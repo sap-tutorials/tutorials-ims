@@ -104,6 +104,26 @@ export interface ConceptPayload {
     stars?: number
     lastCommitAt?: string    // ISO timestamp
   }>
+  // Phase 4.7 (#748 §4.7): help-docs from three sources (help.sap.com,
+  // cap.cloud.sap, ui5.sap.com) explaining this concept. Empty until the
+  // weekly fetch-help-docs-job has populated HelpDocConceptLinks. Shape
+  // mirrors the per-concept array emitted by
+  // srv/lib/published-concepts-query.js (Task 2's extension). Pass-through:
+  // source, sourceLabel, anchor, anchorLabel, snippet, product all flow
+  // verbatim into frontmatter. `description` (NCLOB) is deliberately NOT
+  // in the wire payload — `snippet` is the safe precomputed replacement.
+  helpDocs?: Array<{
+    slug: string
+    title: string
+    url: string
+    source: 'help-sap-com' | 'cap-cloud-sap' | 'ui5-sap-com'
+    sourceLabel: string
+    anchor?: string | null
+    anchorLabel?: string | null
+    snippet?: string | null
+    product?: string
+    confidence?: number
+  }>
 }
 
 interface BuildConceptsResponse {
@@ -262,6 +282,33 @@ export function frontmatter(c: ConceptPayload): string {
       })()
     : null
 
+  // Phase 4.7 (#748 §4.7): emit `helpDocs` only when non-empty. Pass-through —
+  // the /build/concepts payload has already: (1) mapped source → sourceLabel
+  // via the constant map in published-concepts-query.js, (2) derived
+  // anchorLabel by title-casing the anchor slug, and (3) precomputed the
+  // snippet from HelpDocConceptLinks.snippet (LOB-locator-safe read).
+  // This code just serializes what came off the wire. The Hugo template's
+  // surrounding `{{ with .Params.helpDocs }}` hides the entire section when
+  // the array is empty, so omitting the key entirely (rather than emitting
+  // `helpDocs: []`) keeps generated frontmatter tidy.
+  const helpDocs = (c.helpDocs && c.helpDocs.length > 0)
+    ? (() => {
+        const lines = ['helpDocs:']
+        for (const h of c.helpDocs!) {
+          lines.push(`  - slug: ${yamlEscape(h.slug)}`)
+          lines.push(`    title: ${yamlEscape(h.title)}`)
+          lines.push(`    url: ${yamlEscape(h.url)}`)
+          lines.push(`    source: ${yamlEscape(h.source)}`)
+          lines.push(`    sourceLabel: ${yamlEscape(h.sourceLabel)}`)
+          if (h.anchor) lines.push(`    anchor: ${yamlEscape(h.anchor)}`)
+          if (h.anchorLabel) lines.push(`    anchorLabel: ${yamlEscape(h.anchorLabel)}`)
+          if (h.snippet) lines.push(`    snippet: ${yamlEscape(h.snippet)}`)
+          if (h.product) lines.push(`    product: ${yamlEscape(h.product)}`)
+        }
+        return lines.join('\n')
+      })()
+    : null
+
   // NOTE: deliberately no `type:` field — Hugo's type-based lookup is singular
   // ("type: concept" → layouts/concept/), but our template lives at
   // layouts/concepts/ (matching the section). Section-based lookup is what we
@@ -290,6 +337,7 @@ export function frontmatter(c: ConceptPayload): string {
   if (videos) parts.push(videos)
   if (apiDocs) parts.push(apiDocs)
   if (samples) parts.push(samples)
+  if (helpDocs) parts.push(helpDocs)
   parts.push('---', '')
   return parts.join('\n')
 }
