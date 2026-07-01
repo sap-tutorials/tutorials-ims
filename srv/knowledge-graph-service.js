@@ -553,6 +553,9 @@ export default cds.service.impl(async function () {
         sharedConcepts:  [],
         whatToLearnNext: [],
         otherResources:  [],  // Phase 4 chassis (#447). Empty in PR-1; PR-2 populates from journey overlap.
+        // Task 4 of #850: ship typeConfig even on cold-start so new clients
+        // don't fire a legacy-fallback warning before the consolidator runs.
+        typeConfig:      typeConfigForWire(),
       };
     }
 

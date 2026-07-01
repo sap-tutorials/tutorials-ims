@@ -22,8 +22,6 @@
   UI_EVENTS_ENABLED bridge ([[project_204_deploy_flag_flipped]]):
     - kg.sidebar.shown                     once on first non-empty render
     - kg.sidebar.click                     tutorial item link click
-    - kg.sidebar.hover_concept             concept hover (defensive; teaches gone)
-    - kg.concept.tutorial_clicked          concept link click (defensive)
     - kg.<per-type>.linked_from_sidebar    Other-resources row click
 -->
 <template>
@@ -33,8 +31,6 @@
       :data-dimmed="expanded ? 'true' : 'false'"
       @open-expanded="onOpen"
       @item-click="onItemClick"
-      @concept-click="onConceptClick"
-      @concept-hover="onConceptHover"
       @resource-click="onOtherResourceClick"
       @legacy-fallback="onLegacyFallback"
     />
@@ -156,18 +152,6 @@ function onItemClick(
   targetSlug: string,
 ): void {
   emit('kg.sidebar.click', { type, targetSlug, slug })
-}
-
-// Retained defensively — the redesign drops the teaches section from
-// SidebarPanel, so SidebarPanel never emits concept-hover / concept-click
-// on the happy path. Kept so that if a future re-add wires them, the
-// telemetry contract is already in place. Safe no-op today.
-function onConceptHover(conceptSlug: string): void {
-  emit('kg.sidebar.hover_concept', { slug, conceptSlug })
-}
-
-function onConceptClick(conceptSlug: string): void {
-  emit('kg.concept.tutorial_clicked', { conceptSlug, tutorialSlug: slug })
 }
 
 // Cross-corpus rail telemetry. Branches on `r.type` so each type has

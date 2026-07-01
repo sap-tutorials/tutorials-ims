@@ -20,6 +20,7 @@
 import { describe, it, expect } from 'vitest';
 import cds from '@sap/cds';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import {
   stampMetaText,
   typeConfigForWire,
@@ -165,5 +166,48 @@ describe('stampMetaText — Task 4 of #850', () => {
   it('returns the same array reference', () => {
     const rows = [];
     expect(stampMetaText(rows)).toBe(rows);
+  });
+});
+
+describe('neighborhood cold-start empty envelope — typeConfig regression', () => {
+  // Regression guard for the "cold-start missing typeConfig" bug — when
+  // GraphMetadata.graphVersion is null (fresh deploy, consolidator hasn't
+  // run yet), the neighborhood + neighborhoodFull handlers return an
+  // empty envelope. That envelope MUST carry typeConfig so new clients
+  // don't fire the legacy-fallback warning on cold-start pages.
+  //
+  // The handlers are invoked with a live cds runtime; exercising them
+  // in a pure unit test is heavy. This structural check reads the
+  // service source and asserts both empty-envelope literals emit
+  // `typeConfig: typeConfigForWire()`. Cheap, and catches the regression.
+  const svcSource = readFileSync(
+    join(process.cwd(), 'srv/knowledge-graph-service.js'),
+    'utf8',
+  );
+
+  it('neighborhood empty envelope includes typeConfig: typeConfigForWire()', () => {
+    // Find the block starting with `if (!graphVersion)` in the neighborhood
+    // handler; assert typeConfigForWire() is present before the closing brace.
+    const idx = svcSource.indexOf(
+      "kg-service: neighborhood(${slug}) — no graphVersion yet",
+    );
+    expect(idx, 'cold-start log line not found in neighborhood handler').toBeGreaterThan(-1);
+    // Look ~600 chars ahead for the typeConfig field.
+    const window = svcSource.slice(idx, idx + 800);
+    expect(window).toMatch(/typeConfig:\s*typeConfigForWire\(\)/);
+  });
+
+  it('neighborhoodFull empty envelope helper includes typeConfig: typeConfigForWire()', () => {
+    // neighborhoodFull uses an emptyEnvelope helper. Grep for its literal.
+    const idx = svcSource.indexOf('const emptyEnvelope = (tutorialInfo, gv)');
+    expect(idx, 'emptyEnvelope helper not found in neighborhoodFull').toBeGreaterThan(-1);
+    const window = svcSource.slice(idx, idx + 500);
+    expect(window).toMatch(/typeConfig:\s*typeConfigForWire\(\)/);
+  });
+
+  it('typeConfigForWire() returns a non-empty array so cold-start clients get a real registry', () => {
+    const cfg = typeConfigForWire();
+    expect(Array.isArray(cfg)).toBe(true);
+    expect(cfg.length).toBeGreaterThan(0);
   });
 });

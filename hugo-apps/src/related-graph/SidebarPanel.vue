@@ -152,8 +152,6 @@ const emit = defineEmits<{
   (e: 'open-expanded'): void
   (e: 'legacy-fallback'): void
   (e: 'item-click', section: 'prerequisitesOf' | 'sharedConcepts' | 'whatToLearnNext', slug: string): void
-  (e: 'concept-click', slug: string): void
-  (e: 'concept-hover', slug: string): void
   (e: 'resource-click', row: OtherResource): void
 }>()
 
