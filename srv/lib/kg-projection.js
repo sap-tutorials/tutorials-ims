@@ -93,6 +93,7 @@ export const KG_IRI_PREFIXES = Object.freeze({
   'video': `${KG}video/`,
   'api-doc': `${KG}api-doc/`,
   'sample': `${KG}sample/`,           // Phase 4.6 (#747)
+  'help-doc': `${KG}help-doc/`,       // Phase 4.7 (#748)
 });
 
 /**
@@ -153,6 +154,15 @@ export function iriApiDoc(slug) {
  */
 export function iriSample(slug) {
   return `${KG_IRI_PREFIXES['sample']}${iriEscapeSegment(slug)}`;
+}
+
+/**
+ * Phase 4.7 (#748) IRI helper for narrative documentation pages
+ * (help.sap.com + cap.cloud.sap + ui5.sap.com). Slug is already
+ * canonicalized to lowercase per spec §4.1; escape defensively.
+ */
+export function iriHelpDoc(slug) {
+  return `${KG_IRI_PREFIXES['help-doc']}${iriEscapeSegment(slug)}`;
 }
 
 /**
