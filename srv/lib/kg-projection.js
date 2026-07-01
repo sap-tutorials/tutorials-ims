@@ -415,6 +415,17 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     }
   }
 
+  // Section 13 — Phase 4.7 (#748) help-doc triples. Same optional shape as
+  // sections 7-12: when the fixture omits helpDocs, emission is skipped.
+  const { helpDocs: helpDocRows = [], links: helpDocLinks = [] } =
+    (fixtures && fixtures.helpDocs) || {};
+  if (helpDocRows.length > 0) {
+    for (const t of buildHelpDocTriples({ helpDocs: helpDocRows, links: helpDocLinks })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
   if (buffer.length > 0) yield buffer;
 }
 
@@ -779,6 +790,74 @@ export function buildSampleTriples({ samples = [], links = [] } = {}) {
       iriPredicate(link.predicate || 'embodies'),
       iriConcept(link.conceptSlug)
     ));
+  }
+
+  return triples;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.7 (#748) — HelpDoc triple builder
+// ---------------------------------------------------------------------------
+
+const KG_HELP_DOC = `${KG}HelpDoc`;
+
+/**
+ * Predicate IRI for the `explains` relationship between a help-doc and a
+ * concept. Exported so callers (payload builders, graph-widening code) can
+ * reference the canonical string without duplicating the prefix.
+ */
+export const IMS_EXPLAINS = `${KG}explains`;
+
+/**
+ * Phase 4.7 (#748): emit N-Triples for help-doc graph nodes + their
+ * concept `explains` edges. Gated by `isWithinTTL('help-doc', lastSeenAt)`.
+ * Anchor is stored on the link but NOT emitted as a triple — it's an
+ * HTTP-URL-fragment detail consumed by the payload builder and the Hugo
+ * template, not a graph-relevance concept.
+ *
+ * Mirrors buildSampleTriples / buildApiDocTriples: per-doc TTL gate,
+ * link filter dropping rows whose parent is dropped by TTL.
+ *
+ * @param {object} args
+ * @param {Array<{slug, source, product, section?, title, url, lastSeenAt}>} args.helpDocs
+ * @param {Array<{helpDocSlug, conceptSlug, predicate?, anchor?}>} args.links
+ * @returns {string[]} N-Triples lines
+ */
+export function buildHelpDocTriples({ helpDocs = [], links = [] } = {}) {
+  const triples = [];
+  const visibleHelpDocSlugs = new Set();
+
+  for (const doc of helpDocs) {
+    if (!doc || !doc.slug) continue;
+    if (!isWithinTTL('help-doc', doc.lastSeenAt)) continue;
+    visibleHelpDocSlugs.add(doc.slug);
+    const subj = iriHelpDoc(doc.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_HELP_DOC)));
+    triples.push(literalTriple(iri(subj), iriPredicate('title'), doc.title ?? ''));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), doc.slug));
+    if (doc.source) {
+      triples.push(literalTriple(iri(subj), iriPredicate('source'), doc.source));
+    }
+    if (doc.product) {
+      triples.push(literalTriple(iri(subj), iriPredicate('product'), doc.product));
+    }
+    if (doc.section) {
+      triples.push(literalTriple(iri(subj), iriPredicate('section'), doc.section));
+    }
+    if (doc.url) {
+      triples.push(literalTriple(iri(subj), iriPredicate('url'), doc.url));
+    }
+  }
+
+  for (const link of links) {
+    if (!link || !link.helpDocSlug || !link.conceptSlug) continue;
+    if (!visibleHelpDocSlugs.has(link.helpDocSlug)) continue;
+    triples.push(triple(
+      iri(iriHelpDoc(link.helpDocSlug)),
+      iriPredicate(link.predicate || 'explains'),
+      iriConcept(link.conceptSlug)
+    ));
+    // Anchor is NOT emitted — payload-only field.
   }
 
   return triples;
@@ -1192,6 +1271,49 @@ async function loadFixtures(db) {
     );
   }
 
+  // Phase 4.7 (#748) — HelpDocs + concept-explains link rows.
+  // Same best-effort pattern as sibling external content types above.
+  // CRITICAL: HelpDocs.description is LargeString (NCLOB) on HANA — DO NOT
+  // include it in the SELECT here (LOB locator may expire before triple
+  // emission — 1st of 4 LOB-locator read sites per spec §10.1). The
+  // projection doesn't need description anyway.
+  let helpDocs = { helpDocs: [], links: [] };
+  try {
+    const { HelpDocs, HelpDocConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const helpDocRows = await db.run(
+      SELECT.from(HelpDocs).columns('ID', 'slug', 'source', 'product', 'section', 'title', 'url', 'lastSeenAt')
+    );
+    const helpDocSlugById = new Map(helpDocRows.map((h) => [h.ID, h.slug]));
+
+    const hLinkRows = await db.run(
+      SELECT.from(HelpDocConceptLinks).columns('helpDoc_ID', 'concept_ID', 'predicate', 'anchor')
+    );
+    const hLinks = [];
+    for (const l of hLinkRows) {
+      const helpDocSlug = helpDocSlugById.get(l.helpDoc_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!helpDocSlug || !conceptSlug) continue;
+      hLinks.push({
+        helpDocSlug, conceptSlug,
+        predicate: l.predicate || 'explains',
+        anchor: l.anchor ?? null,
+      });
+    }
+
+    helpDocs = {
+      helpDocs: helpDocRows.map((h) => ({
+        slug: h.slug, source: h.source, product: h.product, section: h.section,
+        title: h.title, url: h.url, lastSeenAt: h.lastSeenAt,
+      })),
+      links: hLinks,
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: HelpDocs load failed; help-doc triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -1207,5 +1329,6 @@ async function loadFixtures(db) {
     videos,
     apiDocs,
     samples,
+    helpDocs,
   };
 }
