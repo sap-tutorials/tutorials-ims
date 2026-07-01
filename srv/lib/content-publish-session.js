@@ -581,17 +581,21 @@ async function upsertTutorialMetadata(namespace, metadata) {
       try {
         const ims = cds.entities(namespace);
         const { TutorialMeta } = ims;
-        const ContributorEmails = ims.ContributorEmails;
         const existingMeta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
         const lastUpdated = meta.lastUpdated || null;
         const directEmail = meta.primaryContributorEmail || null;
-        const login = meta.primaryContributorLogin || null;
 
-        let resolvedOwner = directEmail;
-        if (!resolvedOwner && login && ContributorEmails) {
-          const mapping = await SELECT.one.from(ContributorEmails).where({ login });
-          if (mapping?.email) resolvedOwner = mapping.email;
-        }
+        // Note: an earlier design here looked up a `login → corporate email`
+        // mapping table (`ContributorEmails`) when directEmail was null, but
+        // the entity was never declared in db/*.cds so the fallback was dead
+        // code (silent no-op). PR #849 (2026-06-30) removed it. If a
+        // login→email translation is needed again, the correct pattern is to
+        // seed Users.githubLogin from a hand-curated mapping (see
+        // scripts/seed-users-github-login.cjs from PR #848) so
+        // resolveTutorialAuthor's Phase 0 can hit — not to add a new mapping
+        // table that would immediately have the same GitHub-noreply-email
+        // reachability problem the whole #842 chain surfaced.
+        const resolvedOwner = directEmail;
 
         if (!existingMeta) {
           await INSERT.into(TutorialMeta).entries({

@@ -58,12 +58,14 @@ describe('MyTutorialsView', () => {
     ]);
   });
 
-  it('joins meta to Users by email and exposes ownerUserId', async () => {
+  it('joins meta to Users by email and exposes userId (Users.uuid)', async () => {
     const db = await cds.connect.to('db');
     const { MyTutorialsView } = cds.entities('com.sap.developers.ims');
     const rows = await db.run(SELECT.from(MyTutorialsView).where({ ownerEmail: 'alice@example.com' }));
     expect(rows).toHaveLength(1);
-    expect(rows[0].ownerUserId).toBe('uuid-A');
+    // #777 renamed `ownerUserId` → `userId` (aliased from Users.uuid, matching
+    // req.user.id at the CAP context layer). See db/views.cds MyTutorialsView.
+    expect(rows[0].userId).toBe('uuid-A');
     expect(rows[0].slug).toBe('tut-1');
   });
 
@@ -248,7 +250,8 @@ describe('MyTutorialsView #385 PR-3 shape', () => {
     await INSERT.into(TutorialMeta).entries(
       { ID: 'm-pr3-nullreview', tutorial_ID: 't-pr3-nullreview', owner: 'X', ownerEmail: 'nullreview@example.com', reviewedDate: null }
     );
-    const row = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-nullreview' });
+    // #777 renamed the view's key from `ID` → `tutorial_ID`.
+    const row = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: 't-pr3-nullreview' });
     expect(row).toBeTruthy();
     expect(row.daysSinceReview).toBeNull();
   });
@@ -265,7 +268,7 @@ describe('MyTutorialsView #385 PR-3 shape', () => {
     await INSERT.into(TutorialMeta).entries(
       { ID: 'm-pr3-oldreview', tutorial_ID: 't-pr3-oldreview', owner: 'X', ownerEmail: 'oldreview@example.com', reviewedDate: tenDaysAgo }
     );
-    const row = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-oldreview' });
+    const row = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: 't-pr3-oldreview' });
     expect(row).toBeTruthy();
     expect(row.daysSinceReview).toBeGreaterThanOrEqual(10);
     expect(row.daysSinceReview).toBeLessThanOrEqual(11); // allow 1-day tolerance for test timing
@@ -285,15 +288,15 @@ describe('MyTutorialsView #385 PR-3 shape', () => {
       { ID: 'm-pr3-active', tutorial_ID: 't-pr3-active', owner: 'X', ownerEmail: 'active@example.com', monitoredStatus: 'ACTIVE' },
       { ID: 'm-pr3-inactive', tutorial_ID: 't-pr3-inactive', owner: 'X', ownerEmail: 'inactive@example.com', monitoredStatus: 'INACTIVE' }
     ]);
-    const activeRow = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-active' });
-    const inactiveRow = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-inactive' });
+    const activeRow = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: 't-pr3-active' });
+    const inactiveRow = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: 't-pr3-inactive' });
     expect(activeRow.monitored).toBe(true);
     expect(inactiveRow.monitored).toBe(false);
   });
 
   it('repositoryName is null when TutorialMeta.repository_ID is unset (chain query NULL-safe)', async () => {
     // Fixture above seeds rows without a repository_ID — chain returns null.
-    const row = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-active' });
+    const row = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: 't-pr3-active' });
     expect(row.repositoryName).toBeNull();
   });
 });
