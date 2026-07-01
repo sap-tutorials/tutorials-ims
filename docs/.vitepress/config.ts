@@ -19,7 +19,8 @@ export default defineConfig({
     'authors/README.md': 'authors/index.md',
     'developers/README.md': 'developers/index.md',
     'historic/README.md': 'historic/index.md',
-    'postmortems/README.md': 'postmortems/index.md'
+    'postmortems/README.md': 'postmortems/index.md',
+    'decisions/README.md': 'decisions/index.md'
   },
 
   ignoreDeadLinks: [
@@ -34,12 +35,15 @@ export default defineConfig({
     // superpowers/** is excluded from srcExclude (build), so links into it
     // from developer docs are not resolvable as VitePress pages.
     /\.\.\/\.\.\/superpowers\//,
+    /\.\.\/superpowers\//,
+    // decisions/_template.md is srcExcluded (template, not a page).
+    /\.\/_template/,
     // TODO(#258 follow-up): docs/developers/architecture/analytics-builder.md
     // is referenced from free-text-grader.md but doesn't exist yet.
     /\.\/analytics-builder/,
   ],
 
-  srcExclude: ['improvements.md', 'TODO.md', 'pilot-status.md', 'superpowers/**'],
+  srcExclude: ['improvements.md', 'TODO.md', 'pilot-status.md', 'superpowers/**', 'decisions/_template.md'],
 
   // Paths in `head[]` are passed through verbatim — VitePress does not
   // apply `base` here. Relative paths resolve against the current page URL
@@ -175,6 +179,14 @@ export default defineConfig({
         ]},
         { text: 'Reference', collapsed: true, items: [
           { text: 'AI-friendly consumption',   link: '/developers/reference/ai-consumption' },
+          { text: 'Architecture decisions (ADR)', collapsed: true, items: [
+            { text: 'Overview',                          link: '/decisions/' },
+            { text: '0001 — Tutorial HTML in HANA',      link: '/decisions/0001-tutorial-html-in-hana-not-static' },
+            { text: '0002 — QA channel as parallel srv', link: '/decisions/0002-qa-channel-parallel-srv' },
+            { text: '0003 — Public Hugo, lazy login',    link: '/decisions/0003-public-hugo-lazy-login' },
+            { text: '0004 — JWT-only identity',          link: '/decisions/0004-jwt-only-identity' },
+            { text: '0005 — bootstrap vs served split',  link: '/decisions/0005-bootstrap-vs-served-split' }
+          ]},
           { text: 'CAP / CDS gotchas',         link: '/developers/reference/cap-cds-gotchas' },
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
           { text: 'Design decisions',          link: '/developers/reference/design-decisions' },
