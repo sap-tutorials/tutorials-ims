@@ -2484,3 +2484,253 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
   background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
   border-radius: 3px;
 }
+
+/* ==========================================================================
+   KG widget redesign (#850) — sidebar row icons, expanded panel dialog,
+   sidebar fade-during-expand, reduced-motion respect.
+   ========================================================================== */
+
+/* Sidebar Other-resources rows use the ResourceRow.vue layout:
+     [icon] [title-link] [meta-text]
+   The row is a flex container so the icon stays aligned with the link's
+   baseline and meta text wraps as needed. */
+.kg-resource-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  line-height: 1.35;
+  list-style: none;
+  margin: 0.35rem 0;
+  padding: 0;
+}
+.kg-resource-row__icon {
+  flex: 0 0 auto;
+  font-size: 0.95em;
+  opacity: 0.85;
+}
+.kg-resource-row__link {
+  flex: 1 1 auto;
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.kg-resource-row__link:hover,
+.kg-resource-row__link:focus-visible {
+  text-decoration: underline;
+}
+.kg-resource-row__meta {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-size: 0.82em;
+}
+
+/* Sidebar fades to 40% while the expanded panel is open so the reader's
+   eyes drift to the dialog. The RelatedGraph orchestrator applies
+   data-dimmed="true" via inheritAttrs on <SidebarPanel>. */
+.kg-sidebar[data-dimmed="true"] {
+  opacity: 0.4;
+  transition: opacity 200ms ease;
+}
+
+/* Sidebar header hosts the expand (⤢) button on the right. */
+.kg-sidebar__expand-btn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 0.15rem 0.4rem;
+  color: var(--sapButton_Lite_TextColor, #0064d9);
+  border-radius: 0.25rem;
+}
+.kg-sidebar__expand-btn:hover,
+.kg-sidebar__expand-btn:focus-visible {
+  background: var(--sapButton_Lite_Hover_Background, rgba(0, 100, 217, 0.06));
+  outline: 2px solid var(--sapBrandColor, #0070f2);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Expanded panel dialog — Joule-style, teleported to #kg-expanded-root.
+   ========================================================================== */
+#kg-expanded-root {
+  position: relative;
+  z-index: 1000;
+}
+.kg-expanded {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(480px, 90vw);
+  background: var(--sapBaseColor, #fff);
+  color: var(--sapTextColor, #32363a);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
+  transform: translateX(0);
+  animation: kg-expanded-in 200ms ease;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+}
+.kg-expanded[data-wide="true"] {
+  width: min(800px, 90vw);
+}
+
+.kg-expanded__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  flex: 0 0 auto;
+}
+.kg-expanded__header h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+.kg-expanded__subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.82em;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+.kg-expanded__widen,
+.kg-expanded__close {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.05rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.25rem;
+  color: var(--sapButton_Lite_TextColor, #0064d9);
+}
+.kg-expanded__widen:hover,
+.kg-expanded__widen:focus-visible,
+.kg-expanded__close:hover,
+.kg-expanded__close:focus-visible {
+  background: var(--sapButton_Lite_Hover_Background, rgba(0, 100, 217, 0.06));
+  outline: 2px solid var(--sapBrandColor, #0070f2);
+  outline-offset: 2px;
+}
+
+.kg-expanded__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 1rem 1.15rem;
+  container-type: inline-size;
+}
+
+.kg-expanded__prereq,
+.kg-expanded__shared,
+.kg-expanded__next {
+  margin-bottom: 1.25rem;
+}
+.kg-expanded__prereq h3,
+.kg-expanded__shared h3,
+.kg-expanded__next h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: var(--sapTextColor, #32363a);
+}
+.kg-expanded__prereq ul,
+.kg-expanded__shared ul,
+.kg-expanded__next ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.kg-expanded__prereq li,
+.kg-expanded__shared li,
+.kg-expanded__next li {
+  margin: 0.25rem 0;
+}
+.kg-expanded__reason {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-size: 0.85em;
+  margin-left: 0.25rem;
+}
+
+/* Per-type grid: single-column by default; 2-column when the dialog is
+   widened (via container query on inline size, not viewport width). */
+.kg-expanded__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin: 1rem 0 1.25rem;
+}
+@container (min-width: 720px) {
+  .kg-expanded__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.kg-expanded__section {
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.02));
+}
+.kg-expanded__section summary {
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.15rem 0;
+  color: var(--sapTextColor, #32363a);
+  list-style: none;
+}
+.kg-expanded__section summary::-webkit-details-marker {
+  display: none;
+}
+.kg-expanded__section summary::marker {
+  content: '';
+}
+.kg-expanded__section[open] summary {
+  margin-bottom: 0.4rem;
+}
+.kg-expanded__section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kg-expanded__no-resources {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-style: italic;
+  padding: 0.75rem 0;
+  margin: 0;
+}
+
+.kg-expanded__skeleton {
+  padding: 0.5rem 0;
+}
+.kg-expanded__error {
+  padding: 1rem;
+  text-align: center;
+}
+.kg-expanded__error button {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--sapButton_Lite_BorderColor, #0064d9);
+  background: transparent;
+  color: var(--sapButton_Lite_TextColor, #0064d9);
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+/* Motion — slide in from the right on open. Honors OS reduced-motion. */
+@keyframes kg-expanded-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kg-expanded {
+    animation: none;
+  }
+  .kg-sidebar[data-dimmed="true"] {
+    transition: none;
+  }
+}
