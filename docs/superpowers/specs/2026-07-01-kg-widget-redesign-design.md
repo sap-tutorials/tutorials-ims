@@ -250,13 +250,33 @@ hugo-apps/src/related-graph/
 ```
 
 **Shared date/format helpers.** `formatRelativeMonth`, `formatDate`, and
-`formatLevel` from `related-graph-helpers.ts` move to a shared module
-`srv/lib/kg-meta-formatters.js` (server) with a corresponding client re-export
-in `related-graph-helpers.ts`. Server's `renderMeta` uses the shared module
-so client-computed and server-computed meta strings match byte-for-byte.
-This is the one server ↔ hugo-apps coupling the design introduces; it's
-deliberate — otherwise the "server ships pre-rendered metaText" idea can't
-survive a client-side date-format tweak. Tests pin the exact string shapes.
+`formatLevel` are needed by BOTH the server (to stamp `metaText` on wire
+rows) and the client (for any client-side computed strings — currently
+`formatRelativeMonth` in the sidebar today). The two bundlers can't share
+one file directly: srv is built by CDS into `gen/srv/` and shipped as its
+own CF app; hugo-apps is built by Vite into `hugo/static/js/*.js` and
+shipped inside the approuter. A `srv/lib/…` file cannot be imported from
+`hugo-apps/src/…` (Vite root won't traverse up + `srv/` isn't in the CF
+approuter container anyway).
+
+**Resolution: duplicate + enforce byte-equality via a build guard.**
+
+- Authoritative copy at `srv/lib/kg-meta-formatters.js` (plain ESM, no Vue
+  or Node-specific imports beyond `Date` / `Intl`).
+- Mirror at `hugo-apps/src/related-graph/kg-meta-formatters.js` (same
+  content, verbatim). `related-graph-helpers.ts` re-exports from the mirror.
+- New CI guard: `scripts/check-kg-meta-formatters-mirror.ts` diffs the two
+  files (raw byte compare after `\r\n → \n` normalization) and fails
+  `npm run lint` if they drift. Runs in the same npm-test lane as
+  `check-public-endpoints.ts`. Guard is ~20 LoC.
+
+This mirrors the pattern the project already uses for the "explore" bundle
+manifest (a mirror-into-gen step from #726 Task 6). Simpler than a shared
+npm package, works around both bundlers without config changes, and
+prevents silent drift.
+
+Client-side tests importing the mirror pass; server-side tests import the
+authoritative copy directly.
 
 **Timezone discipline for the shared formatters.** `related-graph-helpers.ts`
 today uses `Intl.DateTimeFormat` and `Date` methods that respect the browser's
@@ -291,10 +311,20 @@ without changing component ownership. This is the **first** Vue 3
 hugo-apps/src/` returns zero hits at spec time — earlier drafts of this
 design claimed CodeCheck.vue used the pattern; that was wrong). SSR-safety:
 `data-vue-island="related-graph"` hydrates client-only via the island
-runtime, so Teleport has no SSR concerns here. The dialog root that
-Teleport targets (`<div id="kg-expanded-root">`) is added to
-[hugo/layouts/_default/baseof.html](../../../hugo/layouts/_default/baseof.html) as an empty
-mount point below `<body>`.
+runtime, so Teleport has no SSR concerns here. The Teleport target
+(`<div id="kg-expanded-root"></div>`) is added to
+[hugo/layouts/tutorials/u1-object-page.html](../../../hugo/layouts/tutorials/u1-object-page.html) —
+NOT the global `baseof.html` — so non-tutorial pages don't ship an empty
+mount point. The element sits at the end of the main content, before
+`</main>`, so it inherits body-level stacking without being nested in the
+right-column aside.
+
+**`ResourceRow` prop indexing.** `ExpandedPanel` and `SidebarPanel` each
+build a `Map<string, TypeConfigEntry>` from the response's `typeConfig`
+array once on mount (keyed by `type`), then pass the resolved entry to
+`ResourceRow` as a prop. Neither panel does `v-if r.type === '…'` in the
+template; the row component receives the config and renders `icon`,
+`plural`, `metaText` uniformly.
 
 ---
 
@@ -526,7 +556,11 @@ unchanged. Nothing that watches those today breaks.
 
 **New:**
 - `srv/lib/kg-resource-type-config.js`
-- `srv/lib/kg-meta-formatters.js`
+- `srv/lib/kg-meta-formatters.js` (authoritative copy)
+- `hugo-apps/src/related-graph/kg-meta-formatters.js` (mirror; content
+  byte-equal to the authoritative)
+- `scripts/check-kg-meta-formatters-mirror.ts` (CI guard enforcing
+  byte-equality between the two copies)
 - `hugo-apps/src/related-graph/SidebarPanel.vue`
 - `hugo-apps/src/related-graph/ExpandedPanel.vue`
 - `hugo-apps/src/related-graph/ResourceRow.vue`
@@ -546,9 +580,10 @@ unchanged. Nothing that watches those today breaks.
   orchestrator; most rendering moves to child components.
 - `hugo-apps/src/related-graph/types.ts` — new types.
 - `hugo-apps/src/related-graph/related-graph-helpers.ts` — re-exports the
-  shared formatter module.
-- `hugo/layouts/_default/baseof.html` — add empty
-  `<div id="kg-expanded-root"></div>` below `<body>` as the Teleport target.
+  local mirror of the formatter module.
+- `hugo/layouts/tutorials/u1-object-page.html` — add
+  `<div id="kg-expanded-root"></div>` before `</main>` as the Teleport
+  target. Non-tutorial pages don't get this element.
 - `approuter/xs-app.json` — regex change from `neighborhood|Concepts|…`
   to `neighborhood(Full)?|Concepts|…` on line 146 so `neighborhoodFull`
   matches the anonymous allowlist branch.
@@ -557,6 +592,7 @@ unchanged. Nothing that watches those today breaks.
   `kg-meta-formatters.js` to the `tutorials-srv-qa` cp list (line 125).
   First two are pre-existing bugs fixed here; last two are new to this
   design.
+- `package.json` — add the mirror-check script to the `lint` npm target.
 - Extended existing tests as listed.
 
 Nothing else.
