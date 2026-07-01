@@ -38,7 +38,8 @@ export async function fetchCapCloudSapCorpus({
     let raw;
     try {
       raw = await fetchRaw(blob.path);
-    } catch {
+    } catch (err) {
+      console.warn('cap-cloud-sap-fetcher: raw fetch failed', { path: blob.path, status: err?.status, message: err?.message });
       continue;
     }
     const { frontmatterTitle, body } = parseMarkdown(raw);

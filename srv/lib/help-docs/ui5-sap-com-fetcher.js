@@ -81,7 +81,8 @@ export async function fetchUi5SapComCorpus({
     let bodyHtml;
     try {
       bodyHtml = await fetchTopicBody(node.key);
-    } catch {
+    } catch (err) {
+      console.warn('ui5-sap-com-fetcher: topic body fetch failed', { key: node.key, message: err?.message });
       continue;   // per-topic 404 or timeout — skip
     }
     const stripped = stripHtml(bodyHtml);

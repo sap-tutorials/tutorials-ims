@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fetchAllHelpDocs, _setMockFetcher, _resetForTests } from '../../../srv/lib/help-docs/index.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { fetchAllHelpDocs, _setMockFetcher, _setMockOrchestrator, _resetForTests } from '../../../srv/lib/help-docs/index.js';
+import { HELP_SAP_COM_DELIVERABLES } from '../../../srv/lib/help-docs/help-sap-com-fetcher.js';
 
 describe('help-docs orchestrator', () => {
   beforeEach(() => {
@@ -59,77 +60,82 @@ describe('help-docs orchestrator', () => {
     expect(perSource['ui5-sap-com'].rowsFetched).toBe(0);
   });
 
-  it('passes seenSourceIds through to each fetcher', async () => {
-    const helpSpy = vi.fn(async (url) => {
-      if (url.includes('/http.svc/deliverableMetadata')) {
-        return { status: 'OK', data: { deliverable: { id: 1, buildNo: 1 }, filePath: 'x.html', topicLoio: 'x' } };
-      }
-      return { status: 'OK', data: { body: '', deliverable: { fullToc: [] }, currentPage: {} } };
-    });
-    _setMockFetcher('help-sap-com', helpSpy);
-    _setMockFetcher('cap-cloud-sap', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
-    _setMockFetcher('ui5-sap-com', async (url) => url.includes('/docs/topics/index.json') ? [] : '');
-    await fetchAllHelpDocs({ apiKey: 'fake', seenSourceIds: new Set(['x']) });
-    expect(helpSpy).toHaveBeenCalled();
-  });
-
-  it('perSource.rowsFetched matches actual returned rows before dedupe', async () => {
-    // help.sap.com — one deliverable, two topics in fullToc, both with bodies long enough to survive filter
+  it('passes seenSourceIds through to each fetcher (filter is actually applied)', async () => {
+    // Mock returns a real topic for every deliverable. The help-sap-com fetcher
+    // computes sourceId as `${product}/${deliverable}/${stripDotHtml(node.u)}`.
+    // Build the full seenSourceIds set from HELP_SAP_COM_DELIVERABLES so every
+    // possible emitted sourceId is filtered — proving the passthrough works.
+    // Post-dedupe row counts alone won't work because dedupe collapses
+    // same-content rows across deliverables.
     const longBody = '<html><body>' + 'x '.repeat(250) + '</body></html>';
-    _setMockFetcher('help-sap-com', async (url) => {
+    const helpMock = async (url) => {
       if (url.includes('/http.svc/deliverableMetadata')) {
         return {
           status: 'OK',
           data: {
-            deliverable: { id: 42, buildNo: 100 },
+            deliverable: { id: 1, buildNo: 1 },
             filePath: 'landing.html',
             topicLoio: 'landing',
-            readableUrls: { topicReadableUrl: 'landing-page' },
           },
         };
       }
-      // pagecontent for landing.html — fullToc has 2 topics (landing + second)
-      if (url.includes('/http.svc/pagecontent') && url.includes('file_path=landing.html')) {
+      if (url.includes('/http.svc/pagecontent')) {
         return {
           status: 'OK',
           data: {
             body: longBody,
             deliverable: {
               fullToc: [
-                { t: 'Landing', u: 'landing.html', c: [] },
-                { t: 'Second Page', u: 'second.html', c: [] },
+                { t: 'Seen Topic', u: 'seen-topic.html', c: [] },
               ],
             },
-            currentPage: { readableUrls: { topicReadableUrl: 'landing-page' } },
-          },
-        };
-      }
-      // pagecontent for second.html
-      if (url.includes('/http.svc/pagecontent') && url.includes('file_path=second.html')) {
-        return {
-          status: 'OK',
-          data: {
-            body: longBody,
-            deliverable: { fullToc: [] },
-            currentPage: { readableUrls: { topicReadableUrl: 'second-page' } },
+            currentPage: { readableUrls: { topicReadableUrl: 'seen-topic' } },
           },
         };
       }
       return null;
-    });
+    };
+    _setMockFetcher('help-sap-com', helpMock);
     _setMockFetcher('cap-cloud-sap', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
     _setMockFetcher('ui5-sap-com', async (url) => url.includes('/docs/topics/index.json') ? [] : '');
 
-    // Restrict help.sap.com scope to a single deliverable for a deterministic count.
-    // Task 20's fetcher accepts a `deliverables:` override — here we can't pass it through
-    // fetchAllHelpDocs, so rely on the mock returning empty for any other deliverable.
-    // The default HELP_SAP_COM_DELIVERABLES list is ~20 pairs; the mock above matches
-    // any product/deliverable URL because it only checks the http.svc path prefix.
-    // Expected rowsFetched: 2 topics × 20 deliverables = 40. The exact number depends
-    // on the scope constant length, so assert "at least 2 per deliverable" instead.
-    const { perSource } = await fetchAllHelpDocs({ apiKey: 'fake' });
-    expect(perSource['help-sap-com'].rowsFetched).toBeGreaterThanOrEqual(2);
-    // (For a hard-count assertion, pass an explicit small deliverable list through the
-    // per-fetcher mock or use _setMockOrchestrator — see Step 34 dedupe test.)
+    // Baseline: no seenSourceIds — orchestrator returns some rows (post-dedupe).
+    const baseline = await fetchAllHelpDocs({ apiKey: 'fake' });
+    const baselineHelp = baseline.rows.filter(r => r.source === 'help-sap-com');
+    expect(baselineHelp.length).toBeGreaterThan(0);
+
+    // Now pass every possible help-sap-com sourceId (product/deliverable/seen-topic)
+    // as seenSourceIds. The orchestrator MUST forward this to the fetcher, which
+    // then filters BEFORE dedupe. If the orchestrator drops seenSourceIds, rows survive.
+    _resetForTests();
+    _setMockFetcher('help-sap-com', helpMock);
+    _setMockFetcher('cap-cloud-sap', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
+    _setMockFetcher('ui5-sap-com', async (url) => url.includes('/docs/topics/index.json') ? [] : '');
+    const seenSourceIds = new Set(
+      HELP_SAP_COM_DELIVERABLES.map(({ product, deliverable }) => `${product}/${deliverable}/seen-topic`)
+    );
+    const filtered = await fetchAllHelpDocs({ apiKey: 'fake', seenSourceIds });
+    const filteredHelpRows = filtered.rows.filter(r => r.source === 'help-sap-com');
+    expect(filteredHelpRows).toHaveLength(0);
+  });
+
+  it('perSource.rowsFetched matches actual returned rows', async () => {
+    // Use _setMockOrchestrator to inject a controlled { rows, perSource } shape
+    // and assert an EXACT count. This is cleaner than trying to control the
+    // fetcher-level mock across 20 deliverables.
+    _setMockOrchestrator(async () => ({
+      rows: [
+        { source: 'help-sap-com', sourceId: 'a', title: 'A', description: 'a', url: 'https://x/a', product: 'btp', section: null },
+        { source: 'help-sap-com', sourceId: 'b', title: 'B', description: 'b', url: 'https://x/b', product: 'btp', section: null },
+      ],
+      perSource: {
+        'help-sap-com': { rowsFetched: 2, fetcherRejected: false, reason: null },
+        'cap-cloud-sap': { rowsFetched: 0, fetcherRejected: false, reason: null },
+        'ui5-sap-com': { rowsFetched: 0, fetcherRejected: false, reason: null },
+      },
+    }));
+    const { rows, perSource } = await fetchAllHelpDocs({ apiKey: 'fake' });
+    expect(perSource['help-sap-com'].rowsFetched).toBe(2);
+    expect(rows).toHaveLength(2);
   });
 });

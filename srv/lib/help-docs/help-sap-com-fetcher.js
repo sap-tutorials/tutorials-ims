@@ -149,7 +149,8 @@ export async function fetchHelpSapComCorpus({
           bodyHtml = page.data?.body;
           topicReadableUrl = page.data?.currentPage?.readableUrls?.topicReadableUrl || null;
         }
-      } catch {
+      } catch (err) {
+        console.warn('help-sap-com-fetcher: topic pagecontent failed', { product, deliverable, filePath: node.u, message: err?.message });
         continue;   // per-topic 404 or timeout — skip
       }
 
