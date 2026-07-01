@@ -284,4 +284,70 @@ describe('RelatedGraph sidebar — help-doc rows (Phase 4.7)', () => {
     // No api-doc "Official reference" lead (help-doc has its own source labels):
     expect(txt).not.toContain('Official reference')
   })
+
+  it('appends the anchor fragment to the href when anchor is set', async () => {
+    // Spec §4.8.2 / plan §3.3 Step 9: sidebar links for help-doc rows must
+    // compose url + '#' + anchor so deep-links to specific doc sections
+    // survive the click-out. Covers the happy path (ResourceRow).
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => makePayload({
+        otherResources: [{
+          type: 'help-doc',
+          slug: 'hd-cap-anchor',
+          title: 'Handlers',
+          url: 'https://cap.cloud.sap/docs/node.js/handlers',
+          source: 'cap-cloud-sap',
+          sourceLabel: 'CAP',
+          anchor: 'before-create',
+          anchorLabel: 'Before Create',
+          metaText: ' · CAP · Before Create',
+        }],
+      }),
+    } as unknown as Response)
+
+    const wrapper = mount(RelatedGraph)
+    await flushPromises()
+    await flushPromises()
+
+    const link = wrapper.find(
+      'a[href="https://cap.cloud.sap/docs/node.js/handlers#before-create"]',
+    )
+    expect(link.exists()).toBe(true)
+  })
+
+  it('does not append a fragment when anchor is null', async () => {
+    // Same rule, negative case: no anchor means the raw url is used as-is,
+    // with no stray '#'.
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => makePayload({
+        otherResources: [{
+          type: 'help-doc',
+          slug: 'hd-no-anchor',
+          title: 'Overview',
+          url: 'https://help.sap.com/docs/cap/overview',
+          source: 'help-sap-com',
+          sourceLabel: 'SAP Help',
+          anchor: null,
+          metaText: ' · SAP Help',
+        }],
+      }),
+    } as unknown as Response)
+
+    const wrapper = mount(RelatedGraph)
+    await flushPromises()
+    await flushPromises()
+
+    const link = wrapper.find(
+      'a[href="https://help.sap.com/docs/cap/overview"]',
+    )
+    expect(link.exists()).toBe(true)
+    // Belt-and-suspenders: the href should have no trailing '#'.
+    expect(link.attributes('href')).not.toContain('#')
+  })
 })

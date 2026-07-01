@@ -76,7 +76,7 @@
       <ul v-else>
         <li v-for="r in otherResources" :key="r.slug">
           <a
-            :href="r.url"
+            :href="r.url + (r.anchor ? '#' + r.anchor : '')"
             target="_blank"
             rel="noopener"
             @click="$emit('resource-click', r)"
