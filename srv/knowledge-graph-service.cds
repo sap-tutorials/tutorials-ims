@@ -115,6 +115,23 @@ service KnowledgeGraphService @(path : '/graph') {
     stars         : Integer;            // sample only (Phase 4.6)
     lastCommitAt  : Timestamp;          // sample only (Phase 4.6)
     overlapCount  : Integer;
+    // Task 4 of #850 (KG-widget redesign): server-composed meta-text string
+    // for the sidebar. Stamped by the neighborhood handler via
+    // RESOURCE_TYPE_CONFIG's per-type `renderMeta`. Client renders as-is,
+    // keeping the per-row template a pure function (no v-if r.type chain).
+    metaText      : String(160);
+  }
+  // TypeConfigEntry — server-owned resource-type registry entry (Task 4 of
+  // #850). Mirrors `RESOURCE_TYPE_CONFIG` in srv/lib/kg-resource-type-config.js
+  // MINUS `renderMeta` (the meta-text function isn't wire-serialisable; the
+  // server evaluates it per row and ships `metaText` instead).
+  type TypeConfigEntry {
+    type          : String(30);
+    icon          : String(8);
+    singular      : String(40);
+    plural        : String(40);
+    priority      : Integer;
+    metaTemplate  : String(120);
   }
   type NeighborhoodResult {
     tutorial        : TutorialInfo;
@@ -124,6 +141,10 @@ service KnowledgeGraphService @(path : '/graph') {
     sharedConcepts  : array of TutorialRef;
     whatToLearnNext : array of TutorialRef;
     otherResources  : array of OtherResource;  // Phase 4 chassis (#447); empty in PR-1, populated in PR-2.
+    // Task 4 of #850: server-owned resource-type registry copy so the client
+    // renderer stays type-agnostic. Sorted by `priority` ascending; excludes
+    // the `renderMeta` function (see TypeConfigEntry).
+    typeConfig      : array of TypeConfigEntry;
   }
   type ConceptCoverage {
     learned : array of ConceptRef;

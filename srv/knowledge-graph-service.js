@@ -264,6 +264,7 @@ import { findNearDuplicates } from './lib/kg-similarity.js';
 import { loadConceptsWithEmbeddings } from './lib/kg-concept-loader.js';
 import { resolveKnowledgeGraphSettings } from './lib/runtime-config/kg-settings.js';
 import { mergeOtherResources, MAX_OTHER_RESOURCES } from './lib/kg-neighborhood-merge.js';
+import { stampMetaText, typeConfigForWire } from './lib/kg-stamp-meta-text.js';
 import { categoryLabel } from './lib/discovery-mission-categories.js';
 import { getTutorialTeachesMap } from './lib/kg-tutorial-teaches-map.js';
 import { getCachedNeighborhood, setCachedNeighborhood } from './lib/kg-neighborhood-cache.js';
@@ -792,6 +793,12 @@ export default cds.service.impl(async function () {
             apiDocOtherResources,
             sampleOtherResources,
           );
+
+          // Step 6 (Task 4 of #850): stamp metaText on each row via
+          // RESOURCE_TYPE_CONFIG.renderMeta. Server owns the meta-text
+          // string so the client renderer stays a pure per-row function
+          // without a `v-if r.type === '…'` chain.
+          stampMetaText(otherResources);
         }
       }
     } catch (err) {
@@ -812,6 +819,9 @@ export default cds.service.impl(async function () {
       sharedConcepts:  enrich(ranked.sharedConcepts),
       whatToLearnNext: enrich(ranked.whatToLearnNext),
       otherResources,  // Phase 4.1 (#447) — populated from journey overlap.
+      // Task 4 of #850: server-owned type registry. Client renders icons +
+      // section labels off this array; no v-if chain on r.type.
+      typeConfig:      typeConfigForWire(),
     };
 
     // 11. Cache-store — key = (slug, graphVersion). Next request for this
