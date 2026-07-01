@@ -63,7 +63,7 @@ describe('mapToCardItem', () => {
   })
 })
 
-import { buildFilter, postFilterNoLicense } from './useSearch'
+import { buildFilter, postFilterNoLicense, buildFacetsUrl } from './useSearch'
 
 describe('buildFilter', () => {
   it('returns empty string with no flags or filters', () => {
@@ -92,6 +92,47 @@ describe('buildFilter', () => {
     // ISO when isNew is true, but the helper guards against misuse.
     const out = buildFilter([], [], [], { isNew: true, isNewCutoffISO: '' })
     expect(out).toBe('')
+  })
+})
+
+describe('buildFacetsUrl', () => {
+  // Regression: issue #869 — the previous URL builder inlined an OData
+  // v2 collection literal (`taskTypes=['TUTORIAL']`, single quotes) which
+  // CAP v4 parses as an invalid enum value and returns HTTP 400. The
+  // parallel `fetch` in useSearch treated any facets failure as a total
+  // search failure, so the entire navigator page showed "no results" even
+  // when SearchableItems returned 210 rows.
+
+  it('uses parameter aliases so array literals are valid OData V4 JSON', () => {
+    const url = buildFacetsUrl('abap', ['TUTORIAL'], ['beginner'])
+    // Path portion: aliases, no inline literals.
+    expect(url.startsWith('/search/getFacets(search=@s,taskTypes=@t,experience=@e)?')).toBe(true)
+    // Aliases carry JSON — arrays have double-quoted strings.
+    const q = new URLSearchParams(url.split('?')[1])
+    expect(JSON.parse(q.get('@s')!)).toBe('abap')
+    expect(JSON.parse(q.get('@t')!)).toEqual(['TUTORIAL'])
+    expect(JSON.parse(q.get('@e')!)).toEqual(['beginner'])
+  })
+
+  it('omits taskTypes/experience aliases when arrays are empty', () => {
+    const url = buildFacetsUrl('abap', [], [])
+    expect(url).toBe(`/search/getFacets(search=@s)?${new URLSearchParams({ '@s': '"abap"' })}`)
+  })
+
+  it('upper-cases task types to match the enum in the SearchableItems view', () => {
+    const url = buildFacetsUrl('x', ['tutorial', 'mission'], [])
+    const q = new URLSearchParams(url.split('?')[1])
+    expect(JSON.parse(q.get('@t')!)).toEqual(['TUTORIAL', 'MISSION'])
+  })
+
+  it('safely encodes single-quoted search terms', () => {
+    // Previous builder called escOData('O''Reilly'), producing `O''''Reilly`
+    // inside an OData string literal — plus URL-encoding on top. With
+    // aliases we just JSON-encode the term and let URLSearchParams handle
+    // the URL layer.
+    const url = buildFacetsUrl("O'Reilly", [], [])
+    const q = new URLSearchParams(url.split('?')[1])
+    expect(JSON.parse(q.get('@s')!)).toBe("O'Reilly")
   })
 })
 
