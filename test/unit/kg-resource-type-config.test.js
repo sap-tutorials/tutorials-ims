@@ -1,7 +1,7 @@
 // test/unit/kg-resource-type-config.test.js
 //
 // Tests for the server-owned external-resource type registry (Task 2 of
-// #850 KG widget redesign). Verifies the registry shape (6 entries, sparse
+// #850 KG widget redesign). Verifies the registry shape (7 entries, sparse
 // priorities, unique keys) and per-type renderMeta output — the sidebar
 // meta-text must match the current Vue template byte-for-byte.
 
@@ -14,9 +14,9 @@ import {
 } from '../../srv/lib/kg-meta-formatters.js';
 
 describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
-  it('is an array with exactly 6 entries', () => {
+  it('is an array with exactly 7 entries', () => {
     expect(Array.isArray(RESOURCE_TYPE_CONFIG)).toBe(true);
-    expect(RESOURCE_TYPE_CONFIG).toHaveLength(6);
+    expect(RESOURCE_TYPE_CONFIG).toHaveLength(7);
   });
 
   it('every entry has the required fields with correct types', () => {
@@ -53,7 +53,7 @@ describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
     expect(priorities).toEqual(sorted);
   });
 
-  it('type values are exactly the six expected external types in priority order', () => {
+  it('type values are exactly the seven expected external types in priority order', () => {
     const types = RESOURCE_TYPE_CONFIG.map((e) => e.type);
     expect(types).toEqual([
       'learning-journey',
@@ -62,6 +62,7 @@ describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
       'video',
       'api-doc',
       'sample',
+      'help-doc',
     ]);
   });
 
@@ -84,6 +85,9 @@ describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
     });
     expect(byType.get('sample')).toMatchObject({
       icon: '🧪', singular: 'Sample', plural: 'Samples',
+    });
+    expect(byType.get('help-doc')).toMatchObject({
+      icon: '📚', singular: 'Help doc', plural: 'Help docs',
     });
   });
 });
@@ -222,6 +226,27 @@ describe('renderMeta — sample', () => {
   });
 
   it('returns empty string when all fields missing', () => {
+    expect(renderMeta({})).toBe('');
+  });
+});
+
+describe('renderMeta — help-doc', () => {
+  const { renderMeta } = byType('help-doc');
+
+  it('renders sourceLabel + anchorLabel', () => {
+    const out = renderMeta({ sourceLabel: 'CAP', anchorLabel: 'Before Create' });
+    expect(out.startsWith(' · ')).toBe(true);
+    expect(out).toContain('CAP');
+    expect(out).toContain('Before Create');
+  });
+
+  it('renders sourceLabel only when anchorLabel is null', () => {
+    const out = renderMeta({ sourceLabel: 'SAP Help', anchorLabel: null });
+    expect(out).toContain('SAP Help');
+    expect(out).not.toContain('null');
+  });
+
+  it('returns empty string when both fields missing', () => {
     expect(renderMeta({})).toBe('');
   });
 });

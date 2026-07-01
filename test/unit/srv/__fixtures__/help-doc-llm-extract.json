@@ -1,0 +1,42 @@
+{
+  "verdict": {
+    "concepts": [
+      {
+        "slug": "cap-service-handlers",
+        "name": "CAP service handlers",
+        "description": "Register handlers that fire before/on/after CRUD operations.",
+        "confidence": 0.94,
+        "anchor": "before-create"
+      },
+      {
+        "slug": "cap-cds-modeling",
+        "name": "CAP CDS modeling",
+        "description": "Model entities and services in CDS.",
+        "confidence": 0.82,
+        "anchor": null
+      },
+      {
+        "slug": "low-confidence-concept",
+        "name": "Low Confidence Bit",
+        "description": "Marginally related.",
+        "confidence": 0.55,
+        "anchor": null
+      },
+      {
+        "slug": "x",
+        "name": "X",
+        "description": "Too-short name should be dropped.",
+        "confidence": 0.88,
+        "anchor": null
+      },
+      {
+        "slug": "cap-drafts",
+        "name": "CAP drafts",
+        "description": "Fiori draft handling in CAP.",
+        "confidence": 0.79,
+        "anchor": "drafts"
+      }
+    ]
+  },
+  "tokenUsage": { "prompt": 3100, "completion": 340 }
+}

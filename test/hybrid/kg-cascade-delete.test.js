@@ -1,6 +1,6 @@
 // test/hybrid/kg-cascade-delete.test.js
 // Hybrid test — runs only against real HANA via `cds bind --exec`.
-// Consolidated cascade-delete audit for all 7 Phase 4 KG parent entities.
+// Consolidated cascade-delete audit for all 8 Phase 4 KG parent entities.
 // See docs/superpowers/specs/2026-07-01-789-kg-cascade-delete-audit-design.md.
 //
 // Fixture ID convention: 00000000-0000-0000-0000-789NNNNNNNNN
@@ -533,5 +533,77 @@ describe.runIf(isSafeForWrites())('Sample DELETE cascades to SampleConceptLinks'
     expect(orphan).toBeUndefined();
     const concept = await SELECT.one.from(Concepts).where({ ID: conceptId });
     expect(concept).toBeDefined();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────
+// Row 12: HelpDocs → HelpDocConceptLinks (#748, Phase 4.7 Task 2)
+// ────────────────────────────────────────────────────────────────────
+describe.runIf(isSafeForWrites())('HelpDoc DELETE cascades to HelpDocConceptLinks', () => {
+  const helpDocId = '00000000-0000-0000-0000-789000000080';
+  const conceptId = '00000000-0000-0000-0000-789000000081';
+  const linkId    = '00000000-0000-0000-0000-789000000082';
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    assertHanaKind(db);
+  });
+
+  afterAll(async () => {
+    const { HelpDocs, HelpDocConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(HelpDocConceptLinks).where({ ID: linkId });
+    await DELETE.from(Concepts).where({ ID: conceptId });
+    await DELETE.from(HelpDocs).where({ ID: helpDocId });
+  });
+
+  it('deletes HelpDocConceptLinks rows when their parent HelpDoc is deleted', async () => {
+    const { HelpDocs, HelpDocConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(HelpDocs).entries({
+      ID: helpDocId,
+      slug: '__test__-789-cascade-help-doc',
+      source: 'cap-cloud-sap',
+      title: '__test__ Cascade Help Doc 789',
+      description: 'x',
+      url: 'https://cap.cloud.sap/__test__/789',
+      sourceId: '__test__/789',
+      contentHash: 'h789',
+      product: 'cap',
+      section: null,
+      firstSeenAt: new Date(),
+      lastSeenAt: new Date(),
+    });
+    await INSERT.into(Concepts).entries({
+      ID: conceptId,
+      slug: '__test__-789-cascade-concept-hd',
+      name: '__test__ Cascade Concept (hd)',
+      status: 'ACTIVE',
+    });
+    await INSERT.into(HelpDocConceptLinks).entries({
+      ID: linkId,
+      helpDoc_ID: helpDocId,
+      concept_ID: conceptId,
+      predicate: 'explains',
+      confidence: 0.9,
+      anchor: 'before-create',
+      snippet: 'test snippet…',
+      extractedAt: new Date(),
+    });
+
+    const before = await SELECT.one.from(HelpDocConceptLinks).where({ ID: linkId });
+    expect(before).toBeDefined();
+    expect(before.helpDoc_ID).toBe(helpDocId);
+
+    await DELETE.from(HelpDocs).where({ ID: helpDocId });
+
+    const orphan = await SELECT.one.from(HelpDocConceptLinks).where({ ID: linkId });
+    expect(orphan).toBeUndefined();
+
+    // Concept survives — the cascade is composition-scoped only.
+    const concept = await SELECT.one.from(Concepts).where({ ID: conceptId });
+    expect(concept).toBeDefined();
+    expect(concept.slug).toBe('__test__-789-cascade-concept-hd');
   });
 });

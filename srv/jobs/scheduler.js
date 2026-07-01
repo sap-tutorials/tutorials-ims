@@ -699,6 +699,26 @@ export function registerJobs() {
     },
   });
 
+  // Phase 4.7 (#748): weekly help-docs corpus refresh + concept-link extraction
+  // across three sources (help.sap.com + cap.cloud.sap + ui5.sap.com).
+  // Wednesday 05:17 UTC — off-cluster from the existing :00/:13/:23/:43 minute
+  // grid (spec §3 Q8). Three-source fanout is slower than single-source
+  // fetchers, so 45-min TTL is generous. Bootstrap via
+  // scripts/seed-help-docs.cjs (or admin action) before the first automatic
+  // run; the cron refuses to self-bootstrap on an empty HelpDocs table
+  // (MAX-or-abort gate). opts threading (Phase 4.6 #757) already supports
+  // manual-trigger overrides.
+  registerJob({
+    jobName: 'fetch-help-docs',
+    schedule: '17 5 * * 3',
+    ttlMs: 45 * 60 * 1000,
+    description: 'Fetch narrative docs from help.sap.com + cap.cloud.sap + ui5.sap.com; extract explains concept links (weekly)',
+    fn: async (logId, opts) => {
+      const { runFetchHelpDocs } = await import('./fetch-help-docs-job.js');
+      return runFetchHelpDocs(logId, opts);
+    },
+  });
+
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
   // Prunes content rows past lastSeenAt + 2×TTL when not pinned. Cascade-deletes
   // link entity rows via CDS Compositions on the parent entity, plus an explicit

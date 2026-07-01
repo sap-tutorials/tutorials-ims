@@ -7,6 +7,29 @@
 
 import cds from '@sap/cds';
 
+// Phase 4.7 (#748): source-label mapping for help-docs. No DB column; the
+// three known sources map to human-readable badges at payload time.
+// Exported so knowledge-graph-service.js can reuse it for neighborhood
+// widening (Phase 4.7 §2.5).
+export const HELP_DOC_SOURCE_LABEL = Object.freeze({
+  'cap-cloud-sap': 'CAP',
+  'help-sap-com': 'SAP Help',
+  'ui5-sap-com': 'UI5',
+});
+
+/**
+ * Derive a title-cased human label from a slug-format anchor
+ * ('before-create' → 'Before Create'). Null-safe. Exported for the
+ * neighborhood widening in knowledge-graph-service.js.
+ */
+export function anchorToLabel(anchor) {
+  if (!anchor) return null;
+  return String(anchor)
+    .split('-')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 /**
  * @param {import('@sap/cds').Service} db  cds.db (or the connect-to('db') handle)
  * @returns {Promise<{
@@ -34,7 +57,8 @@ export async function buildConceptsPayload(db) {
     DiscoveryMissions, DiscoveryMissionConceptLinks,
     Videos, VideoConceptLinks,
     ApiDocs, ApiDocConceptLinks,
-    Samples, SampleConceptLinks } =
+    Samples, SampleConceptLinks,
+    HelpDocs, HelpDocConceptLinks } =
     cds.entities('com.sap.developers.ims.external');
   const { PublishedConcepts } = cds.entities('KnowledgeGraphService');
 
@@ -308,6 +332,49 @@ export async function buildConceptsPayload(db) {
     }
   }
 
+  // 5g. Phase 4.7 (#748): narrative help docs explaining each concept.
+  // Same conceptIds-guard pattern; per-concept 8-row cap; ordered by
+  // helpDoc.source asc, helpDoc.title asc (deterministic — cap-cloud-sap
+  // sorts first alphabetically, help-sap-com second, ui5-sap-com third).
+  // CRITICAL: HelpDocs.description is LargeString (NCLOB) and NOT pulled here —
+  // payload uses the precomputed snippet column on HelpDocConceptLinks
+  // (LOB-locator safety, §10.1, 3rd of 4 read sites).
+  let helpDocsByConcept = {};
+  if (ids.length > 0) {
+    const helpDocLinks = await db.run(
+      SELECT.from(HelpDocConceptLinks)
+        .columns(
+          'concept_ID',
+          'anchor',
+          'confidence',
+          'snippet',
+          'helpDoc.slug as slug',
+          'helpDoc.title as title',
+          'helpDoc.source as source',
+          'helpDoc.url as url',
+          'helpDoc.product as product',
+        )
+        .where({ concept_ID: { in: ids } })
+        .orderBy('helpDoc.source asc', 'helpDoc.title asc')
+        .limit(8 * ids.length)
+    );
+    const groupedHelpDocs = groupBy(helpDocLinks, 'concept_ID', r => ({
+      slug: r.slug,
+      title: r.title,
+      source: r.source,
+      sourceLabel: HELP_DOC_SOURCE_LABEL[r.source] ?? r.source,
+      url: r.url,
+      anchor: r.anchor ?? null,
+      anchorLabel: anchorToLabel(r.anchor),
+      snippet: r.snippet ?? '',
+      product: r.product,
+      confidence: r.confidence,
+    }));
+    for (const [conceptId, rows] of Object.entries(groupedHelpDocs)) {
+      helpDocsByConcept[conceptId] = rows.slice(0, 8);
+    }
+  }
+
   // 6. Stitch.
   const concepts = published.map(c => ({
     slug: c.slug.toLowerCase(),
@@ -323,6 +390,7 @@ export async function buildConceptsPayload(db) {
     videos: videosByConcept[c.ID] || [],
     apiDocs: apiDocsByConcept[c.ID] || [],
     samples: samplesByConcept[c.ID] || [],
+    helpDocs: helpDocsByConcept[c.ID] || [],
   }));
 
   return { concepts, generatedAt: new Date().toISOString() };

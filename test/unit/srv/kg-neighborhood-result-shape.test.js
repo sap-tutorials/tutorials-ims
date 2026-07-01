@@ -75,9 +75,9 @@ describe('KnowledgeGraphService.NeighborhoodResult CDS type', () => {
 });
 
 describe('typeConfigForWire — Task 4 of #850', () => {
-  it('returns 6 entries sorted by priority ascending', () => {
+  it('returns 7 entries sorted by priority ascending', () => {
     const cfg = typeConfigForWire();
-    expect(cfg).toHaveLength(6);
+    expect(cfg).toHaveLength(7);
     const priorities = cfg.map((c) => c.priority);
     expect(priorities).toEqual([...priorities].sort((a, b) => a - b));
   });

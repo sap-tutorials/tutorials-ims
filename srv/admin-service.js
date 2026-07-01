@@ -2193,6 +2193,42 @@ export default class AdminService extends cds.ApplicationService {
       return { started: true, reason: null };
     });
 
+    // Phase 4.7 (#748): operator-grade HelpDocs corpus bootstrap
+    // (help.sap.com + cap.cloud.sap + ui5.sap.com). Fire-and-forget
+    // sibling of seedSamples — same shape, different cron. Audit emission
+    // uses the post-#769 canonical pattern: first arg is the ACTION NAME
+    // ('kg.help-docs.seed'), NOT 'SecurityEvent'. The SecurityEvent audit
+    // type is hardcoded inside the createAuditEmitter closure.
+    this.on('seedHelpDocs', async (req) => {
+      const commit = !!req.data?.commit;
+      if (!commit) {
+        return { started: false, reason: 'dry-run (pass commit=true to actually seed)' };
+      }
+      const userId = req.user?.id;
+      // Fire-and-forget: invoke the cron with sinceIsoOverride to bypass
+      // the MAX-or-abort first-run gate. Budget override null means "respect
+      // ChatSettings"; the CLI uses Infinity for unbounded bootstrap.
+      setImmediate(() => {
+        runJobByName('fetch-help-docs', {
+          manualTrigger: true,
+          user: userId,
+          sinceIsoOverride: '1970-01-01T00:00:00Z',
+          budgetOverride: null,
+        }).catch((err) => {
+          cds.log('admin-service').error(`seedHelpDocs cron failed: ${err.message ?? err}`);
+        });
+      });
+      setImmediate(() => {
+        auditEvent('kg.help-docs.seed', {
+          user: userId,
+          committed: true,
+        }).catch((err) => {
+          cds.log('admin-service').warn(`seedHelpDocs audit emit failed: ${err.message ?? err}`);
+        });
+      });
+      return { started: true, reason: null };
+    });
+
     // ─────────────────────────────────────────────────────────────────
     // #756: AdminService.JobControls actions.
     //

@@ -244,6 +244,14 @@ service AdminService {
       started : Boolean;
       reason  : String;
     };
+    // Phase 4.7 (#748): operator-grade HelpDocs corpus bootstrap
+    // (help.sap.com + cap.cloud.sap + ui5.sap.com).
+    // Fire-and-forget invocation of the weekly fetch-help-docs cron with
+    // sinceIsoOverride to bypass the MAX-or-abort first-run gate.
+    action seedHelpDocs(commit: Boolean) returns {
+      started : Boolean;
+      reason  : String;
+    };
   };
 
   // Phase 4.5 (#746): per-cron last-run health surface for the admin

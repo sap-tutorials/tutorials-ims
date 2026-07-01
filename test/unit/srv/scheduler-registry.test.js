@@ -39,12 +39,14 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(() => registerJob({ jobName: 'dup', schedule: '0 1 * * *', ttlMs: 1000, description: 'x', fn: async () => 'b' })).toThrow(/Duplicate jobName/);
   });
 
-  it('registerJobs() registers exactly 26 jobs (lockstep)', async () => {
+  it('registerJobs() registers exactly 27 jobs (lockstep)', async () => {
     // The full registerJobs() schedules crons against node-cron. We run it
     // in a fresh test context; the test isolates by resetting the registry
     // in beforeEach and again in afterAll (below).
     registerJobs();
-    expect(_getJobRegistry().size).toBe(26);    // KG-widget-perf adds materialize-co-completions
+    expect(_getJobRegistry().size).toBe(27);    // Phase 4.7 (#748) adds fetch-help-docs
+    const names = [..._getJobRegistry().keys()];
+    expect(names).toContain('fetch-help-docs');
   });
 
   it('runJobByName(unknownName) throws', async () => {
