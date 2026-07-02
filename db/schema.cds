@@ -895,3 +895,41 @@ entity TenantSettings : cuid, managed {
   techUsers            : LargeString;
   techUsersMapping     : LargeString;
 }
+
+// --- Observability (#805) ---------------------------------------------------
+// Generic 5-min rollup. Composite primary key so both CF instances write
+// the same window independently (no job-lock on the rollup writer).
+// See docs/superpowers/specs/2026-07-02-805-observability-instrumentation-design.md
+@cds.persistence.table
+@analytics.exposed
+entity MetricSnapshots : managed {
+  key windowStart  : Timestamp;     // aligned to 5-min boundary
+  key metric       : String(64);    // e.g. 'content.cache.hit'
+  key instanceId   : String(64);    // process.env.CF_INSTANCE_GUID || `local-${pid}`
+  kind         : String(16);        // 'counter' | 'histogram' | 'gauge'
+  count        : Integer64;
+  value        : Double;            // counters/gauges: sum or current
+  p50          : Double;            // histograms only
+  p95          : Double;
+  p99          : Double;
+  max          : Double;
+  tags         : String(255);       // reserved for future dimensions (JSON)
+}
+
+// Per-publish detail row. `cuid` for UUID key; @assert.unique.session
+// prevents duplicate rows from failed-retry.
+@cds.persistence.table
+@analytics.exposed
+@assert.unique.session : [sessionId]
+entity PublishTimings : cuid, managed {
+  sessionId       : String(36);     // = ContentManifest.sessionId = PipelineLog.ID
+  manifestVersion : Integer;
+  mode            : String(16);     // 'delta' | 'full' | 'heal'
+  initiator       : String(255);
+  slugCount       : Integer;
+  beginMs         : Integer;        // createdAt → firstAppendAt
+  appendMsTotal   : Integer;        // sum of append handler wall-clocks
+  commitMs        : Integer;        // commit handler wall-clock
+  totalMs         : Integer;        // createdAt → commit response sent
+  outcome         : String(16);     // 'committed' | 'aborted' | 'rejected'
+}

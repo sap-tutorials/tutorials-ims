@@ -4,6 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { getNextLegacyId } from './legacy-id.js';
 import { toBuffer } from './content-store.js';
+import * as metrics from './metrics.js';
 import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';
 import { tutorialsTableInfo } from './_tutorials-table.js';
 import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
@@ -79,6 +80,8 @@ export function createSessionHelpers({ namespace }) {
     } catch (err) {
       await releaseLock(LOCK_NAME, INSTANCE_ID, namespace).catch(() => {});
       throw err;
+    } finally {
+      metrics.counter('publish.attempt');  // #805
     }
   }
 
@@ -94,6 +97,7 @@ export function createSessionHelpers({ namespace }) {
   }
 
   async function appendToSession({ sessionId, files = {}, metadata = {}, bodyTexts = {}, branchSpecs = {}, sources = {} }) {
+    const appendStartHr = process.hrtime.bigint();  // #805
     const session = await findActiveSession(sessionId);
     const { ContentFiles, ContentManifest } = cds.entities(namespace);
 
@@ -182,6 +186,22 @@ export function createSessionHelpers({ namespace }) {
     await UPDATE(ContentManifest)
       .where({ sessionId })
       .set({ lastAppendAt: new Date().toISOString() });
+
+    // #805 — accumulate wall-clock into ContentManifest so a load-balanced
+    // append batch on instance A survives a commit on instance B.
+    try {
+      const appendMs = Math.round(Number(process.hrtime.bigint() - appendStartHr) / 1e6);
+      const db = await cds.connect.to('db');
+      // Raw SQL — HANA column names are quoted-camelCase in migration tables
+      // (see db/src/*.hdbmigrationtable). COALESCE handles first-append case.
+      const hanaContentManifest = `${namespace.replace(/\./g, '_')}_ContentManifest`;
+      await db.run(
+        `UPDATE ${hanaContentManifest} SET "appendMsTotal" = COALESCE("appendMsTotal", 0) + ?, "firstAppendAt" = COALESCE("firstAppendAt", CURRENT_UTCTIMESTAMP) WHERE "sessionId" = ?`,
+        [appendMs, sessionId]
+      );
+    } catch (err) {
+      LOG.warn(`[content/publish/append] timing update failed (non-fatal): ${err.message}`);
+    }
 
     return {
       slugsAccepted: slugs.length,
@@ -420,6 +440,44 @@ export function createSessionHelpers({ namespace }) {
       LOG.warn(`[content/publish/commit] PipelineLog end failed (non-fatal): ${logErr.message}`);
     }
 
+    // #805 — Write PublishTimings row + histogram observations.
+    // Best-effort — failure here MUST NOT prevent commit success.
+    try {
+      const { PublishTimings } = cds.entities(namespace);
+      const [freshManifest] = await SELECT.from(ContentManifest).where({ sessionId }).columns(
+        'createdAt', 'firstAppendAt', 'appendMsTotal', 'version', 'trigger', 'initiator'
+      );
+      if (freshManifest) {
+        const createdAtMs = new Date(freshManifest.createdAt).getTime();
+        const firstAppendMs = freshManifest.firstAppendAt
+          ? new Date(freshManifest.firstAppendAt).getTime()
+          : createdAtMs;
+        const beginMs = Math.max(0, firstAppendMs - createdAtMs);
+        const appendMsTotal = freshManifest.appendMsTotal || 0;
+        const commitMs = durationMs;
+        const totalMs = Math.round(Date.now() - createdAtMs);
+        const outcome = rejectedReverts.length ? 'rejected' : 'committed';
+
+        await INSERT.into(PublishTimings).entries({
+          sessionId,
+          manifestVersion: freshManifest.version,
+          mode: freshManifest.trigger || 'unknown',
+          initiator: freshManifest.initiator || null,
+          slugCount: freshCount + carriedForward,
+          beginMs, appendMsTotal, commitMs, totalMs,
+          outcome,
+        });
+
+        metrics.observe('publish.begin.ms', beginMs);
+        metrics.observe('publish.append.ms', appendMsTotal);
+        metrics.observe('publish.commit.ms', commitMs);
+        metrics.observe('publish.total.ms', totalMs);
+        metrics.counter(outcome === 'rejected' ? 'publish.commit.reject' : 'publish.commit.ok');
+      }
+    } catch (metricsErr) {
+      LOG.warn(`[content/publish/commit] PublishTimings insert failed (non-fatal): ${metricsErr.message}`);
+    }
+
     return {
       version: newVersion,
       fileCount: freshCount + carriedForward,
@@ -459,6 +517,30 @@ export function createSessionHelpers({ namespace }) {
         );
       } catch (logErr) {
         LOG.warn(`[content/publish/abort] PipelineLog end failed (non-fatal): ${logErr.message}`);
+      }
+
+      // #805 — Write PublishTimings row for the aborted publish.
+      try {
+        const { PublishTimings } = cds.entities(namespace);
+        const createdAtMs = new Date(existing.createdAt).getTime();
+        const firstAppendMs = existing.firstAppendAt
+          ? new Date(existing.firstAppendAt).getTime()
+          : createdAtMs;
+        await INSERT.into(PublishTimings).entries({
+          sessionId,
+          manifestVersion: existing.version,
+          mode: existing.trigger || 'unknown',
+          initiator: existing.initiator || null,
+          slugCount: 0,
+          beginMs: Math.max(0, firstAppendMs - createdAtMs),
+          appendMsTotal: existing.appendMsTotal || 0,
+          commitMs: 0,
+          totalMs: Math.round(Date.now() - createdAtMs),
+          outcome: 'aborted',
+        });
+        metrics.counter('publish.abort');
+      } catch (metricsErr) {
+        LOG.warn(`[content/publish/abort] PublishTimings insert failed (non-fatal): ${metricsErr.message}`);
       }
     }
     // FAILED, ACTIVE, SUPERSEDED → no-op, idempotent.

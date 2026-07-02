@@ -43,3 +43,6 @@ annotate ims.MissionSlugRedirects with @cds.persistence.journal;
 annotate ims.UIEvent with @cds.persistence.journal;
 annotate ims.DevtoberfestConfig with @cds.persistence.journal;
 annotate ims.EventRegistrations with @cds.persistence.journal;
+// #805 — Observability
+annotate ims.MetricSnapshots with @cds.persistence.journal;
+annotate ims.PublishTimings with @cds.persistence.journal;

@@ -63,6 +63,7 @@
         { "key": "analyticsExternal", "title": "Analytics", "href": "/analytics-ui/", "target": "_self", "requiredScope": "Tutorial.Author" },
         { "key": "analytics", "title": "Completion analytics" },
         { "key": "statistics", "title": "Statistics" },
+        { "key": "metrics", "title": "Metrics" },
         { "key": "dataExport", "title": "Data Export" }
       ]
     },
