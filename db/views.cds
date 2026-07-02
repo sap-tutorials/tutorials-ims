@@ -302,6 +302,47 @@ view MyTutorialsView as
   // migration rows) is kept for backward compat.
   where t.status is null or t.status not in ('INACTIVE', 'DELETED');
 
+// #923 — the panel-shape view for Sage's "My Tutorials." Personal
+// watch list, sourced from TutorialMonitors (the CAP equivalent of
+// Java IMS's IMS_DASHBOARD_MONITOR_RECORD). See ADR 0006 §2026-07-02b
+// for the semantic rationale — this is orthogonal to the 4-source
+// UNION in MyTutorialsView, which merges four "who's associated with
+// this tutorial" signals (author FK, contributor FK, ownerEmail,
+// legacy free-text owner). None of those match what a user
+// actually opts into monitoring; TutorialMonitors is a personal signal.
+//
+// Column shape mirrors MyTutorialsView so consumers that read the
+// panel don't need to reshape their response contract (Sage's
+// getMyTutorials() maps 1-1 by column name). `bestPriority` is
+// intentionally absent — there's no priority union here; every row
+// is a single user's explicit opt-in.
+view MyMonitoredTutorialsView as
+  select from ims.TutorialMonitors as mon
+    inner join ims.Tutorials      as t on t.ID = mon.tutorial.ID
+    left  join ims.Users          as u on u.ID = mon.user.ID
+    left  join ims.TutorialMeta   as m on m.tutorial.ID = t.ID
+  {
+    key t.ID                                as tutorial_ID,
+    key u.uuid                              as userId,
+    t.slug,
+    t.title,
+    t.primaryTag,
+    t.status,
+    m.reviewedDate,
+    m.monitoredStatus,
+    m.notificationNumber,
+    m.lastNotificationDate                  as notificationDate,
+    m.firstNotificationDate,
+    m.owner                                 as owner,
+    m.ownerEmail                            as ownerEmail,
+    m.repository.name                       as repositoryName : String,
+    case when m.monitoredStatus = 'ACTIVE'
+         then true else false end           as monitored : Boolean,
+    days_between(m.reviewedDate, $now)      as daysSinceReview : Integer
+  }
+  // Same soft-delete gate as MyTutorialsView (see comment above).
+  where t.status is null or t.status not in ('INACTIVE', 'DELETED');
+
 // #777 followup (2026-06-30) — bridge entity needed by db/advocates.cds's
 // `ownedTutorials` association. MyTutorialsView.userId = Users.uuid (the
 // CAP req.user.id-compatible field) but Advocates.user is a managed

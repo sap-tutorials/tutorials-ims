@@ -361,6 +361,26 @@ entity TutorialMeta : cuid, managed, LegacyKeyed {
   repository                  : Association to TutorialRepositories;
 }
 
+// #923 — Sage's "My Tutorials" panel is a personal watch list, not an
+// authorship signal. In legacy Java IMS this is the
+// IMS_DASHBOARD_MONITOR_RECORD table (see the Java model at
+// D:/projects/com.sap.developers.ims/application/src/main/java/com/sap/
+// developers/ims/model/DashboardMonitoredRecord.java). A user toggles
+// "watch this tutorial" via a UI eye icon (setMonitoredStatus endpoint);
+// the panel query filters TutorialMeta by rows joined to this table
+// where userId == currentUser. The signal is completely orthogonal to
+// TutorialMeta.owner/ownerEmail — those describe who's responsible for
+// authoring/maintaining the tutorial (surfaced on the admin dashboard).
+//
+// The unique constraint prevents duplicate (user, tutorial) pairs — same
+// invariant Java IMS enforces via @EqualsAndHashCode on
+// DashboardMonitoredRecord.
+@assert.unique.userTutorial : [user, tutorial]
+entity TutorialMonitors : cuid, managed {
+  user     : Association to Users;
+  tutorial : Association to Tutorials;
+}
+
 entity TutorialContributors : cuid, LegacyKeyed {
   tutorial                  : Association to Tutorials;
   name                      : String(255);
