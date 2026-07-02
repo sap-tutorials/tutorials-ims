@@ -117,9 +117,9 @@ CREATE VIEW "KG_PG_VERTICES_V" AS
 CREATE VIEW "KG_PG_EDGES_V" AS
   -- kg:requires edges: concept → concept
   SELECT
-    'concept:' || src.slug    AS "SOURCE",
-    'concept:' || tgt.slug    AS "TARGET",
-    'requires'                AS "EDGE_TYPE"
+    CAST('concept:' || src.slug AS NVARCHAR(100)) AS "SOURCE",
+    CAST('concept:' || tgt.slug AS NVARCHAR(100)) AS "TARGET",
+    'requires'                                    AS "EDGE_TYPE"
   FROM "com_sap_developers_ims_ConceptEdges" ce
   JOIN "com_sap_developers_ims_Concepts" src ON src.ID = ce.source_ID
   JOIN "com_sap_developers_ims_Concepts" tgt ON tgt.ID = ce.target_ID
@@ -128,9 +128,9 @@ CREATE VIEW "KG_PG_EDGES_V" AS
   UNION ALL
   -- kg:teaches edges: tutorial → concept
   SELECT
-    'tutorial:' || t.slug     AS "SOURCE",
-    'concept:' || c.slug      AS "TARGET",
-    'teaches'                 AS "EDGE_TYPE"
+    CAST('tutorial:' || t.slug AS NVARCHAR(100)) AS "SOURCE",
+    CAST('concept:'  || c.slug AS NVARCHAR(100)) AS "TARGET",
+    'teaches'                                    AS "EDGE_TYPE"
   FROM "com_sap_developers_ims_TutorialConceptLinks" tcl
   JOIN "com_sap_developers_ims_Tutorials" t ON t.ID = tcl.tutorial_ID
   JOIN "com_sap_developers_ims_Concepts" c   ON c.ID = tcl.concept_ID
