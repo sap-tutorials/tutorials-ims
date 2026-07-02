@@ -26,6 +26,7 @@ import { runSeedApiDocs } from './lib/seed-api-docs.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
+import * as metrics from './lib/metrics.js';
 import {
   listAlertSeverities,
   listAlertAudiences,
@@ -1473,6 +1474,19 @@ export default class AdminService extends cds.ApplicationService {
     this.on('findMissingSlugs', async () => {
       const { findMissingSlugs } = await import('./lib/slug-mapping.js');
       return findMissingSlugs();
+    });
+
+    // #805 — Live in-memory metrics snapshot for the admin-shell Metrics view.
+    // Returns JSON-encoded string; the tile JSON.parses it. Matches the shape
+    // served by /admin/metrics/live (Express route) for on-call curl.
+    this.on('getMetricsSnapshot', async () => {
+      return JSON.stringify({
+        snapshot: metrics.snapshot(),
+        instanceId: process.env.CF_INSTANCE_GUID || `local-${process.pid}`,
+        uptimeSec: Math.round(process.uptime()),
+        dbWrapEnabled: process.env.METRICS_DB_WRAP === 'true',
+        generatedAt: new Date().toISOString(),
+      });
     });
 
     this.on('getBoardStatistics', async () => {

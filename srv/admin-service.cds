@@ -536,6 +536,13 @@ service AdminService {
     tutorialsNeedReview     : Integer;
   };
 
+  // --- #805 Observability live snapshot ---
+  // Returns JSON-encoded string (avoids modelling the nested counters/gauges/
+  // histograms shape in CDS). The admin-shell tile JSON.parses the string.
+  // The plain /admin/metrics/live Express route (basic-auth) returns the same
+  // shape for on-call curl. See docs/developers/architecture/observability.md.
+  function getMetricsSnapshot() returns String;
+
   // --- Tag Import ---
 
   type TagImportRow {
