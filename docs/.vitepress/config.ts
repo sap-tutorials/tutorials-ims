@@ -185,7 +185,8 @@ export default defineConfig({
             { text: '0002 — QA channel as parallel srv', link: '/decisions/0002-qa-channel-parallel-srv' },
             { text: '0003 — Public Hugo, lazy login',    link: '/decisions/0003-public-hugo-lazy-login' },
             { text: '0004 — JWT-only identity',          link: '/decisions/0004-jwt-only-identity' },
-            { text: '0005 — bootstrap vs served split',  link: '/decisions/0005-bootstrap-vs-served-split' }
+            { text: '0005 — bootstrap vs served split',  link: '/decisions/0005-bootstrap-vs-served-split' },
+            { text: '0006 — Authorship vs. ownership semantics', link: '/decisions/0006-authorship-vs-ownership-semantics' }
           ]},
           { text: 'CAP / CDS gotchas',         link: '/developers/reference/cap-cds-gotchas' },
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
