@@ -11,22 +11,43 @@
 --   (SQLScript) handles input validation + result shaping; this
 --   procedure (GRAPH) handles the algorithm call.
 --
--- WHY DEFINER
---   Same rationale as KG_PATH_V2 — pins the graph-workspace access
---   identity to #OO regardless of which runtime user calls it. See
---   the sibling procedure's header for the full memory reference.
+-- SYNTAX REFERENCE
+--   Modeled after SAP's official HANA Cloud SHORTEST_PATH_ONE_TO_ONE
+--   sample:
+--   https://github.com/SAP-samples/hana-graph-examples/blob/main/
+--     GRAPH_PROCEDURE_EXAMPLES/BUILTIN_FUNCTIONS_ALGORITHMS/
+--     HANA_Cloud_2021Q1_Shortest_Path_One_to_One.sql
+--   Key patterns from that sample:
+--     - LANGUAGE GRAPH READS SQL DATA AS  (not SQL SECURITY DEFINER
+--       — GraphScript procedures don't accept that clause; the
+--       DEFINER-owner discipline holds because the workspace IS_VALID
+--       check pins the object-owner identity regardless).
+--     - Graph("SCHEMA", "WORKSPACE") — always two-arg form.
+--     - Shortest_Path(:g, :v_from, :v_to, weight_lambda, :direction)
+--       — the direction arg ('ANY') is required for undirected traversal.
+--     - Vertices(:p) — mixed case.
+--     - FOREACH v IN Vertices(:p) WITH ORDINALITY AS <name> — this
+--       IS the correct FOREACH form inside a SELECT expression.
 --
 -- CALL CONTRACT
 --   IN  i_from        VERTEX_KEY of the source (e.g. 'tutorial:<slug>')
 --   IN  i_to          VERTEX_KEY of the destination
 --   OUT o_verts       Table of (VERTEX_KEY, SEQ_IDX) rows tracing the
---                     shortest path. Empty if no path exists.
+--                     shortest path. Empty if no path exists (or if
+--                     either endpoint doesn't exist in the workspace).
 --
 -- WEIGHT FUNCTION
 --   Uniform cost 1 per edge — the SHORTEST_PATH we want IS the hop-
 --   count-minimizing path. If a follow-on ever needs to weight
 --   coCompletedWith edges lower than requires edges (e.g. PageRank
 --   → weighted shortest), the lambda below is the extension point.
+--
+-- DIRECTION
+--   'ANY' — undirected traversal. KG_PG_EDGES_V materializes edges as
+--   directed (concept→concept for 'requires', tutorial→concept for
+--   'teaches'), but the PREREQ semantics we want (tutorial → concept
+--   chain → tutorial) requires traversing 'teaches' edges backwards.
+--   'ANY' lets the algorithm walk against edge direction.
 --
 -- Spec:  docs/superpowers/specs/2026-07-02-913-kg-property-graph-spike-design.md
 -- Issue: #913
@@ -40,22 +61,33 @@ PROCEDURE KG_SHORTEST_PATH_GRAPH (
     seq_idx    BIGINT
   )
 )
-LANGUAGE GRAPH
-READS SQL DATA
-SQL SECURITY DEFINER
-AS
+LANGUAGE GRAPH READS SQL DATA AS
 BEGIN
-  GRAPH g = Graph("KG_PG_WORKSPACE");
+  -- Two-arg Graph() constructor — schema qualifier required per the
+  -- SAP sample. **CURRENT_SCHEMA** is the HDI container schema; HANA
+  -- resolves it at deploy time.
+  GRAPH g = Graph("**CURRENT_SCHEMA**", "KG_PG_WORKSPACE");
+
+  -- Guard against missing endpoints — same pattern as SAP's example.
+  -- Without this, Vertex(:g, :key) throws when the key doesn't exist,
+  -- and the caller would see a confusing exception instead of an
+  -- empty result. Fail-open by returning zero rows.
+  IF (NOT VERTEX_EXISTS(:g, :i_from) OR NOT VERTEX_EXISTS(:g, :i_to)) {
+    return;
+  }
+
   VERTEX v_from = Vertex(:g, :i_from);
   VERTEX v_to   = Vertex(:g, :i_to);
 
-  -- Unit-cost weight lambda: every edge is 1 hop.
-  WeightedPath<BIGINT> p = SHORTEST_PATH(:g, :v_from, :v_to,
-    (Edge e) => BIGINT{ RETURN 1L; });
+  -- Unit-cost weight lambda + 'ANY' direction. Every edge costs 1
+  -- regardless of type or direction; SHORTEST_PATH becomes hop-count-
+  -- minimizing with undirected traversal.
+  WeightedPath<BIGINT> p = Shortest_Path(:g, :v_from, :v_to,
+    (Edge e) => BIGINT{ return 1L; }, 'ANY');
 
-  -- If no path exists, VERTICES(:p) is empty; the SELECT returns
-  -- zero rows and o_verts is empty. Callers treat empty as "no path".
+  -- If no path exists between two live endpoints, Shortest_Path returns
+  -- an empty path — the SELECT below emits zero rows.
   o_verts = SELECT :v."VERTEX_KEY" AS vertex_key,
                    :SEQ AS seq_idx
-            FOREACH v IN VERTICES(:p) WITH ORDINALITY AS SEQ;
+            FOREACH v IN Vertices(:p) WITH ORDINALITY AS SEQ;
 END;

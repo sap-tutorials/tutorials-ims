@@ -56,6 +56,10 @@ BEGIN
   DECLARE to_key   NVARCHAR(400);
   DECLARE effective_max_hops INTEGER;
   DECLARE hop_count_calculated INTEGER;
+  -- Table variable for the GraphScript sibling's OUT param. SQLScript
+  -- requires all DECLAREs at the top of the BEGIN block — HANA rejects
+  -- mid-body DECLAREs with "syntax error near DECLARE".
+  DECLARE graph_verts TABLE (vertex_key NVARCHAR(400), seq_idx BIGINT);
 
   IF :from_iri IS NULL OR NOT (:from_iri LIKE_REGEXPR
        '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') OR
@@ -77,7 +81,6 @@ BEGIN
   -- Delegate to the GraphScript sibling for the SHORTEST_PATH call.
   -- Returns the vertex sequence as (VERTEX_KEY, SEQ_IDX) rows. Empty
   -- when no path exists — no SIGNAL, empty is a valid answer per spec.
-  DECLARE graph_verts TABLE (vertex_key NVARCHAR(400), seq_idx BIGINT);
   CALL KG_SHORTEST_PATH_GRAPH(:from_key, :to_key, :graph_verts);
 
   -- Compute hop count: edges in the path = vertices - 1. For the
