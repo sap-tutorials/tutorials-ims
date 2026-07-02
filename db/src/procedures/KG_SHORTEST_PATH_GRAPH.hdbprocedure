@@ -1,0 +1,61 @@
+-- KG_SHORTEST_PATH_GRAPH.hdbprocedure
+-- ============================================================
+-- HANA GraphScript sibling for KG_PATH_V2. Computes the shortest path
+-- between two vertices in KG_PG_WORKSPACE and returns the vertex
+-- sequence as a table.
+--
+-- WHY A SEPARATE PROCEDURE
+--   HANA SQLScript does NOT allow inline `LANGUAGE GRAPH` blocks inside
+--   a `LANGUAGE SQLSCRIPT` procedure body. GraphScript is a distinct
+--   language that must be declared at the procedure boundary. KG_PATH_V2
+--   (SQLScript) handles input validation + result shaping; this
+--   procedure (GRAPH) handles the algorithm call.
+--
+-- WHY DEFINER
+--   Same rationale as KG_PATH_V2 — pins the graph-workspace access
+--   identity to #OO regardless of which runtime user calls it. See
+--   the sibling procedure's header for the full memory reference.
+--
+-- CALL CONTRACT
+--   IN  i_from        VERTEX_KEY of the source (e.g. 'tutorial:<slug>')
+--   IN  i_to          VERTEX_KEY of the destination
+--   OUT o_verts       Table of (VERTEX_KEY, SEQ_IDX) rows tracing the
+--                     shortest path. Empty if no path exists.
+--
+-- WEIGHT FUNCTION
+--   Uniform cost 1 per edge — the SHORTEST_PATH we want IS the hop-
+--   count-minimizing path. If a follow-on ever needs to weight
+--   coCompletedWith edges lower than requires edges (e.g. PageRank
+--   → weighted shortest), the lambda below is the extension point.
+--
+-- Spec:  docs/superpowers/specs/2026-07-02-913-kg-property-graph-spike-design.md
+-- Issue: #913
+-- ============================================================
+
+PROCEDURE KG_SHORTEST_PATH_GRAPH (
+  IN  i_from  NVARCHAR(400),
+  IN  i_to    NVARCHAR(400),
+  OUT o_verts TABLE (
+    vertex_key NVARCHAR(400),
+    seq_idx    BIGINT
+  )
+)
+LANGUAGE GRAPH
+READS SQL DATA
+SQL SECURITY DEFINER
+AS
+BEGIN
+  GRAPH g = Graph("KG_PG_WORKSPACE");
+  VERTEX v_from = Vertex(:g, :i_from);
+  VERTEX v_to   = Vertex(:g, :i_to);
+
+  -- Unit-cost weight lambda: every edge is 1 hop.
+  WeightedPath<BIGINT> p = SHORTEST_PATH(:g, :v_from, :v_to,
+    (Edge e) => BIGINT{ RETURN 1L; });
+
+  -- If no path exists, VERTICES(:p) is empty; the SELECT returns
+  -- zero rows and o_verts is empty. Callers treat empty as "no path".
+  o_verts = SELECT :v."VERTEX_KEY" AS vertex_key,
+                   :SEQ AS seq_idx
+            FOREACH v IN VERTICES(:p) WITH ORDINALITY AS SEQ;
+END;
