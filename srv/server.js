@@ -69,6 +69,13 @@ let embeddingsStatsHandler = (req, res) => res.status(503).json({ error: 'servic
 // handled correctly rather than falling through to AdminService.
 let analyticsOdataRouter = (req, res, next) => res.status(503).json({ error: 'service_starting' });
 
+// #805 — Late-bound Express handler for /admin/metrics/live. Same trap as
+// /admin/analytics/* above: AdminService's OData adapter mounts at /admin
+// and would otherwise intercept as "Invalid resource path AdminService.metrics.live".
+// The stub returns 503 during boot; the third cds.on('served') handler
+// (at bottom of this file) wires the real handler.
+let metricsLiveHandler = (req, res) => res.status(503).json({ error: 'service_starting' });
+
 // Per-request scope used by POST /feedback/submit to thread the originating
 // client IP from the express handler to a srv.before('submitTutorialFeedback')
 // hook. CAP 9.9.1 strictly validates action arguments and rejects unknown
@@ -397,6 +404,10 @@ cds.on('bootstrap', (app) => {
   // Same: reserve GET /admin/embeddings/stats BEFORE CAP mounts AdminService
   // at /admin. Auth + business logic bound lazily in 'served'.
   app.get('/admin/embeddings/stats', (req, res, next) => embeddingsStatsHandler(req, res, next));
+
+  // #805 — Reserve /admin/metrics/live BEFORE CAP mounts AdminService.
+  // The real handler is late-bound in cds.on('served') below.
+  app.get('/admin/metrics/live', (req, res) => metricsLiveHandler(req, res));
 
   // Reserve ALL /admin/analytics/* requests BEFORE CAP mounts AdminService at /admin.
   // Without this reservation AdminService's OData router intercepts /admin/analytics/*
@@ -952,6 +963,41 @@ cds.on('served', async () => {
   } else {
     cds.log('analytics').warn('AnalyticsService OData adapter not found — /admin/analytics may 404');
   }
+
+  // #805 — Wire the real /admin/metrics/live handler. Same context+auth
+  // sandwich as embeddingsStatsHandler (Admin scope required — the endpoint
+  // exposes in-memory operational data that isn't for public consumption).
+  const metricsLiveBusiness = async (req, res) => {
+    const user = cds.context?.user;
+    if (!user?.id || user.id === 'anonymous') {
+      return res.status(401).json({ error: 'unauthenticated' });
+    }
+    if (!(user?.is && user.is('Admin'))) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const metrics = await import('./lib/metrics.js');
+      res.json({
+        snapshot: metrics.snapshot(),
+        instanceId: process.env.CF_INSTANCE_GUID || `local-${process.pid}`,
+        uptimeSec: Math.round(process.uptime()),
+        dbWrapEnabled: process.env.METRICS_DB_WRAP === 'true',
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      cds.log('metrics-live').error(err.message);
+      res.status(500).json({ error: 'snapshot_failed' });
+    }
+  };
+  metricsLiveHandler = (req, res, next) => {
+    contextMw(req, res, (err) => {
+      if (err) return next(err);
+      authMw(req, res, (err) => {
+        if (err) return next(err);
+        Promise.resolve(metricsLiveBusiness(req, res)).catch(next);
+      });
+    });
+  };
 
   // Wire the real streaming handler for GET /admin/exports/exportLegacyData now
   // that cds.middlewares (context + auth) are available.
