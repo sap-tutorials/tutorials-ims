@@ -24,8 +24,16 @@ async function main() {
   }
 
   // Load the CDS model so `cds.entities(...)` is callable. The serving
-  // lifecycle does this for you; `cds bind --exec` does not. See #757.
-  cds.model = await cds.load('*');
+  // lifecycle does this for you; `cds bind --exec` does not. See #757 / #911.
+  // Two subtleties that #911 discovered:
+  //   1. `cds.load('*')` returns a plain CSN; its `.definitions` is a non-
+  //      iterable object. `cds.linked(csn)` wraps it in a proxy whose
+  //      `.definitions` is iterable — which is what `cds.entities()` needs.
+  //   2. `await cds.connect.to('db')` mutates `cds.model` and strips that
+  //      iterator. Touching `cds.model.entities` BEFORE connect primes and
+  //      caches the getter so it survives the connect.
+  cds.model = cds.linked(await cds.load('*'));
+  void cds.model.entities;
   await cds.connect.to('db');
 
   const { runFetchSamples } = await import('../srv/jobs/fetch-samples-job.js');

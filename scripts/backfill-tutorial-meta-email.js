@@ -13,8 +13,11 @@ import { fileURLToPath } from 'node:url';
 
 export async function backfill({ dryRun = false } = {}) {
   // Load the CDS model so `cds.entities(...)` is callable. The serving
-  // lifecycle does this for you; `cds bind --exec` does not. See #757.
-  cds.model = await cds.load('*');
+  // lifecycle does this for you; `cds bind --exec` does not. See #757 / #911.
+  // `cds.linked(...)` + priming `cds.model.entities` BEFORE connect are both
+  // required — the getter is stripped by connect otherwise.
+  cds.model = cds.linked(await cds.load('*'));
+  void cds.model.entities;
   const db = await cds.connect.to('db');
   const { TutorialMeta, Users } = cds.entities('com.sap.developers.ims');
 

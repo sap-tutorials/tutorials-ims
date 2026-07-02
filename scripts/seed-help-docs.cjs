@@ -26,8 +26,11 @@ async function main() {
   }
 
   // Load the CDS model so `cds.entities(...)` is callable. The serving
-  // lifecycle does this for you; `cds bind --exec` does not.
-  cds.model = await cds.load('*');
+  // lifecycle does this for you; `cds bind --exec` does not. See #757 / #911.
+  // `cds.linked(...)` + priming `cds.model.entities` BEFORE connect are both
+  // required — the getter is stripped by connect otherwise.
+  cds.model = cds.linked(await cds.load('*'));
+  void cds.model.entities;
   await cds.connect.to('db');
 
   const { runFetchHelpDocs } = await import('../srv/jobs/fetch-help-docs-job.js');
