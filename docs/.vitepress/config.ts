@@ -171,6 +171,7 @@ export default defineConfig({
           { text: 'Re-migration runbook',      link: '/developers/operations/re-migration-runbook' },
           { text: 'Rebuild content workflow',  link: '/developers/operations/rebuild-content-workflow' },
           { text: 'Content rollback',          link: '/developers/operations/content-rollback' },
+          { text: 'Rotate CONTENT_API_KEY',    link: '/developers/operations/rotate-content-api-key' },
           { text: 'Runtime config',            link: '/developers/operations/runtime-config' },
           { text: 'Secrets tracking',          link: '/developers/operations/secrets-tracking' },
           { text: 'SMTP credentials rotation', link: '/developers/operations/smtp-credentials-rotation' },

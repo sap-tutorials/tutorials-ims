@@ -364,6 +364,16 @@ jobs:
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm run copy-joule-vendor
 
+      # [#797] Hugo safeHTML XSS-guard. Sweeps hugo/layouts/**/*.{html,xml,xsl}
+      # for unmarked `| safeHTML` / `| safeHTMLAttr` / `printf "<...%s"` usages
+      # and fails CI if any occurrence lacks a `<!-- security-reviewed: <reason> -->`
+      # marker within 3 lines above (guard: scripts/check-hugo-safe-html.cjs).
+      # Runs in all modes (the Hugo build always runs). This workflow invokes
+      # /tmp/hugo directly rather than `npm run build:all`, so the explicit
+      # step is the only place the guard fires in rebuild-content.
+      - name: Check Hugo security annotations
+        run: npm run check:security-annotations
+
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 

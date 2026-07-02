@@ -21,6 +21,7 @@
        ============================================================ -->
   <section class="kg-overview__section kg-overview__diagram" aria-labelledby="kg-arch">
     <h2 id="kg-arch">How it's built</h2>
+    <!-- security-reviewed: readFile of a static repo asset; not user-supplied -->
     {{ readFile "static/img/knowledge-graph/architecture.svg" | safeHTML }}
     <p>
       Every night, a CAP cron job hands each tutorial's markdown to

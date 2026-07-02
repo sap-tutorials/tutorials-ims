@@ -1,3 +1,4 @@
+{{- /* security-reviewed: static XML declaration string; no user input */ -}}
 {{- printf "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>" | safeHTML }}
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 {{- range site.Pages }}

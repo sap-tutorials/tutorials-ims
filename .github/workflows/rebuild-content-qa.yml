@@ -126,6 +126,15 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+      # [#797] Hugo safeHTML XSS-guard. Sweeps hugo/layouts/**/*.{html,xml,xsl}
+      # for unmarked `| safeHTML` / `| safeHTMLAttr` / `printf "<...%s"` usages
+      # and fails CI if any occurrence lacks a `<!-- security-reviewed: <reason> -->`
+      # marker within 3 lines above (guard: scripts/check-hugo-safe-html.cjs).
+      # Layouts are shared between prod and QA channels, so the guard needs
+      # to fire on the QA build path too.
+      - name: Check Hugo security annotations
+        run: npm run check:security-annotations
+
       - name: Build QA Hugo site
         # Hugo was downloaded to /tmp/hugo (line 44). The build:qa npm script
         # invokes 'hugo' (bare binary name) — works locally where hugo is
