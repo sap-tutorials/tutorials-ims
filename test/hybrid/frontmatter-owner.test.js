@@ -275,5 +275,200 @@ describe.runIf(isSafeForWrites() && process.env.ALLOW_HYBRID_WRITES === 'true')(
       const t = await SELECT.one.from(Tutorials).where({ ID: tutId }).columns('author_ID');
       expect(t.author_ID).toBe(userId);
     }, 60_000);
+
+    // -------------------------------------------------------------------------
+    // Test 5 — #862 reopen (2026-07-02): ownerEmail comes from the resolved
+    // author signal, NOT from contributors[0].email.
+    //
+    // Two subjects:
+    //   - Alice: frontmatter-declared author, has githubLogin='alicetestlogin'
+    //     and email='alice@example.com'
+    //   - Bob:   NO Users.githubLogin, only email='bob@example.com'; appears
+    //     as the "primaryContributorEmail" in the publish payload (i.e. Bob
+    //     made the last commit / typo-fix)
+    //
+    // Under the old (buggy) publish path, upsertTutorialMetadata would have
+    // stamped TutorialMeta.ownerEmail = 'bob@example.com'. Under the fix,
+    // linkTutorialAuthorship resolves the author to Alice via Phase 0
+    // (frontmatterGithubLogin → Users.githubLogin → Users.email), and writes
+    // that email — never Bob's — into TutorialMeta.ownerEmail.
+    // -------------------------------------------------------------------------
+    it('Test 5 — #862 reopen: TutorialMeta.ownerEmail from author, never contributor', async () => {
+      const slug = TEST_PREFIX + 'owneremail-' + Date.now();
+
+      const aliceId = cds.utils.uuid();
+      const tutId = cds.utils.uuid();
+      const metaId = cds.utils.uuid();
+      cleanup.users.push(aliceId);
+      cleanup.tutorials.push(tutId);
+      cleanup.meta.push(metaId);
+
+      const { Users, Tutorials, TutorialMeta } = cds.entities(NS);
+
+      const aliceLogin = 'alicetestlogin-' + aliceId.slice(0, 8);
+      const aliceEmail = TEST_PREFIX + 'alice-' + aliceId.slice(0, 8) + '@example.com';
+      const bobEmail   = TEST_PREFIX + 'bob-'   + tutId.slice(0, 8)   + '@example.com';
+
+      await INSERT.into(Users).entries({
+        ID: aliceId,
+        uuid: aliceId,
+        sapId: TEST_PREFIX + 'alice-' + aliceId.slice(0, 8),
+        email: aliceEmail,
+        displayName: TEST_PREFIX + 'Alice',
+        githubLogin: aliceLogin,
+      });
+      await INSERT.into(Tutorials).entries({
+        ID: tutId,
+        slug,
+        title: TEST_PREFIX + slug,
+        status: 'ACTIVE',
+      });
+      // Seed TutorialMeta with NULL ownerEmail — the state upsertTutorial
+      // Metadata produces on a fresh publish under the fix.
+      await INSERT.into(TutorialMeta).entries({
+        ID: metaId,
+        tutorial_ID: tutId,
+        owner: null,
+        ownerEmail: null,
+        monitoredStatus: 'ACTIVE',
+        notificationNumber: 0,
+        legacyId: 9_999_800 + Math.floor(Math.random() * 100),
+      });
+
+      await linkTutorialAuthorship(NS, {
+        [slug]: {
+          primaryContributorEmail: bobEmail,       // Bob is the contributor
+          primaryContributorLogin: 'boblogin',
+          frontmatterGithubLogin: aliceLogin,      // Alice is the declared owner
+        },
+      });
+
+      const meta = await SELECT.one
+        .from(TutorialMeta)
+        .where({ ID: metaId })
+        .columns('ownerEmail');
+
+      // #862 reopen — Alice's email wins because she's the frontmatter-
+      // declared owner. Bob (the contributor) MUST NOT appear as ownerEmail.
+      expect(meta.ownerEmail).toBe(aliceEmail);
+      expect(meta.ownerEmail).not.toBe(bobEmail);
+    }, 60_000);
+
+    // -------------------------------------------------------------------------
+    // Test 6 — #862 reopen: no author signal → ownerEmail stays NULL.
+    //
+    // Payload carries only a contributor's email. No frontmatter login. No
+    // TutorialContributors row. Under the old publish path, ownerEmail would
+    // get stamped with the contributor's email. Under the fix, ownerEmail
+    // stays NULL because linkTutorialAuthorship never resolves an authorUserId.
+    // -------------------------------------------------------------------------
+    it('Test 6 — #862 reopen: no author resolvable → ownerEmail remains NULL', async () => {
+      const slug = TEST_PREFIX + 'noauth-owneremail-' + Date.now();
+
+      const tutId = cds.utils.uuid();
+      const metaId = cds.utils.uuid();
+      cleanup.tutorials.push(tutId);
+      cleanup.meta.push(metaId);
+
+      const { Tutorials, TutorialMeta } = cds.entities(NS);
+
+      const orphanEmail = TEST_PREFIX + 'orphan-' + tutId.slice(0, 8) + '@example.com';
+
+      await INSERT.into(Tutorials).entries({
+        ID: tutId,
+        slug,
+        title: TEST_PREFIX + slug,
+        status: 'ACTIVE',
+      });
+      await INSERT.into(TutorialMeta).entries({
+        ID: metaId,
+        tutorial_ID: tutId,
+        owner: null,
+        ownerEmail: null,
+        monitoredStatus: 'ACTIVE',
+        notificationNumber: 0,
+        legacyId: 9_999_900 + Math.floor(Math.random() * 100),
+      });
+
+      await linkTutorialAuthorship(NS, {
+        [slug]: {
+          primaryContributorEmail: orphanEmail,  // No matching Users row
+          // No frontmatterGithubLogin
+        },
+      });
+
+      const meta = await SELECT.one
+        .from(TutorialMeta)
+        .where({ ID: metaId })
+        .columns('ownerEmail');
+
+      // NULL stays NULL — absence of an author signal is not filled by a
+      // contributor. Admin can set explicitly via the admin UI later.
+      expect(meta.ownerEmail).toBeNull();
+    }, 60_000);
+
+    // -------------------------------------------------------------------------
+    // Test 7 — #862 reopen: existing non-NULL ownerEmail is preserved.
+    //
+    // A tutorial already has ownerEmail set (admin correction or legit legacy
+    // IMS migration value). Even if the resolver finds an author whose email
+    // differs, ownerEmail MUST NOT be overwritten. The UPDATE is gated by
+    // WHERE OWNEREMAIL IS NULL.
+    // -------------------------------------------------------------------------
+    it('Test 7 — #862 reopen: existing ownerEmail not overwritten by resolver', async () => {
+      const slug = TEST_PREFIX + 'preserve-owneremail-' + Date.now();
+
+      const aliceId = cds.utils.uuid();
+      const tutId = cds.utils.uuid();
+      const metaId = cds.utils.uuid();
+      cleanup.users.push(aliceId);
+      cleanup.tutorials.push(tutId);
+      cleanup.meta.push(metaId);
+
+      const { Users, Tutorials, TutorialMeta } = cds.entities(NS);
+
+      const aliceLogin = 'alice-preserve-' + aliceId.slice(0, 8);
+      const aliceEmail = TEST_PREFIX + 'alice-preserve-' + aliceId.slice(0, 8) + '@example.com';
+      const adminSetEmail = TEST_PREFIX + 'admin-preserve-' + tutId.slice(0, 8) + '@example.com';
+
+      await INSERT.into(Users).entries({
+        ID: aliceId,
+        uuid: aliceId,
+        sapId: TEST_PREFIX + 'alice-preserve-' + aliceId.slice(0, 8),
+        email: aliceEmail,
+        displayName: TEST_PREFIX + 'Alice',
+        githubLogin: aliceLogin,
+      });
+      await INSERT.into(Tutorials).entries({
+        ID: tutId,
+        slug,
+        title: TEST_PREFIX + slug,
+        status: 'ACTIVE',
+      });
+      await INSERT.into(TutorialMeta).entries({
+        ID: metaId,
+        tutorial_ID: tutId,
+        owner: adminSetEmail,
+        ownerEmail: adminSetEmail,   // ← pre-existing, must not be overwritten
+        monitoredStatus: 'ACTIVE',
+        notificationNumber: 0,
+        legacyId: 9_999_950 + Math.floor(Math.random() * 50),
+      });
+
+      await linkTutorialAuthorship(NS, {
+        [slug]: {
+          frontmatterGithubLogin: aliceLogin,  // Would resolve to Alice
+        },
+      });
+
+      const meta = await SELECT.one
+        .from(TutorialMeta)
+        .where({ ID: metaId })
+        .columns('ownerEmail');
+
+      // Admin's setting is preserved. The resolver's Alice does NOT overwrite.
+      expect(meta.ownerEmail).toBe(adminSetEmail);
+      expect(meta.ownerEmail).not.toBe(aliceEmail);
+    }, 60_000);
   }
 );

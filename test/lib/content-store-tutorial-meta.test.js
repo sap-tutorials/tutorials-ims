@@ -29,7 +29,11 @@ describe('content-store TutorialMeta auto-init', () => {
     await DELETE.from(JobLocks);
   });
 
-  it('creates a TutorialMeta row when publishing a new tutorial', async () => {
+  it('leaves owner/ownerEmail NULL on the deprecated single-shot publish path (#862 reopen)', async () => {
+    // The deprecated /content/publish handler does NOT run linkTutorial
+    // Authorship, so ownerEmail can only be filled by the chunked publish
+    // path (which resolves the author signal from frontmatter). This test
+    // documents the intentional behavior: a contributor is not the owner.
     const slug = 'auto-init-new';
     const res = await project.axios.post('/content/publish', {
       trigger: 'test',
@@ -55,7 +59,9 @@ describe('content-store TutorialMeta auto-init', () => {
     expect(meta.reviewedDate).toBe('2026-05-20T10:00:00.000Z');
     expect(meta.monitoredStatus).toBe('ACTIVE');
     expect(meta.notificationNumber).toBe(0);
-    expect(meta.owner).toBe('thomas.jung@sap.com');
+    // #862 reopen — contributor is NOT the owner.
+    expect(meta.owner).toBeNull();
+    expect(meta.ownerEmail).toBeNull();
   });
 
   it('leaves owner null when no primaryContributorEmail in payload', async () => {
@@ -143,7 +149,12 @@ describe('content-store TutorialMeta auto-init', () => {
     expect(meta.owner).toBe('someone@sap.com');
   });
 
-  it('backfills ownerEmail on republish when existing TutorialMeta has it null', async () => {
+  it('does NOT overwrite existing ownerEmail on republish (#862 reopen)', async () => {
+    // Formerly this test asserted that a NULL ownerEmail was backfilled from
+    // primaryContributorEmail on republish. #862 reopen severed that
+    // coupling: the deprecated single-shot handler now leaves ownerEmail
+    // unchanged on republish. The chunked path fills it from the resolved
+    // author signal (frontmatter → Users.githubLogin).
     const tutorialId = cds.utils.uuid();
     await INSERT.into(Tutorials).entries({
       ID: tutorialId, slug: 'auto-init-backfill', title: 'Old', status: 'ACTIVE'
@@ -155,6 +166,7 @@ describe('content-store TutorialMeta auto-init', () => {
       notificationNumber: 3,
       lastNotificationDate: '2026-04-01T00:00:00.000Z',
       legacyId: 7777
+      // ownerEmail intentionally NULL
     });
 
     const slug = 'auto-init-backfill';
@@ -171,11 +183,20 @@ describe('content-store TutorialMeta auto-init', () => {
     }, { headers: { Authorization: `Bearer ${API_KEY}` } });
 
     const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
-    expect(meta.ownerEmail).toBe('backfill-test@example.com');
+    // #862 reopen — contributor is NOT the owner; single-shot path leaves
+    // ownerEmail unchanged. NULL stays NULL until an authoritative signal
+    // fills it via the chunked path's linkTutorialAuthorship.
+    expect(meta.ownerEmail).toBeNull();
     expect(meta.owner).toBe('admin@sap.com');
   });
 
-  it('publish writes ownerEmail (not just owner) when primaryContributorEmail is present', async () => {
+  it('single-shot publish leaves ownerEmail NULL even with primaryContributorEmail (#862 reopen)', async () => {
+    // Formerly this test asserted that primaryContributorEmail was written to
+    // both `owner` and `ownerEmail`. The severance in #862 reopen means
+    // both remain NULL on the deprecated single-shot handler. On the
+    // chunked path, ownerEmail is filled from the resolved author signal
+    // (frontmatter → Users.githubLogin) by linkTutorialAuthorship — verified
+    // by test/hybrid/frontmatter-owner.test.js.
     const slug = 'auto-init-email';
     const res = await project.axios.post('/content/publish', {
       trigger: 'test',
@@ -194,7 +215,7 @@ describe('content-store TutorialMeta auto-init', () => {
     expect(res.status).toBe(201);
     const tut = await SELECT.one.from(Tutorials).where({ slug });
     const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tut.ID });
-    expect(meta.ownerEmail).toBe('fp-test@example.com');
-    expect(meta.owner).toBe('fp-test@example.com');
+    expect(meta.ownerEmail).toBeNull();
+    expect(meta.owner).toBeNull();
   });
 });

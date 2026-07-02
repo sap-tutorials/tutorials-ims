@@ -48,6 +48,27 @@ A signal's meaning is expressed in the *endpoint name* and the *comment block* a
 - **Neutral.** `bestPriority` remains on every response. Clients who need an "any-priority-under-N" filter can still do it via `$filter=bestPriority le N` on the broad endpoint — the endpoints are conveniences, not restrictions.
 - **Neutral.** `TutorialMeta.ownerEmail` is only useful if it's clean. Data quality issues in that column (migration drift) surface immediately on `MyOwnedTutorials`; scrub scripts (like `scripts/scrub-tutorialmeta-owner-email.cjs`) become part of the operational discipline.
 
+## 2026-07-02 update — the ownerEmail write path is now author-only
+
+Riley's second reopen ([#862 comment](https://github.com/sap-tutorials/tutorials-ims/issues/862#issuecomment-4867834304)) surfaced that even with the three purpose-built endpoints in place, `MyOwnedTutorials` returned rows Riley did not own. Root cause was upstream of every endpoint: the publish path (both `srv/lib/content-publish-session.js`'s chunked `upsertTutorialMetadata` and the legacy single-shot handler in `srv/lib/content-store.js`) was stamping
+
+    TutorialMeta.owner = TutorialMeta.ownerEmail = primaryContributorEmail
+
+on every publish. `primaryContributorEmail` is the first entry of the tutorial frontmatter's `contributors:` array — often the author of a small typo-fix PR, not the tutorial's owner. Once that email hit `ownerEmail`, source #3 in the `MyTutorialsRaw` UNION lit up and the contributor appeared on `MyOwnedTutorials` for every tutorial they had ever touched.
+
+**New invariant** — `TutorialMeta.ownerEmail` is set by exactly two paths, both of which use an *authoritative* owner signal:
+
+1. **`linkTutorialAuthorship`** (chunked publish, runs after `upsertTutorialMetadata`) — after resolving `authorUserId` via `resolveTutorialAuthor`, writes that user's email to `TutorialMeta.ownerEmail` **only when the current value is NULL**. The signal is Phase 0 (frontmatter `author_profile` → `Users.githubLogin`) or a role-matching contributor — never a bare "first committer" contributor.
+2. **Admin UI** — explicit writes via the AdminService projection.
+
+The publish path's `upsertTutorialMetadata` INSERTs `owner: null, ownerEmail: null` on new rows. Existing rows keep whatever they had. Rows that were poisoned pre-2026-07-02 need a separate scrub (see [`scripts/scrub-tutorialmeta-owner-email.cjs`](../../scripts/scrub-tutorialmeta-owner-email.cjs)).
+
+**Regression guard** — three hybrid tests at [`test/hybrid/frontmatter-owner.test.js`](../../test/hybrid/frontmatter-owner.test.js) (Tests 5, 6, 7) enforce the invariant:
+
+- **Test 5** — With frontmatter `author_profile` = Alice AND `contributors[0]` = Bob, ownerEmail resolves to Alice's email, never Bob's.
+- **Test 6** — With only a contributor email (no frontmatter, no matching Users row), ownerEmail stays NULL. Absence of an author signal is not filled from a contributor.
+- **Test 7** — An existing non-NULL ownerEmail (admin correction or legacy IMS value) is never overwritten.
+
 ## Alternatives Considered
 
 - **Overload `MyAuthoredTutorials` to mean priority ≤ 3 (author OR contributor OR owner).** Rejected — the name would misdescribe the row set, and the Advocate/admin consumers explicitly need priority-1-only. Adding "Authored" behavior to it would drop rows they depend on.
