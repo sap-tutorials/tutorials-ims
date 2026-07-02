@@ -97,13 +97,26 @@ describe('KG_HELP_DOC_EXTRACT_SCHEMA', () => {
     // cron writes null on HelpDocConceptLinks.anchor. Reinstate via a
     // Claude-friendly mechanism (sentinel string, or two-pass) when
     // anchor UX is a priority. See srv/lib/help-doc-extract.js comment.
-    const props = KG_HELP_DOC_EXTRACT_SCHEMA.parameters.properties.concepts.items.properties;
+    const props = KG_HELP_DOC_EXTRACT_SCHEMA.properties.concepts.items.properties;
     expect(props.anchor).toBeUndefined();
     // Sanity: the remaining fields are still there
     expect(props.slug).toBeDefined();
     expect(props.name).toBeDefined();
     expect(props.confidence).toBeDefined();
     expect(props.description).toBeDefined();
+  });
+
+  it('schema is a BARE JSON schema (no `{name, parameters}` wrapper — Bug 6)', () => {
+    // defaultCallModel wraps the schema into a function-tool internally; a
+    // schema that already has the {name, parameters} wrapper shape gets
+    // double-nested and Claude sees a malformed schema. All sibling adapters
+    // (sample-extract, api-doc-extract, video-extract) use this bare shape.
+    // Verified live via cron + diagnostic 2026-07-01 (Bug 6).
+    expect(KG_HELP_DOC_EXTRACT_SCHEMA.name).toBeUndefined();
+    expect(KG_HELP_DOC_EXTRACT_SCHEMA.parameters).toBeUndefined();
+    expect(KG_HELP_DOC_EXTRACT_SCHEMA.type).toBe('object');
+    expect(KG_HELP_DOC_EXTRACT_SCHEMA.required).toEqual(['concepts']);
+    expect(KG_HELP_DOC_EXTRACT_SCHEMA.properties).toBeDefined();
   });
 
   it('caps concepts array at 8 via post-validation (schema has no maxItems)', async () => {
@@ -130,7 +143,7 @@ describe('KG_HELP_DOC_EXTRACT_SCHEMA', () => {
   it('enforces floor 0.7 on confidence via post-validation (schema accepts 0-1)', async () => {
     // Confidence floor lives in post-validation. Schema accepts 0-1 broadly
     // (so a single-below-floor concept doesn't crash the tool call).
-    const confSpec = KG_HELP_DOC_EXTRACT_SCHEMA.parameters.properties.concepts.items.properties.confidence;
+    const confSpec = KG_HELP_DOC_EXTRACT_SCHEMA.properties.concepts.items.properties.confidence;
     expect(confSpec.minimum).toBe(0);
     expect(confSpec.maximum).toBe(1);
     // End-to-end: a below-floor entry is dropped.
