@@ -176,6 +176,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
 
+      # [#797] Hugo safeHTML XSS-guard. Sweeps hugo/layouts/**/*.{html,xml,xsl}
+      # for unmarked `| safeHTML` / `| safeHTMLAttr` / `printf "<...%s"` usages
+      # and fails CI if any occurrence lacks a `<!-- security-reviewed: <reason> -->`
+      # marker within 3 lines above (guard: scripts/check-hugo-safe-html.cjs).
+      # Also transitively invoked via `npm run prebuild` inside `npm run
+      # build:all`, but wired here explicitly so the failure attribution
+      # is clear and the guard runs even if the pre-Hugo step order changes.
+      - name: Check Hugo security annotations
+        run: npm run check:security-annotations
+
       # Run the postbuild static guards before mbt build. These were defined
       # as `postbuild:apps` (lifecycle hook on root `npm run build:apps`), but
       # CI never invokes root `build:apps` — `mbt build` walks straight to
