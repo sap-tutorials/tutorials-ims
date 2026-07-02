@@ -67,10 +67,9 @@ Validate via the boot log line: `[rebuild-trigger] active — admin writes will 
    export GITHUB_DISPATCH_TOKEN="<NEW_TOKEN>"
    # qa/prod also need:
    export CONTENT_API_KEY="<value>"
-   export REBUILD_API_KEY="<value>"
    export APPROUTER_URL="<value>"
 
-   envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
+   envsubst '$CONTENT_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
      < deploy/dev.mtaext > deploy/dev.resolved.mtaext
 
    cd .deploy && mbt build

@@ -16,7 +16,9 @@ modules:
       instances: 2
       keep-existing-routes: true
     properties:
-      REBUILD_API_KEY: ${REBUILD_API_KEY}
+      # REBUILD_API_KEY was formerly injected here — removed in PR #903
+      # rollout step 3 (#871 follow-up). Approuter now reads exclusively
+      # from the credstore. See deploy/dev.mtaext for the full rationale.
       APPROUTER_URL: ${APPROUTER_URL}
 
 resources:
