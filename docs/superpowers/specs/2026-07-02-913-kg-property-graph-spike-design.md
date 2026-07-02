@@ -42,10 +42,22 @@ The DEFINER-security pattern is preserved from the existing SPARQL DEFINER work 
                                                                          │        ▼
                                                                          │      RESULT: (iri, hopIdx) rows
                                                                          │
-                                                                         └─► kgPathBetween('CO_COMPLETED')  (SPARQL)
-                                                                                 kgPathBetween('SHARED')    (SPARQL)
-                                                                                 merge + rank in JS
+                                                                         (v2 result replaces pathBetween
+                                                                          when non-empty — see "Semantics"
+                                                                          below for why)
 ```
+
+### Semantics when the flag is on: v2 replaces the response, does not merge with v1
+
+**During the spike, when `KG_PATH_V2_ENABLED=true` and `kgPathV2()` returns at least one path, the handler returns those v2 results only.** It does NOT also run the CO_COMPLETED and SHARED_CONCEPT arms and merge them in. This is a deliberate simplification for the spike, and it is a small functional regression on the v1 wire shape: a caller who would have seen 10 paths (5 PREREQ + 3 CO_COMPLETED + 2 SHARED) on v1 will see only the PREREQ paths on v2.
+
+We accept the regression for three reasons:
+
+1. **The spike is measuring v2 against v1 on PREREQ specifically.** Merging with SPARQL arms would confound the A/B — v2 latency would always include the SPARQL round-trip.
+2. **When v2 is empty (no PREREQ path exists), the handler falls through to the full v1 3-arm SPARQL query.** So users on an isolated tutorial pair still see CO_COMPLETED and SHARED results — they just come from v1 in one round-trip instead of a merged v1+v2 response.
+3. **The "always-run all three arms, only swap PREREQ" design** would require the SPARQL layer to expose per-arm entry points. That's a design decision worth deferring until the spike's decision gate — if v2 graduates, the follow-up PR can refactor the SPARQL layer to expose per-arm entry points and switch to the merge model.
+
+The metrics dimension `arm` distinguishes these cases: v2 successes are tagged `arm: 'prereq'`; v1 fallbacks after v2 emptiness or error are tagged `arm: 'co_completed'`, `arm: 'shared_concept'`, or `arm: 'none'` per the v1 result.
 
 **New artifacts (two files):**
 
@@ -67,7 +79,7 @@ The DEFINER-security pattern is preserved from the existing SPARQL DEFINER work 
 
 **Rebuild path unchanged:** [srv/lib/kg-graph-rebuild.js](../../../srv/lib/kg-graph-rebuild.js) does not change. Because the workspace is view-based, it is always current with the CDS tables that the RDF projection also reads.
 
-**QA channel:** matching stub procedures under `db-qa/src/procedures/KG_PATH_V2.hdbprocedure` that signal `KG_NOT_AVAILABLE_ON_QA`, mirroring the pattern established in the SPARQL DEFINER spec's [QA channel section](2026-06-22-kg-sparql-definer-procedures-design.md#qa-channel).
+**QA channel:** matching stub procedure under `db-qa/src/procedures/KG_PATH_V2.hdbprocedure` whose body contains only the `SIGNAL KG_NOT_AVAILABLE_ON_QA` line and does NOT reference `KG_PG_WORKSPACE`, `KG_PG_VERTICES_V`, or `KG_PG_EDGES_V`. The workspace and views are NOT deployed to `db-qa` (they would fail HDI compile against QA's schema, and the QA channel has no property-graph consumer). Mirrors the pattern established in the SPARQL DEFINER spec's [QA channel section](2026-06-22-kg-sparql-definer-procedures-design.md#qa-channel).
 
 ## Data model — the property-graph workspace
 
@@ -77,22 +89,22 @@ The DEFINER-security pattern is preserved from the existing SPARQL DEFINER work 
 CREATE VIEW "KG_PG_VERTICES_V" AS
   -- Concept vertices
   SELECT
-    'concept:' || slug        AS "VERTEX_KEY",
-    'concept'                 AS "VERTEX_TYPE",
-    slug                      AS "SLUG",
-    name                      AS "LABEL",
-    status                    AS "STATUS"
+    CAST('concept:' || slug AS NVARCHAR(100))  AS "VERTEX_KEY",
+    'concept'                                  AS "VERTEX_TYPE",
+    slug                                       AS "SLUG",
+    name                                       AS "LABEL",
+    status                                     AS "STATUS"
   FROM "com_sap_developers_ims_Concepts"
   WHERE status = 'ACTIVE'
   UNION ALL
   -- Tutorial vertices (synthesized from the link table — tutorials don't
   -- live in a KG-specific table, they live in Tutorials).
   SELECT DISTINCT
-    'tutorial:' || t.slug     AS "VERTEX_KEY",
-    'tutorial'                AS "VERTEX_TYPE",
-    t.slug                    AS "SLUG",
-    t.title                   AS "LABEL",
-    NULL                      AS "STATUS"
+    CAST('tutorial:' || t.slug AS NVARCHAR(100)) AS "VERTEX_KEY",
+    'tutorial'                                   AS "VERTEX_TYPE",
+    t.slug                                       AS "SLUG",
+    t.title                                      AS "LABEL",
+    NULL                                         AS "STATUS"
   FROM "com_sap_developers_ims_TutorialConceptLinks" tcl
   JOIN "com_sap_developers_ims_Tutorials" t ON t.ID = tcl.tutorial_ID;
 ```
@@ -146,7 +158,7 @@ Edges are unkeyed — multiple edges between the same vertex pair fold to one, w
 
 The v1 SPARQL PREREQ arm walks: `<from> kg:teaches ?c1 . ?c1 (^kg:requires)+ ?cN . ?b kg:teaches ?cN`. Translated to vertex-hops on the property graph:
 
-```
+```text
 tutorial:<from>  --teaches-->  concept:c1
                                     ^
                                     | (^requires) closure — any number of hops
@@ -221,6 +233,12 @@ END;
 
 2. **Table-typed OUT parameter.** HANA SQLScript supports `OUT param TABLE(...)` but the calling convention from `cds.db.run` needs verification — the existing DEFINER procedures use scalar OUT parameters (`response NCLOB`). Fallback if table-OUT doesn't cross the boundary cleanly: write path rows into a global temporary table `#KG_PATH_V2_RESULT` and have the JS layer `SELECT` from it — same one-transaction guarantee, uglier boundary. Task 1 confirms.
 
+**Task 1 also confirms three related facts before any DDL is finalized:**
+
+- **Exact HANA table names.** The view DDL assumes `com_sap_developers_ims_Concepts` etc. — CDS namespace flattening for `com.sap.developers.ims`. This is the deterministic default, but `@cds.persistence.name` overrides anywhere in the graph would break the assumption. Confirmed via `hana-cli inspectTable --schema <schema> --table Concepts` before writing the view DDL.
+- **Runtime privilege.** The property-graph feature is entitled subaccount-wide but a specific privilege (e.g., `GRAPH USAGE` on the workspace, or a HDI role grant for the property-graph engine catalog) may be missing on the runtime user. Confirmed via `hana-cli status --priv` before writing procedure code. If missing, the spike stalls on a service-key update rather than on code.
+- **`SHORTEST_PATH` tie behavior.** Whether the algorithm returns one path or all shortest paths, and how ties are ordered. If the DB doesn't rank ties deterministically, the JS wrapper's secondary sort on `vertex_seq` (already implemented above) makes the client-side rendering deterministic across calls.
+
 ## JS wrapper
 
 ```js
@@ -255,7 +273,11 @@ export async function kgPathV2({ fromIri, toIri, maxHops = 8 }) {
   }
 
   const rows = await cds.db.run(
-    `CALL "KG_PATH_V2"(?, ?, ?, ?)`,
+    // Three IN parameters. The OUT TABLE(...) binding convention through
+    // cds.db.run is confirmed in Task 1 — if table-OUT doesn't cross the
+    // boundary cleanly, we fall back to a `#KG_PATH_V2_RESULT` global
+    // temporary table pattern (see Procedure body § Placeholder gap 2).
+    `CALL "KG_PATH_V2"(?, ?, ?)`,
     [fromIri, toIri, maxHops]
   );
 
@@ -270,12 +292,58 @@ export async function kgPathV2({ fromIri, toIri, maxHops = 8 }) {
     }
     bucket.vertices[r.SEQ_INDEX] = r.VERTEX_SEQ;
   }
-  return [...byRank.values()]
-    .sort((a, b) => a.pathRank - b.pathRank);
+
+  // Defense-in-depth post-filter: drop paths whose interior vertices
+  // aren't concepts. Guards against a bad workspace refresh where the
+  // edge view might emit a non-concept vertex in the middle of a path.
+  // The endpoints are expected to be tutorial vertices.
+  const filtered = [...byRank.values()].filter(p => {
+    if (p.vertices.length < 2) return false;
+    const interior = p.vertices.slice(1, -1);
+    return interior.every(v => typeof v === 'string' && v.startsWith('concept:'));
+  });
+
+  // Deterministic ordering: primary key path_rank ascending (cheapest
+  // first). SHORTEST_PATH may return ties without a rank; Task 1 confirms
+  // whether the algorithm returns one path or all shortest paths and how
+  // ties are ordered. If the DB doesn't rank ties, this wrapper imposes a
+  // stable secondary sort on the joined vertex_seq to make client-side
+  // rendering deterministic across calls.
+  return filtered.sort((a, b) => {
+    if (a.pathRank !== b.pathRank) return a.pathRank - b.pathRank;
+    return a.vertices.join('|').localeCompare(b.vertices.join('|'));
+  });
 }
 ```
 
-## Handler edit
+### Wire-shape mapping — `mapPgPathsToWireShape`
+
+The v1 `pathBetween` handler returns `array of String` per the CDS declaration in [srv/knowledge-graph-service.cds:219](../../../srv/knowledge-graph-service.cds#L219). Each string is one tutorial slug on the path. The current three-arm SPARQL result yields an interleaved list of `?b` (bridging tutorial) slugs with hop counts always zero and no ordering guarantees beyond the SPARQL engine's default.
+
+For v2, `mapPgPathsToWireShape(paths)` produces the same wire shape from the property-graph result:
+
+```js
+function mapPgPathsToWireShape(paths) {
+  // Take the top path only for the spike (path_rank = 1). If Task 1
+  // confirms SHORTEST_PATH returns multiple ranked paths, follow-on work
+  // decides whether to widen the wire shape. For now, one path preserves
+  // v1 semantics — the wire is a single flat list of slugs.
+  const best = paths[0];
+  if (!best) return [];
+  // best.vertices is ['tutorial:from', 'concept:...', ..., 'concept:...', 'tutorial:to'].
+  // Wire shape wants only the tutorial slugs on the path — for the PREREQ
+  // arm that's the two endpoints. The concept chain is INTERNAL to the
+  // property-graph traversal and is not surfaced by v1 either (the v1
+  // SPARQL PREREQ arm returns only the bridging tutorial slug).
+  return best.vertices
+    .filter(v => v.startsWith('tutorial:'))
+    .map(v => v.slice('tutorial:'.length));
+}
+```
+
+Follow-on work (post-gate) may widen the CDS return type to expose hop counts and internal concept slugs — the sidebar widget and Joule chat tool could both make use of that richer shape. For the spike, we preserve the existing wire contract so no client changes are needed to A/B v1 vs v2.
+
+### Handler edit
 
 The existing `pathBetween` handler in `srv/knowledge-graph-service.js` grows a flag check at the top:
 
@@ -297,7 +365,13 @@ srv.on('pathBetween', async (req) => {
       }
     } catch (err) {
       // Log and fall through — never let a v2 failure regress v1.
-      req.warn('kg_path_v2_failed', { code: err.code, message: err.message });
+      // Use cds.log so the warning stays server-side (goes to cf logs and
+      // audit log) and doesn't leak into the OData response's `messages`
+      // array — req.warn would surface it to the caller.
+      cds.log('kg').warn('kg_path_v2_failed', {
+        code: err.code, message: err.message,
+        fromSlug: req.data.fromSlug, toSlug: req.data.toSlug
+      });
     }
   }
 
@@ -359,7 +433,7 @@ Uses the existing metrics module ([srv/lib/metrics.js](../../../srv/lib/metrics.
 
 **Manual probe:** `GET /admin/metrics/live` (Admin scope) pulls the last 5-min window as JSON for ad-hoc analysis.
 
-**One log line per fallback.** `req.warn('kg_path_v2_failed', { code, message, fromSlug, toSlug })` — greppable in `cf logs` and hits the audit log. If we see this at >1% of calls, that's a spike-defining failure signal.
+**One log line per fallback.** `cds.log('kg').warn('kg_path_v2_failed', { code, message, fromSlug, toSlug })` — greppable in `cf logs` and hits the audit log. Uses `cds.log` (not `req.warn`) so the message stays server-side and doesn't leak into the OData response's `messages` array. If we see this at >1% of calls, that's a spike-defining failure signal.
 
 **No new tables.** Everything rides on existing `MetricSnapshots` / `PipelineLog` infrastructure.
 
@@ -368,11 +442,13 @@ Uses the existing metrics module ([srv/lib/metrics.js](../../../srv/lib/metrics.
 Before declaring the spike "on":
 
 1. `cf set-env tutorials-srv KG_PATH_V2_ENABLED true && cf restart tutorials-srv`.
-2. Confirm v2 metrics appear in `/admin-ui/#metrics` within 5 minutes.
-3. `cf set-env tutorials-srv KG_PATH_V2_ENABLED false && cf restart tutorials-srv`.
-4. Confirm v2 metrics stop appearing and v1 numbers match pre-flag baseline.
+2. **Deliberately drive v2 traffic:** invoke `GET /graph/pathBetween(fromSlug='<known-a>',toSlug='<known-b>')` at least 5 times over the following minute using a pair of tutorial slugs known to have a PREREQ path. This ensures the 5-minute rollup has v2 metric rows to observe; without it, an empty traffic window would let the drill pass by accident with v2 silently broken.
+3. Confirm v2 metrics appear in `/admin-ui/#metrics` within 5 minutes with `version: 'v2'` counters incrementing.
+4. `cf set-env tutorials-srv KG_PATH_V2_ENABLED false && cf restart tutorials-srv`.
+5. Drive the same 5-call probe again with the flag off.
+6. Confirm v2 metrics stop appearing and v1 numbers match pre-flag baseline.
 
-If step 4 doesn't hold, the flag doesn't gate cleanly and we fix that before opening it up.
+If step 6 doesn't hold, the flag doesn't gate cleanly and we fix that before opening it up.
 
 ## Decision gate
 
@@ -409,7 +485,7 @@ Filed alongside this spec merging, cross-referencing it. Each is a stub — the 
 ## Risks & mitigations
 
 | Risk | Mitigation |
-|---|---|
+| --- | --- |
 | `SHORTEST_PATH` call syntax on the deployed QRC differs from what training data suggests. | Task 1 of the plan probes the live DB via `hana-cli` before the procedure body is finalized. |
 | Table-typed OUT parameter doesn't cross the `cds.db.run` boundary cleanly. | Fallback to a global temporary table pattern; confirmed in Task 1. |
 | View-based workspace is too slow for `SHORTEST_PATH` at production graph size. | The spike measures this. If slow, the review-artifact numbers surface it; follow-on Issue 4 already anticipates the materialized-table alternative. |
