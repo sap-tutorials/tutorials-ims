@@ -22,6 +22,7 @@ const { isAuthorizedBearer } = require('./lib/bearer-auth')
 const { resolveSecret } = require('./lib/credstore-secret')
 const { getIndex, startAutoRefresh } = require('./lib/legacy-redirects-loader')
 const { bump, startAutoFlush } = require('./lib/hit-counter')
+const { safeFetch } = require('./lib/safe-fetch')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
 // array) injected by the approuter framework when mta.yaml declares
@@ -122,6 +123,9 @@ async function imgCdnHandler(req, res, next) {
     res.end('Invalid u parameter')
     return
   }
+  // #888: hostname allowlist + private-IP block are enforced by safeFetch
+  // per hop (initial + every 3xx redirect). Pre-check here for a fast 403
+  // path so we don't even open a socket for obviously-wrong hosts.
   if (!IMG_CDN_HOSTS.has(target.hostname)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' })
     res.end('Forbidden host')
@@ -132,7 +136,15 @@ async function imgCdnHandler(req, res, next) {
   const acceptsWebp = /image\/webp/.test(req.headers.accept || '')
 
   try {
-    const upstream = await fetch(u, { signal: AbortSignal.timeout(IMG_CDN_TIMEOUT_MS) })
+    // #888: safeFetch validates hostname + private-IP + protocol on every hop.
+    // Without redirect: 'manual' here, a controlled 302 from
+    // raw.githubusercontent.com to 169.254.169.254 would leak metadata creds.
+    const upstream = await safeFetch(u, {
+      allowedHosts: IMG_CDN_HOSTS,
+      allowedProtocols: ['https:', 'http:'],
+      timeoutMs: IMG_CDN_TIMEOUT_MS,
+      maxRedirects: 3,
+    })
     if (!upstream.ok) {
       res.writeHead(upstream.status, { 'Content-Type': 'text/plain' })
       res.end(`Upstream ${upstream.status}`)
@@ -176,10 +188,18 @@ async function imgCdnHandler(req, res, next) {
     })
     res.end(out)
   } catch (err) {
-    console.error('[img-cdn]', err.message)
+    console.error('[img-cdn]', err.code || 'ERR', err.message)
     if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'text/plain' })
-      res.end('Upstream error')
+      // #888: SSRF_BLOCKED means the URL (or a redirect target) resolved to
+      // a private/internal address. Return 403 not 502 so probes can be
+      // distinguished from upstream flakes in logs.
+      if (err.code === 'SSRF_BLOCKED') {
+        res.writeHead(403, { 'Content-Type': 'text/plain' })
+        res.end('Forbidden')
+      } else {
+        res.writeHead(502, { 'Content-Type': 'text/plain' })
+        res.end('Upstream error')
+      }
     }
   }
 }
