@@ -3,7 +3,7 @@
 **Issue:** [#805](https://github.com/sap-tutorials/tutorials-ims/issues/805)
 **Date:** 2026-07-02
 **Author:** Tom Jung (design captured by Claude)
-**Status:** Draft — pending spec review
+**Status:** Draft — revised after spec review round 1
 
 ## Problem
 
@@ -52,13 +52,38 @@ metrics.gauge('content.cache.bytes', 1_234_567)
 
 The module owns in-memory state, exposes `snapshot()`, and never talks to the database itself.
 
+**Public surface:**
+
+- `counter(name)` — increments a named integer counter by 1.
+- `observe(name, value)` — pushes a sample into the named histogram's reservoir.
+- `gauge(name, value)` — overwrites the named gauge (latest value wins).
+- `snapshot()` — returns `{ counters, gauges, histograms: { name: { count, p50, p95, p99, max } } }`. Cheap; safe to call between rotations.
+- `rotate()` — called by the rollup job; returns the snapshot and atomically zeros counters + drains reservoirs.
+- `emitLogLine(name, value, tags)` — one structured `cds.log('jobs/metrics-rollup').info(...)` line per rollup boundary.
+
+**Histogram algorithm** (settled after spec review): [Vitter's Algorithm R](https://en.wikipedia.org/wiki/Reservoir_sampling#Simple:_Algorithm_R), reservoir size 2000 per metric. Uniform reservoir sampling means the samples represent the whole 5-min window rather than biasing toward the tail (as FIFO would). HdrHistogram was considered and rejected as a heavier dependency for our modest volume. Algorithm R fits in ~30 lines with zero deps and self-drains on rotation.
+
 Three consumer paths fan out:
 
-1. **Admin UI** — new `Operations` tile at `/admin-ui/#operations-display`. Reads `AnalyticsService.MetricSnapshots` (24 h chart data) + `AnalyticsService.PublishTimings` (per-publish table) + `GET /admin/metrics/live` (current in-memory snapshot, 30 s polling while visible).
-2. **CF logs → Splunk** — the rollup writer emits one structured `cds.log('metrics').info(...)` line per metric per 5-min boundary. Same pattern as #759 explainer-generator cost lines. Splunk / existing log scrape picks these up unchanged.
-3. **`/admin/metrics/live`** — plain JSON snapshot endpoint, basic-auth-protected like other `/admin/*` custom Express routes. On-call humans curl this during incidents; the admin UI polls it.
+1. **Admin UI** — new `Metrics` view at `/admin-ui/#metrics`. Reads `AnalyticsService.MetricSnapshots` (24 h chart data) + `AnalyticsService.PublishTimings` (per-publish table) + `AdminService.getMetricsSnapshot()` action (current in-memory snapshot, 30 s polling while visible).
+2. **CF logs → Splunk** — the rollup writer emits one structured `cds.log('jobs/metrics-rollup').info(...)` line per metric per 5-min boundary. Same pattern as #759 explainer-generator cost lines. Splunk / existing log scrape picks these up unchanged.
+3. **`/admin/metrics/live`** — plain JSON snapshot endpoint, basic-auth-protected like other `/admin/*` custom Express routes. On-call humans curl this during incidents.
 
-Rollup writer `srv/jobs/metrics-rollup-job.js` runs every 5 min, wrapped in `job-lock.js` (matches the existing `ngds-retry` pattern) so a 2-instance CF scale-out doesn't double-write. On each tick it reads `metrics.snapshot()`, writes one `MetricSnapshots` row per metric per window, emits one log line per metric, then **rotates the histograms** (drains the reservoir so the next window starts fresh).
+Rollup writer `srv/jobs/metrics-rollup-job.js` runs every 5 min, wrapped in `job-lock.js` (matches the existing `ngds-retry` pattern) so a 2-instance CF scale-out doesn't double-write. On each tick it:
+
+1. Computes `windowStart = Math.floor(Date.now() / 300_000) * 300_000` — aligns to the 5-min boundary so a cron firing at 14:00:07 records `windowStart = 14:00:00`, not the raw fire time. Cross-tick idempotent if the lock skips a window.
+2. Reads `metrics.snapshot()`.
+3. Writes one `MetricSnapshots` row per metric per window, emits one log line per metric.
+4. **Rotates the histograms** (drains the reservoir so the next window starts fresh).
+
+**`instanceId` semantics under job-lock.** Only one instance wins the lock per tick, so `instanceId` records whichever instance won the write — but the in-memory `metrics.snapshot()` on that instance only reflects that instance's activity. This is a real limitation: with two CF instances and one lock-winner writing per tick, half the observations vanish. Two ways out; the spec picks (b) for v1:
+
+- (a) Drop `job-lock`; use `PRIMARY KEY (windowStart, metric, instanceId)` on `MetricSnapshots` so both instances write independently. Admin-tile queries aggregate across rows.
+- (b) **Keep the lock; each instance emits its snapshot to the log stream every tick (unconditional) but only the lock-winner writes to HANA with a merged snapshot.** The merge is done via a small `POST /admin/metrics/ingest` internal endpoint that the loser calls to hand its snapshot to the winner before the winner writes. **Rejected** — adds a coordination hop that could fail.
+
+Revised choice: **(a) — drop the job-lock for the rollup writer specifically.** The rollup is idempotent per `(windowStart, metric, instanceId)`: even if both instances fire at 14:05:00.100 and 14:05:00.200 they still write to different `instanceId` rows. `PRIMARY KEY (windowStart, metric, instanceId)` gives us that constraint. Admin-tile queries `SELECT metric, AVG(value) FROM MetricSnapshots WHERE windowStart >= ? GROUP BY windowStart, metric` naturally aggregate across instances. Retention prunes on `windowStart < now() - 30d`, agnostic of instance count.
+
+The retention job, in contrast, **does** need `job-lock` (multiple deletes are not idempotent-safe against retry storms). Retention keeps the lock; rollup drops it.
 
 ### Data model
 
@@ -87,14 +112,15 @@ entity MetricSnapshots : cuid, managed {
 @cds.persistence.table
 @analytics.exposed
 entity PublishTimings : cuid, managed {
-  manifestVersion : Integer;                   // FK-equivalent to ContentManifest.version
+  sessionId       : String(36);                // = ContentManifest.sessionId = PipelineLog.ID — cross-links to existing runbooks
+  manifestVersion : Integer;                   // matches ContentManifest.version type (Integer, verified at db/_content-shape.cds:45)
   mode            : String(16);                // 'delta' | 'full' | 'heal'
   initiator       : String(255);               // mirrors ContentManifest.initiator
   slugCount       : Integer;
-  beginMs         : Integer;                   // begin -> first append received
-  appendMsTotal   : Integer;                   // sum of all append handler wall-clocks
+  beginMs         : Integer;                   // createdAt -> firstAppendAt
+  appendMsTotal   : Integer;                   // sum of all append handler wall-clocks (persisted on ContentManifest, copied here at commit)
   commitMs        : Integer;                   // commit handler wall-clock
-  totalMs         : Integer;                   // begin -> commit response sent
+  totalMs         : Integer;                   // createdAt -> commit response sent
   outcome         : String(16);                // 'committed' | 'aborted' | 'rejected'
 }
 ```
@@ -108,46 +134,112 @@ Indexes: `MetricSnapshots(windowStart, metric)` for admin 24 h scans; `PublishTi
 
 Both well below existing `PipelineLog` volume.
 
-Both entities carry `@analytics.exposed` so the existing `AnalyticsService` ad-hoc SQL surface reads them without additional plumbing.
+Both entities carry `@analytics.exposed`. **Correction after spec review:** the annotation alone is NOT sufficient — [srv/analytics-service.js](../../../srv/analytics-service.js) `getExposedEntries()` iterates the compiled model AND checks that the entity is projected on `AnalyticsService`. Compare `CodeCheckSubmissions` at [db/schema.cds:661](../../../db/schema.cds#L661) which is both annotated and projected at [srv/analytics-service.cds:22](../../../srv/analytics-service.cds#L22). The spec adds two explicit projections to `srv/analytics-service.cds`:
+
+```cds
+@readonly entity MetricSnapshots as projection on ims.MetricSnapshots;
+@readonly entity PublishTimings  as projection on ims.PublishTimings;
+```
+
+The service-level `@requires : 'Admin'` on `AnalyticsService` gates these to Admin role — which is what the admin-shell users hold anyway. No new auth surface.
+
+**HANA index delivery mechanism.** Per [db/schema-ext.cds](../../../db/schema-ext.cds#L107) documented pattern, HANA indexes on `@cds.persistence.table` entities require `.hdbindex` files (CDS `index` syntax rejects semicolons in `@sql.append`). Two new files:
+
+- `db/src/IDX_METRIC_SNAPSHOTS_WINDOW.hdbindex` — `INDEX ... ON "COM_SAP_DEVELOPERS_IMS_METRICSNAPSHOTS" (WINDOWSTART, METRIC)`
+- `db/src/IDX_PUBLISH_TIMINGS_CREATED.hdbindex` — `INDEX ... ON "COM_SAP_DEVELOPERS_IMS_PUBLISHTIMINGS" (CREATEDAT DESC)`
+
+Both required for the admin-tile query performance stated in the "Retention" section.
 
 ### Instrumentation points
 
-**1. Content cache** — in [srv/lib/content-store.js:144](../../../srv/lib/content-store.js#L144) `ContentCache` class:
+**1. Content cache** — in [srv/lib/content-store.js:144](../../../srv/lib/content-store.js#L144) `ContentCache` class.
 
-- `get()` — on hit, `metrics.counter('content.cache.hit')`; on miss, `metrics.counter('content.cache.miss')`.
-- Inside the eviction `while` loop in `set()`, `metrics.counter('content.cache.evict')`.
-- After the size update in `set()`, `metrics.gauge('content.cache.bytes', this.totalBytes)`.
+**Correction after spec review:** the same `ContentCache` instance stores two key namespaces — raw content keys (a bare `slug`) and `render:` prefix keys (see [content-store.js:196](../../../srv/lib/content-store.js#L196) `invalidateByPrefix('render:')`). Instrumenting inside `get()` would conflate the two, and a first-render miss is a semantically different event from a "user hit a URL and we couldn't serve them" content miss.
 
-Hit-rate is derived at snapshot time (`hit / (hit + miss)`), not stored — the raw denominator matters (100% over 3 requests ≠ 100% over 30 000).
+Counters live at the call sites, not in the class:
 
-**2. HANA pool acquire-latency (passive wrapping)** — in [srv/server.js](../../../srv/server.js) at `cds.on('served')`, wrap `cds.db.run` when `METRICS_DB_WRAP=true`:
+- Bare-`slug` cache: two counters at [content-store.js:995](../../../srv/lib/content-store.js#L995) inside `serveHandler` — `metrics.counter('content.cache.hit')` when `cached` is truthy, `metrics.counter('content.cache.miss')` on the falsy branch (before the DB fallback).
+- `render:` cache: two counters at [content-store.js:896](../../../srv/lib/content-store.js#L896) inside `serveHandler`'s render branch — `metrics.counter('render.cache.hit')` and `metrics.counter('render.cache.miss')`.
+- Eviction (shared across both namespaces): one counter inside the eviction `while` in `ContentCache.set()` — `metrics.counter('cache.evict')`.
+- Size: `metrics.gauge('cache.bytes', this.totalBytes)` at the end of `set()`.
+
+Hit-rate is derived at snapshot time per namespace (`content.cache.hit / (hit + miss)`), not stored — the raw denominator matters (100% over 3 requests ≠ 100% over 30 000). The admin tile shows both hit-rates side by side.
+
+**2. HANA pool acquire-latency (passive wrapping)** — in [srv/server.js](../../../srv/server.js) at `cds.on('served')`, wrap the DB service `run` method AND transaction acquisition when `METRICS_DB_WRAP=true`.
+
+**Correction after spec review:** the codebase uses two distinct call sites — `db.run(...)` where `db = await cds.connect.to('db')`, AND `tx.run(...)` inside `cds.tx(async (tx) => …)` blocks (39+ sites: [srv/lib/category-classifier.js:99](../../../srv/lib/category-classifier.js#L99), [srv/lib/repo-catalog.js:62](../../../srv/lib/repo-catalog.js#L62), [srv/lib/kg-merge-pair.js](../../../srv/lib/kg-merge-pair.js), several `srv/jobs/` files). Wrapping only `cds.db.run` would leave tx-scoped queries invisible — and KG rebuild / co-completion materialization / category classifier all use `tx.run` for the exact heavy paths that cause pool starvation. Both surfaces must be wrapped.
 
 ```js
-const originalRun = cds.db.run.bind(cds.db);
-cds.db.run = function wrappedRun(...args) {
-  const started = process.hrtime.bigint();
-  const promise = originalRun(...args);
-  promise.then(
-    () => metrics.observe('db.acquire.ms', Number(process.hrtime.bigint() - started) / 1e6),
-    (err) => {
-      metrics.observe('db.acquire.ms', Number(process.hrtime.bigint() - started) / 1e6);
-      if (/timeout|acquire/i.test(err?.message || '')) {
-        metrics.counter('db.pool.timeout');
-      }
-    }
-  );
-  return promise;
+// One-time guard — cds.on('served') can fire more than once under cds.test().
+// Codebase convention: globalThis.__X_Registered sentinel
+// (see feedbackBeforeHookRegistered, changelogNoisePurgeAttempted,
+// navigatorCacheInvalidatorRegistered in srv/server.js).
+if (globalThis.__metricsDbWrapInstalled) return;
+globalThis.__metricsDbWrapInstalled = true;
+
+// Wrap cds.db.run
+const originalDbRun = cds.db.run.bind(cds.db);
+cds.db.run = function wrappedDbRun(...args) {
+  return timeAndCount(originalDbRun(...args));
 };
+
+// Wrap cds.tx so tx.run inherits the wrapper on the returned tx object
+const originalTx = cds.tx.bind(cds);
+cds.tx = function wrappedTx(...args) {
+  const txOrPromise = originalTx(...args);
+  // cds.tx(fn) returns a promise; cds.tx({}) returns a tx object — handle both.
+  // For the callback form, cds core wires tx.run to the same pool; the outer
+  // callback timing captures the whole tx duration. For the object form,
+  // patch the returned tx.run once we have it.
+  if (typeof txOrPromise?.then === 'function') {
+    return timeAndCount(txOrPromise);
+  }
+  const originalTxRun = txOrPromise.run?.bind(txOrPromise);
+  if (originalTxRun) {
+    txOrPromise.run = (...runArgs) => timeAndCount(originalTxRun(...runArgs));
+  }
+  return txOrPromise;
+};
+
+function timeAndCount(promise) {
+  const started = process.hrtime.bigint();
+  const finish = (isErr, err) => {
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    metrics.observe('db.acquire.ms', elapsedMs);
+    if (isErr && /timeout|acquire/i.test(err?.message || '')) {
+      metrics.counter('db.pool.timeout');
+    }
+  };
+  promise.then(() => finish(false), (err) => finish(true, err));
+  return promise;
+}
 ```
 
-**Caveat, documented in code:** this measures `run()` → resolve, which conflates acquire time and query time. Separating them requires driver hooks that aren't exposed. When the pool is starved, acquire dominates; when the pool is healthy, query time dominates and blends into histogram noise. A sudden rise in the p95 with unchanged query mix is the exhaustion signal.
+**Caveats, documented in code:**
 
-**3. Publish latency** — in [srv/lib/content-publish-session.js](../../../srv/lib/content-publish-session.js):
+- Timing measures `run()` → resolve — conflates acquire time and query time. Separating them requires driver hooks that aren't exposed. When the pool is starved, acquire dominates; when the pool is healthy, query time dominates and blends into histogram noise. A sudden rise in the p95 with unchanged query mix is the exhaustion signal.
+- `cds.tx(fn)` callback form captures **total tx wall-clock**, not per-statement — still a valid exhaustion signal, but interpreted differently. The metric is emitted as `db.tx.ms` (distinct from `db.acquire.ms`) so the histograms stay meaningful. The admin tile shows both.
+- The observation on `.then` never throws (defensive `finish` is synchronous); the returned promise is the untouched original.
 
-- `beginPublishSession` — record `startedAt` (already on `PublishSessions.createdAt`), plus `metrics.counter('publish.attempt')`.
-- `appendToSession` — accumulate handler wall-clock into an in-memory tally keyed by `sessionId` (Map; entry lifecycle bounded by session lifetime).
-- `commitSession` — compute `commitMs`, `beginMs`, `appendMsTotal`, `totalMs`; write one `PublishTimings` row with `outcome='committed'` (or `'rejected'` if all slugs rejected); record `metrics.observe('publish.begin.ms' | 'publish.append.ms' | 'publish.commit.ms' | 'publish.total.ms', …)`.
+**3. Publish latency** — in [srv/lib/content-publish-session.js](../../../srv/lib/content-publish-session.js).
+
+**Correction after spec review:** an in-memory Map keyed by `sessionId` would break on scale-out — the load balancer can route successive `/content/publish/append` calls to different CF instances, so the Map on instance A never sees instance B's contributions. `beginPublishSession` already acquires a `content-publish` job-lock ([srv/lib/content-publish-session.js:34](../../../srv/lib/content-publish-session.js#L34)) so publishes are serialized cluster-wide, but the append HTTP calls themselves are stateless and can hit either instance. The tally must be persisted.
+
+Two new columns on `ContentManifestAspect` in [db/_content-shape.cds](../../../db/_content-shape.cds) (sits next to the existing `sessionId`, `lastAppendAt`):
+
+```cds
+appendMsTotal : Integer default 0;   // sum of append handler wall-clocks
+firstAppendAt : Timestamp;           // for beginMs computation
+```
+
+Handler changes:
+
+- `beginPublishSession` — record `createdAt`, `metrics.counter('publish.attempt')`.
+- `appendToSession` — measure handler wall-clock; issue `UPDATE ContentManifest SET appendMsTotal = appendMsTotal + ?, firstAppendAt = COALESCE(firstAppendAt, ?) WHERE sessionId = ?`. Idempotent on either instance.
+- `commitSession` — read the manifest row; compute `beginMs = firstAppendAt - createdAt`, `appendMsTotal` (already summed on the row), `commitMs = commit handler wall-clock`, `totalMs = commitDone - createdAt`; write one `PublishTimings` row with `outcome='committed'` (or `'rejected'` if all slugs rejected). Record `metrics.observe('publish.begin.ms' | 'publish.append.ms' | 'publish.commit.ms' | 'publish.total.ms', …)`.
 - `abortSession` — write one `PublishTimings` row with `outcome='aborted'` so aborted publishes stay in the record.
+
+The per-batch UPDATE adds one small write per append batch (~30 batches per full publish — negligible next to the batch's own inserts).
 
 **4. Publish outcome counters** — layered on the timing rows: `publish.commit.ok`, `publish.commit.reject`, `publish.abort`.
 
@@ -159,24 +251,42 @@ cds.db.run = function wrappedRun(...args) {
 
 ### Admin UI surface
 
-New view **`app/admin-shell/src/views/Operations.vue`** — peer of `Board.vue`, `Statistics.vue`, `TutorialDashboard.vue`. Registered in the admin-shell router + side navigation under the existing "Analytics" section.
+**Correction after spec review:** `app/admin-shell/` is a UI5 application (`sap.tnt.ToolPage`, minUI5Version 1.136.0), not Vue. Peer views are UI5 controllers at `app/admin-shell/webapp/controller/*.controller.js` (`Board.controller.js`, `Statistics.controller.js`, `TutorialDashboard.controller.js`, etc.), backed by matching `view/*.view.xml` files. Also, the route name `operations` is already taken by the Featured Tasks Fiori sub-component (`sap.tutorials.admin.operations` at [app/admin/operations](../../../app/admin/operations)) and its `pipelinelog` / `joblog` peers. The observability tile ships under a distinct route.
 
-Three cards on one page:
+New peer view **`Metrics`** in the admin shell:
+
+- `app/admin-shell/webapp/view/Metrics.view.xml`
+- `app/admin-shell/webapp/controller/Metrics.controller.js`
+- Route registration in `app/admin-shell/webapp/manifest.json` (`sap.ui5.routing.routes`): `{ "name": "metrics", "pattern": "metrics", "target": [{ "name": "metricsTarget", ... }] }` — mirrors the `board` / `statistics` / `tutorialdashboard` route shape.
+- Side-navigation entry added to `Shell.controller.js` under the existing "Analytics" section.
+- URL: `/admin-ui/#metrics`.
+
+Three cards on one view:
 
 1. **Content cache** — current hit-rate (big number), 24 h line chart of 5-min window hit-rates, current cache size in MB / 50 MB max, evictions per hour.
 2. **HANA pool** — p50 / p95 / p99 acquire-latency current-window numbers + 24 h chart, total queries per window (throughput sanity), acquire-timeout count for last hour (red badge if > 0).
-3. **Publish latency** — sortable table of last 20 publishes from `PublishTimings` with mode, initiator, slug count, total ms, and a phase-breakdown mini-bar (begin / append / commit split); footer line showing aggregate p50 / p95 / p99 over last 7 days.
+3. **Publish latency** — sortable `sap.m.Table` of last 20 publishes from `PublishTimings` with mode, initiator, slug count, total ms, and a phase-breakdown mini-bar (begin / append / commit split); footer showing aggregate p50 / p95 / p99 over last 7 days.
 
-Chart library matches whatever `admin-shell` already ships (avoids a new bundle — decision at implementation time; both Chart.js and D3 are already elsewhere in the tree).
+Chart rendering uses whatever `admin-shell` already ships (verify at implementation start; if none, use `sap.viz` or Chart.js — the Statistics view is the existing precedent).
 
-Backend route **`GET /admin/metrics/live`** in [srv/server.js](../../../srv/server.js):
+**Data sources** (revised after spec review to reflect real AnalyticsService plumbing):
 
-- Registered alongside `/health` / `/health/db`, protected by `basicAuthMiddleware`.
-- Returns `{ snapshot: metrics.snapshot(), instanceId, uptimeSec, generatedAt }`.
-- Polled every 30 s by the admin tile while visible; polling stops on view unmount.
-- Same endpoint humans curl during incidents.
+- `AnalyticsService.MetricSnapshots` (OData) for the 24 h charts.
+- `AnalyticsService.PublishTimings` (OData) for the publish table.
+- `GET /admin/metrics/live` for the "current" numbers on the cards (polled every 30 s while the view is visible; polling stops on route change / view unmount).
 
-No admin CRUD. Operations is read-only. Counters reset on `cf restart` (in-memory).
+**AnalyticsService is scope `Admin`** ([srv/analytics-service.cds](../../../srv/analytics-service.cds) service-level `@requires : 'Admin'`). Admin-shell users hold the Admin role already; the OData calls flow with the XSUAA cookie session as with all other admin-shell entities. No new auth surface.
+
+**`/admin/metrics/live` auth mismatch — resolved.** [srv/server.js:183](../../../srv/server.js#L183) applies `basicAuthMiddleware` globally after `/health`. Admin-shell views run inside the approuter under XSUAA and cannot easily add a `Authorization: Basic ...` header to a fetch. Two options; the spec picks (b):
+
+- (a) Route `/admin/metrics/live` through the approuter with an XSUAA route so the shell fetches with the SSO cookie. Requires `xs-app.json` edit and destination remapping.
+- (b) **Move the "live snapshot" surface off `/admin/metrics/live` and onto an `AdminService` unbound action `getMetricsSnapshot`** (returning the same JSON shape). Admin-shell already talks to `AdminService` via OData with XSUAA cookies; no new auth path, no basic-auth from a browser. The `/admin/metrics/live` Express route stays for on-call `curl` (basic-auth) and for CF log correlation.
+
+Under (b), the admin tile calls `POST /admin/getMetricsSnapshot` (action, not entity read) with the XSUAA session; on-call humans still `curl /admin/metrics/live -u tech:pass` for the same data. Both routes call the same underlying `metrics.snapshot()`.
+
+**Feature-flag visibility to the UI (spec review Should-fix #3).** Env vars are process-scope and not visible to the browser bundle. The `getMetricsSnapshot` action includes `{ dbWrapEnabled: process.env.METRICS_DB_WRAP === 'true' }` in its response. The pool card renders "not yet enabled" when `dbWrapEnabled` is false. Same field appears in `/admin/metrics/live`.
+
+No admin CRUD. Metrics view is read-only. Counters reset on `cf restart` (in-memory).
 
 ### Structured log lines
 
@@ -193,17 +303,19 @@ Emitted via `cds.log('metrics').info(JSON.stringify({...}))`. **Not** emitted pe
 Two PRs, deliberately. The DB wrapper is the one piece that could theoretically slow every request; we observe it in isolation from the rest.
 
 **PR 1 — Everything except the DB wrapper.**
-Schema (`MetricSnapshots`, `PublishTimings`), `srv/lib/metrics.js` module, cache-hit instrumentation, publish timing instrumentation, rollup job, retention cleanup, `/admin/metrics/live`, admin UI Operations tile. `METRICS_DB_WRAP` stays `false` — the pool card renders "not yet enabled." Deploy this alone. Verify one full day of rollup rows accumulates.
+Schema (`MetricSnapshots`, `PublishTimings`, two new `.hdbindex` files, two new `ContentManifest` columns), `srv/lib/metrics.js` module, cache-hit instrumentation, publish timing instrumentation, rollup job (no `job-lock`), retention cleanup (with `job-lock`), `AnalyticsService` projections, `AdminService.getMetricsSnapshot` action, `/admin/metrics/live` Express route, admin-shell UI5 Metrics view. `METRICS_DB_WRAP` stays `false` — the pool card renders "not yet enabled" (the response flag `dbWrapEnabled: false` drives this). Deploy this alone. Verify one full day of rollup rows accumulates across both CF instances.
 
 **PR 2 — DB wrapper.**
-Enables passive `cds.db.run` wrapping. Flip `METRICS_DB_WRAP=true` on DEV in `cf set-env`, watch for regression in p95 request latency, flip on QA + PROD.
+Enables passive wrapping of both `cds.db.run` and `cds.tx` (so `tx.run` inside `cds.tx(async (tx) => …)` blocks is instrumented too). Metrics: `db.acquire.ms` (direct `cds.db.run` timings), `db.tx.ms` (whole-tx wall-clock), `db.pool.timeout` (counter for pool-exhaustion errors). Flip `METRICS_DB_WRAP=true` on DEV in `cf set-env`, watch for regression in p95 request latency, flip on QA + PROD.
 
 ## Feature flags
 
 Two env vars, both `cf set-env` — not credstore (non-secret operational toggles):
 
-- **`METRICS_ENABLED`** (default `true`) — master switch. When `false`, `metrics.counter/observe/gauge` become no-ops and the rollup job skips its tick. Kill-switch for any incident where instrumentation itself is suspected.
-- **`METRICS_DB_WRAP`** (default `false` for first deploy, then flipped on) — governs the passive `cds.db.run` wrapper specifically. Reversible in one `cf set-env` + `cf restart`.
+- **`METRICS_ENABLED`** (default `true`) — master switch. When `false`, `metrics.counter/observe/gauge` become no-ops (early-return before any state mutation) AND the rollup job skips its tick AND the DB wrapper is not installed at `served` time. This avoids paying the promise-chain overhead on every query when metrics are off — a `.then/.catch` on every `db.run` is not free even if the callback no-ops.
+- **`METRICS_DB_WRAP`** (default `false` for first deploy, then flipped on) — governs the DB / tx wrapper specifically. `false` = don't install the wrapper at all. `true` = install once (guarded by `globalThis.__metricsDbWrapInstalled`). Reversible in one `cf set-env` + `cf restart`.
+
+Both flags are surfaced in the `getMetricsSnapshot` / `/admin/metrics/live` response so the admin tile can render "not yet enabled" states without the browser knowing env vars.
 
 ## Error handling
 
@@ -218,17 +330,20 @@ The metrics module has one nasty failure mode: **instrumentation crashes the thi
 
 **Unit tests** in [test/unit/](../../../test/unit/):
 
-- `metrics.test.js` — counter increments; histogram percentile math (feed known distribution, assert p50 / p95 / p99); reservoir rotation; snapshot shape; no-op behavior when `METRICS_ENABLED=false`; swallow-and-log on injected throw.
-- `content-cache-metrics.test.js` — `ContentCache` hit / miss / evict counters wire through to the module.
+- `metrics.test.js` — counter increments; Algorithm R reservoir math (feed known distribution, assert p50 / p95 / p99 stay within tolerance across independent runs); rotation atomically zeros counters and drains reservoirs; snapshot shape; no-op behavior when `METRICS_ENABLED=false`; swallow-and-log on injected throw.
+- `content-cache-metrics.test.js` — call `serveHandler` code paths for both hit and miss on the bare-slug cache AND the `render:` cache; assert counters land under the correct namespace and don't cross-pollute.
+- `db-wrap.test.js` — with `METRICS_DB_WRAP=true`, wrapping is applied exactly once even when `cds.on('served')` fires twice (single-application guard). `tx.run` inside `cds.tx(async (tx) => …)` observes `db.tx.ms`; bare `cds.db.run(...)` observes `db.acquire.ms`; injected throw in `.then` callback does not affect the returned promise's resolution.
 
 **Hybrid tests** in [test/hybrid/](../../../test/hybrid/) (real HANA via `cds bind --exec`, `__TEST__` prefix, `_guard.js` write-safety):
 
-- `metrics-rollup.test.js` — seed counters + histograms, invoke the rollup handler function directly, assert `MetricSnapshots` rows appear with correct `windowStart` alignment and percentile values, assert histograms are drained on rotation.
-- `publish-timings.test.js` — begin → append → commit through the real HANA pool, assert one `PublishTimings` row is written with plausible non-zero `beginMs`, `appendMsTotal`, `commitMs`, `totalMs`, `outcome='committed'`.
+- `metrics-rollup.test.js` — seed counters + histograms, invoke the rollup handler function directly, assert `MetricSnapshots` rows appear with `windowStart` floored to 5-min boundary and expected percentile values; assert histograms are drained after rotation; assert `PRIMARY KEY (windowStart, metric, instanceId)` allows two simulated instances to write the same window without collision.
+- `publish-timings.test.js` — begin → append (twice, simulating two batches) → commit through the real HANA pool with a stub `sessionId`. Assert one `PublishTimings` row is written with `sessionId` populated, `outcome='committed'`, and plausible non-zero `beginMs` / `appendMsTotal` / `commitMs` / `totalMs`. Assert `ContentManifest.appendMsTotal` was incremented on each append.
+- `analytics-projection.test.js` — issue OData `GET /analytics/MetricSnapshots?$top=1` and `GET /analytics/PublishTimings?$top=1` with Admin token; assert 200 + JSON body shape. Confirms the `analytics-service.cds` projection is wired.
 
 **Smoke tests** in [test/smoke/](../../../test/smoke/) (HTTP against deployed):
 
-- `metrics-live.smoke.js` — `GET /admin/metrics/live` (with basic-auth) returns a non-empty snapshot with expected top-level keys (`snapshot`, `instanceId`, `uptimeSec`, `generatedAt`).
+- `metrics-live.smoke.js` — `GET /admin/metrics/live` (with basic-auth) returns a non-empty snapshot with expected top-level keys (`snapshot`, `instanceId`, `uptimeSec`, `dbWrapEnabled`, `generatedAt`).
+- `metrics-action.smoke.js` — `POST /admin/getMetricsSnapshot` (XSUAA Admin token) returns the same shape; verifies the AdminService action path used by the admin-shell.
 
 **Not tested (documented):** absolute timing accuracy of the DB wrapper — timing tests on real HANA are flaky. We assert that when wrapping is enabled, the `db.acquire.ms` histogram's `count` increases in proportion to observed queries; we do not assert absolute latency numbers.
 
@@ -251,3 +366,21 @@ Choices captured from the brainstorm dialog, ordered as answered:
 - **Q2 → A** — 5-min rollup rows + live counters. Rejected per-event rows (cache-miss volume too high) and live-only (loses history on `cf restart`).
 - **Q3 → A** — per-publish, per-phase timing rows. Rejected per-slug (14 k rows/day too much for a v1) and rollup-only (loses per-publish attribution).
 - **Q4 → A alone** — passive `cds.db.run` wrapper. Rejected active synthetic probe (`/health/db` already covers liveness; false-negative risk when synthetic passes but real queries starve).
+
+## Revision log
+
+**Round 1 (2026-07-02) — spec review by `general-purpose` agent (agentId `a1cf146080d5550f4`).** Five Critical + seven Should-fix issues found; all addressed:
+
+- Admin UI is UI5 (`app/admin-shell/webapp/controller/*.controller.js`), not Vue — rewrote § Admin UI surface. Also renamed the route from `operations` (collided with existing Featured Tasks Fiori sub-component) to `metrics`.
+- `@analytics.exposed` alone doesn't route; added explicit `@readonly entity … as projection on …` block for `analytics-service.cds` and noted the service-level `@requires : 'Admin'` gate.
+- `cds.db.run` wrapper misses `tx.run` (39+ sites); expanded to wrap both `cds.db.run` and `cds.tx()`, emitting separate `db.acquire.ms` and `db.tx.ms` metrics.
+- Added `globalThis.__metricsDbWrapInstalled` guard to prevent double-wrap when `cds.on('served')` re-fires (matches existing `srv/server.js` sentinel convention).
+- In-memory publish-timing tally would break on load-balanced append batches; moved the running tally onto two new `ContentManifest` columns (`appendMsTotal`, `firstAppendAt`) so timing survives instance-swap mid-publish.
+- HANA indexes require `.hdbindex` files, not CDS `index` syntax; added two files (`IDX_METRIC_SNAPSHOTS_WINDOW`, `IDX_PUBLISH_TIMINGS_CREATED`).
+- Feature flag state needs to reach the browser; surfaced `dbWrapEnabled` in the `getMetricsSnapshot` response and made `AdminService.getMetricsSnapshot` the primary UI path (XSUAA-friendly), with `/admin/metrics/live` retained for on-call `curl`.
+- `windowStart` alignment: rollup writer must `Math.floor(now / 300_000) * 300_000`.
+- `MetricSnapshots` needs `PRIMARY KEY (windowStart, metric, instanceId)` and the rollup writer drops `job-lock` (both instances write independently); retention keeps `job-lock`.
+- `ContentCache` counters moved out of the class (which stores two key namespaces) into the `serveHandler` call sites so `content.cache.*` and `render.cache.*` don't cross-pollute.
+- Reservoir algorithm settled: Vitter's Algorithm R, size 2000 per metric, drains on rotation.
+- `PublishTimings.sessionId` added for free cross-link to `PipelineLog.ID`.
+- `METRICS_ENABLED=false` skips wrapper installation entirely (not "install and short-circuit inside") to avoid promise-chain overhead when off.
