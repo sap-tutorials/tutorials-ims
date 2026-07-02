@@ -87,7 +87,14 @@ BEGIN
 
   -- If no path exists between two live endpoints, Shortest_Path returns
   -- an empty path — the SELECT below emits zero rows.
-  o_verts = SELECT :v."VERTEX_KEY" AS vertex_key,
-                   :SEQ AS seq_idx
+  --
+  -- NB: GraphScript SELECT-FOREACH grammar does NOT accept column
+  -- aliases (`AS <name>`) on projection expressions. Output column
+  -- names come from the OUT parameter's TABLE definition (positional:
+  -- 1st expression -> vertex_key, 2nd -> seq_idx). Trying to use
+  -- `AS vertex_key` here yields "unexpected AS, expecting FOREACH or ,"
+  -- The ORDINALITY name (:SEQ below) IS valid — that's a variable
+  -- binding in FOREACH scope, not an output alias.
+  o_verts = SELECT :v."VERTEX_KEY", :SEQ
             FOREACH v IN Vertices(:p) WITH ORDINALITY AS SEQ;
 END;
