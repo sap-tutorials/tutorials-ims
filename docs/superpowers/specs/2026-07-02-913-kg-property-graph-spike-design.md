@@ -89,7 +89,7 @@ The metrics dimension `arm` distinguishes these cases: v2 successes are tagged `
 CREATE VIEW "KG_PG_VERTICES_V" AS
   -- Concept vertices
   SELECT
-    CAST('concept:' || SLUG AS NVARCHAR(100)) AS "VERTEX_KEY",
+    CAST('concept:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
     'concept'                                 AS "VERTEX_TYPE",
     SLUG                                      AS "SLUG",
     NAME                                      AS "LABEL",
@@ -100,7 +100,7 @@ CREATE VIEW "KG_PG_VERTICES_V" AS
   -- Tutorial vertices (synthesized from the link table — tutorials don't
   -- live in a KG-specific table, they live in Tutorials).
   SELECT DISTINCT
-    CAST('tutorial:' || t.SLUG AS NVARCHAR(100)) AS "VERTEX_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
     'tutorial'                                   AS "VERTEX_TYPE",
     t.SLUG                                       AS "SLUG",
     t.TITLE                                      AS "LABEL",
@@ -119,8 +119,8 @@ CREATE VIEW "KG_PG_VERTICES_V" AS
 CREATE VIEW "KG_PG_EDGES_V" AS
   -- kg:requires edges: concept → concept
   SELECT
-    CAST('concept:' || src.SLUG AS NVARCHAR(100)) AS "SOURCE",
-    CAST('concept:' || tgt.SLUG AS NVARCHAR(100)) AS "TARGET",
+    CAST('concept:' || src.SLUG AS NVARCHAR(280)) AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(280)) AS "TARGET",
     'requires'                                    AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
@@ -130,8 +130,8 @@ CREATE VIEW "KG_PG_EDGES_V" AS
   UNION ALL
   -- kg:teaches edges: tutorial → concept
   SELECT
-    CAST('tutorial:' || t.SLUG AS NVARCHAR(100)) AS "SOURCE",
-    CAST('concept:'  || c.SLUG AS NVARCHAR(100)) AS "TARGET",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280)) AS "SOURCE",
+    CAST('concept:'  || c.SLUG AS NVARCHAR(280)) AS "TARGET",
     'teaches'                                    AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
   JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID

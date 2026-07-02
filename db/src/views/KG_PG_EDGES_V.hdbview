@@ -1,8 +1,11 @@
 VIEW "KG_PG_EDGES_V" AS
   -- kg:requires edges: concept → concept
+  -- NVARCHAR(280) sizing must match KG_PG_VERTICES_V.hdbview — the graph
+  -- workspace joins SOURCE/TARGET against VERTEX_KEY, and type-length
+  -- mismatches have been observed to trip the workspace validator.
   SELECT
-    CAST('concept:' || src.SLUG AS NVARCHAR(100)) AS "SOURCE",
-    CAST('concept:' || tgt.SLUG AS NVARCHAR(100)) AS "TARGET",
+    CAST('concept:' || src.SLUG AS NVARCHAR(280)) AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(280)) AS "TARGET",
     'requires'                                    AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
@@ -11,9 +14,13 @@ VIEW "KG_PG_EDGES_V" AS
     AND src.STATUS = 'ACTIVE' AND tgt.STATUS = 'ACTIVE'
   UNION ALL
   -- kg:teaches edges: tutorial → concept
-  SELECT
-    CAST('tutorial:' || t.SLUG AS NVARCHAR(100)) AS "SOURCE",
-    CAST('concept:'  || c.SLUG AS NVARCHAR(100)) AS "TARGET",
+  -- DISTINCT mirrors the vertices view's DISTINCT on the tutorial arm; the
+  -- composite PK on TutorialConceptLinks should prevent dupes, but if a
+  -- future migrator ever inserts a duplicate (TUTORIAL_ID, CONCEPT_ID) row,
+  -- DISTINCT keeps the workspace edge count honest for hop-count math.
+  SELECT DISTINCT
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280)) AS "SOURCE",
+    CAST('concept:'  || c.SLUG AS NVARCHAR(280)) AS "TARGET",
     'teaches'                                    AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
   JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
