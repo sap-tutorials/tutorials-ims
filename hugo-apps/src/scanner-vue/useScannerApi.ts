@@ -22,11 +22,16 @@ export function useScannerApi() {
     }
   }
 
-  async function claimPrize(recordId: string): Promise<string> {
+  // #889: accountNumber is required — the server verifies the prize belongs
+  // to the scanned contestant before flipping status. Callers must pass the
+  // uid from the QR the operator just scanned (i.e. contestant.value.uid).
+  async function claimPrize(recordId: string, accountNumber: string): Promise<string> {
     loading.value = true
     error.value = null
     try {
-      const res = await fetch(`/scanner/claimPrize(recordId='${encodeURIComponent(recordId)}')`)
+      const res = await fetch(
+        `/scanner/claimPrize(recordId='${encodeURIComponent(recordId)}',accountNumber='${encodeURIComponent(accountNumber)}')`
+      )
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error?.message || `HTTP ${res.status}`)

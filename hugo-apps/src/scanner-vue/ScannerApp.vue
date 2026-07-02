@@ -113,7 +113,7 @@ async function onClaimPrize() {
 
   state.value = 'claiming'
   try {
-    await claimPrize(contestant.value.recordId)
+    await claimPrize(contestant.value.recordId, contestant.value.uid)
     showToast('Prize claimed!')
     // Refresh contestant data
     const scanResult: ScanResult = {
