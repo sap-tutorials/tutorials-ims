@@ -422,7 +422,10 @@ function mapSparqlError(err, req, log) {
 function mapPgPathsToWireShape(paths) {
   const best = paths[0];
   if (!best) return [];
-  return best.vertices
+  // `?? []` guards against a future kgPathV2 shape that ever omits `vertices`;
+  // today the wrapper always emits it, but the mapper stays defensive since
+  // it's called from the pathBetween hot path.
+  return (best.vertices ?? [])
     .filter(v => typeof v === 'string' && v.startsWith('tutorial:'))
     .map(v => v.slice('tutorial:'.length));
 }
@@ -925,7 +928,6 @@ export default cds.service.impl(async function () {
     const fromIri = `https://developers.sap.com/kg/tutorial/${fromSlug}`;
     const toIri   = `https://developers.sap.com/kg/tutorial/${toSlug}`;
     const t0 = Date.now();
-
     // Test-injection hooks (#913). cds.test('serve') pre-resolves this
     // module via cds.utils._import (dynamic file:// import on Windows),
     // which bypasses vi.mock's ESM interceptor. See the same pattern in
@@ -959,6 +961,11 @@ export default cds.service.impl(async function () {
 
     // ── v1 SPARQL fallback: activates the PATH_BETWEEN dispatch in KG_QUERY.
     // ── Previously stubbed to []; now wired to the real named-query call.
+    // `t1` captures the boundary between v2 fail-through and the v1 SPARQL
+    // round-trip so `kg_path_between_latency_ms_v1` isn't polluted by v2
+    // fallback-attempt time (v2 timeouts would otherwise show up in v1's
+    // p95/p99 dashboard and confuse the decision-gate A/B numbers).
+    const t1 = Date.now();
     try {
       const { response } = await kgQueryImpl({
         db: cds.db,
@@ -967,7 +974,7 @@ export default cds.service.impl(async function () {
       });
       const wire = mapV1SparqlToWireShape(response);
       metrics.counter(wire.length ? 'kg_path_between_calls_v1_success' : 'kg_path_between_calls_v1_empty');
-      metrics.observe('kg_path_between_latency_ms_v1', Date.now() - t0);
+      metrics.observe('kg_path_between_latency_ms_v1', Date.now() - t1);
       return wire;
     } catch (err) {
       log.warn(`kg-service: pathBetween v1 failed: ${err.message}`);
