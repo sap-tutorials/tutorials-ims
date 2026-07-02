@@ -30,13 +30,17 @@ describe('help-doc-extract', () => {
     ]);
   });
 
-  it('preserves anchor when non-null; passes null through unchanged', async () => {
+  it('anchor is always null (Bug 5 workaround — see help-doc-extract.js comment)', async () => {
+    // Claude 4.6 Sonnet refuses to call the tool when schema declares
+    // anchor as `type: ['string', 'null']`. Anchor extraction removed
+    // from schema + prompt; post-validation writes null unconditionally.
+    // If future work reinstates anchor extraction (via sentinel string
+    // or two-pass), update this test AND the schema simultaneously.
     const callModel = vi.fn().mockResolvedValue(llmFixture);
     const result = await extractConceptsFromHelpDoc({ callModel, helpDoc, nearestConcepts });
-    const handlers = result.concepts.find(c => c.slug === 'cap-service-handlers');
-    const modeling = result.concepts.find(c => c.slug === 'cap-cds-modeling');
-    expect(handlers.anchor).toBe('before-create');
-    expect(modeling.anchor).toBeNull();
+    for (const c of result.concepts) {
+      expect(c.anchor).toBeNull();
+    }
   });
 
   it('rejects concepts below floor 0.7', async () => {
@@ -87,11 +91,19 @@ describe('KG_HELP_DOC_EXTRACT_SCHEMA', () => {
   // empty tool calls when schema constraints rejected a single item. See
   // srv/lib/help-doc-extract.js comment block for rationale.
 
-  it('declares optional anchor field (nullable string)', () => {
-    const anchorSpec = KG_HELP_DOC_EXTRACT_SCHEMA.parameters.properties.concepts.items.properties.anchor;
-    expect(anchorSpec).toBeDefined();
-    // anchor may be null OR a string (pattern enforced downstream in applyPostValidation)
-    expect(anchorSpec.type).toEqual(['string', 'null']);
+  it('schema does NOT declare anchor field (Bug 5 workaround)', () => {
+    // Claude 4.6 Sonnet refuses to call the tool when a schema field uses
+    // `type: ['string', 'null']`. Anchor removed from schema entirely;
+    // cron writes null on HelpDocConceptLinks.anchor. Reinstate via a
+    // Claude-friendly mechanism (sentinel string, or two-pass) when
+    // anchor UX is a priority. See srv/lib/help-doc-extract.js comment.
+    const props = KG_HELP_DOC_EXTRACT_SCHEMA.parameters.properties.concepts.items.properties;
+    expect(props.anchor).toBeUndefined();
+    // Sanity: the remaining fields are still there
+    expect(props.slug).toBeDefined();
+    expect(props.name).toBeDefined();
+    expect(props.confidence).toBeDefined();
+    expect(props.description).toBeDefined();
   });
 
   it('caps concepts array at 8 via post-validation (schema has no maxItems)', async () => {
