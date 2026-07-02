@@ -37,5 +37,19 @@ SQL SECURITY DEFINER
 AS
 BEGIN
   DECLARE KG_NOT_AVAILABLE_ON_QA CONDITION FOR SQL_ERROR_CODE 10002;
+
+  -- HANA HDI validator requires every OUT parameter to be assigned before
+  -- the body ends. SIGNAL raises an exception mid-body, but static
+  -- analysis sees only that `paths` is never assigned on some path — the
+  -- compiler rejects with "some out table variable is not assigned: PATHS"
+  -- (deploy attempt 2026-07-02, MTA op df6302bc-...). Fix: assign an empty
+  -- result set first, then SIGNAL. Callers never see the empty rows —
+  -- SIGNAL wins — but the validator is satisfied.
+  paths = SELECT
+            CAST(NULL AS INTEGER)         AS path_rank,
+            CAST(NULL AS INTEGER)         AS hop_count,
+            CAST(NULL AS NVARCHAR(500))   AS vertex_seq,
+            CAST(NULL AS INTEGER)         AS seq_index
+          FROM DUMMY WHERE 1 = 0;
   SIGNAL KG_NOT_AVAILABLE_ON_QA;
 END;
