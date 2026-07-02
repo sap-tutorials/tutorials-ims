@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { csrfFetch } from '../api/csrf-fetch'
 
 /**
  * useExport — wraps POST /admin/analytics/export (shipped in Phase 1).
@@ -14,7 +15,7 @@ export function useExport() {
     isExporting.value = true
     lastError.value = null
     try {
-      const r = await fetch('/admin/analytics/export', {
+      const r = await csrfFetch('/admin/analytics/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sql }),

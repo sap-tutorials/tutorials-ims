@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
+import { csrfFetch } from '@shared/csrf-fetch';
 
 interface Profile {
   linked: boolean;
@@ -55,7 +56,7 @@ async function onLink() {
   if (!v) { errorStatus.value = 'invalid-input'; return; }
   busy.value = true; errorStatus.value = null;
   try {
-    const r = await fetch('/api/setKhorosLink', {
+    const r = await csrfFetch('/api/setKhorosLink', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -90,7 +91,7 @@ async function onUnlink() {
   if (busy.value) return;
   busy.value = true;
   try {
-    await fetch('/api/clearKhorosLink', {
+    await csrfFetch('/api/clearKhorosLink', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' }, body: '{}',
     });

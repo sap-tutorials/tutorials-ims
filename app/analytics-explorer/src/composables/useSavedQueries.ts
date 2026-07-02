@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { csrfFetch } from '../api/csrf-fetch'
 import type { QuerySpec } from '../types/query-spec'
 
 export interface SavedRow {
@@ -36,7 +37,7 @@ function entityKeyUrl(id: string): string {
 }
 
 async function jsonFetch(url: string, init: RequestInit = {}): Promise<any> {
-  const r = await fetch(url, {
+  const r = await csrfFetch(url, {
     headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(init.headers || {}) },
     ...init,
   })

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useJouleChat } from '../useJouleChat'
+import { _resetCsrfTokenCacheForTests, _seedCsrfTokenForTests } from '../../api/csrf-fetch'
 
 const encoder = new TextEncoder()
 function sseStream(events: string[]) {
@@ -13,6 +14,10 @@ function sseStream(events: string[]) {
 }
 
 beforeEach(() => {
+  // csrfFetch() (used for POST /chat/stream) would fire an extra
+  // `GET /auth/user` handshake. Seed the token to skip it.
+  _resetCsrfTokenCacheForTests()
+  _seedCsrfTokenForTests('TEST-CSRF')
   vi.spyOn(globalThis, 'fetch' as any).mockImplementation(async () => ({
     ok: true,
     body: sseStream([

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { csrfFetch } from '@shared/csrf-fetch'
 import type { TermsResponse } from './types'
 
 const props = defineProps<{
@@ -77,7 +78,7 @@ async function onAccept(): Promise<void> {
   if (!canAccept.value) return
   submitting.value = true
   try {
-    const res = await fetch(props.apiJoin, {
+    const res = await csrfFetch(props.apiJoin, {
       method: 'POST',
       credentials: 'include',
       headers: {

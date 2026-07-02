@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { csrfFetch } from './csrf-fetch'
 
 export interface ApiError {
   status: number
@@ -35,7 +36,7 @@ export function useApi() {
     loading.value = true
     error.value = null
     try {
-      const res = await fetch(`${getApiBase()}${path}`, {
+      const res = await csrfFetch(`${getApiBase()}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: body ? JSON.stringify(body) : undefined,

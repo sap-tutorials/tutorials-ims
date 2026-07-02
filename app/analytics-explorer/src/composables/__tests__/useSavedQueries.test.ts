@@ -5,10 +5,15 @@ const fetchMock = vi.fn()
 ;(globalThis as any).fetch = fetchMock
 
 const { useSavedQueries } = await import('../useSavedQueries')
+const { _resetCsrfTokenCacheForTests, _seedCsrfTokenForTests } = await import('../../api/csrf-fetch')
 
 describe('useSavedQueries', () => {
   beforeEach(() => {
     fetchMock.mockReset()
+    // csrfFetch() is used by jsonFetch() for every POST/DELETE call.
+    // Seed the token so csrfFetch skips the /auth/user handshake in tests.
+    _resetCsrfTokenCacheForTests()
+    _seedCsrfTokenForTests('TEST-CSRF')
   })
 
   it('loadRows fetches /admin/analytics/SavedQueries ordered desc by lastRunAt then createdAt', async () => {

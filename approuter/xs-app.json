@@ -68,8 +68,7 @@
       "target": "/scanner/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.MobileApp",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.MobileApp"
     },
     {
       "source": "^/analytics-ui/(.*)$",
@@ -99,22 +98,19 @@
       "source": "^/auth/user$",
       "authenticationType": "xsuaa",
       "target": "/auth/user",
-      "destination": "srv-api",
-      "csrfProtection": false
+      "destination": "srv-api"
     },
     {
       "source": "^/api/devtoberfest/(status|terms)$",
       "target": "/api/devtoberfest/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/api/devtoberfest/(join|me)$",
       "target": "/api/devtoberfest/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
-      "csrfProtection": false
+      "authenticationType": "xsuaa"
     },
     {
       "source": "^/devtoberfest(/.*)?$",
@@ -127,198 +123,171 @@
       "target": "/admin/exports/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/admin/analytics/(.*)$",
       "target": "/admin/analytics/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/admin/(.*)$",
       "target": "/admin/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/author/(.*)$",
       "target": "/author/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Tutorial.Author",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/graph/(neighborhood(?:Full)?|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path)(\\(.*\\))?(/.*)?(\\?.*)?$",
       "target": "/graph/$1$2$3$4",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/graph/(.*)$",
       "target": "/graph/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/display/(.*)$",
       "target": "/display/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.DisplayApp",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.DisplayApp"
     },
     {
       "source": "^/api/v1/(.*)$",
       "target": "/api/v1/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.ConsolidationScope",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.ConsolidationScope"
     },
     {
       "source": "^/api/ChatConfig(.*)$",
       "target": "/api/ChatConfig$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/chat/(.*)$",
       "target": "/chat/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
-      "csrfProtection": false
+      "authenticationType": "xsuaa"
     },
     {
       "source": "^/api/advocates(/.*)?$",
       "target": "/api/advocates$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/api/alerts$",
       "target": "/api/alerts",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/api/ui-event$",
       "target": "/api/ui-event",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
-      "csrfProtection": false
+      "authenticationType": "xsuaa"
     },
     {
       "source": "^/search/(.*)$",
       "target": "/search/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/socket\\.io/(.*)$",
       "target": "/socket.io/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/ws/(.*)$",
       "target": "/ws/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/rest/(.*)$",
       "target": "/rest/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/build/(breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|kg-stats|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels)(/.*)?$",
       "target": "/build/$1$2",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/homepage/(.*)$",
       "target": "/homepage/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/feedback/(.*)$",
       "target": "/feedback/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/health(/.*)?$",
       "target": "/health$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/.well-known/(.*)$",
       "target": "/.well-known/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/ord/(.*)$",
       "target": "/ord/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/content/(.*)$",
       "target": "/content/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/tutorials-qa/_nav\\.json$",
       "target": "/content/nav",
       "destination": "srv-qa-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Tutorial.Author",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/qa-search/(.*)$",
       "target": "/search/$1",
       "destination": "srv-qa-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Tutorial.Author",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/tutorials-qa/search/?(.*)$",
@@ -332,15 +301,13 @@
       "target": "/content/tutorials/$1",
       "destination": "srv-qa-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Tutorial.Author",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/tutorials/_nav\\.json$",
       "target": "/content/nav",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/concepts/?$",
@@ -352,31 +319,27 @@
       "source": "^/concepts/(.*)$",
       "target": "/content/concepts/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/tutorials/(.*)$",
       "target": "/content/tutorials/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/_dev/?(.*)$",
       "target": "/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/(\\$api-docs/.*)$",
       "target": "/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^(.*)$",

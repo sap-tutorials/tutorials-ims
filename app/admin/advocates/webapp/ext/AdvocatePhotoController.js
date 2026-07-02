@@ -107,6 +107,10 @@ sap.ui.define([
           // FormData carries the file as a binary part — no base64 inflation,
           // no FileReader. The approuter forwards XSUAA session cookies
           // to /admin/* so credentials: 'same-origin' is sufficient.
+          // CSRF: fetch a token first (approuter enforces on non-GET POSTs
+          // to /admin/*). Same pattern as verb-definitions/ActionsController.
+          const csrfResp = await fetch("/admin/", { headers: { "x-csrf-token": "fetch" }, credentials: "same-origin" });
+          const csrf = csrfResp.headers.get("x-csrf-token");
           const formData = new FormData();
           formData.append("photo", file);
           const resp = await fetch(
@@ -115,7 +119,10 @@ sap.ui.define([
               method: "POST",
               body: formData,
               credentials: "same-origin",
-              headers: { "Accept": "application/json" }
+              headers: {
+                "Accept": "application/json",
+                "x-csrf-token": csrf || "fetch"
+              }
             }
           );
           if (!resp.ok) {

@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import CommunityProfile from '../CommunityProfile.vue';
+import { _resetCsrfTokenCacheForTests, _seedCsrfTokenForTests } from '@shared/csrf-fetch';
 
 function mockFetch(routes: Record<string, () => Promise<any>>) {
   return vi.fn(async (url: string, init?: RequestInit) => {
@@ -18,7 +19,14 @@ function mockFetch(routes: Record<string, () => Promise<any>>) {
 }
 
 describe('CommunityProfile.vue', () => {
-  beforeEach(() => { vi.restoreAllMocks(); });
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // csrfFetch() (used for POST /api/setKhorosLink and /api/clearKhorosLink)
+    // would otherwise fire an extra `GET /auth/user` handshake that mockFetch's
+    // strict routing table throws on. Seed the token so csrfFetch skips it.
+    _resetCsrfTokenCacheForTests();
+    _seedCsrfTokenForTests('TEST-CSRF');
+  });
 
   it('renders unlinked state when getKhorosProfile returns linked:false', async () => {
     const fetchMock = mockFetch({

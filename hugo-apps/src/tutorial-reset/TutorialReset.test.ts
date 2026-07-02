@@ -15,6 +15,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import TutorialReset from './TutorialReset.vue';
+import { _resetCsrfTokenCacheForTests, _seedCsrfTokenForTests } from '@shared/csrf-fetch';
 
 // ── Fetch mock helpers ────────────────────────────────────────────────
 
@@ -31,6 +32,11 @@ function mockFetchResponse(body: object, status = 200) {
 
 function setupFetch() {
   fetchMock = vi.fn();
+  // Pre-seed the CSRF token so csrfFetch() (used by TutorialReset.vue for
+  // POST /api/resetTutorialProgress) skips the /auth/user handshake and
+  // the fetchMock queue only sees the real POST.
+  _resetCsrfTokenCacheForTests();
+  _seedCsrfTokenForTests('TEST-CSRF');
   vi.stubGlobal('fetch', fetchMock);
 }
 
