@@ -2,7 +2,14 @@
 //
 // Phase 4.7 (#748): LLM extraction adapter for narrative documentation pages
 // from help.sap.com, cap.cloud.sap, and ui5.sap.com. Single predicate
-// `explains`. Floor 0.7, cap 8. Optional anchor per concept.
+// `explains`. Floor 0.7, cap 8.
+//
+// NOTE (2026-07-01): anchor extraction is currently NOT emitted by the LLM.
+// Claude 4.6 Sonnet refuses to call the tool when the schema contains a
+// nullable field via `type: ['string', 'null']` convention. Verified empirically.
+// Column persists on HelpDocConceptLinks; cron writes null. Reinstate via a
+// Claude-friendly mechanism (sentinel empty-string, or two-pass extraction)
+// when anchor UX is a priority.
 //
 // Spec: docs/superpowers/specs/2026-07-01-748-phase4.7-help-docs.md §4.3
 
@@ -13,7 +20,6 @@ const CAP = 8;
 const MIN_NAME_LEN = 2;
 const MAX_SLUG_LEN = 80;
 const MAX_NAME_LEN = 120;
-const MAX_ANCHOR_LEN = 120;
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
 const REGISTRY_HINT_K = 25;
 
@@ -24,11 +30,22 @@ export const KG_HELP_DOC_EXTRACT_SCHEMA = Object.freeze({
   // constraints (slug patterns, name/description min-length, anchor patterns,
   // confidence floor) live in `applyPostValidation` below rather than the
   // schema, so a single non-conforming concept in the LLM output DOES NOT
-  // cause the whole tool call to return empty. gpt-4o-mini's structured-
-  // output mode is stricter than plain JSON validation — schema patterns
-  // that reject one item can silently zero the whole array.
+  // cause the whole tool call to return empty.
   //
-  // See spec §4.3 for the intended constraints; they're enforced downstream.
+  // NOTE (2026-07-01, Bug 5): `anchor` was previously declared as
+  // `type: ['string', 'null']` per JSON Schema convention for nullable
+  // fields. Verified live via one-off diagnostic that Claude 4.6 Sonnet
+  // (the KG-extract deployment model) responds with `verdict: {}` — refuses
+  // to call the tool at all — when a schema uses the array-type-with-null
+  // convention. Removing anchor from the schema entirely restored real
+  // multi-concept output (390 completion tokens vs 16 before). LLM does
+  // NOT emit anchors today; anchor rendering in Task 3's UI stays dormant
+  // until anchor extraction is added back via a Claude-friendly mechanism
+  // (candidates for future work: `type: 'string'` with sentinel `''`,
+  // or a second post-extraction pass).
+  //
+  // See spec §4.3 for the original design intent + Bug 5 investigation
+  // notes for the trade-off.
   parameters: {
     type: 'object',
     required: ['concepts'],
@@ -43,13 +60,6 @@ export const KG_HELP_DOC_EXTRACT_SCHEMA = Object.freeze({
             name: { type: 'string' },
             description: { type: 'string' },
             confidence: { type: 'number', minimum: 0, maximum: 1 },
-            anchor: {
-              // §3 Q5: optional slug-format H2/H3 identifier from the doc page.
-              // null when the concept is discussed throughout the page rather
-              // than in one section. Type-only (no pattern/maxLength here to
-              // avoid tool-call rejection); enforced in applyPostValidation.
-              type: ['string', 'null'],
-            },
           },
         },
       },
@@ -78,9 +88,6 @@ Each concept comes with:
   - name: human-readable label. REQUIRED.
   - description: one-sentence description of the concept.
   - confidence: 0.0-1.0; use 0.7+ for concepts the page directly explains.
-  - anchor: optional H2/H3 slug from the page's TOC when the concept is
-    discussed primarily in one section. Use null when the concept spans
-    multiple sections.
 
 You will be given a K=25 list of registry concepts. STRONGLY PREFER reusing
 a registry slug when your concept matches — this keeps the graph coherent.
@@ -136,18 +143,15 @@ function applyPostValidation(raw) {
     // non-conforming slugs into the graph.
     const slugLower = item.slug.toLowerCase();
     if (!SLUG_PATTERN.test(slugLower) || slugLower.length > MAX_SLUG_LEN) continue;
-    // Anchor: null OR a slug-format string ≤ MAX_ANCHOR_LEN. Anything else null-ed.
-    let anchor = null;
-    if (typeof item.anchor === 'string' && item.anchor.length > 0) {
-      const a = item.anchor.toLowerCase();
-      if (SLUG_PATTERN.test(a) && a.length <= MAX_ANCHOR_LEN) anchor = a;
-    }
     filtered.push({
       slug: slugLower,
       name: item.name,
       description: typeof item.description === 'string' ? item.description : '',
       confidence: item.confidence,
-      anchor,
+      // anchor is not extracted today — see KG_HELP_DOC_EXTRACT_SCHEMA
+      // note for the Claude compatibility trade-off. Column persists on
+      // HelpDocConceptLinks per schema; the cron writes null.
+      anchor: null,
     });
     if (filtered.length >= CAP) break;
   }
