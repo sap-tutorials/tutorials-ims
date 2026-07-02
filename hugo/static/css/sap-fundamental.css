@@ -3286,6 +3286,59 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }/* ── Mobile res
   font-size: 0.85em;
   background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
   border-radius: 3px;
+}/* Phase 4.7 (#748 §4.8.1): help-docs source badge + metadata classes.
+   Three-source discriminator visible at a glance. Mirrors the shape of
+   .kg-api-type (Phase 4.5) and .kg-language (Phase 4.6) — small
+   monospaced pill — but with per-source tinted backgrounds instead of
+   the neutral gray. The tint palette is intentionally muted (soft,
+   Fundamental-Style neutral tones — no saturated brand colors) so the
+   badge signals canonicality without visually dominating the row.
+
+   Precedent: .kg-api-type / .kg-language are neutral pills (single
+   background). Phase 4.7 needs source discrimination, so each source
+   gets a distinct pastel background but the shape stays identical. */.concept-page__section .kg-help-source,
+.kg-sidebar-meta .kg-help-source {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  font-family: var(--sapFontFamily, sans-serif);
+  font-size: 0.8em;
+  font-weight: 500;
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
+  border-radius: 3px;
+  margin-right: 0.25em;
+  vertical-align: baseline;
+}.concept-page__section .kg-help-source--cap-cloud-sap,
+.kg-sidebar-meta .kg-help-source--cap-cloud-sap {
+  /* CAP: muted blue (matches SAP Fiori design's info-blue tone). */
+  background: #e5f0ff;
+  color: #0a5a9e;
+}.concept-page__section .kg-help-source--help-sap-com,
+.kg-sidebar-meta .kg-help-source--help-sap-com {
+  /* help.sap.com: muted orange (SAP corporate accent). */
+  background: #fff2e0;
+  color: #a05a10;
+}.concept-page__section .kg-help-source--ui5-sap-com,
+.kg-sidebar-meta .kg-help-source--ui5-sap-com {
+  /* UI5: muted teal (matches UI5 Horizon accent). */
+  background: #e0f5f0;
+  color: #10704a;
+}/* Anchor label — the human-readable H2/H3 title next to the
+   ` · ` separator. Muted so it reads as metadata, not primary content. */.concept-page__section .kg-help-anchor {
+  color: var(--sapContent_LabelColor, #555);
+  font-size: 0.9em;
+}/* Snippet — first ~120 chars of the docs page description. Muted like
+   .kg-help-anchor, and ellipsis-truncated when it exceeds the row
+   width. `max-width` deliberately generous — full one-liner snippets
+   render intact on desktop; long ones truncate cleanly on narrow
+   screens. */.concept-page__section .kg-help-snippet {
+  color: var(--sapContent_LabelColor, #555);
+  font-size: 0.9em;
+  display: inline-block;
+  max-width: 60ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }/* ==========================================================================
    KG widget redesign (#850) — sidebar row icons, expanded panel dialog,
    sidebar fade-during-expand, reduced-motion respect.
