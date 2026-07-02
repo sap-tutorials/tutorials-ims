@@ -278,7 +278,7 @@ SQL SECURITY DEFINER
 AS
 BEGIN
   DECLARE KG_INVALID_TUTORIAL_IRI CONDITION FOR SQL_ERROR_CODE 10006;
-  DECLARE KG_MAX_HOPS_OUT_OF_RANGE CONDITION FOR SQL_ERROR_CODE 10008;
+  DECLARE KG_MAX_HOPS_OUT_OF_RANGE CONDITION FOR SQL_ERROR_CODE 10010;
 
   DECLARE from_key NVARCHAR(500);
   DECLARE to_key   NVARCHAR(500);
@@ -336,7 +336,7 @@ BEGIN
   -- QA channel has no property-graph consumer. Body must NOT reference
   -- KG_PG_WORKSPACE / KG_PG_VERTICES_V / KG_PG_EDGES_V — those are not
   -- deployed to db-qa.
-  DECLARE KG_NOT_AVAILABLE_ON_QA CONDITION FOR SQL_ERROR_CODE 10099;
+  DECLARE KG_NOT_AVAILABLE_ON_QA CONDITION FOR SQL_ERROR_CODE 10002;
   SIGNAL KG_NOT_AVAILABLE_ON_QA;
 END;
 ```
@@ -435,7 +435,7 @@ describe('kgPathV2 — input validation', () => {
       fromIri: 'https://developers.sap.com/kg/tutorial/foo',
       toIri:   'https://developers.sap.com/kg/tutorial/bar',
       maxHops: 0,
-    })).rejects.toMatchObject({ code: 10008 });
+    })).rejects.toMatchObject({ code: 10010 });
   });
 
   it('rejects maxHops > 20', async () => {
@@ -443,7 +443,7 @@ describe('kgPathV2 — input validation', () => {
       fromIri: 'https://developers.sap.com/kg/tutorial/foo',
       toIri:   'https://developers.sap.com/kg/tutorial/bar',
       maxHops: 21,
-    })).rejects.toMatchObject({ code: 10008 });
+    })).rejects.toMatchObject({ code: 10010 });
   });
 });
 
@@ -521,7 +521,7 @@ describe('kgPathV2 — row grouping', () => {
 //
 // Error codes surfaced to callers via err.code:
 //   10006  KG_INVALID_TUTORIAL_IRI   — IRI regex mismatch (pre-check + DB)
-//   10008  KG_MAX_HOPS_OUT_OF_RANGE  — maxHops not in [1, 20]
+//   10010  KG_MAX_HOPS_OUT_OF_RANGE  — maxHops not in [1, 20]
 
 import cds from '@sap/cds';
 
@@ -553,7 +553,7 @@ export async function kgPathV2({ fromIri, toIri, maxHops = 8 }) {
   }
   if (!Number.isInteger(maxHops) || maxHops < 1 || maxHops > 20) {
     const err = new Error('KG_MAX_HOPS_OUT_OF_RANGE');
-    err.code = 10008;
+    err.code = 10010;
     throw err;
   }
 
@@ -1038,7 +1038,7 @@ hana-cli querySimple --profile qa --query "DO BEGIN
 END"
 ```
 
-  Expected: fails with SQLError code `10099` (`KG_NOT_AVAILABLE_ON_QA`). Any other outcome means the QA stub didn't deploy or referenced a missing object.
+  Expected: fails with SQLError code `10002` (`KG_NOT_AVAILABLE_ON_QA`). Any other outcome means the QA stub didn't deploy or referenced a missing object.
 
 ### Step 7.2: Execute the rollback drill (from the spec)
 

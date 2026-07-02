@@ -1,0 +1,8 @@
+{
+  "vertexTable":       "KG_PG_VERTICES_V",
+  "vertexKeyColumn":   "VERTEX_KEY",
+  "edgeTable":         "KG_PG_EDGES_V",
+  "edgeSourceColumn":  "SOURCE",
+  "edgeTargetColumn":  "TARGET",
+  "edgeKeyColumn":     null
+}

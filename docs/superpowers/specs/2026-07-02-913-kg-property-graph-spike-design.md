@@ -191,7 +191,7 @@ SQL SECURITY DEFINER
 AS
 BEGIN
   DECLARE KG_INVALID_TUTORIAL_IRI CONDITION FOR SQL_ERROR_CODE 10006;
-  DECLARE KG_MAX_HOPS_OUT_OF_RANGE CONDITION FOR SQL_ERROR_CODE 10008;
+  DECLARE KG_MAX_HOPS_OUT_OF_RANGE CONDITION FOR SQL_ERROR_CODE 10010;
 
   DECLARE from_key NVARCHAR(500);
   DECLARE to_key   NVARCHAR(500);
@@ -256,7 +256,7 @@ END;
 //
 // Error codes surfaced to callers via err.code:
 //   10006  KG_INVALID_TUTORIAL_IRI   — IRI regex mismatch (pre-check + DB)
-//   10008  KG_MAX_HOPS_OUT_OF_RANGE  — maxHops not in [1, 20]
+//   10010  KG_MAX_HOPS_OUT_OF_RANGE  — maxHops not in [1, 20]
 
 import cds from '@sap/cds';
 
@@ -270,7 +270,7 @@ export async function kgPathV2({ fromIri, toIri, maxHops = 8 }) {
   }
   if (!Number.isInteger(maxHops) || maxHops < 1 || maxHops > 20) {
     const err = new Error('KG_MAX_HOPS_OUT_OF_RANGE');
-    err.code = 10008;
+    err.code = 10010;
     throw err;
   }
 
@@ -400,7 +400,7 @@ srv.on('pathBetween', async (req) => {
 **Unit tests** — `test/unit/kg-path-v2-client.test.js` (new file)
 
 - IRI regex rejects `http://` / trailing slash / uppercase / `>80` chars → throws with `err.code === 10006` before any DB call.
-- `maxHops` outside `[1, 20]` → throws with `err.code === 10008`.
+- `maxHops` outside `[1, 20]` → throws with `err.code === 10010`.
 - Row grouping: given flat `PATH_RANK/SEQ_INDEX` rows, returns correctly ordered `vertices` arrays.
 - Grouping is robust to out-of-order rows (DB doesn't guarantee ordering without `ORDER BY`).
 

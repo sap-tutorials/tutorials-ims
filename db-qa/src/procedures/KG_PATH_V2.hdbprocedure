@@ -1,0 +1,41 @@
+-- KG_PATH_V2.hdbprocedure  (QA channel — stub)
+-- ============================================================
+-- This is the QA-channel stub for the KG_PATH_V2 procedure. It has the
+-- same signature as db/src/procedures/KG_PATH_V2.hdbprocedure but
+-- intentionally raises KG_NOT_AVAILABLE_ON_QA instead of running the
+-- real property-graph shortest-path logic.
+--
+-- WHY A STUB
+--   The QA channel (tutorials-db-qa / tutorials-srv-qa) does not host a
+--   property-graph workspace — KG_PG_WORKSPACE, KG_PG_VERTICES_V and
+--   KG_PG_EDGES_V are NOT deployed to db-qa (they would fail HDI compile
+--   against QA's schema, and QA has no property-graph consumer). The
+--   stub exists so that:
+--     1. srv-qa code that imports the JS-side path client compiles
+--        against the same procedure signature as prod.
+--     2. Any accidental KG_PATH_V2 call in a QA runtime path fails
+--        loudly rather than silently producing wrong data.
+--
+-- Spec:   docs/superpowers/specs/2026-07-02-913-kg-property-graph-spike-design.md
+--         §"QA channel"
+-- Issue:  #913
+-- ============================================================
+
+PROCEDURE KG_PATH_V2 (
+  IN  from_iri  NVARCHAR(500),
+  IN  to_iri    NVARCHAR(500),
+  IN  max_hops  INTEGER,
+  OUT paths     TABLE (
+    path_rank   INTEGER,
+    hop_count   INTEGER,
+    vertex_seq  NVARCHAR(500),
+    seq_index   INTEGER
+  )
+)
+LANGUAGE SQLSCRIPT
+SQL SECURITY DEFINER
+AS
+BEGIN
+  DECLARE KG_NOT_AVAILABLE_ON_QA CONDITION FOR SQL_ERROR_CODE 10002;
+  SIGNAL KG_NOT_AVAILABLE_ON_QA;
+END;
