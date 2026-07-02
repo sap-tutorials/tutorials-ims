@@ -50,10 +50,31 @@ describe('AuthorService.rebuildContent', () => {
   });
 
   it('dispatches with reason="author-ui:rebuild-button:<user>" for a Tutorial.Author', async () => {
-    const { Tutorials } = cds.entities('com.sap.developers.ims');
+    const { Users, Tutorials, TutorialMeta } = cds.entities('com.sap.developers.ims');
     const id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    await DELETE.from(TutorialMeta).where({ tutorial_ID: id });
     await DELETE.from(Tutorials).where({ ID: id });
-    await INSERT.into(Tutorials).entries({ ID: id, slug: 'auth-test', title: 'A', status: 'ACTIVE' });
+
+    // #890: rebuildContent now checks ownership via MyTutorialsView. Seed a
+    // Users row whose sapId matches the `author` mock user's resolved sapId,
+    // then link the tutorial's author FK to it so MyTutorialsView returns a
+    // row for the caller. Without this the ownership gate would 403 here.
+    // `author` mock user resolves to sapId='author' via resolveUserSapId
+    // (basic-auth fallback: user.id → sapId).
+    await DELETE.from(Users).where({ ID: 'u-author-test' });
+    await INSERT.into(Users).entries({
+      ID: 'u-author-test', uuid: 'u-author-test',
+      sapId: 'author', legacyId: 90001,
+      email: 'author@test.example', displayName: 'Author',
+    });
+    await INSERT.into(Tutorials).entries({
+      ID: id, slug: 'auth-test', title: 'A', status: 'ACTIVE',
+      author_ID: 'u-author-test',
+    });
+    await INSERT.into(TutorialMeta).entries({
+      ID: 'tm-auth-test', tutorial_ID: id,
+      owner: 'Author', ownerEmail: 'author@test.example',
+    });
 
     // The `POST` returned by cds.test() resolves to axios; pass auth via the
     // axios second-arg-config to authenticate as the seeded `author` mock user.
