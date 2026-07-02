@@ -32,7 +32,7 @@ async function assertOwnership(tutorialId, user) {
 }
 
 export default cds.service.impl(async function () {
-  const { MyTutorials, MyAuthoredTutorials } = this.entities;
+  const { MyTutorials, MyAuthoredTutorials, MyOwnedTutorials } = this.entities;
   const { Tutorials } = this.entities;
 
   // Audit emitter — best-effort; tolerates missing binding in dev/mock-auth.
@@ -105,6 +105,24 @@ export default cds.service.impl(async function () {
   // what makes GET /author/MyAuthoredTutorials return strict-authorship-only
   // rows without any client-side filtering.
   this.before('READ', MyAuthoredTutorials, async (req) => {
+    if (!req.user?.id || req.user.id === 'anonymous') {
+      return req.reject(401, 'Authentication required');
+    }
+    const dbUser = await resolveDbUser(req.user, ['uuid']);
+    if (!dbUser?.uuid) {
+      req.query.where({ userId: '__NO_USERS_ROW__' });
+      return;
+    }
+    req.query.where({ userId: dbUser.uuid });
+  });
+
+  // #862 reopen — MyOwnedTutorials uses the same caller-scoping semantics
+  // as MyTutorials and MyAuthoredTutorials. The bestPriority = 3 filter
+  // is baked into the CDS projection (srv/author-service.cds) so all we
+  // do here is stamp the userId. GET /author/MyOwnedTutorials returns
+  // the "tutorials the caller owns/monitors" set for Sage's My Tutorials
+  // panel — no client-side filtering required.
+  this.before('READ', MyOwnedTutorials, async (req) => {
     if (!req.user?.id || req.user.id === 'anonymous') {
       return req.reject(401, 'Authentication required');
     }
