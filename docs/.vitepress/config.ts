@@ -117,8 +117,9 @@ export default defineConfig({
 
       '/developers/': [
         { text: 'Overview', items: [
-          { text: 'Persona index',   link: '/developers/' },
-          { text: 'Getting started', link: '/developers/getting-started' }
+          { text: 'Persona index',    link: '/developers/' },
+          { text: 'Getting started',  link: '/developers/getting-started' },
+          { text: 'Security review (2026-07)', link: '/developers/security-review-2026-07' }
         ]},
         { text: 'Architecture', items: [
           { text: 'Authentication and authorization', link: '/developers/architecture/authentication' },
