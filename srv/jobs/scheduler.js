@@ -27,7 +27,8 @@
 
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
-import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings, pruneAnalyticsHistory, cleanupChangeLog } from './cleanup.js';
+import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings, pruneAnalyticsHistory, cleanupChangeLog, cleanupMetricSnapshots, cleanupPublishTimings } from './cleanup.js';
+import { runMetricsRollup } from './metrics-rollup-job.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
@@ -781,6 +782,33 @@ export function registerJobs() {
     ttlMs: 30 * 60 * 1000,
     description: 'Nightly link-health check for HomepageShelves entries',
     fn: runHomepageLinkHealth,
+  });
+
+  // #805 — every 5 minutes, rotate the metrics module into MetricSnapshots rows.
+  // NO job-lock: both CF instances write independently under the composite
+  // primary key (windowStart, metric, instanceId). See spec § Rollout.
+  registerJob({
+    jobName: 'metrics-rollup',
+    schedule: '*/5 * * * *',
+    ttlMs: 60_000,
+    description: '#805 5-min rollup — write MetricSnapshots rows',
+    fn: () => runMetricsRollup(),
+  });
+
+  // #805 — daily retention. Off-minutes per project convention.
+  registerJob({
+    jobName: 'metrics-snapshots-retention',
+    schedule: '17 4 * * *',
+    ttlMs: 5 * 60_000,
+    description: '#805 daily prune of MetricSnapshots older than 30 days',
+    fn: () => cleanupMetricSnapshots(30),
+  });
+  registerJob({
+    jobName: 'publish-timings-retention',
+    schedule: '23 4 * * *',
+    ttlMs: 5 * 60_000,
+    description: '#805 daily prune of PublishTimings older than 90 days',
+    fn: () => cleanupPublishTimings(90),
   });
 
   LOG.info('All scheduled jobs registered');

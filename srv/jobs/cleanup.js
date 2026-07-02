@@ -189,3 +189,28 @@ export async function pruneAnalyticsHistory(keepLatest = 200) {
   LOG.info(`pruneAnalyticsHistory: kept ${keepLatest} per user; deleted ${totalDeleted} rows total`);
   return totalDeleted;
 }
+
+/**
+ * #805 — Prune MetricSnapshots older than N days.
+ * Called by the daily cleanup cron (with job-lock, unlike the rollup writer).
+ */
+export async function cleanupMetricSnapshots(retentionDays = 30) {
+  const { MetricSnapshots } = cds.entities('com.sap.developers.ims');
+  const LOG = cds.log('jobs/cleanup');
+  const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
+  const deleted = await DELETE.from(MetricSnapshots).where({ windowStart: { '<': cutoff } });
+  LOG.info(`[#805] pruned ${deleted} MetricSnapshots rows older than ${retentionDays} days`);
+  return deleted;
+}
+
+/**
+ * #805 — Prune PublishTimings older than N days.
+ */
+export async function cleanupPublishTimings(retentionDays = 90) {
+  const { PublishTimings } = cds.entities('com.sap.developers.ims');
+  const LOG = cds.log('jobs/cleanup');
+  const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
+  const deleted = await DELETE.from(PublishTimings).where({ createdAt: { '<': cutoff } });
+  LOG.info(`[#805] pruned ${deleted} PublishTimings rows older than ${retentionDays} days`);
+  return deleted;
+}
