@@ -27,15 +27,18 @@
 **New files under `srv/lib/` and tests:**
 
 - `srv/lib/kg-path-v2-client.js` — JS wrapper.
-- `test/unit/kg-path-v2-client.test.js` — pure-JS wrapper unit tests.
+- `test/unit/srv/kg-path-v2-client.test.js` — pure-JS wrapper unit tests (co-located with other srv/lib tests).
 - `test/unit/srv/kg-path-v2-handler-flag.test.js` — handler-level flag/fallback tests.
 - `test/hybrid/kg-path-v2.test.js` — end-to-end fixture graph test against real HANA.
 - `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-review.md` — decision-gate artifact (template written now; numbers filled at end of week).
 
 **Modified files:**
 
-- `srv/knowledge-graph-service.js` — `pathBetween` handler gains a flag check + fail-open fallback + metric emission.
-- `.deploy/mta.yaml` — add `db/src/graph/` + `db/src/views/` to db module HDI content if not already implicit.
+- `srv/knowledge-graph-service.js` — `pathBetween` handler (currently a Phase 2 stub at lines 895-900) gains a flag check, v2 call, fail-open v1 fallback wired to `kgQuery({ queryName: 'PATH_BETWEEN' })`, and metric emission.
+
+**Deploy-time verification (not a code edit):**
+
+- `.deploy/mta.yaml` — confirm `tutorials-db-deployer` module (`path: ../gen/db`) picks up new HDI artifacts under `db/src/{views,graph,procedures}/` after `cds build --production`. The db module points at `gen/db` (the build output), so any `.hdb*` file under `db/src/` is packed automatically by `cds build`. Similarly confirm `tutorials-db-qa-deployer` (`path: ../gen/db-qa`) packs the QA stub procedure. **Task 3 Step 3.5 adds a `cds build --production && ls gen/db/src/gen/` verification step** to catch this before deploy.
 
 **No changes to:**
 
@@ -50,9 +53,11 @@
 **Goal:** Before writing any HDI artifact, confirm four unknowns against the deployed DEV HANA instance. If any of these fail, the plan stalls on service-key rotation or entitlement escalation, not on code.
 
 **Files:**
+
 - Create: `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-task1-notes.md` (scratch notes; not code)
 
 **Prerequisites:**
+
 - `hana-cli` installed and authenticated against the DEV HDI container (`hana-cli status` should return without error).
 - `cf target` on the DEV space, and `cds bind` state populated for hybrid access.
 
@@ -71,24 +76,23 @@
 
 ### Step 1.3: Probe `SHORTEST_PATH` syntax with a hand-written GraphScript block
 
-- [ ] Create a minimal throwaway workspace and vertex/edge tables directly via `hana-cli querySimple`. Use the `hana-cli` sandbox schema (not the HDI schema) so nothing pollutes real state:
+- [ ] Create a minimal throwaway workspace + vertex/edge tables via `hana-cli querySimple`. Use highly-collision-resistant `_KGPROBE_`-prefixed names (there is no "sandbox schema" — the HDI runtime schema is the only writable target for the DEV service key; prefixing plus explicit DROP in Step 1.5 keeps state clean):
 
 ```sql
--- Sandbox setup: 3 vertices, 2 edges, forming a path A → B → C.
-CREATE COLUMN TABLE "T1_V" ("KEY" NVARCHAR(50) PRIMARY KEY, "NAME" NVARCHAR(100));
-CREATE COLUMN TABLE "T1_E" ("SOURCE" NVARCHAR(50), "TARGET" NVARCHAR(50));
-INSERT INTO "T1_V" VALUES ('a','Alpha'), ('b','Bravo'), ('c','Charlie');
-INSERT INTO "T1_E" VALUES ('a','b'), ('b','c');
+CREATE COLUMN TABLE "_KGPROBE_V" ("KEY" NVARCHAR(50) PRIMARY KEY, "NAME" NVARCHAR(100));
+CREATE COLUMN TABLE "_KGPROBE_E" ("SOURCE" NVARCHAR(50), "TARGET" NVARCHAR(50));
+INSERT INTO "_KGPROBE_V" VALUES ('a','Alpha'), ('b','Bravo'), ('c','Charlie');
+INSERT INTO "_KGPROBE_E" VALUES ('a','b'), ('b','c');
 
-CREATE GRAPH WORKSPACE "T1_WS" EDGE TABLE "T1_E" SOURCE COLUMN "SOURCE" TARGET COLUMN "TARGET" VERTEX TABLE "T1_V" KEY COLUMN "KEY";
+CREATE GRAPH WORKSPACE "_KGPROBE_WS" EDGE TABLE "_KGPROBE_E" SOURCE COLUMN "SOURCE" TARGET COLUMN "TARGET" VERTEX TABLE "_KGPROBE_V" KEY COLUMN "KEY";
 ```
 
-- [ ] Run a `SHORTEST_PATH` call against `T1_WS`. The QRC-2026-Q3 syntax is expected to be (verify — this is the placeholder Task 1 confirms):
+- [ ] Run a `SHORTEST_PATH` call against `_KGPROBE_WS`. The QRC-2026-Q3 syntax is expected to be (verify — this is the placeholder Task 1 confirms):
 
 ```sql
 DO BEGIN
   DECLARE result TABLE (source NVARCHAR(50), target NVARCHAR(50), weight DOUBLE);
-  CREATE GRAPH WORKSPACE g_ws INSTANCE "T1_WS";
+  CREATE GRAPH WORKSPACE g_ws INSTANCE "_KGPROBE_WS";
   result = MAP GRAPH SHORTEST_PATH(:g_ws, VERTEX v1 = VERTEX(:g_ws, 'a'), VERTEX v2 = VERTEX(:g_ws, 'c'));
   SELECT * FROM :result;
 END;
@@ -97,6 +101,14 @@ END;
   - Expected: 2 rows (edges a→b and b→c) OR one row per vertex hop, depending on API shape.
   - Capture the exact syntax that works. **This is the load-bearing evidence for the entire plan.**
   - If `SHORTEST_PATH` isn't callable this way, try variants: `PGQL` block (`SELECT ... MATCH SHORTEST ((v1)-[e*]->(v2)) ...`); or a `CREATE PROCEDURE ... LANGUAGE GRAPH` block; document what does work.
+
+- [ ] **Immediately drop the probe artifacts** (before Step 1.4 to avoid leaving them in the container):
+
+```sql
+DROP GRAPH WORKSPACE "_KGPROBE_WS";
+DROP TABLE "_KGPROBE_E";
+DROP TABLE "_KGPROBE_V";
+```
 
 ### Step 1.4: Probe `OUT param TABLE(...)` binding via `cds.db.run`
 
@@ -137,6 +149,7 @@ git commit -m "docs(#913): Task 1 — HANA property-graph syntax probe notes"
 **Depends on:** Task 1 complete, HANA table names confirmed.
 
 **Files:**
+
 - Create: `db/src/views/KG_PG_VERTICES_V.hdbview`
 - Create: `db/src/views/KG_PG_EDGES_V.hdbview`
 
@@ -198,17 +211,24 @@ VIEW "KG_PG_EDGES_V" AS
   WHERE c."status" = 'ACTIVE';
 ```
 
-### Step 2.3: Deploy views to DEV HDI via `cds deploy`
+### Step 2.3: Deploy views to DEV HDI
 
-- [ ] From the worktree root:
+- [ ] **Do NOT use `cds deploy --auto-undeploy` from the worktree** — the DEV HDI is shared with other in-flight work; auto-undeploy will nuke artifacts not present in this worktree's build (see the [`feedback-cf-push-db-deployer-fast-path`](../../../memory/feedback-cf-push-db-deployer-fast-path.md) memory + the "Always deploy from main" memory).
+
+- [ ] Use the **`cf push db-deployer` fast-path** for schema-only iteration (documented in `docs/developers/operations/mta-deployment.md` § "Fast schema-only path"):
 
 ```bash
+cd d:/projects/tutorials-poc
+git checkout main && git pull && git checkout worktree-kg-property-graph-spec -- db/src/views/
 cds build --production
 cf target -s dev
-cds deploy --to hana:tutorials-db --auto-undeploy
+cf push tutorials-db-deployer -f .deploy/manifest-db-deployer.yml --no-start
+cf run-task tutorials-db-deployer --command "npx @sap/hdi-deploy" --wait
 ```
 
-Expected: deploy succeeds; `hana-cli views | grep KG_PG` shows both views. If either fails compile, Task 1's table-name form was wrong — go back to Task 1 Step 1.2, correct, re-run Step 2.1/2.2.
+  - If the manifest doesn't exist, the tutorials-db-deployer app in DEV can be re-`cf restart`ed after new `.hdbview` files land in its droplet — deploying via a fresh `mbt build && cf deploy` from a clean `main` checkout is the fully safe alternative but is ~5 min slower.
+  - Expected: deploy succeeds; `hana-cli views | grep KG_PG` shows both views.
+  - If either fails compile, Task 1's table-name form was wrong — go back to Task 1 Step 1.2, correct, re-run Step 2.1/2.2.
 
 ### Step 2.4: Smoke-verify the views return rows
 
@@ -232,6 +252,7 @@ Expected: two rows in the vertex query (`concept: N`, `tutorial: M`), two rows i
 **Depends on:** Task 2 deployed successfully, Task 1 Step 1.3 confirmed `SHORTEST_PATH` call syntax.
 
 **Files:**
+
 - Create: `db/src/graph/KG_PG_WORKSPACE.hdbgraphworkspace`
 - Create: `db/src/procedures/KG_PATH_V2.hdbprocedure`
 - Create: `db-qa/src/procedures/KG_PATH_V2.hdbprocedure` (QA stub)
@@ -339,18 +360,35 @@ END;
 
 ### Step 3.4: Deploy to DEV and smoke-test
 
-- [ ] `cds build --production && cds deploy --to hana:tutorials-db --auto-undeploy`
-- [ ] Probe from `hana-cli`:
+- [ ] Deploy via the same `cf push db-deployer` fast-path from Step 2.3 (do NOT `cds deploy --auto-undeploy` from the worktree).
+
+- [ ] Probe via a DO-block that binds the OUT param (direct `CALL` will error because `@cap-js/hana` doesn't bind OUT table params through `db.run`; the DO-block-with-inline-SELECT is the canonical workaround established in [`srv/lib/kg-sparql-client.js:73-107`](../../../srv/lib/kg-sparql-client.js#L73-L107)):
 
 ```bash
-hana-cli querySimple --query "CALL \"KG_PATH_V2\"('https://developers.sap.com/kg/tutorial/<known-slug-a>', 'https://developers.sap.com/kg/tutorial/<known-slug-b>', 8, ?)"
+hana-cli querySimple --query "DO (IN f NVARCHAR(500) => 'https://developers.sap.com/kg/tutorial/<known-slug-a>', IN t NVARCHAR(500) => 'https://developers.sap.com/kg/tutorial/<known-slug-b>', IN m INTEGER => 8) BEGIN
+  DECLARE paths TABLE (path_rank INTEGER, hop_count INTEGER, vertex_seq NVARCHAR(500), seq_index INTEGER);
+  CALL KG_PATH_V2(:f, :t, :m, :paths);
+  SELECT * FROM :paths;
+END"
 ```
 
-Replace `<known-slug-a/b>` with two tutorial slugs known to be connected in the graph. Expected: zero or more rows returned. If a `SIGNAL 10006` fires, the IRI regex mismatched — check tutorial slugs.
+  Replace `<known-slug-a/b>` with two tutorial slugs known to be connected in the graph. Expected: zero or more rows. If a `SIGNAL 10006` fires, the IRI regex mismatched — check tutorial slugs.
 
-### Step 3.5: Commit
+### Step 3.5: Verify `cds build` packs the new artifacts, then commit
 
-- [ ] `git add db/src/graph/ db/src/procedures/ db-qa/src/procedures/ && git commit -m "feat(#913): KG_PATH_V2 procedure + KG_PG_WORKSPACE"`
+- [ ] Confirm all new artifacts land in the build output:
+
+```bash
+cds build --production
+ls gen/db/src/gen/ | grep -E 'KG_PATH_V2|KG_PG'
+ls gen/db-qa/src/gen/ | grep KG_PATH_V2
+```
+
+  Expected: 4 lines from `gen/db/src/gen/` (`KG_PATH_V2.hdbprocedure`, `KG_PG_WORKSPACE.hdbgraphworkspace`, `KG_PG_VERTICES_V.hdbview`, `KG_PG_EDGES_V.hdbview`) and 1 line from `gen/db-qa/src/gen/` (`KG_PATH_V2.hdbprocedure`).
+
+  If any are missing, either the mta.yaml `before-all` copy list (lines 22-23) needs an update, or `.hdiconfig` doesn't map the new file suffix. **Do NOT proceed to deploy until all four DEV + one QA artifact are present.**
+
+- [ ] `git add db/src/graph/ db/src/procedures/ db/src/views/ db-qa/src/procedures/ && git commit -m "feat(#913): KG_PATH_V2 procedure + KG_PG_WORKSPACE + views + QA stub"`
 
 ---
 
@@ -359,15 +397,16 @@ Replace `<known-slug-a/b>` with two tutorial slugs known to be connected in the 
 **Depends on:** Task 3 deployed. Task 1 Step 1.4 confirmed the DO-block-with-table shape (`cds.db.run` returns rows correctly).
 
 **Files:**
+
 - Create: `srv/lib/kg-path-v2-client.js`
 - Create: `test/unit/kg-path-v2-client.test.js`
 
 ### Step 4.1: Write the failing unit tests (TDD red)
 
-- [ ] Create `test/unit/kg-path-v2-client.test.js`:
+- [ ] Create `test/unit/srv/kg-path-v2-client.test.js` (co-located with other srv/lib tests):
 
 ```js
-// test/unit/kg-path-v2-client.test.js
+// test/unit/srv/kg-path-v2-client.test.js
 // Pure-JS unit tests for the KG_PATH_V2 wrapper. Uses vi.mock to stub
 // cds.db.run — no DB required. Hybrid coverage lives in
 // test/hybrid/kg-path-v2.test.js.
@@ -380,7 +419,7 @@ vi.mock('@sap/cds', () => ({
 }));
 
 // Import AFTER vi.mock so the mock is in place.
-const { kgPathV2 } = await import('../../srv/lib/kg-path-v2-client.js');
+const { kgPathV2 } = await import('../../../srv/lib/kg-path-v2-client.js');
 
 beforeEach(() => { runMock.mockReset(); });
 
@@ -441,10 +480,9 @@ describe('kgPathV2 — row grouping', () => {
       fromIri: 'https://developers.sap.com/kg/tutorial/foo',
       toIri:   'https://developers.sap.com/kg/tutorial/bar',
     });
-    // path_rank 2 has only 2 vertices — interior filter should drop it
-    // (< 2 interior vertices means no valid concept chain; that path is
-    // filtered as a defense-in-depth measure).
-    // path_rank 1 has interior ['concept:c1','concept:c2'] — kept.
+    // path_rank 2 has only 2 vertices total — no interior at all — so the
+    // < 3 total-vertices filter drops it. path_rank 1 has 4 vertices; its
+    // interior is ['concept:c1','concept:c2'] — kept.
     expect(out).toEqual([
       {
         pathRank: 1,
@@ -480,8 +518,8 @@ describe('kgPathV2 — row grouping', () => {
 });
 ```
 
-- [ ] Run: `npx vitest run --project unit test/unit/kg-path-v2-client.test.js`
-- Expected: **all tests FAIL** with "Cannot find module '../../srv/lib/kg-path-v2-client.js'".
+- [ ] Run: `npx vitest run --project unit test/unit/srv/kg-path-v2-client.test.js`
+- Expected: **all tests FAIL** with "Cannot find module '../../../srv/lib/kg-path-v2-client.js'".
 
 ### Step 4.2: Implement `kg-path-v2-client.js` (green)
 
@@ -570,12 +608,12 @@ export async function kgPathV2({ fromIri, toIri, maxHops = 8 }) {
 }
 ```
 
-- [ ] Run: `npx vitest run --project unit test/unit/kg-path-v2-client.test.js`
+- [ ] Run: `npx vitest run --project unit test/unit/srv/kg-path-v2-client.test.js`
 - Expected: **all tests PASS**.
 
 ### Step 4.3: Commit
 
-- [ ] `git add srv/lib/kg-path-v2-client.js test/unit/kg-path-v2-client.test.js && git commit -m "feat(#913): kg-path-v2-client JS wrapper + unit tests"`
+- [ ] `git add srv/lib/kg-path-v2-client.js test/unit/srv/kg-path-v2-client.test.js && git commit -m "feat(#913): kg-path-v2-client JS wrapper + unit tests"`
 
 ---
 
@@ -584,135 +622,166 @@ export async function kgPathV2({ fromIri, toIri, maxHops = 8 }) {
 **Depends on:** Task 4 complete.
 
 **Files:**
-- Modify: `srv/knowledge-graph-service.js` (existing `pathBetween` handler)
+
+- Modify: `srv/knowledge-graph-service.js` (existing `pathBetween` handler at lines 895-900 — currently a Phase 2 stub returning `[]`)
 - Create: `test/unit/srv/kg-path-v2-handler-flag.test.js`
 
-### Step 5.1: Locate the existing `pathBetween` handler
+### Step 5.1: Read the current handler + metrics API
 
-- [ ] Read `srv/knowledge-graph-service.js` and find the `srv.on('pathBetween', ...)` handler (also grep for `kgQuery.*PATH_BETWEEN`). Note the line numbers — the edit inserts a flag-check branch **before** the existing v1 body, not replacing it.
+- [ ] Read [`srv/knowledge-graph-service.js:895-900`](../../../srv/knowledge-graph-service.js#L895-L900). Current handler body is:
 
-### Step 5.2: Write the failing handler-level test
+```js
+  // ─── pathBetween — Phase 2 stub ────────────────────────────────────────
+  this.on('pathBetween', async (req) => {
+    const { fromSlug, toSlug } = req.data;
+    log.warn(`kg-service: pathBetween(${fromSlug} → ${toSlug}) — Phase 2 stub, returning []`);
+    return [];
+  });
+```
+
+  **Implication:** there is NO complex v1 body to preserve. The Phase 2 stub returns `[]` today; the RDF-based `PATH_BETWEEN` SPARQL body exists in `db/src/procedures/KG_QUERY.hdbprocedure` but is not currently invoked by this handler. The spike's "v1 fallback" therefore has TWO options:
+    - **Option A (recommended):** wire v1 to the existing `kgQuery({ queryName: 'PATH_BETWEEN', params: { fromSlug, toSlug } })` from [`srv/lib/kg-sparql-client.js`](../../../srv/lib/kg-sparql-client.js) — this activates the SPARQL PATH_BETWEEN dispatch that was written for issue #445 but never wired to the handler. Small extra scope; produces a real A/B.
+    - **Option B:** keep v1 as `[]` and let v2 be measured against "nothing." The A/B becomes v2-only.
+
+  Pick **A**. The plan proceeds on that basis.
+
+- [ ] Read [`srv/lib/metrics.js`](../../../srv/lib/metrics.js). The public API is **module-level named exports**, not an object:
+
+```js
+export function counter(name) { /* increments; no dimensions */ }
+export function gauge(name, value) { /* sets */ }
+export function observe(name, value) { /* Vitter reservoir push */ }
+```
+
+  **Implication:** dimensions in the spec (e.g. `{ version: 'v1', outcome: 'success' }`) must be **encoded into the metric name** — the API doesn't accept dimension objects. Use `_`-separated name suffixes: `kg_path_between_calls_v2_success_prereq`, `kg_path_between_latency_ms_v2`, etc. Follow the convention used elsewhere in the project — grep `srv/` for existing `counter('kg_...')` calls if any to check.
+
+### Step 5.2: Write the failing handler-level test using `cds.test`
+
+The codebase's convention for service-handler unit tests is to `cds.load` the CSN and either assert against it OR spin up `cds.test` and POST to the handler. Below uses the CSN-load pattern from [`test/unit/srv/kg-neighborhood-result-shape.test.js`](../../../test/unit/srv/kg-neighborhood-result-shape.test.js) plus a `cds.test('.')` bootstrap for HTTP-level interaction.
+
+- [ ] Create `test/unit/srv/kg-path-v2-client.test.js` **(moved from `test/unit/kg-path-v2-client.test.js` for co-location with other srv/lib tests — reviewer MINOR 7)**. The client-only tests from Task 4 Step 4.1 move here; no logic changes.
 
 - [ ] Create `test/unit/srv/kg-path-v2-handler-flag.test.js`:
 
 ```js
 // test/unit/srv/kg-path-v2-handler-flag.test.js
-// Handler-level flag-behavior tests. Mocks kgPathV2 + the existing v1 SPARQL
-// call so we're only exercising the branching logic. In-memory SQLite; fast.
+// Handler-level flag-behavior tests. Uses cds.test('.') to spin up an
+// in-memory SQLite instance and exercise the pathBetween handler via
+// OData. vi.mock replaces the JS wrappers so we're only testing branching.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import cds from '@sap/cds';
 
+// Mock the property-graph wrapper.
 const kgPathV2Mock = vi.fn();
-const v1Mock = vi.fn();
-const warnMock = vi.fn();
-
 vi.mock('../../../srv/lib/kg-path-v2-client.js', () => ({
   kgPathV2: (...args) => kgPathV2Mock(...args),
 }));
 
-// Stub the v1 SPARQL client call site. Adjust the mocked module path to
-// match wherever pathBetween's v1 impl actually lives (grep for the
-// PATH_BETWEEN name inside srv/lib/).
+// Mock kgQuery so the v1 fallback path is observable without hitting HANA.
+const kgQueryMock = vi.fn();
 vi.mock('../../../srv/lib/kg-sparql-client.js', async () => {
   const actual = await vi.importActual('../../../srv/lib/kg-sparql-client.js');
-  return { ...actual, kgQuery: (...args) => v1Mock(...args) };
+  return { ...actual, kgQuery: (...args) => kgQueryMock(...args) };
 });
 
-// cds.log stub — captures warn calls so we can assert the fallback log line.
-vi.spyOn(cds, 'log').mockReturnValue({
-  warn: (...args) => warnMock(...args),
-  info: () => {}, error: () => {}, debug: () => {},
-});
+// Capture cds.log warns for the fail-open assertion.
+const warnCalls = [];
+const originalLog = cds.log;
+cds.log = (topic) => {
+  const real = originalLog(topic);
+  return {
+    ...real,
+    warn: (...args) => { warnCalls.push({ topic, args }); },
+  };
+};
 
-// Load the service AFTER mocks are in place.
-const { default: knowledgeGraphService } = await import(
-  '../../../srv/knowledge-graph-service.js'
-);
-
-// Helper: invoke the pathBetween handler with a mock req.
-function invoke({ fromSlug, toSlug }) {
-  const srv = knowledgeGraphService;
-  // Access the registered handler — the exact API depends on how the
-  // service is exported. If the service module exports a factory,
-  // instantiate it and pull `.handlers` off the resulting service.
-  // Alternative: exercise via cds.test('.') with an OData request.
-  return srv._runHandler('pathBetween', {
-    data: { fromSlug, toSlug },
-    warn: () => {},
-  });
-}
+// cds.test spins up the service. Point at the project root; the KG service
+// registers automatically via `cds.service.impl` in srv/knowledge-graph-service.js.
+const { GET, expect: cdsExpect } = cds.test('.');
 
 beforeEach(() => {
   kgPathV2Mock.mockReset();
-  v1Mock.mockReset();
-  warnMock.mockReset();
+  kgQueryMock.mockReset();
+  warnCalls.length = 0;
 });
 
 afterEach(() => {
   delete process.env.KG_PATH_V2_ENABLED;
 });
 
-describe('pathBetween handler — flag behavior', () => {
-  it('flag off: v1 runs, v2 wrapper never called', async () => {
-    delete process.env.KG_PATH_V2_ENABLED;
-    v1Mock.mockResolvedValue({ response: JSON.stringify({ results: { bindings: [] } }) });
-    await invoke({ fromSlug: 'a', toSlug: 'b' });
-    expect(kgPathV2Mock).not.toHaveBeenCalled();
-    expect(v1Mock).toHaveBeenCalledOnce();
-  });
+const CALL = `/graph/pathBetween(fromSlug='a',toSlug='b')`;
 
-  it('flag on + v2 returns rows: v2-mapped response, v1 not called', async () => {
-    process.env.KG_PATH_V2_ENABLED = 'true';
+describe('pathBetween handler — flag off', () => {
+  it('v2 wrapper is never called; v1 (kgQuery) runs', async () => {
+    delete process.env.KG_PATH_V2_ENABLED;
+    // v1 SPARQL result — an empty PATH_BETWEEN JSON body.
+    kgQueryMock.mockResolvedValue({
+      response: JSON.stringify({ results: { bindings: [] } }),
+    });
+    const { data } = await GET(CALL);
+    expect(kgPathV2Mock).not.toHaveBeenCalled();
+    expect(kgQueryMock).toHaveBeenCalledOnce();
+    expect(data.value).toEqual([]);
+  });
+});
+
+describe('pathBetween handler — flag on', () => {
+  beforeEach(() => { process.env.KG_PATH_V2_ENABLED = 'true'; });
+
+  it('v2 returns rows → response is v2-mapped, v1 not called', async () => {
     kgPathV2Mock.mockResolvedValue([
       { pathRank: 1, hopCount: 2, vertices: ['tutorial:a', 'concept:c1', 'tutorial:b'] },
     ]);
-    const out = await invoke({ fromSlug: 'a', toSlug: 'b' });
+    const { data } = await GET(CALL);
     expect(kgPathV2Mock).toHaveBeenCalledOnce();
-    expect(v1Mock).not.toHaveBeenCalled();
-    expect(out).toEqual(['a', 'b']);
+    expect(kgQueryMock).not.toHaveBeenCalled();
+    expect(data.value).toEqual(['a', 'b']);
   });
 
-  it('flag on + v2 empty: falls through to v1', async () => {
-    process.env.KG_PATH_V2_ENABLED = 'true';
+  it('v2 returns [] → falls through to v1 (kgQuery called)', async () => {
     kgPathV2Mock.mockResolvedValue([]);
-    v1Mock.mockResolvedValue({ response: JSON.stringify({ results: { bindings: [] } }) });
-    await invoke({ fromSlug: 'a', toSlug: 'b' });
+    kgQueryMock.mockResolvedValue({
+      response: JSON.stringify({ results: { bindings: [] } }),
+    });
+    await GET(CALL);
     expect(kgPathV2Mock).toHaveBeenCalledOnce();
-    expect(v1Mock).toHaveBeenCalledOnce();
-    expect(warnMock).not.toHaveBeenCalled();
+    expect(kgQueryMock).toHaveBeenCalledOnce();
+    expect(warnCalls).toHaveLength(0);
   });
 
-  it('flag on + v2 throws: falls through to v1 AND emits kg_path_v2_failed warn', async () => {
-    process.env.KG_PATH_V2_ENABLED = 'true';
+  it('v2 throws → falls through to v1 AND logs kg_path_v2_failed', async () => {
     const err = new Error('boom'); err.code = 42;
     kgPathV2Mock.mockRejectedValue(err);
-    v1Mock.mockResolvedValue({ response: JSON.stringify({ results: { bindings: [] } }) });
-    await invoke({ fromSlug: 'a', toSlug: 'b' });
-    expect(v1Mock).toHaveBeenCalledOnce();
-    expect(warnMock).toHaveBeenCalledWith(
-      'kg_path_v2_failed',
-      expect.objectContaining({ code: 42, fromSlug: 'a', toSlug: 'b' }),
-    );
+    kgQueryMock.mockResolvedValue({
+      response: JSON.stringify({ results: { bindings: [] } }),
+    });
+    await GET(CALL);
+    expect(kgQueryMock).toHaveBeenCalledOnce();
+    expect(warnCalls.some(w =>
+      w.args[0] === 'kg_path_v2_failed' &&
+      w.args[1]?.code === 42 &&
+      w.args[1]?.fromSlug === 'a'
+    )).toBe(true);
   });
 });
 ```
 
 - [ ] Run: `npx vitest run --project unit test/unit/srv/kg-path-v2-handler-flag.test.js`
-- Expected: **all four tests FAIL** — either the mock indirection isn't right yet, or (more likely) the handler doesn't do any flag-checking yet.
-
-**Note on test shape:** the `srv._runHandler` helper above is illustrative. If it doesn't exist, use `cds.test('.').post('/graph/pathBetween(fromSlug=\\'a\\',toSlug=\\'b\\')')` — the pattern established in [test/unit/srv/kg-neighborhood-result-shape.test.js](../../../test/unit/srv/kg-neighborhood-result-shape.test.js) shows the shape. Prefer whichever is already used in the neighborhood tests to keep style consistent.
+- Expected: **all four tests FAIL** — the handler still returns the Phase 2 stub `[]` and doesn't call either wrapper.
 
 ### Step 5.3: Edit the handler + import mapper
 
-- [ ] In `srv/knowledge-graph-service.js`, add near the top imports:
+- [ ] Confirm `kgQuery` is already imported near the top of `srv/knowledge-graph-service.js` (grep for `kgQuery` — if only `kgAdminRunSparql` is imported, add `kgQuery` to the same import).
+
+- [ ] Add these imports near the top of `srv/knowledge-graph-service.js`:
 
 ```js
 import { kgPathV2 } from './lib/kg-path-v2-client.js';
-import { metrics } from './lib/metrics.js'; // if not already imported
+import * as metrics from './lib/metrics.js';
 ```
 
-- [ ] Add helper `mapPgPathsToWireShape` in the same file, near other helpers:
+- [ ] Add helper `mapPgPathsToWireShape` near other in-file helpers (search for `function mapPgPathsToWireShape` — should not exist yet):
 
 ```js
 function mapPgPathsToWireShape(paths) {
@@ -722,52 +791,72 @@ function mapPgPathsToWireShape(paths) {
     .filter(v => typeof v === 'string' && v.startsWith('tutorial:'))
     .map(v => v.slice('tutorial:'.length));
 }
+
+// Extract the bridging tutorial slugs from a SPARQL PATH_BETWEEN response.
+// Mirrors the wire shape of the property-graph mapper above.
+function mapV1SparqlToWireShape(response) {
+  let parsed;
+  try { parsed = JSON.parse(response); } catch { return []; }
+  const bindings = parsed?.results?.bindings ?? [];
+  // The PATH_BETWEEN SPARQL binds ?b (bridging tutorial IRI) per db/src/procedures/KG_QUERY.hdbprocedure:205.
+  return bindings
+    .map(b => b?.b?.value ?? '')
+    .filter(v => v.startsWith('https://developers.sap.com/kg/tutorial/'))
+    .map(v => v.slice('https://developers.sap.com/kg/tutorial/'.length));
+}
 ```
 
-- [ ] Modify the existing `pathBetween` handler. Keep the v1 body verbatim in an `existingSparqlPathBetween` inline function (or inline block), then wrap:
+- [ ] Replace the current 5-line Phase 2 stub at `srv/knowledge-graph-service.js:895-900` with:
 
 ```js
-srv.on('pathBetween', async (req) => {
-  const { fromSlug, toSlug } = req.data;
-  const fromIri = `https://developers.sap.com/kg/tutorial/${fromSlug}`;
-  const toIri   = `https://developers.sap.com/kg/tutorial/${toSlug}`;
-  const t0 = Date.now();
+  // ─── pathBetween — property-graph v2 with fail-open v1 fallback (#913) ─
+  this.on('pathBetween', async (req) => {
+    const { fromSlug, toSlug } = req.data;
+    const fromIri = `https://developers.sap.com/kg/tutorial/${fromSlug}`;
+    const toIri   = `https://developers.sap.com/kg/tutorial/${toSlug}`;
+    const t0 = Date.now();
 
-  if (process.env.KG_PATH_V2_ENABLED === 'true') {
-    try {
-      const paths = await kgPathV2({ fromIri, toIri });
-      if (paths.length > 0) {
-        const wire = mapPgPathsToWireShape(paths);
-        metrics.counter('kg_path_between_calls', { version: 'v2', outcome: 'success', arm: 'prereq' }).inc();
-        metrics.reservoir('kg_path_between_latency_ms', { version: 'v2' }).observe(Date.now() - t0);
-        return wire;
+    if (process.env.KG_PATH_V2_ENABLED === 'true') {
+      try {
+        const paths = await kgPathV2({ fromIri, toIri });
+        if (paths.length > 0) {
+          const wire = mapPgPathsToWireShape(paths);
+          metrics.counter('kg_path_between_calls_v2_success_prereq');
+          metrics.observe('kg_path_between_latency_ms_v2', Date.now() - t0);
+          return wire;
+        }
+        metrics.counter('kg_path_v2_fallback_empty');
+      } catch (err) {
+        cds.log('kg').warn('kg_path_v2_failed', {
+          code: err.code, message: err.message, fromSlug, toSlug,
+        });
+        metrics.counter('kg_path_v2_fallback_error');
       }
-      metrics.counter('kg_path_v2_fallback', { reason: 'empty' }).inc();
-    } catch (err) {
-      cds.log('kg').warn('kg_path_v2_failed', {
-        code: err.code, message: err.message,
-        fromSlug, toSlug,
-      });
-      metrics.counter('kg_path_v2_fallback', { reason: 'error' }).inc();
+    } else {
+      metrics.counter('kg_path_v2_fallback_flag_off');
     }
-  } else {
-    metrics.counter('kg_path_v2_fallback', { reason: 'flag_off' }).inc();
-  }
 
-  // ── v1 unchanged from here ──
-  const v1Result = await /* existing v1 SPARQL call */;
-  const arm = classifyV1Arm(v1Result); // returns 'prereq'|'co_completed'|'shared_concept'|'none'
-  metrics.counter('kg_path_between_calls', { version: 'v1', outcome: v1Result.length ? 'success' : 'empty', arm }).inc();
-  metrics.reservoir('kg_path_between_latency_ms', { version: 'v1' }).observe(Date.now() - t0);
-  return v1Result;
-});
+    // ── v1 SPARQL fallback: activates the PATH_BETWEEN dispatch in KG_QUERY.
+    // ── Previously stubbed to []; now wired to the real named-query call.
+    try {
+      const { response } = await kgQuery({
+        db: cds.db,
+        queryName: 'PATH_BETWEEN',
+        params: { fromSlug, toSlug },
+      });
+      const wire = mapV1SparqlToWireShape(response);
+      metrics.counter(wire.length ? 'kg_path_between_calls_v1_success' : 'kg_path_between_calls_v1_empty');
+      metrics.observe('kg_path_between_latency_ms_v1', Date.now() - t0);
+      return wire;
+    } catch (err) {
+      log.warn(`kg-service: pathBetween v1 failed: ${err.message}`);
+      metrics.counter('kg_path_between_calls_v1_error');
+      return [];
+    }
+  });
 ```
 
-**Note:** `classifyV1Arm` may not exist in the current handler. Two options:
-1. If the v1 result carries an arm tag internally (grep the SPARQL body for `BIND(... AS ?pathType)`), extract it and map to metric labels.
-2. If not, add a simple `classifyV1Arm(result)` local function that returns `'none'` on empty results and `'prereq'` on non-empty results for the spike. Arm-level attribution on v1 is nice-to-have, not load-bearing.
-
-- [ ] Confirm the `metrics.counter(...)` and `metrics.reservoir(...)` names exist by grepping `srv/lib/metrics.js`. If the module uses different primitive names (e.g. `metrics.inc`, `metrics.observe`), adjust.
+**Arm attribution note (reviewer MAJOR 4):** the metric names above collapse the three v1 arms (PREREQ / CO_COMPLETED / SHARED_CONCEPT) into a single `v1_success` counter. Per-arm attribution on v1 would require parsing the SPARQL result's `?pathType` binding — which the current `PATH_BETWEEN` SPARQL does emit (see [KG_QUERY.hdbprocedure:214-231](../../../db/src/procedures/KG_QUERY.hdbprocedure#L214-L231)). If the review artifact needs arm-level v1 numbers, extend `mapV1SparqlToWireShape` to return `{wire, arm}` and stamp the arm into the counter name. For the spike's minimum viable A/B this is deferred.
 
 ### Step 5.4: Run the handler tests (green)
 
@@ -776,7 +865,7 @@ srv.on('pathBetween', async (req) => {
 
 ### Step 5.5: Commit
 
-- [ ] `git add srv/knowledge-graph-service.js test/unit/srv/kg-path-v2-handler-flag.test.js && git commit -m "feat(#913): pathBetween flag branch + fail-open v2→v1 fallback + metrics"`
+- [ ] `git add srv/knowledge-graph-service.js test/unit/srv/kg-path-v2-handler-flag.test.js test/unit/srv/kg-path-v2-client.test.js && git commit -m "feat(#913): pathBetween flag branch + fail-open v2→v1 fallback + metrics"`
 
 ---
 
@@ -785,6 +874,7 @@ srv.on('pathBetween', async (req) => {
 **Depends on:** Task 5 complete. Requires `ALLOW_HYBRID_WRITES=true` + `cf login` to DEV.
 
 **Files:**
+
 - Create: `test/hybrid/kg-path-v2.test.js`
 
 ### Step 6.1: Author the hybrid test
@@ -945,7 +1035,29 @@ npm run build:all
 cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
 ```
 
-- Expected: deploy succeeds. `hana-cli inspectTable --table KG_PG_VERTICES_V` returns metadata; procedure `KG_PATH_V2` exists.
+- Expected: deploy succeeds.
+- Verify the property-graph artifacts landed:
+
+```bash
+hana-cli views | grep KG_PG          # expect: KG_PG_VERTICES_V, KG_PG_EDGES_V
+hana-cli procedures | grep KG_PATH_V2  # expect: KG_PATH_V2
+```
+
+  (`hana-cli inspectTable` is for tables, not views/procedures — use `views` and `procedures` list commands.)
+
+- [ ] **Verify QA stub is deployed too** (QA channel should NOT crash on procedure resolution even though the property-graph engine isn't wired there):
+
+```bash
+# Against the QA HDI container (switch service key via `hana-cli useKey <qa-key>` or the appropriate `--profile qa` on hana-cli).
+hana-cli procedures --profile qa | grep KG_PATH_V2  # expect: KG_PATH_V2 present
+hana-cli querySimple --profile qa --query "DO BEGIN
+  DECLARE paths TABLE (path_rank INTEGER, hop_count INTEGER, vertex_seq NVARCHAR(500), seq_index INTEGER);
+  CALL KG_PATH_V2('https://developers.sap.com/kg/tutorial/foo','https://developers.sap.com/kg/tutorial/bar', 8, :paths);
+  SELECT * FROM :paths;
+END"
+```
+
+  Expected: fails with SQLError code `10099` (`KG_NOT_AVAILABLE_ON_QA`). Any other outcome means the QA stub didn't deploy or referenced a missing object.
 
 ### Step 7.2: Execute the rollback drill (from the spec)
 
@@ -956,7 +1068,7 @@ cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext
 BASE=https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com
 # Note: /graph/pathBetween is public per srv/knowledge-graph-service.cds § "@requires: 'any'"
 for i in 1 2 3 4 5; do
-  curl -sS "$BASE/graph/pathBetween(fromSlug='<a>',toSlug='<b>')" > /dev/null
+  curl -sS "$BASE/graph/pathBetween(fromSlug='SLUG_A',toSlug='SLUG_B')" > /dev/null
   echo "call $i"
 done
 ```
@@ -972,7 +1084,7 @@ done
 
 ### Step 7.3: Document the drill outcome
 
-- [ ] Append a "Rollback drill — <date>" section to `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-task1-notes.md` with the observed counter values and any anomalies.
+- [ ] Append a "Rollback drill — YYYY-MM-DD" section to `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-task1-notes.md` with the observed counter values and any anomalies.
 
 - [ ] Commit if any notes changed.
 
@@ -987,6 +1099,7 @@ done
 **Depends on:** Task 7 flag flipped on. Fill in at end of week; skeleton committed now.
 
 **Files:**
+
 - Create: `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-review.md` (rename `DD` to actual date at fill-in time)
 
 ### Step 8.1: Author the review template
@@ -1003,9 +1116,9 @@ done
 ## 1. What we shipped
 
 - [ ] Merged PR(s):
-- [ ] Deployed procedure `KG_PATH_V2` (verify: `hana-cli inspectTable --table KG_PATH_V2` returns metadata)
-- [ ] Deployed workspace `KG_PG_WORKSPACE`
-- [ ] Deployed views `KG_PG_VERTICES_V`, `KG_PG_EDGES_V`
+- [ ] Deployed procedure `KG_PATH_V2` (verify: `hana-cli procedures | grep KG_PATH_V2`)
+- [ ] Deployed workspace `KG_PG_WORKSPACE` (verify via HANA `SYS.GRAPH_WORKSPACES` view or the HDI-plugin-specific catalog)
+- [ ] Deployed views `KG_PG_VERTICES_V`, `KG_PG_EDGES_V` (verify: `hana-cli views | grep KG_PG`)
 
 ## 2. Was v2 measurably better on `pathBetween`?
 
@@ -1063,4 +1176,3 @@ Interpretation: (1-2 paragraphs on what the numbers say)
 - **No admin-UI changes.** The metrics tile already exists (#805); we ride on it.
 - **No documentation changes to CLAUDE.md or `docs/developers/`.** The property-graph engine remains internal until the gate decides to graduate a follow-on.
 - **No PR to widen `KG_PG_EDGES_V`.** That's #919, filed and blocked on this spike's gate.
-
