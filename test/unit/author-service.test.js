@@ -281,78 +281,84 @@ describe('AuthorService.MyAuthoredTutorials filtering (#862)', () => {
   });
 });
 
-// #862 reopen / #923 — MyOwnedTutorials now sources from
-// MyMonitoredTutorialsView (backed by TutorialMonitors), NOT from
-// MyTutorialsView.bestPriority=3. Legacy Java IMS's "My Tutorials"
-// panel is a personal watch list; the ownerEmail-based view was
-// answering a different question. See ADR 0006 §2026-07-02b for the
-// semantic shift.
+// #862 reopen — MyOwnedTutorials returns rows where the caller matches
+// TutorialMeta on EITHER ownerEmail (priority 3) OR owner-free-text-name
+// (priority 4). This is the legacy-IMS "My Tutorials" semantics: Java
+// IMS renders IMS_TUTORIAL_AUTHOR.NAME on its "Owner" column, and Sage's
+// panel needs to match users whose owner-record has a noreply email
+// (priority 3 misses) but the display name matches the SAP corporate
+// user (priority 4 hits via `u.firstName || ' ' || u.lastName`).
 //
-// Fixture: reuses the parent-block Users (u-A / u-B / uuid-A / uuid-B)
-// and Tutorials (t-1 / t-2 / t-3) rows plus adds TutorialMonitors rows
-// so Alice monitors t-1 and t-3 but not t-2.
-describe('AuthorService.MyOwnedTutorials filtering (#862 reopen / #923)', () => {
-  beforeAll(async () => {
-    const db = await cds.connect.to('db');
-    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
-    await DELETE.from(TutorialMonitors);
-    await INSERT.into(TutorialMonitors).entries([
-      { ID: 'mon-A-1', user_ID: 'u-A', tutorial_ID: 't-1' },
-      { ID: 'mon-A-3', user_ID: 'u-A', tutorial_ID: 't-3' },
-      { ID: 'mon-B-2', user_ID: 'u-B', tutorial_ID: 't-2' },
-    ]);
-  });
-
+// A brief #923 detour re-pointed this at MyMonitoredTutorialsView; live-
+// probing IMS afterwards showed that was the eye-icon watch filter, not
+// the default panel. TutorialMonitors + toggleMonitor from #923 remain
+// for that feature; MyOwnedTutorials is back on the maintainer signal.
+//
+// Fixture: for alice (uuid-A, email=alice@example.com, firstName=Alice, lastName=A):
+//   - tut-1  (owner='Alice A', ownerEmail=alice@example.com) → priority 3 (ownerEmail wins over name)
+//   - tut-A1 (author_ID=u-A + owner='Alice A' + ownerEmail=alice) → priority 1 (author wins)
+//   - tut-A2 (owner='Alice A', ownerEmail=alice@example.com) → priority 3
+// So MyOwnedTutorials for Alice returns tut-1 and tut-A2 (priority 3 hits).
+// tut-A1 is excluded because bestPriority=1 (strict author).
+describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
   it('exposes MyOwnedTutorials as a readable entity', async () => {
     const srv = await cds.connect.to('AuthorService');
     expect(srv.entities.MyOwnedTutorials).toBeDefined();
   });
 
-  it('returns only tutorials the caller has explicitly monitored', async () => {
+  it('returns rows with bestPriority IN (3, 4) — ownerEmail OR owner-name match', async () => {
     const srv = await cds.connect.to('AuthorService');
     const rows = await srv.tx(
       { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
       (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
     );
     const slugs = rows.map((r) => r.slug).sort();
-    // Alice monitors t-1 and t-3. t-3 has TutorialMeta ownerEmail=nosuch
-    // but that's the maintainer signal (not surfaced on MyOwnedTutorials
-    // anymore); the personal-watch signal is what matters here.
-    expect(slugs).toEqual(['tut-1', 'tut-3']);
-  });
-
-  it('does NOT return tutorials that only match on ownerEmail (the old signal)', async () => {
-    // Under the OLD MyOwnedTutorials (bestPriority=3), Alice would have
-    // seen tut-1 because ownerEmail=alice@example.com. That row IS still
-    // in her list here — but for a DIFFERENT reason (she explicitly
-    // monitors t-1). This test locks in that removing her TutorialMonitors
-    // row removes tut-1 from her panel, even though ownerEmail still
-    // matches. That's the semantic difference.
-    const db = await cds.connect.to('db');
-    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
-    await DELETE.from(TutorialMonitors).where({ ID: 'mon-A-1' });
-
-    const srv = await cds.connect.to('AuthorService');
-    try {
-      const rows = await srv.tx(
-        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
-        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
-      );
-      expect(rows.map((r) => r.slug)).not.toContain('tut-1');
-      expect(rows.map((r) => r.slug)).toEqual(['tut-3']);
-    } finally {
-      // Restore for downstream tests
-      await INSERT.into(TutorialMonitors).entries({ ID: 'mon-A-1', user_ID: 'u-A', tutorial_ID: 't-1' });
+    expect(slugs).toEqual(['tut-1', 'tut-A2']);
+    for (const r of rows) {
+      expect([3, 4]).toContain(r.bestPriority);
     }
   });
 
-  it('does not leak Bobs monitored tutorials to Alice', async () => {
+  it('does NOT return rows where the caller is strict author (bestPriority=1)', async () => {
     const srv = await cds.connect.to('AuthorService');
     const rows = await srv.tx(
       { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
       (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
     );
-    expect(rows.map((r) => r.slug)).not.toContain('tut-2'); // Bob monitors that
+    // tut-A1: alice is BOTH author and ownerEmail — bestPriority=1 wins, so it
+    // appears on MyAuthoredTutorials but NOT here.
+    expect(rows.map((r) => r.slug)).not.toContain('tut-A1');
+    expect(rows.map((r) => r.slug)).not.toContain('tut-B1');
+  });
+
+  it('returns a name-only-match row (priority 4) when ownerEmail is NULL but owner is firstName lastName', async () => {
+    // Simulates Riley's real production case: IMS_TUTORIAL_AUTHOR.EMAIL is a
+    // GitHub noreply placeholder (ownerEmail nulled by the resync placeholder
+    // filter), but IMS_TUTORIAL_AUTHOR.NAME is the display name "Riley Rainey"
+    // which matches Users.firstName || ' ' || lastName. Priority-4 hits.
+    const db = await cds.connect.to('db');
+    const { Tutorials, TutorialMeta } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tutorials).entries({
+      ID: 't-noreply-A', slug: 'tut-noreply-A', title: 'Alice name-only',
+      status: 'ACTIVE',
+    });
+    await INSERT.into(TutorialMeta).entries({
+      ID: 'm-noreply-A', tutorial_ID: 't-noreply-A',
+      owner: 'Alice A', ownerEmail: null,
+    });
+    try {
+      const srv = await cds.connect.to('AuthorService');
+      const rows = await srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      const noreplyRow = rows.find((r) => r.slug === 'tut-noreply-A');
+      expect(noreplyRow).toBeDefined();
+      expect(noreplyRow.bestPriority).toBe(4);
+    } finally {
+      await DELETE.from(TutorialMeta).where({ ID: 'm-noreply-A' });
+      await DELETE.from(Tutorials).where({ ID: 't-noreply-A' });
+    }
   });
 
   it('populates the ID alias (backward-compat with tutorial_ID)', async () => {
@@ -374,27 +380,6 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen / #923)', () => 
       (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
     );
     expect(rows).toHaveLength(0);
-  });
-
-  it('returns empty when caller has no TutorialMonitors rows', async () => {
-    // Bob monitors t-2. But if a new user with no monitor rows queries,
-    // they get an empty panel — matches legacy Java behavior.
-    const db = await cds.connect.to('db');
-    const { Users } = cds.entities('com.sap.developers.ims');
-    await INSERT.into(Users).entries({
-      ID: 'u-C', uuid: 'uuid-C', sapId: 'uuid-C',
-      email: 'carol@example.com', firstName: 'Carol', lastName: 'C',
-    });
-    try {
-      const srv = await cds.connect.to('AuthorService');
-      const rows = await srv.tx(
-        { user: { id: 'uuid-C', roles: { 'Tutorial.Author': true } } },
-        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
-      );
-      expect(rows).toHaveLength(0);
-    } finally {
-      await DELETE.from(Users).where({ ID: 'u-C' });
-    }
   });
 });
 

@@ -129,14 +129,13 @@ export default cds.service.impl(async function () {
     req.query.where({ userId: dbUser.uuid });
   });
 
-  // #862 reopen / #923 — MyOwnedTutorials is Sage's "My Tutorials" panel.
-  // The projection now targets MyMonitoredTutorialsView (personal watch
-  // list, sourced from TutorialMonitors — the CAP equivalent of Java
-  // IMS's IMS_DASHBOARD_MONITOR_RECORD). Same caller-scoping semantics
-  // as MyTutorials and MyAuthoredTutorials — we stamp req.query.where
-  // with userId = dbUser.uuid; the view already exposes userId as
-  // Users.uuid. Users who haven't opted-in to monitor anything see an
-  // empty panel (matches legacy Java behavior). See ADR 0006 §2026-07-02b.
+  // #862 reopen — MyOwnedTutorials is Sage's "My Tutorials" panel. The
+  // projection sources from MyTutorialsView.bestPriority IN (3, 4) —
+  // either ownerEmail match OR owner-display-name match. Stamps userId
+  // from resolveDbUser so both joins are caller-scoped. #923's
+  // MyMonitoredTutorialsView repoint was reverted; see srv/author-
+  // service.cds for the rationale. TutorialMonitors + toggleMonitor
+  // from #923 remain for the eye-icon watch feature.
   this.before('READ', MyOwnedTutorials, async (req) => {
     if (!req.user?.id || req.user.id === 'anonymous') {
       return req.reject(401, 'Authentication required');
