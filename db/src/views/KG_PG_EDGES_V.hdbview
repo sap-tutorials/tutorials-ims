@@ -3,10 +3,24 @@ VIEW "KG_PG_EDGES_V" AS
   -- NVARCHAR(280) sizing must match KG_PG_VERTICES_V.hdbview — the graph
   -- workspace joins SOURCE/TARGET against VERTEX_KEY, and type-length
   -- mismatches have been observed to trip the workspace validator.
+  --
+  -- EDGE_KEY sizing (NVARCHAR(400)): the composite is
+  --   teaches: 't|' + tutorial-slug(≤255) + '|' + concept-slug(≤80) → ≤ 338 chars
+  --   requires: 'r|' + concept-slug(≤80) + '|' + concept-slug(≤80)  → ≤ 163 chars
+  -- 400 gives modest headroom. The 'r|' / 't|' type prefix prevents any
+  -- theoretical collision if a concept slug ever equaled a tutorial slug
+  -- (CLAUDE.md's slug conventions don't currently rule that out).
+  --
+  -- Why EDGE_KEY exists at all: HDI's .hdbgraphworkspace plugin (unlike
+  -- HANA's raw CREATE GRAPH WORKSPACE DDL) rejects a workspace without an
+  -- edge key column at deploy time. First deploy attempt of #925 surfaced
+  -- this — see docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md
+  -- § "Path C follow-up finding (2026-07-02, post-merge)".
   SELECT
-    CAST('concept:' || src.SLUG AS NVARCHAR(280)) AS "SOURCE",
-    CAST('concept:' || tgt.SLUG AS NVARCHAR(280)) AS "TARGET",
-    'requires'                                    AS "EDGE_TYPE"
+    CAST('r|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('concept:' || src.SLUG AS NVARCHAR(280))              AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(280))              AS "TARGET",
+    'requires'                                                 AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" tgt ON tgt.ID = ce.TARGET_ID
@@ -17,11 +31,13 @@ VIEW "KG_PG_EDGES_V" AS
   -- DISTINCT mirrors the vertices view's DISTINCT on the tutorial arm; the
   -- composite PK on TutorialConceptLinks should prevent dupes, but if a
   -- future migrator ever inserts a duplicate (TUTORIAL_ID, CONCEPT_ID) row,
-  -- DISTINCT keeps the workspace edge count honest for hop-count math.
+  -- DISTINCT keeps the workspace edge count honest for hop-count math AND
+  -- keeps EDGE_KEY unique per row (mandatory for the HDI plugin).
   SELECT DISTINCT
-    CAST('tutorial:' || t.SLUG AS NVARCHAR(280)) AS "SOURCE",
-    CAST('concept:'  || c.SLUG AS NVARCHAR(280)) AS "TARGET",
-    'teaches'                                    AS "EDGE_TYPE"
+    CAST('t|' || t.SLUG || '|' || c.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280))           AS "SOURCE",
+    CAST('concept:'  || c.SLUG AS NVARCHAR(280))           AS "TARGET",
+    'teaches'                                              AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
   JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS"  c ON c.ID = tcl.CONCEPT_ID
