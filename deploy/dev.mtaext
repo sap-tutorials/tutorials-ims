@@ -21,11 +21,15 @@ modules:
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
-      # Bearer-token gate on POST /admin/rebuild — consumed by rebuild-content.yml
-      # workflow's final "Push content to AppRouter" step. Resolved by envsubst
-      # against deploy.yml's $REBUILD_API_KEY env (line ~38). qa.mtaext +
-      # prod.mtaext already inject; dev was the missing leg of the triple
-      # (surfaced by rebuild-content run 28324486225).
-      REBUILD_API_KEY: ${REBUILD_API_KEY}
-      # Self-URL of this approuter app. Same envsubst plumbing as REBUILD_API_KEY.
+      # REBUILD_API_KEY was formerly injected here via envsubst against
+      # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
+      # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY
+      # exclusively from the BTP Credential Store via
+      # approuter/lib/credstore-secret.js. Keeping both stores meant they
+      # could drift — which produced HTTP 401 on the 2026-07-01 → 07-02
+      # rebuild-content runs. The env-fallback in resolveSecret() still
+      # works, but no CI path or mtaext writes to it any more.
+      #
+      # Self-URL of this approuter app. Kept on envsubst — #867 issue notes
+      # marked APPROUTER_URL as a separate follow-up class.
       APPROUTER_URL: ${APPROUTER_URL}

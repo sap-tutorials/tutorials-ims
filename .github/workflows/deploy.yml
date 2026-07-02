@@ -28,14 +28,13 @@ jobs:
       - name: Verify envsubst resolves all known placeholders
         env:
           CONTENT_API_KEY: dummy-content
-          REBUILD_API_KEY: dummy-rebuild
           APPROUTER_URL: https://dummy.example.com
           GITHUB_DISPATCH_TOKEN: dummy-token
         run: |
           set -euo pipefail
           for env in dev qa prod; do
             OUT=$(mktemp)
-            envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
+            envsubst '$CONTENT_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
               < deploy/${env}.mtaext > "$OUT"
             # The character class also catches hyphenated leftovers (e.g.
             # ${content-api-key}) so a half-finished rename surfaces here too.
@@ -362,9 +361,13 @@ jobs:
         # plugin's source); the previous --var-based block was non-functional
         # but had never run successfully (CI was failing at mbt build for
         # unrelated reasons since 2026-05-05).
+        #
+        # [#903 / #871 follow-up] REBUILD_API_KEY was formerly on this
+        # allowlist. Removed 2026-07-02: approuter reads it exclusively
+        # from the credstore now, so keeping it in the envsubst plumbing
+        # only reintroduces the two-stores-can-drift class of failure.
         env:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
-          REBUILD_API_KEY: ${{ secrets.REBUILD_API_KEY }}
           APPROUTER_URL: ${{ steps.deploy-vars.outputs.approuter_url }}
           GITHUB_DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
         run: |
@@ -373,7 +376,7 @@ jobs:
           OUT=deploy/${{ steps.env.outputs.target }}.resolved.mtaext
           # Restrict substitution to known names — defends against incidental
           # ${OTHER} sequences elsewhere in the file (description text, etc.).
-          envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
+          envsubst '$CONTENT_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
             < "$IN" > "$OUT"
           # Fail loudly if any placeholder survived. The character class
           # accepts hyphenated names too (e.g. ${content-api-key}) so a

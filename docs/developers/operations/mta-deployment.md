@@ -217,13 +217,18 @@ When `envsubst < dev.mtaext > dev.resolved.mtaext` substitutes a placeholder wit
 ```bash
 GITHUB_DISPATCH_TOKEN="$YOUR_PAT" \
 CONTENT_API_KEY="$YOUR_CONTENT_KEY" \
-REBUILD_API_KEY="$YOUR_REBUILD_KEY" \
 APPROUTER_URL="$YOUR_APPROUTER_URL" \
-envsubst '$GITHUB_DISPATCH_TOKEN $CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL' \
+envsubst '$GITHUB_DISPATCH_TOKEN $CONTENT_API_KEY $APPROUTER_URL' \
   < deploy/dev.mtaext > deploy/dev.resolved.mtaext
 sed -E -i '/^[[:space:]]+[A-Z_]+:[[:space:]]*$/d' deploy/dev.resolved.mtaext
 ```
 
+> **Note (2026-07-02):** `REBUILD_API_KEY` formerly rode through `envsubst`
+> here. Removed in PR #903 (finishes #871 rollout): approuter reads it
+> exclusively from BTP Credential Store via
+> [approuter/lib/credstore-secret.js](../../../approuter/lib/credstore-secret.js).
+> Rotation is done through the admin UI at `/admin-ui/#secrets-display`.
+>
 > **Note (2026-06-26):** SMTP transport config (`SMTP_HOST/PORT/USER/FROM/PASS`)
 > and `REBUILD_TARGET_ENV` formerly rode through `envsubst` here. They now live
 > in BTP Credential Store / `TenantSettings` respectively and are managed via
