@@ -76,7 +76,7 @@
 
 ### Step 1.3: Probe `SHORTEST_PATH` syntax with a hand-written GraphScript block
 
-- [ ] Create a minimal throwaway workspace + vertex/edge tables via `hana-cli querySimple`. Use highly-collision-resistant `_KGPROBE_`-prefixed names (there is no "sandbox schema" — the HDI runtime schema is the only writable target for the DEV service key; prefixing plus explicit DROP in Step 1.5 keeps state clean):
+- [ ] Create a minimal throwaway workspace + vertex/edge tables via `hana-cli querySimple`. Use highly-collision-resistant `_KGPROBE_`-prefixed names (there is no "sandbox schema" — the HDI runtime schema is the only writable target for the DEV service key; prefixing plus the explicit DROP at the end of this step keeps state clean):
 
 ```sql
 CREATE COLUMN TABLE "_KGPROBE_V" ("KEY" NVARCHAR(50) PRIMARY KEY, "NAME" NVARCHAR(100));
@@ -399,7 +399,7 @@ ls gen/db-qa/src/gen/ | grep KG_PATH_V2
 **Files:**
 
 - Create: `srv/lib/kg-path-v2-client.js`
-- Create: `test/unit/kg-path-v2-client.test.js`
+- Create: `test/unit/srv/kg-path-v2-client.test.js`
 
 ### Step 4.1: Write the failing unit tests (TDD red)
 
@@ -659,8 +659,6 @@ export function observe(name, value) { /* Vitter reservoir push */ }
 
 The codebase's convention for service-handler unit tests is to `cds.load` the CSN and either assert against it OR spin up `cds.test` and POST to the handler. Below uses the CSN-load pattern from [`test/unit/srv/kg-neighborhood-result-shape.test.js`](../../../test/unit/srv/kg-neighborhood-result-shape.test.js) plus a `cds.test('.')` bootstrap for HTTP-level interaction.
 
-- [ ] Create `test/unit/srv/kg-path-v2-client.test.js` **(moved from `test/unit/kg-path-v2-client.test.js` for co-location with other srv/lib tests — reviewer MINOR 7)**. The client-only tests from Task 4 Step 4.1 move here; no logic changes.
-
 - [ ] Create `test/unit/srv/kg-path-v2-handler-flag.test.js`:
 
 ```js
@@ -698,7 +696,7 @@ cds.log = (topic) => {
 
 // cds.test spins up the service. Point at the project root; the KG service
 // registers automatically via `cds.service.impl` in srv/knowledge-graph-service.js.
-const { GET, expect: cdsExpect } = cds.test('.');
+const { GET } = cds.test('.');
 
 beforeEach(() => {
   kgPathV2Mock.mockReset();
