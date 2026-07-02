@@ -22,7 +22,13 @@ const MAX_RETRIES = 8
 const BASE_DELAY_MS = 1000
 const MAX_DELAY_MS = 60_000
 
-export const EXCLUDED_REPOS = new Set(['tutorials-ims'])
+// tutorials-ims: this repo itself, never a content source.
+// sandbox, sandbox-Contribution: Sage/BAS test fixture repos, not for
+// production discovery. Their content (e.g. rbrainey-sandbox-1) is not
+// public tutorials. Excluded ahead of the private-repo filter so the
+// -Contribution branch of the check doesn't re-admit sandbox-Contribution
+// on QA-channel builds.
+export const EXCLUDED_REPOS = new Set(['tutorials-ims', 'sandbox', 'sandbox-Contribution'])
 
 // Private repos that SHOULD be discovered + fetched despite being non-public.
 // `meta-tutorials` contains showcase tutorials demonstrating platform features
