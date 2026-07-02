@@ -456,7 +456,7 @@ If step 6 doesn't hold, the flag doesn't gate cleanly and we fix that before ope
 
 The gate is a **qualitative team review** at end of week, not a numeric hurdle. But the review meeting must have the right evidence in front of it — the spike commits to producing this artifact:
 
-`docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-review.md` covering:
+`docs/superpowers/reviews/2026-07-09-kg-property-graph-spike-review.md` covering:
 
 1. **What we shipped** — links to the merged PR(s), the deployed procedure, the workspace.
 2. **Was v2 measurably better on `pathBetween`?** — screenshot of `/admin-ui/#metrics` showing v1 vs v2 latency reservoirs and success/empty/error counters over the flag-on window. Concrete numbers.
@@ -470,10 +470,10 @@ The review meeting outputs a decision on **each** follow-on independently.
 
 Filed alongside this spec merging, cross-referencing it. Each is a stub — the design work happens later if the team elects to work them.
 
-- **Issue: KG PageRank for whatToLearnNext ranking.** Replaces hardcoded per-arm weights in [KG_QUERY.hdbprocedure:143](../../../db/src/procedures/KG_QUERY.hdbprocedure#L143) with data-driven scores from a nightly PageRank pass over `KG_PG_WORKSPACE` (widened to include `coCompletedWith`).
-- **Issue: KG community detection → auto-suggested completion paths.** Louvain / label-propagation over `KG_PG_WORKSPACE` surfaces natural clusters the admin UI can suggest as missions/groups.
-- **Issue: KG weakly-connected components as a curation quality signal.** Any concept or tutorial in a WCC of size 1 is a curation gap; nightly WCC pass, `@readonly` service-layer projection exposes an isolation flag, admin UI shows a badge.
-- **Issue: Widen `KG_PG_WORKSPACE` to full 9-predicate parity with the RDF graph.** Prerequisite for any of the three follow-ons above at full fidelity. Design question: do view-based edges perform at that width, or do we need materialized tables?
+- **[#916](https://github.com/sap-tutorials/tutorials-ims/issues/916) — KG PageRank for whatToLearnNext ranking.** Replaces hardcoded per-arm weights in [KG_QUERY.hdbprocedure:143](../../../db/src/procedures/KG_QUERY.hdbprocedure#L143) with data-driven scores from a nightly PageRank pass over `KG_PG_WORKSPACE` (widened to include `coCompletedWith`).
+- **[#917](https://github.com/sap-tutorials/tutorials-ims/issues/917) — KG community detection → auto-suggested completion paths.** Louvain / label-propagation over `KG_PG_WORKSPACE` surfaces natural clusters the admin UI can suggest as missions/groups.
+- **[#918](https://github.com/sap-tutorials/tutorials-ims/issues/918) — KG weakly-connected components as a curation quality signal.** Any concept or tutorial in a WCC of size 1 is a curation gap; nightly WCC pass, `@readonly` service-layer projection exposes an isolation flag, admin UI shows a badge.
+- **[#919](https://github.com/sap-tutorials/tutorials-ims/issues/919) — Widen `KG_PG_WORKSPACE` to full 9-predicate parity with the RDF graph.** Prerequisite for any of the three follow-ons above at full fidelity. Design question: do view-based edges perform at that width, or do we need materialized tables?
 
 ## Non-goals
 

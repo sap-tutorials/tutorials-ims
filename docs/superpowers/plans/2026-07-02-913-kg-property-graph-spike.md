@@ -30,7 +30,7 @@
 - `test/unit/srv/kg-path-v2-client.test.js` — pure-JS wrapper unit tests (co-located with other srv/lib tests).
 - `test/unit/srv/kg-path-v2-handler-flag.test.js` — handler-level flag/fallback tests.
 - `test/hybrid/kg-path-v2.test.js` — end-to-end fixture graph test against real HANA.
-- `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-review.md` — decision-gate artifact (template written now; numbers filled at end of week).
+- `docs/superpowers/reviews/2026-07-09-kg-property-graph-spike-review.md` — decision-gate artifact (template written now; numbers filled at end of week).
 
 **Modified files:**
 
@@ -54,7 +54,7 @@
 
 **Files:**
 
-- Create: `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-task1-notes.md` (scratch notes; not code)
+- Create: `docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md` (scratch notes; not code)
 
 **Prerequisites:**
 
@@ -105,7 +105,7 @@ END`);
 
 ### Step 1.5: Commit Task 1 notes
 
-- [ ] Fill in `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-task1-notes.md` with four sections:
+- [ ] Fill in `docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md` with four sections:
   1. Privilege confirmation (Step 1.1 output).
   2. HANA table naming convention (dots or underscores) with a sample `SELECT COUNT(*)` from each of the 4 tables.
   3. Working `SHORTEST_PATH` call syntax (the exact SQL that returned rows).
@@ -114,7 +114,7 @@ END`);
 - [ ] Commit:
 
 ```bash
-git add docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-task1-notes.md
+git add docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md
 git commit -m "docs(#913): Task 1 — HANA property-graph syntax probe notes"
 ```
 
@@ -1065,7 +1065,7 @@ done
 
 ### Step 7.3: Document the drill outcome
 
-- [ ] Append a "Rollback drill — YYYY-MM-DD" section to `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-task1-notes.md` with the observed counter values and any anomalies.
+- [ ] Append a "Rollback drill — YYYY-MM-DD" section to `docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md` with the observed counter values and any anomalies.
 
 - [ ] Commit if any notes changed.
 
@@ -1081,7 +1081,7 @@ done
 
 **Files:**
 
-- Create: `docs/superpowers/reviews/2026-07-DD-kg-property-graph-spike-review.md` (rename `DD` to actual date at fill-in time)
+- Create: `docs/superpowers/reviews/2026-07-09-kg-property-graph-spike-review.md` (rename `DD` to actual date at fill-in time)
 
 ### Step 8.1: Author the review template
 

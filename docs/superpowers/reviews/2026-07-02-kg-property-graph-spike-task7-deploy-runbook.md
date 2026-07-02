@@ -148,6 +148,18 @@ END;
 
 KG_PATH_V2 (SQLScript) then calls it. Same iteration pattern.
 
+### Verify the real body against the hybrid fixture
+
+Once rows come back for a known-connected slug pair, the hybrid test in [`test/hybrid/kg-path-v2.test.js`](../../../test/hybrid/kg-path-v2.test.js) has an assertion (`hopCount >= 1` + endpoint vertex keys) that's `.skipIf`-gated on `KG_PATH_V2_BODY_IMPLEMENTED=true`. Flip the env var and re-run:
+
+```bash
+ALLOW_HYBRID_WRITES=true KG_PATH_V2_BODY_IMPLEMENTED=true \
+  npx cds bind --exec --profile hybrid -- \
+  npx vitest run --project hybrid test/hybrid/kg-path-v2.test.js
+```
+
+Expected: all 4 tests pass, including the previously-skipped "chained tutorials find a path" case. If that one fails, the real body doesn't yet return the expected shape — inspect the raw `SELECT * FROM :paths` output against the seeded fixture and iterate the procedure body.
+
 ## Rollback drill (Step 7.2)
 
 **Only run this after 7.1a-c pass and a real `SHORTEST_PATH` body is landed.** Running the drill against the placeholder body would show only `kg_path_v2_fallback_empty` counters — the drill exists to prove the flag gates cleanly, which requires v2 producing real rows.
@@ -200,7 +212,7 @@ cf set-env tutorials-srv KG_PATH_V2_ENABLED true
 cf restart tutorials-srv
 ```
 
-The maintainer collects the decision-gate evidence during the week; end-of-week they fill in `docs/superpowers/reviews/YYYY-MM-DD-kg-property-graph-spike-review.md` (Task 8 skeleton) and the team reviews.
+The maintainer collects the decision-gate evidence during the week; end-of-week they fill in [`docs/superpowers/reviews/2026-07-09-kg-property-graph-spike-review.md`](2026-07-09-kg-property-graph-spike-review.md) (Task 8 skeleton, rename the date if fill-in lands on a different day) and the team reviews.
 
 ## Estimated wall-clock
 
