@@ -364,6 +364,13 @@ function tryLoadDiscoveryFile(path: string): DiscoveredTutorial[] | null {
     const tutorials = Object.values(map).filter(
       (t): t is DiscoveredTutorial =>
         !!t && typeof t.slug === 'string' && typeof t.repo === 'string' && typeof t.branch === 'string',
+    ).filter(
+      // #862 reopen — also filter out any repo names in EXCLUDED_REPOS here.
+      // The fetch-time GraphQL/REST paths already apply EXCLUDED_REPOS; this
+      // second application defends the fallback path from a stale committed
+      // baseline that predates a repo being excluded. Without this filter, a
+      // GitHub-outage build could silently re-introduce sandbox rows.
+      (t) => !EXCLUDED_REPOS.has(t.repo),
     )
     return tutorials.length > 0 ? tutorials : null
   } catch {

@@ -60,12 +60,17 @@ const DRY_RUN_CSV = path.join(
 const CSV_STALE_MS = 60 * 60 * 1000; // 60 min
 
 // ─── Frontmatter helpers (same shape as repair-author-id-phase-c.cjs) ─
+//
+// Distinguishes "file missing" (return null — expected for gitignored dirs
+// and orphan slugs) from "read failed" (re-throw — surfaces I/O issues to
+// the > 5% read-error abort guard in main()).
 function extractFrontmatter(mdPath) {
   let raw;
   try {
     raw = fs.readFileSync(mdPath, 'utf8');
-  } catch {
-    return null;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
   }
   const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(raw);
   if (!m) return null;

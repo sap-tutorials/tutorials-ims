@@ -34,7 +34,8 @@ async function main() {
   log.info(`mode=${COMMIT ? 'COMMIT' : 'DRY-RUN'} initiator=${INITIATOR}`);
 
   await cds.connect.to('db');
-  const { Tutorials, TutorialRepositories } = cds.entities('com.sap.developers.ims');
+  const { Tutorials, TutorialMeta, TutorialRepositories } =
+    cds.entities('com.sap.developers.ims');
 
   const repos = await SELECT.from(TutorialRepositories)
     .columns('ID', 'name')
@@ -46,9 +47,23 @@ async function main() {
   log.info(`found ${repos.length} sandbox repo row(s): ${repos.map((r) => r.name).join(', ')}`);
 
   const repoIds = repos.map((r) => r.ID);
+
+  // The repository FK lives on TutorialMeta, not Tutorials — Tutorials has
+  // only { author, redirectTo } as its outgoing associations (see
+  // db/schema.cds:32-49). Two-step: find TutorialMeta rows for the sandbox
+  // repos, then look up the parent Tutorials rows by tutorial_ID.
+  const metas = await SELECT.from(TutorialMeta)
+    .columns('tutorial_ID')
+    .where({ 'repository_ID': { in: repoIds } });
+  const tutIds = [...new Set(metas.map((m) => m.tutorial_ID).filter(Boolean))];
+  if (!tutIds.length) {
+    log.info('no TutorialMeta rows found for sandbox repos — nothing to do');
+    return;
+  }
+
   const rows = await SELECT.from(Tutorials)
     .columns('ID', 'slug', 'status')
-    .where({ 'repository_ID': { in: repoIds } });
+    .where({ ID: { in: tutIds } });
 
   const buckets = { 'soft-delete': [], 'already-inactive': [] };
   for (const row of rows) {
