@@ -23,44 +23,34 @@ const MAX_NAME_LEN = 120;
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
 const REGISTRY_HINT_K = 25;
 
+// Bare `{type, required, properties}` JSON Schema — NOT wrapped in
+// `{name, parameters: {...}}`. defaultCallModel already wraps this into the
+// OpenAI-style function-tool shape internally; a schema arg that already
+// looks like a tool def gets double-nested and Claude sees a malformed
+// schema. Verified live 2026-07-01 (Bug 6). All sibling adapters
+// (sample-extract, api-doc-extract, video-extract, learning-journey-extract,
+// blog-post-extract, discovery-mission-extract) use this bare shape.
+//
+// Schema stays MINIMAL — tight constraints (slug pattern, name/description
+// length, confidence floor, cap 8) live in `applyPostValidation` below.
+// Nullable fields (like the original `anchor: { type: ['string', 'null'] }`)
+// cause Claude 4.6 Sonnet to refuse the tool call — see Bug 5 note.
+//
+// See spec §4.3 for the design intent + Bug 5/6 investigation notes.
 export const KG_HELP_DOC_EXTRACT_SCHEMA = Object.freeze({
-  name: 'extract_help_doc_concepts',
-  // Schema is intentionally minimal — matches sibling adapters
-  // (sample-extract.js, api-doc-extract.js, video-extract.js). Tight
-  // constraints (slug patterns, name/description min-length, anchor patterns,
-  // confidence floor) live in `applyPostValidation` below rather than the
-  // schema, so a single non-conforming concept in the LLM output DOES NOT
-  // cause the whole tool call to return empty.
-  //
-  // NOTE (2026-07-01, Bug 5): `anchor` was previously declared as
-  // `type: ['string', 'null']` per JSON Schema convention for nullable
-  // fields. Verified live via one-off diagnostic that Claude 4.6 Sonnet
-  // (the KG-extract deployment model) responds with `verdict: {}` — refuses
-  // to call the tool at all — when a schema uses the array-type-with-null
-  // convention. Removing anchor from the schema entirely restored real
-  // multi-concept output (390 completion tokens vs 16 before). LLM does
-  // NOT emit anchors today; anchor rendering in Task 3's UI stays dormant
-  // until anchor extraction is added back via a Claude-friendly mechanism
-  // (candidates for future work: `type: 'string'` with sentinel `''`,
-  // or a second post-extraction pass).
-  //
-  // See spec §4.3 for the original design intent + Bug 5 investigation
-  // notes for the trade-off.
-  parameters: {
-    type: 'object',
-    required: ['concepts'],
-    properties: {
-      concepts: {
-        type: 'array',
-        items: {
-          type: 'object',
-          required: ['slug', 'name', 'confidence'],
-          properties: {
-            slug: { type: 'string', minLength: 1 },
-            name: { type: 'string' },
-            description: { type: 'string' },
-            confidence: { type: 'number', minimum: 0, maximum: 1 },
-          },
+  type: 'object',
+  required: ['concepts'],
+  properties: {
+    concepts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['slug', 'name', 'confidence'],
+        properties: {
+          slug: { type: 'string', minLength: 1 },
+          name: { type: 'string' },
+          description: { type: 'string' },
+          confidence: { type: 'number', minimum: 0, maximum: 1 },
         },
       },
     },
