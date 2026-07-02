@@ -19,21 +19,19 @@
 --                                     tutorial IRI pattern
 --   10010  KG_MAX_HOPS_OUT_OF_RANGE – max_hops not in [1, 20]
 --
--- WHY PLACEHOLDER BODY
---   The KG_PG_WORKSPACE.hdbgraphworkspace declaration is deployed
---   independently first (spec Path C). Once the workspace compiles
---   cleanly against the live views, this procedure body will be
---   iterated to the real SHORTEST_PATH_ONE_TO_ONE (or the equivalent
---   HANA property-graph algorithm) call. Until then, `paths` is set
---   to an empty result set from DUMMY — the procedure is
---   signature-complete for JS callers but returns zero paths at
---   runtime.
+-- WHY THIS IS TWO PROCEDURES (updated 2026-07-02)
+--   HANA does not allow inline `LANGUAGE GRAPH` blocks inside a
+--   `LANGUAGE SQLSCRIPT` procedure body. GraphScript is a distinct
+--   language declared at the procedure boundary. KG_PATH_V2 (this file,
+--   SQLScript) handles input validation + result shaping; the sibling
+--   KG_SHORTEST_PATH_GRAPH.hdbprocedure (GraphScript) computes the
+--   actual shortest path. KG_PATH_V2 CALLs KG_SHORTEST_PATH_GRAPH.
 --
 -- QA NOTE
 --   db-qa/src/procedures/KG_PATH_V2.hdbprocedure contains a stub with the
 --   same signature but a SIGNAL KG_NOT_AVAILABLE_ON_QA body (see spec
---   §"QA channel"). The property-graph workspace and vertex/edge views
---   are NOT deployed to db-qa.
+--   §"QA channel"). The property-graph workspace, vertex/edge views,
+--   AND KG_SHORTEST_PATH_GRAPH are NOT deployed to db-qa.
 -- ============================================================
 
 PROCEDURE KG_PATH_V2 (
@@ -54,9 +52,10 @@ BEGIN
   DECLARE KG_INVALID_TUTORIAL_IRI CONDITION FOR SQL_ERROR_CODE 10006;
   DECLARE KG_MAX_HOPS_OUT_OF_RANGE CONDITION FOR SQL_ERROR_CODE 10010;
 
-  DECLARE from_key NVARCHAR(500);
-  DECLARE to_key   NVARCHAR(500);
+  DECLARE from_key NVARCHAR(400);
+  DECLARE to_key   NVARCHAR(400);
   DECLARE effective_max_hops INTEGER;
+  DECLARE hop_count_calculated INTEGER;
 
   IF :from_iri IS NULL OR NOT (:from_iri LIKE_REGEXPR
        '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') OR
@@ -75,14 +74,45 @@ BEGIN
   to_key   := 'tutorial:' ||
     SUBSTR(:to_iri,   LENGTH('https://developers.sap.com/kg/tutorial/') + 1);
 
-  -- BODY: SHORTEST_PATH_* call over KG_PG_WORKSPACE. See the header's
-  -- "WHY PLACEHOLDER BODY" block for why this returns an empty set.
-  -- Once the workspace compiles, the body will assemble rows into :paths
-  -- with columns (path_rank, hop_count, vertex_seq, seq_index) — joining
-  -- against KG_PG_VERTICES_V if the algorithm returns edges instead of
-  -- vertices. Empty result when no path exists — do NOT SIGNAL.
+  -- Delegate to the GraphScript sibling for the SHORTEST_PATH call.
+  -- Returns the vertex sequence as (VERTEX_KEY, SEQ_IDX) rows. Empty
+  -- when no path exists — no SIGNAL, empty is a valid answer per spec.
+  DECLARE graph_verts TABLE (vertex_key NVARCHAR(400), seq_idx BIGINT);
+  CALL KG_SHORTEST_PATH_GRAPH(:from_key, :to_key, :graph_verts);
+
+  -- Compute hop count: edges in the path = vertices - 1. For the
+  -- PREREQ semantics (tutorial→concept*→tutorial), the two tutorial
+  -- endpoints are "teaches" edges, so PREREQ-relevant hop_count is
+  -- (total vertices - 1) - 2 = (total vertices - 3). But the JS
+  -- wrapper's mapper only uses `hop_count` for logging today; sticking
+  -- with the total-edge count (vertices - 1) is simpler and matches
+  -- what a caller who wants "how far apart are these tutorials"
+  -- intuitively expects. If we later add a `prereqDepth` field, we
+  -- compute it there.
+  SELECT COUNT(*) - 1 INTO hop_count_calculated FROM :graph_verts;
+  IF hop_count_calculated < 0 THEN hop_count_calculated := 0; END IF;
+
+  -- Enforce max_hops post-hoc: if the shortest path exceeds the cap,
+  -- return empty. Cheaper than trying to encode a hop bound into the
+  -- GraphScript algorithm parameters.
+  IF hop_count_calculated > :effective_max_hops THEN
+    paths = SELECT
+              CAST(NULL AS INTEGER)       AS path_rank,
+              CAST(NULL AS INTEGER)       AS hop_count,
+              CAST(NULL AS NVARCHAR(500)) AS vertex_seq,
+              CAST(NULL AS INTEGER)       AS seq_index
+            FROM DUMMY WHERE 1 = 0;
+    RETURN;
+  END IF;
+
+  -- Shape to the wire contract. Always path_rank=1 (SHORTEST_PATH
+  -- returns a single path, or nothing). seq_index is 0-based per
+  -- the CDS return-type documentation in the plan's Step 3.2.
   paths = SELECT
-            1 AS path_rank, 0 AS hop_count,
-            :from_key AS vertex_seq, 0 AS seq_index
-          FROM DUMMY WHERE 1 = 0;
+            1                                        AS path_rank,
+            :hop_count_calculated                    AS hop_count,
+            CAST(vertex_key AS NVARCHAR(500))        AS vertex_seq,
+            CAST(seq_idx - 1 AS INTEGER)             AS seq_index
+          FROM :graph_verts
+          ORDER BY seq_idx;
 END;
