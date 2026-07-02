@@ -1,3 +1,30 @@
+// srv/jobs/scheduler.js
+//
+// Central registration + dispatch for every scheduled job in the app.
+//
+// The scheduler has two invocation paths and JOB_REGISTRY is the single
+// source of truth for both:
+//   1. node-cron ticks — `cron.schedule(expr, () => runJobByName(name))`,
+//      wired up inside registerJob() at registration time.
+//   2. Admin manual triggers — `AdminService.JobControls.runJob(jobName)`
+//      dispatches to `runJobByName(name, {manualTrigger, user})` (#756).
+//
+// Both routes end up in `runWithLock`, which:
+//   - Acquires a DB-backed lock (JobLocks) keyed on jobName + instanceId,
+//     so multi-instance CF deploys never run the same job twice
+//     concurrently. Losing the race returns `{skipped:true, reason:'lock-held'}`
+//     — the caller decides whether to retry / next-tick / surface an error.
+//   - Emits PipelineLog start/end rows (visible on the admin Job Log tile).
+//   - Records JobLastRun outcome (visible on the Cron health tile).
+//   - For `manualTrigger:true`, emits SecurityEvent audit events (spec §9).
+//
+// Convention: schedules use OFF-MINUTES (e.g. :07, :13, :23, :43) rather
+// than the :00/:30 thundering herd — this project has ~24 scheduled jobs
+// and the DB doesn't need them all firing at the same instant. New jobs
+// should pick a minute not already in use in registerJobs() below.
+//
+// #756 spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md
+
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
 import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings, pruneAnalyticsHistory, cleanupChangeLog } from './cleanup.js';

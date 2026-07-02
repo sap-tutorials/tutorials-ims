@@ -6,9 +6,29 @@
 //
 // HANA-only path uses raw SQL because mixing BLOB columns with metadata
 // in CDS QL triggers LOB-locator expiry (see CLAUDE.md gotcha).
+//
+// Two public loaders:
+//   - `loadStepVectors(id)` — single-tutorial fetch, one round-trip.
+//   - `loadStepVectorsBulk(ids)` — multi-tutorial fetch, one round-trip
+//     regardless of `ids.length`. Prefer this in any loop over tutorials
+//     (issue #294 collapsed several N+1 sequences).
 
 import cds from '@sap/cds';
 
+/**
+ * Load all step embeddings for one tutorial.
+ *
+ * Returns a plain `Float32Array[]` (order matches DB return order, which is
+ * not stepNumber-sorted — callers that need step ordering should use
+ * `loadStepVectorsBulk` or join with Steps themselves).
+ *
+ * Rows whose embedding BLOB is malformed (byteLength not divisible by 4)
+ * are silently dropped via `.filter(Boolean)`; corrupted embeddings should
+ * never crash a recommendation call.
+ *
+ * @param {string|number} tutorialId
+ * @returns {Promise<Float32Array[]>}
+ */
 export async function loadStepVectors(tutorialId) {
   const db = cds.db;
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
@@ -82,6 +102,21 @@ export async function loadStepVectorsBulk(tutorialIds) {
   return out;
 }
 
+/**
+ * Decode a stored embedding into a `Float32Array`, or `null` if the payload
+ * is empty/corrupt. Polymorphic input:
+ *   - `Buffer` / `Uint8Array` — production HANA path (raw BLOB bytes).
+ *   - `string` — SQLite path via CDS QL. The driver JSON-stringifies BLOBs
+ *     as `'{"type":"Buffer","data":[…]}'` when they're read back through
+ *     the SQLite adapter; we parse it here so tests match production shape.
+ *   - falsy / any other type — returns `null`.
+ *
+ * Returns `null` when `byteLength % 4 !== 0` (Float32 requires a multiple
+ * of 4). Callers use `.filter(Boolean)` to drop malformed rows.
+ *
+ * @param {Buffer|Uint8Array|string|null|undefined} blob
+ * @returns {Float32Array | null}
+ */
 export function bufToFloat32(blob) {
   if (!blob) return null;
   // SQLite stores Vector(N) as a JSON-stringified Buffer literal:
@@ -93,6 +128,7 @@ export function bufToFloat32(blob) {
       const parsed = JSON.parse(blob);
       if (parsed && parsed.type === 'Buffer' && Array.isArray(parsed.data)) {
         const buf = Buffer.from(parsed.data);
+        // Float32 = 4 bytes; anything else is corruption, skip silently.
         if (buf.byteLength % 4 !== 0) return null;
         return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
       }

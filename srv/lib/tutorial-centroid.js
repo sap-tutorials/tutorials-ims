@@ -1,11 +1,34 @@
 // srv/lib/tutorial-centroid.js
-const TTL_MS = 30 * 60 * 1000;
-const MAX_ENTRIES = 256;
+//
+// Compute + cache one embedding vector per tutorial (the "centroid" — mean
+// of its step embeddings). Used by the tutorial-similarity path and the
+// recommendation pipeline to compare tutorials in vector space without
+// re-fetching all step embeddings on every request.
+//
+// Cache is a bounded module-level Map (Node = single-threaded, so no lock
+// needed). TTL bounds staleness after a re-embed; `MAX_ENTRIES` bounds RAM.
+// Eviction is FIFO by insertion order (not access-time LRU — cheaper and
+// good enough for a warm working set of a few hundred tutorials).
+const TTL_MS = 30 * 60 * 1000;   // 30 min — matches the reconciliation cadence
+const MAX_ENTRIES = 256;         // ~256 * 1536f32 ≈ 1.5 MB steady state
 
 const cache = new Map(); // key -> { value, at }
 
+/** Test-only — clears the module-level cache between tests. */
 export function __resetForTest() { cache.clear(); }
 
+/**
+ * Average N same-length vectors into one. Returns `null` for empty/nullish
+ * input.
+ *
+ * Vectors with mismatched dimensionality are skipped (not padded/truncated).
+ * The kept vectors are the ones matching the modal (most common) dimension —
+ * this graceful-degrade path handles corpora that straddled an embedding
+ * model change without failing the whole request. If nothing matches, `null`.
+ *
+ * @param {Float32Array[]} vectors
+ * @returns {Float32Array | null}
+ */
 export function averageVectors(vectors) {
   if (!vectors || vectors.length === 0) return null;
   // Pick the modal dimension; skip rows that don't match.
@@ -25,6 +48,24 @@ export function averageVectors(vectors) {
   return out;
 }
 
+/**
+ * Get one tutorial's centroid, caching for up to `TTL_MS`.
+ *
+ * `loadVectors` is a caller-supplied fetcher — typically
+ * `loadStepVectors(id)` from step-vectors.js — so this module has no direct
+ * DB dependency (easier to test, and lets callers plug in a bulk path).
+ * The fetcher receives the tutorialId and MUST resolve to a
+ * `Float32Array[]` (may be empty).
+ *
+ * Cache is FIFO-bounded: when size exceeds `MAX_ENTRIES` after an insert,
+ * the oldest inserted entry is deleted. This is not a true LRU (no
+ * access-time bookkeeping), but suffices for the recommend path's
+ * hot-set of a few hundred tutorials.
+ *
+ * @param {string|number} tutorialId
+ * @param {(id: string|number) => Promise<Float32Array[]>} loadVectors
+ * @returns {Promise<Float32Array | null>}
+ */
 export async function getCentroid(tutorialId, loadVectors) {
   const now = Date.now();
   const hit = cache.get(tutorialId);
