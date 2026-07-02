@@ -404,3 +404,44 @@ open http://localhost:5000/analytics-ui/  # SQL + entity browser (Admin scope)
 open http://localhost:5000/scanner-vue/   # Badge scanner (MobileApp scope)
 open http://localhost:5000/me/            # Profile + Recent Activity timeline
 ```
+
+---
+
+## Security Testing Reference
+
+Focused pen-test suite added in [#797](https://github.com/sap-tutorials/tutorials-ims/issues/797). All framework defaults (CAP CSRF auto-enforcement, Fiori Elements token prefetch, `sanitize-html`, approuter CSP) cover the primary attack surface — these tests pin the coverage against regression.
+
+| File | Type | Scope |
+| --- | --- | --- |
+| [`test/unit/srv/analytics-sql-validator.pen.test.js`](../../../test/unit/srv/analytics-sql-validator.pen.test.js) | unit | Malicious SQL against `AnalyticsService.runSelectQuery` validator (DDL/DML, stacked queries, comment bypasses, disallowed tables, oversize input). Covers [`srv/lib/analytics-sql-validator.cjs`](../../../srv/lib/analytics-sql-validator.cjs). |
+| [`test/unit/scripts/sanitize-html.pen.test.js`](../../../test/unit/scripts/sanitize-html.pen.test.js) | unit | OWASP XSS Filter Evasion Cheat Sheet payloads against tutorial-source sanitizer. Covers [`scripts/parsers/sanitize-html.ts`](../../../scripts/parsers/sanitize-html.ts). |
+| [`test/unit/scripts/check-hugo-safe-html.test.js`](../../../test/unit/scripts/check-hugo-safe-html.test.js) | unit | Unit coverage for the Hugo `safeHTML` grep guard (marker recognition, 3-line window, allow/deny cases). Covers [`scripts/check-hugo-safe-html.cjs`](../../../scripts/check-hugo-safe-html.cjs). |
+| [`test/smoke/csrf-enforcement.test.js`](../../../test/smoke/csrf-enforcement.test.js) | smoke | POST to `/admin/Tags`, `/admin/Missions`, `/api/completeStep` without a valid `x-csrf-token` → 4xx. Covers the CAP OData mutation surface. |
+| [`test/smoke/express-route-mutations.test.js`](../../../test/smoke/express-route-mutations.test.js) | smoke | Sweeps all 10 bearer-token-protected `app.post(...)` routes in `srv/server.js` (`/content/publish`, `/content/rollback`, `/content/code-check-specs`, `/content/validate-answer-specs`, and the 6 build endpoints), plus XSUAA-scoped and public-POST hardening. |
+| [`test/smoke/xss-reflection.test.js`](../../../test/smoke/xss-reflection.test.js) | smoke | Read-only reflection check: probes `/homepage/` and `/tutorials/tutorial-platform-feature-cookbook` for unescaped payloads, `/search/?q=<payload>` for reflected query strings, and `/tutorials/<payload>/` for reflection on the 404 path. |
+| [`test/smoke/security-headers.test.js`](../../../test/smoke/security-headers.test.js) | smoke | CSP, X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy on approuter HTML responses. |
+| [`scripts/check-hugo-safe-html.cjs`](../../../scripts/check-hugo-safe-html.cjs) | build guard | Fails the build if any new `safeHTML` / `safeHTMLAttr` / `printf "<%s>"` lands in `hugo/layouts/**/*.{html,xml,xsl}` without a `<!-- security-reviewed: ... -->` marker within 3 lines above. Runs as `npm run check:security-annotations` (wired into `prebuild`). |
+
+**Running locally:**
+
+```bash
+# All unit pen tests (fast, no external deps)
+npx vitest run test/unit/srv/analytics-sql-validator.pen.test.js \
+              test/unit/scripts/sanitize-html.pen.test.js \
+              test/unit/scripts/check-hugo-safe-html.test.js \
+              --project unit
+
+# All smoke pen tests (needs deployed DEV; SRV and/or approuter URLs)
+SMOKE_BASE_URL="https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com" \
+SMOKE_SRV_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" \
+  npx vitest run test/smoke/csrf-enforcement.test.js \
+                 test/smoke/express-route-mutations.test.js \
+                 test/smoke/xss-reflection.test.js \
+                 test/smoke/security-headers.test.js \
+                 --project smoke
+
+# Hugo safeHTML guard
+npm run check:security-annotations
+```
+
+**Policy for new findings:** if a pen test uncovers a real vulnerability (not a test-expectation mismatch), file a follow-up issue referencing #797, skip that individual case with a `.skip` and a `// TODO(#XXX)` comment, and address it in a dedicated PR. This suite is a **regression net**, not a fix-it-all PR.
