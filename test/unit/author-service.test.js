@@ -281,6 +281,69 @@ describe('AuthorService.MyAuthoredTutorials filtering (#862)', () => {
   });
 });
 
+// #862 reopen — MyOwnedTutorials returns rows where the caller's Users.email
+// matches TutorialMeta.ownerEmail (bestPriority = 3, source-3 in
+// db/views.cds MyTutorialsRaw). This is the legacy-IMS "My Tutorials"
+// semantics that Sage's panel needs.
+//
+// Fixture: reuses the parent MyTutorialsView beforeAll + sibling
+// MyAuthoredTutorials beforeAll. For alice (uuid-A, email=alice@example.com):
+//   - tut-1  (ownerEmail=alice, no author)                → priority 3
+//   - tut-A1 (author=alice AND ownerEmail=alice)          → priority 1 (author wins)
+//   - tut-A2 (ownerEmail=alice, no author)                → priority 3
+// So MyOwnedTutorials returns ['tut-1', 'tut-A2'] and NOT tut-A1.
+describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
+  it('exposes MyOwnedTutorials as a readable entity', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    expect(srv.entities.MyOwnedTutorials).toBeDefined();
+  });
+
+  it('returns only bestPriority=3 rows for the caller (ownerEmail matches)', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+    );
+    const slugs = rows.map((r) => r.slug).sort();
+    expect(slugs).toEqual(['tut-1', 'tut-A2']);
+    for (const r of rows) expect(r.bestPriority).toBe(3);
+  });
+
+  it('does NOT return rows where the caller is author (bestPriority=1)', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+    );
+    // tut-A1: alice is BOTH author and ownerEmail — bestPriority=1 wins, so it
+    // appears on MyAuthoredTutorials but NOT here.
+    expect(rows.map((r) => r.slug)).not.toContain('tut-A1');
+    // And no rows belong to other users:
+    expect(rows.map((r) => r.slug)).not.toContain('tut-B1');
+  });
+
+  it('populates the ID alias (backward-compat with tutorial_ID)', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+    );
+    for (const r of rows) {
+      expect(r.ID).toBeDefined();
+      expect(r.ID).toBe(r.tutorial_ID);
+    }
+  });
+
+  it('returns empty when caller has no matching Users row', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'unknown-uuid', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+    );
+    expect(rows).toHaveLength(0);
+  });
+});
+
 describe('AuthorService.reviewTutorial/snoozeTutorial', () => {
   it('reviewTutorial succeeds when caller owns the tutorial', async () => {
     const srv = await cds.connect.to('AuthorService');

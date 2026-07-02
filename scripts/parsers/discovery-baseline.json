@@ -5549,11 +5549,6 @@
     "repo": "eda",
     "branch": "main"
   },
-  "rbrainey-sandbox-1": {
-    "slug": "rbrainey-sandbox-1",
-    "repo": "sandbox",
-    "branch": "main"
-  },
   "register-multitenant-app-saas-provisioning-service": {
     "slug": "register-multitenant-app-saas-provisioning-service",
     "repo": "Tutorials",

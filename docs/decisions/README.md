@@ -42,6 +42,7 @@ Never renumber; never delete. Deprecated ADRs stay, so the trail is intact.
 | [0003](0003-public-hugo-lazy-login.md) | Public Hugo with lazy XSUAA login | Accepted | 2026-04-22 | [POC spec](../superpowers/specs/2026-04-22-tutorial-platform-poc-design.md) |
 | [0004](0004-jwt-only-identity.md) | JWT-only identity on CAP (no SCI profile enrichment) | Accepted | 2026-04-28 | [IMS CAP rewrite spec](../superpowers/specs/2026-04-28-ims-cap-rewrite-design.md), [authentication](../developers/architecture/authentication.md) |
 | [0005](0005-bootstrap-vs-served-split.md) | `bootstrap` vs. `served` route/plugin split | Accepted | 2026-04-28 | [design-decisions §CAP runtime](../developers/reference/design-decisions.md) |
+| [0006](0006-authorship-vs-ownership-semantics.md) | Authorship vs. ownership vs. contribution semantics | Accepted | 2026-07-01 | [#862](https://github.com/sap-tutorials/tutorials-ims/issues/862), [spec](../superpowers/specs/2026-07-01-862-my-owned-tutorials-design.md) |
 
 ## See also
 

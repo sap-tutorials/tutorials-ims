@@ -88,6 +88,25 @@ service AuthorService {
   @readonly entity MyAuthoredTutorials as
     projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority = 1;
 
+  // #862 reopen — MyOwnedTutorials is the panel-shaped surface for
+  // "tutorials I currently monitor / am the declared post-publish owner
+  // of". It projects MyTutorialsView filtered to bestPriority = 3
+  // (source 3 in db/views.cds MyTutorialsRaw:
+  // TutorialMeta.ownerEmail = Users.email).
+  //
+  // Why a third endpoint (not a change to MyAuthoredTutorials): legacy
+  // IMS "My Tutorials" panel semantics are OWNER-based, not
+  // AUTHOR-based. For example a tutorial where "Riley is Owner, Daniel
+  // Wroblewski is Author" appears on legacy IMS's list for Riley but
+  // NOT on MyAuthoredTutorials — correctly. Sage needs OWNER semantics
+  // for its panel; Advocate + admin Tutorial Health need AUTHOR
+  // semantics for theirs. Three endpoints, three signal sets.
+  //
+  // See ADR 0006 for the full authorship-vs-ownership semantics.
+  @Capabilities.ChangeTracking : { Supported: true }
+  @readonly entity MyOwnedTutorials as
+    projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority = 3;
+
   action reviewTutorial(tutorialId : UUID) returns {
     reviewedDate       : Timestamp;
     notificationNumber : Integer;

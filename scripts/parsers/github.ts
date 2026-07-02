@@ -22,7 +22,13 @@ const MAX_RETRIES = 8
 const BASE_DELAY_MS = 1000
 const MAX_DELAY_MS = 60_000
 
-export const EXCLUDED_REPOS = new Set(['tutorials-ims'])
+// tutorials-ims: this repo itself, never a content source.
+// sandbox, sandbox-Contribution: Sage/BAS test fixture repos, not for
+// production discovery. Their content (e.g. rbrainey-sandbox-1) is not
+// public tutorials. Excluded ahead of the private-repo filter so the
+// -Contribution branch of the check doesn't re-admit sandbox-Contribution
+// on QA-channel builds.
+export const EXCLUDED_REPOS = new Set(['tutorials-ims', 'sandbox', 'sandbox-Contribution'])
 
 // Private repos that SHOULD be discovered + fetched despite being non-public.
 // `meta-tutorials` contains showcase tutorials demonstrating platform features
@@ -358,6 +364,13 @@ function tryLoadDiscoveryFile(path: string): DiscoveredTutorial[] | null {
     const tutorials = Object.values(map).filter(
       (t): t is DiscoveredTutorial =>
         !!t && typeof t.slug === 'string' && typeof t.repo === 'string' && typeof t.branch === 'string',
+    ).filter(
+      // #862 reopen — also filter out any repo names in EXCLUDED_REPOS here.
+      // The fetch-time GraphQL/REST paths already apply EXCLUDED_REPOS; this
+      // second application defends the fallback path from a stale committed
+      // baseline that predates a repo being excluded. Without this filter, a
+      // GitHub-outage build could silently re-introduce sandbox rows.
+      (t) => !EXCLUDED_REPOS.has(t.repo),
     )
     return tutorials.length > 0 ? tutorials : null
   } catch {
