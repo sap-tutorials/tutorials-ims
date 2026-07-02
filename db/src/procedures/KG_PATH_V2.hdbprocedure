@@ -1,0 +1,88 @@
+-- KG_PATH_V2.hdbprocedure
+-- ============================================================
+-- WHY DEFINER
+--   Consistent with the sibling KG_QUERY / KG_ADMIN_RUNSPARQL / KG_GRAPH_*
+--   procedures: HANA Cloud property-graph algorithms (SHORTEST_PATH_*) run
+--   over a HANA graph workspace whose access identity is the workspace
+--   owner.  Declaring SQL SECURITY DEFINER pins the procedure body to the
+--   HDI container's object-owner (#OO) — the same stable identity that
+--   owns KG_PG_WORKSPACE — so every binding (tutorials-srv, cds bind
+--   probes, future callers) observes the same graph access rights.
+--
+--   Memory: hana_sparql_per_graph_acl_creator_owns (same rationale
+--     generalized to graph workspaces).
+--   Spec:   docs/superpowers/specs/2026-07-02-913-kg-property-graph-spike-design.md
+--   Issue:  #913
+--
+-- ERROR CODES (user-defined range 10000–19999)
+--   10006  KG_INVALID_TUTORIAL_IRI  – from_iri or to_iri does not match the
+--                                     tutorial IRI pattern
+--   10010  KG_MAX_HOPS_OUT_OF_RANGE – max_hops not in [1, 20]
+--
+-- WHY PLACEHOLDER BODY
+--   The KG_PG_WORKSPACE.hdbgraphworkspace declaration is deployed
+--   independently first (spec Path C). Once the workspace compiles
+--   cleanly against the live views, this procedure body will be
+--   iterated to the real SHORTEST_PATH_ONE_TO_ONE (or the equivalent
+--   HANA property-graph algorithm) call. Until then, `paths` is set
+--   to an empty result set from DUMMY — the procedure is
+--   signature-complete for JS callers but returns zero paths at
+--   runtime.
+--
+-- QA NOTE
+--   db-qa/src/procedures/KG_PATH_V2.hdbprocedure contains a stub with the
+--   same signature but a SIGNAL KG_NOT_AVAILABLE_ON_QA body (see spec
+--   §"QA channel"). The property-graph workspace and vertex/edge views
+--   are NOT deployed to db-qa.
+-- ============================================================
+
+PROCEDURE KG_PATH_V2 (
+  IN  from_iri  NVARCHAR(500),
+  IN  to_iri    NVARCHAR(500),
+  IN  max_hops  INTEGER,
+  OUT paths     TABLE (
+    path_rank   INTEGER,
+    hop_count   INTEGER,
+    vertex_seq  NVARCHAR(500),
+    seq_index   INTEGER
+  )
+)
+LANGUAGE SQLSCRIPT
+SQL SECURITY DEFINER
+AS
+BEGIN
+  DECLARE KG_INVALID_TUTORIAL_IRI CONDITION FOR SQL_ERROR_CODE 10006;
+  DECLARE KG_MAX_HOPS_OUT_OF_RANGE CONDITION FOR SQL_ERROR_CODE 10010;
+
+  DECLARE from_key NVARCHAR(500);
+  DECLARE to_key   NVARCHAR(500);
+  DECLARE effective_max_hops INTEGER;
+
+  IF :from_iri IS NULL OR NOT (:from_iri LIKE_REGEXPR
+       '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') OR
+     :to_iri IS NULL OR NOT (:to_iri LIKE_REGEXPR
+       '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') THEN
+    SIGNAL KG_INVALID_TUTORIAL_IRI;
+  END IF;
+
+  effective_max_hops := COALESCE(:max_hops, 8);
+  IF effective_max_hops < 1 OR effective_max_hops > 20 THEN
+    SIGNAL KG_MAX_HOPS_OUT_OF_RANGE;
+  END IF;
+
+  from_key := 'tutorial:' ||
+    SUBSTR(:from_iri, LENGTH('https://developers.sap.com/kg/tutorial/') + 1);
+  to_key   := 'tutorial:' ||
+    SUBSTR(:to_iri,   LENGTH('https://developers.sap.com/kg/tutorial/') + 1);
+
+  -- BODY: SHORTEST_PATH_* call over KG_PG_WORKSPACE. See the header's
+  -- "WHY PLACEHOLDER BODY" block for why this returns an empty set.
+  -- Once the workspace compiles, the body will assemble rows into :paths
+  -- with columns (path_rank, hop_count, vertex_seq, seq_index) — joining
+  -- against KG_PG_VERTICES_V if the algorithm returns edges instead of
+  -- vertices. Empty result when no path exists — do NOT SIGNAL.
+  paths = SELECT
+            1 AS path_rank, 0 AS hop_count,
+            :from_key AS vertex_seq, 0 AS seq_index
+          FROM DUMMY WHERE 1 = 0;
+END;

@@ -1,0 +1,496 @@
+# KG Property Graph spike — design
+
+**Status:** Design for [#913](https://github.com/sap-tutorials/tutorials-ims/issues/913).
+**Date:** 2026-07-02
+**Branch:** `feat/kg-property-graph-spike` (to be created from this design)
+
+## Problem
+
+The current `pathBetween` implementation in [db/src/procedures/KG_QUERY.hdbprocedure](../../../db/src/procedures/KG_QUERY.hdbprocedure) uses a three-arm SPARQL UNION (PREREQ / CO_COMPLETED / SHARED_CONCEPT). The PREREQ arm — the one that walks prerequisite chains via `kg:requires` closure — has a documented limitation called out in the procedure body itself:
+
+> HANA KGE does NOT support {n,m} counted-range property paths (Task 0 spike confirmed 'Unsupported functionality: Path repeat range'). We use + (plus closure, one-or-more hops) instead. Depth bounded by LIMIT 10 and the 5s wall-clock timeout enforced by kgQuery()'s withTimeout wrapper.
+
+As a result, every PREREQ-arm result today returns `hopCount = 0` (see [KG_QUERY.hdbprocedure:216](../../../db/src/procedures/KG_QUERY.hdbprocedure#L216)) — the SPARQL engine can't compute hop counts, so we bind a placeholder zero. The sidebar widget's UX and the Joule path-between tool would both be strictly better with real hop-bounded, hop-counted shortest paths.
+
+The 2026-Q3 HANA Cloud release added a **Property Graph Workspace projection** over the RDF graph, unlocking the separate HANA Graph Engine's algorithm library — including `SHORTEST_PATH` with real hop-bounded queries and real hop-count output. Tom confirmed on 2026-07-01 that the HANA instance for the DevRel & Community Tools subaccount was upgraded and the property-graph entitlement is enabled.
+
+This spec designs a one-week spike to introduce the Property Graph Engine into the tutorials-ims Knowledge Graph pipeline. The pilot algorithm is `SHORTEST_PATH`, applied to the PREREQ arm only. A qualitative team review at end of week decides whether to expand to PageRank, community detection, and weakly-connected components (each tracked as a separate follow-on issue filed alongside this spec).
+
+## Approach
+
+Add one HDI DEFINER procedure (`KG_PATH_V2.hdbprocedure`), one property-graph workspace (`KG_PG_WORKSPACE.hdbgraphworkspace`) built on **views** over the existing `Concepts`, `ConceptEdges`, `Tutorials`, and `TutorialConceptLinks` CDS tables, one JS wrapper (`srv/lib/kg-path-v2-client.js`), and one handler edit in `srv/knowledge-graph-service.js`. The handler gates behavior on a new env flag `KG_PATH_V2_ENABLED` — off by default. When on, the PREREQ arm uses `SHORTEST_PATH` via the new procedure; empty results and any error fall through to the existing SPARQL implementation.
+
+The workspace is deliberately view-based (not materialized) so the RDF graph and the property graph share one source of truth (the CDS tables) and cannot drift. `srv/lib/kg-graph-rebuild.js` is unchanged.
+
+The DEFINER-security pattern is preserved from the existing SPARQL DEFINER work ([spec](2026-06-22-kg-sparql-definer-procedures-design.md), [#533](https://github.com/sap-tutorials/tutorials-ims/pull/533)): the procedure body runs as the HDI container's object-owner user regardless of which runtime user calls it, so per-workspace ACL (if HANA applies one) pins to a stable identity across bindings.
+
+## Architecture
+
+```text
+                       BEFORE                                       AFTER (spike, flag ON)
+                       ──────                                       ─────────────────────
+
+  pathBetween handler                                    pathBetween handler
+     │                                                        │
+     │ (single call)                                          │ KG_PATH_V2_ENABLED?
+     ▼                                                        │
+  kgPathBetween()  ──►  KG_QUERY('PATH_BETWEEN')              ├─► NO  ──► kgPathBetween() (unchanged)
+     │                     3-arm UNION SPARQL                 │
+     │                     PREREQ / CO_COMP / SHARED          └─► YES ──┬─► kgPathV2()  ──► KG_PATH_V2 procedure
+     ▼                                                                   │        │           SHORTEST_PATH over
+   response                                                              │        │           KG_PG_WORKSPACE
+                                                                         │        ▼
+                                                                         │      RESULT: (iri, hopIdx) rows
+                                                                         │
+                                                                         (v2 result replaces pathBetween
+                                                                          when non-empty — see "Semantics"
+                                                                          below for why)
+```
+
+### Semantics when the flag is on: v2 replaces the response, does not merge with v1
+
+**During the spike, when `KG_PATH_V2_ENABLED=true` and `kgPathV2()` returns at least one path, the handler returns those v2 results only.** It does NOT also run the CO_COMPLETED and SHARED_CONCEPT arms and merge them in. This is a deliberate simplification for the spike, and it is a small functional regression on the v1 wire shape: a caller who would have seen 10 paths (5 PREREQ + 3 CO_COMPLETED + 2 SHARED) on v1 will see only the PREREQ paths on v2.
+
+We accept the regression for three reasons:
+
+1. **The spike is measuring v2 against v1 on PREREQ specifically.** Merging with SPARQL arms would confound the A/B — v2 latency would always include the SPARQL round-trip.
+2. **When v2 is empty (no PREREQ path exists), the handler falls through to the full v1 3-arm SPARQL query.** So users on an isolated tutorial pair still see CO_COMPLETED and SHARED results — they just come from v1 in one round-trip instead of a merged v1+v2 response.
+3. **The "always-run all three arms, only swap PREREQ" design** would require the SPARQL layer to expose per-arm entry points. That's a design decision worth deferring until the spike's decision gate — if v2 graduates, the follow-up PR can refactor the SPARQL layer to expose per-arm entry points and switch to the merge model.
+
+The metrics dimension `arm` distinguishes these cases: v2 successes are tagged `arm: 'prereq'`; v1 fallbacks after v2 emptiness or error are tagged `arm: 'co_completed'`, `arm: 'shared_concept'`, or `arm: 'none'` per the v1 result.
+
+**New artifacts (two files):**
+
+- `db/src/procedures/KG_PATH_V2.hdbprocedure` — new DEFINER procedure. Validates IRIs, calls `SHORTEST_PATH` over `KG_PG_WORKSPACE`, returns a table.
+- `db/src/graph/KG_PG_WORKSPACE.hdbgraphworkspace` — declares vertices and edges via views on `Concepts`, `Tutorials`, `ConceptEdges`, and `TutorialConceptLinks`.
+
+**New view definitions (two files under `db/src/views/`):**
+
+- `db/src/views/KG_PG_VERTICES_V.hdbview` — union of concept and tutorial vertex projections.
+- `db/src/views/KG_PG_EDGES_V.hdbview` — union of `requires` (concept→concept) and `teaches` (tutorial→concept) edge projections.
+
+**New JS module (one file):**
+
+- `srv/lib/kg-path-v2-client.js` — typed wrapper around the procedure call, mirroring the shape of `srv/lib/kg-sparql-client.js` but not folded into it because it doesn't speak SPARQL.
+
+**One handler edit:**
+
+- `srv/knowledge-graph-service.js` — `pathBetween` handler gains a flag check and a fail-open-to-v1 fallback.
+
+**Rebuild path unchanged:** [srv/lib/kg-graph-rebuild.js](../../../srv/lib/kg-graph-rebuild.js) does not change. Because the workspace is view-based, it is always current with the CDS tables that the RDF projection also reads.
+
+**QA channel:** matching stub procedure under `db-qa/src/procedures/KG_PATH_V2.hdbprocedure` whose body contains only the `SIGNAL KG_NOT_AVAILABLE_ON_QA` line and does NOT reference `KG_PG_WORKSPACE`, `KG_PG_VERTICES_V`, or `KG_PG_EDGES_V`. The workspace and views are NOT deployed to `db-qa` (they would fail HDI compile against QA's schema, and the QA channel has no property-graph consumer). Mirrors the pattern established in the SPARQL DEFINER spec's [QA channel section](2026-06-22-kg-sparql-definer-procedures-design.md#qa-channel).
+
+## Data model — the property-graph workspace
+
+### Vertex view: `KG_PG_VERTICES_V`
+
+```sql
+CREATE VIEW "KG_PG_VERTICES_V" AS
+  -- Concept vertices
+  SELECT
+    CAST('concept:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+    'concept'                                 AS "VERTEX_TYPE",
+    SLUG                                      AS "SLUG",
+    NAME                                      AS "LABEL",
+    STATUS                                    AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTS"
+  WHERE STATUS = 'ACTIVE'
+  UNION ALL
+  -- Tutorial vertices (synthesized from the link table — tutorials don't
+  -- live in a KG-specific table, they live in Tutorials).
+  SELECT DISTINCT
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+    'tutorial'                                   AS "VERTEX_TYPE",
+    t.SLUG                                       AS "SLUG",
+    t.TITLE                                      AS "LABEL",
+    NULL                                         AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID;
+```
+
+> **Task 1 finding (2026-07-02):** HANA table + column names are uppercase-underscore, not lowercase-dotted. The DDL above uses the confirmed form. See [`docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md`](../reviews/2026-07-02-kg-property-graph-spike-task1-notes.md).
+
+`VERTEX_KEY` is the workspace's primary key. The `concept:` / `tutorial:` prefixes prevent collisions between concept slugs and tutorial slugs, which share a slug namespace at the CDS level but are disambiguated at the KG IRI layer.
+
+### Edge view: `KG_PG_EDGES_V`
+
+```sql
+CREATE VIEW "KG_PG_EDGES_V" AS
+  -- kg:requires edges: concept → concept
+  SELECT
+    CAST('concept:' || src.SLUG AS NVARCHAR(280)) AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(280)) AS "TARGET",
+    'requires'                                    AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" tgt ON tgt.ID = ce.TARGET_ID
+  WHERE ce.PREDICATE = 'requires' AND ce.STATUS = 'ACTIVE'
+    AND src.STATUS = 'ACTIVE' AND tgt.STATUS = 'ACTIVE'
+  UNION ALL
+  -- kg:teaches edges: tutorial → concept
+  SELECT
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280)) AS "SOURCE",
+    CAST('concept:'  || c.SLUG AS NVARCHAR(280)) AS "TARGET",
+    'teaches'                                    AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" c   ON c.ID = tcl.CONCEPT_ID
+  WHERE c.STATUS = 'ACTIVE';
+```
+
+Only two edge types (`requires`, `teaches`). The PREREQ arm doesn't need `coCompletedWith`, `relatedTo`, or the other seven predicates — and adding them would inflate the workspace with edges `SHORTEST_PATH` would then have to filter out. If any follow-on issue graduates (PageRank, community detection, WCC), the edge view widens accordingly — tracked in follow-on Issue 4.
+
+### Workspace declaration: `KG_PG_WORKSPACE.hdbgraphworkspace`
+
+```json
+{
+  "vertexTable":     "KG_PG_VERTICES_V",
+  "vertexKeyColumn": "VERTEX_KEY",
+  "edgeTable":       "KG_PG_EDGES_V",
+  "edgeSourceColumn": "SOURCE",
+  "edgeTargetColumn": "TARGET",
+  "edgeKeyColumn":   null
+}
+```
+
+Edges are unkeyed — multiple edges between the same vertex pair fold to one, which is fine for `SHORTEST_PATH` (it cares about existence and hop count, not edge identity).
+
+### What the PREREQ query actually computes
+
+The v1 SPARQL PREREQ arm walks: `<from> kg:teaches ?c1 . ?c1 (^kg:requires)+ ?cN . ?b kg:teaches ?cN`. Translated to vertex-hops on the property graph:
+
+```text
+tutorial:<from>  --teaches-->  concept:c1
+                                    ^
+                                    | (^requires) closure — any number of hops
+                                    v
+                              concept:cN  <--teaches--  tutorial:<b>
+```
+
+`SHORTEST_PATH` with an edge-type filter handles this cleanly. The JS layer post-filters paths whose internal vertices aren't concepts (defense in depth against a bad workspace refresh).
+
+**Hop count** = path length − 2 (subtract the two `teaches` edges at the endpoints). This is what the v1 comment says is zero today because SPARQL can't compute it.
+
+## Procedure body
+
+```sql
+PROCEDURE KG_PATH_V2 (
+  IN  from_iri    NVARCHAR(500),
+  IN  to_iri      NVARCHAR(500),
+  IN  max_hops    INTEGER,        -- caller-supplied bound; NULL → default 8
+  OUT paths       TABLE (
+    path_rank    INTEGER,     -- 1..N, cheapest first
+    hop_count    INTEGER,     -- edges − 2 (exclude the two `teaches` bookends)
+    vertex_seq   NVARCHAR(500),  -- 'concept:<slug>' or 'tutorial:<slug>'
+    seq_index    INTEGER      -- 0..hop_count+1 along the path
+  )
+)
+LANGUAGE SQLSCRIPT
+SQL SECURITY DEFINER
+AS
+BEGIN
+  DECLARE KG_INVALID_TUTORIAL_IRI CONDITION FOR SQL_ERROR_CODE 10006;
+  DECLARE KG_MAX_HOPS_OUT_OF_RANGE CONDITION FOR SQL_ERROR_CODE 10010;
+
+  DECLARE from_key NVARCHAR(500);
+  DECLARE to_key   NVARCHAR(500);
+  DECLARE effective_max_hops INTEGER;
+
+  -- Validate IRIs against the same regex used by KG_QUERY.
+  IF :from_iri IS NULL OR NOT (:from_iri LIKE_REGEXPR
+       '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') OR
+     :to_iri IS NULL OR NOT (:to_iri LIKE_REGEXPR
+       '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') THEN
+    SIGNAL KG_INVALID_TUTORIAL_IRI;
+  END IF;
+
+  -- Clamp max_hops to [1, 20]. NULL → 8.
+  effective_max_hops := COALESCE(:max_hops, 8);
+  IF effective_max_hops < 1 OR effective_max_hops > 20 THEN
+    SIGNAL KG_MAX_HOPS_OUT_OF_RANGE;
+  END IF;
+
+  -- Derive workspace vertex keys from the IRIs.
+  from_key := 'tutorial:' ||
+    SUBSTR(:from_iri, LENGTH('https://developers.sap.com/kg/tutorial/') + 1);
+  to_key   := 'tutorial:' ||
+    SUBSTR(:to_iri,   LENGTH('https://developers.sap.com/kg/tutorial/') + 1);
+
+  -- Body: shortest path in KG_PG_WORKSPACE.
+  -- The GraphScript block below is a placeholder. Task 1 of the implementation
+  -- plan (spike-within-the-spike) confirms the exact call shape against the
+  -- live DB via hana-cli before we lock the procedure body.
+  paths = SELECT
+            :from_key   AS vertex_seq, 0 AS seq_index,
+            1           AS path_rank,  0 AS hop_count
+          FROM DUMMY
+          WHERE 1 = 0;  -- placeholder: returns empty until Task 1 lands
+END;
+```
+
+**Two intentional placeholder gaps, addressed as Task 1 of the implementation plan:**
+
+1. **The `SHORTEST_PATH` invocation syntax.** HANA property-graph algorithms are invoked via GraphScript (`CREATE PROCEDURE ... LANGUAGE GRAPH`). The exact call syntax on the QRC that shipped 2026-07-01 needs to be confirmed against the live DB — the [SAP HANA Graph reference](https://help.sap.com/docs/hana-cloud-database) is versioned per QRC and the property-graph transformation feature is new enough that training data does not cover it. Task 1 is a 30-minute probe using `hana-cli` to run a hand-written `SHORTEST_PATH` against a tiny fixture, capturing the exact call shape.
+
+2. **Table-typed OUT parameter.** HANA SQLScript supports `OUT param TABLE(...)` but the calling convention from `cds.db.run` needs verification — the existing DEFINER procedures use scalar OUT parameters (`response NCLOB`). Fallback if table-OUT doesn't cross the boundary cleanly: write path rows into a global temporary table `#KG_PATH_V2_RESULT` and have the JS layer `SELECT` from it — same one-transaction guarantee, uglier boundary. Task 1 confirms.
+
+**Task 1 also confirms three related facts before any DDL is finalized:**
+
+- **Exact HANA table names.** The view DDL assumes `com_sap_developers_ims_Concepts` etc. — CDS namespace flattening for `com.sap.developers.ims`. This is the deterministic default, but `@cds.persistence.name` overrides anywhere in the graph would break the assumption. Confirmed via `hana-cli inspectTable --schema <schema> --table Concepts` before writing the view DDL.
+- **Runtime privilege.** The property-graph feature is entitled subaccount-wide but a specific privilege (e.g., `GRAPH USAGE` on the workspace, or a HDI role grant for the property-graph engine catalog) may be missing on the runtime user. Confirmed via `hana-cli status --priv` before writing procedure code. If missing, the spike stalls on a service-key update rather than on code.
+- **`SHORTEST_PATH` tie behavior.** Whether the algorithm returns one path or all shortest paths, and how ties are ordered. If the DB doesn't rank ties deterministically, the JS wrapper's secondary sort on `vertex_seq` (already implemented above) makes the client-side rendering deterministic across calls.
+
+## JS wrapper
+
+```js
+// srv/lib/kg-path-v2-client.js
+// Typed wrapper for the KG_PATH_V2 DEFINER procedure. Separate module from
+// kg-sparql-client.js because this doesn't speak SPARQL — it calls the HANA
+// property-graph engine via a stored procedure over the KG_PG_WORKSPACE
+// view-based workspace.
+//
+// Contract:
+//   kgPathV2({ fromIri, toIri, maxHops = 8 })
+//     → Promise<Array<{ pathRank, hopCount, vertices: string[] }>>
+//
+// Error codes surfaced to callers via err.code:
+//   10006  KG_INVALID_TUTORIAL_IRI   — IRI regex mismatch (pre-check + DB)
+//   10010  KG_MAX_HOPS_OUT_OF_RANGE  — maxHops not in [1, 20]
+
+import cds from '@sap/cds';
+
+const IRI_RX = /^https:\/\/developers\.sap\.com\/kg\/tutorial\/[a-z0-9-]{1,80}$/;
+
+export async function kgPathV2({ fromIri, toIri, maxHops = 8 }) {
+  if (!IRI_RX.test(fromIri) || !IRI_RX.test(toIri)) {
+    const err = new Error('KG_INVALID_TUTORIAL_IRI');
+    err.code = 10006;
+    throw err;
+  }
+  if (!Number.isInteger(maxHops) || maxHops < 1 || maxHops > 20) {
+    const err = new Error('KG_MAX_HOPS_OUT_OF_RANGE');
+    err.code = 10010;
+    throw err;
+  }
+
+  const rows = await cds.db.run(
+    // Three IN parameters. The OUT TABLE(...) binding convention through
+    // cds.db.run is confirmed in Task 1 — if table-OUT doesn't cross the
+    // boundary cleanly, we fall back to a `#KG_PATH_V2_RESULT` global
+    // temporary table pattern (see Procedure body § Placeholder gap 2).
+    `CALL "KG_PATH_V2"(?, ?, ?)`,
+    [fromIri, toIri, maxHops]
+  );
+
+  // rows is a flat array of { PATH_RANK, HOP_COUNT, VERTEX_SEQ, SEQ_INDEX }.
+  // Group by PATH_RANK; SEQ_INDEX puts vertices in path order per group.
+  const byRank = new Map();
+  for (const r of rows) {
+    let bucket = byRank.get(r.PATH_RANK);
+    if (!bucket) {
+      bucket = { pathRank: r.PATH_RANK, hopCount: r.HOP_COUNT, vertices: [] };
+      byRank.set(r.PATH_RANK, bucket);
+    }
+    bucket.vertices[r.SEQ_INDEX] = r.VERTEX_SEQ;
+  }
+
+  // Defense-in-depth post-filter: drop paths whose interior vertices
+  // aren't concepts. Guards against a bad workspace refresh where the
+  // edge view might emit a non-concept vertex in the middle of a path.
+  // The endpoints are expected to be tutorial vertices.
+  const filtered = [...byRank.values()].filter(p => {
+    if (p.vertices.length < 2) return false;
+    const interior = p.vertices.slice(1, -1);
+    return interior.every(v => typeof v === 'string' && v.startsWith('concept:'));
+  });
+
+  // Deterministic ordering: primary key path_rank ascending (cheapest
+  // first). SHORTEST_PATH may return ties without a rank; Task 1 confirms
+  // whether the algorithm returns one path or all shortest paths and how
+  // ties are ordered. If the DB doesn't rank ties, this wrapper imposes a
+  // stable secondary sort on the joined vertex_seq to make client-side
+  // rendering deterministic across calls.
+  return filtered.sort((a, b) => {
+    if (a.pathRank !== b.pathRank) return a.pathRank - b.pathRank;
+    return a.vertices.join('|').localeCompare(b.vertices.join('|'));
+  });
+}
+```
+
+### Wire-shape mapping — `mapPgPathsToWireShape`
+
+The v1 `pathBetween` handler returns `array of String` per the CDS declaration in [srv/knowledge-graph-service.cds:219](../../../srv/knowledge-graph-service.cds#L219). Each string is one tutorial slug on the path. The current three-arm SPARQL result yields an interleaved list of `?b` (bridging tutorial) slugs with hop counts always zero and no ordering guarantees beyond the SPARQL engine's default.
+
+For v2, `mapPgPathsToWireShape(paths)` produces the same wire shape from the property-graph result:
+
+```js
+function mapPgPathsToWireShape(paths) {
+  // Take the top path only for the spike (path_rank = 1). If Task 1
+  // confirms SHORTEST_PATH returns multiple ranked paths, follow-on work
+  // decides whether to widen the wire shape. For now, one path preserves
+  // v1 semantics — the wire is a single flat list of slugs.
+  const best = paths[0];
+  if (!best) return [];
+  // best.vertices is ['tutorial:from', 'concept:...', ..., 'concept:...', 'tutorial:to'].
+  // Wire shape wants only the tutorial slugs on the path — for the PREREQ
+  // arm that's the two endpoints. The concept chain is INTERNAL to the
+  // property-graph traversal and is not surfaced by v1 either (the v1
+  // SPARQL PREREQ arm returns only the bridging tutorial slug).
+  return best.vertices
+    .filter(v => v.startsWith('tutorial:'))
+    .map(v => v.slice('tutorial:'.length));
+}
+```
+
+Follow-on work (post-gate) may widen the CDS return type to expose hop counts and internal concept slugs — the sidebar widget and Joule chat tool could both make use of that richer shape. For the spike, we preserve the existing wire contract so no client changes are needed to A/B v1 vs v2.
+
+### Handler edit
+
+The existing `pathBetween` handler in `srv/knowledge-graph-service.js` grows a flag check at the top:
+
+```js
+srv.on('pathBetween', async (req) => {
+  const { fromSlug, toSlug } = req.data;
+  const fromIri = `https://developers.sap.com/kg/tutorial/${fromSlug}`;
+  const toIri   = `https://developers.sap.com/kg/tutorial/${toSlug}`;
+
+  // Feature flag: property-graph PREREQ path.
+  if (process.env.KG_PATH_V2_ENABLED === 'true') {
+    try {
+      const paths = await kgPathV2({ fromIri, toIri });
+      if (paths.length > 0) {
+        // Map property-graph result to the existing wire shape;
+        // fall through to CO_COMPLETED / SHARED_CONCEPT arms via
+        // the existing SPARQL client if paths.length === 0.
+        return mapPgPathsToWireShape(paths);
+      }
+    } catch (err) {
+      // Log and fall through — never let a v2 failure regress v1.
+      // Use cds.log so the warning stays server-side (goes to cf logs and
+      // audit log) and doesn't leak into the OData response's `messages`
+      // array — req.warn would surface it to the caller.
+      cds.log('kg').warn('kg_path_v2_failed', {
+        code: err.code, message: err.message,
+        fromSlug: req.data.fromSlug, toSlug: req.data.toSlug
+      });
+    }
+  }
+
+  // Unchanged v1 path.
+  return existingSparqlPathBetween({ fromIri, toIri });
+});
+```
+
+**Two hardening choices:**
+
+- **Fail-open to v1.** Any v2 error (procedure missing, workspace not built, IRI validation mismatch, DB timeout) logs a warning and falls through to the v1 SPARQL path. The user sees the v1 result.
+- **Empty-v2 falls through, doesn't return empty.** If PREREQ has no path but CO_COMPLETED / SHARED_CONCEPT would — we take the v1 result. Preserves the current graceful-fallback UX.
+
+## Feature flag
+
+- Name: `KG_PATH_V2_ENABLED`
+- Default: unset (v1 behavior).
+- Values: `'true'` enables v2. Any other value keeps v1.
+- Set via `cf set-env tutorials-srv KG_PATH_V2_ENABLED true && cf restart tutorials-srv`.
+- Rollback: `cf set-env tutorials-srv KG_PATH_V2_ENABLED false && cf restart tutorials-srv`. Procedure and workspace stay deployed but idle.
+
+## Test coverage
+
+**Unit tests** — `test/unit/kg-path-v2-client.test.js` (new file)
+
+- IRI regex rejects `http://` / trailing slash / uppercase / `>80` chars → throws with `err.code === 10006` before any DB call.
+- `maxHops` outside `[1, 20]` → throws with `err.code === 10010`.
+- Row grouping: given flat `PATH_RANK/SEQ_INDEX` rows, returns correctly ordered `vertices` arrays.
+- Grouping is robust to out-of-order rows (DB doesn't guarantee ordering without `ORDER BY`).
+
+**Handler-level unit test** — `test/unit/srv/kg-path-v2-handler-flag.test.js` (new file)
+
+- `KG_PATH_V2_ENABLED=false` → wrapper is never called (spied), v1 path runs.
+- `KG_PATH_V2_ENABLED=true` + wrapper returns rows → returns v2-mapped shape.
+- `KG_PATH_V2_ENABLED=true` + wrapper returns `[]` → falls through to v1.
+- `KG_PATH_V2_ENABLED=true` + wrapper throws → falls through to v1 **and** emits `kg_path_v2_failed` warning.
+
+**Hybrid test** — `test/hybrid/kg-path-v2.test.js` (new file, gated by `ALLOW_HYBRID_WRITES=true` per the write-safety guard)
+
+1. `beforeAll`: seeds a small subgraph using `__TEST__`-prefixed slugs (matching the existing hybrid-test cleanup convention in [test/hybrid/_guard.js](../../../test/hybrid/_guard.js)). Fixture: 4 concepts chained by `kg:requires`, plus 3 tutorials each teaching one concept, plus one "island" tutorial with no path.
+2. `kgPathV2({ fromIri, toIri })` on the chained tutorials returns at least one path with `hopCount ≥ 1` and vertex sequence matches the seeded chain.
+3. The "island" tutorial returns `[]` (empty — not a throw).
+4. Invalid IRI → `err.code === 10006` from the DB, confirming procedure-level validation still fires (not just the JS pre-check).
+5. `afterAll`: `DELETE ... WHERE slug LIKE '__TEST__%'`.
+
+**Smoke test:** none for the spike. Adding `pathBetween` to the smoke suite would require test fixtures in production. If the spike graduates, a smoke test is part of the follow-on PR.
+
+**Deliberately out of scope:** performance micro-benchmarks against a hybrid DB. Noisy and misleading. The A/B latency signal comes from live logs during the flag-on window, not tests.
+
+## Observability
+
+Uses the existing metrics module ([srv/lib/metrics.js](../../../srv/lib/metrics.js), from #805). Emitted in the `pathBetween` handler right before returning:
+
+- `counter kg_path_between_calls` with dimensions `{ version: 'v1' | 'v2', outcome: 'success' | 'empty' | 'error', arm: 'prereq' | 'co_completed' | 'shared_concept' | 'none' }`
+- `counter kg_path_v2_fallback` with dimension `{ reason: 'error' | 'empty' | 'flag_off' }` — every time v2 was attempted but v1 served the response
+- `reservoir kg_path_between_latency_ms` with dimension `{ version: 'v1' | 'v2' }` — p50/p95/p99 over the 5-min rollup window
+
+**Live dashboard:** `/admin-ui/#metrics` renders `MetricSnapshots` and refreshes every 30 s. No new UI. When the flag is on, the tile shows both v1 and v2 series side-by-side — that IS the A/B evidence.
+
+**Manual probe:** `GET /admin/metrics/live` (Admin scope) pulls the last 5-min window as JSON for ad-hoc analysis.
+
+**One log line per fallback.** `cds.log('kg').warn('kg_path_v2_failed', { code, message, fromSlug, toSlug })` — greppable in `cf logs` and hits the audit log. Uses `cds.log` (not `req.warn`) so the message stays server-side and doesn't leak into the OData response's `messages` array. If we see this at >1% of calls, that's a spike-defining failure signal.
+
+**No new tables.** Everything rides on existing `MetricSnapshots` / `PipelineLog` infrastructure.
+
+## Rollback drill
+
+Before declaring the spike "on":
+
+1. `cf set-env tutorials-srv KG_PATH_V2_ENABLED true && cf restart tutorials-srv`.
+2. **Deliberately drive v2 traffic:** invoke `GET /graph/pathBetween(fromSlug='<known-a>',toSlug='<known-b>')` at least 5 times over the following minute using a pair of tutorial slugs known to have a PREREQ path. This ensures the 5-minute rollup has v2 metric rows to observe; without it, an empty traffic window would let the drill pass by accident with v2 silently broken.
+3. Confirm v2 metrics appear in `/admin-ui/#metrics` within 5 minutes with `version: 'v2'` counters incrementing.
+4. `cf set-env tutorials-srv KG_PATH_V2_ENABLED false && cf restart tutorials-srv`.
+5. Drive the same 5-call probe again with the flag off.
+6. Confirm v2 metrics stop appearing and v1 numbers match pre-flag baseline.
+
+If step 6 doesn't hold, the flag doesn't gate cleanly and we fix that before opening it up.
+
+## Decision gate
+
+The gate is a **qualitative team review** at end of week, not a numeric hurdle. But the review meeting must have the right evidence in front of it — the spike commits to producing this artifact:
+
+`docs/superpowers/reviews/2026-07-09-kg-property-graph-spike-review.md` covering:
+
+1. **What we shipped** — links to the merged PR(s), the deployed procedure, the workspace.
+2. **Was v2 measurably better on `pathBetween`?** — screenshot of `/admin-ui/#metrics` showing v1 vs v2 latency reservoirs and success/empty/error counters over the flag-on window. Concrete numbers.
+3. **Did anything break?** — count of `kg_path_v2_failed` fallbacks, cited log lines, any user-visible incident.
+4. **Developer-experience read** — how much friction was the property-graph learning curve? Would the team be comfortable authoring another algorithm procedure without hand-holding?
+5. **The follow-on question** — for each of the four candidate follow-on issues (below), a one-paragraph "yes / no / needs-more-thought" from the team.
+
+The review meeting outputs a decision on **each** follow-on independently.
+
+## Follow-on issues
+
+Filed alongside this spec merging, cross-referencing it. Each is a stub — the design work happens later if the team elects to work them.
+
+- **[#916](https://github.com/sap-tutorials/tutorials-ims/issues/916) — KG PageRank for whatToLearnNext ranking.** Replaces hardcoded per-arm weights in [KG_QUERY.hdbprocedure:143](../../../db/src/procedures/KG_QUERY.hdbprocedure#L143) with data-driven scores from a nightly PageRank pass over `KG_PG_WORKSPACE` (widened to include `coCompletedWith`).
+- **[#917](https://github.com/sap-tutorials/tutorials-ims/issues/917) — KG community detection → auto-suggested completion paths.** Louvain / label-propagation over `KG_PG_WORKSPACE` surfaces natural clusters the admin UI can suggest as missions/groups.
+- **[#918](https://github.com/sap-tutorials/tutorials-ims/issues/918) — KG weakly-connected components as a curation quality signal.** Any concept or tutorial in a WCC of size 1 is a curation gap; nightly WCC pass, `@readonly` service-layer projection exposes an isolation flag, admin UI shows a badge.
+- **[#919](https://github.com/sap-tutorials/tutorials-ims/issues/919) — Widen `KG_PG_WORKSPACE` to full 9-predicate parity with the RDF graph.** Prerequisite for any of the three follow-ons above at full fidelity. Design question: do view-based edges perform at that width, or do we need materialized tables?
+
+## Non-goals
+
+- **Not** replacing SPARQL as the primary KG query language. SPARQL and property-graph queries are complementary; the property graph adds algorithmic capabilities SPARQL can't express.
+- **Not** touching the RDF graph rebuild path ([srv/lib/kg-graph-rebuild.js](../../../srv/lib/kg-graph-rebuild.js)).
+- **Not** exposing property-graph queries to the admin `runSparql` action or the Joule chat tools. The wrapper is server-internal for the spike.
+- **Not** materializing vertex/edge tables. Views only for the spike.
+- **Not** widening the workspace beyond `requires` + `teaches`. That's follow-on Issue 4.
+- **Not** shipping a smoke test for the spike.
+
+## Risks & mitigations
+
+| Risk | Mitigation |
+| --- | --- |
+| `SHORTEST_PATH` call syntax on the deployed QRC differs from what training data suggests. | Task 1 of the plan probes the live DB via `hana-cli` before the procedure body is finalized. |
+| Table-typed OUT parameter doesn't cross the `cds.db.run` boundary cleanly. | Fallback to a global temporary table pattern; confirmed in Task 1. |
+| View-based workspace is too slow for `SHORTEST_PATH` at production graph size. | The spike measures this. If slow, the review-artifact numbers surface it; follow-on Issue 4 already anticipates the materialized-table alternative. |
+| Per-workspace ACL (if HANA applies one) locks the workspace to whichever runtime user first touches it, mirroring the [#533](https://github.com/sap-tutorials/tutorials-ims/pull/533) SPARQL issue. | DEFINER procedure pattern already mitigates this — the procedure body runs as `#OO`, the stable object-owner identity. |
+| Property-graph feature is entitled but a specific privilege (e.g. `GRAPH USAGE`) is missing on the runtime user. | Task 1 verifies `hana-cli status --priv` before writing any procedure code. If missing, the spike stalls on a service-key update rather than on code. |
+| The one-week timebox is optimistic. | The spike is scoped to fail cleanly: at worst we ship the workspace + procedure with a placeholder body and a review-artifact that says "the syntax spike took longer than expected — no v2 code path reached DEV." That IS the answer if it happens. |

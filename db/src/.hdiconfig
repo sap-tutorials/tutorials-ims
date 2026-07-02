@@ -9,6 +9,9 @@
     "hdbprocedure": {
       "plugin_name": "com.sap.hana.di.procedure"
     },
+    "hdbgraphworkspace": {
+      "plugin_name": "com.sap.hana.di.graphworkspace"
+    },
     "hdbsequence": {
       "plugin_name": "com.sap.hana.di.sequence"
     },

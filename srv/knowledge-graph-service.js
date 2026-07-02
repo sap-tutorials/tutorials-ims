@@ -280,6 +280,8 @@ import {
 } from './lib/kg-neighborhood-full-helpers.js';
 import { getTutorialTeachesMap } from './lib/kg-tutorial-teaches-map.js';
 import { getCachedNeighborhood, setCachedNeighborhood } from './lib/kg-neighborhood-cache.js';
+import { kgPathV2 } from './lib/kg-path-v2-client.js';
+import * as metrics from './lib/metrics.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -411,6 +413,34 @@ function mapSparqlError(err, req, log) {
     message: err?.message,
   });
   throw err;
+}
+
+// ─── pathBetween wire-shape mappers (#913) ────────────────────────────────
+// Both mappers reduce the underlying result to the CDS return type
+// `array of String`, i.e. bare tutorial slugs. Kept side-by-side so a
+// reviewer can eyeball the v1/v2 parity at a glance.
+function mapPgPathsToWireShape(paths) {
+  const best = paths[0];
+  if (!best) return [];
+  // `?? []` guards against a future kgPathV2 shape that ever omits `vertices`;
+  // today the wrapper always emits it, but the mapper stays defensive since
+  // it's called from the pathBetween hot path.
+  return (best.vertices ?? [])
+    .filter(v => typeof v === 'string' && v.startsWith('tutorial:'))
+    .map(v => v.slice('tutorial:'.length));
+}
+
+// Extract the bridging tutorial slugs from a SPARQL PATH_BETWEEN response.
+// Mirrors the wire shape of the property-graph mapper above.
+function mapV1SparqlToWireShape(response) {
+  let parsed;
+  try { parsed = JSON.parse(response); } catch { return []; }
+  const bindings = parsed?.results?.bindings ?? [];
+  // The PATH_BETWEEN SPARQL binds ?b (bridging tutorial IRI) per db/src/procedures/KG_QUERY.hdbprocedure:205.
+  return bindings
+    .map(b => b?.b?.value ?? '')
+    .filter(v => v.startsWith('https://developers.sap.com/kg/tutorial/'))
+    .map(v => v.slice('https://developers.sap.com/kg/tutorial/'.length));
 }
 
 /**
@@ -892,11 +922,65 @@ export default cds.service.impl(async function () {
     return result;
   });
 
-  // ─── pathBetween — Phase 2 stub ────────────────────────────────────────
+  // ─── pathBetween — property-graph v2 with fail-open v1 fallback (#913) ─
   this.on('pathBetween', async (req) => {
     const { fromSlug, toSlug } = req.data;
-    log.warn(`kg-service: pathBetween(${fromSlug} → ${toSlug}) — Phase 2 stub, returning []`);
-    return [];
+    const fromIri = `https://developers.sap.com/kg/tutorial/${fromSlug}`;
+    const toIri   = `https://developers.sap.com/kg/tutorial/${toSlug}`;
+    const t0 = Date.now();
+    // Test-injection hooks (#913). cds.test('serve') pre-resolves this
+    // module via cds.utils._import (dynamic file:// import on Windows),
+    // which bypasses vi.mock's ESM interceptor. See the same pattern in
+    // srv/lib/explainer-generator.js. Production code never sets these.
+    const kgPathV2Impl = typeof globalThis.__KG_PATH_V2_TEST_IMPL__ === 'function'
+      ? globalThis.__KG_PATH_V2_TEST_IMPL__
+      : kgPathV2;
+    const kgQueryImpl = typeof globalThis.__KG_QUERY_TEST_IMPL__ === 'function'
+      ? globalThis.__KG_QUERY_TEST_IMPL__
+      : kgQuery;
+
+    if (process.env.KG_PATH_V2_ENABLED === 'true') {
+      try {
+        const paths = await kgPathV2Impl({ fromIri, toIri });
+        if (paths.length > 0) {
+          const wire = mapPgPathsToWireShape(paths);
+          metrics.counter('kg_path_between_calls_v2_success_prereq');
+          metrics.observe('kg_path_between_latency_ms_v2', Date.now() - t0);
+          return wire;
+        }
+        metrics.counter('kg_path_v2_fallback_empty');
+      } catch (err) {
+        cds.log('kg').warn('kg_path_v2_failed', {
+          code: err.code, message: err.message, fromSlug, toSlug,
+        });
+        metrics.counter('kg_path_v2_fallback_error');
+      }
+    } else {
+      metrics.counter('kg_path_v2_fallback_flag_off');
+    }
+
+    // ── v1 SPARQL fallback: activates the PATH_BETWEEN dispatch in KG_QUERY.
+    // ── Previously stubbed to []; now wired to the real named-query call.
+    // `t1` captures the boundary between v2 fail-through and the v1 SPARQL
+    // round-trip so `kg_path_between_latency_ms_v1` isn't polluted by v2
+    // fallback-attempt time (v2 timeouts would otherwise show up in v1's
+    // p95/p99 dashboard and confuse the decision-gate A/B numbers).
+    const t1 = Date.now();
+    try {
+      const { response } = await kgQueryImpl({
+        db: cds.db,
+        queryName: 'PATH_BETWEEN',
+        params: { fromSlug, toSlug },
+      });
+      const wire = mapV1SparqlToWireShape(response);
+      metrics.counter(wire.length ? 'kg_path_between_calls_v1_success' : 'kg_path_between_calls_v1_empty');
+      metrics.observe('kg_path_between_latency_ms_v1', Date.now() - t1);
+      return wire;
+    } catch (err) {
+      log.warn(`kg-service: pathBetween v1 failed: ${err.message}`);
+      metrics.counter('kg_path_between_calls_v1_error');
+      return [];
+    }
   });
 
   // ─── conceptsForUser — Phase 2 implementation (#445) ────────────────────
