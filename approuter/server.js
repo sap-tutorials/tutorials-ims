@@ -327,7 +327,39 @@ function staticHandler(req, res, next) {
 // authenticationType: "xsuaa", which enforces OAuth before reaching the CAP backend.
 // Locally we proxy them directly since there's no real XSUAA binding.
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
-const isLocal = !process.env.VCAP_APPLICATION
+// #892: local-dev mock auth (Basic admin:admin) requires TWO signals, not one.
+//
+// Historically `isLocal = !process.env.VCAP_APPLICATION` — meaning any
+// deployed container missing VCAP_APPLICATION would silently downgrade to
+// admin-without-auth. The double gate below makes that impossible unless
+// someone actively sets NODE_ENV to a dev/test value AND removes CF
+// metadata — a much louder configuration mistake.
+//
+// Positive dev signals (any one is sufficient alongside missing VCAP):
+//   - NODE_ENV === 'development' | 'test'  (developer workstation, unit tests)
+//   - CI === 'true'                        (GitHub Actions, other CI)
+//   - APPROUTER_LOCAL === 'true'           (explicit opt-in override)
+const isLocal = !process.env.VCAP_APPLICATION && (
+     process.env.NODE_ENV === 'development'
+  || process.env.NODE_ENV === 'test'
+  || process.env.CI === 'true'
+  || process.env.APPROUTER_LOCAL === 'true'
+)
+
+if (isLocal) {
+  console.warn('[approuter] LOCAL MODE — mock Basic auth is active. Do NOT ship this instance.')
+} else if (!process.env.VCAP_APPLICATION) {
+  // VCAP absent AND no dev signal — either a mis-bound CF app or a stripped
+  // NODE_ENV. Warn loudly. We don't exit(1) because that would break
+  // scenarios where operators launch the approuter in unusual contexts,
+  // but we make it impossible to *silently* fall through to mock-auth.
+  console.warn(
+    '[approuter] WARNING: VCAP_APPLICATION not set AND no dev signal (NODE_ENV=development/test, CI=true, APPROUTER_LOCAL=true). ' +
+    'Mock auth is DISABLED. Authenticated routes will fail until XSUAA binding is present. ' +
+    'If this is a local workstation, set NODE_ENV=development.'
+  )
+}
+
 const PROXY_PREFIXES = [
   '/_dev', '/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/',
   '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/',
