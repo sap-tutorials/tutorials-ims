@@ -88,4 +88,33 @@ describe('ui5-sap-com-fetcher', () => {
     expect(rows[0].description.length).toBe(2000);
     expect(rows[0].description).not.toMatch(/</);
   });
+
+  it('skips composite-key nodes (key contains "#") without fetching their body (#910)', async () => {
+    // Real /docs/topics/index.json contains anchor-style child keys like
+    // "<parent>#<child>". They 404 on /docs/topics/<key>.html because the
+    // fragment isn't a real doc — the parent doc IS already fetched separately.
+    const indexWithComposite = [
+      {
+        key: 'parent000000000000000000000000000',
+        text: 'Parent Topic',
+        links: [
+          { key: 'parent000000000000000000000000000#anchor-a', text: 'Anchor A', links: [] },
+          { key: 'parent000000000000000000000000000#anchor-b', text: 'Anchor B', links: [] },
+        ],
+      },
+    ];
+    const requestedTopicUrls = [];
+    _setMockFetcher(async (url) => {
+      if (url.endsWith('/index.json')) return clone(indexWithComposite);
+      requestedTopicUrls.push(url);
+      return LONG_TOPIC_HTML;
+    });
+    const rows = await fetchUi5SapComCorpus();
+    // Only the parent row survives; composite children skipped entirely.
+    expect(rows).toHaveLength(1);
+    expect(rows[0].sourceId).toBe('topic/parent000000000000000000000000000');
+    // Ensure no topic body fetch was attempted for a composite key.
+    expect(requestedTopicUrls.some(u => u.includes('#'))).toBe(false);
+    expect(requestedTopicUrls).toHaveLength(1);
+  });
 });

@@ -104,6 +104,9 @@ export async function fetchUi5SapComCorpus({
 // Recursively walk the index tree. Yields { key, title, parentTitle } for each node.
 function* walkIndex(nodes, parentTitle) {
   for (const n of nodes) {
+    // Skip composite keys — they're anchors within a parent doc that's already
+    // fetched separately and 404 on /docs/topics/<key>.html (#910).
+    if (n.key && n.key.includes('#')) continue;
     yield { key: n.key, title: n.text, parentTitle };
     if (Array.isArray(n.links) && n.links.length > 0) {
       yield* walkIndex(n.links, n.text);
