@@ -69,31 +69,34 @@ The publish path's `upsertTutorialMetadata` INSERTs `owner: null, ownerEmail: nu
 - **Test 6** — With only a contributor email (no frontmatter, no matching Users row), ownerEmail stays NULL. Absence of an author signal is not filled from a contributor.
 - **Test 7** — An existing non-NULL ownerEmail (admin correction or legacy IMS value) is never overwritten.
 
-## 2026-07-02b update — MyOwnedTutorials sources from a fifth signal (personal monitor)
+## 2026-07-02b update — MyOwnedTutorials sources bestPriority IN (3, 4)
 
-While iterating on the 2026-07-02 update above, we discovered the deeper defect: none of the four signals `MyTutorialsView` unions describe what Java IMS's "My Tutorials" panel actually displays. Java's [`TutorialMetaSpecifications.java:73-76`](https://github.wdf.sap.corp/i809764/com.sap.developers.ims/blob/main/application/src/main/java/com/sap/developers/ims/specifications/TutorialMetaSpecifications.java#L73-L76) shows the panel filters on `IMS_DASHBOARD_MONITOR_RECORD` — a personal watch list where each user explicitly opts in to track a tutorial. That table was never migrated to CAP. Every prior attempt at fixing Riley's report (PRs #920, #921, #922) had been reasoning from schema-inferred semantics of `TutorialMeta.owner`, which is the wrong table for the panel.
+The 2026-07-02 update above surfaced a separate problem after live-probing legacy IMS: many `IMS_TUTORIAL_META.OWNER_ID → IMS_TUTORIAL_AUTHOR` rows have `EMAIL = '<userid>+<login>@users.noreply.github.com'` — a GitHub noreply placeholder that doesn't match `Users.email`. Riley's tutorial `tutorial-first-steps` (legacyId `15733`) is the canonical example. Under a bestPriority=3 (email-only) rule for `MyOwnedTutorials`, those users saw an empty panel.
 
-**Fifth signal** (introduced in [#923]):
+But `IMS_TUTORIAL_AUTHOR` has a second column — `NAME` — which holds the display name Java IMS's admin UI renders ("Riley Rainey"). `MyTutorialsRaw` source-4 already has the join `WHERE m.owner = u.firstName || ' ' || u.lastName`. If the resync script preserves `A.NAME → TutorialMeta.owner` (not just `A.EMAIL → TutorialMeta.ownerEmail`), source-4 catches every user whose display name matches their Users row. **No hand-curated map, no GitHub-login seeding — just preserve the two signals IMS already has.**
 
-| Priority | Source | Meaning |
-|---|---|---|
-| — | `TutorialMonitors.(user, tutorial)` | Personal watch list — user explicitly opted in |
+Two-line code change:
 
-Deliberately **not** part of the `MyTutorialsRaw` UNION. Merging it in would confuse admin queries against `MyTutorials`. Instead, the personal watch list gets its own view (`MyMonitoredTutorialsView`) and the `MyOwnedTutorials` endpoint (Sage's URL) now projects from THAT view. The URL contract stays unchanged; Sage doesn't need to update.
+1. **`MyOwnedTutorials` widens to `bestPriority IN (3, 4)`** — email OR name match ([srv/author-service.cds](../../srv/author-service.cds)).
+2. **Resync script preserves both signals** — `A.NAME → owner`, `A.EMAIL → ownerEmail` (previously wrote email into both columns; [scripts/resync-tutorial-meta-from-ims.cjs](../../scripts/resync-tutorial-meta-from-ims.cjs)).
 
-**Endpoint mapping after #923:**
+**Regression guards** ([test/unit/author-service.test.js](../../test/unit/author-service.test.js)):
+- Alice + Alice A + alice@example.com + tutorial with `owner='Alice A', ownerEmail=alice@example.com` → priority 3 (email wins).
+- Alice + Alice A + tutorial with `owner='Alice A', ownerEmail=null` → priority 4 (name-only match still fires) — this is the Riley shape.
+- Strict-author (priority 1) is still excluded from `MyOwnedTutorials`.
+
+### #923's watch-list additions — kept but unused for MyOwnedTutorials
+
+While iterating on this fix, PR #923 briefly re-pointed `MyOwnedTutorials` at a personal-watch-list view sourced from `IMS_DASHBOARD_MONITOR_RECORD`. Live-probing IMS confirmed that table is the **"Monitored by me" checkbox filter** in the legacy IMS admin UI (a separate toggle), NOT the default `My Tutorials` panel. The repoint has been reverted; the `TutorialMonitors` entity, `MyMonitoredTutorialsView`, `toggleMonitor` action, and migration script from #923 remain in place for the eye-icon watch feature. See the entity comment at [db/schema.cds](../../db/schema.cds) for that surface's semantics.
+
+**Endpoint map after this fix:**
 
 | Signal | Endpoint | Consumer |
 |---|---|---|
-| Priority 1 — author FK | `GET /author/MyAuthoredTutorials` | Advocate object page `ownedTutorials` facet, admin Tutorial Health |
-| Personal monitor | `GET /author/MyOwnedTutorials` | **Sage VS Code extension "My Tutorials" panel** — repointed from bestPriority=3 |
+| Priority 1 — author FK | `GET /author/MyAuthoredTutorials` | Advocate object page, admin Tutorial Health |
+| Priority 3 (ownerEmail = Users.email) OR 4 (owner = firstName + ' ' + lastName) | `GET /author/MyOwnedTutorials` | Sage VS Code extension "My Tutorials" panel |
 | Union of 1–4 | `GET /author/MyTutorials` | Legacy compat, ad-hoc admin queries |
-
-The `TutorialMeta.owner`/`ownerEmail` write path from the 2026-07-02 update above is still correct — it just doesn't power the user-facing panel anymore. It remains the admin-dashboard "who's the declared maintainer" signal, and it's what the resync script (PR #921) reconciles against live IMS. Two orthogonal concerns, two orthogonal columns.
-
-**Write path** — the new `POST /author/toggleMonitor(tutorialId, status)` action is the CAP equivalent of Java IMS's `POST /tutorialMeta/setMonitoredStatus`. Idempotent (unique constraint on `TutorialMonitors.(user, tutorial)`).
-
-**Regression guard** — hybrid tests at [`test/hybrid/tutorial-monitors.test.js`](../../test/hybrid/tutorial-monitors.test.js) verify (1) the entity accepts valid pairs, (2) the unique constraint blocks duplicates, (3) the view is caller-scoped by `Users.uuid`, and (4) INACTIVE/DELETED tutorials are filtered out.
+| `TutorialMonitors.user = caller` | *(no endpoint yet)* | Eye-icon watch feature (deferred Sage adoption) |
 
 ## Alternatives Considered
 

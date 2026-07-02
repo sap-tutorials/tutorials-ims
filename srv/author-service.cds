@@ -88,27 +88,28 @@ service AuthorService {
   @readonly entity MyAuthoredTutorials as
     projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority = 1;
 
-  // #862 reopen / #923 — MyOwnedTutorials is Sage's "My Tutorials" panel.
-  // Originally sourced from MyTutorialsView.bestPriority = 3 (source 3:
-  // TutorialMeta.ownerEmail = Users.email). Investigation of the legacy
-  // Java IMS source (TutorialMetaSpecifications.java:73-76) revealed
-  // that Java's "monitoredByMe" panel — the one Sage's users see today
-  // when they open the extension — filters on IMS_DASHBOARD_MONITOR_
-  // RECORD, a personal watch list where each user explicitly opts in
-  // to track a tutorial. Not TutorialMeta.owner (a maintainer signal).
+  // #862 reopen — MyOwnedTutorials is Sage's "My Tutorials" panel.
+  // Sources from MyTutorialsView filtered to bestPriority IN (3, 4):
+  //   - Priority 3: TutorialMeta.ownerEmail = Users.email
+  //   - Priority 4: TutorialMeta.owner (free-text) = Users.firstName || ' ' || lastName
   //
-  // #923 introduced the TutorialMonitors entity (the CAP equivalent of
-  // that Java table) plus MyMonitoredTutorialsView. This projection now
-  // points at that view — Sage keeps its /author/MyOwnedTutorials URL
-  // unchanged. Response shape unchanged (bestPriority column dropped,
-  // but Sage never read it). See ADR 0006 §2026-07-02b for the shift.
+  // Both signals come from IMS_TUTORIAL_AUTHOR — one row's EMAIL and NAME
+  // columns respectively. Legacy Java IMS's admin UI renders the NAME
+  // ("Riley Rainey") on the tutorial's "Owner" column; when a user's
+  // OWNER row uses a GitHub `<userid>+<login>@users.noreply.github.com`
+  // placeholder as EMAIL, priority-3 misses but priority-4 fires via the
+  // display-name join. The resync script (scripts/resync-tutorial-meta-
+  // from-ims.cjs) preserves both signals so this join can hit.
   //
-  // Users who haven't opted-in to monitor anything will see an empty
-  // panel — this matches legacy Java behavior. To watch a tutorial,
-  // call toggleMonitor below (equivalent to Java's setMonitoredStatus).
+  // #923 briefly re-pointed this at MyMonitoredTutorialsView (personal
+  // watch list from IMS_DASHBOARD_MONITOR_RECORD); live-probing IMS
+  // afterwards showed that's a filter checkbox behind a separate toggle,
+  // not the default panel. The TutorialMonitors + toggleMonitor
+  // machinery from #923 remains for the eye-icon watch feature; see
+  // ADR 0006 §2026-07-02b for the full semantic map.
   @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity MyOwnedTutorials as
-    projection on ims.MyMonitoredTutorialsView { *, tutorial_ID as ID };
+    projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority in (3, 4);
 
   // #923 — Sage's "watch this tutorial" toggle. Mirrors Java IMS's
   // POST /tutorialMeta/setMonitoredStatus?status=<bool> with body [<id>].

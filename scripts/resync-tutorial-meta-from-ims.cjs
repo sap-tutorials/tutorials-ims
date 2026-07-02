@@ -114,22 +114,27 @@ function tutorialUuid(legacyId) {
  * DEV has no matching row yet), decide what to do. Pure function.
  *
  * Full-mirror semantics:
- *   - `@sap-tutorials.local` bot emails are treated as no-signal.
- *     Resync writes NULL for those.
+ *   - `@sap-tutorials.local` bot emails are treated as no-signal for
+ *     ownerEmail. Resync writes NULL for those.
  *   - `@users.noreply.github.com` GitHub-noreply placeholders are
  *     RESOLVED via `githubLoginToEmail` when the map has a match on the
- *     `<userid>+<login>` login segment (case-insensitive). The publish
- *     path in PR #920 uses the same map to fill `ownerEmail` from
- *     frontmatter `author_profile`; the resync mirrors that convention.
- *     If the login isn't in the map, the placeholder is treated as
- *     no-signal (write NULL).
+ *     `<userid>+<login>` login segment (case-insensitive). If the login
+ *     isn't in the map, the placeholder is treated as no-signal (NULL
+ *     ownerEmail). The Users.githubLogin map used to build this is
+ *     populated organically as SAP users log in via SAP IDP + GitHub
+ *     auth; no hand-curation required.
+ *   - `newOwner` (free-text) comes from IMS's `A.NAME` field. It's the
+ *     display-name Java IMS renders in its admin UI ("Riley Rainey")
+ *     and matches MyTutorialsRaw source 4's
+ *     `WHERE m.owner = u.firstName || ' ' || u.lastName` join. NULL if
+ *     A.NAME is missing/blank.
  *   - If DEV has no matching row for this tutorial UUID: skip (bucket
  *     `no-target-row`) — a resync is NOT a create.
  *   - If DEV row's current owner/ownerEmail already agrees with the
  *     desired IMS value: skip (bucket `already-matches`).
  *   - Otherwise emit an update (bucket `will-overwrite`).
  *
- * @param {object} imsRow  {TUT_LEGACY_ID, OWNER_EMAIL}
+ * @param {object} imsRow  {TUT_LEGACY_ID, OWNER_NAME, OWNER_EMAIL}
  * @param {object|null} devRow  {ID, TUTORIAL_ID, OWNER, OWNEREMAIL} — or null
  * @param {Map<string,string>} [githubLoginToEmail]  lower(login) → Users.email
  * @returns {{
@@ -146,31 +151,33 @@ function buildResyncDecision(imsRow, devRow, githubLoginToEmail) {
   const targetTutorialUuid = tutorialUuid(imsRow.TUT_LEGACY_ID);
   const loginMap = githubLoginToEmail instanceof Map ? githubLoginToEmail : new Map();
 
+  // === newOwner: free-text display name from IMS ===
+  // A.NAME is what legacy Java IMS's admin UI shows in the "Owner" column
+  // ("Riley Rainey", "John Currie"). It joins to MyTutorialsRaw source 4
+  // via `m.owner = u.firstName || ' ' || u.lastName`.
+  const rawName = imsRow.OWNER_NAME;
+  const newOwner = (typeof rawName === 'string' && rawName.trim().length > 0)
+    ? rawName.trim()
+    : null;
+
+  // === newOwnerEmail: email from IMS, with noreply resolution ===
   // Placeholder detection. Two shapes:
-  //   1. `@sap-tutorials.local` — synthetic emails the migrator invented for
-  //      contributors with no email at all. Always no-signal; NULL them out.
-  //   2. `<userid>+<login>@users.noreply.github.com` — GitHub's default
-  //      commit email for users who haven't set a corporate address. Try
-  //      to resolve via `Users.githubLogin -> Users.email` (login segment
-  //      only). If the login is not in the map, treat as no-signal.
-  //
-  // The resolved-from-noreply path returns resolvedFromNoreply=true so
-  // callers (CSV output, dry-run summary) can surface which rows survived
-  // via the noreply resolver.
+  //   1. `@sap-tutorials.local` -- synthetic bot addresses. Always no-signal.
+  //   2. `<userid>+<login>@users.noreply.github.com` -- GitHub's default
+  //      commit email. Try to resolve via `Users.githubLogin -> Users.email`.
+  //      If the login is not in the map, treat as no-signal.
   let newOwnerEmail = null;
   let resolvedFromNoreply = false;
-  const raw = imsRow.OWNER_EMAIL;
-  if (raw) {
-    if (/@users\.noreply\.github\.com$/i.test(raw)) {
-      // GitHub noreply. Try the modern `<userid>+<login>@` shape first.
-      // Older, bare `<login>@users.noreply.github.com` addresses also work
-      // (GitHub still supports them for pre-2017 accounts); parse them too.
+  const rawEmail = imsRow.OWNER_EMAIL;
+  if (rawEmail) {
+    if (/@users\.noreply\.github\.com$/i.test(rawEmail)) {
+      // GitHub noreply. Modern shape first, then legacy bare shape.
       let login = null;
-      const modernMatch = /^(\d+)\+([^@]+)@users\.noreply\.github\.com$/i.exec(raw);
+      const modernMatch = /^(\d+)\+([^@]+)@users\.noreply\.github\.com$/i.exec(rawEmail);
       if (modernMatch) {
         login = modernMatch[2].trim().toLowerCase();
       } else {
-        const legacyMatch = /^([^@+\s]+)@users\.noreply\.github\.com$/i.exec(raw);
+        const legacyMatch = /^([^@+\s]+)@users\.noreply\.github\.com$/i.exec(rawEmail);
         if (legacyMatch) login = legacyMatch[1].trim().toLowerCase();
       }
       if (login) {
@@ -180,16 +187,12 @@ function buildResyncDecision(imsRow, devRow, githubLoginToEmail) {
           resolvedFromNoreply = true;
         }
       }
-      // unresolved noreply -> newOwnerEmail stays null (no-signal)
-    } else if (/@sap-tutorials\.local$/i.test(raw)) {
-      // Synthetic bot email -> no signal
+    } else if (/@sap-tutorials\.local$/i.test(rawEmail)) {
       newOwnerEmail = null;
     } else {
-      // Real corporate email -> use as-is
-      newOwnerEmail = raw;
+      newOwnerEmail = rawEmail;
     }
   }
-  const newOwner = newOwnerEmail; // Mirror the publish-path invariant (owner == ownerEmail)
 
   if (!devRow) {
     return {
@@ -327,7 +330,7 @@ function writeDryRunCsv(decisions) {
     ['bucket', 'tut_legacy_id', 'target_tutorial_uuid',
      'current_owner', 'current_ownerEmail',
      'new_owner', 'new_ownerEmail',
-     'resolved_from_noreply', 'ims_raw_email'].join(','),
+     'resolved_from_noreply', 'ims_raw_name', 'ims_raw_email'].join(','),
   ];
   for (const d of decisions) {
     lines.push([
@@ -339,6 +342,7 @@ function writeDryRunCsv(decisions) {
       csvEscape(d.decision.newOwner),
       csvEscape(d.decision.newOwnerEmail),
       d.decision.resolvedFromNoreply ? 'yes' : '',
+      csvEscape(d.imsRow.OWNER_NAME),
       csvEscape(d.imsRow.OWNER_EMAIL),
     ].join(','));
   }
@@ -385,10 +389,21 @@ async function main() {
   await runSql(target, `SET SCHEMA "${targetCreds.schema}"`);
   console.log('  ✓ Connected to target CAP HANA');
 
-  // Pull IMS rows. Same join the original backfill uses. EMAIL may be null.
+  // Pull IMS rows. The join returns TWO signals: A.NAME (display name,
+  // e.g. "Riley Rainey") and A.EMAIL (may be a corporate address or a
+  // GitHub `<userid>+<login>@users.noreply.github.com` placeholder).
+  // Both are needed:
+  //   - A.NAME goes to TutorialMeta.owner (free-text; joins to
+  //     MyTutorialsRaw source 4: `owner = Users.firstName || ' ' || lastName`)
+  //   - A.EMAIL goes to TutorialMeta.ownerEmail (joins to source 3:
+  //     `ownerEmail = Users.email`)
+  // Legacy Java IMS's admin UI displays A.NAME; Sage's panel via
+  // MyOwnedTutorials matches the caller via either source 3 or source 4,
+  // so preserving BOTH gives us the widest correct match set.
   const imsRows = await runSql(source, `
     SELECT
       TM.TUTORIAL_ID  AS TUT_LEGACY_ID,
+      A.NAME          AS OWNER_NAME,
       A.EMAIL         AS OWNER_EMAIL
     FROM IMS_TUTORIAL_META TM
     JOIN IMS_TUTORIAL_AUTHOR A ON TM.OWNER_ID = A.ID
