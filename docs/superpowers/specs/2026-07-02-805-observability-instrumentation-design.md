@@ -3,7 +3,7 @@
 **Issue:** [#805](https://github.com/sap-tutorials/tutorials-ims/issues/805)
 **Date:** 2026-07-02
 **Author:** Tom Jung (design captured by Claude)
-**Status:** Draft — revised after spec review round 2
+**Status:** Ready for user review — spec-review loop complete (3 rounds, 0 Critical remaining)
 
 ## Problem
 
@@ -24,7 +24,7 @@ The `@opentelemetry/*` deps in `package.json` are unused; no `srv/lib/metrics.js
 - Two new HANA entities (`MetricSnapshots`, `PublishTimings`) under `com.sap.developers.ims`, both `@analytics.exposed`.
 - 5-min rollup job (`srv/jobs/metrics-rollup-job.js`) with `job-lock.js` for scale-out safety.
 - `GET /admin/metrics/live` JSON endpoint on the srv (basic-auth).
-- New Vue view `app/admin-shell/src/views/Operations.vue` — three cards (cache, pool, publish).
+- New UI5 peer view `app/admin-shell/webapp/view/Metrics.view.xml` + `controller/Metrics.controller.js` — three cards (cache, pool, publish), route `#metrics`.
 - Structured log lines at each rollup boundary (Splunk / CF log scrape path).
 - Retention job (`MetricSnapshots` 30 d, `PublishTimings` 90 d) folded into existing `srv/jobs/scheduler.js` cleanup cron.
 
@@ -65,7 +65,7 @@ The module owns in-memory state, exposes `snapshot()`, and never talks to the da
 
 Three consumer paths fan out:
 
-1. **Admin UI** — new `Metrics` view at `/admin-ui/#metrics`. Reads `AnalyticsService.MetricSnapshots` (24 h chart data) + `AnalyticsService.PublishTimings` (per-publish table) + `AdminService.getMetricsSnapshot()` action (current in-memory snapshot, 30 s polling while visible).
+1. **Admin UI** — new `Metrics` view at `/admin-ui/#metrics`. Reads `AnalyticsService.MetricSnapshots` (24 h chart data) + `AnalyticsService.PublishTimings` (per-publish table) + `AdminService.getMetricsSnapshot()` function (current in-memory snapshot, 30 s polling while visible).
 2. **CF logs → Splunk** — the rollup writer emits one structured `cds.log('jobs/metrics-rollup').info(...)` line per metric per 5-min boundary. Same pattern as #759 explainer-generator cost lines. Splunk / existing log scrape picks these up unchanged.
 3. **`/admin/metrics/live`** — plain JSON snapshot endpoint, basic-auth-protected like other `/admin/*` custom Express routes. On-call humans curl this during incidents.
 
@@ -180,61 +180,69 @@ Hit-rate is derived at snapshot time per namespace (`content.cache.hit / (hit + 
 
 **Correction after spec review (rounds 1 + 2):**
 
-- Codebase uses **`db.tx(...)`** where `db = await cds.connect.to('db')` (9+ sites: [srv/jobs/consolidate-concepts-job.js:152](../../../srv/jobs/consolidate-concepts-job.js#L152), [srv/jobs/extract-concepts-job.js:272](../../../srv/jobs/extract-concepts-job.js#L272), [srv/jobs/materialize-co-completions.js:109](../../../srv/jobs/materialize-co-completions.js#L109), [srv/knowledge-graph-service.js:1046](../../../srv/knowledge-graph-service.js#L1046), [srv/lib/kg-graph-rebuild.js:152](../../../srv/lib/kg-graph-rebuild.js#L152), [srv/lib/kg-merge-pair.js:69](../../../srv/lib/kg-merge-pair.js#L69), and `srv/lib/category-classifier.js`, `srv/lib/repo-catalog.js`) far more than `cds.tx(...)` (4 sites). Reassigning `cds.tx` only shadows the prototype method **for the `cds` module itself** — `db.tx()` resolves via the DB service instance's own prototype chain (`Service.prototype.tx` from `@sap/cds/lib/srv/srv-tx.js`) and is untouched by patching `cds.tx`. **Fix: patch `cds.db.tx` instead** (matches the scope of the `cds.db.run` wrapper).
+- Codebase uses **`db.tx(...)`** where `db = await cds.connect.to('db')` in **7 verified sites** ([srv/jobs/consolidate-concepts-job.js:152](../../../srv/jobs/consolidate-concepts-job.js#L152), [srv/jobs/extract-concepts-job.js:272](../../../srv/jobs/extract-concepts-job.js#L272), [srv/jobs/materialize-co-completions.js:109](../../../srv/jobs/materialize-co-completions.js#L109), [srv/knowledge-graph-service.js:1046](../../../srv/knowledge-graph-service.js#L1046), [srv/knowledge-graph-service.js:1070](../../../srv/knowledge-graph-service.js#L1070), [srv/lib/kg-graph-rebuild.js:152](../../../srv/lib/kg-graph-rebuild.js#L152), [srv/lib/kg-merge-pair.js:69](../../../srv/lib/kg-merge-pair.js#L69)) — the KG/co-completion/concept-extraction heavy paths that drive pool starvation. In contrast `cds.tx(...)` appears at only **3 sites** ([srv/lib/repo-catalog.js:62](../../../srv/lib/repo-catalog.js#L62), [srv/lib/category-classifier.js:99](../../../srv/lib/category-classifier.js#L99), [srv/lib/validate-answer-spec-publish.js:50](../../../srv/lib/validate-answer-spec-publish.js#L50)) — smaller-scoped writes, not pool-starving. Reassigning `cds.tx` only shadows the prototype method **for the `cds` module itself** — `db.tx()` resolves via the DB service instance's own prototype chain (`Service.prototype.tx` from `@sap/cds/lib/srv/srv-tx.js`) and is untouched by patching `cds.tx`. **Fix: patch `cds.db.tx` instead** (matches the scope of the `cds.db.run` wrapper and covers the majority form). The 3 `cds.tx(...)` sites stay un-instrumented in v1 — acceptable trade-off since they aren't pool-starving; documented in Caveats below.
 - `cds.tx(fn)` / `db.tx(fn)` callback form **always returns a Promise** (of `fn`'s result), never a tx object with `.run`. Verified in `@sap/cds/lib/srv/srv-tx.js:25-28`. So an `if (result.run)` branch to patch `tx.run` on the returned value is dead code. The only way to time `tx.run` inside the callback is to intercept the `tx` argument the runtime passes into `fn` — done by wrapping `db.tx` such that when called with a function, it re-wraps the passed tx to patch its `.run` before calling the user's `fn`. Object-form `db.tx()` (without argument) is never used in this codebase (grep confirmed 0 sites), so we don't need to handle it.
 
 ```js
-// One-time guard — cds.on('served') can fire more than once under cds.test().
-// Codebase convention: globalThis.__X_Registered sentinel
-// (see feedbackBeforeHookRegistered, changelogNoisePurgeAttempted,
-// navigatorCacheInvalidatorRegistered in srv/server.js).
-if (globalThis.__metricsDbWrapInstalled) return;
-globalThis.__metricsDbWrapInstalled = true;
+// Add a THIRD cds.on('served') handler in srv/server.js — the two existing
+// handlers at ~line 604 and ~line 965 do other work; keeping this separate
+// keeps the wrapping code isolated for the METRICS_DB_WRAP flag path.
+cds.on('served', () => {
+  if (process.env.METRICS_ENABLED === 'false') return;
+  if (process.env.METRICS_DB_WRAP !== 'true') return;
 
-// 1. Wrap cds.db.run — every non-tx query flows through here.
-const originalDbRun = cds.db.run.bind(cds.db);
-cds.db.run = function wrappedDbRun(...args) {
-  return timeAndCount(originalDbRun(...args), 'db.acquire.ms');
-};
+  // One-time guard — cds.on('served') can fire more than once under cds.test().
+  // Codebase convention: globalThis.__X_Registered sentinel
+  // (see feedbackBeforeHookRegistered, changelogNoisePurgeAttempted,
+  // navigatorCacheInvalidatorRegistered in srv/server.js).
+  if (globalThis.__metricsDbWrapInstalled) return;
+  globalThis.__metricsDbWrapInstalled = true;
 
-// 2. Wrap cds.db.tx — every db.tx(fn) call flows through here.
-// The runtime passes a fresh tx object into fn; we intercept and
-// patch tx.run so per-statement calls inside the callback are timed.
-const originalDbTx = cds.db.tx.bind(cds.db);
-cds.db.tx = function wrappedDbTx(fnOrOptsOrReq, maybeFn) {
-  // Signature variants: db.tx(fn), db.tx(opts, fn), db.tx(req, fn), db.tx(req).
-  // All 9+ sites in this codebase use db.tx(fn). If we ever hit an
-  // unexpected shape, fall through un-wrapped rather than break the caller.
-  if (typeof fnOrOptsOrReq !== 'function' && typeof maybeFn !== 'function') {
-    return originalDbTx(fnOrOptsOrReq);
-  }
-  const fn = typeof fnOrOptsOrReq === 'function' ? fnOrOptsOrReq : maybeFn;
-  const firstArg = typeof fnOrOptsOrReq === 'function' ? undefined : fnOrOptsOrReq;
-  const wrappedFn = async (tx) => {
-    // Patch tx.run so per-statement calls inside the callback get timed.
-    const originalTxRun = tx.run.bind(tx);
-    tx.run = (...runArgs) => timeAndCount(originalTxRun(...runArgs), 'db.tx.run.ms');
-    return fn(tx);
+  // 1. Wrap cds.db.run — every non-tx query flows through here.
+  const originalDbRun = cds.db.run.bind(cds.db);
+  cds.db.run = function wrappedDbRun(...args) {
+    return timeAndCount(originalDbRun(...args), 'db.acquire.ms');
   };
-  // Overall tx wall-clock (begin -> commit / rollback) recorded separately.
-  return timeAndCount(
-    firstArg === undefined ? originalDbTx(wrappedFn) : originalDbTx(firstArg, wrappedFn),
-    'db.tx.ms'
-  );
-};
 
-function timeAndCount(promise, metricName) {
-  const started = process.hrtime.bigint();
-  const finish = (isErr, err) => {
-    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-    metrics.observe(metricName, elapsedMs);
-    if (isErr && /timeout|acquire/i.test(err?.message || '')) {
-      metrics.counter('db.pool.timeout');
+  // 2. Wrap cds.db.tx — every db.tx(fn) call flows through here.
+  // The runtime passes a fresh tx object into fn; we intercept and
+  // patch tx.run so per-statement calls inside the callback are timed.
+  const originalDbTx = cds.db.tx.bind(cds.db);
+  cds.db.tx = function wrappedDbTx(fnOrOptsOrReq, maybeFn) {
+    // Signature variants: db.tx(fn), db.tx(opts, fn), db.tx(req, fn), db.tx(req).
+    // All 7 db.tx sites in this codebase use db.tx(fn). If we ever hit an
+    // unexpected shape, fall through un-wrapped rather than break the caller.
+    if (typeof fnOrOptsOrReq !== 'function' && typeof maybeFn !== 'function') {
+      return originalDbTx(fnOrOptsOrReq);
     }
+    const fn = typeof fnOrOptsOrReq === 'function' ? fnOrOptsOrReq : maybeFn;
+    const firstArg = typeof fnOrOptsOrReq === 'function' ? undefined : fnOrOptsOrReq;
+    const wrappedFn = async (tx) => {
+      // Patch tx.run so per-statement calls inside the callback get timed.
+      const originalTxRun = tx.run.bind(tx);
+      tx.run = (...runArgs) => timeAndCount(originalTxRun(...runArgs), 'db.tx.run.ms');
+      return fn(tx);
+    };
+    // Overall tx wall-clock (begin -> commit / rollback) recorded separately.
+    return timeAndCount(
+      firstArg === undefined ? originalDbTx(wrappedFn) : originalDbTx(firstArg, wrappedFn),
+      'db.tx.ms'
+    );
   };
-  promise.then(() => finish(false), (err) => finish(true, err));
-  return promise;
-}
+
+  function timeAndCount(promise, metricName) {
+    const started = process.hrtime.bigint();
+    const finish = (isErr, err) => {
+      const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+      metrics.observe(metricName, elapsedMs);
+      if (isErr && /timeout|acquire/i.test(err?.message || '')) {
+        metrics.counter('db.pool.timeout');
+      }
+    };
+    promise.then(() => finish(false), (err) => finish(true, err));
+    return promise;
+  }
+});
 ```
 
 **Metrics emitted:**
@@ -250,6 +258,7 @@ The admin tile shows `db.acquire.ms` and `db.tx.run.ms` percentiles side-by-side
 
 - Timing measures `run()` → resolve — conflates acquire time and query time. Separating them requires driver hooks that aren't exposed. When the pool is starved, acquire dominates; when the pool is healthy, query time dominates and blends into histogram noise. A sudden rise in the p95 with unchanged query mix is the exhaustion signal.
 - Only `cds.db.run` and `cds.db.tx` are patched. Non-`db` services (e.g. `srv.run()`) go un-instrumented; those are handler-side and don't touch the HANA pool directly.
+- **Nested tx short-circuit** — `@sap/cds/lib/srv/srv-tx.js:18` short-circuits `if (srv.context) return srv` for a service already inside a tx. Our wrapper calls `originalDbTx(wrappedFn)` which will hit this branch if `cds.db.tx()` is called inside a handler that already has an active tx. The wrapped `fn` still runs, but the outer `db.tx.ms` observation on top of a nested call double-counts against the wall-clock of the outer tx. Not a correctness issue — the histograms include some nested contribution — but flagged so the admin tile percentiles are read as "acquire + tx pressure signal" not "unique wall-clock samples."
 - If the runtime tx-callback signature changes in a future `@sap/cds` version, the un-wrapped fallback ensures behavior degrades to "un-timed" rather than "broken."
 
 **3. Publish latency** — in [srv/lib/content-publish-session.js](../../../srv/lib/content-publish-session.js).
@@ -313,7 +322,7 @@ Chart rendering uses whatever `admin-shell` already ships (verify at implementat
 **`/admin/metrics/live` auth mismatch — resolved.** [srv/server.js:183](../../../srv/server.js#L183) applies `basicAuthMiddleware` globally after `/health`. Admin-shell views run inside the approuter under XSUAA and cannot easily add a `Authorization: Basic ...` header to a fetch. Two options; the spec picks (b):
 
 - (a) Route `/admin/metrics/live` through the approuter with an XSUAA route so the shell fetches with the SSO cookie. Requires `xs-app.json` edit and destination remapping.
-- (b) **Move the "live snapshot" surface off `/admin/metrics/live` and onto an `AdminService` unbound action `getMetricsSnapshot`** (returning the same JSON shape). Admin-shell already talks to `AdminService` via OData with XSUAA cookies; no new auth path, no basic-auth from a browser. The `/admin/metrics/live` Express route stays for on-call `curl` (basic-auth) and for CF log correlation.
+- (b) **Move the "live snapshot" surface off `/admin/metrics/live` and onto an `AdminService` unbound function `getMetricsSnapshot`** (returning the same JSON shape). Admin-shell already talks to `AdminService` via OData with XSUAA cookies; no new auth path, no basic-auth from a browser. The `/admin/metrics/live` Express route stays for on-call `curl` (basic-auth) and for CF log correlation.
 
 Under (b), the admin tile calls `GET /admin/getMetricsSnapshot()` (**function**, not action — CAP `function` is GET + read-only, matches the `getNotificationConfig` / `getEventStatistics` / `getBoardStatistics` pattern in [srv/admin-service.cds](../../../srv/admin-service.cds)) with the XSUAA session; on-call humans still `curl /admin/metrics/live -u tech:pass` for the same data. Both routes call the same underlying `metrics.snapshot()`.
 
@@ -328,7 +337,7 @@ app.get('/admin/metrics/live', (req, res) => liveMetricsHandler(req, res));
 liveMetricsHandler = async (req, res) => { /* basicAuth check + metrics.snapshot() */ };
 ```
 
-**Feature-flag visibility to the UI (spec review Should-fix #3).** Env vars are process-scope and not visible to the browser bundle. The `getMetricsSnapshot` action includes `{ dbWrapEnabled: process.env.METRICS_DB_WRAP === 'true' }` in its response. The pool card renders "not yet enabled" when `dbWrapEnabled` is false. Same field appears in `/admin/metrics/live`.
+**Feature-flag visibility to the UI (spec review Should-fix #3).** Env vars are process-scope and not visible to the browser bundle. The `getMetricsSnapshot` function response includes `{ dbWrapEnabled: process.env.METRICS_DB_WRAP === 'true' }`. The pool card renders "not yet enabled" when `dbWrapEnabled` is false. Same field appears in `/admin/metrics/live`.
 
 No admin CRUD. Metrics view is read-only. Counters reset on `cf restart` (in-memory).
 
@@ -357,10 +366,10 @@ If QA-side publish timing ever becomes valuable, it's a follow-up spec — cheap
 Two PRs, deliberately. The DB wrapper is the one piece that could theoretically slow every request; we observe it in isolation from the rest.
 
 **PR 1 — Everything except the DB wrapper.**
-Schema (`MetricSnapshots`, `PublishTimings`, two new `.hdbindex` files, two new `ContentManifest` columns), `srv/lib/metrics.js` module, cache-hit instrumentation, publish timing instrumentation, rollup job (no `job-lock`), retention cleanup (with `job-lock`), `AnalyticsService` projections, `AdminService.getMetricsSnapshot` action, `/admin/metrics/live` Express route, admin-shell UI5 Metrics view. `METRICS_DB_WRAP` stays `false` — the pool card renders "not yet enabled" (the response flag `dbWrapEnabled: false` drives this). Deploy this alone. Verify one full day of rollup rows accumulates across both CF instances.
+Schema (`MetricSnapshots`, `PublishTimings`, two new `.hdbindex` files, two new `ContentManifest` columns), `srv/lib/metrics.js` module, cache-hit instrumentation, publish timing instrumentation, rollup job (no `job-lock`), retention cleanup (with `job-lock`), `AnalyticsService` projections, `AdminService.getMetricsSnapshot` function, `/admin/metrics/live` Express route, admin-shell UI5 Metrics view. `METRICS_DB_WRAP` stays `false` — the pool card renders "not yet enabled" (the response flag `dbWrapEnabled: false` drives this). Deploy this alone. Verify one full day of rollup rows accumulates across both CF instances.
 
 **PR 2 — DB wrapper.**
-Enables passive wrapping of both `cds.db.run` and `cds.tx` (so `tx.run` inside `cds.tx(async (tx) => …)` blocks is instrumented too). Metrics: `db.acquire.ms` (direct `cds.db.run` timings), `db.tx.ms` (whole-tx wall-clock), `db.pool.timeout` (counter for pool-exhaustion errors). Flip `METRICS_DB_WRAP=true` on DEV in `cf set-env`, watch for regression in p95 request latency, flip on QA + PROD.
+Enables passive wrapping of `cds.db.run` and `cds.db.tx`. Metrics emitted: `db.acquire.ms` (bare `cds.db.run`), `db.tx.ms` (whole `db.tx(fn)` wall-clock), `db.tx.run.ms` (per-statement `tx.run` inside a callback), `db.pool.timeout` (counter for pool-exhaustion errors). The 3 `cds.tx(...)` sites ([srv/lib/repo-catalog.js:62](../../../srv/lib/repo-catalog.js#L62), [srv/lib/category-classifier.js:99](../../../srv/lib/category-classifier.js#L99), [srv/lib/validate-answer-spec-publish.js:50](../../../srv/lib/validate-answer-spec-publish.js#L50)) remain un-instrumented in v1 — they don't drive the pool-starvation paths this spec targets. Flip `METRICS_DB_WRAP=true` on DEV in `cf set-env`, watch for regression in p95 request latency, flip on QA + PROD.
 
 ## Feature flags
 
@@ -385,7 +394,7 @@ The metrics module has one nasty failure mode: **instrumentation crashes the thi
 
 **Unit tests** in [test/unit/](../../../test/unit/):
 
-- `metrics.test.js` — counter increments; Algorithm R reservoir math (feed known distribution, assert p50 / p95 / p99 stay within tolerance across independent runs); rotation atomically zeros counters and drains reservoirs; snapshot shape; no-op behavior when `METRICS_ENABLED=false`; swallow-and-log on injected throw.
+- `metrics.test.js` — counter increments; Algorithm R reservoir math (feed known distribution, assert p50 / p95 / p99 stay within tolerance across independent runs); rotation atomically zeros counters and drains reservoirs; snapshot shape; **empty-shape guarantee**: `snapshot()` returns `{ counters: {}, gauges: {}, histograms: {} }` when `METRICS_ENABLED=false` (no throws, stable keys); no-op behavior when `METRICS_ENABLED=false`; swallow-and-log on injected throw.
 - `content-cache-metrics.test.js` — call `serveHandler` code paths for both hit and miss on the bare-slug cache AND the `render:` cache; assert counters land under the correct namespace and don't cross-pollute.
 - `db-wrap.test.js` — with `METRICS_DB_WRAP=true`, wrapping is applied exactly once even when `cds.on('served')` fires twice (single-application guard). Test exercises `const db = await cds.connect.to('db'); await db.tx(async (tx) => await tx.run(SELECT.one.from('...')));` and asserts BOTH `db.tx.ms` AND `db.tx.run.ms` histograms record samples (the actual codebase pattern — verified in `srv/lib/kg-merge-pair.js` etc.). Bare `cds.db.run(...)` records `db.acquire.ms`. Injected throw in the `.then` callback does not affect the returned promise's resolution.
 
@@ -398,7 +407,7 @@ The metrics module has one nasty failure mode: **instrumentation crashes the thi
 **Smoke tests** in [test/smoke/](../../../test/smoke/) (HTTP against deployed):
 
 - `metrics-live.smoke.js` — `GET /admin/metrics/live` (with basic-auth) returns a non-empty snapshot with expected top-level keys (`snapshot`, `instanceId`, `uptimeSec`, `dbWrapEnabled`, `generatedAt`).
-- `metrics-action.smoke.js` — `POST /admin/getMetricsSnapshot` (XSUAA Admin token) returns the same shape; verifies the AdminService action path used by the admin-shell.
+- `metrics-function.smoke.js` — `GET /admin/getMetricsSnapshot()` (XSUAA Admin token, CAP function is GET) returns the same shape; verifies the AdminService function path used by the admin-shell.
 
 **Not tested (documented):** absolute timing accuracy of the DB wrapper — timing tests on real HANA are flaky. We assert that when wrapping is enabled, the `db.acquire.ms` histogram's `count` increases in proportion to observed queries; we do not assert absolute latency numbers.
 
@@ -453,3 +462,14 @@ Choices captured from the brainstorm dialog, ordered as answered:
 - Tests now exercise `db.tx(async (tx) => await tx.run(...))` (the actual codebase pattern) and assert BOTH `db.tx.ms` and `db.tx.run.ms` histograms record samples.
 - `instanceId` sourced from `process.env.CF_INSTANCE_GUID` with `local-${process.pid}` fallback — matches `srv/lib/content-publish-session.js:15` convention.
 - `snapshot()` returns a stable empty shape when disabled or errored so the admin tile has a single render path.
+
+**Round 3 (2026-07-02) — same reviewer, verifying round-2 fixes landed.** Zero Critical items. Four Should-fix items — all were stale-text cleanup left over from earlier revisions (I updated the substantive sections but forgot cross-references). Plus four Nice-to-have items — three addressed in-spec, one is a plan-time checklist item:
+
+- Scope bullet updated to "UI5 peer view … route `#metrics`" (was still saying "Vue view Operations.vue").
+- Four remaining "`getMetricsSnapshot` action" references corrected to "function"; smoke test renamed to `metrics-function.smoke.js` with `GET /admin/getMetricsSnapshot()` (was invoking POST against a `function`).
+- Rollout PR 2 wording corrected: wrapper is on `cds.db.tx` (not `cds.tx`); metric list restored to all four (`db.acquire.ms`, `db.tx.ms`, `db.tx.run.ms`, `db.pool.timeout`); 3 `cds.tx` sites named as un-instrumented.
+- Line-183 `.tx` site classification corrected: 7 verified `db.tx` sites (KG/co-completion/concept-extraction — the pool-starving group), 3 verified `cds.tx` sites (repo-catalog / category-classifier / validate-answer-spec-publish — smaller writes, not pool-starving).
+- Wrapper snippet re-scoped inside an explicit `cds.on('served', () => { ... })` block with early-returns on `METRICS_ENABLED=false` / `METRICS_DB_WRAP !== 'true'`. Called out as a THIRD `served` handler in `srv/server.js`.
+- Added the nested-tx short-circuit caveat (`srv-tx.js:18` returns `srv` when already in a tx) so admin-tile percentiles are read as "acquire + tx pressure signal" not "unique wall-clock samples."
+- `metrics.test.js` bullet expanded to explicitly assert the empty-shape guarantee.
+- Nice-to-have #4 (plan should include `cds build --production` verification step) is a checklist item for the implementation plan, not the spec itself.
