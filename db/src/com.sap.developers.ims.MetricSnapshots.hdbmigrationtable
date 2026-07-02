@@ -1,0 +1,19 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_MetricSnapshots (
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  windowStart TIMESTAMP NOT NULL,
+  metric NVARCHAR(64) NOT NULL,
+  instanceId NVARCHAR(64) NOT NULL,
+  kind NVARCHAR(16),
+  "COUNT" BIGINT,
+  value DOUBLE,
+  p50 DOUBLE,
+  p95 DOUBLE,
+  p99 DOUBLE,
+  "MAX" DOUBLE,
+  tags NVARCHAR(255),
+  PRIMARY KEY(windowStart, metric, instanceId)
+)

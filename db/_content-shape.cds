@@ -58,6 +58,10 @@ aspect ContentManifestAspect : managed {
   // The 5-min reaper ignores rows where sessionId IS NULL — keeps legacy publishes safe.
   sessionId                 : String(36);
   lastAppendAt              : Timestamp;
+  // #805 — running append-handler wall-clock tally, persisted on the manifest
+  // so a load-balanced append batch on instance A survives a commit on instance B.
+  appendMsTotal             : Integer default 0;
+  firstAppendAt             : Timestamp;
 }
 
 aspect TutorialBodyTextAspect : managed {

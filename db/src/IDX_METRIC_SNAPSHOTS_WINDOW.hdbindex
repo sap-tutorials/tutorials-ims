@@ -1,0 +1,1 @@
+INDEX IDX_METRIC_SNAPSHOTS_WINDOW ON com_sap_developers_ims_MetricSnapshots (windowStart, metric)

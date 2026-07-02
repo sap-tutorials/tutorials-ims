@@ -1,0 +1,19 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_PublishTimings (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  sessionId NVARCHAR(36),
+  manifestVersion INTEGER,
+  mode NVARCHAR(16),
+  initiator NVARCHAR(255),
+  slugCount INTEGER,
+  beginMs INTEGER,
+  appendMsTotal INTEGER,
+  commitMs INTEGER,
+  totalMs INTEGER,
+  outcome NVARCHAR(16),
+  PRIMARY KEY(ID)
+)
