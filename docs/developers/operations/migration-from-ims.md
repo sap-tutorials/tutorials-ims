@@ -258,3 +258,96 @@ audit here — a summary count is also printed at the top.
 
 [backfill]: ../../../scripts/backfill-tutorial-meta-from-ims.cjs
 [pr920]: https://github.com/sap-tutorials/tutorials-ims/pull/920
+
+## Step 6 — Migrate IMS_DASHBOARD_MONITOR_RECORD to CAP TutorialMonitors (#923)
+
+**When to run:** DEV or PROD is missing the personal watch-list rows that
+drive Sage's "My Tutorials" panel. Symptom: users open Sage and see an
+empty panel even though they explicitly monitor tutorials in legacy IMS.
+
+**What it does:** Reads `IMS_DASHBOARD_MONITOR_RECORD JOIN IMS_TUTORIAL_META
+JOIN IMS_USER` from live IMS, resolves each `(user_id, tutorial_meta_id)`
+pair against DEV via `Users.sapId ↔ IMS_USER.SAP_ID` and
+`Tutorials.legacyId ↔ IMS_TUTORIAL_META.tutorial_id`, and INSERTs rows
+into `TutorialMonitors`. Idempotent via `uuidv5(sourceRowId, NS.tutorialmonitor)`
+and the `@assert.unique.userTutorial : [user, tutorial]` constraint.
+
+**Orphan handling (per Tom, 2026-07-02):** if `Users.sapId` or
+`Tutorials.legacyId` doesn't resolve on the DEV side, SKIP + log to CSV.
+Do NOT create placeholder Users rows. Safer than inventing identities;
+users log in via SAP IDP and their row gets JIT-provisioned — after
+that, they can toggle monitor status from Sage and the row appears in
+`TutorialMonitors` naturally.
+
+**Prereqs:**
+
+- The `TutorialMonitors` table must exist in the target HDI container
+  (i.e., PR #923 has been deployed via MTA or `cds deploy`). Otherwise
+  the migrator errors with "invalid table name".
+- CF login to both the target (`tutorial-system/dev/eu10-005`) for the
+  service key AND briefly to the source (`Developer Destination_IMS/PROD`
+  in `us30`) to read `imsprod` env vars (`DB_USERNAME=IMSDBUSER`,
+  `DB_PASSWORD=<...>`, `DB_URL=...?currentschema=IMSDBUSER`). See Step 4's
+  IMS credential paragraph for the standard pattern.
+
+```bash
+# Stage creds (same shape as Step 4/5)
+cf target -o "Developer Destination_IMS" -s PROD                       # source
+cf env imsprod | awk '...extract DB_USERNAME/DB_PASSWORD/DB_URL...'    # to .migration-data/ims-creds.json
+
+cf target -o tutorial-system -s dev                                     # target
+cf service-key tutorials-hana tutorials-hana-key                        # to .migration-data/cap-dev-creds.json
+
+# Dry-run — writes .migration-data/migrate-dashboard-monitors.dryrun.csv
+export IMS_HANA_CREDENTIALS=$(cat .migration-data/ims-creds.json)
+export CAP_HANA_CREDENTIALS=$(cat .migration-data/cap-dev-creds.json)
+node scripts/migrate-dashboard-monitors.cjs --dry-run --verbose
+
+# Review the CSV. Sanity-check "will-insert" count against expected row
+# count (legacy IMS TutorialMeta grid + "monitor" column has this signal
+# but no bulk export; N per active-author is the rough estimate).
+
+# Commit within 60 minutes
+node scripts/migrate-dashboard-monitors.cjs --commit \
+  --initiator "scripts/migrate-dashboard-monitors@$(whoami)"
+
+# Cleanup
+rm .migration-data/ims-creds.json .migration-data/cap-dev-creds.json
+```
+
+CSV columns: `bucket`, `source_row_id`, `tut_legacy_id`, `user_sap_id`,
+`target_tutorial_uuid`, `target_user_uuid`, `monitor_row_uuid`. Buckets:
+
+- `will-insert` — both sides resolved; row will be created
+- `orphan-tutorial` — `IMS_TUTORIAL_META.tutorial_id` has no matching
+  `Tutorials.legacyId` in DEV. Common when the source tutorial was
+  renamed/deleted between the initial migration and now, or when the
+  slug got case-shifted (see [tutorial-slugs-are-lowercase-canonical]
+  gotcha in CLAUDE.md).
+- `orphan-user` — `IMS_USER.SAP_ID` has no matching `Users.sapId` in
+  DEV. Common when a user never logged into DEV via SAP IDP
+  post-migration — their row hasn't been JIT-provisioned. Not a bug
+  in the migrator; they'll see their monitored tutorials once they
+  log in and re-toggle.
+
+### Post-commit verification
+
+1. **Riley's My Tutorials should now match legacy IMS.** Hit
+   `https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/author/MyOwnedTutorials`
+   as Riley and confirm the same row(s) as legacy prod IMS.
+2. **Sage adoption:** unchanged. Sage's `imsApiClient.ts` still calls
+   `/author/MyOwnedTutorials` — same URL, new semantics, same JSON shape
+   (minus the `bestPriority` column which Sage never read).
+3. **Toggle test:** any authenticated Tutorial.Author caller can hit
+   `POST /author/toggleMonitor` with `{"tutorialId": "<uuid>", "status": true}`
+   to opt into watching a tutorial. Returns `true`. Second call same
+   args also returns `true` (idempotent). Same call with `status: false`
+   returns `false`, DELETEs the row.
+
+### See also (Step 6)
+
+- Script: [`scripts/migrate-dashboard-monitors.cjs`](../../../scripts/migrate-dashboard-monitors.cjs)
+- Unit tests (pure decision logic): [`scripts/__tests__/migrate-dashboard-monitors.test.ts`](../../../scripts/__tests__/migrate-dashboard-monitors.test.ts)
+- Hybrid test (entity + view + soft-delete filter): [`test/hybrid/tutorial-monitors.test.js`](../../../test/hybrid/tutorial-monitors.test.js)
+- Java source that motivated the fix: `D:/projects/com.sap.developers.ims/application/src/main/java/com/sap/developers/ims/specifications/TutorialMetaSpecifications.java` lines 73-76
+- ADR 0006 §2026-07-02b update: [`docs/decisions/0006-authorship-vs-ownership-semantics.md`](../../decisions/0006-authorship-vs-ownership-semantics.md)

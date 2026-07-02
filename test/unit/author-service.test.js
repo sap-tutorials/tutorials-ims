@@ -281,45 +281,78 @@ describe('AuthorService.MyAuthoredTutorials filtering (#862)', () => {
   });
 });
 
-// #862 reopen — MyOwnedTutorials returns rows where the caller's Users.email
-// matches TutorialMeta.ownerEmail (bestPriority = 3, source-3 in
-// db/views.cds MyTutorialsRaw). This is the legacy-IMS "My Tutorials"
-// semantics that Sage's panel needs.
+// #862 reopen / #923 — MyOwnedTutorials now sources from
+// MyMonitoredTutorialsView (backed by TutorialMonitors), NOT from
+// MyTutorialsView.bestPriority=3. Legacy Java IMS's "My Tutorials"
+// panel is a personal watch list; the ownerEmail-based view was
+// answering a different question. See ADR 0006 §2026-07-02b for the
+// semantic shift.
 //
-// Fixture: reuses the parent MyTutorialsView beforeAll + sibling
-// MyAuthoredTutorials beforeAll. For alice (uuid-A, email=alice@example.com):
-//   - tut-1  (ownerEmail=alice, no author)                → priority 3
-//   - tut-A1 (author=alice AND ownerEmail=alice)          → priority 1 (author wins)
-//   - tut-A2 (ownerEmail=alice, no author)                → priority 3
-// So MyOwnedTutorials returns ['tut-1', 'tut-A2'] and NOT tut-A1.
-describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
+// Fixture: reuses the parent-block Users (u-A / u-B / uuid-A / uuid-B)
+// and Tutorials (t-1 / t-2 / t-3) rows plus adds TutorialMonitors rows
+// so Alice monitors t-1 and t-3 but not t-2.
+describe('AuthorService.MyOwnedTutorials filtering (#862 reopen / #923)', () => {
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialMonitors);
+    await INSERT.into(TutorialMonitors).entries([
+      { ID: 'mon-A-1', user_ID: 'u-A', tutorial_ID: 't-1' },
+      { ID: 'mon-A-3', user_ID: 'u-A', tutorial_ID: 't-3' },
+      { ID: 'mon-B-2', user_ID: 'u-B', tutorial_ID: 't-2' },
+    ]);
+  });
+
   it('exposes MyOwnedTutorials as a readable entity', async () => {
     const srv = await cds.connect.to('AuthorService');
     expect(srv.entities.MyOwnedTutorials).toBeDefined();
   });
 
-  it('returns only bestPriority=3 rows for the caller (ownerEmail matches)', async () => {
+  it('returns only tutorials the caller has explicitly monitored', async () => {
     const srv = await cds.connect.to('AuthorService');
     const rows = await srv.tx(
       { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
       (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
     );
     const slugs = rows.map((r) => r.slug).sort();
-    expect(slugs).toEqual(['tut-1', 'tut-A2']);
-    for (const r of rows) expect(r.bestPriority).toBe(3);
+    // Alice monitors t-1 and t-3. t-3 has TutorialMeta ownerEmail=nosuch
+    // but that's the maintainer signal (not surfaced on MyOwnedTutorials
+    // anymore); the personal-watch signal is what matters here.
+    expect(slugs).toEqual(['tut-1', 'tut-3']);
   });
 
-  it('does NOT return rows where the caller is author (bestPriority=1)', async () => {
+  it('does NOT return tutorials that only match on ownerEmail (the old signal)', async () => {
+    // Under the OLD MyOwnedTutorials (bestPriority=3), Alice would have
+    // seen tut-1 because ownerEmail=alice@example.com. That row IS still
+    // in her list here — but for a DIFFERENT reason (she explicitly
+    // monitors t-1). This test locks in that removing her TutorialMonitors
+    // row removes tut-1 from her panel, even though ownerEmail still
+    // matches. That's the semantic difference.
+    const db = await cds.connect.to('db');
+    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialMonitors).where({ ID: 'mon-A-1' });
+
+    const srv = await cds.connect.to('AuthorService');
+    try {
+      const rows = await srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      expect(rows.map((r) => r.slug)).not.toContain('tut-1');
+      expect(rows.map((r) => r.slug)).toEqual(['tut-3']);
+    } finally {
+      // Restore for downstream tests
+      await INSERT.into(TutorialMonitors).entries({ ID: 'mon-A-1', user_ID: 'u-A', tutorial_ID: 't-1' });
+    }
+  });
+
+  it('does not leak Bobs monitored tutorials to Alice', async () => {
     const srv = await cds.connect.to('AuthorService');
     const rows = await srv.tx(
       { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
       (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
     );
-    // tut-A1: alice is BOTH author and ownerEmail — bestPriority=1 wins, so it
-    // appears on MyAuthoredTutorials but NOT here.
-    expect(rows.map((r) => r.slug)).not.toContain('tut-A1');
-    // And no rows belong to other users:
-    expect(rows.map((r) => r.slug)).not.toContain('tut-B1');
+    expect(rows.map((r) => r.slug)).not.toContain('tut-2'); // Bob monitors that
   });
 
   it('populates the ID alias (backward-compat with tutorial_ID)', async () => {
@@ -341,6 +374,121 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
       (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
     );
     expect(rows).toHaveLength(0);
+  });
+
+  it('returns empty when caller has no TutorialMonitors rows', async () => {
+    // Bob monitors t-2. But if a new user with no monitor rows queries,
+    // they get an empty panel — matches legacy Java behavior.
+    const db = await cds.connect.to('db');
+    const { Users } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({
+      ID: 'u-C', uuid: 'uuid-C', sapId: 'uuid-C',
+      email: 'carol@example.com', firstName: 'Carol', lastName: 'C',
+    });
+    try {
+      const srv = await cds.connect.to('AuthorService');
+      const rows = await srv.tx(
+        { user: { id: 'uuid-C', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      expect(rows).toHaveLength(0);
+    } finally {
+      await DELETE.from(Users).where({ ID: 'u-C' });
+    }
+  });
+});
+
+// #923 — toggleMonitor action tests. The action is the CAP equivalent of
+// Java IMS's POST /tutorialMeta/setMonitoredStatus and controls a user's
+// personal watch list. Idempotent per spec.
+describe('AuthorService.toggleMonitor (#923)', () => {
+  it('status=true creates a TutorialMonitors row for the caller', async () => {
+    const db = await cds.connect.to('db');
+    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
+    // Start clean for tut-2 + alice
+    await DELETE.from(TutorialMonitors).where({ user_ID: 'u-A', tutorial_ID: 't-2' });
+
+    const srv = await cds.connect.to('AuthorService');
+    const result = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.send('toggleMonitor', { tutorialId: 't-2', status: true })
+    );
+    expect(result).toBe(true);
+    const rows = await db.run(SELECT.from(TutorialMonitors)
+      .where({ user_ID: 'u-A', tutorial_ID: 't-2' }));
+    expect(rows).toHaveLength(1);
+    // Cleanup
+    await DELETE.from(TutorialMonitors).where({ user_ID: 'u-A', tutorial_ID: 't-2' });
+  });
+
+  it('status=true is idempotent (second call still returns true, no dup row)', async () => {
+    const db = await cds.connect.to('db');
+    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialMonitors).where({ user_ID: 'u-A', tutorial_ID: 't-2' });
+
+    const srv = await cds.connect.to('AuthorService');
+    const ctx = { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } };
+    await srv.tx(ctx, (tx) => tx.send('toggleMonitor', { tutorialId: 't-2', status: true }));
+    const secondResult = await srv.tx(ctx, (tx) =>
+      tx.send('toggleMonitor', { tutorialId: 't-2', status: true }));
+    expect(secondResult).toBe(true);
+    const rows = await db.run(SELECT.from(TutorialMonitors)
+      .where({ user_ID: 'u-A', tutorial_ID: 't-2' }));
+    expect(rows).toHaveLength(1);
+    // Cleanup
+    await DELETE.from(TutorialMonitors).where({ user_ID: 'u-A', tutorial_ID: 't-2' });
+  });
+
+  it('status=false deletes the row and returns false', async () => {
+    const db = await cds.connect.to('db');
+    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(TutorialMonitors).entries(
+      { ID: 'mon-del-test', user_ID: 'u-A', tutorial_ID: 't-2' }
+    );
+
+    const srv = await cds.connect.to('AuthorService');
+    const result = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.send('toggleMonitor', { tutorialId: 't-2', status: false })
+    );
+    expect(result).toBe(false);
+    const rows = await db.run(SELECT.from(TutorialMonitors)
+      .where({ user_ID: 'u-A', tutorial_ID: 't-2' }));
+    expect(rows).toHaveLength(0);
+  });
+
+  it('status=false on a row that does not exist is a no-op (still returns false)', async () => {
+    const db = await cds.connect.to('db');
+    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialMonitors).where({ user_ID: 'u-A', tutorial_ID: 't-2' });
+
+    const srv = await cds.connect.to('AuthorService');
+    const result = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.send('toggleMonitor', { tutorialId: 't-2', status: false })
+    );
+    expect(result).toBe(false);
+  });
+
+  it('rejects anonymous callers', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    await expect(
+      srv.tx({ user: { id: 'anonymous', roles: {} } }, (tx) =>
+        tx.send('toggleMonitor', { tutorialId: 't-1', status: true }))
+    ).rejects.toMatchObject({ code: 403 });
+  });
+
+  it('returns 404 when tutorial does not exist', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    await expect(
+      srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.send('toggleMonitor', {
+          tutorialId: '00000000-0000-0000-0000-000000000000',
+          status: true,
+        })
+      )
+    ).rejects.toMatchObject({ code: 404 });
   });
 });
 

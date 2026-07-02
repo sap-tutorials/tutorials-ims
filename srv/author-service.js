@@ -129,12 +129,14 @@ export default cds.service.impl(async function () {
     req.query.where({ userId: dbUser.uuid });
   });
 
-  // #862 reopen — MyOwnedTutorials uses the same caller-scoping semantics
-  // as MyTutorials and MyAuthoredTutorials. The bestPriority = 3 filter
-  // is baked into the CDS projection (srv/author-service.cds) so all we
-  // do here is stamp the userId. GET /author/MyOwnedTutorials returns
-  // the "tutorials the caller owns/monitors" set for Sage's My Tutorials
-  // panel — no client-side filtering required.
+  // #862 reopen / #923 — MyOwnedTutorials is Sage's "My Tutorials" panel.
+  // The projection now targets MyMonitoredTutorialsView (personal watch
+  // list, sourced from TutorialMonitors — the CAP equivalent of Java
+  // IMS's IMS_DASHBOARD_MONITOR_RECORD). Same caller-scoping semantics
+  // as MyTutorials and MyAuthoredTutorials — we stamp req.query.where
+  // with userId = dbUser.uuid; the view already exposes userId as
+  // Users.uuid. Users who haven't opted-in to monitor anything see an
+  // empty panel (matches legacy Java behavior). See ADR 0006 §2026-07-02b.
   this.before('READ', MyOwnedTutorials, async (req) => {
     if (!req.user?.id || req.user.id === 'anonymous') {
       return req.reject(401, 'Authentication required');
@@ -186,6 +188,66 @@ export default cds.service.impl(async function () {
     } catch (err) {
       if (err.code === 404) return req.reject(404, err.message);
       throw err;
+    }
+  });
+
+  // #923 — Sage's "watch this tutorial" toggle. Mirrors Java IMS's
+  // POST /tutorialMeta/setMonitoredStatus semantics: upsert TutorialMonitors
+  // row for (caller, tutorial) when status=true; delete when status=false.
+  //
+  // Idempotent by design — the @assert.unique.userTutorial constraint means a
+  // second true-call resolves to the existing row (INSERT is guarded by an
+  // exists-check). A second false-call is a no-op (DELETE affects 0 rows).
+  //
+  // Returns the *post-call* monitored state (true when the row is present,
+  // false when absent). Same as Java's ResponseEntity<CREATED|NO_CONTENT>.
+  this.on('toggleMonitor', async (req) => {
+    const { tutorialId, status } = req.data;
+    if (!req.user?.id || req.user.id === 'anonymous') {
+      return req.reject(401, 'Authentication required');
+    }
+    const dbUser = await resolveDbUser(req.user, ['ID']);
+    if (!dbUser?.ID) {
+      return req.reject(403, 'No matching Users row for caller');
+    }
+    // Confirm the target tutorial exists (400 rather than a foreign-key
+    // failure on INSERT). No ownership assertion — this is a personal
+    // watch-list toggle, not an admin action.
+    const { Tutorials, TutorialMonitors } = cds.entities('com.sap.developers.ims');
+    const t = await SELECT.one.from(Tutorials).columns('ID', 'status').where({ ID: tutorialId });
+    if (!t) return req.reject(404, 'Tutorial not found');
+    // Refuse to watch INACTIVE/DELETED tutorials — the view would filter
+    // them out on read anyway, and letting a row accumulate against a soft-
+    // deleted tutorial would leak invisible rows into the DB.
+    if (t.status === 'INACTIVE' || t.status === 'DELETED') {
+      return req.reject(410, `Tutorial ${tutorialId} is ${t.status}`);
+    }
+
+    const existing = await SELECT.one.from(TutorialMonitors)
+      .columns('ID')
+      .where({ user_ID: dbUser.ID, tutorial_ID: tutorialId });
+
+    if (status) {
+      if (!existing) {
+        try {
+          await INSERT.into(TutorialMonitors).entries({
+            ID: cds.utils.uuid(),
+            user_ID: dbUser.ID,
+            tutorial_ID: tutorialId,
+          });
+        } catch (err) {
+          // Race: another concurrent toggleMonitor(true) call created the row
+          // between our SELECT and INSERT. Treat as success — the invariant
+          // is "row exists after this call" and it does.
+          if (!/unique|duplicate|assert/i.test(String(err.message || ''))) throw err;
+        }
+      }
+      return true;
+    } else {
+      if (existing) {
+        await DELETE.from(TutorialMonitors).where({ ID: existing.ID });
+      }
+      return false;
     }
   });
 

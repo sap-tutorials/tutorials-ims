@@ -88,24 +88,38 @@ service AuthorService {
   @readonly entity MyAuthoredTutorials as
     projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority = 1;
 
-  // #862 reopen — MyOwnedTutorials is the panel-shaped surface for
-  // "tutorials I currently monitor / am the declared post-publish owner
-  // of". It projects MyTutorialsView filtered to bestPriority = 3
-  // (source 3 in db/views.cds MyTutorialsRaw:
-  // TutorialMeta.ownerEmail = Users.email).
+  // #862 reopen / #923 — MyOwnedTutorials is Sage's "My Tutorials" panel.
+  // Originally sourced from MyTutorialsView.bestPriority = 3 (source 3:
+  // TutorialMeta.ownerEmail = Users.email). Investigation of the legacy
+  // Java IMS source (TutorialMetaSpecifications.java:73-76) revealed
+  // that Java's "monitoredByMe" panel — the one Sage's users see today
+  // when they open the extension — filters on IMS_DASHBOARD_MONITOR_
+  // RECORD, a personal watch list where each user explicitly opts in
+  // to track a tutorial. Not TutorialMeta.owner (a maintainer signal).
   //
-  // Why a third endpoint (not a change to MyAuthoredTutorials): legacy
-  // IMS "My Tutorials" panel semantics are OWNER-based, not
-  // AUTHOR-based. For example a tutorial where "Riley is Owner, Daniel
-  // Wroblewski is Author" appears on legacy IMS's list for Riley but
-  // NOT on MyAuthoredTutorials — correctly. Sage needs OWNER semantics
-  // for its panel; Advocate + admin Tutorial Health need AUTHOR
-  // semantics for theirs. Three endpoints, three signal sets.
+  // #923 introduced the TutorialMonitors entity (the CAP equivalent of
+  // that Java table) plus MyMonitoredTutorialsView. This projection now
+  // points at that view — Sage keeps its /author/MyOwnedTutorials URL
+  // unchanged. Response shape unchanged (bestPriority column dropped,
+  // but Sage never read it). See ADR 0006 §2026-07-02b for the shift.
   //
-  // See ADR 0006 for the full authorship-vs-ownership semantics.
+  // Users who haven't opted-in to monitor anything will see an empty
+  // panel — this matches legacy Java behavior. To watch a tutorial,
+  // call toggleMonitor below (equivalent to Java's setMonitoredStatus).
   @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity MyOwnedTutorials as
-    projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority = 3;
+    projection on ims.MyMonitoredTutorialsView { *, tutorial_ID as ID };
+
+  // #923 — Sage's "watch this tutorial" toggle. Mirrors Java IMS's
+  // POST /tutorialMeta/setMonitoredStatus?status=<bool> with body [<id>].
+  //   status=true  : upsert TutorialMonitors row for (caller, tutorial)
+  //   status=false : delete the row (no-op if absent)
+  // Returns true when the row is present after the call.
+  //
+  // Idempotent: calling toggleMonitor(t, true) twice is safe (unique
+  // constraint on (user, tutorial) — second call resolves to already-
+  // present). Same for two false calls (second is a no-op).
+  action toggleMonitor(tutorialId : UUID, status : Boolean) returns Boolean;
 
   action reviewTutorial(tutorialId : UUID) returns {
     reviewedDate       : Timestamp;

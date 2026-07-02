@@ -69,6 +69,32 @@ The publish path's `upsertTutorialMetadata` INSERTs `owner: null, ownerEmail: nu
 - **Test 6** — With only a contributor email (no frontmatter, no matching Users row), ownerEmail stays NULL. Absence of an author signal is not filled from a contributor.
 - **Test 7** — An existing non-NULL ownerEmail (admin correction or legacy IMS value) is never overwritten.
 
+## 2026-07-02b update — MyOwnedTutorials sources from a fifth signal (personal monitor)
+
+While iterating on the 2026-07-02 update above, we discovered the deeper defect: none of the four signals `MyTutorialsView` unions describe what Java IMS's "My Tutorials" panel actually displays. Java's [`TutorialMetaSpecifications.java:73-76`](https://github.wdf.sap.corp/i809764/com.sap.developers.ims/blob/main/application/src/main/java/com/sap/developers/ims/specifications/TutorialMetaSpecifications.java#L73-L76) shows the panel filters on `IMS_DASHBOARD_MONITOR_RECORD` — a personal watch list where each user explicitly opts in to track a tutorial. That table was never migrated to CAP. Every prior attempt at fixing Riley's report (PRs #920, #921, #922) had been reasoning from schema-inferred semantics of `TutorialMeta.owner`, which is the wrong table for the panel.
+
+**Fifth signal** (introduced in [#923]):
+
+| Priority | Source | Meaning |
+|---|---|---|
+| — | `TutorialMonitors.(user, tutorial)` | Personal watch list — user explicitly opted in |
+
+Deliberately **not** part of the `MyTutorialsRaw` UNION. Merging it in would confuse admin queries against `MyTutorials`. Instead, the personal watch list gets its own view (`MyMonitoredTutorialsView`) and the `MyOwnedTutorials` endpoint (Sage's URL) now projects from THAT view. The URL contract stays unchanged; Sage doesn't need to update.
+
+**Endpoint mapping after #923:**
+
+| Signal | Endpoint | Consumer |
+|---|---|---|
+| Priority 1 — author FK | `GET /author/MyAuthoredTutorials` | Advocate object page `ownedTutorials` facet, admin Tutorial Health |
+| Personal monitor | `GET /author/MyOwnedTutorials` | **Sage VS Code extension "My Tutorials" panel** — repointed from bestPriority=3 |
+| Union of 1–4 | `GET /author/MyTutorials` | Legacy compat, ad-hoc admin queries |
+
+The `TutorialMeta.owner`/`ownerEmail` write path from the 2026-07-02 update above is still correct — it just doesn't power the user-facing panel anymore. It remains the admin-dashboard "who's the declared maintainer" signal, and it's what the resync script (PR #921) reconciles against live IMS. Two orthogonal concerns, two orthogonal columns.
+
+**Write path** — the new `POST /author/toggleMonitor(tutorialId, status)` action is the CAP equivalent of Java IMS's `POST /tutorialMeta/setMonitoredStatus`. Idempotent (unique constraint on `TutorialMonitors.(user, tutorial)`).
+
+**Regression guard** — hybrid tests at [`test/hybrid/tutorial-monitors.test.js`](../../test/hybrid/tutorial-monitors.test.js) verify (1) the entity accepts valid pairs, (2) the unique constraint blocks duplicates, (3) the view is caller-scoped by `Users.uuid`, and (4) INACTIVE/DELETED tutorials are filtered out.
+
 ## Alternatives Considered
 
 - **Overload `MyAuthoredTutorials` to mean priority ≤ 3 (author OR contributor OR owner).** Rejected — the name would misdescribe the row set, and the Advocate/admin consumers explicitly need priority-1-only. Adding "Authored" behavior to it would drop rows they depend on.
