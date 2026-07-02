@@ -40,9 +40,32 @@ function rateLimitExceeded(hashedIp) {
 
 function isInt0to10(v) { return v == null || (Number.isInteger(v) && v >= 0 && v <= 10); }
 
+// #893: feedback.comment is stored and later rendered in the admin Feedback
+// Fiori app. Any HTML tag in the stored value is a stored-XSS pivot if a
+// renderer ever treats the column as HTML (Fiori Elements can be coaxed
+// into it via custom column formatters). Feedback is plain text by product
+// intent, so we strip HTML *entirely* server-side — no allowlist, no
+// reliance on the admin UI's default escaping.
+//
+// The stripping is pragmatic, not a full HTML parser:
+//   1. Remove tag pairs plus contents for the always-dangerous elements
+//      (<script>, <style>, <iframe>, <object>, <embed>, <svg>, <math>) —
+//      defends even if the browser tries to render before our regex sees it.
+//   2. Strip every remaining tag (<...>) so no HTML at all reaches storage.
+//   3. Encode residual angle brackets that never formed a tag (e.g. "a < b")
+//      so an attacker can't round-trip a partial tag past the strip pass.
+//   4. Cap at 2000 chars.
+const DANGEROUS_TAGS_RE = /<(script|style|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+const ANY_TAG_RE = /<\/?[a-zA-Z][^>]*>/g;
+
 function sanitizeComment(s) {
   if (!s) return null;
-  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').slice(0, 2000);
+  let out = String(s);
+  out = out.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  out = out.replace(DANGEROUS_TAGS_RE, '');
+  out = out.replace(ANY_TAG_RE, '');
+  out = out.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return out.slice(0, 2000);
 }
 
 export default class DeveloperService extends cds.ApplicationService {
