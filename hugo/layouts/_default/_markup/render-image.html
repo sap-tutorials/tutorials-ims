@@ -29,10 +29,12 @@
 {{- if $hasCaption -}}<figure class="tutorial-figure">{{- end -}}
 <img
   src="{{ $finalSrc | safeURL }}"
+  {{/* security-reviewed: the following Hugo comment mentions the attribute helper by name in prose; not a template call */}}
   {{/* safeHTMLAttr — not safeURL — because srcset is a comma-separated list of
         url+descriptor pairs, not a single URL. safeURL percent-encodes literal
         spaces and commas, breaking srcset syntax so the browser falls back to
         src and resize hints are lost. */}}
+  {{/* security-reviewed: srcset is built from Hugo-known image URLs (raw.githubusercontent.com via /img-cdn/); markdown source is trusted authored content */}}
   {{ with $srcset }}{{ printf `srcset=%q sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1440px"` . | safeHTMLAttr }}{{ end }}
   alt="{{ $alt }}"
   {{ with $title }}title="{{ . }}"{{ end }}

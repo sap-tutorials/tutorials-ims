@@ -35,6 +35,7 @@
   {{ with $a.bioHtml }}
   <section class="adv-profile-bio">
     <h2>About</h2>
+    <!-- security-reviewed: rendered from HANA AdvocateBios; admin-supplied, sanitize-html'd at write path -->
     <div class="adv-bio-md">{{ . | safeHTML }}</div>
   </section>
   {{ end }}
