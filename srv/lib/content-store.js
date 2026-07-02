@@ -13,6 +13,7 @@ import { createShellLoader, ShellMarkerError, composeShell } from './chrome-shel
 import { createSessionHelpers } from './content-publish-session.js';
 import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';
 import { tutorialsTableInfo } from './_tutorials-table.js';
+import * as metrics from './metrics.js';
 import { resolveSecret } from './secret-resolver.js';
 
 const LOG = cds.log('content-store');
@@ -165,9 +166,11 @@ class ContentCache {
       const [oldestKey, oldestEntry] = this.map.entries().next().value;
       this.totalBytes -= oldestEntry.buffer.length;
       this.map.delete(oldestKey);
+      metrics.counter('cache.evict');  // #805
     }
     this.map.set(key, { buffer, hash });
     this.totalBytes += buffer.length;
+    metrics.gauge('cache.bytes', this.totalBytes);  // #805
   }
 
   invalidate() {
@@ -895,6 +898,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       const cacheKey = `render:${slug}`;
       const cachedRender = cache.get(cacheKey);
       if (cachedRender) {
+        metrics.counter('render.cache.hit');  // #805
         const ifNoneMatch = req.headers['if-none-match'];
         if (ifNoneMatch && ifNoneMatch === `"${cachedRender.hash}"`) {
           return res.status(304).end();
@@ -905,6 +909,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         res.setHeader('X-Content-Source', 'render-cache');
         return res.send(cachedRender.buffer);
       }
+      metrics.counter('render.cache.miss');  // #805
 
       try {
         const rendered = await renderCatalogPage(slug, {
@@ -994,6 +999,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // Check cache (only for ACTIVE / unknown-but-published slugs)
     const cached = cache.get(slug);
     if (cached) {
+      metrics.counter('content.cache.hit');  // #805
       const ifNoneMatch = req.headers['if-none-match'];
       if (ifNoneMatch && ifNoneMatch === `"${cached.hash}"`) {
         return res.status(304).end();
@@ -1004,6 +1010,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       res.setHeader('X-Content-Source', 'cache');
       return res.send(cached.buffer);
     }
+    metrics.counter('content.cache.miss');  // #805
 
     try {
       const activeVersion = await getActiveVersion();
