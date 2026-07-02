@@ -571,22 +571,24 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
               const { TutorialMeta } = ims;
               const existingMeta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
               const lastUpdated = meta.lastUpdated || null;
-              const directEmail = meta.primaryContributorEmail || null;
 
-              // Note: an earlier design here looked up a `login → corporate
-              // email` mapping table (`ContributorEmails`) when directEmail
-              // was null. That entity was never declared in db/*.cds so the
-              // fallback was dead code (silent no-op). PR #849 (2026-06-30)
-              // removed it. See the parallel comment in
-              // srv/lib/content-publish-session.js.
-              const resolvedOwner = directEmail;
+              // #862 reopen (2026-07-02): DO NOT stamp owner/ownerEmail from
+              // primaryContributorEmail. A contributor is not the owner.
+              // The chunked publish path (content-publish-session.js) fills
+              // TutorialMeta.ownerEmail from the resolved author signal via
+              // linkTutorialAuthorship. This deprecated single-shot handler
+              // does not run linkTutorialAuthorship, so it can only leave
+              // the field NULL on first publish. If a caller ends up on this
+              // path (they should not — publish-content.ts uses chunked), the
+              // next chunked publish will fill ownerEmail via the author
+              // signal. See the parallel block in content-publish-session.js.
 
               if (!existingMeta) {
                 await INSERT.into(TutorialMeta).entries({
                   ID: cds.utils.uuid(),
                   tutorial_ID: tutorialId,
-                  owner: resolvedOwner,
-                  ownerEmail: resolvedOwner,
+                  owner: null,
+                  ownerEmail: null,
                   reviewedDate: lastUpdated,
                   monitoredStatus: 'ACTIVE',
                   notificationNumber: 0,
@@ -603,7 +605,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                       notificationNumber: 0,
                       lastNotificationDate: null
                     };
-                    if (resolvedOwner && !existingMeta.ownerEmail) updates.ownerEmail = resolvedOwner;
+                    // #862 reopen: do NOT touch ownerEmail here.
                     await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set(updates);
                   } else if (existingTs !== null && Number.isNaN(existingTs)) {
                     LOG.warn(`TutorialMeta ${slug} has unparseable reviewedDate; skipping refresh`);

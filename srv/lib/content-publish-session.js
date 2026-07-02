@@ -665,26 +665,28 @@ async function upsertTutorialMetadata(namespace, metadata) {
         const { TutorialMeta } = ims;
         const existingMeta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
         const lastUpdated = meta.lastUpdated || null;
-        const directEmail = meta.primaryContributorEmail || null;
 
-        // Note: an earlier design here looked up a `login → corporate email`
-        // mapping table (`ContributorEmails`) when directEmail was null, but
-        // the entity was never declared in db/*.cds so the fallback was dead
-        // code (silent no-op). PR #849 (2026-06-30) removed it. If a
-        // login→email translation is needed again, the correct pattern is to
-        // seed Users.githubLogin from a hand-curated mapping (see
-        // scripts/seed-users-github-login.cjs from PR #848) so
-        // resolveTutorialAuthor's Phase 0 can hit — not to add a new mapping
-        // table that would immediately have the same GitHub-noreply-email
-        // reachability problem the whole #842 chain surfaced.
-        const resolvedOwner = directEmail;
+        // #862 reopen (2026-07-02): DO NOT stamp `owner`/`ownerEmail` from
+        // `primaryContributorEmail` here. A contributor is not the owner —
+        // someone who fixed a typo shouldn't inherit responsibility for a
+        // tutorial they didn't author. Prior versions of this code set
+        // `owner: primaryContributorEmail, ownerEmail: primaryContributorEmail`
+        // which silently promoted committers to declared owners across
+        // hundreds of tutorials.
+        //
+        // `TutorialMeta.ownerEmail` is now set exclusively by
+        // linkTutorialAuthorship() below (which runs after this function
+        // in the same publish session). That path resolves the owner from
+        // frontmatter `author_profile` → `Users.githubLogin` — the
+        // authoritative "declared owner" signal — and only fills NULL for
+        // existing rows so admin corrections are preserved.
 
         if (!existingMeta) {
           await INSERT.into(TutorialMeta).entries({
             ID: cds.utils.uuid(),
             tutorial_ID: tutorialId,
-            owner: resolvedOwner,
-            ownerEmail: resolvedOwner,
+            owner: null,
+            ownerEmail: null,
             reviewedDate: lastUpdated,
             monitoredStatus: 'ACTIVE',
             notificationNumber: 0,
@@ -701,7 +703,10 @@ async function upsertTutorialMetadata(namespace, metadata) {
                 notificationNumber: 0,
                 lastNotificationDate: null
               };
-              if (resolvedOwner && !existingMeta.ownerEmail) updates.ownerEmail = resolvedOwner;
+              // #862 reopen: do NOT touch ownerEmail here. If it's currently
+              // NULL, linkTutorialAuthorship() below will fill it from the
+              // authoritative frontmatter signal. If it's non-NULL, that's
+              // either a valid legacy value or an admin correction — leave it.
               await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set(updates);
             } else if (existingTs !== null && Number.isNaN(existingTs)) {
               LOG.warn(`TutorialMeta ${slug} has unparseable reviewedDate; skipping refresh`);
@@ -747,6 +752,14 @@ async function upsertTutorialMetadata(namespace, metadata) {
 // corrections are preserved. Failure mode: caller wraps this in
 // try/catch — publish must not fail because of authorship resolution.
 //
+// #862 reopen (2026-07-02) — also fills TutorialMeta.ownerEmail from the
+// resolved-author signal (only when the existing ownerEmail is NULL, to
+// preserve admin corrections and legitimate legacy values). This is where
+// the "declared owner" identity now enters TutorialMeta; upsertTutorial
+// Metadata used to stamp it from contributors[0].email, which conflated
+// "committer" with "owner." See the comment block in upsertTutorial
+// Metadata for the full rationale.
+//
 // #777 followup — frontmatter-authoritative ownership (2026-06-30):
 //   * Builds loginToUserId map from Users.githubLogin
 //   * Per slug: bootstraps Users.githubLogin from frontmatter when null
@@ -764,15 +777,22 @@ export async function linkTutorialAuthorship(namespace, metadata) {
   const usersTable = isHana
     ? '"COM_SAP_DEVELOPERS_IMS_USERS"'
     : 'com_sap_developers_ims_Users';
+  // #862 reopen (2026-07-02): also select the raw (non-lowered) email so
+  // we can write TutorialMeta.ownerEmail with the canonical Users.email
+  // casing rather than a lowered version. The lowered form is used only as
+  // the map key for the resolver.
   const userRows = await db.run(
-    `SELECT "ID" AS id, LOWER(TRIM("EMAIL")) AS email FROM ${usersTable} WHERE "EMAIL" IS NOT NULL AND LENGTH(TRIM("EMAIL")) > 0`
+    `SELECT "ID" AS id, "EMAIL" AS raw_email, LOWER(TRIM("EMAIL")) AS email FROM ${usersTable} WHERE "EMAIL" IS NOT NULL AND LENGTH(TRIM("EMAIL")) > 0`
   );
   if (!userRows || userRows.length === 0) return;
   const emailToUserId = new Map();
+  const userIdToEmail = new Map(); // #862 reopen — id → raw email (canonical case)
   for (const r of userRows) {
     const email = r.email || r.EMAIL;
     const id = r.id || r.ID;
+    const rawEmail = r.raw_email || r.RAW_EMAIL;
     if (email && !emailToUserId.has(email)) emailToUserId.set(email, id);
+    if (id && rawEmail && !userIdToEmail.has(id)) userIdToEmail.set(id, rawEmail);
   }
 
   // Build login→user map ONCE per publish session. Used by resolver Phase 0
@@ -795,9 +815,16 @@ export async function linkTutorialAuthorship(namespace, metadata) {
   const contributorsTable = isHana
     ? '"COM_SAP_DEVELOPERS_IMS_TUTORIALCONTRIBUTORS"'
     : 'com_sap_developers_ims_TutorialContributors';
+  // #862 reopen (2026-07-02) — TutorialMeta.ownerEmail is now filled from the
+  // resolved-author signal here (formerly stamped from contributors[0].email
+  // in upsertTutorialMetadata). Only fills NULL — never overwrites existing.
+  const tutorialMetaTable = isHana
+    ? '"COM_SAP_DEVELOPERS_IMS_TUTORIALMETA"'
+    : 'com_sap_developers_ims_TutorialMeta';
 
   let linkedAuthors = 0;
   let linkedContributors = 0;
+  let linkedOwnerEmails = 0;  // #862 reopen
 
   for (const [rawSlug, meta] of Object.entries(metadata)) {
     const slug = rawSlug.toLowerCase();
@@ -919,13 +946,40 @@ export async function linkTutorialAuthorship(namespace, metadata) {
         );
         linkedContributors++;
       }
+
+      // #862 reopen (2026-07-02) — TutorialMeta.ownerEmail from resolved author.
+      //
+      // Formerly upsertTutorialMetadata stamped `ownerEmail = primaryContributor
+      // Email`, which conflated "someone who committed a change" with "declared
+      // owner." That contaminated hundreds of DEV TutorialMeta rows across
+      // multiple users. The fix: only set ownerEmail from the authoritative
+      // author signal (Phase 0 frontmatter or role-match contributor), and
+      // only when the current row's ownerEmail is NULL (never overwrite an
+      // admin correction or a legacy legitimate value from IMS migration).
+      //
+      // If Phase 0 (frontmatter) resolved, this is the strongest signal — same
+      // logic as Tutorials.author_ID. If a lower phase resolved, we still fill
+      // NULL only. Rationale: ADR 0006 treats TutorialMeta.ownerEmail as a
+      // MONITORING signal ("who watches for staleness"); the declared author
+      // is a defensible initial monitor. If they want to stop monitoring, the
+      // admin UI can clear the row explicitly.
+      if (authorUserId) {
+        const authorEmail = userIdToEmail.get(authorUserId);
+        if (authorEmail) {
+          const res = await db.run(
+            `UPDATE ${tutorialMetaTable} SET "OWNEREMAIL" = ? WHERE "TUTORIAL_ID" = ? AND "OWNEREMAIL" IS NULL`,
+            [authorEmail, tutorialId]
+          );
+          if (res && (typeof res === 'number' ? res : 1) > 0) linkedOwnerEmails++;
+        }
+      }
     } catch (perSlugErr) {
       LOG.warn(`linkTutorialAuthorship: ${slug} failed`, perSlugErr.message);
     }
   }
 
-  if (linkedAuthors || linkedContributors) {
-    LOG.info(`linkTutorialAuthorship: linked ${linkedAuthors} author(s), ${linkedContributors} contributor(s)`);
+  if (linkedAuthors || linkedContributors || linkedOwnerEmails) {
+    LOG.info(`linkTutorialAuthorship: linked ${linkedAuthors} author(s), ${linkedContributors} contributor(s), ${linkedOwnerEmails} ownerEmail(s)`);
   }
 }
 
