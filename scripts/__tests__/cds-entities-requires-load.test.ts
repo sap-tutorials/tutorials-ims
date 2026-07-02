@@ -97,6 +97,53 @@ export function auditScript(source: string): string | null {
     `Add \`cds.model = await cds.load('*');\` before the first cds.connect.to('db') call. See #757.`;
 }
 
+/**
+ * Stronger guard for #911: `cds.load('*')` returns a plain CSN whose
+ * `.definitions` is a non-iterable object. If a script assigns that raw CSN
+ * to `cds.model` and then calls `cds.entities(...)`, it will throw
+ * `cds.entities is not a function`. The fix is to wrap the CSN through
+ * `cds.linked(...)` (or the equivalent `cds.compile.for.nodejs(...)`),
+ * and — because `cds.connect.to('db')` mutates and strips the iterator —
+ * to prime the getter by touching `cds.model.entities` BEFORE connect.
+ *
+ * Returns null if safe; a reason string otherwise. Only fires when the
+ * script both (a) contains the `cds.model = ... cds.load(...)` pattern and
+ * (b) also uses `cds.entities(`. Scripts that use bare `await cds.load('*')`
+ * for its side-effects only, or that don't touch `cds.model`, are exempt.
+ */
+export function auditLinkedAndPrimed(source: string): string | null {
+  const stripped = stripComments(source);
+  if (!/\bcds\.entities\s*\(/.test(stripped)) return null;
+  // Only guard the "assigns to cds.model" shape — bare `await cds.load('*')`
+  // side-effect callers are a different lifecycle that we intentionally allow.
+  if (!/\bcds\.model\s*=/.test(stripped)) return null;
+
+  // Accept either wrapper — both return a linked model with iterable defs.
+  const linked = /\bcds\.linked\s*\(/.test(stripped);
+  const compiled = /\bcds\.compile\.for\.nodejs\s*\(/.test(stripped);
+  if (!linked && !compiled) {
+    return `assigns raw CSN to cds.model without wrapping via cds.linked(...) or cds.compile.for.nodejs(...). ` +
+      `See #911: a bare CSN's .definitions is non-iterable, so cds.entities(...) will throw. ` +
+      `Use \`cds.model = cds.linked(await cds.load('*')); void cds.model.entities; await cds.connect.to('db');\`.`;
+  }
+
+  // Only enforce priming for the cds.linked(...) shape. cds.compile.for.nodejs
+  // returns an already-cached model; the prime step is a no-op there.
+  if (linked) {
+    // The prime read has to appear before the connect call. We enforce that
+    // textually by finding the first cds.connect.to('db') and checking that a
+    // reference to cds.model.entities appears earlier.
+    const connectIdx = stripped.search(/\bcds\.connect\.to\s*\(\s*['"]db['"]/);
+    const primeIdx = stripped.search(/\bcds\.model\.entities\b/);
+    if (connectIdx >= 0 && (primeIdx < 0 || primeIdx > connectIdx)) {
+      return `wraps CSN with cds.linked(...) but does not prime cds.model.entities BEFORE cds.connect.to('db'). ` +
+        `See #911: connect strips the iterator installed by linked; prime the getter first with ` +
+        `\`void cds.model.entities;\` between the linked() call and connect.`;
+    }
+  }
+  return null;
+}
+
 describe('cds.entities() callers require cds.load() (regression #757)', () => {
   const files = listShallowScripts();
 
@@ -171,6 +218,101 @@ describe('auditScript pure-function unit tests', () => {
       "await cds.connect.to('db');",
     ].join('\n');
     expect(auditScript(src)).toBeNull();
+  });
+});
+
+describe('cds.entities() callers must wrap CSN + prime the getter (regression #911)', () => {
+  const files = listShallowScripts();
+
+  for (const name of files) {
+    it(`scripts/${name} wraps CSN through cds.linked()/compile.for.nodejs() and primes cds.model.entities before connect`, () => {
+      const src = readFileSync(join(SCRIPTS_DIR, name), 'utf8');
+      const reason = auditLinkedAndPrimed(src);
+      if (reason) {
+        throw new Error(`scripts/${name}: ${reason}`);
+      }
+    });
+  }
+});
+
+describe('auditLinkedAndPrimed pure-function unit tests', () => {
+  it('returns null when the file does not touch cds.entities', () => {
+    expect(auditLinkedAndPrimed("cds.model = await cds.load('*');\nawait cds.connect.to('db');")).toBeNull();
+  });
+
+  it('returns null when the file uses bare cds.load without assigning cds.model', () => {
+    const src = [
+      "await cds.load('*');",
+      "await cds.connect.to('db');",
+      "const { X } = cds.entities('ns');",
+    ].join('\n');
+    expect(auditLinkedAndPrimed(src)).toBeNull();
+  });
+
+  it('flags the broken pattern: cds.model = await cds.load(...) + cds.entities(...) without cds.linked()', () => {
+    const src = [
+      "cds.model = await cds.load('*');",
+      "await cds.connect.to('db');",
+      "const { Tutorials } = cds.entities('com.sap.developers.ims');",
+    ].join('\n');
+    const reason = auditLinkedAndPrimed(src);
+    expect(reason).toMatch(/#911/);
+    expect(reason).toMatch(/cds\.linked/);
+    expect(reason).toMatch(/cds\.compile\.for\.nodejs/);
+  });
+
+  it('accepts the cds.compile.for.nodejs shape without a separate prime step', () => {
+    const src = [
+      "const csn = await cds.load('*');",
+      "cds.model = cds.compile.for.nodejs(csn);",
+      "await cds.connect.to('db');",
+      "const { Tutorials } = cds.entities('com.sap.developers.ims');",
+    ].join('\n');
+    expect(auditLinkedAndPrimed(src)).toBeNull();
+  });
+
+  it('accepts the cds.linked + prime shape', () => {
+    const src = [
+      "cds.model = cds.linked(await cds.load('*'));",
+      "void cds.model.entities;",
+      "await cds.connect.to('db');",
+      "const { Tutorials } = cds.entities('com.sap.developers.ims');",
+    ].join('\n');
+    expect(auditLinkedAndPrimed(src)).toBeNull();
+  });
+
+  it('flags cds.linked WITHOUT a prime read before connect', () => {
+    const src = [
+      "cds.model = cds.linked(await cds.load('*'));",
+      "await cds.connect.to('db');",
+      "const { Tutorials } = cds.entities('com.sap.developers.ims');",
+    ].join('\n');
+    const reason = auditLinkedAndPrimed(src);
+    expect(reason).toMatch(/prime/i);
+    expect(reason).toMatch(/#911/);
+  });
+
+  it('flags cds.linked with the prime read AFTER connect (order matters)', () => {
+    const src = [
+      "cds.model = cds.linked(await cds.load('*'));",
+      "await cds.connect.to('db');",
+      "void cds.model.entities;",  // too late — connect already stripped the iterator
+      "const { Tutorials } = cds.entities('com.sap.developers.ims');",
+    ].join('\n');
+    const reason = auditLinkedAndPrimed(src);
+    expect(reason).toMatch(/BEFORE cds\.connect/);
+  });
+
+  it('does not see wrapper mentions inside comments', () => {
+    const src = [
+      "// The right pattern is cds.linked(await cds.load('*')) then void cds.model.entities.",
+      "cds.model = await cds.load('*');",
+      "await cds.connect.to('db');",
+      "const { X } = cds.entities('ns');",
+    ].join('\n');
+    // Comment mentions of cds.linked and cds.model.entities should NOT satisfy the audit.
+    const reason = auditLinkedAndPrimed(src);
+    expect(reason).toMatch(/#911/);
   });
 });
 

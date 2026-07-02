@@ -50,8 +50,11 @@
     // Load the CDS model so `cds.entities(NAMESPACE)` is callable inside the
     // dynamically-imported extractor (srv/jobs/extract-concepts-job.js). The
     // serving lifecycle (`cds-serve`) populates `cds.model` automatically; a
-    // bare `cds.connect.to('db')` under `cds bind --exec` does not. See #757.
-    cds.model = await cds.load('*');
+    // bare `cds.connect.to('db')` under `cds bind --exec` does not. See #757 / #911.
+    // `cds.linked(...)` + priming `cds.model.entities` BEFORE connect are both
+    // required — the getter is stripped by connect otherwise.
+    cds.model = cds.linked(await cds.load('*'));
+    void cds.model.entities;
     const db = await cds.connect.to('db');
     if (db.kind !== 'hana') {
       console.error(
