@@ -114,37 +114,81 @@ function tutorialUuid(legacyId) {
  * DEV has no matching row yet), decide what to do. Pure function.
  *
  * Full-mirror semantics:
- *   - Placeholder IMS emails (bots, noreply) are treated as no-signal.
- *     Resync writes NULL for those. This matches the way the publish path
- *     never writes such addresses in the first place.
+ *   - `@sap-tutorials.local` bot emails are treated as no-signal.
+ *     Resync writes NULL for those.
+ *   - `@users.noreply.github.com` GitHub-noreply placeholders are
+ *     RESOLVED via `githubLoginToEmail` when the map has a match on the
+ *     `<userid>+<login>` login segment (case-insensitive). The publish
+ *     path in PR #920 uses the same map to fill `ownerEmail` from
+ *     frontmatter `author_profile`; the resync mirrors that convention.
+ *     If the login isn't in the map, the placeholder is treated as
+ *     no-signal (write NULL).
  *   - If DEV has no matching row for this tutorial UUID: skip (bucket
  *     `no-target-row`) — a resync is NOT a create.
  *   - If DEV row's current owner/ownerEmail already agrees with the
  *     desired IMS value: skip (bucket `already-matches`).
- *   - Otherwise emit an update (bucket `will-overwrite`) with the exact
- *     new owner/ownerEmail values.
+ *   - Otherwise emit an update (bucket `will-overwrite`).
  *
  * @param {object} imsRow  {TUT_LEGACY_ID, OWNER_EMAIL}
  * @param {object|null} devRow  {ID, TUTORIAL_ID, OWNER, OWNEREMAIL} — or null
+ * @param {Map<string,string>} [githubLoginToEmail]  lower(login) → Users.email
  * @returns {{
  *   bucket: 'no-target-row'|'already-matches'|'will-overwrite',
  *   targetTutorialUuid: string,
  *   currentOwner: string|null,
  *   currentOwnerEmail: string|null,
  *   newOwner: string|null,
- *   newOwnerEmail: string|null
+ *   newOwnerEmail: string|null,
+ *   resolvedFromNoreply: boolean,
  * }}
  */
-function buildResyncDecision(imsRow, devRow) {
+function buildResyncDecision(imsRow, devRow, githubLoginToEmail) {
   const targetTutorialUuid = tutorialUuid(imsRow.TUT_LEGACY_ID);
+  const loginMap = githubLoginToEmail instanceof Map ? githubLoginToEmail : new Map();
 
-  // Placeholder emails are treated as "IMS has no clean signal here"
-  // — same filter the original backfill uses.
-  const isPlaceholder =
-    imsRow.OWNER_EMAIL &&
-    /(@users\.noreply\.github\.com|@sap-tutorials\.local)$/i.test(imsRow.OWNER_EMAIL);
-  const newOwnerEmail =
-    imsRow.OWNER_EMAIL && !isPlaceholder ? imsRow.OWNER_EMAIL : null;
+  // Placeholder detection. Two shapes:
+  //   1. `@sap-tutorials.local` — synthetic emails the migrator invented for
+  //      contributors with no email at all. Always no-signal; NULL them out.
+  //   2. `<userid>+<login>@users.noreply.github.com` — GitHub's default
+  //      commit email for users who haven't set a corporate address. Try
+  //      to resolve via `Users.githubLogin -> Users.email` (login segment
+  //      only). If the login is not in the map, treat as no-signal.
+  //
+  // The resolved-from-noreply path returns resolvedFromNoreply=true so
+  // callers (CSV output, dry-run summary) can surface which rows survived
+  // via the noreply resolver.
+  let newOwnerEmail = null;
+  let resolvedFromNoreply = false;
+  const raw = imsRow.OWNER_EMAIL;
+  if (raw) {
+    if (/@users\.noreply\.github\.com$/i.test(raw)) {
+      // GitHub noreply. Try the modern `<userid>+<login>@` shape first.
+      // Older, bare `<login>@users.noreply.github.com` addresses also work
+      // (GitHub still supports them for pre-2017 accounts); parse them too.
+      let login = null;
+      const modernMatch = /^(\d+)\+([^@]+)@users\.noreply\.github\.com$/i.exec(raw);
+      if (modernMatch) {
+        login = modernMatch[2].trim().toLowerCase();
+      } else {
+        const legacyMatch = /^([^@+\s]+)@users\.noreply\.github\.com$/i.exec(raw);
+        if (legacyMatch) login = legacyMatch[1].trim().toLowerCase();
+      }
+      if (login) {
+        const resolvedEmail = loginMap.get(login) || null;
+        if (resolvedEmail) {
+          newOwnerEmail = resolvedEmail;
+          resolvedFromNoreply = true;
+        }
+      }
+      // unresolved noreply -> newOwnerEmail stays null (no-signal)
+    } else if (/@sap-tutorials\.local$/i.test(raw)) {
+      // Synthetic bot email -> no signal
+      newOwnerEmail = null;
+    } else {
+      // Real corporate email -> use as-is
+      newOwnerEmail = raw;
+    }
+  }
   const newOwner = newOwnerEmail; // Mirror the publish-path invariant (owner == ownerEmail)
 
   if (!devRow) {
@@ -155,6 +199,7 @@ function buildResyncDecision(imsRow, devRow) {
       currentOwnerEmail: null,
       newOwner,
       newOwnerEmail,
+      resolvedFromNoreply,
     };
   }
 
@@ -173,6 +218,7 @@ function buildResyncDecision(imsRow, devRow) {
       currentOwnerEmail,
       newOwner,
       newOwnerEmail,
+      resolvedFromNoreply,
     };
   }
 
@@ -189,6 +235,7 @@ function buildResyncDecision(imsRow, devRow) {
       currentOwnerEmail,
       newOwner,
       newOwnerEmail,
+      resolvedFromNoreply,
     };
   }
 
@@ -199,6 +246,7 @@ function buildResyncDecision(imsRow, devRow) {
     currentOwnerEmail,
     newOwner,
     newOwnerEmail,
+    resolvedFromNoreply,
   };
 }
 
@@ -278,7 +326,8 @@ function writeDryRunCsv(decisions) {
   const lines = [
     ['bucket', 'tut_legacy_id', 'target_tutorial_uuid',
      'current_owner', 'current_ownerEmail',
-     'new_owner', 'new_ownerEmail'].join(','),
+     'new_owner', 'new_ownerEmail',
+     'resolved_from_noreply', 'ims_raw_email'].join(','),
   ];
   for (const d of decisions) {
     lines.push([
@@ -289,6 +338,8 @@ function writeDryRunCsv(decisions) {
       csvEscape(d.decision.currentOwnerEmail),
       csvEscape(d.decision.newOwner),
       csvEscape(d.decision.newOwnerEmail),
+      d.decision.resolvedFromNoreply ? 'yes' : '',
+      csvEscape(d.imsRow.OWNER_EMAIL),
     ].join(','));
   }
   fs.writeFileSync(DRY_RUN_CSV, lines.join('\n') + '\n');
@@ -350,6 +401,26 @@ async function main() {
     `SELECT ID, TUTORIAL_ID, OWNER, OWNEREMAIL FROM COM_SAP_DEVELOPERS_IMS_TUTORIALMETA`);
   console.log(`  Read ${devRows.length} TutorialMeta rows from DEV`);
 
+  // Load DEV Users.githubLogin -> Users.email map for @users.noreply.github.com
+  // resolution. Same table + same normalization the publish-path uses
+  // (srv/lib/content-publish-session.js). NULL githubLogin rows are skipped;
+  // a user without a GitHub login can't resolve a noreply placeholder.
+  const userRows = await runSql(target, `
+    SELECT LOWER(TRIM("GITHUBLOGIN")) AS LOGIN, "EMAIL" AS EMAIL
+      FROM COM_SAP_DEVELOPERS_IMS_USERS
+     WHERE "GITHUBLOGIN" IS NOT NULL AND LENGTH(TRIM("GITHUBLOGIN")) > 0
+       AND "EMAIL" IS NOT NULL AND LENGTH(TRIM("EMAIL")) > 0
+  `);
+  const githubLoginToEmail = new Map();
+  for (const r of userRows) {
+    const login = r.LOGIN || r.login;
+    const email = r.EMAIL || r.email;
+    if (login && email && !githubLoginToEmail.has(login)) {
+      githubLoginToEmail.set(login, email);
+    }
+  }
+  console.log(`  Built githubLogin->email map with ${githubLoginToEmail.size} entries`);
+
   const devByTutorialUuid = new Map();
   for (const r of devRows) devByTutorialUuid.set(r.TUTORIAL_ID, r);
 
@@ -358,13 +429,17 @@ async function main() {
   for (const imsRow of imsRows) {
     const targetUuid = tutorialUuid(imsRow.TUT_LEGACY_ID);
     const devRow = devByTutorialUuid.get(targetUuid) || null;
-    const decision = buildResyncDecision(imsRow, devRow);
+    const decision = buildResyncDecision(imsRow, devRow, githubLoginToEmail);
     decisions.push({ imsRow, decision, bucket: decision.bucket });
   }
 
   // Bucket counts for the summary.
   const buckets = { 'will-overwrite': 0, 'already-matches': 0, 'no-target-row': 0 };
-  for (const d of decisions) buckets[d.bucket]++;
+  let resolvedFromNoreplyCount = 0;
+  for (const d of decisions) {
+    buckets[d.bucket]++;
+    if (d.decision.resolvedFromNoreply) resolvedFromNoreplyCount++;
+  }
 
   const csvPath = writeDryRunCsv(decisions);
   console.log(`  ✓ Dry-run CSV: ${csvPath}`);
@@ -372,9 +447,10 @@ async function main() {
   console.log('\n╔══════════════════════════════════════════════════════╗');
   console.log('║  Resync summary                                       ║');
   console.log('╚══════════════════════════════════════════════════════╝');
-  console.log(`  Will overwrite:        ${buckets['will-overwrite']}`);
-  console.log(`  Already matches:       ${buckets['already-matches']}`);
-  console.log(`  No target row (skip):  ${buckets['no-target-row']}`);
+  console.log(`  Will overwrite:               ${buckets['will-overwrite']}`);
+  console.log(`  Already matches:              ${buckets['already-matches']}`);
+  console.log(`  No target row (skip):         ${buckets['no-target-row']}`);
+  console.log(`  Resolved from @noreply login: ${resolvedFromNoreplyCount}`);
 
   if (VERBOSE) {
     for (const d of decisions.slice(0, 50)) {

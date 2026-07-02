@@ -138,3 +138,147 @@ describe('buildResyncDecision', () => {
     expect(a.targetTutorialUuid).toBe(uuidFor(15733));
   });
 });
+
+describe('buildResyncDecision — @users.noreply.github.com resolution (#862 PR C)', () => {
+  it('resolves modern <userid>+<login>@ noreply via githubLogin map — Riley case', () => {
+    // Exactly the scenario from live IMS: tutorial 15733 owned by
+    // 10248021+rbrainey@users.noreply.github.com. With DEV.Users.githubLogin
+    // = 'rbrainey' and Users.email = 'riley.rainey@sap.com', the resync
+    // resolves to Riley's corporate email — which is what Sage's
+    // MyOwnedTutorials keys on.
+    const map = new Map([['rbrainey', 'riley.rainey@sap.com']]);
+    const imsRow = {
+      TUT_LEGACY_ID: 15733,
+      OWNER_EMAIL: '10248021+rbrainey@users.noreply.github.com',
+    };
+    const devRow = {
+      ID: 'x', TUTORIAL_ID: uuidFor(15733),
+      OWNER: null, OWNEREMAIL: null,
+    };
+    const d = buildResyncDecision(imsRow, devRow, map);
+    expect(d.bucket).toBe('will-overwrite');
+    expect(d.newOwnerEmail).toBe('riley.rainey@sap.com');
+    expect(d.newOwner).toBe('riley.rainey@sap.com');
+    expect(d.resolvedFromNoreply).toBe(true);
+  });
+
+  it('resolves legacy bare-login <login>@ noreply via githubLogin map', () => {
+    // Pre-2017 GitHub accounts use bare <login>@users.noreply.github.com
+    // (no userid-plus prefix). The resolver must handle both shapes.
+    const map = new Map([['legacyuser', 'legacy.user@sap.com']]);
+    const imsRow = {
+      TUT_LEGACY_ID: 42,
+      OWNER_EMAIL: 'legacyuser@users.noreply.github.com',
+    };
+    const devRow = {
+      ID: 'x', TUTORIAL_ID: uuidFor(42),
+      OWNER: null, OWNEREMAIL: null,
+    };
+    const d = buildResyncDecision(imsRow, devRow, map);
+    expect(d.bucket).toBe('will-overwrite');
+    expect(d.newOwnerEmail).toBe('legacy.user@sap.com');
+    expect(d.resolvedFromNoreply).toBe(true);
+  });
+
+  it('login lookup is case-insensitive', () => {
+    // GitHub logins are typically lowercase but the map may hold LOWER(TRIM).
+    // If the IMS email preserves case ('10248021+RBrainey@...') the resolver
+    // must still hit.
+    const map = new Map([['rbrainey', 'riley.rainey@sap.com']]);
+    const imsRow = {
+      TUT_LEGACY_ID: 15733,
+      OWNER_EMAIL: '10248021+RBrainey@users.noreply.github.com',
+    };
+    const devRow = {
+      ID: 'x', TUTORIAL_ID: uuidFor(15733),
+      OWNER: null, OWNEREMAIL: null,
+    };
+    const d = buildResyncDecision(imsRow, devRow, map);
+    expect(d.newOwnerEmail).toBe('riley.rainey@sap.com');
+    expect(d.resolvedFromNoreply).toBe(true);
+  });
+
+  it('unresolved noreply (login not in map) → newOwnerEmail is null, no-signal', () => {
+    // GitHub-noreply for a user who has never logged into DEV via SAP IDP,
+    // OR whose Users.githubLogin has not been populated. Fall back to
+    // no-signal — do NOT write the placeholder as ownerEmail.
+    const map = new Map([['someoneelse', 'someone.else@sap.com']]);
+    const imsRow = {
+      TUT_LEGACY_ID: 99,
+      OWNER_EMAIL: '99999+unknownlogin@users.noreply.github.com',
+    };
+    const devRow = {
+      ID: 'x', TUTORIAL_ID: uuidFor(99),
+      OWNER: 'was-something@sap.com', OWNEREMAIL: 'was-something@sap.com',
+    };
+    const d = buildResyncDecision(imsRow, devRow, map);
+    expect(d.bucket).toBe('will-overwrite');
+    expect(d.newOwnerEmail).toBeNull();
+    expect(d.newOwner).toBeNull();
+    expect(d.resolvedFromNoreply).toBe(false);
+  });
+
+  it('unresolved noreply → already-matches when DEV is also NULL', () => {
+    const map = new Map();
+    const imsRow = {
+      TUT_LEGACY_ID: 100,
+      OWNER_EMAIL: '12345+ghost@users.noreply.github.com',
+    };
+    const devRow = {
+      ID: 'x', TUTORIAL_ID: uuidFor(100),
+      OWNER: null, OWNEREMAIL: null,
+    };
+    expect(buildResyncDecision(imsRow, devRow, map).bucket).toBe('already-matches');
+  });
+
+  it('resolvedFromNoreply is false for non-noreply corporate emails', () => {
+    const map = new Map([['rbrainey', 'riley.rainey@sap.com']]);
+    const imsRow = {
+      TUT_LEGACY_ID: 5580,
+      OWNER_EMAIL: 'john.currie@sap.com',
+    };
+    const devRow = {
+      ID: 'x', TUTORIAL_ID: uuidFor(5580),
+      OWNER: null, OWNEREMAIL: null,
+    };
+    const d = buildResyncDecision(imsRow, devRow, map);
+    expect(d.newOwnerEmail).toBe('john.currie@sap.com');
+    expect(d.resolvedFromNoreply).toBe(false);
+  });
+
+  it('@sap-tutorials.local bots are never resolved via the map — always no-signal', () => {
+    // Even if someone with login "bot" existed in Users, this synthetic
+    // bot address is not GitHub noreply — the migrator invented it for
+    // authors with no email at all. Always treat as no-signal.
+    const map = new Map([['bot', 'bot@sap.com']]);
+    const imsRow = {
+      TUT_LEGACY_ID: 200,
+      OWNER_EMAIL: 'sap-tutorials-bot@sap-tutorials.local',
+    };
+    const devRow = {
+      ID: 'x', TUTORIAL_ID: uuidFor(200),
+      OWNER: null, OWNEREMAIL: null,
+    };
+    const d = buildResyncDecision(imsRow, devRow, map);
+    expect(d.newOwnerEmail).toBeNull();
+    expect(d.resolvedFromNoreply).toBe(false);
+  });
+
+  it('null githubLoginToEmail argument is safe (defaults to empty Map)', () => {
+    // Backward-compat: existing callers may still pass 2 args. The 3rd arg
+    // defaults to an empty Map, which cleanly falls through to no-signal
+    // for every noreply address.
+    const imsRow = {
+      TUT_LEGACY_ID: 300,
+      OWNER_EMAIL: '10248021+rbrainey@users.noreply.github.com',
+    };
+    const devRow = {
+      ID: 'x', TUTORIAL_ID: uuidFor(300),
+      OWNER: null, OWNEREMAIL: null,
+    };
+    // No third arg
+    const d = buildResyncDecision(imsRow, devRow);
+    expect(d.newOwnerEmail).toBeNull();
+    expect(d.resolvedFromNoreply).toBe(false);
+  });
+});
