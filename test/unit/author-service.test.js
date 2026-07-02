@@ -532,3 +532,51 @@ describe('AuthorService.isSlugAvailable #385 PR-3', () => {
     ).rejects.toMatchObject({ code: 400 });
   });
 });
+
+// #862 followup — MyTutorialsView filters INACTIVE/DELETED rows at the view
+// layer so that soft-delete on Tutorials propagates to all three
+// MyTutorials-family endpoints (MyTutorials, MyAuthoredTutorials,
+// MyOwnedTutorials) without requiring each handler to re-implement the filter.
+//
+// Regression guard for the DEV rollout finding: rbrainey-sandbox-1 was soft-
+// deleted (Tutorials.status='INACTIVE') but continued to appear on
+// MyAuthoredTutorials because the view didn't gate on status.
+describe('AuthorService — soft-deleted tutorials do not surface (#862 followup)', () => {
+  beforeAll(async () => {
+    const { Tutorials, TutorialMeta } = cds.entities('com.sap.developers.ims');
+    // Alice-authored INACTIVE tutorial. Should NOT appear on any endpoint.
+    await INSERT.into(Tutorials).entries([
+      { ID: 't-inactive', slug: 'tut-inactive', title: 'Retired', status: 'INACTIVE', author_ID: 'u-A' }
+    ]);
+    await INSERT.into(TutorialMeta).entries([
+      { ID: 'm-inactive', tutorial_ID: 't-inactive', owner: 'Alice A', ownerEmail: 'alice@example.com' }
+    ]);
+  });
+
+  it('MyAuthoredTutorials does NOT surface INACTIVE rows', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyAuthoredTutorials))
+    );
+    expect(rows.map((r) => r.slug)).not.toContain('tut-inactive');
+  });
+
+  it('MyOwnedTutorials does NOT surface INACTIVE rows', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+    );
+    expect(rows.map((r) => r.slug)).not.toContain('tut-inactive');
+  });
+
+  it('MyTutorials (broad) does NOT surface INACTIVE rows either', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyTutorials))
+    );
+    expect(rows.map((r) => r.slug)).not.toContain('tut-inactive');
+  });
+});
