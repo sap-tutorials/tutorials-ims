@@ -1,0 +1,72 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.shell.controller.Metrics"
+  xmlns="sap.m"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns:layout="sap.ui.layout"
+  xmlns:core="sap.ui.core">
+  <Page title="Observability — Live Snapshot" showNavButton="false">
+    <content>
+      <layout:Grid defaultSpan="XL4 L4 M6 S12" hSpacing="1" vSpacing="1" class="sapUiSmallMargin">
+
+        <!-- Content cache card -->
+        <Panel headerText="Content cache" expandable="false">
+          <VBox class="sapUiSmallMargin">
+            <ObjectStatus
+              text="Overall hit rate: {/cacheHitRateDisplay}"
+              state="{/cacheHitRateState}"
+              inverted="true"/>
+            <Text text="Content: {/cacheContentHitRateDisplay}"/>
+            <Text text="Render:  {/cacheRenderHitRateDisplay}"/>
+            <Text text="Size:    {/cacheBytesDisplay} / 50 MB"/>
+            <Text text="Evicts:  {/cacheEvicts}"/>
+          </VBox>
+        </Panel>
+
+        <!-- HANA pool card -->
+        <Panel headerText="HANA pool acquire" expandable="false">
+          <VBox class="sapUiSmallMargin">
+            <MessageStrip
+              visible="{= !${/dbWrapEnabled} }"
+              text="DB wrapper not enabled. Set METRICS_DB_WRAP=true (PR 2 rollout)."
+              type="Information"
+              showIcon="true"/>
+            <Text text="p50: {/dbAcquireP50Display} ms" visible="{/dbWrapEnabled}"/>
+            <Text text="p95: {/dbAcquireP95Display} ms" visible="{/dbWrapEnabled}"/>
+            <Text text="p99: {/dbAcquireP99Display} ms" visible="{/dbWrapEnabled}"/>
+            <Text text="Timeouts (in-mem count): {/dbPoolTimeouts}" visible="{/dbWrapEnabled}"/>
+          </VBox>
+        </Panel>
+
+        <!-- Publish latency card -->
+        <Panel headerText="Publish latency" expandable="false">
+          <VBox class="sapUiSmallMargin">
+            <Text text="Last 20 publishes:"/>
+            <Table items="{/recentPublishes}" growing="false">
+              <columns>
+                <Column><Text text="When"/></Column>
+                <Column><Text text="Mode"/></Column>
+                <Column hAlign="End"><Text text="Total ms"/></Column>
+                <Column><Text text="Outcome"/></Column>
+              </columns>
+              <items>
+                <ColumnListItem>
+                  <cells>
+                    <Text text="{createdAtDisplay}"/>
+                    <Text text="{mode}"/>
+                    <Text text="{totalMs}"/>
+                    <ObjectStatus
+                      text="{outcome}"
+                      state="{outcomeState}"/>
+                  </cells>
+                </ColumnListItem>
+              </items>
+            </Table>
+            <Text text="Aggregate (7d): p50 {/publish7dP50}ms · p95 {/publish7dP95}ms · p99 {/publish7dP99}ms"/>
+          </VBox>
+        </Panel>
+
+      </layout:Grid>
+      <Text text="Last refresh: {/generatedAt} · instance {/instanceId} · uptime {/uptimeSec}s" class="sapUiSmallMargin"/>
+    </content>
+  </Page>
+</mvc:View>
