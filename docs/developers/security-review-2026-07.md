@@ -35,7 +35,7 @@ Note on the numbering: #896 and #897 are both MEDIUM but grouped under the "auth
 
 ### #887 — DEV `CONTENT_API_KEY` committed to repo and published docs site
 
-The DEV publish-token value `tutorials-content-publish-2024` is embedded in:
+The DEV publish-token value (a short well-known ASCII string, redacted here per #887 fix) was previously embedded in:
 
 - [CLAUDE.md:95](../../CLAUDE.md#L95), [CLAUDE.md:130](../../CLAUDE.md#L130)
 - [deploy/dev.mtaext](../../deploy/dev.mtaext) — literal, not a `${...}` placeholder

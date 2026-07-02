@@ -133,6 +133,9 @@ sap.ui.define([
                 var oModel = this.getView().getModel();
                 var oContext = oModel.bindContext("/claimPrize(...)");
                 oContext.setParameter("recordId", recordId);
+                // #889: accountNumber is required so the server can verify
+                // the prize belongs to the scanned contestant.
+                oContext.setParameter("accountNumber", uid);
                 await oContext.execute();
                 MessageToast.show("Prize claimed!", { duration: 2000 });
 

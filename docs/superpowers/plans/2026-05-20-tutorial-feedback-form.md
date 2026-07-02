@@ -1469,7 +1469,7 @@ Expected: all green, including the 3 new test files.
 
 ```bash
 # Terminal 1: CAP with HANA binding
-SUBMISSION_SALT_SECRET=devsecret CONTENT_API_KEY=tutorials-content-publish-2024 \
+SUBMISSION_SALT_SECRET=devsecret CONTENT_API_KEY=<DEV-content-api-key> \
   npx cds bind --exec -- npm run watch:hybrid
 
 # Terminal 2: AppRouter

@@ -49,7 +49,20 @@ export default cds.service.impl(async function () {
   // rebuildContent — symmetric with AdminService; differs only by source string.
   // The shared helper in srv/lib/rebuild-action-handler.js derives the dispatch
   // reason from the source prefix → 'author-ui:rebuild-button:<user>'.
+  //
+  // #890: ownership check is REQUIRED here — the Tutorial.Author scope is
+  // shared across all authors, so without this any author could queue a
+  // rebuild (expensive; GH Actions quota) against any other author's
+  // tutorial by ID. AdminService's rebuildContent is intentionally
+  // unrestricted; only the author projection needs this gate.
   this.on('rebuildContent', 'Tutorials', async (req) => {
+    const tutorialId = req.params?.[0]?.ID ?? req.params?.[0];
+    if (!tutorialId) {
+      return req.reject(400, 'Tutorial ID is required');
+    }
+    if (!(await assertOwnership(tutorialId, req.user))) {
+      return req.reject(403, 'Not the owner of this tutorial');
+    }
     return handleRebuildAction(req, {
       source: 'author-ui:tutorial-detail',
       selectOne: (id) =>

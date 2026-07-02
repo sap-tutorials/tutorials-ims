@@ -62,7 +62,7 @@ Three patterns were considered:
 |---|---|---|---|
 | **mtaext property + `--var` placeholder** (this design) | Mirrors existing `${content-api-key}`/`${rebuild-api-key}` pattern. Survives redeploys. One CI secret rotates all three envs. | The PAT enters CF as a plain env var — same threat model as today, no worse. | **Chosen** |
 | User-provided service (`cf cups github-dispatch -p '{"token":"..."}'`) bound to `tutorials-srv` | Rotation = update CUPS, no MTA redeploy. | Adds an unbound resource for one string. Breaks the existing pattern. The other two property-based secrets don't need it either. | Rejected — defer until we have ≥3 such tokens. |
-| Hardcode a separate DEV-only PAT directly in `dev.mtaext` (matches `CONTENT_API_KEY: tutorials-content-publish-2024`) | Local DEV deploys work without `--var`. | A real GitHub PAT in git is a leak regardless of which CF space it points at. The CONTENT_API_KEY shared-literal is acceptable because that key gates one srv endpoint at a known shape; a PAT gates `actions:write` on the entire repo. | Rejected — DEV uses the same `${github-dispatch-token}` placeholder. |
+| Hardcode a separate DEV-only PAT directly in `dev.mtaext` (matches `CONTENT_API_KEY: <DEV-content-api-key>`) | Local DEV deploys work without `--var`. | A real GitHub PAT in git is a leak regardless of which CF space it points at. The CONTENT_API_KEY shared-literal is acceptable because that key gates one srv endpoint at a known shape; a PAT gates `actions:write` on the entire repo. | Rejected — DEV uses the same `${github-dispatch-token}` placeholder. |
 
 ## Failure modes after this change
 

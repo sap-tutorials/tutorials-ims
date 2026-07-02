@@ -1702,7 +1702,7 @@ In two terminals:
 
 ```bash
 # T1
-CONTENT_API_KEY=tutorials-content-publish-2024 npx cds bind --exec -- npm run watch
+CONTENT_API_KEY=<DEV-content-api-key> npx cds bind --exec -- npm run watch
 
 # T2
 npm run start:approuter

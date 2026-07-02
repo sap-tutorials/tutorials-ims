@@ -20,6 +20,18 @@
     {
       "name": "X-Robots-Tag",
       "value": "index, follow, max-image-preview:large"
+    },
+    {
+      "name": "Strict-Transport-Security",
+      "value": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "name": "X-Frame-Options",
+      "value": "SAMEORIGIN"
+    },
+    {
+      "name": "Permissions-Policy",
+      "value": "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()"
     }
   ],
   "login": {

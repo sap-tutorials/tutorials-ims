@@ -40,9 +40,32 @@ function rateLimitExceeded(hashedIp) {
 
 function isInt0to10(v) { return v == null || (Number.isInteger(v) && v >= 0 && v <= 10); }
 
+// #893: feedback.comment is stored and later rendered in the admin Feedback
+// Fiori app. Any HTML tag in the stored value is a stored-XSS pivot if a
+// renderer ever treats the column as HTML (Fiori Elements can be coaxed
+// into it via custom column formatters). Feedback is plain text by product
+// intent, so we strip HTML *entirely* server-side — no allowlist, no
+// reliance on the admin UI's default escaping.
+//
+// The stripping is pragmatic, not a full HTML parser:
+//   1. Remove tag pairs plus contents for the always-dangerous elements
+//      (<script>, <style>, <iframe>, <object>, <embed>, <svg>, <math>) —
+//      defends even if the browser tries to render before our regex sees it.
+//   2. Strip every remaining tag (<...>) so no HTML at all reaches storage.
+//   3. Encode residual angle brackets that never formed a tag (e.g. "a < b")
+//      so an attacker can't round-trip a partial tag past the strip pass.
+//   4. Cap at 2000 chars.
+const DANGEROUS_TAGS_RE = /<(script|style|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+const ANY_TAG_RE = /<\/?[a-zA-Z][^>]*>/g;
+
 function sanitizeComment(s) {
   if (!s) return null;
-  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').slice(0, 2000);
+  let out = String(s);
+  out = out.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  out = out.replace(DANGEROUS_TAGS_RE, '');
+  out = out.replace(ANY_TAG_RE, '');
+  out = out.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return out.slice(0, 2000);
 }
 
 export default class DeveloperService extends cds.ApplicationService {
@@ -641,9 +664,16 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('submitTutorialFeedback', async (req) => {
       const d = req.data;
+      // #897: log a structured line per submission attempt so ops can
+      // pattern-detect abuse (repeated 429s from one hashedIp = attempted
+      // flood; unknown-slug bursts = enumeration probe; honeypot hits =
+      // bot traffic). Purposefully keeps only the IP hash (not raw IP)
+      // and slug — safe to leave in CF logs.
+      const FLOG = cds.log('feedback');
 
       // 1. Honeypot — silent success
       if (d.honeypot && d.honeypot.trim() !== '') {
+        FLOG.warn(`submit rejected: honeypot slug=${(d.tutorialSlug || '').toString().slice(0, 80)}`);
         return { submissionId: cds.utils.uuid() };
       }
 
@@ -655,16 +685,22 @@ export default class DeveloperService extends cds.ApplicationService {
       const tutorialSlug = d.tutorialSlug.toLowerCase();
 
       // 3. Rate limit (before any DB I/O so unknown-slug floods don't hammer the DB)
-      if (!d._clientIp) cds.log('feedback').warn('submitTutorialFeedback: _clientIp missing — rate limiting will share one bucket. Express bridge must inject it.');
+      if (!d._clientIp) FLOG.warn('submitTutorialFeedback: _clientIp missing — rate limiting will share one bucket. Express bridge must inject it.');
       const ip = d._clientIp || 'unknown';
       const hashedIp = await hashIp(ip);
-      if (rateLimitExceeded(hashedIp)) return req.error(429, 'Too many submissions');
+      if (rateLimitExceeded(hashedIp)) {
+        FLOG.warn(`submit rejected: rate-limit ipHash=${hashedIp.slice(0, 12)} slug=${tutorialSlug}`);
+        return req.error(429, 'Too many submissions');
+      }
 
       // 4. Slug existence
       const { ContentFiles, TutorialFeedback } = cds.entities('com.sap.developers.ims');
       // slug-canonical: pre-canonicalized
       const exists = await SELECT.one.from(ContentFiles).columns('slug').where({ slug: tutorialSlug });
-      if (!exists) return req.error(400, 'Unknown tutorial');
+      if (!exists) {
+        FLOG.warn(`submit rejected: unknown-slug ipHash=${hashedIp.slice(0, 12)} slug=${tutorialSlug}`);
+        return req.error(400, 'Unknown tutorial');
+      }
 
       // 5. Persist
       const id = cds.utils.uuid();

@@ -55,7 +55,12 @@ function makeYamlFallbackLoader() {
     const yamlPath = path.resolve(process.cwd(), 'db', 'data', 'api-docs.yaml');
     if (!fs.existsSync(yamlPath)) return [];
     const loadFn = yaml.load ?? yaml.default?.load;
-    return loadFn(fs.readFileSync(yamlPath, 'utf8'));
+    const CORE = yaml.CORE_SCHEMA ?? yaml.default?.CORE_SCHEMA;
+    // #900: CORE_SCHEMA disables JS-YAML type extensions (!!js/function,
+    // !!js/regexp, …) that could otherwise construct arbitrary objects
+    // on parse. api-docs.yaml is version-controlled today but the field
+    // could be repointed at a fetched / user-authored file in future.
+    return loadFn(fs.readFileSync(yamlPath, 'utf8'), { schema: CORE });
   };
 }
 

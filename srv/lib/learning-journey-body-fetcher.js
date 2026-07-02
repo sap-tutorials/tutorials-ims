@@ -12,10 +12,18 @@
 //
 // Spec: docs/superpowers/specs/2026-06-28-447-phase4.1-learning-journeys.md §2.4 + Q7
 
+import { safeFetch } from './safe-fetch.js';
+
 const STRUCTURED_SELECTOR_RE = /<div\s+[^>]*class=["'][^"']*\blj-description\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i;
 const RETRY_DELAYS_MS = [200, 1000, 5000];
 const MIN_READABILITY_LEN = 200;
 const TIMEOUT_MS = 5000;
+
+// #895: hostname allowlist for the learning-journey scraper. URLs come from
+// LearningJourneys.url which is populated by the sap-devs MCP client, so a
+// misconfigured / poisoned MCP source could hand us an internal URL. Cap
+// this to the one public host we actually need.
+const ALLOWED_HOSTS = new Set(['learning.sap.com']);
 
 let mockFetcher = null;
 
@@ -27,15 +35,17 @@ let delayFn = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function fetchHtml(url) {
   if (mockFetcher) return mockFetcher(url);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const r = await fetch(url, { signal: controller.signal });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return await r.text();
-  } finally {
-    clearTimeout(timer);
-  }
+  // #895: safeFetch enforces https, allowlisted host, and private-IP block
+  // on the initial request AND every 3xx redirect hop. Without this an
+  // attacker who could poison LearningJourneys.url would pivot to IMDS.
+  const r = await safeFetch(url, {
+    allowedHosts: ALLOWED_HOSTS,
+    allowedProtocols: ['https:'],
+    timeoutMs: TIMEOUT_MS,
+    maxRedirects: 3,
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return await r.text();
 }
 
 async function fetchWithRetry(url, maxAttempts = 3) {

@@ -548,7 +548,7 @@ Content publishing uses a simpler bearer token mechanism:
 
 ```bash
 # Set in CI secrets and on the deployed app
-export CONTENT_API_KEY="tutorials-content-publish-2024"
+export CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"
 
 # The publish script includes this as Authorization: Bearer header
 npm run publish-content

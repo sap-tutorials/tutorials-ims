@@ -91,8 +91,8 @@ Flags: `--skip-cleanup` (skip autotest deletion), `--skip-slugs` (skip slug assi
 After Hugo builds, publish tutorial HTML to HANA. The publisher uses a chunked protocol (begin → append batches → commit) so a flaky TCP connection or a 53 MB JSON body no longer kills the run, and the server's commit step does carry-forward of unchanged slugs.
 
 ```bash
-# Set the API key (actual DEV key below — must match CONTENT_API_KEY env var on tutorials-srv)
-export CONTENT_API_KEY="tutorials-content-publish-2024"
+# Set the API key (fetch DEV value from BTP credstore or ask the tech lead — #887)
+export CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"
 
 # Publish to deployed CAP — default mode is correctness-equivalent to --force
 # (server's commit carries forward unchanged slugs, so a delta payload no longer drops the rest of the catalog)
@@ -127,7 +127,7 @@ The no-revert guard rejects a slug if its incoming `sourceHash` appears in **any
 If CONTENT_API_KEY is not set on the deployed srv app:
 
 ```bash
-cf set-env tutorials-srv CONTENT_API_KEY "tutorials-content-publish-2024"
+cf set-env tutorials-srv CONTENT_API_KEY "<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"
 cf restart tutorials-srv
 ```
 

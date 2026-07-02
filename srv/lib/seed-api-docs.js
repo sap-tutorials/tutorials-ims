@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { load as yamlLoad } from 'js-yaml';
+import { load as yamlLoad, CORE_SCHEMA } from 'js-yaml';
 import cds from '@sap/cds';
 
 const YAML_PATH = path.resolve(process.cwd(), 'db', 'data', 'api-docs.yaml');
@@ -41,7 +41,11 @@ function sha256(s) {
  */
 export async function runSeedApiDocs({ yamlContent, commit = false, slugFilter = null } = {}) {
   const raw = yamlContent ?? fs.readFileSync(YAML_PATH, 'utf8');
-  const rows = yamlLoad(raw);
+  // #900: CORE_SCHEMA disables the JS-YAML type extensions (!!js/function,
+  // !!js/regexp, etc.) that would otherwise construct arbitrary objects on
+  // parse. api-docs.yaml is version-controlled today but the field could
+  // easily be repointed to a fetched or user-authored file in future.
+  const rows = yamlLoad(raw, { schema: CORE_SCHEMA });
   if (!Array.isArray(rows)) throw new Error('seed-api-docs: YAML root must be an array');
 
   const { ApiDocs } = cds.entities('com.sap.developers.ims.external');

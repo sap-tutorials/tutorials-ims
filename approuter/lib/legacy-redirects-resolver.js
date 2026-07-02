@@ -16,6 +16,11 @@
  * Build an opaque index from a list of redirect rows.
  * Inactive rows are filtered out at build time.
  *
+ * #891: rows with a non-same-origin toPath are rejected at build time so
+ * the resolver hot path is guaranteed to only emit relative Location
+ * targets. Admins can only edit redirects to point at paths under this
+ * origin — no external redirects.
+ *
  * @param {Array} rows - Redirect records with fields:
  *   id, fromPath, toPath, statusCode, isPattern, isActive
  * @returns {{ exactMap: Map, patterns: Array }}
@@ -25,6 +30,12 @@ export function buildIndex(rows) {
   const patterns = [];
   for (const row of rows || []) {
     if (!row?.isActive) continue;
+    if (!isSameOriginPath(row.toPath)) {
+      // Drop external redirects rather than serving them. This preserves the
+      // rest of the redirect index if a single row is malformed.
+      // (approuter/server.js emits a warning above; keep the resolver silent.)
+      continue;
+    }
     if (row.isPattern) {
       patterns.push({ regex: new RegExp(row.fromPath), redirect: row });
     } else {
@@ -32,6 +43,32 @@ export function buildIndex(rows) {
     }
   }
   return { exactMap, patterns };
+}
+
+/**
+ * #891 — return true if `toPath` is a same-origin absolute path.
+ *
+ * Rejects:
+ *   - undefined / null / empty string
+ *   - protocol-relative URLs (//attacker.com)
+ *   - URLs with an explicit scheme (http:, https:, javascript:, data:, mailto:, etc.)
+ *   - paths that don't start with `/`
+ *
+ * Accepts anything that starts with a single `/` and can also validate the
+ * resulting URL parses as a same-origin URL (belt-and-suspenders).
+ *
+ * @param {string} toPath
+ * @returns {boolean}
+ */
+export function isSameOriginPath(toPath) {
+  if (typeof toPath !== 'string' || toPath.length === 0) return false;
+  // Protocol-relative: //evil.com or //evil.com/x — browser treats as external
+  if (toPath.startsWith('//')) return false;
+  // Any scheme: <letter><letter/digit/+/-/.>*:
+  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(toPath)) return false;
+  // Must be an absolute path
+  if (!toPath.startsWith('/')) return false;
+  return true;
 }
 
 /**
@@ -91,6 +128,10 @@ export function resolveRedirect(index, url) {
         /\$(\d+)/g,
         (_, n) => m[Number(n)] ?? ''
       );
+      // #891: capture-group substitution could turn a benign toPath like
+      // '/new-$1' into '/new-http://attacker.example' if the URL provided
+      // '$1' evilly. Re-validate the substituted result.
+      if (!isSameOriginPath(resolved)) continue;
       return {
         id: redirect.id,
         toPath: appendQuery(resolved, query),

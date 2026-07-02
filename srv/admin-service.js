@@ -358,6 +358,28 @@ export default class AdminService extends cds.ApplicationService {
       await ensureDevtoberfestActiveFlagInvariant(req);
     });
 
+    // #891: LegacyRedirects.toPath must be a same-origin absolute path,
+    // never an external URL. The resolver rejects external targets at
+    // index-build time as a backstop, but this hook stops bad rows from
+    // being written at all so the admin gets immediate feedback rather
+    // than silently-dropped redirects.
+    this.before(['CREATE', 'UPDATE', 'NEW', 'PATCH'], 'LegacyRedirects', async (req) => {
+      const toPath = req.data?.toPath;
+      if (toPath === undefined) return; // PATCH that doesn't touch toPath — fine
+      if (typeof toPath !== 'string' || toPath.length === 0) {
+        return req.reject(400, 'toPath is required and must be a non-empty string');
+      }
+      if (toPath.startsWith('//')) {
+        return req.reject(400, 'toPath must not be protocol-relative (starts with //)');
+      }
+      if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(toPath)) {
+        return req.reject(400, 'toPath must not contain a scheme (http:, javascript:, etc.) — must be same-origin');
+      }
+      if (!toPath.startsWith('/')) {
+        return req.reject(400, 'toPath must start with / (absolute same-origin path)');
+      }
+    });
+
     // Ensure singleton row exists for KnowledgeGraphSettings. The seed CSV is
     // header-only (no data row); without this hook OData V4 returns 404 on the
     // singleton's first read. Defaults mirror the admin form's placeholders.

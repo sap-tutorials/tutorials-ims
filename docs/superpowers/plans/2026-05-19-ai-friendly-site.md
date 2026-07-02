@@ -1334,7 +1334,7 @@ All should produce matches.
 This is required because the HANA-served `/tutorials/*` HTML is what crawlers see; Hugo statics in `hugo/public/tutorials/` are stripped from the AppRouter (per CLAUDE.md "Tutorials are DB-only").
 
 ```bash
-export CONTENT_API_KEY="tutorials-content-publish-2024"
+export CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"
 CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" \
   npm run publish-content -- --force
 ```

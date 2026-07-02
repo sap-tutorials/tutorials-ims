@@ -2284,7 +2284,7 @@ cd .deploy && mbt build && cf deploy "$(ls -1t mta_archives/*.mtar | head -1)" -
 Per project memo "publish-content needs --force":
 
 ```bash
-export CONTENT_API_KEY="tutorials-content-publish-2024"
+export CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"
 CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" \
   npm run publish-content -- --force
 ```

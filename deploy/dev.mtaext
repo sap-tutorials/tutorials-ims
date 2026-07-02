@@ -6,7 +6,12 @@ modules:
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
-      CONTENT_API_KEY: tutorials-content-publish-2024
+      # #887: was previously a hardcoded literal. Now a placeholder resolved
+      # by envsubst at deploy time (same shape as prod.mtaext / qa.mtaext),
+      # so the DEV key never appears in source control or the VitePress
+      # docs site. Set CONTENT_API_KEY in the workflow secrets or export it
+      # locally before running `envsubst < dev.mtaext > dev.resolved.mtaext`.
+      CONTENT_API_KEY: ${CONTENT_API_KEY}
       GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN}
       # KG Phase 1 flag flipped 2026-06-19 (#381 / #442). Override the
       # mta.yaml default ('false') so MTA redeploys preserve the DEV-only

@@ -22,6 +22,7 @@ const { isAuthorizedBearer } = require('./lib/bearer-auth')
 const { resolveSecret } = require('./lib/credstore-secret')
 const { getIndex, startAutoRefresh } = require('./lib/legacy-redirects-loader')
 const { bump, startAutoFlush } = require('./lib/hit-counter')
+const { safeFetch } = require('./lib/safe-fetch')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
 // array) injected by the approuter framework when mta.yaml declares
@@ -122,6 +123,9 @@ async function imgCdnHandler(req, res, next) {
     res.end('Invalid u parameter')
     return
   }
+  // #888: hostname allowlist + private-IP block are enforced by safeFetch
+  // per hop (initial + every 3xx redirect). Pre-check here for a fast 403
+  // path so we don't even open a socket for obviously-wrong hosts.
   if (!IMG_CDN_HOSTS.has(target.hostname)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' })
     res.end('Forbidden host')
@@ -132,7 +136,15 @@ async function imgCdnHandler(req, res, next) {
   const acceptsWebp = /image\/webp/.test(req.headers.accept || '')
 
   try {
-    const upstream = await fetch(u, { signal: AbortSignal.timeout(IMG_CDN_TIMEOUT_MS) })
+    // #888: safeFetch validates hostname + private-IP + protocol on every hop.
+    // Without redirect: 'manual' here, a controlled 302 from
+    // raw.githubusercontent.com to 169.254.169.254 would leak metadata creds.
+    const upstream = await safeFetch(u, {
+      allowedHosts: IMG_CDN_HOSTS,
+      allowedProtocols: ['https:', 'http:'],
+      timeoutMs: IMG_CDN_TIMEOUT_MS,
+      maxRedirects: 3,
+    })
     if (!upstream.ok) {
       res.writeHead(upstream.status, { 'Content-Type': 'text/plain' })
       res.end(`Upstream ${upstream.status}`)
@@ -176,10 +188,18 @@ async function imgCdnHandler(req, res, next) {
     })
     res.end(out)
   } catch (err) {
-    console.error('[img-cdn]', err.message)
+    console.error('[img-cdn]', err.code || 'ERR', err.message)
     if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'text/plain' })
-      res.end('Upstream error')
+      // #888: SSRF_BLOCKED means the URL (or a redirect target) resolved to
+      // a private/internal address. Return 403 not 502 so probes can be
+      // distinguished from upstream flakes in logs.
+      if (err.code === 'SSRF_BLOCKED') {
+        res.writeHead(403, { 'Content-Type': 'text/plain' })
+        res.end('Forbidden')
+      } else {
+        res.writeHead(502, { 'Content-Type': 'text/plain' })
+        res.end('Upstream error')
+      }
     }
   }
 }
@@ -259,7 +279,22 @@ async function rebuildHandler(req, res, next) {
       createGunzip(),
       tar.extract({
         cwd: TEMP_DIR,
-        filter: (path) => {
+        // #899: pin defensive extraction flags explicitly, don't rely on
+        // tar v7 defaults staying safe if the dep is ever bumped or forked.
+        strict: true,           // reject entries with unknown/unsupported header types
+        preservePaths: false,   // strip leading '/' and drop '..' segments
+        strip: 0,
+        // filter() receives (path, entry) — reject symlinks and hardlinks
+        // outright (they're never expected in a Hugo static-site tarball)
+        // and re-check the resolved path stays under TEMP_DIR as a
+        // belt-and-suspenders against any escape via tar features we
+        // haven't thought of. Both these classes have caused real CVEs in
+        // the tar package's history — no reason to leave them open.
+        filter: (path, entry) => {
+          if (entry && (entry.type === 'SymbolicLink' || entry.type === 'Link')) {
+            console.warn(`[rebuild] rejecting tar entry (${entry.type}): ${path}`)
+            return false
+          }
           const resolved = resolve(TEMP_DIR, path)
           return resolved.startsWith(TEMP_DIR + sep)
         }
@@ -307,7 +342,39 @@ function staticHandler(req, res, next) {
 // authenticationType: "xsuaa", which enforces OAuth before reaching the CAP backend.
 // Locally we proxy them directly since there's no real XSUAA binding.
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
-const isLocal = !process.env.VCAP_APPLICATION
+// #892: local-dev mock auth (Basic admin:admin) requires TWO signals, not one.
+//
+// Historically `isLocal = !process.env.VCAP_APPLICATION` — meaning any
+// deployed container missing VCAP_APPLICATION would silently downgrade to
+// admin-without-auth. The double gate below makes that impossible unless
+// someone actively sets NODE_ENV to a dev/test value AND removes CF
+// metadata — a much louder configuration mistake.
+//
+// Positive dev signals (any one is sufficient alongside missing VCAP):
+//   - NODE_ENV === 'development' | 'test'  (developer workstation, unit tests)
+//   - CI === 'true'                        (GitHub Actions, other CI)
+//   - APPROUTER_LOCAL === 'true'           (explicit opt-in override)
+const isLocal = !process.env.VCAP_APPLICATION && (
+     process.env.NODE_ENV === 'development'
+  || process.env.NODE_ENV === 'test'
+  || process.env.CI === 'true'
+  || process.env.APPROUTER_LOCAL === 'true'
+)
+
+if (isLocal) {
+  console.warn('[approuter] LOCAL MODE — mock Basic auth is active. Do NOT ship this instance.')
+} else if (!process.env.VCAP_APPLICATION) {
+  // VCAP absent AND no dev signal — either a mis-bound CF app or a stripped
+  // NODE_ENV. Warn loudly. We don't exit(1) because that would break
+  // scenarios where operators launch the approuter in unusual contexts,
+  // but we make it impossible to *silently* fall through to mock-auth.
+  console.warn(
+    '[approuter] WARNING: VCAP_APPLICATION not set AND no dev signal (NODE_ENV=development/test, CI=true, APPROUTER_LOCAL=true). ' +
+    'Mock auth is DISABLED. Authenticated routes will fail until XSUAA binding is present. ' +
+    'If this is a local workstation, set NODE_ENV=development.'
+  )
+}
+
 const PROXY_PREFIXES = [
   '/_dev', '/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/',
   '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/',

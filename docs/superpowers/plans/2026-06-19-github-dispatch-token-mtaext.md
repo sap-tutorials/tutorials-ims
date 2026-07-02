@@ -66,7 +66,7 @@ modules:
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
-      CONTENT_API_KEY: tutorials-content-publish-2024
+      CONTENT_API_KEY: <DEV-content-api-key>
       GITHUB_DISPATCH_TOKEN: ${github-dispatch-token}
       REBUILD_TARGET_ENV: dev
 
@@ -88,7 +88,7 @@ yq eval '.modules[] | select(.name == "tutorials-srv") | .properties' deploy/dev
 Expected output (key order may vary by yq version):
 ```yaml
 EXPOSE_CAP_UI: true
-CONTENT_API_KEY: tutorials-content-publish-2024
+CONTENT_API_KEY: <DEV-content-api-key>
 GITHUB_DISPATCH_TOKEN: ${github-dispatch-token}
 REBUILD_TARGET_ENV: dev
 ```

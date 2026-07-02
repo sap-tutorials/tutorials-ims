@@ -8,7 +8,7 @@
     "watch": "cds watch",
     "watch:hybrid": "cds watch --profile hybrid",
     "dev:hybrid": "npm run watch:hybrid & npm run start:approuter",
-    "start:approuter": "cd approuter && npm start",
+    "start:approuter": "cd approuter && NODE_ENV=development npm start",
     "bind:setup": "node scripts/setup-hybrid-env.js",
     "setup": "npm --prefix hugo-apps install --no-audit --no-fund && npm rebuild --ignore-scripts=false better-sqlite3 && sh scripts/install-git-hooks.sh",
     "build:cds": "cds build --production",

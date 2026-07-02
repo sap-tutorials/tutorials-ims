@@ -68,16 +68,33 @@ export default class ScannerService extends cds.ApplicationService {
     });
 
     this.on('claimPrize', async (req) => {
-      const { recordId } = req.data;
+      const { recordId, accountNumber } = req.data;
       if (!recordId) return req.reject(400, 'recordId is required');
-      log.info(`Claiming prize for record: ${recordId}`);
+      if (!accountNumber) return req.reject(400, 'accountNumber is required');
+      log.info(`Claiming prize record=${recordId} for account=${accountNumber}`);
 
       const prizeRecordLegacyId = parseInt(recordId, 10);
       if (Number.isNaN(prizeRecordLegacyId)) return req.reject(400, `Invalid record ID format: ${recordId}`);
 
+      const contestantLegacyId = parseInt(accountNumber, 10);
+      if (Number.isNaN(contestantLegacyId)) return req.reject(400, `Invalid account number format: ${accountNumber}`);
+
+      // #889: resolve the contestant just scanned + the prize record atomically,
+      // then reject the update if they don't match. Without this any caller
+      // with MobileApp scope could claim any prize by legacyId enumeration.
+      const contestant = await SELECT.one.from(Users)
+        .columns('ID')
+        .where({ legacyId: contestantLegacyId });
+      if (!contestant) return req.reject(404, `User not found: ${accountNumber}`);
+
       const record = await SELECT.one.from(PrizeRecords)
         .where({ legacyId: prizeRecordLegacyId });
       if (!record) return req.reject(404, `Prize record not found: ${recordId}`);
+
+      if (record.user_ID !== contestant.ID) {
+        log.warn(`[claimPrize] ownership mismatch: record ${recordId} belongs to user ${record.user_ID}, not scanned account ${accountNumber} (${contestant.ID})`);
+        return req.reject(403, 'Prize record does not belong to the scanned contestant');
+      }
 
       if (record.status === 'CLAIMED') {
         return `Record ${recordId} already claimed`;
