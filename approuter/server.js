@@ -279,7 +279,22 @@ async function rebuildHandler(req, res, next) {
       createGunzip(),
       tar.extract({
         cwd: TEMP_DIR,
-        filter: (path) => {
+        // #899: pin defensive extraction flags explicitly, don't rely on
+        // tar v7 defaults staying safe if the dep is ever bumped or forked.
+        strict: true,           // reject entries with unknown/unsupported header types
+        preservePaths: false,   // strip leading '/' and drop '..' segments
+        strip: 0,
+        // filter() receives (path, entry) — reject symlinks and hardlinks
+        // outright (they're never expected in a Hugo static-site tarball)
+        // and re-check the resolved path stays under TEMP_DIR as a
+        // belt-and-suspenders against any escape via tar features we
+        // haven't thought of. Both these classes have caused real CVEs in
+        // the tar package's history — no reason to leave them open.
+        filter: (path, entry) => {
+          if (entry && (entry.type === 'SymbolicLink' || entry.type === 'Link')) {
+            console.warn(`[rebuild] rejecting tar entry (${entry.type}): ${path}`)
+            return false
+          }
           const resolved = resolve(TEMP_DIR, path)
           return resolved.startsWith(TEMP_DIR + sep)
         }
