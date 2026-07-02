@@ -166,7 +166,7 @@ function step3() {
     fail(3, 'cf-env',
       'CONTENT_API_KEY not set on tutorials-srv. Without it, the post-migration ' +
       'content rebuild (Step 13) will fail. Remediation:\n' +
-      '  cf set-env tutorials-srv CONTENT_API_KEY "tutorials-content-publish-2024"\n' +
+      '  cf set-env tutorials-srv CONTENT_API_KEY "<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"\n' +
       '  cf restart tutorials-srv');
   }
   console.log('  ✓ CONTENT_API_KEY is set');

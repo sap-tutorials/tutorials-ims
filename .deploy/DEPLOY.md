@@ -115,7 +115,7 @@ cf push tutorials-srv -p gen/srv
 Use after Hugo build to push HTML to HANA:
 
 ```bash
-export CONTENT_API_KEY="tutorials-content-publish-2024"
+export CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, see docs/developers/operations/rotate-content-api-key.md>"
 export CAP_BASE_URL="https://<srv-url>"
 npm run publish-content
 ```

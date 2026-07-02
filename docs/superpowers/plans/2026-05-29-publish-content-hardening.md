@@ -1913,7 +1913,7 @@ If pre-existing tests reference deleted code paths, update them — they should 
 Bring up CAP locally with hybrid bindings (`npm run dev:hybrid`), set `CONTENT_API_KEY`, then run:
 
 ```bash
-CONTENT_API_KEY="tutorials-content-publish-2024" npm run publish-content -- --dry-run --verbose
+CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>" npm run publish-content -- --dry-run --verbose
 ```
 
 Expected: prints `would publish: ...` list and exits 0. No HTTP traffic.
@@ -1921,7 +1921,7 @@ Expected: prints `would publish: ...` list and exits 0. No HTTP traffic.
 Then a real publish against the local CAP:
 
 ```bash
-CONTENT_API_KEY="tutorials-content-publish-2024" npm run publish-content -- --force --verbose
+CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>" npm run publish-content -- --force --verbose
 ```
 
 Expected: shows `Session ... version ...`, `N batches × up to 50 slugs, concurrency=6`, parallel append progress, `Published successfully`, `Verify OK`. Exit 0.
@@ -2139,7 +2139,7 @@ protocol (begin/append/commit):
 
 ```bash
 # Set the API key
-export CONTENT_API_KEY="tutorials-content-publish-2024"
+export CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"
 
 # Standard publish (delta — only changed slugs)
 CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" npm run publish-content
@@ -2163,7 +2163,7 @@ Flags:
 If `CONTENT_API_KEY` is not set on the deployed srv app:
 
 ```bash
-cf set-env tutorials-srv CONTENT_API_KEY "tutorials-content-publish-2024"
+cf set-env tutorials-srv CONTENT_API_KEY "<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"
 cf restart tutorials-srv
 ```
 ```

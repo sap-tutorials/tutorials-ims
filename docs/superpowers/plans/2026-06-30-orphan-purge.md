@@ -702,7 +702,7 @@ describeIf('POST /content/orphan-purge — hybrid (real HANA)', () => {
 - [ ] **Step 2: Run against DEV (requires `cf login` to DEV; `CONTENT_API_KEY` must be set in the calling shell — `cds bind` does NOT inject it, only service-binding env vars)**
 
 ```bash
-CONTENT_API_KEY="tutorials-content-publish-2024" \
+CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>" \
 ALLOW_HYBRID_WRITES=true \
   npx cds bind --exec -- npx vitest run test/hybrid/orphan-purge.test.js
 ```

@@ -78,7 +78,7 @@ Tutorials are served from HANA BLOBs, not static files. After Hugo builds, publi
 
 ```bash
 # Set the shared API key (must match CONTENT_API_KEY on tutorials-srv)
-export CONTENT_API_KEY="tutorials-content-publish-2024"
+export CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"
 
 # Ensure CONTENT_API_KEY is set on the deployed srv
 cf set-env tutorials-srv CONTENT_API_KEY "$CONTENT_API_KEY"

@@ -6,8 +6,18 @@ const project = cds.test('serve', '--project', '.', '--profile', 'hybrid');
 
 const TEST_PREFIX = '__TEST__';
 const ORIGINAL_KEY = process.env.CONTENT_API_KEY;
-// Match the format used in CI/local dev — see CLAUDE.md "Content Publishing"
-const TEST_TOKEN = ORIGINAL_KEY || 'tutorials-content-publish-2024';
+// #887: previously this fell back to the hardcoded DEV key literal.
+// Silently using DEV credentials against DEV HANA is the shared-secret
+// pattern #887 is fixing. Fail loud instead. Export CONTENT_API_KEY
+// (fetch from BTP credstore per rotate-content-api-key runbook) before
+// running the hybrid tests.
+if (!ORIGINAL_KEY) {
+  throw new Error(
+    'CONTENT_API_KEY not set — export it before running the hybrid repo-catalog test. ' +
+    'See docs/developers/operations/rotate-content-api-key.md.'
+  );
+}
+const TEST_TOKEN = ORIGINAL_KEY;
 
 function testEntries() {
   return {

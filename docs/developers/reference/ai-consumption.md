@@ -370,7 +370,7 @@ The AppRouter strips `hugo/public/tutorials/` during build (`rm -rf approuter/st
 **Implication**: any `<head>` change in this initiative requires a content republish to reach production tutorials. After `npm run build:all`:
 
 ```bash
-export CONTENT_API_KEY="tutorials-content-publish-2024"
+export CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NOT commit>"
 CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" \
   npm run publish-content -- --force
 ```
