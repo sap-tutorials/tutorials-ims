@@ -118,6 +118,13 @@ async function main() {
     }
   }
 
+  // Load + compile the CDS model. Matches scripts/repair-author-id-phase-c.cjs
+  // — required so cds.entities() resolves the namespace under `cds bind --exec`.
+  // Without this the call throws TypeError: cds.entities is not a function.
+  process.env.cds_requires_auth_kind = 'mocked';
+  const csn = await cds.load('*');
+  cds.model = cds.compile.for.nodejs(csn);
+
   await cds.connect.to('db');
   const { TutorialMeta, Tutorials, Users } = cds.entities('com.sap.developers.ims');
 
@@ -138,13 +145,13 @@ async function main() {
   log.info(`loaded ${users.length} users (${usersByLogin.size} with githubLogin)`);
 
   // ── Row set: TutorialMeta joined to Tutorials.slug ────────────────
+  // Preload ALL Tutorials (~1400 rows) rather than SELECT WHERE ID IN
+  // (thousands of meta.tutorial_IDs). The WHERE-IN packet exceeds HANA's
+  // maximum size on the production DB and crashes the script mid-run.
+  const allTuts = await SELECT.from(Tutorials).columns('ID', 'slug');
+  const slugByTutId = new Map(allTuts.map((t) => [t.ID, t.slug]));
   const metas = await SELECT.from(TutorialMeta)
     .columns('ID', 'tutorial_ID', 'owner', 'ownerEmail');
-  const tutIds = metas.map((m) => m.tutorial_ID).filter(Boolean);
-  const tuts = tutIds.length
-    ? await SELECT.from(Tutorials).columns('ID', 'slug').where({ ID: { in: tutIds } })
-    : [];
-  const slugByTutId = new Map(tuts.map((t) => [t.ID, t.slug]));
 
   let readErrors = 0;
   const buckets = { ok: [], 'null-out': [], 'no-frontmatter': [], 'no-signals': [], 'no-owner-email': [] };

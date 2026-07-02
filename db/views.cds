@@ -291,7 +291,16 @@ view MyTutorialsView as
     case when m.monitoredStatus = 'ACTIVE'
          then true else false end           as monitored : Boolean,
     days_between(m.reviewedDate, $now)      as daysSinceReview : Integer
-  };
+  }
+  // #862 rollout: filter INACTIVE / DELETED tutorials at the view level so
+  // the three MyTutorials-family endpoints (MyTutorials, MyAuthoredTutorials,
+  // MyOwnedTutorials) never surface soft-deleted rows. Without this filter
+  // the sandbox soft-delete script has no user-visible effect: the row
+  // stays on MyAuthoredTutorials for its FK author regardless of Tutorials.status.
+  // DRAFT is intentionally allowed — authors want their in-progress work on
+  // "My Tutorials." Only INACTIVE and DELETED are hidden; NULL (pre-status
+  // migration rows) is kept for backward compat.
+  where t.status is null or t.status not in ('INACTIVE', 'DELETED');
 
 // #777 followup (2026-06-30) — bridge entity needed by db/advocates.cds's
 // `ownedTutorials` association. MyTutorialsView.userId = Users.uuid (the
