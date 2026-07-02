@@ -89,25 +89,27 @@ The metrics dimension `arm` distinguishes these cases: v2 successes are tagged `
 CREATE VIEW "KG_PG_VERTICES_V" AS
   -- Concept vertices
   SELECT
-    CAST('concept:' || slug AS NVARCHAR(100))  AS "VERTEX_KEY",
-    'concept'                                  AS "VERTEX_TYPE",
-    slug                                       AS "SLUG",
-    name                                       AS "LABEL",
-    status                                     AS "STATUS"
-  FROM "com_sap_developers_ims_Concepts"
-  WHERE status = 'ACTIVE'
+    CAST('concept:' || SLUG AS NVARCHAR(100)) AS "VERTEX_KEY",
+    'concept'                                 AS "VERTEX_TYPE",
+    SLUG                                      AS "SLUG",
+    NAME                                      AS "LABEL",
+    STATUS                                    AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTS"
+  WHERE STATUS = 'ACTIVE'
   UNION ALL
   -- Tutorial vertices (synthesized from the link table — tutorials don't
   -- live in a KG-specific table, they live in Tutorials).
   SELECT DISTINCT
-    CAST('tutorial:' || t.slug AS NVARCHAR(100)) AS "VERTEX_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(100)) AS "VERTEX_KEY",
     'tutorial'                                   AS "VERTEX_TYPE",
-    t.slug                                       AS "SLUG",
-    t.title                                      AS "LABEL",
+    t.SLUG                                       AS "SLUG",
+    t.TITLE                                      AS "LABEL",
     NULL                                         AS "STATUS"
-  FROM "com_sap_developers_ims_TutorialConceptLinks" tcl
-  JOIN "com_sap_developers_ims_Tutorials" t ON t.ID = tcl.tutorial_ID;
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID;
 ```
+
+> **Task 1 finding (2026-07-02):** HANA table + column names are uppercase-underscore, not lowercase-dotted. The DDL above uses the confirmed form. See [`docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md`](../reviews/2026-07-02-kg-property-graph-spike-task1-notes.md).
 
 `VERTEX_KEY` is the workspace's primary key. The `concept:` / `tutorial:` prefixes prevent collisions between concept slugs and tutorial slugs, which share a slug namespace at the CDS level but are disambiguated at the KG IRI layer.
 
@@ -117,24 +119,24 @@ CREATE VIEW "KG_PG_VERTICES_V" AS
 CREATE VIEW "KG_PG_EDGES_V" AS
   -- kg:requires edges: concept → concept
   SELECT
-    CAST('concept:' || src.slug AS NVARCHAR(100)) AS "SOURCE",
-    CAST('concept:' || tgt.slug AS NVARCHAR(100)) AS "TARGET",
+    CAST('concept:' || src.SLUG AS NVARCHAR(100)) AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(100)) AS "TARGET",
     'requires'                                    AS "EDGE_TYPE"
-  FROM "com_sap_developers_ims_ConceptEdges" ce
-  JOIN "com_sap_developers_ims_Concepts" src ON src.ID = ce.source_ID
-  JOIN "com_sap_developers_ims_Concepts" tgt ON tgt.ID = ce.target_ID
-  WHERE ce.predicate = 'requires' AND ce.status = 'ACTIVE'
-    AND src.status = 'ACTIVE' AND tgt.status = 'ACTIVE'
+  FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" tgt ON tgt.ID = ce.TARGET_ID
+  WHERE ce.PREDICATE = 'requires' AND ce.STATUS = 'ACTIVE'
+    AND src.STATUS = 'ACTIVE' AND tgt.STATUS = 'ACTIVE'
   UNION ALL
   -- kg:teaches edges: tutorial → concept
   SELECT
-    CAST('tutorial:' || t.slug AS NVARCHAR(100)) AS "SOURCE",
-    CAST('concept:'  || c.slug AS NVARCHAR(100)) AS "TARGET",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(100)) AS "SOURCE",
+    CAST('concept:'  || c.SLUG AS NVARCHAR(100)) AS "TARGET",
     'teaches'                                    AS "EDGE_TYPE"
-  FROM "com_sap_developers_ims_TutorialConceptLinks" tcl
-  JOIN "com_sap_developers_ims_Tutorials" t ON t.ID = tcl.tutorial_ID
-  JOIN "com_sap_developers_ims_Concepts" c   ON c.ID = tcl.concept_ID
-  WHERE c.status = 'ACTIVE';
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" c   ON c.ID = tcl.CONCEPT_ID
+  WHERE c.STATUS = 'ACTIVE';
 ```
 
 Only two edge types (`requires`, `teaches`). The PREREQ arm doesn't need `coCompletedWith`, `relatedTo`, or the other seven predicates — and adding them would inflate the workspace with edges `SHORTEST_PATH` would then have to filter out. If any follow-on issue graduates (PageRank, community detection, WCC), the edge view widens accordingly — tracked in follow-on Issue 4.

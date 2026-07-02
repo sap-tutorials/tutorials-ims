@@ -74,41 +74,19 @@
   - If the name uses dots, the view DDL in later tasks needs `"com.sap.developers.ims.Concepts"` (double-quoted). If it uses underscores, use `"com_sap_developers_ims_Concepts"`. Record the observed form in Task 1 notes.
 - [ ] Repeat for `ConceptEdges`, `Tutorials`, `TutorialConceptLinks`. Confirm all four use the same naming convention.
 
-### Step 1.3: Probe `SHORTEST_PATH` syntax with a hand-written GraphScript block
+### Step 1.3: `SHORTEST_PATH` syntax probe — redirect to HDI deploy cycle (Path C)
 
-- [ ] Create a minimal throwaway workspace + vertex/edge tables via `hana-cli querySimple`. Use highly-collision-resistant `_KGPROBE_`-prefixed names (there is no "sandbox schema" — the HDI runtime schema is the only writable target for the DEV service key; prefixing plus the explicit DROP at the end of this step keeps state clean):
+**Update (2026-07-02, from executed Task 1):** The original ad-hoc probe plan (create throwaway `_KGPROBE_*` tables directly) is **not possible** in this HDI container. Runtime users don't have `CREATE TABLE` — HDI's object-owner model reserves DDL for `.hdb*` files at deploy time. Details in [`docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md`](../reviews/2026-07-02-kg-property-graph-spike-task1-notes.md).
 
-```sql
-CREATE COLUMN TABLE "_KGPROBE_V" ("KEY" NVARCHAR(50) PRIMARY KEY, "NAME" NVARCHAR(100));
-CREATE COLUMN TABLE "_KGPROBE_E" ("SOURCE" NVARCHAR(50), "TARGET" NVARCHAR(50));
-INSERT INTO "_KGPROBE_V" VALUES ('a','Alpha'), ('b','Bravo'), ('c','Charlie');
-INSERT INTO "_KGPROBE_E" VALUES ('a','b'), ('b','c');
+**Redirect (Path C, approved):** use the first HDI deploy attempt in Tasks 2–3 as the probe.
 
-CREATE GRAPH WORKSPACE "_KGPROBE_WS" EDGE TABLE "_KGPROBE_E" SOURCE COLUMN "SOURCE" TARGET COLUMN "TARGET" VERTEX TABLE "_KGPROBE_V" KEY COLUMN "KEY";
-```
+- Task 2 authors the real `.hdbview` files with the confirmed uppercase-underscore table names.
+- Task 3 Step 3.1 authors a minimal `.hdbgraphworkspace` declaration.
+- The first `cf push tutorials-db-deployer` either:
+  - **Compiles the workspace successfully** → entitlement + HDI plugin are wired. Iterate on the procedure body's `SHORTEST_PATH` call in Task 3 Step 3.2 across successive deploys (~30 s each).
+  - **Rejects the file suffix or the workspace declaration** → the property-graph HDI plugin is not configured on this container. The spike stalls on service-key/plugin config, not on code. Update this notes file and surface to the maintainer.
 
-- [ ] Run a `SHORTEST_PATH` call against `_KGPROBE_WS`. The QRC-2026-Q3 syntax is expected to be (verify — this is the placeholder Task 1 confirms):
-
-```sql
-DO BEGIN
-  DECLARE result TABLE (source NVARCHAR(50), target NVARCHAR(50), weight DOUBLE);
-  CREATE GRAPH WORKSPACE g_ws INSTANCE "_KGPROBE_WS";
-  result = MAP GRAPH SHORTEST_PATH(:g_ws, VERTEX v1 = VERTEX(:g_ws, 'a'), VERTEX v2 = VERTEX(:g_ws, 'c'));
-  SELECT * FROM :result;
-END;
-```
-
-  - Expected: 2 rows (edges a→b and b→c) OR one row per vertex hop, depending on API shape.
-  - Capture the exact syntax that works. **This is the load-bearing evidence for the entire plan.**
-  - If `SHORTEST_PATH` isn't callable this way, try variants: `PGQL` block (`SELECT ... MATCH SHORTEST ((v1)-[e*]->(v2)) ...`); or a `CREATE PROCEDURE ... LANGUAGE GRAPH` block; document what does work.
-
-- [ ] **Immediately drop the probe artifacts** (before Step 1.4 to avoid leaving them in the container):
-
-```sql
-DROP GRAPH WORKSPACE "_KGPROBE_WS";
-DROP TABLE "_KGPROBE_E";
-DROP TABLE "_KGPROBE_V";
-```
+Skip to Step 1.4 — the "hand-authored SQL against a throwaway workspace" is deleted as unreachable.
 
 ### Step 1.4: Probe `OUT param TABLE(...)` binding via `cds.db.run`
 
@@ -155,33 +133,38 @@ git commit -m "docs(#913): Task 1 — HANA property-graph syntax probe notes"
 
 ### Step 2.1: Author `KG_PG_VERTICES_V.hdbview`
 
-- [ ] Create the file with the union of concept + tutorial vertex projections. Use the **exact table-name form confirmed in Task 1 Step 1.2**.
+**Confirmed table + column names from Task 1** (see [`docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md`](../reviews/2026-07-02-kg-property-graph-spike-task1-notes.md)):
+
+- Tables: `COM_SAP_DEVELOPERS_IMS_CONCEPTS`, `COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES`, `COM_SAP_DEVELOPERS_IMS_TUTORIALS`, `COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS` — all uppercase, underscore-flattened.
+- Columns are uppercase: `SLUG`, `NAME`, `TITLE`, `STATUS`, `ID`, `SOURCE_ID`, `TARGET_ID`, `TUTORIAL_ID`, `CONCEPT_ID`, `PREDICATE`.
+
+- [ ] Create the file with union of concept + tutorial vertex projections:
 
 ```sql
 VIEW "KG_PG_VERTICES_V" AS
   -- Concept vertices — one row per active concept.
   SELECT
-    CAST('concept:' || "slug" AS NVARCHAR(100)) AS "VERTEX_KEY",
-    'concept'                                   AS "VERTEX_TYPE",
-    "slug"                                      AS "SLUG",
-    "name"                                      AS "LABEL",
-    "status"                                    AS "STATUS"
-  FROM "com.sap.developers.ims.Concepts"        -- Task 1: confirm the exact name
-  WHERE "status" = 'ACTIVE'
+    CAST('concept:' || SLUG AS NVARCHAR(100)) AS "VERTEX_KEY",
+    'concept'                                 AS "VERTEX_TYPE",
+    SLUG                                      AS "SLUG",
+    NAME                                      AS "LABEL",
+    STATUS                                    AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTS"
+  WHERE STATUS = 'ACTIVE'
   UNION ALL
-  -- Tutorial vertices — synthesized from the link table because
-  -- tutorials don't live in a KG-specific table.
+  -- Tutorial vertices — synthesized from the link table because tutorials
+  -- don't live in a KG-specific table.
   SELECT DISTINCT
-    CAST('tutorial:' || t."slug" AS NVARCHAR(100)) AS "VERTEX_KEY",
-    'tutorial'                                     AS "VERTEX_TYPE",
-    t."slug"                                       AS "SLUG",
-    t."title"                                      AS "LABEL",
-    NULL                                           AS "STATUS"
-  FROM "com.sap.developers.ims.TutorialConceptLinks" tcl
-  JOIN "com.sap.developers.ims.Tutorials" t ON t."ID" = tcl."tutorial_ID";
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(100)) AS "VERTEX_KEY",
+    'tutorial'                                   AS "VERTEX_TYPE",
+    t.SLUG                                       AS "SLUG",
+    t.TITLE                                      AS "LABEL",
+    NULL                                         AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID;
 ```
 
-**Note:** `.hdbview` files use `VIEW` (not `CREATE VIEW`) and are UNQUOTED-schema by convention — HDI resolves the schema at deploy time. If Task 1 confirmed underscore names, replace the double-quoted dotted names accordingly.
+**Note:** `.hdbview` files use `VIEW` (not `CREATE VIEW`) and HDI resolves the schema at deploy time.
 
 ### Step 2.2: Author `KG_PG_EDGES_V.hdbview`
 
@@ -191,24 +174,24 @@ VIEW "KG_PG_VERTICES_V" AS
 VIEW "KG_PG_EDGES_V" AS
   -- kg:requires edges: concept → concept
   SELECT
-    CAST('concept:' || src."slug" AS NVARCHAR(100)) AS "SOURCE",
-    CAST('concept:' || tgt."slug" AS NVARCHAR(100)) AS "TARGET",
-    'requires'                                      AS "EDGE_TYPE"
-  FROM "com.sap.developers.ims.ConceptEdges" ce
-  JOIN "com.sap.developers.ims.Concepts" src ON src."ID" = ce."source_ID"
-  JOIN "com.sap.developers.ims.Concepts" tgt ON tgt."ID" = ce."target_ID"
-  WHERE ce."predicate" = 'requires' AND ce."status" = 'ACTIVE'
-    AND src."status" = 'ACTIVE' AND tgt."status" = 'ACTIVE'
+    CAST('concept:' || src.SLUG AS NVARCHAR(100)) AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(100)) AS "TARGET",
+    'requires'                                    AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" tgt ON tgt.ID = ce.TARGET_ID
+  WHERE ce.PREDICATE = 'requires' AND ce.STATUS = 'ACTIVE'
+    AND src.STATUS = 'ACTIVE' AND tgt.STATUS = 'ACTIVE'
   UNION ALL
   -- kg:teaches edges: tutorial → concept
   SELECT
-    CAST('tutorial:' || t."slug" AS NVARCHAR(100)) AS "SOURCE",
-    CAST('concept:'  || c."slug" AS NVARCHAR(100)) AS "TARGET",
-    'teaches'                                      AS "EDGE_TYPE"
-  FROM "com.sap.developers.ims.TutorialConceptLinks" tcl
-  JOIN "com.sap.developers.ims.Tutorials" t ON t."ID" = tcl."tutorial_ID"
-  JOIN "com.sap.developers.ims.Concepts"  c ON c."ID" = tcl."concept_ID"
-  WHERE c."status" = 'ACTIVE';
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(100)) AS "SOURCE",
+    CAST('concept:'  || c.SLUG AS NVARCHAR(100)) AS "TARGET",
+    'teaches'                                    AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS"  c ON c.ID = tcl.CONCEPT_ID
+  WHERE c.STATUS = 'ACTIVE';
 ```
 
 ### Step 2.3: Deploy views to DEV HDI
