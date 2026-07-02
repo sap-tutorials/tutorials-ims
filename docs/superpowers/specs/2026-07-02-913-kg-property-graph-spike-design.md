@@ -119,9 +119,10 @@ CREATE VIEW "KG_PG_VERTICES_V" AS
 CREATE VIEW "KG_PG_EDGES_V" AS
   -- kg:requires edges: concept → concept
   SELECT
-    CAST('concept:' || src.SLUG AS NVARCHAR(280)) AS "SOURCE",
-    CAST('concept:' || tgt.SLUG AS NVARCHAR(280)) AS "TARGET",
-    'requires'                                    AS "EDGE_TYPE"
+    CAST('r|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('concept:' || src.SLUG AS NVARCHAR(280))              AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(280))              AS "TARGET",
+    'requires'                                                 AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" tgt ON tgt.ID = ce.TARGET_ID
@@ -129,32 +130,34 @@ CREATE VIEW "KG_PG_EDGES_V" AS
     AND src.STATUS = 'ACTIVE' AND tgt.STATUS = 'ACTIVE'
   UNION ALL
   -- kg:teaches edges: tutorial → concept
-  SELECT
-    CAST('tutorial:' || t.SLUG AS NVARCHAR(280)) AS "SOURCE",
-    CAST('concept:'  || c.SLUG AS NVARCHAR(280)) AS "TARGET",
-    'teaches'                                    AS "EDGE_TYPE"
+  SELECT DISTINCT
+    CAST('t|' || t.SLUG || '|' || c.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280))           AS "SOURCE",
+    CAST('concept:'  || c.SLUG AS NVARCHAR(280))           AS "TARGET",
+    'teaches'                                              AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
   JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" c   ON c.ID = tcl.CONCEPT_ID
   WHERE c.STATUS = 'ACTIVE';
 ```
 
+`EDGE_KEY` is a composite string column mandatory for the HDI `.hdbgraphworkspace` plugin — see § *Deploy-time correction (post-#925 merge)* in this spec's follow-up section, and [`docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md`](../reviews/2026-07-02-kg-property-graph-spike-task1-notes.md) § *Path C follow-up finding*. The `'r|'` / `'t|'` type prefix prevents any theoretical collision if a concept slug ever equaled a tutorial slug.
+
 Only two edge types (`requires`, `teaches`). The PREREQ arm doesn't need `coCompletedWith`, `relatedTo`, or the other seven predicates — and adding them would inflate the workspace with edges `SHORTEST_PATH` would then have to filter out. If any follow-on issue graduates (PageRank, community detection, WCC), the edge view widens accordingly — tracked in follow-on Issue 4.
 
 ### Workspace declaration: `KG_PG_WORKSPACE.hdbgraphworkspace`
 
-```json
-{
-  "vertexTable":     "KG_PG_VERTICES_V",
-  "vertexKeyColumn": "VERTEX_KEY",
-  "edgeTable":       "KG_PG_EDGES_V",
-  "edgeSourceColumn": "SOURCE",
-  "edgeTargetColumn": "TARGET",
-  "edgeKeyColumn":   null
-}
+```text
+GRAPH WORKSPACE "KG_PG_WORKSPACE"
+  EDGE TABLE "KG_PG_EDGES_V"
+    SOURCE COLUMN "SOURCE"
+    TARGET COLUMN "TARGET"
+    KEY COLUMN "EDGE_KEY"
+  VERTEX TABLE "KG_PG_VERTICES_V"
+    KEY COLUMN "VERTEX_KEY"
 ```
 
-Edges are unkeyed — multiple edges between the same vertex pair fold to one, which is fine for `SHORTEST_PATH` (it cares about existence and hop count, not edge identity).
+The `.hdbgraphworkspace` file is authored in DDL form (not JSON as this spec's earlier draft implied) — confirmed against the shipped file post-#925 merge. The plugin requires an edge key column (`KEY COLUMN "EDGE_KEY"`); the composite `EDGE_KEY` above satisfies it while keeping the underlying data view-only.
 
 ### What the PREREQ query actually computes
 

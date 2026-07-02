@@ -174,9 +174,10 @@ VIEW "KG_PG_VERTICES_V" AS
 VIEW "KG_PG_EDGES_V" AS
   -- kg:requires edges: concept → concept
   SELECT
-    CAST('concept:' || src.SLUG AS NVARCHAR(280)) AS "SOURCE",
-    CAST('concept:' || tgt.SLUG AS NVARCHAR(280)) AS "TARGET",
-    'requires'                                    AS "EDGE_TYPE"
+    CAST('r|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('concept:' || src.SLUG AS NVARCHAR(280))              AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(280))              AS "TARGET",
+    'requires'                                                 AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" tgt ON tgt.ID = ce.TARGET_ID
@@ -184,10 +185,11 @@ VIEW "KG_PG_EDGES_V" AS
     AND src.STATUS = 'ACTIVE' AND tgt.STATUS = 'ACTIVE'
   UNION ALL
   -- kg:teaches edges: tutorial → concept
-  SELECT
-    CAST('tutorial:' || t.SLUG AS NVARCHAR(280)) AS "SOURCE",
-    CAST('concept:'  || c.SLUG AS NVARCHAR(280)) AS "TARGET",
-    'teaches'                                    AS "EDGE_TYPE"
+  SELECT DISTINCT
+    CAST('t|' || t.SLUG || '|' || c.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280))           AS "SOURCE",
+    CAST('concept:'  || c.SLUG AS NVARCHAR(280))           AS "TARGET",
+    'teaches'                                              AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
   JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS"  c ON c.ID = tcl.CONCEPT_ID
@@ -244,18 +246,17 @@ Expected: two rows in the vertex query (`concept: N`, `tutorial: M`), two rows i
 
 - [ ] Create `db/src/graph/KG_PG_WORKSPACE.hdbgraphworkspace`:
 
-```json
-{
-  "vertexTable":       "KG_PG_VERTICES_V",
-  "vertexKeyColumn":   "VERTEX_KEY",
-  "edgeTable":         "KG_PG_EDGES_V",
-  "edgeSourceColumn":  "SOURCE",
-  "edgeTargetColumn":  "TARGET",
-  "edgeKeyColumn":     null
-}
+```text
+GRAPH WORKSPACE "KG_PG_WORKSPACE"
+  EDGE TABLE "KG_PG_EDGES_V"
+    SOURCE COLUMN "SOURCE"
+    TARGET COLUMN "TARGET"
+    KEY COLUMN "EDGE_KEY"
+  VERTEX TABLE "KG_PG_VERTICES_V"
+    KEY COLUMN "VERTEX_KEY"
 ```
 
-**Note:** the exact `.hdbgraphworkspace` JSON schema varies by HDI-plugin version — check the current tutorial-ims HDI setup (`cat .hdiconfig`) and confirm the property-graph plugin is enabled. If the schema differs, adjust the property names to match. This is a compile-time file, so `cds build` will fail loudly if the shape is wrong.
+**Format note:** `.hdbgraphworkspace` is DDL (not JSON) — verified post-#925 deploy. The plugin **requires** an edge key column; a null / missing `KEY COLUMN` on the edge table fails HDI deploy with "make failed". `EDGE_KEY` is defined in `KG_PG_EDGES_V.hdbview` as a composite string (`'r|<src-slug>|<tgt-slug>'` for requires edges, `'t|<tutorial-slug>|<concept-slug>'` for teaches edges) — deterministic, unique per row, cheap to compute, no schema drift.
 
 ### Step 3.2: Author `KG_PATH_V2.hdbprocedure` — final body
 

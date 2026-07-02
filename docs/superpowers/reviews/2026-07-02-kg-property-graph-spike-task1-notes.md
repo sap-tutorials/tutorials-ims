@@ -130,3 +130,32 @@ WHERE  "STATUS" = 'ACTIVE'
 
 - Does the HDI container's `.hdiconfig` map the `.hdbgraphworkspace` suffix to a plugin? If not, the deploy fails with "no plugin registered for file suffix .hdbgraphworkspace" and Task 3 gets blocked on a service-key config change. Verify by running `cds build --production && cat gen/db/src/gen/.hdiconfig | jq '.file_suffixes.hdbgraphworkspace'` before the deploy.
 - If `.hdbgraphworkspace` is unsupported by the HDI plugin (older QRC on the actual plugin binary, not the DB), fallback is to declare the workspace inside the procedure body via `CREATE GRAPH WORKSPACE g_ws INSTANCE ...` — see Task 3 Step 3.2's `-- BODY --` comment.
+
+---
+
+## Path C follow-up finding (2026-07-02, post-#925 merge)
+
+**Trigger:** `#925` merged, deploy to DEV kicked off, MTA deploy failed on the new KG_PG artifacts.
+
+**Root cause:** the HDI `.hdbgraphworkspace` plugin **requires** an edge key column, even though HANA's native `CREATE GRAPH WORKSPACE` DDL accepts unkeyed edges. The spec's original design (`edgeKeyColumn: null`) plus `KG_PG_EDGES_V`'s three-column projection (`SOURCE`, `TARGET`, `EDGE_TYPE`) left the workspace with no per-row identity, and the plugin rejected it. Two spec reviewer passes and two plan reviewer passes missed it because none of them ran a live HDI deploy — the `cds build` step doesn't semantically validate `.hdbgraphworkspace` files (it just packs them).
+
+A second drift also surfaced: the workspace file was shipped as **DDL** (`GRAPH WORKSPACE "..." EDGE TABLE ...`), not JSON as the spec + plan showed. Task 3's implementer silently corrected the format during authoring; no reviewer flagged it because none of them read the actual `.hdbgraphworkspace` file (they cross-checked against the JSON shown in the plan).
+
+**Fix (applied in follow-up PR):**
+
+1. Add a composite string `EDGE_KEY` column to `KG_PG_EDGES_V.hdbview`:
+    - `requires` arm: `'r|' || src.SLUG || '|' || tgt.SLUG` (max ≈ 163 chars for the 80-char concept-slug cap).
+    - `teaches` arm: `'t|' || t.SLUG || '|' || c.SLUG` (max ≈ 338 chars for the 255-char tutorial-slug cap).
+    - Sized `NVARCHAR(400)` for headroom. `'r|'` / `'t|'` type prefix prevents any theoretical collision if a concept slug ever equaled a tutorial slug.
+2. Update `KG_PG_WORKSPACE.hdbgraphworkspace` to include `KEY COLUMN "EDGE_KEY"` on the edge table. (Not `edgeKeyColumn` in JSON — the file is DDL.)
+3. Update spec + plan to match the shipped DDL format and to show the composite EDGE_KEY in the view.
+
+**Why not other options:**
+
+- `ROW_NUMBER() OVER (...)` for the key: order-dependent, shifts on every concept change. Fragile edge identity.
+- Materialized `KG_PG_EDGES` table with a real primary key: breaks the spec's locked "views only, no drift" decision. Overkill for a spike.
+- Revert #925: throws away the whole design + review chain for a fix that's ~10 lines.
+
+**Verification path:** `cds build --production` packs the fix cleanly, but semantic validation only happens at deploy time. Re-deploy after the follow-up PR merges to confirm the plugin accepts the keyed workspace.
+
+**Reviewer discipline lesson:** for spec/plan-review passes on HDI artifacts that don't get exercised until deploy, adding a "verify by comparing to a working sibling artifact in the repo" step to the reviewer checklist would have caught this — the SAP HANA HDI docs (or a working `.hdbgraphworkspace` elsewhere in SAP samples) would have shown the required KEY column. Filing this as a hindsight note; not proposing a process change today.
