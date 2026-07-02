@@ -197,8 +197,37 @@ The CSV columns:
 - `target_tutorial_uuid` — the DEV `Tutorials.ID` derived deterministically
   via `uuidv5(String(legacyId), NAMESPACES.tutorial)`
 - `current_owner`, `current_ownerEmail` — what DEV had before the resync
-- `new_owner`, `new_ownerEmail` — what IMS says today (`NULL` when IMS's
-  join returns `EMAIL=NULL` or a placeholder like `@users.noreply.github.com`)
+- `new_owner`, `new_ownerEmail` — what IMS says today. `NULL` when IMS's
+  join returns `EMAIL=NULL`, when the email is a `@sap-tutorials.local`
+  synthetic bot address, or when it's a `@users.noreply.github.com`
+  placeholder that could NOT be resolved via `Users.githubLogin` (see
+  next paragraph)
+- `resolved_from_noreply` — `yes` when the new value was derived by
+  parsing a `<userid>+<login>@users.noreply.github.com` placeholder,
+  looking `<login>` up in `Users.githubLogin`, and writing the matched
+  `Users.email`. Blank when the email came through unchanged.
+- `ims_raw_email` — the raw value from IMS (useful when the resolver
+  chose to null-out or transform: this column shows what was rejected
+  or how the transformation was seeded)
+
+**`@users.noreply.github.com` resolution (PR C).** GitHub's default commit
+email is `<userid>+<login>@users.noreply.github.com` (modern) or
+`<login>@users.noreply.github.com` (pre-2017). Live IMS returns this
+verbatim for authors who never set a corporate email in their GitHub
+profile — Riley's case for tutorial `15733` was
+`10248021+rbrainey@users.noreply.github.com`. The resync parses out the
+`<login>` segment (case-insensitive) and looks it up in DEV's
+`Users.githubLogin → Users.email` map (built once at script startup from
+`COM_SAP_DEVELOPERS_IMS_USERS WHERE githubLogin IS NOT NULL`). Match →
+that user's corporate email is written to `TutorialMeta.ownerEmail`; no
+match → the row is treated as no-signal (written NULL).
+
+For Riley's `MyOwnedTutorials` to show `tutorial-first-steps` after the
+resync, DEV's `Users` row for Riley MUST have `githubLogin = 'rbrainey'`
+AND `email = 'riley.rainey@sap.com'`. If either is missing, the resync
+NULLs out `ownerEmail` for tutorial 15733 and Riley sees zero rows on
+his panel. The `resolved_from_noreply` column in the CSV is what you
+audit here — a summary count is also printed at the top.
 
 ### Post-commit verification
 
@@ -213,6 +242,12 @@ The CSV columns:
    upstream or re-apply the correction post-resync (a follow-on cutover
    task will formalize CAP as the source of truth after the July 2026
    PROD cutover).
+3. **Users with an unresolved `@users.noreply.github.com` in IMS** will
+   see their `MyOwnedTutorials` empty on DEV until either: (a) their
+   `Users.githubLogin` gets populated (login-side; new logins auto-set;
+   older Users need `scripts/seed-users-github-login.cjs`), OR (b) the
+   tutorial gets re-published so the publish path's frontmatter
+   resolution fills `ownerEmail` from `author_profile`.
 
 ### See also (Step 5)
 
