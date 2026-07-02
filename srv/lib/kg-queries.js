@@ -28,6 +28,11 @@ import { iriEscapeSegment } from './kg-projection.js';
 // (Tutorials.slug, Missions.slug, Groups.slug). 1–80 chars, lowercase
 // alnum + hyphen, no leading/trailing hyphen. Exported so the
 // KnowledgeGraphService handler can reuse it without re-deriving.
+//
+// Deliberately conservative: it also happens to reject the IRI-unsafe set
+// ('<', '>', '"', space, backslash, etc.), so a slug that passes this test
+// is safe to interpolate into a SPARQL IRI. The `iriEscapeSegment` call in
+// `coerce()` is belt-and-suspenders for any future loosening of this regex.
 export const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/;
 
 // RFC 4122 UUID — case-insensitive (we do not try to canonicalise).
@@ -36,6 +41,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Whitelist of placeholder name → type. Adding a new placeholder requires
 // a new entry here AND a corresponding case in coerce(). Anything outside
 // the whitelist throws KG_QUERY_UNKNOWN_PLACEHOLDER.
+//
+// Type semantics:
+//   'slug'    — string, must match SLUG_RE, IRI-escaped before substitution.
+//   'uuid'    — string, must match UUID_RE (RFC 4122). Substituted verbatim.
+//   'integer' — coerced via Number(), must be finite, non-negative, integral.
 const PLACEHOLDER_TYPES = Object.freeze({
   SLUG:       'slug',
   FROM_SLUG:  'slug',

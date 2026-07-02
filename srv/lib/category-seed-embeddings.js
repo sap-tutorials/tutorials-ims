@@ -31,6 +31,11 @@ export function _resetCache() {
   _loadingPromise = null;
 }
 
+/**
+ * Load and embed every Category with a non-empty `seedDescription` in one
+ * batch. Categories without a seed are absent from the returned Map — the
+ * classifier falls back to LLM-only for them.
+ */
 async function loadAll() {
   const { Categories } = cds.entities('com.sap.developers.ims');
   const rows = await SELECT.from(Categories).columns('ID', 'seedDescription');
@@ -47,6 +52,16 @@ async function loadAll() {
   return m;
 }
 
+/**
+ * Refresh `_cache` entries for the given IDs from a fresh embed call.
+ *
+ * Fetches all Categories rows and filters in JS by `staleIds` rather than
+ * chaining a `.where()` after `.columns()` — the CDS QL builder rejects
+ * that method order. The extra row read is trivial (Categories has ≤8 rows).
+ *
+ * Silently no-ops if none of the stale IDs still have a non-empty
+ * `seedDescription` (row deleted or seed cleared while stale).
+ */
 async function recomputeStale(staleIds) {
   // Fetch all rows and filter in JS — avoids chaining .where() after
   // .columns() which the CDS QL builder doesn't support in that order.
@@ -60,6 +75,22 @@ async function recomputeStale(staleIds) {
   }
 }
 
+/**
+ * Get the `categoryId → Float32Array` seed-embedding map, populating lazily.
+ *
+ * Three states:
+ *   - Not loaded and no load in flight → start the load, remember the
+ *     Promise in `_loadingPromise`, return it.
+ *   - Not loaded but a load IS in flight → return the same Promise (racing
+ *     classify calls share one AI Core call).
+ *   - Loaded → if any IDs are marked stale, refresh only those before
+ *     returning the cache.
+ *
+ * `_loadingPromise` is cleared in the loader's `finally` so a failed first
+ * load doesn't wedge the module — the next call retries.
+ *
+ * @returns {Promise<Map<string, Float32Array>>}
+ */
 export async function getSeedEmbeddings() {
   if (!_cache) {
     if (_loadingPromise) return _loadingPromise;
@@ -83,14 +114,30 @@ export async function getSeedEmbeddings() {
   return _cache;
 }
 
-/** Drop one entry (sync); next getSeedEmbeddings() call recomputes only it. */
+/**
+ * Drop one entry (sync); next `getSeedEmbeddings()` call recomputes only it.
+ * No-op if the cache isn't populated yet — a subsequent first-load will pick
+ * up the current DB state anyway, so there's nothing to invalidate.
+ *
+ * Called from the Categories OData UPDATE after-hook when `seedDescription`
+ * changes.
+ */
 export function invalidateSeedEmbedding(categoryId) {
   if (!_cache) return; // not loaded yet — nothing to do
   _cache.delete(categoryId);
   _stale.add(categoryId);
 }
 
-/** Embed an ad-hoc piece of text (used for missions/groups/uncached tutorials). */
+/**
+ * Embed a single ad-hoc string. Used to embed missions/groups (which have
+ * no persistent embedding row) and uncached tutorials at classify time.
+ *
+ * Throws on empty input — unlike `getSeedEmbeddings()`, this is a
+ * fire-and-return path where empty text is a programmer error.
+ *
+ * @param {string} text
+ * @returns {Promise<Float32Array>}
+ */
 export async function embedAdHoc(text) {
   if (!text || !text.trim()) {
     throw new Error('embedAdHoc: empty text');
