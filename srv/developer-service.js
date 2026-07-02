@@ -664,9 +664,16 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('submitTutorialFeedback', async (req) => {
       const d = req.data;
+      // #897: log a structured line per submission attempt so ops can
+      // pattern-detect abuse (repeated 429s from one hashedIp = attempted
+      // flood; unknown-slug bursts = enumeration probe; honeypot hits =
+      // bot traffic). Purposefully keeps only the IP hash (not raw IP)
+      // and slug — safe to leave in CF logs.
+      const FLOG = cds.log('feedback');
 
       // 1. Honeypot — silent success
       if (d.honeypot && d.honeypot.trim() !== '') {
+        FLOG.warn(`submit rejected: honeypot slug=${(d.tutorialSlug || '').toString().slice(0, 80)}`);
         return { submissionId: cds.utils.uuid() };
       }
 
@@ -678,16 +685,22 @@ export default class DeveloperService extends cds.ApplicationService {
       const tutorialSlug = d.tutorialSlug.toLowerCase();
 
       // 3. Rate limit (before any DB I/O so unknown-slug floods don't hammer the DB)
-      if (!d._clientIp) cds.log('feedback').warn('submitTutorialFeedback: _clientIp missing — rate limiting will share one bucket. Express bridge must inject it.');
+      if (!d._clientIp) FLOG.warn('submitTutorialFeedback: _clientIp missing — rate limiting will share one bucket. Express bridge must inject it.');
       const ip = d._clientIp || 'unknown';
       const hashedIp = await hashIp(ip);
-      if (rateLimitExceeded(hashedIp)) return req.error(429, 'Too many submissions');
+      if (rateLimitExceeded(hashedIp)) {
+        FLOG.warn(`submit rejected: rate-limit ipHash=${hashedIp.slice(0, 12)} slug=${tutorialSlug}`);
+        return req.error(429, 'Too many submissions');
+      }
 
       // 4. Slug existence
       const { ContentFiles, TutorialFeedback } = cds.entities('com.sap.developers.ims');
       // slug-canonical: pre-canonicalized
       const exists = await SELECT.one.from(ContentFiles).columns('slug').where({ slug: tutorialSlug });
-      if (!exists) return req.error(400, 'Unknown tutorial');
+      if (!exists) {
+        FLOG.warn(`submit rejected: unknown-slug ipHash=${hashedIp.slice(0, 12)} slug=${tutorialSlug}`);
+        return req.error(400, 'Unknown tutorial');
+      }
 
       // 5. Persist
       const id = cds.utils.uuid();
