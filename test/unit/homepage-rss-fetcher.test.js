@@ -1,7 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchRssItems, _resetForTests } from '../../srv/lib/homepage-rss-fetcher.js';
+import { _setLookupForTests } from '../../srv/lib/safe-fetch.js';
 
-beforeEach(() => { _resetForTests(); vi.restoreAllMocks(); });
+beforeEach(() => {
+  _resetForTests();
+  vi.restoreAllMocks();
+  // #895: safeFetch does a DNS lookup on every hop. In unit tests we stub
+  // it to return a public IP so the private-IP block passes.
+  _setLookupForTests(async () => [{ address: '8.8.8.8', family: 4 }]);
+});
+
+afterEach(() => {
+  _setLookupForTests(null);
+});
 
 const FAKE_RSS = `<?xml version="1.0"?><rss><channel>
   <item><title>Post A</title><link>https://x/a</link><pubDate>Fri, 26 Jun 2026 10:00:00 GMT</pubDate><description>Desc A</description></item>

@@ -11,6 +11,7 @@
 // Module-singleton via globalThis Symbol per feedback_module_singletons_in_vitest_cds.
 
 import cds from '@sap/cds';
+import { safeFetch } from './safe-fetch.js';
 
 const log = cds.log('homepage-rss-fetcher');
 
@@ -95,10 +96,17 @@ export async function fetchRssItems(url, { limit = 5 } = {}) {
 
   let res;
   try {
-    res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    // #895: safeFetch validates protocol, rejects private/link-local
+    // addresses, and re-checks the guard on every 3xx hop. Prevents any
+    // future admin-editable RSS URL from pivoting to IMDS or internal CF.
+    res = await safeFetch(url, {
+      allowedProtocols: ['https:'],
+      timeoutMs: TIMEOUT_MS,
+      maxRedirects: 3,
+    });
   } catch (err) {
-    // Network error / timeout -- do NOT cache; next call will retry
-    log.warn(`homepage-rss-fetcher: fetch failed for ${url}: ${err.message}`);
+    // Network error / timeout / SSRF_BLOCKED -- do NOT cache; next call will retry
+    log.warn(`homepage-rss-fetcher: fetch failed for ${url}: ${err.code || ''} ${err.message}`);
     return [];
   }
 
