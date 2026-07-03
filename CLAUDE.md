@@ -27,6 +27,9 @@ npm run start:approuter      # Standalone approuter (port 5000)
 npm run bind:setup           # First-time hybrid env binding setup
 npm run setup-dev-data       # Populate slugs + clean autotest data (requires cds bind)
 
+# Seed community events (fresh DB or first-run — Phase 4.8 #765)
+node scripts/seed-community-events.cjs --commit  # via npx cds bind --exec -- ... for HANA
+
 # Tests
 npm test                     # Unit (in-memory SQLite, fast)
 npm run test:hybrid          # Hybrid (real HANA via cds bind --exec; requires cf login)
