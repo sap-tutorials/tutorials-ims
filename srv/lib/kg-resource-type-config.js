@@ -32,7 +32,7 @@ import {
 // "Official reference" lead) and does NOT use this helper.
 const joinMeta = (parts) => (parts.length ? ' · ' + parts.join(' · ') : '');
 
-export const RESOURCE_TYPE_CONFIG = [
+export const RESOURCE_TYPE_CONFIG = Object.freeze([
   {
     type: 'learning-journey',
     icon: '🎓',
@@ -157,4 +157,4 @@ export const RESOURCE_TYPE_CONFIG = [
       return joinMeta(parts);
     },
   },
-];
+]);

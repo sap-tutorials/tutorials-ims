@@ -305,8 +305,9 @@ function resolveNeighborhoodFullPerTypeLimit() {
   return n;
 }
 const KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT = resolveNeighborhoodFullPerTypeLimit();
-// eslint-disable-next-line no-console
-console.log(`[kg] KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT = ${KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT}`);
+cds.log('knowledge-graph-service').info(
+  `[kg] KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT = ${KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT}`,
+);
 
 // Task 5 of #850: raised per-section cap for the expanded panel (vs the
 // sidebar's TOP_N=10). Passed to rankNeighborhood via the new maxResults

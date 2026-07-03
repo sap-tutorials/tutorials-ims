@@ -98,35 +98,6 @@ describe('RelatedGraph sidebar — "Other resources" section', () => {
     expect(wrapper.text()).not.toContain('Other resources')
   })
 
-  it('renders rows in "title · {Level title-case} · {durationHours}h" format', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => makePayload({
-        otherResources: [
-          {
-            type: 'learning-journey',
-            slug: 'cap-quickstart',
-            title: 'CAP Quickstart Journey',
-            url: 'https://learning.sap.com/learning-journeys/cap-quickstart',
-            level: 'intermediate',
-            durationHours: 7.25,
-          },
-        ],
-      }),
-    } as unknown as Response)
-
-    const wrapper = mount(RelatedGraph)
-    await flushPromises()
-    await flushPromises()
-
-    // Level rendered title-case ("intermediate" → "Intermediate").
-    expect(wrapper.text()).toContain('Intermediate')
-    // durationHours rendered with the `h` suffix.
-    expect(wrapper.text()).toContain('7.25h')
-  })
-
   it('external links use target="_blank" rel="noopener"', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,

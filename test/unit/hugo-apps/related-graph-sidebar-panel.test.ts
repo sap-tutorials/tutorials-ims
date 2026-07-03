@@ -6,9 +6,6 @@
 // RelatedGraph.vue. Redesign changes: drop the "teaches" section, reorder
 // to Prereq → Other → Shared → Next, and render Other-resources rows via
 // <ResourceRow> (Task 10) using server-supplied typeConfig + metaText.
-// Legacy fallback: if the response has NO typeConfig, emit 'legacy-fallback'
-// so the parent can react, and render an inline v-else-if chain as a
-// belt-and-braces defense during CDN cache-refresh.
 import { mount } from '@vue/test-utils';
 import { describe, it, expect } from 'vitest';
 import SidebarPanel from '../../../hugo-apps/src/related-graph/SidebarPanel.vue';
@@ -83,13 +80,6 @@ describe('SidebarPanel', () => {
     const headings = w.findAll('h3').map(h => h.text());
     expect(headings).not.toContain('Tutorials covering related concepts');
     expect(headings).not.toContain('What to learn next');
-  });
-
-  it('emits legacy-fallback when typeConfig is missing on the response', () => {
-    // Simulate old cached server response without typeConfig
-    const legacy = makeData({ typeConfig: undefined });
-    const w = mount(SidebarPanel, { props: { data: legacy } });
-    expect(w.emitted('legacy-fallback')).toBeTruthy();
   });
 
   it('renders the sidebar header with kg-sidebar aside class', () => {

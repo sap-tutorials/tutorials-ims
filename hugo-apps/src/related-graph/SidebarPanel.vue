@@ -7,19 +7,12 @@
     - "This tutorial teaches" section removed entirely.
     - Section order: Prereq → Other resources → Shared → Next.
     - Other-resources rows render via <ResourceRow> using the
-      server-supplied typeConfig + metaText. No client-side v-if r.type chain
-      on the happy path.
-
-  Legacy fallback: when the wire payload has NO typeConfig (older cached
-  responses), emit 'legacy-fallback' on mount so the parent can react, AND
-  render the original per-type v-else-if chain inline as a belt-and-braces
-  defense for the CDN cache-refresh window. Removed in a follow-up PR after
-  24h. Both branches ship — the feature-detect just decides which is visible.
+      server-supplied typeConfig + metaText. No client-side v-if r.type chain.
 
   The parent (RelatedGraph.vue after Task 13) owns fetching, telemetry, and
   expansion state. This component is purely presentational and communicates
-  via emits: open-expanded, legacy-fallback, item-click, concept-click,
-  concept-hover, resource-click.
+  via emits: open-expanded, item-click, concept-click, concept-hover,
+  resource-click.
 -->
 <template>
   <aside
@@ -57,9 +50,9 @@
 
     <section v-if="otherResources.length > 0" class="kg-section-other">
       <h3>Other resources</h3>
-      <!-- Happy path: server sent typeConfig; ResourceRow renders icon +
-           link + metaText uniformly, no per-type branches on the client. -->
-      <ul v-if="typeConfigMap">
+      <!-- ResourceRow renders icon + link + metaText uniformly using the
+           server-supplied typeConfig — no per-type branches on the client. -->
+      <ul>
         <ResourceRow
           v-for="r in otherResources"
           :key="r.slug"
@@ -67,58 +60,6 @@
           :row="r"
           @click="$emit('resource-click', $event)"
         />
-      </ul>
-      <!-- Legacy fallback: no typeConfig on the wire (older cached
-           server response). Renders the original per-type v-else-if chain
-           lifted verbatim from RelatedGraph.vue lines 145-197. Defensive
-           belt during the CDN cache-refresh window; will be removed in a
-           follow-up PR after 24h. -->
-      <ul v-else>
-        <li v-for="r in otherResources" :key="r.slug">
-          <a
-            :href="r.url + (r.anchor ? '#' + r.anchor : '')"
-            target="_blank"
-            rel="noopener"
-            @click="$emit('resource-click', r)"
-          >{{ r.title }}</a>
-          <span v-if="r.type === 'learning-journey' && (r.level || r.durationHours)" class="kg-sidebar-meta">
-            <template v-if="r.level"> · {{ formatLevel(r.level) }}</template>
-            <template v-if="r.durationHours"> · {{ r.durationHours }}h</template>
-          </span>
-          <span v-else-if="r.type === 'blog-post' && (r.authorName || r.postedAt)" class="kg-sidebar-meta">
-            <template v-if="r.authorName"> · by {{ r.authorName }}</template>
-            <template v-if="r.postedAt"> · {{ formatDate(r.postedAt) }}</template>
-          </span>
-          <span v-else-if="r.type === 'discovery-mission' && (r.effortLevel || r.categoryLabel)" class="kg-sidebar-meta">
-            <template v-if="r.effortLevel"> · effort {{ r.effortLevel }}</template>
-            <template v-if="r.categoryLabel"> · {{ r.categoryLabel }}</template>
-          </span>
-          <span v-else-if="r.type === 'video' && (r.channelTitle || r.publishedAt)" class="kg-sidebar-meta">
-            <template v-if="r.channelTitle"> · by {{ r.channelTitle }}</template>
-            <template v-if="r.publishedAt"> · {{ formatDate(r.publishedAt) }}</template>
-          </span>
-          <span v-else-if="r.type === 'api-doc'" class="kg-sidebar-meta">
-            · Official reference<template v-if="r.category"> · {{ r.category }}</template>
-          </span>
-          <span v-else-if="r.type === 'sample'" class="kg-sidebar-meta">
-            <template v-if="r.language"> · {{ r.language }}</template>
-            <template v-if="r.stars"> · {{ r.stars }} stars</template>
-            <template v-if="r.lastCommitAt"> · Updated {{ formatRelativeMonth(r.lastCommitAt) }}</template>
-          </span>
-          <!--
-            Phase 4.7 (#748 §4.8.2): help-doc legacy-fallback branch. Row
-            shape per §3 Q10: `Title ↗ · <sourceLabel>`. Snippet + anchor
-            label deliberately NOT rendered here (concept page only —
-            space budget in the sidebar). The happy path routes through
-            ResourceRow driven by the server's RESOURCE_TYPE_CONFIG entry
-            for `help-doc` (priority 70, icon 📚, metaTemplate 'Source ·
-            Anchor'); this branch only fires against cached responses
-            older than Task 2 that lack `typeConfig` on the wire.
-          -->
-          <span v-else-if="r.type === 'help-doc'" class="kg-sidebar-meta">
-            <template v-if="r.sourceLabel"> · <span class="kg-help-source" :class="`kg-help-source--${r.source}`">{{ r.sourceLabel }}</span></template>
-          </span>
-        </li>
       </ul>
     </section>
 
@@ -153,26 +94,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import type { NeighborhoodResult, OtherResource, TypeConfigEntry } from './types'
-import { formatRelativeMonth } from './related-graph-helpers'
 import KgReasonPopover from './KgReasonPopover.vue'
 import ResourceRow from './ResourceRow.vue'
 
 const props = defineProps<{ data: NeighborhoodResult }>()
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'open-expanded'): void
-  (e: 'legacy-fallback'): void
   (e: 'item-click', section: 'prerequisitesOf' | 'sharedConcepts' | 'whatToLearnNext', slug: string): void
   (e: 'resource-click', row: OtherResource): void
 }>()
 
-// Feature-detect: typeConfig present → use ResourceRow. Absent → legacy fallback.
-const typeConfigMap = computed<Map<string, TypeConfigEntry> | null>(() => {
-  if (!props.data.typeConfig || props.data.typeConfig.length === 0) return null
-  return new Map(props.data.typeConfig.map((c) => [c.type, c]))
-})
+const typeConfigMap = computed<Map<string, TypeConfigEntry>>(
+  () => new Map((props.data.typeConfig ?? []).map((c) => [c.type, c])),
+)
 
 const otherResources = computed<OtherResource[]>(
   () => props.data.otherResources ?? [],
@@ -182,37 +119,10 @@ const otherResources = computed<OtherResource[]>(
 // type isn't in typeConfig (shouldn't happen, but defensive), synthesize a
 // minimal entry so ResourceRow doesn't crash — icon '' + empty template.
 function resolveConfig(type: string): TypeConfigEntry {
-  const entry = typeConfigMap.value?.get(type)
+  const entry = typeConfigMap.value.get(type)
   if (entry) return entry
   return { type, icon: '', singular: type, plural: type, priority: 999, metaTemplate: '' }
 }
-
-// Legacy fallback helpers — used only when typeConfig is missing on the
-// wire. Lifted verbatim from RelatedGraph.vue's original per-type chain.
-function formatLevel(level: string | null | undefined): string {
-  if (!level) return ''
-  return level.charAt(0).toUpperCase() + level.slice(1).toLowerCase()
-}
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return ''
-  try {
-    const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
-    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-  } catch {
-    return (iso || '').slice(0, 10)
-  }
-}
-
-onMounted(() => {
-  // `typeConfig` explicitly absent from the payload → old server or old
-  // cached response. Signal the parent so it can log / measure the
-  // fallback frequency. An empty array is also treated as legacy since
-  // there's nothing to resolve rows against.
-  if (!props.data.typeConfig || props.data.typeConfig.length === 0) {
-    emit('legacy-fallback')
-  }
-})
 </script>
 
 <style scoped>

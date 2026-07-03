@@ -83,31 +83,6 @@ describe('RelatedGraph sidebar — discovery-mission rows in "Other resources"',
     expect(wrapper.text()).toContain('Get Started with SAP BTP Enterprise Account')
   })
 
-  it('renders "· effort N · CategoryLabel" meta for discovery-mission rows', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => makePayload({
-        otherResources: [{
-          type: 'discovery-mission',
-          slug: 'dm-3019',
-          title: 'Get Started with SAP BTP Enterprise Account',
-          url: 'https://discovery-center.cloud.sap/missiondetail/3019/',
-          effortLevel: 2,
-          categoryLabel: 'Onboarding',
-        }],
-      }),
-    } as unknown as Response)
-
-    const wrapper = mount(RelatedGraph)
-    await flushPromises()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('effort 2')
-    expect(wrapper.text()).toContain('Onboarding')
-  })
-
   it('does NOT render learning-journey or blog-post meta for a discovery-mission row', async () => {
     // Mutual exclusion: the v-if/v-else-if chain in RelatedGraph.vue ensures
     // a mission row never picks up `level`/`durationHours`/`authorName`/
