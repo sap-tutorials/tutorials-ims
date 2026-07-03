@@ -617,6 +617,15 @@ entity ChatSettings : cuid, managed {
   // Knowledge Graph pathBetween tool for Phase 2 learning paths (#445).
   // When false, findLearningPath tool is not registered.
   kgPathBetweenEnabled : Boolean default false;
+
+  // Knowledge Graph search expansion tool for tutorial navigator Joule handoff (#943).
+  // When true, expandSearchConcepts tool is registered in the chat orchestrator's
+  // standard path — LLM embeds the query, does cosine over Concepts.embedding,
+  // takes one hop along ConceptEdges, joins TutorialConceptLinks.
+  // Defaults to true (unlike the AI-quota-heavy ragEnabled / codeCheckEnabled /
+  // kgPathBetweenEnabled flags) because expansion is cheap: 1 embed + 1 cosine
+  // scan + 1-hop walk. Toggle OFF if telemetry shows problems.
+  kgSearchExpansionEnabled : Boolean default true;
 }
 
 // Phase 2-A foundation (#463). Mirrors the ChatSettings singleton pattern.
