@@ -95,20 +95,10 @@ describe('analytics-sql-validator: injection fuzz (#797)', () => {
       );
     });
 
-    // TODO(#906): node-sql-parser (MySQL dialect) parses SYSTEM_USER
-    // as a bare column_ref, not a function call, so the function-allowlist path
-    // never fires and the validator returns success. The FROM table `Users`
-    // is on the allowlist, so the SELECT is accepted and re-emitted as
-    //   SELECT "SYSTEM_USER" FROM "Users"
-    // which HANA would resolve to a column named SYSTEM_USER. On tables where
-    // no such column exists this is a runtime error, but on any table that
-    // happens to define a SYSTEM_USER column, or if a future refactor allows
-    // schema introspection views, this becomes an information-disclosure
-    // channel. Track as follow-up to #797 and add SYSTEM_USER / SESSION_USER /
-    // CURRENT_USER to an identifier-denylist in the validator, or force
-    // bare identifiers to resolve against an explicit column allowlist.
-    it.skip('rejects SELECT SYSTEM_USER FROM Users (real gap — column_ref, not function call)', () => {
-      expect(() => validator.validateSelect('SELECT SYSTEM_USER FROM Users', ALLOWED)).toThrow();
+    it('rejects SELECT SYSTEM_USER FROM Users (bare identifier — column_ref, not function call)', () => {
+      expect(() => validator.validateSelect('SELECT SYSTEM_USER FROM Users', ALLOWED)).toThrow(
+        /reserved session-context name/i,
+      );
     });
 
     // Positive control: a genuinely disallowed function call (os_command)
@@ -117,6 +107,58 @@ describe('analytics-sql-validator: injection fuzz (#797)', () => {
       expect(() => validator.validateSelect('SELECT os_command() FROM Users', ALLOWED)).toThrow(
         /function.*not in the analytics function allowlist/i,
       );
+    });
+  });
+
+  describe('rejects bare HANA session-context identifiers (#906)', () => {
+    // These identifiers are HANA session-context / system-pseudocolumn names.
+    // node-sql-parser (MySQL dialect) parses the bare forms as column_ref
+    // AST nodes rather than function-call nodes, so the function-allowlist
+    // path does not fire. The bare-identifier walker added in #906 closes
+    // that gap. See docs/superpowers/specs/2026-07-03-906-bare-identifier-denylist-design.md.
+
+    it('rejects SELECT SESSION_USER FROM Users', () => {
+      expect(() => validator.validateSelect('SELECT SESSION_USER FROM Users', ALLOWED)).toThrow(
+        /reserved session-context name/i,
+      );
+    });
+
+    it('rejects SELECT CURRENT_SCHEMA FROM Users', () => {
+      expect(() => validator.validateSelect('SELECT CURRENT_SCHEMA FROM Users', ALLOWED)).toThrow(
+        /reserved session-context name/i,
+      );
+    });
+
+    it('rejects SELECT SYSUUID FROM Users', () => {
+      expect(() => validator.validateSelect('SELECT SYSUUID FROM Users', ALLOWED)).toThrow(
+        /reserved session-context name/i,
+      );
+    });
+
+    it('rejects lowercase bare identifier — SELECT session_user FROM Users', () => {
+      // Case-insensitivity pin: HANA identifiers are case-insensitive and the
+      // walker uppercases before set lookup. A case-sensitive implementation
+      // would silently pass this test — hence its inclusion.
+      expect(() => validator.validateSelect('SELECT session_user FROM Users', ALLOWED)).toThrow(
+        /reserved session-context name/i,
+      );
+    });
+
+    it('rejects bare identifier in WHERE predicate', () => {
+      // Confirms the walker recurses through WHERE, not just the SELECT list.
+      expect(() =>
+        validator.validateSelect("SELECT id FROM Users WHERE SYSTEM_USER = 'x'", ALLOWED),
+      ).toThrow(/reserved session-context name/i);
+    });
+
+    it('rejects bare identifier inside a subquery', () => {
+      // Confirms the walker follows nested SELECT nodes.
+      expect(() =>
+        validator.validateSelect(
+          'SELECT * FROM Users WHERE id IN (SELECT SESSION_USER FROM Users)',
+          ALLOWED,
+        ),
+      ).toThrow(/reserved session-context name/i);
     });
   });
 
@@ -154,6 +196,39 @@ describe('analytics-sql-validator: injection fuzz (#797)', () => {
     });
     it('accepts SELECT with WHERE + literal', () => {
       expect(() => validator.validateSelect("SELECT id FROM Users WHERE name = 'x'", ALLOWED)).not.toThrow();
+    });
+
+    it('accepts SELECT CURRENT_DATE() FROM Users (function form works)', () => {
+      // Pins the bare-vs-function precision. The MySQL parser classifies
+      // both bare CURRENT_DATE and CURRENT_DATE() as `function` AST nodes,
+      // so they flow through the function-allowlist path — where CURRENT_DATE
+      // is on ALLOWED_FUNCTIONS.
+      expect(() => validator.validateSelect('SELECT CURRENT_DATE() FROM Users', ALLOWED)).not.toThrow();
+    });
+
+    it('accepts SELECT CURRENT_DATE FROM Users (bare form ALSO parsed as function)', () => {
+      // Documents the belt-and-suspenders overlap between ALLOWED_FUNCTIONS
+      // and DENIED_BARE_IDENTIFIERS for date/time registers: today's parser
+      // classifies bare CURRENT_DATE as `function`, so the denylist entry is
+      // dormant. If a future parser upgrade flips the classification to
+      // column_ref, this test starts failing — flag to human, remove
+      // CURRENT_DATE from DENIED_BARE_IDENTIFIERS since it returns
+      // non-sensitive data.
+      expect(() => validator.validateSelect('SELECT CURRENT_DATE FROM Users', ALLOWED)).not.toThrow();
+    });
+
+    it('accepts SELECT Users.SYSTEM_USER FROM Users (qualified column reference not flagged)', () => {
+      // Qualified references have column_ref.table set to the qualifier —
+      // the walker only flags bare (unqualified) references. HANA may error
+      // at execution (no such column), but that's out of scope for the
+      // validator.
+      expect(() => validator.validateSelect('SELECT Users.SYSTEM_USER FROM Users', ALLOWED)).not.toThrow();
+    });
+
+    it('accepts SELECT id AS SYSTEM_USER FROM Users (alias, not a bare identifier)', () => {
+      // The walker only inspects column_ref nodes, not the .as field.
+      // Pins the intent and catches a future refactor that starts walking aliases.
+      expect(() => validator.validateSelect('SELECT id AS SYSTEM_USER FROM Users', ALLOWED)).not.toThrow();
     });
   });
 });
