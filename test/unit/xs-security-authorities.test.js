@@ -4,6 +4,14 @@
 // Author` role-collection design (any authenticated user got QA-preview
 // access). This test locks the auto-grant down to `Everyone` only.
 //
+// Two files must stay in sync: the root `xs-security.json` (used by
+// `cds watch` locally) and `.deploy/xs-security.json` (the one MTA actually
+// deploys via `.deploy/mta.yaml`'s `config-path: xs-security.json`). The
+// original A1 fix (PR #941) only updated the root file; the drift was
+// discovered post-cutover on 2026-07-03 when it turned out the deploy copy
+// still had the auto-grant. This test now covers BOTH files so any future
+// drift fails CI.
+//
 // If a future change must re-add a scope here, update this test AND
 // document the operational impact in xsuaa-role-collection-assignment.md.
 
@@ -11,9 +19,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
-describe('xs-security.json — top-level authorities auto-grant', () => {
+const FILES = [
+  'xs-security.json',
+  '.deploy/xs-security.json',
+];
+
+describe.each(FILES)('%s — top-level authorities auto-grant', (relPath) => {
   const cfg = JSON.parse(
-    readFileSync(join(process.cwd(), 'xs-security.json'), 'utf8')
+    readFileSync(join(process.cwd(), relPath), 'utf8')
   );
 
   it('exposes an authorities array', () => {
@@ -26,5 +39,20 @@ describe('xs-security.json — top-level authorities auto-grant', () => {
 
   it('does not auto-grant Tutorial.Author (A1 regression)', () => {
     expect(cfg.authorities).not.toContain('$XSAPPNAME.Tutorial.Author');
+  });
+});
+
+describe('xs-security.json root vs .deploy copy — drift guard', () => {
+  const root = readFileSync(join(process.cwd(), 'xs-security.json'), 'utf8');
+  const deploy = readFileSync(join(process.cwd(), '.deploy/xs-security.json'), 'utf8');
+
+  it('root and .deploy copies are byte-identical', () => {
+    // The two files are duplicated by convention: cds watch reads the root,
+    // MTA deploy reads the .deploy copy. Any drift between them creates a
+    // gap between local behavior and deployed behavior. This assertion
+    // caught the Phase A1 partial-fix on 2026-07-03 (root had the auto-grant
+    // removed but the deploy copy still had it, so the next MTA deploy
+    // would have regressed the fix silently).
+    expect(deploy).toBe(root);
   });
 });
