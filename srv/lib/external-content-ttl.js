@@ -14,6 +14,7 @@ export const PER_TYPE_TTL_DAYS = Object.freeze({
   'api-doc': 1095,          // 4.5 — 3 years; spec §3 Q8 compromise (was speculative 3650)
   'sample': 365,            // 4.6
   'help-doc': 540,          // 4.7 — same band as blog-post (§3 Q9)
+  'community-event': null,   // 4.8 — date-aware via endDate + 30-day grace (§7 of spec)
 });
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;

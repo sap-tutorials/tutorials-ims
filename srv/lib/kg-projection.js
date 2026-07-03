@@ -94,6 +94,7 @@ export const KG_IRI_PREFIXES = Object.freeze({
   'api-doc': `${KG}api-doc/`,
   'sample': `${KG}sample/`,           // Phase 4.6 (#747)
   'help-doc': `${KG}help-doc/`,       // Phase 4.7 (#748)
+  'community-event': `${KG}community-event/`,   // Phase 4.8 (#765)
 });
 
 /**
@@ -163,6 +164,10 @@ export function iriSample(slug) {
  */
 export function iriHelpDoc(slug) {
   return `${KG_IRI_PREFIXES['help-doc']}${iriEscapeSegment(slug)}`;
+}
+
+export function iriCommunityEvent(slug) {
+  return KG_IRI_PREFIXES['community-event'] + iriEscapeSegment(slug);
 }
 
 /**
