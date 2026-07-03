@@ -122,6 +122,14 @@ service KnowledgeGraphService @(path : '/graph') {
     anchor        : String;             // help-doc only (Phase 4.7) — optional
     anchorLabel   : String;             // help-doc only (Phase 4.7) — derived (title-case of anchor)
     snippet       : String;             // help-doc only (Phase 4.7) — first ~120 chars of description
+    // Phase 4.8 (#765): community-event rows carry eventType + location + scope +
+    // virtualOrInPerson + startDate + endDate.
+    eventType         : String(20);   // 'codejam' | 'teched' | 'devtoberfest' | 'usergroup'
+    location          : String(500);
+    scope             : String(20);
+    virtualOrInPerson : String(20);
+    startDate         : Date;
+    endDate           : Date;
     overlapCount  : Integer;
     // Task 4 of #850 (KG-widget redesign): server-composed meta-text string
     // for the sidebar. Stamped by the neighborhood handler via
