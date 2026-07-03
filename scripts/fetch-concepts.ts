@@ -124,6 +124,26 @@ export interface ConceptPayload {
     product?: string
     confidence?: number
   }>
+  // Phase 4.8 (#765): SAP CodeJams, Devtoberfest, TechEd, and user-group
+  // events linked to this concept. Empty until the twice-weekly
+  // fetch-community-events cron has populated CommunityEventConceptLinks.
+  // Shape mirrors the per-concept array emitted by
+  // srv/lib/published-concepts-query.js (Task 2's extension). Pass-through:
+  // all fields flow verbatim into frontmatter. The Hugo template's surrounding
+  // `{{ with .Params.communityEvents }}` hides the entire section when absent.
+  communityEvents?: Array<{
+    slug: string
+    title: string
+    url: string
+    eventType?: string
+    location?: string
+    scope?: string
+    virtualOrInPerson?: string
+    startDate?: string
+    endDate?: string | null
+    snippet?: string
+    confidence?: number
+  }>
 }
 
 interface BuildConceptsResponse {
@@ -309,6 +329,34 @@ export function frontmatter(c: ConceptPayload): string {
       })()
     : null
 
+  // Phase 4.8 (#765): emit `communityEvents` only when non-empty. Pass-through
+  // — no helper transformation. `eventType`, `location`, `scope`,
+  // `virtualOrInPerson`, `startDate`, `endDate` are all optional on the wire;
+  // per-field guards skip emission when absent. The Hugo template's surrounding
+  // `{{ with .Params.communityEvents }}` hides the entire section when the key
+  // is missing — omitting the key (rather than emitting `communityEvents: []`)
+  // keeps generated frontmatter tidy. `snippet` and `confidence` are
+  // deliberately not rendered in the Hugo template (they are concept-extraction
+  // metadata, not user-facing content). They flow through for future tooling.
+  const communityEvents = (c.communityEvents && c.communityEvents.length > 0)
+    ? (() => {
+        const lines = ['communityEvents:']
+        for (const ev of c.communityEvents!) {
+          lines.push(`  - slug: ${yamlEscape(ev.slug)}`)
+          lines.push(`    title: ${yamlEscape(ev.title)}`)
+          lines.push(`    url: ${yamlEscape(ev.url)}`)
+          if (ev.eventType)         lines.push(`    eventType: ${ev.eventType}`)
+          if (ev.location)          lines.push(`    location: ${yamlEscape(ev.location)}`)
+          if (ev.scope)             lines.push(`    scope: ${ev.scope}`)
+          if (ev.virtualOrInPerson) lines.push(`    virtualOrInPerson: ${ev.virtualOrInPerson}`)
+          if (ev.startDate)         lines.push(`    startDate: ${ev.startDate}`)
+          if (ev.endDate)           lines.push(`    endDate: ${ev.endDate}`)
+          if (ev.snippet)           lines.push(`    snippet: ${yamlEscape(ev.snippet)}`)
+        }
+        return lines.join('\n')
+      })()
+    : null
+
   // NOTE: deliberately no `type:` field — Hugo's type-based lookup is singular
   // ("type: concept" → layouts/concept/), but our template lives at
   // layouts/concepts/ (matching the section). Section-based lookup is what we
@@ -338,6 +386,7 @@ export function frontmatter(c: ConceptPayload): string {
   if (apiDocs) parts.push(apiDocs)
   if (samples) parts.push(samples)
   if (helpDocs) parts.push(helpDocs)
+  if (communityEvents) parts.push(communityEvents)
   parts.push('---', '')
   return parts.join('\n')
 }
