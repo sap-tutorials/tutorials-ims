@@ -6,7 +6,7 @@ cds.test('serve', '--project', '.', '--in-memory')
 describe('cleanup job — analytics history pruning', () => {
   it('keeps the most recent 200 rows per user, deletes the rest', async () => {
     const db = await cds.connect.to('db')
-    const { AnalyticsQueryHistory } = db.entities('com.sap.developers.ims')
+    const { AnalyticsQueryHistory } = cds.entities('com.sap.developers.ims')
 
     // Insert 250 rows for tom@test, 50 for admin@test, all with marker SQL.
     const tomRows = Array.from({ length: 250 }, (_, i) => ({
