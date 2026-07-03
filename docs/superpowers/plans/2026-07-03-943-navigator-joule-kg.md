@@ -105,7 +105,7 @@ describe('topConceptsByCosine (SQLite path)', () => {
     const v1 = normalize(Array(1536).fill(0).map((_, i) => (i === 0 ? 1 : 0)))
     const v2 = normalize(Array(1536).fill(0).map((_, i) => (i === 0 ? 0.9 : (i === 1 ? 0.1 : 0))))
     const v3 = normalize(Array(1536).fill(0).map((_, i) => (i === 1 ? 1 : 0)))
-    await db.run(INSERT.into('sap.developers.ims.Concepts').entries([
+    await db.run(INSERT.into('com.sap.developers.ims.Concepts').entries([
       { ID: c1, slug: 'async-abap', name: 'Async ABAP', embedding: encode(v1), ...active },
       { ID: c2, slug: 'rap', name: 'RAP', embedding: encode(v2), ...active },
       { ID: c3, slug: 'other', name: 'Other', embedding: encode(v3), ...active },
@@ -199,7 +199,7 @@ export async function topConceptsByCosine({ db, queryVector, limit = 5 }) {
 
   // SQLite path — small dataset in tests, full scan is fine.
   const rows = await db.run(
-    `SELECT ID as id, slug, name, embedding FROM sap_developers_ims_Concepts
+    `SELECT ID as id, slug, name, embedding FROM com_sap_developers_ims_Concepts
      WHERE status = 'ACTIVE' AND publishedAt IS NOT NULL AND mergedInto_ID IS NULL`
   )
   const scored = []
@@ -270,19 +270,19 @@ describe('expandSearchConceptsHandler', () => {
     db = await cds.connect.to('db')
     await cds.deploy(cds.model || 'db/schema.cds').to(db)
     const active = { status: 'ACTIVE', publishedAt: new Date().toISOString(), mergedInto_ID: null }
-    await db.run(INSERT.into('sap.developers.ims.Concepts').entries([
+    await db.run(INSERT.into('com.sap.developers.ims.Concepts').entries([
       { ID: conceptIds[0], slug: 'async-abap', name: 'Asynchronous ABAP', embedding: encode(unit(0)), ...active },
       { ID: conceptIds[1], slug: 'rap',        name: 'RAP',                embedding: encode(unit(1)), ...active },
       { ID: conceptIds[2], slug: 'other',      name: 'Other',              embedding: encode(unit(2)), ...active },
     ]))
-    await db.run(INSERT.into('sap.developers.ims.ConceptEdges').entries([
+    await db.run(INSERT.into('com.sap.developers.ims.ConceptEdges').entries([
       { ID: cds.utils.uuid(), source_ID: conceptIds[0], target_ID: conceptIds[1], predicate: 'relatedTo', confidence: 0.8 },
     ]))
-    await db.run(INSERT.into('sap.developers.ims.Tutorials').entries([
+    await db.run(INSERT.into('com.sap.developers.ims.Tutorials').entries([
       { ID: tutorialIds[0], slug: 'abap-async-rap', title: 'Async RAP in ABAP Cloud' },
       { ID: tutorialIds[1], slug: 'basic-abap',     title: 'Basic ABAP' },
     ]))
-    await db.run(INSERT.into('sap.developers.ims.TutorialConceptLinks').entries([
+    await db.run(INSERT.into('com.sap.developers.ims.TutorialConceptLinks').entries([
       { ID: cds.utils.uuid(), tutorial_ID: tutorialIds[0], concept_ID: conceptIds[0], predicate: 'teaches', confidence: 0.9 },
       { ID: cds.utils.uuid(), tutorial_ID: tutorialIds[0], concept_ID: conceptIds[1], predicate: 'teaches', confidence: 0.7 },
       { ID: cds.utils.uuid(), tutorial_ID: tutorialIds[1], concept_ID: conceptIds[2], predicate: 'teaches', confidence: 0.9 },
@@ -401,7 +401,7 @@ async function fetchEdges(db, sourceIds) {
   }
   return await db.run(
     `SELECT source_ID as source_id, target_ID as target_id, predicate, confidence
-     FROM sap_developers_ims_ConceptEdges
+     FROM com_sap_developers_ims_ConceptEdges
      WHERE predicate IN ('requires','relatedTo') AND source_ID IN (${placeholders})`,
     sourceIds
   ) || []
@@ -420,7 +420,7 @@ async function fetchConceptsByIds(db, ids) {
     ) || []
   }
   return await db.run(
-    `SELECT ID as id, slug, name FROM sap_developers_ims_Concepts
+    `SELECT ID as id, slug, name FROM com_sap_developers_ims_Concepts
      WHERE ID IN (${placeholders})
        AND status = 'ACTIVE' AND publishedAt IS NOT NULL AND mergedInto_ID IS NULL`,
     ids
@@ -443,8 +443,8 @@ async function fetchLinks(db, conceptIds) {
   return await db.run(
     `SELECT l.concept_ID as concept_id, l.tutorial_ID as tutorial_id, l.confidence,
             t.slug as tutorial_slug, t.title
-     FROM sap_developers_ims_TutorialConceptLinks l
-     JOIN sap_developers_ims_Tutorials t ON t.ID = l.tutorial_ID
+     FROM com_sap_developers_ims_TutorialConceptLinks l
+     JOIN com_sap_developers_ims_Tutorials t ON t.ID = l.tutorial_ID
      WHERE l.predicate = 'teaches' AND l.concept_ID IN (${placeholders})`,
     conceptIds
   ) || []
@@ -719,7 +719,7 @@ async function fetchCandidates(db) {
   // Publish gate: ACTIVE + published + not merged; embedding IS NULL for backfill,
   // or embeddedAt < updatedAt for reconciliation (concept edited after embed).
   const isHana = db.kind === 'hana'
-  const table = isHana ? 'COM_SAP_DEVELOPERS_IMS_CONCEPTS' : 'sap_developers_ims_Concepts'
+  const table = isHana ? 'COM_SAP_DEVELOPERS_IMS_CONCEPTS' : 'com_sap_developers_ims_Concepts'
   const cols = isHana
     ? 'ID, SLUG, NAME, DESCRIPTION'
     : 'ID as id, slug, name, description'
@@ -744,7 +744,7 @@ export async function runConceptEmbeddingBackfill({ db, embedClient, telemetry, 
         const vec = await embedClient.embed(text)
         if (!vec || vec.length !== DIMS) throw new Error(`bad vector length ${vec?.length}`)
         const blob = encodeEmbedding(vec)
-        const table = dbHandle.kind === 'hana' ? 'COM_SAP_DEVELOPERS_IMS_CONCEPTS' : 'sap_developers_ims_Concepts'
+        const table = dbHandle.kind === 'hana' ? 'COM_SAP_DEVELOPERS_IMS_CONCEPTS' : 'com_sap_developers_ims_Concepts'
         const col = dbHandle.kind === 'hana' ? 'EMBEDDING' : 'embedding'
         const embAt = dbHandle.kind === 'hana' ? 'EMBEDDEDAT' : 'embeddedAt'
         await dbHandle.run(
