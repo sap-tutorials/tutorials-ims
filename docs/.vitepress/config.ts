@@ -162,6 +162,7 @@ export default defineConfig({
           { text: 'KG concept operations',     link: '/developers/operations/kg-concept-operations' },
           { text: 'KG grantor setup',          link: '/developers/operations/kg-grantor-setup' },
           { text: 'Live probing',              link: '/developers/operations/live-probing' },
+          { text: 'Load testing',              link: '/developers/operations/load-testing' },
           { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
           { text: 'Phase 4 code-check eval',   link: '/developers/operations/phase-4-codecheck-eval' },
           { text: 'Postmortems', collapsed: true, items: [
