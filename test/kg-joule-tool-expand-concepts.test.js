@@ -89,4 +89,34 @@ describe('expandSearchConceptsHandler', () => {
     expect(out.concepts).toEqual([])
     expect(out.tutorials).toEqual([])
   })
+
+  it('returns { warning: "timeout" } when embed honours AbortSignal', async () => {
+    const abortingClient = {
+      embed: (_text, opts) => new Promise((_resolve, reject) => {
+        opts?.signal?.addEventListener('abort', () => {
+          const err = new Error('aborted')
+          err.name = 'AbortError'
+          reject(err)
+        })
+      }),
+    }
+    const out = await expandSearchConceptsHandler({
+      db, embedClient: abortingClient, args: { query: 'slow' }, timeoutMs: 30,
+    })
+    expect(out.warning).toBe('timeout')
+    expect(out.concepts).toEqual([])
+    expect(out.tutorials).toEqual([])
+  })
+
+  it('returns { warning: "timeout" } when embed resolves after the deadline', async () => {
+    const slowClient = {
+      embed: () => new Promise(resolve => setTimeout(() => resolve(Float32Array.from(unit(0))), 60)),
+    }
+    const out = await expandSearchConceptsHandler({
+      db, embedClient: slowClient, args: { query: 'lagging' }, timeoutMs: 30,
+    })
+    expect(out.warning).toBe('timeout')
+    expect(out.concepts).toEqual([])
+    expect(out.tutorials).toEqual([])
+  })
 })

@@ -8,7 +8,7 @@
 //
 // Handler algorithm:
 //   1. Validate args (query non-empty, <= 200 chars; clamp maxConcepts/maxTutorials).
-//   2. Embed the query via injected embedClient.
+//   2. Embed the query via injected embedClient (with 5s AbortController).
 //   3. Top-N cosine over Concepts.embedding (via concept-embedding-query.js helper).
 //   4. 1-hop walk along ConceptEdges (requires | relatedTo), boosting neighbours
 //      with WALK_BOOST * seedScore * edgeConfidence.
@@ -17,6 +17,8 @@
 //      SUM(conceptScore * linkConfidence).
 //   7. Rationale = names of top 2 contributing concepts joined with " and ".
 //   8. Empty KG → { queryEcho, concepts: [], tutorials: [] } (not an error).
+//   9. Wall-clock check between each DB round-trip; on timeout return
+//      { warning: 'timeout', concepts: [], tutorials: [] } per spec §3.
 
 import { topConceptsByCosine } from './concept-embedding-query.js'
 
@@ -55,6 +57,7 @@ const DEFAULT_MAX_CONCEPTS = 5
 const DEFAULT_MAX_TUTORIALS = 8
 const HARD_QUERY_LIMIT = 200
 const WALK_BOOST = 0.5
+const DEFAULT_TIMEOUT_MS = 5000  // Spec §3 error-handling table: >5s → { warning: 'timeout' }
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -138,13 +141,16 @@ async function fetchLinks(db, conceptIds) {
 
 /**
  * @param {object} opts
- * @param {object}   opts.db          - CDS db handle
- * @param {object}   opts.embedClient - { embed(text) => Promise<Float32Array> }
- * @param {object}   opts.args        - { query, maxConcepts?, maxTutorials? } from the LLM
- * @param {object=}  opts.telemetry   - { emit(event, payload) } optional
+ * @param {object}   opts.db           - CDS db handle
+ * @param {object}   opts.embedClient  - { embed(text, opts?) => Promise<Float32Array> }
+ * @param {object}   opts.args         - { query, maxConcepts?, maxTutorials? } from the LLM
+ * @param {object=}  opts.telemetry    - { emit(event, payload) } optional
+ * @param {number=}  opts.timeoutMs    - wall-clock cap (default 5000). Passes an AbortSignal
+ *                                       to embedClient.embed if the client accepts one; also
+ *                                       short-circuits before edge/link fetches once exceeded.
  * @returns {Promise<object>} JSON response for the LLM
  */
-export async function expandSearchConceptsHandler({ db, embedClient, args, telemetry }) {
+export async function expandSearchConceptsHandler({ db, embedClient, args, telemetry, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   const rawQuery = typeof args?.query === 'string' ? args.query.trim() : ''
   if (!rawQuery) return { error: 'query is empty', concepts: [], tutorials: [] }
   if (rawQuery.length > HARD_QUERY_LIMIT) {
@@ -154,115 +160,138 @@ export async function expandSearchConceptsHandler({ db, embedClient, args, telem
   const maxTutorials = clampInt(args?.maxTutorials, 1, 20, DEFAULT_MAX_TUTORIALS)
 
   const t0 = Date.now()
+  const deadline = t0 + timeoutMs
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(new Error('expandSearchConcepts timeout')), timeoutMs)
+  const timedOut = () => Date.now() >= deadline
+  const emitTimeout = () => {
+    telemetry?.emit?.('kg.joule.search_expansion_returned', {
+      warning: 'timeout', latencyMs: Date.now() - t0,
+    })
+    return { queryEcho: rawQuery, concepts: [], tutorials: [], warning: 'timeout' }
+  }
+
   telemetry?.emit?.('kg.joule.search_expansion_requested', {
     queryLength: rawQuery.length, maxConcepts, maxTutorials,
   })
 
-  let queryVector
   try {
-    queryVector = await embedClient.embed(rawQuery)
-  } catch (err) {
-    telemetry?.emit?.('kg.joule.search_expansion_returned', {
-      error: 'embed_failed', latencyMs: Date.now() - t0,
-    })
-    return { queryEcho: rawQuery, concepts: [], tutorials: [], warning: 'embed_failed' }
-  }
-
-  const seeds = await topConceptsByCosine({ db, queryVector, limit: maxConcepts })
-  if (seeds.length === 0) {
-    telemetry?.emit?.('kg.joule.search_expansion_returned', {
-      resultCount: 0, latencyMs: Date.now() - t0,
-    })
-    return { queryEcho: rawQuery, concepts: [], tutorials: [] }
-  }
-
-  const seedById = new Map(seeds.map(s => [s.id, s]))
-  const edges = await fetchEdges(db, seeds.map(s => s.id))
-  const boosted = new Map(seeds.map(s => [s.id, { ...s }]))
-  const neighbourIds = new Set()
-  for (const e of edges) {
-    if (boosted.has(e.target_id) && seedById.has(e.target_id)) continue
-    const src = seedById.get(e.source_id)
-    if (!src) continue
-    const boost = WALK_BOOST * src.score * (Number(e.confidence) || 0)
-    neighbourIds.add(e.target_id)
-    const existing = boosted.get(e.target_id)
-    if (existing) {
-      existing.score = Math.max(existing.score, boost)
-    } else {
-      boosted.set(e.target_id, { id: e.target_id, score: boost })
+    // Embed with AbortSignal — client may or may not honour it; the wall-clock check
+    // below is the backstop.
+    let queryVector
+    try {
+      queryVector = await embedClient.embed(rawQuery, { signal: abort.signal })
+    } catch (err) {
+      if (abort.signal.aborted) return emitTimeout()
+      telemetry?.emit?.('kg.joule.search_expansion_returned', {
+        error: 'embed_failed', latencyMs: Date.now() - t0,
+      })
+      return { queryEcho: rawQuery, concepts: [], tutorials: [], warning: 'embed_failed' }
     }
-  }
+    if (timedOut()) return emitTimeout()
 
-  // Hydrate neighbour metadata (respects publish gate — filters out non-ACTIVE).
-  if (neighbourIds.size > 0) {
-    const hydrated = await fetchConceptsByIds(db, [...neighbourIds])
-    const hydratedMap = new Map(hydrated.map(h => [h.id, h]))
-    for (const id of neighbourIds) {
-      const meta = hydratedMap.get(id)
-      const entry = boosted.get(id)
-      if (!meta) { boosted.delete(id); continue }
-      entry.slug = meta.slug
-      entry.name = meta.name
+    const seeds = await topConceptsByCosine({ db, queryVector, limit: maxConcepts })
+    if (timedOut()) return emitTimeout()
+    if (seeds.length === 0) {
+      telemetry?.emit?.('kg.joule.search_expansion_returned', {
+        resultCount: 0, latencyMs: Date.now() - t0,
+      })
+      return { queryEcho: rawQuery, concepts: [], tutorials: [] }
     }
-  }
 
-  const allConcepts = [...boosted.values()]
-    .filter(c => c.slug && c.name)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, maxConcepts)
+    const seedById = new Map(seeds.map(s => [s.id, s]))
+    const edges = await fetchEdges(db, seeds.map(s => s.id))
+    if (timedOut()) return emitTimeout()
+    const boosted = new Map(seeds.map(s => [s.id, { ...s }]))
+    const neighbourIds = new Set()
+    for (const e of edges) {
+      if (boosted.has(e.target_id) && seedById.has(e.target_id)) continue
+      const src = seedById.get(e.source_id)
+      if (!src) continue
+      const boost = WALK_BOOST * src.score * (Number(e.confidence) || 0)
+      neighbourIds.add(e.target_id)
+      const existing = boosted.get(e.target_id)
+      if (existing) {
+        existing.score = Math.max(existing.score, boost)
+      } else {
+        boosted.set(e.target_id, { id: e.target_id, score: boost })
+      }
+    }
 
-  if (allConcepts.length === 0) {
+    // Hydrate neighbour metadata (respects publish gate — filters out non-ACTIVE).
+    if (neighbourIds.size > 0) {
+      const hydrated = await fetchConceptsByIds(db, [...neighbourIds])
+      if (timedOut()) return emitTimeout()
+      const hydratedMap = new Map(hydrated.map(h => [h.id, h]))
+      for (const id of neighbourIds) {
+        const meta = hydratedMap.get(id)
+        const entry = boosted.get(id)
+        if (!meta) { boosted.delete(id); continue }
+        entry.slug = meta.slug
+        entry.name = meta.name
+      }
+    }
+
+    const allConcepts = [...boosted.values()]
+      .filter(c => c.slug && c.name)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxConcepts)
+
+    if (allConcepts.length === 0) {
+      telemetry?.emit?.('kg.joule.search_expansion_returned', {
+        resultCount: 0, latencyMs: Date.now() - t0,
+      })
+      return { queryEcho: rawQuery, concepts: [], tutorials: [] }
+    }
+
+    const links = await fetchLinks(db, allConcepts.map(c => c.id))
+    if (timedOut()) return emitTimeout()
+    const conceptScoreById = new Map(allConcepts.map(c => [c.id, c.score]))
+    const conceptNameById  = new Map(allConcepts.map(c => [c.id, c.name]))
+
+    // Aggregate per tutorial.
+    const perTutorial = new Map()
+    for (const l of links) {
+      const cs = conceptScoreById.get(l.concept_id) ?? 0
+      const contribution = cs * (Number(l.confidence) || 0)
+      let bucket = perTutorial.get(l.tutorial_id)
+      if (!bucket) {
+        bucket = { slug: l.tutorial_slug, title: l.title, score: 0, contribs: [] }
+        perTutorial.set(l.tutorial_id, bucket)
+      }
+      bucket.score += contribution
+      bucket.contribs.push({ conceptId: l.concept_id, contribution })
+    }
+
+    const tutorials = [...perTutorial.values()]
+      .map(b => {
+        const topTwo = b.contribs
+          .sort((x, y) => y.contribution - x.contribution)
+          .slice(0, 2)
+          .map(c => conceptNameById.get(c.conceptId))
+          .filter(Boolean)
+        const rationale = topTwo.length === 0
+          ? ''
+          : topTwo.length === 1
+            ? `Teaches ${topTwo[0]}`
+            : `Teaches ${topTwo[0]} and ${topTwo[1]}`
+        return { slug: b.slug, title: b.title, rationale, score: b.score }
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxTutorials)
+
     telemetry?.emit?.('kg.joule.search_expansion_returned', {
-      resultCount: 0, latencyMs: Date.now() - t0,
+      conceptCount: allConcepts.length,
+      tutorialCount: tutorials.length,
+      latencyMs: Date.now() - t0,
     })
-    return { queryEcho: rawQuery, concepts: [], tutorials: [] }
-  }
 
-  const links = await fetchLinks(db, allConcepts.map(c => c.id))
-  const conceptScoreById = new Map(allConcepts.map(c => [c.id, c.score]))
-  const conceptNameById  = new Map(allConcepts.map(c => [c.id, c.name]))
-
-  // Aggregate per tutorial.
-  const perTutorial = new Map()
-  for (const l of links) {
-    const cs = conceptScoreById.get(l.concept_id) ?? 0
-    const contribution = cs * (Number(l.confidence) || 0)
-    let bucket = perTutorial.get(l.tutorial_id)
-    if (!bucket) {
-      bucket = { slug: l.tutorial_slug, title: l.title, score: 0, contribs: [] }
-      perTutorial.set(l.tutorial_id, bucket)
+    return {
+      queryEcho: rawQuery,
+      concepts: allConcepts.map(c => ({ slug: c.slug, name: c.name, score: Number(c.score.toFixed(4)) })),
+      tutorials: tutorials.map(t => ({ ...t, score: Number(t.score.toFixed(4)) })),
     }
-    bucket.score += contribution
-    bucket.contribs.push({ conceptId: l.concept_id, contribution })
-  }
-
-  const tutorials = [...perTutorial.values()]
-    .map(b => {
-      const topTwo = b.contribs
-        .sort((x, y) => y.contribution - x.contribution)
-        .slice(0, 2)
-        .map(c => conceptNameById.get(c.conceptId))
-        .filter(Boolean)
-      const rationale = topTwo.length === 0
-        ? ''
-        : topTwo.length === 1
-          ? `Teaches ${topTwo[0]}`
-          : `Teaches ${topTwo[0]} and ${topTwo[1]}`
-      return { slug: b.slug, title: b.title, rationale, score: b.score }
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, maxTutorials)
-
-  telemetry?.emit?.('kg.joule.search_expansion_returned', {
-    conceptCount: allConcepts.length,
-    tutorialCount: tutorials.length,
-    latencyMs: Date.now() - t0,
-  })
-
-  return {
-    queryEcho: rawQuery,
-    concepts: allConcepts.map(c => ({ slug: c.slug, name: c.name, score: Number(c.score.toFixed(4)) })),
-    tutorials: tutorials.map(t => ({ ...t, score: Number(t.score.toFixed(4)) })),
+  } finally {
+    clearTimeout(timer)
   }
 }
