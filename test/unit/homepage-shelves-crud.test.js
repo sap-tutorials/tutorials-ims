@@ -13,7 +13,7 @@ describe('HomepageShelves CRUD', () => {
   beforeAll(async () => { db = await cds.connect.to('db'); });
 
   it('inserts and retrieves a shelf entry', async () => {
-    const { HomepageShelves } = db.entities('com.sap.developers.ims');
+    const { HomepageShelves } = cds.entities('com.sap.developers.ims');
     await db.run(INSERT.into(HomepageShelves).entries({
       ID: 'aaaaaaaa-1111-2222-3333-444444444444',
       verb: 'LEARN',
@@ -34,7 +34,7 @@ describe('HomepageShelves CRUD', () => {
   });
 
   it('rejects duplicate URL within same verb (assert.unique)', async () => {
-    const { HomepageShelves } = db.entities('com.sap.developers.ims');
+    const { HomepageShelves } = cds.entities('com.sap.developers.ims');
     const entry = {
       verb: 'BUILD', shelf: 'REFERENCE', sortOrder: 5,
       title: '__TEST__ Unique-constraint probe',
@@ -48,7 +48,7 @@ describe('HomepageShelves CRUD', () => {
   });
 
   it('persists HomepageConfig as a singleton', async () => {
-    const { HomepageConfig } = db.entities('com.sap.developers.ims');
+    const { HomepageConfig } = cds.entities('com.sap.developers.ims');
     // Clear any seed row (Task 2 seeds one) so this test exercises the
     // post-insert read against a controlled state.
     await db.run(DELETE.from(HomepageConfig));

@@ -642,15 +642,26 @@ export default class DeveloperService extends cds.ApplicationService {
           tutorialTitle: tutorial?.title || 'Unknown Tutorial',
         };
 
-        // Broadcast to kiosks (unauthenticated, no user info)
+        // Broadcast to kiosks (unauthenticated, no user info).
+        // Broadcast to authenticated clients (with user name).
+        //
+        // CAP 10: `service_level_restrictions` is enforced; `@requires` on the
+        // consumed service now applies to local calls too. DisplayService is
+        // `@requires: 'DisplayApp'` — a completing developer does NOT have
+        // that scope, so we run the emits under `cds.User.privileged`. These
+        // are trusted internal notifications (WS fan-out to display kiosks),
+        // not user-authorized actions.
+        const privileged = cds.User.privileged;
         const eventStream = await cds.connect.to('EventStreamService');
-        await eventStream.emit('tutorialCompleted', payload, { contexts: [String(event.legacyId)] });
-
-        // Broadcast to authenticated clients (with user name)
+        await eventStream.tx({ user: privileged }, tx =>
+          tx.emit('tutorialCompleted', payload, { contexts: [String(event.legacyId)] })
+        );
         const display = await cds.connect.to('DisplayService');
-        await display.emit('tutorialCompleted',
-          { ...payload, userName: user?.displayName || 'Someone' },
-          { contexts: [String(event.legacyId)] }
+        await display.tx({ user: privileged }, tx =>
+          tx.emit('tutorialCompleted',
+            { ...payload, userName: user?.displayName || 'Someone' },
+            { contexts: [String(event.legacyId)] }
+          )
         );
       } catch (e) {
         cds.log('ws').warn('Failed to emit tutorialCompleted:', e.message);

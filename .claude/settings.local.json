@@ -23,7 +23,11 @@
       "Bash(gh pr *)",
       "Bash(rm .git/PR_BODY.md)",
       "Read(//d//**)",
-      "Bash(rmdir D:/projects/tutorials-poc/.claude/worktrees/672-publish-staleness-guard)"
+      "Bash(rmdir D:/projects/tutorials-poc/.claude/worktrees/672-publish-staleness-guard)",
+      "mcp__sap-devs-server__search_events"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "sap-devs-server"
+  ]
 }
