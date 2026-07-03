@@ -28,16 +28,34 @@ The validator re-emits queries with `Postgresql` dialect quoting, so the accepte
 
 ## Fix
 
-Add a **denylist walker** (`collectBareIdentifiers`) that scans the AST for `column_ref` nodes whose `column` field is a string matching a HANA session-context / system-pseudocolumn name. Reject on match.
+Add a **denylist walker** (`collectBareIdentifiers`) that scans the AST for `column_ref` nodes whose `column` field is a bare string matching a HANA session-context / system-pseudocolumn name. Reject on match.
+
+### Case handling
+
+HANA identifiers are case-insensitive; `node-sql-parser` preserves the source casing on `column_ref.column`. To mirror the existing `collectFunctions` pattern (which uppercases and compares against an upper-case `ALLOWED_FUNCTIONS`), the walker uppercases the extracted identifier before the set lookup, and `DENIED_BARE_IDENTIFIERS` stores upper-case names. `system_user`, `SYSTEM_USER`, and `System_User` all resolve to the same denylist hit.
+
+### AST shape
+
+`node-sql-parser` surfaces `column_ref.column` as either a bare string primitive (the common case) or as a nested object like `{ expr: { type: 'default', value: 'X' } }` (for quoted / special forms). The walker MUST handle both:
+
+```js
+const raw = typeof node.column === 'string'
+  ? node.column
+  : (node.column?.expr?.value ?? null)
+if (!raw) return
+```
+
+Anything else (missing, non-string, unexpected shape) is skipped — the identifier still flows through the rest of validation and, if genuinely disallowed at HANA, errors at execution. The denylist is a targeted defense, not a general column validator.
 
 ### Denylist contents
 
-HANA reserved session-context and system pseudocolumns (per the HANA SQL Reference "Predefined Special Registers" section):
+HANA reserved session-context and system pseudocolumns. Sourcing: HANA SQL Reference (HANA Cloud QRC 2026-Q2), sections "Predefined Special Registers" and "Session Variables". Concretely:
 
 - `SYSTEM_USER`
 - `SESSION_USER`
 - `CURRENT_USER`
 - `CURRENT_SCHEMA`
+- `CURRENT_CLIENT`
 - `CURRENT_DATE`
 - `CURRENT_TIME`
 - `CURRENT_TIMESTAMP`
@@ -45,9 +63,14 @@ HANA reserved session-context and system pseudocolumns (per the HANA SQL Referen
 - `CURRENT_UTCTIME`
 - `CURRENT_UTCTIMESTAMP`
 - `CURRENT_CONNECTION`
+- `CURRENT_OBJECT_SCHEMA`
+- `CURRENT_SITE_ID`
+- `CURRENT_MVCC_SNAPSHOT_TIMESTAMP`
 - `CURRENT_TRANSACTION_ISOLATION_LEVEL`
 - `CURRENT_UPDATE_STATEMENT_SEQUENCE`
 - `SYSUUID`
+
+The list is stored as an upper-case `Set` in the validator; additions when SAP publishes new registers are one-line PRs against `DENIED_BARE_IDENTIFIERS`.
 
 **On the CURRENT_DATE / CURRENT_TIMESTAMP bare-vs-function distinction:** these names appear both on the function allowlist (`ALLOWED_FUNCTIONS`) and on the new bare-identifier denylist. That is intentional — `CURRENT_TIMESTAMP()` (function-call form, parsed as `function` node) is legitimate for analytics use; the bare form (parsed as `column_ref`) leaks session context and is denied. The two walkers are dispatched on AST node type, so there is no ambiguity in the code path.
 
@@ -68,7 +91,7 @@ Consistent voice with the existing `Function '<name>' is not in the analytics fu
 - **`srv/lib/analytics-sql-validator.cjs`** — add `DENIED_BARE_IDENTIFIERS` set, add `collectBareIdentifiers` walker (same recursive shape as `collectSubqueries` / `collectFunctions`), add one new loop in `validateSelect` after the function-allowlist loop and before AST re-emit.
 - **`test/unit/srv/analytics-sql-validator.pen.test.js`** — un-skip the existing `TODO(#906)` case, drop the TODO comment, add the four additional cases below.
 
-Total change: one file of production code (~15 lines added), one test file (~30 lines added, one `.skip` → `.it`).
+Total change: one file of production code (~20 lines added), one test file (~50 lines added, one `.skip` → `.it`).
 
 ## Tests
 
@@ -78,8 +101,12 @@ Un-skip and extend the pen-test suite in `test/unit/srv/analytics-sql-validator.
 2. **New: `SESSION_USER` bare** — `SELECT SESSION_USER FROM Users` must throw with the new error message.
 3. **New: `CURRENT_SCHEMA` bare** — `SELECT CURRENT_SCHEMA FROM Users` must throw.
 4. **New: `SYSUUID` bare** — `SELECT SYSUUID FROM Users` must throw.
-5. **New (positive control — function form still works):** `SELECT CURRENT_DATE() FROM Users` must NOT throw. This pins the bare-vs-function precision — a regression here would break legitimate analytics queries.
-6. **New (positive control — qualified column reference not flagged):** `SELECT Users.SYSTEM_USER FROM Users` must not throw on the identifier walker. It may error later (HANA has no such column), but that is not the validator's concern.
+5. **New (case-insensitive):** `SELECT session_user FROM Users` must throw. Pins the uppercase-comparison behavior — a case-sensitive implementation would pass all the earlier cases while leaving a trivial `session_user` / `System_User` bypass.
+6. **New (WHERE clause position):** `SELECT id FROM Users WHERE SYSTEM_USER = 'x'` must throw. Confirms the walker recurses into WHERE predicates, not just the SELECT list.
+7. **New (subquery position):** `SELECT * FROM Users WHERE id IN (SELECT SESSION_USER FROM Users)` must throw. Confirms the walker follows nested SELECT nodes.
+8. **New (positive control — function form still works):** `SELECT CURRENT_DATE() FROM Users` must NOT throw. Pins the bare-vs-function precision — a regression here would break legitimate analytics queries.
+9. **New (positive control — qualified column reference not flagged):** `SELECT Users.SYSTEM_USER FROM Users` must not throw on the identifier walker. It may error later (HANA has no such column), but that is not the validator's concern.
+10. **New (positive control — alias only, not a bare identifier):** `SELECT id AS SYSTEM_USER FROM Users` must not throw. Pins that the walker only inspects `column_ref` nodes, not the `.as` field — documents intent and catches a future refactor that starts walking aliases.
 
 All tests run under Vitest's `unit` project — pure logic, no HANA, no CAP boot, no HTTP. Runtime <1 s.
 
