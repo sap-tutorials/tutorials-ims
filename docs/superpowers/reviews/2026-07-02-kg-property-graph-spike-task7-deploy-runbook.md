@@ -94,59 +94,96 @@ END"
 
 Substitute `<known-slug-a>` / `<known-slug-b>` with two tutorial slugs known to be connected via `kg:requires` chain in the live graph. Expected: empty result **initially** — the procedure body is currently a placeholder returning `SELECT ... FROM DUMMY WHERE 1 = 0`. Iterating the body to the real `SHORTEST_PATH` call happens next.
 
-## Iterating the `SHORTEST_PATH` body
+## Iterating the `SHORTEST_PATH` body — RESOLVED 2026-07-03
 
-Once the workspace is confirmed created and the procedure is deployed with a placeholder body, the property-graph syntax probe (originally Task 1.3) resumes here. Two experimental approaches to try in order:
+**Update:** The body iteration completed overnight 2026-07-02/03 across 4 deploys (#932 → #933 → #934 → #936). The confirmed working design is now shipped on `main`. This section documents the final syntax so a future reader doesn't have to re-derive it.
 
-### Approach 1 — GraphScript procedure inside KG_PATH_V2's body
+### Final design: SQLScript wrapper + GraphScript sibling
 
-```sql
--- Replace the placeholder `paths = SELECT ... FROM DUMMY WHERE 1 = 0;` block
--- in db/src/procedures/KG_PATH_V2.hdbprocedure with:
+HANA does **not** allow inline `LANGUAGE GRAPH` blocks inside a `LANGUAGE SQLSCRIPT` procedure body. GraphScript is a distinct language declared at the procedure boundary. Solution: two procedures, `KG_PATH_V2` (SQLScript) calls `KG_SHORTEST_PATH_GRAPH` (GraphScript).
 
-paths = SELECT
-          1                                    AS path_rank,
-          CARDINALITY(:v_path) - 2             AS hop_count,
-          :vertex                              AS vertex_seq,
-          :idx - 1                             AS seq_index
-        FROM :v_path
-        UNORDERED;
-```
-
-You'll need a GraphScript block preceding this to compute `:v_path`. Try:
+**`db/src/procedures/KG_SHORTEST_PATH_GRAPH.hdbprocedure`** — GraphScript sibling:
 
 ```sql
-DECLARE g GRAPH USING "AC9753D6C4764F5ABE3B3CA4E88233C0"."KG_PG_WORKSPACE";
-DECLARE v_from VERTEX = VERTEX(:g, :from_key);
-DECLARE v_to   VERTEX = VERTEX(:g, :to_key);
-DECLARE v_path = SHORTEST_PATH(:g, :v_from, :v_to, 'ANY');
-```
-
-**These are best-guess call shapes based on HANA Graph documentation patterns.** The exact syntax needs iterative testing against the deployed workspace. Update the procedure body, re-deploy via `cf push tutorials-db-deployer`, probe with the DO-block from 7.1c. Repeat until rows come back for a known-connected slug pair.
-
-### Approach 2 — CREATE PROCEDURE ... LANGUAGE GRAPH sibling
-
-If the inline GraphScript block above doesn't compile, HANA may require a separate `LANGUAGE GRAPH` procedure that KG_PATH_V2 then CALLs. Pattern:
-
-```sql
--- New file: db/src/procedures/KG_SHORTEST_PATH_IMPL.hdbprocedure
-PROCEDURE KG_SHORTEST_PATH_IMPL(
-  IN  workspace_name NVARCHAR(100),
-  IN  from_key       NVARCHAR(280),
-  IN  to_key         NVARCHAR(280),
-  OUT path_vertices  TABLE(vertex_key NVARCHAR(280), seq_index INTEGER)
+PROCEDURE KG_SHORTEST_PATH_GRAPH (
+  IN  i_from  NVARCHAR(400),
+  IN  i_to    NVARCHAR(400),
+  OUT o_verts TABLE (
+    vertex_key NVARCHAR(400),
+    seq_idx    BIGINT
+  )
 )
-LANGUAGE GRAPH
-AS BEGIN
-  GRAPH g = Graph(:workspace_name);
-  Vertex v_from = Vertex(:g, :from_key);
-  Vertex v_to   = Vertex(:g, :to_key);
-  MULTISET<VERTEX> path = SHORTEST_PATH(:g, :v_from, :v_to);
-  -- flatten into path_vertices with FOREACH...
+LANGUAGE GRAPH READS SQL DATA AS
+BEGIN
+  -- Single-arg Graph() constructor. HDI enforces schema-local
+  -- references — no explicit schema qualifier permitted (compile
+  -- error 8250002: "the reference has to be schema-local").
+  GRAPH g = Graph("KG_PG_WORKSPACE");
+
+  -- Guard against missing endpoints — without this, Vertex() throws
+  -- when the key doesn't exist, and the caller would see a confusing
+  -- exception instead of an empty result. Fail-open with return.
+  IF (NOT VERTEX_EXISTS(:g, :i_from) OR NOT VERTEX_EXISTS(:g, :i_to)) {
+    return;
+  }
+
+  VERTEX v_from = Vertex(:g, :i_from);
+  VERTEX v_to   = Vertex(:g, :i_to);
+
+  -- Unit-cost weight lambda + 'ANY' direction. Every edge costs 1
+  -- regardless of type or direction; Shortest_Path becomes hop-count-
+  -- minimizing with undirected traversal.
+  WeightedPath<BIGINT> p = Shortest_Path(:g, :v_from, :v_to,
+    (Edge e) => BIGINT{ return 1L; }, 'ANY');
+
+  -- GraphScript SELECT-FOREACH does NOT accept AS aliases on the
+  -- projection expressions. Output columns come from the OUT param's
+  -- TABLE(...) definition (positional). The ORDINALITY name (:SEQ)
+  -- IS valid — it's a variable binding in FOREACH scope.
+  o_verts = SELECT :v."VERTEX_KEY", :SEQ
+            FOREACH v IN Vertices(:p) WITH ORDINALITY AS SEQ;
 END;
 ```
 
-KG_PATH_V2 (SQLScript) then calls it. Same iteration pattern.
+**Key syntax facts confirmed by deploy iteration:**
+
+| Fact | Notes |
+| --- | --- |
+| `LANGUAGE GRAPH READS SQL DATA AS` | The `READS SQL DATA` clause goes here, not on `LANGUAGE SQLSCRIPT`-adjacent DEFINER lines. |
+| No `SQL SECURITY DEFINER` on GraphScript | GraphScript rejects the clause. Workspace-level ACL pins identity to `#OO`. |
+| Single-arg `Graph("WS_NAME")` | The two-arg form `Graph("SCHEMA", "WS")` is only for cross-schema references. Within an HDI container: single-arg. |
+| Mixed-case function names | `Shortest_Path`, `Vertex`, `Vertices` — HANA is case-insensitive but the sample-canonical casing is documented for readability. |
+| Direction as 5th arg | `'ANY'` — the KG edges are directed (concept→concept for `requires`, tutorial→concept for `teaches`), but PREREQ semantics require walking teaches edges backwards. `'ANY'` enables that. |
+| Endpoint-exists guard | `IF (NOT VERTEX_EXISTS(:g, :i_from) OR ...) return;` — matches SAP's sample. Without this, Vertex() throws on missing keys. |
+| SELECT-FOREACH projection is BARE | No `AS colname` aliases. Positional match against the OUT TABLE columns. |
+
+### Live probe result
+
+Verified 2026-07-03 05:36 UTC against DEV HANA (schema `AC9753D6C4764F5ABE3B3CA4E88233C0`):
+
+```sql
+CALL KG_PATH_V2(
+  'https://developers.sap.com/kg/tutorial/btp-cf-ext-successfactors',
+  'https://developers.sap.com/kg/tutorial/xsa-create-user-provided-anonymous-service',
+  8, :paths);
+```
+
+Returned 4 rows, `hop_count=3`, path:
+
+```text
+tutorial:btp-cf-ext-successfactors
+  → concept:cloud-foundry-app-deployment  (teaches edge)
+  → concept:sap-hana-hdi-container         (requires edge)
+  → tutorial:xsa-create-user-provided-anonymous-service  (teaches edge, reversed via 'ANY')
+```
+
+The hop count is **real** — v1 SPARQL always returned 0 for the same query due to the KGE `{n,m}` limitation the whole spike was designed around.
+
+### Empty-path timeout risk
+
+Live probe of a **nonexistent slug pair** timed out at hana-cli's 30-second default. Shortest_Path does exhaustive BFS before concluding no path exists, and on a workspace with 6,054 vertices / 7,164 edges that can dominate.
+
+Fix landed in the JS wrapper (see PR #938): `Promise.race`-based `withTimeout` in `srv/lib/kg-path-v2-client.js`, default 5000ms, caller-overridable. On expiry, rejects with `err.code === 'ETIMEDOUT'`; the `pathBetween` handler's existing try/catch falls through to v1 SPARQL and emits `kg_path_v2_failed` warning + `kg_path_v2_fallback_error` counter. No handler changes needed.
 
 ### Verify the real body against the hybrid fixture
 

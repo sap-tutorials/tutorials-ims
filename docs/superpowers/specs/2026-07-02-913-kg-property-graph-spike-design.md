@@ -175,18 +175,22 @@ tutorial:<from>  --teaches-->  concept:c1
 
 **Hop count** = path length − 2 (subtract the two `teaches` edges at the endpoints). This is what the v1 comment says is zero today because SPARQL can't compute it.
 
-## Procedure body
+## Procedure body — final shipped design (2026-07-03)
+
+**Update:** the placeholder-body-first strategy in this spec was executed as designed (PR #925 shipped placeholder; PRs #932/#933/#934/#936 iterated the real body across HDI deploys). The final working design has two procedures — a SQLScript wrapper and a GraphScript sibling — because HANA does not allow inline `LANGUAGE GRAPH` blocks inside a SQLScript procedure body.
+
+**`db/src/procedures/KG_PATH_V2.hdbprocedure`** — SQLScript wrapper. Validates IRIs, derives vertex keys, CALLs the GraphScript sibling, reshapes the returned rows into the `(path_rank, hop_count, vertex_seq, seq_index)` wire contract:
 
 ```sql
 PROCEDURE KG_PATH_V2 (
-  IN  from_iri    NVARCHAR(500),
-  IN  to_iri      NVARCHAR(500),
-  IN  max_hops    INTEGER,        -- caller-supplied bound; NULL → default 8
-  OUT paths       TABLE (
-    path_rank    INTEGER,     -- 1..N, cheapest first
-    hop_count    INTEGER,     -- edges − 2 (exclude the two `teaches` bookends)
-    vertex_seq   NVARCHAR(500),  -- 'concept:<slug>' or 'tutorial:<slug>'
-    seq_index    INTEGER      -- 0..hop_count+1 along the path
+  IN  from_iri  NVARCHAR(500),
+  IN  to_iri    NVARCHAR(500),
+  IN  max_hops  INTEGER,
+  OUT paths     TABLE (
+    path_rank   INTEGER,
+    hop_count   INTEGER,
+    vertex_seq  NVARCHAR(500),
+    seq_index   INTEGER
   )
 )
 LANGUAGE SQLSCRIPT
@@ -196,53 +200,85 @@ BEGIN
   DECLARE KG_INVALID_TUTORIAL_IRI CONDITION FOR SQL_ERROR_CODE 10006;
   DECLARE KG_MAX_HOPS_OUT_OF_RANGE CONDITION FOR SQL_ERROR_CODE 10010;
 
-  DECLARE from_key NVARCHAR(500);
-  DECLARE to_key   NVARCHAR(500);
+  DECLARE from_key NVARCHAR(400);
+  DECLARE to_key   NVARCHAR(400);
   DECLARE effective_max_hops INTEGER;
+  DECLARE hop_count_calculated INTEGER;
+  -- SQLScript requires all DECLAREs at the top of the BEGIN block.
+  DECLARE graph_verts TABLE (vertex_key NVARCHAR(400), seq_idx BIGINT);
 
-  -- Validate IRIs against the same regex used by KG_QUERY.
-  IF :from_iri IS NULL OR NOT (:from_iri LIKE_REGEXPR
-       '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') OR
-     :to_iri IS NULL OR NOT (:to_iri LIKE_REGEXPR
-       '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') THEN
-    SIGNAL KG_INVALID_TUTORIAL_IRI;
-  END IF;
+  -- IRI validation (regex mirrors KG_QUERY's) + max_hops range check.
+  -- SIGNAL on failure; caller sees err.code 10006 / 10010.
+  -- Derive vertex keys by stripping the IRI prefix.
+  -- ...
 
-  -- Clamp max_hops to [1, 20]. NULL → 8.
-  effective_max_hops := COALESCE(:max_hops, 8);
-  IF effective_max_hops < 1 OR effective_max_hops > 20 THEN
-    SIGNAL KG_MAX_HOPS_OUT_OF_RANGE;
-  END IF;
+  -- Delegate to the GraphScript sibling for the SHORTEST_PATH call.
+  CALL KG_SHORTEST_PATH_GRAPH(:from_key, :to_key, :graph_verts);
 
-  -- Derive workspace vertex keys from the IRIs.
-  from_key := 'tutorial:' ||
-    SUBSTR(:from_iri, LENGTH('https://developers.sap.com/kg/tutorial/') + 1);
-  to_key   := 'tutorial:' ||
-    SUBSTR(:to_iri,   LENGTH('https://developers.sap.com/kg/tutorial/') + 1);
-
-  -- Body: shortest path in KG_PG_WORKSPACE.
-  -- The GraphScript block below is a placeholder. Task 1 of the implementation
-  -- plan (spike-within-the-spike) confirms the exact call shape against the
-  -- live DB via hana-cli before we lock the procedure body.
-  paths = SELECT
-            :from_key   AS vertex_seq, 0 AS seq_index,
-            1           AS path_rank,  0 AS hop_count
-          FROM DUMMY
-          WHERE 1 = 0;  -- placeholder: returns empty until Task 1 lands
+  -- Compute hop count + enforce max_hops post-hoc.
+  -- Return empty (SELECT ... FROM DUMMY WHERE 1=0) if hop_count > max.
+  -- Otherwise shape the graph_verts rows into (path_rank=1, hop_count,
+  -- vertex_seq, seq_index=seq_idx-1) via SELECT.
 END;
 ```
 
-**Two intentional placeholder gaps, addressed as Task 1 of the implementation plan:**
+**`db/src/procedures/KG_SHORTEST_PATH_GRAPH.hdbprocedure`** — GraphScript sibling:
 
-1. **The `SHORTEST_PATH` invocation syntax.** HANA property-graph algorithms are invoked via GraphScript (`CREATE PROCEDURE ... LANGUAGE GRAPH`). The exact call syntax on the QRC that shipped 2026-07-01 needs to be confirmed against the live DB — the [SAP HANA Graph reference](https://help.sap.com/docs/hana-cloud-database) is versioned per QRC and the property-graph transformation feature is new enough that training data does not cover it. Task 1 is a 30-minute probe using `hana-cli` to run a hand-written `SHORTEST_PATH` against a tiny fixture, capturing the exact call shape.
+```sql
+PROCEDURE KG_SHORTEST_PATH_GRAPH (
+  IN  i_from  NVARCHAR(400),
+  IN  i_to    NVARCHAR(400),
+  OUT o_verts TABLE (
+    vertex_key NVARCHAR(400),
+    seq_idx    BIGINT
+  )
+)
+LANGUAGE GRAPH READS SQL DATA AS
+BEGIN
+  -- Single-arg Graph(): HDI requires schema-local references.
+  GRAPH g = Graph("KG_PG_WORKSPACE");
 
-2. **Table-typed OUT parameter.** HANA SQLScript supports `OUT param TABLE(...)` but the calling convention from `cds.db.run` needs verification — the existing DEFINER procedures use scalar OUT parameters (`response NCLOB`). Fallback if table-OUT doesn't cross the boundary cleanly: write path rows into a global temporary table `#KG_PATH_V2_RESULT` and have the JS layer `SELECT` from it — same one-transaction guarantee, uglier boundary. Task 1 confirms.
+  -- Guard against missing endpoints; Vertex() throws on unknown keys.
+  IF (NOT VERTEX_EXISTS(:g, :i_from) OR NOT VERTEX_EXISTS(:g, :i_to)) {
+    return;
+  }
 
-**Task 1 also confirms three related facts before any DDL is finalized:**
+  VERTEX v_from = Vertex(:g, :i_from);
+  VERTEX v_to   = Vertex(:g, :i_to);
 
-- **Exact HANA table names.** The view DDL assumes `com_sap_developers_ims_Concepts` etc. — CDS namespace flattening for `com.sap.developers.ims`. This is the deterministic default, but `@cds.persistence.name` overrides anywhere in the graph would break the assumption. Confirmed via `hana-cli inspectTable --schema <schema> --table Concepts` before writing the view DDL.
-- **Runtime privilege.** The property-graph feature is entitled subaccount-wide but a specific privilege (e.g., `GRAPH USAGE` on the workspace, or a HDI role grant for the property-graph engine catalog) may be missing on the runtime user. Confirmed via `hana-cli status --priv` before writing procedure code. If missing, the spike stalls on a service-key update rather than on code.
-- **`SHORTEST_PATH` tie behavior.** Whether the algorithm returns one path or all shortest paths, and how ties are ordered. If the DB doesn't rank ties deterministically, the JS wrapper's secondary sort on `vertex_seq` (already implemented above) makes the client-side rendering deterministic across calls.
+  -- Uniform-cost weight lambda + 'ANY' direction (undirected traversal).
+  WeightedPath<BIGINT> p = Shortest_Path(:g, :v_from, :v_to,
+    (Edge e) => BIGINT{ return 1L; }, 'ANY');
+
+  -- BARE projection — GraphScript SELECT-FOREACH doesn't accept AS
+  -- aliases. Column names come from the OUT TABLE positionally.
+  o_verts = SELECT :v."VERTEX_KEY", :SEQ
+            FOREACH v IN Vertices(:p) WITH ORDINALITY AS SEQ;
+END;
+```
+
+**Key syntax facts confirmed by 4-cycle deploy iteration** (see [`docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md`](../reviews/2026-07-02-kg-property-graph-spike-task1-notes.md) § *Body iteration completed*):
+
+- LANGUAGE GRAPH accepts `READS SQL DATA` but NOT `SQL SECURITY DEFINER` — the workspace-level ACL pins identity to `#OO`.
+- Single-arg `Graph("WS_NAME")` is required — schema qualifier prohibited on schema-local references (HDI error 8250002).
+- `Shortest_Path` (mixed case), 5-arg form with direction, `'ANY'` for undirected traversal.
+- SELECT-FOREACH projection accepts NO `AS` aliases. Output columns from OUT TABLE positionally.
+- Endpoint-exists guard prevents Vertex() from throwing on unknown keys.
+
+**Live probe result** (2026-07-03 05:36 UTC):
+
+```sql
+CALL KG_PATH_V2(
+  'https://developers.sap.com/kg/tutorial/btp-cf-ext-successfactors',
+  'https://developers.sap.com/kg/tutorial/xsa-create-user-provided-anonymous-service',
+  8, :paths);
+```
+
+Returned 4 rows, hop_count=3. The hop count is real — v1 SPARQL always returned 0 due to the KGE `{n,m}` limitation this spike was designed around.
+
+**Empty-path timeout risk** (fixed in PR #938):
+
+Live probe of nonexistent slug pairs timed out hana-cli's default 30s. HANA's `Shortest_Path` does exhaustive BFS before concluding no path exists. On the current workspace (6,054 vertices / 7,164 edges), that dominates for unconnected pairs. Fix: `Promise.race`-based `withTimeout` wrapper in the JS client, default 5000ms.
 
 ## JS wrapper
 

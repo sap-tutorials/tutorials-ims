@@ -159,3 +159,34 @@ A second drift also surfaced: the workspace file was shipped as **DDL** (`GRAPH 
 **Verification path:** `cds build --production` packs the fix cleanly, but semantic validation only happens at deploy time. Re-deploy after the follow-up PR merges to confirm the plugin accepts the keyed workspace.
 
 **Reviewer discipline lesson:** for spec/plan-review passes on HDI artifacts that don't get exercised until deploy, adding a "verify by comparing to a working sibling artifact in the repo" step to the reviewer checklist would have caught this — the SAP HANA HDI docs (or a working `.hdbgraphworkspace` elsewhere in SAP samples) would have shown the required KEY column. Filing this as a hindsight note; not proposing a process change today.
+
+---
+
+## Body iteration completed (2026-07-02/03)
+
+The `SHORTEST_PATH` body iteration ran across 4 deploys overnight:
+
+1. **PR #932** — real body first attempt with LANGUAGE GRAPH sibling procedure. HDI rejected: (a) `READS SQL DATA` clause misplaced, (b) mid-body `DECLARE` in SQLScript.
+2. **PR #933** — mechanical fixes + full rewrite against SAP's [`HANA_Cloud_2021Q1_Shortest_Path_One_to_One.sql`](https://github.com/SAP-samples/hana-graph-examples/blob/main/GRAPH_PROCEDURE_EXAMPLES/BUILTIN_FUNCTIONS_ALGORITHMS/HANA_Cloud_2021Q1_Shortest_Path_One_to_One.sql) sample. Still wrong on the SELECT-FOREACH grammar.
+3. **PR #934** — GraphScript's `SELECT ... FOREACH` doesn't accept `AS` column aliases on the projection. Output columns come from the OUT param's TABLE definition positionally.
+4. **PR #936** — HDI enforces schema-local references in procedures; `Graph("**CURRENT_SCHEMA**", "KG_PG_WORKSPACE")` rejected. Single-arg `Graph("KG_PG_WORKSPACE")` works.
+
+After #936 merged, the procedures compiled cleanly and a live probe on 2026-07-03 05:36 UTC confirmed the shipped design works end-to-end:
+
+- Test slug pair: `btp-cf-ext-successfactors` → `xsa-create-user-provided-anonymous-service`
+- Result: 4 rows, hop_count=3, path: tutorial → concept:cloud-foundry-app-deployment → concept:sap-hana-hdi-container → tutorial
+- The hop count is real (v1 SPARQL always returned 0 due to the KGE `{n,m}` limitation this spike was designed around).
+
+### One-off finding: exhaustive BFS on empty-path case (PR #938)
+
+Live probe of a **nonexistent slug pair** timed out hana-cli's 30-second default. HANA's `Shortest_Path` does exhaustive BFS before concluding no path exists; on the current workspace (6,054 vertices / 7,164 edges) that dominates for unconnected pairs.
+
+Fix landed as PR #938: `Promise.race`-based `withTimeout` in `srv/lib/kg-path-v2-client.js`, default 5000ms, caller-overridable. On expiry the wrapper rejects with `err.code === 'ETIMEDOUT'`; the pathBetween handler's existing try/catch falls through to v1 SPARQL and emits `kg_path_v2_failed` warning + `kg_path_v2_fallback_error` counter.
+
+**Contrast with connected-pair performance:** the successful 3-hop probe above returned in ~50ms. The timeout only bites on truly unconnected pairs OR runs where the graph has expanded significantly beyond current capacity estimates.
+
+### Reviewer-discipline lesson from the whole iteration
+
+Every one of the 4 syntax fixes was readable straight off the HDI compile error. None of them would have been caught by a smarter spec-review or code-quality-review pass, because HDI's semantic validation only runs at `cf push tutorials-db-deployer` time — `cds build` treats `.hdbprocedure` files as passthrough. This makes HDI artifact review structurally different from JS/TS code review; the only reliable validation is a live deploy.
+
+For future property-graph work (follow-ons #916, #917, #918, #919), the runbook now documents the confirmed GraphScript syntax so authors can start from a known-working baseline instead of re-deriving it.
