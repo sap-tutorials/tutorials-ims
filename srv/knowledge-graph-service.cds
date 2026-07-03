@@ -114,10 +114,10 @@ service KnowledgeGraphService @(path : '/graph') {
     language      : String;             // sample only (Phase 4.6)
     stars         : Integer;            // sample only (Phase 4.6)
     lastCommitAt  : Timestamp;          // sample only (Phase 4.6)
-    // Phase 4.7 (#748): help-doc rows carry source + product + anchor + snippet
+    // Phase 4.7 (#748) + #860: help-doc rows carry source + product + anchor + snippet
     // + sourceLabel derived at payload time. anchor is optional (may be null).
-    source        : String;             // help-doc only (Phase 4.7): 'help-sap-com' | 'cap-cloud-sap' | 'ui5-sap-com'
-    sourceLabel   : String;             // help-doc only (Phase 4.7): 'SAP Help' | 'CAP' | 'UI5'
+    source        : String;             // help-doc only: 'help-sap-com' | 'cap-cloud-sap' | 'ui5-sap-com' | 'architecture-sap-com'
+    sourceLabel   : String;             // help-doc only: 'SAP Help' | 'CAP' | 'UI5' | 'Architecture Center'
     product       : String;             // help-doc only (Phase 4.7)
     anchor        : String;             // help-doc only (Phase 4.7) — optional
     anchorLabel   : String;             // help-doc only (Phase 4.7) — derived (title-case of anchor)

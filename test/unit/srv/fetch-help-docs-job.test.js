@@ -168,6 +168,7 @@ describe('fetch-help-docs-job', () => {
         'help-sap-com': { rowsFetched: 0, fetcherRejected: true, reason: '403 forbidden' },
         'cap-cloud-sap': { rowsFetched: 1, fetcherRejected: false },
         'ui5-sap-com': { rowsFetched: 0, fetcherRejected: false },
+        'architecture-sap-com': { rowsFetched: 0, fetcherRejected: false },
       },
     }));
 
@@ -183,6 +184,8 @@ describe('fetch-help-docs-job', () => {
     expect(summary.perSource['cap-cloud-sap'].rowsFetched).toBe(1);
     expect(summary.perSource['ui5-sap-com'].fetcherRejected).toBe(false);
     expect(summary.perSource['ui5-sap-com'].rowsFetched).toBe(0);
+    expect(summary.perSource['architecture-sap-com'].fetcherRejected).toBe(false);
+    expect(summary.perSource['architecture-sap-com'].rowsFetched).toBe(0);
   });
 
   it('budget exhausted counts extracted but marks budgetExhausted flag', async () => {

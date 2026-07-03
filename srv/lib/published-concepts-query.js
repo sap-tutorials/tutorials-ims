@@ -7,11 +7,12 @@
 
 import cds from '@sap/cds';
 
-// Phase 4.7 (#748): source-label mapping for help-docs. No DB column; the
-// three known sources map to human-readable badges at payload time.
+// Phase 4.7 (#748) + #860: source-label mapping for help-docs. No DB column;
+// the four known sources map to human-readable badges at payload time.
 // Exported so knowledge-graph-service.js can reuse it for neighborhood
 // widening (Phase 4.7 §2.5).
 export const HELP_DOC_SOURCE_LABEL = Object.freeze({
+  'architecture-sap-com': 'Architecture Center',
   'cap-cloud-sap': 'CAP',
   'help-sap-com': 'SAP Help',
   'ui5-sap-com': 'UI5',
