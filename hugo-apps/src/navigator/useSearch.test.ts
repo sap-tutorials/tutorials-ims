@@ -117,7 +117,27 @@ describe('buildFacetsUrl', () => {
 
   it('omits taskTypes/experience aliases when arrays are empty', () => {
     const url = buildFacetsUrl('abap', [], [])
-    expect(url).toBe(`/search/getFacets(search=@s)?${new URLSearchParams({ '@s': "'abap'" })}`)
+    // Hand-authored expectation instead of URLSearchParams round-trip: the
+    // exact raw URL matters here — the previous URLSearchParams-based
+    // builder encoded space as `+`, which CAP's OData v4 parser treats as
+    // a literal `+` character and breaks multi-word queries. The regression
+    // test below (`encodes space as %20…`) locks the encoding.
+    expect(url).toBe(`/search/getFacets(search=@s)?@s=${encodeURIComponent("'abap'")}`)
+  })
+
+  it('encodes space as %20, NOT as `+`, in the @s alias (regression: production `cap ` / `cap handler` returned 0 rows)', () => {
+    // The previous URLSearchParams-based builder produced `@s='cap+'` for
+    // a `cap ` input; CAP's OData v4 URL parser does not decode `+` back to
+    // space in a parenthesized function parameter — it stays a literal
+    // `+`. `cap handler` broke the same way. encodeURIComponent uses
+    // RFC 3986 percent-encoding (space → `%20`) which the parser handles.
+    // See the note above encodeODataValue in useSearch.ts.
+    const trailing = buildFacetsUrl('cap ', [], [])
+    expect(trailing).not.toMatch(/[?&]@s=[^&]*\+/)
+    expect(trailing).toMatch(/%20/)
+    const multi = buildFacetsUrl('cap handler', [], [])
+    expect(multi).not.toMatch(/[?&]@s=[^&]*\+/)
+    expect(multi).toContain('cap%20handler')
   })
 
   it('upper-cases task types to match the enum in the SearchableItems view', () => {

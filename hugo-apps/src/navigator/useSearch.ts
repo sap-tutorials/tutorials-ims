@@ -39,6 +39,20 @@ export const MIN_SEARCH_CHARS = 2
 
 const escOData = (v: string) => v.replace(/'/g, "''")
 
+// Percent-encode a value for use in an OData query string. CANNOT use
+// URLSearchParams here: it applies `application/x-www-form-urlencoded`
+// (RFC 1866 §8.2.1) rules which encode space as `+`, but CAP's OData v4
+// URL parser does NOT decode `+` back to space in `$search` or in a
+// parenthesized function parameter — it treats it as a literal `+`
+// character. That silently broke every multi-word query typed into the
+// navigator search box: `cap handler` → `?$search=cap+handler` →
+// tokenised as a single opaque `cap+handler` token → zero rows, even
+// though `cap` alone returns the whole CAP catalogue. Same problem hits
+// the getFacets alias @s='cap ' → literal `cap+` → zero matches.
+// encodeURIComponent uses RFC 3986 percent-encoding (space → `%20`) which
+// the parser handles correctly.
+const encodeODataValue = (v: string) => encodeURIComponent(v)
+
 // Build the `getFacets(...)` URL using OData V4 parameter aliases.
 //
 // Scalar-vs-array literal shapes differ, and CAP's v4 parser is strict:
@@ -52,22 +66,20 @@ const escOData = (v: string) => v.replace(/'/g, "''")
 //     literals: `["TUTORIAL"]` (double quotes). The v2-era OData form
 //     `['TUTORIAL']` is still rejected.
 //
-// Aliases keep the payload out of the URL path so URLSearchParams
-// handles URL-level encoding. See issues #869 (initial fix) and #943
-// (regression + this fix).
+// See issues #869 (initial fix) and #943 (regression + this fix), plus
+// the note above encodeODataValue for the space-encoding gotcha.
 export function buildFacetsUrl(term: string, taskTypes: string[], experience: string[]): string {
-  const q = new URLSearchParams()
-  q.set('@s', `'${escOData(term)}'`)
-  const params: string[] = ['search=@s']
+  const parts: string[] = ['search=@s']
+  const query: string[] = [`@s=${encodeODataValue(`'${escOData(term)}'`)}`]
   if (taskTypes.length) {
-    q.set('@t', JSON.stringify(taskTypes.map(t => t.toUpperCase())))
-    params.push('taskTypes=@t')
+    parts.push('taskTypes=@t')
+    query.push(`@t=${encodeODataValue(JSON.stringify(taskTypes.map(t => t.toUpperCase())))}`)
   }
   if (experience.length) {
-    q.set('@e', JSON.stringify(experience))
-    params.push('experience=@e')
+    parts.push('experience=@e')
+    query.push(`@e=${encodeODataValue(JSON.stringify(experience))}`)
   }
-  return `/search/getFacets(${params.join(',')})?${q}`
+  return `/search/getFacets(${parts.join(',')})?${query.join('&')}`
 }
 
 export interface BuildFilterFlags {
@@ -154,15 +166,19 @@ export function useSearch(options: UseSearchOptions) {
         filterProducts.value,
         { isNew: isNewFlag, isNewCutoffISO },
       )
-      const params = new URLSearchParams()
-      params.set('$search', term)
-      params.set('$top', String(pageSize))
-      params.set('$skip', String(page * pageSize))
-      params.set('$count', 'true')
-      if (filter) params.set('$filter', filter)
+      // Hand-build the query string — see encodeODataValue above for why we
+      // can't use URLSearchParams for $search (space→`+` breaks CAP's OData
+      // v4 parser, `cap handler` → 0 rows).
+      const qs: string[] = [
+        `$search=${encodeODataValue(term)}`,
+        `$top=${pageSize}`,
+        `$skip=${page * pageSize}`,
+        `$count=true`,
+      ]
+      if (filter) qs.push(`$filter=${encodeODataValue(filter)}`)
 
       const [itemsRes, facetsRes] = await Promise.all([
-        fetch(`/search/SearchableItems?${params}`),
+        fetch(`/search/SearchableItems?${qs.join('&')}`),
         fetch(buildFacetsUrl(term, filterTypes.value, filterLevels.value)),
       ])
 
