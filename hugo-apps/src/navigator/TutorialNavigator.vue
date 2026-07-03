@@ -207,6 +207,29 @@ watch(sort, (next) => {
   }
 })
 
+// Joule handoff (#943): button in the search box's fd-input-group__addon
+// slot opens Joule with a canned prompt when the user has typed a search
+// query, otherwise just opens the Joule pane empty. Drops telemetry into
+// globalThis.__JOULE_NAV_SEARCH before calling openWithMessage so
+// downstream tools can attribute the call to a navigator search. Mirrors
+// the __JOULE_ADVOCATES bridge in hugo-apps/src/advocates/App.vue.
+function handleJouleClick() {
+  const query = searchQuery.value?.trim() ?? ''
+  const joule = (window as any).joule
+  if (!joule) return
+  if (!query) { joule.open?.(); return }
+  const template = [
+    `Find tutorials about: ${query}`,
+    `Use the expandSearchConcepts tool for related concepts, then searchTutorials for keyword matches. Summarise the top results with why they're relevant.`,
+  ].join('\n\n')
+  ;(globalThis as any).__JOULE_NAV_SEARCH = {
+    queryLength: query.length,
+    hasFilters: hasActiveFilters.value,
+    ts: Date.now(),
+  }
+  joule.openWithMessage?.({ text: template })
+}
+
 onMounted(async () => {
   const [navRes, catalogRes, progRes] = await Promise.all([
     fetch('/tutorials/_nav.json'),
@@ -301,6 +324,16 @@ onMounted(async () => {
             placeholder="Search for a tutorial"
             class="fd-input fd-input-group__input"
           />
+          <span class="fd-input-group__addon">
+            <button
+              type="button"
+              class="fd-button fd-button--transparent joule-search-btn"
+              :aria-label="'Ask Joule about ' + (searchQuery || 'tutorials')"
+              @click="handleJouleClick"
+            >
+              <i class="sap-icon--ai" aria-hidden="true"></i>
+            </button>
+          </span>
           <span class="fd-input-group__addon fd-input-group__addon--button">
             <button class="fd-button fd-button--emphasized fd-input-group__button" aria-label="Search">Search</button>
           </span>
