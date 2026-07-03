@@ -143,7 +143,16 @@ describe('BrowsePage mount', () => {
     // createApp doesn't emit hydration-specific warnings, but any
     // [Vue warn] of any kind (component lifecycle, prop validation,
     // missing key, etc.) still indicates a real bug. Catch all of them.
-    const vueWarnings = warnings.filter(w => /\[Vue warn\]/i.test(w))
+    //
+    // happy-dom v20 stopped silently accepting unknown-tag custom elements;
+    // Vue now surfaces "Failed to resolve component: ui5-*" for the UI5
+    // Web Components used across BrowseGrid/GroupCard/TutorialCard. Those
+    // are legit custom elements registered by @ui5/webcomponents at runtime
+    // in the browser but not present in the vitest+happy-dom context.
+    // Filter those from the guard — they are not bugs.
+    const vueWarnings = warnings
+      .filter(w => /\[Vue warn\]/i.test(w))
+      .filter(w => !/Failed to resolve component:\s*ui5-/.test(w))
     expect(vueWarnings).toEqual([])
   })
 
