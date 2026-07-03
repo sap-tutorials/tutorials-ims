@@ -234,8 +234,20 @@ describe('Secrets entity CREATE (#465 regression)', () => {
       })
     );
     expect(created).toBeDefined();
-    // Whether single-row or array depends on CAP version — accept both.
-    const row = Array.isArray(created) ? created[0] : created;
-    expect(row.key).toBe('TEST_NEW_SECRET');
+    // CAP 10 returns InsertResult (iterable of created keys), not the full
+    // row. Read back explicitly to verify the row landed. Old shapes handled
+    // for back-compat: row/array-of-rows, and the historical mock that
+    // returned the payload.
+    let row;
+    if (created?.key) {
+      row = created;
+    } else if (Array.isArray(created) && created[0]?.key) {
+      row = created[0];
+    } else {
+      const db = await cds.connect.to('db');
+      const { Secrets } = cds.entities('com.sap.developers.ims');
+      row = await SELECT.one.from(Secrets).where({ key: 'TEST_NEW_SECRET' });
+    }
+    expect(row?.key).toBe('TEST_NEW_SECRET');
   });
 });

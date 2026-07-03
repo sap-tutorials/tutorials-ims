@@ -26,7 +26,7 @@ describe('AnalyticsService.runSelectQuery — Phase 1 envelope', () => {
         sql: 'SELECT ID FROM com_sap_developers_ims_TaskRecords LIMIT 1',
         source: 'editor',
       }))
-    const { AnalyticsQueryHistory } = db.entities('com.sap.developers.ims')
+    const { AnalyticsQueryHistory } = cds.entities('com.sap.developers.ims')
     const row = await SELECT.one.from(AnalyticsQueryHistory).where({ ID: r.historyId })
     expect(row).toBeTruthy()
     expect(row.source).toBe('editor')
@@ -41,7 +41,7 @@ describe('AnalyticsService.runSelectQuery — Phase 1 envelope', () => {
         sql: 'SELECT ID FROM com_sap_developers_ims_TaskRecords LIMIT 1',
         source: 'definitely-not-valid',
       }))
-    const { AnalyticsQueryHistory } = db.entities('com.sap.developers.ims')
+    const { AnalyticsQueryHistory } = cds.entities('com.sap.developers.ims')
     const row = await SELECT.one.from(AnalyticsQueryHistory).where({ ID: r.historyId })
     expect(row.source).toBe('editor')
   })
@@ -72,7 +72,7 @@ describe('runSelectQuery — spec parameter (Phase 4)', () => {
       spec: specJson,
     }))
 
-    const { AnalyticsQueryHistory } = db.entities('com.sap.developers.ims')
+    const { AnalyticsQueryHistory } = cds.entities('com.sap.developers.ims')
     const row = await SELECT.one.from(AnalyticsQueryHistory).where({ ID: r.historyId })
     expect(row.spec).toBe(specJson)
   })
@@ -86,7 +86,7 @@ describe('runSelectQuery — spec parameter (Phase 4)', () => {
       source: 'editor',
     }))
 
-    const { AnalyticsQueryHistory } = db.entities('com.sap.developers.ims')
+    const { AnalyticsQueryHistory } = cds.entities('com.sap.developers.ims')
     const row = await SELECT.one.from(AnalyticsQueryHistory).where({ ID: r.historyId })
     expect(row.spec).toBe(null)
   })
