@@ -2265,6 +2265,38 @@ export default class AdminService extends cds.ApplicationService {
       return { started: true, reason: null };
     });
 
+    // Phase 4.8 (#765): operator-grade CommunityEvents corpus bootstrap
+    // (Khoros CodeJams + Devtoberfest RSS). Fire-and-forget sibling of
+    // seedHelpDocs — same shape, different cron. Audit emission uses the
+    // post-#769 canonical pattern: first arg is the ACTION NAME
+    // ('kg.community-events.seed'), NOT 'SecurityEvent'.
+    this.on('seedCommunityEvents', async (req) => {
+      const commit = !!req.data?.commit;
+      if (!commit) {
+        return { started: false, reason: 'dry-run (pass commit=true to actually seed)' };
+      }
+      const userId = req.user?.id;
+      setImmediate(() => {
+        runJobByName('fetch-community-events', {
+          manualTrigger: true,
+          user: userId,
+          sinceIsoOverride: '1970-01-01T00:00:00Z',
+          budgetOverride: null,
+        }).catch((err) => {
+          cds.log('admin-service').error(`seedCommunityEvents cron failed: ${err.message ?? err}`);
+        });
+      });
+      setImmediate(() => {
+        auditEvent('kg.community-events.seed', {
+          user: userId,
+          committed: true,
+        }).catch((err) => {
+          cds.log('admin-service').warn(`seedCommunityEvents audit emit failed: ${err.message ?? err}`);
+        });
+      });
+      return { started: true, reason: null };
+    });
+
     // ─────────────────────────────────────────────────────────────────
     // #756: AdminService.JobControls actions.
     //
