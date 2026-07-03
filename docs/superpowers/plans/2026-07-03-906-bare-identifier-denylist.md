@@ -30,7 +30,7 @@ No new files. No dependency changes.
 **Files:**
 - Modify: `test/unit/srv/analytics-sql-validator.pen.test.js`
 
-The eleven test cases from the spec (§ Tests) all go in this task. Positive-control cases already pass under the current validator (nothing to un-fire); the negative cases are the ones that will drive the RED → GREEN transition.
+The eleven test cases from the spec (§ Tests) all go in this task — one un-skipped from the existing `TODO(#906)` slot and ten new cases (six negatives, four positive controls). Positive controls will already pass under the current validator (the walker doesn't exist yet, so nothing throws); the six negative cases are the ones that will drive the RED → GREEN transition.
 
 ### Guidance
 
@@ -141,27 +141,33 @@ Append this block AFTER the closing `});` of the existing `describe('rejects dis
         ),
       ).toThrow(/reserved session-context name/i);
     });
-
-    it('rejects bare CURRENT_DATE — dialect-quirk pin', () => {
-      // Either the new denylist error or a parse-error is acceptable per spec.
-      // Test uses bare .toThrow() to pin *some* failure so a future parser
-      // upgrade that flips column_ref → function classification doesn't
-      // silently open a hole.
-      expect(() => validator.validateSelect('SELECT CURRENT_DATE FROM Users', ALLOWED)).toThrow();
-    });
   });
 ```
 
+Note: no separate test for bare `CURRENT_DATE` throwing. A pre-flight probe confirmed the MySQL parser classifies bare `CURRENT_DATE` / `CURRENT_TIME` / `CURRENT_TIMESTAMP` as `function` AST nodes, not `column_ref`, so the bare-identifier walker never sees them. They pass through the pre-existing function-allowlist path (they're in `ALLOWED_FUNCTIONS`). This is fine — they return non-sensitive values (current date/time). The bare-CURRENT_DATE case moves to the positive-control block in Step 4.
+
 - [ ] **Step 4: Add the positive-control block**
 
-Append this block to the existing `describe('accepts legitimate SELECTs', ...)` block (or add it as a sibling `describe` immediately after — either works; matching the file's style suggests appending inside):
+Append the three cases below INSIDE the existing `describe('accepts legitimate SELECTs', ...)` block (not a sibling — placing them inside matches the file's current style, which groups all positive controls together):
 
 ```javascript
-    it('accepts SELECT CURRENT_DATE() FROM Users (function form still allowed)', () => {
-      // Pins the bare-vs-function precision. Denylist entry CURRENT_DATE
-      // must NOT block the function-call form; the two walkers dispatch on
-      // AST node type.
+    it('accepts SELECT CURRENT_DATE() FROM Users (function form works)', () => {
+      // Pins the bare-vs-function precision. The MySQL parser classifies
+      // both bare CURRENT_DATE and CURRENT_DATE() as `function` AST nodes,
+      // so they flow through the function-allowlist path — where CURRENT_DATE
+      // is on ALLOWED_FUNCTIONS.
       expect(() => validator.validateSelect('SELECT CURRENT_DATE() FROM Users', ALLOWED)).not.toThrow();
+    });
+
+    it('accepts SELECT CURRENT_DATE FROM Users (bare form ALSO parsed as function)', () => {
+      // Documents the belt-and-suspenders overlap between ALLOWED_FUNCTIONS
+      // and DENIED_BARE_IDENTIFIERS for date/time registers: today's parser
+      // classifies bare CURRENT_DATE as `function`, so the denylist entry is
+      // dormant. If a future parser upgrade flips the classification to
+      // column_ref, this test starts failing — flag to human, remove
+      // CURRENT_DATE from DENIED_BARE_IDENTIFIERS since it returns
+      // non-sensitive data.
+      expect(() => validator.validateSelect('SELECT CURRENT_DATE FROM Users', ALLOWED)).not.toThrow();
     });
 
     it('accepts SELECT Users.SYSTEM_USER FROM Users (qualified column reference not flagged)', () => {
@@ -188,13 +194,11 @@ npx vitest run --project unit test/unit/srv/analytics-sql-validator.pen.test.js 
 ```
 
 Expected outcome:
-- All negative cases from Steps 2 and 3 FAIL with output showing `validateSelect` did NOT throw (or threw a different error that doesn't match the regex).
-- All positive-control cases from Step 4 PASS — they don't rely on the fix.
+- All six negative cases from Steps 2 and 3 FAIL with output showing `validateSelect` did NOT throw (or threw a different error that doesn't match the regex).
+- All four positive-control cases from Step 4 PASS — they don't rely on the fix. Note: bare `CURRENT_DATE` passes because the MySQL parser classifies it as a `function` AST node, and `CURRENT_DATE` is on `ALLOWED_FUNCTIONS`. Confirmed via pre-flight probe against the actual parser.
 - All pre-existing tests in the file continue to pass.
 
 Do NOT proceed if any pre-existing test starts failing — that would signal accidental damage to the file. Fix the test file before continuing.
-
-If the bare `CURRENT_DATE` test in Step 3 passes (throws) even without the fix, that's fine — parser dialect quirks may cause it to fail at parse time. The test's assertion is `.toThrow()` without a matcher, so either outcome is acceptable.
 
 - [ ] **Step 6: Commit the failing tests**
 
@@ -299,9 +303,7 @@ Immediately after that block's closing `}` and BEFORE the `const isStar = ...` l
   collectBareIdentifiers(ast, bareIdentifiers)
   for (const id of bareIdentifiers) {
     if (DENIED_BARE_IDENTIFIERS.has(id)) {
-      throw new Error(
-        `Identifier '${id}' is a reserved session-context name and not allowed as a bare column reference`,
-      )
+      throw new Error(`Identifier '${id}' is a reserved session-context name and not allowed as a bare column reference`)
     }
   }
 ```
@@ -341,8 +343,8 @@ npx vitest run --project unit test/unit/srv/analytics-sql-validator.pen.test.js 
 ```
 
 Expected:
-- All negative cases now PASS (throw with `/reserved session-context name/i` matcher).
-- All positive-control cases still PASS (function form, qualified reference, alias not flagged).
+- All six negative cases now PASS (throw with `/reserved session-context name/i` matcher).
+- All four positive-control cases still PASS (function form, bare CURRENT_DATE via function classification, qualified reference, alias not flagged).
 - All pre-existing tests still PASS.
 - Test count matches: 1 un-skipped + 10 new + all originals.
 
@@ -411,12 +413,10 @@ Run:
 ```bash
 cd d:/projects/tutorials-poc/.claude/worktrees/fix-906-bare-identifier-denylist
 git status
-git log --oneline -5
+git log --oneline main..HEAD
 ```
 
-Expected: three commits ahead of `main` on branch `fix/906-bare-identifier-denylist` — the spec doc, the spec-review revisions, the failing tests, and the implementation. (Actually 4 total: spec + spec-pass-1-fixes + spec-pass-2-fixes + failing tests + implementation = 5. Adjust the count in the log check accordingly.)
-
-Working tree must be clean.
+Expected: `git log --oneline main..HEAD` shows the two commits from Tasks 1 and 2 (plus the spec + plan commits from earlier in this branch's history). Working tree must be clean.
 
 - [ ] **Step 2: Push the branch**
 
