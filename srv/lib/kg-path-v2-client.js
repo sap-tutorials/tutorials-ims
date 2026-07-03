@@ -5,16 +5,23 @@
 // view-based workspace.
 //
 // Contract:
-//   kgPathV2({ fromIri, toIri, maxHops = 8 })
+//   kgPathV2({ fromIri, toIri, maxHops = 8, timeoutMs = 5000 })
 //     → Promise<Array<{ pathRank, hopCount, vertices: string[] }>>
 //
 // Error codes surfaced to callers via err.code:
 //   10006  KG_INVALID_TUTORIAL_IRI   — IRI regex mismatch (pre-check + DB)
 //   10010  KG_MAX_HOPS_OUT_OF_RANGE  — maxHops not in [1, 20]
+//   'ETIMEDOUT' — HANA didn't return within timeoutMs. Fires when the two
+//                 endpoints have no path AND the workspace is large enough
+//                 that Shortest_Path's exhaustive BFS dominates. Live probe
+//                 2026-07-03: 6054 vertices / 7164 edges, a nonexistent
+//                 pair timed out at 30s in hana-cli. Default 5000ms bound
+//                 matches the v1 SPARQL kgQuery() withTimeout wrapper.
 
 import cds from '@sap/cds';
 
 const IRI_RX = /^https:\/\/developers\.sap\.com\/kg\/tutorial\/[a-z0-9-]{1,80}$/;
+const DEFAULT_TIMEOUT_MS = 5000;
 
 // DO-block converts the OUT TABLE(...) param to a SELECT result-set. Matches
 // the pattern in kg-sparql-client.js — @cap-js/hana does not bind OUT params
@@ -34,7 +41,26 @@ const DO_KG_PATH_V2 = `DO (
   SELECT * FROM :paths;
 END`;
 
-export async function kgPathV2({ fromIri, toIri, maxHops = 8 }) {
+// Promise.race timeout — mirrors withTimeout() in srv/lib/kg-sparql-client.js.
+// The rejected promise resolves before HANA does, but HANA continues running
+// server-side; that's acceptable because the query is read-only and short
+// under normal conditions (path exists → returns in ~50ms per probe).
+function withTimeout(promise, timeoutMs, fromIri, toIri) {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(`kgPathV2 timed out after ${timeoutMs}ms`);
+      err.code = 'ETIMEDOUT';
+      err.timeoutMs = timeoutMs;
+      err.fromIri = fromIri;
+      err.toIri = toIri;
+      reject(err);
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
+export async function kgPathV2({ fromIri, toIri, maxHops = 8, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   if (!IRI_RX.test(fromIri) || !IRI_RX.test(toIri)) {
     const err = new Error('KG_INVALID_TUTORIAL_IRI');
     err.code = 10006;
@@ -46,7 +72,12 @@ export async function kgPathV2({ fromIri, toIri, maxHops = 8 }) {
     throw err;
   }
 
-  const rows = await cds.db.run(DO_KG_PATH_V2, [fromIri, toIri, maxHops]);
+  const rows = await withTimeout(
+    cds.db.run(DO_KG_PATH_V2, [fromIri, toIri, maxHops]),
+    timeoutMs,
+    fromIri,
+    toIri,
+  );
   // Coerce the DO-block result — @cap-js/hana wraps it as {changes: [{},[rows]]}
   // in production, but tests / other drivers return a plain array. Match the
   // shape defensively (mirrors coerceRow() in kg-sparql-client.js).

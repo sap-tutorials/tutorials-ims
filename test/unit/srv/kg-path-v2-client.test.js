@@ -108,3 +108,30 @@ describe('kgPathV2 — row grouping', () => {
     expect(out).toEqual([]);
   });
 });
+
+describe('kgPathV2 — timeout', () => {
+  it('rejects with ETIMEDOUT when cds.db.run exceeds timeoutMs', async () => {
+    // Never-resolving DB call to force the timeout to win the race.
+    runMock.mockReturnValueOnce(new Promise(() => {}));
+    await expect(kgPathV2({
+      fromIri: 'https://developers.sap.com/kg/tutorial/foo',
+      toIri:   'https://developers.sap.com/kg/tutorial/bar',
+      timeoutMs: 50,
+    })).rejects.toMatchObject({
+      code: 'ETIMEDOUT',
+      timeoutMs: 50,
+      fromIri: 'https://developers.sap.com/kg/tutorial/foo',
+      toIri:   'https://developers.sap.com/kg/tutorial/bar',
+    });
+  });
+
+  it('completes normally when DB responds before timeout', async () => {
+    runMock.mockResolvedValueOnce([]);
+    const out = await kgPathV2({
+      fromIri: 'https://developers.sap.com/kg/tutorial/foo',
+      toIri:   'https://developers.sap.com/kg/tutorial/bar',
+      timeoutMs: 5000,
+    });
+    expect(out).toEqual([]);
+  });
+});
