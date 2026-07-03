@@ -91,6 +91,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.10.1",
     "@cap-js/cds-test": "^1.0.0",
+    "@cap-js/data-inspector": "1.0.5",
     "@lhci/cli": "^0.14.0",
     "@sap-theming/theming-base-content": "^11.0.0",
     "@sap/cds-dk": "^10.0.3",
