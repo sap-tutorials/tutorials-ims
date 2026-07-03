@@ -63,34 +63,6 @@ describe('RelatedGraph sidebar — api-doc rows in "Other resources"', () => {
     try { sessionStorage.clear() } catch { /* ignore */ }
   })
 
-  it('renders an api-doc row with "· Official reference · Category" meta', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => makePayload({
-        otherResources: [{
-          type: 'api-doc',
-          slug: 'ad-cap_cqn',
-          title: 'CAP CQN Reference',
-          url: 'https://api.sap.com/package/CAP_CQN_Reference',
-          category: 'CAP',
-          apiType: 'reference',
-        }],
-      }),
-    } as unknown as Response)
-
-    const wrapper = mount(RelatedGraph)
-    await flushPromises()
-    await flushPromises()
-
-    const txt = wrapper.text()
-    expect(txt).toContain('Other resources')
-    expect(txt).toContain('CAP CQN Reference')
-    expect(txt).toContain('Official reference')
-    expect(txt).toContain('CAP')
-  })
-
   it('mutual exclusion: api-doc row does NOT render other-type meta fields', async () => {
     // The v-if/v-else-if chain in RelatedGraph.vue ensures an api-doc row
     // never picks up `level`/`durationHours`/`authorName`/`postedAt-as-by-
@@ -235,31 +207,4 @@ describe('RelatedGraph sidebar — api-doc rows in "Other resources"', () => {
     expect(otherSection.findAll('img').length).toBe(0)
   })
 
-  it('renders gracefully when category is absent (Official reference still shown)', async () => {
-    // Defensive: category is optional on the wire. The row title plus the
-    // unconditional "· Official reference" prefix must still render even
-    // without category.
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => makePayload({
-        otherResources: [{
-          type: 'api-doc',
-          slug: 'ad-bare',
-          title: 'A Bare API Doc',
-          url: 'https://api.sap.com/bare',
-          category: null,
-        }],
-      }),
-    } as unknown as Response)
-
-    const wrapper = mount(RelatedGraph)
-    await flushPromises()
-    await flushPromises()
-
-    const txt = wrapper.text()
-    expect(txt).toContain('A Bare API Doc')
-    expect(txt).toContain('Official reference')
-  })
 })

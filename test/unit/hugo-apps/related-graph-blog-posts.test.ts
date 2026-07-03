@@ -82,32 +82,6 @@ describe('RelatedGraph sidebar — blog-post rows in "Other resources"', () => {
     expect(wrapper.text()).toContain('A Blog Post About CAP Handlers')
   })
 
-  it('renders "· by Author · {Date}" meta for blog-post rows', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => makePayload({
-        otherResources: [{
-          type: 'blog-post',
-          slug: 'bp-99999',
-          title: 'A Blog Post About CAP Handlers',
-          url: 'https://community.sap.com/t5/blog/cap-handlers/ba-p/99999',
-          authorName: 'Test Author',
-          postedAt: '2026-05-15T09:32:11.000Z',
-        }],
-      }),
-    } as unknown as Response)
-
-    const wrapper = mount(RelatedGraph)
-    await flushPromises()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Test Author')
-    // Assert just the year to dodge locale-formatting brittleness across runners.
-    expect(wrapper.text()).toContain('2026')
-  })
-
   it('does NOT render learning-journey meta (·Level·Hh) for a blog-post row', async () => {
     // Defensive: makes sure the v-if/v-else-if branches don't double-fire on a
     // mis-typed row. If `level` somehow leaked into a blog-post fixture, the

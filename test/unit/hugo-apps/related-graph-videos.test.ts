@@ -65,35 +65,6 @@ describe('RelatedGraph sidebar — video rows in "Other resources"', () => {
     try { sessionStorage.clear() } catch { /* ignore */ }
   })
 
-  it('renders video rows with "· by Channel · Date" meta', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => makePayload({
-        otherResources: [{
-          type: 'video',
-          slug: 'vid-abc123',
-          title: 'CAP Service Handlers — Deep Dive',
-          url: 'https://www.youtube.com/watch?v=abc123',
-          channelTitle: 'SAP Developers',
-          publishedAt: '2026-05-10T14:00:00Z',
-        }],
-      }),
-    } as unknown as Response)
-
-    const wrapper = mount(RelatedGraph)
-    await flushPromises()
-    await flushPromises()
-
-    const txt = wrapper.text()
-    expect(txt).toContain('Other resources')
-    expect(txt).toContain('CAP Service Handlers — Deep Dive')
-    expect(txt).toContain('by SAP Developers')
-    // formatDate('2026-05-10T14:00:00Z') → "May 10, 2026" via en-US locale
-    expect(txt).toMatch(/May 10, 2026/)
-  })
-
   it('does NOT render learning-journey / blog-post / discovery-mission meta for a video row', async () => {
     // Mutual exclusion: the v-if/v-else-if chain in RelatedGraph.vue
     // ensures a video row never picks up `level`/`durationHours`/

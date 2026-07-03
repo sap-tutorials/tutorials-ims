@@ -32,7 +32,6 @@
       @open-expanded="onOpen"
       @item-click="onItemClick"
       @resource-click="onOtherResourceClick"
-      @legacy-fallback="onLegacyFallback"
     />
     <ExpandedPanel
       v-if="expanded"
@@ -199,16 +198,6 @@ function onOtherResourceClick(r: OtherResource): void {
       helpDocSlug: r.slug,
     })
   }
-}
-
-// SidebarPanel emits legacy-fallback when the wire payload lacks
-// typeConfig (older cached server response). Log a warn so we can
-// measure CDN cache-refresh window; no state change — SidebarPanel
-// already renders the fallback branch itself.
-function onLegacyFallback(): void {
-  console.warn(
-    '[kg-sidebar] typeConfig missing on wire — falling back to inline per-type chain (CDN cache staleness?)',
-  )
 }
 
 // ── Expansion state ───────────────────────────────────────────────────

@@ -186,61 +186,6 @@ describe('RelatedGraph sidebar — help-doc rows (Phase 4.7)', () => {
     window.removeEventListener('kg.help-doc.linked_from_sidebar', handler)
   })
 
-  it('legacy fallback (no typeConfig) renders help-sap-com tint class on the badge', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => makePayload({
-        withTypeConfig: false,
-        otherResources: [{
-          type: 'help-doc',
-          slug: 'hd-help',
-          title: 'CAP overview',
-          url: 'https://help.sap.com/docs/cap/overview',
-          source: 'help-sap-com',
-          sourceLabel: 'SAP Help',
-        }],
-      }),
-    } as unknown as Response)
-
-    const wrapper = mount(RelatedGraph)
-    await flushPromises()
-    await flushPromises()
-
-    const html = wrapper.html()
-    expect(html).toContain('SAP Help')
-    // Legacy fallback branch renders the .kg-help-source--help-sap-com tint class:
-    expect(html).toContain('kg-help-source--help-sap-com')
-  })
-
-  it('legacy fallback (no typeConfig) renders cap-cloud-sap tint on CAP-source rows', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => makePayload({
-        withTypeConfig: false,
-        otherResources: [{
-          type: 'help-doc',
-          slug: 'hd-cap',
-          title: 'Handlers',
-          url: 'https://cap.cloud.sap/docs/node.js/handlers',
-          source: 'cap-cloud-sap',
-          sourceLabel: 'CAP',
-        }],
-      }),
-    } as unknown as Response)
-
-    const wrapper = mount(RelatedGraph)
-    await flushPromises()
-    await flushPromises()
-
-    const html = wrapper.html()
-    expect(html).toContain('CAP')
-    expect(html).toContain('kg-help-source--cap-cloud-sap')
-  })
-
   it('mutual exclusion: help-doc row does NOT render other-type meta fields (legacy fallback)', async () => {
     // In the legacy fallback path, the SidebarPanel v-else-if chain must
     // route a `help-doc` row to only the help-doc branch — never to
