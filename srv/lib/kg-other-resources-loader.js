@@ -23,6 +23,7 @@
 import cds from '@sap/cds';
 import { categoryLabel } from './discovery-mission-categories.js';
 import { HELP_DOC_SOURCE_LABEL, anchorToLabel } from './published-concepts-query.js';
+import { isWithinTTL } from './external-content-ttl.js';
 
 /**
  * Tally overlap-link rows keyed by an FK column, sort by overlap desc,
@@ -68,15 +69,19 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
     ApiDocs, ApiDocConceptLinks,
     Samples, SampleConceptLinks,
     HelpDocs, HelpDocConceptLinks,
+    CommunityEvents, CommunityEventConceptLinks,
   } = cds.entities('com.sap.developers.ims.external');
 
-  // Step 1: fetch all 7 overlap-link tables in parallel. Each returns
+  // Step 1: fetch all 8 overlap-link tables in parallel. Each returns
   // Array<{fkID, concept_ID}>. Small rows, cheap network.
   //
   // Phase 4.7 (#748) note: HelpDocConceptLinks also carries `anchor` per
   // link; we tally by helpDoc_ID to bucket rows, then look up the anchor
   // from the top-overlap row in Step 4 below.
-  const [journeyLinks, blogLinks, missionLinks, videoLinks, apiDocLinks, sampleLinks, helpDocLinks] =
+  // Phase 4.8 (#765): CommunityEventConceptLinks joins to CommunityEvents;
+  // no additional per-link scalar hoisting (snippet is looked up on demand
+  // by consumers of the concepts payload, not the widget metaText).
+  const [journeyLinks, blogLinks, missionLinks, videoLinks, apiDocLinks, sampleLinks, helpDocLinks, communityEventLinks] =
     await Promise.all([
       SELECT.from(LearningJourneyConceptLinks)
         .columns('journey_ID', 'concept_ID')
@@ -99,6 +104,9 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
       SELECT.from(HelpDocConceptLinks)
         .columns('helpDoc_ID', 'concept_ID', 'anchor')
         .where({ concept_ID: { in: conceptIds } }),
+      SELECT.from(CommunityEventConceptLinks)
+        .columns('event_ID', 'concept_ID')
+        .where({ concept_ID: { in: conceptIds } }),
     ]);
 
   // Step 2: JS-side per-corpus overlap tallies (microseconds).
@@ -109,6 +117,7 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
   const apiDocT  = tally(apiDocLinks,  'apiDoc_ID',  perTypeLimit);
   const sampleT  = tally(sampleLinks,  'sample_ID',  perTypeLimit);
   const helpDocT = tally(helpDocLinks, 'helpDoc_ID', perTypeLimit);
+  const eventT   = tally(communityEventLinks, 'event_ID', perTypeLimit);
 
   // Anchor lookup: pick the first non-null anchor per helpDoc_ID for the
   // meta-text renderer. If none, anchor is null and only sourceLabel shows.
@@ -127,7 +136,7 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
   // have LargeString `description` columns — we deliberately exclude them
   // from the projection to keep the sidebar payload scalar-only.
   // HelpDocs is the 4th (final) LOB-locator read-site per spec §10.1.
-  const [journeys, posts, missions, videos, apiDocs, samples, helpDocs] = await Promise.all([
+  const [journeys, posts, missions, videos, apiDocs, samples, helpDocs, communityEvents] = await Promise.all([
     journeyT.topIds.length
       ? SELECT.from(LearningJourneys)
           .columns('ID', 'slug', 'title', 'url', 'level', 'durationHours')
@@ -162,6 +171,15 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
       ? SELECT.from(HelpDocs)
           .columns('ID', 'slug', 'title', 'url', 'source', 'product')
           .where({ ID: { in: helpDocT.topIds } })
+      : Promise.resolve([]),
+    // Phase 4.8 (#765): community-event metadata. LOB-safe — description
+    // (LargeString/NCLOB) is deliberately excluded, per spec §10.1.
+    eventT.topIds.length
+      ? SELECT.from(CommunityEvents)
+          .columns('ID', 'slug', 'title', 'url', 'eventType', 'location',
+                   'scope', 'virtualOrInPerson', 'startDate', 'endDate',
+                   'lastSeenAt')
+          .where({ ID: { in: eventT.topIds } })
       : Promise.resolve([]),
   ]);
 
@@ -245,6 +263,30 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
       };
     });
 
+  // Phase 4.8 (#765): community-event wire shape. TTL gated per-row so
+  // ~-day-past events don't clutter the "Other resources" tile. `metaText`
+  // is a compact one-liner "<location> · <YYYY-MM-DD>[ · virtual]" that the
+  // widget renders directly; also emits the raw dates/scope/virtual flag
+  // for consumers that want to reformat.
+  const eventById = new Map(communityEvents.map((e) => [e.ID, e]));
+  const communityEventOtherResources = eventT.topIds
+    .map((id) => eventById.get(id))
+    .filter(Boolean)
+    .filter((e) => {
+      const decayDate = e.endDate ?? e.startDate ?? null;
+      return isWithinTTL('community-event', e.lastSeenAt, decayDate);
+    })
+    .map((e) => ({
+      type: 'community-event',
+      slug: e.slug, title: e.title, url: e.url,
+      eventType: e.eventType,
+      location: e.location, scope: e.scope,
+      virtualOrInPerson: e.virtualOrInPerson,
+      startDate: e.startDate, endDate: e.endDate,
+      overlapCount: eventT.overlapByFk.get(e.ID),
+      metaText: buildEventMetaText(e),
+    }));
+
   // Return a Map keyed by wire `type` string. Callers either flatten the
   // values for a global top-N merge (sidebar) or keep the grouping (full
   // panel, Task 5).
@@ -256,5 +298,25 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
   byType.set('api-doc',           apiDocOtherResources);
   byType.set('sample',            sampleOtherResources);
   byType.set('help-doc',          helpDocOtherResources);
+  byType.set('community-event',   communityEventOtherResources);
   return byType;
+}
+
+/**
+ * Phase 4.8 (#765): compact one-line meta-text renderer for a community
+ * event. Format: `<location or 'Location TBD'> · <YYYY-MM-DD>[ · 🌐]`.
+ * Kept pure so callers can render offline.
+ *
+ * @param {{location?:string, startDate?:string|Date, virtualOrInPerson?:string}} row
+ * @returns {string}
+ */
+export function buildEventMetaText(row) {
+  const parts = [];
+  parts.push(row.location && String(row.location).trim().length > 0 ? row.location : 'Location TBD');
+  if (row.startDate) {
+    const d = row.startDate instanceof Date ? row.startDate : new Date(row.startDate);
+    if (!isNaN(d.getTime())) parts.push(d.toISOString().slice(0, 10));
+  }
+  if (row.virtualOrInPerson === 'virtual') parts.push('🌐');
+  return parts.join(' · ');
 }

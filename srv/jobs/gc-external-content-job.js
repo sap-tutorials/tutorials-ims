@@ -27,7 +27,7 @@ const NAMESPACE = 'com.sap.developers.ims.external';
 /**
  * Map from content-type → CDS entity name. 4.2-4.6 add entries.
  */
-const ITERATION_SET = {
+export const ITERATION_SET = {
   'learning-journey': 'LearningJourneys',
   'blog-post': 'BlogPosts',  // Phase 4.2 (#447)
   'discovery-mission': 'DiscoveryMissions',  // Phase 4.3 (#447)
@@ -35,6 +35,7 @@ const ITERATION_SET = {
   'api-doc': 'ApiDocs',  // Phase 4.5 (#746)
   'sample': 'Samples',  // Phase 4.6 (#747)
   'help-doc': 'HelpDocs',  // Phase 4.7 (#748)
+  'community-event': 'CommunityEvents',  // Phase 4.8 (#765)
 };
 
 export async function runGcExternalContent() {
@@ -47,9 +48,33 @@ export async function runGcExternalContent() {
   for (const [contentType, entityName] of Object.entries(ITERATION_SET)) {
     const ttlDays = PER_TYPE_TTL_DAYS[contentType];
     if (ttlDays == null) {
-      // Date-aware types (trials) need a different prune predicate; skip in
-      // this generic pass. 4.3 will add a trial-specific branch.
-      LOG.info(`gc-external-content: skipping ${contentType} (date-aware, separate pass)`);
+      // Date-aware types. Phase 4.8 (#765) activates this branch for community
+      // events. Prune predicate: COALESCE(endDate, startDate) + 30 days < today.
+      if (contentType === 'community-event') {
+        const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const nowStr = new Date().toISOString();
+        const { CommunityEvents } = cds.entities('com.sap.developers.ims.external');
+        // Tagged-template syntax is safe on both SQLite and HANA (matches the
+        // pattern used for the standard TTL SELECT above). The object/or form
+        // generates malformed SQL on SQLite.
+        const stale = await SELECT.from(CommunityEvents).columns('ID', 'slug').where`
+          (
+            (endDate is not null and endDate < ${cutoff})
+            or
+            (endDate is null and startDate < ${cutoff})
+          )
+          and (pinUntil is null or pinUntil < ${nowStr})
+        `;
+        let pruned = 0;
+        for (const row of stale) {
+          await DELETE.from(CommunityEvents).where({ ID: row.ID });
+          pruned++;
+        }
+        LOG.info(`gc-external-content: pruned ${pruned} community-event rows past endDate + 30d`);
+        summary[contentType] = { pruned };
+        continue;
+      }
+      LOG.info(`gc-external-content: skipping ${contentType} (date-aware, no branch)`);
       summary[contentType] = 'skipped-date-aware';
       continue;
     }

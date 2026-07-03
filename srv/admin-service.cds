@@ -262,6 +262,14 @@ service AdminService {
       started : Boolean;
       reason  : String;
     };
+    // Phase 4.8 (#765): operator-grade CommunityEvents corpus bootstrap
+    // (Khoros CodeJams + Devtoberfest RSS). Fire-and-forget invocation
+    // of the twice-weekly fetch-community-events cron with
+    // sinceIsoOverride to bypass the MAX-or-abort first-run gate.
+    action seedCommunityEvents(commit: Boolean) returns {
+      started : Boolean;
+      reason  : String;
+    };
   };
 
   // Phase 4.5 (#746): per-cron last-run health surface for the admin

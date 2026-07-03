@@ -607,3 +607,79 @@ describe.runIf(isSafeForWrites())('HelpDoc DELETE cascades to HelpDocConceptLink
     expect(concept.slug).toBe('__test__-789-cascade-concept-hd');
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// Row 13: CommunityEvents → CommunityEventConceptLinks (#765, Phase 4.8 Task 2)
+// ────────────────────────────────────────────────────────────────────
+describe.runIf(isSafeForWrites())('CommunityEvent DELETE cascades to CommunityEventConceptLinks', () => {
+  const eventId   = '00000000-0000-0000-0000-789000000090';
+  const conceptId = '00000000-0000-0000-0000-789000000091';
+  const linkId    = '00000000-0000-0000-0000-789000000092';
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    assertHanaKind(db);
+  });
+
+  afterAll(async () => {
+    const { CommunityEvents, CommunityEventConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(CommunityEventConceptLinks).where({ ID: linkId });
+    await DELETE.from(Concepts).where({ ID: conceptId });
+    await DELETE.from(CommunityEvents).where({ ID: eventId });
+  });
+
+  it('deletes CommunityEventConceptLinks rows when their parent CommunityEvent is deleted', async () => {
+    const { CommunityEvents, CommunityEventConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(CommunityEvents).entries({
+      ID: eventId,
+      slug: '__test__-789-cascade-community-event',
+      eventType: 'codejam',
+      source: 'khoros',
+      title: '__test__ Cascade CodeJam 789',
+      description: 'x',
+      url: 'https://community.sap.com/__test__/789',
+      sourceId: 'codejam/__test__-789',
+      location: 'Test City',
+      scope: 'local',
+      virtualOrInPerson: 'in-person',
+      startDate: '2027-01-01',
+      endDate: '2027-01-01',
+      contentHash: 'h789ce',
+      firstSeenAt: new Date(),
+      lastSeenAt: new Date(),
+    });
+    await INSERT.into(Concepts).entries({
+      ID: conceptId,
+      slug: '__test__-789-cascade-concept-ce',
+      name: '__test__ Cascade Concept (ce)',
+      status: 'ACTIVE',
+    });
+    await INSERT.into(CommunityEventConceptLinks).entries({
+      ID: linkId,
+      event_ID: eventId,
+      concept_ID: conceptId,
+      predicate: 'covers',
+      confidence: 0.9,
+      snippet: 'test snippet · Test City · 2027-01-01',
+      extractedAt: new Date(),
+      modelVersion: 'test',
+    });
+
+    const before = await SELECT.one.from(CommunityEventConceptLinks).where({ ID: linkId });
+    expect(before).toBeDefined();
+    expect(before.event_ID).toBe(eventId);
+
+    await DELETE.from(CommunityEvents).where({ ID: eventId });
+
+    const orphan = await SELECT.one.from(CommunityEventConceptLinks).where({ ID: linkId });
+    expect(orphan).toBeUndefined();
+
+    // Concept survives — the cascade is composition-scoped only.
+    const concept = await SELECT.one.from(Concepts).where({ ID: conceptId });
+    expect(concept).toBeDefined();
+    expect(concept.slug).toBe('__test__-789-cascade-concept-ce');
+  });
+});

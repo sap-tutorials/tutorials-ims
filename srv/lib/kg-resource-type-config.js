@@ -157,4 +157,25 @@ export const RESOURCE_TYPE_CONFIG = Object.freeze([
       return joinMeta(parts);
     },
   },
+  {
+    type: 'community-event',
+    icon: '📅',
+    singular: 'Community event',
+    plural: 'Community events',
+    priority: 80,
+    metaTemplate: '{location} · {startDate}',
+    renderMeta(r) {
+      // Phase 4.8 (#765): location, startDate, and virtualOrInPerson come
+      // from CommunityEvents.{location,startDate,virtualOrInPerson}. The
+      // 🌐 icon is appended for virtual events so the sidebar can surface
+      // the event format without extra UI chrome.
+      const row = r || {};
+      const loc = (row.location && row.location.trim()) ? row.location : 'Location TBD';
+      const date = row.startDate ? formatDate(row.startDate) : '';
+      const parts = [loc];
+      if (date) parts.push(date);
+      if (row.virtualOrInPerson === 'virtual') parts.push('🌐');
+      return joinMeta(parts);
+    },
+  },
 ]);

@@ -380,6 +380,48 @@
   </section>
   {{ end }}
 
+  {{/*
+    Phase 4.8 (#765): "Upcoming hands-on events" — section #10 on the concept
+    landing page, appended after Samples (#9), before Prerequisites.
+
+    Surfaces SAP CodeJams, Devtoberfest, TechEd, and user-group events linked
+    to this concept via CommunityEventConceptLinks. Row format:
+      EventTitle ↗ · Location · StartDate [· 🌐]
+
+    The `data-kg-section="community-events"` attribute is used by the telemetry
+    block below to attach click listeners. The `data-community-event-slug` on
+    each <a> carries the event slug into the telemetry payload.
+
+    UL is NEVER emitted for concepts with no linked events ({{ with }} guard).
+  */}}
+  {{ with .Params.communityEvents }}
+  <section
+    class="concept-page__section"
+    data-kg-section="community-events"
+    data-concept-slug="{{ $.Params.slug }}"
+  >
+    <h2>Upcoming hands-on events</h2>
+    <ul>
+      {{ range . }}
+        {{ $url := .url }}
+        {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
+        <li>
+          {{ if $isSafe }}
+          <a href="{{ $url }}" target="_blank" rel="noopener" data-community-event-slug="{{ .slug }}">
+            {{ .title }} <span class="kg-link-out" aria-hidden="true">↗</span>
+          </a>
+          {{ else }}
+          <span data-community-event-slug="{{ .slug }}">{{ .title }}</span>
+          {{ end }}
+          {{ if .location }} · <span class="kg-event-location">{{ .location }}</span>{{ end }}
+          {{ if .startDate }} · <span class="kg-event-date">{{ .startDate }}</span>{{ end }}
+          {{ if eq .virtualOrInPerson "virtual" }} · <span class="kg-event-virtual" aria-label="Virtual event">🌐</span>{{ end }}
+        </li>
+      {{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
   {{ with .Params.requires }}
   <section class="concept-page__section">
     <h2>Prerequisites</h2>
@@ -603,6 +645,31 @@
               } catch (e) { /* never let telemetry break the page */ }
             });
           })(helpDocLinks[p]);
+        }
+      }
+
+      // Phase 4.8 (#765 §8): delegated click listener on the "Upcoming
+      // hands-on events" section. CSP-safe — addEventListener only, no
+      // inline onclick. Parallels the eight prior blocks above; only the
+      // event name + detail field name differ. Uses `var q` to avoid
+      // colliding with `var p` from the Phase 4.7 help-docs block.
+      var communityEventSection = document.querySelector('[data-kg-section="community-events"]');
+      if (communityEventSection) {
+        var communityEventConceptSlug = communityEventSection.getAttribute('data-concept-slug');
+        var communityEventLinks = communityEventSection.querySelectorAll('a[data-community-event-slug]');
+        for (var q = 0; q < communityEventLinks.length; q++) {
+          (function (a) {
+            a.addEventListener('click', function () {
+              try {
+                window.dispatchEvent(new CustomEvent('kg.community-event.linked_from_concept_page', {
+                  detail: {
+                    conceptSlug: communityEventConceptSlug,
+                    eventSlug: a.getAttribute('data-community-event-slug')
+                  }
+                }));
+              } catch (e) { /* never let telemetry break the page */ }
+            });
+          })(communityEventLinks[q]);
         }
       }
     })();

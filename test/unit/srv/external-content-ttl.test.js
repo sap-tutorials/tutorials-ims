@@ -50,3 +50,26 @@ describe('isWithinTTL', () => {
     expect(isWithinTTL('unknown-type', new Date())).toBe(false);
   });
 });
+
+describe('community-event (date-aware TTL)', () => {
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+
+  it('includes event ending in the future', () => {
+    expect(isWithinTTL('community-event', new Date(now), new Date(now + 7 * day))).toBe(true);
+  });
+
+  it('includes event ending within the 30-day grace period', () => {
+    expect(isWithinTTL('community-event', new Date(now - 45 * day), new Date(now - 15 * day))).toBe(true);
+  });
+
+  it('excludes event that ended more than 30 days ago', () => {
+    expect(isWithinTTL('community-event', new Date(now - 45 * day), new Date(now - 31 * day))).toBe(false);
+  });
+
+  it('accepts a null endDate (treated as no end — TTL infinite)', () => {
+    // The caller (GC / projection) is responsible for falling back to startDate
+    // when endDate is null. isWithinTTL alone with a null endDate returns true.
+    expect(isWithinTTL('community-event', new Date(now - 365 * day), null)).toBe(true);
+  });
+});

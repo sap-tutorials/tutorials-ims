@@ -49,6 +49,7 @@ export const SHORT_BY_TYPE = Object.freeze({
   'api-doc': 'ad',  // Phase 4.5 (#746).
   'sample': 'sa',  // Phase 4.6 (#747).
   'help-doc': 'hd',  // Phase 4.7 (#748).
+  'community-event': 'ce',   // Phase 4.8 (#765)
 });
 
 // IRI tail-segment → (entity type, short node-id prefix). Derived from

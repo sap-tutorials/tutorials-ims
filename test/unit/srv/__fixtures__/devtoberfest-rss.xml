@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Devtoberfest Events</title>
+    <item>
+      <title>Devtoberfest 2027 Week 1: CAP Deep Dive</title>
+      <link>https://community.sap.com/t5/devtoberfest/deep-dive-cap/ba-p/11111</link>
+      <pubDate>Mon, 05 Oct 2027 09:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>Devtoberfest 2027 Week 2: BTP Kyma Runtime</title>
+      <link>https://community.sap.com/t5/devtoberfest/deep-dive-kyma/ba-p/22222</link>
+      <pubDate>Mon, 12 Oct 2027 09:00:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>

@@ -1,9 +1,10 @@
 // test/unit/kg-resource-type-config.test.js
 //
 // Tests for the server-owned external-resource type registry (Task 2 of
-// #850 KG widget redesign). Verifies the registry shape (7 entries, sparse
+// #850 KG widget redesign). Verifies the registry shape (8 entries, sparse
 // priorities, unique keys) and per-type renderMeta output — the sidebar
 // meta-text must match the current Vue template byte-for-byte.
+// Phase 4.8 (#765): adds 'community-event' as the 8th entry.
 
 import { describe, it, expect } from 'vitest';
 import { RESOURCE_TYPE_CONFIG } from '../../srv/lib/kg-resource-type-config.js';
@@ -14,9 +15,9 @@ import {
 } from '../../srv/lib/kg-meta-formatters.js';
 
 describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
-  it('is an array with exactly 7 entries', () => {
+  it('is an array with exactly 8 entries', () => {
     expect(Array.isArray(RESOURCE_TYPE_CONFIG)).toBe(true);
-    expect(RESOURCE_TYPE_CONFIG).toHaveLength(7);
+    expect(RESOURCE_TYPE_CONFIG).toHaveLength(8);
   });
 
   it('every entry has the required fields with correct types', () => {
@@ -53,16 +54,17 @@ describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
     expect(priorities).toEqual(sorted);
   });
 
-  it('type values are exactly the seven expected external types in priority order', () => {
+  it('type values are exactly the eight expected external types in priority order', () => {
     const types = RESOURCE_TYPE_CONFIG.map((e) => e.type);
     expect(types).toEqual([
-      'learning-journey',
-      'blog-post',
-      'discovery-mission',
-      'video',
-      'api-doc',
-      'sample',
-      'help-doc',
+      'learning-journey',    // 10
+      'blog-post',           // 20
+      'discovery-mission',   // 30
+      'video',               // 40
+      'api-doc',             // 50
+      'sample',              // 60
+      'help-doc',            // 70
+      'community-event',     // 80  ← Phase 4.8
     ]);
   });
 
@@ -251,11 +253,41 @@ describe('renderMeta — help-doc', () => {
   });
 });
 
-// Cross-cutting empty-input contract: only api-doc emits meta on empty input
-// (its "Official reference" lead is unconditional per spec). Every other type
-// returns '' — the sidebar must not render an orphan ' · ' delimiter.
-describe('renderMeta — empty-input contract (non api-doc)', () => {
-  const emptyOnly = RESOURCE_TYPE_CONFIG.filter((e) => e.type !== 'api-doc');
+it('community-event entry has canonical icon + labels', () => {
+  const byType2 = new Map(RESOURCE_TYPE_CONFIG.map(c => [c.type, c]));
+  const ce = byType2.get('community-event');
+  expect(ce.icon).toBe('📅');
+  expect(ce.singular).toBe('Community event');
+  expect(ce.plural).toBe('Community events');
+  expect(ce.priority).toBe(80);
+});
+
+describe('community-event renderMeta', () => {
+  const byType2 = new Map(RESOURCE_TYPE_CONFIG.map(c => [c.type, c]));
+  const ce = byType2.get('community-event');
+
+  it('combines location and startDate', () => {
+    const s = ce.renderMeta({ location: 'Berlin', startDate: '2027-01-15' });
+    expect(s).toContain('Berlin');
+    expect(s).toContain('2027');  // year present in formatted or raw date
+  });
+
+  it('appends 🌐 when virtualOrInPerson is virtual', () => {
+    const s = ce.renderMeta({ location: 'virtual', startDate: '2027-01-15', virtualOrInPerson: 'virtual' });
+    expect(s).toContain('🌐');
+  });
+
+  it('falls back to "Location TBD" when location is missing', () => {
+    const s = ce.renderMeta({ startDate: '2027-01-15' });
+    expect(s).toContain('Location TBD');
+  });
+});
+
+// Cross-cutting empty-input contract: api-doc and community-event emit meta
+// on empty/missing input (unconditional lead). Every other type returns ''
+// — the sidebar must not render an orphan ' · ' delimiter.
+describe('renderMeta — empty-input contract (non api-doc, non community-event)', () => {
+  const emptyOnly = RESOURCE_TYPE_CONFIG.filter((e) => e.type !== 'api-doc' && e.type !== 'community-event');
   for (const entry of emptyOnly) {
     it(`${entry.type}.renderMeta({}) === ''`, () => {
       expect(entry.renderMeta({})).toBe('');
@@ -264,8 +296,9 @@ describe('renderMeta — empty-input contract (non api-doc)', () => {
 });
 
 // Null/undefined safety — renderMeta must not throw when called with a
-// missing row object. Every non-api-doc type returns ''; api-doc returns
-// its unconditional "Official reference" lead.
+// missing row object. Every non-api-doc/non-community-event type returns '';
+// api-doc returns its unconditional "Official reference" lead;
+// community-event returns its unconditional "Location TBD" fallback.
 describe('renderMeta — null/undefined input safety', () => {
   for (const entry of RESOURCE_TYPE_CONFIG) {
     it(`${entry.type}.renderMeta(null) does not throw`, () => {
@@ -280,6 +313,13 @@ describe('renderMeta — null/undefined input safety', () => {
       });
       it(`${entry.type}.renderMeta(undefined) still renders "Official reference"`, () => {
         expect(entry.renderMeta(undefined)).toContain('Official reference');
+      });
+    } else if (entry.type === 'community-event') {
+      it(`${entry.type}.renderMeta(null) still renders "Location TBD"`, () => {
+        expect(entry.renderMeta(null)).toContain('Location TBD');
+      });
+      it(`${entry.type}.renderMeta(undefined) still renders "Location TBD"`, () => {
+        expect(entry.renderMeta(undefined)).toContain('Location TBD');
       });
     } else {
       it(`${entry.type}.renderMeta(null) returns ''`, () => {

@@ -58,7 +58,8 @@ export async function buildConceptsPayload(db) {
     Videos, VideoConceptLinks,
     ApiDocs, ApiDocConceptLinks,
     Samples, SampleConceptLinks,
-    HelpDocs, HelpDocConceptLinks } =
+    HelpDocs, HelpDocConceptLinks,
+    CommunityEvents, CommunityEventConceptLinks } =
     cds.entities('com.sap.developers.ims.external');
   const { PublishedConcepts } = cds.entities('KnowledgeGraphService');
 
@@ -375,6 +376,54 @@ export async function buildConceptsPayload(db) {
     }
   }
 
+  // 5h. Phase 4.8 (#765): community events covering each concept (cap 5,
+  // sort startDate ASC, TTL-filtered via endDate + 30d fallback to startDate).
+  // CommunityEvents.description is LargeString (NCLOB) and NOT pulled here —
+  // payload uses the precomputed snippet column on CommunityEventConceptLinks
+  // (LOB-locator safety, §10.1, 4th read site).
+  let communityEventsByConcept = {};
+  if (ids.length > 0) {
+    const eventLinks = await db.run(
+      SELECT.from(CommunityEventConceptLinks)
+        .columns('concept_ID', 'event_ID', 'snippet', 'confidence')
+        .where({ concept_ID: { in: ids } })
+    );
+    const eventIds = [...new Set(eventLinks.map(l => l.event_ID))];
+    const eventsById = new Map();
+    if (eventIds.length > 0) {
+      const eventRows = await db.run(
+        SELECT.from(CommunityEvents)
+          .columns('ID', 'slug', 'title', 'url', 'eventType', 'location', 'scope',
+                   'virtualOrInPerson', 'startDate', 'endDate', 'lastSeenAt')
+          .where({ ID: { in: eventIds } })
+      );
+      for (const r of eventRows) eventsById.set(r.ID, r);
+    }
+    const grouped = {};
+    const now = Date.now();
+    const graceMs = 30 * 24 * 60 * 60 * 1000;
+    for (const l of eventLinks) {
+      const ev = eventsById.get(l.event_ID);
+      if (!ev) continue;
+      const decay = ev.endDate ?? ev.startDate ?? null;
+      if (decay) {
+        const ends = new Date(decay).getTime();
+        if (Number.isFinite(ends) && now - ends > graceMs) continue;
+      }
+      (grouped[l.concept_ID] ??= []).push({
+        slug: ev.slug, title: ev.title, url: ev.url,
+        eventType: ev.eventType, location: ev.location, scope: ev.scope,
+        virtualOrInPerson: ev.virtualOrInPerson,
+        startDate: ev.startDate, endDate: ev.endDate,
+        snippet: l.snippet, confidence: l.confidence,
+      });
+    }
+    for (const [conceptId, rows] of Object.entries(grouped)) {
+      rows.sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+      communityEventsByConcept[conceptId] = rows.slice(0, 5);
+    }
+  }
+
   // 6. Stitch.
   const concepts = published.map(c => ({
     slug: c.slug.toLowerCase(),
@@ -391,6 +440,7 @@ export async function buildConceptsPayload(db) {
     apiDocs: apiDocsByConcept[c.ID] || [],
     samples: samplesByConcept[c.ID] || [],
     helpDocs: helpDocsByConcept[c.ID] || [],
+    communityEvents: communityEventsByConcept[c.ID] || [],
   }));
 
   return { concepts, generatedAt: new Date().toISOString() };

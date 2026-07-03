@@ -140,6 +140,7 @@ export default defineConfig({
           { text: 'Developer Advocates',              link: '/developers/architecture/advocates' },
           { text: 'HANA KG Engine access',            link: '/developers/architecture/hana-kge-access' },
           { text: 'Khoros community link',            link: '/developers/architecture/khoros-link' },
+          { text: 'Knowledge graph',                  link: '/developers/architecture/knowledge-graph' },
           { text: 'Observability',                    link: '/developers/architecture/observability' },
           { text: 'Scaling playbook',                 link: '/developers/architecture/scaling-playbook' }
         ]},

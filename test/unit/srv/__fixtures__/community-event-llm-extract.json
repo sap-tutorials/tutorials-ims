@@ -1,0 +1,12 @@
+{
+  "verdict": {
+    "concepts": [
+      { "slug": "cap-cds-modeling",     "name": "CAP CDS modeling",     "description": "Model entities and services in CDS.", "confidence": 0.94 },
+      { "slug": "generative-ai-hub",    "name": "Generative AI Hub",    "description": "Consume LLMs via BTP.",              "confidence": 0.88 },
+      { "slug": "cap-service-handlers", "name": "CAP service handlers", "description": "before/on/after handlers.",          "confidence": 0.81 },
+      { "slug": "low-conf",             "name": "Low Confidence Bit",   "description": "Marginally related.",                 "confidence": 0.55 },
+      { "slug": "x",                    "name": "X",                    "description": "Too-short name should be dropped.",   "confidence": 0.88 }
+    ]
+  },
+  "tokenUsage": { "prompt": 2400, "completion": 220 }
+}

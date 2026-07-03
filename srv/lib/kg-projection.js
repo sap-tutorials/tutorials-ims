@@ -94,6 +94,7 @@ export const KG_IRI_PREFIXES = Object.freeze({
   'api-doc': `${KG}api-doc/`,
   'sample': `${KG}sample/`,           // Phase 4.6 (#747)
   'help-doc': `${KG}help-doc/`,       // Phase 4.7 (#748)
+  'community-event': `${KG}community-event/`,   // Phase 4.8 (#765)
 });
 
 /**
@@ -163,6 +164,10 @@ export function iriSample(slug) {
  */
 export function iriHelpDoc(slug) {
   return `${KG_IRI_PREFIXES['help-doc']}${iriEscapeSegment(slug)}`;
+}
+
+export function iriCommunityEvent(slug) {
+  return KG_IRI_PREFIXES['community-event'] + iriEscapeSegment(slug);
 }
 
 /**
@@ -421,6 +426,17 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     (fixtures && fixtures.helpDocs) || {};
   if (helpDocRows.length > 0) {
     for (const t of buildHelpDocTriples({ helpDocs: helpDocRows, links: helpDocLinks })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
+  // Section 14 — Phase 4.8 (#765) community-event triples. Same optional
+  // shape: when the fixture omits communityEvents, emission is skipped.
+  const { events: eventRows = [], links: eventLinks = [] } =
+    (fixtures && fixtures.communityEvents) || {};
+  if (eventRows.length > 0) {
+    for (const t of buildCommunityEventTriples({ events: eventRows, links: eventLinks })) {
       buffer.push(t);
       if (buffer.length >= batchSize) { yield buffer; buffer = []; }
     }
@@ -866,6 +882,58 @@ export function buildHelpDocTriples({ helpDocs = [], links = [] } = {}) {
 // ---------------------------------------------------------------------------
 // Production path - load snapshot from CDS QL
 // ---------------------------------------------------------------------------
+
+// Phase 4.8 (#765) — community-event predicate + node type.
+export const IMS_COVERS = `${KG}covers`;
+const KG_COMMUNITY_EVENT = `${KG}CommunityEvent`;
+
+/**
+ * Phase 4.8 (#765): emit N-Triples for community-event graph nodes + their
+ * concept `covers` edges. TTL gate is date-aware: uses endDate + 30-day
+ * grace when present, falls back to startDate. Mirrors the shape of
+ * buildHelpDocTriples with per-event TTL and link filter that drops rows
+ * whose parent is dropped.
+ *
+ * @param {object} args
+ * @param {Array<{slug, title, url, eventType?, source?, location?, scope?, virtualOrInPerson?, startDate?, endDate?, lastSeenAt}>} args.events
+ * @param {Array<{event_slug, conceptSlug, predicate?}>} args.links
+ * @returns {string[]} N-Triples lines
+ */
+export function buildCommunityEventTriples({ events = [], links = [] } = {}) {
+  const triples = [];
+  const visibleSlugs = new Set();
+
+  for (const ev of events) {
+    if (!ev || !ev.slug) continue;
+    // Date-aware TTL — endDate + 30-day grace; fall back to startDate when
+    // endDate is null (still-running series, RSS without end field, ...).
+    const decayDate = ev.endDate ?? ev.startDate ?? null;
+    if (!isWithinTTL('community-event', ev.lastSeenAt, decayDate)) continue;
+    visibleSlugs.add(ev.slug);
+    const subj = iriCommunityEvent(ev.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_COMMUNITY_EVENT)));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), ev.slug));
+    if (ev.title)             triples.push(literalTriple(iri(subj), iriPredicate('title'), ev.title));
+    if (ev.eventType)         triples.push(literalTriple(iri(subj), iriPredicate('eventType'), ev.eventType));
+    if (ev.source)            triples.push(literalTriple(iri(subj), iriPredicate('source'), ev.source));
+    if (ev.location)          triples.push(literalTriple(iri(subj), iriPredicate('location'), ev.location));
+    if (ev.scope)             triples.push(literalTriple(iri(subj), iriPredicate('scope'), ev.scope));
+    if (ev.virtualOrInPerson) triples.push(literalTriple(iri(subj), iriPredicate('virtualOrInPerson'), ev.virtualOrInPerson));
+    if (ev.url)               triples.push(literalTriple(iri(subj), iriPredicate('url'), ev.url));
+  }
+
+  for (const link of links) {
+    if (!link || !link.event_slug || !link.conceptSlug) continue;
+    if (!visibleSlugs.has(link.event_slug)) continue;
+    triples.push(triple(
+      iri(iriCommunityEvent(link.event_slug)),
+      iriPredicate(link.predicate || 'covers'),
+      iriConcept(link.conceptSlug)
+    ));
+  }
+
+  return triples;
+}
 
 /**
  * Production projection. Loads CDS state into a fixture-shaped snapshot
@@ -1314,6 +1382,50 @@ async function loadFixtures(db) {
     );
   }
 
+  // Phase 4.8 (#765): community-event fixtures. LOB-safe — never SELECT the
+  // description LargeString/NCLOB alongside metadata (locator can expire
+  // before triple emission on HANA).
+  let communityEvents = { events: [], links: [] };
+  try {
+    const { CommunityEvents, CommunityEventConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const eventRows = await db.run(
+      SELECT.from(CommunityEvents).columns(
+        'ID', 'slug', 'eventType', 'source', 'title', 'url',
+        'location', 'scope', 'virtualOrInPerson', 'startDate', 'endDate',
+        'lastSeenAt', 'pinUntil',
+      )
+    );
+    const eventSlugById = new Map(eventRows.map((r) => [r.ID, r.slug]));
+    const eLinkRows = await db.run(
+      SELECT.from(CommunityEventConceptLinks).columns('event_ID', 'concept_ID', 'predicate', 'confidence')
+    );
+    const eLinks = [];
+    for (const l of eLinkRows) {
+      const event_slug = eventSlugById.get(l.event_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!event_slug || !conceptSlug) continue;
+      eLinks.push({
+        event_slug, conceptSlug,
+        predicate: l.predicate || 'covers',
+      });
+    }
+    communityEvents = {
+      events: eventRows.map((e) => ({
+        slug: e.slug, eventType: e.eventType, source: e.source, title: e.title,
+        url: e.url, location: e.location, scope: e.scope,
+        virtualOrInPerson: e.virtualOrInPerson,
+        startDate: e.startDate, endDate: e.endDate,
+        lastSeenAt: e.lastSeenAt,
+      })),
+      links: eLinks,
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: CommunityEvents load failed; community-event triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -1330,5 +1442,6 @@ async function loadFixtures(db) {
     apiDocs,
     samples,
     helpDocs,
+    communityEvents,
   };
 }

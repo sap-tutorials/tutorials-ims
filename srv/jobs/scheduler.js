@@ -762,6 +762,20 @@ export function registerJobs() {
     },
   });
 
+  // Phase 4.8 (#765): twice-weekly cron for SAP community events (Khoros
+  // CodeJams + Devtoberfest RSS). Smaller ttl than help-docs — the corpus
+  // is compact and per-row work is lighter (short titles, no HTML fetch).
+  registerJob({
+    jobName: 'fetch-community-events',
+    schedule: '31 4 * * 1,4',       // Mon+Thu 04:31 UTC
+    ttlMs: 20 * 60 * 1000,           // 20 min — smaller than help-docs
+    description: 'Fetch SAP community events (Khoros CodeJams + Devtoberfest RSS) and extract covers concept links (twice-weekly)',
+    fn: async (logId, opts) => {
+      const { runFetchCommunityEvents } = await import('./fetch-community-events-job.js');
+      return runFetchCommunityEvents(logId, opts);
+    },
+  });
+
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
   // Prunes content rows past lastSeenAt + 2×TTL when not pinned. Cascade-deletes
   // link entity rows via CDS Compositions on the parent entity, plus an explicit

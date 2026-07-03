@@ -9,7 +9,8 @@
 // include 'learning-journey'. Phase 4.2 (#447 §9) adds 'blog-post'.
 // Phase 4.3 (#447 §8) adds 'discovery-mission'. Phase 4.4 (#447 §9) adds
 // 'video'. Phase 4.5 (#746) adds 'api-doc'. Phase 4.6 (#747) adds
-// 'sample'. Phase 4.7 (#748) adds 'help-doc'.
+// 'sample'. Phase 4.7 (#748) adds 'help-doc'. Phase 4.8 (#765) adds
+// 'community-event'.
 export type NodeType =
   | 'tutorial'
   | 'concept'
@@ -25,6 +26,7 @@ export type NodeType =
   | 'api-doc'
   | 'sample'
   | 'help-doc'
+  | 'community-event'    // Phase 4.8 (#765)
 
 export type ConceptRef = {
   slug: string
@@ -54,10 +56,11 @@ export type TutorialInfo = {
 // journeys) populated it. Phase 4.2 (#447 §9) widens the discriminant to
 // include 'blog-post' rows; Phase 4.3 (#447 §8) adds 'discovery-mission';
 // Phase 4.4 (#447 §9) adds 'video'; Phase 4.5 (#746) adds 'api-doc';
-// Phase 4.6 (#747) adds 'sample'; Phase 4.7 (#748) adds 'help-doc'.
+// Phase 4.6 (#747) adds 'sample'; Phase 4.7 (#748) adds 'help-doc';
+// Phase 4.8 (#765) adds 'community-event'.
 // Mirrors the OtherResource type in srv/knowledge-graph-service.cds.
 export type OtherResource = {
-  type: 'learning-journey' | 'blog-post' | 'discovery-mission' | 'video' | 'api-doc' | 'sample' | 'help-doc'   // widens per sub-phase
+  type: 'learning-journey' | 'blog-post' | 'discovery-mission' | 'video' | 'api-doc' | 'sample' | 'help-doc' | 'community-event'   // widens per sub-phase
   slug: string
   title: string
   url: string
@@ -105,6 +108,15 @@ export type OtherResource = {
   snippet?: string | null
   product?: string | null
   overlapCount?: number | null
+  // Phase 4.8 (#765): community-event fields. All nullable — event data
+  // from upstream may be incomplete at fetch time. `virtualOrInPerson`
+  // drives the 🌐 icon in the sidebar and the concept-page section.
+  eventType?: string | null
+  location?: string | null
+  scope?: string | null
+  virtualOrInPerson?: string | null
+  startDate?: string | null     // YYYY-MM-DD
+  endDate?: string | null       // YYYY-MM-DD or null
   // Phase 5 (#850): server-rendered meta string, e.g. " · by Alice · Jun 3, 2026".
   // Consumers (ResourceRow / SidebarPanel / ExpandedPanel) should render this
   // verbatim instead of computing meta client-side from per-type fields.

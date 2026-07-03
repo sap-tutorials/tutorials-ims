@@ -1,0 +1,51 @@
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": "12345",
+        "subject": "Build AI services using SAP CAP (Bengaluru, India)",
+        "view_href": "https://community.sap.com/t5/sap-codejam/build-ai-services-using-sap-cap-bengaluru/ev-p/12345",
+        "occasion_data": {
+          "start_time": "2027-01-15T09:30:00.000+05:30",
+          "end_time":   "2027-01-15T17:00:00.000+05:30",
+          "timezone":   "Asia/Kolkata",
+          "location":   "Bosch Global Software Technologies, Bengaluru, India"
+        }
+      },
+      {
+        "id": "12346",
+        "subject": "AI-enabled integrations with SAP Integration Suite (Utrecht)",
+        "view_href": "https://community.sap.com/t5/sap-codejam/ai-enabled-integrations-utrecht/ev-p/12346",
+        "occasion_data": {
+          "start_time": "2027-02-10T09:00:00.000+01:00",
+          "end_time":   "2027-02-10T17:00:00.000+01:00",
+          "timezone":   "Europe/Amsterdam",
+          "location":   "INNOV8iON, Utrecht, The Netherlands"
+        }
+      },
+      {
+        "id": "99999",
+        "subject": "Past CodeJam (should be filtered)",
+        "view_href": "https://community.sap.com/t5/sap-codejam/past-event/ev-p/99999",
+        "occasion_data": {
+          "start_time": "2024-01-01T09:00:00.000Z",
+          "end_time":   "2024-01-01T17:00:00.000Z",
+          "timezone":   "UTC",
+          "location":   "Berlin, Germany"
+        }
+      },
+      {
+        "id": "88888",
+        "subject": "Item with /ec-p/ URL (should be filtered — matches Go skip rule)",
+        "view_href": "https://community.sap.com/t5/sap-codejam/event/ec-p/88888",
+        "occasion_data": {
+          "start_time": "2027-05-01T09:00:00.000Z",
+          "end_time":   "2027-05-01T17:00:00.000Z",
+          "timezone":   "UTC",
+          "location":   "London, UK"
+        }
+      }
+    ]
+  }
+}
