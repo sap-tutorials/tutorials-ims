@@ -395,3 +395,50 @@ entity HelpDocConceptLinks : cuid, managed {
 
 annotate HelpDocConceptLinks with
   @assert.unique.helpDocConceptAnchor : [helpDoc, concept, predicate, anchor];
+
+// -----------------------------------------------------------------------
+// Phase 4.8 (#765) — SAP community events
+//
+// Sources: Khoros community-groups API (CodeJams), RSS feeds (Devtoberfest,
+// user groups). Vendored JS ports of the Go source at
+// D:\projects\sap-devs-cli\internal\events\{khoros,rss}.go.
+//
+// TTL: null (date-aware) — routed through isWithinTTL's endDate + 30-day
+// grace-period branch (first live consumer of that path; existed since
+// Phase 4.3 for trials but never activated).
+//
+// Predicate: covers (single). No sibling service-junction table.
+// -----------------------------------------------------------------------
+
+entity CommunityEvents : cuid, managed {
+  slug              : String(80) @assert.unique;   // 'ce-' + kebab(sourceId)
+  eventType         : String(20);                  // 'codejam' | 'teched' | 'devtoberfest' | 'usergroup'
+  source            : String(20);                  // 'khoros' | 'rss' | 'manual'
+  title             : String(500);
+  description       : LargeString;                 // NCLOB; may be synthesized (see Task 2 §2.3)
+  url               : String(1000);
+  sourceId          : String(200);                 // upstream id (e.g. 'codejam/12345')
+  location          : String(500);                 // free-form; 'virtual' sentinel accepted
+  scope             : String(20);                  // 'local' | 'regional' | 'virtual' | 'global'
+  virtualOrInPerson : String(20);                  // 'virtual' | 'in-person' (derived)
+  startDate         : Date;                        // upstream 'date' — required
+  endDate           : Date;                        // upstream 'end_date' — nullable
+  contentHash       : String(64);
+  lastExtractedHash : String(64);                  // #708 crash-safety
+  firstSeenAt       : Timestamp @cds.on.insert: $now;
+  lastSeenAt        : Timestamp;
+  pinUntil          : Timestamp;
+  links             : Composition of many CommunityEventConceptLinks on links.event = $self;
+}
+
+entity CommunityEventConceptLinks : cuid {
+  event        : Association to CommunityEvents @assert.notNull;
+  concept      : Association to ims.Concepts;
+  predicate    : String(20);
+  confidence   : Decimal(3, 2);
+  snippet      : String(200);
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+annotate CommunityEventConceptLinks with @assert.unique.pair : [event, concept];
