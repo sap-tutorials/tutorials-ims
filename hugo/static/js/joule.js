@@ -16,6 +16,55 @@
     if (force || isNearBottom(el)) el.scrollTop = el.scrollHeight;
   }
 
+  // AppRouter's CSRF flow (re-enabled site-wide in #895). Any mutating request
+  // against an XSUAA-authenticated route (e.g. POST /chat/stream) is rejected
+  // by the approuter unless an `x-csrf-token` header accompanies it. This is
+  // a hand-rolled copy of the two-step handshake — joule.js is plain non-module
+  // JS in hugo/static/, so it can't import hugo-apps/src/shared/csrf-fetch.ts.
+  // Behaviour must stay in sync with that module. Fixes #953-follow-up: the
+  // navigator's new Joule button was the first surface to hit this hole,
+  // showing up as a bare "POST /chat/stream 400" in the console.
+  let _csrfToken = null;
+  async function _fetchCsrfToken() {
+    const res = await fetch('/auth/user', {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'x-csrf-token': 'fetch' },
+    });
+    const token = res.headers.get('x-csrf-token');
+    if (!res.ok || !token) throw new Error('csrf token unavailable');
+    return token;
+  }
+  async function csrfFetch(url, init) {
+    const method = ((init && init.method) || 'GET').toUpperCase();
+    // Safe methods: pass through — AppRouter never enforces CSRF here.
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+      return fetch(url, { credentials: 'include', ...(init || {}) });
+    }
+    if (_csrfToken == null) _csrfToken = await _fetchCsrfToken();
+    const merge = (extra) => {
+      const h = new Headers((init && init.headers) || undefined);
+      for (const [k, v] of Object.entries(extra)) h.set(k, v);
+      return h;
+    };
+    const first = await fetch(url, {
+      credentials: 'include',
+      ...(init || {}),
+      headers: merge({ 'x-csrf-token': _csrfToken }),
+    });
+    if (first.status !== 403) return first;
+    const required = (first.headers.get('x-csrf-token') || '').toLowerCase();
+    if (required !== 'required') return first;
+    // Token was stale — refetch once and retry.
+    _csrfToken = null;
+    _csrfToken = await _fetchCsrfToken();
+    return fetch(url, {
+      credentials: 'include',
+      ...(init || {}),
+      headers: merge({ 'x-csrf-token': _csrfToken }),
+    });
+  }
+
   // Sync-attach window.joule so UI5 controllers can call open() before
   // the async config load resolves.
   window.joule = {
@@ -501,7 +550,7 @@
 
     let res;
     try {
-      res = await fetch('/chat/stream', {
+      res = await csrfFetch('/chat/stream', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
