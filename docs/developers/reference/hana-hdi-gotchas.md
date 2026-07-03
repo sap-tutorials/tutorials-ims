@@ -11,6 +11,7 @@ Search (Ctrl-F) for the error message you're seeing, the API you're using, or th
 ## Sections
 
 - [HANA raw SQL requires UPPERCASE identifiers](#hana-raw-sql-requires-uppercase-identifiers)
+- [Raw db.run() BLOBs are base64 strings on SQLite, Buffers on HANA](#raw-dbrun-blobs-are-base64-strings-on-sqlite-buffers-on-hana)
 - [HANA boolean CASE WHEN — compare to literal, never bare](#hana-boolean-case-when-compare-to-literal-never-bare)
 - [HANA WITH HINT scope — STATEMENT_TIMEOUT is not a hint](#hana-with-hint-scope-statement_timeout-is-not-a-hint)
 - [HANA Cloud SQLScript divergences from training data](#hana-cloud-sqlscript-divergences-from-training-data)
@@ -81,6 +82,49 @@ reserved word), use UPPERCASE inside the quotes. Mirror
 the related "use raw SQL on HANA for BLOB reads" rule. The full chain
 of advocate-specific CAP gotchas is documented in
 `project_developer_advocates_impl`.
+
+---
+
+## Raw db.run() BLOBs are base64 strings on SQLite, Buffers on HANA
+
+When you SELECT a `LargeBinary`/BLOB column via raw `db.run(sql)` — the pattern we use for embedding tables to sidestep HANA's LOB-locator expiry — the two adapters return the value differently:
+
+- **HANA raw** → returns a `Buffer` (or `Uint8Array`) of the actual bytes
+- **SQLite raw** → returns a **base64-encoded `string`** (`typeof === 'string'`), because the sqlite CDS adapter stringifies BLOBs for JSON-safety
+
+`Buffer.from(str)` **without an explicit `'base64'` argument** re-interprets that string as UTF-8, yielding a same-length byte array of the wrong bytes. Length checks like `bytes.length !== DIMS * 4` silently drop every row — the helper appears to work but returns `[]`.
+
+**Wrong** (bit us on the concept-embedding cosine helper in the #943 plan — commit `892f06d6+`, and would have wasted a Task 3 hour too if not caught by the Task 2 subagent):
+
+```js
+function decodeEmbedding(buf) {
+  if (!buf) return null
+  const bytes = Buffer.isBuffer(buf) ? buf : Buffer.from(buf)  // <- SQLite base64 string → UTF-8 garbage
+  if (bytes.length !== DIMS * 4) return null                   // silently returns null on SQLite
+  ...
+}
+```
+
+**Right** — the four-branch coercion matching `srv/lib/kg-merge-on-write.js:109-114` (`toBuffer()`):
+
+```js
+function decodeEmbedding(buf) {
+  if (!buf) return null
+  let bytes
+  if (Buffer.isBuffer(buf)) bytes = buf
+  else if (typeof buf === 'string') bytes = Buffer.from(buf, 'base64')
+  else if (buf instanceof Uint8Array) bytes = Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength)
+  else bytes = Buffer.from(buf)  // fallback (rare)
+  if (bytes.length !== DIMS * 4) return null
+  ...
+}
+```
+
+**Why it doesn't bite `srv/lib/embedding-query.js`**: that file's SQLite branch uses **CDS QL** (`SELECT.from(...)`), which returns `Buffer` directly. The bug only surfaces when the SQLite path uses raw `db.run(sql)` for parity with a HANA raw-SQL branch — i.e. anything under `srv/lib/kg/` or `srv/lib/embedding-*` that has to avoid LOB-locator expiry on HANA.
+
+**How to apply**: any new BLOB-decoding helper under `srv/lib/` MUST use the four-branch coercion above. When adding a new one, unit-test on SQLite in-memory (not just HANA hybrid) — the base64-string return is what actually exercises the string branch.
+
+Related: [HANA raw SQL requires UPPERCASE identifiers](#hana-raw-sql-requires-uppercase-identifiers) (the reason we reach for raw SQL in the first place), and `feedback_hana_lob_locator_expiry` in `CLAUDE.md` Gotchas (the reason we can't SELECT the BLOB alongside metadata via CDS QL on HANA).
 
 ---
 

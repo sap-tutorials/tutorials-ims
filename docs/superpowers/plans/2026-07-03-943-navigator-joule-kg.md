@@ -144,7 +144,14 @@ const BYTES_PER_FLOAT = 4
 
 function decodeEmbedding(buf) {
   if (!buf) return null
-  const bytes = Buffer.isBuffer(buf) ? buf : Buffer.from(buf)
+  // BLOB shapes vary by adapter: HANA raw db.run() → Buffer; SQLite raw db.run()
+  // → base64 string; CDS QL SQLite → Uint8Array or Buffer; some bind paths → Uint8Array.
+  // Matches the coercion pattern documented in srv/lib/kg-merge-on-write.js:113.
+  let bytes
+  if (Buffer.isBuffer(buf)) bytes = buf
+  else if (typeof buf === 'string') bytes = Buffer.from(buf, 'base64')
+  else if (buf instanceof Uint8Array) bytes = Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength)
+  else bytes = Buffer.from(buf)
   if (bytes.length !== DIMS * BYTES_PER_FLOAT) return null
   const out = new Float32Array(DIMS)
   for (let i = 0; i < DIMS; i++) out[i] = bytes.readFloatLE(i * BYTES_PER_FLOAT)
