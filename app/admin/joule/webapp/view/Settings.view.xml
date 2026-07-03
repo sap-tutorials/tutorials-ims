@@ -50,6 +50,7 @@
         </f:SimpleForm>
         <Toolbar>
           <Button text="{i18n>seedButton}" press=".onSeedEmbeddings" type="Emphasized" enabled="{settings>/ragEnabled}" />
+          <Button text="{i18n>seedConceptButton}" press=".onSeedConceptEmbeddings" type="Default" />
         </Toolbar>
         <VBox class="sapUiSmallMargin">
           <Title text="{i18n>ragStatsTitle}" level="H4" />

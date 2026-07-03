@@ -32,6 +32,7 @@ import { runMetricsRollup } from './metrics-rollup-job.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
+import { runConceptEmbeddingBackfill } from './concept-embedding-backfill.js';
 import { runExtractConcepts } from './extract-concepts-job.js';
 import { runConsolidateConcepts } from './consolidate-concepts-job.js';
 import { runSecretExpiryCheck } from './secret-expiry-check.js';
@@ -504,6 +505,20 @@ export function registerJobs() {
     ttlMs: 1800000,
     description: 'Re-embed tutorial steps whose content drifted',
     fn: (logId) => runReconciliationJob(logId),
+  });
+
+  // #943 — Hourly at :17, KG-side concept backfill. Distinct from
+  // embedding-reconciliation above (that job targets TutorialEmbedding /
+  // HANA Vector(1536); this job targets Concepts.embedding / raw BLOB
+  // Float32 LE). Distributed-lock keyed on 'concept-embedding-backfill'
+  // so both jobs coexist on the same minute without stepping on each
+  // other. On a fresh DB the backfill is a no-op.
+  registerJob({
+    jobName: 'concept-embedding-backfill',
+    schedule: '17 * * * *',
+    ttlMs: 1800000,
+    description: 'Backfill Concepts.embedding for ACTIVE/published rows missing an embedding',
+    fn: () => runConceptEmbeddingBackfill(),
   });
 
   // Daily at 03:15 — prune pipeline log entries older than 30 days

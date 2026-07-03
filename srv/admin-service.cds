@@ -225,6 +225,16 @@ service AdminService {
       queued     : Boolean;
       activeSlugs: Integer;
     };
+    // Issue #943: one-shot backfill for Concepts.embedding. Distinct from
+    // seedEmbeddings (which handles TutorialEmbedding via embedSlugs). Runs
+    // srv/jobs/concept-embedding-backfill.js:runConceptEmbeddingBackfill()
+    // synchronously and returns the summary. Auth via @requires: 'Admin' at
+    // the entity level.
+    action seedConceptEmbeddings() returns {
+      processed : Integer;
+      failed    : Integer;
+      latencyMs : Integer;
+    };
   };
 
   @odata.singleton

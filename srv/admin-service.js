@@ -1239,6 +1239,17 @@ export default class AdminService extends cds.ApplicationService {
       return { queued: true, activeSlugs: slugs.length };
     });
 
+    // Issue #943: one-shot backfill for Concepts.embedding. Distinct code path
+    // from seedEmbeddings (which handles TutorialEmbedding via embedSlugs).
+    // Invokes the same runConceptEmbeddingBackfill() the scheduled cron uses
+    // (single source of truth). Synchronous — returns { processed, failed,
+    // latencyMs } for the admin toast. Auth enforced by the entity-level
+    // @requires: 'Admin' on ChatSettings.
+    this.on('seedConceptEmbeddings', async () => {
+      const { runConceptEmbeddingBackfill } = await import('./jobs/concept-embedding-backfill.js');
+      return await runConceptEmbeddingBackfill({ db });
+    });
+
     // --- Account Merge Status ---
 
     this.on('getAccountMergeStatus', async (req) => {
