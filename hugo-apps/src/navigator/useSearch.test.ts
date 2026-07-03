@@ -103,20 +103,21 @@ describe('buildFacetsUrl', () => {
   // search failure, so the entire navigator page showed "no results" even
   // when SearchableItems returned 210 rows.
 
-  it('uses parameter aliases so array literals are valid OData V4 JSON', () => {
+  it('uses parameter aliases with scalar String in OData literal form and arrays as JSON', () => {
     const url = buildFacetsUrl('abap', ['TUTORIAL'], ['beginner'])
     // Path portion: aliases, no inline literals.
     expect(url.startsWith('/search/getFacets(search=@s,taskTypes=@t,experience=@e)?')).toBe(true)
-    // Aliases carry JSON — arrays have double-quoted strings.
     const q = new URLSearchParams(url.split('?')[1])
-    expect(JSON.parse(q.get('@s')!)).toBe('abap')
+    // Scalar String: OData V4 single-quoted literal (regression fix for #943).
+    expect(q.get('@s')).toBe("'abap'")
+    // Arrays: JSON collection literals (unchanged from #869).
     expect(JSON.parse(q.get('@t')!)).toEqual(['TUTORIAL'])
     expect(JSON.parse(q.get('@e')!)).toEqual(['beginner'])
   })
 
   it('omits taskTypes/experience aliases when arrays are empty', () => {
     const url = buildFacetsUrl('abap', [], [])
-    expect(url).toBe(`/search/getFacets(search=@s)?${new URLSearchParams({ '@s': '"abap"' })}`)
+    expect(url).toBe(`/search/getFacets(search=@s)?${new URLSearchParams({ '@s': "'abap'" })}`)
   })
 
   it('upper-cases task types to match the enum in the SearchableItems view', () => {
@@ -125,14 +126,14 @@ describe('buildFacetsUrl', () => {
     expect(JSON.parse(q.get('@t')!)).toEqual(['TUTORIAL', 'MISSION'])
   })
 
-  it('safely encodes single-quoted search terms', () => {
-    // Previous builder called escOData('O''Reilly'), producing `O''''Reilly`
-    // inside an OData string literal — plus URL-encoding on top. With
-    // aliases we just JSON-encode the term and let URLSearchParams handle
-    // the URL layer.
+  it('safely encodes single-quoted search terms by doubling internal quotes', () => {
+    // OData V4 string-literal escaping: `O'Reilly` becomes `'O''Reilly'`.
+    // URLSearchParams handles URL-level encoding on top. The prior JSON
+    // encoding (`"O'Reilly"`) was rejected by the stricter CAP v4 parser
+    // for scalar String params — see #943.
     const url = buildFacetsUrl("O'Reilly", [], [])
     const q = new URLSearchParams(url.split('?')[1])
-    expect(JSON.parse(q.get('@s')!)).toBe("O'Reilly")
+    expect(q.get('@s')).toBe("'O''Reilly'")
   })
 })
 
