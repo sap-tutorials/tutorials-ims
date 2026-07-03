@@ -178,7 +178,8 @@ export default defineConfig({
           { text: 'SMTP credentials rotation', link: '/developers/operations/smtp-credentials-rotation' },
           { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
           { text: 'Testing guide',             link: '/developers/operations/testing-guide' },
-          { text: 'Tutorial markdown lint',    link: '/developers/operations/tutorial-markdown-lint' }
+          { text: 'Tutorial markdown lint',    link: '/developers/operations/tutorial-markdown-lint' },
+          { text: 'XSUAA Role Collection Assignment', link: '/developers/operations/xsuaa-role-collection-assignment' }
         ]},
         { text: 'Reference', collapsed: true, items: [
           { text: 'AI-friendly consumption',   link: '/developers/reference/ai-consumption' },
