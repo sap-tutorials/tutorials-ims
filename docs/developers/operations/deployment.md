@@ -11,7 +11,7 @@ Single MTA deployment to SAP BTP Cloud Foundry:
 
 ```bash
 mbt build
-cf deploy mta_archives/tutorials-poc_1.0.0.mtar
+cf deploy mta_archives/tutorials-ims_1.0.0.mtar
 ```
 
 #### MTA Modules

@@ -403,7 +403,7 @@ jobs:
             STRATEGY_FLAGS="--strategy blue-green --skip-testing-phase"
           fi
 
-          cf deploy mta_archives/tutorials-poc_${{ steps.version.outputs.version }}.mtar \
+          cf deploy mta_archives/tutorials-ims_${{ steps.version.outputs.version }}.mtar \
             -e deploy/${{ steps.env.outputs.target }}.resolved.mtaext \
             $STRATEGY_FLAGS \
             -f
@@ -411,7 +411,12 @@ jobs:
       - name: Abort blue-green on failure
         if: failure() && steps.env.outputs.target == 'prod'
         run: |
-          OP_ID=$(cf mta-ops | grep "tutorials-poc" | grep -i "error\|abort" | head -1 | awk '{print $1}')
+          # During the tutorials-poc → tutorials-ims rename cutover window the
+          # old `tutorials-poc` MTA registration may still co-exist briefly —
+          # grep either name so blue-green abort works regardless of which
+          # registration the failed operation belongs to. Remove the `-poc`
+          # branch once `cf purge-mta tutorials-poc` is done.
+          OP_ID=$(cf mta-ops | grep -E "tutorials-(ims|poc)" | grep -i "error\|abort" | head -1 | awk '{print $1}')
           if [ -n "$OP_ID" ]; then
             echo "Aborting failed blue-green operation: $OP_ID"
             cf deploy -i "$OP_ID" -a abort || true
@@ -624,7 +629,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="v${{ steps.version.outputs.version }}-${{ steps.env.outputs.target }}"
-          MTAR_FILE="mta_archives/tutorials-poc_${{ steps.version.outputs.version }}.mtar"
+          MTAR_FILE="mta_archives/tutorials-ims_${{ steps.version.outputs.version }}.mtar"
 
           gh release create "$TAG" "$MTAR_FILE" \
             --title "v${{ steps.version.outputs.version }} (${{ steps.env.outputs.target }})" \

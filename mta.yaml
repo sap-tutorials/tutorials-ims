@@ -1,5 +1,11 @@
 _schema-version: 3.3.0
-ID: tutorials-poc
+# MTA identity. Renamed from `tutorials-poc` 2026-06-29 (#635). Cloud Foundry
+# treats this rename as a new MTA registration, but every `resources:` entry
+# below declares an explicit `service-name:`, which lets the MTA deployer
+# ADOPT the existing service instances (HANA HDI, XSUAA, credstore, etc.)
+# instead of recreating them. See docs/developers/operations/mta-deployment.md
+# §Rename cutover for the runbook.
+ID: tutorials-ims
 version: 1.0.0
 
 build-parameters:

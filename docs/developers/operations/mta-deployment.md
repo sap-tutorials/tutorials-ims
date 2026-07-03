@@ -5,7 +5,7 @@ Complete deployment procedure for standing up the tutorials-ims stack in a CF sp
 ## Architecture
 
 ```text
-tutorials-poc MTA
+tutorials-ims MTA
 ├── tutorials-db-deployer  (type: hdb — deploys CDS schema to HDI container)
 ├── tutorials-srv          (type: nodejs — CAP OData/REST backend)
 └── tutorials-approuter    (type: approuter.nodejs — serves static UI + proxies to srv)
@@ -31,7 +31,7 @@ Resources (created by MTA):
 ```bash
 cd .deploy
 mbt build
-cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext
+cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e ../deploy/dev.mtaext
 ```
 
 The `dev.mtaext` extension adds DEV-specific overrides (debug logging, approuter name suffix, expose CAP UI). For production, omit `-e` or provide a prod extension.
@@ -186,6 +186,169 @@ Cross-references:
 - **Content 404s**: Content must be published to HANA after deploy. Run `npm run publish-content` with `CAP_BASE_URL` and `CONTENT_API_KEY` set.
 - **Role collection not working**: Role collections are created by XSUAA update, but user assignment is manual (BTP Cockpit → Security → Role Collections).
 
+## Rename cutover (`tutorials-poc` → `tutorials-ims`)
+
+Issue [#635](https://github.com/sap-tutorials/tutorials-ims/issues/635). One-time procedure to retire the legacy `tutorials-poc` MTA identity and matching `xsappname` without recreating service instances or losing HANA data.
+
+The rename touches **two** identity domains that Cloud Foundry tracks independently:
+
+| Domain | What's renamed | Effect |
+| --- | --- | --- |
+| MTA `ID:` | `tutorials-poc` → `tutorials-ims` in `mta.yaml` and `.deploy/mta.yaml` | CF creates a NEW MTA registration. Service instances are NOT recreated because every `resources:` entry declares an explicit `service-name:` — the deployer adopts the existing `tutorials-hana`, `tutorials-xsuaa`, `tutorials-credstore`, etc. |
+| `xsappname` | `tutorials-poc` → `tutorials-ims` in `xs-security.json` and `.deploy/xs-security.json` | XSUAA service instance is **updated** (not recreated) — `cf update-service tutorials-xsuaa -c xs-security.json` flips the scope namespace. Every issued JWT scope literal changes from `tutorials-poc!t<n>.*` to `tutorials-ims!t<n>.*`. Existing role-collection bindings become empty (they reference scopes that no longer exist) and must be re-bound. |
+
+### What is and isn't safe
+
+**Safe (data preserved):**
+- HANA HDI containers (`tutorials-hana`, `tutorials-hana-qa`) — adopted by `service-name`. Schema deploys land in the same container. No data loss.
+- All managed services (Destination, Audit Log, Cloud Logging, AI Core, credstore, kg-grantor) — same `service-name`, adopted.
+- App routes — `tutorials-srv`, `tutorials-srv-qa`, `tutorials-dev-approuter` keep their existing URLs (`tutorial-system-dev-tutorials-*.cfapps.eu10-005.hana.ondemand.com`).
+- Source-code scopes — `srv/**/*.cds` uses bare `@requires: 'Admin'` (verified: zero `tutorials-poc.` literals). CAP resolves against `$XSAPPNAME` at runtime, picks up the new prefix automatically.
+- AppRouter routes — `approuter/xs-app.json` uses `$XSAPPNAME.*` throughout (no hard-coded prefix).
+
+**Disruption window:**
+- ~5-10 minutes of 403s on protected routes between the XSUAA update completing and the role-collection rebind landing. Plan the cutover for a low-traffic window.
+- Up to 12 hours of stale-JWT 403s for users with active sessions (JWT TTL). Mitigation: clear the XSUAA client (cockpit → Security → OAuth → Reset client) right after deploy, or just tell affected users to log out + back in.
+
+### Cutover steps
+
+> Run from the `main` branch in the primary worktree (per CLAUDE.md "always deploy from main"). The PR for this rename is #TBD.
+
+**1. Pre-flight: inventory current role-collection bindings**
+
+```bash
+# In tutorial-system subaccount (DEV):
+node scripts/inventory-role-collections.cjs --subaccount tutorial-system \
+  --out .migration-data/role-collections-pre-rename.json
+```
+
+Writes the current `Tutorials Admin`, `Tutorials SuperAdmin`, `Tutorials Developer`, `Tutorials Display`, `Tutorials Author`, `Tutorials Scanner` collection definitions + their user/group assignments to disk. This file is the rollback safety net if anything goes wrong.
+
+**2. Build + deploy with the new MTA ID and `xsappname`**
+
+```bash
+# Confirm CF target (don't trust muscle memory)
+cf target
+# org: tutorial-system, space: dev
+
+npm run build:all
+cd .deploy && mbt build
+
+# The new mtar filename reflects the new ID:
+cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e ../deploy/dev.mtaext -f
+```
+
+What happens during the deploy:
+
+- MTA deployer creates a new MTA registration `tutorials-ims`.
+- It resolves `resources:` against the space — finds existing `tutorials-hana`, `tutorials-xsuaa`, `tutorials-credstore`, etc. by their `service-name:` and **adopts** them. No `create-service` calls. No HDI redeploy beyond the normal CDS artifact refresh.
+- `cf update-service tutorials-xsuaa -c xs-security.json` runs as part of the resource sync, flipping the XSUAA descriptor's `xsappname` to `tutorials-ims`.
+- The three apps (`tutorials-srv`, `tutorials-srv-qa`, `tutorials-dev-approuter`) repush. Routes preserved.
+
+**3. Verify role-collection assignments survived the deploy**
+
+XSUAA role collections in the `tutorial-system` subaccount carry scope-template references like `tutorials-poc!t676072.Admin`. The `cf update-service tutorials-xsuaa -c xs-security.json` that runs as part of step 2 **recreates the 6 `Tutorials *` collections inline** from the descriptor — because they're declared in `xs-security.json` itself (`role-collections:` block at lines 64-118), they're rewritten with the new `tutorials-ims.*` template references automatically.
+
+**SUBACCOUNT-level user assignments survive the recreate** because they bind by collection name (e.g. `Tutorials Admin`), not by template reference. In the happy path no manual rebind is needed.
+
+But we don't trust the happy path on a one-time cutover. Verify against the pre-flight snapshot:
+
+```bash
+node scripts/migrate-role-collections.cjs \
+  --inventory .migration-data/role-collections-pre-rename.json \
+  --verify
+```
+
+Expected output: every collection reports `OK` with the same user count as the snapshot. Exit code 0.
+
+**If --verify reports MISSING users on any collection**, restore from the snapshot:
+
+```bash
+node scripts/migrate-role-collections.cjs \
+  --inventory .migration-data/role-collections-pre-rename.json \
+  --restore --commit
+```
+
+The script re-asserts every user assignment captured in the snapshot. It's idempotent — users already bound return an "already" status; only genuinely-lost assignments cause a write. Run without `--commit` first to preview.
+
+**4. (Optional) Force-refresh active sessions**
+
+In-flight access tokens issued under `tutorials-poc!t<n>` continue to assert the old scope literals until they expire (default 12 h TTL). On a protected route, the JWT validator on `tutorials-srv` sees `scope: ["tutorials-poc!t<n>.Admin"]` but the XSUAA descriptor now offers `tutorials-ims!t<n>.Admin` — result: 403 until the user logs out and back in.
+
+Two ways to shorten the tail:
+
+- **Cockpit (recommended for DEV):** Subaccount → Security → OAuth → "Trust Configuration" → tutorials-xsuaa → "Reset Client Secret". This invalidates the client's signing key, so all outstanding tokens fail validation. Users with active sessions get redirected to login by approuter on next request and come back with fresh JWTs.
+- **Wait it out:** for DEV traffic levels, just notify affected users and rely on the 12 h TTL.
+
+Skip this step entirely if step 3 confirmed assignments are intact and DEV traffic is low — the disruption is invisible until a user with an active session hits a protected route.
+
+**5. Verify**
+
+```bash
+APPROUTER="https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com"
+SRV="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com"
+
+# Public endpoints unchanged
+curl -s "$SRV/health" | jq .status                                              # "ok"
+curl -s "$SRV/build/catalog" | jq '.missions | length'                          # >0
+
+# Authenticated round-trip — log in via approuter, then check the scope claim
+# Open https://<approuter>/auth/user in a browser, sign in, response should show
+# scopes prefixed with `tutorials-ims!t<n>.` not `tutorials-poc!t<n>.`
+
+# Tutorial content still serves from HANA
+curl -s -o /dev/null -w "%{http_code}\n" "$APPROUTER/tutorials/abap-dev-get-started/"   # 200
+
+# Admin UI loads (requires a valid `Tutorials Admin` collection assignment)
+curl -s -o /dev/null -w "%{http_code}\n" "$APPROUTER/admin-ui/"                 # 200
+```
+
+**6. Clean up the old MTA registration**
+
+```bash
+# Confirm both registrations exist (transient state after step 2):
+cf mtas
+# expected:
+# mta id           version
+# tutorials-ims    1.0.<run>
+# tutorials-poc    1.0.<prev>
+
+# Drop the old registration WITHOUT touching services or apps
+# (the apps have been re-claimed by tutorials-ims; this only removes the metadata record):
+cf purge-mta tutorials-poc
+
+# Confirm:
+cf mtas
+# expected: only tutorials-ims
+```
+
+If `cf purge-mta` is not available (older multiapps plugin), `cf undeploy tutorials-poc -f` works — but be sure you do **not** pass `--delete-services`. Without that flag, only the registration record is removed.
+
+### Rollback (if step 2 fails before step 3)
+
+If `cf deploy` of `tutorials-ims_1.0.0.mtar` fails partway through, the XSUAA descriptor update may have already landed. To roll back to `tutorials-poc`:
+
+1. Revert this PR locally: `git checkout main && git pull && git revert <merge-commit>`.
+2. `npm run build:all && cd .deploy && mbt build && cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext -f`.
+3. The deploy adopts the same services again — `xsappname` flips back to `tutorials-poc`.
+4. After the revert deploy completes, verify assignments with `node scripts/migrate-role-collections.cjs --inventory .migration-data/role-collections-pre-rename.json --verify`. If anything was lost during the failed forward attempt, `--restore --commit` re-asserts from the snapshot.
+
+### PROD cutover
+
+Same procedure, scheduled into the end-of-July 2026 AEM→IMS PROD window. Differences vs DEV:
+
+- Pre-flight inventory runs against the PROD subaccount.
+- Blue-green strategy applies (`STRATEGY_FLAGS="--strategy blue-green --skip-testing-phase"` in `deploy.yml:389`) — the new MTA ID still works with blue-green.
+- The grep at `deploy.yml:401` was widened to match both names during the cutover window. After PROD cutover lands, narrow it back to `tutorials-ims` only.
+
+### Why not `cf undeploy --delete-services` first (as the issue originally specified)?
+
+The issue's original runbook assumed renaming the MTA `ID:` forced full service-instance recreation. That's only true when `resources:` entries lack explicit `service-name:` declarations. **This codebase already declares `service-name:` on every resource** (see `.deploy/mta.yaml:211-289`), which decouples instance identity from MTA identity. The `--delete-services` flag would actively destroy HANA schemas, force a fresh HDI deploy, and require restoring data from snapshot — the destructive path is exactly what `service-name:` is designed to avoid.
+
+
+
+A reference of pitfalls discovered while deploying this project's MTA. Each subsection is a single discovered failure mode with cause and fix. Originally maintained as agent-memory entries; promoted here 2026-06-24 so future deployers find them via the sidebar instead of re-discovering them.
+
 ## Gotchas (deploy-time pitfalls)
 
 A reference of pitfalls discovered while deploying this project's MTA. Each subsection is a single discovered failure mode with cause and fix. Originally maintained as agent-memory entries; promoted here 2026-06-24 so future deployers find them via the sidebar instead of re-discovering them.
@@ -202,7 +365,7 @@ A reference of pitfalls discovered while deploying this project's MTA. Each subs
 cd d:/projects/tutorials-poc
 export GITHUB_DISPATCH_TOKEN=admin-rebuild-disabled-pending-pr   # or real PAT
 envsubst < deploy/dev.mtaext > .deploy/dev.mtaext.resolved
-cd .deploy && cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e dev.mtaext.resolved -f
+cd .deploy && cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e dev.mtaext.resolved -f
 rm .deploy/dev.mtaext.resolved
 ```
 
@@ -319,7 +482,7 @@ The `before-all` build hook in `.deploy/mta.yaml` copies app builds into the app
 
    ```bash
    cd .deploy && mkdir -p ..deploy_mta_inspect && cd ..deploy_mta_inspect
-   unzip -p ../mta_archives/tutorials-poc_1.0.0.mtar tutorials-approuter/data.zip > approuter.zip
+   unzip -p ../mta_archives/tutorials-ims_1.0.0.mtar tutorials-approuter/data.zip > approuter.zip
    unzip -l approuter.zip | grep <renamed-file>
    ```
 

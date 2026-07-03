@@ -1,5 +1,12 @@
 _schema-version: 3.3.0
-ID: tutorials-poc
+# MTA identity. Renamed from `tutorials-poc` 2026-06-29 (#635). The MTA `ID:`
+# is what Cloud Foundry uses to track the deployment registration. Every
+# `resources:` entry below declares an explicit `service-name:` so the rename
+# does NOT cascade into service-instance recreation — the existing
+# tutorials-hana / tutorials-xsuaa / tutorials-credstore / etc. instances are
+# adopted by the new MTA registration. Runbook:
+# docs/developers/operations/mta-deployment.md §Rename cutover.
+ID: tutorials-ims
 version: 1.0.0
 
 # Full MTA for deploying: db-deployer + CAP srv + approuter (with admin UI).
@@ -7,10 +14,10 @@ version: 1.0.0
 # Usage:
 #   cd .deploy
 #   mbt build
-#   cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext
+#   cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e ../deploy/dev.mtaext
 #
 # Or deploy a single module:
-#   cf deploy mta_archives/tutorials-poc_1.0.0.mtar --module tutorials-srv
+#   cf deploy mta_archives/tutorials-ims_1.0.0.mtar --module tutorials-srv
 
 build-parameters:
   before-all:

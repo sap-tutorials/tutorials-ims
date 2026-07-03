@@ -60,7 +60,7 @@ The XSUAA JWT contains these identity-relevant claims:
   "given_name": "Alice",
   "family_name": "Developer",
   "user_name": "alice@example.com",  // Login name (usually email)
-  "scope": ["tutorials-poc.DeveloperApp", "tutorials-poc.Everyone"],
+  "scope": ["tutorials-ims.DeveloperApp", "tutorials-ims.Everyone"],
   "xs.user.attributes": {
     "email": ["user@example.com"],
     "given_name": ["Alice"],

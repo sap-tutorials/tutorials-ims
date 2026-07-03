@@ -66,8 +66,8 @@ For production deployments, consider removing `optional: true` so a missing serv
 **Option B (recommended):** Use an MTA extension file (`deploy/prod.mtaext`):
 ```yaml
 _schema-version: 3.3.0
-ID: tutorials-poc-prod
-extends: tutorials-poc
+ID: tutorials-ims-prod
+extends: tutorials-ims
 
 resources:
   - name: tutorials-mail
@@ -80,7 +80,7 @@ resources:
 
 Then deploy with:
 ```bash
-cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e deploy/prod.mtaext
+cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e deploy/prod.mtaext
 ```
 
 ---
