@@ -83,6 +83,12 @@ Phase A3 also removed the silent-Admin default for role-less tech-user entries i
 
 Pre-deploy audit: run the DEV/PROD `TenantSettings.techUsers` audit query in the Phase A plan (Check-4/-5) and back-fill any role-less entries via the admin UI (`/admin-ui/#tenants-display`) before shipping.
 
+## Post-Phase-A2 note — hybrid-dev tech-user needs `MobileApp` role
+
+Phase A2 tightened `ScannerService` from `@requires: 'authenticated-user'` to `@requires: 'MobileApp'`. Production traffic through the approuter is unaffected (the approuter route already required `MobileApp` at ingress). But **local hybrid-dev with tech-user Basic auth needs the tech-user's `TenantSettings.techUsers` entry to include `MobileApp` in its role list**, otherwise the srv layer returns 403 on `/scanner/*` calls.
+
+Format: `svc-account:pass:MobileApp` (or `svc-account:pass:Admin,MobileApp` for multi-role tech users).
+
 ## Related docs
 
 - [MTA Deployment Runbook](mta-deployment.md) — see Step 4 for the `cf update-service` command in context.
