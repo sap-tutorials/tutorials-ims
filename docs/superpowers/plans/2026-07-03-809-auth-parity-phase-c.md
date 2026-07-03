@@ -481,7 +481,7 @@ Above the service definition, add:
 
   Run: `grep -rn '// AUTH:' srv/ | wc -l`
 
-  Expected: ~20-30 hits. If < 15, you missed some — cross-check against C5.1–C5.4.
+  Expected: ≥ 20 hits. If < 20, you missed some — cross-check against C5.1–C5.4 (C5.1 alone contributes ~19 individual op annotations plus one service-level, so the floor is tight).
 
 - [ ] **Step C5.5.3: Run `npm test` — annotations should be inert**
 
@@ -619,6 +619,12 @@ Phase B ships the ratchet in warn mode. Phase C's job is to (a) prove the mappin
   Run: `head -50 docs/developers/reference/testing-endpoints.md`
 
   Expected: some markdown tables of endpoints. Identify the columns.
+
+  Then enumerate the number of tables to know the scope of the sweep before starting:
+  ```bash
+  grep -c '^| Endpoint\|^| Method\|^|---' docs/developers/reference/testing-endpoints.md
+  ```
+  Expected: multiple table headers. Count them so you know how many blocks need updating; a single table can be edited row-by-row, but a doc with 10+ tables is better tackled with a small `sed` or table-by-table pass.
 
 - [ ] **Step C7.2: Add a "Required scope" column to each endpoint table**
 
@@ -763,9 +769,20 @@ Phase B ships the ratchet in warn mode. Phase C's job is to (a) prove the mappin
 - [ ] **Step C8.6: Post-deploy smoke**
 
   ```bash
-  # /author/MyTutorials still works for a role-collection-holder (login required)
-  # Should return the caller's tutorials, filter by user_uuid via @restrict
-  # (verify via Playwright or manual browser test)
+  # /author/MyTutorials must remain functional for a real
+  # role-collection-holder AFTER Phase C2 adds the @restrict.
+  # This is the load-bearing verification: @restrict rejects with 403
+  # when the JWT user_uuid claim is empty. Prove the claim is populated
+  # in DEV before considering the deploy soaked.
+  #
+  # Log in via the approuter as a Tutorials Author role-collection
+  # holder, then:
+  APPROUTER="https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com"
+  # (assumes cookies.txt captured post-login; use Playwright otherwise)
+  curl -sb cookies.txt "$APPROUTER/author/MyTutorials?\$top=1" | head -20
+  # Expect: JSON body with at least one row (author's own). 403 or empty
+  # rows means the JWT user_uuid claim is not populated -- investigate
+  # the SAP IDP config before rolling forward.
 
   # /graph/Concepts anonymous PATCH -- should return 403 not 500
   curl -X PATCH "https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/graph/Concepts(guid'00000000-0000-0000-0000-000000000001')" \
@@ -837,12 +854,12 @@ Legend:
 | Legacy endpoint | Legacy guard | CAP equivalent | CAP guard | Disposition |
 |---|---|---|---|---|
 | POST /task-records | Admin, DeveloperApp, MobileApp | `DeveloperService.createTaskRecord` | authenticated-user | ✏️ Annotated (`// AUTH: authenticated-user; user-scoped by JWT user_uuid`). Legacy scope split subsumed by user-uuid axis. |
-| GET /task-records/search/findByAccountNumber | Admin | `ScannerService.getContestant` | MobileApp (post-A2) | ✏️ Annotated (C4). Legacy Admin gate is tighter; CAP MobileApp is looser at caller-eligibility but ingress-scoped to scanner UI. Follow-up ticket for per-user tenant scoping. |
+| GET /task-records/search/findByAccountNumber (scanner path) | Admin | `ScannerService.getContestant` | MobileApp (post-A2) | ✏️ Annotated (C4). Legacy Admin gate is tighter; CAP MobileApp is looser at caller-eligibility but ingress-scoped to scanner UI. Follow-up ticket for per-user tenant scoping. |
 | GET /task-records/download/{fileName}.csv | Admin | `AdminService.exportTaskRecords` | Admin | ✅ parity |
 | GET /task-records/search/findTaskProgressByUserAndTasksIds | Admin, DeveloperApp | `DeveloperService.findTaskProgressByUserAndTasksIds` | authenticated-user | ✏️ Annotated (user-uuid axis). |
 | GET /task-records/search/countCompletedMissionsTotalById | Admin | `DeveloperService.countCompletedMissionsTotal` | authenticated-user | ✏️ Annotated. |
 | GET /task-records/search/countCompletedMissionsPercentById | Admin | `DeveloperService.countCompletedMissionsPercent` | authenticated-user | ✏️ Annotated. |
-| GET /task-records/search/findByAccountNumber | Admin | `AdminService.findByAccountNumber` | Admin | ✅ parity |
+| GET /task-records/search/findByAccountNumber | Admin | `AdminService.findByAccountNumber` (admin path) | Admin | ✅ parity |
 | GET /task-records/sendToNgds | Admin, DeveloperApp | `AdminService.sendToNgds` | Admin | ✅ tighter |
 | POST /task-records | Admin, D, M (repo save) | via `AdminService.TaskRecords` | Admin | ✅ tighter (write requires Admin) |
 | PATCH /prize-records/{id} | Admin, DeveloperApp, MobileApp | `ScannerService.claimPrize` + `AdminService.PrizeRecords` UPDATE | MobileApp (scanner) OR Admin | ✅ parity + tighter |
