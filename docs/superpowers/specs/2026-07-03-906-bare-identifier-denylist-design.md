@@ -36,7 +36,7 @@ HANA identifiers are case-insensitive; `node-sql-parser` preserves the source ca
 
 ### AST shape
 
-`node-sql-parser` surfaces `column_ref.column` as either a bare string primitive (the common case) or as a nested object like `{ expr: { type: 'default', value: 'X' } }` (for quoted / special forms). The walker MUST handle both:
+`node-sql-parser` surfaces `column_ref.column` as either a bare string primitive (the common case) or as a nested object whose `.expr.value` holds the identifier (for quoted / special forms; the `.expr.type` discriminator varies by parser version and is not checked). The walker MUST handle both:
 
 ```js
 const raw = typeof node.column === 'string'
@@ -45,7 +45,7 @@ const raw = typeof node.column === 'string'
 if (!raw) return
 ```
 
-Anything else (missing, non-string, unexpected shape) is skipped — the identifier still flows through the rest of validation and, if genuinely disallowed at HANA, errors at execution. The denylist is a targeted defense, not a general column validator.
+Any nested `.expr.value` string is treated as an identifier candidate — `expr.type` is deliberately ignored so future parser versions don't silently regress the check. Anything else (missing, non-string, unexpected shape) is skipped — the identifier still flows through the rest of validation and, if genuinely disallowed at HANA, errors at execution. The denylist is a targeted defense, not a general column validator.
 
 ### Denylist contents
 
@@ -89,7 +89,7 @@ Consistent voice with the existing `Function '<name>' is not in the analytics fu
 ## Files changed
 
 - **`srv/lib/analytics-sql-validator.cjs`** — add `DENIED_BARE_IDENTIFIERS` set, add `collectBareIdentifiers` walker (same recursive shape as `collectSubqueries` / `collectFunctions`), add one new loop in `validateSelect` after the function-allowlist loop and before AST re-emit.
-- **`test/unit/srv/analytics-sql-validator.pen.test.js`** — un-skip the existing `TODO(#906)` case, drop the TODO comment, add the four additional cases below.
+- **`test/unit/srv/analytics-sql-validator.pen.test.js`** — un-skip the existing `TODO(#906)` case, drop the TODO comment, and add the additional cases enumerated in the Tests section.
 
 Total change: one file of production code (~20 lines added), one test file (~50 lines added, one `.skip` → `.it`).
 
@@ -105,8 +105,9 @@ Un-skip and extend the pen-test suite in `test/unit/srv/analytics-sql-validator.
 6. **New (WHERE clause position):** `SELECT id FROM Users WHERE SYSTEM_USER = 'x'` must throw. Confirms the walker recurses into WHERE predicates, not just the SELECT list.
 7. **New (subquery position):** `SELECT * FROM Users WHERE id IN (SELECT SESSION_USER FROM Users)` must throw. Confirms the walker follows nested SELECT nodes.
 8. **New (positive control — function form still works):** `SELECT CURRENT_DATE() FROM Users` must NOT throw. Pins the bare-vs-function precision — a regression here would break legitimate analytics queries.
-9. **New (positive control — qualified column reference not flagged):** `SELECT Users.SYSTEM_USER FROM Users` must not throw on the identifier walker. It may error later (HANA has no such column), but that is not the validator's concern.
-10. **New (positive control — alias only, not a bare identifier):** `SELECT id AS SYSTEM_USER FROM Users` must not throw. Pins that the walker only inspects `column_ref` nodes, not the `.as` field — documents intent and catches a future refactor that starts walking aliases.
+9. **New (bare `CURRENT_DATE` — pin the dialect quirk):** `SELECT CURRENT_DATE FROM Users` must throw. Whether it fails with the new denylist message (parser classifies as `column_ref`) or with a parse error (MySQL-dialect keyword collision, as with the pre-existing bare `CURRENT_USER` test at line 92 of the pen-test) is acceptable — the test just uses `.toThrow()` without a message matcher. Pins the behavior so a future parser upgrade that flips the classification doesn't silently open a hole.
+10. **New (positive control — qualified column reference not flagged):** `SELECT Users.SYSTEM_USER FROM Users` must not throw on the identifier walker. It may error later (HANA has no such column), but that is not the validator's concern.
+11. **New (positive control — alias only, not a bare identifier):** `SELECT id AS SYSTEM_USER FROM Users` must not throw. Pins that the walker only inspects `column_ref` nodes, not the `.as` field — documents intent and catches a future refactor that starts walking aliases.
 
 All tests run under Vitest's `unit` project — pure logic, no HANA, no CAP boot, no HTTP. Runtime <1 s.
 
@@ -124,7 +125,7 @@ All tests run under Vitest's `unit` project — pure logic, no HANA, no CAP boot
 
 ## Testing plan
 
-- **Unit:** `npm test -- test/unit/srv/analytics-sql-validator.pen.test.js` — must pass all cases including the newly un-skipped one and the four new cases.
+- **Unit:** `npm test -- test/unit/srv/analytics-sql-validator.pen.test.js` — must pass all cases including the newly un-skipped one and all new cases enumerated in the Tests section.
 - **No hybrid, no smoke.** The change never leaves the JS validator module.
 
 ## References
