@@ -6,10 +6,15 @@ const fetchMock = vi.fn()
 ;(globalThis as any).fetch = fetchMock
 
 const { useExport } = await import('../useExport')
+const { _resetCsrfTokenCacheForTests, _seedCsrfTokenForTests } = await import('../../api/csrf-fetch')
 
 describe('useExport', () => {
   beforeEach(() => {
     fetchMock.mockReset()
+    // Pre-seed the CSRF token so csrfFetch() skips the /auth/user handshake
+    // and fetchMock only sees the real POST.
+    _resetCsrfTokenCacheForTests()
+    _seedCsrfTokenForTests('TEST-CSRF')
     // happy-dom doesn't implement createObjectURL — stub it.
     if (!URL.createObjectURL) {
       ;(URL as any).createObjectURL = vi.fn(() => 'blob:fake')

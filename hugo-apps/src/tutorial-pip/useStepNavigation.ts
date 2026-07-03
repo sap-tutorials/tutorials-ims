@@ -1,5 +1,6 @@
 // hugo-apps/src/tutorial-pip/useStepNavigation.ts
 import type { Ref } from 'vue';
+import { csrfFetch } from '@shared/csrf-fetch';
 import type { StepPayload } from '../shared/pip-types';
 
 export function useStepNavigation(
@@ -31,7 +32,7 @@ export function useStepNavigation(
     },
     async completeStep(stepIndex: number): Promise<boolean> {
       try {
-        const res = await fetch('/api/completeStep', {
+        const res = await csrfFetch('/api/completeStep', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },

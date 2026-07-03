@@ -112,6 +112,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
+import { csrfFetch } from '@shared/csrf-fetch'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -173,7 +174,7 @@ async function submit() {
   verdict.value = null
   error.value = null
   try {
-    const res = await fetch('/api/codecheck', {
+    const res = await csrfFetch('/api/codecheck', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },

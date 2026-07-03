@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue'
+import { csrfFetch } from '../api/csrf-fetch'
 
 export type JouleMessage =
   | { id: string; role: 'user'; text: string }
@@ -33,7 +34,7 @@ async function send(prompt: string, pageContext: any) {
         role: m.role,
         content: m.role === 'user' ? (m as any).text : (m as any).text,
       }))
-    const res: any = await fetch('/chat/stream', {
+    const res: any = await csrfFetch('/chat/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ messages: wireMessages, pageContext }),

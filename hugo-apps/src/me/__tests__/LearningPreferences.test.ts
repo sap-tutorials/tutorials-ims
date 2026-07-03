@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import LearningPreferences from '../LearningPreferences.vue';
+import { _resetCsrfTokenCacheForTests, _seedCsrfTokenForTests } from '@shared/csrf-fetch';
 
 function mockFetch(routes: Record<string, () => Promise<any>>) {
   return vi.fn(async (url: string, init?: RequestInit) => {
@@ -18,7 +19,14 @@ function mockFetch(routes: Record<string, () => Promise<any>>) {
 }
 
 describe('LearningPreferences.vue', () => {
-  beforeEach(() => { vi.restoreAllMocks(); });
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // csrfFetch() (used for POST /api/setLearningPreferences) would fire an
+    // extra `GET /auth/user` handshake that mockFetch's strict table throws
+    // on. Seed the token so csrfFetch skips it.
+    _resetCsrfTokenCacheForTests();
+    _seedCsrfTokenForTests('TEST-CSRF');
+  });
 
   it('1. mount fetches /api/LearningPreferences AND /api/ChatConfig; Save button disabled', async () => {
     const fetchMock = mockFetch({

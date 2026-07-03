@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref } from 'vue';
 import { useStepNavigation } from './useStepNavigation';
 import type { StepPayload } from '../shared/pip-types';
+import { _resetCsrfTokenCacheForTests, _seedCsrfTokenForTests } from '@shared/csrf-fetch';
 
 const steps: StepPayload[] = [
   { stepIndex: 1, heading: 'A', html: '<p>a</p>' },
@@ -13,6 +14,10 @@ const steps: StepPayload[] = [
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // Pre-seed the CSRF token so csrfFetch() skips the /auth/user handshake
+  // in tests — keeps the fetch mock queue simple (only real POSTs observed).
+  _resetCsrfTokenCacheForTests();
+  _seedCsrfTokenForTests('TEST-CSRF');
 });
 
 describe('useStepNavigation', () => {

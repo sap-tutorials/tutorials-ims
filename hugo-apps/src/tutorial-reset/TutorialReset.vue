@@ -1,6 +1,7 @@
 <!-- hugo-apps/src/tutorial-reset/TutorialReset.vue -->
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { csrfFetch } from '@shared/csrf-fetch';
 
 interface Props {
   slug: string;
@@ -113,7 +114,7 @@ async function confirmReset() {
   submitting.value = true;
   errorMessage.value = null;
   try {
-    const res = await fetch('/api/resetTutorialProgress', {
+    const res = await csrfFetch('/api/resetTutorialProgress', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',

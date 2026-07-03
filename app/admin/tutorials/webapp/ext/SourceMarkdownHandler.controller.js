@@ -112,14 +112,20 @@ sap.ui.define([
       });
 
       // Call the unbound AdminService action. POST body per OData V4 spec.
-      fetch("/admin/getTutorialSource", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({ slug: sSlug })
+      // CAP OData V4 + XSUAA approuter requires CSRF token on action invocations.
+      // Two-step: GET /admin/ for token, POST with x-csrf-token header.
+      fetch("/admin/", { headers: { "x-csrf-token": "fetch" } }).then(function (tokenRes) {
+        var csrf = tokenRes.headers.get("x-csrf-token");
+        return fetch("/admin/getTutorialSource", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "x-csrf-token": csrf || "fetch"
+          },
+          body: JSON.stringify({ slug: sSlug })
+        });
       }).then(function (res) {
         if (!res.ok) throw new Error("HTTP " + res.status);
         return res.json();

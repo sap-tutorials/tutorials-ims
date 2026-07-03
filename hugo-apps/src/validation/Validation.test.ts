@@ -23,6 +23,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import Validation from './Validation.vue'
 import type { ValidationQuestion } from './grading'
+import { _resetCsrfTokenCacheForTests, _seedCsrfTokenForTests } from '@shared/csrf-fetch'
 
 // ── Test fixtures ─────────────────────────────────────────────────────
 
@@ -63,6 +64,15 @@ function mockFetchResponse(body: object, status = 200) {
 
 function setupFetch() {
   fetchMock = vi.fn()
+  // csrfFetch (used by Validation.vue for POST /api/validate-answer) issues
+  // a `GET /auth/user` with `x-csrf-token: fetch` before the real POST unless
+  // the token cache is pre-seeded. Seed a synthetic token so csrfFetch skips
+  // the token fetch and the mock queue only sees the real POSTs — critical
+  // for tests that assert on signal forwarding / abort semantics where the
+  // extra microtask hop of the token fetch would otherwise defer the real
+  // fetch by one Vue tick.
+  _resetCsrfTokenCacheForTests()
+  _seedCsrfTokenForTests('TEST-CSRF')
   // happy-dom provides fetch but we want to intercept for assertions.
   vi.stubGlobal('fetch', fetchMock)
 }

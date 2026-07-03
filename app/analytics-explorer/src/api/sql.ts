@@ -1,3 +1,5 @@
+import { csrfFetch } from './csrf-fetch'
+
 export interface SqlResult {
   columns: string[]
   rows: Array<Array<string | null>>
@@ -11,7 +13,7 @@ export async function runSelectQuery(
   source: 'builder' | 'editor' | 'joule' | 'replay' = 'editor',
   spec?: string,  // optional JSON-stringified QuerySpec
 ): Promise<SqlResult> {
-  const r = await fetch('/admin/analytics/runSelectQuery', {
+  const r = await csrfFetch('/admin/analytics/runSelectQuery', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ sql, source, ...(spec ? { spec } : {}) }),

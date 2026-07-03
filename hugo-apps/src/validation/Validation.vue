@@ -1,6 +1,7 @@
 <!-- hugo-apps/src/validation/Validation.vue -->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { csrfFetch } from '@shared/csrf-fetch';
 import PreviewAINotice from './PreviewAINotice.vue';
 import {
   gradeAnswers,
@@ -176,7 +177,7 @@ async function gradeAi(slug: string, stepNumber: number, questionId: string, sub
     return { verdict: 'disabled' as const };
   }
   try {
-    const res = await fetch('/api/validate-answer', {
+    const res = await csrfFetch('/api/validate-answer', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',

@@ -74,6 +74,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue';
+import { csrfFetch } from '@shared/csrf-fetch';
 // PR 6: import vocabulary from the single source of truth (single source of
 // truth is srv/lib/branch/profile-fields.js — also imported by the action
 // handler and used by the schema-drift guard test). Vite resolves the relative
@@ -196,7 +197,7 @@ async function onSave() {
   status.value = 'saving';
   if (savedTimer) clearTimeout(savedTimer);
   try {
-    const resp = await fetch('/api/setLearningPreferences', {
+    const resp = await csrfFetch('/api/setLearningPreferences', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       credentials: 'include',
