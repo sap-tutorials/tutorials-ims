@@ -48,7 +48,7 @@ Some findings from these checks may reveal that A3 has more moving parts than th
 
 - [ ] **Check-4: Audit DEV `TenantSettings.techUsers` for role-less entries**
 
-  This is the load-bearing pre-flight check for A3. A production tenant with a role-less entry would crash srv boot after A3 ships.
+  With A3's skip-with-warning refinement (see Task A3), a surviving role-less entry after ship no longer crashes boot — it silently stops authenticating. That's still a UX regression for whoever was using that entry, so this audit remains **strongly recommended** even though it's no longer boot-blocking.
 
   Prereq: `cf login` to the tutorial-system DEV space.
 
@@ -73,7 +73,7 @@ Some findings from these checks may reveal that A3 has more moving parts than th
     })().catch(e => { console.error(e); process.exit(1); });
   "
   ```
-  Expected output: `audit complete` with zero `ROLE-LESS ENTRY` lines. If any appear, **stop Phase A implementation** and back-fill each entry via the admin UI (`/admin-ui/#tenants-display` → edit techUsers to append `:Admin` to each role-less entry) before proceeding. Re-run the audit until it's clean.
+  Expected output: `audit complete` with zero `ROLE-LESS ENTRY` lines. If any appear, back-fill each entry via the admin UI (`/admin-ui/#tenants-display` → edit techUsers to append `:Admin` to each role-less entry) before proceeding. Re-run the audit until it's clean. With A3's skip-with-warning refinement, proceeding without fixing them is technically safe (they just stop working), but the users of those entries deserve the heads-up.
 
 - [ ] **Check-5: Same audit against PROD**
 
@@ -735,6 +735,37 @@ Not a code task — an operational checklist to run before/after merging Phase A
 
 - [ ] **Step A6.1: Open PR from `worktree-809-auth-parity` to `main`**
 
+  First, author the PR body:
+  ```bash
+  cat > /tmp/809-a-pr-body.md <<'EOF'
+  ## Summary
+
+  Phase A of the auth-parity effort (#809). Three commits, each an independent misconfig fix:
+
+  1. **A1** — Remove `Tutorial.Author` from top-level `authorities` in `xs-security.json`. QA-preview and `/author/*` now require explicit `Tutorials Author` role-collection assignment.
+  2. **A2** — Tighten `ScannerService` from `@requires: 'authenticated-user'` to `@requires: 'MobileApp'`. Closes the direct-srv-URL bypass.
+  3. **A3** — Drop the silent-Admin default in tech-user auth. Role-less entries are now skipped with a warning (refined from spec's "throw" to avoid boot-crash on operator misconfig).
+
+  Plus documentation: new `xsuaa-role-collection-assignment.md` runbook and expanded `mta-deployment.md` Step 4.
+
+  ## Deploy checklist
+
+  - [ ] DEV `cf update-service tutorial-system-dev-tutorials-xsuaa -c xs-security.json` after deploy
+  - [ ] `TenantSettings.techUsers` audit run against DEV as part of this deploy (see plan Check-4)
+  - [ ] `Tutorials Author` role-collection granted to the current QA-author list before deploy
+
+  ## Rollback
+
+  Each of A1/A2/A3/A4 reverts independently. A1 rollback requires re-running `cf update-service`.
+
+  Full plan: `docs/superpowers/plans/2026-07-03-809-auth-parity-phase-a.md`.
+  Master spec: `docs/superpowers/specs/2026-07-03-809-authorization-parity-design.md`.
+
+  Refs #809.
+  EOF
+  ```
+
+  Then open the PR:
   ```bash
   gh pr create --repo sap-tutorials/tutorials-ims \
     --base main \
@@ -742,8 +773,6 @@ Not a code task — an operational checklist to run before/after merging Phase A
     --title "fix(#809): auth-parity Phase A — three misconfiguration fixes" \
     --body-file /tmp/809-a-pr-body.md
   ```
-
-  (Author the body inline covering: three commits, rollback plan, operational impact on QA authors, tech-user audit results.)
 
 - [ ] **Step A6.2: Confirm CI passes on the PR**
 
