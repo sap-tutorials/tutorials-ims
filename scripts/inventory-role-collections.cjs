@@ -69,19 +69,19 @@ async function main() {
   const btp = await loadBtpLib();
 
   const target = await btp.getCurrentTarget();
-  if (!target || !target.subaccount) {
+  if (!target || !target.subaccountSubdomain) {
     console.error('btp target returned no subaccount. Run `btp login` first.');
     process.exit(2);
   }
-  if (target.subaccount !== subaccount) {
+  if (target.subaccountSubdomain !== subaccount) {
     console.error(
-      `Subaccount mismatch. --subaccount=${subaccount} but btp target shows ${target.subaccount}. ` +
+      `Subaccount mismatch. --subaccount=${subaccount} but btp target shows ${target.subaccountSubdomain}. ` +
       `Run \`btp target --subaccount ${subaccount}\` first.`
     );
     process.exit(2);
   }
 
-  console.log(`Targeting subaccount: ${target.subaccount} (${target.globalAccount || 'unknown global'})`);
+  console.log(`Targeting subaccount: ${target.subaccountSubdomain} (${target.globalAccountSubdomain || 'unknown global'})`);
 
   const collections = await btp.listRoleCollections();
   const tutorialsCollections = collections.filter(c =>
@@ -101,8 +101,8 @@ async function main() {
 
   const inventory = {
     capturedAt: new Date().toISOString(),
-    subaccount: target.subaccount,
-    globalAccount: target.globalAccount,
+    subaccount: target.subaccountSubdomain,
+    globalAccount: target.globalAccountSubdomain,
     expectedXsappname: 'tutorials-poc',   // what we expect pre-rename
     collections: [],
   };

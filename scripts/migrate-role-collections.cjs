@@ -105,14 +105,14 @@ function loadInventory(path) {
 
 async function assertSameSubaccount(btp, inventory) {
   const target = await btp.getCurrentTarget();
-  if (!target || !target.subaccount) {
+  if (!target || !target.subaccountSubdomain) {
     console.error('btp target returned no subaccount. Run `btp login` first.');
     process.exit(2);
   }
-  if (target.subaccount !== inventory.subaccount) {
+  if (target.subaccountSubdomain !== inventory.subaccount) {
     console.error(
       `Subaccount mismatch. Inventory was captured in "${inventory.subaccount}" ` +
-      `but btp target is "${target.subaccount}". Switch subaccount first.`
+      `but btp target is "${target.subaccountSubdomain}". Switch subaccount first.`
     );
     process.exit(2);
   }
