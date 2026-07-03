@@ -33,6 +33,11 @@ const ALLOWED_FUNCTIONS = new Set([
 // HANA SQL Reference (HANA Cloud QRC 2026-Q2), sections "Predefined Special
 // Registers" and "Session Variables". Additions when SAP publishes new
 // registers are one-line PRs against this set.
+//
+// NOTE: CURRENT_DATE / CURRENT_TIME / CURRENT_TIMESTAMP currently parse as
+// `function` nodes (already gated by ALLOWED_FUNCTIONS above) — they are
+// kept here defensively so a future parser-version bump that reclassifies
+// them as column_ref doesn't silently re-open the gap.
 const DENIED_BARE_IDENTIFIERS = new Set([
   'SYSTEM_USER', 'SESSION_USER', 'CURRENT_USER',
   'CURRENT_SCHEMA', 'CURRENT_CLIENT',
