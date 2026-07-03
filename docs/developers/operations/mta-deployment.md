@@ -345,6 +345,25 @@ Same procedure, scheduled into the end-of-July 2026 AEM→IMS PROD window. Diffe
 
 The issue's original runbook assumed renaming the MTA `ID:` forced full service-instance recreation. That's only true when `resources:` entries lack explicit `service-name:` declarations. **This codebase already declares `service-name:` on every resource** (see `.deploy/mta.yaml:211-289`), which decouples instance identity from MTA identity. The `--delete-services` flag would actively destroy HANA schemas, force a fresh HDI deploy, and require restoring data from snapshot — the destructive path is exactly what `service-name:` is designed to avoid.
 
+### Post-cutover lessons (2026-07-03 DEV cutover incident)
+
+The first DEV cutover surfaced three failure modes not captured by the original runbook. Fixed by [PR #809-rename-followups](https://github.com/sap-tutorials/tutorials-ims/pull) but worth documenting here for the PROD cutover:
+
+**1. `deploy/*.mtaext` `extends:` field must match the new MTA `ID:`.** The original rename PR flipped `mta.yaml`'s `ID: tutorials-poc` → `tutorials-ims` but left all three `deploy/*.mtaext` files with `extends: tutorials-poc`. The MTA deployer silently ignores an extension whose `extends:` doesn't match the base MTA ID. Effect: every override in `dev.mtaext` (env vars, `app-name`, etc.) was dropped. `tutorials-srv` came up without `CONTENT_API_KEY` / `KNOWLEDGE_GRAPH_ENABLED` / `EXPOSE_CAP_UI`. Fix: update the `extends:` and `ID:` lines in all three mtaext files.
+
+**2. XSUAA broker refuses in-place `xsappname` renames.** The runbook (§Cutover step 2) says `cf update-service tutorials-xsuaa -c xs-security.json` runs as part of MTA deploy. That's true, but if `xs-security.json`'s `xsappname` differs from what the deployed service already has, the broker rejects with `Cannot change AppId with update. Old AppId: X!t<n> New AppId: Y!t<n>`. Even a fresh xsuaa service instance can't claim an AppId that's already registered on the tenant server (a "ghost" from any prior deploy attempt — including one that failed partway). The correct sequence for a rename is:
+- Pre-flight inventory (`scripts/inventory-role-collections.cjs`)
+- Delete xsuaa: unbind from apps → `cf delete-service tutorials-xsuaa`
+- **Pre-create the new xsuaa MANUALLY, outside MTA:** `cf create-service xsuaa application tutorials-xsuaa -c xs-security.json`. This applies the `xsappname` at creation time, which MTA's own `create-service` call sometimes fails to do (it created a service with a random-UUID `xsappname` in the DEV cutover; the fix was to pre-create manually so MTA adopts by `service-name:`).
+- Deploy the MTA (adopts the pre-created service).
+- Restore user assignments (`scripts/migrate-role-collections.cjs --restore --commit`).
+
+**3. MTA `cf deploy` fails with `Controller operation failed: 500 Internal Server Error: UnknownError(10001)` when an app has stale build state.** The multiapps plugin's `UploadAppStep` calls `getBuildsForApplication` before uploading. If the app has any lingering build record from a prior partial deploy or manual `cf push`, that call returns 500 and blocks the deploy indefinitely (3 automatic retries all fail). Manual `cf push` of the same content works fine — this is specific to the multiapps controller. **Recovery:** `cf delete <app-name> -f` (after unbinding services). The next MTA deploy re-creates the app fresh with clean build state. Applies to any app that has been touched by manual `cf push` OR by an aborted MTA deploy.
+
+**4. When the ghost `xsappname` collides.** If `tutorials-ims!t<n>` is registered on the tenant XSUAA server from an earlier failed attempt, no service instance can claim it. Change `xs-security.json` to a different xsappname (e.g. `tutorials`) to sidestep the ghost. The tenant AppId is minted for as long as the tenant exists; it cannot be reaped from the CF/BTP side.
+
+Estimated PROD-cutover time impact: add ~30 minutes for the pre-create-service step + user-assignment restore, and expect that a full cf-deploy after xsuaa recreation may require deleting 3-4 apps to clear stale build state before it succeeds. Blue-green strategy in PROD does not avoid these issues — it just delays them to the swap phase.
+
 
 
 A reference of pitfalls discovered while deploying this project's MTA. Each subsection is a single discovered failure mode with cause and fix. Originally maintained as agent-memory entries; promoted here 2026-06-24 so future deployers find them via the sidebar instead of re-discovering them.
