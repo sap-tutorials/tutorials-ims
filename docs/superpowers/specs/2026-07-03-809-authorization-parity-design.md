@@ -181,16 +181,16 @@ For a small (~15–20 case) integration set that proves the whole auth chain end
 
 Uses `jose` to sign JWTs with a per-test-run RSA keypair; the public JWK is served from an in-process HTTP mock on a random port. `@sap/xssec` is pointed at that mock via `VCAP_SERVICES.xsuaa[0].credentials.url` env var. Same pattern as existing `test/hybrid/kg-*` tests — formalizing, not inventing.
 
-Cases:
+Cases (all assume Phase A has already merged — the `/scanner/*` and `/tutorials-qa/*` cases below only pass once A2 and A1 respectively are in `main`):
 - `/admin/*` — `Admin` → 200; anonymous → 401; only `DeveloperApp` → 403
 - `/author/*` — `Tutorial.Author` → 200; anonymous → 401
 - `/display/*` — `DisplayApp` → 200; anonymous → 401
 - `/api/v1/user-merge/*` — `ConsolidationScope` → 200; wrong scope → 403
 - `/graph/runSparql` — `KnowledgeGraph.Admin` → 200; anonymous → 401
 - `/graph/neighborhood` — anonymous → 200 (proves public-KG allowlist end-to-end)
-- `/scanner/*` — `MobileApp` → 200; only `authenticated-user` → 403 (proves Phase A2)
+- `/scanner/*` — `MobileApp` → 200; only `authenticated-user` → 403 (**depends on Phase A2 being in `main`**)
 - `/content/publish` — bearer positive → 200; missing → 401; wrong → 403
-- `/tutorials-qa/*` — `Tutorial.Author` → 200; without → 401 (proves Phase A1)
+- `/tutorials-qa/*` — `Tutorial.Author` → 200; without → 401 (**depends on Phase A1 being in `main`**)
 
 #### B5 — Coverage gaps closed
 
@@ -218,9 +218,10 @@ Placement: `scripts/check-auth-matrix-completeness.cjs`.
 
 #### B7 — Non-negotiables
 
-- Every `.auth.test.js` file MUST include an "unauthenticated" case for every action (empty scopes → 401). At minimum, that proves the guard exists.
+- Every `.auth.test.js` file MUST include an "unauthenticated" case for every action that asserts the **documented outcome** — 401/403 for gated actions; reaches-handler for anonymous-by-design (`/api/ui-event`, `HomepageService.recordRedirectHits`, `submitTutorialFeedback`, `SearchService`, `EventStreamService`, KG public-allowlist). The point is proving the guard behaves as documented, not that every action rejects anonymous.
 - Every action defined in `srv/*.cds` MUST appear in the matrix (enforced by B6).
-- Assertion count target: ≥ 200 across `test/auth/**` (legacy Java had ~460 across a larger surface).
+- Assertion count target: ≥ 200 across `test/auth/**` AND ≥ 5 cases per CDS-service `.auth.test.js` file (per-service floor prevents one large file inflating the total while others are thin). Legacy Java had ~460 across a larger surface.
+- Tests that assert C-phase tightened behavior are added in Phase B as `it.todo` or `it.skip` with a `// unskip in Phase C — <reason>` comment. The Phase C plan author can grep this marker to find them mechanically.
 
 ### Phase C — Per-action tightening (pragmatic parity)
 
@@ -336,7 +337,7 @@ Platform-fact content (scope list, role-collection names, mapping table) goes in
 - [ ] 3 unit tests exist (`test/unit/xs-security-authorities.test.js`, extended `scanner-service-auth.test.js`, extended `tech-user-auth.test.js`)
 - [ ] `docs/developers/operations/xsuaa-role-collection-assignment.md` exists and covers current holders, cockpit + `btp` CLI grant procedure, audit
 - [ ] Deploy runbook step for `cf update-service xsuaa` added to `mta-deployment.md`
-- [ ] `TenantSettings.techUsers` audit run against DEV and PROD; role-less entries back-filled
+- [ ] `TenantSettings.techUsers` audit run against DEV and PROD **as part of this deploy** (not a prior audit — config drift can reintroduce role-less entries between an earlier audit and the actual ship); role-less entries back-filled
 - [ ] PR merged, deployed to DEV, `cf update-service` executed, one working-day soak
 - [ ] `/auth/user` shows expected `isAuthor` value for both a role-collection-holder and a non-holder (Playwright verification)
 
@@ -345,7 +346,7 @@ Platform-fact content (scope list, role-collection names, mapping table) goes in
 - [ ] `test/auth/_harness/` contains `with-user.js`, `http-fixture.js`, `fake-xsuaa.js`, `matrix.js`
 - [ ] `test/auth/services/` contains one `.auth.test.js` per CDS service (12 services)
 - [ ] `test/auth/express/` contains one `.auth.test.js` per Express-route group (~12 files)
-- [ ] Total assertion count ≥ 200
+- [ ] Total assertion count ≥ 200 across `test/auth/**` AND ≥ 5 cases per CDS-service `.auth.test.js` file
 - [ ] Every action in `srv/*.cds` appears in the matrix (proved by `scripts/check-auth-matrix-completeness.cjs` in warn mode)
 - [ ] Existing `test/unit/*-auth*.test.js` files remain green
 - [ ] `test/auth/**` completes in < 30s locally
@@ -514,3 +515,4 @@ Skeleton established in Phase C — Section C1. Full population happens in the P
 ## Change log
 
 - **2026-07-03** — Initial draft. Brainstorming session with Thomas Jung. Design decisions locked: full parity scope; A/B/C decomposition; single master spec covering all three phases; `Tutorial.Author` auto-grant removed; hybrid test framework (in-process + signed-JWT HTTP tier); pragmatic parity for Phase C (`rebuildContent` stays Admin; ScannerService gets tenant-scope check).
+- **2026-07-03** — Spec-review approved (advisory-only findings). Softened B7 non-negotiables to distinguish gated vs anonymous-by-design actions; added per-service assertion floor (≥ 5 per file); called out that C-dependent tests in Phase B are added as `it.todo`/`it.skip` with a `// unskip in Phase C` marker; tightened A3 deploy-checklist wording to gate on a same-deploy `techUsers` audit; annotated HTTP-tier cases with explicit "depends on Phase A[1|2] in `main`".
