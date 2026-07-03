@@ -39,17 +39,25 @@ export const MIN_SEARCH_CHARS = 2
 
 const escOData = (v: string) => v.replace(/'/g, "''")
 
-// Build the `getFacets(...)` URL using OData V4 parameter aliases. Inline
-// collection literals in a URL segment are `["a","b"]` (JSON array, double
-// quotes), NOT the OData string-literal form `['a','b']` — the latter is a
-// v2-era artifact that CAP's v4 parser rejects with HTTP 400
-// `Invalid value: taskTypes`. Aliases keep the JSON payload out of the URL
-// path, so URLSearchParams handles all encoding for us and single quotes in
-// the search term don't need to be doubled twice (once for OData, once for
-// URL). See issue #869.
+// Build the `getFacets(...)` URL using OData V4 parameter aliases.
+//
+// Scalar-vs-array literal shapes differ, and CAP's v4 parser is strict:
+//   - Scalar `String` params require the OData string-literal form
+//     `'abap'` (single quotes, internal quotes doubled). JSON-quoted
+//     `"abap"` is rejected with HTTP 400 `Expected ... a single quoted
+//     string ... but "\"" found.` This is the regression behind #943;
+//     the prior fix for #869 emitted JSON here and worked against the
+//     older parser but broke when @sap/cds tightened.
+//   - Array params (`taskTypes`, `experience`) accept JSON collection
+//     literals: `["TUTORIAL"]` (double quotes). The v2-era OData form
+//     `['TUTORIAL']` is still rejected.
+//
+// Aliases keep the payload out of the URL path so URLSearchParams
+// handles URL-level encoding. See issues #869 (initial fix) and #943
+// (regression + this fix).
 export function buildFacetsUrl(term: string, taskTypes: string[], experience: string[]): string {
   const q = new URLSearchParams()
-  q.set('@s', JSON.stringify(term))
+  q.set('@s', `'${escOData(term)}'`)
   const params: string[] = ['search=@s']
   if (taskTypes.length) {
     q.set('@t', JSON.stringify(taskTypes.map(t => t.toUpperCase())))
