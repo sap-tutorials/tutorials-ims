@@ -65,7 +65,8 @@ describe('Notification reset on review', () => {
 
       // #450: after review, the row should be queryable from MyTutorialsView
       // and outdated should be false (notificationNumber=0 < 4).
-      const reviewedRow = await SELECT.one.from(MyTutorialsView).where({ ID: tutorialId });
+      // The view's key is tutorial_ID (not ID) — see db/views.cds line 271.
+      const reviewedRow = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: tutorialId });
       expect(reviewedRow).toBeTruthy();  // confirms the inner-join with Users resolves
       expect(reviewedRow.notificationNumber).toBe(0);
     });

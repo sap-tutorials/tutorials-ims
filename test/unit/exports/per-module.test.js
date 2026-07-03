@@ -66,7 +66,7 @@ describe('exports/task-records', () => {
 
   it('emits the legacy IMS_TASK_RECORD header', () => {
     expect(mod.legacyHeader).toEqual([
-      'ID', 'USER_ID', 'TASK_ID', 'TASK_TYPE', 'STATUS', 'PROGRESS',
+      'ID', 'USER_ID', 'TASK_ID', 'TASK_TYPE', 'STATUS', 'PROGRESS', 'ATTEMPT_NUMBER',
       'COMPLETION_TIME', 'COMPLETION_DATE', 'CONTENT_LANGUAGE', 'SITE_LANGUAGE',
       'SUBMISSION_ID_STARTED', 'SUBMISSION_ID_COMPLETED', 'TITLE_SNAPSHOT',
       'PROGRESS_NOTE', 'EVENT', 'CREATED_AT', 'MODIFIED_AT'
@@ -90,9 +90,10 @@ describe('exports/task-records', () => {
     expect(typeof rows[0][0]).toBe('string'); // ID is UUID string
     expect(rows[0][1]).toBe(userId);            // USER_ID
     expect(rows[0][2]).toBe(101);               // TASK_ID = taskLegacyId
+    // #600 ATTEMPT_NUMBER at index 6 shifted COMPLETION_DATE to index 8.
     // First row was COMPLETED (legacyId:1, ordered first)
-    expect(rows[0][7]).toBeTruthy();            // COMPLETION_DATE present
-    expect(rows[1][7] ?? '').toBe('');          // COMPLETION_DATE empty for IN_PROGRESS
+    expect(rows[0][8]).toBeTruthy();            // COMPLETION_DATE present
+    expect(rows[1][8] ?? '').toBe('');          // COMPLETION_DATE empty for IN_PROGRESS
   });
 });
 

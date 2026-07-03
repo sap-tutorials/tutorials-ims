@@ -123,7 +123,7 @@ describe('hugo homepage partials render against normalized browse.json', () => {
       );
     }
     expect(r.status).toBe(0);
-  });
+  }, 60_000);
 
   it('renders the featured-missions teaser on the homepage', () => {
     const homepageHtml = join(PUBLIC_DIR, 'index.html');

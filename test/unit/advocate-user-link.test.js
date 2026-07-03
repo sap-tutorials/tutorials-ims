@@ -113,13 +113,18 @@ describe('/api/advocates — email + tutorials shaping', () => {
   });
 
   it('includes authoredTutorials sorted by title when linked user authored some', async () => {
-    const { Advocates, Users, Tutorials } = cds.entities('com.sap.developers.ims');
+    const { Advocates, Users, Tutorials, TutorialMeta } = cds.entities('com.sap.developers.ims');
     await INSERT.into(Users).entries({ uuid: 'pub-2', email: 'pub2@example.com' });
     const u = await SELECT.one.from(Users).where({ uuid: 'pub-2' });
     await INSERT.into(Tutorials).entries([
       { slug: 't-zebra', title: 'Zebra Tutorial', author_ID: u.ID },
       { slug: 't-apple', title: 'Apple Tutorial', author_ID: u.ID },
     ]);
+    // #777: MyTutorialsView inner-joins TutorialMeta — without a row, the
+    // author signal from Tutorials never reaches the view. Real production
+    // data always has a TutorialMeta row (created during fetch).
+    const tutorialRows = await SELECT.from(Tutorials).where({ author_ID: u.ID });
+    await INSERT.into(TutorialMeta).entries(tutorialRows.map((t) => ({ tutorial_ID: t.ID })));
     await INSERT.into(Advocates).entries({ slug: 'public-authored', firstName: 'P', lastName: 'A', isActive: true, user_ID: u.ID });
     const body = await fetchAdvocates();
     const adv = body.advocates.find((a) => a.slug === 'public-authored');

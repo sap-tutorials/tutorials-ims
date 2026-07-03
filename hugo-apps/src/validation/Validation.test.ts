@@ -451,7 +451,9 @@ describe('Validation.vue — #235 component flow', () => {
     // 1. The fieldset (form) is still in the DOM — the whole question +
     //    answer should remain visible, NOT vanish.
     expect(wrapper.find('fieldset.validation-question').exists()).toBe(true)
-    expect(wrapper.find('ui5-textarea').exists()).toBe(true)
+    // ui5-textarea is stubbed via global.stubs so the rendered tag is
+    // <ui5-textarea-stub> (Vue Test Utils' default anonymous-stub name).
+    expect(wrapper.find('ui5-textarea-stub').exists()).toBe(true)
 
     // 2. The answer text survives the lock — `answers.value['q-ai']`
     //    still holds what the learner typed, so the textarea's `:value`
@@ -489,7 +491,7 @@ describe('Validation.vue — #235 component flow', () => {
     )
 
     expect(getVm(wrapper).result).toBe('partial')
-    expect(wrapper.find('ui5-textarea').exists()).toBe(true)
+    expect(wrapper.find('ui5-textarea-stub').exists()).toBe(true)
     // Answer preserved even in partial state (the textarea was never
     // unmounted, so the typed text remained in the ref).
     const answersMap = (wrapper.vm as unknown as VmExposed & { answers: Record<string, string> }).answers

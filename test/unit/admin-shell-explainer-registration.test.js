@@ -27,10 +27,12 @@ describe('admin-shell explainer-app registration (#759 PR 3b)', () => {
     expect(targets['shelfDefinitionsTarget']?.usage).toBe('shelfDefinitionsComponent');
   });
 
-  it('navigation.json adds Verb Definitions + Shelf Definitions to the Content group', () => {
-    const content = NAV.groups.find(g => g.title === 'Content' || g.key === 'content');
-    expect(content).toBeTruthy();
-    const items = content.items.map(i => i.key);
+  it('navigation.json adds Verb Definitions + Shelf Definitions to the Homepage group', () => {
+    // Placement was moved from the Content group to homepageGroup after the
+    // #759 PR-3b landing — explainers are intrinsically homepage-scoped.
+    const homepage = NAV.groups.find(g => g.key === 'homepageGroup');
+    expect(homepage).toBeTruthy();
+    const items = homepage.items.map(i => i.key);
     expect(items).toContain('verbDefinitions');
     expect(items).toContain('shelfDefinitions');
   });

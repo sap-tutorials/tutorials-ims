@@ -19,6 +19,12 @@ export default defineConfig({
           environment: 'node',
           include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts', 'scripts/**/__tests__/**/*.test.ts', 'srv/**/__tests__/**/*.test.{js,ts}', 'app/analytics-explorer/src/**/__tests__/**/*.test.ts', 'app/explore/src/**/__tests__/**/*.test.ts', 'hugo-apps/src/**/*.{test,spec}.{js,ts}'],
           exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**'],
+          // testTimeout raised to 30s because the `test/unit/check-*.test.ts`
+          // cluster spawns `npx tsx <script>` per-`it` — cold TSX + child process
+          // startup on Windows can breach the vitest default (5s). Project
+          // configs don't inherit the outer `test.testTimeout`; the value must
+          // live here.
+          testTimeout: 30_000,
           hookTimeout: 60000,
           env: { NO_TELEMETRY: 'true' }
         },
