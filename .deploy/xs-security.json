@@ -1,5 +1,5 @@
 {
-  "xsappname": "tutorials-ims",
+  "xsappname": "tutorials",
   "tenant-mode": "dedicated",
   "description": "Deployment creates a dedicated XSUAA instance (tutorials-xsuaa) via org.cloudfoundry.managed-service in mta.yaml.",
   "scopes": [
