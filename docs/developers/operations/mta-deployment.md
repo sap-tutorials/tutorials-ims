@@ -95,19 +95,23 @@ Use `--dry-run` to preview, `--force` to skip delta detection, `--verbose` for e
 
 ## Step 4: XSUAA Role Collections
 
-Role collections are defined in `xs-security.json` and created automatically when the XSUAA service instance is created/updated. To manually refresh:
+Role collections are defined in `xs-security.json` and created automatically when the XSUAA service instance is created via MTA deploy. **Any subsequent change to `xs-security.json` (scope add/remove, role template edit, or authorities-array change) requires a manual `cf update-service` to reconcile the deployed instance.** The MTA `cf deploy` command alone does NOT re-read `xs-security.json`.
 
 ```bash
-cf update-service tutorials-xsuaa -c xs-security.json
+cf update-service tutorial-system-dev-tutorials-xsuaa -c xs-security.json
 ```
+
+This is a well-known trap. Ship the `cf update-service` step in the same change window as the code deploy.
+
+**Post-Phase-A1 (#809):** the `Tutorial.Author` scope is no longer auto-granted. Users needing QA-preview access must be explicitly assigned to the `Tutorials Author` role collection. See [xsuaa-role-collection-assignment.md](xsuaa-role-collection-assignment.md) for the full runbook.
 
 **Assign users to role collections** in BTP Cockpit:
 
 1. Navigate to Security → Role Collections
-2. Find "Tutorials Admin" / "Tutorials Developer" / "Tutorials Display"
+2. Find "Tutorials Admin" / "Tutorials Developer" / "Tutorials Display" / "Tutorials Author" / "Tutorials Scanner" / "Tutorials SuperAdmin"
 3. Add users (e-mail addresses from SAP IDP)
 
-Note: CF CLI cannot assign users to role collections — this is a BTP subaccount-level operation.
+Note: CF CLI cannot assign users to role collections — this is a BTP subaccount-level operation. Use `btp` CLI for CI/scripted assignments (see the assignment runbook).
 
 ## Step 5: Verify Deployment
 

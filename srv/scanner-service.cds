@@ -1,7 +1,7 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 
 @path: '/scanner'
-@requires: 'authenticated-user'
+@requires: 'MobileApp'
 service ScannerService {
 
   function getContestant(accountNumber : String) returns {
