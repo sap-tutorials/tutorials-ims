@@ -25,6 +25,31 @@ const ALLOWED_FUNCTIONS = new Set([
   // conditional (note: CASE/WHEN/THEN/ELSE/END are AST nodes, not function calls — handled separately)
 ])
 
+// HANA reserved session-context and system pseudocolumns that node-sql-parser
+// (MySQL dialect) parses as bare column_ref AST nodes rather than function
+// calls. Without this denylist, `SELECT SYSTEM_USER FROM Users` slips past
+// the function-allowlist walker below — see #906. Names stored upper-case
+// and compared upper-case (HANA identifiers are case-insensitive). Sourcing:
+// HANA SQL Reference (HANA Cloud QRC 2026-Q2), sections "Predefined Special
+// Registers" and "Session Variables". Additions when SAP publishes new
+// registers are one-line PRs against this set.
+//
+// NOTE: CURRENT_DATE / CURRENT_TIME / CURRENT_TIMESTAMP currently parse as
+// `function` nodes (already gated by ALLOWED_FUNCTIONS above) — they are
+// kept here defensively so a future parser-version bump that reclassifies
+// them as column_ref doesn't silently re-open the gap.
+const DENIED_BARE_IDENTIFIERS = new Set([
+  'SYSTEM_USER', 'SESSION_USER', 'CURRENT_USER',
+  'CURRENT_SCHEMA', 'CURRENT_CLIENT',
+  'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP',
+  'CURRENT_UTCDATE', 'CURRENT_UTCTIME', 'CURRENT_UTCTIMESTAMP',
+  'CURRENT_CONNECTION', 'CURRENT_OBJECT_SCHEMA', 'CURRENT_SITE_ID',
+  'CURRENT_MVCC_SNAPSHOT_TIMESTAMP',
+  'CURRENT_TRANSACTION_ISOLATION_LEVEL',
+  'CURRENT_UPDATE_STATEMENT_SEQUENCE',
+  'SYSUUID',
+])
+
 function validateSelect(sql, allowedTableNames) {
   if (!sql || !sql.trim()) {
     throw new Error('SQL is empty or missing')
@@ -69,6 +94,17 @@ function validateSelect(sql, allowedTableNames) {
   for (const fn of calledFunctions) {
     if (!ALLOWED_FUNCTIONS.has(fn)) {
       throw new Error(`Function '${fn}' is not in the analytics function allowlist`)
+    }
+  }
+
+  // Bare-identifier denylist: HANA session-context names like SYSTEM_USER
+  // parse as column_ref nodes, not function calls, and would otherwise slip
+  // past the function-allowlist path above. See #906.
+  const bareIdentifiers = new Set()
+  collectBareIdentifiers(ast, bareIdentifiers)
+  for (const id of bareIdentifiers) {
+    if (DENIED_BARE_IDENTIFIERS.has(id)) {
+      throw new Error(`Identifier '${id}' is a reserved session-context name and not allowed as a bare column reference`)
     }
   }
 
@@ -120,6 +156,25 @@ function collectFunctions(node, out) {
     out.add(node.name.toUpperCase())
   }
   for (const v of Object.values(node)) collectFunctions(v, out)
+}
+
+function collectBareIdentifiers(node, out) {
+  if (!node || typeof node !== 'object') return
+  if (Array.isArray(node)) { node.forEach(n => collectBareIdentifiers(n, out)); return }
+  // A column_ref with no table qualifier is a bare identifier. Qualified
+  // references (Users.SYSTEM_USER) are legitimate column reads and left alone.
+  // node-sql-parser surfaces column_ref.column either as a bare string primitive
+  // or as a nested object whose .expr.value holds the identifier; we handle
+  // both without inspecting .expr.type (varies by parser version).
+  if (node.type === 'column_ref' && (!node.table || node.table === '')) {
+    const raw = typeof node.column === 'string'
+      ? node.column
+      : (node.column?.expr?.value ?? null)
+    if (raw && typeof raw === 'string' && raw !== '*') {
+      out.add(raw.toUpperCase())
+    }
+  }
+  for (const v of Object.values(node)) collectBareIdentifiers(v, out)
 }
 
 module.exports = { validateSelect }
