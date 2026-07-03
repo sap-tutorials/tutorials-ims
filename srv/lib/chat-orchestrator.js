@@ -5,6 +5,8 @@ import { specToSql } from './spec-to-sql.mjs';
 import { getAnalyticsContext } from './analytics-llm-context.js';
 import { GET_BRANCH_RECOMMENDATION_TOOL, getBranchRecommendationHandler } from './branch/joule-tool.js';
 import { FIND_LEARNING_PATH_TOOL, findLearningPathHandler } from './kg/joule-tool-find-path.js';
+import { EXPAND_SEARCH_CONCEPTS_TOOL, expandSearchConceptsHandler } from './kg/joule-tool-expand-concepts.js';
+import { embed as embedInputs } from './embedding-client.js';
 
 const LOG = cds.log('chat');
 const MAX_TURNS = 5;
@@ -13,6 +15,27 @@ const MAX_TURNS = 5;
 // (deploymentId, model) combination. Repeats are silenced so a misconfigured
 // embedding deployment doesn't flood cf logs with thousands of identical lines.
 const ragWarnedKeys = new Set();
+
+/**
+ * Adapt the shared `embed(inputs, model)` client (batched, retry-wrapped)
+ * to the single-string `{ embed(text, opts?) => Promise<Float32Array> }`
+ * shape used by KG tools. Mirrors the identical wrapper in
+ * srv/jobs/concept-embedding-backfill.js — keeping the two in sync means
+ * either both work or neither does.
+ *
+ * The signal option is accepted for API compatibility with the KG-tool DI
+ * contract (see joule-tool-expand-concepts.js § embed with AbortSignal) but
+ * the underlying batched client doesn't currently plumb it through; the
+ * handler's wall-clock deadline is the real backstop.
+ */
+function defaultEmbedClient(model) {
+  return {
+    async embed(text /* , opts */) {
+      const [vec] = await embedInputs([text], model);
+      return vec;
+    },
+  };
+}
 
 const SEARCH_TUTORIALS_TOOL = {
   type: 'function',
@@ -193,13 +216,27 @@ const GET_DEVTOBERFEST_INFO_TOOL = {
   }
 };
 
-async function toolsForContext({ pageContext, isAdmin }) {
+/**
+ * Pure, synchronous tool-registry builder. Given the ChatSettings row (or a
+ * plain-object subset in tests) plus pageContext/isAdmin, returns the list
+ * of tool descriptors to expose to the LLM on this turn.
+ *
+ * Kept synchronous and side-effect-free so unit tests can call it without
+ * booting CAP or seeding DB — see test/chat-orchestrator-search-expansion.test.js.
+ * `toolsForContext` is the caller-facing async wrapper that fetches settings
+ * from DB.
+ *
+ * pageContext / isAdmin default to a standard learner context (kind: 'generic',
+ * not admin) when omitted — matches what a bare `buildToolRegistry({ settings })`
+ * call in tests should reasonably return.
+ */
+export function buildToolRegistry({ settings, pageContext, isAdmin = false } = {}) {
   if (pageContext?.kind === 'devtoberfest') {
     // Devtoberfest pages get a scoped tool set: catalog search (the persona
     // instructs the model to pass tags=['devtoberfest']) + the dedicated
     // event-data tool. Feature-flagged tools (RAG, branching, codecheck,
-    // findLearningPath) and getUserProgress are explicitly suppressed —
-    // their scopes don't apply to Devtoberfest event pages.
+    // findLearningPath, expandSearchConcepts) and getUserProgress are
+    // explicitly suppressed — their scopes don't apply to Devtoberfest event pages.
     return [SEARCH_TUTORIALS_TOOL, GET_DEVTOBERFEST_INFO_TOOL];
   }
 
@@ -207,9 +244,9 @@ async function toolsForContext({ pageContext, isAdmin }) {
 
   // Advocates page: trimmed palette. searchTutorials + getUserProgress.
   // ChatSettings-gated tools (getRelevantSteps, checkCode,
-  // getBranchRecommendation, findLearningPath) are intentionally excluded
-  // — off-scope on /developer-advocates/. Early return keeps the existing
-  // admin and learner branches below byte-identical.
+  // getBranchRecommendation, findLearningPath, expandSearchConcepts) are
+  // intentionally excluded — off-scope on /developer-advocates/. Early
+  // return keeps the existing admin and learner branches below byte-identical.
   if (pageContext?.kind === 'advocates') {
     tools.push(GET_USER_PROGRESS_TOOL);
     return tools;
@@ -222,25 +259,55 @@ async function toolsForContext({ pageContext, isAdmin }) {
     // tutorials, so progress lookup is irrelevant in the admin persona.
     tools.push(GET_USER_PROGRESS_TOOL);
   }
-  try {
-    const { ChatSettings } = cds.entities('com.sap.developers.ims');
-    const settings = await SELECT.one.from(ChatSettings);
-    if (settings?.ragEnabled) {
-      tools.push(GET_RELEVANT_STEPS_TOOL);
-    }
-    if (settings?.codeCheckEnabled) {
-      tools.push(CHECK_CODE_TOOL);
-    }
-    if (settings?.branchingEnabled) {
-      tools.push(GET_BRANCH_RECOMMENDATION_TOOL);
-    }
-    if (settings?.kgPathBetweenEnabled) {
-      tools.push(FIND_LEARNING_PATH_TOOL);
-    }
-  } catch (err) {
-    LOG.warn('toolsForContext: could not read ChatSettings', err.message);
+  if (settings?.ragEnabled) {
+    tools.push(GET_RELEVANT_STEPS_TOOL);
+  }
+  if (settings?.codeCheckEnabled) {
+    tools.push(CHECK_CODE_TOOL);
+  }
+  if (settings?.branchingEnabled) {
+    tools.push(GET_BRANCH_RECOMMENDATION_TOOL);
+  }
+  if (settings?.kgPathBetweenEnabled) {
+    tools.push(FIND_LEARNING_PATH_TOOL);
+  }
+  if (settings?.kgSearchExpansionEnabled) {
+    tools.push(EXPAND_SEARCH_CONCEPTS_TOOL);
   }
   return tools;
+}
+
+/**
+ * Return supplementary system-prompt lines that depend on flag-gated tool
+ * availability. Pure/synchronous, mirrors `buildToolRegistry` semantics —
+ * only emits guidance for tools that will actually be registered.
+ */
+export function buildSystemPromptLines({ settings, pageContext, isAdmin = false } = {}) {
+  const lines = [];
+  // Devtoberfest / advocates use minimal tool sets with none of these — skip.
+  if (pageContext?.kind === 'devtoberfest' || pageContext?.kind === 'advocates') return lines;
+  // Same guard as buildToolRegistry: the tool is only registered on the
+  // standard learner/admin path.
+  if (settings?.kgSearchExpansionEnabled) {
+    lines.push(
+      "When the user asks to find or search for tutorials on a topic, prefer calling `expandSearchConcepts` first, then `searchTutorials` for narrow keyword matches. Combine both signals in your response — mention the top concept relationships when they add clarity."
+    );
+  }
+  return lines;
+}
+
+async function toolsForContext({ pageContext, isAdmin }) {
+  let settings = null;
+  // Devtoberfest short-circuits without a DB read — settings are irrelevant there.
+  if (pageContext?.kind !== 'devtoberfest') {
+    try {
+      const { ChatSettings } = cds.entities('com.sap.developers.ims');
+      settings = await SELECT.one.from(ChatSettings);
+    } catch (err) {
+      LOG.warn('toolsForContext: could not read ChatSettings', err.message);
+    }
+  }
+  return buildToolRegistry({ settings, pageContext, isAdmin });
 }
 
 function sse(res, payload) {
@@ -503,6 +570,25 @@ export async function dispatchTool(name, args, user) {
     }
   }
 
+  if (name === 'expandSearchConcepts') {
+    try {
+      const db = await cds.connect.to('db');
+      // Resolve the embedding model from ChatSettings (same source as the
+      // concept-embedding backfill job); fall back to the SDK default.
+      let model = 'text-embedding-3-small';
+      try {
+        const { ChatSettings } = cds.entities('com.sap.developers.ims');
+        const row = await SELECT.one.from(ChatSettings).columns('embeddingModel');
+        if (row?.embeddingModel) model = row.embeddingModel;
+      } catch { /* keep default */ }
+      const embedClient = defaultEmbedClient(model);
+      return await expandSearchConceptsHandler({ db, embedClient, args });
+    } catch (err) {
+      LOG.warn('expandSearchConcepts dispatch failed:', err.message);
+      return { queryEcho: args?.query ?? '', concepts: [], tutorials: [], warning: 'dispatch_failed' };
+    }
+  }
+
   return { error: 'unknown_tool' };
 }
 
@@ -665,4 +751,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, EXPAND_SEARCH_CONCEPTS_TOOL, toolsForContext };
