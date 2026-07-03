@@ -1,0 +1,136 @@
+name: Load Test
+
+on:
+  schedule:
+    # Monday 03:00 UTC — low-traffic window on DEV.
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Which scenario to run'
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - baseline
+          - ramp
+          - tutorials
+          - ws
+          - all-except-ramp
+
+concurrency:
+  group: load-test
+  cancel-in-progress: false
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve LOAD_BASE_URL
+        id: resolve
+        env:
+          REPO_LOAD_BASE_URL: ${{ vars.LOAD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -n "${REPO_LOAD_BASE_URL:-}" ]; then
+            echo "base_url=$REPO_LOAD_BASE_URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "base_url=https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com" >> "$GITHUB_OUTPUT"
+          fi
+          echo "srv_url=$(echo "${REPO_LOAD_BASE_URL:-https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com}" | sed 's/-tutorials-approuter/-tutorials-srv/')" >> "$GITHUB_OUTPUT"
+
+      - name: Publish-in-flight guard
+        id: guard
+        env:
+          SRV_URL: ${{ steps.resolve.outputs.srv_url }}
+        run: |
+          set -euo pipefail
+          # If /content/hashes changes between two reads 10 s apart, a
+          # publish is in flight and we bail out cleanly.
+          first=$(curl -sf "$SRV_URL/content/hashes" -H 'Accept: application/json' \
+            | jq -r '.manifestVersion // .version // "unknown"' 2>/dev/null || echo "unreachable")
+          sleep 10
+          second=$(curl -sf "$SRV_URL/content/hashes" -H 'Accept: application/json' \
+            | jq -r '.manifestVersion // .version // "unknown"' 2>/dev/null || echo "unreachable")
+          if [ "$first" = "unreachable" ] || [ "$second" = "unreachable" ]; then
+            echo "::warning::/content/hashes unreachable — proceeding anyway"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ "$first" != "$second" ]; then
+            echo "::warning::Publish in flight ($first -> $second); skipping load test"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve scenarios to run
+        id: scenarios
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          INPUT: ${{ inputs.scenario || 'baseline' }}
+        run: |
+          set -euo pipefail
+          case "$INPUT" in
+            smoke)     files='test/load/scenarios/01-smoke.js' ;;
+            baseline)  files='test/load/scenarios/02-public-baseline.js' ;;
+            ramp)      files='test/load/scenarios/03-public-ramp.js' ;;
+            tutorials) files='test/load/scenarios/04-tutorial-serve.js' ;;
+            ws)        files='test/load/scenarios/05-websocket-handshake.js' ;;
+            all-except-ramp)
+              files='test/load/scenarios/01-smoke.js test/load/scenarios/02-public-baseline.js test/load/scenarios/04-tutorial-serve.js test/load/scenarios/05-websocket-handshake.js'
+              ;;
+            *) echo "unknown scenario: $INPUT" >&2; exit 1 ;;
+          esac
+          {
+            echo 'files<<EOF'
+            echo "$files"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run k6
+        id: k6
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          LOAD_BASE_URL: ${{ steps.resolve.outputs.base_url }}
+          LOAD_SRV_URL: ${{ steps.resolve.outputs.srv_url }}
+          FILES: ${{ steps.scenarios.outputs.files }}
+        run: |
+          set -uo pipefail
+          overall=0
+          for f in $FILES; do
+            name=$(basename "$f" .js)
+            echo "::group::k6 run $f"
+            docker run --rm \
+              -v "$PWD:/work" -w /work \
+              -e LOAD_BASE_URL \
+              -e LOAD_SRV_URL \
+              -e LOAD_SUMMARY_PATH="k6-summary-${name}.json" \
+              grafana/k6:0.51.0 run "$f"
+            rc=$?
+            echo "::endgroup::"
+            if [ $rc -ne 0 ]; then
+              echo "::error::$f failed with exit $rc (threshold or execution)"
+              overall=$rc
+            fi
+          done
+          echo "rc=$overall" >> "$GITHUB_OUTPUT"
+
+      - name: Upload k6 summary artifacts
+        if: always() && steps.guard.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summaries
+          path: k6-summary-*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Fail loudly on threshold violation
+        if: steps.guard.outputs.skip != 'true' && steps.k6.outputs.rc != '0'
+        run: |
+          echo "::error::One or more k6 runs exited non-zero — see 'k6 run' groups above."
+          exit 1
