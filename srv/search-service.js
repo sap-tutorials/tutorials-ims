@@ -11,6 +11,18 @@ function _padCol(col) {
     + `'(',' '),')',' '),':',' '),';',' ')||' ')`;
 }
 
+// Common English stopwords that show up mid-typing and would otherwise
+// AND-away legitimate results ("abap in " produces tokens ['abap','in']; the
+// AND-semantics below then requires every corpus row to contain a standalone
+// `in` word, which drops the abap catalogue to zero). Applied AFTER the
+// length ≥ 2 filter. Deliberately tight — domain terms like `js`, `vr`, `ai`
+// are NOT stopwords. If ALL tokens are stopwords the query falls through to
+// length-0 (same behaviour as an empty search box).
+const STOPWORDS = new Set([
+  'a', 'an', 'and', 'as', 'at', 'be', 'by', 'for', 'from', 'in', 'is', 'it',
+  'of', 'on', 'or', 'so', 'the', 'to', 'with',
+]);
+
 // Word-boundary search across @cds.search columns (title, description, primaryTag, tagBag).
 //
 // Substring LIKE matches "CAP" inside "Capture/Capability"; HANA fuzzy matches
@@ -18,13 +30,15 @@ function _padCol(col) {
 // spaces, replace common separators with spaces too, then LIKE '% term %'.
 // "Capture" stays "capture" → no match. "abap-connectivity" becomes
 // "abap connectivity" → matches `% abap %`. Tokens AND together (multi-word
-// search requires every token to match somewhere across the four columns).
+// search requires every token to match somewhere across the four columns) —
+// but stopwords (`in`, `on`, `to`, …) are filtered first so incomplete typing
+// like "abap in " doesn't drop the result set to zero.
 function applyWordBoundarySearch(query, term) {
   const tokens = String(term ?? '')
     .toLowerCase()
     .trim()
     .split(/\s+/)
-    .filter((t) => t.length >= 2);
+    .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
   if (!tokens.length) return tokens;
 
   for (const tok of tokens) {

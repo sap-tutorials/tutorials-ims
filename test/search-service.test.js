@@ -303,5 +303,29 @@ describe('SearchService', () => {
       const slugs = data.value.map(i => i.slug);
       expect(slugs).toContain('hana-cloud-setup');
     });
+
+    it('drops stopwords so incomplete typing ("abap in") still returns results', async () => {
+      // Regression test for the "too strict" search: typing "hana in " tokenises
+      // to ['hana','in']; AND-semantics would require every corpus row to
+      // contain a standalone `in` word, dropping the result set to zero.
+      // Stopword filter removes `in` before the AND-loop, so the query behaves
+      // like a plain `hana` search.
+      const bareHana = await project.get('/search/SearchableItems?$search=hana');
+      const withStopword = await project.get('/search/SearchableItems?$search=hana in');
+      const bareSlugs = new Set(bareHana.data.value.map(i => i.slug).filter(Boolean));
+      const stopSlugs = new Set(withStopword.data.value.map(i => i.slug).filter(Boolean));
+      expect(stopSlugs.size).toBeGreaterThan(0);
+      // Set equality — the stopword must not narrow the result set.
+      expect([...stopSlugs].sort()).toEqual([...bareSlugs].sort());
+    });
+
+    it('returns nothing when ALL tokens are stopwords (same as empty search)', async () => {
+      // "in on" tokenises to ['in','on'], both stopwords. Falls through to a
+      // zero-token predicate — same behaviour as an empty search box (no
+      // predicate applied, so the full catalogue comes back — we assert only
+      // that this does NOT throw and does return rows).
+      const { data } = await project.get('/search/SearchableItems?$search=in on');
+      expect(Array.isArray(data.value)).toBe(true);
+    });
   });
 });

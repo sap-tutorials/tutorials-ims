@@ -68,6 +68,11 @@ const ROOTS = [
   { glob: 'app/analytics-explorer/src/**/*.{ts,vue}', flavour: 'analytics-explorer' as const },
   { glob: 'app/admin/**/webapp/**/*.js', flavour: 'admin-ext' as const },
   { glob: 'app/scanner/webapp/**/*.js', flavour: 'scanner' as const },
+  // Plain (non-module) JS delivered by Hugo — can't import the Vite bundle,
+  // must inline the two-step `x-csrf-token: fetch` handshake. Added after
+  // the #953 follow-up: joule.js was doing an unauthenticated POST /chat/stream
+  // that broke silently once #895 flipped CSRF on for every XSUAA route.
+  { glob: 'hugo/static/js/**/*.js', flavour: 'hugo-static' as const },
 ];
 
 // Files that legitimately don't need CSRF because they only ever call
@@ -169,7 +174,7 @@ function isAnonymousUrl(url: string | null): boolean {
 function scanClientFile(
   absPath: string,
   relPath: string,
-  flavour: 'hugo-app' | 'analytics-explorer' | 'admin-ext' | 'scanner',
+  flavour: 'hugo-app' | 'analytics-explorer' | 'admin-ext' | 'scanner' | 'hugo-static',
 ): Violation[] {
   const content = readFileSync(absPath, 'utf8');
   const mutating = detectMutatingFetches(content, relPath);
@@ -201,8 +206,9 @@ function scanClientFile(
       continue;
     }
 
-    // UI5 admin ext controllers / scanner: must reference `x-csrf-token`
-    // manually (they can't import from the Vite bundle).
+    // UI5 admin ext controllers / scanner / plain hugo-static JS: must
+    // reference `x-csrf-token` manually (they can't import from the Vite
+    // bundle).
     if (!hasManual) {
       violations.push({
         file: relPath,
@@ -210,7 +216,7 @@ function scanClientFile(
         method: hit.method,
         url: hit.url,
         reason:
-          'Mutating fetch() in a UI5/admin file without a manual `x-csrf-token: fetch` handshake. Reference implementation: app/admin/verb-definitions/webapp/ext/ActionsController.js:17-36. See docs/superpowers/specs/2026-07-02-895-csrf-reenablement-design.md.',
+          'Mutating fetch() in a UI5/admin/hugo-static file without a manual `x-csrf-token: fetch` handshake. Reference implementation: app/admin/verb-definitions/webapp/ext/ActionsController.js:17-36 (UI5) or hugo/static/js/joule.js (plain JS). See docs/superpowers/specs/2026-07-02-895-csrf-reenablement-design.md.',
       });
     }
   }
