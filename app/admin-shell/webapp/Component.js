@@ -64,12 +64,35 @@ sap.ui.define([
         try { window.location.reload(); } catch (e) { window.location.href = window.location.href; }
       }
 
+      function isCsrfRejection(oHeaders, sUrl) {
+        // Recognize an AppRouter CSRF 403 so the interceptor does NOT reload
+        // (the OData v4 client re-fetches the token on its own; reload strips
+        // the fresh token from memory and reproduces the failure — #895).
+        //
+        // Two signals, either sufficient:
+        //   1. Response carries `x-csrf-token: required` (AppRouter's native
+        //      contract when errorPage[403] is not rewriting the response).
+        //   2. The URL is an OData batch/action endpoint — those are the ONLY
+        //      places UI5 OData v4 sends POST/PUT/DELETE, so a 403 there is
+        //      overwhelmingly CSRF, not permissions. Belt-and-suspenders in
+        //      case a future errorPage[403] rewrite masks the header.
+        if (oHeaders && oHeaders.get) {
+          var sHdr = "";
+          try { sHdr = oHeaders.get("x-csrf-token") || ""; } catch (e) { /* swallow */ }
+          if (sHdr.toLowerCase() === "required") return true;
+        }
+        if (sUrl && /\/\$batch(\?|$)/.test(sUrl)) return true;
+        return false;
+      }
+
       var fnOriginalFetch = window.fetch;
       window.fetch = function (input, init) {
         var sUrl = (typeof input === "string") ? input : (input && input.url);
+        var sMethod = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
         return fnOriginalFetch.apply(this, arguments).then(function (response) {
           if (!isBackendUrl(sUrl)) return response;
-          if (response.status === 401 || response.status === 403) {
+          var bMutating = sMethod !== "GET" && sMethod !== "HEAD" && sMethod !== "OPTIONS";
+          if (response.status === 401 || (response.status === 403 && !(bMutating && isCsrfRejection(response.headers, sUrl)))) {
             handleUnauthorized();
           } else if (response.status === 200 && looksLikeLoginHtml(
             response.headers && response.headers.get && response.headers.get("content-type"),
@@ -86,6 +109,7 @@ sap.ui.define([
       var fnOriginalSend = XMLHttpRequest.prototype.send;
       XMLHttpRequest.prototype.open = function (method, url) {
         this.__authUrl = url;
+        this.__authMethod = (method || "GET").toUpperCase();
         return fnOriginalOpen.apply(this, arguments);
       };
       XMLHttpRequest.prototype.send = function () {
@@ -93,6 +117,12 @@ sap.ui.define([
         this.addEventListener("load", function () {
           if (!isBackendUrl(that.__authUrl)) return;
           if (that.status === 401 || that.status === 403) {
+            // XHR: emulate the fetch-side headers.get() so isCsrfRejection() works.
+            var oHdrs = { get: function (n) {
+              try { return that.getResponseHeader(n); } catch (e) { return null; }
+            }};
+            var bMutating = that.__authMethod !== "GET" && that.__authMethod !== "HEAD" && that.__authMethod !== "OPTIONS";
+            if (that.status === 403 && bMutating && isCsrfRejection(oHdrs, that.__authUrl)) return;
             handleUnauthorized();
             return;
           }
