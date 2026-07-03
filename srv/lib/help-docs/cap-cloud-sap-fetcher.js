@@ -7,6 +7,8 @@
 //
 // Spec: docs/superpowers/specs/2026-07-01-748-phase4.7-help-docs.md §4.2.3
 
+import { stripMarkdown } from './_strip-markdown.js';
+
 const SYM = Symbol.for('com.sap.developers.ims.cap-cloud-sap-fetcher');
 globalThis[SYM] ??= { mockFetcher: null };
 
@@ -115,14 +117,4 @@ function parseMarkdown(raw) {
 function extractH1(body) {
   const m = body.match(/^#\s+(.+)$/m);
   return m ? m[1].trim() : null;
-}
-
-function stripMarkdown(md) {
-  return String(md || '')
-    .replace(/```[\s\S]*?```/g, ' ')          // fenced code blocks
-    .replace(/`[^`]*`/g, ' ')                  // inline code
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // links → text
-    .replace(/[#>*_~`]/g, ' ')                 // markdown syntax
-    .replace(/\s+/g, ' ')
-    .trim();
 }
