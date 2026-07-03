@@ -83,6 +83,34 @@ describe('help-docs dedupe (spec §6.4)', () => {
     expect(rows[0].source).toBe('cap-cloud-sap');
   });
 
+  it('architecture-sap-com wins over cap-cloud-sap on same contentHash (#860, arch > cap)', async () => {
+    _setMockOrchestrator(async () => ({
+      rows: [
+        baseRow('cap-cloud-sap', 'docs/node.js/handlers'),
+        baseRow('architecture-sap-com', 'docs/ref-arch/RA0001.md'),
+      ],
+      perSource: {},
+    }));
+    const { rows } = await fetchAllHelpDocs({ apiKey: 'fake' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source).toBe('architecture-sap-com');
+  });
+
+  it('architecture-sap-com wins over all three lower sources on same contentHash (#860)', async () => {
+    _setMockOrchestrator(async () => ({
+      rows: [
+        baseRow('help-sap-com', 'btp/handlers'),
+        baseRow('ui5-sap-com', 'topic/xyz'),
+        baseRow('cap-cloud-sap', 'docs/node.js/handlers'),
+        baseRow('architecture-sap-com', 'docs/ref-arch/RA0001.md'),
+      ],
+      perSource: {},
+    }));
+    const { rows } = await fetchAllHelpDocs({ apiKey: 'fake' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source).toBe('architecture-sap-com');
+  });
+
   it('keeps distinct-content rows even when titles overlap fuzzily (hash requires exact material match)', async () => {
     _setMockOrchestrator(async () => ({
       rows: [
