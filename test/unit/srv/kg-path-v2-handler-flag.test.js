@@ -57,7 +57,7 @@ afterAll(() => {
 const CALL = `/graph/pathBetween(fromSlug='a',toSlug='b')`;
 
 describe('pathBetween handler — flag off', () => {
-  it('v2 wrapper is never called; v1 (kgQuery) runs', async () => {
+  it('v2 wrapper is never called; v1 (kgQuery) runs with IRI-shaped params', async () => {
     delete process.env.KG_PATH_V2_ENABLED;
     // v1 SPARQL result — an empty PATH_BETWEEN JSON body.
     kgQueryMock.mockResolvedValue({
@@ -66,6 +66,19 @@ describe('pathBetween handler — flag off', () => {
     const { data } = await GET(CALL);
     expect(kgPathV2Mock).not.toHaveBeenCalled();
     expect(kgQueryMock).toHaveBeenCalledOnce();
+    // Regression guard: KG_QUERY.hdbprocedure expects full IRIs, not bare
+    // slugs. Live drill 2026-07-03 caught a pre-existing wiring bug where
+    // the handler passed { fromSlug: 'a', toSlug: 'b' } and KG_QUERY
+    // SIGNAL'd KG_INVALID_TUTORIAL_IRI. This assertion locks the fix.
+    expect(kgQueryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryName: 'PATH_BETWEEN',
+        params: {
+          fromSlug: 'https://developers.sap.com/kg/tutorial/a',
+          toSlug:   'https://developers.sap.com/kg/tutorial/b',
+        },
+      }),
+    );
     expect(data.value).toEqual([]);
   });
 });
