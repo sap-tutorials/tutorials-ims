@@ -14,15 +14,21 @@ async function loadTechUsers() {
   }
 
   // Format: "user1:pass1:role1,role2;user2:pass2:role3"
+  // Phase A3 (#809): a role-less entry no longer silently defaults to
+  // Admin. Such entries are skipped with a warning at parse time.
+  // Operators must specify roles explicitly, e.g. "svc-account:pass:Admin".
   techUsers = new Map();
   for (const entry of raw.split(';')) {
     const [username, password, roles] = entry.split(':');
-    if (username && password) {
-      techUsers.set(username, {
-        password,
-        roles: roles ? roles.split(',') : ['Admin']
-      });
+    if (!username || !password) continue;
+    if (!roles) {
+      console.warn(
+        '[tech-user-auth] skipping tech-user entry with no roles -- specify roles explicitly (e.g. "user:pass:Admin") to enable this entry:',
+        username
+      );
+      continue;
     }
+    techUsers.set(username, { password, roles: roles.split(',') });
   }
   return techUsers;
 }

@@ -80,15 +80,45 @@ describe('tech-user-auth', () => {
     expect(req.user.is('ContentAuthor')).toBe(true);
   });
 
-  it('defaults to Admin role when no roles specified', async () => {
+  it('logs a warning and skips the entry when roles are missing (A3)', async () => {
+    // Phase A3 (#809) -- previously this entry silently defaulted to Admin,
+    // a supply-chain / config-drift risk. Now we skip the entry loudly:
+    // the middleware refuses to authenticate against a role-less entry,
+    // and prints a warning at parse time so operators notice.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mockTenant({ techUsers: 'svc-account:pass123' });
     const mw = await loadMiddleware();
     const creds = Buffer.from('svc-account:pass123').toString('base64');
     const req = makeReq(`Basic ${creds}`);
     let called = false;
     await mw(req, makeRes(), () => { called = true; });
+    // Middleware must not silently elevate to Admin.
+    expect(req.user).toBeUndefined();
+    // Downstream middleware still runs -- we don't 401, we just don't
+    // authenticate this caller. Approuter / CAP layer will reject if
+    // the endpoint requires auth.
     expect(called).toBe(true);
-    expect(req.user.is('Admin')).toBe(true);
+    // Operator visibility: parse-time warning names the offending user.
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('tech-user'),
+      expect.stringContaining('svc-account')
+    );
+    warn.mockRestore();
+  });
+
+  it('authenticates a well-formed entry with explicit roles', async () => {
+    // Sanity check that A3 did not regress the intended happy path.
+    // Two entries: one role-less (skipped), one explicit-roles (works).
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockTenant({ techUsers: 'bad-entry:pass;good-entry:pass:ContentAuthor' });
+    const mw = await loadMiddleware();
+    const creds = Buffer.from('good-entry:pass').toString('base64');
+    const req = makeReq(`Basic ${creds}`);
+    await mw(req, makeRes(), () => {});
+    expect(req.user).toBeDefined();
+    expect(req.user.id).toBe('good-entry');
+    expect(req.user.is('ContentAuthor')).toBe(true);
+    warn.mockRestore();
   });
 
   it('rejects invalid password', async () => {
