@@ -1041,41 +1041,51 @@ git commit -m "test(#943): hybrid HANA + AI Core coverage for expandSearchConcep
 
 - [ ] **Step 1: Write the smoke test**
 
-Create `test/smoke/joule-search.smoke.test.js`:
+Create `test/smoke/joule-search.smoke.test.js` — mirror the prior-art pattern from `test/smoke/joule-find-learning-path.test.js` (issue #445): `describe.runIf(APPROUTER && SRV)` + `it.runIf(AUTH_TOKEN)`, `SMOKE_AUTH_TOKEN` env var, and the deployed `/chat/stream` request shape (which is `{ messages: [{ role: 'user', content }], pageContext }` per `srv/server.js:1063`, NOT `{ text }`):
 
 ```js
 import { describe, it, expect } from 'vitest'
+import { fetchWithRetry } from './smoke.config.js'
 
+const APPROUTER = process.env.SMOKE_BASE_URL
 const SRV = process.env.SMOKE_SRV_URL
-const describeMaybe = SRV ? describe : describe.skip
+const AUTH_TOKEN = process.env.SMOKE_AUTH_TOKEN
 
-describeMaybe('post-deploy Joule search expansion smoke', () => {
-  it('/chat/stream emits an expandSearchConcepts tool_use for a search prompt', async () => {
-    const res = await fetch(`${SRV}/chat/stream`, {
+describe.runIf(APPROUTER && SRV)('Joule expandSearchConcepts smoke (issue #943)', () => {
+  it.runIf(AUTH_TOKEN)('POST /chat/stream with a search prompt emits an expandSearchConcepts tool call', async () => {
+    const res = await fetchWithRetry(`${SRV}/chat/stream`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.SMOKE_BEARER ?? ''}` },
-      body: JSON.stringify({ text: 'find tutorials about abap async' }),
+      headers: {
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify({
+        messages: [
+          { role: 'user', content: "Find tutorials about: abap async\n\nUse the expandSearchConcepts tool for related concepts, then searchTutorials for keyword matches. Summarise the top results with why they're relevant." },
+        ],
+        pageContext: { kind: 'generic' },
+      }),
     })
-    expect(res.ok).toBe(true)
-    const reader = res.body.getReader()
-    const dec = new TextDecoder()
-    let saw = false
-    const deadline = Date.now() + 30_000
-    while (Date.now() < deadline) {
-      const { value, done } = await reader.read()
-      if (done) break
-      const chunk = dec.decode(value)
-      if (chunk.includes('expandSearchConcepts')) { saw = true; break }
-    }
-    expect(saw).toBe(true)
-  })
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body.length).toBeGreaterThan(0)
+    expect(body).toContain('expandSearchConcepts')
+  }, 60_000)
 })
 ```
 
 - [ ] **Step 2: Run against DEV after deploy**
 
-Run: `SMOKE_SRV_URL=https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com SMOKE_BEARER=<dev-bearer> npx vitest run --project smoke test/smoke/joule-search.smoke.test.js`
+Run: `SMOKE_BASE_URL=https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com SMOKE_SRV_URL=https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com SMOKE_AUTH_TOKEN="$(cf oauth-token | tr -d '\n')" npm run test:smoke -- test/smoke/joule-search.smoke.test.js`
 Expected: PASS.
+
+> **Two live-endpoint gotchas the Task 9 subagent caught** (both were wrong in the initial plan-body sketch; corrected above and worth remembering when writing future smoke tests against `/chat/stream`):
+>
+> 1. **Body shape is `{ messages: [{ role, content }], pageContext }`, NOT `{ text }`** — see `srv/server.js:1063` `const { messages = [], pageContext = { kind: 'generic' } } = req.body || {};`. Sending `{ text }` results in an empty messages array; the LLM never fires any tool and the assertion returns a false negative.
+> 2. **Auth env var is `SMOKE_AUTH_TOKEN`**, matching `test/smoke/joule-find-learning-path.test.js:33` and the `deploy.yml` step. `SMOKE_BEARER` is not referenced anywhere in the repo and would silently send an empty Bearer.
+>
+> Both are trivially catchable by grepping `test/smoke/` before hand-writing a new `/chat/stream` request. Always mirror prior-art smoke tests — they've been through CI and the failure modes are already resolved.
 
 - [ ] **Step 3: Commit**
 
