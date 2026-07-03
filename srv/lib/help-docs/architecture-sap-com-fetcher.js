@@ -1,39 +1,54 @@
-// srv/lib/help-docs/cap-cloud-sap-fetcher.js
+// srv/lib/help-docs/architecture-sap-com-fetcher.js
 //
-// Phase 4.7 (#748): CAP framework docs fetcher.
-// Direct GitHub REST API against cap-js/docs. Single tree call gives all .md
-// files; per-file raw fetch pulls markdown content. Auth via
-// TUTORIALS_GITHUB_TOKEN (env-var fallback to GITHUB_TOKEN).
+// #860: SAP Architecture Center narrative-docs fetcher (fourth source).
+// Direct GitHub REST API against SAP/architecture-center. Single tree call
+// gives all .md/.mdx files under docs/ and news/; per-file raw fetch pulls
+// the markdown body. Auth via TUTORIALS_GITHUB_TOKEN.
 //
-// Spec: docs/superpowers/specs/2026-07-01-748-phase4.7-help-docs.md §4.2.3
+// Spec: docs/superpowers/specs/2026-07-03-860-arch-center-help-doc-source.md §4.2
+// Parent: docs/superpowers/specs/2026-07-01-748-phase4.7-help-docs.md §4.2.3
 
 import { stripMarkdown } from './_strip-markdown.js';
 
-const SYM = Symbol.for('com.sap.developers.ims.cap-cloud-sap-fetcher');
+const SYM = Symbol.for('com.sap.developers.ims.architecture-sap-com-fetcher');
 globalThis[SYM] ??= { mockFetcher: null };
 
-const REPO = 'cap-js/docs';
+const REPO = 'SAP/architecture-center';
 const TREE_URL = `https://api.github.com/repos/${REPO}/git/trees/main?recursive=true`;
 const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/main`;
-const SITE_BASE = 'https://cap.cloud.sap';
+const SITE_BASE = 'https://architecture.learning.sap.com';
 const PER_PAGE_TIMEOUT_MS = 30_000;
 const DESCRIPTION_MAX_CHARS = 2000;
 
 export function _setMockFetcher(fn) { globalThis[SYM].mockFetcher = fn; }
 export function _resetForTests() { globalThis[SYM].mockFetcher = null; }
 
-export async function fetchCapCloudSapCorpus({
+/**
+ * @typedef {Object} HelpDocRow
+ * @property {'architecture-sap-com'} source
+ * @property {string} sourceId       — repo-relative path, e.g. 'docs/ref-arch/RA0001.md'
+ * @property {string} title
+ * @property {string} description    — stripped body first 2000 chars
+ * @property {string} url            — https://architecture.learning.sap.com/<path-without-extension>
+ * @property {'architecture'} product
+ * @property {null} section
+ */
+
+export async function fetchArchitectureSapComCorpus({
   apiKey,
   seenSourceIds = null,
   limit = null,
 } = {}) {
   const tree = await fetchTree(apiKey);
-  const mdBlobs = (tree.tree || []).filter(
-    e => e.type === 'blob' && e.path.startsWith('docs/') && e.path.endsWith('.md')
+  const blobs = (tree.tree || []).filter(
+    (e) =>
+      e.type === 'blob'
+      && (e.path.startsWith('docs/') || e.path.startsWith('news/'))
+      && (e.path.endsWith('.md') || e.path.endsWith('.mdx'))
   );
 
   const rows = [];
-  for (const blob of mdBlobs) {
+  for (const blob of blobs) {
     if (limit != null && rows.length >= limit) break;
     if (seenSourceIds && seenSourceIds.has(blob.path)) continue;
 
@@ -41,23 +56,29 @@ export async function fetchCapCloudSapCorpus({
     try {
       raw = await fetchRaw(blob.path);
     } catch (err) {
-      console.warn('cap-cloud-sap-fetcher: raw fetch failed', { path: blob.path, status: err?.status, message: err?.message });
+      // eslint-disable-next-line no-console
+      console.warn('architecture-sap-com-fetcher: raw fetch failed', {
+        path: blob.path,
+        status: err?.status,
+        message: err?.message,
+      });
       continue;
     }
-    const { frontmatterTitle, body } = parseMarkdown(raw);
-    const filenameTitle = blob.path.split('/').pop().replace(/\.md$/, '');
+
+    const { frontmatterTitle, body } = parseFrontmatter(raw);
+    const filenameTitle = blob.path.split('/').pop().replace(/\.mdx?$/, '');
     const title = frontmatterTitle || extractH1(body) || filenameTitle;
 
     const description = stripMarkdown(body).slice(0, DESCRIPTION_MAX_CHARS);
     if (description.length === 0) continue;
 
     rows.push({
-      source: 'cap-cloud-sap',
+      source: 'architecture-sap-com',
       sourceId: blob.path,
       title,
       description,
-      url: `${SITE_BASE}/${blob.path.replace(/\.md$/, '')}`,
-      product: 'cap',
+      url: `${SITE_BASE}/${blob.path.replace(/\.mdx?$/, '')}`,
+      product: 'architecture',
       section: null,
     });
   }
@@ -67,11 +88,6 @@ export async function fetchCapCloudSapCorpus({
 async function fetchTree(apiKey) {
   const mock = globalThis[SYM].mockFetcher;
   if (mock) return mock(TREE_URL);
-  // Only send Authorization when we have a real token. Sending `Bearer undefined`
-  // (which happens when apiKey is missing) causes GitHub to 401 the request
-  // even though the git-trees endpoint is public-read; omitting the header
-  // lets the unauth path work at GitHub's ~60/hr shared-IP quota, which is
-  // enough for a single cron cycle against cap-js/docs (~1 request).
   const headers = {
     'Accept': 'application/vnd.github+json',
     'User-Agent': 'sap-tutorials-fetch-help-docs',
@@ -105,12 +121,14 @@ async function fetchRaw(path) {
   return res.text();
 }
 
-function parseMarkdown(raw) {
+function parseFrontmatter(raw) {
   const m = raw.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
   if (!m) return { frontmatterTitle: null, body: raw };
   const fm = m[1];
   const titleMatch = fm.match(/^title:\s*(.+)$/m);
-  const frontmatterTitle = titleMatch ? titleMatch[1].trim().replace(/^["']|["']$/g, '') : null;
+  const frontmatterTitle = titleMatch
+    ? titleMatch[1].trim().replace(/^["']|["']$/g, '')
+    : null;
   return { frontmatterTitle, body: raw.slice(m[0].length) };
 }
 

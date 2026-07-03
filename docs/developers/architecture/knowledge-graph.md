@@ -49,9 +49,10 @@ api.sap.com authority documentation. Monthly cron. Priority 50.
 
 SAP-samples GitHub repositories. Weekly cron. Priority 60.
 
-### Phase 4.7 — Help docs (#748)
+### Phase 4.7 — Help docs (#748, extended by #860)
 
-Documentation from help.sap.com, cap.cloud.sap, and ui5.sap.com. Weekly cron.
+Documentation from help.sap.com, cap.cloud.sap, ui5.sap.com, and
+architecture.learning.sap.com (SAP Architecture Center). Weekly cron.
 Priority 70.
 
 ### Phase 4.8 — SAP community events (#765)

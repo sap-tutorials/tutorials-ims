@@ -7,7 +7,7 @@ describe('help-docs orchestrator', () => {
     _resetForTests();
   });
 
-  it('returns { rows, perSource } when all three fetchers succeed', async () => {
+  it('returns { rows, perSource } when all four fetchers succeed', async () => {
     // Empty payloads per source — orchestrator returns { rows: [], perSource: {...} }
     _setMockFetcher('help-sap-com', async (url) => {
       if (url.includes('/http.svc/deliverableMetadata')) {
@@ -20,22 +20,25 @@ describe('help-docs orchestrator', () => {
     });
     _setMockFetcher('cap-cloud-sap', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
     _setMockFetcher('ui5-sap-com', async (url) => url.includes('/docs/topics/index.json') ? [] : '');
+    _setMockFetcher('architecture-sap-com', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
     const result = await fetchAllHelpDocs({ apiKey: 'fake' });
     expect(Array.isArray(result.rows)).toBe(true);
     expect(result.perSource).toBeDefined();
     expect(result.perSource['help-sap-com'].fetcherRejected).toBe(false);
     expect(result.perSource['cap-cloud-sap'].fetcherRejected).toBe(false);
     expect(result.perSource['ui5-sap-com'].fetcherRejected).toBe(false);
+    expect(result.perSource['architecture-sap-com'].fetcherRejected).toBe(false);
   });
 
   it('surfaces partial catalog when one fetcher rejects (does not abort cycle)', async () => {
     // help-sap-com and ui5-sap-com are designed to survive per-item errors and
-    // return []; cap-cloud-sap propagates tree-fetch failures. To exercise the
-    // partial-catalog path we make cap-cloud-sap reject while the other two
-    // still return their (empty) fulfilled catalogs.
+    // return []; cap-cloud-sap and architecture-sap-com propagate tree-fetch failures.
+    // To exercise the partial-catalog path we make cap-cloud-sap reject while the
+    // other three still return their (empty) fulfilled catalogs.
     _setMockFetcher('help-sap-com', async () => { throw new Error('help.sap.com item down'); });
     _setMockFetcher('cap-cloud-sap', async () => { throw new Error('cap-cloud-sap tree 500'); });
     _setMockFetcher('ui5-sap-com', async (url) => url.includes('/docs/topics/index.json') ? [] : '');
+    _setMockFetcher('architecture-sap-com', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
     const { rows, perSource } = await fetchAllHelpDocs({ apiKey: 'fake' });
     expect(rows).toEqual([]);
     // help-sap-com swallowed per-deliverable errors and produced an empty catalog.
@@ -45,19 +48,23 @@ describe('help-docs orchestrator', () => {
     expect(perSource['cap-cloud-sap'].fetcherRejected).toBe(true);
     expect(perSource['cap-cloud-sap'].reason).toMatch(/tree 500/);
     expect(perSource['ui5-sap-com'].fetcherRejected).toBe(false);
+    expect(perSource['architecture-sap-com'].fetcherRejected).toBe(false);
   });
 
   it('returns empty rows when all fetchers produce zero output; perSource records status', async () => {
-    // Only cap-cloud-sap actually rejects (its contract is to propagate);
-    // help-sap-com and ui5-sap-com swallow per-item errors and return [].
+    // cap-cloud-sap and architecture-sap-com actually reject (their contract is
+    // to propagate); help-sap-com and ui5-sap-com swallow per-item errors and
+    // return [].
     _setMockFetcher('help-sap-com', async () => { throw new Error('down1'); });
     _setMockFetcher('cap-cloud-sap', async () => { throw new Error('down2'); });
     _setMockFetcher('ui5-sap-com', async () => { throw new Error('down3'); });
+    _setMockFetcher('architecture-sap-com', async () => { throw new Error('down4'); });
     const { rows, perSource } = await fetchAllHelpDocs({ apiKey: 'fake' });
     expect(rows).toEqual([]);
     expect(perSource['help-sap-com'].rowsFetched).toBe(0);
     expect(perSource['cap-cloud-sap'].fetcherRejected).toBe(true);
     expect(perSource['ui5-sap-com'].rowsFetched).toBe(0);
+    expect(perSource['architecture-sap-com'].fetcherRejected).toBe(true);
   });
 
   it('passes seenSourceIds through to each fetcher (filter is actually applied)', async () => {
@@ -98,6 +105,7 @@ describe('help-docs orchestrator', () => {
     _setMockFetcher('help-sap-com', helpMock);
     _setMockFetcher('cap-cloud-sap', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
     _setMockFetcher('ui5-sap-com', async (url) => url.includes('/docs/topics/index.json') ? [] : '');
+    _setMockFetcher('architecture-sap-com', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
 
     // Baseline: no seenSourceIds — orchestrator returns some rows (post-dedupe).
     const baseline = await fetchAllHelpDocs({ apiKey: 'fake' });
@@ -111,6 +119,7 @@ describe('help-docs orchestrator', () => {
     _setMockFetcher('help-sap-com', helpMock);
     _setMockFetcher('cap-cloud-sap', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
     _setMockFetcher('ui5-sap-com', async (url) => url.includes('/docs/topics/index.json') ? [] : '');
+    _setMockFetcher('architecture-sap-com', async (url) => url.includes('/git/trees/') ? { tree: [] } : '');
     const seenSourceIds = new Set(
       HELP_SAP_COM_DELIVERABLES.map(({ product, deliverable }) => `${product}/${deliverable}/seen-topic`)
     );
@@ -132,6 +141,7 @@ describe('help-docs orchestrator', () => {
         'help-sap-com': { rowsFetched: 2, fetcherRejected: false, reason: null },
         'cap-cloud-sap': { rowsFetched: 0, fetcherRejected: false, reason: null },
         'ui5-sap-com': { rowsFetched: 0, fetcherRejected: false, reason: null },
+        'architecture-sap-com': { rowsFetched: 0, fetcherRejected: false, reason: null },
       },
     }));
     const { rows, perSource } = await fetchAllHelpDocs({ apiKey: 'fake' });

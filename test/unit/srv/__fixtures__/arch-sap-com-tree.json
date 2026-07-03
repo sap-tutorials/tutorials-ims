@@ -1,0 +1,15 @@
+{
+  "sha": "fake-sha",
+  "url": "https://api.github.com/repos/SAP/architecture-center/git/trees/fake-sha",
+  "tree": [
+    { "path": "docs/ref-arch/RA0001.md",             "mode": "100644", "type": "blob", "sha": "b1", "size": 1200, "url": "https://api.github.com/blobs/b1" },
+    { "path": "docs/ref-arch/RA0002.mdx",            "mode": "100644", "type": "blob", "sha": "b2", "size": 1400, "url": "https://api.github.com/blobs/b2" },
+    { "path": "docs/golden-path/ai-golden-path.md",  "mode": "100644", "type": "blob", "sha": "b3", "size": 900,  "url": "https://api.github.com/blobs/b3" },
+    { "path": "docs/community/contribution.md",      "mode": "100644", "type": "blob", "sha": "b4", "size": 600,  "url": "https://api.github.com/blobs/b4" },
+    { "path": "news/2026-06-agentic-code-quality.mdx","mode": "100644","type": "blob", "sha": "b5", "size": 1100, "url": "https://api.github.com/blobs/b5" },
+    { "path": "api/plugins/some-internal-page.md",   "mode": "100644", "type": "blob", "sha": "b6", "size": 500,  "url": "https://api.github.com/blobs/b6" },
+    { "path": "docs/ref-arch/diagram.png",           "mode": "100644", "type": "blob", "sha": "b7", "size": 20000,"url": "https://api.github.com/blobs/b7" },
+    { "path": "README.md",                            "mode": "100644","type": "blob", "sha": "b8", "size": 300,  "url": "https://api.github.com/blobs/b8" }
+  ],
+  "truncated": false
+}

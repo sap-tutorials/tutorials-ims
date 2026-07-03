@@ -1,19 +1,23 @@
 // srv/lib/help-docs/index.js
 //
-// Phase 4.7 (#748): help-docs orchestrator.
-// Runs the three source fetchers in parallel via Promise.allSettled (partial
+// Phase 4.7 (#748) + #860: help-docs orchestrator.
+// Runs the four source fetchers in parallel via Promise.allSettled (partial
 // catalog acceptable — one failed source does NOT abort the cycle). Merges
 // results and dedupes by contentHash with source precedence
-// cap-cloud-sap > ui5-sap-com > help-sap-com (per spec §3 Q13).
+// architecture-sap-com > cap-cloud-sap > ui5-sap-com > help-sap-com
+// (per Phase 4.7 spec §3 Q13, extended by #860 Q4).
 //
 // Spec: docs/superpowers/specs/2026-07-01-748-phase4.7-help-docs.md §4.2.5, §6
+// Addendum: docs/superpowers/specs/2026-07-03-860-arch-center-help-doc-source.md
 
 import { createHash } from 'node:crypto';
 import * as helpSapCom from './help-sap-com-fetcher.js';
 import * as capCloudSap from './cap-cloud-sap-fetcher.js';
 import * as ui5SapCom from './ui5-sap-com-fetcher.js';
+import * as archSapCom from './architecture-sap-com-fetcher.js';
 
 const SOURCE_PRECEDENCE = Object.freeze({
+  'architecture-sap-com': 4,
   'cap-cloud-sap': 3,
   'ui5-sap-com': 2,
   'help-sap-com': 1,
@@ -30,7 +34,7 @@ let mockOrchestrator = null;
  * in every deliverable slug).
  * Slug format: `hd-<source>__<canonicalizedPath>` (max 150 chars per §4.1).
  *
- * @param {string} source     — 'help-sap-com' | 'cap-cloud-sap' | 'ui5-sap-com'
+ * @param {string} source     — 'help-sap-com' | 'cap-cloud-sap' | 'ui5-sap-com' | 'architecture-sap-com'
  * @param {string} sourceId   — per-source stable ID (URL path or GitHub blob path)
  * @returns {string}          — canonical slug (WITH the 'hd-' prefix)
  */
@@ -48,17 +52,17 @@ export function canonicalizeHelpDocPath(source, sourceId) {
 }
 
 /**
- * Fetch help-docs across all three sources, dedupe by contentHash.
+ * Fetch help-docs across all four sources, dedupe by contentHash.
  * Partial-catalog: one failed source is logged and skipped, not aborted.
  *
  * @param {Object} [opts]
- * @param {string} [opts.apiKey]          — GitHub token for cap-cloud-sap fetcher
+ * @param {string} [opts.apiKey]          — GitHub token for cap-cloud-sap + architecture-sap-com fetchers
  * @param {Set<string>} [opts.seenSourceIds]
  * @param {number} [opts.limit]
  * @returns {Promise<{ rows: Array, perSource: Record<string, {rowsFetched: number, fetcherRejected: boolean, reason?: string}> }>}
  */
 export async function fetchAllHelpDocs({ apiKey, seenSourceIds = null, limit = null } = {}) {
-  // Task 2's cron unit tests can bypass the three fetchers entirely via
+  // Task 2's cron unit tests can bypass the four fetchers entirely via
   // _setMockOrchestrator (below). If set, mock returns synthetic rows +
   // perSource; those rows still flow through dedupeByContentHash so
   // dedupe unit tests can exercise the primitive without real HTTP.
@@ -69,22 +73,25 @@ export async function fetchAllHelpDocs({ apiKey, seenSourceIds = null, limit = n
     return { rows: dedupeByContentHash(rows), perSource };
   }
 
-  const [helpRes, capRes, ui5Res] = await Promise.allSettled([
+  const [helpRes, capRes, ui5Res, archRes] = await Promise.allSettled([
     helpSapCom.fetchHelpSapComCorpus({ seenSourceIds, limit }),
     capCloudSap.fetchCapCloudSapCorpus({ apiKey, seenSourceIds, limit }),
     ui5SapCom.fetchUi5SapComCorpus({ seenSourceIds, limit }),
+    archSapCom.fetchArchitectureSapComCorpus({ apiKey, seenSourceIds, limit }),
   ]);
 
   const perSource = {
     'help-sap-com': shape(helpRes),
     'cap-cloud-sap': shape(capRes),
     'ui5-sap-com': shape(ui5Res),
+    'architecture-sap-com': shape(archRes),
   };
 
   const rows = [
     ...(helpRes.status === 'fulfilled' ? helpRes.value : []),
     ...(capRes.status === 'fulfilled' ? capRes.value : []),
     ...(ui5Res.status === 'fulfilled' ? ui5Res.value : []),
+    ...(archRes.status === 'fulfilled' ? archRes.value : []),
   ];
 
   const rejects = Object.entries(perSource)
@@ -178,6 +185,7 @@ const FETCHER_BY_SOURCE = Object.freeze({
   'help-sap-com': helpSapCom,
   'cap-cloud-sap': capCloudSap,
   'ui5-sap-com': ui5SapCom,
+  'architecture-sap-com': archSapCom,
 });
 
 export function _setMockFetcher(source, fn) {

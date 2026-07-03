@@ -82,6 +82,7 @@ export async function runFetchHelpDocs(logId, opts = {}) {
       'help-sap-com': { rowsFetched: 0, fetcherRejected: false, reason: null },
       'cap-cloud-sap': { rowsFetched: 0, fetcherRejected: false, reason: null },
       'ui5-sap-com': { rowsFetched: 0, fetcherRejected: false, reason: null },
+      'architecture-sap-com': { rowsFetched: 0, fetcherRejected: false, reason: null },
     },
   };
 
@@ -139,10 +140,10 @@ export async function runFetchHelpDocs(logId, opts = {}) {
     // Task 1's orchestrator unit test.
     //
     // API key: TUTORIALS_GITHUB_TOKEN (credstore) → env fallbacks. Used by the
-    // cap-cloud-sap fetcher (GitHub tree + raw endpoints); help.sap.com and
-    // ui5.sap.com endpoints are unauthenticated. If missing, we still fetch —
-    // cap-cloud-sap will 401 out and get logged as a fetcher rejection; the
-    // other two sources still yield a partial catalog.
+    // cap-cloud-sap and architecture-sap-com fetchers (GitHub tree + raw endpoints);
+    // help.sap.com and ui5.sap.com endpoints are unauthenticated. If missing, we
+    // still fetch — the GitHub-backed sources will 401 out and get logged as
+    // fetcher rejections; the other two sources still yield a partial catalog.
     let apiKey = opts.apiKeyOverride;
     if (apiKey === undefined) {
       apiKey = await resolveSecret('TUTORIALS_GITHUB_TOKEN', { logTag: 'fetch-help-docs' })
@@ -152,7 +153,7 @@ export async function runFetchHelpDocs(logId, opts = {}) {
         || null;
     }
     if (!apiKey) {
-      LOG.warn('fetch-help-docs: TUTORIALS_GITHUB_TOKEN unavailable; cap-cloud-sap fetcher will fail (help.sap.com + ui5.sap.com still fetch).');
+      LOG.warn('fetch-help-docs: TUTORIALS_GITHUB_TOKEN unavailable; cap-cloud-sap + architecture-sap-com fetchers will fail (help.sap.com + ui5.sap.com still fetch).');
     }
 
     let orchResult;

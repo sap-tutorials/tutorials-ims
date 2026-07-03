@@ -3125,13 +3125,12 @@
     }
   },
   "meta": {
-    "creator": "CDS Compiler v6.9.0",
-    "compilerVersion": "6.9.0",
+    "creator": "CDS Compiler v7.0.1",
     "compilerCsnFlavor": "$internal",
     "flavor": "inferred",
     "sap.changelog.enhanced": true,
     "minified": true,
-    "build": "CDS Build v9.9.1"
+    "build": "CDS Build v10.0.3"
   },
   "$version": "2.0"
 }

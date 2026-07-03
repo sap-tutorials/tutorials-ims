@@ -80,13 +80,34 @@ describe('buildConceptsPayload — helpDocs field (Phase 4.7)', () => {
     ]);
   });
 
-  it('sourceLabel mapping: cap-cloud-sap → CAP, help-sap-com → SAP Help, ui5-sap-com → UI5', async () => {
+  it('sourceLabel mapping: cap-cloud-sap → CAP, help-sap-com → SAP Help, ui5-sap-com → UI5, architecture-sap-com → Architecture Center', async () => {
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    const { HelpDocs, HelpDocConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const now = new Date().toISOString();
+
+    // Insert an architecture-sap-com row + link so the label mapping is
+    // exercised end-to-end for the fourth source (#860).
+    await INSERT.into(HelpDocs).entries([{
+      slug: 'hd-architecture-sap-com__ra0001', source: 'architecture-sap-com',
+      product: 'architecture', section: null,
+      title: 'RA0001', url: 'https://architecture.learning.sap.com/docs/ref-arch/RA0001',
+      description: 'ref arch body', sourceId: 'docs/ref-arch/RA0001.md',
+      contentHash: 'h4', firstSeenAt: now, lastSeenAt: now,
+    }]);
+    const arch = await SELECT.one.from(HelpDocs).columns('ID').where({ slug: 'hd-architecture-sap-com__ra0001' });
+    const multi = await SELECT.one.from(Concepts).columns('ID').where({ slug: 'multi-hd' });
+    await INSERT.into(HelpDocConceptLinks).entries([{
+      helpDoc_ID: arch.ID, concept_ID: multi.ID, predicate: 'explains',
+      confidence: 0.9, anchor: null, snippet: 'ra0001…', extractedAt: now,
+    }]);
+
     const payload = await buildConceptsPayload(cds.db);
-    const multi = payload.concepts.find(c => c.slug === 'multi-hd');
-    const labels = new Map(multi.helpDocs.map(hd => [hd.source, hd.sourceLabel]));
+    const multiPayload = payload.concepts.find(c => c.slug === 'multi-hd');
+    const labels = new Map(multiPayload.helpDocs.map(hd => [hd.source, hd.sourceLabel]));
     expect(labels.get('cap-cloud-sap')).toBe('CAP');
     expect(labels.get('help-sap-com')).toBe('SAP Help');
     expect(labels.get('ui5-sap-com')).toBe('UI5');
+    expect(labels.get('architecture-sap-com')).toBe('Architecture Center');
   });
 
   it('derives anchorLabel from anchor (title-case, dashes → spaces); null-safe', async () => {
