@@ -948,9 +948,15 @@ cds.on('served', async () => {
   // Wire up the real AnalyticsService OData adapter to the stub registered in 'bootstrap'.
   // In CDS 9.x, cds.services.AnalyticsService._adapters._default IS the express Router/middleware
   // function (not a wrapper object with a .router property). Assign it directly.
+  // CAP 10 change: `_adapters._default` is now the adapter INSTANCE (HttpAdapter) rather
+  // than the router function — get the router via `.router`. Fall back to the CDS-9 shape
+  // in case anything downstream still returns the raw router (defensive).
   // We must also wrap it with context + auth middlewares (the CDS 'before' middlewares that
   // cds.serve normally prepends) since our bootstrap stub bypassed them.
-  const analyticsAdapter = cds.services.AnalyticsService?._adapters?._default;
+  const analyticsDefaultAdapter = cds.services.AnalyticsService?._adapters?._default;
+  const analyticsAdapter = typeof analyticsDefaultAdapter === 'function'
+    ? analyticsDefaultAdapter                      // CDS 9 shape
+    : analyticsDefaultAdapter?.router;             // CDS 10 shape
   if (typeof analyticsAdapter === 'function') {
     analyticsOdataRouter = (req, res, next) => {
       contextMw(req, res, (err) => {
