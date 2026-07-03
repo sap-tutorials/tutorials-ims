@@ -63,10 +63,19 @@ PROCEDURE KG_SHORTEST_PATH_GRAPH (
 )
 LANGUAGE GRAPH READS SQL DATA AS
 BEGIN
-  -- Two-arg Graph() constructor — schema qualifier required per the
-  -- SAP sample. **CURRENT_SCHEMA** is the HDI container schema; HANA
-  -- resolves it at deploy time.
-  GRAPH g = Graph("**CURRENT_SCHEMA**", "KG_PG_WORKSPACE");
+  -- Single-arg Graph() constructor. HDI enforces that PROCEDURE
+  -- references are schema-local — the two-arg form Graph("SCHEMA",
+  -- "WORKSPACE") from SAP's sample works when the workspace lives in
+  -- a different schema (their sample has GRAPHSCRIPT.GRAPHWS across
+  -- schemas). Our workspace lives in the HDI container's own schema,
+  -- so the single-arg form is required. Deploy attempt with
+  -- **CURRENT_SCHEMA** placeholder failed with error 8250002:
+  --   "the reference has to be schema-local in PROCEDURE
+  --   KG_SHORTEST_PATH_GRAPH"
+  -- See db/src/procedures/KG_QUERY.hdbprocedure:41-45 for the parallel
+  -- lesson on the SPARQL side: cross-schema references in DEFINER
+  -- procedures require a synonym; single-schema references are direct.
+  GRAPH g = Graph("KG_PG_WORKSPACE");
 
   -- Guard against missing endpoints — same pattern as SAP's example.
   -- Without this, Vertex(:g, :key) throws when the key doesn't exist,
