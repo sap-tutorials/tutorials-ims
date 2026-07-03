@@ -965,12 +965,22 @@ export default cds.service.impl(async function () {
     // round-trip so `kg_path_between_latency_ms_v1` isn't polluted by v2
     // fallback-attempt time (v2 timeouts would otherwise show up in v1's
     // p95/p99 dashboard and confuse the decision-gate A/B numbers).
+    //
+    // IRI-vs-slug contract: KG_QUERY.hdbprocedure validates p1/p2 against
+    // `^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$` (line 182)
+    // and SIGNALs KG_INVALID_TUTORIAL_IRI (10006) on mismatch. Callers MUST
+    // pass full IRIs, not bare slugs. See srv/lib/kg-path.js:38-45 for the
+    // canonical pattern. Live drill 2026-07-03 caught this: passing bare
+    // slugs raised SIGNAL 10006 on every call, causing the handler to
+    // return []. Not a regression from the spike — the pre-spike handler
+    // was a Phase 2 stub that always returned []; the spike wired it up
+    // for the first time and inherited the impedance mismatch.
     const t1 = Date.now();
     try {
       const { response } = await kgQueryImpl({
         db: cds.db,
         queryName: 'PATH_BETWEEN',
-        params: { fromSlug, toSlug },
+        params: { fromSlug: fromIri, toSlug: toIri },
       });
       const wire = mapV1SparqlToWireShape(response);
       metrics.counter(wire.length ? 'kg_path_between_calls_v1_success' : 'kg_path_between_calls_v1_empty');
