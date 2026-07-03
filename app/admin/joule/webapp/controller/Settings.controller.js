@@ -176,6 +176,56 @@ sap.ui.define([
         });
     },
 
+    // Issue #943: mirrors onSeedEmbeddings but targets Concepts.embedding
+    // (KG concept-level embeddings) rather than TutorialEmbedding. The
+    // backend action runs synchronously and returns { processed, failed,
+    // latencyMs } — surfaced as a toast on completion.
+    onSeedConceptEmbeddings: function () {
+      var self = this;
+      var bundle = self.getView().getModel("i18n").getResourceBundle();
+      MessageToast.show(bundle.getText("seedConceptRunning"));
+      fetch("/admin/$metadata", {
+        method: "HEAD",
+        credentials: "include",
+        headers: { "x-csrf-token": "fetch" }
+      })
+        .then(function (res) {
+          return res.headers.get("x-csrf-token") || "";
+        })
+        .then(function (token) {
+          return fetch("/admin/ChatSettings/AdminService.seedConceptEmbeddings", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "x-csrf-token": token
+            },
+            body: JSON.stringify({})
+          });
+        })
+        .then(function (res) {
+          if (!res.ok) {
+            return res.text().then(function (txt) {
+              throw new Error(txt || "HTTP " + res.status);
+            });
+          }
+          return res.json();
+        })
+        .then(function (payload) {
+          // OData wraps action results in { value: {...} } or returns the flat
+          // object depending on protocol version. Accept both shapes.
+          var summary = payload && payload.value ? payload.value : payload;
+          var processed = summary && summary.processed != null ? summary.processed : 0;
+          var failed = summary && summary.failed != null ? summary.failed : 0;
+          var latencyMs = summary && summary.latencyMs != null ? summary.latencyMs : 0;
+          MessageToast.show(bundle.getText("seedConceptSummary", [processed, failed, latencyMs]));
+        })
+        .catch(function (err) {
+          MessageBox.error("Concept seed failed: " + err.message);
+        });
+    },
+
     _refreshStats: function () {
       var self = this;
       fetch("/admin/embeddings/stats", {
