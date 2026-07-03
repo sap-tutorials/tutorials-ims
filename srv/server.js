@@ -49,6 +49,7 @@ import { backfillUserProfile, resolveDbUser } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import multer from 'multer';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
+import { installDbWrap } from './lib/metrics-db-wrap.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -1104,4 +1105,45 @@ cds.on('served', () => {
   };
 
   cds.log('chat').info('POST /chat/stream registered');
+});
+
+// #805 PR 2 (#909) — Passive wrapper on cds.db.run / cds.db.tx to observe HANA
+// pool acquire-latency + tx wall-clock. Deliberately its own cds.on('served')
+// handler so the wrapping code is isolated behind the METRICS_DB_WRAP flag.
+// The wrapping logic itself lives in ./lib/metrics-db-wrap.js so it can be
+// unit-tested without booting CAP.
+//
+// Gate: both METRICS_ENABLED !== 'false' AND METRICS_DB_WRAP === 'true'.
+// This mirrors metrics.js's own kill-switch semantics (env var 'false' wins
+// over 'true' or unset). When the wrapper isn't installed, cds.db.run and
+// cds.db.tx retain their original bindings at zero cost — no promise-chain
+// overhead per query.
+//
+// Guard: globalThis.__metricsDbWrapInstalled — cds.on('served') can re-fire
+// under cds.test() when multiple test files import the runtime. Matches the
+// __feedbackBeforeHookRegistered / navigatorCacheInvalidatorRegistered
+// sentinel convention elsewhere in this file.
+//
+// Metrics emitted:
+//   - db.acquire.ms       — histogram, every cds.db.run(...) observation
+//   - db.tx.ms            — histogram, every db.tx(fn) end-to-end wall-clock
+//   - db.tx.run.ms        — histogram, every tx.run(...) inside a tx callback
+//   - db.pool.timeout     — counter, error.message matches /timeout|acquire/i
+//
+// Caveats (see spec § HANA pool acquire-latency):
+//   - Timing conflates acquire time and query time — no driver hook separates
+//     them. When the pool is starved, acquire dominates; when healthy, query
+//     time dominates and blends into histogram noise. A p95 rise with
+//     unchanged query mix is the exhaustion signal.
+//   - The 3 cds.tx(...) sites (repo-catalog / category-classifier /
+//     validate-answer-spec-publish) go un-instrumented in v1. Not pool-starving.
+//   - Nested-tx short-circuit in @sap/cds/lib/srv/srv-tx.js means the outer
+//     db.tx.ms observation can double-count against the wall-clock of an
+//     already-active tx. Not a correctness issue — flagged so admin-tile
+//     percentiles read as "acquire + tx pressure signal" not "unique samples."
+cds.on('served', () => {
+  const installed = installDbWrap(cds);
+  if (installed) {
+    cds.log('metrics-db-wrap').info('METRICS_DB_WRAP enabled: cds.db.run / cds.db.tx wrapped');
+  }
 });
