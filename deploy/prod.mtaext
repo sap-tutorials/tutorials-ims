@@ -1,6 +1,6 @@
 _schema-version: 3.3.0
-ID: tutorials-poc-prod
-extends: tutorials-poc
+ID: tutorials-ims-prod
+extends: tutorials-ims
 
 modules:
   - name: tutorials-srv
