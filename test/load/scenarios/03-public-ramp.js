@@ -1,0 +1,79 @@
+// test/load/scenarios/03-public-ramp.js
+// Ramp 0 → 100 VU over 5 min, hold 10 min. Same endpoint mix as baseline.
+// Threshold is 2× baseline (softer — see spec section 3).
+
+import { sleep } from 'k6';
+import { BASE_URL, SRV_URL, SUMMARY_PATH, THRESHOLDS } from '../config.js';
+import { getTagged } from '../lib/http.js';
+import { checkJson, checkHtml, checkImage } from '../lib/checks.js';
+import fetchSlugs from '../lib/slugs.js';
+
+export const options = {
+  scenarios: {
+    ramp: {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        { duration: '5m', target: 100 },
+        { duration: '10m', target: 100 },
+      ],
+      tags: { scenario: 'ramp' },
+    },
+  },
+  thresholds: THRESHOLDS,
+};
+
+export function setup() {
+  return fetchSlugs(SRV_URL);
+}
+
+const MIX = [
+  { max: 20, endpoint: 'build-catalog' },
+  { max: 30, endpoint: 'build-navigator' },
+  { max: 80, endpoint: 'tutorial' },
+  { max: 95, endpoint: 'advocates-list' },
+  { max: 100, endpoint: 'advocates-photo' },
+];
+
+function pickEndpoint() {
+  const roll = Math.random() * 100;
+  for (const m of MIX) {
+    if (roll < m.max) return m.endpoint;
+  }
+  return MIX[MIX.length - 1].endpoint;
+}
+
+export default function (data) {
+  const which = pickEndpoint();
+  switch (which) {
+    case 'build-catalog':
+      checkJson(getTagged(`${SRV_URL}/build/catalog`, 'build-catalog'), 'build-catalog');
+      break;
+    case 'build-navigator':
+      checkJson(getTagged(`${SRV_URL}/build/navigator`, 'build-navigator'), 'build-navigator');
+      break;
+    case 'tutorial': {
+      const slug = data.tutorialSlugs[Math.floor(Math.random() * data.tutorialSlugs.length)];
+      checkHtml(getTagged(`${BASE_URL}/tutorials/${slug}/`, 'tutorial'), 'tutorial');
+      break;
+    }
+    case 'advocates-list':
+      checkJson(getTagged(`${SRV_URL}/api/advocates`, 'advocates-list'), 'advocates-list');
+      break;
+    case 'advocates-photo': {
+      if (data.advocateSlugs.length === 0) break;
+      const slug = data.advocateSlugs[Math.floor(Math.random() * data.advocateSlugs.length)];
+      checkImage(
+        getTagged(`${SRV_URL}/api/advocates/${slug}/photo`, 'advocates-photo'),
+        'advocates-photo',
+        'image/',
+      );
+      break;
+    }
+  }
+  sleep(0.3 + Math.random() * 0.4);
+}
+
+export function handleSummary(data) {
+  return { [SUMMARY_PATH]: JSON.stringify(data, null, 2) };
+}
