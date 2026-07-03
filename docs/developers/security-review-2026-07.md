@@ -37,8 +37,8 @@ Note on the numbering: #896 and #897 are both MEDIUM but grouped under the "auth
 
 The DEV publish-token value (a short well-known ASCII string, redacted here per #887 fix) was previously embedded in:
 
-- [CLAUDE.md:95](../../CLAUDE.md#L95), [CLAUDE.md:130](../../CLAUDE.md#L130)
-- [deploy/dev.mtaext](../../deploy/dev.mtaext) — literal, not a `${...}` placeholder
+- [CLAUDE.md:95](https://github.com/sap-tutorials/tutorials-ims/blob/main/CLAUDE.md#L95), [CLAUDE.md:130](https://github.com/sap-tutorials/tutorials-ims/blob/main/CLAUDE.md#L130)
+- [deploy/dev.mtaext](https://github.com/sap-tutorials/tutorials-ims/blob/main/deploy/dev.mtaext) — literal, not a `${...}` placeholder
 - Multiple developer docs (`docs/developers/architecture/authentication.md`, `docs/developers/operations/mta-deployment.md`, `docs/developers/operations/re-migration-runbook.md`, `docs/developers/reference/ai-consumption.md`)
 - Every `docs/superpowers/plans/*.md` that ever mentioned publish testing
 - `srv/data/admin-docs-index.json` (indexed for the in-app admin help)
