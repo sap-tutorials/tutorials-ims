@@ -1,0 +1,35 @@
+name: unit tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# PR-time gate — `deploy.yml` runs unit tests only after a successful deploy,
+# which is too late for merge protection. This workflow re-runs the same
+# `npm test` suite on every PR and every push to `main`, so a red commit
+# never lands unnoticed. Closes the PR-gate half of #961.
+#
+# The vitest `unit` project uses in-memory SQLite and does not need a HANA
+# binding or CF login. `npm run setup` installs the nested `hugo-apps` and
+# `app/explore` workspaces and rebuilds `better-sqlite3` — both are required
+# by the unit suite and are otherwise silently skipped by the org-wide
+# `npm config ignore-scripts=true` policy.
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Setup nested workspaces (hugo-apps, app/explore) + rebuild native bindings
+        run: npm run setup
+      - name: Run unit tests
+        run: npm test

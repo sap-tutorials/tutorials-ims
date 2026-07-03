@@ -14,11 +14,14 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
   describe('navigation.json', () => {
     const nav = JSON.parse(readFileSync(path.join(SHELL_DIR, 'model/navigation.json'), 'utf8'))
 
-    it('has a top-level "homepageGroup" group with three children in the right order', () => {
+    it('has a top-level "homepageGroup" group with the expected children in the right order', () => {
       const group = nav.groups.find((g: any) => g.key === 'homepageGroup')
       expect(group, 'homepageGroup must exist at top level').toBeTruthy()
+      // Order matters: Shelves first, then the two explainer apps (#759),
+      // then Redirects and Config. Any reorder here is a UI regression.
       expect(group.items.map((i: any) => i.key)).toEqual([
-        'homepageShelves', 'homepageRedirects', 'homepageConfig',
+        'homepageShelves', 'verbDefinitions', 'shelfDefinitions',
+        'homepageRedirects', 'homepageConfig',
       ])
     })
 

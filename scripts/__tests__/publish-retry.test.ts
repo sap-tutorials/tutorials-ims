@@ -82,6 +82,11 @@ describe('withRetry', () => {
     const err502 = Object.assign(new Error('boom'), { status: 502 });
     const fn = vi.fn().mockRejectedValue(err502);
     const p = withRetry(fn, { attempts: 3, backoffMs: [10, 30, 90] });
+    // Pre-attach a catch handler so the eventual rejection isn't reported
+    // as unhandled between vi.advanceTimersByTimeAsync ticks — Vitest's
+    // unhandled-rejection guard fires on the microtask BEFORE `expect(p).rejects`
+    // registers its own handler.
+    p.catch(() => {});
     await vi.advanceTimersByTimeAsync(40);
     await vi.advanceTimersByTimeAsync(30);
     await expect(p).rejects.toMatchObject({ attempts: 3 });

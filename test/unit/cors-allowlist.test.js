@@ -1,18 +1,27 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 
-// Issue #133: CORS must allowlist origins, not reflect any. Set
-// ALLOWED_CORS_ORIGINS before cds.test boots so the bootstrap closure picks
-// it up the first time the middleware runs.
-process.env.ALLOWED_CORS_ORIGINS = 'http://allowed.example,http://localhost:1313';
+// Issue #133: CORS must allowlist origins, not reflect any. The allowlist is
+// now sourced from TenantSettings (managed via /admin-ui/#tenantsettings-display)
+// — the ALLOWED_CORS_ORIGINS env-var fallback was removed in the
+// credstore-runtime-config PR. See srv/lib/runtime-config/tenant-settings.js.
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('CORS allowlist (#133)', () => {
   let baseUrl;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     baseUrl = project.url;
+    // Seed the TenantSettings row that resolveTenantSettings() reads. The
+    // resolver caches for 5s on globalThis; reset the cache and (re-)insert.
+    const { TenantSettings } = cds.entities('com.sap.developers.ims');
+    const { _resetCacheForTests } = await import('../../srv/lib/runtime-config/tenant-settings.js');
+    await DELETE.from(TenantSettings);
+    await INSERT.into(TenantSettings).entries({
+      allowedCorsOrigins: 'http://allowed.example,http://localhost:1313',
+    });
+    _resetCacheForTests();
   });
 
   it('does not echo a disallowed origin', async () => {

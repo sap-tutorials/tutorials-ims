@@ -34,6 +34,7 @@ hugo/static-qa/
 *.png
 !docs/public/launch/*.png
 !hugo/static/img/advocates-world-map.png
+!test/unit/advocates/fixtures/*.png
 hugo/static/js/*
 !hugo/static/js/joule.js
 !hugo/static/js/joule-render.js

@@ -17,7 +17,9 @@ describe('header.html — Knowledge Graph nav entry', () => {
   it('has a /explore <ui5-li>', () => {
     // Match the line shape — icon + data-href + text — without overspecifying
     // the icon (so we can iterate on visuals without breaking the test).
-    const re = /<ui5-li[^>]*data-href="\/explore"[^>]*>([^<]+)<\/ui5-li>/
+    // The href points at /explore/about/ (landing sub-page); anything under
+    // /explore/... is accepted so future re-routing doesn't break the test.
+    const re = /<ui5-li[^>]*data-href="\/explore(?:\/[^"]*)?"[^>]*>([^<]+)<\/ui5-li>/
     const m = header.match(re)
     expect(m, '/explore <ui5-li> in nav popover').toBeTruthy()
     expect(m![1].trim().toLowerCase()).toMatch(/knowledge graph/)
