@@ -39,6 +39,17 @@ describe('migration-mode handler routing', () => {
   });
 
   function setContext(ctx) {
+    // Self-reference `ctx.context = ctx` bypasses CAP's `EventContext.for(x)`
+    // wrapping (see `@sap/cds/lib/index.js` — the setter uses `x.context ||
+    // EventContext.for(x)`). Without this shortcut, `EventContext.for(x)`
+    // sets `_propagated = cds.context`, so `http` / `user` from the previous
+    // `it`'s `setContext` bleed through even across `afterEach`-restored
+    // undefined resets — because Vitest 4 + Node 22 (forks pool) creates
+    // each `it` in a new async task whose AsyncLocalStorage inherits the
+    // parent scope's frozen store, and `enterWith(undefined)` inside
+    // `beforeEach`/`afterEach` doesn't propagate back to that parent scope.
+    // Self-ref sidesteps the whole propagation chain.
+    ctx.context = ctx;
     cds.context = ctx;
   }
 

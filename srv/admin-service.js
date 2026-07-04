@@ -2436,10 +2436,20 @@ export default class AdminService extends cds.ApplicationService {
   async _collectClassifyTargets(kind, ids) {
     const out = [];
     const kinds = kind === 'all' ? ['mission', 'group', 'tutorial'] : [kind];
+    // Use the entity refs from the persisted model, not the bare projection
+    // names ('Missions'/'Groups'/'Tutorials'). Under `cds.test('serve','--in-memory')`
+    // the AdminService projections are compiled as views, but the awaited
+    // SELECT ultimately dispatches through `cds.db`, whose model only carries
+    // the fully-qualified persisted names. Passing the bare projection name
+    // there yields `SELECT ID FROM Missions` → SQLite "no such table" on some
+    // Node versions where the resolver doesn't fall back to the projection.
+    // Grabbing the entity references from `cds.entities(NS)` sidesteps this.
+    const { Missions, Groups, Tutorials } = cds.entities('com.sap.developers.ims');
+    const entityRef = { mission: Missions, group: Groups, tutorial: Tutorials };
     for (const k of kinds) {
-      const entityName = { mission: 'Missions', group: 'Groups', tutorial: 'Tutorials' }[k];
+      const entity = entityRef[k];
       const where = (Array.isArray(ids) && ids.length > 0) ? { ID: { in: ids } } : {};
-      const rows = await SELECT.from(entityName).columns('ID').where(where);
+      const rows = await SELECT.from(entity).columns('ID').where(where);
       for (const r of rows) out.push({ kind: k, id: r.ID });
     }
     return out;
