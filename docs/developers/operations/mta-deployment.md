@@ -392,36 +392,25 @@ A placeholder PAT is safe for ad-hoc deploys: only [srv/lib/rebuild-trigger.js](
 
 CI uses `--var github-dispatch-token=...` per CLAUDE.md docs — but that's the GitHub Actions / `mbt` deploy step, not raw `cf deploy`. The `mbt deploy` plugin has the flag; `cf deploy` doesn't.
 
-### Empty-value placeholders become YAML `null` and MTA rejects them
+### Local deploy no longer needs envsubst
 
-When `envsubst < dev.mtaext > dev.resolved.mtaext` substitutes a placeholder with an EMPTY env var (e.g. unset `GITHUB_DISPATCH_TOKEN=""`), the resulting line is `KEY:` followed by a single space and no value. YAML parses that as `null`, NOT as `""`. The MTA descriptor merger rejects null with `"The property X is not optional and has no value"` — even though the BASE mta.yaml declares the property with `KEY: ""` (empty string).
+As of the finish-credstore-migration PR (2026-07-04), `deploy/{dev,qa,prod}.mtaext` contain no `${…}` placeholders — the three deploy-time secrets (`CONTENT_API_KEY`, `GITHUB_DISPATCH_TOKEN`) live exclusively in the BTP Credential Store, and `APPROUTER_URL` was removed entirely (no code reads it).
 
-**Why:** Any empty placeholder in dev/qa/prod.mtaext stops cf deploy at the descriptor-merge step.
-
-**How to apply:** When running a local deploy with no real value for a secret-bearing var, **strip the empty placeholder lines** from the resolved mtaext rather than letting them write a YAML-null override. One-liner:
+The local deploy is now one line:
 
 ```bash
-GITHUB_DISPATCH_TOKEN="$YOUR_PAT" \
-CONTENT_API_KEY="$YOUR_CONTENT_KEY" \
-APPROUTER_URL="$YOUR_APPROUTER_URL" \
-envsubst '$GITHUB_DISPATCH_TOKEN $CONTENT_API_KEY $APPROUTER_URL' \
-  < deploy/dev.mtaext > deploy/dev.resolved.mtaext
-sed -E -i '/^[[:space:]]+[A-Z_]+:[[:space:]]*$/d' deploy/dev.resolved.mtaext
+cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
 ```
 
-> **Note (2026-07-02):** `REBUILD_API_KEY` formerly rode through `envsubst`
-> here. Removed in PR #903 (finishes #871 rollout): approuter reads it
-> exclusively from BTP Credential Store via
-> [approuter/lib/credstore-secret.js](../../../approuter/lib/credstore-secret.js).
-> Rotation is done through the admin UI at `/admin-ui/#secrets-display`.
->
-> **Note (2026-06-26):** SMTP transport config (`SMTP_HOST/PORT/USER/FROM/PASS`)
-> and `REBUILD_TARGET_ENV` formerly rode through `envsubst` here. They now live
-> in BTP Credential Store / `TenantSettings` respectively and are managed via
-> the admin UI (`/admin-ui/#secrets-display`, `/#tenantsettings-display`). The
-> envsubst allowlist above is the complete remaining set.
+**Secrets seeded elsewhere:** Manage rotation through `/admin-ui/#secrets-display` on the target env's approuter. If a fresh env has never had secrets seeded, `contentAuthMiddleware` returns 503 "Content API not configured" — seed the aliases before running `POST /content/publish`.
 
-After the strip, the base mta.yaml's `KEY: ""` default takes effect. This matches the actual deploy intent ("don't override").
+**Prior migrations for context:**
+- `REBUILD_API_KEY` — moved to credstore in #871, envsubst stripped in #904 (2026-07-02).
+- `YOUTUBE_API_KEY` — moved to credstore in #683.
+- SMTP transport (`SMTP_HOST/PORT/USER/FROM/PASS`) — moved to credstore in #545/#580.
+- `REBUILD_TARGET_ENV` — moved to `TenantSettings` HANA entity, managed via `/admin-ui/#tenantsettings-display`.
+
+The envsubst allowlist in `.github/workflows/deploy.yml` is now empty — the precheck job just greps for surviving `${…}` placeholders as a regression guard.
 
 ### mtaext cannot introduce new properties — base mta.yaml must declare them first
 
