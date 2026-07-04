@@ -1,4 +1,5 @@
 import { readSessionCache, writeSessionCache, type Envelope } from './session-cache';
+import { applyVerbOrder } from './verb-order';
 
 const DEFAULT_FLAG_KEY = 'sap-devs-homepage-default';
 const ENDPOINT = '/homepage/personalized';
@@ -47,4 +48,9 @@ export async function boot(): Promise<void> {
 }
 
 // Replaced by Task 10 with the surface dispatcher.
-function applyEnvelope(_env: Envelope): void { /* Task 10 */ }
+function applyEnvelope(env: Envelope): void {
+  applyVerbOrder(
+    document.querySelector<HTMLElement>('[data-personalize="verb-order"]'),
+    env.verbOrder ?? []
+  );
+}

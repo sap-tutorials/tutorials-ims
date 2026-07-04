@@ -5,7 +5,10 @@
        Reads verb definitions from site.Data.verb_definitions (baked by
        scripts/fetch-verb-definitions.ts at build time). Falls back to the
        hard-coded slice if the baked JSON is missing — keeps local dev
-       working without the fetcher step. */ -}}
+       working without the fetcher step.
+
+       #763: section/ul/li structure added so homepage-personalizer.js can
+       reorder tiles by moving existing <li> elements (preserves DOM identity). */ -}}
 {{- $shelves := .shelves | default slice -}}
 {{- $bakedVerbs := slice -}}
 {{- with site.Data.verb_definitions }}
@@ -23,7 +26,8 @@
 {{- $verbDefs := cond (gt (len $bakedVerbs) 0) $bakedVerbs $fallbackVerbs -}}
 {{- /* For baked entries, supply href since the build feed doesn't include it. */ -}}
 {{- $hrefMap := dict "LEARN" "/learn/" "BUILD" "/build/" "INTEGRATE" "/integrate/" "OPERATE" "/operate/" "AI" "/ai/" "CONNECT" "/connect/" -}}
-<nav class="hp-verbs" aria-label="Developer paths">
+<section class="verb-spine" data-personalize="verb-order" data-skeleton="verb-spine">
+<ul class="hp-verbs" aria-label="Developer paths">
   {{- range sort $verbDefs "sortOrder" -}}
     {{- $vKey := .verbKey -}}
     {{- $vLabel := .label -}}
@@ -42,6 +46,7 @@
            after createApp.mount(). */ -}}
     {{- $previewTitles := slice -}}
     {{- range $preview -}}{{- $previewTitles = $previewTitles | append .title -}}{{- end -}}
+    <li data-verb="{{ $vKey | lower }}">
     <div data-island="verb-flip-tile"
          data-verb-key="{{ $vKey }}"
          data-label="{{ $vLabel }}"
@@ -66,5 +71,7 @@
         {{- end -}}
       </a>
     </div>
+    </li>
   {{- end -}}
-</nav>
+</ul>
+</section>
