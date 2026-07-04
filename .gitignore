@@ -28,6 +28,8 @@ hugo/static-qa/
 .comparison-results/
 .migration-data/
 .hana-snapshots/
+# #807 baseline validation — local k6 summaries + /admin/metrics/live captures.
+.load-artifacts/
 *.local
 .env
 .playwright-mcp/
