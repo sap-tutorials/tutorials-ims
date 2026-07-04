@@ -118,4 +118,49 @@ VIEW "KG_PG_EDGES_V" AS
   FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS" m
   JOIN "COM_SAP_DEVELOPERS_IMS_GROUPS" g ON g.ID = m.GROUP_ID
   WHERE m.GROUP_ID IS NOT NULL
-    AND m.SLUG IS NOT NULL AND g.SLUG IS NOT NULL;
+    AND m.SLUG IS NOT NULL AND g.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:taggedWith edges: tutorial → tag
+  -- Tag identity is Tags.name (Tags entity has no dedicated slug column;
+  -- RDF projection at srv/lib/kg-projection.js:1027-1028 uses NAME too).
+  -- Filter NULL names (Tags.name is nullable per the live schema).
+  SELECT
+    CAST('tw|' || t.SLUG || '|' || tg.NAME AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280))             AS "SOURCE",
+    CAST('tag:'      || tg.NAME AS NVARCHAR(280))            AS "TARGET",
+    'taggedWith'                                             AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALTAGS" tt
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tt.TUTORIAL_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_TAGS" tg ON tg.ID = tt.TAG_ID
+  WHERE tg.NAME IS NOT NULL AND t.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:aboutProduct edges: tutorial → product
+  -- Product vertices are synthesized from tags whose NAME starts with
+  -- 'software-product>'. LENGTH('software-product>')=17, so SUBSTRING
+  -- position 18 extracts the suffix. Mirrors RDF projection at
+  -- srv/lib/kg-projection.js:305-310.
+  SELECT
+    CAST('ap|' || t.SLUG || '|' || SUBSTRING(tg.NAME, 18) AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280))                            AS "SOURCE",
+    CAST('product:'  || SUBSTRING(tg.NAME, 18) AS NVARCHAR(280))            AS "TARGET",
+    'aboutProduct'                                                          AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALTAGS" tt
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tt.TUTORIAL_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_TAGS" tg ON tg.ID = tt.TAG_ID
+  WHERE tg.NAME LIKE 'software-product>%'
+    AND t.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:inCategory edges: mission → category
+  -- Via MissionCategories junction. RDF projection at
+  -- srv/lib/kg-projection.js:320-323 only emits Mission→Category;
+  -- TutorialCategories exists in the schema but is NOT projected either
+  -- side. #919 mirrors that decision.
+  SELECT
+    CAST('ic|' || m.SLUG || '|' || c.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('mission:'  || m.SLUG AS NVARCHAR(280))            AS "SOURCE",
+    CAST('category:' || c.SLUG AS NVARCHAR(280))            AS "TARGET",
+    'inCategory'                                            AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_MISSIONCATEGORIES" mc
+  JOIN "COM_SAP_DEVELOPERS_IMS_MISSIONS" m ON m.ID = mc.MISSION_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CATEGORIES" c ON c.ID = mc.CATEGORY_ID
+  WHERE m.SLUG IS NOT NULL AND c.SLUG IS NOT NULL;
