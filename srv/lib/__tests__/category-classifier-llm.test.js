@@ -19,8 +19,14 @@ vi.mock('@sap/cds', () => {
   return { default: { log, env: {} } };
 });
 
+vi.mock('../chat-settings-resolver.js', () => ({
+  resolveChatLlmSettings: vi.fn(() => Promise.resolve({
+    modelName: 'anthropic--claude-4.6-sonnet',
+    deploymentId: 'test-deployment-id',
+  })),
+}));
+
 beforeEach(() => {
-  globalThis.SELECT = { one: { from: () => Promise.resolve({ modelName: null, deploymentId: null }) } };
   mockChatCompletion.mockReset();
 });
 
