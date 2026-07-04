@@ -30,6 +30,8 @@ describe('mountForYou', () => {
   // Regression: XSS via javascript:/data:/vbscript: URLs in admin-authored
   // For-you candidates. linkFor() must drop unsafe kinds/schemes entirely
   // (the <li v-if=linkFor> gate removes the whole item from the DOM).
+  // Also covers the parser-differential where '//evil.com' resolves against
+  // location.origin — must reject protocol-relative inputs.
   it('drops items whose resolved link is not http(s)', async () => {
     mountForYou(root(), [
       { ID: '1', kind: 'tutorial', slug: 'safe-a', title: 'A', description: '', imageUrl: '' },
@@ -38,6 +40,7 @@ describe('mountForYou', () => {
       { ID: '4', kind: 'blog',     slug: 'data:text/html,<script>alert(1)</script>', title: 'Data', description: '', imageUrl: '' },
       { ID: '5', kind: 'tutorial', slug: 'safe-c', title: 'C', description: '', imageUrl: '' },
       { ID: '6', kind: 'unknown-kind', slug: '/tutorials/x/', title: 'X', description: '', imageUrl: '' },
+      { ID: '7', kind: 'shelf',    slug: '//evil.com/pwn', title: 'ProtoRel', description: '', imageUrl: '' },
     ]);
     // Wait a tick for Vue to render.
     await new Promise((r) => setTimeout(r, 0));
@@ -50,6 +53,7 @@ describe('mountForYou', () => {
       expect(href.startsWith('/') || href.startsWith('https://') || href.startsWith('http://')).toBe(true);
       expect(href.startsWith('javascript:')).toBe(false);
       expect(href.startsWith('data:')).toBe(false);
+      expect(href.startsWith('//')).toBe(false);
     }
   });
 });

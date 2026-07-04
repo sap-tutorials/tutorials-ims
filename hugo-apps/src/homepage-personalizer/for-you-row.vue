@@ -20,15 +20,18 @@ interface ForYouItem {
 defineProps<{ items: ForYouItem[] }>();
 
 // Only http(s) URLs are permitted for external targets. Anything else
-// (javascript:, data:, vbscript:) resolves to null → item is dropped from
-// the list entirely (see <li v-if> above). Admins own For-you candidates,
-// but this defends against a compromised admin session or a data-import
-// mistake — the personalization surface must never emit an active
-// javascript: URL. Follows the same allowlist pattern as slug validation
-// elsewhere in the pipeline.
+// (javascript:, data:, vbscript:, protocol-relative //evil.com) resolves
+// to null → item is dropped from the list entirely (see <li v-if> above).
+// Admins own For-you candidates, but this defends against a compromised
+// admin session or a data-import mistake — the personalization surface
+// must never emit an active javascript: URL or a cross-origin link the
+// author didn't type. Parses the candidate WITHOUT a base URL so
+// protocol-relative inputs like '//evil.com' throw and get rejected —
+// avoids the parser-differential where `new URL('//evil.com', origin)`
+// resolves to a same-scheme cross-origin URL and passes an isHttp check.
 function isHttpUrl(candidate: string): boolean {
   try {
-    const u = new URL(candidate, location.origin);
+    const u = new URL(candidate);
     return u.protocol === 'https:' || u.protocol === 'http:';
   } catch {
     return false;
@@ -72,7 +75,13 @@ function linkFor(it: ForYouItem): string | null {
 
 function safeImage(url: string): string | null {
   if (!url) return null;
-  if (url.startsWith('/') && !url.startsWith('//')) return url;   // same-origin absolute path
-  return isHttpUrl(url) ? url : null;                              // full URLs must be http(s)
+  // Same-origin absolute path — must NOT be protocol-relative ('//host/x').
+  if (url.startsWith('/') && !url.startsWith('//')) return url;
+  // External images: require an explicit http(s) scheme in the raw string,
+  // then confirm via URL parsing that the resolved protocol is http(s).
+  // Rejecting protocol-relative here avoids the parser-differential where
+  // '//evil.com/x.png' resolves against the page origin.
+  if (!url.startsWith('https://') && !url.startsWith('http://')) return null;
+  return isHttpUrl(url) ? url : null;
 }
 </script>
