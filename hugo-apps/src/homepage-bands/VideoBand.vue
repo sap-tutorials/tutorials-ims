@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { applyVideoFilter } from '../homepage-personalizer/video-filter';
 
 interface VideoItem {
   videoId: string;
   title: string;
   thumbnail?: string;
   publishedAt?: string;
+  tags?: string[];
 }
 
 interface VideosResponse {
@@ -29,19 +31,29 @@ function watchUrl(videoId: string): string {
 
 const recentSlice = computed(() => recent.value.slice(0, 3));
 
+function readVideoTags(): string[] {
+  try {
+    const raw = sessionStorage.getItem('sap-devs-homepage-personalized');
+    if (!raw) return [];
+    const row = JSON.parse(raw) as { payload?: { videoFilterTags?: string[] } };
+    return row?.payload?.videoFilterTags ?? [];
+  } catch { return []; }
+}
+
 onMounted(async () => {
   try {
     const res = await fetch('/homepage/videos');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body: VideosResponse = await res.json();
+    const tags = readVideoTags();
     // Support both shaped response {featured, recent:[...]} and flat array
     if (body.featured) {
       featured.value = body.featured;
-      recent.value = body.recent ?? [];
+      recent.value = applyVideoFilter(body.recent ?? [], tags);
     } else if (Array.isArray(body)) {
       const arr = body as VideoItem[];
       featured.value = arr[0] ?? null;
-      recent.value = arr.slice(1);
+      recent.value = applyVideoFilter(arr.slice(1), tags);
     } else {
       featured.value = null;
       recent.value = [];

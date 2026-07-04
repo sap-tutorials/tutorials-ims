@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { applyRssFilter } from '../homepage-personalizer/rss-filter';
 
 interface Advocate {
   ID?: string | number;
@@ -15,12 +16,14 @@ interface BlogPost {
   url: string;
   publishedAt?: string;
   author?: string;
+  categories?: string[];
 }
 
 interface NewsItem {
   title: string;
   url: string;
   publishedAt?: string;
+  categories?: string[];
 }
 
 // Three independent fetch states
@@ -60,6 +63,16 @@ function pickRandom<T>(arr: T[], n: number): T[] {
   return copy.slice(0, n);
 }
 
+/** Read rssFilterTags from the personalizer sessionStorage cache (belt-and-braces; passthrough when absent). */
+function readRssTags(): string[] {
+  try {
+    const raw = sessionStorage.getItem('sap-devs-homepage-personalized');
+    if (!raw) return [];
+    const row = JSON.parse(raw) as { payload?: { rssFilterTags?: string[] } };
+    return row?.payload?.rssFilterTags ?? [];
+  } catch { return []; }
+}
+
 onMounted(() => {
   // Advocates
   fetch('/api/advocates', { headers: { Accept: 'application/json' } })
@@ -77,8 +90,9 @@ onMounted(() => {
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = await res.json();
-      blogs.value = Array.isArray(body.value) ? body.value.slice(0, 3)
-        : Array.isArray(body) ? body.slice(0, 3) : [];
+      const raw: BlogPost[] = Array.isArray(body.value) ? body.value
+        : Array.isArray(body) ? body : [];
+      blogs.value = applyRssFilter(raw, readRssTags()).slice(0, 3);
     })
     .catch((e) => { blogError.value = (e as Error).message; })
     .finally(() => { blogLoading.value = false; });
@@ -88,8 +102,9 @@ onMounted(() => {
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = await res.json();
-      news.value = Array.isArray(body.value) ? body.value.slice(0, 2)
-        : Array.isArray(body) ? body.slice(0, 2) : [];
+      const raw: NewsItem[] = Array.isArray(body.value) ? body.value
+        : Array.isArray(body) ? body : [];
+      news.value = applyRssFilter(raw, readRssTags()).slice(0, 2);
     })
     .catch((e) => { newsError.value = (e as Error).message; })
     .finally(() => { newsLoading.value = false; });
