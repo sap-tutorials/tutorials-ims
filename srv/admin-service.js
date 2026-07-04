@@ -514,7 +514,8 @@ export default class AdminService extends cds.ApplicationService {
           developerNewsPlaylistId: null,
           videoBandEnabled: true,
           eventsBandEnabled: true,
-          communityLaneEnabled: true
+          communityLaneEnabled: true,
+          personalizationEnabled: false
         });
       }
     });

@@ -81,6 +81,10 @@ entity HomepageConfig : cuid, managed {
   videoBandEnabled        : Boolean default true;
   eventsBandEnabled       : Boolean default true;
   communityLaneEnabled    : Boolean default true;
+  // (#763) Kill switch for the personalized-homepage feature.
+  // Default false at first migration so a deploy doesn't flip the page
+  // for every signed-in user; admin enables via /admin-ui/#homepage.
+  personalizationEnabled  : Boolean default false;
 }
 
 // (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
