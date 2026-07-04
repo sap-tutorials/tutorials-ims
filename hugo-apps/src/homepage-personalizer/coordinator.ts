@@ -5,6 +5,7 @@ import { applyTeaserRerank, type FetchedCard } from './teaser-rerank';
 import { mountForYou } from './mount-for-you';
 import { applyShelfRerank } from './shelf-rerank';
 import { subscribeBroadcast } from './prefs-broadcast';
+import { beaconApplied } from './beacon';
 
 const DEFAULT_FLAG_KEY = 'sap-devs-homepage-default';
 const ENDPOINT = '/homepage/personalized';
@@ -74,6 +75,7 @@ function applyEnvelope(env: Envelope): void {
     document.querySelector<HTMLElement>('[data-personalize="verb-order"]'),
     env.verbOrder ?? []
   );
+  beaconApplied('verb-order');
   renderBadge(
     document.querySelector('.personalized-badge-slot'),
     env.profile ?? null,
@@ -84,12 +86,14 @@ function applyEnvelope(env: Envelope): void {
     document.querySelector<HTMLElement>('[data-personalize="teaser-rerank"]'),
     env.teaserOrder ?? [],
     fetchMissingCards
-  );
+  ).then(() => beaconApplied('teaser'));
   // (#763 Task 13) For-you row (Row 2b).
   mountForYou(
     document.querySelector<HTMLElement>('[data-personalize="for-you"]'),
     env.forYou ?? []
   );
+  if ((env.forYou ?? []).length > 0) beaconApplied('for-you');
   // (#763 Task 14) Shelf rerank for verb sub-pages.
   applyShelfRerank(env.shelfOverrides);
+  if (env.shelfOverrides) beaconApplied('shelf');
 }

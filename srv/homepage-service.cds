@@ -81,4 +81,10 @@ service HomepageService {
   // Capped at 20 slugs server-side to guard against abuse.
   type TutorialCard { slug: String; html: String; }
   function tutorialCards(slugs: array of String) returns array of TutorialCard;
+
+  // (#763 Task 19) Client beacon — emitted once per surface per session after
+  // personalization is applied.  Aggregate signal only; no PII stored.
+  // Public (inherits service-level @requires:'any') — anonymous beacons are fine.
+  // surface is validated server-side against a fixed allowlist.
+  action beaconApplied(surface: String, at: Integer) returns {};
 }

@@ -22,6 +22,7 @@ import { fetchRssItems } from './lib/homepage-rss-fetcher.js';
 import { resolveSecret } from './lib/secret-resolver.js';
 import { buildEnvelope, hashEnvelope } from './lib/homepage/personalized-envelope.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
+import * as metrics from './lib/metrics.js';
 
 const log = cds.log('homepage-service');
 
@@ -217,6 +218,7 @@ export default class HomepageService extends cds.ApplicationService {
 
       const cfg = await SELECT.one.from(HomepageConfig).columns('personalizationEnabled');
       if (!cfg?.personalizationEnabled) {
+        metrics.counter('homepage.personalized.requests[result=204-disabled]');
         req.res.status(204).end();
         return req.reject(-1);
       }
@@ -272,6 +274,7 @@ export default class HomepageService extends cds.ApplicationService {
       const inm = req.req?.headers?.['if-none-match'];
       if (inm && inm.replace(/"/g, '') === envelope.hash) {
         req.res.setHeader('ETag', `"${envelope.hash}"`);
+        metrics.counter('homepage.personalized.requests[result=304]');
         req.res.status(304).end();
         return req.reject(-1);
       }
@@ -279,6 +282,7 @@ export default class HomepageService extends cds.ApplicationService {
       req.res.setHeader('Cache-Control', 'private, no-store');
       req.res.setHeader('X-Personalization', '1');
       req.res.setHeader('ETag', `"${envelope.hash}"`);
+      metrics.counter('homepage.personalized.requests[result=200]');
       return envelope;
     });
 
@@ -327,6 +331,22 @@ export default class HomepageService extends cds.ApplicationService {
             `</div>`,
         };
       });
+    });
+
+    // (#763 Task 19) beaconApplied — client fires once per surface per session
+    // after personalization has been applied to the page.  Aggregate signal
+    // only — no PII stored.  surface is validated against a fixed allowlist.
+    const BEACON_SURFACES = new Set([
+      'verb-order', 'for-you', 'teaser', 'shelf', 'video-filter', 'rss-filter',
+    ]);
+    this.on('beaconApplied', (req) => {
+      const { surface } = req.data ?? {};
+      if (!surface || !BEACON_SURFACES.has(surface)) {
+        // Unknown surface — ignore silently (don't leak the allowlist).
+        return {};
+      }
+      metrics.counter(`homepage.personalized.applied[surface=${surface}]`);
+      return {};
     });
   }
 }

@@ -8,6 +8,12 @@ describe('coordinator boot()', () => {
     localStorage.clear();
     document.cookie = '';
     (globalThis as any).fetch = vi.fn();
+    // Stub sendBeacon so beacon.ts calls never fire real HTTP in happy-dom.
+    Object.defineProperty(globalThis.navigator, 'sendBeacon', {
+      value: vi.fn().mockReturnValue(true),
+      writable: true,
+      configurable: true,
+    });
   });
 
   it('early-exits when anon', async () => {
