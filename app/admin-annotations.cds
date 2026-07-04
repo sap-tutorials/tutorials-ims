@@ -559,6 +559,9 @@ annotate AdminService.Tutorials with {
                             { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'primaryTag' }
                           ]
                         };
+  // #918 — populated by after('READ', 'Tutorials') decorator in
+  // admin-service.js from the KgIsolation sidecar.
+  isolated              @Common.Label: 'Isolated'    @Common.FieldControl: #ReadOnly;
 };
 
 annotate AdminService.TutorialMeta with {
@@ -577,7 +580,7 @@ annotate AdminService.Tutorials with @UI: {
     Title: { Value: title },
     Description: { Value: slug }
   },
-  SelectionFields: [ title, primaryTag, experienceTag, status, meta.owner ],
+  SelectionFields: [ title, primaryTag, experienceTag, status, meta.owner, isolated ],
   LineItem: [
     { Value: legacyIdStr },
     { Value: title },
@@ -587,7 +590,16 @@ annotate AdminService.Tutorials with @UI: {
     { Value: averageTimeToComplete },
     { Value: status },
     { Value: meta.owner, Label: 'Owner' },
-    { Value: redirectTo.title, Label: 'Redirect To' }
+    { Value: redirectTo.title, Label: 'Redirect To' },
+    // #918 — Isolated column. Criticality 1 (Negative/red) when this
+    // tutorial's WCC size is <= KG_WCC_ISOLATION_THRESHOLD (default 1).
+    // 0 (Neutral) when false or null.
+    {
+      $Type: 'UI.DataField',
+      Value: isolated,
+      Label: 'Isolated',
+      Criticality: { $edmJson: { $If: [ { $Path: 'isolated' }, 1, 0 ] } }
+    }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
@@ -2508,6 +2520,9 @@ annotate KnowledgeGraphService.Concepts with {
   // cleared by unpublishConcept; never user-edited.
   publishedAt     @Common.Label: 'Published'      @Common.FieldControl: #ReadOnly;
   publishedBy     @Common.Label: 'Published By'   @Common.FieldControl: #ReadOnly;
+  // #918 — populated by after('READ', 'Concepts') decorator in
+  // knowledge-graph-service.js from the KgIsolation sidecar.
+  isolated        @Common.Label: 'Isolated'       @Common.FieldControl: #ReadOnly;
 };
 
 annotate KnowledgeGraphService.Concepts with @(
@@ -2518,7 +2533,7 @@ annotate KnowledgeGraphService.Concepts with @(
     Description    : { Value: slug }
   },
 
-  UI.SelectionFields: [ status, slug ],
+  UI.SelectionFields: [ status, slug, isolated ],
 
   UI.LineItem: [
     { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
@@ -2535,6 +2550,17 @@ annotate KnowledgeGraphService.Concepts with @(
       Value: publishedAt,
       Label: 'Published',
       Criticality: { $edmJson: { $If: [ { $Ne: [ { $Path: 'publishedAt' }, null ] }, 3, 0 ] } }
+    },
+    // #918 — Isolated column. Criticality 1 (Negative/red) when the
+    // vertex sits in a small WCC (default: size 1). 0 (Neutral) when
+    // false or null. OData V4 CriticalityType: 0=Neutral, 1=Negative,
+    // 2=Critical, 3=Positive. Mirrors the publishedAt $edmJson pattern
+    // above.
+    {
+      $Type: 'UI.DataField',
+      Value: isolated,
+      Label: 'Isolated',
+      Criticality: { $edmJson: { $If: [ { $Path: 'isolated' }, 1, 0 ] } }
     },
     { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
     { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' },
