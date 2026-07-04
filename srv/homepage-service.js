@@ -307,7 +307,8 @@ export default class HomepageService extends cds.ApplicationService {
         return {
           slug: r.slug,
           html:
-            `<a href="/tutorials/${safe(r.slug)}/" class="nav-card" data-slug="${safe(r.slug)}" data-vt-card="navigator">` +
+            `<div data-slug="${safe(r.slug)}">` +
+            `<a href="/tutorials/${safe(r.slug)}/" class="nav-card" data-vt-card="navigator">` +
             `<div class="nav-card__type nav-card__type--tutorial">TUTORIAL</div>` +
             `<h3 class="nav-card__title">${safe(r.title)}</h3>` +
             `<p class="nav-card__desc">${safe(r.description)}</p>` +
@@ -317,7 +318,8 @@ export default class HomepageService extends cds.ApplicationService {
             `<span class="nav-card__meta-item">${safe(timeLabel)}</span>` +
             `</div>` +
             `<div class="nav-card__tag">${safe(r.primaryTag)}</div>` +
-            `</a>`,
+            `</a>` +
+            `</div>`,
         };
       });
     });
