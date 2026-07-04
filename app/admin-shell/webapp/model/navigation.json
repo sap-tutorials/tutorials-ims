@@ -32,6 +32,7 @@
         { "key": "homepageShelves",   "title": "Shelf Entries (Links)" },
         { "key": "verbDefinitions",   "title": "Verb Explainers" },
         { "key": "shelfDefinitions",  "title": "Shelf Explainers" },
+        { "key": "forYou",            "title": "For-you Candidates" },
         { "key": "homepageRedirects", "title": "Redirects" },
         { "key": "homepageConfig",    "title": "Config" }
       ]

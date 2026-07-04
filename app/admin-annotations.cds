@@ -3106,3 +3106,66 @@ annotate AdminService.ShelfDefinitions {
   shelfKey        @Common.FieldControl: #ReadOnly @Common.Label: 'Shelf key';
   authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
 };
+
+// --- HomepageForYouCandidates (#763 Task 18) ---
+// List report + Object Page for the "For You" row candidate pool.
+// The entity is @odata.draft.enabled from Task 8 (app/admin-annotations.cds —
+// the draft annotation lives on the AdminService projection there, not here).
+// PersonaTagChoices value help was introduced in Task 17 and is reused directly.
+annotate AdminService.HomepageForYouCandidatesAdmin with @(
+  UI.LineItem: [
+    { Value: title,        Label: 'Title' },
+    { Value: kind,         Label: 'Kind' },
+    { Value: targetSlug,   Label: 'Target' },
+    { Value: personaTags,  Label: 'Persona tags' },
+    { Value: personaWeight, Label: 'Weight' },
+    { Value: active,       Label: 'Active' },
+    { Value: sortOrder,    Label: 'Sort' },
+    { Value: modifiedAt,   Label: 'Updated' },
+  ],
+  UI.HeaderInfo: {
+    TypeName: 'For-you candidate',
+    TypeNamePlural: 'For-you candidates',
+    Title: { Value: title },
+    Description: { Value: kind },
+  },
+  UI.FieldGroup #Main: {
+    Data: [
+      { Value: kind },
+      { Value: targetSlug },
+      { Value: title },
+      { Value: description },
+      { Value: imageUrl },
+      { Value: sortOrder },
+      { Value: active },
+    ]
+  },
+  UI.FieldGroup #Personalization: {
+    Data: [
+      { Value: personaTags,   Label: 'Persona tags (positive)' },
+      { Value: personaWeight, Label: 'Persona weight' },
+      { Value: personaHidden, Label: 'Persona hidden (exclude)' },
+    ]
+  },
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', ID: 'MainFacet',            Label: 'General',
+      Target: '@UI.FieldGroup#Main' },
+    { $Type: 'UI.ReferenceFacet', ID: 'PersonalizationFacet', Label: 'Personalization',
+      Target: '@UI.FieldGroup#Personalization' },
+  ],
+);
+
+annotate AdminService.HomepageForYouCandidatesAdmin with {
+  personaTags   @Common.Label: 'Persona tags (positive)'
+                @Common.ValueList: {
+                  CollectionPath: 'PersonaTagChoices',
+                  Parameters: [{ $Type: 'Common.ValueListParameterInOut',
+                                 LocalDataProperty: personaTags, ValueListProperty: 'tag' }]
+                };
+  personaHidden @Common.Label: 'Persona hidden (exclude)'
+                @Common.ValueList: {
+                  CollectionPath: 'PersonaTagChoices',
+                  Parameters: [{ $Type: 'Common.ValueListParameterInOut',
+                                 LocalDataProperty: personaHidden, ValueListProperty: 'tag' }]
+                };
+};
