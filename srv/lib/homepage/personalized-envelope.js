@@ -5,7 +5,7 @@
 
 import crypto from 'node:crypto';
 import { rankShelves, rankForYou } from './persona-scoring.js';
-import { BASE_ORDER, computeVerbOrder } from './persona-map.js';
+import { computeVerbOrder } from './persona-map.js';
 
 const VERBS_UPPER = ['LEARN','BUILD','INTEGRATE','OPERATE','AI','CONNECT'];
 const VERB_TO_LOWER = { LEARN:'learn', BUILD:'build', INTEGRATE:'integrate',
