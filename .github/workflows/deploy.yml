@@ -19,32 +19,28 @@ env:
 
 jobs:
   validate-mtaext-substitution:
-    # [#455] Verify envsubst resolves every placeholder in every mtaext.
-    # Catches regressions where someone reverts the rename or removes the
-    # envsubst step in `deploy:`. Runs on every deploy invocation.
+    # [#455 / finish-credstore-migration] Verify no envsubst placeholders
+    # remain in any mtaext. After the credstore migration, the three
+    # deploy-time secrets (CONTENT_API_KEY, GITHUB_DISPATCH_TOKEN,
+    # APPROUTER_URL) no longer live here — the grep-guard catches
+    # regressions if anyone tries to reintroduce a ${…} placeholder for
+    # a fourth key without also wiring the corresponding envsubst step
+    # in the deploy job.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify envsubst resolves all known placeholders
-        env:
-          CONTENT_API_KEY: dummy-content
-          APPROUTER_URL: https://dummy.example.com
-          GITHUB_DISPATCH_TOKEN: dummy-token
+      - name: Verify no unresolved placeholders in any mtaext
         run: |
           set -euo pipefail
           for env in dev qa prod; do
-            OUT=$(mktemp)
-            envsubst '$CONTENT_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
-              < deploy/${env}.mtaext > "$OUT"
             # The character class also catches hyphenated leftovers (e.g.
             # ${content-api-key}) so a half-finished rename surfaces here too.
-            if grep -nE '\$\{[A-Za-z_-]+\}' "$OUT"; then
-              echo "::error::Unresolved placeholder(s) in deploy/${env}.mtaext after envsubst"
-              cat "$OUT"
+            if grep -nE '\$\{[A-Za-z_-]+\}' "deploy/${env}.mtaext"; then
+              echo "::error::deploy/${env}.mtaext still contains \${…} placeholders — see docs/superpowers/specs/2026-07-04-finish-credstore-migration-design.md for the removal rationale."
               exit 1
             fi
           done
-          echo "All three mtaext files resolve cleanly."
+          echo "All three mtaext files are placeholder-free."
 
   deploy:
     runs-on: ubuntu-latest
@@ -355,44 +351,17 @@ jobs:
           path: .hana-snapshots/pre-deploy.json
           retention-days: 90
 
-      - name: Resolve deploy variables
-        id: deploy-vars
-        run: |
-          case "${{ steps.env.outputs.target }}" in
-            dev)  echo "approuter_url=${{ secrets.APPROUTER_URL_DEV }}" >> "$GITHUB_OUTPUT" ;;
-            qa)   echo "approuter_url=${{ secrets.APPROUTER_URL_QA }}" >> "$GITHUB_OUTPUT" ;;
-            prod) echo "approuter_url=${{ secrets.APPROUTER_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
-          esac
-
-      - name: Resolve mtaext placeholders
-        # [#455] envsubst replaces ${VAR} placeholders with real values from
-        # CI secrets BEFORE cf deploy sees the file. The --var flag is NOT
-        # supported by the multiapps-cli-plugin (verified by reading the
-        # plugin's source); the previous --var-based block was non-functional
-        # but had never run successfully (CI was failing at mbt build for
-        # unrelated reasons since 2026-05-05).
-        #
-        # [#903 / #871 follow-up] REBUILD_API_KEY was formerly on this
-        # allowlist. Removed 2026-07-02: approuter reads it exclusively
-        # from the credstore now, so keeping it in the envsubst plumbing
-        # only reintroduces the two-stores-can-drift class of failure.
-        env:
-          CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
-          APPROUTER_URL: ${{ steps.deploy-vars.outputs.approuter_url }}
-          GITHUB_DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+      - name: Verify no unresolved placeholders (target env)
+        # [finish-credstore-migration] After stripping the three deploy-time
+        # secrets from the mtaext files, cf deploy consumes them verbatim.
+        # This guard mirrors validate-mtaext-substitution but scoped to the
+        # target env for a clearer error in the deploy job's logs if someone
+        # reintroduces a ${…} placeholder.
         run: |
           set -euo pipefail
           IN=deploy/${{ steps.env.outputs.target }}.mtaext
-          OUT=deploy/${{ steps.env.outputs.target }}.resolved.mtaext
-          # Restrict substitution to known names — defends against incidental
-          # ${OTHER} sequences elsewhere in the file (description text, etc.).
-          envsubst '$CONTENT_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
-            < "$IN" > "$OUT"
-          # Fail loudly if any placeholder survived. The character class
-          # accepts hyphenated names too (e.g. ${content-api-key}) so a
-          # half-finished rename surfaces the same way as a typo.
-          if grep -nE '\$\{[A-Za-z_-]+\}' "$OUT"; then
-            echo "::error::Unresolved placeholder(s) in $OUT — check that the env-var is exported and matches the placeholder name."
+          if grep -nE '\$\{[A-Za-z_-]+\}' "$IN"; then
+            echo "::error::$IN contains \${…} placeholders — see docs/superpowers/specs/2026-07-04-finish-credstore-migration-design.md before adding new deploy-time envsubst plumbing."
             exit 1
           fi
 
@@ -404,7 +373,7 @@ jobs:
           fi
 
           cf deploy mta_archives/tutorials-ims_${{ steps.version.outputs.version }}.mtar \
-            -e deploy/${{ steps.env.outputs.target }}.resolved.mtaext \
+            -e deploy/${{ steps.env.outputs.target }}.mtaext \
             $STRATEGY_FLAGS \
             -f
 

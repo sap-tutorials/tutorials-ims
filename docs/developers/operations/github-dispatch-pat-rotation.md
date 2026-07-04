@@ -44,16 +44,20 @@ Validate via the boot log line: `[rebuild-trigger] active — admin writes will 
 
    Expect: HTTP 204 (no body). A new run should appear in the [Actions tab](https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml) within seconds.
 
-3. **Update the GitHub Actions secret + redeploy each environment.** The token lives in the `DISPATCH_TOKEN` repository secret (named `DISPATCH_TOKEN` — not `GITHUB_DISPATCH_TOKEN` — because GitHub reserves the `GITHUB_` prefix for secret names) and is injected into each `tutorials-srv` deploy by an `envsubst` step in [.github/workflows/deploy.yml](../../../.github/workflows/deploy.yml) that writes `deploy/<env>.resolved.mtaext` from the `deploy/<env>.mtaext` template using the secret as the `GITHUB_DISPATCH_TOKEN` env var. `cf deploy -e <resolved>` then consumes the resolved file. The `cf deploy --var` mechanism that previously appeared here is **not** supported by the multiapps-cli-plugin (see #455). The runtime env var on `tutorials-srv` is still `GITHUB_DISPATCH_TOKEN` (that's what `srv/lib/rebuild-trigger.js` reads); only the GitHub Actions secret had to drop the prefix. `REBUILD_TARGET_ENV` is a literal in each `deploy/<env>.mtaext` and does not need rotation.
+3. **Update the credential store + redeploy each environment.** The token lives as the `GITHUB_DISPATCH_TOKEN` alias in the BTP Credential Store (managed via `/admin-ui/#secrets` on each env's approuter). Update the alias directly rather than the old GitHub Actions `DISPATCH_TOKEN` secret — the deploy workflow no longer injects the token via `envsubst`; the runtime reads it exclusively from credstore on startup. The runtime env var on `tutorials-srv` is still `GITHUB_DISPATCH_TOKEN` (that's what `srv/lib/rebuild-trigger.js` reads). `REBUILD_TARGET_ENV` is a literal in each `deploy/<env>.mtaext` and does not need rotation.
 
    ```bash
-   # Update the repo-level secret (one-time, applies to all envs):
-   gh secret set DISPATCH_TOKEN --repo sap-tutorials/tutorials-ims --body "<NEW_TOKEN>"
-
-   # Then trigger the Build & Deploy workflow (.github/workflows/deploy.yml) for each env:
-   gh workflow run deploy.yml --repo sap-tutorials/tutorials-ims -f environment=dev
-   gh workflow run deploy.yml --repo sap-tutorials/tutorials-ims -f environment=qa
-   gh workflow run deploy.yml --repo sap-tutorials/tutorials-ims -f environment=prod
+   # Rotate the token in the BTP Credential Store for each env's approuter.
+   # This requires XSUAA login to the target env's admin UI — there is no
+   # `gh` / `cf` CLI shortcut. Open in a browser:
+   #   /admin-ui/#secrets  → find GITHUB_DISPATCH_TOKEN → Rotate → paste <NEW_TOKEN>
+   #
+   # The runtime picks up the new value on the next resolveSecret() call
+   # (5-minute TTL cache). To force immediate propagation, use the
+   # "Invalidate cache" action on the same admin UI row — this calls
+   # invalidateSecret('GITHUB_DISPATCH_TOKEN') server-side.
+   #
+   # No cf deploy needed — credstore rotation is a runtime-only change.
    ```
 
    Validate after each deploy: `cf logs tutorials-srv --recent | grep rebuild-trigger` should show
@@ -62,21 +66,15 @@ Validate via the boot log line: `[rebuild-trigger] active — admin writes will 
 
    **Local rotation validation** (optional — verify the new token before merging the secret bump to all envs):
 
+   Rotate through the admin UI at `/admin-ui/#secrets` on the target env's approuter (alias `GITHUB_DISPATCH_TOKEN`). The runtime picks up the new value on the next `resolveSecret` call — the 5-minute TTL means propagation is near-immediate. Confirm via:
+
    ```bash
-   # From the repo root:
-   export GITHUB_DISPATCH_TOKEN="<NEW_TOKEN>"
-   # qa/prod also need:
-   export CONTENT_API_KEY="<value>"
-   export APPROUTER_URL="<value>"
-
-   envsubst '$CONTENT_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
-     < deploy/dev.mtaext > deploy/dev.resolved.mtaext
-
-   cd .deploy && mbt build
-   cf deploy mta_archives/tutorials-ims_*.mtar -e ../deploy/dev.resolved.mtaext -f
+   cf logs tutorials-srv --recent | grep 'rebuild-trigger'
+   # Expected: [rebuild-trigger] active — admin writes will dispatch with environment='<env>'
+   # NOT expected: [rebuild-trigger] unset-token warning
    ```
 
-   `deploy/*.resolved.mtaext` is gitignored — leave it on disk or `rm` after the deploy.
+   If you need to invalidate the resolver cache before the 5-minute TTL, use the admin UI's "invalidate" action on the alias — this calls `invalidateSecret('GITHUB_DISPATCH_TOKEN')` server-side.
 
 4. **Revoke the old token.** GitHub → Settings → Developer settings → Personal access tokens → click old token → Revoke.
 
