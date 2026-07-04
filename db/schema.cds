@@ -51,6 +51,10 @@ entity Tutorials : TaskBase {
 entity Missions : TaskBase {
   slug                      : String(255);
   communityMissionId        : String(255);
+  // Set when the mission was drafted via promoteCommunityToMission (#917).
+  // NULL for hand-authored missions. Distinct from communityMissionId,
+  // which is the IMS-legacy community ID from the old CMS import.
+  sourceKgCommunityId       : Integer;
   missionType               : MissionType @assert.range;
   // Default false: new and migrated missions are NOT visible until a SuperAdmin
   // toggles published to true. Replaces AEM's role of curating which missions

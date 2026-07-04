@@ -408,6 +408,10 @@
           "length": 255,
           "@cds.persistence.name": "COMMUNITYMISSIONID"
         },
+        "sourceKgCommunityId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "SOURCEKGCOMMUNITYID"
+        },
         "missionType": {
           "type": "cds.String",
           "length": 20,
