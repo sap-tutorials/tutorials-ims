@@ -33,7 +33,7 @@ import {
 } from './lib/alert-enums.js';
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
-import { validateTags } from './lib/homepage/persona-tag-validator.js';
+import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -335,6 +335,11 @@ export default class AdminService extends cds.ApplicationService {
 
     // READ handler for the unbound in-memory AlertCtaTargets entity.
     this.on('READ', 'AlertCtaTargets', () => listCtaTargets());
+
+    // (#763) READ handler for the unbound value-help entity PersonaTagChoices.
+    // Returns all KNOWN_TAGS as { tag } rows for @Common.ValueList bindings on
+    // HomepageShelves.personaTags / personaHidden.
+    this.on('READ', 'PersonaTagChoices', () => KNOWN_TAGS.map((tag) => ({ tag })));
 
     // Virtual severityCrit element (drives @UI.LineItem Criticality coloring).
     // Information=3 (Neutral), Success=5 (Positive), Warning=2 (Critical), Error=1 (Negative)

@@ -202,6 +202,13 @@ service AdminService {
         label : String(100);
   }
 
+  // (#763) Value-help entity for @Common.ValueList bindings on HomepageShelves
+  // personaTags / personaHidden. Served in-memory from KNOWN_TAGS by the READ
+  // handler in admin-service.js — no DB table, no persistence.
+  @readonly @cds.persistence.skip entity PersonaTagChoices {
+    key tag : String(40);
+  }
+
   entity FailedEmails as projection on ims.FailedEmails;
   entity PrimaryAccounts as projection on ims.PrimaryAccounts;
   entity SecondaryAccounts as projection on ims.SecondaryAccounts;

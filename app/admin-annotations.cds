@@ -2916,8 +2916,9 @@ annotate AdminService.HomepageShelves with @(
   ],
   UI.SelectionFields : [ verb, shelf, isActive, linkStatus ],
   UI.Facets : [
-    { $Type: 'UI.ReferenceFacet', Label: 'General',   Target: '@UI.FieldGroup#Main' },
-    { $Type: 'UI.ReferenceFacet', Label: 'Explainer', Target: '@UI.FieldGroup#Explainer' }
+    { $Type: 'UI.ReferenceFacet', Label: 'General',         Target: '@UI.FieldGroup#Main' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Explainer',       Target: '@UI.FieldGroup#Explainer' },
+    { $Type: 'UI.ReferenceFacet', ID: 'PersonalizationFacet', Label: 'Personalization', Target: '@UI.FieldGroup#Personalization' }
   ],
   UI.FieldGroup #Main : { Data : [
     { Value : verb },
@@ -2934,6 +2935,11 @@ annotate AdminService.HomepageShelves with @(
     { Value : tagline,         Label : 'Tagline' },
     { Value : whyItMatters,    Label : 'Why it matters' },
     { Value : authoringStatus, Label : 'Authoring status' }
+  ]},
+  UI.FieldGroup #Personalization : { Data : [
+    { Value : personaTags,   Label : 'Persona tags (positive)' },
+    { Value : personaWeight, Label : 'Persona weight' },
+    { Value : personaHidden, Label : 'Persona hidden (exclude)' }
   ]}
 );
 
@@ -2943,6 +2949,18 @@ annotate AdminService.HomepageShelves {
   badge           @Common.ValueListWithFixedValues @Common.Label: 'Badge';
   linkStatus      @Common.ValueListWithFixedValues @Common.Label: 'Link health';
   authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
+  // (#763) Persona facet fields
+  personaTags   @Common.Label: 'Persona tags (positive)' @Common.ValueList: {
+    CollectionPath: 'PersonaTagChoices',
+    Parameters: [{ $Type: 'Common.ValueListParameterInOut',
+                   LocalDataProperty: personaTags, ValueListProperty: 'tag' }]
+  };
+  personaWeight @Common.Label: 'Persona weight';
+  personaHidden @Common.Label: 'Persona hidden (exclude)' @Common.ValueList: {
+    CollectionPath: 'PersonaTagChoices',
+    Parameters: [{ $Type: 'Common.ValueListParameterInOut',
+                   LocalDataProperty: personaHidden, ValueListProperty: 'tag' }]
+  };
 };
 
 annotate AdminService.LegacyRedirects with @(
