@@ -120,3 +120,5 @@ Subsystem one-liners:
 - **`rebuild-content.yml` auto-infers `mode=slug-targeted`** when a `slug` input is set — don't pass `-f mode=slug-targeted`. Wall-clock: catalog-only ~5min, slug-targeted ~2min, full ~10min.
 
 - **Alert saves do NOT trigger rebuilds** — Alerts are runtime-served. Cache-bust on save is the only freshness mechanism; up-to-60s admin-to-visitor delay expected.
+
+- **`@cap-js/ai` plugin (issue #959, PR 2 of 2)** — adopted for RPT-1 recommendations on `@Common.ValueList` fields. Auto-hooks every such field in Fiori draft-enabled admin UIs. Local `cds watch` uses `AICore-mocked` (no recommendations, zero AI Core quota); hybrid/production use `AICore-btp` against the `aicore` VCAP binding. Per-field opt-out: `@UI.RecommendationState: 0`. Reference: [docs/developers/reference/cap-ai-plugin.md](docs/developers/reference/cap-ai-plugin.md).
