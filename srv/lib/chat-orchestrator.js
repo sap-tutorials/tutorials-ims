@@ -7,6 +7,7 @@ import { GET_BRANCH_RECOMMENDATION_TOOL, getBranchRecommendationHandler } from '
 import { FIND_LEARNING_PATH_TOOL, findLearningPathHandler } from './kg/joule-tool-find-path.js';
 import { EXPAND_SEARCH_CONCEPTS_TOOL, expandSearchConceptsHandler } from './kg/joule-tool-expand-concepts.js';
 import { embed as embedInputs } from './embedding-client.js';
+import { resolveEmbeddingSettings } from './chat-settings-resolver.js';
 
 const LOG = cds.log('chat');
 const MAX_TURNS = 5;
@@ -527,7 +528,7 @@ export async function dispatchTool(name, args, user) {
       // Rate-limit by (embeddingDeploymentId, embeddingModel) so we log once
       // per process for each misconfiguration rather than per chat turn.
       const embeddingDeploymentId = settings?.embeddingDeploymentId || '';
-      const embeddingModel = settings?.embeddingModel || 'text-embedding-3-small';
+      const { model: embeddingModel } = await resolveEmbeddingSettings();
       const key = `${embeddingDeploymentId}:${embeddingModel}`;
       if (!ragWarnedKeys.has(key)) {
         ragWarnedKeys.add(key);
@@ -596,12 +597,9 @@ export async function dispatchTool(name, args, user) {
       const db = await cds.connect.to('db');
       // Resolve the embedding model from ChatSettings (same source as the
       // concept-embedding backfill job); fall back to the SDK default.
-      let model = 'text-embedding-3-small';
-      try {
-        const { ChatSettings } = cds.entities('com.sap.developers.ims');
-        const row = await SELECT.one.from(ChatSettings).columns('embeddingModel');
-        if (row?.embeddingModel) model = row.embeddingModel;
-      } catch { /* keep default */ }
+      // Resolve embedding model via the shared resolver. Failure to read
+      // ChatSettings falls back through env → hardcoded default; NEVER throws.
+      const { model } = await resolveEmbeddingSettings();
       const embedClient = defaultEmbedClient(model);
       return await expandSearchConceptsHandler({ db, embedClient, args });
     } catch (err) {

@@ -1,5 +1,6 @@
 import cds from '@sap/cds';
 import { computeKgSignal, buildKgRankFragment } from './lib/search-kg-signal.js';
+import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 
 const LOG = cds.log('search-service');
 
@@ -219,10 +220,11 @@ export default class SearchService extends cds.ApplicationService {
       try {
         const settings = await readChatSettings();
         if (settings?.searchKgRerankEnabled) {
+          const { model: embeddingModel } = await resolveEmbeddingSettings();
           const signal = await computeKgSignal({
             phrase,
             db: cds.db,
-            embeddingModel: settings.embeddingModel || 'text-embedding-3-small',
+            embeddingModel,
             enabled: true,
           });
           kgFragment = buildKgRankFragment(signal);
