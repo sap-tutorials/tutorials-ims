@@ -6,6 +6,7 @@
 
 <article class="developer-homepage">
   {{ partial "homepage/hero.html" . }}
+  <div class="personalized-badge-slot" data-testid="personalized-badge-slot" hidden></div>
   {{ partial "homepage/verb-spine.html" (dict "shelves" $shelves) }}
   {{ partial "homepage/events-band.html" . }}
   {{ partial "homepage/video-band.html" . }}

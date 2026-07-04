@@ -1,5 +1,6 @@
 import { readSessionCache, writeSessionCache, type Envelope } from './session-cache';
 import { applyVerbOrder } from './verb-order';
+import { renderBadge } from './personalized-badge';
 
 const DEFAULT_FLAG_KEY = 'sap-devs-homepage-default';
 const ENDPOINT = '/homepage/personalized';
@@ -26,7 +27,10 @@ async function isSignedIn(): Promise<boolean> {
 
 export async function boot(): Promise<void> {
   try {
-    if (isDefaultViewActive()) return;
+    if (isDefaultViewActive()) {
+      renderBadge(document.querySelector('.personalized-badge-slot'), null, 'default');
+      return;
+    }
     if (!(await isSignedIn())) return;
 
     const cached = readSessionCache();
@@ -52,5 +56,10 @@ function applyEnvelope(env: Envelope): void {
   applyVerbOrder(
     document.querySelector<HTMLElement>('[data-personalize="verb-order"]'),
     env.verbOrder ?? []
+  );
+  renderBadge(
+    document.querySelector('.personalized-badge-slot'),
+    env.profile ?? null,
+    'personalized'
   );
 }
