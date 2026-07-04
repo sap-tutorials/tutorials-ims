@@ -26,8 +26,10 @@ Non-goals:
 **Thin adapter — keep the `JOB_REGISTRY` + `runWithLock` chassis, swap the engine only.** The 32 `registerJob({...})` call sites in `registerJobs()` do not change. The public shape of `registerJob`, `runJobByName`, `preSeedJobLastRun`, `formatJobSummary`, and both contributor-notification cycle helpers is preserved. Admin UI code and all admin action handlers in `srv/admin-service.js` are unchanged. `srv/lib/cron-firings.js` is unchanged — `cron-parser` continues to power the "Next 3 runs" tile.
 
 Two things are deleted outright:
-- `srv/jobs/job-lock.js` (and the DB-backed `JobLocks` entity in `db/schema.cds`) — CAP 10's `.as(name)` status-column locking replaces it.
+- `srv/jobs/job-lock.js` — CAP 10's `.as(name)` status-column locking replaces the scheduler's lock helper.
 - `node-cron` from `dependencies` — no longer used anywhere.
+
+**Amendment (post-brainstorm):** the `JobLocks` **entity** in `db/schema.cds` is preserved for a separate concern: `srv/lib/purge-stale-changelog.js`'s `autoPurgeOnce()` uses it as a persistent at-most-once boot sentinel (INSERT with no release; ~10-min expiry as recovery valve for entity-list bumps). Because `autoPurgeOnce` was the *only* caller of `acquireLock` outside the scheduler chassis, and because the sentinel semantics (permanent row, never released) are fundamentally different from the scheduler's transient acquire/release, we inline a tiny private helper into `purge-stale-changelog.js` that talks to the `JobLocks` entity directly, delete `srv/jobs/job-lock.js`, and keep the entity. A follow-up ticket can retire the entity by moving the sentinel to a purpose-built `BootSentinels` entity.
 
 ## Architecture
 
@@ -39,8 +41,8 @@ A new internal service `CronService` acts as the scheduling bus. It is defined i
 
 **Files touched:**
 - `srv/jobs/scheduler.js` (engine swap: remove `node-cron` + `JobLocks` wiring)
-- `server.js` (remove the `served` hook block that calls `registerJobs()`)
-- `db/schema.cds` (remove the `JobLocks` entity)
+- `srv/server.js` (remove the `served` hook block that calls `registerJobs()`)
+- `srv/lib/purge-stale-changelog.js` (inline private sentinel helper — one function replacing the `import { acquireLock } from '../jobs/job-lock.js';`)
 - `package.json` (drop `node-cron` from `dependencies`)
 
 **Files unchanged:**
@@ -253,14 +255,14 @@ Both engines fire during this window. `runWithLock`'s `JobLocks` guarantees no d
 
 Point of no return for node-cron. `.as(name)` locking is now the only mechanism preventing duplicate scheduled ticks; `JobLocks` continues to protect against manual-vs-scheduled races that still exist.
 
-### Commit 3 — Drop JobLocks
+### Commit 3 — Drop JobLocks scheduler usage
 
 - Remove `acquireLock`/`releaseLock` calls from `runWithLock`.
 - Remove the "lock-held" branches, associated audit emission, and their unit tests.
+- Inline the boot-sentinel helper into `srv/lib/purge-stale-changelog.js` (replaces the `import { acquireLock } from '../jobs/job-lock.js'` line — the sentinel row is still INSERTed into the `JobLocks` entity, no schema change needed).
 - Delete `srv/jobs/job-lock.js`.
-- Remove the `JobLocks` entity from `db/schema.cds`.
-- Run `cds build --production` to regenerate `db/last-dev/`.
-- Adjust `test/unit/srv/run-with-lock.test.js`.
+- Adjust `test/unit/srv/run-with-lock.test.js` (remove the `lock-held` test).
+- `db/schema.cds` is NOT modified — the `JobLocks` entity stays for the boot sentinel path.
 
 ### Commit 4 — Cleanup
 
@@ -284,7 +286,7 @@ The `CAP_SCHEDULING_ENABLED` flag is set in `deploy/dev.mtaext`, not code defaul
 
 ## HANA schema cleanup
 
-The `JobLocks` table remains in HANA after Commit 3 — removing an entity from `db/schema.cds` does not `DROP TABLE`. Dead but not harmful (small table, zero writes). Follow-up cleanup ticket (not this PR): `hdi undeploy` of `JobLocks` via a targeted `undeploy.json` entry. Explicitly out of scope here to keep the migration reversible.
+The `JobLocks` table stays in HANA and in `db/schema.cds` after this PR — retained for the `autoPurgeOnce` boot sentinel in `srv/lib/purge-stale-changelog.js`. Follow-up cleanup ticket (not this PR): introduce a purpose-built `BootSentinels` entity, migrate `autoPurgeOnce` off `JobLocks`, then `hdi undeploy` the `JobLocks` table. Explicitly out of scope here to keep the migration reversible and the blast radius contained to the scheduler chassis.
 
 ## Success criteria
 
@@ -293,8 +295,9 @@ The `JobLocks` table remains in HANA after Commit 3 — removing an entity from 
 - `AdminService.JobControls.runJob('<name>')` still triggers a manual run, still emits `started` + completion `SecurityEvent` audits.
 - `test/hybrid/admin-run-job.test.js` passes green.
 - `package.json` no longer has `node-cron` in `dependencies`.
-- `srv/jobs/job-lock.js` and the `JobLocks` entity are gone from source.
-- `cds build --production` regenerates `db/last-dev/` cleanly with `JobLocks` removed.
+- `srv/jobs/job-lock.js` is gone from source (helper module).
+- `srv/lib/purge-stale-changelog.js`'s `autoPurgeOnce` boot sentinel still works (integration test).
+- `db/schema.cds` still defines the `JobLocks` entity (retained for the boot sentinel — retirement is a follow-up ticket).
 
 ## References
 
