@@ -21,19 +21,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 import { tokensToCents } from './_token-cost.js';
+import { resolveChatLlmSettings } from './chat-settings-resolver.js';
 
 const LOG = cds.log('explainer-generator');
 
 const TOOL_NAME = 'submit_explainer';
 const TEMPERATURE = 0.4;   // some creativity for variety, but bounded
 const MAX_TOKENS = 600;
-
-// Default model. Currently hardcoded — if/when a future PR wants
-// ChatSettings.modelName / CHAT_MODEL_NAME env override (matching the
-// pattern from category-classifier-llm.js / chat-orchestrator.js),
-// remember to also add the new model's rates to _token-cost.js RATES
-// or tokensToCents will throw "no rates for model 'X'".
-const DEFAULT_MODEL = 'anthropic--claude-4.6-sonnet';
 
 // Load all three prompt files once at module-init time. They're small
 // (<1KB each) and never change at runtime.
@@ -110,7 +104,11 @@ export async function generateExplainer({ kind, row, context }) {
   const systemPrompt = PROMPTS[kind];
   const userMessage = buildUserMessage(kind, row, context);
 
-  const modelName = DEFAULT_MODEL;
+  // Resolve modelName + deploymentId via the shared resolver. Admins can
+  // steer the explainer model via /admin-ui/#joule-settings (parity with
+  // every other LLM call site in the app). Throws if deploymentId is
+  // unresolvable.
+  const { modelName, deploymentId } = await resolveChatLlmSettings();
 
   const client = new OrchestrationClient(
     {
@@ -129,7 +127,7 @@ export async function generateExplainer({ kind, row, context }) {
         },
       },
     },
-    {} // deploymentId / resourceGroup picked up from cds.requires/env
+    { deploymentId }
   );
 
   let response;
