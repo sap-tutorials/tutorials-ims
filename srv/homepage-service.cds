@@ -75,4 +75,10 @@ service HomepageService {
 
   @(requires: 'authenticated-user')
   function personalized() returns PersonalizedEnvelope;
+
+  // (#763) Fetch card HTML for tutorial slugs not already in the Row-5 DOM.
+  // Public (inherits service-level @requires:'any') — no auth needed.
+  // Capped at 20 slugs server-side to guard against abuse.
+  type TutorialCard { slug: String; html: String; }
+  function tutorialCards(slugs: array of String) returns array of TutorialCard;
 }

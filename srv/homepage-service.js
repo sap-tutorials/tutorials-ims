@@ -213,7 +213,7 @@ export default class HomepageService extends cds.ApplicationService {
     // Returns 204 when kill switch off, 200+envelope when on, 304 on ETag match.
     this.on('personalized', async (req) => {
       const { HomepageShelves, HomepageForYouCandidates, HomepageConfig,
-              UserLearningPreferences, Users } = cds.entities('com.sap.developers.ims');
+              UserLearningPreferences, Users, Tutorials } = cds.entities('com.sap.developers.ims');
 
       const cfg = await SELECT.one.from(HomepageConfig).columns('personalizationEnabled');
       if (!cfg?.personalizationEnabled) {
@@ -228,7 +228,7 @@ export default class HomepageService extends cds.ApplicationService {
       const dbUser = sapId ? await SELECT.one.from(Users).columns('ID').where({ sapId }) : null;
       // No Users row → envelope is still built with all-null profile (valid).
 
-      const [prefsRow, shelves, forYou] = await Promise.all([
+      const [prefsRow, shelves, forYou, featuredRows] = await Promise.all([
         dbUser?.ID
           ? SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID })
               .columns('deployment', 'role', 'cloud')
@@ -239,6 +239,13 @@ export default class HomepageService extends cds.ApplicationService {
         SELECT.from(HomepageForYouCandidates).where({ active: true })
           .columns('ID', 'kind', 'targetSlug', 'title', 'description', 'imageUrl',
                    'personaTags', 'personaWeight', 'personaHidden', 'sortOrder'),
+        // (#763 Task 12) Static top-8 featured tutorials ordered by featuredOrder.
+        // Tutorials.featuredOrder is the admin-curated rank (NULL = not featured).
+        SELECT.from(Tutorials)
+          .where`featuredOrder is not null`
+          .columns('slug', 'featuredOrder')
+          .orderBy('featuredOrder')
+          .limit(8),
       ]);
 
       const profile = {
@@ -247,8 +254,16 @@ export default class HomepageService extends cds.ApplicationService {
         cloud:      prefsRow?.cloud      ?? null,
       };
 
+      // (#763 Task 12) Compose teaserSlugs: static featured top-8 + for-you tutorials,
+      // deduped and capped at 12.
+      const staticSlugs = featuredRows.map((r) => r.slug);
+      const featuredForYouSlugs = forYou
+        .filter((f) => f.kind === 'tutorial')
+        .map((f) => f.targetSlug);
+      const teaserSlugs = [...new Set([...staticSlugs, ...featuredForYouSlugs])].slice(0, 12);
+
       const envelope = buildEnvelope({
-        profile, shelves, forYouCandidates: forYou, teaserSlugs: [], // Task 12
+        profile, shelves, forYouCandidates: forYou, teaserSlugs,
       });
       envelope.hash = hashEnvelope(envelope);
 
@@ -263,6 +278,48 @@ export default class HomepageService extends cds.ApplicationService {
       req.res.setHeader('X-Personalization', '1');
       req.res.setHeader('ETag', `"${envelope.hash}"`);
       return envelope;
+    });
+
+    // (#763 Task 12) tutorialCards() — fetch card HTML for slugs not in the Row-5 DOM.
+    // Public endpoint (inherits service @requires:'any'). Capped at 20 slugs.
+    // Returns nav-card HTML matching browse/_partials/card-tutorial.html shape.
+    this.on('tutorialCards', async (req) => {
+      const raw = req.data?.slugs || [];
+      const slugs = raw.filter(Boolean).map(String).slice(0, 20);
+      if (slugs.length === 0) return [];
+
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const rows = await SELECT.from(Tutorials)
+        .where({ slug: { in: slugs } })
+        .columns('slug', 'title', 'description', 'primaryTag', 'experienceTag', 'averageTimeToComplete');
+
+      // HTML-escape helper — guards against XSS if a title/tag ever contains markup.
+      const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
+      const safe = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ESC[c]);
+
+      return rows.map((r) => {
+        const level = r.experienceTag ?? '';
+        const levelLabel = level ? level[0].toUpperCase() + level.slice(1) : '';
+        const mins = r.averageTimeToComplete ?? 0;
+        const timeLabel = mins < 60
+          ? `${mins} min.`
+          : `${Math.floor(mins / 60)} hr.${mins % 60 > 0 ? ` ${mins % 60} min.` : ''}`;
+        return {
+          slug: r.slug,
+          html:
+            `<a href="/tutorials/${safe(r.slug)}/" class="nav-card" data-slug="${safe(r.slug)}" data-vt-card="navigator">` +
+            `<div class="nav-card__type nav-card__type--tutorial">TUTORIAL</div>` +
+            `<h3 class="nav-card__title">${safe(r.title)}</h3>` +
+            `<p class="nav-card__desc">${safe(r.description)}</p>` +
+            `<div class="nav-card__meta">` +
+            `<span class="nav-card__meta-item">${safe(levelLabel)}</span>` +
+            `<span class="nav-card__meta-sep">&middot;</span>` +
+            `<span class="nav-card__meta-item">${safe(timeLabel)}</span>` +
+            `</div>` +
+            `<div class="nav-card__tag">${safe(r.primaryTag)}</div>` +
+            `</a>`,
+        };
+      });
     });
   }
 }

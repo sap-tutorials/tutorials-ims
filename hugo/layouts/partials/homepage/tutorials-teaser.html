@@ -18,19 +18,21 @@
 {{- $all := $browse.all | default slice -}}
 {{- $featured := $browse.featured | default slice -}}
 {{- $ids := first 6 $featured -}}
-<section class="hp-teaser" aria-labelledby="hp-teaser-title">
+<section class="hp-teaser" aria-labelledby="hp-teaser-title" data-personalize="teaser-rerank">
   <div class="hp-teaser__header">
     <h2 id="hp-teaser-title" class="hp-band__title">Featured missions</h2>
     <a class="hp-teaser__see-all" href="/tutorial-navigator/">Browse all →</a>
   </div>
   {{- if gt (len $ids) 0 -}}
-    <div class="hp-teaser__grid">
+    <div class="hp-teaser__grid cards">
       {{- range $rid := $ids -}}
         {{- range $item := $all -}}
           {{- if eq $item.id $rid -}}
+            <div data-slug="{{ $item.id }}">
             {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
             {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
             {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
+            </div>
           {{- end -}}
         {{- end -}}
       {{- end -}}
