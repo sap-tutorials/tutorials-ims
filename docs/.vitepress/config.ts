@@ -202,6 +202,7 @@ export default defineConfig({
           { text: 'Iframe allowlist',          link: '/developers/reference/iframe-allowlist' },
           { text: 'Sage extension migration',  link: '/developers/reference/sage-extension-migration' },
           { text: 'Theme variants',            link: '/developers/reference/theme-variants' },
+          { text: 'tutorials-ims gotchas',     link: '/developers/reference/tutorials-ims-gotchas' },
           { text: 'Vue islands / Hugo / Vite gotchas', link: '/developers/reference/vue-islands-gotchas' }
         ]}
       ],
