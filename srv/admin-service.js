@@ -336,6 +336,43 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // ─── after(READ, Tutorials) — #918 WCC isolation flag ───────────────
+    //
+    // Populate the virtual `isolated : Boolean` field on each Tutorials
+    // row from the KgIsolation sidecar (populated nightly by
+    // srv/jobs/kg-wcc-job.js). Batched per page — Fiori Elements requests
+    // 30 rows/page by default, so this is one small IN-clause query per
+    // list-report page load. Same shape as the after('READ', 'Concepts')
+    // handler in srv/knowledge-graph-service.js.
+    //
+    // Fail-quiet: on any error (sidecar missing, HANA hiccup, deploy
+    // skew), leave `isolated` unset. Fiori renders `null` boolean as no
+    // badge — same visual result as false. No request-time throw ever
+    // propagates to the client.
+    //
+    // Spec: docs/superpowers/specs/2026-07-04-918-kg-wcc-isolation-design.md
+    this.after('READ', 'Tutorials', async (rows, req) => {
+      const arr = Array.isArray(rows) ? rows : [rows];
+      const slugs = arr.filter(Boolean).map((r) => r.slug).filter(Boolean);
+      if (slugs.length === 0) return;
+      try {
+        const placeholders = slugs.map(() => '?').join(',');
+        const flagged = await cds.tx(req).run(
+          `SELECT SLUG FROM "COM_SAP_DEVELOPERS_IMS_KGISOLATION" ` +
+            `WHERE VERTEXTYPE = ? AND SLUG IN (${placeholders})`,
+          ['tutorial', ...slugs],
+        );
+        const set = new Set(flagged.map((r) => r.SLUG));
+        for (const r of arr) {
+          if (r && r.slug) r.isolated = set.has(r.slug);
+        }
+      } catch (err) {
+        cds.log('kg-wcc').warn(
+          `admin-service: isolated flag lookup failed on Tutorials; leaving field unset (${err?.message ?? err})`,
+        );
+      }
+    });
+
     // Ensure singleton row exists for ChatSettings (defensive — seed CSV
     // populates this on cds deploy; this covers fresh in-memory test DBs).
     const CHAT_SETTINGS_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8a7';

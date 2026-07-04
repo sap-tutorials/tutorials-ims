@@ -263,3 +263,14 @@ extend entity KnowledgeGraphService.Concepts with actions {
   @requires : 'KnowledgeGraph.Admin'
   action unpublishConcept();
 };
+
+// #918 — virtual `isolated` flag populated by the after('READ', 'Concepts')
+// decorator in srv/knowledge-graph-service.js. True iff a KgIsolation row
+// exists for this concept slug (WCC size <= KG_WCC_ISOLATION_THRESHOLD).
+// Fail-quiet at read time: if the SELECT throws or the sidecar is missing,
+// stays null (Fiori renders `null` boolean as no badge). Added via
+// `extend ... with columns` so the base projection line stays a
+// legal-syntax `projection on ... excluding { embedding }`.
+extend KnowledgeGraphService.Concepts with columns {
+  virtual isolated : Boolean
+};
