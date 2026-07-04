@@ -53,4 +53,35 @@ VIEW "KG_PG_EDGES_V" AS
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
   JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS"  c ON c.ID = tcl.CONCEPT_ID
-  WHERE c.STATUS = 'ACTIVE';
+  WHERE c.STATUS = 'ACTIVE'
+  UNION ALL
+  -- kg:relatedTo edges: concept → concept
+  -- Same source as `requires` (ConceptEdges), different PREDICATE value.
+  -- Mirrors srv/lib/kg-projection.js:295-319 which emits both from the same
+  -- ConceptEdges scan.
+  SELECT
+    CAST('rel|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('concept:' || src.SLUG AS NVARCHAR(280))                AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(280))                AS "TARGET",
+    'relatedTo'                                                  AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" tgt ON tgt.ID = ce.TARGET_ID
+  WHERE ce.PREDICATE = 'relatedTo' AND ce.STATUS = 'ACTIVE'
+    AND src.STATUS = 'ACTIVE' AND tgt.STATUS = 'ACTIVE'
+  UNION ALL
+  -- kg:extends edges: tutorial → tutorial
+  -- Uses TutorialConceptLinks with predicate='extends' and the
+  -- EXTENDSTUTORIAL_ID FK (concept_ID is NULL for extends rows per the
+  -- schema invariant at db/knowledge-graph.cds:44). Column name verified
+  -- against live DEV HANA in Task 0 notes.
+  SELECT
+    CAST('ext|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('tutorial:' || src.SLUG AS NVARCHAR(280))               AS "SOURCE",
+    CAST('tutorial:' || tgt.SLUG AS NVARCHAR(280))               AS "TARGET",
+    'extends'                                                    AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" src ON src.ID = tcl.TUTORIAL_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" tgt ON tgt.ID = tcl.EXTENDSTUTORIAL_ID
+  WHERE tcl.PREDICATE = 'extends'
+    AND tcl.EXTENDSTUTORIAL_ID IS NOT NULL;
