@@ -70,9 +70,15 @@ annotate ims.AuthorAiRequests with @PersonalData: {
   variants       @PersonalData.IsPotentiallyPersonal;
 }
 
+// #960 — kept as 'Other' + DataSubjectRole because BranchDecisions has aggregate
+// views on top (AnalyticsBranchPerformance, AnalyticsBranchTopPick in db/views.cds)
+// that GROUP BY branch metadata and drop the `user` FK. The @cap-js/data-privacy
+// plugin's projection-hierarchy auto-exposure trips on that pattern. The user
+// field keeps FieldSemantics: 'DataSubjectID' so audit-logging + a future
+// null-personal / audit-only cascade can still resolve the subject linkage.
 annotate ims.BranchDecisions with @PersonalData: {
-  EntitySemantics: 'DataSubjectDetails',
-  cascade: 'delete'
+  EntitySemantics: 'Other',
+  DataSubjectRole: 'Developer'
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
 }

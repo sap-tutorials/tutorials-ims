@@ -101,18 +101,6 @@
           "type": "cds.String",
           "length": 64,
           "@cds.persistence.name": "GITHUBLOGIN"
-        },
-        "dppBlockingDate": {
-          "type": "cds.Date",
-          "@cds.persistence.name": "DPPBLOCKINGDATE"
-        },
-        "ilmEarliestDestructionDate": {
-          "type": "cds.Date",
-          "@cds.persistence.name": "ILMEARLIESTDESTRUCTIONDATE"
-        },
-        "ilmLatestDestructionDate": {
-          "type": "cds.Date",
-          "@cds.persistence.name": "ILMLATESTDESTRUCTIONDATE"
         }
       },
       "$tableConstraints": {
@@ -263,10 +251,6 @@
             "val": 1
           },
           "@cds.persistence.name": "ATTEMPTNUMBER"
-        },
-        "dppBlockingDate": {
-          "type": "cds.Date",
-          "@cds.persistence.name": "DPPBLOCKINGDATE"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TASKRECORDS"
@@ -1293,10 +1277,6 @@
           "type": "cds.String",
           "length": 50,
           "@cds.persistence.name": "STATUS"
-        },
-        "dppBlockingDate": {
-          "type": "cds.Date",
-          "@cds.persistence.name": "DPPBLOCKINGDATE"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_PRIZERECORDS"
@@ -1330,10 +1310,6 @@
         "awardedAt": {
           "type": "cds.Timestamp",
           "@cds.persistence.name": "AWARDEDAT"
-        },
-        "dppBlockingDate": {
-          "type": "cds.Date",
-          "@cds.persistence.name": "DPPBLOCKINGDATE"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_ACCOMPLISHMENTRECORDS"
@@ -1399,10 +1375,6 @@
           "type": "cds.String",
           "length": 2000,
           "@cds.persistence.name": "VALUE"
-        },
-        "dppBlockingDate": {
-          "type": "cds.Date",
-          "@cds.persistence.name": "DPPBLOCKINGDATE"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_USERMETADATA"
@@ -1435,10 +1407,6 @@
         "tabOrder": {
           "type": "cds.Integer",
           "@cds.persistence.name": "TABORDER"
-        },
-        "dppBlockingDate": {
-          "type": "cds.Date",
-          "@cds.persistence.name": "DPPBLOCKINGDATE"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_DEVELOPERENVIRONMENTTABS"
@@ -1476,10 +1444,6 @@
         "linkOrder": {
           "type": "cds.Integer",
           "@cds.persistence.name": "LINKORDER"
-        },
-        "dppBlockingDate": {
-          "type": "cds.Date",
-          "@cds.persistence.name": "DPPBLOCKINGDATE"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_DEVELOPERENVIRONMENTLINKS"
@@ -3172,7 +3136,6 @@
     "compilerCsnFlavor": "$internal",
     "flavor": "inferred",
     "sap.changelog.enhanced": true,
-    "sap.ilm.enhanced": true,
     "minified": true,
     "build": "CDS Build v10.0.3"
   },

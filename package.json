@@ -141,7 +141,6 @@
     "@cap-js-community/websocket": "^1.10.5",
     "@cap-js/audit-logging": "^1.2.2",
     "@cap-js/change-tracking": "^2.0.1",
-    "@cap-js/data-privacy": "0.6.2",
     "@cap-js/hana": "^3.0.1",
     "@cap-js/ord": "^1.9.1",
     "@cap-js/sqlite": "^3.0.2",
