@@ -46,40 +46,44 @@ annotate ims.TaskRecords with @PersonalData: {
 }
 
 annotate ims.CodeCheckSubmissions with @PersonalData: {
-  EntitySemantics: 'Other'
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
 } {
   user          @PersonalData.FieldSemantics: 'DataSubjectID';
   submittedCode @PersonalData.IsPotentiallyPersonal;
 }
 
 annotate ims.ValidateAnswerSubmissions with @PersonalData: {
-  EntitySemantics: 'Other'
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
 } {
   user            @PersonalData.FieldSemantics: 'DataSubjectID';
   submittedAnswer @PersonalData.IsPotentiallyPersonal;
 }
 
 annotate ims.AuthorAiRequests with @PersonalData: {
-  EntitySemantics: 'Other'
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
 } {
   authorId       @PersonalData.FieldSemantics: 'DataSubjectID';
   sourceMarkdown @PersonalData.IsPotentiallyPersonal;
   variants       @PersonalData.IsPotentiallyPersonal;
 }
 
+// #960 — kept as 'Other' + DataSubjectRole because BranchDecisions has aggregate
+// views on top (AnalyticsBranchPerformance, AnalyticsBranchTopPick in db/views.cds)
+// that GROUP BY branch metadata and drop the `user` FK. The @cap-js/data-privacy
+// plugin's projection-hierarchy auto-exposure trips on that pattern. The user
+// field keeps FieldSemantics: 'DataSubjectID' so audit-logging + a future
+// null-personal / audit-only cascade can still resolve the subject linkage.
 annotate ims.BranchDecisions with @PersonalData: {
-  EntitySemantics: 'Other'
+  EntitySemantics: 'Other',
+  DataSubjectRole: 'Developer'
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
 }
 
-// Knowledge graph (#381). Concepts is admin-edited (merge / veto / rename) and
-// while it carries no personal data, the audit-logging plugin's annotation-driven
-// emission gives us a tamper-evident record of curation actions for free —
-// mirrors how Categories / Missions admin edits are surfaced.
-annotate ims.Concepts with @PersonalData: {
-  EntitySemantics: 'Other'
-};
+// Concepts audit trail moved to @cds.changelog — see db/change-tracking.cds (#960).
 
 // Phase 2-C (#465): security-purpose audit on Secrets metadata writes.
 // EntitySemantics: 'Other' is the documented annotation for entities that
@@ -134,4 +138,45 @@ annotate ims.Advocates with @PersonalData: {
   cascade        : 'null-personal'
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
+};
+
+// #960 — DataSubjectDetails compositions of ims.Users. The @cap-js/data-privacy
+// plugin flags these as missing at boot (modelling bad-practice warning) because
+// they compose off Users but carry no personal-data semantics. Adding
+// EntitySemantics: 'DataSubjectDetails' + cascade: 'delete' both silences the
+// warning AND fixes a latent bug: today these rows survive user anonymization
+// as FK-ghosts pointing at anonymized ghost users. Field-level review confirmed
+// none carries analytical value post-anonymization (see spec §2a).
+annotate ims.PrizeRecords with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+};
+
+annotate ims.AccomplishmentRecords with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+};
+
+annotate ims.DeveloperEnvironmentTabs with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+};
+
+// Links are nested inside Tabs; annotate the child for plugin completeness.
+// Cascade-delete of the parent already cleans up Links via the composition
+// (Composition of many DeveloperEnvironmentLinks on links.tab = $self at
+// db/schema.cds:217) — the direct annotation here is belt-and-braces for
+// the case where a Link exists without its parent Tab (which the schema
+// prevents but the annotation should not assume).
+annotate ims.DeveloperEnvironmentLinks with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
+} {
+  tab @PersonalData.FieldSemantics: 'DataSubjectID';
 };

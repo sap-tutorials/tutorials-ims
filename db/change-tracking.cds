@@ -36,6 +36,9 @@ annotate ims.Alerts with @changelog: [title, severity, audience, startsAt, endsA
 // (db/views.cds:AuthorTutorialChanges → filters Changes to AdminService.Tutorials).
 annotate ims.Tutorials with @changelog;
 
+// Concepts admin merge/veto/rename — audit trail moved here from @PersonalData (#960).
+annotate ims.Concepts with @changelog;
+
 // #639: track admin edits to homepage shelves + redirect map.
 // HomepageConfig is intentionally NOT tracked — it's a config singleton
 // (see issue #658 — singletons produce no-delta phantom rows).
@@ -66,11 +69,12 @@ annotate ext.ApiDocs with @changelog: [slug, title, category, apiType];
 //      ChatSettings, KnowledgeGraphSettings, UiEventsSettings,
 //      TenantSettings, SearchSettings, NavigatorSettings, DisplaySettings.
 //
-//   2. AI-generated knowledge-graph tables (Concepts, ConceptEdges).
-//      The extract-concepts cron deletes-and-reinserts ConceptEdges and
-//      bumps Concepts.lastSeenAt/extractionCount on every run. With
-//      @changelog active the triggers fire thousands of empty-attribute
-//      rows per cron tick. Admin curation (rename/describe/veto) on
-//      Concepts is rare enough that the trade-off isn't worth it.
+//   2. AI-generated knowledge-graph tables (ConceptEdges).
+//      The extract-concepts cron deletes-and-reinserts ConceptEdges on every
+//      run. With @changelog active the triggers fire thousands of empty-attribute
+//      rows per cron tick.
+//      Note: Concepts itself IS now @changelog-tracked (#960) for admin
+//      merge/veto/rename curation — the cron only bumps lastSeenAt /
+//      extractionCount (non-tracked fields) and should not produce noise.
 //
 // Spec: docs/superpowers/specs/2026-06-26-658-changelog-noise-cleanup-design.md

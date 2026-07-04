@@ -624,6 +624,29 @@ A User record is created lazily on first meaningful interaction (e.g., completin
 
 ---
 
+### Data Privacy Integration (DPI) readiness
+
+Issue [#960](https://github.com/sap-tutorials/tutorials-ims/issues/960) landed the `@PersonalData` annotation cleanups that make the schema ready for the SAP Data Privacy Integration (DPI) service, but the plugin adoption (`@cap-js/data-privacy`) is **deferred** to plugin 1.x GA due to an upstream bug in 0.6.2 (see the spec at `docs/superpowers/specs/2026-07-04-960-data-privacy-plugin-design.md`, "Scope revision" section).
+
+**What is in place today**:
+
+- 13 entities annotated with `@PersonalData.EntitySemantics` covering the full DataSubject / DataSubjectDetails / Other spectrum
+- `cascade: 'delete'` on 7 user-owned detail entities (PrizeRecords, AccomplishmentRecords, DeveloperEnvironmentTabs, DeveloperEnvironmentLinks, CodeCheckSubmissions, ValidateAnswerSubmissions, AuthorAiRequests); driven by `srv/lib/anonymization-cascade.js`. Hybrid test coverage: `test/hybrid/anonymization-cascade-compositions.test.js`.
+- `cascade: 'identity-replace'` on Users, `cascade: 'audit-only'` on TaskRecords, `cascade: 'null-personal'` on Advocates
+- `DataSubjectRole: 'Developer'` on the three admin-authored audit entities (AnalyticsQueryHistory, AnalyticsSavedQuery, BranchDecisions) that stay `EntitySemantics: 'Other'`
+- Concepts moved from `@PersonalData: {Other}` (which existed only to register with audit-logging) to `@cds.changelog` — the semantically correct home for admin merge/veto/rename curation trail
+
+**What is NOT in place today** (planned for a follow-up issue):
+
+- `/dpp/information` and `/dpp/retention` endpoints — require `@cap-js/data-privacy` install, which is blocked on plugin 1.x GA
+- xs-security scopes `$XSAPPNAME.PersonalDataManagerUser` and `$XSAPPNAME.DataRetentionManagerUser` — pending plugin install
+- Approuter routes for `/dpp/*` — pending plugin install
+- Retention *windows* — those live in DPI's own admin UI (organizational attribute + condition set → rule). CDS annotations declare which entities carry personal data; DPI decides how long
+
+**When plugin 1.x ships**, the follow-up issue can pick up cleanly: the annotations are already correct, and the ready blueprints for xs-security wiring, approuter routes, and smoke tests live in the original plan at `docs/superpowers/plans/2026-07-04-960-data-privacy-plugin.md` (Tasks 7, 8, 9).
+
+---
+
 ### Future Considerations
 
 #### If You Need Finer-Grained Control on DeveloperService

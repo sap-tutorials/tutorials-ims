@@ -147,16 +147,21 @@ describe('cascade action helpers (in-memory SQLite)', () => {
   });
 
   it('cascadeNullPersonal: nulls FK + IsPotentiallyPersonal fields, keeps row', async () => {
-    const { Users, CodeCheckSubmissions } = cds.entities('com.sap.developers.ims');
+    // #960 Task 4 upgraded CodeCheckSubmissions from EntitySemantics: 'Other'
+    // (default cascade: null-personal) to 'DataSubjectDetails' + cascade: 'delete'.
+    // This test used to exercise null-personal via CodeCheckSubmissions; the
+    // canonical null-personal target now is Advocates (cascade: 'null-personal'
+    // per db/audit-logging.cds:132-137), so we switch to it here to keep the
+    // cascadeNullPersonal helper coverage identical.
+    const { Users, Advocates } = cds.entities('com.sap.developers.ims');
     await INSERT.into(Users).entries({
       ID: '11111111-1111-1111-1111-111111111111', sapId: 'u1',
       firstName: 'Alice', email: 'alice@example.com'
     });
-    await INSERT.into(CodeCheckSubmissions).entries({
+    await INSERT.into(Advocates).entries({
       ID: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
       user_ID: '11111111-1111-1111-1111-111111111111',
-      tutorialSlug: 'sample', stepNumber: 1,
-      submittedCode: 'console.log(1)', verdict: 'pass'
+      slug: 'alice-a', firstName: 'Alice', lastName: 'A'
     });
 
     await executeAnonymizationCascade(
@@ -164,11 +169,10 @@ describe('cascade action helpers (in-memory SQLite)', () => {
       await cds.connect.to('db')
     );
 
-    const rows = await SELECT.from(CodeCheckSubmissions);
+    const rows = await SELECT.from(Advocates);
     expect(rows).toHaveLength(1);                    // row preserved
     expect(rows[0].user_ID).toBeNull();              // FK nulled
-    expect(rows[0].submittedCode).toBeNull();        // IsPotentiallyPersonal field nulled
-    expect(rows[0].verdict).toBe('pass');            // analytical column intact
+    expect(rows[0].slug).toBe('alice-a');            // analytical/reference column intact
   });
 
   it('cascadeDelete: removes UserMetaData rows for the user', async () => {
@@ -237,21 +241,27 @@ describe('cascade action helpers (in-memory SQLite)', () => {
   });
 
   it('orchestrator end-to-end: dispatches all four cascade actions in order', async () => {
-    const { Users, UserMetaData, TaskRecords, CodeCheckSubmissions } = cds.entities('com.sap.developers.ims');
+    // #960 Task 4 upgrade: CodeCheckSubmissions moved from 'Other' (null-personal
+    // default) to 'DataSubjectDetails' + cascade: 'delete', so its row is now
+    // DELETED here instead of nulled-personal. Advocates (cascade: 'null-personal')
+    // stands in for that flavor.
+    const { Users, UserMetaData, TaskRecords, CodeCheckSubmissions, Advocates } = cds.entities('com.sap.developers.ims');
     const userId = '11111111-1111-1111-1111-111111111111';
     await INSERT.into(Users).entries({ ID: userId, sapId: 'u1', firstName: 'Alice', email: 'a@e.com' });
     await INSERT.into(UserMetaData).entries({ ID: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_ID: userId });
     await INSERT.into(TaskRecords).entries({ ID: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', user_ID: userId, titleSnapshot: 't1', taskType: 'TUTORIAL', createdBy: 'a@e.com', modifiedBy: 'a@e.com' });
     await INSERT.into(CodeCheckSubmissions).entries({ ID: 'cccccccc-cccc-cccc-cccc-cccccccccccc', user_ID: userId, tutorialSlug: 'sample', stepNumber: 1, submittedCode: 'x', verdict: 'pass' });
+    await INSERT.into(Advocates).entries({ ID: 'dddddddd-dddd-dddd-dddd-dddddddddddd', user_ID: userId, slug: 'alice-a', firstName: 'Alice', lastName: 'A' });
 
     await executeAnonymizationCascade({ ID: userId, sapId: 'u1' }, await cds.connect.to('db'));
 
-    expect(await SELECT.from(UserMetaData)).toHaveLength(0);                                    // deleted
+    expect(await SELECT.from(UserMetaData)).toHaveLength(0);                                    // cascade: delete
+    expect(await SELECT.from(CodeCheckSubmissions)).toHaveLength(0);                            // #960 — cascade: delete (was null-personal pre-#960)
     const tr = await SELECT.from(TaskRecords);
     expect(tr[0].createdBy).toBe('ANONYMIZED');                                                  // audit-only
-    const cc = await SELECT.from(CodeCheckSubmissions);
-    expect(cc[0].user_ID).toBeNull();
-    expect(cc[0].submittedCode).toBeNull();                                                      // null-personal
+    const adv = await SELECT.one.from(Advocates);
+    expect(adv.user_ID).toBeNull();                                                              // null-personal (moved from CodeCheckSubmissions to Advocates as the canonical example)
+    expect(adv.slug).toBe('alice-a');
     const u = await SELECT.one.from(Users).where({ ID: userId });
     expect(u.firstName).toBe('ANONYMIZED');                                                      // identity-replace
   });
