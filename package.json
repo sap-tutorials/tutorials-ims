@@ -88,6 +88,7 @@
     "test:hybrid": "cds bind --exec -- npx vitest run --project hybrid",
     "test:hybrid:watch": "cds bind --exec -- npx vitest --project hybrid",
     "test:smoke": "vitest run --project smoke",
+    "test:smoke:personalization": "vitest run test/smoke/homepage-personalized.test.js",
     "test:a11y": "vitest run --project a11y",
     "test:a11y:lighthouse": "lhci autorun --config=test/a11y/lighthouserc.json",
     "test:a11y:summary": "node test/a11y/summary.js",
