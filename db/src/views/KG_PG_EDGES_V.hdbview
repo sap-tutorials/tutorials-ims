@@ -4,12 +4,20 @@ VIEW "KG_PG_EDGES_V" AS
   -- workspace joins SOURCE/TARGET against VERTEX_KEY, and type-length
   -- mismatches have been observed to trip the workspace validator.
   --
-  -- EDGE_KEY sizing (NVARCHAR(400)): the composite is
-  --   teaches: 't|' + tutorial-slug(≤255) + '|' + concept-slug(≤80) → ≤ 338 chars
-  --   requires: 'r|' + concept-slug(≤80) + '|' + concept-slug(≤80)  → ≤ 163 chars
-  -- 400 gives modest headroom. The 'r|' / 't|' type prefix prevents any
-  -- theoretical collision if a concept slug ever equaled a tutorial slug
-  -- (CLAUDE.md's slug conventions don't currently rule that out).
+  -- EDGE_KEY sizing (NVARCHAR(600)): the composite is
+  --   'type-prefix|source-slug|target-slug'. Widest arms post-#919 are
+  --   `taggedWith` and `aboutProduct`:
+  --     taggedWith  : 'tw|' + tutorial-slug(≤255) + '|' + tag-name(≤255)          → ≤ 513 chars
+  --     aboutProduct: 'ap|' + tutorial-slug(≤255) + '|' + product-suffix(≤240)    ≈ ≤ 500 chars
+  --     teaches     : 't|'  + tutorial-slug(≤255) + '|' + concept-slug(≤80)       → ≤ 338 chars
+  --     requires    : 'r|'  + concept-slug(≤80)   + '|' + concept-slug(≤80)       → ≤ 163 chars
+  --   NVARCHAR(600) gives modest headroom. Prior to #919 the ceiling was
+  --   400 (safe for the 2-predicate spike). Widened here in defensive
+  --   isolation before the 7 new UNION-ALL arms land.
+  --
+  -- The type prefix ('r|', 't|', 'rel|', 'ext|', 'po|', 'tw|', 'ap|',
+  -- 'ic|', 'cc|') prevents any theoretical collision if slugs from
+  -- different vertex types happen to coincide.
   --
   -- Why EDGE_KEY exists at all: HDI's .hdbgraphworkspace plugin (unlike
   -- HANA's raw CREATE GRAPH WORKSPACE DDL) rejects a workspace without an
@@ -17,7 +25,7 @@ VIEW "KG_PG_EDGES_V" AS
   -- this — see docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md
   -- § "Path C follow-up finding (2026-07-02, post-merge)".
   SELECT
-    CAST('r|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('r|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
     CAST('concept:' || src.SLUG AS NVARCHAR(280))              AS "SOURCE",
     CAST('concept:' || tgt.SLUG AS NVARCHAR(280))              AS "TARGET",
     'requires'                                                 AS "EDGE_TYPE"
@@ -33,8 +41,12 @@ VIEW "KG_PG_EDGES_V" AS
   -- future migrator ever inserts a duplicate (TUTORIAL_ID, CONCEPT_ID) row,
   -- DISTINCT keeps the workspace edge count honest for hop-count math AND
   -- keeps EDGE_KEY unique per row (mandatory for the HDI plugin).
+  --
+  -- Predicate-filter free by design: TutorialConceptLinks with
+  -- predicate='extends' have concept_ID=NULL (schema invariant at
+  -- db/knowledge-graph.cds:44); the inner JOIN to Concepts drops them.
   SELECT DISTINCT
-    CAST('t|' || t.SLUG || '|' || c.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('t|' || t.SLUG || '|' || c.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
     CAST('tutorial:' || t.SLUG AS NVARCHAR(280))           AS "SOURCE",
     CAST('concept:'  || c.SLUG AS NVARCHAR(280))           AS "TARGET",
     'teaches'                                              AS "EDGE_TYPE"
