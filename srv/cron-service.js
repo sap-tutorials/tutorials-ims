@@ -24,11 +24,11 @@ const LOG = cds.log('cron-service');
 
 export default class CronService extends cds.ApplicationService {
   async init() {
-    // Owned entirely by CronService now — the previous 'served' hook in
-    // srv/server.js that called registerJobs() is removed in Commit 2.
-    // During Commit 1's dual-engine window, registerJobs() is called by
-    // BOTH srv/server.js and CronService.init(). The registry throws on
-    // duplicate jobName registration, so we skip if already populated.
+    // Owned entirely by CronService now — the srv/server.js call to
+    // registerJobs() was removed in Commit 2 of this migration. The
+    // size==0 guard remains as belt-and-suspenders against re-entry
+    // (registerJob throws on duplicate jobName; the guard prevents that
+    // from ever surfacing in test fixtures that reuse the module).
     if (_getJobRegistry().size === 0) {
       registerJobs();
     } else {

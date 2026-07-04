@@ -4,8 +4,11 @@
 //
 // The scheduler has two invocation paths and JOB_REGISTRY is the single
 // source of truth for both:
-//   1. node-cron ticks — `cron.schedule(expr, () => runJobByName(name))`,
-//      wired up inside registerJob() at registration time.
+//   1. CAP scheduled ticks — srv/cron-service.js reads JOB_REGISTRY at
+//      init() and calls `this.schedule('cron.<name>', {}).every(expr)
+//      .as(jobName)`. Its `on('cron.<name>')` handler invokes
+//      `runJobByName(name)`. Per-instance status-column singleton
+//      locking replaces the previous node-cron + JobLocks scheme (#958).
 //   2. Admin manual triggers — `AdminService.JobControls.runJob(jobName)`
 //      dispatches to `runJobByName(name, {manualTrigger, user})` (#756).
 //
@@ -14,6 +17,8 @@
 //     so multi-instance CF deploys never run the same job twice
 //     concurrently. Losing the race returns `{skipped:true, reason:'lock-held'}`
 //     — the caller decides whether to retry / next-tick / surface an error.
+//     (JobLocks acquire/release removed in Commit 3 of #958 — CAP 10's
+//     .as(name) singleton locking replaces it.)
 //   - Emits PipelineLog start/end rows (visible on the admin Job Log tile).
 //   - Records JobLastRun outcome (visible on the Cron health tile).
 //   - For `manualTrigger:true`, emits SecurityEvent audit events (spec §9).
@@ -24,8 +29,8 @@
 // should pick a minute not already in use in registerJobs() below.
 //
 // #756 spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md
+// #958 spec: docs/superpowers/specs/2026-07-04-958-cap10-scheduler-migration-design.md
 
-import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
 import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings, pruneAnalyticsHistory, cleanupChangeLog, cleanupMetricSnapshots, cleanupPublishTimings } from './cleanup.js';
 import { runMetricsRollup } from './metrics-rollup-job.js';
@@ -51,7 +56,7 @@ const instanceId = process.env.CF_INSTANCE_INDEX || '0';
 const LOG = cds.log('scheduler');
 
 // #756: JOB_REGISTRY is the single source of truth for all scheduled jobs.
-// Both cron.schedule() (in registerJobs() below) and the new
+// Both CronService (in srv/cron-service.js) and the
 // AdminService.JobControls.runJob() handler read from this map.
 //
 // Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.1
@@ -67,7 +72,8 @@ const JOB_REGISTRY = new Map();
  */
 
 /**
- * Register a job in the JOB_REGISTRY AND schedule it via node-cron.
+ * Register a job in the JOB_REGISTRY. CronService.init() reads the
+ * registry at boot and calls srv.schedule() per entry.
  * Both invocation paths (scheduled and manual) read from the registry.
  */
 export function registerJob({ jobName, schedule, ttlMs, description, fn }) {
@@ -75,8 +81,8 @@ export function registerJob({ jobName, schedule, ttlMs, description, fn }) {
     throw new Error(`Duplicate jobName: ${jobName}`);
   }
   JOB_REGISTRY.set(jobName, { jobName, schedule, ttlMs, description, fn });
-  // Schedule the cron alongside registration.
-  cron.schedule(schedule, () => runJobByName(jobName));
+  // #958: cron.schedule() removed; CronService owns scheduling via
+  // srv.schedule('cron.<name>', {}).every(schedule).as(jobName).
 }
 
 /**
