@@ -25,4 +25,67 @@ VIEW "KG_PG_VERTICES_V" AS
     t.TITLE                                      AS "LABEL",
     NULL                                         AS "STATUS"
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
-  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID;
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
+  UNION ALL
+  -- Mission vertices. Missions have a STATUS column ('ACTIVE' /
+  -- 'DELETED') — use it directly. #919 added missions to support the
+  -- partOf and inCategory edge arms.
+  SELECT
+    CAST('mission:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+    'mission'                                 AS "VERTEX_TYPE",
+    SLUG                                      AS "SLUG",
+    TITLE                                     AS "LABEL",
+    STATUS                                    AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
+  WHERE SLUG IS NOT NULL
+  UNION ALL
+  -- Group vertices. #919 added groups to support the partOf arm's
+  -- mission→group hop.
+  SELECT
+    CAST('group:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+    'group'                                 AS "VERTEX_TYPE",
+    SLUG                                    AS "SLUG",
+    TITLE                                   AS "LABEL",
+    STATUS                                  AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_GROUPS"
+  WHERE SLUG IS NOT NULL
+  UNION ALL
+  -- Tag vertices. Tags have no dedicated slug column — RDF projection
+  -- and the taggedWith edge arm both use NAME as the identifier.
+  -- DISTINCT because Tags.name has no @assert.unique (dup-name risk
+  -- RDF already lives with; defense-in-depth here).
+  SELECT DISTINCT
+    CAST('tag:' || NAME AS NVARCHAR(280)) AS "VERTEX_KEY",
+    'tag'                                 AS "VERTEX_TYPE",
+    NAME                                  AS "SLUG",
+    LABEL                                 AS "LABEL",
+    'ACTIVE'                              AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_TAGS"
+  WHERE NAME IS NOT NULL
+  UNION ALL
+  -- Product vertices — synthesized from tags whose NAME starts with
+  -- 'software-product>'. LENGTH('software-product>')=17, so
+  -- SUBSTRING(NAME, 18) extracts the suffix as the product slug.
+  -- DISTINCT because multiple tag rows may extract to the same product
+  -- slug. Mirrors RDF projection at srv/lib/kg-projection.js:305-310.
+  SELECT DISTINCT
+    CAST('product:' || SUBSTRING(NAME, 18) AS NVARCHAR(280)) AS "VERTEX_KEY",
+    'product'                                                AS "VERTEX_TYPE",
+    SUBSTRING(NAME, 18)                                      AS "SLUG",
+    LABEL                                                    AS "LABEL",
+    'ACTIVE'                                                 AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_TAGS"
+  WHERE NAME LIKE 'software-product>%'
+  UNION ALL
+  -- Category vertices. Categories are CSV-seeded (8 rows) with slugs
+  -- that are @mandatory at the CDS layer — the NULL filter is
+  -- defense-in-depth since HANA doesn't enforce @mandatory on
+  -- CSV-seeded rows.
+  SELECT
+    CAST('category:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+    'category'                                 AS "VERTEX_TYPE",
+    SLUG                                       AS "SLUG",
+    LABEL                                      AS "LABEL",
+    'ACTIVE'                                   AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_CATEGORIES"
+  WHERE SLUG IS NOT NULL;

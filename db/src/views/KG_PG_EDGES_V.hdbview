@@ -4,12 +4,20 @@ VIEW "KG_PG_EDGES_V" AS
   -- workspace joins SOURCE/TARGET against VERTEX_KEY, and type-length
   -- mismatches have been observed to trip the workspace validator.
   --
-  -- EDGE_KEY sizing (NVARCHAR(400)): the composite is
-  --   teaches: 't|' + tutorial-slug(≤255) + '|' + concept-slug(≤80) → ≤ 338 chars
-  --   requires: 'r|' + concept-slug(≤80) + '|' + concept-slug(≤80)  → ≤ 163 chars
-  -- 400 gives modest headroom. The 'r|' / 't|' type prefix prevents any
-  -- theoretical collision if a concept slug ever equaled a tutorial slug
-  -- (CLAUDE.md's slug conventions don't currently rule that out).
+  -- EDGE_KEY sizing (NVARCHAR(600)): the composite is
+  --   'type-prefix|source-slug|target-slug'. Widest arms post-#919 are
+  --   `taggedWith` and `aboutProduct`:
+  --     taggedWith  : 'tw|' + tutorial-slug(≤255) + '|' + tag-name(≤255)          → ≤ 513 chars
+  --     aboutProduct: 'ap|' + tutorial-slug(≤255) + '|' + product-suffix(≤240)    ≈ ≤ 500 chars
+  --     teaches     : 't|'  + tutorial-slug(≤255) + '|' + concept-slug(≤80)       → ≤ 338 chars
+  --     requires    : 'r|'  + concept-slug(≤80)   + '|' + concept-slug(≤80)       → ≤ 163 chars
+  --   NVARCHAR(600) gives modest headroom. Prior to #919 the ceiling was
+  --   400 (safe for the 2-predicate spike). Widened here in defensive
+  --   isolation before the 7 new UNION-ALL arms land.
+  --
+  -- The type prefix ('r|', 't|', 'rel|', 'ext|', 'po|', 'tw|', 'ap|',
+  -- 'ic|', 'cc|') prevents any theoretical collision if slugs from
+  -- different vertex types happen to coincide.
   --
   -- Why EDGE_KEY exists at all: HDI's .hdbgraphworkspace plugin (unlike
   -- HANA's raw CREATE GRAPH WORKSPACE DDL) rejects a workspace without an
@@ -17,7 +25,7 @@ VIEW "KG_PG_EDGES_V" AS
   -- this — see docs/superpowers/reviews/2026-07-02-kg-property-graph-spike-task1-notes.md
   -- § "Path C follow-up finding (2026-07-02, post-merge)".
   SELECT
-    CAST('r|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('r|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
     CAST('concept:' || src.SLUG AS NVARCHAR(280))              AS "SOURCE",
     CAST('concept:' || tgt.SLUG AS NVARCHAR(280))              AS "TARGET",
     'requires'                                                 AS "EDGE_TYPE"
@@ -33,12 +41,141 @@ VIEW "KG_PG_EDGES_V" AS
   -- future migrator ever inserts a duplicate (TUTORIAL_ID, CONCEPT_ID) row,
   -- DISTINCT keeps the workspace edge count honest for hop-count math AND
   -- keeps EDGE_KEY unique per row (mandatory for the HDI plugin).
+  --
+  -- Predicate-filter free by design: TutorialConceptLinks with
+  -- predicate='extends' have concept_ID=NULL (schema invariant at
+  -- db/knowledge-graph.cds:44); the inner JOIN to Concepts drops them.
   SELECT DISTINCT
-    CAST('t|' || t.SLUG || '|' || c.SLUG AS NVARCHAR(400)) AS "EDGE_KEY",
+    CAST('t|' || t.SLUG || '|' || c.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
     CAST('tutorial:' || t.SLUG AS NVARCHAR(280))           AS "SOURCE",
     CAST('concept:'  || c.SLUG AS NVARCHAR(280))           AS "TARGET",
     'teaches'                                              AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
   JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS"  c ON c.ID = tcl.CONCEPT_ID
-  WHERE c.STATUS = 'ACTIVE';
+  WHERE c.STATUS = 'ACTIVE'
+  UNION ALL
+  -- kg:relatedTo edges: concept → concept
+  -- Same source as `requires` (ConceptEdges), different PREDICATE value.
+  -- Mirrors srv/lib/kg-projection.js:295-319 which emits both from the same
+  -- ConceptEdges scan.
+  SELECT
+    CAST('rel|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('concept:' || src.SLUG AS NVARCHAR(280))                AS "SOURCE",
+    CAST('concept:' || tgt.SLUG AS NVARCHAR(280))                AS "TARGET",
+    'relatedTo'                                                  AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" ce
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" src ON src.ID = ce.SOURCE_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" tgt ON tgt.ID = ce.TARGET_ID
+  WHERE ce.PREDICATE = 'relatedTo' AND ce.STATUS = 'ACTIVE'
+    AND src.STATUS = 'ACTIVE' AND tgt.STATUS = 'ACTIVE'
+  UNION ALL
+  -- kg:extends edges: tutorial → tutorial
+  -- Uses TutorialConceptLinks with predicate='extends' and the
+  -- EXTENDSTUTORIAL_ID FK (concept_ID is NULL for extends rows per the
+  -- schema invariant at db/knowledge-graph.cds:44). Column name verified
+  -- against live DEV HANA in Task 0 notes.
+  SELECT
+    CAST('ext|' || src.SLUG || '|' || tgt.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('tutorial:' || src.SLUG AS NVARCHAR(280))               AS "SOURCE",
+    CAST('tutorial:' || tgt.SLUG AS NVARCHAR(280))               AS "TARGET",
+    'extends'                                                    AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" src ON src.ID = tcl.TUTORIAL_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" tgt ON tgt.ID = tcl.EXTENDSTUTORIAL_ID
+  WHERE tcl.PREDICATE = 'extends'
+    AND tcl.EXTENDSTUTORIAL_ID IS NOT NULL
+  UNION ALL
+  -- kg:partOf edges: tutorial → mission
+  -- Via CompletionPathItems -> CompletionPaths -> Missions.
+  -- CompletionPathItems.tutorial_ID is NULL for CHECKPOINT / GROUP task
+  -- types (see db/schema.cds around the CompletionPathItems.taskType
+  -- discriminator) — the inner JOIN + explicit IS NOT NULL filter drops
+  -- those. DISTINCT because a tutorial in multiple variant paths of the
+  -- same mission would otherwise emit duplicate edges.
+  SELECT DISTINCT
+    CAST('po|' || t.SLUG || '|' || m.SLUG AS NVARCHAR(600))  AS "EDGE_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280))             AS "SOURCE",
+    CAST('mission:'  || m.SLUG AS NVARCHAR(280))             AS "TARGET",
+    'partOf'                                                 AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS" cpi
+  JOIN "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS" cp ON cp.ID = cpi.PATH_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_MISSIONS" m ON m.ID = cp.MISSION_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = cpi.TUTORIAL_ID
+  WHERE cpi.TUTORIAL_ID IS NOT NULL
+    AND t.SLUG IS NOT NULL AND m.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:partOf edges: mission → group
+  -- Both partOf arms share EDGE_TYPE='partOf' per RDF-parity: RDF projects
+  -- one predicate for both hops. Algorithms can navigate
+  -- tutorial→mission→group without knowing about the underlying join
+  -- shapes.
+  SELECT
+    CAST('po|' || m.SLUG || '|' || g.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('mission:' || m.SLUG AS NVARCHAR(280))             AS "SOURCE",
+    CAST('group:'   || g.SLUG AS NVARCHAR(280))             AS "TARGET",
+    'partOf'                                                AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS" m
+  JOIN "COM_SAP_DEVELOPERS_IMS_GROUPS" g ON g.ID = m.GROUP_ID
+  WHERE m.GROUP_ID IS NOT NULL
+    AND m.SLUG IS NOT NULL AND g.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:taggedWith edges: tutorial → tag
+  -- Tag identity is Tags.name (Tags entity has no dedicated slug column;
+  -- RDF projection at srv/lib/kg-projection.js:1027-1028 uses NAME too).
+  -- Filter NULL names (Tags.name is nullable per the live schema).
+  SELECT
+    CAST('tw|' || t.SLUG || '|' || tg.NAME AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280))             AS "SOURCE",
+    CAST('tag:'      || tg.NAME AS NVARCHAR(280))            AS "TARGET",
+    'taggedWith'                                             AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALTAGS" tt
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tt.TUTORIAL_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_TAGS" tg ON tg.ID = tt.TAG_ID
+  WHERE tg.NAME IS NOT NULL AND t.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:aboutProduct edges: tutorial → product
+  -- Product vertices are synthesized from tags whose NAME starts with
+  -- 'software-product>'. LENGTH('software-product>')=17, so SUBSTRING
+  -- position 18 extracts the suffix. Mirrors RDF projection at
+  -- srv/lib/kg-projection.js:305-310.
+  SELECT
+    CAST('ap|' || t.SLUG || '|' || SUBSTRING(tg.NAME, 18) AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280))                            AS "SOURCE",
+    CAST('product:'  || SUBSTRING(tg.NAME, 18) AS NVARCHAR(280))            AS "TARGET",
+    'aboutProduct'                                                          AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALTAGS" tt
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tt.TUTORIAL_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_TAGS" tg ON tg.ID = tt.TAG_ID
+  WHERE tg.NAME LIKE 'software-product>%'
+    AND t.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:inCategory edges: mission → category
+  -- Via MissionCategories junction. RDF projection at
+  -- srv/lib/kg-projection.js:320-323 only emits Mission→Category;
+  -- TutorialCategories exists in the schema but is NOT projected either
+  -- side. #919 mirrors that decision.
+  SELECT
+    CAST('ic|' || m.SLUG || '|' || c.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('mission:'  || m.SLUG AS NVARCHAR(280))            AS "SOURCE",
+    CAST('category:' || c.SLUG AS NVARCHAR(280))            AS "TARGET",
+    'inCategory'                                            AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_MISSIONCATEGORIES" mc
+  JOIN "COM_SAP_DEVELOPERS_IMS_MISSIONS" m ON m.ID = mc.MISSION_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CATEGORIES" c ON c.ID = mc.CATEGORY_ID
+  WHERE m.SLUG IS NOT NULL AND c.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:coCompletedWith edges: tutorial → tutorial
+  -- CoCompletions stores each pair twice (A→B and B→A per line 145-150 of
+  -- db/knowledge-graph.cds); both directions emit naturally. K-anonymity
+  -- gate WHERE SCORE >= 10 MIRRORS the RDF projection's k=10 threshold at
+  -- srv/lib/kg-projection.js:466-479. Raw pair counts below the threshold
+  -- must never reach the property graph.
+  SELECT
+    CAST('cc|' || SOURCESLUG || '|' || TARGETSLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('tutorial:' || SOURCESLUG AS NVARCHAR(280))                AS "SOURCE",
+    CAST('tutorial:' || TARGETSLUG AS NVARCHAR(280))                AS "TARGET",
+    'coCompletedWith'                                               AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_COCOMPLETIONS"
+  WHERE SCORE >= 10
+    AND SOURCESLUG IS NOT NULL AND TARGETSLUG IS NOT NULL;
