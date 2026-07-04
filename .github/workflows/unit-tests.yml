@@ -27,6 +27,16 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Install Hugo
+        # test/unit/hugo-homepage-partials.test.ts spawns the real Hugo binary
+        # to build a fixture browse.json. Without Hugo on PATH the spawnSync
+        # returns `status: null` and the test fails with "Hugo build failed
+        # (exit null)". Matches the version used by rebuild-content.yml.
+        run: |
+          curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz \
+            | tar -xz -C /tmp hugo
+          sudo mv /tmp/hugo /usr/local/bin/hugo
+          hugo version
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Setup nested workspaces (hugo-apps, app/explore) + rebuild native bindings

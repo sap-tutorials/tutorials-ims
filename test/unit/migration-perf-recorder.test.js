@@ -156,10 +156,14 @@ describe('migration-perf-recorder', () => {
       const parsed = JSON.parse(readFileSync(reportPath, 'utf-8'))
       expect(parsed.summary.totalInserted).toBe(100)
       // totalDurationMs is wall-clock from startRun to writeReport. On a fast
-      // CI box this can round to 0 ms; what matters is the formula works once
-      // there's measurable elapsed time. Just assert it's a non-negative number.
+      // CI box this can round to 0 ms; when that happens, overallRowsPerSec
+      // is `null` by design (see recorder line 129 — `totalDurationMs > 0`
+      // gate). What matters is the formula works once there's measurable
+      // elapsed time. Accept both `null` (0-ms edge case) and a non-negative
+      // number.
       expect(parsed.summary.totalDurationMs).toBeGreaterThanOrEqual(0)
-      expect(parsed.summary.overallRowsPerSec).toBeGreaterThanOrEqual(0)
+      const rps = parsed.summary.overallRowsPerSec
+      expect(rps === null || (typeof rps === 'number' && rps >= 0)).toBe(true)
     })
 
     it('produces a report even when no records were pushed (empty migration)', () => {
