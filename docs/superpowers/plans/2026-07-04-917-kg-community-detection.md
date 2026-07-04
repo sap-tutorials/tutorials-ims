@@ -65,7 +65,7 @@
 | 7 | Implement `promoteCommunityToMission` handler | INSERT Missions + CompletionPath + CompletionPathItems A→Z, atomic in one `db.tx`, SecurityEvent audit. |
 | 8 | FE admin tile — `app/admin/kgCommunities/webapp/` | Stock FE List Report + Object Page from the two projections. |
 | 9 | Shell wiring — nav, manifest, controller | Add `#kgCommunities` route so the tile is reachable when `KG_COMMUNITIES_ENABLED === 'true'`. |
-| 10 | Feature-flag gate in shell | Hide the nav entry when the env flag isn't on. |
+| 10 | ~~Feature-flag gate in shell~~ **SKIPPED** | ~~Hide the nav entry when the env flag isn't on.~~ No shell-config precedent — see Global Constraints and `.superpowers/sdd/task-10-report.md`. |
 | 11 | `CLAUDE.md` gotcha line | Future engineers learn about the flag + the job. |
 | 12 | Deploy dark, verify data, flip flag | Roll out to DEV with flag OFF, verify data quality, flip flag, monitor. |
 
