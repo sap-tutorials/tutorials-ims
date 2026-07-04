@@ -8,6 +8,7 @@ import cds from '@sap/cds';
 import { randomUUID } from 'node:crypto';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 import { persistAuthorAiRequest } from './author-ai-persist.js';
+import { resolveChatLlmSettings } from './chat-settings-resolver.js';
 
 const LOG = cds.log('os-variants');
 const SENTINEL = '===NEXT_VARIANT===';
@@ -48,38 +49,6 @@ ${sourceMarkdown}
 Produce ${targetOSes.length} block${targetOSes.length === 1 ? '' : 's'} separated by ${SENTINEL}.`;
 }
 
-/**
- * Resolve model + deployment from ChatSettings, falling back to env vars + defaults.
- * Mirrors srv/lib/code-check-llm.js settings resolution including the build-pipeline
- * raw-SQL fallback (see feedback_cds_entities_runtime_only in project memory).
- */
-async function resolveSettings() {
-  let settings = null;
-  try {
-    if (typeof cds.entities === 'function') {
-      const { ChatSettings } = cds.entities('com.sap.developers.ims');
-      settings = await SELECT.one.from(ChatSettings);
-    } else {
-      const db = await cds.connect.to('db');
-      const rows = await db.run(
-        'SELECT modelName, deploymentId FROM COM_SAP_DEVELOPERS_IMS_CHATSETTINGS LIMIT 1'
-      );
-      settings = rows?.[0] ?? null;
-    }
-  } catch (err) {
-    LOG.warn('ChatSettings read failed; using env-var defaults', err.message);
-  }
-  const modelName = settings?.modelName
-    || settings?.MODELNAME
-    || process.env.CHAT_MODEL_NAME
-    || 'anthropic--claude-4.6-sonnet';
-  const deploymentId = settings?.deploymentId
-    || settings?.DEPLOYMENTID
-    || process.env.CHAT_DEPLOYMENT_ID
-    || null;
-  return { modelName, deploymentId };
-}
-
 export async function generateOsVariants({
   sourceMarkdown, sourceOS, targetOSes, context = {}, userId,
 }) {
@@ -107,7 +76,7 @@ export async function generateOsVariants({
   }
 
   try {
-    const { modelName, deploymentId } = await resolveSettings();
+    const { modelName, deploymentId } = await resolveChatLlmSettings();
     resolvedModel = modelName;
     const client = new OrchestrationClient(
       {

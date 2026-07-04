@@ -1,29 +1,59 @@
 // srv/lib/chat-settings-resolver.js
-// Resolves modelName + deploymentId for SAP AI Hub calls. Shared by
-// srv/lib/code-check-llm.js and srv/lib/ai-quiz-llm.js — both used to
-// inline the same ~30-line fallback block. See issue #318.
+// Resolves modelName + deploymentId (for orchestration) and model (for
+// embeddings) from ChatSettings, env vars, and hardcoded defaults. Every
+// AI-call site in the app resolves configuration through this file — no
+// inline duplication. See docs/superpowers/plans/2026-07-04-959-pr1-consolidate-ai-resolution.md.
 //
-// Resolution order (highest to lowest priority):
+// resolveChatLlmSettings() resolution order:
 //   1. ChatSettings.modelName / deploymentId (CAP entity, lowercase keys)
 //   2. ChatSettings raw-SQL UPPERCASE column shape (HANA build-pipeline path)
 //   3. process.env.CHAT_MODEL_NAME / CHAT_DEPLOYMENT_ID
-//   4. modelName: hardcoded fallback 'anthropic--claude-4.6-sonnet'
+//   4. modelName: hardcoded 'anthropic--claude-4.6-sonnet'
 //      deploymentId: NO fallback — throws with a diagnostic message.
 //
-// The throw-on-null-deploymentId is the actual #318 fix. Previously
-// callers passed null deploymentId to OrchestrationClient and got an
-// opaque "upstream error" 3 seconds later. The Phase 4 bootstrap (#210)
-// hit this exact dead-end. Now the failure surfaces immediately with
-// a message naming the env var and the ChatSettings column.
+// resolveEmbeddingSettings() resolution order:
+//   1. ChatSettings.embeddingModel (CAP entity, lowercase keys)
+//   2. ChatSettings raw-SQL UPPERCASE column shape (HANA build-pipeline path)
+//   3. process.env.CHAT_EMBEDDING_MODEL
+//   4. Hardcoded 'text-embedding-3-small'
+//   There is NO embeddingDeploymentId column — @sap-ai-sdk/foundation-models
+//   resolves the deployment from the model name via the aicore binding.
+//
+// The throw-on-null-deploymentId is the issue #318 fix (surfaces the failure
+// immediately with an actionable message; before, callers passed null to the
+// SDK and got an opaque "upstream error" 3 seconds later).
 
 import cds from '@sap/cds';
 
 const LOG = cds.log('chat-settings-resolver');
 
-/** Hardcoded fallback — last resort when ChatSettings.modelName is null
- *  AND CHAT_MODEL_NAME env var isn't set. Same value as code-check-llm.js
- *  + ai-quiz-llm.js used before extraction. */
 const DEFAULT_MODEL_NAME = 'anthropic--claude-4.6-sonnet';
+const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
+
+/**
+ * Read the singleton ChatSettings row. Tolerant of build-pipeline contexts
+ * where cds.entities is undefined (CAP hasn't booted via cds.serve).
+ * On HANA the raw-SQL path returns UPPERCASE column names.
+ *
+ * @returns {Promise<object|null>} row (lowercase or UPPERCASE keys) or null on any failure
+ */
+async function readChatSettings() {
+  try {
+    if (typeof cds.entities === 'function') {
+      const { ChatSettings } = cds.entities('com.sap.developers.ims');
+      return (await SELECT.one.from(ChatSettings)) ?? null;
+    }
+    // Build-pipeline path: cds.entities not initialized, try raw SQL.
+    const db = await cds.connect.to('db');
+    const rows = await db.run(
+      'SELECT modelName, deploymentId, embeddingModel FROM COM_SAP_DEVELOPERS_IMS_CHATSETTINGS LIMIT 1'
+    );
+    return rows?.[0] ?? null;
+  } catch (err) {
+    LOG.warn('ChatSettings read failed; using env-var defaults', err.message);
+    return null;
+  }
+}
 
 /**
  * Resolve modelName + deploymentId for an OrchestrationClient call.
@@ -34,31 +64,8 @@ const DEFAULT_MODEL_NAME = 'anthropic--claude-4.6-sonnet';
  *   operator can fix it without spelunking through srv/lib.
  */
 export async function resolveChatLlmSettings() {
-  // 1. Read ChatSettings — tolerant of build-pipeline contexts where
-  //    cds.entities is undefined (CAP hasn't booted via cds.serve).
-  //    See feedback_cds_entities_runtime_only in project memory.
-  let settings = null;
-  try {
-    if (typeof cds.entities === 'function') {
-      const { ChatSettings } = cds.entities('com.sap.developers.ims');
-      settings = await SELECT.one.from(ChatSettings);
-    } else {
-      // Build-pipeline path: CAP model loader hasn't initialized cds.entities,
-      // but `cds.connect.to('db')` may have succeeded. Try raw SQL.
-      const db = await cds.connect.to('db');
-      const rows = await db.run(
-        'SELECT modelName, deploymentId FROM COM_SAP_DEVELOPERS_IMS_CHATSETTINGS LIMIT 1'
-      );
-      settings = rows?.[0] ?? null;
-    }
-  } catch (err) {
-    // ChatSettings read failed (e.g. no DB binding, table doesn't exist).
-    // Fall through to env-var defaults below.
-    LOG.warn('ChatSettings read failed; using env-var defaults', err.message);
-  }
+  const settings = await readChatSettings();
 
-  // HANA returns UPPERCASE column names from raw `db.run` SELECTs; CAP
-  // returns lowercase. Accept either.
   const modelName = settings?.modelName
     || settings?.MODELNAME
     || process.env.CHAT_MODEL_NAME
@@ -79,4 +86,18 @@ export async function resolveChatLlmSettings() {
   }
 
   return { modelName, deploymentId };
+}
+
+/**
+ * Resolve the embedding model for AzureOpenAiEmbeddingClient calls.
+ *
+ * @returns {Promise<{ model: string }>}
+ */
+export async function resolveEmbeddingSettings() {
+  const settings = await readChatSettings();
+  const model = settings?.embeddingModel
+    || settings?.EMBEDDINGMODEL
+    || process.env.CHAT_EMBEDDING_MODEL
+    || DEFAULT_EMBEDDING_MODEL;
+  return { model };
 }

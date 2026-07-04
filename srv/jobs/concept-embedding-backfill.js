@@ -20,11 +20,11 @@
 import cds from '@sap/cds';
 import { acquireLock, releaseLock } from './job-lock.js';
 import { embed as embedInputs } from '../lib/embedding-client.js';
+import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
 
 const LOG = cds.log('concept-embedding-backfill');
 const LOCK_NAME = 'concept-embedding-backfill';
 const DIMS = 1536;
-const DEFAULT_MODEL = 'text-embedding-3-small';
 const BYTES_PER_FLOAT = 4;
 
 function encodeEmbedding(vec) {
@@ -37,14 +37,9 @@ function isHana(db) {
   return db?.kind === 'hana' || db?.options?.kind === 'hana';
 }
 
-async function resolveModel(db) {
-  try {
-    const { ChatSettings } = cds.entities('com.sap.developers.ims');
-    const row = await SELECT.one.from(ChatSettings).columns('embeddingModel');
-    return row?.embeddingModel || DEFAULT_MODEL;
-  } catch {
-    return DEFAULT_MODEL;
-  }
+async function resolveModel() {
+  const { model } = await resolveEmbeddingSettings();
+  return model;
 }
 
 async function fetchCandidates(db) {
@@ -109,7 +104,7 @@ export async function runConceptEmbeddingBackfill({ db, embedClient, telemetry, 
   let failed = 0;
 
   try {
-    const model = await resolveModel(dbHandle);
+    const model = await resolveModel();
     const client = embedClient || defaultEmbedClient(model);
     const rows = await fetchCandidates(dbHandle);
 

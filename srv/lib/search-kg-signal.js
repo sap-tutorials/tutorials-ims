@@ -168,7 +168,7 @@ function normalizeKey(phrase) {
  * @param {string} opts.phrase              raw user query (whitespace/case OK)
  * @param {object} opts.db                  CDS db handle (SQLite or HANA)
  * @param {object=} opts.embedClient        override for tests: { embed(text) => Promise<Float32Array> }
- * @param {string=} opts.embeddingModel     defaults to 'text-embedding-3-small'
+ * @param {string=} opts.embeddingModel     embedding model name (resolved upstream via resolveEmbeddingSettings)
  * @param {boolean=} opts.enabled           flag — when false, returns empty signal without any work
  * @param {number=} opts.timeoutMs          wall-clock cap (default 5000)
  * @returns {Promise<KgSignal>}
@@ -177,7 +177,7 @@ export async function computeKgSignal({
   phrase,
   db,
   embedClient,
-  embeddingModel = 'text-embedding-3-small',
+  embeddingModel,  // resolved upstream via resolveEmbeddingSettings()
   enabled = true,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }) {

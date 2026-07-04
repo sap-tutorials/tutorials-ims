@@ -11,6 +11,7 @@
 
 import cds from '@sap/cds';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
+import { resolveChatLlmSettings } from './chat-settings-resolver.js';
 
 const LOG = cds.log('category-classifier');
 
@@ -35,8 +36,8 @@ const MAX_TOKENS = 512;
  * category assignments. The `slug` field is an enum restricted to taxonomy
  * slugs so the model cannot hallucinate a category that doesn't exist.
  *
- * Fallback chain for modelName:
- *   ChatSettings.modelName → process.env.CHAT_MODEL_NAME → 'anthropic--claude-4.6-sonnet'
+ * Fallback chain for modelName + deploymentId:
+ *   See resolveChatLlmSettings() in srv/lib/chat-settings-resolver.js.
  *
  * @param {object} opts
  * @param {string}   opts.title       - Tutorial title.
@@ -57,37 +58,9 @@ export async function classifyViaLlm({ title, description, tagSlugs, taxonomy })
     throw new Error('classifyViaLlm: empty taxonomy');
   }
 
-  // 1. Read ChatSettings — tolerant of build-pipeline contexts where
-  //    cds.entities is undefined (CAP hasn't booted via cds.serve).
-  //    See feedback_cds_entities_runtime_only in project memory.
-  let settings = null;
-  try {
-    if (typeof cds.entities === 'function') {
-      const { ChatSettings } = cds.entities('com.sap.developers.ims');
-      settings = await SELECT.one.from(ChatSettings);
-    } else {
-      // Build-pipeline path: try raw SQL.
-      const db = await cds.connect.to('db');
-      const rows = await db.run(
-        'SELECT modelName, deploymentId FROM COM_SAP_DEVELOPERS_IMS_CHATSETTINGS LIMIT 1'
-      );
-      settings = rows?.[0] ?? null;
-    }
-  } catch (err) {
-    // ChatSettings read failed (e.g. no DB binding, table doesn't exist).
-    // Fall through to env-var defaults below.
-    LOG.warn('ChatSettings read failed; using env-var defaults', err.message);
-  }
-
-  const modelName = settings?.modelName
-    || settings?.MODELNAME      // raw-SQL path returns UPPERCASE column names on HANA
-    || process.env.CHAT_MODEL_NAME
-    || 'anthropic--claude-4.6-sonnet';
-
-  const deploymentId = settings?.deploymentId
-    || settings?.DEPLOYMENTID
-    || process.env.CHAT_DEPLOYMENT_ID
-    || null;
+  // Resolve modelName + deploymentId. See srv/lib/chat-settings-resolver.js.
+  // Throws when both ChatSettings.deploymentId and the env-var fallback are unresolvable.
+  const { modelName, deploymentId } = await resolveChatLlmSettings();
 
   // 2. Build the taxonomy slug enum from the supplied taxonomy.
   const knownSlugs = taxonomy.map(c => c.slug);

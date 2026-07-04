@@ -29,12 +29,12 @@ import {
   resolveConceptCandidates,
 } from '../lib/kg-merge-on-write.js';
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
+import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
 
 const NAMESPACE_EXT = 'com.sap.developers.ims.external';
 const NAMESPACE_KG = 'com.sap.developers.ims';
 const DEFAULT_BUDGET = 50;
 const DEFAULT_LIMIT = 500;
-const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 const PREDICATE = 'officialReferenceFor';
 
 const LOG = cds.log('fetch-api-docs');
@@ -103,18 +103,15 @@ export async function runFetchApiDocs(deps = {}) {
 
   // 2. Merge config.
   let mergeThreshold = 0.85;
-  let embeddingModel = DEFAULT_EMBEDDING_MODEL;
   try {
     const kg = await resolveKnowledgeGraphSettings();
     if (typeof kg?.mergeSimThresholdExtract === 'number') {
       mergeThreshold = kg.mergeSimThresholdExtract;
     }
-    const { ChatSettings } = cds.entities(NAMESPACE_KG);
-    const cfg = await SELECT.one.from(ChatSettings).columns('embeddingModel');
-    if (cfg?.embeddingModel) embeddingModel = cfg.embeddingModel;
   } catch (err) {
     LOG.warn(`fetch-api-docs: settings resolve failed; using defaults: ${err.message}`);
   }
+  const { model: embeddingModel } = await resolveEmbeddingSettings();
 
   // 3. Registry.
   const db = cds.db ?? await cds.connect.to('db');
