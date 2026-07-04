@@ -26,8 +26,8 @@
 {{- $verbDefs := cond (gt (len $bakedVerbs) 0) $bakedVerbs $fallbackVerbs -}}
 {{- /* For baked entries, supply href since the build feed doesn't include it. */ -}}
 {{- $hrefMap := dict "LEARN" "/learn/" "BUILD" "/build/" "INTEGRATE" "/integrate/" "OPERATE" "/operate/" "AI" "/ai/" "CONNECT" "/connect/" -}}
-<section class="verb-spine" data-personalize="verb-order" data-skeleton="verb-spine">
-<ul class="hp-verbs" aria-label="Developer paths">
+<nav class="verb-spine" data-personalize="verb-order" data-skeleton="verb-spine" aria-label="Developer paths">
+<ul class="hp-verbs">
   {{- range sort $verbDefs "sortOrder" -}}
     {{- $vKey := .verbKey -}}
     {{- $vLabel := .label -}}
@@ -74,4 +74,4 @@
     </li>
   {{- end -}}
 </ul>
-</section>
+</nav>
