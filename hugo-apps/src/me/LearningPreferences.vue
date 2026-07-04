@@ -75,6 +75,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue';
 import { csrfFetch } from '@shared/csrf-fetch';
+import { broadcastPreferencesChanged } from '../homepage-personalizer/prefs-broadcast';
 // PR 6: import vocabulary from the single source of truth (single source of
 // truth is srv/lib/branch/profile-fields.js — also imported by the action
 // handler and used by the schema-drift guard test). Vite resolves the relative
@@ -211,6 +212,7 @@ async function onSave() {
     status.value = 'saved';
     dirty.value = false;
     savedTimer = window.setTimeout(() => { if (status.value === 'saved') status.value = 'idle'; }, 3000);
+    try { broadcastPreferencesChanged(); } catch {}
   } catch {
     status.value = 'error';
     // A11y: focus the first Select for the user to retry

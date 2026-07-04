@@ -4,6 +4,7 @@ import { renderBadge } from './personalized-badge';
 import { applyTeaserRerank, type FetchedCard } from './teaser-rerank';
 import { mountForYou } from './mount-for-you';
 import { applyShelfRerank } from './shelf-rerank';
+import { subscribeBroadcast } from './prefs-broadcast';
 
 const DEFAULT_FLAG_KEY = 'sap-devs-homepage-default';
 const ENDPOINT = '/homepage/personalized';
@@ -60,6 +61,7 @@ export async function boot(): Promise<void> {
     const payload = (await resp.json()) as Envelope;
     writeSessionCache(payload);
     applyEnvelope(payload);
+    subscribeBroadcast(payload.hash, (next) => applyEnvelope(next));
   } catch (e) {
     // eslint-disable-next-line no-console
     console.debug('[homepage-personalizer] boot failed', e);
