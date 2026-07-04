@@ -51,6 +51,52 @@ function coCompletionBoost(score) {
   return 1 + Math.log10(s + 1);
 }
 
+// ============================================================
+// PageRank blend (#916).
+//
+// Multiplicative blend on top of the arm's existing weight:
+//   weight *= (1 + α × normalize(tutorialRank[slug]))
+// where normalize maps the raw PageRank into [0, 1] via min-max scaling.
+// α defaults to 1.0 → weights grow at most 2× (bounded, safe).
+//
+// Fail-open on every path:
+//   - flag off               → EMPTY_RANK_MAPS, multiplier collapses to 1.0
+//   - rankMaps.tutorialRank.get(slug) undefined → 0 → multiplier 1.0
+//   - degenerate (max == min) → normalize returns 0 → multiplier 1.0
+//   - loadRankMaps() throws  → EMPTY_RANK_MAPS returned by caller
+//
+// Applies uniformly to all three tutorial-targeted arms (prerequisitesOf,
+// sharedConcepts, whatToLearnNext). The `teaches` arm ranks concepts —
+// when conceptRank is populated it re-sorts by concept PageRank instead
+// of pure lex order.
+// ============================================================
+
+const PAGERANK_ALPHA = Number(process.env.KG_PAGERANK_ALPHA) || 1.0;
+
+const _EMPTY_MAP = new Map();
+const EMPTY_RANK_MAPS = Object.freeze({
+  conceptRank: _EMPTY_MAP,
+  tutorialRank: _EMPTY_MAP,
+  _normalizeTut: () => 0,
+});
+
+/**
+ * Rank-maps shape recognizer for the backwards-compat shim on
+ * rankNeighborhood's 5th positional arg. Recognizes both live-loaded
+ * maps (from loadRankMaps in this file) and the frozen EMPTY_RANK_MAPS.
+ * Anything else that lacks the shape falls through to being treated
+ * as maxResults (a number) or ignored.
+ */
+function isRankMapsLike(x) {
+  return (
+    x &&
+    typeof x === 'object' &&
+    x.conceptRank instanceof Map &&
+    x.tutorialRank instanceof Map &&
+    typeof x._normalizeTut === 'function'
+  );
+}
+
 /**
  * Determine whether `candidateTeaches` is a non-trivial subset of
  * `inputTeaches` — i.e. every concept the candidate teaches is also taught
@@ -82,19 +128,47 @@ function isFullySubset(inputTeaches, candidateTeaches) {
  *   concept-slugs the tutorial teaches. When provided, sharedConcepts items
  *   whose teaches-set is fully a subset of `slug`'s teaches-set are pushed
  *   to the bottom (no learning value). Skipped when undefined.
+ * @param {object|number} [rankMapsOrMaxResults] — polymorphic 5th arg:
+ *   - When shaped like `{conceptRank, tutorialRank, _normalizeTut}` (from
+ *     loadRankMaps below), used to blend PageRank into all four arm weights
+ *     (#916). Requires KG_PAGERANK_ENABLED to be gated at the caller.
+ *   - When a number, treated as the maxResults cap (backwards-compat with
+ *     the pre-#916 signature `rankNeighborhood(rows, slug, coMap,
+ *     teachesMap, maxResults)`).
+ *   - Anything else is ignored (fail-open — no blend, defaults to TOP_N).
  * @param {number} [maxResults] — per-section cap. Defaults to TOP_N (10)
  *   for the sidebar path; the /graph/neighborhoodFull handler passes 30
- *   for the expanded panel (Task 5 of #850).
+ *   for the expanded panel. Also accepts the cap via the 5th positional
+ *   arg when the 5th arg is numeric (see above).
  * @returns {{teaches:Array, prerequisitesOf:Array, sharedConcepts:Array, whatToLearnNext:Array}}
  *   - teaches items:           { slug, name }
  *   - tutorial-targeted items: { slug, weight, reason }
  *     (`title` is left undefined; the handler enriches via Tutorials.title)
  */
-export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap, maxResults) {
+export function rankNeighborhood(
+  rows,
+  slug,
+  coCompletionMap,
+  tutorialTeachesMap,
+  rankMapsOrMaxResults,
+  maxResults,
+) {
   const coMap = coCompletionMap instanceof Map ? coCompletionMap : new Map();
+
+  // Backwards-compat shim: 5th positional arg polymorphism (#916).
+  // Callers pre-dating the PageRank blend pass maxResults here. New callers
+  // (in this file's own handlers post-#916) pass rankMaps and use the 6th
+  // arg for maxResults. Anything unrecognized fails-open to EMPTY.
+  let rankMaps = EMPTY_RANK_MAPS;
+  let capArg = maxResults;
+  if (isRankMapsLike(rankMapsOrMaxResults)) {
+    rankMaps = rankMapsOrMaxResults;
+  } else if (typeof rankMapsOrMaxResults === 'number' && Number.isFinite(rankMapsOrMaxResults)) {
+    capArg = rankMapsOrMaxResults;
+  }
   const capN =
-    typeof maxResults === 'number' && Number.isFinite(maxResults) && maxResults > 0
-      ? Math.floor(maxResults)
+    typeof capArg === 'number' && Number.isFinite(capArg) && capArg > 0
+      ? Math.floor(capArg)
       : TOP_N;
 
   // Bucket by type, deduped by (type, targetSlug). Skip rows with unknown
@@ -122,8 +196,31 @@ export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap
   for (const [targetSlug, row] of buckets.teaches) {
     teaches.push({ slug: targetSlug, name: row.targetLabel || targetSlug });
   }
-  // Stable lex order — teaches has no other ranking signal in Phase 1.
-  teaches.sort((a, b) => a.slug.localeCompare(b.slug));
+  // When conceptRank is populated (#916 flag on and job has run), sort by
+  // PageRank desc with lex as tiebreaker. Otherwise stable lex order.
+  // teaches has no other ranking signal (there's no ?weight from SPARQL
+  // on this arm), so PageRank is the only tie-breaker we get.
+  if (rankMaps.conceptRank.size > 0) {
+    teaches.sort((a, b) => {
+      const sa = rankMaps.conceptRank.get(a.slug) ?? 0;
+      const sb = rankMaps.conceptRank.get(b.slug) ?? 0;
+      if (sa !== sb) return sb - sa;
+      return a.slug.localeCompare(b.slug);
+    });
+  } else {
+    teaches.sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  // PageRank blend for tutorial-targeted items (all three arms below).
+  // Fail-open: unknown slug → 0 → multiplier 1.0.
+  //   weight *= (1 + α × normalize(tutorialRank[slug]))
+  function blendTutRank(item) {
+    const s = rankMaps.tutorialRank.get(item.slug);
+    if (typeof s !== 'number' || !Number.isFinite(s)) return;
+    const norm = rankMaps._normalizeTut(s);
+    if (!Number.isFinite(norm) || norm <= 0) return;
+    item.weight = item.weight * (1 + PAGERANK_ALPHA * norm);
+  }
 
   // Helper: build a tutorial-targeted item.
   function makeTutItem(type, targetSlug, row) {
@@ -137,12 +234,14 @@ export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap
     };
   }
 
-  // prerequisitesOf — already weight-bound by SPARQL (0.9). Sort by weight
-  // desc, then slug.
+  // prerequisitesOf — already weight-bound by SPARQL (0.9). PageRank blend
+  // lifts globally-central tutorials above equal-weighted peers, then sort
+  // by (final weight desc, slug asc).
   const prerequisitesOf = [];
   for (const [targetSlug, row] of buckets.prerequisitesOf) {
     prerequisitesOf.push(makeTutItem('prerequisitesOf', targetSlug, row));
   }
+  for (const item of prerequisitesOf) blendTutRank(item);
   prerequisitesOf.sort((a, b) => (b.weight - a.weight) || a.slug.localeCompare(b.slug));
 
   // sharedConcepts — apply subset suppression if tutorialTeachesMap given.
@@ -163,10 +262,13 @@ export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap
     }
     sharedConcepts.push(item);
   }
+  for (const item of sharedConcepts) blendTutRank(item);
   sharedConcepts.sort((a, b) => (b.weight - a.weight) || a.slug.localeCompare(b.slug));
 
-  // whatToLearnNext — boost by coCompletion. Sort by boosted weight desc,
-  // then slug.
+  // whatToLearnNext — boost by coCompletion AND blend PageRank. The two
+  // signals compose multiplicatively: co-completion (behavioral) × PageRank
+  // (structural). A tutorial that's both cohort-linked to the input and
+  // globally central rises fastest.
   const whatToLearnNext = [];
   for (const [targetSlug, row] of buckets.whatToLearnNext) {
     const base = makeTutItem('whatToLearnNext', targetSlug, row);
@@ -174,6 +276,7 @@ export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap
     base.weight = base.weight * boost;
     whatToLearnNext.push(base);
   }
+  for (const item of whatToLearnNext) blendTutRank(item);
   whatToLearnNext.sort((a, b) => (b.weight - a.weight) || a.slug.localeCompare(b.slug));
 
   // Cap each group at capN (defaults to TOP_N; /graph/neighborhoodFull
@@ -188,6 +291,104 @@ export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap
 
 // Re-exported for the (next-dispatch) handler to consume without re-deriving.
 export const _internals = { GROUP_KEYS, TOP_N, DEFAULT_WEIGHT, coCompletionBoost, isFullySubset };
+
+// ============================================================
+// PageRank rank-map loader (#916).
+//
+// Reads ConceptRank + TutorialRank sidecars and returns a shape the
+// rankNeighborhood shim accepts as its 5th arg:
+//   { conceptRank: Map<slug, score>,
+//     tutorialRank: Map<slug, score>,
+//     _normalizeTut: (score) => number in [0, 1] }
+//
+// Wrapped in a per-instance LRU (5-minute TTL) with a single-flight guard:
+// concurrent neighborhood handlers share the in-flight promise, so N
+// simultaneous request-time misses fire only ONE `SELECT * FROM
+// ConceptRank / TutorialRank` pair.
+//
+// Every fault path returns EMPTY_RANK_MAPS. The ranker's multiplier
+// collapses to 1.0 on empty maps, so any error here is equivalent to
+// flag-off — no request-time throw ever propagates to the client.
+// ============================================================
+
+const RANK_MAP_TTL_MS = 5 * 60 * 1000;
+
+// Late import: `cds` and `metrics` are already imported at the top of
+// this file (lines ~259 and ~284 respectively) so we reference them
+// directly below. The pure ranker tests never exercise this code path.
+
+let _rankMapsCache = null;      // { at: number, value: {...} }
+let _rankMapsInFlight = null;   // Promise or null
+
+// Exposed for tests. Not for production callers.
+export function _resetRankMapsCacheForTest() {
+  _rankMapsCache = null;
+  _rankMapsInFlight = null;
+}
+
+async function _loadRankMapsFromDb() {
+  // Late-bind cds and metrics via dynamic import so this file's ranker
+  // remains loadable in the CDS-model-free test workspace at
+  // test/unit/kg-neighborhood-ranking.test.js. The (top-of-file) static
+  // imports are only used inside the cds.service.impl callback, which
+  // isn't reached by the ranker unit tests.
+  const cdsMod = await import('@sap/cds');
+  const db = await cdsMod.default.connect.to('db');
+  const [conceptRows, tutorialRows] = await Promise.all([
+    db.run('SELECT "SLUG", "SCORE" FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTRANK"'),
+    db.run('SELECT "SLUG", "SCORE" FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALRANK"'),
+  ]);
+
+  const conceptRank = new Map(
+    conceptRows.map(r => [r.SLUG, Number(r.SCORE) || 0]),
+  );
+  const tutorialRank = new Map(
+    tutorialRows.map(r => [r.SLUG, Number(r.SCORE) || 0]),
+  );
+
+  // Precompute min/max of tutorialRank once per cache load so the
+  // per-item blendTutRank callback is O(1).
+  let tMin = Infinity;
+  let tMax = -Infinity;
+  for (const s of tutorialRank.values()) {
+    if (s < tMin) tMin = s;
+    if (s > tMax) tMax = s;
+  }
+  const range = tMax - tMin;
+  const _normalizeTut = range > 0
+    ? (s) => (s - tMin) / range
+    : () => 0;
+
+  return { conceptRank, tutorialRank, _normalizeTut };
+}
+
+export async function loadRankMaps() {
+  const now = Date.now();
+  if (_rankMapsCache && now - _rankMapsCache.at < RANK_MAP_TTL_MS) {
+    return _rankMapsCache.value;
+  }
+  if (_rankMapsInFlight) return _rankMapsInFlight;
+
+  _rankMapsInFlight = (async () => {
+    try {
+      const value = await _loadRankMapsFromDb();
+      _rankMapsCache = { at: Date.now(), value };
+      return value;
+    } catch (err) {
+      // Late-imported metrics — same reason as _loadRankMapsFromDb.
+      try {
+        const m = await import('./lib/metrics.js');
+        m.counter('kg_pagerank_read_failures');
+      } catch { /* metrics unavailable — swallow */ }
+      // Fail-open. Do NOT cache the failure — next request retries.
+      return EMPTY_RANK_MAPS;
+    } finally {
+      _rankMapsInFlight = null;
+    }
+  })();
+
+  return _rankMapsInFlight;
+}
 
 // ---------------------------------------------------------------------------
 // Title-enrichment + dead-reference filter (PR #558 — KG sidebar UX)
@@ -650,7 +851,14 @@ export default cds.service.impl(async function () {
     }
 
     // 9. Run the pure ranker.
-    const ranked = rankNeighborhood(rows, slug, coMap, tutorialTeachesMap);
+    // Flag-gated PageRank blend (#916). When on, load the sidecar maps
+    // (LRU-cached, 5-min TTL, single-flight in-file) and pass as the 5th
+    // positional arg. When off, EMPTY_RANK_MAPS collapses every multiplier
+    // to 1.0, so the arm output is identical to pre-#916.
+    const rankMaps = process.env.KG_PAGERANK_ENABLED === 'true'
+      ? await loadRankMaps()
+      : EMPTY_RANK_MAPS;
+    const ranked = rankNeighborhood(rows, slug, coMap, tutorialTeachesMap, rankMaps);
 
     // 10 + 10b. Enrichment lookups. Run in parallel — they're independent.
     //   - Tutorial titles: from Tutorials table for prereqs/shared/next slugs.
@@ -852,12 +1060,18 @@ export default cds.service.impl(async function () {
       tutorialTeachesMap = undefined;
     }
 
-    // 7. Rank with raised per-section cap (30 vs the sidebar's 10).
+    // 7. Rank with raised per-section cap (30 vs the sidebar's 10) AND
+    //    flag-gated PageRank blend (#916). The 6th positional arg carries
+    //    the cap; the 5th carries rankMaps (or EMPTY_RANK_MAPS when off).
+    const rankMaps = process.env.KG_PAGERANK_ENABLED === 'true'
+      ? await loadRankMaps()
+      : EMPTY_RANK_MAPS;
     const ranked = rankNeighborhood(
       rows,
       slug,
       coMap,
       tutorialTeachesMap,
+      rankMaps,
       NEIGHBORHOOD_FULL_MAX_PER_SECTION,
     );
 

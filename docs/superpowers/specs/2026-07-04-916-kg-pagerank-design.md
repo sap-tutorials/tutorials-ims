@@ -6,6 +6,46 @@
 **Scope:** DEV-only in v1. PROD rollout is out of scope.
 **Date:** 2026-07-04
 
+> **📌 Design pivot after Task 0 (2026-07-04) — Option C: PageRank in Node.js.**
+>
+> Q2's original answer ("HANA GraphScript `Compute_Pagerank` in
+> `KG_PAGERANK.hdbprocedure`") turned out to be a dead end. The Task 0
+> probe enumerated the full `BUILTIN_FUNCTIONS_ALGORITHMS` set in
+> [SAP-samples/hana-graph-examples](https://github.com/SAP-samples/hana-graph-examples/tree/main/GRAPH_PROCEDURE_EXAMPLES/BUILTIN_FUNCTIONS_ALGORITHMS)
+> — BFS, DFS, Dijkstra, Shortest_Path (1:1, 1:all), Neighbors,
+> Top_k_Shortest_Paths, Strongly_Connected_Components, Communities_Louvain,
+> Max_Flow — and confirmed **no PageRank built-in exists**. The deploy
+> probe with `PAGE_RANK` (and `Compute_PageRank`, `PageRank`) failed at
+> HDI precompile with syntax error at `MAP<Vertex, DOUBLE>`. See
+> [`docs/superpowers/reviews/2026-07-04-916-kg-pagerank-task0-notes.md`](../reviews/2026-07-04-916-kg-pagerank-task0-notes.md).
+>
+> Compute moves to Node.js — `srv/jobs/kg-pagerank-job.js` reads
+> `KG_PG_VERTICES_V` + `KG_PG_EDGES_V` and runs an iterative undirected
+> PageRank on a `Float64Array` (see the `computePageRank` export). At 17k
+> vertices / 40k edges, wall-clock is sub-2s (compute) + sub-1s (write).
+>
+> **What changed** vs the pre-pivot text below:
+>
+> | Section | Before pivot | After pivot |
+> |---|---|---|
+> | Q2 (compute engine) | HANA GraphScript primitive | Node.js iterative fixed-point on Float64Array |
+> | `KG_PAGERANK.hdbprocedure` | New GraphScript proc | **Removed** — no HDI artifact |
+> | `db-qa/.../KG_PAGERANK.hdbprocedure` | QA-channel stub | **Removed** — nothing to stub |
+> | Graph orientation | Ambiguous | **Undirected** — matches `KG_SHORTEST_PATH_GRAPH`'s `direction='ANY'` and `coCompletedWith`'s inherent symmetry |
+> | Job body | Thin `TRUNCATE+CALL` wrapper | Full compute + typed-array iteration + batch INSERT (500/batch) |
+> | Hub-tutorial vs spoke fixture assertion | hub-tutorial > spoke | Not true for undirected PageRank on the teaches-only fixture. Real hub-lift signal comes from `coCompletedWith` links. Fixture assertions relaxed to hub-concept > leaves + spoke tutorials tie by symmetry (see `test/unit/kg-pagerank-compute.test.js` for the closed-form analysis) |
+>
+> **What stayed the same:** sidecar tables (Task 1), scheduler slot
+> (03:53 UTC), env flags (`KG_PAGERANK_ENABLED`, `KG_PAGERANK_ALPHA`),
+> metric names, ranker blend formula (`weight *= 1 + α × normalize(PR)`),
+> fail-open semantics, rollout plan.
+>
+> Everything below this notice is the pre-pivot design, kept for
+> historical context. See the [implementation plan](../plans/2026-07-04-916-kg-pagerank.md)
+> for the up-to-date task list and code.
+
+---
+
 ## Problem
 
 The `whatToLearnNext` arm in the KG sidebar widget currently ranks candidates

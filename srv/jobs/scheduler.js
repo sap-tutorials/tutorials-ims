@@ -46,6 +46,7 @@ import { runGcExternalContent } from './gc-external-content-job.js';
 import { runFetchLearningJourneys } from './fetch-learning-journeys-job.js';
 import { runFetchBlogPosts } from './fetch-blog-posts-job.js';
 import { runMaterializeCoCompletions } from './materialize-co-completions.js';
+import { runKgPageRank } from './kg-pagerank-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -579,6 +580,25 @@ export function registerJobs() {
     ttlMs: 900000,
     description: 'Rebuild CoCompletions table for fast neighborhood lookups',
     fn: () => runMaterializeCoCompletions(),
+  });
+
+  // Daily 03:53 UTC — recompute PageRank over the KG property graph
+  // and materialize per-concept + per-tutorial scores into the sidecar
+  // tables read by rankNeighborhood() when KG_PAGERANK_ENABLED === 'true'.
+  // Off-minute (:53) — the neighboring 03:xx slots are already taken
+  // (:00, :15, :23, :30, :45); :53 keeps us out of the 03:xx cluster.
+  // ttlMs 10 min — expected wall-clock at 17k vertices / 40k edges is
+  // sub-2s (compute) + sub-1s (write); the 10-min ceiling is loud
+  // headroom in case the graph 10x's overnight. Fail-open: job errors
+  // never break request-time reads (ranker catches loadRankMaps() throws).
+  // Spec: docs/superpowers/specs/2026-07-04-916-kg-pagerank-design.md
+  // Issue: #916
+  registerJob({
+    jobName: 'kg-pagerank',
+    schedule: '53 3 * * *',
+    ttlMs: 600000,
+    description: 'Nightly PageRank over KG_PG_WORKSPACE — populates ConceptRank/TutorialRank sidecars (#916)',
+    fn: () => runKgPageRank(),
   });
 
   // Weekly Sunday 02:00 — tutorial metadata review

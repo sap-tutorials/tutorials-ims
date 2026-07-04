@@ -159,3 +159,41 @@ entity CoCompletions {
   key targetSlug : String(120);
       score      : Integer;
 }
+
+/**
+ * PageRank sidecar tables (#916).
+ *
+ * Populated nightly by KG_PAGERANK.hdbprocedure (GraphScript sibling of
+ * KG_SHORTEST_PATH_GRAPH) over KG_PG_WORKSPACE. Consumed at request
+ * time by rankNeighborhood in srv/knowledge-graph-service.js when
+ * KG_PAGERANK_ENABLED === 'true'.
+ *
+ * NOT exposed on any OData surface (@cds.autoexpose: false + no service
+ * projection) — issue #916 non-goal #1 is "not exposing scores on the
+ * OData surface for admin editing".
+ *
+ * NOT `managed` — nightly TRUNCATE+INSERT overwrite semantics; the
+ * `managed` timestamps/user columns would be trigger noise on a rebuilt-
+ * from-scratch aggregate table. `computedAt` captures the batch time.
+ *
+ * Cache invalidation: the nightly job wraps TRUNCATE + TRUNCATE + CALL
+ * in one db.tx, so readers see either the old snapshot or the new one,
+ * never a partial write.
+ *
+ * Slug widths mirror the source entities' Concepts.slug (String(80)) and
+ * Tutorials.slug (String(255)) — kept exact so a JOIN on slug never
+ * needs implicit casting.
+ */
+@cds.autoexpose: false
+entity ConceptRank {
+  key slug       : String(80);
+      score      : Double;
+      computedAt : Timestamp;
+}
+
+@cds.autoexpose: false
+entity TutorialRank {
+  key slug       : String(255);
+      score      : Double;
+      computedAt : Timestamp;
+}
