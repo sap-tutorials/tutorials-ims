@@ -858,8 +858,15 @@ extend entity AdminService.Tutorials with actions {
 extend service AdminService with {
 
   // LR-facing aggregate. One row per detected community.
+  // topConceptSlugs / alreadyPromoted are computed at read time by the
+  // after('READ', 'KgCommunities') decorators in srv/admin-service.js
+  // — not persisted; recomputed per request against KgCommunity + Missions.
   @readonly
-  entity KgCommunities as projection on ims.KgCommunitySummaryV;
+  entity KgCommunities as projection on ims.KgCommunitySummaryV {
+    *,
+    virtual null as topConceptSlugs : String(255),
+    virtual null as alreadyPromoted : Boolean,
+  };
 
   // OP-facing memberships. Rows keyed to (communityId, vertexKey).
   @readonly
@@ -869,6 +876,9 @@ extend service AdminService with {
   // Curator finishes the draft in the Missions LR (write description,
   // reorder, drop tutorials, publish). Returns the new Mission ID so
   // FE can navigate to it. See srv/admin-service.js for the handler.
+  // Guarded to SuperAdmin (matches the write-guard pattern used by
+  // Missions.published — req.user.is('SuperAdmin') at admin-service.js:1585).
+  @requires: 'SuperAdmin'
   action promoteCommunityToMission(
     communityId : Integer,
     missionSlug : String(255),

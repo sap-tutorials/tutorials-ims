@@ -64,6 +64,17 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!db) return;
+  // Promoted Missions cleanup MUST run before Tutorials cleanup because
+  // CompletionPathItems references Tutorials.ID.
+  await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS"
+    WHERE "path_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS"
+    WHERE "mission_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
+    WHERE LOWER("slug") LIKE '__test__kg-communities-%'))`);
+  await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS"
+    WHERE "mission_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
+    WHERE LOWER("slug") LIKE '__test__kg-communities-%')`);
+  await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
+    WHERE LOWER("slug") LIKE '__test__kg-communities-%'`);
   await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
     WHERE LOWER("vertexKey") LIKE 'tutorial:__test__kg-communities-%'
        OR LOWER("vertexKey") LIKE 'concept:__test__kg-communities-%'`);
@@ -98,5 +109,39 @@ describe('kg-communities nightly job (hybrid)', () => {
     expect(aCommunities.size).toBe(1);
     expect(bCommunities.size).toBe(1);
     expect([...aCommunities][0]).not.toBe([...bCommunities][0]);
+  }, 120_000);
+
+  it('promoteCommunityToMission drafts a Mission with all A-tutorials, sorted A→Z', async () => {
+    await runKgCommunities();
+    const aRows = await db.run(
+      `SELECT DISTINCT "communityId" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
+       WHERE "vertexKey" = ?`,
+      [`tutorial:${A_TUTS[0]}`]
+    );
+    const aCommunityId = Number(aRows[0].communityId);
+
+    const AdminService = await cds.connect.to('AdminService');
+    const missionSlug = `${P}mission`;
+    const mission = await AdminService.send({
+      event: 'promoteCommunityToMission',
+      data: { communityId: aCommunityId, missionSlug, title: `Promoted ${RUN_ID}` },
+    });
+    expect(mission).toBeTruthy();
+    expect(mission.ID).toBeTruthy();
+    expect(mission.sourceKgCommunityId).toBe(aCommunityId);
+    // HANA returns Boolean as 0/1 via raw run — CAP SELECT.one normalises.
+    expect(Boolean(mission.published)).toBe(false);
+
+    const items = await db.run(
+      `SELECT i."itemOrder", t."slug" FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS" i
+       JOIN "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS" p ON i."path_ID" = p."ID"
+       JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON i."tutorial_ID" = t."ID"
+       WHERE p."mission_ID" = ? ORDER BY i."itemOrder"`,
+      [mission.ID]
+    );
+    expect(items.length).toBe(A_TUTS.length);
+    for (let i = 1; i < items.length; i++) {
+      expect(items[i].slug.localeCompare(items[i - 1].slug)).toBeGreaterThan(0);
+    }
   }, 120_000);
 });
