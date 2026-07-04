@@ -36,10 +36,23 @@
 // Issue: #918
 // ============================================================
 
+import cds from '@sap/cds';
+import * as metrics from '../lib/metrics.js';
+
+const LOG = cds.log('kg-wcc');
+
+// HANA table name for the sidecar (bytecode name emitted by CAP for
+// the KgIsolation CDS entity in db/knowledge-graph-isolation.cds).
+// Raw table name — parameterized INSERT below — because this job may
+// be invoked via `cf run-task ... node -e` which skips the CAP
+// cds.server bootstrap, and `cds.entities()` is undefined in that
+// context. Matches the invocation-path-independence fix that #916
+// landed in commit 6a715d0f.
+const KG_ISOLATION_TABLE = '"COM_SAP_DEVELOPERS_IMS_KGISOLATION"';
+
 // Batch insert size — same as kg-pagerank-job.js. A KgIsolation row
 // is a vertexType (≤16B) + slug (≤255B) + componentId (≤280B) + int
 // + timestamp; each batch is well under HANA's 32MB statement cap.
-// eslint-disable-next-line no-unused-vars
 const INSERT_BATCH_SIZE = 500;
 
 // ============================================================
@@ -143,4 +156,123 @@ export function computeWcc(vertices, edges) {
     };
   }
   return { components, componentCount: sizeByRoot.size };
+}
+
+// ============================================================
+// DB-integrated entry point — the scheduler calls this.
+//
+// Reads the workspace, runs computeWcc, then filters the per-vertex
+// result to (vertexType IN ('concept','tutorial') AND componentSize
+// <= threshold) before writing to KgIsolation. All non-flagged
+// vertices are silently dropped — the sidecar only exists to
+// materialize the "flag me" signal.
+// ============================================================
+
+/**
+ * Read KG_WCC_ISOLATION_THRESHOLD; parseInt, fall back to 1 on NaN
+ * or negative. 0 is honored (empties the table). Exposed for tests.
+ */
+export function readThreshold() {
+  const raw = process.env.KG_WCC_ISOLATION_THRESHOLD;
+  if (raw === undefined || raw === null || raw === '') return 1;
+  const n = Number.parseInt(raw, 10);
+  if (Number.isNaN(n) || n < 0) return 1;
+  return n;
+}
+
+export async function runKgWcc() {
+  const threshold = readThreshold();
+  const t0 = Date.now();
+  const db = await cds.connect.to('db');
+
+  try {
+    // 1. Load vertices + edges from the workspace views. Same rows
+    //    the PageRank job at srv/jobs/kg-pagerank-job.js reads.
+    const vertexRows = await db.run(
+      'SELECT VERTEX_KEY, VERTEX_TYPE, SLUG FROM KG_PG_VERTICES_V',
+    );
+    const edgeRows = await db.run(
+      'SELECT "SOURCE", "TARGET" FROM KG_PG_EDGES_V',
+    );
+    const readMs = Date.now() - t0;
+
+    // 2. Run union-find. Undirected.
+    const vertexKeys = vertexRows.map((r) => r.VERTEX_KEY);
+    const edges = edgeRows.map((r) => [r.SOURCE, r.TARGET]);
+    const t1 = Date.now();
+    const { components, componentCount } = computeWcc(vertexKeys, edges);
+    const computeMs = Date.now() - t1;
+
+    // 3. Zip compute results back to (vertexType, slug) and filter
+    //    to the two vertex types we materialize, plus the size
+    //    threshold. Non-flagged vertices are dropped — the sidecar
+    //    only tracks the signal, not the full graph.
+    const now = new Date().toISOString();
+    const toInsert = [];
+    for (let i = 0; i < vertexRows.length; i++) {
+      const v = vertexRows[i];
+      const c = components[i];
+      if (!v.SLUG) continue;
+      if (v.VERTEX_TYPE !== 'concept' && v.VERTEX_TYPE !== 'tutorial') continue;
+      if (c.componentSize > threshold) continue;
+      toInsert.push({
+        vertexType: v.VERTEX_TYPE,
+        slug: v.SLUG,
+        componentId: c.componentId,
+        componentSize: c.componentSize,
+        computedAt: now,
+      });
+    }
+
+    // 4. Atomic swap in one tx: TRUNCATE + batched INSERTs. If the
+    //    batch loop throws mid-way, HANA rolls back to yesterday's
+    //    rows — readers never see a partial state.
+    const t2 = Date.now();
+    const INSERT_SQL =
+      `INSERT INTO ${KG_ISOLATION_TABLE} ` +
+      `(VERTEXTYPE, SLUG, COMPONENTID, COMPONENTSIZE, COMPUTEDAT) ` +
+      `VALUES (?, ?, ?, ?, ?)`;
+    await db.tx(async (tx) => {
+      await tx.run(`TRUNCATE TABLE ${KG_ISOLATION_TABLE}`);
+      for (let i = 0; i < toInsert.length; i += INSERT_BATCH_SIZE) {
+        const batch = toInsert.slice(i, i + INSERT_BATCH_SIZE);
+        await tx.run(
+          INSERT_SQL,
+          batch.map((r) => [
+            r.vertexType,
+            r.slug,
+            r.componentId,
+            r.componentSize,
+            r.computedAt,
+          ]),
+        );
+      }
+    });
+    const writeMs = Date.now() - t2;
+
+    const durationMs = Date.now() - t0;
+    metrics.observe('kg_wcc_duration_ms', durationMs);
+    metrics.gauge('kg_wcc_component_count', componentCount);
+    metrics.gauge('kg_wcc_isolated_count', toInsert.length);
+
+    LOG.info(
+      `WCC: ${vertexKeys.length} vertices / ${edges.length} edges → ` +
+        `${componentCount} components, ${toInsert.length} isolated ` +
+        `(threshold=${threshold}, read=${readMs}ms, compute=${computeMs}ms, ` +
+        `write=${writeMs}ms, total=${durationMs}ms)`,
+    );
+
+    return {
+      componentCount,
+      isolatedCount: toInsert.length,
+      readMs,
+      computeMs,
+      writeMs,
+      durationMs,
+    };
+  } catch (err) {
+    metrics.counter('kg_wcc_failures');
+    LOG.error('WCC job failed', err);
+    throw err;
+  }
 }
