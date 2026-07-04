@@ -241,8 +241,10 @@ export default class HomepageService extends cds.ApplicationService {
                    'personaTags', 'personaWeight', 'personaHidden', 'sortOrder'),
         // (#763 Task 12) Static top-8 featured tutorials ordered by featuredOrder.
         // Tutorials.featuredOrder is the admin-curated rank (NULL = not featured).
+        // status filter mirrors srv/handlers/recommendations.js — hides soft-deleted
+        // (INACTIVE / DELETED) tutorials that must not leak onto public surfaces.
         SELECT.from(Tutorials)
-          .where`featuredOrder is not null`
+          .where`featuredOrder is not null and (status = 'ACTIVE' or status is null)`
           .columns('slug', 'featuredOrder')
           .orderBy('featuredOrder')
           .limit(8),
@@ -289,8 +291,11 @@ export default class HomepageService extends cds.ApplicationService {
       if (slugs.length === 0) return [];
 
       const { Tutorials } = cds.entities('com.sap.developers.ims');
+      // status filter matches srv/handlers/recommendations.js — hides
+      // INACTIVE/DELETED tutorials from the public /homepage/tutorialCards path.
       const rows = await SELECT.from(Tutorials)
         .where({ slug: { in: slugs } })
+        .and(`status = 'ACTIVE' or status is null`)
         .columns('slug', 'title', 'description', 'primaryTag', 'experienceTag', 'averageTimeToComplete');
 
       // HTML-escape helper — guards against XSS if a title/tag ever contains markup.
