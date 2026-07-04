@@ -21,6 +21,7 @@ import { fetchSapDevsVideos } from './lib/youtube-fetcher.js';
 import { fetchRssItems } from './lib/homepage-rss-fetcher.js';
 import { resolveSecret } from './lib/secret-resolver.js';
 import { buildEnvelope, hashEnvelope } from './lib/homepage/personalized-envelope.js';
+import { resolveUserSapId } from './lib/resolve-db-user.js';
 
 const log = cds.log('homepage-service');
 
@@ -212,7 +213,7 @@ export default class HomepageService extends cds.ApplicationService {
     // Returns 204 when kill switch off, 200+envelope when on, 304 on ETag match.
     this.on('personalized', async (req) => {
       const { HomepageShelves, HomepageForYouCandidates, HomepageConfig,
-              UserLearningPreferences } = cds.entities('com.sap.developers.ims');
+              UserLearningPreferences, Users } = cds.entities('com.sap.developers.ims');
 
       const cfg = await SELECT.one.from(HomepageConfig).columns('personalizationEnabled');
       if (!cfg?.personalizationEnabled) {
@@ -220,12 +221,18 @@ export default class HomepageService extends cds.ApplicationService {
         return req.reject(-1);
       }
 
-      const userId = req.user?.id;
-      if (!userId) return req.reject(401, 'authentication required');
+      // Resolve the Users.ID (UUID FK) from the XSUAA sapId claim — mirrors
+      // the pattern in developer-service.js:744-754 (LearningPreferences READ).
+      // req.user.id is the XSUAA subject string, NOT the Users.ID UUID column.
+      const sapId = resolveUserSapId(req.user);
+      const dbUser = sapId ? await SELECT.one.from(Users).columns('ID').where({ sapId }) : null;
+      // No Users row → envelope is still built with all-null profile (valid).
 
       const [prefsRow, shelves, forYou] = await Promise.all([
-        SELECT.one.from(UserLearningPreferences).where({ user_ID: userId })
-          .columns('deployment', 'role', 'cloud'),
+        dbUser?.ID
+          ? SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID })
+              .columns('deployment', 'role', 'cloud')
+          : Promise.resolve(null),
         SELECT.from(HomepageShelves).where({ isActive: true })
           .columns('ID', 'verb', 'shelf', 'sortOrder', 'title',
                    'personaTags', 'personaWeight', 'personaHidden'),
