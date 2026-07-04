@@ -33,6 +33,7 @@ import {
 } from './lib/alert-enums.js';
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
+import { validateTags } from './lib/homepage/persona-tag-validator.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -196,6 +197,21 @@ async function sendLastChanceForAuthor(authorEmail, dryRun, ctx) {
     tutorialSlugs: target.tutorials.map(t => t.slug),
     error: result.error ?? '',
   };
+}
+
+// (#763) Validate personaTags / personaHidden arrays against PROFILE_VOCAB.
+// Called as before-CREATE/UPDATE on HomepageShelves and HomepageForYouCandidatesAdmin.
+// Uses req.error() (not throw) so CAP surfaces all field-level errors at once
+// in Fiori Elements.
+function checkPersonaTagsHandler(req) {
+  for (const field of ['personaTags', 'personaHidden']) {
+    const tags = req.data?.[field];
+    if (tags == null) continue;
+    const v = validateTags(tags);
+    if (!v.ok) {
+      return req.reject(400, `Unknown persona tag(s): ${v.invalid.join(', ')}`);
+    }
+  }
 }
 
 export default class AdminService extends cds.ApplicationService {
@@ -2427,6 +2443,17 @@ export default class AdminService extends cds.ApplicationService {
       });
       return { status: 'ok' };
     });
+
+    // (#763) Persona-tag validator — rejects unknown tags at save time on
+    // both HomepageShelves and the new ForYou candidate pool.
+    // Draft lifecycle: NEW/PATCH fire on entity.drafts; SAVE fires on drafts at activation.
+    // Direct REST: CREATE/UPDATE fire on the active entity.
+    const { HomepageShelves, HomepageForYouCandidatesAdmin } = this.entities;
+    const shelfEvents = ['CREATE', 'UPDATE', 'NEW', 'PATCH', 'SAVE'];
+    this.before(shelfEvents, HomepageShelves, checkPersonaTagsHandler);
+    this.before(shelfEvents, HomepageShelves.drafts, checkPersonaTagsHandler);
+    this.before(shelfEvents, HomepageForYouCandidatesAdmin, checkPersonaTagsHandler);
+    this.before(shelfEvents, HomepageForYouCandidatesAdmin.drafts, checkPersonaTagsHandler);
 
     await super.init();
 

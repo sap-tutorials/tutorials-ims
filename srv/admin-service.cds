@@ -192,6 +192,11 @@ service AdminService {
     action regenerate()   returns { processed : Integer; skipped : Integer; cost : String };
   };
 
+  // (#763) For-you candidate pool — admin editing surface.
+  // Validator in admin-service.js rejects unknown persona tags at save time.
+  @odata.draft.enabled
+  entity HomepageForYouCandidatesAdmin as projection on ims.HomepageForYouCandidates;
+
   @readonly @cds.persistence.skip entity AlertCtaTargets {
     key url   : String(500);
         label : String(100);
