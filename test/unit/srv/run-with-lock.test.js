@@ -35,10 +35,11 @@ describe('runWithLock — JobLastRun retrofit + manual-trigger opts', () => {
 
   beforeEach(async () => {
     _resetJobRegistry();
-    // Reset JobLastRun + JobLocks between tests.
-    const { JobLastRun, JobLocks } = cds.entities('com.sap.developers.ims');
+    // Reset JobLastRun between tests. The scheduler chassis no longer
+    // touches JobLocks (#958 — CAP 10's .as(name) singleton locking
+    // replaced the DB lock), so JobLocks reset removed here.
+    const { JobLastRun } = cds.entities('com.sap.developers.ims');
     await DELETE.from(JobLastRun);
-    await DELETE.from(JobLocks);
   });
 
   it('successful fn: returns outcome=success, writes JobLastRun.lastSuccessAt', async () => {
@@ -81,29 +82,5 @@ describe('runWithLock — JobLastRun retrofit + manual-trigger opts', () => {
     expect(row).toBeTruthy();
     expect(row.lastErrorMessage).toBe('boom');
     expect(row.lastErrorAt).toBeTruthy();
-  });
-
-  it('lock-held: returns {skipped: true, reason: lock-held}', async () => {
-    registerJob({
-      jobName: 'test-lock',
-      schedule: '0 0 1 1 *',
-      ttlMs: 60000,
-      description: 'unit test — lock-held path',
-      fn: async () => ({ processed: 1 }),
-    });
-
-    // Manually insert a JobLocks row that's not expired.
-    const { JobLocks } = cds.entities('com.sap.developers.ims');
-    const futureExpiry = new Date(Date.now() + 60000);
-    await INSERT.into(JobLocks).entries({
-      jobName: 'test-lock',
-      lockedBy: 'someone-else',
-      lockedAt: new Date(),
-      expiresAt: futureExpiry,
-    });
-
-    const result = await runJobByName('test-lock');
-    expect(result.skipped).toBe(true);
-    expect(result.reason).toBe('lock-held');
   });
 });

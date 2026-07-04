@@ -4,19 +4,25 @@
 //
 // The scheduler has two invocation paths and JOB_REGISTRY is the single
 // source of truth for both:
-//   1. node-cron ticks — `cron.schedule(expr, () => runJobByName(name))`,
-//      wired up inside registerJob() at registration time.
+//   1. CAP scheduled ticks — srv/cron-service.js reads JOB_REGISTRY at
+//      init() and calls `this.schedule('cron.<name>', {}).every(expr)
+//      .as(jobName)`. Its `on('cron.<name>')` handler invokes
+//      `runJobByName(name)`. Per-instance status-column singleton
+//      locking replaces the previous node-cron + JobLocks scheme (#958).
 //   2. Admin manual triggers — `AdminService.JobControls.runJob(jobName)`
 //      dispatches to `runJobByName(name, {manualTrigger, user})` (#756).
 //
 // Both routes end up in `runWithLock`, which:
-//   - Acquires a DB-backed lock (JobLocks) keyed on jobName + instanceId,
-//     so multi-instance CF deploys never run the same job twice
-//     concurrently. Losing the race returns `{skipped:true, reason:'lock-held'}`
-//     — the caller decides whether to retry / next-tick / surface an error.
 //   - Emits PipelineLog start/end rows (visible on the admin Job Log tile).
 //   - Records JobLastRun outcome (visible on the Cron health tile).
 //   - For `manualTrigger:true`, emits SecurityEvent audit events (spec §9).
+//
+// #958: The pre-CAP-10 chassis also acquired/released a DB-backed lock
+// (JobLocks) keyed on jobName + instanceId to prevent duplicate scheduled
+// ticks across CF instances. CAP 10's `.as(name)` status-column singleton
+// locking replaces that mechanism, so runWithLock no longer touches
+// JobLocks. Manual triggers colliding with an in-flight scheduled run
+// now both run to completion; last-write-wins on JobLastRun.
 //
 // Convention: schedules use OFF-MINUTES (e.g. :07, :13, :23, :43) rather
 // than the :00/:30 thundering herd — this project has ~24 scheduled jobs
@@ -24,9 +30,8 @@
 // should pick a minute not already in use in registerJobs() below.
 //
 // #756 spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md
+// #958 spec: docs/superpowers/specs/2026-07-04-958-cap10-scheduler-migration-design.md
 
-import cron from 'node-cron';
-import { acquireLock, releaseLock } from './job-lock.js';
 import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings, pruneAnalyticsHistory, cleanupChangeLog, cleanupMetricSnapshots, cleanupPublishTimings } from './cleanup.js';
 import { runMetricsRollup } from './metrics-rollup-job.js';
 import { retryNgds } from './ngds-retry.js';
@@ -51,7 +56,7 @@ const instanceId = process.env.CF_INSTANCE_INDEX || '0';
 const LOG = cds.log('scheduler');
 
 // #756: JOB_REGISTRY is the single source of truth for all scheduled jobs.
-// Both cron.schedule() (in registerJobs() below) and the new
+// Both CronService (in srv/cron-service.js) and the
 // AdminService.JobControls.runJob() handler read from this map.
 //
 // Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.1
@@ -67,7 +72,8 @@ const JOB_REGISTRY = new Map();
  */
 
 /**
- * Register a job in the JOB_REGISTRY AND schedule it via node-cron.
+ * Register a job in the JOB_REGISTRY. CronService.init() reads the
+ * registry at boot and calls srv.schedule() per entry.
  * Both invocation paths (scheduled and manual) read from the registry.
  */
 export function registerJob({ jobName, schedule, ttlMs, description, fn }) {
@@ -75,8 +81,8 @@ export function registerJob({ jobName, schedule, ttlMs, description, fn }) {
     throw new Error(`Duplicate jobName: ${jobName}`);
   }
   JOB_REGISTRY.set(jobName, { jobName, schedule, ttlMs, description, fn });
-  // Schedule the cron alongside registration.
-  cron.schedule(schedule, () => runJobByName(jobName));
+  // #958: cron.schedule() removed; CronService owns scheduling via
+  // srv.schedule('cron.<name>', {}).every(schedule).as(jobName).
 }
 
 /**
@@ -109,39 +115,37 @@ export function _setJobFn(jobName, mockFn) {
 }
 
 /**
- * Distributed-lock wrapper around a cron job's runner function. Acquires
- * a DB-backed lock via JobLocks, runs fn(logId), records JobLastRun on
- * completion (success or error), and releases the lock.
+ * Runs a cron job's fn (or a manual admin trigger) under the standard
+ * chassis: PipelineLog start row, invoke fn(logId), PipelineLog end row
+ * (SUCCESS or FAILED), then JobLastRun UPSERT in `finally`. On manual
+ * triggers (opts.manualTrigger=true), emits a completion SecurityEvent
+ * audit event from the `finally` block (spec §9).
  *
- * #756 (Task 1) extensions vs the previous 3-arg signature:
- *  - 4th opts arg {manualTrigger, user} for the admin-triggered path
- *  - Always invokes recordJobLastRun(jobName, outcome, errorMessage) in
- *    finally block — Phase 4.1-4.5 + future cron retrofit
- *  - When manualTrigger=true, emits SecurityEvent audit events
- *    (lockheld OR success/error) via emitJobAudit (lazily imported from
- *    admin-service.js to avoid circular import)
- *  - Returns a structured response shape: {skipped, outcome, result,
- *    errorMessage, reason} — old void return is now a return value
+ * Return shape: {skipped: false, outcome: 'success'|'error', result,
+ * errorMessage} — `skipped` is always false since #958 retired the
+ * lock-held short-circuit; retained in the shape for backward-compat
+ * with existing callers that destructure it.
  *
- * Lock-held behavior: emits ONE audit event (outcome='lockheld') when
- * manualTrigger=true. Success/error paths emit TWO events (started
- * synchronously from runJob handler + completion from this finally
- * block). Spec §5 + §9.
+ * durationMs is unused (CAP owns duration semantics now) but retained
+ * in the signature for registerJob call-site stability.
  *
- * Backward-compat: existing 3-arg callers continue working. opts is
- * optional with sensible defaults.
+ * Backward-compat: the pre-#756 3-arg signature works because opts
+ * defaults to {}. `manualTrigger` and `user` opts are passed through
+ * from AdminService.JobControls.runJob.
  *
- * Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.3
+ * Spec: docs/superpowers/specs/2026-07-04-958-cap10-scheduler-migration-design.md
  */
 async function runWithLock(jobName, durationMs, fn, opts = {}) {
-  // instanceId is module-level const at scheduler.js:20 — do NOT redeclare.
-  const acquired = await acquireLock(jobName, instanceId, durationMs);
-  if (!acquired) {
-    if (opts.manualTrigger) {
-      await emitJobAuditSafely({ jobName, user: opts.user, outcome: 'lockheld' });
-    }
-    return { skipped: true, reason: 'lock-held' };
-  }
+  // #958: node-cron + JobLocks retired. CAP 10's .as(name) status-column
+  // singleton semantics prevent concurrent scheduled ticks across CF
+  // instances. Manual triggers (setImmediate path from admin actions)
+  // bypass the outbox entirely — a manual-vs-scheduled collision runs
+  // both to completion; last-write-wins on JobLastRun. Documented
+  // behavior change from the pre-#958 lock-held short-circuit.
+  //
+  // durationMs is retained in the signature for call-site stability
+  // (registerJob passes it through) but is unused inside this function.
+  void durationMs;
 
   let outcome = 'success';
   let errorMessage = null;
@@ -158,7 +162,6 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
     LOG.error(`Job ${jobName} failed:`, errorMessage);
     await logPipelineEnd(logId, 'FAILED', jobName, errorMessage);
   } finally {
-    await releaseLock(jobName, instanceId);
     try {
       await recordJobLastRun(jobName, outcome, errorMessage);
     } catch (err) {

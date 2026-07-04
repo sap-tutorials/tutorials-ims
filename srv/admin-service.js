@@ -42,8 +42,9 @@ const MAX_JOB_NAME_LEN = 100;
  * Emit a SecurityEvent audit row for the manual-trigger lifecycle.
  *
  * Two invocations per click: one with outcome='started' synchronously
- * on the runJob action; one with outcome ∈ {success, error, lockheld}
- * after the cron resolves (or the lock is held).
+ * on the runJob action; one with outcome ∈ {success, error}
+ * after the cron resolves (#958 retired the 'lockheld' outcome — CAP 10's
+ * .as(name) singleton locking replaced the JobLocks acquire path).
  *
  * Exported so srv/jobs/scheduler.js can lazy-import this from inside
  * runWithLock's emitJobAuditSafely wrapper (circular-import-safe).
@@ -65,7 +66,7 @@ const MAX_JOB_NAME_LEN = 100;
  *
  * Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.8
  *
- * @param {{jobName: string, user?: string, outcome: 'started'|'success'|'error'|'lockheld', durationMs?: number, startedAt?: Date}} opts
+ * @param {{jobName: string, user?: string, outcome: 'started'|'success'|'error', durationMs?: number, startedAt?: Date}} opts
  * @returns {Promise<void>}
  */
 export async function emitJobAudit({ jobName, user, outcome, durationMs = null, startedAt = null }) {

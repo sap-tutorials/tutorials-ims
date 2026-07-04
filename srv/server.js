@@ -1,7 +1,6 @@
 import cds from '@sap/cds';
 import express from 'express';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { registerJobs } from './jobs/scheduler.js';
 import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
@@ -1010,9 +1009,8 @@ cds.on('served', async () => {
   // that cds.middlewares (context + auth) are available.
   wireExportsBridge();
 
-  if (process.env.NODE_ENV !== 'test') {
-    registerJobs();
-  }
+  // #958: registerJobs() call removed — CronService.init() owns the
+  // scheduler lifecycle now.
 });
 
 cds.on('served', () => {

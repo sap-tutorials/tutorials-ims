@@ -64,6 +64,8 @@ Nine decisions resolved during brainstorming, with rationale:
 
 ## 4. Architecture
 
+> **Update 2026-07-04 (#958):** the scheduler engine migrated from node-cron to CAP 10's Scheduling API. `runWithLock` no longer acquires a DB lock — CAP 10's `.as(name)` singleton locking replaces `JobLocks` on the scheduler path. The scheduling bus itself now lives in `srv/cron-service.js` (an internal service with no protocol exposure); `srv/server.js` no longer calls `registerJobs()`. The admin manual-trigger chassis described below is preserved verbatim — the `manualTrigger` opts path, PipelineLog, JobLastRun UPSERT, and SecurityEvent audit emission are unchanged. See `docs/superpowers/specs/2026-07-04-958-cap10-scheduler-migration-design.md` for the migration.
+
 ### 4.1 `JOB_REGISTRY` + `JobDef` shape
 
 ```javascript

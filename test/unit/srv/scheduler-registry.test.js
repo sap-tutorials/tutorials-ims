@@ -2,11 +2,12 @@
 //
 // Unit tests for the JOB_REGISTRY chassis in srv/jobs/scheduler.js.
 // Tests registry population, duplicate-name rejection, lockstep with
-// registerJobs(), and node-cron validate() compat for every registered
-// schedule.
+// registerJobs(), and cron-parser parse compat for every registered
+// schedule (#958 replaced node-cron.validate with cron-parser.parse —
+// the same lib already used by srv/lib/cron-firings.js).
 
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import cron from 'node-cron';
+import { CronExpressionParser } from 'cron-parser';
 
 import {
   registerJob,
@@ -54,11 +55,15 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     await expect(runJobByName('does-not-exist')).rejects.toThrow(/Unknown jobName/);
   });
 
-  it('every registered schedule validates via node-cron', () => {
+  it('every registered schedule parses via cron-parser', () => {
     registerJobs();
     const registry = _getJobRegistry();
     for (const job of registry.values()) {
-      expect(cron.validate(job.schedule), `invalid cron for ${job.jobName}: ${job.schedule}`).toBe(true);
+      // cron-parser throws on invalid expressions; assert no throw.
+      expect(
+        () => CronExpressionParser.parse(job.schedule, { tz: 'UTC' }),
+        `invalid cron for ${job.jobName}: ${job.schedule}`
+      ).not.toThrow();
     }
   });
 
