@@ -626,6 +626,16 @@ entity ChatSettings : cuid, managed {
   // kgPathBetweenEnabled flags) because expansion is cheap: 1 embed + 1 cosine
   // scan + 1-hop walk. Toggle OFF if telemetry shows problems.
   kgSearchExpansionEnabled : Boolean default true;
+
+  // Server-side KG-boosted search ranking (#945). When true:
+  //   - /search/SearchableItems rank formula extends to `fuzzy + 2.0 * kg_score`
+  //     via SearchService.before('READ'); byte-identical to today when the KG
+  //     signal is empty (empty query, KG off, timeout, zero ACTIVE concepts).
+  //   - searchTutorials Joule tool annotates each hit with a `rationale`
+  //     from the same shared cache — one signal, one cache, one flag.
+  // Same cheap cost profile as kgSearchExpansionEnabled (1 embed + 1 cosine
+  // scan + 1-hop walk, per query, cached 5 min in-process).
+  searchKgRerankEnabled    : Boolean default true;
 }
 
 // Phase 2-A foundation (#463). Mirrors the ChatSettings singleton pattern.

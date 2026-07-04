@@ -44,6 +44,11 @@ service SearchService {
     @Search.fuzzinessThreshold: 0.85
     @Search.ranking: #LOW
     tagBag,
+    // #945: composite rank exposed to callers that $select it. Populated in
+    // SearchService.after('READ') from the internal _searchRank column when
+    // it is present (which is when the request came in with a $search phrase).
+    // Virtual → no DB column, no impact on non-search reads.
+    virtual null as searchScore : Decimal(8,4),
     *
   } excluding { bodyText, tagBag };
 

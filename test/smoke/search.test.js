@@ -83,4 +83,38 @@ describe('Search Service (smoke)', () => {
     expect(data.value).toEqual([]);
     expect(data['@odata.count']).toBe(0);
   });
+
+  // #945: searchScore is a virtual field exposed on the SearchableItems
+  // projection. When the request includes $search, the composite rank
+  // (fuzzy + KG blend) is copied into searchScore and rows are ordered by
+  // it DESC. When there's no $search, searchScore stays null.
+  it('$search=… + $select=searchScore returns monotone-DESC scores', async () => {
+    const res = await fetch(
+      `${BASE_URL}/search/SearchableItems?$search=cap&$select=slug,title,searchScore&$top=10`,
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    // Environment-dependent — DEV always has content, but be defensive.
+    if (!Array.isArray(data.value) || data.value.length < 2) return;
+    for (const row of data.value) {
+      expect(row).toHaveProperty('searchScore');
+      expect(typeof row.searchScore).toBe('number');
+    }
+    // Order is DESC by searchScore (allow equal for tiebreakers).
+    for (let i = 1; i < data.value.length; i++) {
+      expect(data.value[i - 1].searchScore).toBeGreaterThanOrEqual(data.value[i].searchScore);
+    }
+  });
+
+  it('non-search read leaves searchScore null (no leaked rank)', async () => {
+    const res = await fetch(
+      `${BASE_URL}/search/SearchableItems?$select=slug,searchScore&$top=3`,
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    if (!Array.isArray(data.value) || data.value.length === 0) return;
+    for (const row of data.value) {
+      expect(row.searchScore == null).toBe(true);
+    }
+  });
 });
