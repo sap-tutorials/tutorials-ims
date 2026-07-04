@@ -66,7 +66,8 @@ export async function embedSlugs(slugs, settings, onSlug) {
   try {
     const db = await cds.connect.to('db');
     const { Tutorials, Steps, TutorialEmbedding } = cds.entities('com.sap.developers.ims');
-    const model = settings.embeddingModel || 'text-embedding-3-small';
+    // model is resolved upstream via resolveEmbeddingSettings() — trust the caller.
+    const model = settings.embeddingModel;
 
     for (const slug of slugs) {
       try {

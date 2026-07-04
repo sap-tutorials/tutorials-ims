@@ -52,9 +52,7 @@ function cosine(a, b) {
  *   strictly below this cosine value are dropped. On the HANA path the
  *   filter happens in JS after `ORDER BY score DESC` so the raw top-K
  *   ranking is preserved even when everything is below the floor.
- * @param {string} [args.settings.embeddingModel='text-embedding-3-small'] -
- *   Must match the model used to populate TutorialEmbedding rows; mixed-model
- *   rows are excluded by the WHERE clause on `embeddingModel`.
+ * @param {string} args.settings.embeddingModel - Embedding model name (resolved upstream via resolveEmbeddingSettings)
  *
  * @returns {Promise<Array<{
  *   tutorialId: string,
@@ -69,7 +67,8 @@ export async function findRelevantSteps({ query, settings }) {
   if (!query || !query.trim()) return [];
   const topK = Math.min(Math.max(settings.embeddingTopK ?? 4, 1), 10);
   const minScore = settings.embeddingMinScore ?? 0.25;
-  const model = settings.embeddingModel || 'text-embedding-3-small';
+  // model is resolved upstream via resolveEmbeddingSettings() — trust the caller.
+  const model = settings.embeddingModel;
 
   const [qVec] = await embed([query.trim()], model);
   const db = cds.db;

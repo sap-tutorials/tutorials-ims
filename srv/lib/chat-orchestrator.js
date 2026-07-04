@@ -612,6 +612,10 @@ export async function dispatchTool(name, args, user) {
 }
 
 export async function streamChat({ res, system, messages, deploymentId, modelName, temperature, maxTokens, signal, tools, user, pageContext }) {
+  // Per-request override chain: request-body modelName (from chat-service.js) → env → hardcoded fallback.
+  // NOT unified through resolveChatLlmSettings() because callers pass a per-request override
+  // (admins can test alternate models via the request body). If we called the resolver here we'd
+  // lose that override capability. Keep the hardcoded fallback as a last-resort safety net.
   const effectiveModel = modelName || process.env.CHAT_MODEL_NAME || 'anthropic--claude-4.6-sonnet';
   const effectiveTemperature = temperature != null ? Number(temperature) : 0.51;
   const effectiveMaxTokens = maxTokens != null ? Number(maxTokens) : 10025;
