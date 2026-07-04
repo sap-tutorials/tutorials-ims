@@ -20,6 +20,7 @@ import { mergeEvents } from './lib/homepage-events-merger.js';
 import { fetchSapDevsVideos } from './lib/youtube-fetcher.js';
 import { fetchRssItems } from './lib/homepage-rss-fetcher.js';
 import { resolveSecret } from './lib/secret-resolver.js';
+import { buildEnvelope, hashEnvelope } from './lib/homepage/personalized-envelope.js';
 
 const log = cds.log('homepage-service');
 
@@ -204,6 +205,57 @@ export default class HomepageService extends cds.ApplicationService {
         updated++;
       }
       return updated;
+    });
+
+    // (#763) personalized() — authenticated envelope. @(requires:'authenticated-user')
+    // declared in CDS overrides the service-level @requires:'any'.
+    // Returns 204 when kill switch off, 200+envelope when on, 304 on ETag match.
+    this.on('personalized', async (req) => {
+      const { HomepageShelves, HomepageForYouCandidates, HomepageConfig,
+              UserLearningPreferences } = cds.entities('com.sap.developers.ims');
+
+      const cfg = await SELECT.one.from(HomepageConfig).columns('personalizationEnabled');
+      if (!cfg?.personalizationEnabled) {
+        req.res.status(204).end();
+        return req.reject(-1);
+      }
+
+      const userId = req.user?.id;
+      if (!userId) return req.reject(401, 'authentication required');
+
+      const [prefsRow, shelves, forYou] = await Promise.all([
+        SELECT.one.from(UserLearningPreferences).where({ user_ID: userId })
+          .columns('deployment', 'role', 'cloud'),
+        SELECT.from(HomepageShelves).where({ isActive: true })
+          .columns('ID', 'verb', 'shelf', 'sortOrder', 'title',
+                   'personaTags', 'personaWeight', 'personaHidden'),
+        SELECT.from(HomepageForYouCandidates).where({ active: true })
+          .columns('ID', 'kind', 'targetSlug', 'title', 'description', 'imageUrl',
+                   'personaTags', 'personaWeight', 'personaHidden', 'sortOrder'),
+      ]);
+
+      const profile = {
+        role:       prefsRow?.role       ?? null,
+        deployment: prefsRow?.deployment ?? null,
+        cloud:      prefsRow?.cloud      ?? null,
+      };
+
+      const envelope = buildEnvelope({
+        profile, shelves, forYouCandidates: forYou, teaserSlugs: [], // Task 12
+      });
+      envelope.hash = hashEnvelope(envelope);
+
+      const inm = req.req?.headers?.['if-none-match'];
+      if (inm && inm.replace(/"/g, '') === envelope.hash) {
+        req.res.setHeader('ETag', `"${envelope.hash}"`);
+        req.res.status(304).end();
+        return req.reject(-1);
+      }
+
+      req.res.setHeader('Cache-Control', 'private, no-store');
+      req.res.setHeader('X-Personalization', '1');
+      req.res.setHeader('ETag', `"${envelope.hash}"`);
+      return envelope;
     });
   }
 }

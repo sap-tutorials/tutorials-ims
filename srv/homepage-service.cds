@@ -47,4 +47,32 @@ service HomepageService {
 
   // (#639) Approuter batches hit counters and flushes every 60s.
   action   recordRedirectHits(hits: array of HitEntry) returns Integer;
+
+  // (#763) Authenticated personalization envelope. Per-function override of
+  // the service-level @requires:'any' — CAP honors the stricter annotation.
+  // Returns 204 when the kill switch is off, 200+envelope when on.
+  // Response headers: Cache-Control:private,no-store; X-Personalization:1; ETag.
+  type PersonalizedProfile { role: String; deployment: String; cloud: String; }
+  type ShelfOverride       { reorder: array of UUID; hidden: array of UUID; }
+  type ShelfOverrideMap {
+    learn: ShelfOverride; build: ShelfOverride; integrate: ShelfOverride;
+    operate: ShelfOverride; ai: ShelfOverride; connect: ShelfOverride;
+  }
+  type ForYouItem {
+    ID: UUID; kind: String; slug: String; title: String;
+    description: String; imageUrl: String;
+  }
+  type PersonalizedEnvelope {
+    hash            : String;
+    profile         : PersonalizedProfile;
+    verbOrder       : array of String;
+    forYou          : array of ForYouItem;
+    teaserOrder     : array of String;
+    shelfOverrides  : ShelfOverrideMap;
+    videoFilterTags : array of String;
+    rssFilterTags   : array of String;
+  }
+
+  @(requires: 'authenticated-user')
+  function personalized() returns PersonalizedEnvelope;
 }
