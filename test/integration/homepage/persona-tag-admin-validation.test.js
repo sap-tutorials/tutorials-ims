@@ -45,4 +45,17 @@ describe('Admin persona-tag validation', () => {
     );
     expect(r.status).toBeLessThan(400);
   });
+
+  it('rejects unknown persona tag on HomepageForYouCandidatesAdmin CREATE', async () => {
+    const r = await project.post(
+      '/admin/HomepageForYouCandidatesAdmin',
+      {
+        ID: 'test-candidate',
+        personaTags: ['cloud:oops'],
+      },
+      adminAuth
+    );
+    expect(r.status).toBeGreaterThanOrEqual(400);
+    expect(JSON.stringify(r.data ?? r.body ?? '')).toMatch(/cloud:oops/);
+  });
 });

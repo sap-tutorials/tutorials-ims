@@ -201,8 +201,8 @@ async function sendLastChanceForAuthor(authorEmail, dryRun, ctx) {
 
 // (#763) Validate personaTags / personaHidden arrays against PROFILE_VOCAB.
 // Called as before-CREATE/UPDATE on HomepageShelves and HomepageForYouCandidatesAdmin.
-// Uses req.error() (not throw) so CAP surfaces all field-level errors at once
-// in Fiori Elements.
+// Uses req.reject(400, message) to surface validation errors. Field-level display
+// of invalid tags in Fiori Elements is a follow-up (see Task 17).
 function checkPersonaTagsHandler(req) {
   for (const field of ['personaTags', 'personaHidden']) {
     const tags = req.data?.[field];
