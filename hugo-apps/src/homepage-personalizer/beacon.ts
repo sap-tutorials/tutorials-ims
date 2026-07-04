@@ -15,8 +15,10 @@ export function beaconApplied(surface: string): void {
     set.add(surface);
     sessionStorage.setItem(KEY, JSON.stringify([...set]));
     if (typeof navigator?.sendBeacon === 'function') {
+      // Send only the surface — server discards timestamps anyway, and
+      // Date.now() in JS is a 13-digit number that overflows CDS Integer.
       const body = new Blob(
-        [JSON.stringify({ surface, at: Date.now() })],
+        [JSON.stringify({ surface })],
         { type: 'application/json' },
       );
       navigator.sendBeacon(ENDPOINT, body);

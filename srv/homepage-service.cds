@@ -86,5 +86,5 @@ service HomepageService {
   // personalization is applied.  Aggregate signal only; no PII stored.
   // Public (inherits service-level @requires:'any') — anonymous beacons are fine.
   // surface is validated server-side against a fixed allowlist.
-  action beaconApplied(surface: String, at: Integer) returns {};
+  action beaconApplied(surface: String) returns {};
 }
