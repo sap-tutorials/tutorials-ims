@@ -93,7 +93,7 @@ Subsystem one-liners:
 
   `mbt build` only `cp`'s `hugo/public/` into the approuter — it does **not** run Hugo or `fetch-tutorials`. Local builds MUST run `npm run build:all` before `mbt build`; skipping ships stale approuter (missing NEW badges, license icons, progress UI). Always confirm deploy scope with maintainer (backend-only / +content / +QA).
 
-- **Local deploy is envsubst-free** — All four secrets (`CONTENT_API_KEY`, `REBUILD_API_KEY`, `APPROUTER_URL`, `GITHUB_DISPATCH_TOKEN`) formerly injected via `envsubst` now live exclusively in the BTP Credential Store (or have been removed entirely, in APPROUTER_URL's case). Run `cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f` directly. Rotation happens through `/admin-ui/#secrets-display` on the target env's approuter. See [mta-deployment.md](docs/developers/operations/mta-deployment.md) "Local deploy no longer needs envsubst" for the full context.
+- **Local deploy is envsubst-free** — All four secrets (`CONTENT_API_KEY`, `REBUILD_API_KEY`, `APPROUTER_URL`, `GITHUB_DISPATCH_TOKEN`) formerly injected via `envsubst` now live exclusively in the BTP Credential Store (or have been removed entirely, in APPROUTER_URL's case). Run `cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f` directly. Rotation happens through `/admin-ui/#secrets` on the target env's approuter. See [mta-deployment.md](docs/developers/operations/mta-deployment.md) "Local deploy no longer needs envsubst" for the full context.
 
 - **PR over direct merge** — Default to `gh pr create` from a feature branch; subagent code review is not a substitute for PR review. Only fast-merge to `main` if explicitly told to skip the PR.
 

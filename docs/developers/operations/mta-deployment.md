@@ -402,7 +402,7 @@ The local deploy is now one line:
 cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
 ```
 
-**Secrets seeded elsewhere:** Manage rotation through `/admin-ui/#secrets-display` on the target env's approuter. If a fresh env has never had secrets seeded, `contentAuthMiddleware` returns 503 "Content API not configured" — seed the aliases before running `POST /content/publish`.
+**Secrets seeded elsewhere:** Manage rotation through `/admin-ui/#secrets` on the target env's approuter. If a fresh env has never had secrets seeded, `contentAuthMiddleware` returns 503 "Content API not configured" — seed the aliases before running `POST /content/publish`.
 
 **Prior migrations for context:**
 - `REBUILD_API_KEY` — moved to credstore in #871, envsubst stripped in #904 (2026-07-02).
