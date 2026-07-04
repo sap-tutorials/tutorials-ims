@@ -17,13 +17,16 @@ aspect AnalyticsQueryShape {
   privacyMode : String(16);              // 'raw' | 'k-anon'
 }
 
-@PersonalData : { EntitySemantics: 'Other' }
+// #960 — 90-day retention enforced by cleanupChangeLog cron
+// (srv/jobs/cleanup.js). DataSubjectRole tags the row as authored by
+// a Developer / Admin for the DPI ILM object listing.
+@PersonalData : { EntitySemantics: 'Other', DataSubjectRole: 'Developer' }
 entity AnalyticsQueryHistory : managed, AnalyticsQueryShape {
   key ID      : UUID;
   source      : String(16);              // 'builder' | 'editor' | 'joule' | 'replay'
 }
 
-@PersonalData    : { EntitySemantics: 'Other' }
+@PersonalData    : { EntitySemantics: 'Other', DataSubjectRole: 'Developer' }
 @cds.changelog   : true
 entity AnalyticsSavedQuery : managed, AnalyticsQueryShape {
   key ID      : UUID;

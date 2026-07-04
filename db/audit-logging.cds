@@ -46,21 +46,24 @@ annotate ims.TaskRecords with @PersonalData: {
 }
 
 annotate ims.CodeCheckSubmissions with @PersonalData: {
-  EntitySemantics: 'Other'
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
 } {
   user          @PersonalData.FieldSemantics: 'DataSubjectID';
   submittedCode @PersonalData.IsPotentiallyPersonal;
 }
 
 annotate ims.ValidateAnswerSubmissions with @PersonalData: {
-  EntitySemantics: 'Other'
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
 } {
   user            @PersonalData.FieldSemantics: 'DataSubjectID';
   submittedAnswer @PersonalData.IsPotentiallyPersonal;
 }
 
 annotate ims.AuthorAiRequests with @PersonalData: {
-  EntitySemantics: 'Other'
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
 } {
   authorId       @PersonalData.FieldSemantics: 'DataSubjectID';
   sourceMarkdown @PersonalData.IsPotentiallyPersonal;
@@ -68,7 +71,8 @@ annotate ims.AuthorAiRequests with @PersonalData: {
 }
 
 annotate ims.BranchDecisions with @PersonalData: {
-  EntitySemantics: 'Other'
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
 }
