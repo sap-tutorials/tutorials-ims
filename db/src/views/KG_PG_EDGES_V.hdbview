@@ -163,4 +163,19 @@ VIEW "KG_PG_EDGES_V" AS
   FROM "COM_SAP_DEVELOPERS_IMS_MISSIONCATEGORIES" mc
   JOIN "COM_SAP_DEVELOPERS_IMS_MISSIONS" m ON m.ID = mc.MISSION_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_CATEGORIES" c ON c.ID = mc.CATEGORY_ID
-  WHERE m.SLUG IS NOT NULL AND c.SLUG IS NOT NULL;
+  WHERE m.SLUG IS NOT NULL AND c.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:coCompletedWith edges: tutorial → tutorial
+  -- CoCompletions stores each pair twice (A→B and B→A per line 145-150 of
+  -- db/knowledge-graph.cds); both directions emit naturally. K-anonymity
+  -- gate WHERE SCORE >= 10 MIRRORS the RDF projection's k=10 threshold at
+  -- srv/lib/kg-projection.js:466-479. Raw pair counts below the threshold
+  -- must never reach the property graph.
+  SELECT
+    CAST('cc|' || SOURCESLUG || '|' || TARGETSLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('tutorial:' || SOURCESLUG AS NVARCHAR(280))                AS "SOURCE",
+    CAST('tutorial:' || TARGETSLUG AS NVARCHAR(280))                AS "TARGET",
+    'coCompletedWith'                                               AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_COCOMPLETIONS"
+  WHERE SCORE >= 10
+    AND SOURCESLUG IS NOT NULL AND TARGETSLUG IS NOT NULL;
