@@ -21,6 +21,7 @@
 //      { warning: 'timeout', concepts: [], tutorials: [] } per spec §3.
 
 import { topConceptsByCosine } from './concept-embedding-query.js'
+import { fetchEdges, fetchConceptsByIds, fetchLinks } from './_search-fetches.js'
 
 // ---------------------------------------------------------------------------
 // LLM-facing tool descriptor
@@ -67,72 +68,6 @@ function clampInt(value, min, max, defaultValue) {
   const n = Math.floor(Number(value))
   if (!Number.isFinite(n)) return defaultValue
   return Math.max(min, Math.min(max, n))
-}
-
-function isHana(db) {
-  return db?.kind === 'hana' || db?.options?.kind === 'hana'
-}
-
-async function fetchEdges(db, sourceIds) {
-  if (sourceIds.length === 0) return []
-  const placeholders = sourceIds.map(() => '?').join(',')
-  if (isHana(db)) {
-    return await db.run(
-      `SELECT SOURCE_ID as source_id, TARGET_ID as target_id, PREDICATE as predicate, CONFIDENCE as confidence
-       FROM COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES
-       WHERE PREDICATE IN ('requires','relatedTo') AND SOURCE_ID IN (${placeholders})`,
-      sourceIds
-    ) || []
-  }
-  return await db.run(
-    `SELECT source_ID as source_id, target_ID as target_id, predicate, confidence
-     FROM com_sap_developers_ims_ConceptEdges
-     WHERE predicate IN ('requires','relatedTo') AND source_ID IN (${placeholders})`,
-    sourceIds
-  ) || []
-}
-
-async function fetchConceptsByIds(db, ids) {
-  if (ids.length === 0) return []
-  const placeholders = ids.map(() => '?').join(',')
-  if (isHana(db)) {
-    return await db.run(
-      `SELECT ID as id, SLUG as slug, NAME as name
-       FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS
-       WHERE ID IN (${placeholders})
-         AND STATUS = 'ACTIVE' AND PUBLISHEDAT IS NOT NULL AND MERGEDINTO_ID IS NULL`,
-      ids
-    ) || []
-  }
-  return await db.run(
-    `SELECT ID as id, slug, name FROM com_sap_developers_ims_Concepts
-     WHERE ID IN (${placeholders})
-       AND status = 'ACTIVE' AND publishedAt IS NOT NULL AND mergedInto_ID IS NULL`,
-    ids
-  ) || []
-}
-
-async function fetchLinks(db, conceptIds) {
-  if (conceptIds.length === 0) return []
-  const placeholders = conceptIds.map(() => '?').join(',')
-  if (isHana(db)) {
-    return await db.run(
-      `SELECT l.CONCEPT_ID as concept_id, l.TUTORIAL_ID as tutorial_id, l.CONFIDENCE as confidence,
-              t.SLUG as tutorial_slug, t.TITLE as title
-       FROM COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS l
-       JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS t ON t.ID = l.TUTORIAL_ID
-       WHERE l.PREDICATE = 'teaches' AND l.CONCEPT_ID IN (${placeholders})`,
-      conceptIds
-    ) || []
-  }
-  return await db.run(
-    `SELECT l.concept_ID as concept_id, l.tutorial_ID as tutorial_id, l.confidence,
-            t.slug as tutorial_slug, t.title
-     FROM com_sap_developers_ims_TutorialConceptLinks l
-     JOIN com_sap_developers_ims_Tutorials t ON t.ID = l.tutorial_ID
-     WHERE l.predicate = 'teaches' AND l.concept_ID IN (${placeholders})`,
-    conceptIds
-  ) || []
 }
 
 // ---------------------------------------------------------------------------

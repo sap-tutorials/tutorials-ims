@@ -1,4 +1,38 @@
 import cds from '@sap/cds';
+import { computeKgSignal, buildKgRankFragment } from './lib/search-kg-signal.js';
+
+const LOG = cds.log('search-service');
+
+// #945: Cache ChatSettings for 30s to avoid a DB round-trip per search request.
+// The flag rarely changes and 30s propagation is acceptable — same as other
+// singleton-flag caches in the tree (see runtime-config/*-settings.js).
+let _chatSettingsCache = null;
+let _chatSettingsExpiresAt = 0;
+const CHAT_SETTINGS_TTL_MS = 30_000;
+
+async function readChatSettings() {
+  const now = Date.now();
+  if (_chatSettingsCache && now < _chatSettingsExpiresAt) return _chatSettingsCache;
+  try {
+    const { ChatSettings } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(ChatSettings);
+    _chatSettingsCache = row || {};
+    _chatSettingsExpiresAt = now + CHAT_SETTINGS_TTL_MS;
+    return _chatSettingsCache;
+  } catch (err) {
+    LOG.warn('readChatSettings failed', err.message);
+    // Cache the empty result briefly so a failing DB doesn't flood retries.
+    _chatSettingsCache = {};
+    _chatSettingsExpiresAt = now + 5_000;
+    return _chatSettingsCache;
+  }
+}
+
+/** Reset internal caches — test-only. */
+export function _resetForTest() {
+  _chatSettingsCache = null;
+  _chatSettingsExpiresAt = 0;
+}
 
 // Word-boundary normalizer used by both the search predicate AND the rank
 // CASE-WHEN. Returns an SQL fragment string that pads separator characters
@@ -87,7 +121,7 @@ function _columnAnyTokenSQL(col, tokens) {
 //
 // Crucial: this runs INSIDE the SELECT, so the DB orders by rank BEFORE
 // applying $top/$skip. Title hits never get stranded on later pages.
-function attachSearchRank(query, tokens) {
+function attachSearchRank(query, tokens, kgFragment = '') {
   if (!Array.isArray(tokens) || tokens.length === 0) return;
 
   const titleOr = _columnAnyTokenSQL('title', tokens);
@@ -95,10 +129,17 @@ function attachSearchRank(query, tokens) {
   const primOr  = _columnAnyTokenSQL('primaryTag', tokens);
   const tagOr   = _columnAnyTokenSQL('tagBag', tokens);
 
+  // #945: kgFragment is the ` + 2.00 * (case slug when 'x' then 0.8100 ... end)`
+  // string produced by buildKgRankFragment(). Empty string when the KG signal
+  // is disabled / empty / timed-out — in that case the rank SQL is byte-identical
+  // to the pre-#945 formula. Slugs in the fragment are pre-validated against
+  // /^[a-z0-9-]+$/ so no quoting drama on the string-concat boundary.
   const rankSQL =
     `(case when (${titleOr}) then 3 else 0 end ` +
     `+ case when (${descOr}) then 2 else 0 end ` +
-    `+ case when (${primOr} or ${tagOr}) then 1 else 0 end)`;
+    `+ case when (${primOr} or ${tagOr}) then 1 else 0 end` +
+    (kgFragment ? ` ${kgFragment}` : '') +
+    `)`;
 
   // cds.parse.expr is the documented public API for parsing an SQL expression
   // string into a CSN xpr node. Replaces an earlier synthetic-template-literal
@@ -128,8 +169,10 @@ export default class SearchService extends cds.ApplicationService {
     // but we strip it from responses to keep OData payloads small and avoid
     // exposing the raw indexed text. (Using @cds.api.ignore would also hide
     // it from the runtime $search element list, defeating the purpose.)
-    // _searchRank is the ranking column appended in before('READ'); it must
-    // never leak to OData consumers or to internal srv.run callers (Joule).
+    // _searchRank is the ranking column appended in before('READ'); it is
+    // internal, never exposed to OData consumers. The client-visible field
+    // is `searchScore` (virtual on the projection), populated here from
+    // _searchRank before the internal name is stripped (#945).
     this.after('READ', SearchableItems, (results) => {
       // Count round-trips return a Number, not an array — return early.
       if (results == null || typeof results === 'number') return;
@@ -137,7 +180,15 @@ export default class SearchService extends cds.ApplicationService {
       for (const r of rows) {
         if (!r) continue;
         if ('bodyText' in r) delete r.bodyText;
-        if ('_searchRank' in r) delete r._searchRank;
+        if ('_searchRank' in r) {
+          // Copy the composite rank into the virtual `searchScore` field so
+          // OData clients can $select it. Non-search reads never set
+          // _searchRank, so searchScore stays null / unset.
+          if (r._searchRank !== null && r._searchRank !== undefined) {
+            r.searchScore = Number(Number(r._searchRank).toFixed(4));
+          }
+          delete r._searchRank;
+        }
       }
     });
 
@@ -145,7 +196,12 @@ export default class SearchService extends cds.ApplicationService {
     // above. CAP would otherwise emit either FUZZY (cds.hana.fuzzy: number) or
     // LOWER(...) LIKE '%term%' (cds.hana.fuzzy: false) — both produce too much
     // noise on short acronyms (CAP/ABAP/HANA).
-    this.before('READ', SearchableItems, (req) => {
+    //
+    // #945: The rank formula extends to `fuzzy + KG_WEIGHT * kg_score` via
+    // the KG signal helper. Signal is cached (in-process, 5-min TTL) so
+    // repeated searches for the same phrase (paging, Joule follow-up in the
+    // same turn) pay the embed cost once.
+    this.before('READ', SearchableItems, async (req) => {
       const sel = req.query?.SELECT;
       // MANDATORY count guard — ranking is meaningless on COUNT(*) round-trips,
       // and adding _searchRank to a count projection can change semantics.
@@ -156,7 +212,26 @@ export default class SearchService extends cds.ApplicationService {
       if (!phrase) return;
       delete sel.search;
       const tokens = applyWordBoundarySearch(req.query, phrase);
-      attachSearchRank(req.query, tokens);
+
+      // Fetch flag once per request. Failure to read ChatSettings → skip KG
+      // silently and use fuzzy-only rank (same behaviour as flag=false).
+      let kgFragment = '';
+      try {
+        const settings = await readChatSettings();
+        if (settings?.searchKgRerankEnabled) {
+          const signal = await computeKgSignal({
+            phrase,
+            db: cds.db,
+            embeddingModel: settings.embeddingModel || 'text-embedding-3-small',
+            enabled: true,
+          });
+          kgFragment = buildKgRankFragment(signal);
+        }
+      } catch (err) {
+        LOG.warn('KG signal computation failed; falling back to fuzzy-only rank', err.message);
+      }
+
+      attachSearchRank(req.query, tokens, kgFragment);
     });
 
     this.on('getFacets', async (req) => {

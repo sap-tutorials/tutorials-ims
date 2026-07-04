@@ -1998,6 +1998,13 @@
             "val": true
           },
           "@cds.persistence.name": "KGSEARCHEXPANSIONENABLED"
+        },
+        "searchKgRerankEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": true
+          },
+          "@cds.persistence.name": "SEARCHKGRERANKENABLED"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"

@@ -332,16 +332,37 @@ export async function dispatchTool(name, args, user) {
       // _searchRank column so title hits are ordered above tag-only hits
       // (issue #154). Without explicit columns the rank fallback early-exits
       // and Joule sees results in DB-natural order.
+      //
+      // #945: the same before('READ') hook now blends KG concept overlap
+      // into _searchRank when the flag is on. It ALSO populates the shared
+      // search-kg-signal in-process cache. We peek that cache below to
+      // attach per-hit `rationale` strings ("Teaches Async ABAP and RAP")
+      // without a second embed call.
       const hits = await search.run(
         SELECT.from('SearchService.SearchableItems')
           .columns('slug', 'title', 'description', 'taskType', 'primaryTag')
           .search(args.query)
           .limit(5)
       );
-      const baseHits = (hits || []).map(h => ({
-        slug: h.slug, title: h.title, description: h.description,
-        type: h.type ?? h.taskType, primaryTag: h.primaryTag
-      }));
+      // Best-effort rationale attach — cache miss (flag off, KG returned
+      // empty, or cache was evicted between the two calls) just means no
+      // rationale field. Never break search on this.
+      let rationaleBySlug = new Map();
+      try {
+        const { peekSignal } = await import('./search-kg-signal.js');
+        const signal = peekSignal(args.query);
+        if (signal?.slugRationale) rationaleBySlug = signal.slugRationale;
+      } catch (peekErr) {
+        LOG.warn('searchTutorials rationale peek failed', peekErr.message);
+      }
+      const baseHits = (hits || []).map(h => {
+        const base = {
+          slug: h.slug, title: h.title, description: h.description,
+          type: h.type ?? h.taskType, primaryTag: h.primaryTag,
+        };
+        const rationale = rationaleBySlug.get(h.slug);
+        return rationale ? { ...base, rationale } : base;
+      });
       // Annotate each hit with the user's status so the LLM can avoid
       // re-suggesting completed items and prioritize in-progress ones.
       // Failure to enrich must NOT break search — fall back to neutral hits.
