@@ -3,6 +3,7 @@ import { applyVerbOrder } from './verb-order';
 import { renderBadge } from './personalized-badge';
 import { applyTeaserRerank, type FetchedCard } from './teaser-rerank';
 import { mountForYou } from './mount-for-you';
+import { applyShelfRerank } from './shelf-rerank';
 
 const DEFAULT_FLAG_KEY = 'sap-devs-homepage-default';
 const ENDPOINT = '/homepage/personalized';
@@ -87,4 +88,6 @@ function applyEnvelope(env: Envelope): void {
     document.querySelector<HTMLElement>('[data-personalize="for-you"]'),
     env.forYou ?? []
   );
+  // (#763 Task 14) Shelf rerank for verb sub-pages.
+  applyShelfRerank(env.shelfOverrides);
 }
