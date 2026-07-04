@@ -84,4 +84,38 @@ VIEW "KG_PG_EDGES_V" AS
   JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" src ON src.ID = tcl.TUTORIAL_ID
   JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" tgt ON tgt.ID = tcl.EXTENDSTUTORIAL_ID
   WHERE tcl.PREDICATE = 'extends'
-    AND tcl.EXTENDSTUTORIAL_ID IS NOT NULL;
+    AND tcl.EXTENDSTUTORIAL_ID IS NOT NULL
+  UNION ALL
+  -- kg:partOf edges: tutorial → mission
+  -- Via CompletionPathItems -> CompletionPaths -> Missions.
+  -- CompletionPathItems.tutorial_ID is NULL for CHECKPOINT / GROUP task
+  -- types (see db/schema.cds around the CompletionPathItems.taskType
+  -- discriminator) — the inner JOIN + explicit IS NOT NULL filter drops
+  -- those. DISTINCT because a tutorial in multiple variant paths of the
+  -- same mission would otherwise emit duplicate edges.
+  SELECT DISTINCT
+    CAST('po|' || t.SLUG || '|' || m.SLUG AS NVARCHAR(600))  AS "EDGE_KEY",
+    CAST('tutorial:' || t.SLUG AS NVARCHAR(280))             AS "SOURCE",
+    CAST('mission:'  || m.SLUG AS NVARCHAR(280))             AS "TARGET",
+    'partOf'                                                 AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS" cpi
+  JOIN "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS" cp ON cp.ID = cpi.PATH_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_MISSIONS" m ON m.ID = cp.MISSION_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = cpi.TUTORIAL_ID
+  WHERE cpi.TUTORIAL_ID IS NOT NULL
+    AND t.SLUG IS NOT NULL AND m.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:partOf edges: mission → group
+  -- Both partOf arms share EDGE_TYPE='partOf' per RDF-parity: RDF projects
+  -- one predicate for both hops. Algorithms can navigate
+  -- tutorial→mission→group without knowing about the underlying join
+  -- shapes.
+  SELECT
+    CAST('po|' || m.SLUG || '|' || g.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('mission:' || m.SLUG AS NVARCHAR(280))             AS "SOURCE",
+    CAST('group:'   || g.SLUG AS NVARCHAR(280))             AS "TARGET",
+    'partOf'                                                AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS" m
+  JOIN "COM_SAP_DEVELOPERS_IMS_GROUPS" g ON g.ID = m.GROUP_ID
+  WHERE m.GROUP_ID IS NOT NULL
+    AND m.SLUG IS NOT NULL AND g.SLUG IS NOT NULL;
