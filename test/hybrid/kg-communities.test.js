@@ -29,10 +29,10 @@ beforeAll(async () => {
     cds.entities('com.sap.developers.ims');
 
   await INSERT.into(Concepts).entries([
-    { slug: CONCEPT_A, label: `A ${RUN_ID}` },
-    { slug: CONCEPT_B, label: `B ${RUN_ID}` },
-    { slug: CONCEPT_BRIDGE_A, label: `bridge-A ${RUN_ID}` },
-    { slug: CONCEPT_BRIDGE_B, label: `bridge-B ${RUN_ID}` },
+    { slug: CONCEPT_A, name: `A ${RUN_ID}`, status: 'ACTIVE' },
+    { slug: CONCEPT_B, name: `B ${RUN_ID}`, status: 'ACTIVE' },
+    { slug: CONCEPT_BRIDGE_A, name: `bridge-A ${RUN_ID}`, status: 'ACTIVE' },
+    { slug: CONCEPT_BRIDGE_B, name: `bridge-B ${RUN_ID}`, status: 'ACTIVE' },
   ]);
   await INSERT.into(Tutorials).entries(
     [...A_TUTS, ...B_TUTS, BRIDGE].map((slug) => ({ slug, title: slug }))
