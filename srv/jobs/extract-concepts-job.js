@@ -20,7 +20,7 @@ import { createHash } from 'node:crypto';
 import { extractConceptsFromTutorial } from '../lib/kg-extract.js';
 import { defaultCallModel } from '../lib/code-check-llm.js';
 import { embed as defaultEmbed } from '../lib/embedding-client.js';
-import { resolveChatLlmSettings } from '../lib/chat-settings-resolver.js';
+import { resolveChatLlmSettings, resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
 import {
   loadConceptRegistry,
@@ -29,7 +29,6 @@ import {
 
 const NAMESPACE = 'com.sap.developers.ims';
 const PAGE_SIZE = 50;
-const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 
 /** SHA-256 hex digest of the tutorial body markdown. */
 function sha256Hex(input) {
@@ -89,16 +88,7 @@ export async function runExtractConcepts(deps = {}) {
   // TutorialConceptLinks, so a model swap forces a re-extract.
   const { modelName } = await resolveChatLlmSettings();
 
-  // Embedding model comes from ChatSettings (so the consolidator + this job
-  // agree). Tolerate missing ChatSettings row in fresh test DBs.
-  let embeddingModel = DEFAULT_EMBEDDING_MODEL;
-  try {
-    const { ChatSettings } = cds.entities(NAMESPACE);
-    const settings = await SELECT.one.from(ChatSettings);
-    if (settings?.embeddingModel) embeddingModel = settings.embeddingModel;
-  } catch {
-    // ChatSettings not yet defined in cds.entities (fresh test boot) — keep default.
-  }
+  const { model: embeddingModel } = await resolveEmbeddingSettings();
 
   const { Tutorials, TutorialConceptLinks, Concepts, ConceptEdges, TutorialBodyText } =
     cds.entities(NAMESPACE);

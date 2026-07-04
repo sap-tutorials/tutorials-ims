@@ -56,6 +56,7 @@ import {
   resolveConceptCandidates,
 } from '../lib/kg-merge-on-write.js';
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
+import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
 
 const NAMESPACE_EXT = 'com.sap.developers.ims.external';
 const NAMESPACE_KG = 'com.sap.developers.ims';
@@ -63,7 +64,6 @@ const K_CONCEPTS = 25;
 const K_CONCEPTS_METADATA_TIER = 15;
 const K_PREREQS = 10;
 const DEFAULT_BUDGET = 500;
-const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 const LOG = cds.log('fetch-learning-journeys');
 
 function sha256Hex(s) {
@@ -146,18 +146,15 @@ export async function runFetchLearningJourneys(deps = {}) {
   // below resolves slugs against this registry and mints (or merges) novel
   // concepts via embedding-similarity matching.
   let mergeThreshold = 0.85;
-  let embeddingModel = DEFAULT_EMBEDDING_MODEL;
   try {
     const kg = await resolveKnowledgeGraphSettings();
     if (typeof kg?.mergeSimThresholdExtract === 'number') {
       mergeThreshold = kg.mergeSimThresholdExtract;
     }
-    const { ChatSettings } = cds.entities(NAMESPACE_KG);
-    const settings = await SELECT.one.from(ChatSettings).columns('embeddingModel');
-    if (settings?.embeddingModel) embeddingModel = settings.embeddingModel;
   } catch (err) {
     LOG.warn(`Could not resolve KG/Chat settings; using defaults: ${err.message}`);
   }
+  const { model: embeddingModel } = await resolveEmbeddingSettings();
   const registry = await loadConceptRegistry(db);
 
   const existingJourneySlugs = new Set(
