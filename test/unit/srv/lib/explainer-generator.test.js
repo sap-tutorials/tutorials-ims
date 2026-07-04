@@ -29,6 +29,16 @@ vi.mock('@sap-ai-sdk/orchestration', () => ({
   OrchestrationClient: OrchestrationClientMock,
 }));
 
+// Task 4 rewired explainer-generator.js to use resolveChatLlmSettings()
+// (parity with every other LLM call site). Mock the resolver at the module
+// boundary so the test doesn't need CHAT_DEPLOYMENT_ID env-var setup.
+vi.mock('../../../../srv/lib/chat-settings-resolver.js', () => ({
+  resolveChatLlmSettings: vi.fn(() => Promise.resolve({
+    modelName: 'anthropic--claude-4.6-sonnet',
+    deploymentId: 'test-deployment-id',
+  })),
+}));
+
 import { generateExplainer } from '../../../../srv/lib/explainer-generator.js';
 
 describe('srv/lib/explainer-generator.js', () => {
