@@ -79,6 +79,7 @@
         { "key": "board", "title": "Board" },
         { "key": "joule", "title": "Joule Settings" },
         { "key": "knowledgeGraph", "title": "Knowledge Graph" },
+        { "key": "kgCommunities", "title": "KG Communities" },
         { "key": "secrets", "title": "Secrets" },
         { "key": "privacy", "title": "Privacy" },
         { "key": "privacyAudit", "title": "Privacy Audit" }
