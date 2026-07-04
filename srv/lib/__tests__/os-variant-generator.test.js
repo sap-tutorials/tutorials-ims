@@ -14,6 +14,13 @@ vi.mock('@sap/cds', () => {
   return { default: { log, env: {}, entities: undefined, connect: { to: () => Promise.resolve({ run: () => Promise.resolve([]) }) } } };
 });
 
+vi.mock('../chat-settings-resolver.js', () => ({
+  resolveChatLlmSettings: vi.fn(() => Promise.resolve({
+    modelName: 'anthropic--claude-4.6-sonnet',
+    deploymentId: 'test-deployment-id',
+  })),
+}));
+
 const mockPersist = vi.fn();
 vi.mock('../author-ai-persist.js', () => ({
   persistAuthorAiRequest: mockPersist,
