@@ -2,6 +2,7 @@ import { readSessionCache, writeSessionCache, type Envelope } from './session-ca
 import { applyVerbOrder } from './verb-order';
 import { renderBadge } from './personalized-badge';
 import { applyTeaserRerank, type FetchedCard } from './teaser-rerank';
+import { mountForYou } from './mount-for-you';
 
 const DEFAULT_FLAG_KEY = 'sap-devs-homepage-default';
 const ENDPOINT = '/homepage/personalized';
@@ -80,5 +81,10 @@ function applyEnvelope(env: Envelope): void {
     document.querySelector<HTMLElement>('[data-personalize="teaser-rerank"]'),
     env.teaserOrder ?? [],
     fetchMissingCards
+  );
+  // (#763 Task 13) For-you row (Row 2b).
+  mountForYou(
+    document.querySelector<HTMLElement>('[data-personalize="for-you"]'),
+    env.forYou ?? []
   );
 }
