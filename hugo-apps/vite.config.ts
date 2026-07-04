@@ -13,6 +13,7 @@ const MAX_ADVOCATE_PROFILE_GZIP = 25 * 1024;
 const MAX_RELATED_GRAPH_GZIP = 12 * 1024;
 const MAX_ALERTS_GZIP = 12 * 1024;
 const MAX_HOMEPAGE_EXPLAINERS_GZIP = 12 * 1024;
+const MAX_HOMEPAGE_PERSONALIZER_GZIP = 12 * 1024;
 
 function codeCheckBudget() {
   return {
@@ -140,6 +141,24 @@ function alertsBudget() {
   };
 }
 
+function homepagePersonalizerBudget() {
+  return {
+    name: 'homepage-personalizer-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['homepage-personalizer.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_HOMEPAGE_PERSONALIZER_GZIP) {
+        // @ts-ignore
+        this.error(`homepage-personalizer.js is ${gz} bytes gzipped (> ${MAX_HOMEPAGE_PERSONALIZER_GZIP}).`);
+      } else {
+        // @ts-ignore
+        this.warn(`homepage-personalizer.js: ${gz} bytes gzipped (budget ${MAX_HOMEPAGE_PERSONALIZER_GZIP}).`);
+      }
+    },
+  };
+}
+
 function homepageExplainersBudget() {
   return {
     name: 'homepage-explainers-budget',
@@ -177,7 +196,7 @@ function relatedGraphBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -229,6 +248,7 @@ export default defineConfig({
         'kg-stats-counter': resolve(__dirname, 'src/kg-stats-counter/main.ts'),
         'concepts-filter': resolve(__dirname, 'src/concepts-filter/main.ts'),
         'homepage-explainers': resolve(__dirname, 'src/homepage-explainers/index.ts'),
+        'homepage-personalizer': resolve(__dirname, 'src/homepage-personalizer/index.ts'),
       },
       output: {
         entryFileNames: '[name].js',
