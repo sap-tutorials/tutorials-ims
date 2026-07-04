@@ -129,3 +129,44 @@ annotate ims.Advocates with @PersonalData: {
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
 };
+
+// #960 — DataSubjectDetails compositions of ims.Users. The @cap-js/data-privacy
+// plugin flags these as missing at boot (modelling bad-practice warning) because
+// they compose off Users but carry no personal-data semantics. Adding
+// EntitySemantics: 'DataSubjectDetails' + cascade: 'delete' both silences the
+// warning AND fixes a latent bug: today these rows survive user anonymization
+// as FK-ghosts pointing at anonymized ghost users. Field-level review confirmed
+// none carries analytical value post-anonymization (see spec §2a).
+annotate ims.PrizeRecords with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+};
+
+annotate ims.AccomplishmentRecords with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+};
+
+annotate ims.DeveloperEnvironmentTabs with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+};
+
+// Links are nested inside Tabs; annotate the child for plugin completeness.
+// Cascade-delete of the parent already cleans up Links via the composition
+// (Composition of many DeveloperEnvironmentLinks on links.tab = $self at
+// db/schema.cds:217) — the direct annotation here is belt-and-braces for
+// the case where a Link exists without its parent Tab (which the schema
+// prevents but the annotation should not assume).
+annotate ims.DeveloperEnvironmentLinks with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
+} {
+  tab @PersonalData.FieldSemantics: 'DataSubjectID';
+};
