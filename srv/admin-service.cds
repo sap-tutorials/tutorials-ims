@@ -1,4 +1,5 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
+using from '../db/knowledge-graph-communities';
 using from '../db/views';
 using from '../app/admin-annotations';
 
@@ -851,3 +852,26 @@ extend entity AdminService.Tutorials with actions {
   @Common.IsActionCritical : true
   action rebuildContent() returns AdminService.RebuildContentResult;
 };
+
+// KG community detection (#917). Two @readonly projections and the
+// promoteCommunityToMission action stub. Handler body in Task 7.
+extend service AdminService with {
+
+  // LR-facing aggregate. One row per detected community.
+  @readonly
+  entity KgCommunities as projection on ims.KgCommunitySummaryV;
+
+  // OP-facing memberships. Rows keyed to (communityId, vertexKey).
+  @readonly
+  entity KgCommunityMembers as projection on ims.KgCommunity;
+
+  // Drafts a Mission from the community's tutorial members, ordered A→Z.
+  // Curator finishes the draft in the Missions LR (write description,
+  // reorder, drop tutorials, publish). Returns the new Mission ID so
+  // FE can navigate to it. See srv/admin-service.js for the handler.
+  action promoteCommunityToMission(
+    communityId : Integer,
+    missionSlug : String(255),
+    title       : String(255)
+  ) returns AdminService.Missions;
+}
