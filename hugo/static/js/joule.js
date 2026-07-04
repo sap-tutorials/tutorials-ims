@@ -86,6 +86,18 @@
       if (!this._ready) { this._pendingOpen = opts; return; }
       _openImpl(opts);
     },
+    // #946: sibling of openWithMessage that pre-fills the composer WITHOUT
+    // submitting. Opens Joule on the hero (or existing history) and drops
+    // the prompt into the input so the user can edit before pressing send.
+    // Optional focus hint: 'input' (default) leaves the caret in the input;
+    // 'send' focuses the send button so pressing Enter/Space submits.
+    openWithPrefill(arg) {
+      const text = typeof arg === 'string' ? arg : (arg && typeof arg.text === 'string' ? arg.text : '');
+      const focus = arg && arg.focus === 'send' ? 'send' : 'input';
+      const opts = { prefillText: text, prefillFocus: focus };
+      if (!this._ready) { this._pendingOpen = opts; return; }
+      _openImpl(opts);
+    },
   };
 
   const trigger = document.getElementById('joule-trigger');
@@ -644,6 +656,21 @@
       showHero();
       renderGreeting(user.firstName);
       renderStarters(opts && opts.starterContext);
+    }
+    // #946: prefill-without-send — drop text into the composer and focus per the
+    // caller's hint. Runs AFTER the hero/chat swap so the input is actually
+    // visible when focus() lands.
+    if (opts && typeof opts.prefillText === 'string' && opts.prefillText.length > 0) {
+      input.value = opts.prefillText;
+      if (opts.prefillFocus === 'send') {
+        const sendBtn = form.querySelector('.joule-panel__send');
+        if (sendBtn) { sendBtn.focus(); return; }
+      }
+      input.focus();
+      // Move caret to end so the user can keep typing or edit inline.
+      const len = input.value.length;
+      try { input.setSelectionRange(len, len); } catch { /* ignore */ }
+      return;
     }
     input.focus();
   }
