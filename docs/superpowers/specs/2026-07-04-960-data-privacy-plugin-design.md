@@ -3,11 +3,45 @@
 **Date**: 2026-07-04
 **Issue**: [sap-tutorials/tutorials-ims#960](https://github.com/sap-tutorials/tutorials-ims/issues/960)
 **Precursor**: PR #957 (installed the sibling `@cap-js/data-inspector` but explicitly deferred `@cap-js/data-privacy` after 8 compile errors on the `SearchableItems` UNION).
-**Status**: Design approved 2026-07-04.
+**Status**: Design approved 2026-07-04. **Plugin adoption deferred at implementation time (2026-07-04) — see "Scope revision" below.**
 
-## Goal
+## Scope revision — 2026-07-04
 
-Install the CAP 10 `@cap-js/data-privacy` plugin so `/dpp/information` and `/dpp/retention` endpoints become available for SAP Data Privacy Integration (DPI) service consumption, and land the surrounding annotation cleanups so plugin boot is warning-free.
+During implementation, `@cap-js/data-privacy@0.6.2` (current beta) proved incompatible with our schema: `cds build --production` crashes inside the plugin's retention-exposure enhancement (`node_modules/@cap-js/data-privacy/lib/csn-enhancements/retention/exposeEntity.js:26`) because it (a) unconditionally dereferences `m.definitions["sap.ilm.blocking"].elements` even when the plugin's own `sap.ilm.*` aspects are not present in per-task compilations (the `db` build task loads only `db/*.cds`), and (b) unconditionally re-exposes aggregate views atop `DataSubjectDetails` entities and expects the `DataSubjectID` field to survive GROUP BY (which it doesn't for our `AnalyticsBranchPerformance` / `AnalyticsBranchTopPick` views over `BranchDecisions`, our `CompletionAnalytics` / `TutorialCompletionStats` / `ActiveLearnersDaily` views over `TaskRecords`, and similar shapes).
+
+Runtime (`cds serve`, `cds watch`) works fine — the crash is limited to the build-time CSN-enhancement path — but our MTA deploy pipeline runs `cds build --production` and the entire pipeline breaks.
+
+**Decision (Tom, 2026-07-04):** Keep the annotation improvements that stand on their own merit; drop the plugin. Reframe #960 as "DPI-readiness" — annotations are in place so a future plugin upgrade (or a different plugin) can pick them up. File the plugin bug upstream at `github.com/cap-js/data-privacy` referencing our schema pattern.
+
+**What ships in this PR (revised)**:
+- Concepts @PersonalData → @cds.changelog swap (Task 2) — audit-trail continuity preserved
+- 4 Users compositions annotated `DataSubjectDetails` + `cascade: 'delete'` (Task 3) — fixes latent FK-ghost cascade gap
+- 4 audit entities upgraded `Other → DataSubjectDetails` + `cascade: 'delete'` (Task 4)
+- 2 analytics entities gain `DataSubjectRole: 'Developer'` (Task 4)
+- BranchDecisions REVERTED to `Other` + `DataSubjectRole: 'Developer'` (Task 4a) — aggregate views atop this entity made `DataSubjectDetails` untenable
+- Plugin uninstalled (Task 4b) — no `/dpp/*` endpoints in this PR
+- Docs: authentication.md documents current DPI-readiness posture; CLAUDE.md captures the upstream bug (Task 10, Task 11)
+- Hybrid test for cascade behavior change on 4 Users compositions (Task 5) — real HANA guard
+- Unit test for @PersonalData model shape (Task 6, revised — no plugin-service assertions)
+
+**What is NOT in this PR (originally scoped, deferred)**:
+- Plugin install and `/dpp/*` endpoints (deferred to plugin 1.x GA)
+- xs-security scope wiring for `PersonalDataManagerUser` / `DataRetentionManagerUser` (unnecessary without plugin)
+- Approuter routes for `/dpp/*` (unnecessary without plugin)
+- Smoke test for `/dpp/*` (unnecessary without endpoints)
+
+## Follow-up: plugin adoption attempt v2
+
+File a new issue after plugin 1.x GA (or after upstream ships a fix for the retention-exposure crash) that:
+1. Installs the plugin
+2. Verifies `cds build --production` works on our current schema
+3. Wires the two scopes into xs-security.json (Task 7 from this plan is a ready blueprint)
+4. Adds approuter routes (Task 8 blueprint ready)
+5. Adds smoke test (Task 9 blueprint ready)
+
+## Goal (revised)
+
+Land the annotation-cleanup half of the original goal so the schema is DPI-ready, defer the plugin install until upstream is fit for our schema shape.
 
 ## Non-goals
 
