@@ -260,18 +260,36 @@ export async function runKgPageRank() {
     // 4. Atomic swap in one tx: TRUNCATE + TRUNCATE + batched INSERTs.
     //    If the batch loop throws mid-way, HANA rolls back to yesterday's
     //    scores — readers never see a partial state.
+    //
+    //    Raw parameterized INSERT (not INSERT.into(ConceptRank).entries)
+    //    because this job may be invoked via `cf run-task ... node -e`
+    //    which skips the CAP `cds.server` bootstrap — cds.entities()
+    //    is undefined in that context. Raw HANA table names work
+    //    identically from the cron path, admin action path, and
+    //    task path. Failed once on DEV via task attempt 2 (2026-07-04)
+    //    with `TypeError: cds.entities is not a function`.
     const t2 = Date.now();
-    const { ConceptRank, TutorialRank } = cds.entities('com.sap.developers.ims');
+    const CONCEPT_INSERT_SQL =
+      `INSERT INTO ${CONCEPT_RANK_TABLE} (SLUG, SCORE, COMPUTEDAT) VALUES (?, ?, ?)`;
+    const TUTORIAL_INSERT_SQL =
+      `INSERT INTO ${TUTORIAL_RANK_TABLE} (SLUG, SCORE, COMPUTEDAT) VALUES (?, ?, ?)`;
     await db.tx(async (tx) => {
       await tx.run(`TRUNCATE TABLE ${CONCEPT_RANK_TABLE}`);
       await tx.run(`TRUNCATE TABLE ${TUTORIAL_RANK_TABLE}`);
       for (let i = 0; i < conceptRows.length; i += INSERT_BATCH_SIZE) {
         const batch = conceptRows.slice(i, i + INSERT_BATCH_SIZE);
-        await tx.run(INSERT.into(ConceptRank).entries(batch));
+        // HANA batch: pass an array of value tuples as the 2nd arg.
+        await tx.run(
+          CONCEPT_INSERT_SQL,
+          batch.map((r) => [r.slug, r.score, r.computedAt]),
+        );
       }
       for (let i = 0; i < tutorialRows.length; i += INSERT_BATCH_SIZE) {
         const batch = tutorialRows.slice(i, i + INSERT_BATCH_SIZE);
-        await tx.run(INSERT.into(TutorialRank).entries(batch));
+        await tx.run(
+          TUTORIAL_INSERT_SQL,
+          batch.map((r) => [r.slug, r.score, r.computedAt]),
+        );
       }
     });
     const writeMs = Date.now() - t2;
