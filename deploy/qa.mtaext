@@ -6,17 +6,16 @@ modules:
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
-      CONTENT_API_KEY: ${CONTENT_API_KEY}
-      GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN}
+      # CONTENT_API_KEY + GITHUB_DISPATCH_TOKEN moved to credstore-only in the
+      # finish-credstore-migration PR. See deploy/dev.mtaext for the rationale.
 
   - name: tutorials-approuter
     parameters:
       app-name: tutorials-qa-approuter
     properties:
       # REBUILD_API_KEY was formerly injected here — removed in PR #903
-      # rollout step 3 (#871 follow-up). Approuter now reads exclusively
-      # from the credstore. See deploy/dev.mtaext for the full rationale.
-      APPROUTER_URL: ${APPROUTER_URL}
+      # rollout step 3 (#871 follow-up). APPROUTER_URL followed the same
+      # pattern in the finish-credstore-migration PR (no runtime readers).
 
 resources:
   - name: tutorials-xsuaa

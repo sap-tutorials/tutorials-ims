@@ -6,13 +6,14 @@ modules:
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
-      # #887: was previously a hardcoded literal. Now a placeholder resolved
-      # by envsubst at deploy time (same shape as prod.mtaext / qa.mtaext),
-      # so the DEV key never appears in source control or the VitePress
-      # docs site. Set CONTENT_API_KEY in the workflow secrets or export it
-      # locally before running `envsubst < dev.mtaext > dev.resolved.mtaext`.
-      CONTENT_API_KEY: ${CONTENT_API_KEY}
-      GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN}
+      # CONTENT_API_KEY + GITHUB_DISPATCH_TOKEN previously injected here via
+      # envsubst. Removed in the credstore-migration follow-up: srv reads both
+      # exclusively from the BTP Credential Store via
+      # srv/lib/secret-resolver.js. Rotation happens through
+      # /admin-ui/#secrets-display; there is no deploy-time write channel any
+      # more. See docs/superpowers/specs/2026-07-04-finish-credstore-migration-design.md
+      # for the "two-stores-can-drift" rationale.
+      #
       # KG Phase 1 flag flipped 2026-06-19 (#381 / #442). Override the
       # mta.yaml default ('false') so MTA redeploys preserve the DEV-only
       # flip — `cf set-env` overrides do NOT survive `cf deploy` of a new
@@ -30,11 +31,6 @@ modules:
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY
       # exclusively from the BTP Credential Store via
-      # approuter/lib/credstore-secret.js. Keeping both stores meant they
-      # could drift — which produced HTTP 401 on the 2026-07-01 → 07-02
-      # rebuild-content runs. The env-fallback in resolveSecret() still
-      # works, but no CI path or mtaext writes to it any more.
-      #
-      # Self-URL of this approuter app. Kept on envsubst — #867 issue notes
-      # marked APPROUTER_URL as a separate follow-up class.
-      APPROUTER_URL: ${APPROUTER_URL}
+      # approuter/lib/credstore-secret.js. APPROUTER_URL followed the same
+      # pattern in the finish-credstore-migration PR: it had zero runtime
+      # readers so it was removed rather than migrated.

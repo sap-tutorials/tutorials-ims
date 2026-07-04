@@ -74,30 +74,16 @@ modules:
       instances: 1
     properties:
       NODE_ENV: production
-      # Per-environment overrides (set via deploy/<env>.mtaext). MTA spec
-      # requires base mta.yaml to declare a property before an mtaext can
-      # override it — empty/safe defaults here so dev/qa/prod mtaext writes
-      # are valid descriptor merges. CI's `Build & Deploy` workflow has been
-      # failing at cf login since 2026-06-21 (UAA/OTP cutover) so this gap
-      # never surfaced; local deploys hit it on the descriptor-merge step.
       EXPOSE_CAP_UI: false
-      CONTENT_API_KEY: ""
-      # GitHub fine-grained PAT for srv/lib/rebuild-trigger.js. Empty here
-      # means rebuild-trigger gracefully no-ops (logs one boot warning).
-      # Real value will be set via credstore + admin Secrets UI once Phase 2-C
-      # bootstrap completes; mtaext placeholder remains for CI-injected values.
-      GITHUB_DISPATCH_TOKEN: ""
       # Knowledge graph (PR 7+ of #381): default OFF; flip per-environment via cf set-env.
       # When 'false', `/graph/*` returns 503 (PR 5 gate) and the sidebar island renders nothing.
       KNOWLEDGE_GRAPH_ENABLED: 'false'
       KG_EXTRACT_BUILD_CAP: '200'
       KG_MERGE_SIM_THRESHOLD: '0.92'
-      # NOTE: SMTP_HOST/PORT/USER/FROM and REBUILD_TARGET_ENV used to live here.
-      # Removed in the credstore-runtime-config follow-up: all 5 SMTP fields are
-      # now resolved from BTP Credential Store via srv/lib/secret-resolver.js;
-      # REBUILD_TARGET_ENV is resolved from TenantSettings via the admin UI.
-      # Admin /admin-ui/#secrets-display + /#tenantsettings-display are the
-      # sole sources of truth — env-var fallback was removed for both.
+      # NOTE: CONTENT_API_KEY, GITHUB_DISPATCH_TOKEN, SMTP_HOST/PORT/USER/FROM
+      # and REBUILD_TARGET_ENV used to live here. All resolved from the BTP
+      # Credential Store now (via srv/lib/secret-resolver.js) or TenantSettings
+      # (via the admin UI). Mirror of the note in the sibling mta.yaml.
     provides:
       - name: srv-api
         properties:

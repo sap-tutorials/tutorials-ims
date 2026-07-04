@@ -113,29 +113,17 @@ modules:
     properties:
       EXPOSE_CAP_UI: true
       NODE_ENV: production
-      # Per-environment overrides (set via deploy/<env>.mtaext). MTA spec
-      # requires base mta.yaml to declare a property before an mtaext can
-      # override it — empty/safe defaults here so dev/qa/prod mtaext writes
-      # are valid descriptor merges. CI's `Build & Deploy` workflow has been
-      # failing at cf login since 2026-06-21 (UAA/OTP cutover) so this gap
-      # never surfaced; local deploys hit it on the descriptor-merge step.
-      CONTENT_API_KEY: ""
-      # GitHub fine-grained PAT for srv/lib/rebuild-trigger.js. Empty here
-      # means rebuild-trigger gracefully no-ops (logs one boot warning).
-      # Real value will be set via credstore + admin Secrets UI once Phase 2-C
-      # bootstrap completes; mtaext placeholder remains for CI-injected values.
-      GITHUB_DISPATCH_TOKEN: ""
       # Knowledge graph (PR 7+ of #381): default OFF; flip per-environment via cf set-env.
       # When 'false', `/graph/*` returns 503 (PR 5 gate) and the sidebar island renders nothing.
       KNOWLEDGE_GRAPH_ENABLED: 'false'
       KG_EXTRACT_BUILD_CAP: '200'
       KG_MERGE_SIM_THRESHOLD: '0.92'
-      # NOTE: SMTP_HOST/PORT/USER/FROM and REBUILD_TARGET_ENV used to live here.
-      # Removed in the credstore-runtime-config follow-up: all 5 SMTP fields are
-      # now resolved from BTP Credential Store via srv/lib/secret-resolver.js;
-      # REBUILD_TARGET_ENV is resolved from TenantSettings via the admin UI.
-      # Admin /admin-ui/#secrets-display + /#tenantsettings-display are the
-      # sole sources of truth — env-var fallback was removed for both.
+      # NOTE: CONTENT_API_KEY, GITHUB_DISPATCH_TOKEN, SMTP_HOST/PORT/USER/FROM
+      # and REBUILD_TARGET_ENV used to live here. All resolved from the BTP
+      # Credential Store now (via srv/lib/secret-resolver.js) or TenantSettings
+      # (via the admin UI). The single source of truth for secret rotation is
+      # /admin-ui/#secrets-display; env-var fallbacks in resolveSecret still
+      # work for local `cds bind --exec` runs but no deploy path writes to them.
     provides:
       - name: srv-api
         properties:
@@ -219,12 +207,12 @@ modules:
       #           rebuildHandler (approuter/server.js:236) rather than a
       #           harder-to-debug undefined-env crash.
       REBUILD_API_KEY: ""
-      # Self-URL of this approuter app (used for in-cluster callbacks).
-      # Same base-declaration story — qa/prod inject via mtaext, dev needs
-      # it too. No code path reads it today (grep -rn 'process.env.APPROUTER_URL'
-      # finds nothing), but the placeholder is documented in deploy.yml's
-      # envsubst step (line ~38) so we keep the wiring consistent.
-      APPROUTER_URL: ""
+      # APPROUTER_URL previously declared here as an empty-string base for
+      # deploy.yml's envsubst allowlist. Removed in the finish-credstore-migration
+      # PR: no code path reads it at runtime (grep -rn 'process.env.APPROUTER_URL'
+      # finds nothing), and the CI-side per-env value lives in
+      # vars.APPROUTER_URL_{DEV,QA,PROD} (used by smoke tests + the
+      # rebuild-content dispatch target) — those workflow vars stay.
     requires:
       - name: tutorials-xsuaa
       # #867 / #871 / #903 — approuter reads REBUILD_API_KEY from credstore
