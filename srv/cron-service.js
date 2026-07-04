@@ -6,10 +6,6 @@
 //      - this.on('cron.<jobName>', () => runJobByName(jobName))
 //      - this.schedule('cron.<jobName>', {}).every(job.schedule).as(job.jobName)
 //
-// Feature flag: CAP_SCHEDULING_ENABLED (default 'true'). Set to 'false'
-// during Commit 1's DEV soak if node-cron behavior needs to be exclusive.
-// Removed cleanly in Commit 4.
-//
 // Migration spec: docs/superpowers/specs/2026-07-04-958-cap10-scheduler-migration-design.md
 // Issue: #958
 
@@ -33,12 +29,6 @@ export default class CronService extends cds.ApplicationService {
       registerJobs();
     } else {
       LOG.info(`JOB_REGISTRY already populated (${_getJobRegistry().size} entries); skipping registerJobs()`);
-    }
-
-    if (process.env.CAP_SCHEDULING_ENABLED === 'false') {
-      LOG.warn('CAP_SCHEDULING_ENABLED=false — skipping srv.schedule() wiring; node-cron remains sole engine');
-      await super.init();
-      return;
     }
 
     // Wire one handler + one schedule() call per registered job.

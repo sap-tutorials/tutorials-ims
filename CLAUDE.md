@@ -76,7 +76,7 @@ Deep dives (do not duplicate here — read the doc when relevant):
 
 Subsystem one-liners:
 
-- **CAP srv/** — 12 services under `@path` prefixes (see testing-endpoints.md). Content persistence in `srv/lib/content-store.js`. WebSocket via `@cap-js-community/websocket` (Socket.IO) on `/ws/display` + `/ws/event-stream`. Jobs in `srv/jobs/` (scheduler.js).
+- **CAP srv/** — 12 services under `@path` prefixes (see testing-endpoints.md). Content persistence in `srv/lib/content-store.js`. WebSocket via `@cap-js-community/websocket` (Socket.IO) on `/ws/display` + `/ws/event-stream`. Jobs in `srv/jobs/` (scheduler.js) — scheduled via CAP 10's Scheduling API through the internal `CronService` in `srv/cron-service.js` (#958).
 - **Admin UI** (`app/admin-shell/` + `app/admin/`) — 14 Fiori Elements components loaded as headless componentUsages inside a unified `sap.tnt.ToolPage` shell. Served at `/admin-ui/` (XSUAA-protected). Theme: `sap_horizon` with auto-detect.
 - **Analytics Explorer** (`app/analytics-explorer/`) — Vue 3 SPA at `/analytics-ui/`. Ad-hoc SQL over `AnalyticsService`; SELECT-only allowlisted via `srv/lib/analytics-sql-validator.cjs`.
 - **Scanner** (`app/scanner/`) — UI5 barcode scanner at `/scanner-ui/`. Uses `sap.ndc.BarcodeScanner`.

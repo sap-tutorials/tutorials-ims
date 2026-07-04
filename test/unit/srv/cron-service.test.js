@@ -39,7 +39,6 @@ describe('CronService.init()', () => {
   afterEach(async () => {
     await cds.disconnect();
     _resetJobRegistry();
-    delete process.env.CAP_SCHEDULING_ENABLED;
   });
 
   it('populates JOB_REGISTRY via registerJobs() and attaches one handler + one schedule() per job', async () => {
@@ -96,22 +95,6 @@ describe('CronService.init()', () => {
     expect(capturedHandler).toBeTruthy();
     await capturedHandler();
     expect(called).toBe(1);
-  });
-
-  it('CAP_SCHEDULING_ENABLED=false: still populates registry, but does NOT wire handlers or schedule calls', async () => {
-    process.env.CAP_SCHEDULING_ENABLED = 'false';
-    const svc = new CronService();
-    svc.on = vi.fn();
-    svc.schedule = vi.fn();
-
-    await svc.init();
-
-    expect(_getJobRegistry().size).toBeGreaterThan(30);
-    const cronOnCalls = svc.on.mock.calls.filter(
-      c => typeof c[0] === 'string' && c[0].startsWith('cron.')
-    );
-    expect(cronOnCalls.length).toBe(0);
-    expect(svc.schedule).not.toHaveBeenCalled();
   });
 
   it('rerun of init() does not re-run registerJobs() (guards against duplicate-jobName throw)', async () => {

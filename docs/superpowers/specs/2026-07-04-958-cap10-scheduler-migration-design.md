@@ -1,9 +1,15 @@
 # #958 — Migrate the scheduler chassis to the CAP 10 Scheduling API
 
-**Status:** Design approved 2026-07-04
+**Status:** Design approved 2026-07-04; implemented 2026-07-04
 **Issue:** [sap-tutorials/tutorials-ims#958](https://github.com/sap-tutorials/tutorials-ims/issues/958)
 **Predecessor:** #957 (CAP 10 runtime upgrade, adopted; scheduler adoption intentionally deferred)
 **Related spec:** `docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md` (admin manual-trigger chassis)
+
+## Implementation deltas (discovered during execution)
+
+- **CronService base class** — spec text originally showed `import { _getJobRegistry, registerJobs, preSeedJobLastRun, runJobByName }` and called `await preSeedJobLastRun()` from `init()`. In practice `registerJobs()` already calls `preSeedJobLastRun()` at its tail (scheduler.js:847, fire-and-forget UPSERT), so the CronService double-call was redundant. The shipped code omits the preSeed import and call from CronService.
+- **Test-mock filter for `svc.on`** — `cds.ApplicationService.init()` auto-registers a CRUD handler via `this.on(['CREATE','READ','UPDATE','UPSERT','DELETE'], '*', ...)`. The unit test filters `svc.on.mock.calls` for entries whose first arg is a string starting with `'cron.'` before counting, to avoid the ApplicationService base call polluting the count.
+- **`srv/jobs/job-lock.js` STAYS** — the spec's original scope check assumed the module had only two callers (scheduler chassis + `srv/lib/purge-stale-changelog.js`). Actually three additional callers use it as a generic mutex primitive (not scheduler locking): `srv/lib/content-publish-session.js` (publish endpoint 409-on-collision), `srv/lib/content-store.js` (publish + rollback routes), `srv/lib/embedding-pipeline.js` (embedding pipeline runner). The module and the `JobLocks` entity both remain. Only the scheduler-side usage (in `runWithLock`) was removed. `srv/lib/purge-stale-changelog.js` continues to use `acquireLock` as its boot sentinel. Retiring the module and entity moves to a future ticket covering the mutex callers.
 
 ## Goal
 

@@ -6,11 +6,6 @@ modules:
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
-      # #958: CAP 10 Scheduling API migration feature flag. Default 'true'.
-      # Set to 'false' during Commit 1's DEV soak to make node-cron the
-      # sole scheduling engine (a code-free rollback). Removed cleanly in
-      # Commit 4 of this migration.
-      CAP_SCHEDULING_ENABLED: "true"
       # #887: was previously a hardcoded literal. Now a placeholder resolved
       # by envsubst at deploy time (same shape as prod.mtaext / qa.mtaext),
       # so the DEV key never appears in source control or the VitePress
