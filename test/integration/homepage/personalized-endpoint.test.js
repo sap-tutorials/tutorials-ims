@@ -86,5 +86,7 @@ describe('GET /homepage/personalized', () => {
       validateStatus: () => true,
     });
     expect(second.status).toBe(304);
+    expect(second.headers['cache-control']).toContain('no-store');
+    expect(second.headers['x-personalization']).toBe('1');
   });
 });

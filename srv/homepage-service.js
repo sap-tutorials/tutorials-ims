@@ -273,6 +273,8 @@ export default class HomepageService extends cds.ApplicationService {
 
       const inm = req.req?.headers?.['if-none-match'];
       if (inm && inm.replace(/"/g, '') === envelope.hash) {
+        req.res.setHeader('Cache-Control', 'private, no-store');
+        req.res.setHeader('X-Personalization', '1');
         req.res.setHeader('ETag', `"${envelope.hash}"`);
         metrics.counter('homepage.personalized.requests[result=304]');
         req.res.status(304).end();

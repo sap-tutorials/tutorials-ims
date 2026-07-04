@@ -41,22 +41,22 @@ GET /
   homepage-personalizer (Vue island, hugo-apps/src/homepage-personalizer/)
     ├─ coordinator.ts       ← reads auth cookie; skips if anon
     │                         checks sessionStorage cache
-    │                         GET /api/homepage/personalized (If-None-Match ETag)
+    │                         GET /homepage/personalized (If-None-Match ETag)
     │                         applies payload to DOM
     │                         subscribes to BroadcastChannel
-    ├─ verb-order.vue       ← Row 2 reorder
+    ├─ verb-order.ts       ← Row 2 reorder
     ├─ for-you-row.vue      ← Row 2b (hidden until ≥3 candidates)
     ├─ teaser-rerank.vue    ← Row 5 reorder
     ├─ shelf-rerank.vue     ← verb sub-pages (/learn/, /build/, ...)
     ├─ video-filter.ts      ← imported by video-band island
     ├─ rss-filter.ts        ← imported by community-lane island
-    ├─ personalized-badge.vue
+    ├─ personalized-badge.ts
     └─ prefs-broadcast.ts   ← BroadcastChannel + storage fallback
 
-GET /api/homepage/personalized
+GET /homepage/personalized
   CAP HomepageService, @requires 'authenticated-user'
   Reads UserLearningPreferences for req.user.id
-  Builds envelope (buildEnvelope in srv/lib/homepage/envelope.js)
+  Builds envelope (buildEnvelope in srv/lib/homepage/personalized-envelope.js)
   In-memory cache per (userId, preferences hash, content hash), 5 min
   Returns JSON envelope
 ```
@@ -66,7 +66,7 @@ GET /api/homepage/personalized
 ## Endpoint contract
 
 ```
-GET /api/homepage/personalized
+GET /homepage/personalized
 
 Auth:         @requires 'authenticated-user' — 401 for anonymous requests
 Kill switch:  204 (no body) when HomepageConfig.personalizationEnabled = false
@@ -203,7 +203,7 @@ async function boot() {
   if (isDefaultViewActive()) return renderBadge();    // ?default=1 or sessionStorage flag
   const cached = readSessionCache();
   const etag = cached?.hash ? `"${cached.hash}"` : undefined;
-  const resp = await fetch('/api/homepage/personalized', {
+  const resp = await fetch('/homepage/personalized', {
     credentials: 'include',
     headers: etag ? { 'If-None-Match': etag } : {},
   });
@@ -236,7 +236,7 @@ Badge in bypass mode: "Viewing the default homepage · Personalize again". Click
 
 ## Observability
 
-Two new metrics via `srv/lib/observability.js`:
+Two new metrics via `srv/lib/metrics.js`:
 
 - `homepage.personalized.requests{result}` — result ∈ `{200, 304, 401, 204-disabled, 5xx}`. Monitors ETag efficiency (target > 60% 304s after warmup) and endpoint health.
 - `homepage.personalized.applied{surface}` — surface ∈ `{verb-order, for-you, teaser, shelf, video-filter, rss-filter}`. Emitted from the coordinator via `navigator.sendBeacon` on first successful hydration per session. No PII — profile values never enter analytics.
