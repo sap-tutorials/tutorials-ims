@@ -48,7 +48,12 @@ export default defineConfig({
         test: {
           name: 'hybrid',
           include: ['test/hybrid/**/*.test.{js,ts}'],
-          testTimeout: 60000
+          testTimeout: 60000,
+          // `cds.test('serve')` in hybrid tests boots CAP + HANA in the
+          // `beforeAll` hook. Cold boot (with @cap-js/ai `served` hook
+          // included, per issue #959 PR 2) can breach vitest's 10s hookTimeout
+          // default — measured ~10s locally.
+          hookTimeout: 60000
         }
       },
       {

@@ -139,6 +139,7 @@
   },
   "dependencies": {
     "@cap-js-community/websocket": "^1.10.5",
+    "@cap-js/ai": "^1.0.1",
     "@cap-js/audit-logging": "^1.2.2",
     "@cap-js/change-tracking": "^2.0.1",
     "@cap-js/hana": "^3.0.1",
@@ -179,6 +180,9 @@
   },
   "cds": {
     "requires": {
+      "AICore": {
+        "resourceGroup": "default"
+      },
       "db": {
         "[hybrid]": {
           "kind": "hana"
