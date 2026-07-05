@@ -15,6 +15,7 @@ type FacetResult {
 
 @path: '/search'
 @requires: 'any'
+@graphql
 service SearchService {
 
   // Per-element fuzziness threshold: entity-level @Search.fuzzinessThreshold
