@@ -3197,10 +3197,14 @@ annotate AdminService.HomepageForYouCandidatesAdmin with {
 };
 
 // --- KG Communities (#917) ---
-// LR-facing aggregate over ims.KgCommunitySummaryV + two virtuals populated
-// by the after('READ', 'KgCommunities') handler in srv/admin-service.js:
-//   * topConceptSlugs — up to 3 concept slugs per community, joined
-//   * alreadyPromoted — true when any Mission carries sourceKgCommunityId=<id>
+// LR-facing aggregate over ims.KgCommunitySummaryV. Two columns of note:
+//   * topConceptSlugs — up to 3 concept slugs per community, populated
+//     by the after('READ', 'KgCommunities') handler in srv/admin-service.js
+//   * alreadyPromoted — materialized in KgCommunitySummaryV itself via a
+//     LEFT JOIN Missions on communityFingerprint (#986). Previously a
+//     virtual populated by an after('READ') handler, but that filter
+//     landed at the DB layer over NULL and dropped every row — see #985
+//     and #986 for the Louvain-ID-volatility + virtual-column-filter fix.
 //
 // The tile is @readonly by construction (projection-only); the only
 // mutation surface is the bound promoteCommunityToMission action, which
