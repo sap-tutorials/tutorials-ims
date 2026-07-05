@@ -183,9 +183,9 @@ No new error paths. HCQL surfaces errors through the same CAP `error` envelope O
 
 ## 10. Deliverables checklist
 
-- [ ] `srv/hcql-enablement.cds` — 9 `annotate ... with @hcql;` lines.
-- [ ] `docs/developers/reference/hcql-support.md` — reference doc per §5.
-- [ ] `CLAUDE.md` — one-line entry in "Top Gotchas".
-- [ ] `cds build --production` run locally; commit any `db/last-dev/` delta if produced.
+- [x] `srv/hcql-enablement.cds` — 9 `annotate ... with @hcql;` lines.
+- [x] `docs/developers/reference/hcql-support.md` — reference doc per §5.
+- [x] `CLAUDE.md` — one-line entry in "Top Gotchas".
+- [x] `cds build --production` run locally; commit any `db/last-dev/` delta if produced.
 - [ ] PR opened; merge; MTA deploy to DEV.
 - [ ] Post-deploy: run the 3-line smoke matrix from §6; paste results in the PR.
