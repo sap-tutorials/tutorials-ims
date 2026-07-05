@@ -232,6 +232,33 @@ service KnowledgeGraphService @(path : '/graph') {
   function pathBetween(fromSlug : String, toSlug : String)    returns array of String;     // Phase 2 stub
   function conceptsForUser(userId : String)                   returns ConceptCoverage;     // Phase 2 stub
 
+  // ─── MCP curated functions (Task 10 of #912) ──────────────────────────
+  /**
+   * Tutorials that teach concepts this tutorial depends on. Answers "what
+   * should I learn first?". Backed by the same graph the sidebar uses.
+   *
+   * @param tutorial_slug Tutorial slug (lowercase).
+   * @param depth         Max returned entries (default 10, hard max 50).
+   * @returns             Prerequisite tutorials ordered by strength.
+   */
+  function kg_prerequisites(
+    tutorial_slug : String,
+    depth         : Integer
+  ) returns array of TutorialRef;
+
+  /**
+   * Tutorials that build on what this one teaches. Answers "what should I
+   * learn next?". PageRank-blended (#916) when enabled.
+   *
+   * @param tutorial_slug Tutorial slug (lowercase).
+   * @param limit         Max returned entries (default 10, hard max 50).
+   * @returns             Next-step tutorials ordered by strength.
+   */
+  function kg_what_to_learn_next(
+    tutorial_slug : String,
+    limit         : Integer
+  ) returns array of TutorialRef;
+
   // ─── Admin curation actions (require KnowledgeGraph.Admin scope) ──────
   @requires : 'KnowledgeGraph.Admin'
   action runSparql(query : String) returns SparqlResult;
