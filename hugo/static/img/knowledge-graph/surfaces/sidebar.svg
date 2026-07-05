@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-label="Placeholder: a tutorial-page sidebar listing prerequisites, related tutorials, and suggested next steps">
+  <rect x="0" y="0" width="600" height="400" fill="#fafbfd"/>
+
+  <!-- Tutorial body column (left, faded) -->
+  <g opacity="0.35">
+    <rect x="20" y="20" width="340" height="24" rx="4" fill="#1c478a"/>
+    <rect x="20" y="60" width="300" height="10" rx="2" fill="#cbd5e3"/>
+    <rect x="20" y="78" width="320" height="10" rx="2" fill="#cbd5e3"/>
+    <rect x="20" y="96" width="260" height="10" rx="2" fill="#cbd5e3"/>
+    <rect x="20" y="132" width="200" height="18" rx="3" fill="#5b738b"/>
+    <rect x="20" y="164" width="320" height="10" rx="2" fill="#cbd5e3"/>
+    <rect x="20" y="182" width="300" height="10" rx="2" fill="#cbd5e3"/>
+    <rect x="20" y="200" width="280" height="10" rx="2" fill="#cbd5e3"/>
+    <rect x="20" y="236" width="180" height="18" rx="3" fill="#5b738b"/>
+    <rect x="20" y="268" width="320" height="10" rx="2" fill="#cbd5e3"/>
+    <rect x="20" y="286" width="300" height="10" rx="2" fill="#cbd5e3"/>
+    <rect x="20" y="304" width="240" height="10" rx="2" fill="#cbd5e3"/>
+  </g>
+
+  <!-- KG sidebar (right, in focus) -->
+  <rect x="380" y="20" width="200" height="360" rx="8" fill="#fff" stroke="#0a6ed1" stroke-width="2"/>
+
+  <text x="395" y="45" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#5b738b">PREREQUISITES</text>
+  <g>
+    <rect x="395" y="55" width="170" height="30" rx="4" fill="#fff" stroke="#cbd5e3"/>
+    <rect x="405" y="65" width="90" height="7" rx="2" fill="#1c478a"/>
+    <rect x="405" y="76" width="60" height="6" rx="2" fill="#a8b5c5"/>
+    <rect x="395" y="90" width="170" height="30" rx="4" fill="#fff" stroke="#cbd5e3"/>
+    <rect x="405" y="100" width="100" height="7" rx="2" fill="#1c478a"/>
+    <rect x="405" y="111" width="70" height="6" rx="2" fill="#a8b5c5"/>
+  </g>
+
+  <text x="395" y="150" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#5b738b">RELATED</text>
+  <g>
+    <rect x="395" y="160" width="170" height="30" rx="4" fill="#fff" stroke="#cbd5e3"/>
+    <rect x="405" y="170" width="110" height="7" rx="2" fill="#1c478a"/>
+    <rect x="405" y="181" width="50" height="6" rx="2" fill="#a8b5c5"/>
+    <rect x="395" y="195" width="170" height="30" rx="4" fill="#fff" stroke="#cbd5e3"/>
+    <rect x="405" y="205" width="80" height="7" rx="2" fill="#1c478a"/>
+    <rect x="405" y="216" width="60" height="6" rx="2" fill="#a8b5c5"/>
+  </g>
+
+  <text x="395" y="255" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#5b738b">WHAT TO LEARN NEXT</text>
+  <g>
+    <rect x="395" y="265" width="170" height="30" rx="4" fill="#e8f1fb" stroke="#0a6ed1"/>
+    <rect x="405" y="275" width="120" height="7" rx="2" fill="#1c478a"/>
+    <rect x="405" y="286" width="70" height="6" rx="2" fill="#5b738b"/>
+    <rect x="395" y="300" width="170" height="30" rx="4" fill="#e8f1fb" stroke="#0a6ed1"/>
+    <rect x="405" y="310" width="90" height="7" rx="2" fill="#1c478a"/>
+    <rect x="405" y="321" width="60" height="6" rx="2" fill="#5b738b"/>
+    <rect x="395" y="335" width="170" height="30" rx="4" fill="#e8f1fb" stroke="#0a6ed1"/>
+    <rect x="405" y="345" width="100" height="7" rx="2" fill="#1c478a"/>
+    <rect x="405" y="356" width="50" height="6" rx="2" fill="#5b738b"/>
+  </g>
+
+  <!-- "Placeholder" pill (top right) -->
+  <rect x="470" y="8" width="110" height="24" rx="12" fill="#d29922"/>
+  <text x="525" y="25" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff">Placeholder</text>
+</svg>
