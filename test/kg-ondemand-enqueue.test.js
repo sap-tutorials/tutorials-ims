@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import cds from '@sap/cds';
 import { enqueueOnDemandExtraction, normalizeQuery } from '../srv/lib/kg/on-demand-enqueue.js';
 import { _resetForTests as _resetRateLimits } from '../srv/lib/per-user-rate-limit.js';
 import { _resetCacheForTests as _resetSettingsCache } from '../srv/lib/runtime-config/kg-settings.js';
+import * as kgSettings from '../srv/lib/runtime-config/kg-settings.js';
 
 const NS = 'com.sap.developers.ims';
 
@@ -155,5 +156,25 @@ describe('enqueueOnDemandExtraction (#948)', () => {
     });
     expect(r3.status).toBe('rate_limited');
     expect(r3.reason).toBe('user'); // 'user' bucket is the per-key bucket, keyed on 'anon' for anonymous
+  });
+
+  it('never throws — settings lookup failure returns { invalid, db_error }', async () => {
+    const spy = vi.spyOn(kgSettings, 'resolveKnowledgeGraphSettings')
+      .mockRejectedValueOnce(new Error('DB unreachable'));
+    let result, threw = false;
+    try {
+      result = await enqueueOnDemandExtraction({
+        db,
+        query: 'test',
+        requester: { id: 'u1', kind: 'user' },
+      });
+    } catch (e) {
+      threw = true;
+    }
+    spy.mockRestore();
+    expect(threw).toBe(false);
+    expect(result).toHaveProperty('status');
+    expect(result.status).toBe('invalid');
+    expect(result.reason).toBe('db_error');
   });
 });

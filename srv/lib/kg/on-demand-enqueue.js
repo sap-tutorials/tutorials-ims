@@ -70,78 +70,87 @@ export async function enqueueOnDemandExtraction({ db, query, requester }) {
   // Backward-compat: threading requester is optional at the call site.
   const req = requester ?? { kind: 'anon' };
 
-  // (1) Flag check.
-  const settings = await resolveKnowledgeGraphSettings();
-  if (!settings.enabled || !settings.onDemandExtractionEnabled) {
-    return { status: 'disabled' };
-  }
-
-  // (2) Normalize.
-  const normalizedKey = normalizeQuery(query);
-  if (!normalizedKey) {
-    return { status: 'invalid' };
-  }
-
-  // (3) Per-user budget. Anonymous requesters all share the 'anon' bucket key.
-  const userLimit = envNumber('KG_ONDEMAND_USER_MAX_PER_HOUR', 3);
-  const userBucketKey = `kgondemand:user:${req.kind === 'user' ? (req.id ?? 'unknown') : 'anon'}`;
-  if (!checkRateLimit(userBucketKey, userLimit, HOUR_MS)) {
-    metrics.emit?.('kg_ondemand_rate_limited', { reason: 'user' });
-    return { status: 'rate_limited', reason: 'user' };
-  }
-
-  // (4) Global budget.
-  const globalLimit = envNumber('KG_ONDEMAND_GLOBAL_MAX_PER_HOUR', 20);
-  if (!checkRateLimit('kgondemand:global', globalLimit, HOUR_MS)) {
-    metrics.emit?.('kg_ondemand_rate_limited', { reason: 'global' });
-    return { status: 'rate_limited', reason: 'global' };
-  }
-
-  // (5) INSERT ... WHERE NOT EXISTS (portable coalescing gate).
-  //
-  // CDS QL cannot express INSERT ... WHERE NOT EXISTS directly, so we use
-  // a two-step check-then-insert with the check inside a small tx. The
-  // filtered unique index on HANA is the belt-and-braces backstop for the
-  // TOCTOU race between the two statements — on the (extremely rare) race,
-  // the INSERT fails with a unique-constraint violation which we catch as
-  // a coalesce.
-  const { KgOnDemandRequests } = cds.entities(NS);
   try {
-    return await db.tx(async (tx) => {
-      const [existing] = await tx.run(
-        SELECT.from(KgOnDemandRequests).columns('ID').where({
+    // (1) Flag check.
+    const settings = await resolveKnowledgeGraphSettings();
+    if (!settings.enabled || !settings.onDemandExtractionEnabled) {
+      return { status: 'disabled' };
+    }
+
+    // (2) Normalize.
+    const normalizedKey = normalizeQuery(query);
+    if (!normalizedKey) {
+      return { status: 'invalid' };
+    }
+
+    // (3) Per-user budget. Anonymous requesters all share the 'anon' bucket key.
+    const userLimit = envNumber('KG_ONDEMAND_USER_MAX_PER_HOUR', 3);
+    const userBucketKey = `kgondemand:user:${req.kind === 'user' ? (req.id ?? 'unknown') : 'anon'}`;
+    if (!checkRateLimit(userBucketKey, userLimit, HOUR_MS)) {
+      metrics.emit?.('kg_ondemand_rate_limited', { reason: 'user' });
+      return { status: 'rate_limited', reason: 'user' };
+    }
+
+    // (4) Global budget.
+    const globalLimit = envNumber('KG_ONDEMAND_GLOBAL_MAX_PER_HOUR', 20);
+    if (!checkRateLimit('kgondemand:global', globalLimit, HOUR_MS)) {
+      metrics.emit?.('kg_ondemand_rate_limited', { reason: 'global' });
+      return { status: 'rate_limited', reason: 'global' };
+    }
+
+    // (5) INSERT ... WHERE NOT EXISTS (portable coalescing gate).
+    //
+    // CDS QL cannot express INSERT ... WHERE NOT EXISTS directly, so we use
+    // a two-step check-then-insert with the check inside a small tx. The
+    // filtered unique index on HANA is the belt-and-braces backstop for the
+    // TOCTOU race between the two statements — on the (extremely rare) race,
+    // the INSERT fails with a unique-constraint violation which we catch as
+    // a coalesce.
+    const { KgOnDemandRequests } = cds.entities(NS);
+    try {
+      return await db.tx(async (tx) => {
+        const [existing] = await tx.run(
+          SELECT.from(KgOnDemandRequests).columns('ID').where({
+            normalizedKey,
+            status: { in: ['PENDING', 'RUNNING'] },
+          }).limit(1)
+        );
+        if (existing) {
+          metrics.emit?.('kg_ondemand_dedup_coalesced', { normalizedKey });
+          return { status: 'coalesced', normalizedKey };
+        }
+        await tx.run(
+          INSERT.into(KgOnDemandRequests).entries({
+            ID: randomUUID(),
+            query,
+            normalizedKey,
+            requestedBy: req.kind === 'user' ? (req.id ?? null) : (req.ipHash ?? null),
+            requestedByKind: req.kind,
+          })
+        );
+        metrics.emit?.('kg_ondemand_enqueued', {
           normalizedKey,
-          status: { in: ['PENDING', 'RUNNING'] },
-        }).limit(1)
-      );
-      if (existing) {
-        metrics.emit?.('kg_ondemand_dedup_coalesced', { normalizedKey });
+          requesterKind: req.kind,
+        });
+        return { status: 'enqueued', normalizedKey };
+      });
+    } catch (err) {
+      // Unique-constraint race -> treat as coalesced. Any other DB error ->
+      // swallow, emit metric, return status so the tool never sees a throw.
+      const msg = err?.message ?? String(err);
+      if (/unique|duplicate|constraint/i.test(msg)) {
+        metrics.emit?.('kg_ondemand_dedup_coalesced', { normalizedKey, viaRace: true });
         return { status: 'coalesced', normalizedKey };
       }
-      await tx.run(
-        INSERT.into(KgOnDemandRequests).entries({
-          ID: randomUUID(),
-          query,
-          normalizedKey,
-          requestedBy: req.kind === 'user' ? (req.id ?? null) : (req.ipHash ?? null),
-          requestedByKind: req.kind,
-        })
-      );
-      metrics.emit?.('kg_ondemand_enqueued', {
-        normalizedKey,
-        requesterKind: req.kind,
-      });
-      return { status: 'enqueued', normalizedKey };
-    });
-  } catch (err) {
-    // Unique-constraint race -> treat as coalesced. Any other DB error ->
-    // swallow, emit metric, return status so the tool never sees a throw.
-    const msg = err?.message ?? String(err);
-    if (/unique|duplicate|constraint/i.test(msg)) {
-      metrics.emit?.('kg_ondemand_dedup_coalesced', { normalizedKey, viaRace: true });
-      return { status: 'coalesced', normalizedKey };
+      LOG.warn(`enqueueOnDemandExtraction DB error, dropped: ${msg}`);
+      metrics.emit?.('kg_ondemand_enqueue_error', { message: msg.slice(0, 200) });
+      return { status: 'invalid', reason: 'db_error' };
     }
-    LOG.warn(`enqueueOnDemandExtraction DB error, dropped: ${msg}`);
+  } catch (err) {
+    // Catches settings lookup, rate limit check, or cds.entities failures.
+    // Returns the same shape as DB errors so the tool contract is preserved.
+    const msg = err?.message ?? String(err);
+    LOG.warn(`enqueueOnDemandExtraction unexpected error: ${msg}`);
     metrics.emit?.('kg_ondemand_enqueue_error', { message: msg.slice(0, 200) });
     return { status: 'invalid', reason: 'db_error' };
   }
