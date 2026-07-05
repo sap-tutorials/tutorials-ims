@@ -278,6 +278,60 @@ export default class SearchService extends cds.ApplicationService {
       }));
     });
 
+    /**
+     * MCP curated tool: list published missions with tutorial counts.
+     *
+     * @param tags  Optional primaryTag filter (any-match).
+     * @param limit Max results (default 20, hard max 50).
+     * @returns     Array of { slug, title, description, tutorialCount } ordered by title.
+     */
+    this.on('list_missions', async (req) => {
+      const { tags } = req.data;
+      const limit = Math.min(Math.max(req.data.limit ?? 20, 1), 50);
+      const { Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+
+      const mq = SELECT.from(Missions)
+        .columns('ID', 'slug', 'title', 'description')
+        .where({ published: true })
+        .orderBy('title asc')
+        .limit(limit);
+
+      if (tags?.length) mq.where({ primaryTag: { in: tags } });
+
+      const missions = await cds.db.run(mq);
+      if (!missions.length) return [];
+
+      // Two-query approach: avoid fragile CQL aggregate JOIN on SQLite.
+      // Fetch CompletionPathItems counts grouped by mission_ID via
+      // CompletionPaths (which carries the mission_ID foreign key).
+      const missionIds = missions.map(m => m.ID);
+      const paths = await cds.db.run(
+        SELECT.from(CompletionPaths)
+          .columns('ID', 'mission_ID')
+          .where({ mission_ID: { in: missionIds } })
+      );
+      const pathIds = paths.map(p => p.ID);
+      const countByMission = new Map(missionIds.map(id => [id, 0]));
+      if (pathIds.length) {
+        const items = await cds.db.run(
+          SELECT.from(CompletionPathItems)
+            .columns('path_ID')
+            .where({ path_ID: { in: pathIds }, taskType: 'TUTORIAL' })
+        );
+        for (const path of paths) {
+          const n = items.filter(i => i.path_ID === path.ID).length;
+          countByMission.set(path.mission_ID, (countByMission.get(path.mission_ID) ?? 0) + n);
+        }
+      }
+
+      return missions.map(m => ({
+        slug:          (m.slug ?? '').toLowerCase(),
+        title:         m.title ?? '',
+        description:   m.description ?? '',
+        tutorialCount: countByMission.get(m.ID) ?? 0,
+      }));
+    });
+
     this.on('getFacets', async (req) => {
       const { search, taskTypes, experience } = req.data;
 

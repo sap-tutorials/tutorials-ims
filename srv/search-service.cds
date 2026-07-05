@@ -88,4 +88,23 @@ service SearchService {
     snippet : String;
     tags    : many String;
   };
+
+  /**
+   * List published missions with the number of tutorials in each. Anonymous
+   * — the same missions the /missions/ page shows.
+   *
+   * @param tags  Optional tag filter (returns only missions whose primaryTag
+   *              matches any of the supplied values).
+   * @param limit Max results (default 20, hard max 50).
+   * @returns     Missions ordered by title.
+   */
+  function list_missions(
+    tags  : many String,
+    limit : Integer
+  ) returns array of {
+    slug          : String;
+    title         : String;
+    description   : String;
+    tutorialCount : Integer;
+  };
 }

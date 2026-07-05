@@ -66,3 +66,31 @@ describe('MCP curated tool: search_tutorials', () => {
     runSpy.mockRestore();
   });
 });
+
+describe('MCP curated tool: list_missions', () => {
+  let SearchService;
+  beforeAll(async () => {
+    await cds.deploy([
+      path.join(process.cwd(), 'db'),
+      path.join(process.cwd(), 'srv'),
+    ]).to('sqlite::memory:');
+    SearchService = await cds.serve('SearchService').from('./srv/search-service');
+  });
+
+  it('returns bounded mission list with tutorial counts', async () => {
+    const results = await SearchService.send('list_missions', { limit: 5 });
+    expect(Array.isArray(results)).toBe(true);
+    expect(results.length).toBeLessThanOrEqual(5);
+    for (const m of results) {
+      expect(m).toHaveProperty('slug');
+      expect(m).toHaveProperty('title');
+      expect(m).toHaveProperty('tutorialCount');
+      expect(typeof m.tutorialCount).toBe('number');
+    }
+  });
+
+  it('clamps limit at 50', async () => {
+    const results = await SearchService.send('list_missions', { limit: 999 });
+    expect(results.length).toBeLessThanOrEqual(50);
+  });
+});
