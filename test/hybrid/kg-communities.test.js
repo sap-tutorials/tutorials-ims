@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import cds from '@sap/cds';
 import { isSafeForWrites } from './_guard.js';
 import { runKgCommunities } from '../../srv/jobs/kg-communities-job.js';
+import { computeKgCommunityFingerprint } from '../../srv/lib/kg-community-fingerprint.js';
 
 const TEST_PREFIX = `__test__kg-communities-`;
 const RUN_ID = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
@@ -132,6 +133,11 @@ describe('kg-communities nightly job (hybrid)', () => {
     // HANA returns Boolean as 0/1 via raw run — CAP SELECT.one normalises.
     expect(Boolean(mission.published)).toBe(false);
 
+    // #985 — the mission carries the same fingerprint the job wrote to
+    // KgCommunity for the A cluster, computed over the sorted A-slug set.
+    const expectedFp = computeKgCommunityFingerprint(A_TUTS);
+    expect(mission.sourceKgCommunityFingerprint).toBe(expectedFp);
+
     const items = await db.run(
       `SELECT i."itemOrder", t."slug" FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS" i
        JOIN "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS" p ON i."path_ID" = p."ID"
@@ -144,4 +150,52 @@ describe('kg-communities nightly job (hybrid)', () => {
       expect(items[i].slug.localeCompare(items[i - 1].slug)).toBeGreaterThan(0);
     }
   }, 120_000);
+
+  it('#985/#986: after a second Louvain pass, alreadyPromoted still resolves via fingerprint', async () => {
+    // Simulate the promote → re-run → LR-read timeline. The community
+    // number rotates on the second pass; the "already promoted" filter
+    // must still identify the A cluster as promoted, keyed off content.
+    await runKgCommunities();
+    const aRowsBefore = await db.run(
+      `SELECT DISTINCT "communityId" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
+       WHERE "vertexKey" = ?`,
+      [`tutorial:${A_TUTS[0]}`]
+    );
+    const aCommunityIdBefore = Number(aRowsBefore[0].communityId);
+
+    const AdminService = await cds.connect.to('AdminService');
+    const missionSlug = `${P}mission-fp`;
+    await AdminService.send({
+      event: 'promoteCommunityToMission',
+      data: {
+        communityId: aCommunityIdBefore,
+        missionSlug,
+        title: `Promoted-fp ${RUN_ID}`,
+      },
+    });
+
+    // Re-run the Louvain pass. The KgCommunity table is TRUNCATE+INSERTed;
+    // the numeric communityId for the A cluster may or may not change,
+    // but the fingerprint over the A-slug set is stable by definition.
+    await runKgCommunities();
+
+    const expectedFp = computeKgCommunityFingerprint(A_TUTS);
+    const aRowsAfter = await db.run(
+      `SELECT "communityFingerprint" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
+       WHERE "vertexKey" = ?`,
+      [`tutorial:${A_TUTS[0]}`]
+    );
+    expect(aRowsAfter[0].communityFingerprint).toBe(expectedFp);
+
+    // The materialized alreadyPromoted column on KgCommunitySummaryV
+    // (via LEFT JOIN Missions on communityFingerprint) must be true for
+    // the row whose fingerprint matches our just-promoted mission.
+    const summary = await AdminService.read('KgCommunities').where({
+      communityFingerprint: expectedFp,
+    });
+    expect(summary.length).toBeGreaterThan(0);
+    for (const row of summary) {
+      expect(row.alreadyPromoted).toBe(true);
+    }
+  }, 240_000);
 });

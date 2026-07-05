@@ -880,14 +880,20 @@ extend service AdminService with {
 extend service AdminService with {
 
   // LR-facing aggregate. One row per detected community.
-  // topConceptSlugs / alreadyPromoted are computed at read time by the
-  // after('READ', 'KgCommunities') decorators in srv/admin-service.js
-  // — not persisted; recomputed per request against KgCommunity + Missions.
+  // topConceptSlugs is computed at read time by the
+  // after('READ', 'KgCommunities') decorator in srv/admin-service.js
+  // — not persisted; recomputed per request against KgCommunity.
+  //
+  // alreadyPromoted is now materialized in the underlying view via a
+  // LEFT JOIN Missions on communityFingerprint (#986). Previously it
+  // was a virtual null column populated by an after('READ') handler,
+  // but that meant the LR's default filter — set by SPV #default in
+  // app/admin-annotations.cds — evaluated against NULL at the DB layer
+  // and dropped every row. See db/knowledge-graph-communities.cds.
   @readonly
   entity KgCommunities as projection on ims.KgCommunitySummaryV {
     *,
     virtual null as topConceptSlugs : String(255),
-    virtual null as alreadyPromoted : Boolean,
   };
 
   // OP-facing memberships. Rows keyed to (communityId, vertexKey).

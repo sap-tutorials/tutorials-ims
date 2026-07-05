@@ -84,7 +84,8 @@
         { "key": "kgOnDemand", "title": "KG On-Demand" },
         { "key": "secrets", "title": "Secrets" },
         { "key": "privacy", "title": "Privacy" },
-        { "key": "privacyAudit", "title": "Privacy Audit" }
+        { "key": "privacyAudit", "title": "Privacy Audit" },
+        { "key": "dataInspector", "title": "Data Inspector", "href": "/data-inspector-ui/", "target": "_self", "requiredScope": "Admin" }
       ]
     },
     {

@@ -54,7 +54,14 @@ entity Missions : TaskBase {
   // Set when the mission was drafted via promoteCommunityToMission (#917).
   // NULL for hand-authored missions. Distinct from communityMissionId,
   // which is the IMS-legacy community ID from the old CMS import.
-  sourceKgCommunityId       : Integer;
+  //
+  // sourceKgCommunityId retained for diagnostic/audit purposes only —
+  // Louvain IDs shuffle across nightly passes, so the "already promoted"
+  // filter keys off sourceKgCommunityFingerprint instead: a stable
+  // SHA-256 of the sorted tutorial-member slug set that survives
+  // Louvain re-runs while the tutorial cluster contents are stable. #985.
+  sourceKgCommunityId          : Integer;
+  sourceKgCommunityFingerprint : String(64);
   missionType               : MissionType @assert.range;
   // Default false: new and migrated missions are NOT visible until a SuperAdmin
   // toggles published to true. Replaces AEM's role of curating which missions

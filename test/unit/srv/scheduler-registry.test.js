@@ -45,11 +45,17 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     // in a fresh test context; the test isolates by resetting the registry
     // in beforeEach and again in afterAll (below).
     registerJobs();
-    expect(_getJobRegistry().size).toBe(36);    // #916 adds kg-pagerank, #917 adds kg-communities, #918 adds kg-wcc, #948 adds kg-ondemand-drain
+    // #916 adds kg-pagerank         (32 -> 33)
+    // #917 adds kg-communities      (33 -> 34)
+    // #918 adds kg-wcc              (34 -> 35)
+    // #948 adds kg-ondemand-drain   (35 -> 36)
+    expect(_getJobRegistry().size).toBe(36);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
     expect(names).toContain('kg-pagerank');
+    expect(names).toContain('kg-communities');
+    expect(names).toContain('kg-wcc');
     expect(names).toContain('kg-ondemand-drain');
   });
 
