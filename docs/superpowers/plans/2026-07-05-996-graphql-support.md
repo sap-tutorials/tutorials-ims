@@ -1337,6 +1337,26 @@ Append (DUAL_MOUNT variant):
       expect(r.status).toBe(200);
       expect(j.errors).toBeUndefined();
     });
+
+    it('/graphql/public schema does NOT include DeveloperService (service-set isolation)', async () => {
+      // Introspection query — /graphql/public must be filtered to the public
+      // subset (KnowledgeGraphService + SearchService only). This is the
+      // regression guard Task 6's smoke test could not provide because
+      // `{ __typename }` returns "Query" from any mount.
+      const r = await fetch(`${baseUrl}/graphql/public`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: '{ __schema { queryType { fields { name } } } }'
+        })
+      });
+      const j = await r.json();
+      expect(r.status).toBe(200);
+      const fieldNames = (j.data?.__schema?.queryType?.fields ?? []).map(f => f.name);
+      expect(fieldNames).toContain('KnowledgeGraphService');
+      expect(fieldNames).toContain('SearchService');
+      expect(fieldNames).not.toContain('DeveloperService');
+    });
   });
 ```
 
