@@ -106,7 +106,7 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
 
     it('pushes the inner hash for Redirects and Config (pipelinelog/joblog precedent)', () => {
       expect(ctrl).toMatch(/setHash\("homepageRedirects&\/hp\/Redirects"\)/)
-      expect(ctrl).toMatch(/setHash\("homepageConfig&\/hp\/Config"\)/)
+      expect(ctrl).toMatch(/setHash\("homepageConfig&\/hp\/HomepageConfig"\)/)
     })
 
     it('does NOT setHash for homepageShelves (defaults to inner ShelvesList route)', () => {

@@ -142,7 +142,7 @@ sap.ui.define([
           HashChanger.getInstance().setHash("homepageRedirects&/hp/Redirects");
         }
         if (sKey === "homepageConfig") {
-          HashChanger.getInstance().setHash("homepageConfig&/hp/Config");
+          HashChanger.getInstance().setHash("homepageConfig&/hp/HomepageConfig");
         }
       }
     },
