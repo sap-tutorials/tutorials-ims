@@ -143,7 +143,7 @@ modules:
         # Wipe each static dir BEFORE cp'ing fresh content. Hugo public, qa, admin-ui,
         # analytics-ui, scanner-ui all need this; everything not under static/ here
         # (e.g. node_modules, package.json) is preserved.
-        - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/explore-ui static/qa
+        - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/explore-ui static/data-inspector-ui static/qa
         - cp -r ../hugo/public/. static/
         - rm -rf static/tutorials
         - mkdir -p static/qa
@@ -160,6 +160,13 @@ modules:
         - mkdir -p static/explore-ui
         - cp -r ../app/explore/dist/. static/explore-ui/
         - cp -r ../app/scanner/webapp static/scanner-ui
+        # Data Inspector UI (#999) — bundled inside @cap-js/data-inspector's
+        # node_modules. Rewrite the UI5 bootstrap CDN in index.html from
+        # sapui5.hana.ondemand.com (plugin default) to ui5.sap.com — the
+        # approuter's CSP script-src only allowlists ui5.sap.com.
+        - mkdir -p static/data-inspector-ui
+        - cp -r ../node_modules/@cap-js/data-inspector/app/data-inspector-ui/webapp/. static/data-inspector-ui/
+        - sed -i 's|https://sapui5.hana.ondemand.com/|https://ui5.sap.com/|g' static/data-inspector-ui/index.html
       ignore:
         - default-env.json
         - default-env-admin.json
