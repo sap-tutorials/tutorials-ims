@@ -258,7 +258,13 @@ export default class SearchService extends cds.ApplicationService {
       // Apply word-boundary search across title/description/primaryTag/tagBag.
       // Reuses the same predicate builder as the OData $search handler so the
       // match semantics are identical (stopword-filtered, separator-normalised).
-      if (query) applyWordBoundarySearch(q, query);
+      // attachSearchRank appends _searchRank to SELECT.columns and prepends
+      // _searchRank DESC to ORDER BY so results are ranked by relevance before
+      // the DB applies the LIMIT — consistent with the OData $search path.
+      if (query) {
+        const tokens = applyWordBoundarySearch(q, query);
+        attachSearchRank(q, tokens);
+      }
 
       if (tags?.length) q.where({ primaryTag: { in: tags } });
       if (experience)   q.where({ experienceTag: experience });
