@@ -332,6 +332,74 @@ export default class SearchService extends cds.ApplicationService {
       }));
     });
 
+    /**
+     * MCP curated tool: fetch a published mission by slug with ordered tutorial list.
+     *
+     * @param slug Mission slug (lowercased server-side; case-insensitive).
+     * @returns    { slug, title, description, tutorials: [{ slug, title, order }] }
+     *             or null when no published mission matches.
+     */
+    this.on('get_mission', async (req) => {
+      const slug = (req.data.slug ?? '').toLowerCase();
+      if (!slug) return null;
+
+      const { Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+
+      const mission = await SELECT.one.from(Missions)
+        .columns('ID', 'slug', 'title', 'description')
+        .where({ slug, published: true });
+      if (!mission) return null;
+
+      // Two-query pattern (mirrors list_missions): fetch paths for this mission,
+      // then items in those paths filtered to TUTORIAL taskType only.
+      const paths = await cds.db.run(
+        SELECT.from(CompletionPaths)
+          .columns('ID')
+          .where({ mission_ID: mission.ID })
+      );
+      const pathIds = paths.map(p => p.ID);
+
+      let tutorials = [];
+      if (pathIds.length) {
+        const items = await cds.db.run(
+          SELECT.from(CompletionPathItems)
+            .columns('tutorial_ID', 'itemOrder')
+            .where({ path_ID: { in: pathIds }, taskType: 'TUTORIAL' })
+            .orderBy('itemOrder asc')
+        );
+        if (items.length) {
+          const tutorialIds = items.map(i => i.tutorial_ID).filter(Boolean);
+          if (tutorialIds.length) {
+            const { Tutorials } = cds.entities('com.sap.developers.ims');
+            const tutRows = await cds.db.run(
+              SELECT.from(Tutorials)
+                .columns('ID', 'slug', 'title')
+                .where({ ID: { in: tutorialIds } })
+            );
+            const tutMap = new Map(tutRows.map(t => [t.ID, t]));
+            tutorials = items
+              .map(i => {
+                const tut = tutMap.get(i.tutorial_ID);
+                if (!tut) return null;
+                return {
+                  slug:  (tut.slug ?? '').toLowerCase(),
+                  title: tut.title ?? '',
+                  order: i.itemOrder ?? 0,
+                };
+              })
+              .filter(Boolean);
+          }
+        }
+      }
+
+      return {
+        slug:        (mission.slug ?? '').toLowerCase(),
+        title:       mission.title ?? '',
+        description: mission.description ?? '',
+        tutorials,
+      };
+    });
+
     this.on('getFacets', async (req) => {
       const { search, taskTypes, experience } = req.data;
 

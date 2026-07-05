@@ -107,4 +107,22 @@ service SearchService {
     description   : String;
     tutorialCount : Integer;
   };
+
+  /**
+   * Fetch a mission by slug, with its ordered tutorial list. Returns null if
+   * no published mission matches. Slug is case-insensitive.
+   *
+   * @param slug Mission slug (lowercased server-side).
+   * @returns    Mission with ordered tutorial list, or null if not found.
+   */
+  function get_mission(slug : String) returns {
+    slug        : String;
+    title       : String;
+    description : String;
+    tutorials   : array of {
+      slug  : String;
+      title : String;
+      order : Integer;
+    };
+  };
 }

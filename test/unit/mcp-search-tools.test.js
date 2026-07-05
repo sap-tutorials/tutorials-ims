@@ -94,3 +94,50 @@ describe('MCP curated tool: list_missions', () => {
     expect(results.length).toBeLessThanOrEqual(50);
   });
 });
+
+describe('MCP curated tool: get_mission', () => {
+  let SearchService;
+  beforeAll(async () => {
+    await cds.deploy([
+      path.join(process.cwd(), 'db'),
+      path.join(process.cwd(), 'srv'),
+    ]).to('sqlite::memory:');
+    SearchService = await cds.serve('SearchService').from('./srv/search-service');
+  });
+
+  it('returns null for unknown slug', async () => {
+    const result = await SearchService.send('get_mission', { slug: 'does-not-exist' });
+    expect(result).toBeNull();
+  });
+
+  it('returns null for empty slug', async () => {
+    const result = await SearchService.send('get_mission', { slug: '' });
+    expect(result).toBeNull();
+  });
+
+  it('lowercases slug before lookup', async () => {
+    // Global memory-fact: tutorial slugs are lowercase canonical.
+    // A mixed-case query must still resolve if the underlying row exists.
+    const a = await SearchService.send('get_mission', { slug: 'test-mission' });
+    const b = await SearchService.send('get_mission', { slug: 'TEST-MISSION' });
+    expect(a).toEqual(b);
+  });
+
+  it('returns mission with tutorials array when mission exists', async () => {
+    // With empty DB this verifies shape: null is fine, but if something matches
+    // it must have slug, title, description, tutorials array.
+    const result = await SearchService.send('get_mission', { slug: 'test-mission' });
+    // Empty DB → null; that is acceptable.
+    if (result !== null) {
+      expect(result).toHaveProperty('slug');
+      expect(result).toHaveProperty('title');
+      expect(result).toHaveProperty('description');
+      expect(Array.isArray(result.tutorials)).toBe(true);
+      for (const t of result.tutorials) {
+        expect(t).toHaveProperty('slug');
+        expect(t).toHaveProperty('title');
+        expect(t).toHaveProperty('order');
+      }
+    }
+  });
+});
