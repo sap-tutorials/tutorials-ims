@@ -160,6 +160,12 @@
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
+      "source": "^/graphql/_plugin(/.*)?$",
+      "target": "/404-not-found",
+      "localDir": "static",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/graphql/public(\\?.*)?$",
       "target": "/graphql/public",
       "destination": "srv-api",
