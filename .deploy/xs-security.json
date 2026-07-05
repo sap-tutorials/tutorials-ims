@@ -12,7 +12,8 @@
     { "name": "$XSAPPNAME.ConsolidationScope", "description": "Account merge operations (SCI technical user)" },
     { "name": "$XSAPPNAME.Tutorial.Author",    "description": "QA channel author preview (unpublished tutorials at /tutorials-qa/*)" },
     { "name": "$XSAPPNAME.KnowledgeGraph.Admin", "description": "Knowledge graph admin: merge/veto concepts, run raw SPARQL" },
-    { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" }
+    { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" },
+    { "name": "$XSAPPNAME.Tutorial.API",       "description": "External GraphQL API access for user-scoped reads (issue #996)" }
   ],
   "role-templates": [
     {
@@ -59,6 +60,11 @@
       "name": "Everyone",
       "description": "Baseline",
       "scope-references": ["$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "TutorialApiConsumer",
+      "description": "External developer / partner consuming the tutorials GraphQL API",
+      "scope-references": ["$XSAPPNAME.Tutorial.API", "$XSAPPNAME.Everyone"]
     }
   ],
   "role-collections": [
@@ -112,6 +118,14 @@
       "description": "Mobile scanner UI access for event staff (gates /scanner-ui/*, /scanner-vue/*, /scanner/*)",
       "role-template-references": [
         "$XSAPPNAME.MobileApp",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "Tutorials API Consumer",
+      "description": "External GraphQL API access (grants Tutorial.API)",
+      "role-template-references": [
+        "$XSAPPNAME.TutorialApiConsumer",
         "$XSAPPNAME.Everyone"
       ]
     }

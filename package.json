@@ -57,7 +57,7 @@
     "build:css": "postcss hugo/assets/css/sap-fundamental.css --config hugo/ --no-map -o hugo/static/css/sap-fundamental.css",
     "vendor:mediapipe": "node scripts/vendor-mediapipe.cjs",
     "build:apps": "npm run vendor:mediapipe && npm --prefix hugo-apps run build",
-    "postbuild:apps": "tsx scripts/check-build-collisions.ts && tsx scripts/check-icon-imports.ts && tsx scripts/check-island-ui5-imports.ts && tsx scripts/check-xs-app-mta.ts && tsx scripts/check-public-endpoints.ts && tsx scripts/check-srv-qa-cp-list.ts && tsx scripts/check-srv-qa-route-drift.ts && tsx scripts/check-slug-lookups.ts && tsx scripts/check-ui5-controller-extensions.ts && tsx scripts/check-kg-meta-formatters-mirror.ts && tsx scripts/check-csrf-clients.ts",
+    "postbuild:apps": "tsx scripts/check-build-collisions.ts && tsx scripts/check-icon-imports.ts && tsx scripts/check-island-ui5-imports.ts && tsx scripts/check-xs-app-mta.ts && tsx scripts/check-public-endpoints.ts && tsx scripts/check-srv-qa-cp-list.ts && tsx scripts/check-srv-qa-route-drift.ts && tsx scripts/check-slug-lookups.ts && tsx scripts/check-ui5-controller-extensions.ts && tsx scripts/check-kg-meta-formatters-mirror.ts && tsx scripts/check-csrf-clients.ts && npm run check:graphql-breaking",
     "build:explore-manifest": "tsx scripts/build-explore-manifest.ts",
     "build:explore": "npm --prefix app/explore install --no-audit --no-fund && npm --prefix app/explore run build && npm run build:explore-manifest",
     "build:analytics-explorer": "npm --prefix app/analytics-explorer install && npm --prefix app/analytics-explorer run build",
@@ -66,7 +66,7 @@
     "build:highlight": "tsx scripts/highlight-cds.ts",
     "build:display": "cd app/display-app && npm install && npm run build",
     "copy-joule-vendor": "node scripts/copy-joule-vendor.mjs",
-    "build:all": "npm run prebuild && npm run fetch-tutorials -- --regenerate && npm run fetch-concepts && npm run fetch-advocates && npm run fetch-homepage-shelves && npm run fetch-verb-definitions && npm run fetch-shelf-definitions && npm run build:css && npm run build:apps && npm run build:analytics-explorer && npm run copy-joule-vendor && npm run build:explore && npm run build:hugo && npm run build:highlight && npm run build:display",
+    "build:all": "npm run prebuild && npm run fetch-tutorials -- --regenerate && npm run fetch-concepts && npm run fetch-advocates && npm run fetch-homepage-shelves && npm run fetch-verb-definitions && npm run fetch-shelf-definitions && npm run build:css && npm run build:apps && npm run build:analytics-explorer && npm run copy-joule-vendor && npm run build:explore && npm run build:hugo && npm run build:highlight && npm run build:display && npm run build:sdl",
     "build:admin": "npm --prefix app/admin-shell run build",
     "predev": "npm run copy-joule-vendor && node -e \"var r=require('fs').existsSync('srv/data/admin-docs-index.json')?{status:0}:require('child_process').spawnSync('npx',['tsx','scripts/build-admin-docs-index.ts'],{stdio:'inherit',shell:true});if(r.status!==0)process.exit(r.status||1)\"",
     "prewatch": "node -e \"var r=require('fs').existsSync('srv/data/admin-docs-index.json')?{status:0}:require('child_process').spawnSync('npx',['tsx','scripts/build-admin-docs-index.ts'],{stdio:'inherit',shell:true});if(r.status!==0)process.exit(r.status||1)\"",
@@ -93,7 +93,9 @@
     "test:a11y:lighthouse": "lhci autorun --config=test/a11y/lighthouserc.json",
     "test:a11y:summary": "node test/a11y/summary.js",
     "test:all": "cds bind --exec -- npx vitest run",
-    "validate-api-docs-yaml": "node scripts/validate-api-docs-yaml.cjs"
+    "validate-api-docs-yaml": "node scripts/validate-api-docs-yaml.cjs",
+    "build:sdl": "tsx scripts/emit-graphql-sdl.ts",
+    "check:graphql-breaking": "tsx scripts/check-graphql-breaking.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
@@ -143,6 +145,7 @@
     "@cap-js/ai": "^1.0.1",
     "@cap-js/audit-logging": "^1.2.2",
     "@cap-js/change-tracking": "^2.0.1",
+    "@cap-js/graphql": "0.14.0",
     "@cap-js/hana": "^3.0.1",
     "@cap-js/ord": "^1.9.1",
     "@cap-js/sqlite": "^3.0.2",
@@ -179,6 +182,11 @@
     "vue-virtual-scroller": "3.0.4"
   },
   "cds": {
+    "protocols": {
+      "graphql": {
+        "path": "/graphql/_plugin"
+      }
+    },
     "requires": {
       "AICore": {
         "resourceGroup": "default"

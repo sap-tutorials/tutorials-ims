@@ -56,3 +56,21 @@ describe('xs-security.json root vs .deploy copy — drift guard', () => {
     expect(deploy).toBe(root);
   });
 });
+
+describe('Tutorial.API scope (#996)', () => {
+  it('is declared in both xs-security.json files', () => {
+    for (const path of ['xs-security.json', '.deploy/xs-security.json']) {
+      const cfg = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'));
+      const names = (cfg.scopes || []).map(s => s.name);
+      expect(names).toContain('$XSAPPNAME.Tutorial.API');
+    }
+  });
+
+  it('has a role template TutorialApiConsumer in both files', () => {
+    for (const path of ['xs-security.json', '.deploy/xs-security.json']) {
+      const cfg = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'));
+      const names = (cfg['role-templates'] || []).map(r => r.name);
+      expect(names).toContain('TutorialApiConsumer');
+    }
+  });
+});

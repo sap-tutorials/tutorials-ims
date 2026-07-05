@@ -49,6 +49,10 @@
         },
         "author": {
           "roles": ["Tutorial.Author", "authenticated-user"]
+        },
+        "apiuser": {
+          "password": "apikey",
+          "roles": ["Tutorial.API", "authenticated-user"]
         }
       }
     },

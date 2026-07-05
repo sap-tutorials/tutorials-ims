@@ -33,6 +33,7 @@
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
 @requires : 'any'
+@graphql
 service KnowledgeGraphService @(path : '/graph') {
 
   // ─── Projections (curation introspection + admin tooling) ─────────────
@@ -56,7 +57,9 @@ service KnowledgeGraphService @(path : '/graph') {
   // tagged @Core.MediaType" convention.
   @cds.redirection.target
   entity Concepts                       as projection on ims.Concepts excluding { embedding };
+
   @readonly entity ConceptEdges         as projection on ims.ConceptEdges;
+
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
 
   /**
