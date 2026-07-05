@@ -26,7 +26,10 @@ describe.skipIf(!RUN)('KG on-demand — hybrid (#948)', () => {
   });
 
   afterAll(async () => {
-    const { KnowledgeGraphSettings } = cds.entities(NS);
+    const { KgOnDemandRequests, KnowledgeGraphSettings } = cds.entities(NS);
+    // Cleanup any rows this suite left behind.
+    await DELETE.from(KgOnDemandRequests).where({ normalizedKey: { like: 'hybridtest%' } });
+    // Restore the flag (existing code).
     await UPDATE(KnowledgeGraphSettings).set({ onDemandExtractionEnabled: originalOnDemand });
     _resetSettingsCache();
   });
@@ -43,8 +46,9 @@ describe.skipIf(!RUN)('KG on-demand — hybrid (#948)', () => {
     });
     expect(r.status).toBe('enqueued');
     const { KgOnDemandRequests } = cds.entities(NS);
-    const rows = await SELECT.from(KgOnDemandRequests).where({ normalizedKey: 'hybridtest one' });
+    const rows = await SELECT.from(KgOnDemandRequests).where({ normalizedKey: 'hybridtest one' }).columns('status');
     expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('PENDING');
   });
 
   it('coalesces 5 concurrent enqueues into 1 row', async () => {
@@ -61,7 +65,7 @@ describe.skipIf(!RUN)('KG on-demand — hybrid (#948)', () => {
 
   it('end-to-end: enqueue → drain → next expandSearchConcepts sees new concepts', async () => {
     // Use a query guaranteed zero-seed against the current KG.
-    const rawQuery = 'quantum tulip encabulator';
+    const rawQuery = 'hybridtest quantum tulip encabulator';
 
     const enqR = await enqueueOnDemandExtraction({
       db, query: rawQuery,
@@ -76,7 +80,7 @@ describe.skipIf(!RUN)('KG on-demand — hybrid (#948)', () => {
 
     const { KgOnDemandRequests } = cds.entities(NS);
     const [row] = await SELECT.from(KgOnDemandRequests)
-      .where({ normalizedKey: 'quantum tulip encabulator' })
+      .where({ normalizedKey: 'hybridtest quantum tulip encabulator' })
       .columns('status', 'tutorialsExtracted', 'llmPromptTokens');
     expect(['DONE', 'FAILED']).toContain(row.status);
   });
