@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import Graph from 'graphology'
+import Graph, { MultiDirectedGraph } from 'graphology'
 import Sigma from 'sigma'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
 import type { ExploreNode, ExploreEdge, NodeType, PredicateType } from '../types'
@@ -29,7 +29,14 @@ let graph: Graph | null = null
 
 onMounted(() => {
   if (!container.value) return
-  graph = new Graph()
+  // MultiDirectedGraph allows multiple edges between the same pair of nodes
+  // as long as each has a unique edge key. Two tutorials can be connected by
+  // both `teaches` and `requires` predicates (for example), and graphology's
+  // default `new Graph()` refuses the second edge with:
+  //   UsageGraphError: Graph.addEdgeWithKey: an edge linking A to B already exists.
+  // The `hasEdge(key)` guard below dedupes the same predicate arriving twice;
+  // the multi-graph type allows different predicates between the same pair.
+  graph = new MultiDirectedGraph()
   for (const n of props.nodes) {
     graph.addNode(n.id, {
       x: Math.random(),
