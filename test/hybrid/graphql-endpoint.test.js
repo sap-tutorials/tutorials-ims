@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
+import { readFileSync } from 'node:fs';
 
 // Boot without --profile hybrid so we get in-memory SQLite (no HANA required).
 cds.test('serve', '--project', '.');
@@ -43,4 +44,13 @@ describe('graphql endpoints (#996)', () => {
     expect([200, 401]).toContain(r.status);
     expect(r.status).not.toBe(404);
   });
+});
+
+it('AppRouter xs-app.json declares /graphql routes before /graph/…', () => {
+  const cfg = JSON.parse(readFileSync('approuter/xs-app.json', 'utf8'));
+  const idxGraphQL = cfg.routes.findIndex(r => r.source.startsWith('^/graphql'));
+  const idxKG = cfg.routes.findIndex(r => r.source.startsWith('^/graph/'));
+  expect(idxGraphQL).toBeGreaterThan(-1);
+  expect(idxKG).toBeGreaterThan(-1);
+  expect(idxGraphQL).toBeLessThan(idxKG);
 });

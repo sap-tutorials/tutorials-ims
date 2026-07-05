@@ -160,6 +160,18 @@
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
+      "source": "^/graphql/public(\\?.*)?$",
+      "target": "/graphql/public",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/graphql(\\?.*)?$",
+      "target": "/graphql",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
       "source": "^/graph/(neighborhood(?:Full)?|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path)(\\(.*\\))?(/.*)?(\\?.*)?$",
       "target": "/graph/$1$2$3$4",
       "destination": "srv-api",
