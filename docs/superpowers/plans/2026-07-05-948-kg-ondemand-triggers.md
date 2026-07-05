@@ -746,4 +746,769 @@ git commit -m "feat(#948): on-demand extraction enqueue module
 - Metrics: kg_ondemand_{enqueued, dedup_coalesced, rate_limited, enqueue_error}."
 ```
 
+---
+
+### Task 4: Cosine ranker + drain job
+
+**Files:**
+- Create: `srv/lib/kg/on-demand-cosine-rank.js`
+- Create: `srv/jobs/kg-ondemand-job.js`
+- Modify: `srv/jobs/scheduler.js` — import + `registerJob({...})` next to the other KG jobs
+- Modify: `docs/superpowers/specs/2026-07-05-948-kg-ondemand-triggers-design.md` — remove the stale `runWithLock('kg-ondemand', ...)` language (spec self-correction)
+- Test: `test/kg-ondemand-cosine-rank.test.js`
+- Test: `test/kg-ondemand-job.test.js`
+
+**Interfaces:**
+- Consumes: `KgOnDemandRequests` entity (Task 1), `resolveKnowledgeGraphSettings()` (Task 2), `extractConceptsFromTutorial` from `srv/lib/kg-extract.js`, `loadConceptRegistry` + `resolveConceptCandidates` from `srv/lib/kg-merge-on-write.js`, `embed` from `srv/lib/embedding-client.js`
+- Produces:
+  - `rankTutorialsByQueryVector({ db, queryVector, limit }) → Promise<Array<{ tutorialId: string, slug: string, title: string, score: number }>>` — ACTIVE-gated; MAX(cosine) per tutorial across its steps
+  - `runOnDemandDrain(deps?) → Promise<{ reason?: string, processed: number, extracted: number, failed: number, coalesced: number, durationMs: number }>` — registered at jobName `'kg-ondemand'`, schedule `'1-59/2 * * * *'`
+- Env knobs (all optional): `KG_ONDEMAND_DRAIN_BATCH` (default 3), `KG_ONDEMAND_TUTORIALS_PER_REQ` (default 5), `KG_ONDEMAND_MAX_ATTEMPTS` (default 3)
+
+#### Sub-part 4a: Cosine ranker
+
+- [ ] **Step 1: Write the ranker test**
+
+Create `test/kg-ondemand-cosine-rank.test.js`:
+
+```javascript
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import cds from '@sap/cds';
+import { rankTutorialsByQueryVector } from '../srv/lib/kg/on-demand-cosine-rank.js';
+
+const NS = 'com.sap.developers.ims';
+const DIMS = 1536;
+
+function unitVec(i) {
+  const v = new Float32Array(DIMS);
+  v[i % DIMS] = 1.0;
+  return v;
+}
+
+function bufFromVec(v) {
+  const buf = Buffer.alloc(v.length * 4);
+  for (let i = 0; i < v.length; i++) buf.writeFloatLE(v[i], i * 4);
+  return buf;
+}
+
+describe('rankTutorialsByQueryVector (#948)', () => {
+  let db;
+
+  beforeAll(async () => {
+    await cds.deploy(cds.env.roots).to('sqlite::memory:');
+    db = await cds.connect.to('db');
+  });
+
+  beforeEach(async () => {
+    const { Tutorials, TutorialEmbedding } = cds.entities(NS);
+    await DELETE.from(TutorialEmbedding);
+    await DELETE.from(Tutorials);
+  });
+
+  it('returns top-K by MAX cosine, ACTIVE-gated', async () => {
+    const { Tutorials, TutorialEmbedding } = cds.entities(NS);
+    const t1 = 'tttttttt-1111-1111-1111-111111111111';
+    const t2 = 'tttttttt-2222-2222-2222-222222222222';
+    const tDraft = 'tttttttt-3333-3333-3333-333333333333';
+
+    await INSERT.into(Tutorials).entries([
+      { ID: t1, slug: 't1', title: 'T1', status: 'ACTIVE' },
+      { ID: t2, slug: 't2', title: 'T2', status: 'ACTIVE' },
+      { ID: tDraft, slug: 'tdraft', title: 'Draft', status: 'DRAFT' },
+    ]);
+
+    // t1 has a step aligned with unit vector 0 → cosine 1.0 with query
+    await INSERT.into(TutorialEmbedding).entries([
+      { tutorial_ID: t1, stepNumber: 1, embedding: bufFromVec(unitVec(0)) },
+      { tutorial_ID: t1, stepNumber: 2, embedding: bufFromVec(unitVec(500)) },
+      { tutorial_ID: t2, stepNumber: 1, embedding: bufFromVec(unitVec(500)) },
+      { tutorial_ID: tDraft, stepNumber: 1, embedding: bufFromVec(unitVec(0)) },
+    ]);
+
+    const results = await rankTutorialsByQueryVector({
+      db, queryVector: unitVec(0), limit: 5,
+    });
+
+    const slugs = results.map(r => r.slug);
+    expect(slugs).toContain('t1');
+    expect(slugs).not.toContain('tdraft');   // ACTIVE-gate
+    expect(results[0].slug).toBe('t1');       // Best cosine
+    expect(results[0].score).toBeCloseTo(1.0, 3);
+  });
+
+  it('returns empty array on empty TutorialEmbedding', async () => {
+    const results = await rankTutorialsByQueryVector({
+      db, queryVector: unitVec(0), limit: 5,
+    });
+    expect(results).toEqual([]);
+  });
+
+  it('respects the limit argument', async () => {
+    const { Tutorials, TutorialEmbedding } = cds.entities(NS);
+    for (let i = 0; i < 10; i++) {
+      const id = `tttttttt-${String(i).padStart(4, '0')}-0000-0000-000000000000`;
+      await INSERT.into(Tutorials).entries({ ID: id, slug: `t${i}`, title: `T${i}`, status: 'ACTIVE' });
+      await INSERT.into(TutorialEmbedding).entries({ tutorial_ID: id, stepNumber: 1, embedding: bufFromVec(unitVec(i)) });
+    }
+    const results = await rankTutorialsByQueryVector({
+      db, queryVector: unitVec(3), limit: 3,
+    });
+    expect(results).toHaveLength(3);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/kg-ondemand-cosine-rank.test.js`
+Expected: FAIL — module does not exist.
+
+- [ ] **Step 3: Implement the ranker**
+
+Create `srv/lib/kg/on-demand-cosine-rank.js`:
+
+```javascript
+// srv/lib/kg/on-demand-cosine-rank.js
+//
+// Rank ACTIVE tutorials by MAX cosine similarity between a query vector
+// and any TutorialEmbedding step of that tutorial.
+//
+// Vector(1536) is a HANA BLOB — LOB expiry applies. Two-phase pattern:
+//   1. IDs + metadata only (no BLOB).
+//   2. Hydrate embeddings by ID in a second raw-SQL pass on HANA.
+// Same shape as srv/lib/kg/concept-embedding-query.js.
+//
+// SQLite tests use CDS QL for both phases (no LOB locators exist there).
+//
+// Result: top-K { tutorialId, slug, title, score } sorted by score DESC.
+//
+// Spec: docs/superpowers/specs/2026-07-05-948-kg-ondemand-triggers-design.md §1
+// Issue: #948
+
+import cds from '@sap/cds';
+
+const NS = 'com.sap.developers.ims';
+const DIMS = 1536;
+const BYTES_PER_FLOAT = 4;
+
+function decodeEmbedding(buf) {
+  if (!buf) return null;
+  let bytes;
+  if (Buffer.isBuffer(buf)) bytes = buf;
+  else if (typeof buf === 'string') bytes = Buffer.from(buf, 'base64');
+  else if (buf instanceof Uint8Array) bytes = Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+  else bytes = Buffer.from(buf);
+  if (bytes.length !== DIMS * BYTES_PER_FLOAT) return null;
+  const out = new Float32Array(DIMS);
+  for (let i = 0; i < DIMS; i++) out[i] = bytes.readFloatLE(i * BYTES_PER_FLOAT);
+  return out;
+}
+
+function cosine(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < DIMS; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  const d = Math.sqrt(na) * Math.sqrt(nb);
+  return d === 0 ? 0 : dot / d;
+}
+
+function isHana(db) {
+  return db?.kind === 'hana' || db?.options?.kind === 'hana';
+}
+
+/**
+ * @param {object} opts
+ * @param {object} opts.db          cds.connect.to('db') handle
+ * @param {Float32Array|number[]} opts.queryVector  1536-dim query embedding
+ * @param {number} opts.limit       Top-K to return
+ * @returns {Promise<Array<{ tutorialId: string, slug: string, title: string, score: number }>>}
+ */
+export async function rankTutorialsByQueryVector({ db, queryVector, limit = 5 }) {
+  const q = queryVector instanceof Float32Array
+    ? queryVector
+    : Float32Array.from(queryVector);
+
+  const { Tutorials, TutorialEmbedding } = cds.entities(NS);
+
+  // Phase 1: fetch ACTIVE tutorial IDs + metadata (no BLOB).
+  const activeTutorials = await SELECT.from(Tutorials)
+    .columns('ID', 'slug', 'title')
+    .where({ status: 'ACTIVE' });
+  if (activeTutorials.length === 0) return [];
+
+  const metaById = new Map(activeTutorials.map(t => [t.ID, t]));
+
+  // Phase 2: fetch embeddings for ACTIVE tutorials only.
+  // On HANA: raw db.run() to avoid LOB locator expiry.
+  // On SQLite: CDS QL is fine.
+  const ids = [...metaById.keys()];
+  let rows;
+  if (isHana(db)) {
+    const placeholders = ids.map(() => '?').join(',');
+    const sql = `SELECT TUTORIAL_ID, STEPNUMBER, EMBEDDING FROM COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING WHERE TUTORIAL_ID IN (${placeholders})`;
+    rows = await db.run(sql, ids);
+  } else {
+    rows = await SELECT.from(TutorialEmbedding)
+      .columns('tutorial_ID', 'stepNumber', 'embedding')
+      .where({ tutorial_ID: { in: ids } });
+  }
+
+  // Compute MAX(cosine) per tutorial.
+  const bestByTutorial = new Map();
+  for (const r of rows) {
+    const tid = r.tutorial_ID ?? r.TUTORIAL_ID;
+    const emb = decodeEmbedding(r.embedding ?? r.EMBEDDING);
+    if (!emb) continue;
+    const c = cosine(q, emb);
+    const prev = bestByTutorial.get(tid) ?? -Infinity;
+    if (c > prev) bestByTutorial.set(tid, c);
+  }
+
+  const scored = [...bestByTutorial.entries()]
+    .map(([tid, score]) => {
+      const meta = metaById.get(tid);
+      return meta ? { tutorialId: tid, slug: meta.slug, title: meta.title, score } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return scored;
+}
+```
+
+- [ ] **Step 4: Re-run the ranker test**
+
+Run: `npx vitest run test/kg-ondemand-cosine-rank.test.js`
+Expected: PASS on all 3 cases.
+
+#### Sub-part 4b: Drain job
+
+- [ ] **Step 5: Write the drain job test**
+
+Create `test/kg-ondemand-job.test.js`:
+
+```javascript
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import cds from '@sap/cds';
+import { runOnDemandDrain } from '../srv/jobs/kg-ondemand-job.js';
+import { _resetCacheForTests as _resetSettingsCache } from '../srv/lib/runtime-config/kg-settings.js';
+
+const NS = 'com.sap.developers.ims';
+
+async function setFlags({ enabled = true, onDemand = true } = {}) {
+  const { KnowledgeGraphSettings } = cds.entities(NS);
+  await DELETE.from(KnowledgeGraphSettings);
+  await INSERT.into(KnowledgeGraphSettings).entries({
+    enabled, onDemandExtractionEnabled: onDemand,
+    extractBuildCap: 200,
+  });
+  _resetSettingsCache();
+}
+
+async function seedPending(rows) {
+  const { KgOnDemandRequests } = cds.entities(NS);
+  await DELETE.from(KgOnDemandRequests);
+  for (let i = 0; i < rows.length; i++) {
+    await INSERT.into(KgOnDemandRequests).entries({
+      ID: `qqqqqqqq-${String(i).padStart(4, '0')}-0000-0000-000000000000`,
+      query: rows[i].query,
+      normalizedKey: rows[i].normalizedKey ?? rows[i].query,
+      status: 'PENDING',
+      requestedByKind: 'user',
+    });
+  }
+}
+
+describe('runOnDemandDrain (#948)', () => {
+  beforeAll(async () => {
+    await cds.deploy(cds.env.roots).to('sqlite::memory:');
+  });
+
+  beforeEach(async () => {
+    const { KgOnDemandRequests, Tutorials, TutorialEmbedding, Concepts } = cds.entities(NS);
+    await DELETE.from(KgOnDemandRequests);
+    await DELETE.from(TutorialEmbedding);
+    await DELETE.from(Concepts);
+    await DELETE.from(Tutorials);
+    delete process.env.KG_ONDEMAND_DRAIN_BATCH;
+    delete process.env.KG_ONDEMAND_TUTORIALS_PER_REQ;
+    delete process.env.KG_ONDEMAND_MAX_ATTEMPTS;
+  });
+
+  it('skips with reason=kg-disabled when master flag is off', async () => {
+    await setFlags({ enabled: false, onDemand: true });
+    const summary = await runOnDemandDrain({});
+    expect(summary.reason).toBe('kg-disabled');
+    expect(summary.processed).toBe(0);
+  });
+
+  it('skips with reason=ondemand-disabled when only the on-demand flag is off', async () => {
+    await setFlags({ enabled: true, onDemand: false });
+    const summary = await runOnDemandDrain({});
+    expect(summary.reason).toBe('ondemand-disabled');
+  });
+
+  it('happy path: drains PENDING rows and marks DONE', async () => {
+    await setFlags();
+    await seedPending([{ query: 'q1' }, { query: 'q2' }]);
+
+    const embed = vi.fn(async () => new Float32Array(1536).fill(0.1));
+    const rankTutorials = vi.fn(async () => [
+      { tutorialId: 'tid-1', slug: 't1', title: 'T1', score: 0.9 },
+    ]);
+    const extractOne = vi.fn(async () => ({
+      teaches: [{ slug: 'foo', name: 'Foo', confidence: 0.9 }],
+      tokenUsage: { prompt: 100, completion: 50 },
+      warnings: [],
+    }));
+
+    const summary = await runOnDemandDrain({
+      embed, rankTutorials, extractOne,
+      persistExtraction: vi.fn(async () => ({ created: 1, merged: 0 })),
+    });
+
+    expect(summary.processed).toBe(2);
+    expect(summary.failed).toBe(0);
+    expect(extractOne).toHaveBeenCalledTimes(2);
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const rows = await SELECT.from(KgOnDemandRequests).columns('status', 'attempts', 'tutorialsExtracted');
+    expect(rows.every(r => r.status === 'DONE')).toBe(true);
+    expect(rows.every(r => r.attempts === 1)).toBe(true);
+  });
+
+  it('extraction throws once → row goes back to PENDING with attempts=1', async () => {
+    await setFlags();
+    await seedPending([{ query: 'q1' }]);
+
+    let call = 0;
+    const embed = vi.fn(async () => new Float32Array(1536).fill(0.1));
+    const rankTutorials = vi.fn(async () => [{ tutorialId: 'tid-1', slug: 't1', title: 'T1', score: 0.9 }]);
+    const extractOne = vi.fn(async () => {
+      call++;
+      if (call === 1) throw new Error('LLM boom');
+      return { teaches: [], tokenUsage: {}, warnings: [] };
+    });
+
+    const summary = await runOnDemandDrain({
+      embed, rankTutorials, extractOne,
+      persistExtraction: vi.fn(async () => ({ created: 0, merged: 0 })),
+    });
+
+    expect(summary.processed).toBe(0);
+    expect(summary.failed).toBe(0);
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const [row] = await SELECT.from(KgOnDemandRequests).columns('status', 'attempts', 'lastError');
+    expect(row.status).toBe('PENDING');
+    expect(row.attempts).toBe(1);
+    expect(row.lastError).toMatch(/LLM boom/);
+  });
+
+  it('extraction throws N times → row lands in FAILED', async () => {
+    await setFlags();
+    process.env.KG_ONDEMAND_MAX_ATTEMPTS = '2';
+    await seedPending([{ query: 'q1' }]);
+
+    const embed = vi.fn(async () => new Float32Array(1536).fill(0.1));
+    const rankTutorials = vi.fn(async () => [{ tutorialId: 'tid-1', slug: 't1', title: 'T1', score: 0.9 }]);
+    const extractOne = vi.fn(async () => { throw new Error('always fails'); });
+
+    await runOnDemandDrain({
+      embed, rankTutorials, extractOne,
+      persistExtraction: vi.fn(async () => ({ created: 0, merged: 0 })),
+    });
+    // second tick
+    const summary = await runOnDemandDrain({
+      embed, rankTutorials, extractOne,
+      persistExtraction: vi.fn(async () => ({ created: 0, merged: 0 })),
+    });
+
+    expect(summary.failed).toBe(1);
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const [row] = await SELECT.from(KgOnDemandRequests).columns('status', 'attempts');
+    expect(row.status).toBe('FAILED');
+    expect(row.attempts).toBe(2);
+  });
+
+  it('empty top-K → row DONE with tutorialsExtracted=0, no LLM calls', async () => {
+    await setFlags();
+    await seedPending([{ query: 'q1' }]);
+
+    const embed = vi.fn(async () => new Float32Array(1536).fill(0.1));
+    const rankTutorials = vi.fn(async () => []);
+    const extractOne = vi.fn();
+
+    const summary = await runOnDemandDrain({
+      embed, rankTutorials, extractOne,
+      persistExtraction: vi.fn(async () => ({ created: 0, merged: 0 })),
+    });
+
+    expect(summary.processed).toBe(1);
+    expect(extractOne).not.toHaveBeenCalled();
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const [row] = await SELECT.from(KgOnDemandRequests).columns('status', 'tutorialsExtracted');
+    expect(row.status).toBe('DONE');
+    expect(row.tutorialsExtracted).toBe(0);
+  });
+
+  it('DRAIN_BATCH bounds per-tick work', async () => {
+    await setFlags();
+    process.env.KG_ONDEMAND_DRAIN_BATCH = '2';
+    await seedPending([{ query: 'q1' }, { query: 'q2' }, { query: 'q3' }, { query: 'q4' }, { query: 'q5' }]);
+
+    const embed = vi.fn(async () => new Float32Array(1536).fill(0.1));
+    const rankTutorials = vi.fn(async () => []);
+    const extractOne = vi.fn();
+
+    const summary = await runOnDemandDrain({
+      embed, rankTutorials, extractOne,
+      persistExtraction: vi.fn(async () => ({ created: 0, merged: 0 })),
+    });
+
+    expect(summary.processed).toBe(2);
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const rows = await SELECT.from(KgOnDemandRequests).columns('status');
+    expect(rows.filter(r => r.status === 'DONE')).toHaveLength(2);
+    expect(rows.filter(r => r.status === 'PENDING')).toHaveLength(3);
+  });
+});
+```
+
+- [ ] **Step 6: Run to verify failure**
+
+Run: `npx vitest run test/kg-ondemand-job.test.js`
+Expected: FAIL — module does not exist.
+
+- [ ] **Step 7: Implement the drain job**
+
+Create `srv/jobs/kg-ondemand-job.js`:
+
+```javascript
+// srv/jobs/kg-ondemand-job.js
+//
+// Drains PENDING KgOnDemandRequests rows every 2 minutes. For each row:
+//   - Embed the query.
+//   - Cosine-rank ACTIVE tutorials by TutorialEmbedding MAX-similarity.
+//   - Extract concepts from top-K tutorials (SAME pipeline as
+//     srv/jobs/extract-concepts-job.js — extractConceptsFromTutorial +
+//     kg-merge-on-write).
+//   - Mark the row DONE, PENDING (retry), or FAILED (max attempts).
+//
+// Registered by srv/jobs/scheduler.js at '1-59/2 * * * *' (every 2 min,
+// odd minute, off-schedule vs. other KG jobs).
+//
+// Chassis: the scheduler's registerJob wrapper handles pipeline logging
+// + JobLastRun. This function MUST NOT call runWithLock itself.
+// CAP 10's .as(name) singleton semantics prevent concurrent scheduled
+// ticks across CF instances.
+//
+// Dependency injection: tests pass mocked embed/rankTutorials/extractOne
+// so no LLM calls happen in unit tests.
+//
+// Spec: docs/superpowers/specs/2026-07-05-948-kg-ondemand-triggers-design.md
+// Issue: #948
+
+import cds from '@sap/cds';
+import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
+import { rankTutorialsByQueryVector } from '../lib/kg/on-demand-cosine-rank.js';
+import { embed as defaultEmbed } from '../lib/embedding-client.js';
+import { extractConceptsFromTutorial } from '../lib/kg-extract.js';
+import { defaultCallModel } from '../lib/code-check-llm.js';
+import { loadConceptRegistry, resolveConceptCandidates } from '../lib/kg-merge-on-write.js';
+import * as metrics from '../lib/metrics.js';
+
+const NS = 'com.sap.developers.ims';
+const LOG = cds.log('kg-ondemand-job');
+
+function envNumber(name, dflt) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return dflt;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : dflt;
+}
+
+/**
+ * Default per-tutorial extract wrapper — mirrors extract-concepts-job.js
+ * lines 171-215. Kept in this file so unit tests can inject a mock via
+ * deps.extractOne without touching the real LLM stack.
+ */
+async function defaultExtractOne({ db, tutorial, callModel, embed, registry }) {
+  const { Tutorials, TutorialBodyText } = cds.entities(NS);
+  const [bodyRow] = await SELECT.from(TutorialBodyText)
+    .columns('bodyText')
+    .where({ slug: tutorial.slug });
+  const tutorialBody = bodyRow?.bodyText ?? '';
+  if (!tutorialBody) return null;
+
+  return await extractConceptsFromTutorial({
+    tutorialSlug: tutorial.slug,
+    tutorialTitle: tutorial.title,
+    tutorialBody,
+    registry,
+    callModel,
+  });
+}
+
+/**
+ * Default persister — mirrors extract-concepts-job.js' merge-on-write +
+ * link-write path but focused on a single tutorial. Returns
+ * { created, merged } counters.
+ */
+async function defaultPersistExtraction({ db, tutorial, extraction, registryBySlug, registryEmbeddings, embed, embeddingModel, mergeThreshold }) {
+  const { Concepts, TutorialConceptLinks } = cds.entities(NS);
+  const candidateResolution = await resolveConceptCandidates({
+    candidates: extraction.teaches ?? [],
+    registry: { bySlug: registryBySlug, embeddings: registryEmbeddings },
+    embed,
+    embeddingModel,
+    mergeThreshold,
+    log: { warn: (m) => LOG.warn(m), info: () => {} },
+  });
+
+  await db.tx(async (tx) => {
+    if (candidateResolution.pendingMints.length > 0) {
+      await tx.run(INSERT.into(Concepts).entries(
+        candidateResolution.pendingMints.map(m => ({
+          ID: m.ID, slug: m.slug, name: m.name,
+          embedding: m.embeddingBuf, status: 'ACTIVE',
+        }))
+      ));
+    }
+    const linkRows = candidateResolution.resolved.map(r => ({
+      tutorial_ID: tutorial.tutorialId ?? tutorial.ID,
+      concept_ID: r.conceptId,
+      predicate: 'teaches',
+      confidence: r.confidence,
+    }));
+    if (linkRows.length > 0) {
+      await tx.run(INSERT.into(TutorialConceptLinks).entries(linkRows));
+    }
+  });
+
+  return {
+    created: candidateResolution.pendingMints.length,
+    merged: candidateResolution.counters.merged,
+  };
+}
+
+/**
+ * Drain up to DRAIN_BATCH PENDING rows.
+ * @param {object} [deps] — dependency injection for tests
+ * @returns {Promise<object>} summary
+ */
+export async function runOnDemandDrain(deps = {}) {
+  const db = deps.db ?? (await cds.connect.to('db'));
+  const embed = deps.embed ?? defaultEmbed;
+  const callModel = deps.callModel ?? defaultCallModel;
+  const rankTutorials = deps.rankTutorials ?? rankTutorialsByQueryVector;
+  const extractOne = deps.extractOne ?? defaultExtractOne;
+  const persistExtraction = deps.persistExtraction ?? defaultPersistExtraction;
+
+  const t0 = Date.now();
+  const settings = await resolveKnowledgeGraphSettings();
+  if (!settings.enabled) return { reason: 'kg-disabled', processed: 0, extracted: 0, failed: 0, coalesced: 0, durationMs: Date.now() - t0 };
+  if (!settings.onDemandExtractionEnabled) return { reason: 'ondemand-disabled', processed: 0, extracted: 0, failed: 0, coalesced: 0, durationMs: Date.now() - t0 };
+
+  const DRAIN_BATCH = envNumber('KG_ONDEMAND_DRAIN_BATCH', 3);
+  const TUTORIALS_PER_REQ = envNumber('KG_ONDEMAND_TUTORIALS_PER_REQ', 5);
+  const MAX_ATTEMPTS = envNumber('KG_ONDEMAND_MAX_ATTEMPTS', 3);
+  const MERGE_THRESHOLD = Number(settings.mergeSimThresholdExtract);
+  const embeddingModel = process.env.KG_EMBED_MODEL ?? 'text-embedding-3-small';
+
+  const { KgOnDemandRequests } = cds.entities(NS);
+
+  const rows = await SELECT.from(KgOnDemandRequests)
+    .columns('ID', 'query', 'attempts')
+    .where({ status: 'PENDING' })
+    .orderBy('requestedAt asc')
+    .limit(DRAIN_BATCH);
+
+  if (rows.length === 0) {
+    return { processed: 0, extracted: 0, failed: 0, coalesced: 0, durationMs: Date.now() - t0 };
+  }
+
+  // Load concept registry once per drain tick (same pattern as extract-concepts-job).
+  const { bySlug: registryBySlug, embeddings: registryEmbeddings } = await loadConceptRegistry(db);
+
+  let processed = 0, extracted = 0, failed = 0;
+
+  for (const row of rows) {
+    const rowT0 = Date.now();
+    // Move to RUNNING + increment attempts.
+    await UPDATE(KgOnDemandRequests)
+      .set({ status: 'RUNNING', startedAt: new Date().toISOString(), attempts: row.attempts + 1 })
+      .where({ ID: row.ID });
+
+    try {
+      const queryVector = await embed(row.query);
+      const topK = await rankTutorials({ db, queryVector, limit: TUTORIALS_PER_REQ });
+
+      let localExtracted = 0, localCreated = 0, localMerged = 0;
+      let promptTok = 0, complTok = 0;
+
+      for (const t of topK) {
+        const extraction = await extractOne({
+          db,
+          tutorial: { tutorialId: t.tutorialId, slug: t.slug, title: t.title },
+          callModel,
+          embed,
+          registry: { bySlug: registryBySlug, embeddings: registryEmbeddings },
+        });
+        if (!extraction) continue;
+        promptTok += extraction.tokenUsage?.prompt ?? 0;
+        complTok  += extraction.tokenUsage?.completion ?? 0;
+        const persisted = await persistExtraction({
+          db,
+          tutorial: { tutorialId: t.tutorialId, ID: t.tutorialId, slug: t.slug },
+          extraction,
+          registryBySlug,
+          registryEmbeddings,
+          embed,
+          embeddingModel,
+          mergeThreshold: MERGE_THRESHOLD,
+        });
+        localExtracted++;
+        localCreated += persisted.created;
+        localMerged  += persisted.merged;
+      }
+
+      await UPDATE(KgOnDemandRequests)
+        .set({
+          status: 'DONE',
+          completedAt: new Date().toISOString(),
+          latencyMs: Date.now() - rowT0,
+          tutorialsExtracted: localExtracted,
+          conceptsCreated: localCreated,
+          conceptsMerged: localMerged,
+          llmPromptTokens: promptTok,
+          llmCompletionTokens: complTok,
+        })
+        .where({ ID: row.ID });
+
+      processed++;
+      extracted += localExtracted;
+      metrics.emit?.('kg_ondemand_extracted', { tutorials: localExtracted, created: localCreated, merged: localMerged });
+    } catch (err) {
+      const msg = (err?.message ?? String(err)).slice(0, 500);
+      LOG.warn(`kg-ondemand row ${row.ID} failed: ${msg}`);
+      const nextAttempts = row.attempts + 1;
+      if (nextAttempts >= MAX_ATTEMPTS) {
+        await UPDATE(KgOnDemandRequests)
+          .set({ status: 'FAILED', lastError: msg, completedAt: new Date().toISOString() })
+          .where({ ID: row.ID });
+        failed++;
+        metrics.emit?.('kg_ondemand_failures', { reason: 'max_attempts' });
+      } else {
+        await UPDATE(KgOnDemandRequests)
+          .set({ status: 'PENDING', lastError: msg })
+          .where({ ID: row.ID });
+      }
+    }
+  }
+
+  const durationMs = Date.now() - t0;
+  metrics.emit?.('kg_ondemand_drain_tick', { processed, extracted, failed, durationMs });
+  return { processed, extracted, failed, coalesced: 0, durationMs };
+}
+```
+
+- [ ] **Step 8: Re-run the drain test**
+
+Run: `npx vitest run test/kg-ondemand-job.test.js`
+Expected: PASS on all 6 cases.
+
+#### Sub-part 4c: Register the job
+
+- [ ] **Step 9: Register in `srv/jobs/scheduler.js`**
+
+Locate the KG-jobs block (grep for `kg-pagerank`, `kg-communities`, `kg-wcc`). Add the import near the other KG imports:
+
+```javascript
+import { runOnDemandDrain } from './kg-ondemand-job.js';
+```
+
+Add the registration inside `registerJobs()` alongside the other KG jobs:
+
+```javascript
+// #948: on-demand KG extraction drain. Every 2 minutes on odd minutes,
+// off-schedule vs. daily kg-pagerank (:53), kg-communities (:57), kg-wcc
+// (04:07), and the daily extractConcepts tick (02:13). Fail-open on every
+// fault path; skips entirely when KnowledgeGraphSettings.onDemandExtraction-
+// Enabled is false (default).
+registerJob({
+  jobName: 'kg-ondemand',
+  schedule: '1-59/2 * * * *',
+  ttlMs: 2 * 60 * 1000,   // matches cadence; chassis uses this only for the registerJob log
+  description: 'On-demand knowledge-graph extraction drain (#948)',
+  fn: runOnDemandDrain,
+});
+```
+
+- [ ] **Step 10: Verify srv-qa cp list**
+
+The `.deploy/mta.yaml` `srv-qa` module has a `cp` list of files copied for the QA channel. The drain job's transitive imports must all be in that list. Run:
+
+```bash
+grep -E "cp:|- (\./)?srv/" .deploy/mta.yaml | head -80
+```
+
+Confirm the following are already listed (they are — they come with the existing extract-concepts-job dependency chain):
+- `srv/lib/kg/on-demand-enqueue.js` (NEW — add explicitly if the mta.yaml enumerates individual kg/ files; otherwise it's covered by a wildcard)
+- `srv/lib/kg/on-demand-cosine-rank.js` (NEW — same)
+- `srv/jobs/kg-ondemand-job.js` (NEW — same)
+
+If mta.yaml lists individual files, add these three; if it uses a wildcard for `srv/lib/kg/` and `srv/jobs/`, no edit is needed. Document the discovery in the commit message.
+
+- [ ] **Step 11: Correct the design spec inline**
+
+Edit `docs/superpowers/specs/2026-07-05-948-kg-ondemand-triggers-design.md`. Find the sentence "`runWithLock('kg-ondemand', instanceId, LOCK_MS = 5 * 60 * 1000, drainImpl)`". Replace the drain-job pseudocode block with:
+
+```
+runOnDemandDrain(deps = {}):
+  1. Load kgSettings.
+     If !enabled: return { reason: 'kg-disabled', ...zeroSummary }.
+     If !onDemandExtractionEnabled: return { reason: 'ondemand-disabled', ...zeroSummary }.
+  2. (Chassis handles pipeline logging and JobLastRun automatically. CAP 10's
+     .as(name) singleton semantics prevent concurrent scheduled ticks across
+     CF instances — the drain body itself does NOT call runWithLock.)
+       a. SELECT ID, query, attempts FROM KgOnDemandRequests
+          WHERE status = 'PENDING'
+          ORDER BY requestedAt ASC
+          LIMIT :DRAIN_BATCH.
+       (rest unchanged)
+```
+
+Also remove the "runWithLock" bullet from Section 4 (error handling table row "Drain: instance already holds lock") — that row was written assuming an explicit lock inside the body. Replace with:
+
+```
+| Drain: chassis pipeline log write fails | Non-fatal; caught by scheduler.js `runWithLock` wrapper — logged as JobLastRun error, tick treated as failed. Next 2-min tick tries. |
+```
+
+- [ ] **Step 12: Full regression**
+
+Run: `npm test`
+Expected: green.
+
+- [ ] **Step 13: Commit**
+
+```
+git add srv/lib/kg/on-demand-cosine-rank.js srv/jobs/kg-ondemand-job.js srv/jobs/scheduler.js test/kg-ondemand-cosine-rank.test.js test/kg-ondemand-job.test.js docs/superpowers/specs/2026-07-05-948-kg-ondemand-triggers-design.md
+git commit -m "feat(#948): cosine ranker + on-demand drain job
+
+- rankTutorialsByQueryVector: two-phase LOB-safe MAX(cosine) over
+  TutorialEmbedding steps, ACTIVE-gated, decoded in Node.js.
+- runOnDemandDrain: per-row RUNNING/DONE/PENDING/FAILED state machine,
+  dependency-injected embed/rank/extractOne/persistExtraction so unit
+  tests never touch the LLM stack.
+- Registered at '1-59/2 * * * *' (odd minute cadence, off-schedule vs.
+  daily KG jobs).
+- Chassis handles pipeline logging + JobLastRun; drain body does NOT
+  call runWithLock (CAP 10 .as() singleton semantics).
+- Spec self-correction: stale runWithLock language removed from
+  §Section 1 pseudocode + §Section 4 error table."
+```
+
 
