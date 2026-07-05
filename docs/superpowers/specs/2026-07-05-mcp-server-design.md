@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-05
 **Author:** Tom (via superpowers:brainstorming)
-**Status:** Draft — awaiting user review
+**Status:** Approved — corrections applied 2026-07-05 after codebase recon during plan-writing
 **Related:** issue [#912](https://github.com/sap-tutorials/tutorials-ims/issues/912); CAP 10 [MCP Protocol Adapter release notes](https://cap.cloud.sap/docs/releases/2026/jun26#new-mcp-protocol-adapter)
 
 ## Summary
@@ -46,15 +46,16 @@ tutorials-srv (CAP Node.js)
    @cap-js/ai plugin registers 'mcp' protocol
    ├── @mcp on SearchService          → describe/query/call_action
    ├── @mcp on HomepageService        → describe/query/call_action
-   ├── @mcp on KnowledgeGraphService  → describe/query/call_action
-   └── @mcp on DeveloperService       → describe/query/call_action
-       (public reads only — Tutorials, Missions, Events)
+   └── @mcp on KnowledgeGraphService  → describe/query/call_action
+       (DeveloperService is authenticated-user per-entity, so it does not
+        carry @mcp in Phase 1 — its curated tools live on SearchService)
         │
-        ├── srv/search-service.js      (search_tutorials, list_missions, get_mission)
-        ├── srv/developer-service.js   (get_tutorial)
+        ├── srv/search-service.js      (search_tutorials, list_missions, get_mission, get_tutorial)
         ├── srv/homepage-service.js    (get_recent_news, get_recent_videos)
         └── srv/knowledge-graph-service.js (kg_prerequisites, kg_what_to_learn_next)
         │
+        │  get_tutorial delegates to srv/lib/content-store.js → HANA BLOBs
+        │  (same code path OData /content/tutorials/:slug uses today)
         ▼
 HANA Cloud (existing schema, no new tables in Phase 1)
 ```
@@ -69,29 +70,32 @@ Key architectural properties:
 
 ### Auto-exposed via `@mcp` annotation
 
-Four services × three tools = 12 free tools:
+Three services × three tools = 9 free tools:
 
 | Service | Auto-tools LLM gets |
 |---|---|
-| `SearchService` | `describe`, `query` (`Tutorials`, `Missions`, facets), `call_action` (`searchFuzzy`) |
-| `HomepageService` | `describe`, `query` (shelves, events, videos), `call_action` (`getHomepageData`, `getRecentNews`, `getRecentVideos`) |
-| `KnowledgeGraphService` | `describe`, `query` (`PublishedConcepts`), `call_action` (`neighborhood`, `prerequisitesOf`, `whatToLearnNext`, `sharedConcepts`) |
-| `DeveloperService` (public subset) | `describe`, `query` (`Tutorials`, `Missions`, `Events`, advocates, tags — restricted to unauth-visible projections) |
+| `SearchService` | `describe`, `query` (`SearchableItems`, `Tags`), `call_action` (`getFacets`) |
+| `HomepageService` | `describe`, `query` (`HomepageShelves`), `call_action` (`events`, `videos`, `news`, `communityBlogs`, `shelves`, `tutorialCards`) |
+| `KnowledgeGraphService` | `describe`, `query` (`Concepts` read-only, `ConceptEdges`, `TutorialConceptLinks`, `PublishedConcepts`), `call_action` (`neighborhood`, `neighborhoodFull`) |
+
+`DeveloperService` does **not** carry `@mcp` in Phase 1 — its meaningful reads (`Tutorials`, `Missions`, `Events`, `TaskRecords`) are all `@requires: 'authenticated-user'`. Exposing it via `@mcp` in the anonymous namespace would either 401 every call or require re-annotation we're deferring to Phase 2.
 
 ### Hand-authored curated tools
 
-Eight tools declared as CDS `function`s on the appropriate service; each backed by the existing handler logic:
+Eight tools declared as CDS `function`s on the appropriate service; each backed by the existing handler logic. **Tutorial-content reads route through `srv/lib/content-store.js`**, the same helper that serves `/content/tutorials/:slug` today — anonymous by design.
 
 | Tool | Service | Purpose | sap-devs replacement |
 |---|---|---|---|
 | `search_tutorials(query, tags?, experience?, limit?)` | Search | Fuzzy full-text search; returns slug + title + snippet + tags | Yes — `search_tutorials` |
-| `get_tutorial(slug, step?)` | Developer | Metadata + rendered HTML for one step. When `step` is omitted, returns metadata + step list only (no full body — LLM must ask for a specific step to get HTML, keeping responses bounded). | Yes — `get_tutorial_step` |
-| `list_missions(tags?, limit?)` | Search | Ordered mission list with tutorial counts | New |
-| `get_mission(slug)` | Developer | Mission metadata + ordered tutorial slugs | New |
-| `get_recent_news(limit?)` | Homepage | Homepage news shelf | Yes — `get_recent_news` |
-| `get_recent_videos(limit?)` | Homepage | Homepage video shelf | Yes — recency slice of `search_videos` |
-| `kg_prerequisites(tutorial_slug, depth?)` | Knowledge Graph | "What should I know before X?" | New — differentiator |
-| `kg_what_to_learn_next(tutorial_slug, limit?)` | Knowledge Graph | "What comes after X?" — PageRank-blended (#916) | New — differentiator |
+| `get_tutorial(slug, step?)` | Search | Metadata + rendered HTML for one step. Fetches via `content-store.serveHandler` internals (no auth needed — same path as `/content/tutorials/:slug`). When `step` is omitted, returns metadata + step list only (no full body — LLM must ask for a specific step to get HTML, keeping responses bounded). | Yes — `get_tutorial_step` |
+| `list_missions(tags?, limit?)` | Search | Ordered mission list with tutorial counts, queried directly from the `ims.Missions` DB entity | New |
+| `get_mission(slug)` | Search | Mission metadata + ordered tutorial slugs, from `ims.Missions` + `ims.CompletionPaths` | New |
+| `get_recent_news(limit?)` | Homepage | Thin wrapper around existing `news()` function with `limit` slicing | Yes — `get_recent_news` |
+| `get_recent_videos(limit?)` | Homepage | Thin wrapper around existing `videos()` function; flattens `featured + recent` | Yes — recency slice of `search_videos` |
+| `kg_prerequisites(tutorial_slug, depth?)` | Knowledge Graph | Calls existing `neighborhood(slug)` and slices the `prerequisitesOf` arm | New — differentiator |
+| `kg_what_to_learn_next(tutorial_slug, limit?)` | Knowledge Graph | Calls existing `neighborhood(slug)` and slices the `whatToLearnNext` arm — PageRank-blended (#916) | New — differentiator |
+
+Note: `list_missions` / `get_mission` live on **`SearchService`** because it's the anonymous entry point. They read the same `ims.Missions` table `AdminService.Missions` exposes; the anonymous read is safe because published missions are already public content on the site.
 
 **Deliberate omissions in Phase 1:**
 
@@ -111,7 +115,7 @@ CAP 10's adapter serves **Streamable HTTP** (MCP 2025-06 wire format) with SSE f
 
 ### Phase 1 auth: none
 
-The approuter route for `/mcp/*` sets `authenticationType: none`, mirroring `/homepage/*`. All four backing services already carry `@requires: 'any'`.
+The approuter route for `/mcp/*` sets `authenticationType: none`, mirroring `/homepage/*`. All three backing services (`SearchService`, `HomepageService`, `KnowledgeGraphService`) already carry `@requires: 'any'`.
 
 Explicit rules:
 
@@ -141,11 +145,7 @@ Placed alongside existing `@path` and `@requires`. The adapter picks up:
 
 ### `@cap-js/ai` install and configuration
 
-```bash
-npm add @cap-js/ai
-```
-
-Adds one dependency; the plugin's `cds-plugin.js` auto-registers the `mcp` protocol. Auto-mounts under `/mcp/<ServiceName>` unless overridden.
+`@cap-js/ai@^1.0.1` **is already installed** for issue #959 (Fiori `@Common.ValueList` recommendations). No dependency change needed. The plugin's `cds-plugin.js` auto-registers the `mcp` protocol as soon as any service carries `@mcp`.
 
 Add to `package.json`:
 
@@ -237,7 +237,7 @@ Approuter route `/mcp/*` shares the anonymous-IP throttle used by `/homepage/*` 
 
 Three layers, all reusing existing rigs. No new frameworks.
 
-**Layer 1 — Unit (`npm test`, in-memory SQLite).** One unit test file per service (`test/unit/mcp-search-tools.test.js`, `test/unit/mcp-developer-tools.test.js`, `test/unit/mcp-homepage-tools.test.js`, `test/unit/mcp-kg-tools.test.js`). Each test invokes the CAP function directly (e.g. `cds.services.SearchService.search_tutorials(...)`) — verifies shape and business logic. No MCP wire traffic.
+**Layer 1 — Unit (`npm test`, in-memory SQLite).** One unit test file per service (`test/unit/mcp-search-tools.test.js`, `test/unit/mcp-homepage-tools.test.js`, `test/unit/mcp-kg-tools.test.js`). Each test invokes the CAP function directly (e.g. `cds.services.SearchService.search_tutorials(...)`) — verifies shape and business logic. No MCP wire traffic.
 
 **Layer 2 — Protocol contract (`test/unit/mcp-contract.test.js`, in-memory).** Boots CAP with `@cap-js/ai` loaded. Sends raw `initialize` + `tools/list` over HTTP. Asserts every Phase 1 tool is enumerated, has a non-empty description, has a valid JSON-schema `input_schema`. Failing this test blocks PR merge — catches missing doc-comments, wrong CDS types, silent adapter version drift. No MCP client SDK dependency; the wire format is straightforward JSON-RPC over HTTP.
 
