@@ -377,4 +377,373 @@ git commit -m "feat(#948): KG settings resolver picks up onDemandExtractionEnabl
   boolean as 0/1; ?? does not fall through 0)."
 ```
 
+---
+
+### Task 3: Enqueue module (`srv/lib/kg/on-demand-enqueue.js`)
+
+**Files:**
+- Create: `srv/lib/kg/on-demand-enqueue.js`
+- Test: `test/kg-ondemand-enqueue.test.js`
+
+**Interfaces:**
+- Consumes: `resolveKnowledgeGraphSettings()` (Task 2), `KgOnDemandRequests` entity (Task 1), `checkRateLimit(key, limit, windowMs)` from `srv/lib/per-user-rate-limit.js`, `emit(name, payload)` from `srv/lib/metrics.js`
+- Produces:
+  - `normalizeQuery(rawQuery: string) → string` (exported for tests only)
+  - `enqueueOnDemandExtraction({ db, query, requester }) → Promise<{ status: 'enqueued'|'coalesced'|'rate_limited'|'disabled'|'invalid', normalizedKey?, reason? }>`
+    - `requester` shape: `{ id?: string, ipHash?: string, kind: 'user'|'anon' }` — id is optional; kind is required
+    - Return value is used by unit tests and by the tool handler's telemetry hook. Never thrown; never null.
+  - Env-var knobs (all optional): `KG_ONDEMAND_USER_MAX_PER_HOUR` (default 3), `KG_ONDEMAND_GLOBAL_MAX_PER_HOUR` (default 20)
+
+- [ ] **Step 1: Write the failing enqueue test suite**
+
+Create `test/kg-ondemand-enqueue.test.js`:
+
+```javascript
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import cds from '@sap/cds';
+import { enqueueOnDemandExtraction, normalizeQuery } from '../srv/lib/kg/on-demand-enqueue.js';
+import { _resetForTests as _resetRateLimits } from '../srv/lib/per-user-rate-limit.js';
+import { _resetCacheForTests as _resetSettingsCache } from '../srv/lib/runtime-config/kg-settings.js';
+
+const NS = 'com.sap.developers.ims';
+
+async function enableFlag(on) {
+  const { KnowledgeGraphSettings } = cds.entities(NS);
+  await DELETE.from(KnowledgeGraphSettings);
+  await INSERT.into(KnowledgeGraphSettings).entries({ enabled: true, onDemandExtractionEnabled: on });
+  _resetSettingsCache();
+}
+
+describe('normalizeQuery', () => {
+  it('lowercases, collapses whitespace, strips punctuation', () => {
+    expect(normalizeQuery('CAP  Tutorial!')).toBe('cap tutorial');
+    expect(normalizeQuery('  hello,  WORLD?? ')).toBe('hello world');
+    expect(normalizeQuery('foo___bar')).toBe('foo___bar'); // underscores preserved (\w)
+  });
+
+  it('returns empty for pure punctuation input', () => {
+    expect(normalizeQuery('!!!')).toBe('');
+    expect(normalizeQuery('   ')).toBe('');
+  });
+});
+
+describe('enqueueOnDemandExtraction (#948)', () => {
+  let db;
+
+  beforeAll(async () => {
+    await cds.deploy(cds.env.roots).to('sqlite::memory:');
+    db = await cds.connect.to('db');
+  });
+
+  beforeEach(async () => {
+    const { KgOnDemandRequests } = cds.entities(NS);
+    await DELETE.from(KgOnDemandRequests);
+    _resetRateLimits();
+    delete process.env.KG_ONDEMAND_USER_MAX_PER_HOUR;
+    delete process.env.KG_ONDEMAND_GLOBAL_MAX_PER_HOUR;
+  });
+
+  it('returns disabled and does NOT insert when flag is off', async () => {
+    await enableFlag(false);
+    const r = await enqueueOnDemandExtraction({
+      db, query: 'test query',
+      requester: { id: 'u1', kind: 'user' },
+    });
+    expect(r.status).toBe('disabled');
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const rows = await SELECT.from(KgOnDemandRequests);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('inserts a PENDING row when flag is on and budget is available', async () => {
+    await enableFlag(true);
+    const r = await enqueueOnDemandExtraction({
+      db, query: 'CAP tutorial',
+      requester: { id: 'u1', kind: 'user' },
+    });
+    expect(r.status).toBe('enqueued');
+    expect(r.normalizedKey).toBe('cap tutorial');
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const [row] = await SELECT.from(KgOnDemandRequests).columns('status', 'query', 'normalizedKey', 'requestedBy', 'requestedByKind');
+    expect(row.status).toBe('PENDING');
+    expect(row.query).toBe('CAP tutorial');
+    expect(row.normalizedKey).toBe('cap tutorial');
+    expect(row.requestedBy).toBe('u1');
+    expect(row.requestedByKind).toBe('user');
+  });
+
+  it('returns invalid for empty normalized query', async () => {
+    await enableFlag(true);
+    const r = await enqueueOnDemandExtraction({
+      db, query: '!!!',
+      requester: { id: 'u1', kind: 'user' },
+    });
+    expect(r.status).toBe('invalid');
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const rows = await SELECT.from(KgOnDemandRequests);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('coalesces near-duplicate queries under the same normalizedKey', async () => {
+    await enableFlag(true);
+    const r1 = await enqueueOnDemandExtraction({
+      db, query: 'CAP tutorial',
+      requester: { id: 'u1', kind: 'user' },
+    });
+    expect(r1.status).toBe('enqueued');
+
+    const r2 = await enqueueOnDemandExtraction({
+      db, query: 'cap  tutorial!',
+      requester: { id: 'u2', kind: 'user' },
+    });
+    expect(r2.status).toBe('coalesced');
+
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const rows = await SELECT.from(KgOnDemandRequests);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('per-user cap: rejects the 4th enqueue in the same window', async () => {
+    await enableFlag(true);
+    process.env.KG_ONDEMAND_USER_MAX_PER_HOUR = '3';
+    for (let i = 0; i < 3; i++) {
+      const r = await enqueueOnDemandExtraction({
+        db, query: `distinct query ${i}`,
+        requester: { id: 'u1', kind: 'user' },
+      });
+      expect(r.status).toBe('enqueued');
+    }
+    const r4 = await enqueueOnDemandExtraction({
+      db, query: 'distinct query 3',
+      requester: { id: 'u1', kind: 'user' },
+    });
+    expect(r4.status).toBe('rate_limited');
+    expect(r4.reason).toBe('user');
+  });
+
+  it('global cap: rejects the 21st enqueue across distinct users', async () => {
+    await enableFlag(true);
+    process.env.KG_ONDEMAND_USER_MAX_PER_HOUR = '99';
+    process.env.KG_ONDEMAND_GLOBAL_MAX_PER_HOUR = '20';
+    for (let i = 0; i < 20; i++) {
+      const r = await enqueueOnDemandExtraction({
+        db, query: `distinct query ${i}`,
+        requester: { id: `u${i}`, kind: 'user' },
+      });
+      expect(r.status).toBe('enqueued');
+    }
+    const r21 = await enqueueOnDemandExtraction({
+      db, query: 'one more',
+      requester: { id: 'u99', kind: 'user' },
+    });
+    expect(r21.status).toBe('rate_limited');
+    expect(r21.reason).toBe('global');
+  });
+
+  it('anonymous requesters share the anon user-bucket', async () => {
+    await enableFlag(true);
+    process.env.KG_ONDEMAND_USER_MAX_PER_HOUR = '2';
+    for (let i = 0; i < 2; i++) {
+      const r = await enqueueOnDemandExtraction({
+        db, query: `q${i}`,
+        requester: { ipHash: `ip${i}`, kind: 'anon' },
+      });
+      expect(r.status).toBe('enqueued');
+    }
+    const r3 = await enqueueOnDemandExtraction({
+      db, query: 'q2',
+      requester: { ipHash: 'ipZ', kind: 'anon' },
+    });
+    expect(r3.status).toBe('rate_limited');
+    expect(r3.reason).toBe('user'); // 'user' bucket is the per-key bucket, keyed on 'anon' for anonymous
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npx vitest run test/kg-ondemand-enqueue.test.js`
+Expected: FAIL — module does not exist.
+
+- [ ] **Step 3: Implement the enqueue module**
+
+Create `srv/lib/kg/on-demand-enqueue.js`:
+
+```javascript
+// srv/lib/kg/on-demand-enqueue.js
+//
+// Enqueue an on-demand KG extraction request when expandSearchConcepts
+// returns zero seeds. Pure enqueue logic — no LLM calls, no cron
+// dependencies, no wait for the drain. Fire-and-forget from the tool.
+//
+// Coalescing: INSERT ... WHERE NOT EXISTS on normalizedKey ensures at most
+// one PENDING/RUNNING row per key. Portable across SQLite (tests) and HANA
+// (production). Defense-in-depth on HANA via KG_ONDEMAND_PENDING_UNIQUE
+// filtered unique index.
+//
+// Rate limiting: per-user + global sliding windows via checkRateLimit
+// from per-user-rate-limit.js. In-memory, per-process. Multi-instance
+// rollout will need a HANA counter table — documented deferred in the
+// design spec §2 (env-defaults table).
+//
+// Fail-open: every early-exit returns a status object; nothing throws.
+// The tool handler .catch()es residual DB errors and still returns success
+// to the LLM.
+//
+// Spec: docs/superpowers/specs/2026-07-05-948-kg-ondemand-triggers-design.md
+// Issue: #948
+
+import cds from '@sap/cds';
+import { randomUUID } from 'node:crypto';
+import { checkRateLimit } from '../per-user-rate-limit.js';
+import { resolveKnowledgeGraphSettings } from '../runtime-config/kg-settings.js';
+import * as metrics from '../metrics.js';
+
+const NS = 'com.sap.developers.ims';
+const LOG = cds.log('kg-ondemand-enqueue');
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Normalize a raw query to a coalescing key.
+ * - Lowercase.
+ * - Collapse whitespace runs to a single space.
+ * - Strip everything that's neither a word-char (\w) nor whitespace.
+ * - Trim.
+ * @param {string} rawQuery
+ * @returns {string}
+ */
+export function normalizeQuery(rawQuery) {
+  if (typeof rawQuery !== 'string') return '';
+  return rawQuery
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function envNumber(name, dflt) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return dflt;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : dflt;
+}
+
+/**
+ * Enqueue an on-demand KG extraction request.
+ * Never throws. Fire-and-forget from the tool's zero-seed branch.
+ *
+ * @param {object} opts
+ * @param {object} opts.db         cds.connect.to('db') handle
+ * @param {string} opts.query      Raw query string (already truncated by the tool's HARD_QUERY_LIMIT)
+ * @param {object} opts.requester  { id?, ipHash?, kind: 'user'|'anon' }
+ * @returns {Promise<{ status: 'enqueued'|'coalesced'|'rate_limited'|'disabled'|'invalid', normalizedKey?: string, reason?: string }>}
+ */
+export async function enqueueOnDemandExtraction({ db, query, requester }) {
+  // Backward-compat: threading requester is optional at the call site.
+  const req = requester ?? { kind: 'anon' };
+
+  // (1) Flag check.
+  const settings = await resolveKnowledgeGraphSettings();
+  if (!settings.enabled || !settings.onDemandExtractionEnabled) {
+    return { status: 'disabled' };
+  }
+
+  // (2) Normalize.
+  const normalizedKey = normalizeQuery(query);
+  if (!normalizedKey) {
+    return { status: 'invalid' };
+  }
+
+  // (3) Per-user budget. Anonymous requesters all share the 'anon' bucket key.
+  const userLimit = envNumber('KG_ONDEMAND_USER_MAX_PER_HOUR', 3);
+  const userBucketKey = `kgondemand:user:${req.kind === 'user' ? (req.id ?? 'unknown') : 'anon'}`;
+  if (!checkRateLimit(userBucketKey, userLimit, HOUR_MS)) {
+    metrics.emit?.('kg_ondemand_rate_limited', { reason: 'user' });
+    return { status: 'rate_limited', reason: 'user' };
+  }
+
+  // (4) Global budget.
+  const globalLimit = envNumber('KG_ONDEMAND_GLOBAL_MAX_PER_HOUR', 20);
+  if (!checkRateLimit('kgondemand:global', globalLimit, HOUR_MS)) {
+    metrics.emit?.('kg_ondemand_rate_limited', { reason: 'global' });
+    return { status: 'rate_limited', reason: 'global' };
+  }
+
+  // (5) INSERT ... WHERE NOT EXISTS (portable coalescing gate).
+  //
+  // CDS QL cannot express INSERT ... WHERE NOT EXISTS directly, so we use
+  // a two-step check-then-insert with the check inside a small tx. The
+  // filtered unique index on HANA is the belt-and-braces backstop for the
+  // TOCTOU race between the two statements — on the (extremely rare) race,
+  // the INSERT fails with a unique-constraint violation which we catch as
+  // a coalesce.
+  const { KgOnDemandRequests } = cds.entities(NS);
+  try {
+    return await db.tx(async (tx) => {
+      const [existing] = await tx.run(
+        SELECT.from(KgOnDemandRequests).columns('ID').where({
+          normalizedKey,
+          status: { in: ['PENDING', 'RUNNING'] },
+        }).limit(1)
+      );
+      if (existing) {
+        metrics.emit?.('kg_ondemand_dedup_coalesced', { normalizedKey });
+        return { status: 'coalesced', normalizedKey };
+      }
+      await tx.run(
+        INSERT.into(KgOnDemandRequests).entries({
+          ID: randomUUID(),
+          query,
+          normalizedKey,
+          requestedBy: req.kind === 'user' ? (req.id ?? null) : (req.ipHash ?? null),
+          requestedByKind: req.kind,
+        })
+      );
+      metrics.emit?.('kg_ondemand_enqueued', {
+        normalizedKey,
+        requesterKind: req.kind,
+      });
+      return { status: 'enqueued', normalizedKey };
+    });
+  } catch (err) {
+    // Unique-constraint race → treat as coalesced. Any other DB error →
+    // swallow, emit metric, return status so the tool never sees a throw.
+    const msg = err?.message ?? String(err);
+    if (/unique|duplicate|constraint/i.test(msg)) {
+      metrics.emit?.('kg_ondemand_dedup_coalesced', { normalizedKey, viaRace: true });
+      return { status: 'coalesced', normalizedKey };
+    }
+    LOG.warn(`enqueueOnDemandExtraction DB error, dropped: ${msg}`);
+    metrics.emit?.('kg_ondemand_enqueue_error', { message: msg.slice(0, 200) });
+    return { status: 'invalid', reason: 'db_error' };
+  }
+}
+```
+
+- [ ] **Step 4: Re-run the enqueue test**
+
+Run: `npx vitest run test/kg-ondemand-enqueue.test.js`
+Expected: PASS on all 8 cases.
+
+- [ ] **Step 5: Full unit test regression**
+
+Run: `npm test`
+Expected: green.
+
+- [ ] **Step 6: Commit**
+
+```
+git add srv/lib/kg/on-demand-enqueue.js test/kg-ondemand-enqueue.test.js
+git commit -m "feat(#948): on-demand extraction enqueue module
+
+- normalizeQuery: lowercase + collapse whitespace + strip punctuation.
+- enqueueOnDemandExtraction: flag check -> normalize -> per-user cap
+  (default 3/hr) -> global cap (default 20/hr) -> INSERT-WHERE-NOT-EXISTS.
+- Never throws; every early-exit returns a status object. The tool
+  handler .catch()es residual DB errors and still succeeds.
+- Coalescing via two-step check-then-insert inside a tx; unique-constraint
+  race caught as coalesce (belt-and-braces with the HANA filtered index).
+- Metrics: kg_ondemand_{enqueued, dedup_coalesced, rate_limited, enqueue_error}."
+```
+
 
