@@ -89,6 +89,14 @@ build-parameters:
         # copy here, before mbt packs the approuter module.
         - mkdir -p approuter/static/explore-ui
         - cp -r app/explore/dist/. approuter/static/explore-ui/
+        # Data Inspector UI (#999) — bundled inside @cap-js/data-inspector's
+        # node_modules. Rewrite the UI5 bootstrap CDN in index.html from
+        # sapui5.hana.ondemand.com (plugin default) to ui5.sap.com — the
+        # approuter's CSP script-src only allowlists ui5.sap.com.
+        - rm -rf approuter/static/data-inspector-ui
+        - mkdir -p approuter/static/data-inspector-ui
+        - cp -r node_modules/@cap-js/data-inspector/app/data-inspector-ui/webapp/. approuter/static/data-inspector-ui/
+        - sed -i 's|https://sapui5.hana.ondemand.com/|https://ui5.sap.com/|g' approuter/static/data-inspector-ui/index.html
         # Approuter and srv are separate CF apps in separate containers — the
         # approuter cannot `import('../srv/lib/...')` at runtime (no shared FS).
         # Mirror the shared resolver into approuter/lib/ at build time so the

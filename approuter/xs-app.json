@@ -88,6 +88,20 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/data-inspector-ui/(.*)$",
+      "target": "/data-inspector-ui/$1",
+      "localDir": "static",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin"
+    },
+    {
+      "source": "^/odata/v4/data-inspector/(.*)$",
+      "target": "/odata/v4/data-inspector/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin"
+    },
+    {
       "source": "^/login(\\?.*)?$",
       "authenticationType": "xsuaa",
       "target": "/login-redirect.html",
