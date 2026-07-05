@@ -24,6 +24,7 @@ beforeEach(async () => {
   delete process.env.KG_EXTRACT_BUILD_CAP;
   delete process.env.KG_MERGE_SIM_THRESHOLD;
   delete process.env.KG_MERGE_SIM_THRESHOLD_EXTRACT;
+  delete process.env.KG_ONDEMAND_ENABLED;
   _resetCacheForTests();
 });
 
@@ -35,6 +36,7 @@ describe('resolveKnowledgeGraphSettings (#463)', () => {
       extractBuildCap: 200,
       mergeSimThreshold: 0.92,
       mergeSimThresholdExtract: 0.85,
+      onDemandExtractionEnabled: false,
     });
   });
 
