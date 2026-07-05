@@ -15,7 +15,12 @@ type FacetResult {
 
 @path: '/search'
 @requires: 'any'
-@graphql
+// NB: MUST be `@protocol: ['odata', 'graphql']`, not the `@graphql` shortcut.
+// `@graphql` is a single-protocol shortcut that REPLACES the default OData
+// mount, leaving `/search/SearchableItems` 404 while GraphQL still resolves
+// via the srv/graphql-config.js filtered adapter. Regression cost: 218 unit
+// tests on 2026-07-05 (misattributed to HCQL and reverted in #1004).
+@protocol: ['odata', 'graphql']
 service SearchService {
 
   // Per-element fuzziness threshold: entity-level @Search.fuzzinessThreshold
