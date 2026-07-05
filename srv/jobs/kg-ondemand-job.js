@@ -264,7 +264,7 @@ export async function runOnDemandDrain(deps = {}) {
       const nextAttempts = currentAttempts + 1;
       if (nextAttempts >= MAX_ATTEMPTS) {
         await UPDATE(KgOnDemandRequests)
-          .set({ status: 'FAILED', lastError: msg, completedAt: new Date().toISOString() })
+          .set({ status: 'FAILED', lastError: msg, completedAt: new Date().toISOString(), latencyMs: Date.now() - rowT0 })
           .where({ ID: row.ID });
         failed++;
         metrics.emit?.('kg_ondemand_failures', { reason: 'max_attempts' });

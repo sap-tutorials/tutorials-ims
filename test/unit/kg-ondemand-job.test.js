@@ -206,4 +206,24 @@ describe('runOnDemandDrain (#948)', () => {
     expect(rows.filter(r => r.status === 'DONE')).toHaveLength(2);
     expect(rows.filter(r => r.status === 'PENDING')).toHaveLength(3);
   });
+
+  it('records latencyMs on FAILED path', async () => {
+    await setFlags();
+    process.env.KG_ONDEMAND_MAX_ATTEMPTS = '1';
+    await seedPending([{ query: 'q1' }]);
+
+    const embed = makeEmbedMock();
+    const rankTutorials = vi.fn(async () => [{ tutorialId: 'tid-1', slug: 't1', title: 'T1', score: 0.9 }]);
+    const extractOne = vi.fn(async () => { throw new Error('boom'); });
+
+    await runOnDemandDrain({
+      embed, rankTutorials, extractOne,
+      persistExtraction: vi.fn(async () => ({ created: 0, merged: 0 })),
+    });
+
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const [row] = await SELECT.from(KgOnDemandRequests).columns('status', 'latencyMs');
+    expect(row.status).toBe('FAILED');
+    expect(row.latencyMs).toBeGreaterThanOrEqual(0);
+  });
 });
