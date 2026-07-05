@@ -111,7 +111,9 @@ export default defineConfig({
           { text: 'Pilot runbook',     link: '/authors/pilot-runbook' }
         ]},
         { text: 'Operations', items: [
-          { text: 'Scheduling alerts', link: '/authors/operations/scheduling-alerts' }
+          { text: 'For-you row curator runbook',           link: '/authors/homepage-for-you-runbook' },
+          { text: 'Homepage personalization manual tests', link: '/authors/homepage-personalization-manual-tests' },
+          { text: 'Scheduling alerts',                      link: '/authors/operations/scheduling-alerts' }
         ]}
       ],
 
@@ -129,6 +131,7 @@ export default defineConfig({
           { text: 'Frontend apps',                    link: '/developers/architecture/frontend-apps' },
           { text: 'Homepage',                         link: '/developers/architecture/homepage' },
           { text: 'Homepage explainer popovers',      link: '/developers/architecture/homepage-explainers' },
+          { text: 'Homepage personalization',         link: '/developers/architecture/homepage-personalization' },
           { text: 'Joule chat',                       link: '/developers/architecture/joule' },
           { text: 'Joule aurora background',          link: '/developers/architecture/joule-aurora' },
           { text: '@PersonalData cascade',            link: '/developers/architecture/anonymization-cascade' },
