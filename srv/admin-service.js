@@ -34,6 +34,7 @@ import {
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
 import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
+import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -2514,6 +2515,22 @@ export default class AdminService extends cds.ApplicationService {
       const missionId = randomUUID();
       const pathId = randomUUID();
 
+      // Fingerprint keyed to the tutorial-typed member slug set — stable
+      // across Louvain re-runs while the tutorial cluster contents are
+      // stable. Louvain-emitted communityId gets recycled next pass, so
+      // Missions.sourceKgCommunityId is retained for audit only; the
+      // alreadyPromoted filter (#986) keys off the fingerprint via a
+      // materialized LEFT JOIN. #985.
+      //
+      // Hash over the tutorials we actually resolved (post-slug lookup),
+      // not the raw KgCommunity slug list — a promotion where some slugs
+      // no longer resolve semantically "already promoted" the reachable
+      // subset only. Downstream re-promotion should still be blocked
+      // for the SAME reachable subset, hence hash the resolved list.
+      const fingerprint = computeKgCommunityFingerprint(
+        tutorials.map((t) => t.slug)
+      );
+
       // 2. Atomic write — reuse the request's tx so all three INSERTs
       //    commit or roll back together with the outer request boundary.
       const tx = cds.tx(req);
@@ -2524,6 +2541,7 @@ export default class AdminService extends cds.ApplicationService {
           title,
           published: false,
           sourceKgCommunityId: communityId,
+          sourceKgCommunityFingerprint: fingerprint,
         })
       );
       await tx.run(
@@ -2596,25 +2614,11 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
-    // alreadyPromoted: true when any Missions row carries
-    // sourceKgCommunityId = <this community's id>. Powers the LR filter
-    // toggle that hides communities already turned into draft missions
-    // (default on, prevents double-promotion via UI).
-    this.after('READ', 'KgCommunities', async (rows) => {
-      if (!rows) return;
-      const list = Array.isArray(rows) ? rows : [rows];
-      if (list.length === 0) return;
-      const ids = list.map((r) => r.communityId).filter((v) => v != null);
-      if (ids.length === 0) return;
-      const { Missions } = cds.entities('com.sap.developers.ims');
-      const promoted = await SELECT.from(Missions)
-        .columns('sourceKgCommunityId')
-        .where({ sourceKgCommunityId: { in: ids } });
-      const promotedSet = new Set(promoted.map((m) => m.sourceKgCommunityId));
-      for (const row of list) {
-        row.alreadyPromoted = promotedSet.has(row.communityId);
-      }
-    });
+    // alreadyPromoted is materialized by KgCommunitySummaryV's LEFT JOIN
+    // Missions on communityFingerprint (#986). No after('READ') decorator
+    // needed — the LR filter (SPV #default) evaluates against a real
+    // column at the DB layer, and the previous Node-side compute has been
+    // dropped. See db/knowledge-graph-communities.cds and issue #985/#986.
 
     // ── clearKhorosLink — admin on-behalf-of variant (issue #566) ──
     // Bound action on Users. Nulls the 4 Khoros columns, evicts the

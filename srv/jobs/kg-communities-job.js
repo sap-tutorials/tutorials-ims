@@ -4,9 +4,19 @@
 // batch-INSERTs the memberships inside one db.tx. Fail-open: errors
 // propagate up so the scheduler chassis writes PipelineLog FAILED, but
 // no request-time reader breaks because loading is decoupled at Task 6.
+//
+// #985: every inserted row also carries a communityFingerprint —
+// SHA-256 hex over the sorted tutorial-typed member slug set for that
+// row's communityId. Denormalized (same value on every row of a given
+// community) so KgCommunitySummaryV can LEFT JOIN Missions on it and
+// materialize `alreadyPromoted` at the DB layer (#986). Fingerprints
+// are computed once per pass here using the shared helper at
+// srv/lib/kg-community-fingerprint.js — the same helper the
+// promoteCommunityToMission handler uses at write time.
 
 import cds from '@sap/cds';
 import * as metrics from '../lib/metrics.js';
+import { computeKgCommunityFingerprint } from '../lib/kg-community-fingerprint.js';
 
 const LOG = cds.log('kg-communities');
 
@@ -19,10 +29,26 @@ export async function runKgCommunities() {
     const db = await cds.connect.to('db');
     const rows = await db.run('CALL "KG_LOUVAIN_GRAPH"()');
 
+    // First pass — group tutorial slugs by communityId so we can hash
+    // each community's tutorial cluster once. Communities with zero
+    // tutorial members get fingerprint=null; the promote path only
+    // accepts communities with at least one tutorial member.
+    const tutorialSlugsByCommunity = new Map();
     const byCommunity = new Map();
     for (const r of rows) {
       const cid = Number(r.COMMUNITY_ID);
       byCommunity.set(cid, (byCommunity.get(cid) || 0) + 1);
+      if (r.VERTEX_TYPE === 'tutorial' && r.SLUG != null) {
+        if (!tutorialSlugsByCommunity.has(cid)) {
+          tutorialSlugsByCommunity.set(cid, []);
+        }
+        tutorialSlugsByCommunity.get(cid).push(String(r.SLUG));
+      }
+    }
+    const fingerprintByCommunity = new Map();
+    for (const [cid, slugs] of tutorialSlugsByCommunity) {
+      if (slugs.length === 0) continue;
+      fingerprintByCommunity.set(cid, computeKgCommunityFingerprint(slugs));
     }
     const maxSize = byCommunity.size ? Math.max(...byCommunity.values()) : 0;
 
@@ -30,16 +56,20 @@ export async function runKgCommunities() {
       await tx.run(`TRUNCATE TABLE ${KG_COMMUNITY_TABLE}`);
       const now = new Date().toISOString();
       const insertSql = `INSERT INTO ${KG_COMMUNITY_TABLE}
-        ("communityId","vertexKey","vertexType","slug","detectedAt")
-        VALUES (?, ?, ?, ?, ?)`;
+        ("communityId","vertexKey","vertexType","slug","detectedAt","communityFingerprint")
+        VALUES (?, ?, ?, ?, ?, ?)`;
       for (let i = 0; i < rows.length; i += INSERT_BATCH_SIZE) {
-        const batch = rows.slice(i, i + INSERT_BATCH_SIZE).map((r) => [
-          Number(r.COMMUNITY_ID),
-          String(r.VERTEX_KEY),
-          String(r.VERTEX_TYPE),
-          r.SLUG == null ? null : String(r.SLUG),
-          now,
-        ]);
+        const batch = rows.slice(i, i + INSERT_BATCH_SIZE).map((r) => {
+          const cid = Number(r.COMMUNITY_ID);
+          return [
+            cid,
+            String(r.VERTEX_KEY),
+            String(r.VERTEX_TYPE),
+            r.SLUG == null ? null : String(r.SLUG),
+            now,
+            fingerprintByCommunity.get(cid) ?? null,
+          ];
+        });
         await tx.run(insertSql, batch);
       }
     });

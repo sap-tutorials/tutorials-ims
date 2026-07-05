@@ -412,6 +412,11 @@
           "type": "cds.Integer",
           "@cds.persistence.name": "SOURCEKGCOMMUNITYID"
         },
+        "sourceKgCommunityFingerprint": {
+          "type": "cds.String",
+          "length": 64,
+          "@cds.persistence.name": "SOURCEKGCOMMUNITYFINGERPRINT"
+        },
         "missionType": {
           "type": "cds.String",
           "length": 20,
