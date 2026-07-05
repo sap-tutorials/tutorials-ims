@@ -107,7 +107,14 @@ export default class HomepageService extends cds.ApplicationService {
       return merged;
     });
 
-    // (#639) videos() — reads HomepageConfig flag, fetches YouTube data.
+    // (#639) videos() — reads HomepageConfig flag, fetches YouTube data. (#1007) with
+    // read-through fallback to the persistent `ext.Videos` table when the live YouTube
+    // call fails or comes back with an empty `recent`. The in-memory 15-min cache in
+    // youtube-fetcher.js does NOT survive a srv restart (per-process globalThis), so
+    // an MTA deploy plus a temporarily-broken YouTube playlistId was enough to empty
+    // the band on DEV. `ext.Videos` is refreshed twice weekly by
+    // srv/jobs/fetch-videos-job.js (Sun+Wed @ 03:11 UTC) — a stale-by-a-few-days list
+    // beats an empty band.
     this.on('videos', async () => {
       let cfg;
       try {
@@ -128,11 +135,51 @@ export default class HomepageService extends cds.ApplicationService {
       }
 
       const apiKey = await resolveSecret('YOUTUBE_API_KEY', { logTag: '[homepage-service/videos]' });
-      return fetchSapDevsVideos({
+      const live = await fetchSapDevsVideos({
         apiKey: apiKey || '',
         playlistId: cfg?.developerNewsPlaylistId || '',
         channelHandle: '@sapdevs',
       });
+
+      // Live path succeeded with data — return as-is.
+      if (!live.error && (live.recent?.length ?? 0) > 0) return live;
+
+      // (#1007) Fallback: read the persistent Videos corpus written by
+      // srv/jobs/fetch-videos-job.js. Best-effort; on any failure fall back to
+      // whatever `live` produced (matches previous behavior — never a 500).
+      try {
+        const db = await cds.connect.to('db');
+        const { Videos } = cds.entities('com.sap.developers.ims.external');
+        const rows = await db.run(
+          SELECT.from(Videos)
+            .columns('youtubeVideoId', 'title', 'thumbnailUrl', 'publishedAt')
+            .orderBy({ publishedAt: 'desc' })
+            .limit(3)
+        );
+        if (rows?.length) {
+          metrics.counter('homepage.videos.fallback[result=hit]');
+          const recent = rows.map(r => ({
+            videoId:     r.youtubeVideoId,
+            title:       r.title,
+            thumbnail:   r.thumbnailUrl,
+            publishedAt: r.publishedAt,
+          }));
+          // Reuse live.featured if the playlist call happened to return one; otherwise
+          // promote the newest row so the featured slot never depends on a
+          // playlistId misconfig (see issue #1007 root cause 2).
+          const featured = live.featured ?? recent[0];
+          return { featured, recent, error: live.error ?? null };
+        }
+        metrics.counter('homepage.videos.fallback[result=empty]');
+      } catch (err) {
+        metrics.counter('homepage.videos.fallback[result=error]');
+        log.warn('[videos] fallback SELECT from ext.Videos failed:', err.message);
+      }
+
+      // No live data, no fallback data — return whatever live gave us (typically
+      // {featured:null, recent:[], error:'…'}) so the client can render its
+      // error state.
+      return live;
     });
 
     // (#639) communityBlogs() — SAP Community RSS, max 3 items.

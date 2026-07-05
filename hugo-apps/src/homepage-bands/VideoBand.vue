@@ -46,17 +46,19 @@ onMounted(async () => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body: VideosResponse = await res.json();
     const tags = readVideoTags();
-    // Support both shaped response {featured, recent:[...]} and flat array
-    if (body.featured) {
-      featured.value = body.featured;
-      recent.value = applyVideoFilter(body.recent ?? [], tags);
-    } else if (Array.isArray(body)) {
+    // (#1007) Preserve body.recent independently of body.featured. The previous
+    // dispatch treated a null/missing featured as "no data at all" and wiped
+    // recent even when the srv returned three videos — exactly the failure
+    // mode that shipped to DEV once the DEV playlistId broke. The
+    // Array.isArray branch is kept for backwards-compat with a hand-rolled
+    // flat-array response shape (no such caller today).
+    if (Array.isArray(body)) {
       const arr = body as VideoItem[];
       featured.value = arr[0] ?? null;
       recent.value = applyVideoFilter(arr.slice(1), tags);
     } else {
-      featured.value = null;
-      recent.value = [];
+      featured.value = body.featured ?? null;
+      recent.value = applyVideoFilter(body.recent ?? [], tags);
     }
   } catch (e: any) {
     error.value = e.message;
