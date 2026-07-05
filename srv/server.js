@@ -49,6 +49,7 @@ import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import multer from 'multer';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
+import './graphql-config.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as

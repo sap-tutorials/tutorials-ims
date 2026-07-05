@@ -33,6 +33,7 @@
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
 @requires : 'any'
+@graphql
 service KnowledgeGraphService @(path : '/graph') {
 
   // ─── Projections (curation introspection + admin tooling) ─────────────
@@ -54,14 +55,11 @@ service KnowledgeGraphService @(path : '/graph') {
   // Excluding it here mirrors the established pattern for TutorialEmbedding
   // (never projected) and the project's "LargeBinary stays off OData unless
   // tagged @Core.MediaType" convention.
-  @protocol: ['odata', 'graphql']
   @cds.redirection.target
   entity Concepts                       as projection on ims.Concepts excluding { embedding };
 
-  @protocol: ['odata', 'graphql']
   @readonly entity ConceptEdges         as projection on ims.ConceptEdges;
 
-  @protocol: ['odata', 'graphql']
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
 
   /**
@@ -69,7 +67,6 @@ service KnowledgeGraphService @(path : '/graph') {
    * (PR 2/3) reads via /build/concepts. Excludes never-published rows,
    * unpublished (publishedAt cleared by admin), VETOED, and MERGED.
    */
-  @protocol: ['odata', 'graphql']
   @readonly
   entity PublishedConcepts as projection on ims.Concepts {
     ID, slug, name, description, publishedAt, publishedBy, status

@@ -180,6 +180,11 @@
     "vue-virtual-scroller": "3.0.4"
   },
   "cds": {
+    "protocols": {
+      "graphql": {
+        "path": "/graphql/_plugin"
+      }
+    },
     "requires": {
       "AICore": {
         "resourceGroup": "default"
