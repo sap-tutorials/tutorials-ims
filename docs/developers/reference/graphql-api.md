@@ -19,9 +19,13 @@ Routes `/graphql` (`xsuaa`) and `/graphql/public` (`none`, DUAL_MOUNT only) decl
 ## Contract Enforcement
 
 - `test/unit/graphql-schema-shape.test.js` — asserts no draft leaks, no admin KG projections, no actions/functions.
-- `test/unit/graphql-breaking-change.test.js` — diffs `graphql/schema.graphql` against `graphql/.last-release.graphql`; fails on breaking changes without `@deprecated`.
+- `test/unit/graphql-breaking-change.test.js` — diffs `graphql/schema.graphql` against `graphql/.last-release.graphql`; fails on breaking changes without `@deprecated`. Detects: TYPE_REMOVED, FIELD_REMOVED, FIELD_TYPE_CHANGED, REQUIRED_ARG_ADDED (both new + existing-made-required), ENUM_REMOVED, ENUM_VALUE_REMOVED. Input-object types are also inspected.
 - `test/hybrid/graphql-endpoint.test.js` — asserts `Tutorial.API` gating on `DeveloperService.Tutorials`.
 - `test/smoke/graphql-smoke.test.js` — post-deploy assertions against the deployed AppRouter.
+
+## Read-only Entities and the Mutation Type
+
+`@readonly` on a CDS entity does NOT remove the entity from the generated Mutation type — `@cap-js/graphql` v0.14 emits `create`/`update`/`delete` fields for every non-composition entity regardless of the CDS annotation. Writes are gated at the CAP handler layer instead: attempts return status 405 with `errors[].extensions.code: "ENTITY_IS_READ_ONLY"`. The SDL surface therefore ADVERTISES mutations that always fail closed. This is a plugin limitation, not a design choice. Every read-only entity in the GraphQL surface (`DeveloperService.Tutorials`, `TaskRecords`, `Events`, `KnowledgeGraphService.ConceptEdges`, `TutorialConceptLinks`, `PublishedConcepts`, all four `SearchService` entities) exhibits this behavior. If a future plugin release removes mutation fields for read-only entities, the schema-shape test will need a widened regex; the breaking-change guard will fire on the SDL diff, which is the correct signal.
 
 ## Observability
 
