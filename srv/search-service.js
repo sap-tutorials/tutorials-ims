@@ -236,6 +236,42 @@ export default class SearchService extends cds.ApplicationService {
       attachSearchRank(req.query, tokens, kgFragment);
     });
 
+    /**
+     * MCP curated tool: fuzzy full-text search across published tutorials.
+     *
+     * @param query      Search terms (word-boundary matching, stopword-filtered).
+     * @param tags       Optional exact-match filter on tutorial primary tag.
+     * @param experience Optional experience-level filter.
+     * @param limit      Max results (default 10, hard max 100).
+     * @returns          Array of { slug, title, snippet, tags } ordered by relevance.
+     */
+    this.on('search_tutorials', async (req) => {
+      const { query, tags, experience } = req.data;
+      const limit = Math.min(Math.max(req.data.limit ?? 10, 1), 100);
+
+      const { SearchableItems } = this.entities;
+      const q = SELECT.from(SearchableItems)
+        .columns('slug', 'title', 'description', 'primaryTag', 'experienceTag')
+        .limit(limit)
+        .where({ taskType: 'TUTORIAL' });
+
+      // Apply word-boundary search across title/description/primaryTag/tagBag.
+      // Reuses the same predicate builder as the OData $search handler so the
+      // match semantics are identical (stopword-filtered, separator-normalised).
+      if (query) applyWordBoundarySearch(q, query);
+
+      if (tags?.length) q.where({ primaryTag: { in: tags } });
+      if (experience)   q.where({ experienceTag: experience });
+
+      const rows = await cds.db.run(q);
+      return rows.map(r => ({
+        slug:    (r.slug ?? '').toLowerCase(),
+        title:   r.title ?? '',
+        snippet: (r.description ?? '').slice(0, 240),
+        tags:    r.primaryTag ? [r.primaryTag] : [],
+      }));
+    });
+
     this.on('getFacets', async (req) => {
       const { search, taskTypes, experience } = req.data;
 

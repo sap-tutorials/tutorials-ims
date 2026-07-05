@@ -64,4 +64,28 @@ service SearchService {
     taskTypes  : array of String,
     experience : array of String
   ) returns FacetResult;
+
+  /**
+   * Fuzzy full-text search across published tutorials. Returns slug + title +
+   * short snippet + tag list. Use this to discover tutorials by topic.
+   *
+   * @param query      Search terms (natural language accepted; word-boundary
+   *                   matching handles hyphenated tags and prose punctuation).
+   * @param tags       Optional exact-match filter on tutorial primary tag.
+   * @param experience Optional experience-level filter: 'beginner',
+   *                   'intermediate', 'advanced'.
+   * @param limit      Max results (default 10, hard max 100).
+   * @returns          Array of tutorial matches ordered by relevance score.
+   */
+  function search_tutorials(
+    query      : String,
+    tags       : many String,
+    experience : String,
+    limit      : Integer
+  ) returns array of {
+    slug    : String;
+    title   : String;
+    snippet : String;
+    tags    : many String;
+  };
 }
