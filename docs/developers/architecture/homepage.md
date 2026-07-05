@@ -161,6 +161,18 @@ See **[Homepage explainer popovers](homepage-explainers.md)** for:
 
 ---
 
+## Personalization for signed-in users
+
+Issue #763 adds per-user reordering + filtering + a "For you" row.
+See **[homepage-personalization.md](homepage-personalization.md)** for:
+
+- Endpoint contract + ETag/304 + `X-Personalization: 1` marker
+- Persona-tag admin workflow
+- BroadcastChannel live re-render + `?default=1` bypass
+- Kill switch (`HomepageConfig.personalizationEnabled`)
+
+---
+
 ## Failure Modes
 
 | Failure | Behaviour |

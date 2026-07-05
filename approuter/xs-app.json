@@ -239,6 +239,12 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/homepage/personalized$",
+      "target": "/homepage/personalized",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
       "source": "^/homepage/(.*)$",
       "target": "/homepage/$1",
       "destination": "srv-api",

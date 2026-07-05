@@ -81,3 +81,8 @@ Cross-references:
 ## Migration
 
 - **Change tracking suppression for REST migrators** — `x-migration-mode: true` header sent by `migrate-reference-data.js` and `migrate-user-progress.js`. HANA-to-HANA path (`migrate-from-hana.js`) still fires DB-level changelog triggers — see [migration-from-ims.md](../operations/migration-from-ims.md) for mitigations.
+
+## Personalization
+
+- **Personalization endpoint MUST set `X-Personalization: 1` and `Cache-Control: private, no-store`** — the approuter is documented to never cache this header combination. Dropping either header silently allows a shared cache to serve one user's personalized payload to another user or to anonymous visitors. The smoke test (`test/smoke/homepage-personalized.test.js`) asserts both headers on every deployed environment.
+- **Client-side ETag round-trip lives in `sessionStorage['sap-devs-homepage-personalized']`** — clearing sessionStorage forces the coordinator to fetch fresh (no `If-None-Match` header, 200 response). The session key is `sap-devs-homepage-personalized`; the bypass flag is `sap-devs-homepage-default`. Both are sessionStorage (not localStorage), so they clear on tab close.

@@ -197,9 +197,21 @@ service AdminService {
     action regenerate()   returns { processed : Integer; skipped : Integer; cost : String };
   };
 
+  // (#763) For-you candidate pool — admin editing surface.
+  // Validator in admin-service.js rejects unknown persona tags at save time.
+  @odata.draft.enabled
+  entity HomepageForYouCandidatesAdmin as projection on ims.HomepageForYouCandidates;
+
   @readonly @cds.persistence.skip entity AlertCtaTargets {
     key url   : String(500);
         label : String(100);
+  }
+
+  // (#763) Value-help entity for @Common.ValueList bindings on HomepageShelves
+  // personaTags / personaHidden. Served in-memory from KNOWN_TAGS by the READ
+  // handler in admin-service.js — no DB table, no persistence.
+  @readonly @cds.persistence.skip entity PersonaTagChoices {
+    key tag : String(40);
   }
 
   entity FailedEmails as projection on ims.FailedEmails;

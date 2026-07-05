@@ -39,7 +39,10 @@
         {{- $shelfWhy = .whyItMatters | default "" -}}
       {{- end -}}
       {{- if not $shelfLabel -}}{{ $shelfLabel = index $fallbackLabels $shelfKey }}{{- end -}}
-    <section class="verb-shelf verb-shelf--{{ $shelfKey | lower }}">
+    <section class="verb-shelf verb-shelf--{{ $shelfKey | lower }}"
+             data-personalize="shelf-rerank"
+             data-verb="{{ $verbKey | lower }}"
+             data-shelf="{{ $shelfKey | lower }}">
       <div data-island="verb-flip-tile"
            data-shelf-key="{{ $shelfKey }}"
            data-label="{{ $shelfLabel }}"
@@ -52,6 +55,7 @@
         {{ range sort $items "sortOrder" }}
         <li data-island="link-explainer-popover"
             data-entry-id="{{ .ID }}"
+            data-shelf-entry-id="{{ .ID }}"
             data-title="{{ .title }}"
             data-tagline="{{ .tagline | default "" }}"
             data-why-it-matters="{{ .whyItMatters | default "" }}"

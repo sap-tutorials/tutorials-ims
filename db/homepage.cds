@@ -49,6 +49,15 @@ entity HomepageShelves : cuid, managed {
   tagline         : String(140);
   whyItMatters    : String(800);
   authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
+  // (#763) Persona tag scoring — see design §5.1.
+  // Grammar: '<field>:<value>' drawn from PROFILE_VOCAB
+  //   role:{developer,architect,sysadmin,student}
+  //   deployment:{cloud,onprem}
+  //   cloud:{btp,aws,azure,gcp,alibaba,oracle,ibm}
+  // Save-time validator in srv/admin-service.js rejects typos.
+  personaTags   : array of String(40);
+  personaWeight : Integer default 0;
+  personaHidden : array of String(40);
 }
 
 // Hand-curated map of legacy URLs → new URLs. Approuter fetches via
@@ -72,6 +81,10 @@ entity HomepageConfig : cuid, managed {
   videoBandEnabled        : Boolean default true;
   eventsBandEnabled       : Boolean default true;
   communityLaneEnabled    : Boolean default true;
+  // (#763) Kill switch for the personalized-homepage feature.
+  // Default false at first migration so a deploy doesn't flip the page
+  // for every signed-in user; admin enables via /admin-ui/#homepage.
+  personalizationEnabled  : Boolean default false;
 }
 
 // (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
@@ -102,4 +115,24 @@ entity ShelfDefinitions : cuid, managed {
   tagline         : String(140);
   whyItMatters    : String(800);
   authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
+}
+
+// (#763) For-you row candidates. Distinct from HomepageShelves because
+// being featured in For-you is orthogonal to being in the directory
+// footer. Design §5.2.
+type ForYouKind : String enum { tutorial; mission; video; blog; shelf; }
+
+entity HomepageForYouCandidates : cuid, managed {
+  kind          : ForYouKind    @mandatory @assert.range;
+  targetSlug    : String(200)   @mandatory;
+  title         : String(255)   @mandatory;
+  description   : String(500);
+  imageUrl      : String(500);
+  personaTags   : array of String(40);
+  personaWeight : Integer       default 0;
+  personaHidden : array of String(40);
+  sortOrder     : Integer       default 100;
+  active        : Boolean       default true;
+  linkStatus    : HomepageLinkStatus default 'UNKNOWN' @assert.range;
+  lastChecked   : Timestamp;
 }

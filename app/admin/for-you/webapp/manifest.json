@@ -1,0 +1,84 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.forYou",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "ForYou-manage": {
+          "semanticObject": "ForYou",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.forYou.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "name": "ForYouList", "pattern": ":?query:", "target": "ForYouListTarget" },
+        { "name": "ForYouOP",   "pattern": "HomepageForYouCandidatesAdmin({key}):?query:", "target": "ForYouOPTarget" }
+      ],
+      "targets": {
+        "ForYouListTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ListReport",
+          "id": "ForYouListTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/HomepageForYouCandidatesAdmin",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "HomepageForYouCandidatesAdmin": { "detail": { "route": "ForYouOP" } }
+              }
+            }
+          }
+        },
+        "ForYouOPTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ObjectPage",
+          "id": "ForYouOPTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/HomepageForYouCandidatesAdmin",
+              "editableHeaderContent": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

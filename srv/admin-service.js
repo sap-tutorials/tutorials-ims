@@ -33,6 +33,7 @@ import {
 } from './lib/alert-enums.js';
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
+import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -198,6 +199,21 @@ async function sendLastChanceForAuthor(authorEmail, dryRun, ctx) {
   };
 }
 
+// (#763) Validate personaTags / personaHidden arrays against PROFILE_VOCAB.
+// Called as before-CREATE/UPDATE on HomepageShelves and HomepageForYouCandidatesAdmin.
+// Uses req.reject(400, message) to surface validation errors. Field-level display
+// of invalid tags in Fiori Elements is a follow-up (see Task 17).
+function checkPersonaTagsHandler(req) {
+  for (const field of ['personaTags', 'personaHidden']) {
+    const tags = req.data?.[field];
+    if (tags == null) continue;
+    const v = validateTags(tags);
+    if (!v.ok) {
+      return req.reject(400, `Unknown persona tag(s): ${v.invalid.join(', ')}`);
+    }
+  }
+}
+
 export default class AdminService extends cds.ApplicationService {
 
   async init() {
@@ -319,6 +335,11 @@ export default class AdminService extends cds.ApplicationService {
 
     // READ handler for the unbound in-memory AlertCtaTargets entity.
     this.on('READ', 'AlertCtaTargets', () => listCtaTargets());
+
+    // (#763) READ handler for the unbound value-help entity PersonaTagChoices.
+    // Returns all KNOWN_TAGS as { tag } rows for @Common.ValueList bindings on
+    // HomepageShelves.personaTags / personaHidden.
+    this.on('READ', 'PersonaTagChoices', () => KNOWN_TAGS.map((tag) => ({ tag })));
 
     // Virtual severityCrit element (drives @UI.LineItem Criticality coloring).
     // Information=3 (Neutral), Success=5 (Positive), Warning=2 (Critical), Error=1 (Negative)
@@ -551,7 +572,8 @@ export default class AdminService extends cds.ApplicationService {
           developerNewsPlaylistId: null,
           videoBandEnabled: true,
           eventsBandEnabled: true,
-          communityLaneEnabled: true
+          communityLaneEnabled: true,
+          personalizationEnabled: false
         });
       }
     });
@@ -2614,6 +2636,17 @@ export default class AdminService extends cds.ApplicationService {
       });
       return { status: 'ok' };
     });
+
+    // (#763) Persona-tag validator — rejects unknown tags at save time on
+    // both HomepageShelves and the new ForYou candidate pool.
+    // Draft lifecycle: NEW/PATCH fire on entity.drafts; SAVE fires on drafts at activation.
+    // Direct REST: CREATE/UPDATE fire on the active entity.
+    const { HomepageShelves, HomepageForYouCandidatesAdmin } = this.entities;
+    const shelfEvents = ['CREATE', 'UPDATE', 'NEW', 'PATCH', 'SAVE'];
+    this.before(shelfEvents, HomepageShelves, checkPersonaTagsHandler);
+    this.before(shelfEvents, HomepageShelves.drafts, checkPersonaTagsHandler);
+    this.before(shelfEvents, HomepageForYouCandidatesAdmin, checkPersonaTagsHandler);
+    this.before(shelfEvents, HomepageForYouCandidatesAdmin.drafts, checkPersonaTagsHandler);
 
     await super.init();
 

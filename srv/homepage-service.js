@@ -20,6 +20,9 @@ import { mergeEvents } from './lib/homepage-events-merger.js';
 import { fetchSapDevsVideos } from './lib/youtube-fetcher.js';
 import { fetchRssItems } from './lib/homepage-rss-fetcher.js';
 import { resolveSecret } from './lib/secret-resolver.js';
+import { buildEnvelope, hashEnvelope } from './lib/homepage/personalized-envelope.js';
+import { resolveUserSapId } from './lib/resolve-db-user.js';
+import * as metrics from './lib/metrics.js';
 
 const log = cds.log('homepage-service');
 
@@ -204,6 +207,148 @@ export default class HomepageService extends cds.ApplicationService {
         updated++;
       }
       return updated;
+    });
+
+    // (#763) personalized() — authenticated envelope. @(requires:'authenticated-user')
+    // declared in CDS overrides the service-level @requires:'any'.
+    // Returns 204 when kill switch off, 200+envelope when on, 304 on ETag match.
+    this.on('personalized', async (req) => {
+      const { HomepageShelves, HomepageForYouCandidates, HomepageConfig,
+              UserLearningPreferences, Users, Tutorials } = cds.entities('com.sap.developers.ims');
+
+      const cfg = await SELECT.one.from(HomepageConfig).columns('personalizationEnabled');
+      if (!cfg?.personalizationEnabled) {
+        metrics.counter('homepage.personalized.requests[result=204-disabled]');
+        req.res.status(204).end();
+        return req.reject(-1);
+      }
+
+      // Resolve the Users.ID (UUID FK) from the XSUAA sapId claim — mirrors
+      // the pattern in developer-service.js:744-754 (LearningPreferences READ).
+      // req.user.id is the XSUAA subject string, NOT the Users.ID UUID column.
+      const sapId = resolveUserSapId(req.user);
+      const dbUser = sapId ? await SELECT.one.from(Users).columns('ID').where({ sapId }) : null;
+      // No Users row → envelope is still built with all-null profile (valid).
+
+      const [prefsRow, shelves, forYou, featuredRows] = await Promise.all([
+        dbUser?.ID
+          ? SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID })
+              .columns('deployment', 'role', 'cloud')
+          : Promise.resolve(null),
+        SELECT.from(HomepageShelves).where({ isActive: true })
+          .columns('ID', 'verb', 'shelf', 'sortOrder', 'title',
+                   'personaTags', 'personaWeight', 'personaHidden'),
+        SELECT.from(HomepageForYouCandidates).where({ active: true })
+          .columns('ID', 'kind', 'targetSlug', 'title', 'description', 'imageUrl',
+                   'personaTags', 'personaWeight', 'personaHidden', 'sortOrder'),
+        // (#763 Task 12) Static top-8 featured tutorials ordered by featuredOrder.
+        // Tutorials.featuredOrder is the admin-curated rank (NULL = not featured).
+        // status filter mirrors srv/handlers/recommendations.js — hides soft-deleted
+        // (INACTIVE / DELETED) tutorials that must not leak onto public surfaces.
+        SELECT.from(Tutorials)
+          .where`featuredOrder is not null and (status = 'ACTIVE' or status is null)`
+          .columns('slug', 'featuredOrder')
+          .orderBy('featuredOrder')
+          .limit(8),
+      ]);
+
+      const profile = {
+        role:       prefsRow?.role       ?? null,
+        deployment: prefsRow?.deployment ?? null,
+        cloud:      prefsRow?.cloud      ?? null,
+      };
+
+      // (#763 Task 12) Compose teaserSlugs: static featured top-8 + for-you tutorials,
+      // deduped and capped at 12.
+      const staticSlugs = featuredRows.map((r) => r.slug);
+      const featuredForYouSlugs = forYou
+        .filter((f) => f.kind === 'tutorial')
+        .map((f) => f.targetSlug);
+      const teaserSlugs = [...new Set([...staticSlugs, ...featuredForYouSlugs])].slice(0, 12);
+
+      const envelope = buildEnvelope({
+        profile, shelves, forYouCandidates: forYou, teaserSlugs,
+      });
+      envelope.hash = hashEnvelope(envelope);
+
+      const inm = req.req?.headers?.['if-none-match'];
+      if (inm && inm.replace(/"/g, '') === envelope.hash) {
+        req.res.setHeader('Cache-Control', 'private, no-store');
+        req.res.setHeader('X-Personalization', '1');
+        req.res.setHeader('ETag', `"${envelope.hash}"`);
+        metrics.counter('homepage.personalized.requests[result=304]');
+        req.res.status(304).end();
+        return req.reject(-1);
+      }
+
+      req.res.setHeader('Cache-Control', 'private, no-store');
+      req.res.setHeader('X-Personalization', '1');
+      req.res.setHeader('ETag', `"${envelope.hash}"`);
+      metrics.counter('homepage.personalized.requests[result=200]');
+      return envelope;
+    });
+
+    // (#763 Task 12) tutorialCards() — fetch card HTML for slugs not in the Row-5 DOM.
+    // Public endpoint (inherits service @requires:'any'). Capped at 20 slugs.
+    // Returns nav-card HTML matching browse/_partials/card-tutorial.html shape.
+    this.on('tutorialCards', async (req) => {
+      const raw = req.data?.slugs || [];
+      const slugs = raw.filter(Boolean).map(String).slice(0, 20);
+      if (slugs.length === 0) return [];
+
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      // status filter matches srv/handlers/recommendations.js — hides
+      // INACTIVE/DELETED tutorials from the public /homepage/tutorialCards path.
+      const rows = await SELECT.from(Tutorials)
+        .where({ slug: { in: slugs } })
+        .and(`status = 'ACTIVE' or status is null`)
+        .columns('slug', 'title', 'description', 'primaryTag', 'experienceTag', 'averageTimeToComplete');
+
+      // HTML-escape helper — guards against XSS if a title/tag ever contains markup.
+      const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
+      const safe = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ESC[c]);
+
+      return rows.map((r) => {
+        const level = r.experienceTag ?? '';
+        const levelLabel = level ? level[0].toUpperCase() + level.slice(1) : '';
+        const mins = r.averageTimeToComplete ?? 0;
+        const timeLabel = mins < 60
+          ? `${mins} min.`
+          : `${Math.floor(mins / 60)} hr.${mins % 60 > 0 ? ` ${mins % 60} min.` : ''}`;
+        return {
+          slug: r.slug,
+          html:
+            `<div data-slug="${safe(r.slug)}">` +
+            `<a href="/tutorials/${safe(r.slug)}/" class="nav-card" data-vt-card="navigator">` +
+            `<div class="nav-card__type nav-card__type--tutorial">TUTORIAL</div>` +
+            `<h3 class="nav-card__title">${safe(r.title)}</h3>` +
+            `<p class="nav-card__desc">${safe(r.description)}</p>` +
+            `<div class="nav-card__meta">` +
+            `<span class="nav-card__meta-item">${safe(levelLabel)}</span>` +
+            `<span class="nav-card__meta-sep">&middot;</span>` +
+            `<span class="nav-card__meta-item">${safe(timeLabel)}</span>` +
+            `</div>` +
+            `<div class="nav-card__tag">${safe(r.primaryTag)}</div>` +
+            `</a>` +
+            `</div>`,
+        };
+      });
+    });
+
+    // (#763 Task 19) beaconApplied — client fires once per surface per session
+    // after personalization has been applied to the page.  Aggregate signal
+    // only — no PII stored.  surface is validated against a fixed allowlist.
+    const BEACON_SURFACES = new Set([
+      'verb-order', 'for-you', 'teaser', 'shelf', 'video-filter', 'rss-filter',
+    ]);
+    this.on('beaconApplied', (req) => {
+      const { surface } = req.data ?? {};
+      if (!surface || !BEACON_SURFACES.has(surface)) {
+        // Unknown surface — ignore silently (don't leak the allowlist).
+        return {};
+      }
+      metrics.counter(`homepage.personalized.applied[surface=${surface}]`);
+      return {};
     });
   }
 }

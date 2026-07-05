@@ -47,4 +47,44 @@ service HomepageService {
 
   // (#639) Approuter batches hit counters and flushes every 60s.
   action   recordRedirectHits(hits: array of HitEntry) returns Integer;
+
+  // (#763) Authenticated personalization envelope. Per-function override of
+  // the service-level @requires:'any' — CAP honors the stricter annotation.
+  // Returns 204 when the kill switch is off, 200+envelope when on.
+  // Response headers: Cache-Control:private,no-store; X-Personalization:1; ETag.
+  type PersonalizedProfile { role: String; deployment: String; cloud: String; }
+  type ShelfOverride       { reorder: array of UUID; hidden: array of UUID; }
+  type ShelfOverrideMap {
+    learn: ShelfOverride; build: ShelfOverride; integrate: ShelfOverride;
+    operate: ShelfOverride; ai: ShelfOverride; connect: ShelfOverride;
+  }
+  type ForYouItem {
+    ID: UUID; kind: String; slug: String; title: String;
+    description: String; imageUrl: String;
+  }
+  type PersonalizedEnvelope {
+    hash            : String;
+    profile         : PersonalizedProfile;
+    verbOrder       : array of String;
+    forYou          : array of ForYouItem;
+    teaserOrder     : array of String;
+    shelfOverrides  : ShelfOverrideMap;
+    videoFilterTags : array of String;
+    rssFilterTags   : array of String;
+  }
+
+  @(requires: 'authenticated-user')
+  function personalized() returns PersonalizedEnvelope;
+
+  // (#763) Fetch card HTML for tutorial slugs not already in the Row-5 DOM.
+  // Public (inherits service-level @requires:'any') — no auth needed.
+  // Capped at 20 slugs server-side to guard against abuse.
+  type TutorialCard { slug: String; html: String; }
+  function tutorialCards(slugs: array of String) returns array of TutorialCard;
+
+  // (#763 Task 19) Client beacon — emitted once per surface per session after
+  // personalization is applied.  Aggregate signal only; no PII stored.
+  // Public (inherits service-level @requires:'any') — anonymous beacons are fine.
+  // surface is validated server-side against a fixed allowlist.
+  action beaconApplied(surface: String) returns {};
 }

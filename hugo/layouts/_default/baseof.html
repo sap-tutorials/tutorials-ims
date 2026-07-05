@@ -61,6 +61,7 @@
   <script type="module" src="{{ $ui5.RelPermalink }}"></script>
   {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/alerts.js" defer></script>{{ end }}
   {{ if and (or .IsHome (eq .Type "verb")) (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/homepage-explainers.js" defer></script>{{ end }}
+  {{ if or .IsHome (eq .Type "verb") }}<script defer src="/js/homepage-personalizer.js"></script>{{ end }}
   {{ if site.Params.previewMode }}
   <script type="module" src="/js/preview-banner.js" defer></script>
   {{ end }}
