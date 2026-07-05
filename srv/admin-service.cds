@@ -55,7 +55,11 @@ service AdminService {
     author.sapId       as authorSapId       : String @Common.FieldControl: #ReadOnly,
     author.displayName as authorDisplayName : String @Common.FieldControl: #ReadOnly,
     author.firstName   as authorFirstName   : String @Common.FieldControl: #ReadOnly,
-    author.lastName    as authorLastName    : String @Common.FieldControl: #ReadOnly
+    author.lastName    as authorLastName    : String @Common.FieldControl: #ReadOnly,
+    // #918 — populated by after('READ') decorator in admin-service.js.
+    // True iff a KgIsolation row exists for this tutorial slug. Fail-quiet:
+    // if the SELECT throws or the sidecar is missing, stays null.
+    virtual isolated : Boolean
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
