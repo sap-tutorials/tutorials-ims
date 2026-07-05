@@ -119,15 +119,16 @@ runOnDemandDrain({ db, callModel, embed, log } = deps):
   1. Load kgSettings.
      If !enabled: return { reason: 'kg-disabled', ...zeroSummary }.
      If !onDemandExtractionEnabled: return { reason: 'ondemand-disabled', ...zeroSummary }.
-  2. runWithLock('kg-ondemand', instanceId, LOCK_MS = 5 * 60 * 1000, drainImpl)
-     where drainImpl does:
+  2. (Chassis handles pipeline logging and JobLastRun automatically. CAP 10's
+     .as(name) singleton semantics prevent concurrent scheduled ticks across
+     CF instances — the drain body itself does NOT call runWithLock.)
        a. SELECT ID, query, attempts FROM KgOnDemandRequests
           WHERE status = 'PENDING'
           ORDER BY requestedAt ASC
           LIMIT :DRAIN_BATCH.
        b. For each row:
             UPDATE ...set status='RUNNING', startedAt=$now, attempts=attempts+1.
-            queryVector = embed(query).
+            queryVector = embed([query])[0].
             top-K = cosineRankTutorials(db, queryVector, K).
             for each { tutorialId } in top-K:
               extraction = extractConceptsFromTutorial({ tutorial, callModel, ... })
@@ -226,7 +227,7 @@ onDemandExtractionEnabled : Boolean default false;
 
 - `TutorialEmbedding` (per-step `Vector(1536)`) — the corpus-rank source.
 - `Concepts`, `TutorialConceptLinks`, `ConceptEdges` — populated by `extractConceptsFromTutorial` exactly as `extract-concepts-job.js` does today.
-- `JobLocks` — used by the drain via `scheduler.runWithLock`.
+- `JobLocks` — no longer used by the drain; CAP 10's `.as(name)` singleton semantics replace the explicit lock. The `runWithLock` chassis in `scheduler.js` now handles pipeline logging only.
 
 ### Env defaults
 
@@ -274,13 +275,13 @@ Later, cron every 2 min:
   runOnDemandDrain
       │
       ├─ flag off? → skip
-      ├─ runWithLock('kg-ondemand', ...)
+      ├─ (chassis handles locking via CAP 10 .as() singleton semantics)
       │       │
       │       ├─ SELECT PENDING rows LIMIT DRAIN_BATCH
       │       │
       │       └─ for each row:
       │             ├─ status=RUNNING, attempts++
-      │             ├─ embed(query)
+      │             ├─ embed([query])[0]
       │             ├─ cosine-rank TutorialEmbedding → top-K ACTIVE tutorials
       │             ├─ for each → extractConceptsFromTutorial → merge-on-write
       │             ├─ status=DONE + metrics on success
@@ -298,7 +299,7 @@ Later, cron every 2 min:
 | DB unavailable at enqueue time | `.catch(...)` in the tool handler consumes the error. LLM sees success. Metric NOT emitted (we can't tell if it landed). |
 | Rate limit hit (user or global) | Silent skip. `kg_ondemand_rate_limited { reason }` emitted. LLM sees the empty response it was already going to see. |
 | Coalesce collision | Silent skip. `kg_ondemand_dedup_coalesced` emitted. |
-| Drain: instance already holds lock | `runWithLock` returns false. Next 2-minute tick tries. |
+| Drain: chassis pipeline log write fails | Non-fatal; caught by scheduler.js `runWithLock` wrapper — logged as JobLastRun error, tick treated as failed. Next 2-min tick tries. |
 | Drain: embed fails | Row goes back to PENDING (or FAILED after max attempts). `lastError` captured. |
 | Drain: `cosineRankTutorials` empty (fresh install, no `TutorialEmbedding` rows) | Row marked DONE with `tutorialsExtracted=0`. No LLM calls. Log at INFO. |
 | Drain: `extractConceptsFromTutorial` throws | Row-level retry counter. Sibling rows in the same batch unaffected. |
@@ -405,3 +406,18 @@ Metrics emission verified via existing `metrics.js` test harness — unit tests 
 - `srv/lib/per-user-rate-limit.js` — sliding-window primitive
 - `srv/lib/runtime-config/kg-settings.js` — settings resolver
 - Recent KG feature-flagged patterns: #916 (PageRank), #917 (Communities), #918 (WCC)
+
+---
+
+## Section 8 — Post-plan correction (2026-07-05)
+
+The `runWithLock` call inside the drain body is no longer required and has been removed from the implementation.
+
+**Reason:** CAP 10's `.as(name)` singleton semantics prevent concurrent scheduled ticks across CF instances for any job registered via `registerJob()` + `CronService`. The `scheduler.js` `runWithLock` chassis wraps every registered job automatically — it handles PipelineLog start/end and JobLastRun. The drain body itself calling a second `runWithLock` would be redundant and was based on a stale design assumption predating #958's CAP 10 scheduler migration.
+
+**Corrections applied in Task 4:**
+1. `srv/jobs/kg-ondemand-job.js` — drain body does NOT call `runWithLock`.
+2. Section 1 pseudocode — `runWithLock('kg-ondemand', ...)` replaced with a note that the chassis handles this.
+3. Section 3 `JobLocks` bullet — updated to reflect that explicit locking is no longer used by the drain.
+4. Section 4 error table — "Drain: instance already holds lock" row replaced with "Drain: chassis pipeline log write fails".
+5. Section 5 flow diagram — `runWithLock('kg-ondemand', ...)` replaced with chassis note.
