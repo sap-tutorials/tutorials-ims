@@ -88,4 +88,25 @@ service HomepageService {
   // Public (inherits service-level @requires:'any') — anonymous beacons are fine.
   // surface is validated server-side against a fixed allowlist.
   action beaconApplied(surface: String) returns {};
+
+  // (#912) MCP curated tools — news + videos bands.
+
+  /**
+   * Recent SAP developer news items — the same feed the homepage news band
+   * shows. Bounded by `limit`; use this to answer "what's new in SAP?".
+   *
+   * @param limit Max items to return (default 10, hard max 50).
+   * @returns     Recent RSS items ordered by publish date desc.
+   */
+  function get_recent_news(limit : Integer) returns array of RssItem;
+
+  /**
+   * Recent SAP developer videos from the persistent Videos corpus, ordered
+   * by publish date desc. The corpus is refreshed twice-weekly by the
+   * fetch-videos-job cron. Use this to discover recent SAP developer videos.
+   *
+   * @param limit Max items to return (default 10, hard max 50).
+   * @returns     Recent video items with videoId, title, thumbnail, publishedAt.
+   */
+  function get_recent_videos(limit : Integer) returns array of VideoItem;
 }
