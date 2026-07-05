@@ -97,12 +97,82 @@ describe('MCP curated tool: list_missions', () => {
 
 describe('MCP curated tool: get_mission', () => {
   let SearchService;
+
+  // Fixed UUIDs so the chain is readable and reproducible.
+  const MISSION_ID  = 'aaaaaaaa-7777-0000-0000-000000000001';
+  const PATH_ID     = 'bbbbbbbb-7777-0000-0000-000000000001';
+  const TUT1_ID     = 'cccccccc-7777-0000-0000-000000000001';
+  const TUT2_ID     = 'cccccccc-7777-0000-0000-000000000002';
+  const UNPUB_ID    = 'dddddddd-7777-0000-0000-000000000001';
+  const PATH2_ID    = 'eeeeeeee-7777-0000-0000-000000000001';
+
   beforeAll(async () => {
     await cds.deploy([
       path.join(process.cwd(), 'db'),
       path.join(process.cwd(), 'srv'),
     ]).to('sqlite::memory:');
     SearchService = await cds.serve('SearchService').from('./srv/search-service');
+
+    const { Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+
+    // Seed two tutorials referenced by path items.
+    await INSERT.into(Tutorials).entries([
+      { ID: TUT1_ID, slug: 'tut-alpha', title: 'Tutorial Alpha', status: 'ACTIVE' },
+      { ID: TUT2_ID, slug: 'tut-beta',  title: 'Tutorial Beta',  status: 'ACTIVE' },
+    ]);
+
+    // Seed one published mission with slug 'test-mission'.
+    await INSERT.into(Missions).entries({
+      ID:          MISSION_ID,
+      slug:        'test-mission',
+      title:       'Test Mission',
+      description: 'A test mission',
+      published:   true,
+    });
+
+    // Seed one unpublished mission to verify the published filter.
+    await INSERT.into(Missions).entries({
+      ID:          UNPUB_ID,
+      slug:        'unpublished-mission',
+      title:       'Unpublished Mission',
+      description: 'Should never surface',
+      published:   false,
+    });
+
+    // Seed a CompletionPath linked to the published mission.
+    await INSERT.into(CompletionPaths).entries({
+      ID:         PATH_ID,
+      mission_ID: MISSION_ID,
+      slug:       'test-mission-path',
+      name:       'Test Path',
+    });
+
+    // Seed a CompletionPath linked to the unpublished mission (should be unreachable).
+    await INSERT.into(CompletionPaths).entries({
+      ID:         PATH2_ID,
+      mission_ID: UNPUB_ID,
+      slug:       'unpublished-mission-path',
+      name:       'Unpublished Path',
+    });
+
+    // Seed two TUTORIAL items in ascending itemOrder.
+    await INSERT.into(CompletionPathItems).entries([
+      {
+        ID:          'ffffffff-7777-0000-0000-000000000001',
+        path_ID:     PATH_ID,
+        taskType:    'TUTORIAL',
+        tutorial_ID: TUT1_ID,
+        itemOrder:   1,
+      },
+      {
+        ID:          'ffffffff-7777-0000-0000-000000000002',
+        path_ID:     PATH_ID,
+        taskType:    'TUTORIAL',
+        tutorial_ID: TUT2_ID,
+        itemOrder:   2,
+      },
+    ]);
   });
 
   it('returns null for unknown slug', async () => {
@@ -115,29 +185,50 @@ describe('MCP curated tool: get_mission', () => {
     expect(result).toBeNull();
   });
 
+  it('returns null for unpublished mission', async () => {
+    // published: false missions must not surface to the MCP tool.
+    const result = await SearchService.send('get_mission', { slug: 'unpublished-mission' });
+    expect(result).toBeNull();
+  });
+
   it('lowercases slug before lookup', async () => {
     // Global memory-fact: tutorial slugs are lowercase canonical.
-    // A mixed-case query must still resolve if the underlying row exists.
-    const a = await SearchService.send('get_mission', { slug: 'test-mission' });
-    const b = await SearchService.send('get_mission', { slug: 'TEST-MISSION' });
-    expect(a).toEqual(b);
+    // A mixed-case query must still resolve against the seeded row.
+    const lower = await SearchService.send('get_mission', { slug: 'test-mission' });
+    const upper = await SearchService.send('get_mission', { slug: 'TEST-MISSION' });
+    // Both must be non-null and deeply equal — not a vacuous null === null.
+    expect(lower).not.toBeNull();
+    expect(upper).not.toBeNull();
+    expect(lower).toEqual(upper);
   });
 
   it('returns mission with tutorials array when mission exists', async () => {
-    // With empty DB this verifies shape: null is fine, but if something matches
-    // it must have slug, title, description, tutorials array.
     const result = await SearchService.send('get_mission', { slug: 'test-mission' });
-    // Empty DB → null; that is acceptable.
-    if (result !== null) {
-      expect(result).toHaveProperty('slug');
-      expect(result).toHaveProperty('title');
-      expect(result).toHaveProperty('description');
-      expect(Array.isArray(result.tutorials)).toBe(true);
-      for (const t of result.tutorials) {
-        expect(t).toHaveProperty('slug');
-        expect(t).toHaveProperty('title');
-        expect(t).toHaveProperty('order');
-      }
+
+    // Unconditional: with seeded data the result must be non-null.
+    expect(result).not.toBeNull();
+    expect(result.slug).toBe('test-mission');
+    expect(result.title).toBe('Test Mission');
+    expect(result.description).toBe('A test mission');
+    expect(Array.isArray(result.tutorials)).toBe(true);
+
+    // Two TUTORIAL items seeded — both must appear.
+    expect(result.tutorials.length).toBe(2);
+
+    // Order ascending by itemOrder.
+    expect(result.tutorials[0].order).toBeLessThan(result.tutorials[1].order);
+
+    // Each tutorial entry has non-empty slug + title.
+    for (const t of result.tutorials) {
+      expect(typeof t.slug).toBe('string');
+      expect(t.slug.length).toBeGreaterThan(0);
+      expect(typeof t.title).toBe('string');
+      expect(t.title.length).toBeGreaterThan(0);
+      expect(typeof t.order).toBe('number');
     }
+
+    // Spot-check the slugs returned for each tutorial item.
+    expect(result.tutorials[0].slug).toBe('tut-alpha');
+    expect(result.tutorials[1].slug).toBe('tut-beta');
   });
 });
