@@ -83,6 +83,15 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
       expect(ctrl).toMatch(/homepageConfig:\s*"homepageConfig"/)
     })
 
+    // #763 — For-you Candidates nav-key must be wired into the controller's
+    // lookup table. Without this, onNavItemSelect silently no-ops (nothing in
+    // NAV_KEY_TO_ROUTE → the `if (sRoute)` guard skips navTo) and the sidebar
+    // click does nothing at all: no URL change, no error, no network call.
+    it('maps the forYou nav-key in NAV_KEY_TO_ROUTE + NAV_KEY_TO_TITLE (#763)', () => {
+      expect(ctrl).toMatch(/forYou:\s*"forYou"/)
+      expect(ctrl).toMatch(/forYou:\s*"For-you Candidates"/)
+    })
+
     it('has titles for the three new nav-keys', () => {
       // Note: NAV_KEY_TO_TITLE uses "Homepage Shelves" / "Homepage Redirects" /
       // "Homepage Config" (used as the page-header / document title), while
