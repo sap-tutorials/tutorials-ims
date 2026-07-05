@@ -3309,3 +3309,88 @@ annotate AdminService.KgCommunityMembers with @(
   Capabilities.UpdateRestrictions.Updatable : false,
   Capabilities.DeleteRestrictions.Deletable : false
 );
+
+// ── KG On-Demand Requests (#948) ─────────────────────────────────────────────
+// Read-only admin surface for the on-demand extraction queue. Operators
+// observe request lifecycle (PENDING → RUNNING → DONE / FAILED) and
+// extraction outcomes (tutorialsExtracted, conceptsCreated, latencyMs).
+// All mutations come from the drain job (srv/jobs/kg-ondemand-job.js).
+
+annotate AdminService.KgOnDemandRequests with {
+  query               @Common.Label: 'Query';
+  normalizedKey       @Common.Label: 'Normalized Key';
+  status              @Common.Label: 'Status';
+  requestedBy         @Common.Label: 'Requested By';
+  requestedByKind     @Common.Label: 'Requester Kind';
+  attempts            @Common.Label: 'Attempts';
+  requestedAt         @Common.Label: 'Requested At';
+  startedAt           @Common.Label: 'Started At';
+  completedAt         @Common.Label: 'Completed At';
+  latencyMs           @Common.Label: 'Latency (ms)';
+  tutorialsExtracted  @Common.Label: 'Tutorials Extracted';
+  conceptsCreated     @Common.Label: 'Concepts Created';
+  conceptsMerged      @Common.Label: 'Concepts Merged';
+  lastError           @Common.Label: 'Last Error';
+  llmPromptTokens     @Common.Label: 'LLM Prompt Tokens';
+  llmCompletionTokens @Common.Label: 'LLM Completion Tokens';
+};
+
+annotate AdminService.KgOnDemandRequests with @(
+  UI: {
+    HeaderInfo: {
+      TypeName       : 'KG On-Demand Request',
+      TypeNamePlural : 'KG On-Demand Requests',
+      Title          : { Value: query },
+      Description    : { Value: status }
+    },
+    SelectionFields : [ status, requestedByKind, requestedAt ],
+    LineItem : [
+      { Value: query,              Label: 'Query' },
+      { Value: normalizedKey,      Label: 'Normalized' },
+      { Value: status,             Label: 'Status' },
+      { Value: requestedByKind,    Label: 'Requester' },
+      { Value: attempts,           Label: 'Attempts' },
+      { Value: tutorialsExtracted, Label: 'Tutorials' },
+      { Value: conceptsCreated,    Label: 'Created' },
+      { Value: conceptsMerged,     Label: 'Merged' },
+      { Value: latencyMs,          Label: 'Latency (ms)' },
+      { Value: requestedAt,        Label: 'Requested' },
+      { Value: completedAt,        Label: 'Completed' },
+      { Value: lastError,          Label: 'Last Error' }
+    ],
+    PresentationVariant : {
+      SortOrder     : [ { Property: requestedAt, Descending: true } ],
+      Visualizations: [ '@UI.LineItem' ]
+    },
+    Facets : [
+      { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Request',   Label: 'Request' },
+      { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Extraction', Label: 'Extraction Result' },
+      { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Cost',       Label: 'Cost' }
+    ],
+    FieldGroup #Request : { Data : [
+      { Value: query },
+      { Value: normalizedKey },
+      { Value: requestedBy },
+      { Value: requestedByKind },
+      { Value: requestedAt },
+      { Value: status },
+      { Value: attempts },
+      { Value: lastError }
+    ]},
+    FieldGroup #Extraction : { Data : [
+      { Value: startedAt },
+      { Value: completedAt },
+      { Value: latencyMs },
+      { Value: tutorialsExtracted },
+      { Value: conceptsCreated },
+      { Value: conceptsMerged }
+    ]},
+    FieldGroup #Cost : { Data : [
+      { Value: llmPromptTokens },
+      { Value: llmCompletionTokens }
+    ]}
+  },
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable : false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);

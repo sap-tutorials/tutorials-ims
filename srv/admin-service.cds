@@ -1,5 +1,6 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 using from '../db/knowledge-graph-communities';
+using from '../db/knowledge-graph-ondemand';
 using from '../db/views';
 using from '../app/admin-annotations';
 
@@ -869,8 +870,13 @@ extend entity AdminService.Tutorials with actions {
   action rebuildContent() returns AdminService.RebuildContentResult;
 };
 
-// KG community detection (#917). Two @readonly projections and the
-// promoteCommunityToMission action stub. Handler body in Task 7.
+// #948: On-demand KG extraction request queue — read-only admin view.
+// The drain job (srv/jobs/kg-ondemand-job.js) writes via db.tx, bypassing
+// the service; the AdminService surface is observe-only for operators.
+extend service AdminService with {
+  @readonly
+  entity KgOnDemandRequests as projection on ims.KgOnDemandRequests;
+}
 extend service AdminService with {
 
   // LR-facing aggregate. One row per detected community.
