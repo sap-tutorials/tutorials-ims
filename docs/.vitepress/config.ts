@@ -203,6 +203,7 @@ export default defineConfig({
           { text: 'Design decisions',          link: '/developers/reference/design-decisions' },
           { text: 'External integrations',     link: '/developers/reference/external-integrations' },
           { text: 'HANA / HDI / SQL gotchas',  link: '/developers/reference/hana-hdi-gotchas' },
+          { text: 'HCQL protocol adapter support', link: '/developers/reference/hcql-support' },
           { text: 'Iframe allowlist',          link: '/developers/reference/iframe-allowlist' },
           { text: 'Sage extension migration',  link: '/developers/reference/sage-extension-migration' },
           { text: 'Theme variants',            link: '/developers/reference/theme-variants' },
