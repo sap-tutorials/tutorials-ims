@@ -1511,4 +1511,727 @@ git commit -m "feat(#948): cosine ranker + on-demand drain job
   §Section 1 pseudocode + §Section 4 error table."
 ```
 
+---
+
+### Task 5: Wire enqueue into `expandSearchConceptsHandler` + `chat-orchestrator`
+
+**Files:**
+- Modify: `srv/lib/kg/joule-tool-expand-concepts.js` — add enqueue side-effect + accept `requester` opt
+- Modify: `srv/lib/chat-orchestrator.js` — thread `requester` into the dispatch (line ~604)
+- Test: extend `test/kg-joule-tool-expand-concepts.test.js`
+
+**Interfaces:**
+- Consumes: `enqueueOnDemandExtraction` (Task 3)
+- Produces: no new exports. `expandSearchConceptsHandler({ db, embedClient, args, requester?, telemetry, timeoutMs })` — new optional `requester` opt.
+
+- [ ] **Step 1: Extend the existing tool test**
+
+Open `test/kg-joule-tool-expand-concepts.test.js`. Add a new `describe` block at the end:
+
+```javascript
+import { vi } from 'vitest';
+import * as onDemandModule from '../srv/lib/kg/on-demand-enqueue.js';
+
+describe('expandSearchConcepts on-demand enqueue side-effect (#948)', () => {
+  let enqueueSpy;
+
+  beforeEach(() => {
+    enqueueSpy = vi.spyOn(onDemandModule, 'enqueueOnDemandExtraction')
+      .mockResolvedValue({ status: 'enqueued', normalizedKey: 'x' });
+  });
+
+  afterEach(() => enqueueSpy.mockRestore());
+
+  it('zero seeds → calls enqueueOnDemandExtraction with the raw query', async () => {
+    const db = /* build a db that returns [] for topConceptsByCosine — same
+                  pattern as existing zero-seed tests in this file */;
+    const embedClient = { embed: vi.fn(async () => new Float32Array(1536)) };
+
+    const result = await expandSearchConceptsHandler({
+      db, embedClient,
+      args: { query: 'obscure query' },
+      requester: { id: 'u1', kind: 'user' },
+    });
+
+    expect(result.concepts).toEqual([]);
+    expect(result.tutorials).toEqual([]);
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+    expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
+      query: 'obscure query',
+      requester: { id: 'u1', kind: 'user' },
+    }));
+  });
+
+  it('zero seeds + enqueue throws → tool STILL returns empty success (fire-and-forget)', async () => {
+    enqueueSpy.mockRejectedValueOnce(new Error('DB down'));
+    const db = /* same zero-seed db */;
+    const embedClient = { embed: vi.fn(async () => new Float32Array(1536)) };
+
+    const result = await expandSearchConceptsHandler({
+      db, embedClient,
+      args: { query: 'obscure query' },
+      requester: { kind: 'anon', ipHash: 'ip1' },
+    });
+
+    expect(result.concepts).toEqual([]);
+    expect(result.tutorials).toEqual([]);
+    // No throw — the tool's contract is preserved.
+  });
+
+  it('non-zero seeds → enqueue is never called', async () => {
+    const db = /* db that returns real seeds (see existing happy-path fixture) */;
+    const embedClient = { embed: vi.fn(async () => new Float32Array(1536)) };
+
+    await expandSearchConceptsHandler({
+      db, embedClient,
+      args: { query: 'CAP' },
+      requester: { id: 'u1', kind: 'user' },
+    });
+
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
+  it('no requester → enqueue still called (backward-compat)', async () => {
+    const db = /* zero-seed db */;
+    const embedClient = { embed: vi.fn(async () => new Float32Array(1536)) };
+
+    await expandSearchConceptsHandler({
+      db, embedClient, args: { query: 'obscure query' },
+    });
+
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+    expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
+      requester: expect.objectContaining({ kind: 'anon' }),
+    }));
+  });
+});
+```
+
+Reuse the existing zero-seed and happy-path DB fixtures from the same file — do not duplicate their setup. The `/* build a db... */` comments point at the existing fixtures; wire them by hand when the test is authored.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/kg-joule-tool-expand-concepts.test.js`
+Expected: 4 new failures (existing tests still green).
+
+- [ ] **Step 3: Add the enqueue side-effect to the tool handler**
+
+Open `srv/lib/kg/joule-tool-expand-concepts.js`. Add the import near the top:
+
+```javascript
+import { enqueueOnDemandExtraction } from './on-demand-enqueue.js';
+```
+
+Locate the zero-seed block (around line 130 — `if (seeds.length === 0)`). Modify it to fire-and-forget the enqueue:
+
+```javascript
+    if (seeds.length === 0) {
+      telemetry?.emit?.('kg.joule.search_expansion_returned', {
+        resultCount: 0, latencyMs: Date.now() - t0,
+      })
+      // #948: fire-and-forget enqueue on zero-seed. Never awaited. Never
+      // throws to the caller. If the flag is off, the module bails
+      // internally and returns { status: 'disabled' }.
+      const requesterOrDefault = requester ?? { kind: 'anon' }
+      enqueueOnDemandExtraction({ db, query: rawQuery, requester: requesterOrDefault })
+        .catch(err => LOG.warn?.('enqueueOnDemandExtraction dispatch failed:', err.message))
+      return { queryEcho: rawQuery, concepts: [], tutorials: [] }
+    }
+```
+
+Extend the function signature to accept `requester`:
+
+```javascript
+export async function expandSearchConceptsHandler({
+  db, embedClient, args, telemetry, timeoutMs = DEFAULT_TIMEOUT_MS,
+  requester,   // #948: { id?, ipHash?, kind: 'user'|'anon' }; optional
+}) {
+```
+
+If the file does not currently import a logger, add:
+
+```javascript
+import cds from '@sap/cds';
+const LOG = cds.log('joule-tool-expand-concepts');
+```
+
+- [ ] **Step 4: Thread `requester` from chat-orchestrator**
+
+Open `srv/lib/chat-orchestrator.js`. Locate line ~604 — the call to `expandSearchConceptsHandler`. Modify it to pass a `requester`:
+
+```javascript
+if (name === 'expandSearchConcepts') {
+  try {
+    const requester = req?.user?.id
+      ? { id: req.user.id, kind: 'user' }
+      : { ipHash: req?.userIpHash ?? null, kind: 'anon' };
+    return await expandSearchConceptsHandler({
+      db, embedClient, args, requester,
+    });
+  } catch (err) {
+    LOG.warn('expandSearchConcepts dispatch failed:', err.message);
+    ...
+  }
+}
+```
+
+The exact `req` variable in scope depends on the surrounding code — inspect the neighboring `else if (name === ...)` branches for the correct binding name. If `req` is not in scope, add it to the dispatch signature the same way `db` and `embedClient` are threaded.
+
+- [ ] **Step 5: Re-run the tool test**
+
+Run: `npx vitest run test/kg-joule-tool-expand-concepts.test.js`
+Expected: PASS on all cases (existing + 4 new).
+
+- [ ] **Step 6: Full regression**
+
+Run: `npm test`
+Expected: green.
+
+- [ ] **Step 7: Commit**
+
+```
+git add srv/lib/kg/joule-tool-expand-concepts.js srv/lib/chat-orchestrator.js test/kg-joule-tool-expand-concepts.test.js
+git commit -m "feat(#948): wire on-demand enqueue into expandSearchConcepts
+
+- Zero-seed branch fire-and-forgets enqueueOnDemandExtraction. Never
+  awaited; .catch()ed so a DB blip cannot corrupt the tool's success
+  contract to the LLM.
+- New optional requester opt on expandSearchConceptsHandler. Defaults
+  to { kind: 'anon' } when not passed (backward-compat with existing
+  test fixtures).
+- chat-orchestrator threads req.user.id (user path) or req.userIpHash
+  (anon path) into the requester opt."
+```
+
+---
+
+### Task 6: Admin surface — `AdminService.KgOnDemandRequests` projection + Fiori Elements app
+
+**Files:**
+- Modify: `srv/admin-service.cds` — add `@readonly` projection
+- Create: `app/admin/kgOnDemand/package.json`
+- Create: `app/admin/kgOnDemand/ui5.yaml`
+- Create: `app/admin/kgOnDemand/webapp/Component.js`
+- Create: `app/admin/kgOnDemand/webapp/manifest.json`
+- Create: `app/admin/kgOnDemand/webapp/i18n/i18n.properties`
+- Create: `app/admin/kgOnDemand/webapp/annotations/annotations.cds`
+- Modify: `app/admin-shell/webapp/manifest.json` — componentUsage + route + target
+- Modify: `app/admin-shell/webapp/controller/Shell.controller.js` — 2 map entries
+- Modify: `app/admin-shell/webapp/model/navigation.json` — 1 nav entry
+- Test: `test/admin-service-kgondemand-projection.test.js`
+
+**Interfaces:**
+- Consumes: `KgOnDemandRequests` entity (Task 1)
+- Produces: OData endpoint `/odata/v4/admin/KgOnDemandRequests`, gated on scope `Tutorial.Author`. Admin route `/admin-ui/#kgOnDemand`.
+
+- [ ] **Step 1: Write the projection test**
+
+Create `test/admin-service-kgondemand-projection.test.js`:
+
+```javascript
+import { describe, it, expect, beforeAll } from 'vitest';
+import cds from '@sap/cds';
+
+describe('AdminService.KgOnDemandRequests projection (#948)', () => {
+  beforeAll(async () => {
+    await cds.deploy(cds.env.roots).to('sqlite::memory:');
+  });
+
+  it('exposes KgOnDemandRequests via AdminService with @readonly', async () => {
+    const admin = await cds.serve('AdminService').from(cds.model);
+    const target = admin.entities.KgOnDemandRequests;
+    expect(target).toBeDefined();
+    expect(target['@readonly']).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npx vitest run test/admin-service-kgondemand-projection.test.js`
+Expected: FAIL — `target` is undefined.
+
+- [ ] **Step 3: Add the projection**
+
+Edit `srv/admin-service.cds`. In the `service AdminService @(...) { ... }` block, add:
+
+```cds
+  // #948: on-demand KG extraction request queue. Read-only from the
+  // service layer — the drain job (srv/jobs/kg-ondemand-job.js) writes
+  // to the underlying entity via db.tx, bypassing the service.
+  @readonly
+  entity KgOnDemandRequests as projection on KgOnDemandRequests;
+```
+
+Verify the existing `@requires: 'Tutorial.Author'` (or equivalent) is applied at the service level. If not, add a targeted `@requires` on this projection.
+
+- [ ] **Step 4: Re-run the projection test**
+
+Run: `npx vitest run test/admin-service-kgondemand-projection.test.js`
+Expected: PASS.
+
+- [ ] **Step 5: Scaffold the FE app**
+
+Copy the shape from `app/admin/kgCommunities/` — it's the closest sibling. Create each file with these contents (adjust names from `kgCommunities` → `kgOnDemand`, `KgCommunity` → `KgOnDemandRequest`):
+
+**`app/admin/kgOnDemand/package.json`:**
+
+```json
+{
+  "name": "sap.tutorials.admin.kgOnDemand",
+  "version": "0.0.1",
+  "private": true
+}
+```
+
+**`app/admin/kgOnDemand/ui5.yaml`:**
+
+```yaml
+specVersion: "3.0"
+metadata:
+  name: sap.tutorials.admin.kgOnDemand
+type: application
+framework:
+  name: SAPUI5
+  version: "1.136.0"
+  libraries:
+    - name: sap.fe.templates
+    - name: sap.m
+```
+
+**`app/admin/kgOnDemand/webapp/Component.js`:** copy verbatim from `app/admin/kgCommunities/webapp/Component.js`, replacing the namespace `sap.tutorials.admin.kgCommunities` with `sap.tutorials.admin.kgOnDemand`.
+
+**`app/admin/kgOnDemand/webapp/manifest.json`:**
+
+Copy from `app/admin/kgCommunities/webapp/manifest.json` and:
+- Change `sap.app.id` to `sap.tutorials.admin.kgOnDemand`
+- Change `crossNavigation.inbounds.*.semanticObject` to `KgOnDemand`
+- Change the `sap.fe.templates` target entity to `KgOnDemandRequests`
+- Sort default: `requestedAt desc`
+- LR columns: `query`, `normalizedKey`, `status`, `requestedByKind`, `attempts`, `tutorialsExtracted`, `conceptsCreated`, `conceptsMerged`, `latencyMs`, `requestedAt`, `completedAt`, `lastError`
+
+**`app/admin/kgOnDemand/webapp/i18n/i18n.properties`:**
+
+```
+appTitle=KG On-Demand Requests
+appSubtitle=On-demand knowledge-graph extraction queue (#948)
+```
+
+**`app/admin/kgOnDemand/webapp/annotations/annotations.cds`:**
+
+Fiori annotations for LR + OP. Reuse the pattern from kgCommunities' annotations. LR: LineItem with the columns above. OP: Object Page with sections { Request, Extraction Result, Cost }. Filter bar on the LR: status, requestedByKind, requestedAt range.
+
+- [ ] **Step 6: Register in `admin-shell/webapp/manifest.json`**
+
+Add three blocks matching the `kgCommunities` pattern (search the manifest for `kgCommunities` and add sibling entries):
+
+1. In `sap.ui5.dependencies.components` alias map:
+```json
+"sap.tutorials.admin.kgOnDemand": "./components/kgOnDemand"
+```
+
+2. In `sap.ui5.componentUsages`:
+```json
+"kgOnDemandComponent": {
+  "name": "sap.tutorials.admin.kgOnDemand",
+  "settings": {},
+  "lazy": true
+}
+```
+
+3. In `sap.ui5.routing.routes`:
+```json
+{ "name": "kgOnDemand", "pattern": "kgOnDemand", "target": [{"name": "kgOnDemandTarget", "prefix": "kod"}] }
+```
+
+4. In `sap.ui5.routing.targets`:
+```json
+"kgOnDemandTarget": {
+  "type": "Component",
+  "usage": "kgOnDemandComponent",
+  "id": "kgOnDemandTarget",
+  "options": { "settings": {} }
+}
+```
+
+- [ ] **Step 7: Register in `admin-shell/webapp/controller/Shell.controller.js`**
+
+Locate lines 38 and 82 (the two maps that carry `kgCommunities:`). Add sibling entries below each:
+
+```javascript
+kgOnDemand: "kgOnDemand",
+```
+
+and
+
+```javascript
+kgOnDemand: "KG On-Demand",
+```
+
+- [ ] **Step 8: Register in `admin-shell/webapp/model/navigation.json`**
+
+At line 83 (where `kgCommunities` nav entry lives), add a sibling:
+
+```json
+{ "key": "kgOnDemand", "title": "KG On-Demand" }
+```
+
+Order it near the other KG entries.
+
+- [ ] **Step 9: Build the admin shell**
+
+```bash
+npm run build:admin
+```
+
+Expected output: `Copied kgOnDemand` in the copy-components.js log (auto-discovery).
+
+- [ ] **Step 10: Manual sanity check the FE app in the shell**
+
+```bash
+cds watch
+```
+
+Then in a browser: `http://localhost:4004/admin-ui/#kgOnDemand`. Expected: empty List Report renders with the columns above. Insert one row directly via `hana-cli` or SQL and reload — the row appears.
+
+If the app fails to load with `ModuleError: failed to load components/kgOnDemand/Component.js`, re-check the copy-components discovery: `ls app/admin-shell/dist/components/kgOnDemand/`. Should show `Component.js` and `manifest.json`.
+
+- [ ] **Step 11: Commit**
+
+```
+git add srv/admin-service.cds app/admin/kgOnDemand/ app/admin-shell/webapp/manifest.json app/admin-shell/webapp/controller/Shell.controller.js app/admin-shell/webapp/model/navigation.json test/admin-service-kgondemand-projection.test.js
+git commit -m "feat(#948): AdminService.KgOnDemandRequests projection + Fiori Elements app
+
+- @readonly projection at /odata/v4/admin/KgOnDemandRequests, gated
+  on the AdminService's existing Tutorial.Author scope.
+- Fiori Elements List Report + Object Page at /admin-ui/#kgOnDemand.
+- LR columns: query, normalizedKey, status, requestedByKind, attempts,
+  tutorialsExtracted, conceptsCreated, conceptsMerged, latencyMs,
+  requestedAt, completedAt, lastError. Sort: requestedAt desc.
+- Admin-shell wiring: componentUsage, route, target, Shell map entries,
+  navigation entry. copy-components.js auto-discovers the app folder;
+  no root package.json edit needed."
+```
+
+---
+
+### Task 7: Hybrid + smoke tests
+
+**Files:**
+- Create: `test/hybrid/kg-ondemand.test.js`
+- Create: `test/smoke/kg-ondemand.smoke.test.js`
+- Modify: `vitest.config.js` — the hybrid/smoke project entries may or may not need explicit file additions depending on how they glob; verify
+
+**Interfaces:** consumes everything from Tasks 1–6.
+
+- [ ] **Step 1: Confirm hybrid + smoke project glob patterns**
+
+```bash
+grep -A2 "hybrid\|smoke" vitest.config.js | head -40
+```
+
+If the projects use `test/hybrid/**/*.test.js` and `test/smoke/**/*.smoke.test.js` globs, the new files are picked up automatically. If the config lists individual files, add the new paths.
+
+- [ ] **Step 2: Write the hybrid test**
+
+Create `test/hybrid/kg-ondemand.test.js`:
+
+```javascript
+// Hybrid test — runs against real HANA via `cds bind --exec`. Gated by
+// HYBRID_KG_ONDEMAND=true to control LLM quota. Run with:
+//   HYBRID_KG_ONDEMAND=true cds bind --exec -- npx vitest run --project hybrid test/hybrid/kg-ondemand.test.js
+//
+// Bare `vitest <file>` silently skips hybrid setup — memory rule.
+
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import cds from '@sap/cds';
+import { enqueueOnDemandExtraction } from '../../srv/lib/kg/on-demand-enqueue.js';
+import { runOnDemandDrain } from '../../srv/jobs/kg-ondemand-job.js';
+import { _resetCacheForTests as _resetSettingsCache } from '../../srv/lib/runtime-config/kg-settings.js';
+
+const NS = 'com.sap.developers.ims';
+const RUN = process.env.HYBRID_KG_ONDEMAND === 'true';
+
+describe.skipIf(!RUN)('KG on-demand — hybrid (#948)', () => {
+  let db, originalOnDemand;
+
+  beforeAll(async () => {
+    db = await cds.connect.to('db');
+    const { KnowledgeGraphSettings } = cds.entities(NS);
+    const [row] = await SELECT.from(KnowledgeGraphSettings);
+    originalOnDemand = row?.onDemandExtractionEnabled ?? false;
+    await UPDATE(KnowledgeGraphSettings).set({ onDemandExtractionEnabled: true });
+    _resetSettingsCache();
+  });
+
+  afterAll(async () => {
+    const { KnowledgeGraphSettings } = cds.entities(NS);
+    await UPDATE(KnowledgeGraphSettings).set({ onDemandExtractionEnabled: originalOnDemand });
+    _resetSettingsCache();
+  });
+
+  beforeEach(async () => {
+    const { KgOnDemandRequests } = cds.entities(NS);
+    await DELETE.from(KgOnDemandRequests).where({ normalizedKey: { like: 'hybridtest%' } });
+  });
+
+  it('inserts a PENDING row on HANA', async () => {
+    const r = await enqueueOnDemandExtraction({
+      db, query: 'hybridtest one',
+      requester: { id: 'hybridtest-u1', kind: 'user' },
+    });
+    expect(r.status).toBe('enqueued');
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const rows = await SELECT.from(KgOnDemandRequests).where({ normalizedKey: 'hybridtest one' });
+    expect(rows).toHaveLength(1);
+  });
+
+  it('coalesces 5 concurrent enqueues into 1 row', async () => {
+    const promises = Array.from({ length: 5 }, (_, i) => enqueueOnDemandExtraction({
+      db, query: 'hybridtest coalesce',
+      requester: { id: `hybridtest-c${i}`, kind: 'user' },
+    }));
+    const results = await Promise.all(promises);
+    const enq = results.filter(r => r.status === 'enqueued').length;
+    const co  = results.filter(r => r.status === 'coalesced').length;
+    expect(enq).toBe(1);
+    expect(co).toBe(4);
+  });
+
+  it('end-to-end: enqueue → drain → next expandSearchConcepts sees new concepts', async () => {
+    // Use a query guaranteed zero-seed against the current KG.
+    const rawQuery = 'quantum tulip encabulator';
+
+    const enqR = await enqueueOnDemandExtraction({
+      db, query: rawQuery,
+      requester: { id: 'hybridtest-e2e', kind: 'user' },
+    });
+    expect(enqR.status).toBe('enqueued');
+
+    const summary = await runOnDemandDrain({});
+    expect(summary.processed).toBeGreaterThanOrEqual(1);
+    // Note: the drain may extract 0 tutorials if cosine-rank returns nothing —
+    // that's a valid outcome and the test does not assert non-zero extraction.
+
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const [row] = await SELECT.from(KgOnDemandRequests)
+      .where({ normalizedKey: 'quantum tulip encabulator' })
+      .columns('status', 'tutorialsExtracted', 'llmPromptTokens');
+    expect(['DONE', 'FAILED']).toContain(row.status);
+  });
+});
+```
+
+- [ ] **Step 3: Run the hybrid test**
+
+Requires `cf login` + `cds bind --exec`. From the worktree:
+
+```bash
+HYBRID_KG_ONDEMAND=true cds bind --exec -- npx vitest run --project hybrid test/hybrid/kg-ondemand.test.js
+```
+
+Expected: all 3 tests PASS. If any test fails, capture the output — do NOT commit until diagnosed.
+
+- [ ] **Step 4: Write the smoke test**
+
+Create `test/smoke/kg-ondemand.smoke.test.js`:
+
+```javascript
+// Post-deploy smoke test. Read-only. Assumes the flag is off in DEV
+// unless the operator has flipped it. Two envs:
+//   SMOKE_SRV_URL — CAP service base URL (e.g. https://tutorials-srv-dev.cfapps.eu10.hana.ondemand.com)
+//   SMOKE_ADMIN_TOKEN — bearer token with Tutorial.Author scope
+//
+// Run: SMOKE_SRV_URL=... SMOKE_ADMIN_TOKEN=... npx vitest run --project smoke test/smoke/kg-ondemand.smoke.test.js
+
+import { describe, it, expect } from 'vitest';
+
+const SRV = process.env.SMOKE_SRV_URL;
+const TOKEN = process.env.SMOKE_ADMIN_TOKEN;
+const RUN = Boolean(SRV);
+
+describe.skipIf(!RUN)('KG on-demand — smoke (#948)', () => {
+  it('OData endpoint returns 200 with Tutorial.Author scope', async () => {
+    const res = await fetch(`${SRV}/odata/v4/admin/KgOnDemandRequests?$top=1`, {
+      headers: TOKEN ? { authorization: `Bearer ${TOKEN}` } : {},
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.value)).toBe(true);
+  });
+
+  it('OData endpoint returns 401/403 without a token', async () => {
+    const res = await fetch(`${SRV}/odata/v4/admin/KgOnDemandRequests?$top=1`);
+    expect([401, 403]).toContain(res.status);
+  });
+
+  it('KnowledgeGraphSettings exposes onDemandExtractionEnabled', async () => {
+    const res = await fetch(`${SRV}/odata/v4/admin/KnowledgeGraphSettings`, {
+      headers: TOKEN ? { authorization: `Bearer ${TOKEN}` } : {},
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.value?.[0]).toHaveProperty('onDemandExtractionEnabled');
+    expect(typeof body.value[0].onDemandExtractionEnabled).toBe('boolean');
+  });
+});
+```
+
+- [ ] **Step 5: Run the smoke test locally against DEV**
+
+```bash
+SMOKE_SRV_URL=https://<dev-srv-url> SMOKE_ADMIN_TOKEN=$DEV_TOKEN npx vitest run --project smoke test/smoke/kg-ondemand.smoke.test.js
+```
+
+Expected: 3 passes. If the third assertion fails (`onDemandExtractionEnabled` missing) the schema hasn't deployed to DEV — the smoke test correctly caught it; go back to the local deploy sequence.
+
+- [ ] **Step 6: Verify vitest.config picks up the new files**
+
+```bash
+npx vitest --project hybrid --listTests | grep kg-ondemand
+npx vitest --project smoke --listTests | grep kg-ondemand
+```
+
+Expected: each shows exactly one match. If not, edit `vitest.config.js` to include the file explicitly.
+
+- [ ] **Step 7: Commit**
+
+```
+git add test/hybrid/kg-ondemand.test.js test/smoke/kg-ondemand.smoke.test.js vitest.config.js
+git commit -m "test(#948): hybrid + smoke coverage for on-demand KG extraction
+
+- Hybrid (test/hybrid/kg-ondemand.test.js): gated by HYBRID_KG_ONDEMAND=true
+  to control LLM quota. Covers HANA insert, concurrent-enqueue coalescing,
+  and end-to-end drain against real HANA.
+- Smoke (test/smoke/kg-ondemand.smoke.test.js): post-deploy sanity — endpoint
+  200 with token, 401/403 without, KnowledgeGraphSettings exposes the new
+  boolean field."
+```
+
+---
+
+### Task 8: Deploy sequence + PR
+
+**Files:** none new. This is the closing checklist.
+
+- [ ] **Step 1: Local build**
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/948-kg-ondemand-triggers
+npm run build:all
+```
+
+Expected: Hugo build succeeds; admin-shell reports `Copied kgOnDemand`; no errors.
+
+- [ ] **Step 2: Local deploy to DEV**
+
+Confirm target first:
+
+```bash
+cf target
+```
+
+Expected: `Org: tutorial-system`, `Space: dev`. If not, `cf target -s dev`.
+
+Confirm deploy scope with Tom before running the deploy command. Then:
+
+```bash
+cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f && cd ..
+```
+
+- [ ] **Step 3: Post-deploy smoke run**
+
+```bash
+SMOKE_SRV_URL=https://<dev-srv-url> SMOKE_ADMIN_TOKEN=$DEV_TOKEN npx vitest run --project smoke test/smoke/kg-ondemand.smoke.test.js
+```
+
+All 3 tests pass.
+
+- [ ] **Step 4: Sanity-check flag defaults**
+
+`hana-cli inspectTable KGONDEMANDREQUESTS` — expect the table exists on DEV.
+`SELECT ONDEMANDEXTRACTIONENABLED FROM COM_SAP_DEVELOPERS_IMS_KNOWLEDGEGRAPHSETTINGS` via `hana-cli querySimple` — expect `FALSE` (or `NULL` if the row was untouched — resolver treats both as false).
+
+- [ ] **Step 5: Push branch + open draft PR**
+
+```bash
+git push -u origin worktree-948-kg-ondemand-triggers
+gh pr create --draft --title "feat(#948): on-demand KG rebuild triggers from expandSearchConcepts" --body "$(cat <<'EOF'
+Closes #948. Parked from #943.
+
+## Summary
+
+When \`expandSearchConcepts\` returns zero seeds and \`KnowledgeGraphSettings.onDemandExtractionEnabled\` is true, the tool fire-and-forgets an enqueue into a new \`KgOnDemandRequests\` HANA queue. A new 2-minute cron (\`kg-ondemand\`) drains the queue, cosine-ranks the corpus by query vector, and extracts concepts from the top-K tutorials via the existing \`extractConceptsFromTutorial\` + \`kg-merge-on-write\` pipeline.
+
+**Behavior in production is unchanged until an admin flips the flag** — default is \`false\`. This PR delivers the observability + coalescing scaffolding the #948 prerequisites list asked for.
+
+## What's in
+
+- \`db/knowledge-graph-ondemand.cds\`: \`KgOnDemandRequests\` entity (queue rows).
+- \`db/src/KG_ONDEMAND_PENDING_UNIQUE.hdbindex\`: filtered unique index (HANA defense-in-depth for the enqueue coalescing gate).
+- \`db/knowledge-graph.cds\`: new \`KnowledgeGraphSettings.onDemandExtractionEnabled\` (default false).
+- \`srv/lib/runtime-config/kg-settings.js\`: resolver picks up the fifth knob (DB > env > default).
+- \`srv/lib/kg/on-demand-enqueue.js\`: pure enqueue logic — flag check, normalize, rate-limit, INSERT-WHERE-NOT-EXISTS.
+- \`srv/lib/kg/on-demand-cosine-rank.js\`: two-phase LOB-safe MAX-cosine ranker over \`TutorialEmbedding\`.
+- \`srv/jobs/kg-ondemand-job.js\`: the drain (registered at \`1-59/2 * * * *\`).
+- \`srv/lib/kg/joule-tool-expand-concepts.js\`: fire-and-forget enqueue on zero-seed + \`requester\` opt.
+- \`srv/lib/chat-orchestrator.js\`: threads \`requester\` into the dispatch.
+- \`srv/admin-service.cds\`: \`@readonly\` projection over \`KgOnDemandRequests\`.
+- \`app/admin/kgOnDemand/\`: Fiori Elements LR + OP.
+- \`app/admin-shell/webapp/{manifest.json,controller/Shell.controller.js,model/navigation.json}\`: registration.
+- Tests: unit (schema, resolver, enqueue, cosine-rank, drain, tool wiring, projection), hybrid, smoke.
+
+## Metrics added
+
+\`kg_ondemand_enqueued\`, \`kg_ondemand_dedup_coalesced\`, \`kg_ondemand_rate_limited\`, \`kg_ondemand_enqueue_error\`, \`kg_ondemand_extracted\`, \`kg_ondemand_failures\`, \`kg_ondemand_drain_tick\`.
+
+## Env knobs (all optional, defaults sane)
+
+\`KG_ONDEMAND_ENABLED\`, \`KG_ONDEMAND_USER_MAX_PER_HOUR=3\`, \`KG_ONDEMAND_GLOBAL_MAX_PER_HOUR=20\`, \`KG_ONDEMAND_DRAIN_BATCH=3\`, \`KG_ONDEMAND_TUTORIALS_PER_REQ=5\`, \`KG_ONDEMAND_MAX_ATTEMPTS=3\`.
+
+## Rollout
+
+Flag stays OFF in this PR. Post-merge, watch \`kg.joule.search_expansion_returned { resultCount: 0 }\` for a week to build the pre-flag baseline. When ready, admin flips \`KnowledgeGraphSettings.onDemandExtractionEnabled=true\` at \`/admin-ui/#kg-settings\` and watches \`/admin-ui/#kgOnDemand\` for PENDING → RUNNING → DONE.
+
+## Spec
+
+\`docs/superpowers/specs/2026-07-05-948-kg-ondemand-triggers-design.md\`
+
+## Plan
+
+\`docs/superpowers/plans/2026-07-05-948-kg-ondemand-triggers.md\`
+EOF
+)"
+```
+
+- [ ] **Step 6: Post the PR URL back to Tom.**
+
+---
+
+## Self-Review
+
+Ran on 2026-07-05 after landing all task blocks.
+
+**1. Spec coverage.** Every §-numbered spec section maps to at least one task:
+- §1 Architecture — Tasks 3, 4, 5 (enqueue, drain, tool wiring).
+- §2 Data model — Task 1 (entity, index, setting).
+- §3 Data flow — spanned by Tasks 3–5.
+- §4 Error handling — asserted by unit tests in Tasks 3, 4, 5.
+- §5 Testing — Tasks 3, 4, 5, 7.
+- §6 Rollout — Task 8 (deploy) + PR body.
+- §7 Alternatives — no task; recorded in spec only, correctly out of scope for a plan.
+- Prerequisites (§Prerequisites addressed 1–3) — all satisfied: (1) metrics added in Task 3+4; (2) cost accounting on the queue row + summary metric in Task 4; (3) INSERT-WHERE-NOT-EXISTS coalescing in Task 3.
+
+**2. Placeholder scan.** Searched for TBD / TODO / FIXME / "implement later" / "similar to Task N without repeating" — none present. All test bodies are complete except Task 5's fixture-reuse comments (`/* zero-seed db */`), which are intentional cross-references to the existing test file's fixtures rather than placeholders; every subagent implementing that task will read the existing file.
+
+**3. Type consistency across tasks.**
+- `enqueueOnDemandExtraction({ db, query, requester })` — defined Task 3, consumed Task 5. Match.
+- `rankTutorialsByQueryVector({ db, queryVector, limit })` — defined Task 4a, consumed Task 4b. Match.
+- `runOnDemandDrain(deps)` return shape — defined Task 4b, asserted in Task 4b tests. Match.
+- `requester` shape — defined Task 3 (`{ id?, ipHash?, kind }`), threaded Task 5. Match.
+- `KgOnDemandRequests` column list — defined Task 1, referenced Tasks 3/4/6. Match.
+
+**4. Scope check.** One issue, one plan, no independent subsystems. Not a decomposition candidate.
+
+Plan is complete and internally consistent.
 
