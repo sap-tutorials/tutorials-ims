@@ -33,7 +33,9 @@
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
 @requires : 'any'
-@graphql
+// See note on SearchService: `@graphql` alone REPLACES the OData mount and
+// 404's /graph/Concepts, /graph/neighborhood, etc. Use dual protocols.
+@protocol: ['odata', 'graphql']
 service KnowledgeGraphService @(path : '/graph') {
 
   // ─── Projections (curation introspection + admin tooling) ─────────────
