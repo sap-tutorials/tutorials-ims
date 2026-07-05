@@ -79,6 +79,11 @@
 <script type="module" src="/js/concepts-filter.js" defer></script>
 
 <style>
+/* Theme-aware — every color / background reads from the SAP Horizon CSS
+   variables declared in hugo/assets/css/sap-theme-vars.css. Light-mode
+   hex is preserved as the var() fallback so we don't regress that mode
+   if a variable is ever missing. Fixes dark-on-dark readability
+   (paralleling the fix in af194ade for My Completions). */
 .concepts-index {
   max-width: 960px;
   margin: 0 auto;
@@ -86,26 +91,26 @@
 }
 .concepts-index__breadcrumb {
   font-size: 0.875rem;
-  color: #515559;
+  color: var(--sapContent_LabelColor, #515559);
   margin-bottom: 1rem;
 }
 .concepts-index__breadcrumb a {
-  color: #0070f2;
+  color: var(--sapLinkColor, #0070f2);
   text-decoration: none;
 }
 .concepts-index__breadcrumb a:hover { text-decoration: underline; }
 .concepts-index__title {
   font-size: 2rem;
   margin: 0 0 0.75rem;
-  color: #1d2d3e;
+  color: var(--sapTextColor, #1d2d3e);
 }
 .concepts-index__intro {
-  color: #515559;
+  color: var(--sapTextColor, #515559);
   margin: 0 0 1.5rem;
   max-width: 60ch;
 }
 .concepts-index__count {
-  color: #515559;
+  color: var(--sapContent_LabelColor, #515559);
   font-size: 0.875rem;
   margin: 0 0 1rem;
 }
@@ -118,15 +123,15 @@
   gap: 0.75rem;
 }
 .concepts-index__item {
-  border: 1px solid #d5dadc;
+  border: 1px solid var(--sapList_BorderColor, #d5dadc);
   border-radius: 6px;
-  background: #fff;
+  background: var(--sapTile_Background, #fff);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .concepts-index__item[hidden] { display: none; }
 .concepts-index__item:hover {
-  border-color: #0070f2;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-color: var(--sapLinkColor, #0070f2);
+  box-shadow: var(--sapContent_Shadow0, 0 2px 8px rgba(0, 0, 0, 0.06));
 }
 .concepts-index__link {
   display: flex;
@@ -138,29 +143,29 @@
 }
 .concepts-index__name {
   font-weight: 600;
-  color: #0070f2;
+  color: var(--sapLinkColor, #0070f2);
 }
 .concepts-index__description {
   font-size: 0.875rem;
-  color: #515559;
+  color: var(--sapTextColor, #515559);
 }
 .concepts-index__meta {
   font-size: 0.75rem;
-  color: #7a8085;
+  color: var(--sapContent_LabelColor, #7a8085);
   margin-top: 0.15rem;
 }
 .concepts-index__empty {
-  color: #515559;
+  color: var(--sapContent_LabelColor, #515559);
   padding: 2rem;
   text-align: center;
-  background: #f5f6f7;
+  background: var(--sapNeutralBackground, #f5f6f7);
   border-radius: 6px;
 }
 .concepts-index__clear-inline {
   background: transparent;
   border: none;
   padding: 0;
-  color: #0070f2;
+  color: var(--sapLinkColor, #0070f2);
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
