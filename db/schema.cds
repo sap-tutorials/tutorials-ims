@@ -656,6 +656,7 @@ entity KnowledgeGraphSettings : cuid, managed {
   extractBuildCap            : Integer       @assert.range: [0, 100000];
   mergeSimThreshold          : Decimal(3, 2) @assert.range: [0.01, 1.00];
   mergeSimThresholdExtract   : Decimal(3, 2) @assert.range: [0.01, 1.00];
+  onDemandExtractionEnabled  : Boolean default false;
 }
 
 entity TutorialEmbedding {
