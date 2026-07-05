@@ -100,6 +100,8 @@ CAP 10 Node.js activates the HCQL adapter as soon as any service is annotated `@
 
 ### 4.4 Data flow
 
+> **Post-implementation correction:** The URL and Content-Type below reflect the pre-implementation hypothesis. See §4.3 callout — actual URL is `/admin` (same as OData), Content-Type is `application/json`. Ascii diagram left as-is for provenance.
+
 ```
 Client                    AppRouter                 CAP HCQL adapter          Service handlers
   ├─ POST /hcql/admin  ────┤ JWT verified,          ├─ parses CQN JSON     ├─ existing @Before/@On/@After
@@ -124,10 +126,10 @@ Contents:
 1. **What HCQL is** — one paragraph plus upstream link.
 2. **Beta status warning** — read-only stable, writes not guaranteed cross-runtime, protocol not yet fully specified.
 3. **Enabled services table** — mirrors §2 above.
-4. **Per-service curl examples** — 9 examples, one per service, using dev-env URLs. The exact per-service path is captured from `cds watch` output during implementation. Example (final path TBD from runtime):
+4. **Per-service curl examples** — 9 examples, one per service, using dev-env URLs. The exact per-service path is captured from `cds watch` output during implementation. Example below reflects the pre-implementation hypothesis (`/hcql/admin`, `application/cqn+json`); the authoritative version in `docs/developers/reference/hcql-support.md` uses the correct `/admin` path and `application/json` Content-Type — see §4.3 callout for details:
 
    ```bash
-   # AdminService.Tutorials — first 5 slugs + titles
+   # PRE-IMPLEMENTATION HYPOTHESIS — see reference doc for the correct form.
    curl -X POST "https://tutorials-approuter-dev.cfapps.eu10-005.hana.ondemand.com/hcql/admin" \
      -H "Authorization: Bearer $JWT" \
      -H "Content-Type: application/cqn+json" \
@@ -159,9 +161,11 @@ Rationale:
 
 **Post-deploy smoke check** (added to §5 doc):
 
-- Anonymous curl to a public service (e.g. `POST /hcql/search`) → expect 200 + JSON.
-- Anonymous curl to a scoped service (e.g. `POST /hcql/admin`) → expect 401.
-- Authenticated curl to `/hcql/admin` without `Admin` scope → expect 403.
+Per the §4.3 correction, HCQL shares URLs with OData — a public HCQL POST to `/search` returns 200; a scoped HCQL POST to `/admin` follows the OData auth path. Original phrasing preserved for provenance:
+
+- ~~Anonymous curl to a public service (e.g. `POST /hcql/search`) → expect 200 + JSON.~~ → **Actual:** `POST /search` (same as OData; 200 + JSON).
+- ~~Anonymous curl to a scoped service (e.g. `POST /hcql/admin`) → expect 401.~~ → **Actual:** `POST /admin` (same as OData; 401).
+- ~~Authenticated curl to `/hcql/admin` without `Admin` scope → expect 403.~~ → **Actual:** `POST /admin` with JWT lacking `Admin` scope → 403.
 
 ## 7. Error handling
 
