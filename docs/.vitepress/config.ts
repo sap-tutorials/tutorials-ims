@@ -202,6 +202,7 @@ export default defineConfig({
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
           { text: 'Design decisions',          link: '/developers/reference/design-decisions' },
           { text: 'External integrations',     link: '/developers/reference/external-integrations' },
+          { text: 'GraphQL API',               link: '/developers/reference/graphql-api' },
           { text: 'HANA / HDI / SQL gotchas',  link: '/developers/reference/hana-hdi-gotchas' },
           { text: 'HCQL protocol adapter support', link: '/developers/reference/hcql-support' },
           { text: 'Iframe allowlist',          link: '/developers/reference/iframe-allowlist' },
