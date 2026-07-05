@@ -226,4 +226,29 @@ describe('runOnDemandDrain (#948)', () => {
     expect(row.status).toBe('FAILED');
     expect(row.latencyMs).toBeGreaterThanOrEqual(0);
   });
+
+  it('finally-recovery flips RUNNING back to PENDING if terminal UPDATE fails', async () => {
+    await setFlags();
+    await seedPending([{ query: 'q1' }]);
+
+    const embed = makeEmbedMock();
+    const rankTutorials = vi.fn(async () => [{ tutorialId: 'tid-1', slug: 't1', title: 'T1', score: 0.9 }]);
+    const extractOne = vi.fn(async () => ({
+      teaches: [{ slug: 'foo', name: 'Foo', confidence: 0.9 }],
+      tokenUsage: { prompt: 100, completion: 50 },
+      warnings: [],
+    }));
+    // Break the persist step so the DONE UPDATE never runs — the whole body
+    // throws after RUNNING has been set.
+    const persistExtraction = vi.fn(async () => { throw new Error('persist boom'); });
+
+    await runOnDemandDrain({ embed, rankTutorials, extractOne, persistExtraction });
+
+    const { KgOnDemandRequests } = cds.entities(NS);
+    const [row] = await SELECT.from(KgOnDemandRequests).columns('status', 'lastError');
+    // The row should NOT be stuck in RUNNING. Either PENDING (retry) or FAILED (max attempts).
+    // With MAX_ATTEMPTS default 3 and attempts=1, expect PENDING.
+    expect(row.status).toBe('PENDING');
+    expect(row.lastError).toMatch(/persist boom/);
+  });
 });

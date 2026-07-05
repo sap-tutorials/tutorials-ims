@@ -191,6 +191,7 @@ export async function runOnDemandDrain(deps = {}) {
   for (const row of rows) {
     const rowT0 = Date.now();
     const currentAttempts = row.attempts ?? 0;
+    let reachedTerminal = false;
 
     // Move to RUNNING + increment attempts.
     await UPDATE(KgOnDemandRequests)
@@ -255,6 +256,7 @@ export async function runOnDemandDrain(deps = {}) {
         })
         .where({ ID: row.ID });
 
+      reachedTerminal = true;
       processed++;
       extracted += localExtracted;
       metrics.emit?.('kg_ondemand_extracted', { tutorials: localExtracted, created: localCreated, merged: localMerged });
@@ -266,12 +268,26 @@ export async function runOnDemandDrain(deps = {}) {
         await UPDATE(KgOnDemandRequests)
           .set({ status: 'FAILED', lastError: msg, completedAt: new Date().toISOString(), latencyMs: Date.now() - rowT0 })
           .where({ ID: row.ID });
+        reachedTerminal = true;
         failed++;
         metrics.emit?.('kg_ondemand_failures', { reason: 'max_attempts' });
       } else {
         await UPDATE(KgOnDemandRequests)
           .set({ status: 'PENDING', lastError: msg })
           .where({ ID: row.ID });
+        reachedTerminal = true;
+      }
+    } finally {
+      if (!reachedTerminal) {
+        // Post-RUNNING code path threw (e.g. inside the catch's terminal UPDATE).
+        // Best-effort recovery: flip back to PENDING so a future tick retries.
+        try {
+          await UPDATE(KgOnDemandRequests)
+            .set({ status: 'PENDING', lastError: 'drain_crashed' })
+            .where({ ID: row.ID, status: 'RUNNING' });
+        } catch (finalErr) {
+          LOG.warn(`kg-ondemand finally-recovery failed for ${row.ID}: ${finalErr.message}`);
+        }
       }
     }
   }
