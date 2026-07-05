@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship a public, external-facing GraphQL endpoint (`/graphql` authenticated + `/graphql/public` anonymous) auto-generated from four CAP services (`HomepageService`, `KnowledgeGraphService`, `SearchService`, `DeveloperService`), with an additive-only versioning contract enforced by a CI schema-diff guard.
+**Goal:** Ship a public, external-facing GraphQL endpoint (`/graphql` authenticated + `/graphql/public` anonymous) auto-generated from three CAP services (`KnowledgeGraphService`, `SearchService`, `DeveloperService`), with an additive-only versioning contract enforced by a CI schema-diff guard. `HomepageService` was originally scoped for v1 but dropped after the Task 1 spike — it exposes only functions/actions, which `@cap-js/graphql` v0.14 does not project.
 
-**Architecture:** Add the `@cap-js/graphql` plugin, mark the four services with `@graphql`, configure the plugin to serve two mount points filtered by service (falling back to a single authenticated mount if the plugin does not support per-endpoint filtering), gate `me.*` reads on `DeveloperService` behind a new XSUAA scope `Tutorial.API`, add AppRouter routes, publish an SDL artifact + Hugo docs page, and lock the contract with unit / hybrid / smoke tests plus a breaking-change CI guard.
+**Architecture:** Add the `@cap-js/graphql` plugin, mark the three services with `@graphql` (or `@protocol: ['odata','graphql']` per-entity for the KG mixed surface), configure the plugin to serve two mount points via a second `GraphQLAdapter` instance in `srv/graphql-config.js` (MOUNT_MODE=DUAL_MOUNT — confirmed by the Task 1 spike; exact call pattern in `scripts/spikes/graphql-mount-spike.md`), gate `me.*` reads on `DeveloperService` behind a new XSUAA scope `Tutorial.API`, add AppRouter routes, publish an SDL artifact + Hugo docs page, and lock the contract with unit / hybrid / smoke tests plus a breaking-change CI guard.
 
 **Tech Stack:** CAP 10 (`@sap/cds ^10.0.3`) on Node.js 22+, HANA, XSUAA, AppRouter, Vitest, Hugo, TypeScript (build scripts), `@cap-js/graphql`.
 
@@ -30,8 +30,7 @@
 
 ```
 srv/
-  graphql-config.js                    # NEW — plugin registration, per-endpoint filter
-  homepage-service.cds                 # EDIT — + @graphql
+  graphql-config.js                    # NEW — plugin registration, per-endpoint filter (paste pattern from spike doc)
   knowledge-graph-service.cds          # EDIT — + @graphql on public entities only
   search-service.cds                   # EDIT — + @graphql
   developer-service.cds                # EDIT — + @graphql; @requires:'Tutorial.API' on me.* projections
@@ -67,12 +66,12 @@ package.json                           # EDIT — + @cap-js/graphql, + build:sdl
 
 ## Task Sequence (12 tasks)
 
-1. Plugin spike — validate per-endpoint filtering (blocking; may fork the plan)
+1. Plugin spike — validate per-endpoint filtering (blocking; may fork the plan) **— DONE, MOUNT_MODE=DUAL_MOUNT, commit 6a25a3ee**
 2. Add dependency and baseline plugin registration
-3. Annotate `HomepageService` and `SearchService`
+3. Annotate `SearchService`
 4. Annotate `KnowledgeGraphService` (public entities only)
 5. Annotate `DeveloperService` + add `Tutorial.API` scope
-6. Configure two mount points (or single, per Task 1 outcome)
+6. Configure two mount points (paste `GraphQLAdapter` pattern from spike doc)
 7. Add AppRouter routes
 8. Schema-shape unit test
 9. SDL emit script + breaking-change CI guard
@@ -83,6 +82,12 @@ package.json                           # EDIT — + @cap-js/graphql, + build:sdl
 ---
 
 ## Task 1: Plugin Spike — Validate Per-Endpoint Service Filtering
+
+**STATUS: DONE.** Executed as commit `6a25a3ee` (originally `4ce94229`, amended after review to add a real live probe). Result: **MOUNT_MODE = DUAL_MOUNT**, using `GraphQLAdapter` from `@cap-js/graphql/lib/GraphQLAdapter`. Bonus finding: `HomepageService` was dropped from v1 (only functions, no entity fields — plugin excludes it). Full evidence in `scripts/spikes/graphql-mount-spike.md`. **Do not re-execute this task.** Skip to Task 2.
+
+The original task description follows for historical reference.
+
+---
 
 **Purpose:** The design has a fork on whether `@cap-js/graphql` supports mounting the same plugin twice at two paths, each filtered to a different subset of services. Validate against the plugin's actual API before writing any production code. Result: either **DUAL_MOUNT** (proceed as designed) or **SINGLE_MOUNT** (fall back to one authenticated `/graphql` endpoint and update Tasks 6, 7, 10, 11).
 
@@ -241,12 +246,9 @@ npm test -- test/unit/graphql-plugin-registered.test.js
 
 Expected: FAIL on "does not activate graphql" if `@cap-js/graphql` was not yet installed in Task 1; PASS-with-warning if it was. Both are fine — proceed.
 
-- [ ] **Step 3: Delete the spike doc**
+- [ ] **Step 3: Note the spike doc stays until Task 6**
 
-```bash
-rm scripts/spikes/graphql-mount-spike.md
-rmdir scripts/spikes 2>/dev/null || true
-```
+The plan originally deleted `scripts/spikes/graphql-mount-spike.md` here, but Task 6 pastes its call signature verbatim into `srv/graphql-config.js`. Leave the spike doc committed until after Task 6 verifies its own tests. Task 6's Step 6 removes it.
 
 - [ ] **Step 4: Run test to confirm it now passes**
 
@@ -260,24 +262,22 @@ Expected: PASS.
 
 ```bash
 git add package.json package-lock.json test/unit/graphql-plugin-registered.test.js
-git rm -r --ignore-unmatch scripts/spikes
 git commit -m "feat(#996): baseline @cap-js/graphql registration"
 ```
 
 ---
 
-## Task 3: Annotate `HomepageService` and `SearchService`
+## Task 3: Annotate `SearchService`
 
-**Purpose:** Turn on the two anonymous-readable services first. Both already declare `@requires:'any'`, so there's no scope wiring needed. This produces a functioning `/graphql` endpoint with two services visible.
+**Purpose:** Turn on the one anonymous-readable service that has real entity projections. `HomepageService` was originally paired with `SearchService` here but was dropped after Task 1 — it exposes only functions. This produces a functioning `/graphql` endpoint with `SearchService` visible.
 
 **Files:**
-- Modify: `srv/homepage-service.cds` (add `@graphql` service-level annotation)
 - Modify: `srv/search-service.cds` (add `@graphql` service-level annotation)
 - Test: `test/unit/graphql-annotation-shape.test.js` (NEW)
 
 **Interfaces:**
 - Consumes: baseline plugin from Task 2
-- Produces: `HomepageService` and `SearchService` visible under `Query` in the generated schema
+- Produces: `SearchService` visible under `Query` in the generated schema
 
 - [ ] **Step 1: Write the failing test**
 
@@ -290,15 +290,7 @@ import cds from '@sap/cds';
 describe('graphql annotation shape', () => {
   let csn;
   beforeAll(async () => {
-    csn = await cds.load([
-      'srv/homepage-service.cds',
-      'srv/search-service.cds'
-    ]);
-  });
-
-  it('HomepageService carries @graphql', () => {
-    const svc = csn.definitions['HomepageService'];
-    expect(svc?.['@graphql']).toBe(true);
+    csn = await cds.load(['srv/search-service.cds']);
   });
 
   it('SearchService carries @graphql', () => {
@@ -314,20 +306,9 @@ describe('graphql annotation shape', () => {
 npm test -- test/unit/graphql-annotation-shape.test.js
 ```
 
-Expected: FAIL — both `@graphql` assertions.
+Expected: FAIL — `@graphql` assertion.
 
-- [ ] **Step 3: Add `@graphql` to `HomepageService`**
-
-Edit `srv/homepage-service.cds`, replace the service declaration block:
-
-```cds
-@path: '/homepage'
-@requires: 'any'
-@graphql
-service HomepageService {
-```
-
-- [ ] **Step 4: Add `@graphql` to `SearchService`**
+- [ ] **Step 3: Add `@graphql` to `SearchService`**
 
 Edit `srv/search-service.cds`:
 
@@ -338,7 +319,7 @@ Edit `srv/search-service.cds`:
 service SearchService {
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 4: Run test to verify it passes**
 
 ```bash
 npm test -- test/unit/graphql-annotation-shape.test.js
@@ -346,7 +327,7 @@ npm test -- test/unit/graphql-annotation-shape.test.js
 
 Expected: PASS.
 
-- [ ] **Step 6: Rebuild CDS**
+- [ ] **Step 5: Rebuild CDS**
 
 ```bash
 cds build --production
@@ -354,11 +335,11 @@ cds build --production
 
 Expected: exits 0. Any error indicates the annotation broke the compile — do not proceed.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add srv/homepage-service.cds srv/search-service.cds test/unit/graphql-annotation-shape.test.js
-git commit -m "feat(#996): annotate HomepageService + SearchService with @graphql"
+git add srv/search-service.cds test/unit/graphql-annotation-shape.test.js
+git commit -m "feat(#996): annotate SearchService with @graphql"
 ```
 
 ---
@@ -730,39 +711,54 @@ Expected: FAIL — `/graphql/public` returns 404.
 
 - [ ] **Step 3: Create `srv/graphql-config.js`**
 
+Paste the pattern from `scripts/spikes/graphql-mount-spike.md` §"Exact call signature for Task 6". Do NOT use the default `require('@cap-js/graphql')` export — that's the singleton adapter and it merges services across mounts. Import `GraphQLAdapter` directly from `lib/GraphQLAdapter`:
+
 ```javascript
 // srv/graphql-config.js
-// Registers a second GraphQL mount at /graphql/public exposing only the
-// anonymous-readable services (HomepageService, KnowledgeGraphService public
-// projections, SearchService). The primary /graphql mount is registered by
-// @cap-js/graphql's cds-plugin.js served hook and sees all @graphql-annotated
-// services including DeveloperService's Tutorial.API-scoped entities.
+// Dual-mount @cap-js/graphql. Registered as a second GraphQL mount at
+// /graphql/public exposing only the anonymous-readable services
+// (KnowledgeGraphService public projections, SearchService). The primary
+// /graphql mount is registered by @cap-js/graphql's cds-plugin.js served
+// hook and sees all @graphql-annotated services including DeveloperService's
+// Tutorial.API-scoped entities.
 //
-// Mount API resolved during Task 1 spike (see PR #996 commit
-// `chore(#996): plugin spike — decided MOUNT_MODE=DUAL_MOUNT`).
+// Mount pattern validated by the Task 1 spike — see
+// scripts/spikes/graphql-mount-spike.md (commit 6a25a3ee). We call
+// GraphQLAdapter directly (bypassing the singleton in the plugin's index.js)
+// so we can pass a filtered service map for the public endpoint.
 
 const cds = require('@sap/cds');
-const graphql = require('@cap-js/graphql');
+const GraphQLAdapter = require('@cap-js/graphql/lib/GraphQLAdapter');
+// ^^ INTERNAL import path — no `exports` map entry. Stable across @cap-js/graphql
+//    0.x. If the plugin upgrades and moves this file, the require throws at
+//    boot with a clear "Cannot find module" — not silent behavioural drift.
 
-const PUBLIC_SERVICES = new Set(['HomepageService', 'KnowledgeGraphService', 'SearchService']);
+const PUBLIC_SERVICES = ['KnowledgeGraphService', 'SearchService'];
+// HomepageService intentionally excluded — dropped from v1 after the Task 1
+// spike observed it exposes only CDS function/action declarations, which
+// @cap-js/graphql v0.14 does not project.
 
 cds.on('served', () => {
   const app = cds.app;
   if (!app) return;
 
-  // Build a filtered handler exposing only the public subset.
-  const publicMw = graphql.createMiddleware
-    ? graphql.createMiddleware({ services: [...PUBLIC_SERVICES] })
-    : graphql({ services: [...PUBLIC_SERVICES] });
+  const publicServices = Object.fromEntries(
+    Object.entries(cds.services).filter(([name]) => PUBLIC_SERVICES.includes(name))
+  );
 
-  app.use('/graphql/public', publicMw);
-  cds.log('graphql').info('mounted /graphql/public with services:', [...PUBLIC_SERVICES]);
+  app.use(
+    '/graphql/public',
+    cds.middlewares.before,
+    GraphQLAdapter({ services: publicServices, path: '/graphql/public', graphiql: false }),
+    cds.middlewares.after
+  );
+  cds.log('graphql').info('mounted /graphql/public with services:', PUBLIC_SERVICES);
 });
 
 module.exports = {};
 ```
 
-If the plugin does not expose `createMiddleware` and the naked factory call fails, replace the middleware body with the exact call recorded in the Task 1 spike doc's commit message.
+The primary `/graphql` mount comes for free from the plugin's own `served` hook — no code needed for it here. It picks up every service annotated with `@graphql` / `@protocol: 'graphql'`.
 
 - [ ] **Step 4: Wire the config into CAP boot**
 
@@ -782,7 +778,16 @@ npm run test:hybrid -- test/hybrid/graphql-endpoint.test.js
 
 Expected: PASS for the two smoke assertions above.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Retire the spike doc**
+
+The spike doc has now been consumed by `srv/graphql-config.js`. Remove it:
+
+```bash
+git rm scripts/spikes/graphql-mount-spike.md scripts/spikes/mount-two.js
+rmdir scripts/spikes 2>/dev/null || true
+```
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add srv/graphql-config.js srv/graphql-config.cds test/hybrid/graphql-endpoint.test.js
@@ -791,27 +796,7 @@ git commit -m "feat(#996): dual-mount GraphQL — anonymous /graphql/public + au
 
 ### If MOUNT_MODE = SINGLE_MOUNT
 
-- [ ] **Step 1: Create a no-op config file for consistency**
-
-```javascript
-// srv/graphql-config.js
-// Single-mount mode chosen after Task 1 spike — @cap-js/graphql supports one
-// endpoint per boot. The plugin's cds-plugin.js served hook mounts /graphql
-// with all @graphql-annotated services. Public reads still require a bearer
-// token; documented in docs page (Task 11).
-module.exports = {};
-```
-
-- [ ] **Step 2: Write and run the reduced hybrid test**
-
-Create `test/hybrid/graphql-endpoint.test.js` with only the second `it()` block from the DUAL_MOUNT variant above. Expect `/graphql` to answer.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add srv/graphql-config.js test/hybrid/graphql-endpoint.test.js
-git commit -m "feat(#996): single-mount GraphQL — authenticated /graphql only"
-```
+*(Task 1 already resolved MOUNT_MODE=DUAL_MOUNT, so this branch is DEAD. Left in place for historical reference only. Skip to Task 7.)*
 
 ---
 
@@ -938,12 +923,12 @@ describe('graphql schema shape (#996)', () => {
     }
   });
 
-  it('exposes exactly the four services under Query', () => {
-    expect(sdl).toMatch(/HomepageService/);
+  it('exposes exactly the three services under Query', () => {
     expect(sdl).toMatch(/KnowledgeGraphService/);
     expect(sdl).toMatch(/SearchService/);
     expect(sdl).toMatch(/DeveloperService/);
     // Deny-list of unwanted services.
+    expect(sdl).not.toMatch(/\bHomepageService\b/);   // dropped from v1 (Task 1 spike)
     expect(sdl).not.toMatch(/\bAdminService\b/);
     expect(sdl).not.toMatch(/\bAuthorService\b/);
     expect(sdl).not.toMatch(/\bExportsService\b/);
@@ -1306,12 +1291,12 @@ Append (DUAL_MOUNT variant):
 
 ```javascript
   describe('scope enforcement', () => {
-    it('/graphql/public serves HomepageService without a token', async () => {
+    it('/graphql/public serves KnowledgeGraphService without a token', async () => {
       const r = await fetch(`${baseUrl}/graphql/public`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: '{ HomepageService { HomepageShelves { totalCount } } }'
+          query: '{ KnowledgeGraphService { PublishedConcepts { totalCount } } }'
         })
       });
       const j = await r.json();
@@ -1406,7 +1391,7 @@ Hit our GraphQL endpoint with any HTTP client:
 ```bash
 curl -s https://developers.sap.com/graphql/public \
   -H 'Content-Type: application/json' \
-  -d '{"query": "{ HomepageService { HomepageShelves { totalCount value { title } } } }"}'
+  -d '{"query": "{ KnowledgeGraphService { PublishedConcepts { totalCount value { slug name } } } }"}'
 ```
 
 Interactive query editor: [GraphiQL](/graphql/public).
@@ -1415,7 +1400,7 @@ Interactive query editor: [GraphiQL](/graphql/public).
 
 | Path | Auth | Contents |
 |---|---|---|
-| `/graphql/public` | none | Public read data — homepage shelves, published concepts, search |
+| `/graphql/public` | none | Public read data — published concepts, search |
 | `/graphql`        | XSUAA bearer with scope `Tutorial.API` | Everything above + user-scoped reads on `DeveloperService` |
 
 *(If `MOUNT_MODE = SINGLE_MOUNT`, edit the table to show only `/graphql` with `authenticationType: xsuaa` and add: "Public data still requires a bearer — request one via client credentials.")*
@@ -1453,12 +1438,12 @@ Requires a service key on the tutorials XSUAA instance. Request one through the 
 
 ## Example Queries
 
-### Public homepage shelves
+### Public concepts
 
 ```graphql
 {
-  HomepageService {
-    HomepageShelves { totalCount value { ID title } }
+  KnowledgeGraphService {
+    PublishedConcepts { totalCount value { slug name description } }
   }
 }
 ```
@@ -1516,10 +1501,10 @@ Design: [`docs/superpowers/specs/2026-07-05-996-graphql-support-design.md`](../.
 - Plugin: `@cap-js/graphql` (registered in `srv/graphql-config.js`).
 - Mount mode: `<DUAL_MOUNT | SINGLE_MOUNT>` (from Task 1 spike).
 - Services exposed:
-  - `HomepageService` (`@graphql` on the service, `@requires: 'any'`)
   - `KnowledgeGraphService` — public entities only (`@protocol: ['odata', 'graphql']` on `Concepts`, `ConceptEdges`, `TutorialConceptLinks`, `PublishedConcepts`)
   - `SearchService` (`@graphql` on the service, `@requires: 'any'`)
   - `DeveloperService` (`@graphql` on the service, `me`-shaped entities gated by `@restrict` requiring `Tutorial.API`)
+  - **`HomepageService` intentionally excluded** — functions/actions only, no entity fields; not projected by @cap-js/graphql v0.14. Rejoin when we add read-entity projections or when the plugin supports actions.
 
 ## AppRouter
 
@@ -1606,7 +1591,7 @@ import { describe, it, expect } from 'vitest';
 const baseUrl = process.env.SMOKE_APPROUTER_URL;
 
 describe.skipIf(!baseUrl)('graphql smoke (#996)', () => {
-  it('public homepage query returns 200', async () => {
+  it('public concepts query returns 200', async () => {
     const r = await fetch(`${baseUrl}/graphql/public`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
