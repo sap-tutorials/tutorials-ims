@@ -40,16 +40,21 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(() => registerJob({ jobName: 'dup', schedule: '0 1 * * *', ttlMs: 1000, description: 'x', fn: async () => 'b' })).toThrow(/Duplicate jobName/);
   });
 
-  it('registerJobs() registers exactly 33 jobs (lockstep)', async () => {
+  it('registerJobs() registers exactly 35 jobs (lockstep)', async () => {
     // The full registerJobs() schedules crons against node-cron. We run it
     // in a fresh test context; the test isolates by resetting the registry
     // in beforeEach and again in afterAll (below).
     registerJobs();
-    expect(_getJobRegistry().size).toBe(33);    // #916 adds kg-pagerank (32 -> 33)
+    // #916 adds kg-pagerank      (32 -> 33)
+    // #917 adds kg-communities   (33 -> 34)
+    // #918 adds kg-wcc           (34 -> 35)
+    expect(_getJobRegistry().size).toBe(35);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
     expect(names).toContain('kg-pagerank');
+    expect(names).toContain('kg-communities');
+    expect(names).toContain('kg-wcc');
   });
 
   it('runJobByName(unknownName) throws', async () => {
