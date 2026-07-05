@@ -21,6 +21,7 @@ using { com.sap.developers.ims.HomepageShelves } from '../db/homepage';
 
 @path: '/homepage'
 @requires: 'any'
+@mcp
 service HomepageService {
 
   // EventCard maps from ims.Events (startDate/name) to the homepage shape.

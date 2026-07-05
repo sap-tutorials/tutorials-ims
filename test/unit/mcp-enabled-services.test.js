@@ -13,4 +13,10 @@ describe('MCP enablement (Phase 1)', () => {
     const ent = csn.definitions['SearchService.SearchableItems'];
     expect(ent['@cds.query.limit']).toBe(200);
   });
+
+  it('HomepageService is annotated with @mcp', async () => {
+    const csn = await cds.load('srv/homepage-service.cds');
+    const svc = csn.definitions['HomepageService'];
+    expect(svc['@mcp']).toBe(true);
+  });
 });
