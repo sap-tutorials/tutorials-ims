@@ -67,6 +67,14 @@ describe('MCP curated tools: HomepageService', () => {
         thumbnailUrl:   'https://img.youtube.com/vi/ghi789/hqdefault.jpg',
         publishedAt:    '2026-06-03T10:00:00Z',
       },
+      {
+        ID:             'aaaaaaaa-9999-0000-0000-000000000004',
+        slug:           'vd-null-test',
+        youtubeVideoId: null,
+        title:          null,
+        thumbnailUrl:   null,
+        publishedAt:    '2026-06-04T10:00:00Z',
+      },
     ]);
   });
 
@@ -155,6 +163,18 @@ describe('MCP curated tools: HomepageService', () => {
       // Call with no auth context — must not throw.
       const results = await HomepageService.send('get_recent_videos', {});
       expect(Array.isArray(results)).toBe(true);
+    });
+
+    it('guards null youtubeVideoId, title, and thumbnail with empty strings', async () => {
+      // Regression test for #912: null fields must become '' not null.
+      const results = await HomepageService.send('get_recent_videos', { limit: 50 });
+      const nullRow = results.find((v) => v.videoId === '');
+      expect(nullRow).toBeDefined();
+      expect(nullRow.videoId).toBe('');
+      expect(nullRow.title).toBe('');
+      expect(nullRow.thumbnail).toBe('');
+      // publishedAt is timestamp, never empty string.
+      expect(nullRow.publishedAt).toBeDefined();
     });
   });
 });

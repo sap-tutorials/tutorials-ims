@@ -425,10 +425,10 @@ export default class HomepageService extends cds.ApplicationService {
             .limit(limit)
         );
         return (rows || []).map((r) => ({
-          videoId:     r.youtubeVideoId,
-          title:       r.title,
-          thumbnail:   r.thumbnailUrl,
-          publishedAt: r.publishedAt,
+          videoId:     r.youtubeVideoId ?? '',
+          title:       r.title ?? '',
+          thumbnail:   r.thumbnailUrl ?? '',
+          publishedAt: r.publishedAt ?? null,
         }));
       } catch (err) {
         log.warn('[get_recent_videos] DB query failed:', err.message);
