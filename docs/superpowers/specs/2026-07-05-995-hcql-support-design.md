@@ -89,12 +89,14 @@ CAP 10 Node.js activates the HCQL adapter as soon as any service is annotated `@
 
 ### 4.3 URL shape
 
-Per the CAP protocol-adapter convention (parallel to `/odata/v4`, `/rest`, `/graphql`), the HCQL adapter mounts under the **`/hcql` base path** by default. Exact per-service URL shape is confirmed by `cds watch` output at implementation time; expected form is one of:
+> **Post-implementation correction (2026-07-05):** Runtime discovery via `cds watch` showed the hypothesis below is wrong. The `/hcql` protocol prefix is ONLY prepended when a service's `@path` is *relative*. All 9 target services have absolute `@path` values (e.g. `/admin`, `/search`), so CAP mounts HCQL at the **same URL as OData** and dispatches by request-body shape (`{"SELECT":...}` → HCQL; else → OData). Content-Type is `application/json` — `application/cqn+json` crashes CAP 10.0.3's body parser. Full details in `docs/developers/reference/hcql-support.md`. The original hypothesis is preserved below for provenance.
 
-- `POST /hcql<service-path>` — e.g. `/hcql/admin`, `/hcql/search`
-- `POST /hcql/<ServiceName>` — e.g. `/hcql/AdminService`
+~~Per the CAP protocol-adapter convention (parallel to `/odata/v4`, `/rest`, `/graphql`), the HCQL adapter mounts under the **`/hcql` base path** by default. Exact per-service URL shape is confirmed by `cds watch` output at implementation time; expected form is one of:~~
 
-The implementation step will `cds watch` locally, capture the actual routes printed by the runtime, and use those in the reference doc. If the base path is configurable, it stays at the default `/hcql` (no `cds.protocols` override — see §4.2).
+- ~~`POST /hcql<service-path>` — e.g. `/hcql/admin`, `/hcql/search`~~
+- ~~`POST /hcql/<ServiceName>` — e.g. `/hcql/AdminService`~~
+
+~~The implementation step will `cds watch` locally, capture the actual routes printed by the runtime, and use those in the reference doc. If the base path is configurable, it stays at the default `/hcql` (no `cds.protocols` override — see §4.2).~~
 
 ### 4.4 Data flow
 
