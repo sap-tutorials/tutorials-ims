@@ -2,6 +2,7 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 
 @path: '/api'
 @requires: 'any'
+@graphql
 service DeveloperService {
 
   // Exposed entities (restricted projections)
@@ -13,6 +14,7 @@ service DeveloperService {
   // user_uuid claim and stays AdminService-only — the smoke test
   // in test/smoke/tutorial-author-fk.smoke.test.js asserts this.
   @(requires: 'authenticated-user')
+  @(restrict: [{ grant: '*', to: 'Tutorial.API' }])
   @readonly entity Tutorials as projection on ims.Tutorials {
     *,
     author.email       as authorEmail       : String,
@@ -22,12 +24,14 @@ service DeveloperService {
   } excluding { meta, contributors, repositories };
 
   @(requires: 'authenticated-user')
+  @(restrict: [{ grant: '*', to: 'Tutorial.API' }])
   entity TaskRecords as projection on ims.TaskRecords;
 
   // Public Events surface (#646). No associations exposed — admins manage
   // mission/prize/registration linkage via AdminService; public callers only
   // need the slim metadata to filter by type, date range, name.
   @(requires: 'authenticated-user')
+  @(restrict: [{ grant: '*', to: 'Tutorial.API' }])
   @readonly entity Events as projection on ims.Events {
     ID, legacyId, name, startDate, endDate, timeZone, eventType
   };
