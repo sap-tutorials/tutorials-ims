@@ -123,6 +123,12 @@ describe('scope enforcement', () => {
       .map(e => e?.extensions?.code)
       .filter(c => c === '401' || c === '403' || c === 'UNAUTHENTICATED' || c === 'FORBIDDEN');
     expect(authCodes).toHaveLength(0);
+    // Positive proof: the gate opened. DeveloperService.Tutorials is HANA-
+    // backed and stable in the hybrid env (unlike the KG service, which is
+    // 503 in the test config), so we can assert the data payload actually
+    // arrived. Without this, the test passes even if DeveloperService
+    // silently errors for any non-auth reason.
+    expect(j.data?.DeveloperService).toBeDefined();
   });
 
   it('/graphql/public schema does NOT include DeveloperService (service-set isolation)', async () => {
