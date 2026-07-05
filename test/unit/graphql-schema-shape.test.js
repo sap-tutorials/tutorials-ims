@@ -5,14 +5,9 @@ describe('graphql schema shape (#996)', () => {
   let sdl;
   beforeAll(async () => {
     const csn = await cds.load('srv/');
-    const { generateSchema4 } = await import('@cap-js/graphql/lib/schema/generateSchema.js').catch(() => ({}));
-    if (typeof generateSchema4 === 'function') {
-      sdl = generateSchema4(csn);
-    } else {
-      // Fallback: shell out to the plugin's SDL emit path we build in Task 9.
-      const { emitSdl } = await import('../../scripts/emit-graphql-sdl.ts');
-      sdl = await emitSdl(csn);
-    }
+    // Use the project's emit-graphql-sdl script (Task 9).
+    const { emitSdl } = await import('../../scripts/emit-graphql-sdl.ts');
+    sdl = await emitSdl(csn);
   });
 
   it('exposes exactly the three services under Query', () => {

@@ -16,6 +16,7 @@ const {
   isObjectType,
   isInterfaceType,
   isEnumType,
+  isInputObjectType,
 } = _require('graphql') as typeof import('graphql');
 
 export interface Breaking {
@@ -81,6 +82,15 @@ export function diffSchemas(oldSdl: string, newSdl: string): { breaking: Breakin
             deprecated: false,
           });
         }
+        // Existing optional arg made required.
+        if (oa && na.type.toString().endsWith('!') && !oa.type.toString().endsWith('!')) {
+          breaking.push({
+            kind: 'ARG_MADE_REQUIRED',
+            where: `${typeName}.${of_.name}(${na.name})`,
+            detail: `${oa.type} -> ${na.type}`,
+            deprecated: !!oa.deprecationReason,
+          });
+        }
       }
     }
   }
@@ -101,6 +111,27 @@ export function diffSchemas(oldSdl: string, newSdl: string): { breaking: Breakin
           where: `${t.name}.${v.name}`,
           detail: '',
           deprecated: !!v.deprecationReason,
+        });
+      }
+    }
+  }
+
+  // Input-object-type field removals.
+  for (const t of Object.values(o.getTypeMap())) {
+    if (!isInputObjectType(t)) continue;
+    const nt = n.getType(t.name);
+    if (!nt || !isInputObjectType(nt)) {
+      breaking.push({ kind: 'TYPE_REMOVED', where: t.name, detail: '', deprecated: false });
+      continue;
+    }
+    const newInputFields = nt.getFields();
+    for (const [fieldName, field] of Object.entries(t.getFields())) {
+      if (!(fieldName in newInputFields)) {
+        breaking.push({
+          kind: 'FIELD_REMOVED',
+          where: `Input<${t.name}>.${fieldName}`,
+          detail: '',
+          deprecated: !!(field as any).deprecationReason,
         });
       }
     }

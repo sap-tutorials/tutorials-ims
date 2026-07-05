@@ -25,7 +25,7 @@ service DeveloperService {
 
   @(requires: 'authenticated-user')
   @(restrict: [{ grant: '*', to: 'Tutorial.API' }])
-  entity TaskRecords as projection on ims.TaskRecords;
+  @readonly entity TaskRecords as projection on ims.TaskRecords;
 
   // Public Events surface (#646). No associations exposed — admins manage
   // mission/prize/registration linkage via AdminService; public callers only

@@ -54,6 +54,16 @@ curl -s "https://<subdomain>.authentication.<region>.hana.ondemand.com/oauth/tok
 
 Requires a service key on the tutorials XSUAA instance. Request one through the platform team.
 
+## Prerequisite: Role Collection Assignment
+
+The `Tutorial.API` scope is only granted to identities assigned the **Tutorials API Consumer** role collection in your BTP subaccount. Ask a subaccount administrator to:
+
+1. Open the [BTP cockpit](https://cockpit.btp.cloud.sap) → your subaccount → **Security** → **Role Collections**.
+2. Locate the `Tutorials API Consumer` role collection (auto-created by the tutorials MTA deploy).
+3. Assign your identity (via **User** or **Identity Provider** tab).
+
+Without this assignment your bearer token will authenticate successfully at `/graphql` but every `DeveloperService.me.*` query returns HTTP 200 with a GraphQL `errors[].extensions.code: "403"`.
+
 ## Example Queries
 
 ### Public concepts
@@ -87,6 +97,15 @@ Requires a service key on the tutorials XSUAA instance. Request one through the 
     Tutorials { totalCount value { slug title } }
   }
 }
+```
+
+### With a token — your task records
+
+```bash
+curl -s https://developers.sap.com/graphql \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "{ DeveloperService { Tutorials { totalCount value { slug title } } } }"}'
 ```
 
 ## Schema

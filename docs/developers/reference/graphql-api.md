@@ -7,7 +7,7 @@ Design: [#996 plan](../../superpowers/plans/2026-07-05-996-graphql-support.md)
 - Plugin: `@cap-js/graphql` (registered in `srv/graphql-config.js`).
 - Mount mode: `DUAL_MOUNT` (from Task 1 spike).
 - Services exposed:
-  - `KnowledgeGraphService` — public entities only (`@protocol: ['odata', 'graphql']` on `Concepts`, `ConceptEdges`, `TutorialConceptLinks`, `PublishedConcepts`)
+  - `KnowledgeGraphService` — service-level `@graphql` (Task 8 fix commit d73981af). The plugin's `served` hook does not honor entity-level `@protocol` for GraphQL, so every entity of the service is exposed. Admin projections (`ConceptClusters`, `KgCommunities`, `KgCommunityMembers`, changelog views) live in `AdminService`, not `KnowledgeGraphService`, so they are naturally excluded. The four public entities in this surface: `Concepts`, `ConceptEdges`, `TutorialConceptLinks`, `PublishedConcepts`.
   - `SearchService` (`@graphql` on the service, `@requires: 'any'`)
   - `DeveloperService` (`@graphql` on the service, `me`-shaped entities gated by `@restrict` requiring `Tutorial.API`)
   - **`HomepageService` intentionally excluded** — functions/actions only, no entity fields; not projected by @cap-js/graphql v0.14. Rejoin when we add read-entity projections or when the plugin supports actions.
