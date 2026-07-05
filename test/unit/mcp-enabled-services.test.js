@@ -19,4 +19,16 @@ describe('MCP enablement (Phase 1)', () => {
     const svc = csn.definitions['HomepageService'];
     expect(svc['@mcp']).toBe(true);
   });
+
+  it('KnowledgeGraphService is annotated with @mcp', async () => {
+    const csn = await cds.load('srv/knowledge-graph-service.cds');
+    const svc = csn.definitions['KnowledgeGraphService'];
+    expect(svc['@mcp']).toBe(true);
+  });
+
+  it('KnowledgeGraphService.PublishedConcepts has @cds.query.limit', async () => {
+    const csn = await cds.load('srv/knowledge-graph-service.cds');
+    const ent = csn.definitions['KnowledgeGraphService.PublishedConcepts'];
+    expect(ent['@cds.query.limit']).toBe(200);
+  });
 });

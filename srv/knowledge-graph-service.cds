@@ -34,6 +34,7 @@ using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
 @requires : 'any'
 @graphql
+@mcp
 service KnowledgeGraphService @(path : '/graph') {
 
   // ─── Projections (curation introspection + admin tooling) ─────────────
@@ -68,6 +69,7 @@ service KnowledgeGraphService @(path : '/graph') {
    * unpublished (publishedAt cleared by admin), VETOED, and MERGED.
    */
   @readonly
+  @cds.query.limit: 200
   entity PublishedConcepts as projection on ims.Concepts {
     ID, slug, name, description, publishedAt, publishedBy, status
   } where publishedAt is not null and status = 'ACTIVE';
