@@ -301,11 +301,20 @@ sap.ui.define([
       // click; the resulting propertyChange fires here. Restoring the same
       // value from localStorage on init also produces a propertyChange, but
       // writing the same value back is a no-op so the loop is self-stable.
+      //
+      // UI5 fires propertyChange with the RELATIVE binding path (`expanded`)
+      // plus a `context` parameter for the row (`/groups/N`) — NOT a
+      // pre-resolved absolute path. The original #832 fix assumed absolute
+      // paths, so its regex never matched and localStorage was never
+      // written. Match on the relative path + a `/groups/\d+` context
+      // instead. (#829 regression, spotted post-#832 in DEV.)
       oNavModel.attachPropertyChange(function (oEvent) {
         var sPath = oEvent.getParameter("path");
-        if (!sPath || !/\/groups\/\d+\/expanded$/.test(sPath)) return;
-        var sParentPath = sPath.replace(/\/expanded$/, "");
-        var oGroup = oNavModel.getProperty(sParentPath);
+        var oContext = oEvent.getParameter("context");
+        if (sPath !== "expanded" || !oContext) return;
+        var sCtxPath = oContext.getPath();
+        if (!/^\/groups\/\d+$/.test(sCtxPath)) return;
+        var oGroup = oNavModel.getProperty(sCtxPath);
         if (!oGroup || !oGroup.key) return;
         var bValue = oEvent.getParameter("value");
         localStorage.setItem("sap-tutorials-admin-nav-group-" + oGroup.key, String(!!bValue));
