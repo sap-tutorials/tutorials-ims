@@ -1,0 +1,109 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.kgOnDemand",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appSubtitle}}",
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "KgOnDemand-manage": {
+          "semanticObject": "KgOnDemand",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.fe.templates": {},
+        "sap.m": {},
+        "sap.ui.core": {}
+      }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "sap.tutorials.admin.kgOnDemand.i18n.i18n"
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "KgOnDemandRequestsList",
+          "target": "KgOnDemandRequestsList"
+        },
+        {
+          "pattern": "KgOnDemandRequests({key}):?query:",
+          "name": "KgOnDemandRequestObjectPage",
+          "target": "KgOnDemandRequestObjectPage"
+        }
+      ],
+      "targets": {
+        "KgOnDemandRequestsList": {
+          "type": "Component",
+          "id": "KgOnDemandRequestsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/KgOnDemandRequests",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "KgOnDemandRequests": {
+                  "detail": {
+                    "route": "KgOnDemandRequestObjectPage"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "KgOnDemandRequestObjectPage": {
+          "type": "Component",
+          "id": "KgOnDemandRequestObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/KgOnDemandRequests",
+              "editableHeaderContent": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

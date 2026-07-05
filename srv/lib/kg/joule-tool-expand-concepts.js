@@ -22,6 +22,10 @@
 
 import { topConceptsByCosine } from './concept-embedding-query.js'
 import { fetchEdges, fetchConceptsByIds, fetchLinks } from './_search-fetches.js'
+import { enqueueOnDemandExtraction } from './on-demand-enqueue.js'
+import cds from '@sap/cds'
+
+const LOG = cds.log('joule-tool-expand-concepts')
 
 // ---------------------------------------------------------------------------
 // LLM-facing tool descriptor
@@ -85,7 +89,7 @@ function clampInt(value, min, max, defaultValue) {
  *                                       short-circuits before edge/link fetches once exceeded.
  * @returns {Promise<object>} JSON response for the LLM
  */
-export async function expandSearchConceptsHandler({ db, embedClient, args, telemetry, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+export async function expandSearchConceptsHandler({ db, embedClient, args, telemetry, timeoutMs = DEFAULT_TIMEOUT_MS, requester }) {
   const rawQuery = typeof args?.query === 'string' ? args.query.trim() : ''
   if (!rawQuery) return { error: 'query is empty', concepts: [], tutorials: [] }
   if (rawQuery.length > HARD_QUERY_LIMIT) {
@@ -131,6 +135,12 @@ export async function expandSearchConceptsHandler({ db, embedClient, args, telem
       telemetry?.emit?.('kg.joule.search_expansion_returned', {
         resultCount: 0, latencyMs: Date.now() - t0,
       })
+      // #948: fire-and-forget enqueue on zero-seed. Never awaited. Never
+      // throws to the caller. If the flag is off, the module bails
+      // internally and returns { status: 'disabled' }.
+      const requesterOrDefault = requester ?? { kind: 'anon' }
+      enqueueOnDemandExtraction({ db, query: rawQuery, requester: requesterOrDefault })
+        .catch(err => LOG.warn?.('enqueueOnDemandExtraction dispatch failed:', err.message))
       return { queryEcho: rawQuery, concepts: [], tutorials: [] }
     }
 

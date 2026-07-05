@@ -61,6 +61,7 @@
       "sap.tutorials.admin.joule": "./components/joule",
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
       "sap.tutorials.admin.kgCommunities": "./components/kgCommunities",
+      "sap.tutorials.admin.kgOnDemand": "./components/kgOnDemand",
       "sap.tutorials.admin.feedback": "./components/feedback",
       "sap.tutorials.admin.secrets": "./components/secrets",
       "sap.tutorials.admin.uiEvents": "./components/uiEvents",
@@ -218,6 +219,12 @@
         "componentData": {},
         "lazy": true
       },
+      "kgOnDemandComponent": {
+        "name": "sap.tutorials.admin.kgOnDemand",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
       "feedbackComponent": {
         "name": "sap.tutorials.admin.feedback",
         "settings": {},
@@ -333,6 +340,7 @@
         { "name": "joule", "pattern": "joule", "target": [{"name": "jouleSettingsTarget", "prefix": "jo"}] },
         { "name": "knowledgeGraph", "pattern": "knowledgeGraph", "target": [{"name": "knowledgeGraphSettingsTarget", "prefix": "kg"}] },
         { "name": "kgCommunities", "pattern": "kgCommunities", "target": [{"name": "kgCommunitiesTarget", "prefix": "kc"}] },
+        { "name": "kgOnDemand", "pattern": "kgOnDemand", "target": [{"name": "kgOnDemandTarget", "prefix": "kod"}] },
         { "name": "secrets", "pattern": "secrets", "target": [{"name": "secretsTarget", "prefix": "se"}] },
         { "name": "feedbackList", "pattern": "feedback/list", "target": [{"name": "feedbackTarget", "prefix": "fb"}] },
         { "name": "feedbackDashboard", "pattern": "feedback/dashboard", "target": "feedbackDashboardTarget" },
@@ -495,6 +503,13 @@
           "id": "kgCommunitiesTarget",
           "viewLevel": 1,
           "prefix": "kc"
+        },
+        "kgOnDemandTarget": {
+          "type": "Component",
+          "usage": "kgOnDemandComponent",
+          "id": "kgOnDemandTarget",
+          "viewLevel": 1,
+          "prefix": "kod"
         },
         "feedbackTarget": {
           "type": "Component",

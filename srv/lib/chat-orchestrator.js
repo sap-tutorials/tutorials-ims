@@ -601,7 +601,12 @@ export async function dispatchTool(name, args, user) {
       // ChatSettings falls back through env → hardcoded default; NEVER throws.
       const { model } = await resolveEmbeddingSettings();
       const embedClient = defaultEmbedClient(model);
-      return await expandSearchConceptsHandler({ db, embedClient, args });
+      // #948: thread authenticated user or anon requester into the handler
+      // so the enqueue side-effect can attribute the request correctly.
+      const requester = user?.id
+        ? { id: user.id, kind: 'user' }
+        : { kind: 'anon' };
+      return await expandSearchConceptsHandler({ db, embedClient, args, requester });
     } catch (err) {
       LOG.warn('expandSearchConcepts dispatch failed:', err.message);
       return { queryEcho: args?.query ?? '', concepts: [], tutorials: [], warning: 'dispatch_failed' };

@@ -1,12 +1,13 @@
 // srv/lib/runtime-config/kg-settings.js
-// Resolves the 4 Knowledge Graph runtime knobs. Layered precedence:
+// Resolves the 5 Knowledge Graph runtime knobs. Layered precedence:
 //   1. KnowledgeGraphSettings row via cds.entities (CAP runtime path)
 //   2. KnowledgeGraphSettings raw-SQL UPPERCASE (HANA build-pipeline path,
 //      reached via the catch fallback when cds.entities('com.sap.developers.ims')
 //      throws because the model isn't loaded)
 //   3. process.env.KNOWLEDGE_GRAPH_ENABLED / KG_EXTRACT_BUILD_CAP /
-//      KG_MERGE_SIM_THRESHOLD / KG_MERGE_SIM_THRESHOLD_EXTRACT
-//   4. Hardcoded defaults: enabled=false, cap=200, thresholds 0.92/0.85
+//      KG_MERGE_SIM_THRESHOLD / KG_MERGE_SIM_THRESHOLD_EXTRACT / KG_ONDEMAND_ENABLED
+//   4. Hardcoded defaults: enabled=false, cap=200, thresholds 0.92/0.85,
+//      onDemandExtractionEnabled=false
 //
 // Inspired by srv/lib/chat-settings-resolver.js (#318), which provides the
 // layered DB→env→default pattern. This resolver ADDS a 5-second in-module
@@ -33,6 +34,7 @@ const DEFAULTS = {
   extractBuildCap: 200,
   mergeSimThreshold: 0.92,
   mergeSimThresholdExtract: 0.85,
+  onDemandExtractionEnabled: false,   // #948
 };
 
 /** Read the singleton row, tolerant of build-pipeline contexts where
@@ -48,7 +50,7 @@ async function readRow() {
     try {
       const db = await cds.connect.to('db');
       const rows = await db.run(
-        'SELECT enabled, extractBuildCap, mergeSimThreshold, mergeSimThresholdExtract ' +
+        'SELECT enabled, extractBuildCap, mergeSimThreshold, mergeSimThresholdExtract, onDemandExtractionEnabled ' +
         'FROM COM_SAP_DEVELOPERS_IMS_KNOWLEDGEGRAPHSETTINGS LIMIT 1'
       );
       return rows?.[0] ?? null;
@@ -82,9 +84,10 @@ function envNumber(name) {
 }
 
 /**
- * Resolve all 4 knobs at once. Returns a fully-populated object (no nulls).
+ * Resolve all 5 knobs at once. Returns a fully-populated object (no nulls).
  * @returns {Promise<{ enabled: boolean, extractBuildCap: number,
- *                     mergeSimThreshold: number, mergeSimThresholdExtract: number }>}
+ *                     mergeSimThreshold: number, mergeSimThresholdExtract: number,
+ *                     onDemandExtractionEnabled: boolean }>}
  */
 export async function resolveKnowledgeGraphSettings() {
   const now = Date.now();
@@ -114,6 +117,11 @@ export async function resolveKnowledgeGraphSettings() {
       pick(row, 'mergeSimThresholdExtract', 'MERGESIMTHRESHOLDEXTRACT')
       ?? envNumber('KG_MERGE_SIM_THRESHOLD_EXTRACT')
       ?? DEFAULTS.mergeSimThresholdExtract,
+    onDemandExtractionEnabled: Boolean(
+      pick(row, 'onDemandExtractionEnabled', 'ONDEMANDEXTRACTIONENABLED')
+      ?? envFlag('KG_ONDEMAND_ENABLED')
+      ?? DEFAULTS.onDemandExtractionEnabled
+    ),
   };
 
   _cached = settings;

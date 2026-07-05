@@ -49,6 +49,7 @@ import { runMaterializeCoCompletions } from './materialize-co-completions.js';
 import { runKgPageRank } from './kg-pagerank-job.js';
 import { runKgCommunities } from './kg-communities-job.js';
 import { runKgWcc } from './kg-wcc-job.js';
+import { runOnDemandDrain } from './kg-ondemand-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -904,6 +905,24 @@ export function registerJobs() {
     ttlMs: 5 * 60_000,
     description: '#805 daily prune of PublishTimings older than 90 days',
     fn: () => cleanupPublishTimings(90),
+  });
+
+  // #948: on-demand KG extraction drain. Every 2 minutes on odd minutes,
+  // off-schedule vs. daily kg-pagerank (:53), kg-communities (:57), kg-wcc
+  // (04:07), and the daily extractConcepts tick (02:13). Fail-open on every
+  // fault path; skips entirely when KnowledgeGraphSettings.onDemandExtraction-
+  // Enabled is false (default).
+  //
+  // CAP 10's .as(name) singleton semantics prevent concurrent scheduled ticks
+  // across CF instances — the drain body itself does NOT call runWithLock.
+  //
+  // Spec: docs/superpowers/specs/2026-07-05-948-kg-ondemand-triggers-design.md
+  registerJob({
+    jobName: 'kg-ondemand-drain',
+    schedule: '1-59/2 * * * *',
+    ttlMs: 2 * 60 * 1000,
+    description: 'On-demand knowledge-graph extraction drain (#948)',
+    fn: runOnDemandDrain,
   });
 
   LOG.info('All scheduled jobs registered');
