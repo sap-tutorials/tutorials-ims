@@ -241,6 +241,7 @@ describe('MCP curated tool: get_tutorial', () => {
   const STEP1_ID    = 'bbbbbbbb-8888-0000-0000-000000000001';
   const STEP2_ID    = 'bbbbbbbb-8888-0000-0000-000000000002';
   const STEP3_ID    = 'bbbbbbbb-8888-0000-0000-000000000003';
+  const STEP_INACTIVE_ID = 'bbbbbbbb-8888-0000-0000-000000000099';
 
   beforeAll(async () => {
     await cds.deploy([
@@ -274,6 +275,7 @@ describe('MCP curated tool: get_tutorial', () => {
       { ID: STEP1_ID, tutorial_ID: TUT_ID, stepOrder: 1, title: 'Step One',   status: 'ACTIVE' },
       { ID: STEP2_ID, tutorial_ID: TUT_ID, stepOrder: 2, title: 'Step Two',   status: 'ACTIVE' },
       { ID: STEP3_ID, tutorial_ID: TUT_ID, stepOrder: 3, title: 'Step Three', status: 'ACTIVE' },
+      { ID: STEP_INACTIVE_ID, tutorial_ID: TUT_ID, stepOrder: 4, title: 'Inactive Step', status: 'INACTIVE' },
     ]);
   });
 
