@@ -232,3 +232,98 @@ describe('MCP curated tool: get_mission', () => {
     expect(result.tutorials[1].slug).toBe('tut-beta');
   });
 });
+
+describe('MCP curated tool: get_tutorial', () => {
+  let SearchService;
+
+  const TUT_ID      = 'aaaaaaaa-8888-0000-0000-000000000001';
+  const INACTIVE_ID = 'aaaaaaaa-8888-0000-0000-000000000002';
+  const STEP1_ID    = 'bbbbbbbb-8888-0000-0000-000000000001';
+  const STEP2_ID    = 'bbbbbbbb-8888-0000-0000-000000000002';
+  const STEP3_ID    = 'bbbbbbbb-8888-0000-0000-000000000003';
+
+  beforeAll(async () => {
+    await cds.deploy([
+      path.join(process.cwd(), 'db'),
+      path.join(process.cwd(), 'srv'),
+    ]).to('sqlite::memory:');
+    SearchService = await cds.serve('SearchService').from('./srv/search-service');
+
+    const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
+
+    // Seed one ACTIVE tutorial with primaryTag.
+    await INSERT.into(Tutorials).entries({
+      ID:          TUT_ID,
+      slug:        'test-tutorial',
+      title:       'Test Tutorial',
+      description: 'A test description',
+      primaryTag:  'technology',
+      status:      'ACTIVE',
+    });
+
+    // Seed one INACTIVE tutorial.
+    await INSERT.into(Tutorials).entries({
+      ID:     INACTIVE_ID,
+      slug:   'inactive-tutorial',
+      title:  'Inactive Tutorial',
+      status: 'INACTIVE',
+    });
+
+    // Seed 3 ACTIVE steps for the ACTIVE tutorial.
+    await INSERT.into(Steps).entries([
+      { ID: STEP1_ID, tutorial_ID: TUT_ID, stepOrder: 1, title: 'Step One',   status: 'ACTIVE' },
+      { ID: STEP2_ID, tutorial_ID: TUT_ID, stepOrder: 2, title: 'Step Two',   status: 'ACTIVE' },
+      { ID: STEP3_ID, tutorial_ID: TUT_ID, stepOrder: 3, title: 'Step Three', status: 'ACTIVE' },
+    ]);
+  });
+
+  it('returns null for unknown slug', async () => {
+    const result = await SearchService.send('get_tutorial', { slug: 'does-not-exist' });
+    expect(result).toBeNull();
+  });
+
+  it('returns null for empty slug', async () => {
+    const result = await SearchService.send('get_tutorial', { slug: '' });
+    expect(result).toBeNull();
+  });
+
+  it('returns non-null for known ACTIVE tutorial with correct fields', async () => {
+    const result = await SearchService.send('get_tutorial', { slug: 'test-tutorial' });
+    expect(result).not.toBeNull();
+    expect(result.slug).toBe('test-tutorial');
+    expect(result.title).toBe('Test Tutorial');
+    expect(result.description).toBe('A test description');
+  });
+
+  it('steps is array of length 3 ordered by number ASC with number + title', async () => {
+    const result = await SearchService.send('get_tutorial', { slug: 'test-tutorial' });
+    expect(result).not.toBeNull();
+    expect(Array.isArray(result.steps)).toBe(true);
+    expect(result.steps.length).toBe(3);
+    // Ordered ascending.
+    expect(result.steps[0].number).toBeLessThan(result.steps[1].number);
+    expect(result.steps[1].number).toBeLessThan(result.steps[2].number);
+    // Each has number and title.
+    for (const s of result.steps) {
+      expect(typeof s.number).toBe('number');
+      expect(typeof s.title).toBe('string');
+      expect(s.title.length).toBeGreaterThan(0);
+    }
+    // Spot-check titles.
+    expect(result.steps[0].title).toBe('Step One');
+    expect(result.steps[2].title).toBe('Step Three');
+  });
+
+  it('case-insensitive: TEST-TUTORIAL deep-equals test-tutorial (both non-null)', async () => {
+    const lower = await SearchService.send('get_tutorial', { slug: 'test-tutorial' });
+    const upper = await SearchService.send('get_tutorial', { slug: 'TEST-TUTORIAL' });
+    expect(lower).not.toBeNull();
+    expect(upper).not.toBeNull();
+    expect(lower).toEqual(upper);
+  });
+
+  it('returns null for INACTIVE tutorial', async () => {
+    const result = await SearchService.send('get_tutorial', { slug: 'inactive-tutorial' });
+    expect(result).toBeNull();
+  });
+});

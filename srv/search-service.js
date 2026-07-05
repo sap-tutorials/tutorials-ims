@@ -400,6 +400,40 @@ export default class SearchService extends cds.ApplicationService {
       };
     });
 
+    /**
+     * MCP curated tool: fetch an ACTIVE tutorial by slug with ordered step list.
+     *
+     * @param slug  Tutorial slug (case-insensitive; lowercased server-side).
+     * @returns     { slug, title, description, tags, steps } or null when
+     *              the slug is empty, unknown, or the tutorial is INACTIVE.
+     */
+    this.on('get_tutorial', async (req) => {
+      const slug = (req.data.slug ?? '').toLowerCase();
+      if (!slug) return null;
+
+      const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
+
+      const tutorial = await SELECT.one.from(Tutorials)
+        .columns('ID', 'slug', 'title', 'description', 'primaryTag')
+        .where({ slug, status: 'ACTIVE' });
+      if (!tutorial) return null;
+
+      const stepRows = await cds.db.run(
+        SELECT.from(Steps)
+          .columns('stepOrder', 'title')
+          .where({ tutorial_ID: tutorial.ID, status: 'ACTIVE' })
+          .orderBy('stepOrder asc')
+      );
+
+      return {
+        slug:        (tutorial.slug ?? '').toLowerCase(),
+        title:       tutorial.title ?? '',
+        description: tutorial.description ?? '',
+        tags:        tutorial.primaryTag ? [tutorial.primaryTag] : [],
+        steps:       stepRows.map(s => ({ number: s.stepOrder, title: s.title ?? '' })),
+      };
+    });
+
     this.on('getFacets', async (req) => {
       const { search, taskTypes, experience } = req.data;
 

@@ -723,84 +723,54 @@ git commit -m "feat(#912): add get_mission MCP tool"
 
 **Files:**
 - Modify: `srv/search-service.cds` — add function.
-- Modify: `srv/search-service.js` — add handler that delegates to `content-store.js`.
+- Modify: `srv/search-service.js` — add handler.
 - Modify: `test/unit/mcp-search-tools.test.js` — add describe block.
 
 **Interfaces:**
-- Consumes: `srv/lib/content-store.js` — its `renderTutorialHTML(slug, step)` or equivalent internal function (grep to find the actual export).
-- Produces: `SearchService.get_tutorial(slug, step?) => { slug, title, tags, steps: array of { number, title }, html?: String }`. When `step` is omitted, `html` is absent — the caller must ask for a specific step.
+- Consumes: `ims.Tutorials` and `ims.Steps` DB entities.
+- Produces: `SearchService.get_tutorial(slug) => { slug, title, description, tags, steps: array of { number, title } }` or null if not found.
 
-- [ ] **Step 1: Verify the delegation target exists**
+**Revision (during execution):** The original brief called for delegating to `content-store.js` to render per-step HTML. Recon found `content-store.js` has no callable per-step HTML helper exported at the module level — only `serveHandler` (an Express handler) and low-level BLOB-fetch internals that are unsafe to call outside the established HANA LOB pattern. Step-HTML slicing is deferred to Phase 2, where the design can be done properly (streaming BLOB → HTML fragment, LOB locator lifetime, response bounding). The Phase 1 tool returns metadata + step list only; callers wanting full HTML hit `/content/tutorials/<slug>` directly.
 
-Run: `grep -n "export\|module.exports\|function render\|function serve" srv/lib/content-store.js | head -20`
-Expected: See exports. `serveHandler` and helpers like `renderTutorialHTML(slug, step)` or `getTutorialMetadata(slug)` are the candidates. If no helper exists, the handler must be shaped to reuse whatever internal function `serveHandler` calls.
+- [ ] **Step 1: Write the failing test**
 
-- [ ] **Step 2: Write the failing test**
+Append to `test/unit/mcp-search-tools.test.js` after the `get_mission` describe block.
 
-Append to `test/unit/mcp-search-tools.test.js`:
+Seed data: one ACTIVE Tutorial with slug `'test-tutorial'`, title `'Test Tutorial'`, description `'A test description'`, `primaryTag: 'technology'`, and 3 Steps with `stepOrder` 1/2/3 and titles `'Step One'`/`'Step Two'`/`'Step Three'`, all `status: 'ACTIVE'`. Also one INACTIVE Tutorial with slug `'inactive-tutorial'`.
 
-```js
-describe('MCP curated tool: get_tutorial', () => {
-  let SearchService;
-  beforeAll(async () => {
-    await cds.deploy('srv').to('sqlite::memory:');
-    SearchService = await cds.connect.to('SearchService');
-  });
+Required test cases (all non-vacuous assertions):
+1. Returns `null` for unknown slug.
+2. Returns `null` for empty slug.
+3. Returns non-null for known ACTIVE tutorial with correct `slug`/`title`/`description`.
+4. `steps` is array of length 3, ordered by number ASC, each has `number` and `title`.
+5. Case-insensitive: `get_tutorial({slug:'test-tutorial'})` deep-equals `get_tutorial({slug:'TEST-TUTORIAL'})` (both non-null).
+6. INACTIVE tutorial returns `null`.
 
-  it('returns null for unknown slug', async () => {
-    const result = await SearchService.send('get_tutorial', { slug: 'does-not-exist' });
-    expect(result).toBeNull();
-  });
+- [ ] **Step 2: Run test to verify it fails**
 
-  it('omits html when step is not provided', async () => {
-    const result = await SearchService.send('get_tutorial', { slug: 'test-tutorial' });
-    if (result) {
-      expect(result.html).toBeUndefined();
-      expect(Array.isArray(result.steps)).toBe(true);
-    }
-  });
-
-  it('includes html when a specific step is requested', async () => {
-    const result = await SearchService.send('get_tutorial', { slug: 'test-tutorial', step: 1 });
-    if (result) expect(typeof result.html).toBe('string');
-  });
-
-  it('lowercases slug before lookup', async () => {
-    const a = await SearchService.send('get_tutorial', { slug: 'test-tutorial' });
-    const b = await SearchService.send('get_tutorial', { slug: 'TEST-TUTORIAL' });
-    expect(a).toEqual(b);
-  });
-});
-```
-
-- [ ] **Step 3: Run test to verify it fails**
-
-Run: `npx vitest run test/unit/mcp-search-tools.test.js -t "get_tutorial"`
+Run: `npx vitest run test/unit/mcp-search-tools.test.js -t "get_tutorial" --project unit`
 Expected: FAIL — action not defined.
 
-- [ ] **Step 4: Add CDS function**
+- [ ] **Step 3: Add CDS function**
 
 ```cds
   /**
-   * Fetch tutorial metadata, step list, and optionally the rendered HTML for
-   * one step. Anonymous — same content path /content/tutorials/:slug serves.
+   * Fetch tutorial metadata and ordered step list by slug.
+   * Returns null for unknown slugs, empty slugs, or INACTIVE tutorials.
    *
    * @param slug  Tutorial slug (case-insensitive).
-   * @param step  Optional 1-indexed step number. When omitted, `html` is not
-   *              included and the caller must request a specific step to get
-   *              the body (keeps responses bounded).
-   * @returns     Tutorial or null.
+   * @returns     Tutorial metadata with step list, or null if not found.
    */
-  function get_tutorial(slug : String, step : Integer) returns {
-    slug  : String;
-    title : String;
-    tags  : many String;
-    steps : array of { number : Integer; title : String; };
-    html  : String;
+  function get_tutorial(slug : String) returns {
+    slug        : String;
+    title       : String;
+    description : String;
+    tags        : many String;
+    steps       : array of { number : Integer; title : String; };
   };
 ```
 
-- [ ] **Step 5: Add handler**
+- [ ] **Step 4: Add handler**
 
 Add to `srv/search-service.js`:
 
@@ -809,41 +779,40 @@ Add to `srv/search-service.js`:
     const slug = (req.data.slug ?? '').toLowerCase();
     if (!slug) return null;
 
-    const { Tutorials } = cds.entities('com.sap.developers.ims');
-    const meta = await SELECT.one.from(Tutorials)
-      .columns('slug', 'title', 'tags')
-      .where({ slug, published: true });
-    if (!meta) return null;
+    const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
 
-    // Delegate to content-store for step list + optional HTML render.
-    const { getStepList, renderStepHTML } = await import('./lib/content-store.js');
-    const steps = await getStepList(slug);
+    const tutorial = await SELECT.one.from(Tutorials)
+      .columns('ID', 'slug', 'title', 'description', 'primaryTag')
+      .where({ slug, status: 'ACTIVE' });
+    if (!tutorial) return null;
 
-    const result = {
-      slug:  meta.slug,
-      title: meta.title,
-      tags:  Array.isArray(meta.tags) ? meta.tags : (meta.tags ? meta.tags.split(',').map(s => s.trim()) : []),
-      steps,
+    const stepRows = await cds.db.run(
+      SELECT.from(Steps)
+        .columns('stepOrder', 'title')
+        .where({ tutorial_ID: tutorial.ID, status: 'ACTIVE' })
+        .orderBy('stepOrder asc')
+    );
+
+    return {
+      slug:        (tutorial.slug ?? '').toLowerCase(),
+      title:       tutorial.title ?? '',
+      description: tutorial.description ?? '',
+      tags:        tutorial.primaryTag ? [tutorial.primaryTag] : [],
+      steps:       stepRows.map(s => ({ number: s.stepOrder, title: s.title ?? '' })),
     };
-    if (req.data.step != null) {
-      result.html = await renderStepHTML(slug, req.data.step);
-    }
-    return result;
   });
 ```
 
-**Note for implementer:** `getStepList` and `renderStepHTML` are aspirational names — `srv/lib/content-store.js` may not export functions with these exact signatures today. Grep first (`grep -n "export" srv/lib/content-store.js`) and either (a) call whatever the file currently exports that returns the step list / rendered HTML, or (b) if only `serveHandler` exists, extract a shared helper from it and export it, then call from both the Express handler and this MCP tool. **Do not duplicate the BLOB-fetch logic** — the memory-fact "Never SELECT a HANA BLOB alongside metadata in a single CDS QL query" applies here too, so this MUST use whatever raw-`db.run()` helper `content-store.js` already has.
+- [ ] **Step 5: Run tests to verify all 6 pass**
 
-- [ ] **Step 6: Run test to verify it passes**
+Run: `npx vitest run test/unit/mcp-search-tools.test.js -t "get_tutorial" --project unit`
+Expected: PASS all 6.
 
-Run: `npx vitest run test/unit/mcp-search-tools.test.js -t "get_tutorial"`
-Expected: PASS.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add srv/search-service.cds srv/search-service.js srv/lib/content-store.js test/unit/mcp-search-tools.test.js
-git commit -m "feat(#912): add get_tutorial MCP tool (delegates to content-store)"
+git add srv/search-service.cds srv/search-service.js test/unit/mcp-search-tools.test.js
+git commit -m "feat(#912): add get_tutorial MCP tool (metadata + step list)"
 ```
 
 ---

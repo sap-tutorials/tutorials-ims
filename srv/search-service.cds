@@ -125,4 +125,19 @@ service SearchService {
       order : Integer;
     };
   };
+
+  /**
+   * Fetch tutorial metadata and ordered step list by slug.
+   * Returns null for unknown slugs, empty slugs, or INACTIVE tutorials.
+   *
+   * @param slug  Tutorial slug (case-insensitive).
+   * @returns     Tutorial metadata with step list, or null if not found.
+   */
+  function get_tutorial(slug : String) returns {
+    slug        : String;
+    title       : String;
+    description : String;
+    tags        : many String;
+    steps       : array of { number : Integer; title : String; };
+  };
 }

@@ -87,7 +87,7 @@ Eight tools declared as CDS `function`s on the appropriate service; each backed 
 | Tool | Service | Purpose | sap-devs replacement |
 |---|---|---|---|
 | `search_tutorials(query, tags?, experience?, limit?)` | Search | Fuzzy full-text search; returns slug + title + snippet + tags | Yes — `search_tutorials` |
-| `get_tutorial(slug, step?)` | Search | Metadata + rendered HTML for one step. Fetches via `content-store.serveHandler` internals (no auth needed — same path as `/content/tutorials/:slug`). When `step` is omitted, returns metadata + step list only (no full body — LLM must ask for a specific step to get HTML, keeping responses bounded). | Yes — `get_tutorial_step` |
+| `get_tutorial(slug)` | Search | Metadata + step list only (no HTML body — callers wanting full HTML hit `/content/tutorials/<slug>` directly). Step-HTML slicing deferred to Phase 2. | Yes — `get_tutorial_step` |
 | `list_missions(tags?, limit?)` | Search | Ordered mission list with tutorial counts, queried directly from the `ims.Missions` DB entity | New |
 | `get_mission(slug)` | Search | Mission metadata + ordered tutorial slugs, from `ims.Missions` + `ims.CompletionPaths` | New |
 | `get_recent_news(limit?)` | Homepage | Thin wrapper around existing `news()` function with `limit` slicing | Yes — `get_recent_news` |
