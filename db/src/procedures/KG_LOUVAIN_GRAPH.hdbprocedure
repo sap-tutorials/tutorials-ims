@@ -1,42 +1,44 @@
 -- KG_LOUVAIN_GRAPH.hdbprocedure
 -- ============================================================
--- HANA GraphScript community detection over KG_PG_WORKSPACE. Calls the
--- built-in Communities_Louvain primitive and returns one row per vertex
--- tagged with its community id, VERTEX_KEY, VERTEX_TYPE, and SLUG so
--- the caller (srv/jobs/kg-communities-job.js) doesn't have to re-join
--- back to KG_PG_VERTICES_V.
+-- TEMPORARY DEPLOY-UNBLOCK STUB — issue #917 follow-up
 --
--- WHY A SEPARATE PROCEDURE
---   HANA SQLScript does NOT allow inline `LANGUAGE GRAPH` blocks inside
---   a `LANGUAGE SQLSCRIPT` procedure body. GraphScript is a distinct
---   language that must be declared at the procedure boundary. Same
---   pattern as sibling KG_SHORTEST_PATH_GRAPH.
+-- The GraphScript body originally shipped with #984 fails HDI
+-- precompile with:
 --
--- SYNTAX REFERENCE
---   Communities_Louvain is enumerated in this HANA Cloud version's
---   BUILTIN_FUNCTIONS_ALGORITHMS set (verified 2026-07-04 against DEV
---   HANA Cloud 2026.14.8 via the sibling #916 Task 0 probe — see
---   docs/superpowers/reviews/2026-07-04-917-kg-community-detection-
---   task0-notes.md). The primitive's exact return-shape keying is not
---   disclosed by the enumeration; the projection below matches the
---   HANA docs' pattern of iterating a MULTISET keyed by community id
---   with a per-community :vertex_key binding.
+--   Error: com.sap.hana.di.procedure: Syntax error:
+--     "exception 73002201: syntax error, unexpected AS,
+--      expecting FOREACH or "," near "AS"" [8250009]
+--     at "src/procedures/KG_LOUVAIN_GRAPH.hdbprocedure" (57:36)
 --
--- CALL CONTRACT
---   OUT o_members    Table of (community_id, vertex_key, vertex_type,
---                    slug) rows — one per vertex in KG_PG_WORKSPACE,
---                    partitioned into Louvain communities.
+-- The `o_members = SELECT ... AS ... FROM :communities JOIN ...`
+-- projection is not legal GraphScript — the language expects a
+-- FOREACH iteration over MULTISET members, not a SQL-style JOIN
+-- projection. Getting the correct GraphScript idiom right requires
+-- a probe against real HANA Cloud (there is no dry-run for
+-- GraphScript syntax outside HDI make), which is not something
+-- we want to iterate on at 22:00 the night Tom needs a working DEV.
 --
--- NO `SQL SECURITY DEFINER`
---   LANGUAGE GRAPH rejects the clause. The workspace-level ACL pins
---   execution identity to the HDI object owner, so the DEFINER-owner
---   discipline holds implicitly. Same design as KG_SHORTEST_PATH_GRAPH.
+-- This stub returns an empty result set with the same shape. The
+-- downstream contract in srv/jobs/kg-communities-job.js is fail-
+-- open: an empty procedure result → `KgCommunity` sidecar left
+-- empty → admin FE `/admin-ui/#kgCommunities` renders "No data"
+-- rather than a 500. That's the same fallback path already used
+-- for the nightly job's own exception paths, so no new behavior
+-- degradation.
 --
--- SINGLE-ARG `Graph()`
---   HDI enforces schema-local PROCEDURE references — the two-arg form
---   `Graph("SCHEMA", "WORKSPACE")` fails with error 8250002
---   ("the reference has to be schema-local"). Sibling procedure's
---   header comment documents this at length.
+-- Everything else in tonight's merges (#988 homepage personalization,
+-- #987 KG WCC isolation, #916 PageRank ranking) is unaffected — the
+-- only functional gap is that Louvain community memberships won't
+-- populate. That surface is DEV-only in v1 per the #917 spec, so
+-- production is not impacted.
+--
+-- REMOVAL:
+--   Restore the intended GraphScript body once the correct
+--   iteration form has been probed against DEV HANA Cloud. See
+--   docs/superpowers/specs/2026-07-04-917-kg-community-detection-
+--   design.md and the HANA docs sample referenced in the sibling
+--   KG_SHORTEST_PATH_GRAPH.hdbprocedure (`FOREACH v IN Vertices(:p)
+--   WITH ORDINALITY AS <name>`).
 --
 -- Spec:  docs/superpowers/specs/2026-07-04-917-kg-community-detection-design.md
 -- Issue: #917
@@ -50,14 +52,14 @@ PROCEDURE KG_LOUVAIN_GRAPH (
     slug         NVARCHAR(255)
   )
 )
-LANGUAGE GRAPH READS SQL DATA AS
+LANGUAGE SQLSCRIPT SQL SECURITY INVOKER READS SQL DATA AS
 BEGIN
-  GRAPH g = Graph("KG_PG_WORKSPACE");
-  MULTISET<INTEGER> communities = Communities_Louvain(:g);
-  o_members = SELECT :community    AS community_id,
-                     :v."VERTEX_KEY",
-                     :v."VERTEX_TYPE",
-                     :v."SLUG"
-              FROM :communities
-              JOIN "KG_PG_VERTICES_V" :v ON :v."VERTEX_KEY" = :vertex_key;
+  -- Return an empty result set with the declared shape. See header
+  -- for the deploy-unblock rationale.
+  o_members = SELECT CAST(NULL AS BIGINT)          AS community_id,
+                     CAST(NULL AS NVARCHAR(280))   AS vertex_key,
+                     CAST(NULL AS NVARCHAR(16))    AS vertex_type,
+                     CAST(NULL AS NVARCHAR(255))   AS slug
+              FROM DUMMY
+              WHERE 1 = 0;
 END;
