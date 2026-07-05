@@ -60,6 +60,7 @@
       "sap.tutorials.admin.analytics": "./components/analytics",
       "sap.tutorials.admin.joule": "./components/joule",
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
+      "sap.tutorials.admin.kgCommunities": "./components/kgCommunities",
       "sap.tutorials.admin.feedback": "./components/feedback",
       "sap.tutorials.admin.secrets": "./components/secrets",
       "sap.tutorials.admin.uiEvents": "./components/uiEvents",
@@ -211,6 +212,12 @@
         "componentData": {},
         "lazy": true
       },
+      "kgCommunitiesComponent": {
+        "name": "sap.tutorials.admin.kgCommunities",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
       "feedbackComponent": {
         "name": "sap.tutorials.admin.feedback",
         "settings": {},
@@ -325,6 +332,7 @@
         { "name": "analytics", "pattern": "analytics", "target": [{"name": "analyticsTarget", "prefix": "an"}] },
         { "name": "joule", "pattern": "joule", "target": [{"name": "jouleSettingsTarget", "prefix": "jo"}] },
         { "name": "knowledgeGraph", "pattern": "knowledgeGraph", "target": [{"name": "knowledgeGraphSettingsTarget", "prefix": "kg"}] },
+        { "name": "kgCommunities", "pattern": "kgCommunities", "target": [{"name": "kgCommunitiesTarget", "prefix": "kc"}] },
         { "name": "secrets", "pattern": "secrets", "target": [{"name": "secretsTarget", "prefix": "se"}] },
         { "name": "feedbackList", "pattern": "feedback/list", "target": [{"name": "feedbackTarget", "prefix": "fb"}] },
         { "name": "feedbackDashboard", "pattern": "feedback/dashboard", "target": "feedbackDashboardTarget" },
@@ -480,6 +488,13 @@
           "id": "knowledgeGraphSettingsTarget",
           "viewLevel": 1,
           "prefix": "kg"
+        },
+        "kgCommunitiesTarget": {
+          "type": "Component",
+          "usage": "kgCommunitiesComponent",
+          "id": "kgCommunitiesTarget",
+          "viewLevel": 1,
+          "prefix": "kc"
         },
         "feedbackTarget": {
           "type": "Component",

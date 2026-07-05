@@ -1,0 +1,63 @@
+-- KG_LOUVAIN_GRAPH.hdbprocedure
+-- ============================================================
+-- HANA GraphScript community detection over KG_PG_WORKSPACE. Calls the
+-- built-in Communities_Louvain primitive and returns one row per vertex
+-- tagged with its community id, VERTEX_KEY, VERTEX_TYPE, and SLUG so
+-- the caller (srv/jobs/kg-communities-job.js) doesn't have to re-join
+-- back to KG_PG_VERTICES_V.
+--
+-- WHY A SEPARATE PROCEDURE
+--   HANA SQLScript does NOT allow inline `LANGUAGE GRAPH` blocks inside
+--   a `LANGUAGE SQLSCRIPT` procedure body. GraphScript is a distinct
+--   language that must be declared at the procedure boundary. Same
+--   pattern as sibling KG_SHORTEST_PATH_GRAPH.
+--
+-- SYNTAX REFERENCE
+--   Communities_Louvain is enumerated in this HANA Cloud version's
+--   BUILTIN_FUNCTIONS_ALGORITHMS set (verified 2026-07-04 against DEV
+--   HANA Cloud 2026.14.8 via the sibling #916 Task 0 probe — see
+--   docs/superpowers/reviews/2026-07-04-917-kg-community-detection-
+--   task0-notes.md). The primitive's exact return-shape keying is not
+--   disclosed by the enumeration; the projection below matches the
+--   HANA docs' pattern of iterating a MULTISET keyed by community id
+--   with a per-community :vertex_key binding.
+--
+-- CALL CONTRACT
+--   OUT o_members    Table of (community_id, vertex_key, vertex_type,
+--                    slug) rows — one per vertex in KG_PG_WORKSPACE,
+--                    partitioned into Louvain communities.
+--
+-- NO `SQL SECURITY DEFINER`
+--   LANGUAGE GRAPH rejects the clause. The workspace-level ACL pins
+--   execution identity to the HDI object owner, so the DEFINER-owner
+--   discipline holds implicitly. Same design as KG_SHORTEST_PATH_GRAPH.
+--
+-- SINGLE-ARG `Graph()`
+--   HDI enforces schema-local PROCEDURE references — the two-arg form
+--   `Graph("SCHEMA", "WORKSPACE")` fails with error 8250002
+--   ("the reference has to be schema-local"). Sibling procedure's
+--   header comment documents this at length.
+--
+-- Spec:  docs/superpowers/specs/2026-07-04-917-kg-community-detection-design.md
+-- Issue: #917
+-- ============================================================
+
+PROCEDURE KG_LOUVAIN_GRAPH (
+  OUT o_members TABLE (
+    community_id BIGINT,
+    vertex_key   NVARCHAR(280),
+    vertex_type  NVARCHAR(16),
+    slug         NVARCHAR(255)
+  )
+)
+LANGUAGE GRAPH READS SQL DATA AS
+BEGIN
+  GRAPH g = Graph("KG_PG_WORKSPACE");
+  MULTISET<INTEGER> communities = Communities_Louvain(:g);
+  o_members = SELECT :community    AS community_id,
+                     :v."VERTEX_KEY",
+                     :v."VERTEX_TYPE",
+                     :v."SLUG"
+              FROM :communities
+              JOIN "KG_PG_VERTICES_V" :v ON :v."VERTEX_KEY" = :vertex_key;
+END;

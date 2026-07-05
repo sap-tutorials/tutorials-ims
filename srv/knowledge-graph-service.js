@@ -745,6 +745,42 @@ export default cds.service.impl(async function () {
     }
   });
 
+  // ─── after(READ, Concepts) — #918 WCC isolation flag ───────────────────
+  //
+  // Populate the virtual `isolated : Boolean` field on each Concepts row
+  // from the KgIsolation sidecar (populated nightly by
+  // srv/jobs/kg-wcc-job.js). Batched per page — Fiori Elements requests
+  // 30 rows/page by default, so this is one small IN-clause query per
+  // list-report page load.
+  //
+  // Fail-quiet: on any error (sidecar missing, HANA hiccup, deploy skew),
+  // leave `isolated` unset. Fiori renders `null` boolean as no badge —
+  // same visual result as false. No request-time throw ever propagates
+  // to the client.
+  //
+  // Spec: docs/superpowers/specs/2026-07-04-918-kg-wcc-isolation-design.md
+  this.after('READ', 'Concepts', async (rows, req) => {
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    const slugs = rows.map((r) => r.slug).filter(Boolean);
+    if (slugs.length === 0) return;
+    try {
+      const placeholders = slugs.map(() => '?').join(',');
+      const flagged = await cds.tx(req).run(
+        `SELECT SLUG FROM "COM_SAP_DEVELOPERS_IMS_KGISOLATION" ` +
+          `WHERE VERTEXTYPE = ? AND SLUG IN (${placeholders})`,
+        ['concept', ...slugs],
+      );
+      const set = new Set(flagged.map((r) => r.SLUG));
+      for (const r of rows) {
+        if (r.slug) r.isolated = set.has(r.slug);
+      }
+    } catch (err) {
+      log.warn(
+        `kg-service: isolated flag lookup failed on Concepts; leaving field unset (${err?.message ?? err})`,
+      );
+    }
+  });
+
   // ─── neighborhood(slug) ────────────────────────────────────────────────
   this.on('neighborhood', async (req) => {
     const { slug } = req.data;

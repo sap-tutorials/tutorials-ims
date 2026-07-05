@@ -357,6 +357,43 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // ─── after(READ, Tutorials) — #918 WCC isolation flag ───────────────
+    //
+    // Populate the virtual `isolated : Boolean` field on each Tutorials
+    // row from the KgIsolation sidecar (populated nightly by
+    // srv/jobs/kg-wcc-job.js). Batched per page — Fiori Elements requests
+    // 30 rows/page by default, so this is one small IN-clause query per
+    // list-report page load. Same shape as the after('READ', 'Concepts')
+    // handler in srv/knowledge-graph-service.js.
+    //
+    // Fail-quiet: on any error (sidecar missing, HANA hiccup, deploy
+    // skew), leave `isolated` unset. Fiori renders `null` boolean as no
+    // badge — same visual result as false. No request-time throw ever
+    // propagates to the client.
+    //
+    // Spec: docs/superpowers/specs/2026-07-04-918-kg-wcc-isolation-design.md
+    this.after('READ', 'Tutorials', async (rows, req) => {
+      const arr = Array.isArray(rows) ? rows : [rows];
+      const slugs = arr.filter(Boolean).map((r) => r.slug).filter(Boolean);
+      if (slugs.length === 0) return;
+      try {
+        const placeholders = slugs.map(() => '?').join(',');
+        const flagged = await cds.tx(req).run(
+          `SELECT SLUG FROM "COM_SAP_DEVELOPERS_IMS_KGISOLATION" ` +
+            `WHERE VERTEXTYPE = ? AND SLUG IN (${placeholders})`,
+          ['tutorial', ...slugs],
+        );
+        const set = new Set(flagged.map((r) => r.SLUG));
+        for (const r of arr) {
+          if (r && r.slug) r.isolated = set.has(r.slug);
+        }
+      } catch (err) {
+        cds.log('kg-wcc').warn(
+          `admin-service: isolated flag lookup failed on Tutorials; leaving field unset (${err?.message ?? err})`,
+        );
+      }
+    });
+
     // Ensure singleton row exists for ChatSettings (defensive — seed CSV
     // populates this on cds deploy; this covers fresh in-memory test DBs).
     const CHAT_SETTINGS_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8a7';
@@ -2426,6 +2463,157 @@ export default class AdminService extends cds.ApplicationService {
         audit: auditEvent,
         schedule: scheduleRebuild,
       });
+    });
+
+    // ── promoteCommunityToMission — #917 ──
+    // Drafts a Mission from a Louvain-detected KG community. Atomically
+    // writes Missions + CompletionPaths + CompletionPathItems inside one
+    // db.tx so a mid-flight failure never leaves an empty Mission behind.
+    // Tutorials are ordered deterministically A→Z by title — no LLM-driven
+    // "smart" curation. The curator finishes the draft in the Missions LR
+    // (title/description/reorder/publish). SuperAdmin-gated via @requires
+    // in admin-service.cds; the CDS gate is authoritative, no in-handler
+    // recheck (matches the Missions.published pattern at line 1585).
+    //
+    // Audit uses the post-#769 canonical pattern: first arg is the ACTION
+    // NAME ('kg.community.promoted'). The SecurityEvent event type is
+    // hardcoded inside createAuditEmitter. Audit is best-effort — a blown
+    // audit MUST NOT roll back a successful promotion (fail-open at the
+    // helper level, see srv/lib/audit-event.js).
+    this.on('promoteCommunityToMission', async (req) => {
+      const { communityId, missionSlug, title } = req.data || {};
+      if (communityId == null || !missionSlug || !title) {
+        return req.reject(400, 'communityId, missionSlug, and title are required');
+      }
+
+      const { Missions, CompletionPaths, CompletionPathItems, Tutorials, KgCommunity } =
+        cds.entities('com.sap.developers.ims');
+
+      // 1. Load community's tutorial-typed members, then look up matching
+      //    Tutorials rows sorted A→Z by title. Members whose slug no longer
+      //    resolves in Tutorials are silently skipped (tutorial deleted
+      //    between the nightly Louvain pass and this call).
+      const members = await SELECT.from(KgCommunity)
+        .columns('slug')
+        .where({ communityId, vertexType: 'tutorial' });
+      if (!members || members.length === 0) {
+        return req.reject(404, `no tutorial members found for community ${communityId}`);
+      }
+      const memberSlugs = members.map((r) => r.slug).filter(Boolean);
+      const tutorials = memberSlugs.length
+        ? await SELECT.from(Tutorials)
+            .columns('ID', 'title', 'slug')
+            .where({ slug: { in: memberSlugs } })
+            .orderBy('title asc')
+        : [];
+      if (tutorials.length === 0) {
+        return req.reject(404, `community ${communityId} members not found in Tutorials`);
+      }
+
+      const lcSlug = String(missionSlug).toLowerCase();
+      const missionId = randomUUID();
+      const pathId = randomUUID();
+
+      // 2. Atomic write — reuse the request's tx so all three INSERTs
+      //    commit or roll back together with the outer request boundary.
+      const tx = cds.tx(req);
+      await tx.run(
+        INSERT.into(Missions).entries({
+          ID: missionId,
+          slug: lcSlug,
+          title,
+          published: false,
+          sourceKgCommunityId: communityId,
+        })
+      );
+      await tx.run(
+        INSERT.into(CompletionPaths).entries({
+          ID: pathId,
+          mission_ID: missionId,
+          name: 'Default',
+          slug: `${lcSlug}-default`,
+        })
+      );
+      await tx.run(
+        INSERT.into(CompletionPathItems).entries(
+          tutorials.map((t, idx) => ({
+            ID: randomUUID(),
+            path_ID: pathId,
+            tutorial_ID: t.ID,
+            taskType: 'TUTORIAL',
+            itemOrder: idx,
+          }))
+        )
+      );
+
+      // 3. Audit — fail-open. createAuditEmitter already swallows and warns
+      //    on per-event throws, but wrap defensively in case the helper
+      //    itself is unavailable (e.g. audit-log binding init raced).
+      try {
+        await auditEvent('kg.community.promoted', {
+          user: req.user?.id,
+          communityId,
+          missionSlug: lcSlug,
+          missionId,
+          memberCount: tutorials.length,
+        });
+      } catch (err) {
+        cds.log('admin-service').warn(
+          `promoteCommunityToMission audit emit failed: ${err?.message ?? err}`
+        );
+      }
+
+      // 4. Return the created Mission so FE can navigate to its OP.
+      return await SELECT.one.from(Missions).where({ ID: missionId });
+    });
+
+    // ── KgCommunities read decorators — #917 ──
+    // topConceptSlugs: for each row, gather up to 3 concept-typed member
+    // slugs from KgCommunity (same communityId). Computed at read time; no
+    // extra column on the base view. Slugs are joined with ', ' and
+    // truncated to 255 chars to match the projection's virtual type.
+    // Sorted alphabetically so the LR presentation is stable across reads.
+    this.after('READ', 'KgCommunities', async (rows) => {
+      if (!rows) return;
+      const list = Array.isArray(rows) ? rows : [rows];
+      if (list.length === 0) return;
+      const ids = list.map((r) => r.communityId).filter((v) => v != null);
+      if (ids.length === 0) return;
+      const { KgCommunity } = cds.entities('com.sap.developers.ims');
+      const concepts = await SELECT.from(KgCommunity)
+        .columns('communityId', 'slug')
+        .where({ communityId: { in: ids }, vertexType: 'concept' });
+      const byId = new Map();
+      for (const c of concepts) {
+        if (c.slug == null) continue;
+        if (!byId.has(c.communityId)) byId.set(c.communityId, []);
+        byId.get(c.communityId).push(c.slug);
+      }
+      for (const row of list) {
+        const slugs = (byId.get(row.communityId) || []).slice().sort();
+        const joined = slugs.slice(0, 3).join(', ');
+        row.topConceptSlugs = joined.length > 255 ? joined.slice(0, 255) : joined;
+      }
+    });
+
+    // alreadyPromoted: true when any Missions row carries
+    // sourceKgCommunityId = <this community's id>. Powers the LR filter
+    // toggle that hides communities already turned into draft missions
+    // (default on, prevents double-promotion via UI).
+    this.after('READ', 'KgCommunities', async (rows) => {
+      if (!rows) return;
+      const list = Array.isArray(rows) ? rows : [rows];
+      if (list.length === 0) return;
+      const ids = list.map((r) => r.communityId).filter((v) => v != null);
+      if (ids.length === 0) return;
+      const { Missions } = cds.entities('com.sap.developers.ims');
+      const promoted = await SELECT.from(Missions)
+        .columns('sourceKgCommunityId')
+        .where({ sourceKgCommunityId: { in: ids } });
+      const promotedSet = new Set(promoted.map((m) => m.sourceKgCommunityId));
+      for (const row of list) {
+        row.alreadyPromoted = promotedSet.has(row.communityId);
+      }
     });
 
     // ── clearKhorosLink — admin on-behalf-of variant (issue #566) ──

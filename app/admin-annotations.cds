@@ -559,6 +559,9 @@ annotate AdminService.Tutorials with {
                             { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'primaryTag' }
                           ]
                         };
+  // #918 — populated by after('READ', 'Tutorials') decorator in
+  // admin-service.js from the KgIsolation sidecar.
+  isolated              @Common.Label: 'Isolated'    @Common.FieldControl: #ReadOnly;
 };
 
 annotate AdminService.TutorialMeta with {
@@ -577,7 +580,7 @@ annotate AdminService.Tutorials with @UI: {
     Title: { Value: title },
     Description: { Value: slug }
   },
-  SelectionFields: [ title, primaryTag, experienceTag, status, meta.owner ],
+  SelectionFields: [ title, primaryTag, experienceTag, status, meta.owner, isolated ],
   LineItem: [
     { Value: legacyIdStr },
     { Value: title },
@@ -587,7 +590,16 @@ annotate AdminService.Tutorials with @UI: {
     { Value: averageTimeToComplete },
     { Value: status },
     { Value: meta.owner, Label: 'Owner' },
-    { Value: redirectTo.title, Label: 'Redirect To' }
+    { Value: redirectTo.title, Label: 'Redirect To' },
+    // #918 — Isolated column. Criticality 1 (Negative/red) when this
+    // tutorial's WCC size is <= KG_WCC_ISOLATION_THRESHOLD (default 1).
+    // 0 (Neutral) when false or null.
+    {
+      $Type: 'UI.DataField',
+      Value: isolated,
+      Label: 'Isolated',
+      Criticality: { $edmJson: { $If: [ { $Path: 'isolated' }, 1, 0 ] } }
+    }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
@@ -2508,6 +2520,9 @@ annotate KnowledgeGraphService.Concepts with {
   // cleared by unpublishConcept; never user-edited.
   publishedAt     @Common.Label: 'Published'      @Common.FieldControl: #ReadOnly;
   publishedBy     @Common.Label: 'Published By'   @Common.FieldControl: #ReadOnly;
+  // #918 — populated by after('READ', 'Concepts') decorator in
+  // knowledge-graph-service.js from the KgIsolation sidecar.
+  isolated        @Common.Label: 'Isolated'       @Common.FieldControl: #ReadOnly;
 };
 
 annotate KnowledgeGraphService.Concepts with @(
@@ -2518,7 +2533,7 @@ annotate KnowledgeGraphService.Concepts with @(
     Description    : { Value: slug }
   },
 
-  UI.SelectionFields: [ status, slug ],
+  UI.SelectionFields: [ status, slug, isolated ],
 
   UI.LineItem: [
     { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
@@ -2535,6 +2550,17 @@ annotate KnowledgeGraphService.Concepts with @(
       Value: publishedAt,
       Label: 'Published',
       Criticality: { $edmJson: { $If: [ { $Ne: [ { $Path: 'publishedAt' }, null ] }, 3, 0 ] } }
+    },
+    // #918 — Isolated column. Criticality 1 (Negative/red) when the
+    // vertex sits in a small WCC (default: size 1). 0 (Neutral) when
+    // false or null. OData V4 CriticalityType: 0=Neutral, 1=Negative,
+    // 2=Critical, 3=Positive. Mirrors the publishedAt $edmJson pattern
+    // above.
+    {
+      $Type: 'UI.DataField',
+      Value: isolated,
+      Label: 'Isolated',
+      Criticality: { $edmJson: { $If: [ { $Path: 'isolated' }, 1, 0 ] } }
     },
     { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
     { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' },
@@ -3169,3 +3195,117 @@ annotate AdminService.HomepageForYouCandidatesAdmin with {
                                  LocalDataProperty: personaHidden, ValueListProperty: 'tag' }]
                 };
 };
+
+// --- KG Communities (#917) ---
+// LR-facing aggregate over ims.KgCommunitySummaryV + two virtuals populated
+// by the after('READ', 'KgCommunities') handler in srv/admin-service.js:
+//   * topConceptSlugs — up to 3 concept slugs per community, joined
+//   * alreadyPromoted — true when any Mission carries sourceKgCommunityId=<id>
+//
+// The tile is @readonly by construction (projection-only); the only
+// mutation surface is the bound promoteCommunityToMission action, which
+// FE renders as a header button via UI.Identification below.
+//
+// alreadyPromoted default filter: SelectionPresentationVariant #default
+// excludes rows where alreadyPromoted=true so curators see only the
+// still-actionable communities. Precedent: TaskRecords SUPERSEDED
+// exclusion at line 1320 above.
+annotate AdminService.KgCommunities with {
+  communityId     @Common.Label: 'Community ID';
+  memberCount     @Common.Label: 'Members';
+  tutorialCount   @Common.Label: 'Tutorials';
+  topConceptSlugs @Common.Label: 'Top Concepts';
+  detectedAt      @Common.Label: 'Detected At';
+  alreadyPromoted @Common.Label: 'Already Promoted';
+};
+
+annotate AdminService.KgCommunities with @(
+  UI: {
+    HeaderInfo: {
+      TypeName       : 'Community',
+      TypeNamePlural : 'Communities',
+      Title          : { Value: communityId },
+      Description    : { Value: topConceptSlugs }
+    },
+    SelectionFields : [ memberCount, detectedAt, alreadyPromoted ],
+    LineItem : [
+      { Value: communityId },
+      { Value: memberCount },
+      { Value: tutorialCount },
+      { Value: topConceptSlugs },
+      { Value: detectedAt },
+      { Value: alreadyPromoted }
+    ],
+    // Default sort memberCount desc — largest communities first.
+    PresentationVariant : {
+      SortOrder     : [ { Property: memberCount, Descending: true } ],
+      Visualizations: [ '@UI.LineItem' ]
+    },
+    // Hide already-promoted rows by default. Curators can flip the
+    // alreadyPromoted filter in the filter bar to see the full set.
+    SelectionPresentationVariant #default : {
+      $Type: 'UI.SelectionPresentationVariantType',
+      Text : 'Not yet promoted',
+      SelectionVariant : {
+        $Type: 'UI.SelectionVariantType',
+        SelectOptions : [{
+          $Type: 'UI.SelectOptionType',
+          PropertyName : alreadyPromoted,
+          Ranges : [{
+            $Type: 'UI.SelectionRangeType',
+            Sign  : #E,        // EXCLUDE
+            Option: #EQ,
+            Low   : true
+          }]
+        }]
+      },
+      PresentationVariant : { Visualizations: [ '@UI.LineItem' ] }
+    },
+    Facets : [
+      { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Community' }
+    ],
+    FieldGroup #General : { Data : [
+      { Value: communityId },
+      { Value: memberCount },
+      { Value: tutorialCount },
+      { Value: topConceptSlugs },
+      { Value: detectedAt },
+      { Value: alreadyPromoted }
+    ]},
+    // The unbound promoteCommunityToMission action (srv/admin-service.cds:882)
+    // takes communityId, missionSlug, title as parameters. FE opens a
+    // parameter dialog on click and follows the `returns Missions`
+    // navigation after success. Note: because the action is unbound
+    // in Task 7's signature, FE will not pre-fill communityId from the
+    // OP row context — curators must supply it in the dialog. Binding
+    // the action to KgCommunities is a possible future refinement.
+    Identification : [
+      { $Type      : 'UI.DataFieldForAction',
+        Action     : 'AdminService.promoteCommunityToMission',
+        Label      : 'Promote to Mission',
+        Determining: true
+      }
+    ]
+  },
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable : false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);
+
+// Membership rows — currently referenced only via the promote handler's
+// SELECT; no navigation is exposed from KgCommunities. Left annotated
+// so admins can inspect memberships directly via the OData surface if
+// needed (e.g. debug via URL). No LR tile is wired for this entity.
+annotate AdminService.KgCommunityMembers with {
+  communityId @Common.Label: 'Community ID';
+  vertexKey   @Common.Label: 'Vertex Key';
+  vertexType  @Common.Label: 'Vertex Type';
+  slug        @Common.Label: 'Slug';
+  detectedAt  @Common.Label: 'Detected At';
+};
+
+annotate AdminService.KgCommunityMembers with @(
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable : false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);

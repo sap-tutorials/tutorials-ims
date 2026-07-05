@@ -47,6 +47,8 @@ import { runFetchLearningJourneys } from './fetch-learning-journeys-job.js';
 import { runFetchBlogPosts } from './fetch-blog-posts-job.js';
 import { runMaterializeCoCompletions } from './materialize-co-completions.js';
 import { runKgPageRank } from './kg-pagerank-job.js';
+import { runKgCommunities } from './kg-communities-job.js';
+import { runKgWcc } from './kg-wcc-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -599,6 +601,47 @@ export function registerJobs() {
     ttlMs: 600000,
     description: 'Nightly PageRank over KG_PG_WORKSPACE — populates ConceptRank/TutorialRank sidecars (#916)',
     fn: () => runKgPageRank(),
+  });
+
+  // Daily 03:57 UTC — Louvain community detection over KG_PG_WORKSPACE.
+  // Runs 4 minutes after kg-pagerank (:53) so both algorithms see the
+  // same nightly snapshot of the graph. Off-minute per the "avoid :00
+  // and :30" convention. ttlMs 10 min — expected wall-clock is sub-3s
+  // (compute) + sub-1s (write); 10 min is loud headroom.
+  //
+  // Fail-open: errors propagate to PipelineLog FAILED but never break
+  // request-time reads (admin tile renders an empty state).
+  //
+  // Spec: docs/superpowers/specs/2026-07-04-917-kg-community-detection-design.md
+  // Issue: #917
+  registerJob({
+    jobName: 'kg-communities',
+    schedule: '57 3 * * *',
+    ttlMs: 600000,
+    description: 'Nightly Louvain community detection over KG_PG_WORKSPACE — populates KgCommunity sidecar (#917)',
+    fn: () => runKgCommunities(),
+  });
+
+  // Daily 04:07 UTC — weakly-connected-components pass over the KG
+  // property graph. Populates KgIsolation with rows for concept and
+  // tutorial vertices whose WCC size <= KG_WCC_ISOLATION_THRESHOLD
+  // (default 1). Runs after PageRank (03:53) and Louvain (03:57) so
+  // all three algorithms see the same nightly snapshot of
+  // KG_PG_WORKSPACE. Off-minute (:07) — 04:00 / 04:11 / 04:17 / 04:23
+  // / 04:33 / 04:43 / 04:31 Mon+Thu are already taken. ttlMs 10 min
+  // — expected wall-clock at 17k vertices / 40k edges is sub-second
+  // (union-find is O(N + M · α(N))); 10-min ceiling is loud headroom.
+  // Fail-quiet: job errors never break request-time reads (the
+  // on(READ) decorators on Concepts and Tutorials catch SELECT throws
+  // and leave `isolated` unset). Spec:
+  // docs/superpowers/specs/2026-07-04-918-kg-wcc-isolation-design.md
+  // Issue: #918
+  registerJob({
+    jobName: 'kg-wcc',
+    schedule: '7 4 * * *',
+    ttlMs: 600000,
+    description: 'Weakly-connected components over KG_PG_WORKSPACE — populates KgIsolation sidecar (#918)',
+    fn: () => runKgWcc(),
   });
 
   // Weekly Sunday 02:00 — tutorial metadata review
