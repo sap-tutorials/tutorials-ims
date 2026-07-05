@@ -142,7 +142,7 @@
   },
   "dependencies": {
     "@cap-js-community/websocket": "^1.10.5",
-    "@cap-js/ai": "^1.0.1",
+    "@cap-js/ai": "~1.0.1",
     "@cap-js/audit-logging": "^1.2.2",
     "@cap-js/change-tracking": "^2.0.1",
     "@cap-js/graphql": "0.14.0",
@@ -235,6 +235,11 @@
         },
         "[production]": {
           "kind": "telemetry-to-cloud-logging"
+        }
+      },
+      "ai": {
+        "mcp": {
+          "path": "/mcp"
         }
       }
     },
