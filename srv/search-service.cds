@@ -16,6 +16,7 @@ type FacetResult {
 @path: '/search'
 @requires: 'any'
 @graphql
+@mcp
 service SearchService {
 
   // Per-element fuzziness threshold: entity-level @Search.fuzzinessThreshold
@@ -32,6 +33,7 @@ service SearchService {
   // against the underlying view, not the projection element list.
   @readonly
   @cds.search: { title, description, primaryTag, tagBag }
+  @cds.query.limit: 200
   entity SearchableItems as projection on ims.SearchableItems {
     @Search.fuzzinessThreshold: 0.85
     @Search.ranking: #HIGH
@@ -54,6 +56,7 @@ service SearchService {
   } excluding { bodyText, tagBag };
 
   @readonly
+  @cds.query.limit: 200
   entity Tags as projection on ims.Tags;
 
   function getFacets(
