@@ -1,5 +1,6 @@
 import cds from '@sap/cds';
 import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 const _require = createRequire(import.meta.url);
 
@@ -54,4 +55,14 @@ export async function emitSdl(csn?: unknown): Promise<string> {
 
   // Normalise CRLF → LF so JS regex `$` anchors work correctly on Windows.
   return sdl.replace(/\r\n/g, '\n');
+}
+
+// CLI harness — only runs when invoked directly (not when imported as a module).
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const path = await import('node:path');
+  const sdl = await emitSdl();
+  mkdirSync('graphql', { recursive: true });
+  writeFileSync(path.join('graphql', 'schema.graphql'), sdl.trimEnd() + '\n', 'utf8');
+  console.log(`wrote graphql/schema.graphql (${sdl.length} bytes)`);
 }

@@ -1,0 +1,3156 @@
+type Query {
+  DeveloperService: DeveloperService
+  KnowledgeGraphService: KnowledgeGraphService
+  SearchService: SearchService
+}
+
+type DeveloperService {
+  Tutorials(top: Int, skip: Int, filter: [DeveloperService_Tutorials_filter], orderBy: [DeveloperService_Tutorials_orderBy]): DeveloperService_Tutorials_connection
+  Steps(top: Int, skip: Int, filter: [DeveloperService_Steps_filter], orderBy: [DeveloperService_Steps_orderBy]): DeveloperService_Steps_connection
+  TutorialCategories(top: Int, skip: Int, filter: [DeveloperService_TutorialCategories_filter], orderBy: [DeveloperService_TutorialCategories_orderBy]): DeveloperService_TutorialCategories_connection
+  TutorialConceptLinks(top: Int, skip: Int, filter: [DeveloperService_TutorialConceptLinks_filter], orderBy: [DeveloperService_TutorialConceptLinks_orderBy]): DeveloperService_TutorialConceptLinks_connection
+  TaskRecords(top: Int, skip: Int, filter: [DeveloperService_TaskRecords_filter], orderBy: [DeveloperService_TaskRecords_orderBy]): DeveloperService_TaskRecords_connection
+  Events(top: Int, skip: Int, filter: [DeveloperService_Events_filter], orderBy: [DeveloperService_Events_orderBy]): DeveloperService_Events_connection
+  ChatConfig(top: Int, skip: Int, filter: [DeveloperService_ChatConfig_filter], orderBy: [DeveloperService_ChatConfig_orderBy]): DeveloperService_ChatConfig_connection
+  LearningPreferences(top: Int, skip: Int, filter: [DeveloperService_LearningPreferences_filter], orderBy: [DeveloperService_LearningPreferences_orderBy]): DeveloperService_LearningPreferences_connection
+  Advocates(top: Int, skip: Int, filter: [DeveloperService_Advocates_filter], orderBy: [DeveloperService_Advocates_orderBy]): DeveloperService_Advocates_connection
+  TutorialContributors(top: Int, skip: Int, filter: [DeveloperService_TutorialContributors_filter], orderBy: [DeveloperService_TutorialContributors_orderBy]): DeveloperService_TutorialContributors_connection
+  AdvocateTopics(top: Int, skip: Int, filter: [DeveloperService_AdvocateTopics_filter], orderBy: [DeveloperService_AdvocateTopics_orderBy]): DeveloperService_AdvocateTopics_connection
+  AdvocateLinks(top: Int, skip: Int, filter: [DeveloperService_AdvocateLinks_filter], orderBy: [DeveloperService_AdvocateLinks_orderBy]): DeveloperService_AdvocateLinks_connection
+  AdvocatePhotos(top: Int, skip: Int, filter: [DeveloperService_AdvocatePhotos_filter], orderBy: [DeveloperService_AdvocatePhotos_orderBy]): DeveloperService_AdvocatePhotos_connection
+}
+
+type DeveloperService_Tutorials_connection {
+  nodes: [DeveloperService_Tutorials]
+  totalCount: Int
+}
+
+type DeveloperService_Tutorials {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  slug: String
+  mdFileUrl: String
+  featuredOrder: Int
+  stepCount: Int
+  redirectTo: DeveloperService_Tutorials
+  steps(top: Int, skip: Int, filter: [DeveloperService_Steps_filter], orderBy: [DeveloperService_Steps_orderBy]): DeveloperService_Steps_connection
+  tags(top: Int, skip: Int): com_sap_developers_ims_TutorialTags_connection
+  categories(top: Int, skip: Int, filter: [DeveloperService_TutorialCategories_filter], orderBy: [DeveloperService_TutorialCategories_orderBy]): DeveloperService_TutorialCategories_connection
+  author: com_sap_developers_ims_Users
+  conceptLinks(top: Int, skip: Int, filter: [DeveloperService_TutorialConceptLinks_filter], orderBy: [DeveloperService_TutorialConceptLinks_orderBy]): DeveloperService_TutorialConceptLinks_connection
+  authorEmail: String
+  authorDisplayName: String
+  authorFirstName: String
+  authorLastName: String
+}
+
+"""
+The `Timestamp` scalar type represents timestamp values as strings in the ISO 8601 format `YYYY-MM-DDThh-mm-ss.sTZD` with up to 7 digits of fractional seconds.
+"""
+scalar Timestamp
+
+type DeveloperService_Steps_connection {
+  nodes: [DeveloperService_Steps]
+  totalCount: Int
+}
+
+type DeveloperService_Steps {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  tutorial: DeveloperService_Tutorials
+  stepOrder: Int
+  contentHash: String
+}
+
+input DeveloperService_Steps_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  legacyId: [Int_filter]
+  title: [String_filter]
+  description: [String_filter]
+  status: [String_filter]
+  deletionReason: [String_filter]
+  primaryTag: [String_filter]
+  experienceTag: [String_filter]
+  averageTimeToComplete: [Int_filter]
+  stepOrder: [Int_filter]
+  contentHash: [String_filter]
+}
+
+input ID_filter {
+  eq: ID
+  ne: [ID]
+  gt: ID
+  ge: ID
+  le: ID
+  lt: ID
+  in: [ID]
+}
+
+input Timestamp_filter {
+  eq: Timestamp
+  ne: [Timestamp]
+  gt: Timestamp
+  ge: Timestamp
+  le: Timestamp
+  lt: Timestamp
+  in: [Timestamp]
+}
+
+input String_filter {
+  eq: String
+  ne: [String]
+  gt: String
+  ge: String
+  le: String
+  lt: String
+  in: [String]
+  startswith: String
+  endswith: String
+  contains: [String]
+}
+
+input Int_filter {
+  eq: Int
+  ne: [Int]
+  gt: Int
+  ge: Int
+  le: Int
+  lt: Int
+  in: [Int]
+}
+
+input DeveloperService_Steps_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  legacyId: SortDirection
+  title: SortDirection
+  description: SortDirection
+  status: SortDirection
+  deletionReason: SortDirection
+  primaryTag: SortDirection
+  experienceTag: SortDirection
+  averageTimeToComplete: SortDirection
+  stepOrder: SortDirection
+  contentHash: SortDirection
+}
+
+enum SortDirection {
+  asc
+  desc
+}
+
+type com_sap_developers_ims_TutorialTags_connection {
+  nodes: [com_sap_developers_ims_TutorialTags]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_TutorialTags {
+  tutorial: com_sap_developers_ims_Tutorials
+  tag: com_sap_developers_ims_Tags
+}
+
+type com_sap_developers_ims_Tutorials {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  slug: String
+  mdFileUrl: String
+  featuredOrder: Int
+  stepCount: Int
+  redirectTo: com_sap_developers_ims_Tutorials
+  steps(top: Int, skip: Int, filter: [com_sap_developers_ims_Steps_filter], orderBy: [com_sap_developers_ims_Steps_orderBy]): com_sap_developers_ims_Steps_connection
+  tags(top: Int, skip: Int): com_sap_developers_ims_TutorialTags_connection
+  meta(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialMeta_filter], orderBy: [com_sap_developers_ims_TutorialMeta_orderBy]): com_sap_developers_ims_TutorialMeta_connection
+  contributors(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialContributors_filter], orderBy: [com_sap_developers_ims_TutorialContributors_orderBy]): com_sap_developers_ims_TutorialContributors_connection
+  categories(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialCategories_filter], orderBy: [com_sap_developers_ims_TutorialCategories_orderBy]): com_sap_developers_ims_TutorialCategories_connection
+  author: com_sap_developers_ims_Users
+  conceptLinks(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialConceptLinks_filter], orderBy: [com_sap_developers_ims_TutorialConceptLinks_orderBy]): com_sap_developers_ims_TutorialConceptLinks_connection
+}
+
+type com_sap_developers_ims_Steps_connection {
+  nodes: [com_sap_developers_ims_Steps]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_Steps {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  tutorial: com_sap_developers_ims_Tutorials
+  stepOrder: Int
+  contentHash: String
+}
+
+input com_sap_developers_ims_Steps_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  legacyId: [Int_filter]
+  title: [String_filter]
+  description: [String_filter]
+  status: [String_filter]
+  deletionReason: [String_filter]
+  primaryTag: [String_filter]
+  experienceTag: [String_filter]
+  averageTimeToComplete: [Int_filter]
+  stepOrder: [Int_filter]
+  contentHash: [String_filter]
+}
+
+input com_sap_developers_ims_Steps_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  legacyId: SortDirection
+  title: SortDirection
+  description: SortDirection
+  status: SortDirection
+  deletionReason: SortDirection
+  primaryTag: SortDirection
+  experienceTag: SortDirection
+  averageTimeToComplete: SortDirection
+  stepOrder: SortDirection
+  contentHash: SortDirection
+}
+
+type com_sap_developers_ims_TutorialMeta_connection {
+  nodes: [com_sap_developers_ims_TutorialMeta]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_TutorialMeta {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  tutorial: com_sap_developers_ims_Tutorials
+  reviewedDate: Timestamp
+  owner: String
+  ownerEmail: String
+  monitoredStatus: String
+  notificationNumber: Int
+  lastNotificationDate: Timestamp
+  firstNotificationDate: Timestamp
+  repository: com_sap_developers_ims_TutorialRepositories
+}
+
+type com_sap_developers_ims_TutorialRepositories {
+  ID: ID
+  legacyId: Int
+  name: String
+  repositoryOwner: com_sap_developers_ims_TutorialContributors
+}
+
+type com_sap_developers_ims_TutorialContributors {
+  ID: ID
+  legacyId: Int
+  tutorial: com_sap_developers_ims_Tutorials
+  name: String
+  email: String
+  role: String
+  user: com_sap_developers_ims_Users
+}
+
+type com_sap_developers_ims_Users {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  uuid: String
+  sapId: String
+  firstName: String
+  lastName: String
+  email: String
+  displayName: String
+  khorosId: String
+  khorosLogin: String
+  khorosAvatarUrl: String
+  khorosLinkedAt: Timestamp
+  githubLogin: String
+  taskRecords(top: Int, skip: Int, filter: [com_sap_developers_ims_TaskRecords_filter], orderBy: [com_sap_developers_ims_TaskRecords_orderBy]): com_sap_developers_ims_TaskRecords_connection
+  prizeRecords(top: Int, skip: Int, filter: [com_sap_developers_ims_PrizeRecords_filter], orderBy: [com_sap_developers_ims_PrizeRecords_orderBy]): com_sap_developers_ims_PrizeRecords_connection
+  accomplishments(top: Int, skip: Int, filter: [com_sap_developers_ims_AccomplishmentRecords_filter], orderBy: [com_sap_developers_ims_AccomplishmentRecords_orderBy]): com_sap_developers_ims_AccomplishmentRecords_connection
+  metadata(top: Int, skip: Int, filter: [com_sap_developers_ims_UserMetaData_filter], orderBy: [com_sap_developers_ims_UserMetaData_orderBy]): com_sap_developers_ims_UserMetaData_connection
+  environmentTabs(top: Int, skip: Int, filter: [com_sap_developers_ims_DeveloperEnvironmentTabs_filter], orderBy: [com_sap_developers_ims_DeveloperEnvironmentTabs_orderBy]): com_sap_developers_ims_DeveloperEnvironmentTabs_connection
+  authoredTutorials(top: Int, skip: Int, filter: [com_sap_developers_ims_Tutorials_filter], orderBy: [com_sap_developers_ims_Tutorials_orderBy]): com_sap_developers_ims_Tutorials_connection
+  tutorialContributions(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialContributors_filter], orderBy: [com_sap_developers_ims_TutorialContributors_orderBy]): com_sap_developers_ims_TutorialContributors_connection
+}
+
+type com_sap_developers_ims_TaskRecords_connection {
+  nodes: [com_sap_developers_ims_TaskRecords]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_TaskRecords {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  user: com_sap_developers_ims_Users
+  taskLegacyId: Int
+  taskType: String
+  status: String
+  progress: Int
+  completionTime: Int64
+  completionDate: Timestamp
+  contentLanguage: String
+  siteLanguage: String
+  submissionIdStarted: ID
+  submissionIdCompleted: ID
+  titleSnapshot: String
+  progressNote: String
+  event: com_sap_developers_ims_Events
+  attemptNumber: Int
+}
+
+"""
+The `Int64` scalar type represents 64-bit non-fractional signed whole numeric values. Int64 can represent values between -(2^63) and 2^63 - 1.
+"""
+scalar Int64
+
+type com_sap_developers_ims_Events {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  name: String
+  startDate: Timestamp
+  endDate: Timestamp
+  timeZone: String
+  eventType: String
+  mission: com_sap_developers_ims_Missions
+  taskRecords(top: Int, skip: Int, filter: [com_sap_developers_ims_TaskRecords_filter], orderBy: [com_sap_developers_ims_TaskRecords_orderBy]): com_sap_developers_ims_TaskRecords_connection
+  prizes(top: Int, skip: Int, filter: [com_sap_developers_ims_Prizes_filter], orderBy: [com_sap_developers_ims_Prizes_orderBy]): com_sap_developers_ims_Prizes_connection
+}
+
+type com_sap_developers_ims_Missions {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  slug: String
+  communityMissionId: String
+  sourceKgCommunityId: Int
+  sourceKgCommunityFingerprint: String
+  missionType: String
+  published: Boolean
+  primaryTagRef: com_sap_developers_ims_Tags
+  group: com_sap_developers_ims_Groups
+  event: com_sap_developers_ims_Events
+  completionPaths(top: Int, skip: Int, filter: [com_sap_developers_ims_CompletionPaths_filter], orderBy: [com_sap_developers_ims_CompletionPaths_orderBy]): com_sap_developers_ims_CompletionPaths_connection
+  tags(top: Int, skip: Int, filter: [com_sap_developers_ims_MissionTags_filter], orderBy: [com_sap_developers_ims_MissionTags_orderBy]): com_sap_developers_ims_MissionTags_connection
+  categories(top: Int, skip: Int, filter: [com_sap_developers_ims_MissionCategories_filter], orderBy: [com_sap_developers_ims_MissionCategories_orderBy]): com_sap_developers_ims_MissionCategories_connection
+}
+
+type com_sap_developers_ims_Tags {
+  ID: ID
+  legacyId: Int
+  name: String
+  label: String
+  titlePath: String
+  mdFormat: String
+  semaphoreId: String
+  isActualTag: Boolean
+  isInterestItem: Boolean
+}
+
+type com_sap_developers_ims_Groups {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  slug: String
+  published: Boolean
+  primaryTagRef: com_sap_developers_ims_Tags
+  missions(top: Int, skip: Int, filter: [com_sap_developers_ims_Missions_filter], orderBy: [com_sap_developers_ims_Missions_orderBy]): com_sap_developers_ims_Missions_connection
+  tags(top: Int, skip: Int, filter: [com_sap_developers_ims_GroupTags_filter], orderBy: [com_sap_developers_ims_GroupTags_orderBy]): com_sap_developers_ims_GroupTags_connection
+  items(top: Int, skip: Int, filter: [com_sap_developers_ims_GroupPathItems_filter], orderBy: [com_sap_developers_ims_GroupPathItems_orderBy]): com_sap_developers_ims_GroupPathItems_connection
+  categories(top: Int, skip: Int, filter: [com_sap_developers_ims_GroupCategories_filter], orderBy: [com_sap_developers_ims_GroupCategories_orderBy]): com_sap_developers_ims_GroupCategories_connection
+}
+
+type com_sap_developers_ims_Missions_connection {
+  nodes: [com_sap_developers_ims_Missions]
+  totalCount: Int
+}
+
+input com_sap_developers_ims_Missions_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  legacyId: [Int_filter]
+  title: [String_filter]
+  description: [String_filter]
+  status: [String_filter]
+  deletionReason: [String_filter]
+  primaryTag: [String_filter]
+  experienceTag: [String_filter]
+  averageTimeToComplete: [Int_filter]
+  slug: [String_filter]
+  communityMissionId: [String_filter]
+  sourceKgCommunityId: [Int_filter]
+  sourceKgCommunityFingerprint: [String_filter]
+  missionType: [String_filter]
+  published: [Boolean_filter]
+}
+
+input Boolean_filter {
+  eq: Boolean
+  ne: [Boolean]
+}
+
+input com_sap_developers_ims_Missions_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  legacyId: SortDirection
+  title: SortDirection
+  description: SortDirection
+  status: SortDirection
+  deletionReason: SortDirection
+  primaryTag: SortDirection
+  experienceTag: SortDirection
+  averageTimeToComplete: SortDirection
+  slug: SortDirection
+  communityMissionId: SortDirection
+  sourceKgCommunityId: SortDirection
+  sourceKgCommunityFingerprint: SortDirection
+  missionType: SortDirection
+  published: SortDirection
+}
+
+type com_sap_developers_ims_GroupTags_connection {
+  nodes: [com_sap_developers_ims_GroupTags]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_GroupTags {
+  ID: ID
+  group: com_sap_developers_ims_Groups
+  tag: com_sap_developers_ims_Tags
+}
+
+input com_sap_developers_ims_GroupTags_filter {
+  ID: [ID_filter]
+}
+
+input com_sap_developers_ims_GroupTags_orderBy {
+  ID: SortDirection
+}
+
+type com_sap_developers_ims_GroupPathItems_connection {
+  nodes: [com_sap_developers_ims_GroupPathItems]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_GroupPathItems {
+  ID: ID
+  legacyId: Int
+  group: com_sap_developers_ims_Groups
+  tutorial: com_sap_developers_ims_Tutorials
+  itemOrder: Int
+  altGroupKey: String
+  altGroupLabel: String
+  altCondition: String
+}
+
+input com_sap_developers_ims_GroupPathItems_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  itemOrder: [Int_filter]
+  altGroupKey: [String_filter]
+  altGroupLabel: [String_filter]
+  altCondition: [String_filter]
+}
+
+input com_sap_developers_ims_GroupPathItems_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  itemOrder: SortDirection
+  altGroupKey: SortDirection
+  altGroupLabel: SortDirection
+  altCondition: SortDirection
+}
+
+type com_sap_developers_ims_GroupCategories_connection {
+  nodes: [com_sap_developers_ims_GroupCategories]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_GroupCategories {
+  ID: ID
+  group: com_sap_developers_ims_Groups
+  category: com_sap_developers_ims_Categories
+  score: Decimal
+}
+
+type com_sap_developers_ims_Categories {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  label: String
+  sortOrder: Int
+  seedDescription: String
+}
+
+"""
+The `Decimal` scalar type represents exact signed decimal values. Decimal represents values as strings rather than floating point numbers.
+"""
+scalar Decimal
+
+input com_sap_developers_ims_GroupCategories_filter {
+  ID: [ID_filter]
+  score: [Decimal_filter]
+}
+
+input Decimal_filter {
+  eq: Decimal
+  ne: [Decimal]
+  gt: Decimal
+  ge: Decimal
+  le: Decimal
+  lt: Decimal
+  in: [Decimal]
+}
+
+input com_sap_developers_ims_GroupCategories_orderBy {
+  ID: SortDirection
+  score: SortDirection
+}
+
+type com_sap_developers_ims_CompletionPaths_connection {
+  nodes: [com_sap_developers_ims_CompletionPaths]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_CompletionPaths {
+  ID: ID
+  legacyId: Int
+  mission: com_sap_developers_ims_Missions
+  name: String
+  description: String
+  slug: String
+  items(top: Int, skip: Int, filter: [com_sap_developers_ims_CompletionPathItems_filter], orderBy: [com_sap_developers_ims_CompletionPathItems_orderBy]): com_sap_developers_ims_CompletionPathItems_connection
+}
+
+type com_sap_developers_ims_CompletionPathItems_connection {
+  nodes: [com_sap_developers_ims_CompletionPathItems]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_CompletionPathItems {
+  ID: ID
+  legacyId: Int
+  path: com_sap_developers_ims_CompletionPaths
+  taskLegacyId: Int
+  taskType: String
+  tutorial: com_sap_developers_ims_Tutorials
+  group: com_sap_developers_ims_Groups
+  checkpointTitle: String
+  prize: com_sap_developers_ims_Prizes
+  itemOrder: Int
+  altGroupKey: String
+  altGroupLabel: String
+  altCondition: String
+}
+
+type com_sap_developers_ims_Prizes {
+  ID: ID
+  legacyId: Int
+  name: String
+  event: com_sap_developers_ims_Events
+}
+
+input com_sap_developers_ims_CompletionPathItems_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  taskLegacyId: [Int_filter]
+  taskType: [String_filter]
+  checkpointTitle: [String_filter]
+  itemOrder: [Int_filter]
+  altGroupKey: [String_filter]
+  altGroupLabel: [String_filter]
+  altCondition: [String_filter]
+}
+
+input com_sap_developers_ims_CompletionPathItems_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  taskLegacyId: SortDirection
+  taskType: SortDirection
+  checkpointTitle: SortDirection
+  itemOrder: SortDirection
+  altGroupKey: SortDirection
+  altGroupLabel: SortDirection
+  altCondition: SortDirection
+}
+
+input com_sap_developers_ims_CompletionPaths_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  name: [String_filter]
+  description: [String_filter]
+  slug: [String_filter]
+}
+
+input com_sap_developers_ims_CompletionPaths_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  name: SortDirection
+  description: SortDirection
+  slug: SortDirection
+}
+
+type com_sap_developers_ims_MissionTags_connection {
+  nodes: [com_sap_developers_ims_MissionTags]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_MissionTags {
+  ID: ID
+  mission: com_sap_developers_ims_Missions
+  tag: com_sap_developers_ims_Tags
+}
+
+input com_sap_developers_ims_MissionTags_filter {
+  ID: [ID_filter]
+}
+
+input com_sap_developers_ims_MissionTags_orderBy {
+  ID: SortDirection
+}
+
+type com_sap_developers_ims_MissionCategories_connection {
+  nodes: [com_sap_developers_ims_MissionCategories]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_MissionCategories {
+  ID: ID
+  mission: com_sap_developers_ims_Missions
+  category: com_sap_developers_ims_Categories
+  score: Decimal
+}
+
+input com_sap_developers_ims_MissionCategories_filter {
+  ID: [ID_filter]
+  score: [Decimal_filter]
+}
+
+input com_sap_developers_ims_MissionCategories_orderBy {
+  ID: SortDirection
+  score: SortDirection
+}
+
+input com_sap_developers_ims_TaskRecords_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  legacyId: [Int_filter]
+  taskLegacyId: [Int_filter]
+  taskType: [String_filter]
+  status: [String_filter]
+  progress: [Int_filter]
+  completionTime: [Int64_filter]
+  completionDate: [Timestamp_filter]
+  contentLanguage: [String_filter]
+  siteLanguage: [String_filter]
+  submissionIdStarted: [ID_filter]
+  submissionIdCompleted: [ID_filter]
+  titleSnapshot: [String_filter]
+  progressNote: [String_filter]
+  attemptNumber: [Int_filter]
+}
+
+input Int64_filter {
+  eq: Int64
+  ne: [Int64]
+  gt: Int64
+  ge: Int64
+  le: Int64
+  lt: Int64
+  in: [Int64]
+}
+
+input com_sap_developers_ims_TaskRecords_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  legacyId: SortDirection
+  taskLegacyId: SortDirection
+  taskType: SortDirection
+  status: SortDirection
+  progress: SortDirection
+  completionTime: SortDirection
+  completionDate: SortDirection
+  contentLanguage: SortDirection
+  siteLanguage: SortDirection
+  submissionIdStarted: SortDirection
+  submissionIdCompleted: SortDirection
+  titleSnapshot: SortDirection
+  progressNote: SortDirection
+  attemptNumber: SortDirection
+}
+
+type com_sap_developers_ims_Prizes_connection {
+  nodes: [com_sap_developers_ims_Prizes]
+  totalCount: Int
+}
+
+input com_sap_developers_ims_Prizes_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  name: [String_filter]
+}
+
+input com_sap_developers_ims_Prizes_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  name: SortDirection
+}
+
+type com_sap_developers_ims_PrizeRecords_connection {
+  nodes: [com_sap_developers_ims_PrizeRecords]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_PrizeRecords {
+  ID: ID
+  legacyId: Int
+  user: com_sap_developers_ims_Users
+  event: com_sap_developers_ims_Events
+  prize: com_sap_developers_ims_Prizes
+  completionPathItem: com_sap_developers_ims_CompletionPathItems
+  status: String
+}
+
+input com_sap_developers_ims_PrizeRecords_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  status: [String_filter]
+}
+
+input com_sap_developers_ims_PrizeRecords_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  status: SortDirection
+}
+
+type com_sap_developers_ims_AccomplishmentRecords_connection {
+  nodes: [com_sap_developers_ims_AccomplishmentRecords]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_AccomplishmentRecords {
+  ID: ID
+  legacyId: Int
+  user: com_sap_developers_ims_Users
+  accomplishment: com_sap_developers_ims_Accomplishments
+  awardedAt: Timestamp
+}
+
+type com_sap_developers_ims_Accomplishments {
+  ID: ID
+  legacyId: Int
+  name: String
+  rule: String
+  description: String
+}
+
+input com_sap_developers_ims_AccomplishmentRecords_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  awardedAt: [Timestamp_filter]
+}
+
+input com_sap_developers_ims_AccomplishmentRecords_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  awardedAt: SortDirection
+}
+
+type com_sap_developers_ims_UserMetaData_connection {
+  nodes: [com_sap_developers_ims_UserMetaData]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_UserMetaData {
+  ID: ID
+  legacyId: Int
+  user: com_sap_developers_ims_Users
+  key: String
+  value: String
+}
+
+input com_sap_developers_ims_UserMetaData_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  key: [String_filter]
+  value: [String_filter]
+}
+
+input com_sap_developers_ims_UserMetaData_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  key: SortDirection
+  value: SortDirection
+}
+
+type com_sap_developers_ims_DeveloperEnvironmentTabs_connection {
+  nodes: [com_sap_developers_ims_DeveloperEnvironmentTabs]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_DeveloperEnvironmentTabs {
+  ID: ID
+  legacyId: Int
+  user: com_sap_developers_ims_Users
+  tabName: String
+  tabOrder: Int
+  links(top: Int, skip: Int, filter: [com_sap_developers_ims_DeveloperEnvironmentLinks_filter], orderBy: [com_sap_developers_ims_DeveloperEnvironmentLinks_orderBy]): com_sap_developers_ims_DeveloperEnvironmentLinks_connection
+}
+
+type com_sap_developers_ims_DeveloperEnvironmentLinks_connection {
+  nodes: [com_sap_developers_ims_DeveloperEnvironmentLinks]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_DeveloperEnvironmentLinks {
+  ID: ID
+  legacyId: Int
+  tab: com_sap_developers_ims_DeveloperEnvironmentTabs
+  title: String
+  url: String
+  linkOrder: Int
+}
+
+input com_sap_developers_ims_DeveloperEnvironmentLinks_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  title: [String_filter]
+  url: [String_filter]
+  linkOrder: [Int_filter]
+}
+
+input com_sap_developers_ims_DeveloperEnvironmentLinks_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  title: SortDirection
+  url: SortDirection
+  linkOrder: SortDirection
+}
+
+input com_sap_developers_ims_DeveloperEnvironmentTabs_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  tabName: [String_filter]
+  tabOrder: [Int_filter]
+}
+
+input com_sap_developers_ims_DeveloperEnvironmentTabs_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  tabName: SortDirection
+  tabOrder: SortDirection
+}
+
+type com_sap_developers_ims_Tutorials_connection {
+  nodes: [com_sap_developers_ims_Tutorials]
+  totalCount: Int
+}
+
+input com_sap_developers_ims_Tutorials_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  legacyId: [Int_filter]
+  title: [String_filter]
+  description: [String_filter]
+  status: [String_filter]
+  deletionReason: [String_filter]
+  primaryTag: [String_filter]
+  experienceTag: [String_filter]
+  averageTimeToComplete: [Int_filter]
+  slug: [String_filter]
+  mdFileUrl: [String_filter]
+  featuredOrder: [Int_filter]
+  stepCount: [Int_filter]
+}
+
+input com_sap_developers_ims_Tutorials_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  legacyId: SortDirection
+  title: SortDirection
+  description: SortDirection
+  status: SortDirection
+  deletionReason: SortDirection
+  primaryTag: SortDirection
+  experienceTag: SortDirection
+  averageTimeToComplete: SortDirection
+  slug: SortDirection
+  mdFileUrl: SortDirection
+  featuredOrder: SortDirection
+  stepCount: SortDirection
+}
+
+type com_sap_developers_ims_TutorialContributors_connection {
+  nodes: [com_sap_developers_ims_TutorialContributors]
+  totalCount: Int
+}
+
+input com_sap_developers_ims_TutorialContributors_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  name: [String_filter]
+  email: [String_filter]
+  role: [String_filter]
+}
+
+input com_sap_developers_ims_TutorialContributors_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  name: SortDirection
+  email: SortDirection
+  role: SortDirection
+}
+
+input com_sap_developers_ims_TutorialMeta_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  legacyId: [Int_filter]
+  reviewedDate: [Timestamp_filter]
+  owner: [String_filter]
+  ownerEmail: [String_filter]
+  monitoredStatus: [String_filter]
+  notificationNumber: [Int_filter]
+  lastNotificationDate: [Timestamp_filter]
+  firstNotificationDate: [Timestamp_filter]
+}
+
+input com_sap_developers_ims_TutorialMeta_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  legacyId: SortDirection
+  reviewedDate: SortDirection
+  owner: SortDirection
+  ownerEmail: SortDirection
+  monitoredStatus: SortDirection
+  notificationNumber: SortDirection
+  lastNotificationDate: SortDirection
+  firstNotificationDate: SortDirection
+}
+
+type com_sap_developers_ims_TutorialCategories_connection {
+  nodes: [com_sap_developers_ims_TutorialCategories]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_TutorialCategories {
+  ID: ID
+  tutorial: com_sap_developers_ims_Tutorials
+  category: com_sap_developers_ims_Categories
+  score: Decimal
+}
+
+input com_sap_developers_ims_TutorialCategories_filter {
+  ID: [ID_filter]
+  score: [Decimal_filter]
+}
+
+input com_sap_developers_ims_TutorialCategories_orderBy {
+  ID: SortDirection
+  score: SortDirection
+}
+
+type com_sap_developers_ims_TutorialConceptLinks_connection {
+  nodes: [com_sap_developers_ims_TutorialConceptLinks]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_TutorialConceptLinks {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  tutorial: com_sap_developers_ims_Tutorials
+  concept: com_sap_developers_ims_Concepts
+  predicate: String
+  extendsTutorial: com_sap_developers_ims_Tutorials
+  confidence: Decimal
+  extractedAt: Timestamp
+  contentHash: String
+  modelVersion: String
+}
+
+type com_sap_developers_ims_Concepts {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  name: String
+  description: String
+  embedding: Binary
+  status: String
+  mergedInto: com_sap_developers_ims_Concepts
+  extractionCount: Int
+  firstSeenAt: Timestamp
+  lastSeenAt: Timestamp
+  publishedAt: Timestamp
+  publishedBy: String
+  links(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialConceptLinks_filter], orderBy: [com_sap_developers_ims_TutorialConceptLinks_orderBy]): com_sap_developers_ims_TutorialConceptLinks_connection
+  outgoingEdges(top: Int, skip: Int, filter: [com_sap_developers_ims_ConceptEdges_filter], orderBy: [com_sap_developers_ims_ConceptEdges_orderBy]): com_sap_developers_ims_ConceptEdges_connection
+  incomingEdges(top: Int, skip: Int, filter: [com_sap_developers_ims_ConceptEdges_filter], orderBy: [com_sap_developers_ims_ConceptEdges_orderBy]): com_sap_developers_ims_ConceptEdges_connection
+}
+
+"""
+The `Binary` scalar type represents binary values as `base64url` encoded strings.
+"""
+scalar Binary
+
+input com_sap_developers_ims_TutorialConceptLinks_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  predicate: [String_filter]
+  confidence: [Decimal_filter]
+  extractedAt: [Timestamp_filter]
+  contentHash: [String_filter]
+  modelVersion: [String_filter]
+}
+
+input com_sap_developers_ims_TutorialConceptLinks_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  predicate: SortDirection
+  confidence: SortDirection
+  extractedAt: SortDirection
+  contentHash: SortDirection
+  modelVersion: SortDirection
+}
+
+type com_sap_developers_ims_ConceptEdges_connection {
+  nodes: [com_sap_developers_ims_ConceptEdges]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_ConceptEdges {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  source: com_sap_developers_ims_Concepts
+  target: com_sap_developers_ims_Concepts
+  predicate: String
+  confidence: Decimal
+  evidence: String
+  status: String
+  extractedAt: Timestamp
+  modelVersion: String
+}
+
+input com_sap_developers_ims_ConceptEdges_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  predicate: [String_filter]
+  confidence: [Decimal_filter]
+  evidence: [String_filter]
+  status: [String_filter]
+  extractedAt: [Timestamp_filter]
+  modelVersion: [String_filter]
+}
+
+input com_sap_developers_ims_ConceptEdges_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  predicate: SortDirection
+  confidence: SortDirection
+  evidence: SortDirection
+  status: SortDirection
+  extractedAt: SortDirection
+  modelVersion: SortDirection
+}
+
+type DeveloperService_TutorialCategories_connection {
+  nodes: [DeveloperService_TutorialCategories]
+  totalCount: Int
+}
+
+type DeveloperService_TutorialCategories {
+  ID: ID
+  tutorial: DeveloperService_Tutorials
+  category: com_sap_developers_ims_Categories
+  score: Decimal
+}
+
+input DeveloperService_TutorialCategories_filter {
+  ID: [ID_filter]
+  score: [Decimal_filter]
+}
+
+input DeveloperService_TutorialCategories_orderBy {
+  ID: SortDirection
+  score: SortDirection
+}
+
+type DeveloperService_TutorialConceptLinks_connection {
+  nodes: [DeveloperService_TutorialConceptLinks]
+  totalCount: Int
+}
+
+type DeveloperService_TutorialConceptLinks {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  tutorial: DeveloperService_Tutorials
+  concept: com_sap_developers_ims_Concepts
+  predicate: String
+  extendsTutorial: DeveloperService_Tutorials
+  confidence: Decimal
+  extractedAt: Timestamp
+  contentHash: String
+  modelVersion: String
+}
+
+input DeveloperService_TutorialConceptLinks_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  predicate: [String_filter]
+  confidence: [Decimal_filter]
+  extractedAt: [Timestamp_filter]
+  contentHash: [String_filter]
+  modelVersion: [String_filter]
+}
+
+input DeveloperService_TutorialConceptLinks_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  predicate: SortDirection
+  confidence: SortDirection
+  extractedAt: SortDirection
+  contentHash: SortDirection
+  modelVersion: SortDirection
+}
+
+input DeveloperService_Tutorials_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  legacyId: [Int_filter]
+  title: [String_filter]
+  description: [String_filter]
+  status: [String_filter]
+  deletionReason: [String_filter]
+  primaryTag: [String_filter]
+  experienceTag: [String_filter]
+  averageTimeToComplete: [Int_filter]
+  slug: [String_filter]
+  mdFileUrl: [String_filter]
+  featuredOrder: [Int_filter]
+  stepCount: [Int_filter]
+  authorEmail: [String_filter]
+  authorDisplayName: [String_filter]
+  authorFirstName: [String_filter]
+  authorLastName: [String_filter]
+}
+
+input DeveloperService_Tutorials_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  legacyId: SortDirection
+  title: SortDirection
+  description: SortDirection
+  status: SortDirection
+  deletionReason: SortDirection
+  primaryTag: SortDirection
+  experienceTag: SortDirection
+  averageTimeToComplete: SortDirection
+  slug: SortDirection
+  mdFileUrl: SortDirection
+  featuredOrder: SortDirection
+  stepCount: SortDirection
+  authorEmail: SortDirection
+  authorDisplayName: SortDirection
+  authorFirstName: SortDirection
+  authorLastName: SortDirection
+}
+
+type DeveloperService_TaskRecords_connection {
+  nodes: [DeveloperService_TaskRecords]
+  totalCount: Int
+}
+
+type DeveloperService_TaskRecords {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  user: com_sap_developers_ims_Users
+  taskLegacyId: Int
+  taskType: String
+  status: String
+  progress: Int
+  completionTime: Int64
+  completionDate: Timestamp
+  contentLanguage: String
+  siteLanguage: String
+  submissionIdStarted: ID
+  submissionIdCompleted: ID
+  titleSnapshot: String
+  progressNote: String
+  event: DeveloperService_Events
+  attemptNumber: Int
+}
+
+type DeveloperService_Events {
+  ID: ID
+  legacyId: Int
+  name: String
+  startDate: Timestamp
+  endDate: Timestamp
+  timeZone: String
+  eventType: String
+}
+
+input DeveloperService_TaskRecords_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  legacyId: [Int_filter]
+  taskLegacyId: [Int_filter]
+  taskType: [String_filter]
+  status: [String_filter]
+  progress: [Int_filter]
+  completionTime: [Int64_filter]
+  completionDate: [Timestamp_filter]
+  contentLanguage: [String_filter]
+  siteLanguage: [String_filter]
+  submissionIdStarted: [ID_filter]
+  submissionIdCompleted: [ID_filter]
+  titleSnapshot: [String_filter]
+  progressNote: [String_filter]
+  attemptNumber: [Int_filter]
+}
+
+input DeveloperService_TaskRecords_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  legacyId: SortDirection
+  taskLegacyId: SortDirection
+  taskType: SortDirection
+  status: SortDirection
+  progress: SortDirection
+  completionTime: SortDirection
+  completionDate: SortDirection
+  contentLanguage: SortDirection
+  siteLanguage: SortDirection
+  submissionIdStarted: SortDirection
+  submissionIdCompleted: SortDirection
+  titleSnapshot: SortDirection
+  progressNote: SortDirection
+  attemptNumber: SortDirection
+}
+
+type DeveloperService_Events_connection {
+  nodes: [DeveloperService_Events]
+  totalCount: Int
+}
+
+input DeveloperService_Events_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  name: [String_filter]
+  startDate: [Timestamp_filter]
+  endDate: [Timestamp_filter]
+  timeZone: [String_filter]
+  eventType: [String_filter]
+}
+
+input DeveloperService_Events_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  name: SortDirection
+  startDate: SortDirection
+  endDate: SortDirection
+  timeZone: SortDirection
+  eventType: SortDirection
+}
+
+type DeveloperService_ChatConfig_connection {
+  nodes: [DeveloperService_ChatConfig]
+  totalCount: Int
+}
+
+type DeveloperService_ChatConfig {
+  ID: ID
+  enabled: Boolean
+  bannerText: String
+  branchingEnabled: Boolean
+}
+
+input DeveloperService_ChatConfig_filter {
+  ID: [ID_filter]
+  enabled: [Boolean_filter]
+  bannerText: [String_filter]
+  branchingEnabled: [Boolean_filter]
+}
+
+input DeveloperService_ChatConfig_orderBy {
+  ID: SortDirection
+  enabled: SortDirection
+  bannerText: SortDirection
+  branchingEnabled: SortDirection
+}
+
+type DeveloperService_LearningPreferences_connection {
+  nodes: [DeveloperService_LearningPreferences]
+  totalCount: Int
+}
+
+type DeveloperService_LearningPreferences {
+  user: com_sap_developers_ims_Users
+  deployment: String
+  role: String
+  cloud: String
+}
+
+input DeveloperService_LearningPreferences_filter {
+  deployment: [String_filter]
+  role: [String_filter]
+  cloud: [String_filter]
+}
+
+input DeveloperService_LearningPreferences_orderBy {
+  deployment: SortDirection
+  role: SortDirection
+  cloud: SortDirection
+}
+
+type DeveloperService_Advocates_connection {
+  nodes: [DeveloperService_Advocates]
+  totalCount: Int
+}
+
+type DeveloperService_Advocates {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  firstName: String
+  lastName: String
+  title: String
+  pronouns: String
+  location: String
+  region: String
+  bio: String
+  isActive: Boolean
+  sortOverride: Int
+  joinedDate: Date
+  hasPhoto: Boolean
+  photoUpdatedAt: Timestamp
+  photoUrl: String
+  user: com_sap_developers_ims_Users
+  authoredTutorials(top: Int, skip: Int, filter: [DeveloperService_Tutorials_filter], orderBy: [DeveloperService_Tutorials_orderBy]): DeveloperService_Tutorials_connection
+  contributedTutorials(top: Int, skip: Int, filter: [DeveloperService_TutorialContributors_filter], orderBy: [DeveloperService_TutorialContributors_orderBy]): DeveloperService_TutorialContributors_connection
+  ownedTutorials(top: Int, skip: Int, filter: [com_sap_developers_ims_MyTutorialsByUserId_filter], orderBy: [com_sap_developers_ims_MyTutorialsByUserId_orderBy]): com_sap_developers_ims_MyTutorialsByUserId_connection
+  topics(top: Int, skip: Int, filter: [DeveloperService_AdvocateTopics_filter], orderBy: [DeveloperService_AdvocateTopics_orderBy]): DeveloperService_AdvocateTopics_connection
+  links(top: Int, skip: Int, filter: [DeveloperService_AdvocateLinks_filter], orderBy: [DeveloperService_AdvocateLinks_orderBy]): DeveloperService_AdvocateLinks_connection
+  photo: DeveloperService_AdvocatePhotos
+}
+
+"""
+The `Date` scalar type represents date values as strings in the ISO 8601 format `YYYY-MM-DD`.
+"""
+scalar Date
+
+type DeveloperService_TutorialContributors_connection {
+  nodes: [DeveloperService_TutorialContributors]
+  totalCount: Int
+}
+
+type DeveloperService_TutorialContributors {
+  ID: ID
+  legacyId: Int
+  tutorial: DeveloperService_Tutorials
+  name: String
+  email: String
+  role: String
+  user: com_sap_developers_ims_Users
+}
+
+input DeveloperService_TutorialContributors_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  name: [String_filter]
+  email: [String_filter]
+  role: [String_filter]
+}
+
+input DeveloperService_TutorialContributors_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  name: SortDirection
+  email: SortDirection
+  role: SortDirection
+}
+
+type com_sap_developers_ims_MyTutorialsByUserId_connection {
+  nodes: [com_sap_developers_ims_MyTutorialsByUserId]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_MyTutorialsByUserId {
+  user_ID: ID
+  tutorial_ID: ID
+  userId: String
+  bestPriority: Int
+  slug: String
+  title: String
+  primaryTag: String
+  status: String
+  reviewedDate: Timestamp
+  monitoredStatus: String
+  notificationNumber: Int
+  notificationDate: Timestamp
+  firstNotificationDate: Timestamp
+  owner: String
+  ownerEmail: String
+  repositoryName: String
+  monitored: Boolean
+  daysSinceReview: Int
+}
+
+input com_sap_developers_ims_MyTutorialsByUserId_filter {
+  user_ID: [ID_filter]
+  tutorial_ID: [ID_filter]
+  userId: [String_filter]
+  bestPriority: [Int_filter]
+  slug: [String_filter]
+  title: [String_filter]
+  primaryTag: [String_filter]
+  status: [String_filter]
+  reviewedDate: [Timestamp_filter]
+  monitoredStatus: [String_filter]
+  notificationNumber: [Int_filter]
+  notificationDate: [Timestamp_filter]
+  firstNotificationDate: [Timestamp_filter]
+  owner: [String_filter]
+  ownerEmail: [String_filter]
+  repositoryName: [String_filter]
+  monitored: [Boolean_filter]
+  daysSinceReview: [Int_filter]
+}
+
+input com_sap_developers_ims_MyTutorialsByUserId_orderBy {
+  user_ID: SortDirection
+  tutorial_ID: SortDirection
+  userId: SortDirection
+  bestPriority: SortDirection
+  slug: SortDirection
+  title: SortDirection
+  primaryTag: SortDirection
+  status: SortDirection
+  reviewedDate: SortDirection
+  monitoredStatus: SortDirection
+  notificationNumber: SortDirection
+  notificationDate: SortDirection
+  firstNotificationDate: SortDirection
+  owner: SortDirection
+  ownerEmail: SortDirection
+  repositoryName: SortDirection
+  monitored: SortDirection
+  daysSinceReview: SortDirection
+}
+
+type DeveloperService_AdvocateTopics_connection {
+  nodes: [DeveloperService_AdvocateTopics]
+  totalCount: Int
+}
+
+type DeveloperService_AdvocateTopics {
+  ID: ID
+  advocate: DeveloperService_Advocates
+  tag: com_sap_developers_ims_Tags
+}
+
+input DeveloperService_AdvocateTopics_filter {
+  ID: [ID_filter]
+}
+
+input DeveloperService_AdvocateTopics_orderBy {
+  ID: SortDirection
+}
+
+type DeveloperService_AdvocateLinks_connection {
+  nodes: [DeveloperService_AdvocateLinks]
+  totalCount: Int
+}
+
+type DeveloperService_AdvocateLinks {
+  ID: ID
+  advocate: DeveloperService_Advocates
+  kind: String
+  url: String
+  label: String
+  sortOrder: Int
+}
+
+input DeveloperService_AdvocateLinks_filter {
+  ID: [ID_filter]
+  kind: [String_filter]
+  url: [String_filter]
+  label: [String_filter]
+  sortOrder: [Int_filter]
+}
+
+input DeveloperService_AdvocateLinks_orderBy {
+  ID: SortDirection
+  kind: SortDirection
+  url: SortDirection
+  label: SortDirection
+  sortOrder: SortDirection
+}
+
+type DeveloperService_AdvocatePhotos {
+  advocate: DeveloperService_Advocates
+  photo256: Binary
+  photo64: Binary
+  photoMimeType: String
+  sizeBytes: Int
+  sha256: String
+  uploadedAt: Timestamp
+}
+
+input DeveloperService_Advocates_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  slug: [String_filter]
+  firstName: [String_filter]
+  lastName: [String_filter]
+  title: [String_filter]
+  pronouns: [String_filter]
+  location: [String_filter]
+  region: [String_filter]
+  bio: [String_filter]
+  isActive: [Boolean_filter]
+  sortOverride: [Int_filter]
+  joinedDate: [Date_filter]
+  hasPhoto: [Boolean_filter]
+  photoUpdatedAt: [Timestamp_filter]
+  photoUrl: [String_filter]
+}
+
+input Date_filter {
+  eq: Date
+  ne: [Date]
+  gt: Date
+  ge: Date
+  le: Date
+  lt: Date
+  in: [Date]
+}
+
+input DeveloperService_Advocates_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  slug: SortDirection
+  firstName: SortDirection
+  lastName: SortDirection
+  title: SortDirection
+  pronouns: SortDirection
+  location: SortDirection
+  region: SortDirection
+  bio: SortDirection
+  isActive: SortDirection
+  sortOverride: SortDirection
+  joinedDate: SortDirection
+  hasPhoto: SortDirection
+  photoUpdatedAt: SortDirection
+  photoUrl: SortDirection
+}
+
+type DeveloperService_AdvocatePhotos_connection {
+  nodes: [DeveloperService_AdvocatePhotos]
+  totalCount: Int
+}
+
+input DeveloperService_AdvocatePhotos_filter {
+  photo256: [Binary_filter]
+  photo64: [Binary_filter]
+  photoMimeType: [String_filter]
+  sizeBytes: [Int_filter]
+  sha256: [String_filter]
+  uploadedAt: [Timestamp_filter]
+}
+
+input Binary_filter {
+  eq: Binary
+  ne: [Binary]
+}
+
+input DeveloperService_AdvocatePhotos_orderBy {
+  photo256: SortDirection
+  photo64: SortDirection
+  photoMimeType: SortDirection
+  sizeBytes: SortDirection
+  sha256: SortDirection
+  uploadedAt: SortDirection
+}
+
+type KnowledgeGraphService {
+  Concepts(top: Int, skip: Int, filter: [KnowledgeGraphService_Concepts_filter], orderBy: [KnowledgeGraphService_Concepts_orderBy]): KnowledgeGraphService_Concepts_connection
+  TutorialConceptLinks(top: Int, skip: Int, filter: [KnowledgeGraphService_TutorialConceptLinks_filter], orderBy: [KnowledgeGraphService_TutorialConceptLinks_orderBy]): KnowledgeGraphService_TutorialConceptLinks_connection
+  ConceptEdges(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptEdges_filter], orderBy: [KnowledgeGraphService_ConceptEdges_orderBy]): KnowledgeGraphService_ConceptEdges_connection
+  PublishedConcepts(top: Int, skip: Int, filter: [KnowledgeGraphService_PublishedConcepts_filter], orderBy: [KnowledgeGraphService_PublishedConcepts_orderBy]): KnowledgeGraphService_PublishedConcepts_connection
+}
+
+type KnowledgeGraphService_Concepts_connection {
+  nodes: [KnowledgeGraphService_Concepts]
+  totalCount: Int
+}
+
+type KnowledgeGraphService_Concepts {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  name: String
+  description: String
+  status: String
+  mergedInto: KnowledgeGraphService_Concepts
+  extractionCount: Int
+  firstSeenAt: Timestamp
+  lastSeenAt: Timestamp
+  publishedAt: Timestamp
+  publishedBy: String
+  links(top: Int, skip: Int, filter: [KnowledgeGraphService_TutorialConceptLinks_filter], orderBy: [KnowledgeGraphService_TutorialConceptLinks_orderBy]): KnowledgeGraphService_TutorialConceptLinks_connection
+  outgoingEdges(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptEdges_filter], orderBy: [KnowledgeGraphService_ConceptEdges_orderBy]): KnowledgeGraphService_ConceptEdges_connection
+  incomingEdges(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptEdges_filter], orderBy: [KnowledgeGraphService_ConceptEdges_orderBy]): KnowledgeGraphService_ConceptEdges_connection
+  isolated: Boolean
+}
+
+type KnowledgeGraphService_TutorialConceptLinks_connection {
+  nodes: [KnowledgeGraphService_TutorialConceptLinks]
+  totalCount: Int
+}
+
+type KnowledgeGraphService_TutorialConceptLinks {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  tutorial: com_sap_developers_ims_Tutorials
+  concept: KnowledgeGraphService_Concepts
+  predicate: String
+  extendsTutorial: com_sap_developers_ims_Tutorials
+  confidence: Decimal
+  extractedAt: Timestamp
+  contentHash: String
+  modelVersion: String
+}
+
+input KnowledgeGraphService_TutorialConceptLinks_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  predicate: [String_filter]
+  confidence: [Decimal_filter]
+  extractedAt: [Timestamp_filter]
+  contentHash: [String_filter]
+  modelVersion: [String_filter]
+}
+
+input KnowledgeGraphService_TutorialConceptLinks_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  predicate: SortDirection
+  confidence: SortDirection
+  extractedAt: SortDirection
+  contentHash: SortDirection
+  modelVersion: SortDirection
+}
+
+type KnowledgeGraphService_ConceptEdges_connection {
+  nodes: [KnowledgeGraphService_ConceptEdges]
+  totalCount: Int
+}
+
+type KnowledgeGraphService_ConceptEdges {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  source: KnowledgeGraphService_Concepts
+  target: KnowledgeGraphService_Concepts
+  predicate: String
+  confidence: Decimal
+  evidence: String
+  status: String
+  extractedAt: Timestamp
+  modelVersion: String
+}
+
+input KnowledgeGraphService_ConceptEdges_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  predicate: [String_filter]
+  confidence: [Decimal_filter]
+  evidence: [String_filter]
+  status: [String_filter]
+  extractedAt: [Timestamp_filter]
+  modelVersion: [String_filter]
+}
+
+input KnowledgeGraphService_ConceptEdges_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  predicate: SortDirection
+  confidence: SortDirection
+  evidence: SortDirection
+  status: SortDirection
+  extractedAt: SortDirection
+  modelVersion: SortDirection
+}
+
+input KnowledgeGraphService_Concepts_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  slug: [String_filter]
+  name: [String_filter]
+  description: [String_filter]
+  status: [String_filter]
+  extractionCount: [Int_filter]
+  firstSeenAt: [Timestamp_filter]
+  lastSeenAt: [Timestamp_filter]
+  publishedAt: [Timestamp_filter]
+  publishedBy: [String_filter]
+  isolated: [Boolean_filter]
+}
+
+input KnowledgeGraphService_Concepts_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  slug: SortDirection
+  name: SortDirection
+  description: SortDirection
+  status: SortDirection
+  extractionCount: SortDirection
+  firstSeenAt: SortDirection
+  lastSeenAt: SortDirection
+  publishedAt: SortDirection
+  publishedBy: SortDirection
+  isolated: SortDirection
+}
+
+type KnowledgeGraphService_PublishedConcepts_connection {
+  nodes: [KnowledgeGraphService_PublishedConcepts]
+  totalCount: Int
+}
+
+type KnowledgeGraphService_PublishedConcepts {
+  ID: ID
+  slug: String
+  name: String
+  description: String
+  publishedAt: Timestamp
+  publishedBy: String
+  status: String
+}
+
+input KnowledgeGraphService_PublishedConcepts_filter {
+  ID: [ID_filter]
+  slug: [String_filter]
+  name: [String_filter]
+  description: [String_filter]
+  publishedAt: [Timestamp_filter]
+  publishedBy: [String_filter]
+  status: [String_filter]
+}
+
+input KnowledgeGraphService_PublishedConcepts_orderBy {
+  ID: SortDirection
+  slug: SortDirection
+  name: SortDirection
+  description: SortDirection
+  publishedAt: SortDirection
+  publishedBy: SortDirection
+  status: SortDirection
+}
+
+type SearchService {
+  SearchableItems(top: Int, skip: Int, filter: [SearchService_SearchableItems_filter], orderBy: [SearchService_SearchableItems_orderBy]): SearchService_SearchableItems_connection
+  Tags(top: Int, skip: Int, filter: [SearchService_Tags_filter], orderBy: [SearchService_Tags_orderBy]): SearchService_Tags_connection
+}
+
+type SearchService_SearchableItems_connection {
+  nodes: [SearchService_SearchableItems]
+  totalCount: Int
+}
+
+type SearchService_SearchableItems {
+  title: String
+  description: String
+  primaryTag: String
+  tagBag: String
+  searchScore: Decimal
+  ID: ID
+  legacyId: Int
+  slug: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  status: String
+  createdAt: Timestamp
+  taskType: String
+}
+
+input SearchService_SearchableItems_filter {
+  title: [String_filter]
+  description: [String_filter]
+  primaryTag: [String_filter]
+  tagBag: [String_filter]
+  searchScore: [Decimal_filter]
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  slug: [String_filter]
+  experienceTag: [String_filter]
+  averageTimeToComplete: [Int_filter]
+  status: [String_filter]
+  createdAt: [Timestamp_filter]
+  taskType: [String_filter]
+}
+
+input SearchService_SearchableItems_orderBy {
+  title: SortDirection
+  description: SortDirection
+  primaryTag: SortDirection
+  tagBag: SortDirection
+  searchScore: SortDirection
+  ID: SortDirection
+  legacyId: SortDirection
+  slug: SortDirection
+  experienceTag: SortDirection
+  averageTimeToComplete: SortDirection
+  status: SortDirection
+  createdAt: SortDirection
+  taskType: SortDirection
+}
+
+type SearchService_Tags_connection {
+  nodes: [SearchService_Tags]
+  totalCount: Int
+}
+
+type SearchService_Tags {
+  ID: ID
+  legacyId: Int
+  name: String
+  label: String
+  titlePath: String
+  mdFormat: String
+  semaphoreId: String
+  isActualTag: Boolean
+  isInterestItem: Boolean
+}
+
+input SearchService_Tags_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  name: [String_filter]
+  label: [String_filter]
+  titlePath: [String_filter]
+  mdFormat: [String_filter]
+  semaphoreId: [String_filter]
+  isActualTag: [Boolean_filter]
+  isInterestItem: [Boolean_filter]
+}
+
+input SearchService_Tags_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  name: SortDirection
+  label: SortDirection
+  titlePath: SortDirection
+  mdFormat: SortDirection
+  semaphoreId: SortDirection
+  isActualTag: SortDirection
+  isInterestItem: SortDirection
+}
+
+type Mutation {
+  DeveloperService: DeveloperService_input
+  KnowledgeGraphService: KnowledgeGraphService_input
+  SearchService: SearchService_input
+}
+
+type DeveloperService_input {
+  Tutorials: DeveloperService_Tutorials_input
+  Steps: DeveloperService_Steps_input
+  TutorialCategories: DeveloperService_TutorialCategories_input
+  TutorialConceptLinks: DeveloperService_TutorialConceptLinks_input
+  TaskRecords: DeveloperService_TaskRecords_input
+  Events: DeveloperService_Events_input
+  ChatConfig: DeveloperService_ChatConfig_input
+  LearningPreferences: DeveloperService_LearningPreferences_input
+  Advocates: DeveloperService_Advocates_input
+  TutorialContributors: DeveloperService_TutorialContributors_input
+  AdvocateTopics: DeveloperService_AdvocateTopics_input
+  AdvocateLinks: DeveloperService_AdvocateLinks_input
+  AdvocatePhotos: DeveloperService_AdvocatePhotos_input
+}
+
+type DeveloperService_Tutorials_input {
+  create(input: [DeveloperService_Tutorials_C]!): [DeveloperService_Tutorials]
+  update(filter: [DeveloperService_Tutorials_filter]!, input: DeveloperService_Tutorials_U!): [DeveloperService_Tutorials]
+  delete(filter: [DeveloperService_Tutorials_filter]!): Int
+}
+
+input DeveloperService_Tutorials_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  slug: String
+  mdFileUrl: String
+  featuredOrder: Int
+  stepCount: Int
+  redirectTo: DeveloperService_Tutorials_C
+  steps: [DeveloperService_Steps_C]
+  tags: [com_sap_developers_ims_TutorialTags_C]
+  categories: [DeveloperService_TutorialCategories_C]
+  author: com_sap_developers_ims_Users_C
+  conceptLinks: [DeveloperService_TutorialConceptLinks_C]
+  authorEmail: String
+  authorDisplayName: String
+  authorFirstName: String
+  authorLastName: String
+}
+
+input DeveloperService_Steps_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  tutorial: DeveloperService_Tutorials_C
+  stepOrder: Int
+  contentHash: String
+}
+
+input com_sap_developers_ims_TutorialTags_C {
+  tutorial: com_sap_developers_ims_Tutorials_C
+  tag: com_sap_developers_ims_Tags_C
+}
+
+input com_sap_developers_ims_Tutorials_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  slug: String
+  mdFileUrl: String
+  featuredOrder: Int
+  stepCount: Int
+  redirectTo: com_sap_developers_ims_Tutorials_C
+  steps: [com_sap_developers_ims_Steps_C]
+  tags: [com_sap_developers_ims_TutorialTags_C]
+  meta: [com_sap_developers_ims_TutorialMeta_C]
+  contributors: [com_sap_developers_ims_TutorialContributors_C]
+  categories: [com_sap_developers_ims_TutorialCategories_C]
+  author: com_sap_developers_ims_Users_C
+  conceptLinks: [com_sap_developers_ims_TutorialConceptLinks_C]
+}
+
+input com_sap_developers_ims_Steps_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  tutorial: com_sap_developers_ims_Tutorials_C
+  stepOrder: Int
+  contentHash: String
+}
+
+input com_sap_developers_ims_TutorialMeta_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  tutorial: com_sap_developers_ims_Tutorials_C
+  reviewedDate: Timestamp
+  owner: String
+  ownerEmail: String
+  monitoredStatus: String
+  notificationNumber: Int
+  lastNotificationDate: Timestamp
+  firstNotificationDate: Timestamp
+  repository: com_sap_developers_ims_TutorialRepositories_C
+}
+
+input com_sap_developers_ims_TutorialRepositories_C {
+  ID: ID
+  legacyId: Int
+  name: String
+  repositoryOwner: com_sap_developers_ims_TutorialContributors_C
+}
+
+input com_sap_developers_ims_TutorialContributors_C {
+  ID: ID
+  legacyId: Int
+  tutorial: com_sap_developers_ims_Tutorials_C
+  name: String
+  email: String
+  role: String
+  user: com_sap_developers_ims_Users_C
+}
+
+input com_sap_developers_ims_Users_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  uuid: String
+  sapId: String
+  firstName: String
+  lastName: String
+  email: String
+  displayName: String
+  khorosId: String
+  khorosLogin: String
+  khorosAvatarUrl: String
+  khorosLinkedAt: Timestamp
+  githubLogin: String
+  taskRecords: [com_sap_developers_ims_TaskRecords_C]
+  prizeRecords: [com_sap_developers_ims_PrizeRecords_C]
+  accomplishments: [com_sap_developers_ims_AccomplishmentRecords_C]
+  metadata: [com_sap_developers_ims_UserMetaData_C]
+  environmentTabs: [com_sap_developers_ims_DeveloperEnvironmentTabs_C]
+  authoredTutorials: [com_sap_developers_ims_Tutorials_C]
+  tutorialContributions: [com_sap_developers_ims_TutorialContributors_C]
+}
+
+input com_sap_developers_ims_TaskRecords_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  user: com_sap_developers_ims_Users_C
+  taskLegacyId: Int
+  taskType: String
+  status: String
+  progress: Int
+  completionTime: Int64
+  completionDate: Timestamp
+  contentLanguage: String
+  siteLanguage: String
+  submissionIdStarted: ID
+  submissionIdCompleted: ID
+  titleSnapshot: String
+  progressNote: String
+  event: com_sap_developers_ims_Events_C
+  attemptNumber: Int
+}
+
+input com_sap_developers_ims_Events_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  name: String
+  startDate: Timestamp
+  endDate: Timestamp
+  timeZone: String
+  eventType: String
+  mission: com_sap_developers_ims_Missions_C
+  taskRecords: [com_sap_developers_ims_TaskRecords_C]
+  prizes: [com_sap_developers_ims_Prizes_C]
+}
+
+input com_sap_developers_ims_Missions_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  slug: String
+  communityMissionId: String
+  sourceKgCommunityId: Int
+  sourceKgCommunityFingerprint: String
+  missionType: String
+  published: Boolean
+  primaryTagRef: com_sap_developers_ims_Tags_C
+  group: com_sap_developers_ims_Groups_C
+  event: com_sap_developers_ims_Events_C
+  completionPaths: [com_sap_developers_ims_CompletionPaths_C]
+  tags: [com_sap_developers_ims_MissionTags_C]
+  categories: [com_sap_developers_ims_MissionCategories_C]
+}
+
+input com_sap_developers_ims_Tags_C {
+  ID: ID
+  legacyId: Int
+  name: String
+  label: String
+  titlePath: String
+  mdFormat: String
+  semaphoreId: String
+  isActualTag: Boolean
+  isInterestItem: Boolean
+}
+
+input com_sap_developers_ims_Groups_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  slug: String
+  published: Boolean
+  primaryTagRef: com_sap_developers_ims_Tags_C
+  missions: [com_sap_developers_ims_Missions_C]
+  tags: [com_sap_developers_ims_GroupTags_C]
+  items: [com_sap_developers_ims_GroupPathItems_C]
+  categories: [com_sap_developers_ims_GroupCategories_C]
+}
+
+input com_sap_developers_ims_GroupTags_C {
+  ID: ID
+  group: com_sap_developers_ims_Groups_C
+  tag: com_sap_developers_ims_Tags_C
+}
+
+input com_sap_developers_ims_GroupPathItems_C {
+  ID: ID
+  legacyId: Int
+  group: com_sap_developers_ims_Groups_C
+  tutorial: com_sap_developers_ims_Tutorials_C
+  itemOrder: Int
+  altGroupKey: String
+  altGroupLabel: String
+  altCondition: String
+}
+
+input com_sap_developers_ims_GroupCategories_C {
+  ID: ID
+  group: com_sap_developers_ims_Groups_C
+  category: com_sap_developers_ims_Categories_C
+  score: Decimal
+}
+
+input com_sap_developers_ims_Categories_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  label: String
+  sortOrder: Int
+  seedDescription: String
+}
+
+input com_sap_developers_ims_CompletionPaths_C {
+  ID: ID
+  legacyId: Int
+  mission: com_sap_developers_ims_Missions_C
+  name: String
+  description: String
+  slug: String
+  items: [com_sap_developers_ims_CompletionPathItems_C]
+}
+
+input com_sap_developers_ims_CompletionPathItems_C {
+  ID: ID
+  legacyId: Int
+  path: com_sap_developers_ims_CompletionPaths_C
+  taskLegacyId: Int
+  taskType: String
+  tutorial: com_sap_developers_ims_Tutorials_C
+  group: com_sap_developers_ims_Groups_C
+  checkpointTitle: String
+  prize: com_sap_developers_ims_Prizes_C
+  itemOrder: Int
+  altGroupKey: String
+  altGroupLabel: String
+  altCondition: String
+}
+
+input com_sap_developers_ims_Prizes_C {
+  ID: ID
+  legacyId: Int
+  name: String
+  event: com_sap_developers_ims_Events_C
+}
+
+input com_sap_developers_ims_MissionTags_C {
+  ID: ID
+  mission: com_sap_developers_ims_Missions_C
+  tag: com_sap_developers_ims_Tags_C
+}
+
+input com_sap_developers_ims_MissionCategories_C {
+  ID: ID
+  mission: com_sap_developers_ims_Missions_C
+  category: com_sap_developers_ims_Categories_C
+  score: Decimal
+}
+
+input com_sap_developers_ims_PrizeRecords_C {
+  ID: ID
+  legacyId: Int
+  user: com_sap_developers_ims_Users_C
+  event: com_sap_developers_ims_Events_C
+  prize: com_sap_developers_ims_Prizes_C
+  completionPathItem: com_sap_developers_ims_CompletionPathItems_C
+  status: String
+}
+
+input com_sap_developers_ims_AccomplishmentRecords_C {
+  ID: ID
+  legacyId: Int
+  user: com_sap_developers_ims_Users_C
+  accomplishment: com_sap_developers_ims_Accomplishments_C
+  awardedAt: Timestamp
+}
+
+input com_sap_developers_ims_Accomplishments_C {
+  ID: ID
+  legacyId: Int
+  name: String
+  rule: String
+  description: String
+}
+
+input com_sap_developers_ims_UserMetaData_C {
+  ID: ID
+  legacyId: Int
+  user: com_sap_developers_ims_Users_C
+  key: String
+  value: String
+}
+
+input com_sap_developers_ims_DeveloperEnvironmentTabs_C {
+  ID: ID
+  legacyId: Int
+  user: com_sap_developers_ims_Users_C
+  tabName: String
+  tabOrder: Int
+  links: [com_sap_developers_ims_DeveloperEnvironmentLinks_C]
+}
+
+input com_sap_developers_ims_DeveloperEnvironmentLinks_C {
+  ID: ID
+  legacyId: Int
+  tab: com_sap_developers_ims_DeveloperEnvironmentTabs_C
+  title: String
+  url: String
+  linkOrder: Int
+}
+
+input com_sap_developers_ims_TutorialCategories_C {
+  ID: ID
+  tutorial: com_sap_developers_ims_Tutorials_C
+  category: com_sap_developers_ims_Categories_C
+  score: Decimal
+}
+
+input com_sap_developers_ims_TutorialConceptLinks_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  tutorial: com_sap_developers_ims_Tutorials_C
+  concept: com_sap_developers_ims_Concepts_C
+  predicate: String
+  extendsTutorial: com_sap_developers_ims_Tutorials_C
+  confidence: Decimal
+  extractedAt: Timestamp
+  contentHash: String
+  modelVersion: String
+}
+
+input com_sap_developers_ims_Concepts_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  name: String
+  description: String
+  embedding: Binary
+  status: String
+  mergedInto: com_sap_developers_ims_Concepts_C
+  extractionCount: Int
+  firstSeenAt: Timestamp
+  lastSeenAt: Timestamp
+  publishedAt: Timestamp
+  publishedBy: String
+  links: [com_sap_developers_ims_TutorialConceptLinks_C]
+  outgoingEdges: [com_sap_developers_ims_ConceptEdges_C]
+  incomingEdges: [com_sap_developers_ims_ConceptEdges_C]
+}
+
+input com_sap_developers_ims_ConceptEdges_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  source: com_sap_developers_ims_Concepts_C
+  target: com_sap_developers_ims_Concepts_C
+  predicate: String
+  confidence: Decimal
+  evidence: String
+  status: String
+  extractedAt: Timestamp
+  modelVersion: String
+}
+
+input DeveloperService_TutorialCategories_C {
+  ID: ID
+  tutorial: DeveloperService_Tutorials_C
+  category: com_sap_developers_ims_Categories_C
+  score: Decimal
+}
+
+input DeveloperService_TutorialConceptLinks_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  tutorial: DeveloperService_Tutorials_C
+  concept: com_sap_developers_ims_Concepts_C
+  predicate: String
+  extendsTutorial: DeveloperService_Tutorials_C
+  confidence: Decimal
+  extractedAt: Timestamp
+  contentHash: String
+  modelVersion: String
+}
+
+input DeveloperService_Tutorials_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  slug: String
+  mdFileUrl: String
+  featuredOrder: Int
+  stepCount: Int
+  redirectTo: DeveloperService_Tutorials_C
+  steps: [DeveloperService_Steps_C]
+  tags: [com_sap_developers_ims_TutorialTags_C]
+  categories: [DeveloperService_TutorialCategories_C]
+  author: com_sap_developers_ims_Users_C
+  conceptLinks: [DeveloperService_TutorialConceptLinks_C]
+  authorEmail: String
+  authorDisplayName: String
+  authorFirstName: String
+  authorLastName: String
+}
+
+type DeveloperService_Steps_input {
+  create(input: [DeveloperService_Steps_C]!): [DeveloperService_Steps]
+  update(filter: [DeveloperService_Steps_filter]!, input: DeveloperService_Steps_U!): [DeveloperService_Steps]
+  delete(filter: [DeveloperService_Steps_filter]!): Int
+}
+
+input DeveloperService_Steps_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  title: String
+  description: String
+  status: String
+  deletionReason: String
+  primaryTag: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  tutorial: DeveloperService_Tutorials_C
+  stepOrder: Int
+  contentHash: String
+}
+
+type DeveloperService_TutorialCategories_input {
+  create(input: [DeveloperService_TutorialCategories_C]!): [DeveloperService_TutorialCategories]
+  update(filter: [DeveloperService_TutorialCategories_filter]!, input: DeveloperService_TutorialCategories_U!): [DeveloperService_TutorialCategories]
+  delete(filter: [DeveloperService_TutorialCategories_filter]!): Int
+}
+
+input DeveloperService_TutorialCategories_U {
+  tutorial: DeveloperService_Tutorials_C
+  category: com_sap_developers_ims_Categories_C
+  score: Decimal
+}
+
+type DeveloperService_TutorialConceptLinks_input {
+  create(input: [DeveloperService_TutorialConceptLinks_C]!): [DeveloperService_TutorialConceptLinks]
+  update(filter: [DeveloperService_TutorialConceptLinks_filter]!, input: DeveloperService_TutorialConceptLinks_U!): [DeveloperService_TutorialConceptLinks]
+  delete(filter: [DeveloperService_TutorialConceptLinks_filter]!): Int
+}
+
+input DeveloperService_TutorialConceptLinks_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  tutorial: DeveloperService_Tutorials_C
+  concept: com_sap_developers_ims_Concepts_C
+  predicate: String
+  extendsTutorial: DeveloperService_Tutorials_C
+  confidence: Decimal
+  extractedAt: Timestamp
+  contentHash: String
+  modelVersion: String
+}
+
+type DeveloperService_TaskRecords_input {
+  create(input: [DeveloperService_TaskRecords_C]!): [DeveloperService_TaskRecords]
+  update(filter: [DeveloperService_TaskRecords_filter]!, input: DeveloperService_TaskRecords_U!): [DeveloperService_TaskRecords]
+  delete(filter: [DeveloperService_TaskRecords_filter]!): Int
+}
+
+input DeveloperService_TaskRecords_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  user: com_sap_developers_ims_Users_C
+  taskLegacyId: Int
+  taskType: String
+  status: String
+  progress: Int
+  completionTime: Int64
+  completionDate: Timestamp
+  contentLanguage: String
+  siteLanguage: String
+  submissionIdStarted: ID
+  submissionIdCompleted: ID
+  titleSnapshot: String
+  progressNote: String
+  event: DeveloperService_Events_C
+  attemptNumber: Int
+}
+
+input DeveloperService_Events_C {
+  ID: ID
+  legacyId: Int
+  name: String
+  startDate: Timestamp
+  endDate: Timestamp
+  timeZone: String
+  eventType: String
+}
+
+input DeveloperService_TaskRecords_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  legacyId: Int
+  user: com_sap_developers_ims_Users_C
+  taskLegacyId: Int
+  taskType: String
+  status: String
+  progress: Int
+  completionTime: Int64
+  completionDate: Timestamp
+  contentLanguage: String
+  siteLanguage: String
+  submissionIdStarted: ID
+  submissionIdCompleted: ID
+  titleSnapshot: String
+  progressNote: String
+  event: DeveloperService_Events_C
+  attemptNumber: Int
+}
+
+type DeveloperService_Events_input {
+  create(input: [DeveloperService_Events_C]!): [DeveloperService_Events]
+  update(filter: [DeveloperService_Events_filter]!, input: DeveloperService_Events_U!): [DeveloperService_Events]
+  delete(filter: [DeveloperService_Events_filter]!): Int
+}
+
+input DeveloperService_Events_U {
+  legacyId: Int
+  name: String
+  startDate: Timestamp
+  endDate: Timestamp
+  timeZone: String
+  eventType: String
+}
+
+type DeveloperService_ChatConfig_input {
+  create(input: [DeveloperService_ChatConfig_C]!): [DeveloperService_ChatConfig]
+  update(filter: [DeveloperService_ChatConfig_filter]!, input: DeveloperService_ChatConfig_U!): [DeveloperService_ChatConfig]
+  delete(filter: [DeveloperService_ChatConfig_filter]!): Int
+}
+
+input DeveloperService_ChatConfig_C {
+  ID: ID
+  enabled: Boolean
+  bannerText: String
+  branchingEnabled: Boolean
+}
+
+input DeveloperService_ChatConfig_U {
+  enabled: Boolean
+  bannerText: String
+  branchingEnabled: Boolean
+}
+
+type DeveloperService_LearningPreferences_input {
+  create(input: [DeveloperService_LearningPreferences_C]!): [DeveloperService_LearningPreferences]
+  update(filter: [DeveloperService_LearningPreferences_filter]!, input: DeveloperService_LearningPreferences_U!): [DeveloperService_LearningPreferences]
+  delete(filter: [DeveloperService_LearningPreferences_filter]!): Int
+}
+
+input DeveloperService_LearningPreferences_C {
+  user: com_sap_developers_ims_Users_C
+  deployment: String
+  role: String
+  cloud: String
+}
+
+input DeveloperService_LearningPreferences_U {
+  deployment: String
+  role: String
+  cloud: String
+}
+
+type DeveloperService_Advocates_input {
+  create(input: [DeveloperService_Advocates_C]!): [DeveloperService_Advocates]
+  update(filter: [DeveloperService_Advocates_filter]!, input: DeveloperService_Advocates_U!): [DeveloperService_Advocates]
+  delete(filter: [DeveloperService_Advocates_filter]!): Int
+}
+
+input DeveloperService_Advocates_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  firstName: String
+  lastName: String
+  title: String
+  pronouns: String
+  location: String
+  region: String
+  bio: String
+  isActive: Boolean
+  sortOverride: Int
+  joinedDate: Date
+  hasPhoto: Boolean
+  photoUpdatedAt: Timestamp
+  photoUrl: String
+  user: com_sap_developers_ims_Users_C
+  authoredTutorials: [DeveloperService_Tutorials_C]
+  contributedTutorials: [DeveloperService_TutorialContributors_C]
+  ownedTutorials: [com_sap_developers_ims_MyTutorialsByUserId_C]
+  topics: [DeveloperService_AdvocateTopics_C]
+  links: [DeveloperService_AdvocateLinks_C]
+  photo: DeveloperService_AdvocatePhotos_C
+}
+
+input DeveloperService_TutorialContributors_C {
+  ID: ID
+  legacyId: Int
+  tutorial: DeveloperService_Tutorials_C
+  name: String
+  email: String
+  role: String
+  user: com_sap_developers_ims_Users_C
+}
+
+input com_sap_developers_ims_MyTutorialsByUserId_C {
+  user_ID: ID
+  tutorial_ID: ID
+  userId: String
+  bestPriority: Int
+  slug: String
+  title: String
+  primaryTag: String
+  status: String
+  reviewedDate: Timestamp
+  monitoredStatus: String
+  notificationNumber: Int
+  notificationDate: Timestamp
+  firstNotificationDate: Timestamp
+  owner: String
+  ownerEmail: String
+  repositoryName: String
+  monitored: Boolean
+  daysSinceReview: Int
+}
+
+input DeveloperService_AdvocateTopics_C {
+  ID: ID
+  advocate: DeveloperService_Advocates_C
+  tag: com_sap_developers_ims_Tags_C
+}
+
+input DeveloperService_AdvocateLinks_C {
+  ID: ID
+  advocate: DeveloperService_Advocates_C
+  kind: String
+  url: String
+  label: String
+  sortOrder: Int
+}
+
+input DeveloperService_AdvocatePhotos_C {
+  advocate: DeveloperService_Advocates_C
+  photo256: Binary
+  photo64: Binary
+  photoMimeType: String
+  sizeBytes: Int
+  sha256: String
+  uploadedAt: Timestamp
+}
+
+input DeveloperService_Advocates_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  firstName: String
+  lastName: String
+  title: String
+  pronouns: String
+  location: String
+  region: String
+  bio: String
+  isActive: Boolean
+  sortOverride: Int
+  joinedDate: Date
+  hasPhoto: Boolean
+  photoUpdatedAt: Timestamp
+  photoUrl: String
+  user: com_sap_developers_ims_Users_C
+  authoredTutorials: [DeveloperService_Tutorials_C]
+  contributedTutorials: [DeveloperService_TutorialContributors_C]
+  ownedTutorials: [com_sap_developers_ims_MyTutorialsByUserId_C]
+  topics: [DeveloperService_AdvocateTopics_C]
+  links: [DeveloperService_AdvocateLinks_C]
+  photo: DeveloperService_AdvocatePhotos_C
+}
+
+type DeveloperService_TutorialContributors_input {
+  create(input: [DeveloperService_TutorialContributors_C]!): [DeveloperService_TutorialContributors]
+  update(filter: [DeveloperService_TutorialContributors_filter]!, input: DeveloperService_TutorialContributors_U!): [DeveloperService_TutorialContributors]
+  delete(filter: [DeveloperService_TutorialContributors_filter]!): Int
+}
+
+input DeveloperService_TutorialContributors_U {
+  legacyId: Int
+  tutorial: DeveloperService_Tutorials_C
+  name: String
+  email: String
+  role: String
+  user: com_sap_developers_ims_Users_C
+}
+
+type DeveloperService_AdvocateTopics_input {
+  create(input: [DeveloperService_AdvocateTopics_C]!): [DeveloperService_AdvocateTopics]
+  update(filter: [DeveloperService_AdvocateTopics_filter]!, input: DeveloperService_AdvocateTopics_U!): [DeveloperService_AdvocateTopics]
+  delete(filter: [DeveloperService_AdvocateTopics_filter]!): Int
+}
+
+input DeveloperService_AdvocateTopics_U {
+  advocate: DeveloperService_Advocates_C
+  tag: com_sap_developers_ims_Tags_C
+}
+
+type DeveloperService_AdvocateLinks_input {
+  create(input: [DeveloperService_AdvocateLinks_C]!): [DeveloperService_AdvocateLinks]
+  update(filter: [DeveloperService_AdvocateLinks_filter]!, input: DeveloperService_AdvocateLinks_U!): [DeveloperService_AdvocateLinks]
+  delete(filter: [DeveloperService_AdvocateLinks_filter]!): Int
+}
+
+input DeveloperService_AdvocateLinks_U {
+  advocate: DeveloperService_Advocates_C
+  kind: String
+  url: String
+  label: String
+  sortOrder: Int
+}
+
+type DeveloperService_AdvocatePhotos_input {
+  create(input: [DeveloperService_AdvocatePhotos_C]!): [DeveloperService_AdvocatePhotos]
+  update(filter: [DeveloperService_AdvocatePhotos_filter]!, input: DeveloperService_AdvocatePhotos_U!): [DeveloperService_AdvocatePhotos]
+  delete(filter: [DeveloperService_AdvocatePhotos_filter]!): Int
+}
+
+input DeveloperService_AdvocatePhotos_U {
+  photo256: Binary
+  photo64: Binary
+  photoMimeType: String
+  sizeBytes: Int
+  sha256: String
+  uploadedAt: Timestamp
+}
+
+type KnowledgeGraphService_input {
+  Concepts: KnowledgeGraphService_Concepts_input
+  TutorialConceptLinks: KnowledgeGraphService_TutorialConceptLinks_input
+  ConceptEdges: KnowledgeGraphService_ConceptEdges_input
+  PublishedConcepts: KnowledgeGraphService_PublishedConcepts_input
+}
+
+type KnowledgeGraphService_Concepts_input {
+  create(input: [KnowledgeGraphService_Concepts_C]!): [KnowledgeGraphService_Concepts]
+  update(filter: [KnowledgeGraphService_Concepts_filter]!, input: KnowledgeGraphService_Concepts_U!): [KnowledgeGraphService_Concepts]
+  delete(filter: [KnowledgeGraphService_Concepts_filter]!): Int
+}
+
+input KnowledgeGraphService_Concepts_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  name: String
+  description: String
+  status: String
+  mergedInto: KnowledgeGraphService_Concepts_C
+  extractionCount: Int
+  firstSeenAt: Timestamp
+  lastSeenAt: Timestamp
+  publishedAt: Timestamp
+  publishedBy: String
+  links: [KnowledgeGraphService_TutorialConceptLinks_C]
+  outgoingEdges: [KnowledgeGraphService_ConceptEdges_C]
+  incomingEdges: [KnowledgeGraphService_ConceptEdges_C]
+  isolated: Boolean
+}
+
+input KnowledgeGraphService_TutorialConceptLinks_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  tutorial: com_sap_developers_ims_Tutorials_C
+  concept: KnowledgeGraphService_Concepts_C
+  predicate: String
+  extendsTutorial: com_sap_developers_ims_Tutorials_C
+  confidence: Decimal
+  extractedAt: Timestamp
+  contentHash: String
+  modelVersion: String
+}
+
+input KnowledgeGraphService_ConceptEdges_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  source: KnowledgeGraphService_Concepts_C
+  target: KnowledgeGraphService_Concepts_C
+  predicate: String
+  confidence: Decimal
+  evidence: String
+  status: String
+  extractedAt: Timestamp
+  modelVersion: String
+}
+
+input KnowledgeGraphService_Concepts_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  name: String
+  description: String
+  status: String
+  mergedInto: KnowledgeGraphService_Concepts_C
+  extractionCount: Int
+  firstSeenAt: Timestamp
+  lastSeenAt: Timestamp
+  publishedAt: Timestamp
+  publishedBy: String
+  links: [KnowledgeGraphService_TutorialConceptLinks_C]
+  outgoingEdges: [KnowledgeGraphService_ConceptEdges_C]
+  incomingEdges: [KnowledgeGraphService_ConceptEdges_C]
+  isolated: Boolean
+}
+
+type KnowledgeGraphService_TutorialConceptLinks_input {
+  create(input: [KnowledgeGraphService_TutorialConceptLinks_C]!): [KnowledgeGraphService_TutorialConceptLinks]
+  update(filter: [KnowledgeGraphService_TutorialConceptLinks_filter]!, input: KnowledgeGraphService_TutorialConceptLinks_U!): [KnowledgeGraphService_TutorialConceptLinks]
+  delete(filter: [KnowledgeGraphService_TutorialConceptLinks_filter]!): Int
+}
+
+input KnowledgeGraphService_TutorialConceptLinks_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  tutorial: com_sap_developers_ims_Tutorials_C
+  concept: KnowledgeGraphService_Concepts_C
+  predicate: String
+  extendsTutorial: com_sap_developers_ims_Tutorials_C
+  confidence: Decimal
+  extractedAt: Timestamp
+  contentHash: String
+  modelVersion: String
+}
+
+type KnowledgeGraphService_ConceptEdges_input {
+  create(input: [KnowledgeGraphService_ConceptEdges_C]!): [KnowledgeGraphService_ConceptEdges]
+  update(filter: [KnowledgeGraphService_ConceptEdges_filter]!, input: KnowledgeGraphService_ConceptEdges_U!): [KnowledgeGraphService_ConceptEdges]
+  delete(filter: [KnowledgeGraphService_ConceptEdges_filter]!): Int
+}
+
+input KnowledgeGraphService_ConceptEdges_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  source: KnowledgeGraphService_Concepts_C
+  target: KnowledgeGraphService_Concepts_C
+  predicate: String
+  confidence: Decimal
+  evidence: String
+  status: String
+  extractedAt: Timestamp
+  modelVersion: String
+}
+
+type KnowledgeGraphService_PublishedConcepts_input {
+  create(input: [KnowledgeGraphService_PublishedConcepts_C]!): [KnowledgeGraphService_PublishedConcepts]
+  update(filter: [KnowledgeGraphService_PublishedConcepts_filter]!, input: KnowledgeGraphService_PublishedConcepts_U!): [KnowledgeGraphService_PublishedConcepts]
+  delete(filter: [KnowledgeGraphService_PublishedConcepts_filter]!): Int
+}
+
+input KnowledgeGraphService_PublishedConcepts_C {
+  ID: ID
+  slug: String
+  name: String
+  description: String
+  publishedAt: Timestamp
+  publishedBy: String
+  status: String
+}
+
+input KnowledgeGraphService_PublishedConcepts_U {
+  slug: String
+  name: String
+  description: String
+  publishedAt: Timestamp
+  publishedBy: String
+  status: String
+}
+
+type SearchService_input {
+  SearchableItems: SearchService_SearchableItems_input
+  Tags: SearchService_Tags_input
+}
+
+type SearchService_SearchableItems_input {
+  create(input: [SearchService_SearchableItems_C]!): [SearchService_SearchableItems]
+  update(filter: [SearchService_SearchableItems_filter]!, input: SearchService_SearchableItems_U!): [SearchService_SearchableItems]
+  delete(filter: [SearchService_SearchableItems_filter]!): Int
+}
+
+input SearchService_SearchableItems_C {
+  title: String
+  description: String
+  primaryTag: String
+  tagBag: String
+  searchScore: Decimal
+  ID: ID
+  legacyId: Int
+  slug: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  status: String
+  createdAt: Timestamp
+  taskType: String
+}
+
+input SearchService_SearchableItems_U {
+  title: String
+  description: String
+  primaryTag: String
+  tagBag: String
+  searchScore: Decimal
+  legacyId: Int
+  slug: String
+  experienceTag: String
+  averageTimeToComplete: Int
+  status: String
+  createdAt: Timestamp
+  taskType: String
+}
+
+type SearchService_Tags_input {
+  create(input: [SearchService_Tags_C]!): [SearchService_Tags]
+  update(filter: [SearchService_Tags_filter]!, input: SearchService_Tags_U!): [SearchService_Tags]
+  delete(filter: [SearchService_Tags_filter]!): Int
+}
+
+input SearchService_Tags_C {
+  ID: ID
+  legacyId: Int
+  name: String
+  label: String
+  titlePath: String
+  mdFormat: String
+  semaphoreId: String
+  isActualTag: Boolean
+  isInterestItem: Boolean
+}
+
+input SearchService_Tags_U {
+  legacyId: Int
+  name: String
+  label: String
+  titlePath: String
+  mdFormat: String
+  semaphoreId: String
+  isActualTag: Boolean
+  isInterestItem: Boolean
+}
