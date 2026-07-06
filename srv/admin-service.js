@@ -32,6 +32,7 @@ import {
   listAlertAudiences,
 } from './lib/alert-enums.js';
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
+import { loadStuckOutboxTargets, isWithinExpectedTickWindow } from './lib/scheduler-wedge.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
 import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
 import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js';
@@ -2389,6 +2390,24 @@ export default class AdminService extends cds.ApplicationService {
       const registry = _getJobRegistry();
       const now = new Date();
       const horizon = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      // #1021: fetch stuck outbox targets in one pass — fail-open (empty
+      // Map on any error) so a detection fault never masks legitimate rows.
+      //
+      // TEST-INJECTION HOOK: cds.test('serve') loads this file via
+      // cds.utils._import (file:// URL on Windows) which bypasses Vitest's
+      // ESM mock interceptor. globalThis.__TEST_loadStuckOutboxTargets and
+      // globalThis.__TEST_isWithinExpectedTickWindow let unit tests inject
+      // fakes without vi.mock. Production never sets these globals.
+      const _loadStuck = globalThis.__TEST_loadStuckOutboxTargets ?? loadStuckOutboxTargets;
+      const _inWindow = globalThis.__TEST_isWithinExpectedTickWindow ?? isWithinExpectedTickWindow;
+
+      let stuckByJob;
+      try {
+        stuckByJob = await _loadStuck();
+      } catch (err) {
+        LOG.warn(`listJobs: loadStuckOutboxTargets failed: ${err.message}`);
+        stuckByJob = new Map();
+      }
 
       return Array.from(registry.values()).map(job => {
         let nextRunsIso = [];
@@ -2404,6 +2423,10 @@ export default class AdminService extends cds.ApplicationService {
         } catch (err) {
           LOG.warn(`listJobs: cron-parser failed on '${job.schedule}': ${err.message}`);
         }
+        // #1021: wedged iff a processing outbox row exists for this job
+        // AND we're not still inside its expected active window.
+        const hasStuckRow = stuckByJob.has(job.jobName);
+        const wedged = hasStuckRow && !_inWindow(job.schedule, now);
         return {
           jobName: job.jobName,
           schedule: job.schedule,
@@ -2411,6 +2434,7 @@ export default class AdminService extends cds.ApplicationService {
           description: job.description,
           nextRunIso,
           nextRunsIso,
+          wedged,
         };
       });
     });

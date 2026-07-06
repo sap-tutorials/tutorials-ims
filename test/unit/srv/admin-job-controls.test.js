@@ -16,7 +16,7 @@
 // export are shared. Without this, registerJob() in the test would not be
 // visible to the AdminService handler.
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
 
@@ -306,5 +306,61 @@ describe('AdminService.JobControls', () => {
     await DELETE.from(PipelineLog);
     const rows = await callListRunningJobs();
     expect(rows).toEqual([]);
+  });
+
+  // #1021 — wedge detection in listJobs()
+  // NOTE: plan named helpers callListJobs() and registerTestJob(name, schedule).
+  // callListJobs() already exists (line 65). registerTestJob does not exist;
+  // registerWithSchedule(jobName, schedule) is the pre-existing equivalent
+  // and is used below (adaptation option b — no renaming of existing helpers).
+  //
+  // IMPORTANT (Windows module-identity / Vitest ESM mock limitation):
+  // cds.test('serve') loads admin-service.js via cds.utils._import, which on
+  // Windows issues import(new URL('file://'+path).href). This bypasses Vitest's
+  // ESM live-binding mock interceptor so vi.spyOn on scheduler-wedge exports
+  // has no effect on the handler's copy — same documented limitation as
+  // AdminService.generate*Explainers tests (admin-service-explainer-actions.test.js)
+  // and kg-path-v2-handler-flag.test.js. Workaround: globalThis injection hooks
+  // (__TEST_loadStuckOutboxTargets, __TEST_isWithinExpectedTickWindow) checked
+  // by the listJobs handler. Production never sets these globals.
+  describe('JobControls.listJobs — wedged field', () => {
+    afterEach(() => {
+      delete globalThis.__TEST_loadStuckOutboxTargets;
+      delete globalThis.__TEST_isWithinExpectedTickWindow;
+    });
+
+    it('returns wedged: false for a job with no outbox row', async () => {
+      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map();
+      const jobs = await callListJobs();
+      for (const job of jobs) {
+        expect(job.wedged).toBe(false);
+      }
+    });
+
+    it('returns wedged: false for a job with a processing row inside its expected tick window', async () => {
+      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map([['test-window-ok', true]]);
+      globalThis.__TEST_isWithinExpectedTickWindow = () => true;
+      registerWithSchedule('test-window-ok', '*/1 * * * *');
+      const jobs = await callListJobs();
+      const job = jobs.find(j => j.jobName === 'test-window-ok');
+      expect(job.wedged).toBe(false);
+    });
+
+    it('returns wedged: true when a processing row exists AND we are past next fire', async () => {
+      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map([['test-wedged', true]]);
+      globalThis.__TEST_isWithinExpectedTickWindow = () => false;
+      registerWithSchedule('test-wedged', '*/1 * * * *');
+      const jobs = await callListJobs();
+      const job = jobs.find(j => j.jobName === 'test-wedged');
+      expect(job.wedged).toBe(true);
+    });
+
+    it('fails open — returns all wedged: false when loadStuckOutboxTargets rejects', async () => {
+      globalThis.__TEST_loadStuckOutboxTargets = async () => { throw new Error('outbox unreachable'); };
+      const jobs = await callListJobs();
+      for (const job of jobs) {
+        expect(job.wedged).toBe(false);
+      }
+    });
   });
 });

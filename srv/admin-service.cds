@@ -317,6 +317,7 @@ service AdminService {
       // per job. Empty for monthly crons whose next firing falls outside the
       // window — nextRunIso still populated via fallback.
       nextRunsIso : array of String;
+      wedged      : Boolean;                                    // #1021
     };
 
     // #1023: currently-executing scheduled jobs. Read from PipelineLog rows
