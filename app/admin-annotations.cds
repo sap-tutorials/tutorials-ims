@@ -3026,11 +3026,20 @@ annotate AdminService.LegacyRedirects {
   hitCount   @Common.Label: 'Hits';
 };
 
+// HomepageConfig is a @odata.singleton — the Object Page renders standalone
+// (no LR list). It MUST declare UI.Facets that reference the field group;
+// without a facet, FE V4 renders only the header + Delete button and the
+// form body stays blank (repro: #948/#1010 follow-up — page opened blank).
 annotate AdminService.HomepageConfig with @(
   UI.HeaderInfo : {
     TypeName       : 'Homepage config',
-    TypeNamePlural : 'Homepage configs'
+    TypeNamePlural : 'Homepage configs',
+    Title          : { Value : 'Homepage config' }
   },
+  UI.Facets : [
+    { $Type : 'UI.ReferenceFacet', ID : 'MainFacet', Label : 'General',
+      Target : '@UI.FieldGroup#Main' }
+  ],
   UI.FieldGroup #Main : { Data : [
     { Value : developerNewsPlaylistId, Label : 'Developer News playlist ID (YouTube)' },
     { Value : videoBandEnabled,        Label : 'Show video band' },
@@ -3182,13 +3191,25 @@ annotate AdminService.HomepageForYouCandidatesAdmin with @(
 );
 
 annotate AdminService.HomepageForYouCandidatesAdmin with {
+  // @UI.RecommendationState: 0 opts these two fields out of the @cap-js/ai
+  // RPT-1 recommendation hook (docs/developers/reference/cap-ai-plugin.md).
+  // Without the opt-out, draft POST → read-after-write fires the plugin's
+  // handler at @cap-js/ai/lib/handlers/recommendations.js:99, which calls
+  // cds.connect.to('AICore') and throws "No service definition found for
+  // 'AICore'" on CF DEV (the aicore VCAP binding is present, but the
+  // plugin's profile-default kind resolution isn't landing) — surfaces to
+  // the user as "Internal Server Error" on Create. RPT-1 predictions add
+  // nothing here anyway: PersonaTagChoices is a small fixed enum, not the
+  // free-text ValueList the plugin is designed for.
   personaTags   @Common.Label: 'Persona tags (positive)'
+                @UI.RecommendationState: 0
                 @Common.ValueList: {
                   CollectionPath: 'PersonaTagChoices',
                   Parameters: [{ $Type: 'Common.ValueListParameterInOut',
                                  LocalDataProperty: personaTags, ValueListProperty: 'tag' }]
                 };
   personaHidden @Common.Label: 'Persona hidden (exclude)'
+                @UI.RecommendationState: 0
                 @Common.ValueList: {
                   CollectionPath: 'PersonaTagChoices',
                   Parameters: [{ $Type: 'Common.ValueListParameterInOut',
