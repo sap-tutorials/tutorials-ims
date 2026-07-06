@@ -1,0 +1,37 @@
+/* hugo-apps/src/homepage-explainers/styles/shelf-header.css
+ *
+ * Inline shelf-header (#1020). The popover-anchor default in popover.css is
+ * `display: inline`, which is right for a mid-sentence icon after a wrapped
+ * link, but for the shelf header we want the block-level heading with the ⓘ
+ * riding on the trailing baseline. `display: flex; align-items: baseline`
+ * gives us both: the <h2> keeps its intrinsic block layout, and the icon
+ * sits next to the label text (not the block bottom).
+ *
+ * The popover container itself is unchanged — same absolute-positioned
+ * .hp-popover primitive as LinkExplainerPopover, which already handles
+ * placement above/below and left/center/right alignment.
+ */
+.hp-shelf-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  /* Match the existing .verb-shelf h2 spacing so cards below stay tight. */
+  margin: 0 0 1rem;
+}
+
+.hp-shelf-header__label {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+/* The default .hp-popover-icon lives inline; here we want it flush with the
+ * heading baseline. `vertical-align: baseline` handles the ⓘ SVG within the
+ * button, and the flex parent aligns the button itself. */
+.hp-shelf-header__icon {
+  vertical-align: baseline;
+}
