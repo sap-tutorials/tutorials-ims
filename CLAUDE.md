@@ -72,6 +72,7 @@ Deep dives (do not duplicate here — read the doc when relevant):
 - [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) — deploy runbook
 - [docs/developers/operations/rebuild-content-workflow.md](docs/developers/operations/rebuild-content-workflow.md) — three rebuild modes, auto-classify
 - [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md) — QA author-preview channel
+- [docs/developers/operations/scheduler-troubleshooting.md](docs/developers/operations/scheduler-troubleshooting.md) — outbox-wedge recovery runbook
 - [docs/developers/reference/tutorials-ims-gotchas.md](docs/developers/reference/tutorials-ims-gotchas.md) — everything else (build pipeline quirks, publish flags, AI features, env vars, migration)
 
 Subsystem one-liners:

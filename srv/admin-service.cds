@@ -317,6 +317,7 @@ service AdminService {
       // per job. Empty for monthly crons whose next firing falls outside the
       // window — nextRunIso still populated via fallback.
       nextRunsIso : array of String;
+      wedged      : Boolean;                                    // #1021
     };
 
     // #1023: currently-executing scheduled jobs. Read from PipelineLog rows
@@ -335,6 +336,16 @@ service AdminService {
       skipped   : Boolean;
       reason    : String;
       startedAt : Timestamp;
+    };
+
+    // #1021: DELETE the stuck cds.outbox.Messages row for jobName. Used
+    // by the Cron health panel's "Force unwedge" button. DELETE-only —
+    // does NOT auto-trigger a run. Emits SecurityEvent audit with
+    // outcome='unwedged'.
+    action forceUnwedge(jobName: String) returns {
+      jobName   : String;
+      cleared   : Boolean;
+      reason    : String;
     };
   };
 

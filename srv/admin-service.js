@@ -32,6 +32,7 @@ import {
   listAlertAudiences,
 } from './lib/alert-enums.js';
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
+import { deleteStuckOutboxRow, loadStuckOutboxTargets, isRowStale } from './lib/scheduler-wedge.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
 import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
 import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js';
@@ -68,7 +69,7 @@ const MAX_JOB_NAME_LEN = 100;
  *
  * Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.8
  *
- * @param {{jobName: string, user?: string, outcome: 'started'|'success'|'error', durationMs?: number, startedAt?: Date}} opts
+ * @param {{jobName: string, user?: string, outcome: 'started'|'success'|'error'|'unwedged', durationMs?: number, startedAt?: Date}} opts
  * @returns {Promise<void>}
  */
 export async function emitJobAudit({ jobName, user, outcome, durationMs = null, startedAt = null }) {
@@ -2390,6 +2391,24 @@ export default class AdminService extends cds.ApplicationService {
       const registry = _getJobRegistry();
       const now = new Date();
       const horizon = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      // #1021: fetch stuck outbox targets in one pass — fail-open (empty
+      // Map on any error) so a detection fault never masks legitimate rows.
+      //
+      // TEST-INJECTION HOOK: cds.test('serve') loads this file via
+      // cds.utils._import (file:// URL on Windows) which bypasses Vitest's
+      // ESM mock interceptor. globalThis.__TEST_loadStuckOutboxTargets and
+      // globalThis.__TEST_isRowStale let unit tests inject
+      // fakes without vi.mock. Production never sets these globals.
+      const _loadStuck = globalThis.__TEST_loadStuckOutboxTargets ?? loadStuckOutboxTargets;
+      const _isStale = globalThis.__TEST_isRowStale ?? isRowStale;
+
+      let stuckByJob;
+      try {
+        stuckByJob = await _loadStuck();
+      } catch (err) {
+        LOG.warn(`listJobs: loadStuckOutboxTargets failed: ${err.message}`);
+        stuckByJob = new Map();
+      }
 
       return Array.from(registry.values()).map(job => {
         let nextRunsIso = [];
@@ -2405,6 +2424,10 @@ export default class AdminService extends cds.ApplicationService {
         } catch (err) {
           LOG.warn(`listJobs: cron-parser failed on '${job.schedule}': ${err.message}`);
         }
+        // #1021: wedged iff a processing outbox row exists for this job
+        // AND the row's own timestamp has been surpassed by the next fire.
+        const rowStartedAt = stuckByJob.get(job.jobName);
+        const wedged = !!rowStartedAt && _isStale(job.schedule, rowStartedAt, now);
         return {
           jobName: job.jobName,
           schedule: job.schedule,
@@ -2412,6 +2435,7 @@ export default class AdminService extends cds.ApplicationService {
           description: job.description,
           nextRunIso,
           nextRunsIso,
+          wedged,
         };
       });
     });
@@ -2492,7 +2516,45 @@ export default class AdminService extends cds.ApplicationService {
       };
     });
 
-    // ── Rebuild-button action (issue: rebuild-button) ──
+    // #1021: forceUnwedge — DELETE the stuck cds.outbox.Messages row
+    // for jobName. DELETE-only; operators click "Run now" separately if
+    // they want the missed run to fire immediately.
+    this.on('forceUnwedge', 'JobControls', async (req) => {
+      const { jobName } = req.data;
+      if (typeof jobName !== 'string' || jobName.length === 0 || jobName.length > MAX_JOB_NAME_LEN) {
+        return req.reject(400, `Invalid jobName (must be non-empty string <=${MAX_JOB_NAME_LEN} chars)`);
+      }
+      const registry = _getJobRegistry();
+      if (!registry.has(jobName)) {
+        return req.reject(400, `Unknown jobName: ${jobName}`);
+      }
+      const user = req.user?.id ?? 'unknown';
+      const startedAt = new Date();
+
+      // Audit BEFORE the DELETE so an audit row always exists even if
+      // the DELETE later fails. Fire-and-forget — audit failure never
+      // fails the action.
+      // TEST-INJECTION HOOK: globalThis.__TEST_emitJobAudit lets unit
+      // tests verify audit calls without ESM spy limitations (same
+      // pattern as __TEST_loadStuckOutboxTargets in listJobs).
+      const _emitAudit = globalThis.__TEST_emitJobAudit ?? emitJobAudit;
+      setImmediate(() => {
+        _emitAudit({ jobName, user, outcome: 'unwedged', startedAt })
+          .catch(err => LOG.warn(`forceUnwedge audit failed: ${err.message}`));
+      });
+
+      // TEST-INJECTION HOOK: globalThis.__TEST_deleteStuckOutboxRow lets
+      // unit tests control the deletion result without real DB operations.
+      const _deleteRow = globalThis.__TEST_deleteStuckOutboxRow ?? deleteStuckOutboxRow;
+      const cleared = await _deleteRow(jobName);
+      return {
+        jobName,
+        cleared,
+        reason: cleared
+          ? null
+          : 'No stuck outbox row found (already clear, or CAP outbox not present)',
+      };
+    });
     // Bound action on Tutorials. Resolves slug, audit-logs intent, dispatches
     // a slug-targeted rebuild via scheduleRebuild's 60s debounce. Shared body
     // lives in srv/lib/rebuild-action-handler.js so AuthorService can reuse it
