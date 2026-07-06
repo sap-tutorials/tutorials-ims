@@ -381,16 +381,24 @@ describe('KnowledgeGraphService.searchKG action', () => {
     };
 ```
 
-- [ ] **Step 4: Wire the handler in `srv/knowledge-graph-service.js`** — inside the `cds.service.impl(async function () { … })` block, next to `this.on('neighborhood', …)` (line ~785), add:
+- [ ] **Step 4: Wire the handler in `srv/knowledge-graph-service.js`** — two edits:
+
+**4a. Add top-level imports** — near the other `import` statements at the top of the file (grep for `from './lib/kg/'` to find the cluster), add:
+
+```js
+import { searchKgHandler } from './lib/kg/search-kg-handler.js'
+```
+
+Verify the embed-client helper is already imported at the top of the file — grep for `embed-client` in `srv/knowledge-graph-service.js`. If already imported under a name like `embedClient` / `getEmbedClient` / `createEmbedClient`, reuse the existing binding. If NOT imported, add it top-level using whatever name that file exports (grep `srv/lib/kg/embed-client.js` for its `export`).
+
+**4b. Register the handler** — inside the `cds.service.impl(async function () { … })` block, next to `this.on('neighborhood', …)` (line ~785), add:
 
 ```js
   // Anonymous KG search for the ⌘K command palette (issue #1036). Delegates
   // to the anonymous-safe handler; never imports on-demand-enqueue.
   this.on('searchKG', async (req) => {
-    const { getEmbedClient } = await import('./lib/kg/embed-client.js')
-    const { searchKgHandler } = await import('./lib/kg/search-kg-handler.js')
     const db = await cds.connect.to('db')
-    const embedClient = await getEmbedClient()
+    const embedClient = await getEmbedClient()   // adjust if the helper is exported under a different name
     return searchKgHandler({
       db,
       embedClient,
@@ -403,7 +411,7 @@ describe('KnowledgeGraphService.searchKG action', () => {
   })
 ```
 
-Note: verify the exact export name of the embed-client factory by grepping `srv/lib/kg/embed-client.js` before writing the import. The `getEmbedClient` name is the expected shape; if the file exports something else (e.g. `createEmbedClient`), update the destructured import accordingly and record the actual name in the commit message.
+Match the convention already used inside `cds.service.impl` for the other actions — if the surrounding handlers reference a module-scope `embedClient` singleton instead of calling a factory, do the same here. The name/shape must match what's used by the existing handlers in this file.
 
 - [ ] **Step 5: Run to verify it passes** — `npx vitest run test/kg-search-kg-action.test.js` — expect 2 PASS. Then run the handler test again to confirm no regression: `npx vitest run test/kg-search-kg-handler.test.js` — expect 7 PASS.
 
