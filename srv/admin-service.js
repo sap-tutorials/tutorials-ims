@@ -32,7 +32,7 @@ import {
   listAlertAudiences,
 } from './lib/alert-enums.js';
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
-import { deleteStuckOutboxRow, loadStuckOutboxTargets, isWithinExpectedTickWindow } from './lib/scheduler-wedge.js';
+import { deleteStuckOutboxRow, loadStuckOutboxTargets, isRowStale } from './lib/scheduler-wedge.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
 import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
 import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js';
@@ -2396,10 +2396,10 @@ export default class AdminService extends cds.ApplicationService {
       // TEST-INJECTION HOOK: cds.test('serve') loads this file via
       // cds.utils._import (file:// URL on Windows) which bypasses Vitest's
       // ESM mock interceptor. globalThis.__TEST_loadStuckOutboxTargets and
-      // globalThis.__TEST_isWithinExpectedTickWindow let unit tests inject
+      // globalThis.__TEST_isRowStale let unit tests inject
       // fakes without vi.mock. Production never sets these globals.
       const _loadStuck = globalThis.__TEST_loadStuckOutboxTargets ?? loadStuckOutboxTargets;
-      const _inWindow = globalThis.__TEST_isWithinExpectedTickWindow ?? isWithinExpectedTickWindow;
+      const _isStale = globalThis.__TEST_isRowStale ?? isRowStale;
 
       let stuckByJob;
       try {
@@ -2424,9 +2424,9 @@ export default class AdminService extends cds.ApplicationService {
           LOG.warn(`listJobs: cron-parser failed on '${job.schedule}': ${err.message}`);
         }
         // #1021: wedged iff a processing outbox row exists for this job
-        // AND we're not still inside its expected active window.
-        const hasStuckRow = stuckByJob.has(job.jobName);
-        const wedged = hasStuckRow && !_inWindow(job.schedule, now);
+        // AND the row's own timestamp has been surpassed by the next fire.
+        const rowStartedAt = stuckByJob.get(job.jobName);
+        const wedged = !!rowStartedAt && _isStale(job.schedule, rowStartedAt, now);
         return {
           jobName: job.jobName,
           schedule: job.schedule,

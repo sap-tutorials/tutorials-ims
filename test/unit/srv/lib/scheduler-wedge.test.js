@@ -14,7 +14,7 @@ import cds from '@sap/cds';
 import {
   deleteStuckOutboxRow,
   loadStuckOutboxTargets,
-  isWithinExpectedTickWindow,
+  isRowStale,
 } from '../../../../srv/lib/scheduler-wedge.js';
 
 describe('scheduler-wedge — fail-open branches', () => {
@@ -79,11 +79,13 @@ describe('scheduler-wedge — fail-open branches', () => {
       }),
       configurable: true,
     });
+    const ts1 = '2026-07-06T12:07:00.000Z';
+    const ts2 = '2026-07-06T14:05:00.000Z';
     const fakeDb = { run: vi.fn().mockResolvedValue([
-      { target: 'cron.extractConcepts', status: 'processing' },
-      { target: 'cron.other-job',       status: 'done' },        // filtered — wrong status
-      { target: 'not-a-cron-target',    status: 'processing' },  // filtered — no cron. prefix
-      { target: 'cron.another-job',     status: 'processing' },
+      { target: 'cron.extractConcepts', status: 'processing', lastAttemptTimestamp: ts1 },
+      { target: 'cron.other-job',       status: 'done',        lastAttemptTimestamp: ts1 }, // filtered — wrong status
+      { target: 'not-a-cron-target',    status: 'processing',  lastAttemptTimestamp: ts1 }, // filtered — no cron. prefix
+      { target: 'cron.another-job',     status: 'processing',  lastAttemptTimestamp: ts2 },
     ])};
     Object.defineProperty(cds, 'connect', {
       value: { to: vi.fn().mockResolvedValue(fakeDb) },
@@ -92,7 +94,11 @@ describe('scheduler-wedge — fail-open branches', () => {
     const result = await loadStuckOutboxTargets();
     expect(result.size).toBe(2);
     expect(result.has('extractConcepts')).toBe(true);
+    expect(result.get('extractConcepts')).toBeInstanceOf(Date);
+    expect(result.get('extractConcepts').toISOString()).toBe(ts1);
     expect(result.has('another-job')).toBe(true);
+    expect(result.get('another-job')).toBeInstanceOf(Date);
+    expect(result.get('another-job').toISOString()).toBe(ts2);
     expect(result.has('other-job')).toBe(false);
   });
 
@@ -103,8 +109,9 @@ describe('scheduler-wedge — fail-open branches', () => {
       }),
       configurable: true,
     });
+    const ts = '2026-07-06T11:00:00.000Z';
     const fakeDb = { run: vi.fn().mockResolvedValue([
-      { TARGET: 'cron.uppercase-job', STATUS: 'processing' },
+      { TARGET: 'cron.uppercase-job', STATUS: 'processing', LASTATTEMPTTIMESTAMP: ts },
     ])};
     Object.defineProperty(cds, 'connect', {
       value: { to: vi.fn().mockResolvedValue(fakeDb) },
@@ -112,26 +119,30 @@ describe('scheduler-wedge — fail-open branches', () => {
     });
     const result = await loadStuckOutboxTargets();
     expect(result.has('uppercase-job')).toBe(true);
+    expect(result.get('uppercase-job')).toBeInstanceOf(Date);
   });
+
 });
 
-describe('scheduler-wedge — isWithinExpectedTickWindow', () => {
-  it('returns true immediately after a firing (inside current window)', () => {
-    // Every hour on the :07 mark. At :30 we are 23 minutes into the current window.
-    const now = new Date('2026-07-06T12:30:00Z');
-    expect(isWithinExpectedTickWindow('7 * * * *', now)).toBe(true);
+describe('scheduler-wedge — isRowStale', () => {
+  it('returns false when now is inside the same tick window as rowStartedAt (healthy)', () => {
+    // Cron fires at :07 every hour. Row started at 12:07; now is 12:30 — still
+    // within the same tick window (next firing is 13:07). Not stale.
+    const rowStartedAt = new Date('2026-07-06T12:07:00Z');
+    const now = new Date('2026-07-06T12:30:00Z'); // 23min into current hour
+    expect(isRowStale('7 * * * *', rowStartedAt, now)).toBe(false);
   });
 
-  it("always returns true for a valid parse — wedge composition is the caller's job", () => {
-    // The pure predicate returns true whenever cron-parser resolves prev/next
-    // cleanly around `now`. Wedge composition happens in listJobs() by
-    // combining this signal with "does an outbox row exist for cron.<name>".
-    const now = new Date('2026-07-06T13:08:00Z');
-    expect(isWithinExpectedTickWindow('7 * * * *', now)).toBe(true);
+  it('returns true when now has passed the next firing after rowStartedAt (wedged)', () => {
+    // Cron fires at :07 every hour. Row started at 12:07; next firing was 13:07,
+    // but now is 14:08 — that firing has come and gone. The row is stale/wedged.
+    // This is the test that would have FAILED against the old tautological impl.
+    const rowStartedAt = new Date('2026-07-06T12:07:00Z');
+    const now = new Date('2026-07-06T14:08:00Z'); // 13:07 fire should have cleared the row
+    expect(isRowStale('7 * * * *', rowStartedAt, now)).toBe(true);
   });
 
-  it('returns true on cron parse failure (fail-open — do not false-positive)', () => {
-    const now = new Date('2026-07-06T12:00:00Z');
-    expect(isWithinExpectedTickWindow('this is not a cron expression', now)).toBe(true);
+  it('returns false on cron parse failure (fail-open — do not false-positive)', () => {
+    expect(isRowStale('not a cron', new Date(), new Date())).toBe(false);
   });
 });

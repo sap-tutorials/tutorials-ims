@@ -321,12 +321,12 @@ describe('AdminService.JobControls', () => {
   // has no effect on the handler's copy — same documented limitation as
   // AdminService.generate*Explainers tests (admin-service-explainer-actions.test.js)
   // and kg-path-v2-handler-flag.test.js. Workaround: globalThis injection hooks
-  // (__TEST_loadStuckOutboxTargets, __TEST_isWithinExpectedTickWindow) checked
+  // (__TEST_loadStuckOutboxTargets, __TEST_isRowStale) checked
   // by the listJobs handler. Production never sets these globals.
   describe('JobControls.listJobs — wedged field', () => {
     afterEach(() => {
       delete globalThis.__TEST_loadStuckOutboxTargets;
-      delete globalThis.__TEST_isWithinExpectedTickWindow;
+      delete globalThis.__TEST_isRowStale;
     });
 
     it('returns wedged: false for a job with no outbox row', async () => {
@@ -338,8 +338,9 @@ describe('AdminService.JobControls', () => {
     });
 
     it('returns wedged: false for a job with a processing row inside its expected tick window', async () => {
-      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map([['test-window-ok', true]]);
-      globalThis.__TEST_isWithinExpectedTickWindow = () => true;
+      const rowTs = new Date('2026-07-06T12:07:00Z');
+      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map([['test-window-ok', rowTs]]);
+      globalThis.__TEST_isRowStale = () => false; // not stale → wedged=false
       registerWithSchedule('test-window-ok', '*/1 * * * *');
       const jobs = await callListJobs();
       const job = jobs.find(j => j.jobName === 'test-window-ok');
@@ -347,8 +348,9 @@ describe('AdminService.JobControls', () => {
     });
 
     it('returns wedged: true when a processing row exists AND we are past next fire', async () => {
-      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map([['test-wedged', true]]);
-      globalThis.__TEST_isWithinExpectedTickWindow = () => false;
+      const rowTs = new Date('2026-07-06T12:07:00Z');
+      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map([['test-wedged', rowTs]]);
+      globalThis.__TEST_isRowStale = () => true; // stale → wedged=true
       registerWithSchedule('test-wedged', '*/1 * * * *');
       const jobs = await callListJobs();
       const job = jobs.find(j => j.jobName === 'test-wedged');

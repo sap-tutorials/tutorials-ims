@@ -18,7 +18,7 @@
 // failure never surfaces as a false-positive wedge indicator.
 
 import cds from '@sap/cds';
-import cronParser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 
 const LOG = cds.log('scheduler-wedge');
 
@@ -52,11 +52,16 @@ export async function deleteStuckOutboxRow(jobName) {
 }
 
 /**
- * Load a Map of jobName → true for every cron job with a `processing`
- * row in cds.outbox.Messages. Reads broadly (all rows) and filters in
- * JS to survive column-name casing drift between CAP releases.
+ * Load a Map of jobName → Date for every cron job with a `processing`
+ * row in cds.outbox.Messages. The Date is the row's own start timestamp
+ * (lastAttemptTimestamp, falling back to timestamp). Reads broadly (all
+ * rows) and filters in JS to survive column-name casing drift between
+ * CAP releases.
  *
- * @returns {Promise<Map<string, true>>}
+ * Rows without a usable timestamp are skipped — missing timestamps are
+ * treated as "not stale" (fail-open).
+ *
+ * @returns {Promise<Map<string, Date>>}
  */
 export async function loadStuckOutboxTargets() {
   const stuck = new Map();
@@ -71,7 +76,16 @@ export async function loadStuckOutboxTargets() {
       if (status === 'processing'
           && typeof target === 'string'
           && target.startsWith('cron.')) {
-        stuck.set(target.slice('cron.'.length), true);
+        // Prefer lastAttemptTimestamp; fall back to timestamp.
+        // Both may arrive uppercase on HANA — cover all casings.
+        const rawTs = row.lastAttemptTimestamp
+          ?? row.LASTATTEMPTTIMESTAMP
+          ?? row.timestamp
+          ?? row.TIMESTAMP;
+        if (!rawTs) continue; // missing timestamp → skip (fail-open)
+        const rowDate = rawTs instanceof Date ? rawTs : new Date(rawTs);
+        if (isNaN(rowDate.getTime())) continue; // unparseable → skip
+        stuck.set(target.slice('cron.'.length), rowDate);
       }
     }
   } catch (err) {
@@ -81,30 +95,28 @@ export async function loadStuckOutboxTargets() {
 }
 
 /**
- * Given a cron expression and a "now" timestamp, return true if we are
- * still inside the active window (between the previous firing and the
- * next firing). Composes with the outbox row's existence in listJobs()
- * to decide "wedged": a row exists AND we are NOT inside the current
- * window → wedged.
+ * Returns true iff `now` has passed the next scheduled firing after the
+ * stuck outbox row's own start timestamp (`rowStartedAt`). This is the
+ * wedge criterion: the row survived past the tick that should have
+ * replaced it.
  *
- * Fail-open: parse failure returns true (assume healthy — don't
+ * Fail-open: parse failure returns false (assume healthy — don't
  * false-positive wedges just because a cron expression is unusual).
  *
  * @param {string} cronExpr
- * @param {Date} now
- * @returns {boolean}
+ * @param {Date}   rowStartedAt  — when the outbox row was created
+ * @param {Date}   now
+ * @returns {boolean}  true = stale (wedged); false = healthy or unknown
  */
-export function isWithinExpectedTickWindow(cronExpr, now) {
+export function isRowStale(cronExpr, rowStartedAt, now) {
   try {
-    const iter = cronParser.parseExpression(cronExpr, { currentDate: now });
-    // prev() = last firing at-or-before now; next() = next firing after now.
-    // We are always inside [prev, next) by definition of these iterators —
-    // this helper's real job is to guard against parse failures cleanly.
-    // Callers combine this with row-age evidence for the wedge decision.
-    const prev = iter.prev();
-    const next = iter.next();
-    return now >= prev.toDate() && now < next.toDate();
+    // Anchor the iterator at rowStartedAt, then advance to the NEXT firing
+    // after that timestamp. If now has reached or passed that firing, the
+    // row has outlived a full tick interval — it is stale/wedged.
+    const iter = CronExpressionParser.parse(cronExpr, { tz: 'UTC', currentDate: rowStartedAt });
+    const nextFiring = iter.next().toDate();
+    return now >= nextFiring;
   } catch {
-    return true;
+    return false; // fail-open: parse failure → not stale
   }
 }
