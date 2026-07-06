@@ -23,21 +23,75 @@
     <h2 id="kg-arch">How it's built</h2>
     <!-- security-reviewed: readFile of a static repo asset; not user-supplied -->
     {{ readFile "static/img/knowledge-graph/architecture.svg" | safeHTML }}
-    <p>
-      Every night, a CAP cron job hands each tutorial's markdown to
-      <strong>SAP AI Core</strong>. The model extracts concepts (e.g. <em>CAP</em>,
-      <em>SAPUI5</em>, <em>HANA Cloud</em>) and the edges between them — what a
-      tutorial <em>teaches</em>, what it <em>requires</em>. Those facts are stored
-      as canonical CDS entities in <strong>SAP HANA Cloud</strong>, then projected
-      into two of the database's built-in graph engines: the
-      <strong>Knowledge Graph Engine</strong>, where SPARQL answers
-      "what should I learn next?" in single-digit milliseconds, and a
-      <strong>Property Graph</strong> workspace, where GraphScript algorithms
-      (SHORTEST_PATH for Joule's learning paths, PageRank for authority ranking,
-      Louvain for community detection, weakly-connected-components for isolation
-      checks) run over the same tutorials and concepts. One database, two graph
-      shapes, no ETL between them.
-    </p>
+    <div class="kg-overview__diagram-cols">
+      <div class="kg-overview__diagram-col">
+        <p>
+          Every night, a CAP cron job hands each tutorial's markdown to
+          <strong>SAP AI Core</strong>. The model extracts concepts (e.g. <em>CAP</em>,
+          <em>SAPUI5</em>, <em>HANA Cloud</em>) and the edges between them — what a
+          tutorial <em>teaches</em>, what it <em>requires</em>. Those facts are stored
+          as canonical CDS entities in <strong>SAP HANA Cloud</strong>, then projected
+          into two of the database's built-in graph engines: the
+          <strong>Knowledge Graph Engine</strong>, where SPARQL answers
+          "what should I learn next?" in single-digit milliseconds, and a
+          <strong>Property Graph</strong> workspace, where GraphScript algorithms
+          (SHORTEST_PATH for Joule's learning paths, PageRank for authority ranking,
+          Louvain for community detection, weakly-connected-components for isolation
+          checks) run over the same tutorials and concepts. One database, two graph
+          shapes, no ETL between them.
+        </p>
+      </div>
+      <div class="kg-overview__diagram-col">
+        <p>
+          Tutorials are only the anchor corpus. Alongside them, nightly fetchers
+          pull in the wider SAP developer ecosystem and run the same
+          concept-extraction pipeline over every item, so a search for
+          <em>CAP</em> or <em>HANA Cloud</em> reaches across all of it:
+          <strong>Learning Journeys</strong> from
+          <a href="https://learning.sap.com" target="_blank" rel="noopener">learning.sap.com</a>,
+          <strong>blog posts</strong> from the
+          <a href="https://community.sap.com" target="_blank" rel="noopener">SAP Community</a>,
+          <strong>Discovery Center missions and BTP services</strong> from
+          <a href="https://discovery-center.cloud.sap" target="_blank" rel="noopener">discovery-center.cloud.sap</a>,
+          <strong>videos</strong> from the
+          <a href="https://youtube.com/@sapdevs" target="_blank" rel="noopener">SAP Developers YouTube channel</a>
+          (including SAP Developer News and Tech Bytes),
+          <strong>API references</strong> from the
+          <a href="https://api.sap.com" target="_blank" rel="noopener">SAP Business Accelerator Hub</a>,
+          canonical <strong>code samples</strong> from the
+          <a href="https://github.com/SAP-samples" target="_blank" rel="noopener">SAP-samples GitHub org</a>,
+          and <strong>upcoming community events</strong> (CodeJams, Devtoberfest,
+          TechEd, user groups). A dedicated <strong>Help Docs</strong> corpus
+          merges four documentation surfaces into one:
+        </p>
+        <ul class="kg-overview__source-list">
+          <li>
+            <a href="https://help.sap.com" target="_blank" rel="noopener">help.sap.com</a>
+            — official SAP product documentation.
+          </li>
+          <li>
+            <a href="https://cap.cloud.sap" target="_blank" rel="noopener">cap.cloud.sap</a>
+            — the CAP framework docs (Node.js and Java).
+          </li>
+          <li>
+            <a href="https://ui5.sap.com" target="_blank" rel="noopener">ui5.sap.com</a>
+            — SAPUI5 SDK reference, API, and samples.
+          </li>
+          <li>
+            <a href="https://architecture.learning.sap.com" target="_blank" rel="noopener">architecture.learning.sap.com</a>
+            — the SAP Architecture Center: North Star docs, AI-golden-path
+            guides, and reference blueprints from
+            <code>SAP/architecture-center</code>.
+          </li>
+        </ul>
+        <p>
+          Every resource — tutorial, journey, blog post, mission, video, API,
+          sample, help doc, event — lands on the same concept vocabulary, so the
+          graph you explore is one graph across all of it, not a dozen siloed
+          catalogs sitting next to each other.
+        </p>
+      </div>
+    </div>
   </section>
 
   <!-- ============================================================
