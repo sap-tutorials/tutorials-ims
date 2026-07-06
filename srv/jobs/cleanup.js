@@ -1,5 +1,28 @@
 import cds from '@sap/cds';
 
+/**
+ * HANA prepared-statement parameter buffer is bounded by `communication_max_packet_size`
+ * (default ~32 MB). A large `IN (?, ?, …)` bind list can overflow it and surface as
+ * "Failed to set parameters, maximum packet size exceeded" from `hdb`/`node-hdb` before
+ * the statement executes. cost: #TBD (this PR) tag-cleanup never succeeded on DEV once
+ * the semi-annual cron finally fired (2026-07-02) because the unused-Tags set had grown
+ * past that limit. Chunking keeps each bind list bounded and gives the same net result.
+ *
+ * 500 is well below any reported client-side limit while still cutting round-trips
+ * dramatically vs one-per-row deletes.
+ */
+const DELETE_IN_CHUNK_SIZE = 500;
+
+async function deleteInChunks(entity, key, ids, chunkSize = DELETE_IN_CHUNK_SIZE) {
+  if (!ids || ids.length === 0) return 0;
+  let total = 0;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const slice = ids.slice(i, i + chunkSize);
+    total += (await DELETE.from(entity).where({ [key]: { in: slice } })) || 0;
+  }
+  return total;
+}
+
 export async function cleanupStepFailures(olderThanDays = 90) {
   const { StepFailures } = cds.entities('com.sap.developers.ims');
   const LOG = cds.log('jobs/cleanup');
@@ -63,8 +86,10 @@ export async function cleanupContentVersions(keepCount = 3, olderThanDays = 7) {
   }
 
   const versions = toPrune.map(r => r.version);
-  await DELETE.from(ContentFiles).where({ version: { in: versions } });
-  await DELETE.from(ContentManifest).where({ version: { in: versions } });
+  // Chunk the DELETE — the version list can grow unbounded on long-lived envs (each
+  // publish adds one) and a single IN(...) bind can overflow HANA's max packet size.
+  await deleteInChunks(ContentFiles, 'version', versions);
+  await deleteInChunks(ContentManifest, 'version', versions);
 
   LOG.info(`Pruned ${toPrune.length} old content versions (kept last ${keepCount}, cutoff ${olderThanDays}d)`);
   return toPrune.length;
@@ -76,11 +101,13 @@ export async function cleanupUnusedTags() {
   const usedTagIds = await SELECT.from(TutorialTags).columns('tag_ID');
   const usedSet = new Set(usedTagIds.map(r => r.tag_ID));
   const allTags = await SELECT.from(Tags).columns('ID');
-  const unused = allTags.filter(t => !usedSet.has(t.ID));
-  if (unused.length === 0) return 0;
-  await DELETE.from(Tags).where({ ID: { in: unused.map(t => t.ID) } });
-  LOG.info(`Cleaned up ${unused.length} unused tags`);
-  return unused.length;
+  const unusedIds = allTags.filter(t => !usedSet.has(t.ID)).map(t => t.ID);
+  if (unusedIds.length === 0) return 0;
+  // Chunk the DELETE — a single `IN (?, ?, …)` with the full unused list can overflow
+  // HANA's max packet size (see deleteInChunks note above).
+  await deleteInChunks(Tags, 'ID', unusedIds);
+  LOG.info(`Cleaned up ${unusedIds.length} unused tags`);
+  return unusedIds.length;
 }
 
 export async function cleanupPipelineLog(retentionDays = 30) {
@@ -92,8 +119,11 @@ export async function cleanupPipelineLog(retentionDays = 30) {
   const expiredIds = await SELECT.from(PipelineLog).columns('ID').where({ startedAt: { '<': cutoff } });
   if (expiredIds.length > 0) {
     const ids = expiredIds.map(r => r.ID);
-    await DELETE.from(PipelineLogItems).where({ pipelineLog_ID: { in: ids } });
-    await DELETE.from(JobLogItems).where({ jobLog_ID: { in: ids } });
+    // Chunk the DELETE — this job runs daily and the expired-id set scales with pipeline
+    // throughput; on busy envs a single IN(...) bind would eventually overflow HANA's
+    // max packet size.
+    await deleteInChunks(PipelineLogItems, 'pipelineLog_ID', ids);
+    await deleteInChunks(JobLogItems, 'jobLog_ID', ids);
   }
   const result = await DELETE.from(PipelineLog).where({ startedAt: { '<': cutoff } });
   LOG.info(`Cleaned up pipeline log entries older than ${retentionDays} days: ${result} removed`);
@@ -164,7 +194,7 @@ export async function pruneOrphanEmbeddings() {
     return 0;
   }
 
-  const result = await DELETE.from(TutorialEmbedding).where({ tutorial_ID: { in: orphanIds } });
+  const result = await deleteInChunks(TutorialEmbedding, 'tutorial_ID', orphanIds);
   LOG.info(`pruneOrphanEmbeddings: deleted ${result} orphan embedding rows for ${orphanIds.length} tutorials`);
   return result;
 }
