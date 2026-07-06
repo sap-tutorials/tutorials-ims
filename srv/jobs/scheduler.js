@@ -54,6 +54,7 @@ import { computeStaleNotifications, determineRecipients, markNotificationSent, g
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
+import { deleteStuckOutboxRow } from '../lib/scheduler-wedge.js';
 import cds from '@sap/cds';
 
 const instanceId = process.env.CF_INSTANCE_INDEX || '0';
@@ -166,6 +167,16 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
     LOG.error(`Job ${jobName} failed:`, errorMessage);
     await logPipelineEnd(logId, 'FAILED', jobName, errorMessage);
   } finally {
+    // #1021: belt-and-suspenders — clear any stuck cds.outbox.Messages
+    // row for this jobName before recording JobLastRun. Runs on every
+    // tick (success and failure) so that a future framework bug that
+    // fails to flip status on success still cannot wedge us. Wrapped
+    // in try/catch inside the helper — never fails the cron.
+    try {
+      await deleteStuckOutboxRow(jobName);
+    } catch (err) {
+      LOG.warn(`deleteStuckOutboxRow(${jobName}) threw unexpectedly: ${err.message}`);
+    }
     try {
       await recordJobLastRun(jobName, outcome, errorMessage);
     } catch (err) {
