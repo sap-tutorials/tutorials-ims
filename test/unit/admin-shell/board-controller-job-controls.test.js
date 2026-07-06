@@ -27,8 +27,10 @@ const HELPER_PATH = path.resolve(
 );
 
 let joinJobsWithLastRuns;
+let classifyJobStatus;
 let formatNextRun;
 let formatRelativeTime;
+let formatElapsedSince;
 
 beforeAll(() => {
   const src = readFileSync(HELPER_PATH, 'utf8');
@@ -47,13 +49,17 @@ beforeAll(() => {
     String,
     Date,
     Math,
+    Array,
+    Boolean,
   };
   vm.createContext(context);
   vm.runInContext(src, context, { filename: HELPER_PATH });
   if (!captured) throw new Error('job-controls-helpers.js did not register a factory');
   joinJobsWithLastRuns = captured.joinJobsWithLastRuns;
+  classifyJobStatus = captured.classifyJobStatus;
   formatNextRun = captured.formatNextRun;
   formatRelativeTime = captured.formatRelativeTime;
+  formatElapsedSince = captured.formatElapsedSince;
 });
 
 describe('joinJobsWithLastRuns', () => {
@@ -79,6 +85,131 @@ describe('joinJobsWithLastRuns', () => {
   it('handles empty + null inputs gracefully', () => {
     expect(joinJobsWithLastRuns([], [])).toEqual([]);
     expect(joinJobsWithLastRuns(null, null)).toEqual([]);
+    expect(joinJobsWithLastRuns(null, null, null)).toEqual([]);
+  });
+
+  // #1023: runningNow flips isRunning true regardless of last-run state.
+  it('marks isRunning:true when jobName appears in runningNow', () => {
+    const jobs = [{ jobName: 'a', schedule: '0 0 * * *' }];
+    const lastRuns = [];
+    const runningNow = [{ jobName: 'a', startedAt: '2026-07-06T18:08:46Z' }];
+    const out = joinJobsWithLastRuns(jobs, lastRuns, runningNow);
+    expect(out[0].isRunning).toBe(true);
+    expect(out[0].runningSince).toBe('2026-07-06T18:08:46Z');
+    expect(out[0].statusLabel).toBe('RUNNING');
+    expect(out[0].statusState).toBe('Information');
+  });
+
+  // #1023: the core UX bug — a re-triggered job that had previously failed
+  // must not display the old error while running.
+  it('RUNNING trumps last-known-failed', () => {
+    const jobs = [{ jobName: 'extractConcepts', schedule: '0 3 * * *' }];
+    const lastRuns = [{
+      jobName: 'extractConcepts',
+      lastSuccessAt: '2026-07-01T03:00:00Z',
+      lastErrorAt: '2026-07-04T03:00:00Z',
+      lastErrorMessage: 'No deploymentId for SAP AI Hub call',
+    }];
+    const runningNow = [{ jobName: 'extractConcepts', startedAt: '2026-07-06T18:08:46Z' }];
+    const out = joinJobsWithLastRuns(jobs, lastRuns, runningNow);
+    expect(out[0].isRunning).toBe(true);
+    expect(out[0].statusLabel).toBe('RUNNING');
+    // last-error fields still carried through — the view surfaces them in
+    // separate columns; RUNNING only overrides the Status column.
+    expect(out[0].lastErrorMessage).toBe('No deploymentId for SAP AI Hub call');
+  });
+
+  it('omits isRunning when runningNow is provided but jobName absent', () => {
+    const jobs = [{ jobName: 'a' }, { jobName: 'b' }];
+    const runningNow = [{ jobName: 'b', startedAt: '2026-07-06T18:00:00Z' }];
+    const out = joinJobsWithLastRuns(jobs, [], runningNow);
+    expect(out[0].isRunning).toBe(false);
+    expect(out[0].runningSince).toBeNull();
+    expect(out[1].isRunning).toBe(true);
+    expect(out[1].runningSince).toBe('2026-07-06T18:00:00Z');
+  });
+});
+
+// #1023: categorical Status column classification.
+describe('classifyJobStatus', () => {
+  const NOW = new Date('2026-07-06T20:00:00Z').getTime();
+
+  it('RUNNING trumps everything', () => {
+    const s = classifyJobStatus({ isRunning: true, lastErrorAt: '2026-07-04T00:00:00Z' }, NOW);
+    expect(s).toEqual({ statusLabel: 'RUNNING', statusState: 'Information' });
+  });
+
+  it('NEVER when there is neither success nor error', () => {
+    const s = classifyJobStatus({ isRunning: false }, NOW);
+    expect(s).toEqual({ statusLabel: 'NEVER', statusState: 'None' });
+  });
+
+  it('FAILED when lastErrorAt is more recent than lastSuccessAt', () => {
+    const s = classifyJobStatus({
+      isRunning: false,
+      lastSuccessAt: '2026-07-05T00:00:00Z',
+      lastErrorAt: '2026-07-06T00:00:00Z',
+    }, NOW);
+    expect(s).toEqual({ statusLabel: 'FAILED', statusState: 'Error' });
+  });
+
+  it('OK when last success is within 2× interval (daily default)', () => {
+    // Successful yesterday, no error; interval defaults to 24h since
+    // nextRunsIso has fewer than 2 entries. 20h ago < 48h threshold.
+    const s = classifyJobStatus({
+      isRunning: false,
+      lastSuccessAt: new Date(NOW - 20 * 3600 * 1000).toISOString(),
+    }, NOW);
+    expect(s).toEqual({ statusLabel: 'OK', statusState: 'Success' });
+  });
+
+  it('STALE when last success is older than 2× interval', () => {
+    // Successful 3 days ago; interval defaults to 24h → threshold 48h. Stale.
+    const s = classifyJobStatus({
+      isRunning: false,
+      lastSuccessAt: new Date(NOW - 3 * 24 * 3600 * 1000).toISOString(),
+    }, NOW);
+    expect(s).toEqual({ statusLabel: 'STALE', statusState: 'Warning' });
+  });
+
+  it('uses nextRunsIso[1]-nextRunsIso[0] as the interval estimate', () => {
+    // Hourly schedule (2 firings in nextRunsIso spaced 1h apart) → threshold 2h.
+    // Last success 3h ago → STALE despite being well under a day old.
+    const now = NOW;
+    const nextRunsIso = [
+      new Date(now + 15 * 60000).toISOString(),  // in 15 min
+      new Date(now + 75 * 60000).toISOString(),  // in 75 min → 1h interval
+    ];
+    const s = classifyJobStatus({
+      isRunning: false,
+      lastSuccessAt: new Date(now - 3 * 3600 * 1000).toISOString(),
+      nextRunsIso,
+    }, now);
+    expect(s.statusLabel).toBe('STALE');
+  });
+});
+
+describe('formatElapsedSince', () => {
+  it('returns "" for null / invalid / future timestamps', () => {
+    expect(formatElapsedSince(null)).toBe('');
+    expect(formatElapsedSince('not-a-date')).toBe('');
+    const future = new Date(Date.now() + 60000).toISOString();
+    expect(formatElapsedSince(future)).toBe('');
+  });
+
+  it('returns "Ns" for sub-minute durations', () => {
+    const iso = new Date(Date.now() - 42000).toISOString();
+    expect(formatElapsedSince(iso)).toMatch(/^\d{1,2}s$/);
+  });
+
+  it('returns "Nm Ss" for minute-scale durations', () => {
+    const iso = new Date(Date.now() - (5 * 60000 + 23000)).toISOString();
+    expect(formatElapsedSince(iso)).toMatch(/^5m \d{1,2}s$/);
+  });
+
+  it('returns "Nh Nm" for hour-scale durations', () => {
+    const iso = new Date(Date.now() - (2 * 3600000 + 15 * 60000)).toISOString();
+    expect(formatElapsedSince(iso)).toMatch(/^2h \d{1,2}m$/);
   });
 });
 

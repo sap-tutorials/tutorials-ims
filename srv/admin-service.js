@@ -2415,6 +2415,45 @@ export default class AdminService extends cds.ApplicationService {
       });
     });
 
+    // #1023: return currently-executing scheduled jobs so the Cron health
+    // tile can distinguish RUNNING from a stale last-completed failure.
+    // Reads PipelineLog rows written by srv/jobs/scheduler.js:runWithLock
+    // (via srv/lib/pipeline-log.js:logPipelineStart) that haven't been
+    // finalized yet. jobName lives inside metadata JSON, extracted here
+    // rather than via HANA JSON_VALUE so the code paths stay identical
+    // across SQLite (unit tests) and HANA (hybrid + prod).
+    this.on('listRunningJobs', 'JobControls', async () => {
+      const { PipelineLog } = cds.entities('com.sap.developers.ims');
+      let rows;
+      try {
+        rows = await SELECT.from(PipelineLog)
+          .columns('metadata', 'startedAt')
+          .where({ pipelineType: 'SCHEDULED_JOB', status: 'RUNNING' });
+      } catch (err) {
+        LOG.warn(`listRunningJobs SELECT failed: ${err.message ?? err}`);
+        return [];
+      }
+      const out = [];
+      for (const row of rows || []) {
+        let jobName = null;
+        if (row.metadata) {
+          try {
+            const parsed = JSON.parse(row.metadata);
+            if (parsed && typeof parsed.jobName === 'string') {
+              jobName = parsed.jobName;
+            }
+          } catch (err) {
+            // Malformed metadata JSON — skip this row, don't fail the whole read.
+            LOG.warn(`listRunningJobs: unparseable metadata: ${err.message ?? err}`);
+          }
+        }
+        if (jobName) {
+          out.push({ jobName, startedAt: row.startedAt });
+        }
+      }
+      return out;
+    });
+
     this.on('runJob', 'JobControls', async (req) => {
       const { jobName } = req.data;
       // Validation FIRST — before any audit emission — to avoid log spam

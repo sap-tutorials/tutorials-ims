@@ -15,25 +15,113 @@ sap.ui.define([], function () {
   'use strict';
 
   /**
-   * JOIN listJobs output with JobLastRun rows by jobName.
+   * JOIN listJobs output with JobLastRun rows AND listRunningJobs by jobName.
    * Both inputs are plain arrays of objects; output is a flat array suitable
    * for setting on a JSONModel at '/jobs'.
    *
-   * @param {Array<{jobName, schedule, ttlMs, description, nextRunIso}>} jobs
+   * runningNow (#1023) is the server-authoritative list of jobs currently
+   * executing (PipelineLog rows with status='RUNNING'). A job appearing here
+   * is marked isRunning:true regardless of last-known-failed state — running
+   * trumps last-completed, because "manually retriggered and still executing"
+   * must not display as the prior failure.
+   *
+   * @param {Array<{jobName, schedule, ttlMs, description, nextRunIso, nextRunsIso?}>} jobs
    * @param {Array<{jobName, lastSuccessAt?, lastErrorAt?, lastErrorMessage?}>} lastRuns
+   * @param {Array<{jobName, startedAt}>} [runningNow]
    * @returns {Array<object>}
    */
-  function joinJobsWithLastRuns(jobs, lastRuns) {
+  function joinJobsWithLastRuns(jobs, lastRuns, runningNow) {
     var byName = new Map((lastRuns || []).map(function (r) { return [r.jobName, r]; }));
+    var byRunning = new Map((runningNow || []).map(function (r) { return [r.jobName, r]; }));
+    var now = Date.now();
     return (jobs || []).map(function (j) {
       var hit = byName.get(j.jobName);
-      return Object.assign({}, j, {
+      var runHit = byRunning.get(j.jobName);
+      var joined = Object.assign({}, j, {
         lastSuccessAt: hit && hit.lastSuccessAt != null ? hit.lastSuccessAt : null,
         lastErrorAt: hit && hit.lastErrorAt != null ? hit.lastErrorAt : null,
         lastErrorMessage: hit && hit.lastErrorMessage != null ? hit.lastErrorMessage : null,
-        isRunning: false,
+        isRunning: !!runHit,
+        runningSince: runHit && runHit.startedAt != null ? runHit.startedAt : null,
       });
+      var status = classifyJobStatus(joined, now);
+      joined.statusLabel = status.statusLabel;
+      joined.statusState = status.statusState;
+      return joined;
     });
+  }
+
+  /**
+   * Categorize a job's live state for the Cron health tile's Status column.
+   *
+   * RUNNING (Information / blue) — job is currently executing, per
+   *   listRunningJobs. Trumps everything: a re-triggered job that had
+   *   previously failed must not display the old error while running.
+   * NEVER (None / grey) — no success and no error recorded yet.
+   * FAILED (Error / red) — most recent completion was a failure.
+   * STALE (Warning / yellow) — last success older than 2× the estimated
+   *   schedule interval. Interval is estimated from nextRunsIso[1] -
+   *   nextRunsIso[0] when ≥2 firings fall in the next 24h window;
+   *   otherwise defaults to 24 h. Monthly crons keep the 24 h default,
+   *   which effectively disables STALE for them — acceptable trade-off,
+   *   monthly jobs get their own explicit review.
+   * OK (Success / green) — last completion was a success and within
+   *   2× interval.
+   *
+   * Kept as a standalone function (not inlined in joinJobsWithLastRuns) so
+   * the classification is unit-testable in isolation and can be reused if
+   * we ever surface the same categorical elsewhere.
+   *
+   * @param {{isRunning:boolean, lastSuccessAt?:string, lastErrorAt?:string, nextRunsIso?:Array<string>}} job
+   * @param {number} [now=Date.now()]
+   * @returns {{statusLabel:string, statusState:string}}
+   */
+  function classifyJobStatus(job, now) {
+    if (now == null) now = Date.now();
+    if (job.isRunning) return { statusLabel: 'RUNNING', statusState: 'Information' };
+    var hasSuccess = job.lastSuccessAt != null;
+    var hasError = job.lastErrorAt != null;
+    if (!hasSuccess && !hasError) return { statusLabel: 'NEVER', statusState: 'None' };
+    var successMs = hasSuccess ? new Date(job.lastSuccessAt).getTime() : 0;
+    var errorMs = hasError ? new Date(job.lastErrorAt).getTime() : 0;
+    if (errorMs > successMs) return { statusLabel: 'FAILED', statusState: 'Error' };
+    // Estimate cadence from adjacent nextRunsIso entries. Default 24h.
+    var intervalMs = 24 * 3600 * 1000;
+    var runs = Array.isArray(job.nextRunsIso) ? job.nextRunsIso : [];
+    if (runs.length >= 2) {
+      var t0 = new Date(runs[0]).getTime();
+      var t1 = new Date(runs[1]).getTime();
+      if (Number.isFinite(t0) && Number.isFinite(t1) && t1 > t0) {
+        intervalMs = t1 - t0;
+      }
+    }
+    if (successMs && (now - successMs) > 2 * intervalMs) {
+      return { statusLabel: 'STALE', statusState: 'Warning' };
+    }
+    return { statusLabel: 'OK', statusState: 'Success' };
+  }
+
+  /**
+   * Humanize a running-since ISO into an "elapsed" duration (#1023) —
+   * "5m 23s", "1h 2m", "42s". Returns '' for null/invalid so the view
+   * binding can render an empty tooltip when the job isn't running.
+   *
+   * @param {string|null|undefined} iso
+   * @returns {string}
+   */
+  function formatElapsedSince(iso) {
+    if (!iso) return '';
+    var date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    var diffMs = Date.now() - date.getTime();
+    if (diffMs < 0) return '';
+    var totalSec = Math.floor(diffMs / 1000);
+    var h = Math.floor(totalSec / 3600);
+    var m = Math.floor((totalSec % 3600) / 60);
+    var s = totalSec % 60;
+    if (h > 0) return h + 'h ' + m + 'm';
+    if (m > 0) return m + 'm ' + s + 's';
+    return s + 's';
   }
 
   /**
@@ -82,7 +170,9 @@ sap.ui.define([], function () {
 
   return {
     joinJobsWithLastRuns: joinJobsWithLastRuns,
+    classifyJobStatus: classifyJobStatus,
     formatNextRun: formatNextRun,
     formatRelativeTime: formatRelativeTime,
+    formatElapsedSince: formatElapsedSince,
   };
 });
