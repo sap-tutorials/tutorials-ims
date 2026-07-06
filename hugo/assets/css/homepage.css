@@ -38,8 +38,10 @@
 /* ===== Verb spine (row 2) ===== */
 .hp-verbs {
   display: grid;
-  /* (#1029) 7 columns since MODEL was added. Responsive breakpoints
-     below unchanged — 2 cols on narrow, 3 cols on medium widths. */
+  /* (#1029) 7 columns since MODEL was added. Breakpoints below tuned to
+     avoid a lonely orphan tile at intermediate widths — 4+3 wrap at
+     901–1200px instead of 3+3+1, and full 7-across only kicks in above
+     1200px where the ~163px/col leaves room for "Extend with AI". */
   grid-template-columns: repeat(7, 1fr);
   gap: 0.75rem;
   list-style: none;
@@ -53,9 +55,12 @@
   }
 }
 
-@media (min-width: 901px) and (max-width: 1100px) {
+@media (min-width: 901px) and (max-width: 1200px) {
+  /* (#1029) Intermediate widths: 4-col wrap so 7 tiles land as 4+3, not
+     3+3+1 with an orphan on the last row. The old 3-col rule at
+     ≤1100px produced a lonely tile whenever the spine grew past 6. */
   .hp-verbs {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -189,8 +194,13 @@
 /* ===== Directory footer (row 7) ===== */
 .hp-directory {
   display: grid;
-  /* (#1029) 7 columns since MODEL was added to the verb spine. */
-  grid-template-columns: repeat(7, 1fr);
+  /* (#1029) auto-fit with a 180px minimum lets the browser fit as many
+     columns as the container comfortably holds — 7 across at ~1440px,
+     dropping to 6/5/4 at narrower widths without an explicit
+     breakpoint per verb count. Each column stays wide enough that
+     link titles like "SAP Business Application Studio" don't wrap
+     to three lines. */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1.5rem;
   padding: 2rem 1rem;
   border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);
@@ -199,6 +209,9 @@
 
 @media (max-width: 900px) {
   .hp-directory {
+    /* On narrow viewports pin to 2 cols so the mobile stack stays
+       predictable — auto-fit would otherwise let a single column
+       expand to full width and destroy the section rhythm. */
     grid-template-columns: repeat(2, 1fr);
   }
 }
