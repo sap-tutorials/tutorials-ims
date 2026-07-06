@@ -33,6 +33,7 @@
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
 @requires : 'any'
+@odata
 @graphql
 @mcp
 service KnowledgeGraphService @(path : '/graph') {

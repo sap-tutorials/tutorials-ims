@@ -15,6 +15,7 @@ type FacetResult {
 
 @path: '/search'
 @requires: 'any'
+@odata
 @graphql
 @mcp
 service SearchService {

@@ -21,6 +21,7 @@ using { com.sap.developers.ims.HomepageShelves } from '../db/homepage';
 
 @path: '/homepage'
 @requires: 'any'
+@odata
 @mcp
 service HomepageService {
 
