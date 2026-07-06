@@ -29,6 +29,15 @@
     <p>{{ .Description }}</p>
   </header>
 
+  {{- /* Optional prose body from the verb's _index.md — rendered above shelves
+         so editorial context (e.g. Joule Studio classic vs. next-gen, #1035)
+         can call out featured items before the auto-generated link tree. */ -}}
+  {{- with .Content -}}
+    <section class="verb-page__body">
+      {{ . }}
+    </section>
+  {{- end -}}
+
   {{ range $shelfKey := slice "START_HERE" "REFERENCE" "TOOLS" "KEEP_CURRENT" }}
     {{- $items := where $verbShelves "shelf" $shelfKey -}}
     {{- if gt (len $items) 0 -}}
