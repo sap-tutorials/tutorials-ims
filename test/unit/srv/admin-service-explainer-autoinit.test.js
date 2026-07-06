@@ -13,14 +13,15 @@ describe('AdminService — VerbDefinitions/ShelfDefinitions auto-init (#759 PR 1
     db = await cds.connect.to('db');
   });
 
-  it('auto-creates 6 VerbDefinitions rows when reading an empty table', async () => {
+  it('auto-creates 7 VerbDefinitions rows when reading an empty table', async () => {
+    // (#1029) MODEL added as 7th verb.
     await db.run(DELETE.from('com.sap.developers.ims.VerbDefinitions'));
     const res = await project.get('/admin/VerbDefinitions', ADMIN_AUTH);
     expect(res.status).toBe(200);
     const rows = res.data.value;
-    expect(rows.length).toBe(6);
+    expect(rows.length).toBe(7);
     const keys = rows.map(r => r.verbKey).sort();
-    expect(keys).toEqual(['AI', 'BUILD', 'CONNECT', 'INTEGRATE', 'LEARN', 'OPERATE']);
+    expect(keys).toEqual(['AI', 'BUILD', 'CONNECT', 'INTEGRATE', 'LEARN', 'MODEL', 'OPERATE']);
     expect(rows.every(r => r.authoringStatus === 'BLANK')).toBe(true);
   });
 
@@ -40,7 +41,7 @@ describe('AdminService — VerbDefinitions/ShelfDefinitions auto-init (#759 PR 1
     const count = await db.run(
       SELECT.from('com.sap.developers.ims.VerbDefinitions').columns('count(*) as n')
     );
-    expect(count[0].n).toBe(6);
+    expect(count[0].n).toBe(7);
   });
 
   it('idempotent — second ShelfDefinitions read does not duplicate', async () => {

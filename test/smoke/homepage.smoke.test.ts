@@ -26,7 +26,8 @@ describe.skipIf(!BASE)('Developer homepage smoke', () => {
     expect(html).toMatch(/data-island=["']?videos["']?/);
   });
 
-  it.each(['learn', 'build', 'integrate', 'operate', 'ai', 'connect'])('GET /%s/ returns the verb sub-page', async (verb) => {
+  it.each(['learn', 'build', 'integrate', 'model', 'operate', 'ai', 'connect'])('GET /%s/ returns the verb sub-page', async (verb) => {
+    // (#1029) MODEL added as 7th verb — data-platform lane.
     const res = await fetch(`${BASE}/${verb}/`);
     expect(res.status).toBe(200);
     const html = await res.text();

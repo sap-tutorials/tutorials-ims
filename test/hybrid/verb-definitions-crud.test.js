@@ -12,16 +12,16 @@ describe.runIf(isSafeForWrites())('VerbDefinitions — admin CRUD on HANA (#759 
     );
   });
 
-  it('AdminService.VerbDefinitions returns 6 rows after auto-init', async () => {
+  it('AdminService.VerbDefinitions returns 7 rows after auto-init', async () => {
     const admin = await cds.connect.to('AdminService');
     const rows = await admin.run(SELECT.from('AdminService.VerbDefinitions'));
-    expect(rows.length).toBe(6);
+    expect(rows.length).toBe(7);
   });
 
-  it('all 6 enum values are represented exactly once', async () => {
+  it('all 7 enum values are represented exactly once', async () => {
     const rows = await db.run(SELECT.from('com.sap.developers.ims.VerbDefinitions'));
     const keys = rows.map(r => r.verbKey).sort();
-    expect(keys).toEqual(['AI', 'BUILD', 'CONNECT', 'INTEGRATE', 'LEARN', 'OPERATE']);
+    expect(keys).toEqual(['AI', 'BUILD', 'CONNECT', 'INTEGRATE', 'LEARN', 'MODEL', 'OPERATE']);
   });
 
   it('@assert.unique.verbKey rejects duplicate insert', async () => {

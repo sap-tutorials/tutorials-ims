@@ -38,7 +38,9 @@
 /* ===== Verb spine (row 2) ===== */
 .hp-verbs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* (#1029) 7 columns since MODEL was added. Responsive breakpoints
+     below unchanged — 2 cols on narrow, 3 cols on medium widths. */
+  grid-template-columns: repeat(7, 1fr);
   gap: 0.75rem;
   list-style: none;
   padding: 0;
@@ -187,7 +189,8 @@
 /* ===== Directory footer (row 7) ===== */
 .hp-directory {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* (#1029) 7 columns since MODEL was added to the verb spine. */
+  grid-template-columns: repeat(7, 1fr);
   gap: 1.5rem;
   padding: 2rem 1rem;
   border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);
@@ -230,7 +233,7 @@
   text-decoration: underline;
 }
 
-/* Utility links row — spans full width below the 6 verb columns */
+/* Utility links row — spans full width below the 7 verb columns */
 .hp-directory__utility {
   grid-column: 1 / -1;
   border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);

@@ -180,7 +180,7 @@ service AdminService {
   entity HomepageConfig as projection on ims.HomepageConfig;
 
   // (#759) Per-verb and per-shelf explainer content. Both have fixed
-  // cardinality (6 verbs / 4 shelves); CRUD lockdown lives in the
+  // cardinality (7 verbs / 4 shelves); CRUD lockdown lives in the
   // Fiori admin app annotations (PR 3). Projection itself is
   // unconstrained — same shape as HomepageConfig. Change-tracking is
   // off (matches HomepageConfig — singleton-set config, not a catalog).

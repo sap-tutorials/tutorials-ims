@@ -137,12 +137,12 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
     },
   },
 
-  // EXPLORE group — the 6 homepage verb-spine routes plus the Knowledge
+  // EXPLORE group — the 7 homepage verb-spine routes plus the Knowledge
   // Graph Explorer. Order matches the verb-spine partial at
   // hugo/layouts/partials/homepage/verb-spine.html (LEARN, BUILD,
-  // INTEGRATE, OPERATE, AI, CONNECT). Keep this list in sync if the spine
-  // ever gains a seventh verb; otherwise the palette will be out of date
-  // with the homepage's own primary nav.
+  // INTEGRATE, MODEL, OPERATE, AI, CONNECT). Keep this list in sync if the
+  // spine ever gains an eighth verb; otherwise the palette will be out of
+  // date with the homepage's own primary nav.
   {
     id: 'explore-learn',
     label: 'Learn — getting started with SAP for developers',
@@ -166,6 +166,16 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
     keywords: ['integrate', 'integration', 'api', 'events', 'connectivity', 'destination', 'verb'],
     group: 'explore',
     run: navTo('/integrate/'),
+  },
+  {
+    // (#1029) MODEL — data-platform verb: HANA Cloud, Datasphere, Business
+    // Data Cloud, SAP Analytics Cloud. CAP CDS stays under BUILD.
+    id: 'explore-model',
+    label: 'Model — HANA Cloud, Datasphere, Business Data Cloud, SAC',
+    icon: 'database',
+    keywords: ['model', 'data', 'hana', 'datasphere', 'bdc', 'business data cloud', 'sac', 'analytics', 'calc view', 'semantic', 'verb'],
+    group: 'explore',
+    run: navTo('/model/'),
   },
   {
     id: 'explore-operate',

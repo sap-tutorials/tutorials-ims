@@ -67,7 +67,7 @@ function buildUserMessage(kind, row, context) {
     return `Generate a tagline + whyItMatters for the **${row.label}** lane (verbKey: ${row.verbKey}).`;
   }
   if (kind === 'shelf') {
-    return `Generate a tagline + whyItMatters for the **${row.label}** shelf category (shelfKey: ${row.shelfKey}). Remember: same explainer shows on all six verb sub-pages.`;
+    return `Generate a tagline + whyItMatters for the **${row.label}** shelf category (shelfKey: ${row.shelfKey}). Remember: same explainer shows on all seven verb sub-pages.`;
   }
   if (kind === 'shelf-entry') {
     const verbContext = context?.verbDefinition

@@ -66,11 +66,12 @@ describe('AdminService.generate*Explainers — action handlers (#759 PR 3a)', ()
   });
 
   describe('fill-blanks mode', () => {
-    it('VerbDefinitions: processes all 6 BLANK rows, returns processed=6', async () => {
+    it('VerbDefinitions: processes all 7 BLANK rows, returns processed=7', async () => {
+      // (#1029) MODEL added as 7th verb.
       const res = await project.post('/admin/generateVerbExplainers',
         { ids: [], mode: 'fill-blanks' }, ADMIN_AUTH);
       expect(res.status).toBe(200);
-      expect(res.data.processed).toBe(6);
+      expect(res.data.processed).toBe(7);
       expect(res.data.skipped).toBe(0);
       expect(res.data.cost).toMatch(/^\$\d+\.\d{2}$/);
     });
@@ -85,7 +86,7 @@ describe('AdminService.generate*Explainers — action handlers (#759 PR 3a)', ()
         .where({ verbKey: 'BUILD' }));
       const res = await project.post('/admin/generateVerbExplainers',
         { ids: [], mode: 'fill-blanks' }, ADMIN_AUTH);
-      expect(res.data.processed).toBe(4); // LEARN + BUILD untouched; 4 BLANK rows processed
+      expect(res.data.processed).toBe(5); // LEARN + BUILD untouched; 5 BLANK rows processed (#1029: 7 verbs - 2 seeded)
     });
   });
 

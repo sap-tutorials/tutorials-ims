@@ -19,13 +19,14 @@
   (dict "verbKey" "LEARN"      "label" "Learn"          "iconName" "learning-assistant"    "href" "/learn/"     "sortOrder" 10)
   (dict "verbKey" "BUILD"      "label" "Build"          "iconName" "developer-settings"    "href" "/build/"     "sortOrder" 20)
   (dict "verbKey" "INTEGRATE"  "label" "Integrate"      "iconName" "chain-link"            "href" "/integrate/" "sortOrder" 30)
+  (dict "verbKey" "MODEL"      "label" "Model"          "iconName" "database"              "href" "/model/"     "sortOrder" 35)
   (dict "verbKey" "OPERATE"    "label" "Operate"        "iconName" "settings"              "href" "/operate/"   "sortOrder" 40)
   (dict "verbKey" "AI"         "label" "Extend with AI" "iconName" "da"                    "href" "/ai/"        "sortOrder" 50)
   (dict "verbKey" "CONNECT"    "label" "Connect"        "iconName" "customer-and-contacts" "href" "/connect/"   "sortOrder" 60)
 -}}
 {{- $verbDefs := cond (gt (len $bakedVerbs) 0) $bakedVerbs $fallbackVerbs -}}
 {{- /* For baked entries, supply href since the build feed doesn't include it. */ -}}
-{{- $hrefMap := dict "LEARN" "/learn/" "BUILD" "/build/" "INTEGRATE" "/integrate/" "OPERATE" "/operate/" "AI" "/ai/" "CONNECT" "/connect/" -}}
+{{- $hrefMap := dict "LEARN" "/learn/" "BUILD" "/build/" "INTEGRATE" "/integrate/" "MODEL" "/model/" "OPERATE" "/operate/" "AI" "/ai/" "CONNECT" "/connect/" -}}
 <nav class="verb-spine" data-personalize="verb-order" data-skeleton="verb-spine" aria-label="Developer paths">
 <ul class="hp-verbs">
   {{- range sort $verbDefs "sortOrder" -}}

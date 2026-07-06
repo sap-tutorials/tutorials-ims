@@ -4,7 +4,7 @@
 // HomepageShelves payload.
 //
 // Verifies that the deployed srv actually serves:
-//   1. /build/verb-definitions — 200, 6 verbs, 60s Cache-Control.
+//   1. /build/verb-definitions — 200, 7 verbs, 60s Cache-Control.
 //   2. /build/shelf-definitions — 200, 4 shelves.
 //   3. /build/homepage-shelves — each row carries the new tagline,
 //      whyItMatters, and authoringStatus fields.
@@ -17,13 +17,14 @@ import { SRV_URL, fetchWithRetry } from './smoke.config.js';
 
 describe('Smoke — build feeds for homepage explainers (#759 PR 1)', () => {
   describe('/build/verb-definitions', () => {
-    it('returns 200 with 6 verbs', async () => {
+    it('returns 200 with 7 verbs', async () => {
+      // (#1029) 7th verb MODEL added — data-platform lane.
       const res = await fetchWithRetry(`${SRV_URL}/build/verb-definitions`);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toMatch(/application\/json/);
       const body = await res.json();
       expect(Array.isArray(body.verbs)).toBe(true);
-      expect(body.verbs.length).toBe(6);
+      expect(body.verbs.length).toBe(7);
     });
 
     it('sets 60s Cache-Control', async () => {

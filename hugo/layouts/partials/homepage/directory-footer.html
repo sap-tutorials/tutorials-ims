@@ -4,11 +4,13 @@
        client-side to add the ⓘ + popover affordance. The inner <a>
        stays as first-paint fallback. */ -}}
 {{- $shelves := .shelves | default slice -}}
-{{- $verbKeys := slice "LEARN" "BUILD" "INTEGRATE" "OPERATE" "AI" "CONNECT" -}}
+{{- /* (#1029) MODEL added as 7th verb (sortOrder 35, between INTEGRATE and OPERATE). */ -}}
+{{- $verbKeys := slice "LEARN" "BUILD" "INTEGRATE" "MODEL" "OPERATE" "AI" "CONNECT" -}}
 {{- $verbLabels := dict
   "LEARN"     "Learn"
   "BUILD"     "Build"
   "INTEGRATE" "Integrate"
+  "MODEL"     "Model"
   "OPERATE"   "Operate"
   "AI"        "Extend with AI"
   "CONNECT"   "Connect"

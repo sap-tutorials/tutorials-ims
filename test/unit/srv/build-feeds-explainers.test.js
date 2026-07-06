@@ -18,7 +18,8 @@ describe('/build/verb-definitions + /build/shelf-definitions (#759 PR 1)', () =>
       expect(Array.isArray(res.data.verbs)).toBe(true);
     });
 
-    it('returns 6 rows after auto-init', async () => {
+    it('returns 7 rows after auto-init', async () => {
+      // (#1029) MODEL added as 7th verb.
       // Trigger auto-init first by reading via AdminService (this fires
       // the before('READ', 'VerbDefinitions', ...) handler from Task 9).
       // The /build/verb-definitions endpoint reads directly from the
@@ -26,7 +27,7 @@ describe('/build/verb-definitions + /build/shelf-definitions (#759 PR 1)', () =>
       // auto-init itself. Pre-seed via AdminService.
       await project.get('/admin/VerbDefinitions', ADMIN_AUTH);
       const res = await project.get('/build/verb-definitions');
-      expect(res.data.verbs.length).toBe(6);
+      expect(res.data.verbs.length).toBe(7);
     });
 
     it('sets 60s Cache-Control header', async () => {

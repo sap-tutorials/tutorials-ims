@@ -23,11 +23,19 @@ describe('Homepage entities — HANA schema (hybrid)', () => {
     }
   });
 
-  it('HomepageShelves seed rows loaded with all 6 verbs', async () => {
+  it('HomepageShelves seed rows loaded with a subset of the 7 valid verbs', async () => {
+    // (#1029) MODEL was added as the 7th verb but has no seeded shelf
+    // content yet — that follows in a content-authoring PR. The assertion
+    // checks every seeded verb is from the valid set, and the six
+    // originally-seeded verbs must all be present.
     const rows = await db.run(SELECT.from('com.sap.developers.ims.HomepageShelves'));
     expect(rows.length).toBeGreaterThanOrEqual(40);
     const verbs = new Set(rows.map(r => r.verb));
-    expect(verbs).toEqual(new Set(['LEARN', 'BUILD', 'INTEGRATE', 'OPERATE', 'AI', 'CONNECT']));
+    const valid = new Set(['LEARN', 'BUILD', 'INTEGRATE', 'MODEL', 'OPERATE', 'AI', 'CONNECT']);
+    for (const v of verbs) expect(valid).toContain(v);
+    for (const required of ['LEARN', 'BUILD', 'INTEGRATE', 'OPERATE', 'AI', 'CONNECT']) {
+      expect(verbs).toContain(required);
+    }
   });
 
   it('LegacyRedirects.fromPath rejects exact-duplicate inserts (assert.unique)', async () => {
