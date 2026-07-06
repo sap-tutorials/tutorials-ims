@@ -30,6 +30,7 @@ Search (Ctrl-F) for the error message you're seeing, the API you're using, or th
 - [Commit cds build artifacts alongside schema.cds changes](#commit-cds-build-artifacts-alongside-schema-cds-changes)
 - [Module singletons load twice under vitest + cds.test on Windows](#module-singletons-load-twice-under-vitest-cds-test-on-windows)
 - [@assert.unique on nullable columns + why khorosLogin isn't unique](#assert-unique-on-nullable-columns-why-khoroslogin-isnt-unique)
+- [`cds.outbox.Messages` is framework-owned — bind via `cds.entities`, never hardcode column names](#cdsoutboxmessages-is-framework-owned--bind-via-cdsentities-never-hardcode-column-names)
 
 ---
 
@@ -645,3 +646,26 @@ still sits in the DB would silently fail the join. `khorosId` is the stable
 key; `khorosLogin` is a display label refreshed lazily every 6h.
 
 **How to apply:** For helpers that wrap env-driven lookups (xsenv binding, env-var reads, file-based config) used by CAP service handlers and tested with `cds.test('serve', '--in-memory')`, default to re-reading on each call. xsenv itself doesn't cache — `serviceCredentials()` parses VCAP_SERVICES every call. The performance cost is negligible for admin-only after-READ hooks. If you genuinely need a cache (hot path, expensive lookup), use `globalThis` for the singleton — but try the no-cache version first. Also call `xsenv.loadEnv()` before `serviceCredentials()` to layer in any `default-env.json` (matches the `reference_cds_plugin_ui5.md` mail-client.js pattern).
+
+---
+
+## `cds.outbox.Messages` is framework-owned — bind via `cds.entities`, never hardcode column names
+
+The `cds.outbox.Messages` entity backs CAP 10's Scheduling API status-column singleton lock (a row with `status='processing'` prevents concurrent scheduled ticks). App code MUST access it through:
+
+```javascript
+const outbox = cds.entities('cds.outbox');
+if (!outbox?.Messages) return;                    // fail-open — CAP <10 or missing
+const db = await cds.connect.to('db');
+await db.run(DELETE.from(outbox.Messages).where({ target: `cron.${jobName}` }));
+```
+
+Never write raw SQL against `CDS_OUTBOX_MESSAGES`. The physical column names (`TASK`, `STATUS`) may change between CAP majors; CDS-level bindings track those renames automatically.
+
+Stable observations across CAP 10.x:
+- Field `target` (String) — for scheduled jobs, format is `cron.<jobName>`
+- Field `status` (String) — `'processing'` while a row is picked up
+
+The `test/hybrid/cron-service-schedule.test.js` reads the outbox broadly and filters in JS specifically because column-name casing may differ between HANA and SQLite. `srv/lib/scheduler-wedge.js` follows the same pattern.
+
+**Never use `CDS_OUTBOX_MESSAGES` directly except in the HANA escape hatch documented at `docs/developers/operations/scheduler-troubleshooting.md`.**
