@@ -482,6 +482,9 @@ import {
 import { getTutorialTeachesMap } from './lib/kg-tutorial-teaches-map.js';
 import { getCachedNeighborhood, setCachedNeighborhood } from './lib/kg-neighborhood-cache.js';
 import { kgPathV2 } from './lib/kg-path-v2-client.js';
+import { searchKgHandler } from './lib/kg/search-kg-handler.js';
+import { embed as embedInputs } from './lib/embedding-client.js';
+import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 import * as metrics from './lib/metrics.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
@@ -538,6 +541,21 @@ const TUTORIAL_IRI_PREFIX = 'https://developers.sap.com/kg/tutorial/';
 const SPARQL_UPDATE_RE = /^\s*(INSERT|DELETE|CLEAR|DROP|CREATE|LOAD|COPY|MOVE|ADD)\b/i;
 function detectUpdate(sparql) {
   return SPARQL_UPDATE_RE.test(sparql);
+}
+
+/**
+ * Minimal embed-client factory for actions that need a vector but should NOT
+ * pull in the Joule orchestrator. Mirrors the identical helper in
+ * srv/lib/chat-orchestrator.js — kept separate to avoid a cross-service import.
+ * Used by the searchKG palette handler (issue #1036).
+ */
+function defaultEmbedClient(model) {
+  return {
+    async embed(text /* , opts */) {
+      const [vec] = await embedInputs([text], model);
+      return vec;
+    },
+  };
 }
 
 /**
@@ -1269,18 +1287,26 @@ export default cds.service.impl(async function () {
     }
   });
 
+  // ─── searchKG — anonymous KG search for the ⌘K command palette ──────────
+  // Delegates to the anonymous-safe handler; never imports on-demand-enqueue.
+  // Auth: inherited service-level @requires:'any' — anonymous callers get 200.
+  // (issue #1036)
+  this.on('searchKG', async (req) => {
+    const { model } = await resolveEmbeddingSettings();
+    const embedClient = defaultEmbedClient(model);
+    return searchKgHandler({
+      db,
+      embedClient,
+      args: {
+        term: req.data.term,
+        maxConcepts: req.data.maxConcepts,
+        maxTutorials: req.data.maxTutorials,
+      },
+    });
+  });
+
   // ─── runSparql — admin raw SPARQL passthrough ──────────────────────────
   this.on('runSparql', async (req) => {
-    const { query } = req.data;
-    if (typeof query !== 'string' || query.length === 0) {
-      return req.error(400, 'Query required');
-    }
-    if (query.length > 8 * 1024) {
-      return req.error(400, 'Query too long (max 8KB)');
-    }
-
-    const truncatedForLog = query.length > 1024 ? query.slice(0, 1024) + '…' : query;
-    const isUpdate = detectUpdate(query);
     log.info(`kg-service: runSparql by ${req.user?.id ?? 'unknown'} (${query.length} chars)`);
     await audit('KnowledgeGraphRunSparql', {
       user: req.user?.id ?? 'unknown',
