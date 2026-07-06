@@ -4,10 +4,11 @@
 // returns zero seeds. Pure enqueue logic — no LLM calls, no cron
 // dependencies, no wait for the drain. Fire-and-forget from the tool.
 //
-// Coalescing: INSERT ... WHERE NOT EXISTS on normalizedKey ensures at most
-// one PENDING/RUNNING row per key. Portable across SQLite (tests) and HANA
-// (production). Defense-in-depth on HANA via KG_ONDEMAND_PENDING_UNIQUE
-// filtered unique index.
+// Coalescing: a two-step SELECT-then-INSERT inside a tx on normalizedKey
+// ensures at most one PENDING/RUNNING row per key. Portable across SQLite
+// (tests) and HANA (production). The prior HANA .hdbindex backstop was
+// removed — HDI declarative .hdbindex does not support filtered unique
+// indexes; see db/knowledge-graph-ondemand.cds for the full note.
 //
 // Rate limiting: per-user + global sliding windows via checkRateLimit
 // from per-user-rate-limit.js. In-memory, per-process. Multi-instance

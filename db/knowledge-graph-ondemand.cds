@@ -7,9 +7,13 @@ namespace com.sap.developers.ims;
 // is true. Drained every 2 min by srv/jobs/kg-ondemand-job.js.
 //
 // Coalescing: at most one row per normalizedKey may be in ('PENDING','RUNNING')
-// simultaneously. Enforced portably by INSERT ... WHERE NOT EXISTS in the
-// enqueue module; defense-in-depth on HANA via
-// db/src/KG_ONDEMAND_PENDING_UNIQUE.hdbindex.
+// simultaneously. Enforced portably by a two-step SELECT-then-INSERT inside
+// a tx in srv/lib/kg/on-demand-enqueue.js. A prior attempt at a HANA filtered
+// unique index (db/src/KG_ONDEMAND_PENDING_UNIQUE.hdbindex) was removed —
+// HDI's declarative .hdbindex format does not support raw CREATE ... WHERE
+// SQL DDL, and it rejected the file at deploy time. If a defense-in-depth
+// backstop is desired, use an .hdbprocedure or an unfiltered unique index
+// on (normalizedKey, status) with periodic cleanup of terminal states.
 entity KgOnDemandRequests {
   key ID              : UUID;
   query               : String(200) @mandatory;
