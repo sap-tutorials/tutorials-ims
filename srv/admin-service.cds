@@ -337,6 +337,16 @@ service AdminService {
       reason    : String;
       startedAt : Timestamp;
     };
+
+    // #1021: DELETE the stuck cds.outbox.Messages row for jobName. Used
+    // by the Cron health panel's "Force unwedge" button. DELETE-only —
+    // does NOT auto-trigger a run. Emits SecurityEvent audit with
+    // outcome='unwedged'.
+    action forceUnwedge(jobName: String) returns {
+      jobName   : String;
+      cleared   : Boolean;
+      reason    : String;
+    };
   };
 
   @odata.draft.enabled

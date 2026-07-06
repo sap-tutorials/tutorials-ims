@@ -363,4 +363,78 @@ describe('AdminService.JobControls', () => {
       }
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────
+  // #1021 — forceUnwedge operator recovery action
+  //
+  // NOTE (ESM identity adaptation — same constraint as Task 3 wedge tests):
+  // cds.test('serve') loads admin-service.js via cds.utils._import (Windows
+  // file:// URL path) which bypasses Vitest's ESM live-binding interceptor.
+  // vi.spyOn on scheduler-wedge or admin-service exports does NOT intercept
+  // the handler's copy of those bindings. Strategy B (pre-flight flag #1):
+  // globalThis seams (__TEST_deleteStuckOutboxRow, __TEST_emitJobAudit)
+  // checked by the forceUnwedge handler. Production never sets these globals.
+  // ─────────────────────────────────────────────────────────────────
+
+  async function callForceUnwedge(jobName) {
+    return admin.tx({ user: ADMIN_USER }, (tx) =>
+      tx.send({ event: 'forceUnwedge', entity: 'AdminService.JobControls', data: { jobName } })
+    );
+  }
+
+  describe('JobControls.forceUnwedge', () => {
+    afterEach(() => {
+      delete globalThis.__TEST_deleteStuckOutboxRow;
+      delete globalThis.__TEST_emitJobAudit;
+    });
+
+    it('rejects with 400 for missing jobName', async () => {
+      await expect(callForceUnwedge(undefined)).rejects.toMatchObject({ code: 400 });
+    });
+
+    it('rejects with 400 for jobName longer than MAX_JOB_NAME_LEN', async () => {
+      const huge = 'x'.repeat(200);
+      await expect(callForceUnwedge(huge)).rejects.toMatchObject({ code: 400 });
+    });
+
+    it('rejects with 400 for unknown jobName', async () => {
+      await expect(callForceUnwedge('never-registered')).rejects.toMatchObject({ code: 400 });
+    });
+
+    it('returns cleared: true when deleteStuckOutboxRow reports a delete', async () => {
+      registerWithSchedule('test-unwedge-ok', '*/1 * * * *');
+      globalThis.__TEST_deleteStuckOutboxRow = async () => true;
+      const result = await callForceUnwedge('test-unwedge-ok');
+      expect(result.cleared).toBe(true);
+      expect(result.reason).toBeFalsy();
+      expect(result.jobName).toBe('test-unwedge-ok');
+    });
+
+    it('returns cleared: false with reason when no row was found', async () => {
+      registerWithSchedule('test-unwedge-none', '*/1 * * * *');
+      globalThis.__TEST_deleteStuckOutboxRow = async () => false;
+      const result = await callForceUnwedge('test-unwedge-none');
+      expect(result.cleared).toBe(false);
+      expect(result.reason).toMatch(/No stuck outbox row/i);
+    });
+
+    it('emits audit with outcome=unwedged before the DELETE (strategy B: globalThis seam)', async () => {
+      // Rationale: vi.spyOn on emitJobAudit export doesn't intercept the
+      // handler's internal binding (ESM namespace frozen at load time, same
+      // issue as listJobs wedge tests). globalThis.__TEST_emitJobAudit is
+      // the canonical workaround for this repo — matches Task 3's pattern.
+      registerWithSchedule('test-unwedge-audit', '*/1 * * * *');
+      const auditCalls = [];
+      globalThis.__TEST_emitJobAudit = async (opts) => { auditCalls.push(opts); };
+      globalThis.__TEST_deleteStuckOutboxRow = async () => true;
+      await callForceUnwedge('test-unwedge-audit');
+      // Flush setImmediate so the fire-and-forget audit call executes.
+      await new Promise(resolve => setImmediate(resolve));
+      expect(auditCalls.length).toBe(1);
+      expect(auditCalls[0]).toMatchObject({
+        jobName: 'test-unwedge-audit',
+        outcome: 'unwedged',
+      });
+    });
+  });
 });
