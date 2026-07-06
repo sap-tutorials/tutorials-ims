@@ -194,6 +194,58 @@ sap.ui.define([
     },
 
     /**
+     * #1021: Force-unwedge button press handler. Confirms with the operator
+     * (DELETE of a framework-owned row deserves a confirm), then invokes
+     * forceUnwedge, refreshes the tile so the wedged flag flips off.
+     */
+    onForceUnwedge: function (oEvent) {
+      var oCtx = oEvent.getSource().getBindingContext("jobControls");
+      var sJobName = oCtx.getProperty("jobName");
+      var sPath = oCtx.getPath();
+      var iIdx = parseInt(sPath.split("/").pop(), 10);
+      var oModel = this.getView().getModel("jobControls");
+      var that = this;
+
+      MessageBox.confirm(
+        "Force-unwedge '" + sJobName + "'? This deletes the stuck outbox row. " +
+          "The next scheduled tick will fire normally.",
+        {
+          title: "Force unwedge",
+          onClose: function (sAction) {
+            if (sAction !== MessageBox.Action.OK) return;
+            oModel.setProperty("/jobs/" + iIdx + "/isUnwedging", true);
+            that._callForceUnwedge(sJobName)
+              .then(function (oResult) {
+                MessageToast.show(oResult && oResult.cleared
+                  ? "Unwedged '" + sJobName + "'"
+                  : "Not wedged: " + ((oResult && oResult.reason) || "unknown"));
+                return that._loadJobControls();
+              })
+              .catch(function (err) {
+                MessageBox.error("Force unwedge failed: " + (err && err.message ? err.message : String(err)));
+              })
+              .finally(function () {
+                oModel.setProperty("/jobs/" + iIdx + "/isUnwedging", false);
+              });
+          }
+        }
+      );
+    },
+
+    /**
+     * #1021: invoke AdminService.JobControls.forceUnwedge(jobName). Mirrors
+     * _callRunJob — bound to the JobControls singleton.
+     */
+    _callForceUnwedge: function (sJobName) {
+      var oAdminModel = this.getOwnerComponent().getModel("admin");
+      var oAction = oAdminModel.bindContext("/JobControls/AdminService.forceUnwedge(...)");
+      oAction.setParameter("jobName", sJobName);
+      return oAction.execute().then(function () {
+        return oAction.getBoundContext().getObject();
+      });
+    },
+
+    /**
      * #756: poll JobLastRun every 30 s for the next 5 min after a manual
      * trigger. Stops automatically when 5 min elapses. Re-entrant — if a
      * second trigger lands while polling is in flight, the existing schedule
