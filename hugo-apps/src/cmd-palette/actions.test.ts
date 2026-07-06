@@ -20,15 +20,16 @@ function fuzzyMatch(item: PaletteAction, q: string): boolean {
 }
 
 describe('PALETTE_ACTIONS — EXPLORE group registration', () => {
-  it('includes all six homepage verb-spine routes', () => {
+  it('includes all seven homepage verb-spine routes', () => {
     const exploreIds = PALETTE_ACTIONS.filter(a => a.group === 'explore').map(a => a.id)
     // The verb-spine partial at hugo/layouts/partials/homepage/verb-spine.html
-    // emits exactly these six verbs in order. If a seventh verb ever appears
-    // there, this list (and the registry) should grow to match.
+    // emits exactly these seven verbs in order. If an eighth verb ever
+    // appears there, this list (and the registry) should grow to match.
     expect(exploreIds).toEqual(expect.arrayContaining([
       'explore-learn',
       'explore-build',
       'explore-integrate',
+      'explore-model',
       'explore-operate',
       'explore-ai',
       'explore-connect',
@@ -59,7 +60,7 @@ describe('PALETTE_ACTIONS — EXPLORE group registration', () => {
     const explicitExplore = PALETTE_ACTIONS.filter(a => a.group === 'explore').length
     const explicitActions = PALETTE_ACTIONS.filter(a => a.group === 'actions').length
     const unset = PALETTE_ACTIONS.filter(a => a.group === undefined).length
-    expect(explicitExplore).toBeGreaterThanOrEqual(7)  // 6 verbs + KG
+    expect(explicitExplore).toBeGreaterThanOrEqual(8)  // 7 verbs + KG
     expect(unset + explicitActions).toBe(PALETTE_ACTIONS.length - explicitExplore)
   })
 })

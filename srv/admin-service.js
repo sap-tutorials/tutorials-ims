@@ -579,8 +579,8 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
-    // #759: VerbDefinitions auto-init. Cardinality is exactly 6 — one
-    // per HomepageVerb enum value. Seed CSV in
+    // #759: VerbDefinitions auto-init. Cardinality is exactly 7 (#1029) —
+    // one per HomepageVerb enum value. Seed CSV in
     // db/data/com.sap.developers.ims-VerbDefinitions.csv is canonical;
     // this handler is the defensive runtime fallback (matches
     // HomepageConfig pattern above). Values MUST agree with the CSV.
@@ -588,13 +588,14 @@ export default class AdminService extends cds.ApplicationService {
       { verbKey: 'LEARN',     label: 'Learn',          iconName: 'learning-assistant',    sortOrder: 10 },
       { verbKey: 'BUILD',     label: 'Build',          iconName: 'developer-settings',    sortOrder: 20 },
       { verbKey: 'INTEGRATE', label: 'Integrate',      iconName: 'chain-link',            sortOrder: 30 },
+      { verbKey: 'MODEL',     label: 'Model',          iconName: 'database',              sortOrder: 35 },
       { verbKey: 'OPERATE',   label: 'Operate',        iconName: 'settings',              sortOrder: 40 },
       { verbKey: 'AI',        label: 'Extend with AI', iconName: 'da',                    sortOrder: 50 },
       { verbKey: 'CONNECT',   label: 'Connect',        iconName: 'customer-and-contacts', sortOrder: 60 },
     ];
     this.before('READ', 'VerbDefinitions', async () => {
       const existing = await SELECT.from('com.sap.developers.ims.VerbDefinitions').columns('verbKey');
-      if (existing.length >= 6) return;
+      if (existing.length >= 7) return;
       const have = new Set(existing.map(r => r.verbKey));
       const missing = VERB_DEFAULTS
         .filter(d => !have.has(d.verbKey))

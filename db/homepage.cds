@@ -6,7 +6,11 @@ using { managed, cuid } from '@sap/cds/common';
 // Spec: docs/superpowers/specs/2026-06-27-639-developer-homepage-design.md §10.1
 
 type HomepageVerb : String enum {
-  LEARN; BUILD; INTEGRATE; OPERATE; AI; CONNECT;
+  // (#1029) MODEL is the data-platform verb — HANA Cloud, Datasphere,
+  // Business Data Cloud, SAC. Slotted between INTEGRATE and OPERATE
+  // (sortOrder 35) so the spine reads app → integration → data-as-product
+  // → run → AI → community. CAP CDS stays under BUILD (app-modeling).
+  LEARN; BUILD; INTEGRATE; MODEL; OPERATE; AI; CONNECT;
 }
 
 type HomepageShelf : String enum {
@@ -104,7 +108,7 @@ entity VerbDefinitions : cuid, managed {
 
 // (#759) Per-shelf-category explainer content. Cardinality is fixed
 // (4 rows, one per HomepageShelf enum value). Content is shared across
-// all 6 verb sub-pages — REFERENCE means the same thing on /learn/ and
+// all 7 verb sub-pages — REFERENCE means the same thing on /learn/ and
 // /operate/. The admin Fiori app (PR 3) enforces the fixed cardinality;
 // the DB schema itself is open. Spec §2.3.
 @assert.unique.shelfKey: [shelfKey]

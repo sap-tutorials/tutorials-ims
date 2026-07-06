@@ -20,7 +20,7 @@ describe('buildEnvelope', () => {
     for (const k of ['profile','verbOrder','forYou','teaserOrder','shelfOverrides','videoFilterTags','rssFilterTags']) {
       expect(env[k]).toBeDefined();
     }
-    expect(env.verbOrder).toHaveLength(6);
+    expect(env.verbOrder).toHaveLength(7);
   });
 
   it('includes hidden shelf IDs per verb', () => {

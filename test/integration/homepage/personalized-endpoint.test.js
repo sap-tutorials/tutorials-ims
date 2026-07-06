@@ -54,7 +54,7 @@ describe('GET /homepage/personalized', () => {
     expect(r.headers['cache-control']).toContain('no-store');
     expect(r.headers['x-personalization']).toBe('1');
     expect(r.data.hash).toBeDefined();
-    expect(r.data.verbOrder).toHaveLength(6);
+    expect(r.data.verbOrder).toHaveLength(7);
     expect(r.data.shelfOverrides).toBeDefined();
   });
 

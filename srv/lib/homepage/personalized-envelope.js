@@ -7,9 +7,9 @@ import crypto from 'node:crypto';
 import { rankShelves, rankForYou } from './persona-scoring.js';
 import { computeVerbOrder } from './persona-map.js';
 
-const VERBS_UPPER = ['LEARN','BUILD','INTEGRATE','OPERATE','AI','CONNECT'];
+const VERBS_UPPER = ['LEARN','BUILD','INTEGRATE','MODEL','OPERATE','AI','CONNECT'];
 const VERB_TO_LOWER = { LEARN:'learn', BUILD:'build', INTEGRATE:'integrate',
-                        OPERATE:'operate', AI:'ai', CONNECT:'connect' };
+                        MODEL:'model', OPERATE:'operate', AI:'ai', CONNECT:'connect' };
 
 // Cloud-provider fan-out: knowing you're on aws is useful; we always
 // include btp too because SAP-first content dominates the corpus.
