@@ -319,6 +319,16 @@ service AdminService {
       nextRunsIso : array of String;
     };
 
+    // #1023: currently-executing scheduled jobs. Read from PipelineLog rows
+    // where pipelineType='SCHEDULED_JOB' AND status='RUNNING'; jobName pulled
+    // from metadata JSON (see srv/jobs/scheduler.js: logPipelineStart writes
+    // { jobName }). Powers the Cron health tile's RUNNING state so operators
+    // can tell "job is executing right now" apart from "last run failed."
+    action listRunningJobs() returns array of {
+      jobName   : String;
+      startedAt : Timestamp;
+    };
+
     action runJob(jobName: String) returns {
       jobName   : String;
       started   : Boolean;

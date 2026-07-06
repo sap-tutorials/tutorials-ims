@@ -69,6 +69,11 @@ sap.ui.define([
      * and push the result onto the 'jobControls' JSONModel. Best-effort —
      * a failure renders an empty tile but doesn't block the rest of the
      * Board.
+     *
+     * #1023: additionally fetch listRunningJobs() so a job that's currently
+     * executing renders as RUNNING even if its previous completion was a
+     * failure. Failures of the new call fall back to `[]` (tile keeps
+     * rendering, just without RUNNING classification for this tick).
      */
     _loadJobControls: function () {
       var oAdminModel = this.getOwnerComponent().getModel("admin");
@@ -76,11 +81,13 @@ sap.ui.define([
       var that = this;
       return Promise.all([
         this._callListJobs(oAdminModel),
-        this._loadJobLastRunRows(oAdminModel)
+        this._loadJobLastRunRows(oAdminModel),
+        this._callListRunningJobs(oAdminModel).catch(function () { return []; })
       ]).then(function (results) {
         var aJobs = results[0];
         var aLastRuns = results[1];
-        var aJoined = JobControlsHelpers.joinJobsWithLastRuns(aJobs, aLastRuns);
+        var aRunning = results[2];
+        var aJoined = JobControlsHelpers.joinJobsWithLastRuns(aJobs, aLastRuns, aRunning);
         // #750: chronological sort (nextRunIso ascending, nulls last) so the
         // table reads top-to-bottom as "soonest first."
         var aSorted = JobControlsSort.sortJobsByNextRun(aJoined);
@@ -112,6 +119,20 @@ sap.ui.define([
         if (!oResult) return [];
         // OData v4 returns the collection under `value` for a bound action
         // that returns a collection; the bare object for a single entity.
+        return Array.isArray(oResult) ? oResult : (oResult.value || []);
+      });
+    },
+
+    /**
+     * #1023: invoke AdminService.JobControls.listRunningJobs(). Returns
+     * array of {jobName, startedAt} for every scheduled-job PipelineLog
+     * row still in RUNNING state.
+     */
+    _callListRunningJobs: function (oAdminModel) {
+      var oAction = oAdminModel.bindContext("/JobControls/AdminService.listRunningJobs(...)");
+      return oAction.execute().then(function () {
+        var oResult = oAction.getBoundContext().getObject();
+        if (!oResult) return [];
         return Array.isArray(oResult) ? oResult : (oResult.value || []);
       });
     },
@@ -204,6 +225,21 @@ sap.ui.define([
      * unit-testable.
      */
     formatNextRun: function (iso) { return JobControlsHelpers.formatNextRun(iso); },
-    formatRelativeTime: function (iso) { return JobControlsHelpers.formatRelativeTime(iso); }
+    formatRelativeTime: function (iso) { return JobControlsHelpers.formatRelativeTime(iso); },
+    formatElapsedSince: function (iso) { return JobControlsHelpers.formatElapsedSince(iso); },
+
+    /**
+     * #1023: refresh the tile when the operator expands the Cron health
+     * panel. Cheap — three parallel reads. Handles "tile was already
+     * expanded on load" as no-op (event still fires only on transitions).
+     */
+    onCronPanelExpand: function (oEvent) {
+      // Panel expand toggle carries `expanded` on the source; only refresh
+      // when transitioning to expanded, not on collapse.
+      var bExpanded = oEvent.getSource().getExpanded();
+      if (bExpanded) {
+        this._loadJobControls();
+      }
+    }
   });
 });

@@ -233,4 +233,78 @@ describe('AdminService.JobControls', () => {
     const row = rows.find(r => r.jobName === jobName);
     expect(row.nextRunsIso.length).toBe(50);
   });
+
+  // ─────────────────────────────────────────────────────────────────
+  // #1023: listRunningJobs — reads PipelineLog rows still in RUNNING
+  // state and extracts jobName from metadata JSON.
+  // ─────────────────────────────────────────────────────────────────
+  async function callListRunningJobs() {
+    return admin.tx({ user: ADMIN_USER }, (tx) =>
+      tx.send({ event: 'listRunningJobs', entity: 'AdminService.JobControls' })
+    );
+  }
+
+  async function insertPipelineRow({ id, status, jobName, pipelineType = 'SCHEDULED_JOB', startedAt = new Date().toISOString() }) {
+    const { PipelineLog } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(PipelineLog).entries({
+      ID: id,
+      pipelineType,
+      status,
+      startedAt,
+      initiator: 'system',
+      metadata: jobName != null ? JSON.stringify({ jobName }) : null,
+    });
+  }
+
+  it('listRunningJobs returns only SCHEDULED_JOB rows with status=RUNNING', async () => {
+    const { PipelineLog } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(PipelineLog);
+    await insertPipelineRow({ id: 'r1', status: 'RUNNING', jobName: 'alpha' });
+    // Finished job — must NOT show up.
+    await insertPipelineRow({ id: 'r2', status: 'SUCCESS', jobName: 'beta' });
+    // Failed job — must NOT show up.
+    await insertPipelineRow({ id: 'r3', status: 'FAILED', jobName: 'gamma' });
+    // Non-scheduled RUNNING pipeline (e.g. CONTENT_PUBLISH) — must NOT show up.
+    await insertPipelineRow({ id: 'r4', status: 'RUNNING', jobName: 'delta', pipelineType: 'CONTENT_PUBLISH' });
+
+    const rows = await callListRunningJobs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].jobName).toBe('alpha');
+    expect(rows[0].startedAt).toBeTruthy();
+  });
+
+  it('listRunningJobs skips rows with unparseable / missing metadata', async () => {
+    const { PipelineLog } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(PipelineLog);
+    await insertPipelineRow({ id: 'r1', status: 'RUNNING', jobName: 'good' });
+    // Garbage metadata — must be skipped, not throw.
+    await INSERT.into(PipelineLog).entries({
+      ID: 'r2',
+      pipelineType: 'SCHEDULED_JOB',
+      status: 'RUNNING',
+      startedAt: new Date().toISOString(),
+      initiator: 'system',
+      metadata: '{not-json',
+    });
+    // Missing metadata — must be skipped.
+    await INSERT.into(PipelineLog).entries({
+      ID: 'r3',
+      pipelineType: 'SCHEDULED_JOB',
+      status: 'RUNNING',
+      startedAt: new Date().toISOString(),
+      initiator: 'system',
+      metadata: null,
+    });
+
+    const rows = await callListRunningJobs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].jobName).toBe('good');
+  });
+
+  it('listRunningJobs returns [] when no scheduled jobs are running', async () => {
+    const { PipelineLog } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(PipelineLog);
+    const rows = await callListRunningJobs();
+    expect(rows).toEqual([]);
+  });
 });
