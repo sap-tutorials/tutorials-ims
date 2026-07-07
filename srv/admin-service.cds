@@ -762,8 +762,16 @@ service AdminService {
   // Phase 2-B (#464): Secrets-visibility metadata-only.
   // Full CRUD over tracked-secret rows. NOT @odata.singleton — this is a list,
   // not a singleton (unlike ChatSettings / KnowledgeGraphSettings).
+  //
+  // #1018: `hasValue` is a virtual Boolean populated by an after('READ')
+  // handler in admin-service.js that probes BTP Credential Store per row
+  // (5-min cached). Renders as a red "Missing value" badge in the FE List
+  // Report — see app/admin-annotations.cds for the UI.Criticality wiring.
   @requires: 'Admin'
-  entity Secrets as projection on ims.Secrets actions {
+  entity Secrets as projection on ims.Secrets {
+    *,
+    virtual null as hasValue : Boolean
+  } actions {
 
     // Phase 2-C (#465): Set a secret's value in BTP Credential Store.
     // Overwrites if value already exists. Stamps lastRotatedAt as a
@@ -819,12 +827,18 @@ service AdminService {
   // Severity-classified expiry warnings, used by the admin-shell notifications
   // popover. Read-only function (NOT action) — invokable via GET; no CSRF
   // token required for the popover fetch.
+  //
+  // #1018: the `reason` field discriminates 'expiry' (row's expiresAt is
+  // within the CRITICAL/WARNING/INFO thresholds) from 'missing-value' (row
+  // exists in HANA but its credstore value is null / unreachable). Missing
+  // values are always CRITICAL and always have daysRemaining=null.
   @requires: 'Admin'
   function secretWarnings() returns array of {
     ![key]            : String(120);
     description       : String(500);
     daysRemaining     : Integer;
     severity          : String(10);
+    reason            : String(20);   // 'expiry' | 'missing-value'
     rotationOwner     : String(120);
     rotationDocsUrl   : String(500);
   };
