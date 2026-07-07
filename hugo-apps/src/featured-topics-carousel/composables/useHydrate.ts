@@ -42,7 +42,7 @@ function esc(s: string): string {
 function buildMissionHtml(m: Record<string, any>): string {
   const levelLabel = capFirst(m.level || '');
   const timeLabel  = formatTime(Number(m.time) || 0);
-  const tutCount   = m.tutorialCount ? `<span class="nav-card__meta-sep">&middot;</span><span class="nav-card__meta-item">${m.tutorialCount} Tutorials</span>` : '';
+  const tutCount   = m.tutorialCount ? `<span class="nav-card__meta-sep">&middot;</span><span class="nav-card__meta-item">${esc(String(m.tutorialCount))} Tutorials</span>` : '';
   return `<a href="${esc(m.href || (m.slug ? `/tutorials/${encodeURIComponent(m.slug)}/` : '#'))}" class="nav-card" data-vt-card="navigator">
 <div class="nav-card__type nav-card__type--mission">MISSION</div>
 <h3 class="nav-card__title">${esc(m.title || '')}</h3>
