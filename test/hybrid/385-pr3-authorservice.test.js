@@ -32,17 +32,17 @@ describe('#385 PR-3 — AuthorService projection (hybrid)', () => {
     expect(typeof row.monitored).toBe('boolean');
   });
 
-  it('MyTutorialsView has at least one row with non-null repositoryName (PR-2 backfill verification)', async () => {
-    // Softer than a hard expect — if PR-2's migration hasn't actually run on
-    // DEV yet, this should skip rather than fail noisily for a reason
-    // unrelated to PR-3 code. PR-2's hybrid test asserts the underlying data;
-    // this test only verifies the AuthorService projection surfaces it.
+  it('MyTutorialsView has at least one row with non-null repositoryName (#1063 RepoCatalog-sourced)', async () => {
+    // #1063 changed the source of repositoryName from
+    // `TutorialMeta.repository → TutorialRepositories.name` (which was
+    // 0/2930 populated on DEV) to `RepoCatalog.repo` (populated on
+    // every content publish, covering 1381/1381 tutorials on DEV).
+    // With the reliable source, the previous soft "skip if empty"
+    // branch no longer applies — this must find a row.
     const row = await SELECT.one.from(MyTutorialsView).where('repositoryName is not null');
-    if (!row) {
-      console.warn('[skip] No MyTutorials rows with repositoryName — PR-2 migration may not have run yet');
-      return;
-    }
+    expect(row).toBeTruthy();
     expect(typeof row.repositoryName).toBe('string');
+    expect(row.repositoryName.length).toBeGreaterThan(0);
   });
 
   it('Tags projection emits actualTag matching SUBSTR_AFTER semantics', async () => {

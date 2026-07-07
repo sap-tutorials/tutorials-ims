@@ -656,9 +656,23 @@ describe('MyTutorialsView #385 PR-3 shape', () => {
     expect(inactiveRow.monitored).toBe(false);
   });
 
-  it('repositoryName is null when TutorialMeta.repository_ID is unset (chain query NULL-safe)', async () => {
-    // Fixture above seeds rows without a repository_ID — chain returns null.
+  it('repositoryName sources from RepoCatalog.repo when a matching slug row exists (#1063)', async () => {
+    const { RepoCatalog } = cds.entities('com.sap.developers.ims');
+    // The 't-pr3-active' fixture seeded above has slug 'pr3-active'.
+    // Seed the matching RepoCatalog row and verify the view returns it.
+    await INSERT.into(RepoCatalog).entries({
+      slug: 'pr3-active',
+      repo: 'Tutorials',
+      owner: null, branch: null, visibility: null, defaultLang: null,
+      topics: null, lastSyncedAt: new Date().toISOString(), payload: '{}'
+    });
     const row = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: 't-pr3-active' });
+    expect(row.repositoryName).toBe('Tutorials');
+  });
+
+  it('repositoryName is null when no RepoCatalog row matches the slug (#1063 left-join is null-safe)', async () => {
+    // 't-pr3-inactive' has slug 'pr3-inactive' and was NOT seeded into RepoCatalog above.
+    const row = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: 't-pr3-inactive' });
     expect(row.repositoryName).toBeNull();
   });
 });
