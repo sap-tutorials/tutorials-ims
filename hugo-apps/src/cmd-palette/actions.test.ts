@@ -101,6 +101,40 @@ describe('keyword-driven discoverability', () => {
   })
 })
 
+describe('#1054 — open-joule action wiring', () => {
+  it('calls window.joule.open() when the runtime is present', () => {
+    const entry = PALETTE_ACTIONS.find(a => a.id === 'open-joule')
+    expect(entry).toBeDefined()
+    const calls: unknown[] = []
+    ;(window as unknown as { joule: { open: (opts?: unknown) => void } }).joule = {
+      open: (opts?: unknown) => { calls.push(opts ?? null) },
+    }
+    try {
+      let closed = false
+      entry!.run(() => { closed = true })
+      expect(closed).toBe(true)
+      expect(calls.length).toBe(1)
+    } finally {
+      delete (window as unknown as { joule?: unknown }).joule
+    }
+  })
+
+  it('falls back to un-hiding the panel when window.joule is missing', () => {
+    const entry = PALETTE_ACTIONS.find(a => a.id === 'open-joule')!
+    delete (window as unknown as { joule?: unknown }).joule
+    const panel = document.createElement('div')
+    panel.id = 'joule-panel'
+    panel.hidden = true
+    document.body.appendChild(panel)
+    try {
+      entry.run(() => {})
+      expect(panel.hidden).toBe(false)
+    } finally {
+      panel.remove()
+    }
+  })
+})
+
 describe('#1036 — Concepts / Devtoberfest / Developer Advocates nav entries', () => {
   it('includes explore-concepts, explore-devtoberfest, explore-advocates in the EXPLORE group', () => {
     const exploreIds = PALETTE_ACTIONS.filter(a => a.group === 'explore').map(a => a.id)

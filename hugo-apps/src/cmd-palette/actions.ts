@@ -70,14 +70,19 @@ function toggleTheme(close: () => void) {
 
 function openJoule(close: () => void) {
   close()
-  // joule-panel.html partial wires itself to a global toggle. If unavailable
-  // we silently no-op — better than a broken-looking action.
-  const fn = (window as unknown as { openJoulePanel?: () => void }).openJoulePanel
-  if (typeof fn === 'function') fn()
-  else {
-    const panel = document.getElementById('joule-panel') as HTMLElement | null
-    if (panel) panel.setAttribute('open', '')
+  // joule.js exposes `window.joule.open()` — attached synchronously (before
+  // its async config load resolves) with an internal _pendingOpen queue, so
+  // it's safe to call whether or not the panel bootstrap has finished.
+  // Fallback: flip the panel's `hidden` attribute directly (the partial uses
+  // the HTML `hidden` boolean, not `open`) so ⌘K still opens *something*
+  // when joule.js failed to load — better than a silent no-op.
+  const j = (window as unknown as { joule?: { open?: (opts?: unknown) => void } }).joule
+  if (j && typeof j.open === 'function') {
+    j.open()
+    return
   }
+  const panel = document.getElementById('joule-panel') as HTMLElement | null
+  if (panel) panel.hidden = false
 }
 
 function navTo(href: string) {
