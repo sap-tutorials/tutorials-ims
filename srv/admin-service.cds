@@ -176,8 +176,24 @@ service AdminService {
   @odata.draft.enabled
   entity LegacyRedirects as projection on ims.LegacyRedirects;
 
+  // #1052: `@odata.draft.enabled` is required for FE V4 Object Page to show
+  // the Edit button. Without drafts (or sticky sessions), the OP renders in
+  // display-only mode — the Delete toolbar action still shows because Delete
+  // was not restricted, but PATCH is unreachable from the UI. Peer FE-rendered
+  // admin surfaces (VerbDefinitions, ShelfDefinitions below) already follow
+  // this exact pattern (draft-enabled + Insert/Delete locked down). The other
+  // singletons (ChatSettings, KnowledgeGraphSettings, NavigatorSettings, etc.)
+  // render via custom XML views and so don't need drafts. HomepageConfig is
+  // the only singleton on the FE Object Page template.
+  //
+  // No @Common.ValueList fields on this entity → the #1019 @cap-js/ai
+  // AICore-kind-resolution hazard does not apply (would have blocked Save).
   @odata.singleton
+  @odata.draft.enabled
   @Capabilities.ChangeTracking : { Supported: false }
+  @Capabilities.InsertRestrictions.Insertable : false
+  @Capabilities.DeleteRestrictions.Deletable  : false
+  @Capabilities.UpdateRestrictions.Updatable  : true
   entity HomepageConfig as projection on ims.HomepageConfig;
 
   // (#759) Per-verb and per-shelf explainer content. Both have fixed
