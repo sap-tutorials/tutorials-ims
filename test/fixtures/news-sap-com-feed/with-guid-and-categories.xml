@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>SAP News</title>
+  <item>
+    <title>CAP 10 adds Java 22 support</title>
+    <link>https://news.sap.com/2026/07/cap-10-java-22/</link>
+    <pubDate>Mon, 06 Jul 2026 09:00:00 +0000</pubDate>
+    <description>The June release adds Java 22.</description>
+    <guid isPermaLink="false">news-sap-com-12345</guid>
+    <category>Technology</category>
+    <category>Developer</category>
+  </item>
+  <item>
+    <title>Earnings guidance updated</title>
+    <link>https://news.sap.com/2026/07/earnings/</link>
+    <pubDate>Mon, 06 Jul 2026 08:00:00 +0000</pubDate>
+    <description>Q2 guidance updated.</description>
+  </item>
+</channel></rss>

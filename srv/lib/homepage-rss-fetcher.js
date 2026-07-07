@@ -54,6 +54,17 @@ function parseRss(xml) {
     const desc  = (block.match(/<description>([\s\S]*?)<\/description>/i) || [])[1]
       ?.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
 
+    const guid = (block.match(/<guid\b[^>]*>([\s\S]*?)<\/guid>/i) || [])[1]
+      ?.replace(/<!\[CDATA\[|\]\]>/g, '').trim() || null;
+
+    const categories = [];
+    const catRe = /<category\b[^>]*>([\s\S]*?)<\/category>/gi;
+    let catM;
+    while ((catM = catRe.exec(block)) !== null) {
+      const c = catM[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+      if (c) categories.push(c);
+    }
+
     // Drop incomplete items (title and link are required)
     if (!title || !link) continue;
 
@@ -72,6 +83,8 @@ function parseRss(xml) {
       link,
       publishedAt,
       description: desc || null,
+      guid,
+      categories,
     });
   }
   return items;
@@ -133,4 +146,9 @@ export async function fetchRssItems(url, { limit = 5 } = {}) {
   _state.cache.set(url, { value: items, expiresAt: Date.now() + TTL_MS });
 
   return items.slice(0, limit);
+}
+
+/** Test-only: expose parseRss for direct unit testing. */
+export function _parseRssForTests(xml) {
+  return parseRss(xml);
 }
