@@ -218,6 +218,10 @@ async function searchTutorials(term: string) {
     return
   }
   searching.value = true
+  // Race guard: capture the query string that produced this request. When
+  // the response lands, if the user has since typed something else,
+  // discard our results — they're stale.
+  const requestedQuery = term
   try {
     const params = new URLSearchParams()
     params.set('$search', term)
@@ -225,10 +229,11 @@ async function searchTutorials(term: string) {
     params.set('$filter', "taskType eq 'TUTORIAL'")
     const res = await fetch(`/search/SearchableItems?${params}`)
     if (!res.ok) {
-      tutorialResults.value = []
+      if (query.value.trim() === requestedQuery) tutorialResults.value = []
       return
     }
     const data = await res.json()
+    if (query.value.trim() !== requestedQuery) return  // stale — discard
     tutorialResults.value = (data.value || [])
       .filter((row: { slug: string | null }) => row.slug)
       .map((row: { ID: string; title: string; slug: string; description: string | null; primaryTag: string | null; averageTimeToComplete: number | null }) => {
@@ -246,16 +251,16 @@ async function searchTutorials(term: string) {
         }
       })
   } catch {
-    tutorialResults.value = []
+    if (query.value.trim() === requestedQuery) tutorialResults.value = []
   } finally {
-    searching.value = false
+    if (query.value.trim() === requestedQuery) searching.value = false
   }
 }
 
 watch(query, (v) => {
   activeIndex.value = 0
   if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => searchTutorials(v.trim()), 200)
+  debounceTimer = setTimeout(() => searchTutorials(v.trim()), 250)
 })
 
 onMounted(() => {
