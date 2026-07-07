@@ -51,6 +51,8 @@ import { runKgCommunities } from './kg-communities-job.js';
 import { runKgWcc } from './kg-wcc-job.js';
 import { runOnDemandDrain } from './kg-ondemand-job.js';
 import { runKgFeaturedTopics } from './kg-featured-topics-job.js';
+import { runCommunityBlogsFetch } from './community-blogs-fetch-job.js';
+import { runCommunityBlogsClassify } from './community-blogs-classify-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -947,6 +949,28 @@ export function registerJobs() {
     ttlMs: 2 * 60 * 1000,
     description: 'On-demand knowledge-graph extraction drain (#948)',
     fn: runOnDemandDrain,
+  });
+
+  // (#1033) Community Blog Posts — fetch every 30 min at :17 and :47
+  // past the hour (off-cycle minutes per the memory rule about avoiding
+  // :00 / :30 thundering herd).
+  registerJob({
+    jobName: 'community-blogs-fetch',
+    schedule: '17,47 * * * *',
+    ttlMs: 5 * 60 * 1000,
+    description: 'Fetch SAP Community RSS feeds into CommunityBlogPosts (#1033)',
+    fn: runCommunityBlogsFetch,
+  });
+
+  // (#1033) Community Blog Posts — classify PENDING rows every 15 min
+  // at :07, :22, :37, :52. Off-minute cadence chosen to avoid overlap
+  // with the fetch job.
+  registerJob({
+    jobName: 'community-blogs-classify',
+    schedule: '7,22,37,52 * * * *',
+    ttlMs: 2 * 60 * 1000,
+    description: 'Drain PENDING CommunityBlogPosts through AI relevance classifier (#1033)',
+    fn: runCommunityBlogsClassify,
   });
 
   LOG.info('All scheduled jobs registered');
