@@ -89,6 +89,9 @@ entity HomepageConfig : cuid, managed {
   // Default false at first migration so a deploy doesn't flip the page
   // for every signed-in user; admin enables via /admin-ui/#homepage.
   personalizationEnabled  : Boolean default false;
+  // #1034 SAP News developer-relevance filter rollout flag. Two-layer with
+  // env HOMEPAGE_NEWS_RELEVANCE_ENABLED: either falsy → legacy pass-through.
+  newsRelevanceEnabled    : Boolean default false;
 }
 
 // (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
