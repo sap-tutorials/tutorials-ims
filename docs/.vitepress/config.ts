@@ -179,6 +179,7 @@ export default defineConfig({
           { text: 'Content rollback',          link: '/developers/operations/content-rollback' },
           { text: 'Rotate CONTENT_API_KEY',    link: '/developers/operations/rotate-content-api-key' },
           { text: 'Runtime config',            link: '/developers/operations/runtime-config' },
+          { text: 'Scheduler troubleshooting', link: '/developers/operations/scheduler-troubleshooting' },
           { text: 'Secrets tracking',          link: '/developers/operations/secrets-tracking' },
           { text: 'SMTP credentials rotation', link: '/developers/operations/smtp-credentials-rotation' },
           { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
