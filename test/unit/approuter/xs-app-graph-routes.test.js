@@ -56,4 +56,22 @@ describe('approuter /graph/* routes', () => {
     // The new expanded case.
     expect(re.test("/graph/neighborhoodFull(slug='x')")).toBe(true);
   });
+
+  it('anonymous /graph/ allowlist regex matches searchKG + PublishedConcepts (#1057)', () => {
+    // The ⌘K command palette fires anonymous requests against:
+    //   POST /graph/searchKG              (KG group)
+    //   GET  /graph/PublishedConcepts     (CONCEPTS group)
+    // Both need to survive the approuter before CAP sees them. Prior to
+    // #1057 they fell into the fallback `^/graph/(.*)$` route and got 401.
+    const allowlist = xsApp.routes.find(
+      (r) => typeof r.source === 'string' &&
+             r.source.startsWith('^/graph/(neighborhood') &&
+             r.authenticationType === 'none'
+    );
+    expect(allowlist, 'anon-allowlist /graph route').toBeTruthy();
+    const re = new RegExp(allowlist.source);
+    expect(re.test('/graph/searchKG')).toBe(true);
+    expect(re.test('/graph/PublishedConcepts')).toBe(true);
+    expect(re.test('/graph/PublishedConcepts?%24search=abap&%24top=6')).toBe(true);
+  });
 })
