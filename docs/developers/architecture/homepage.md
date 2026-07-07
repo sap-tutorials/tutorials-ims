@@ -176,6 +176,27 @@ Row 5 of the homepage was previously a static tutorials-catalog teaser. Issue #1
 
 ---
 
+## SAP News (developer-relevance filter — #1034)
+
+The homepage `/homepage/news` handler serves items from the `NewsItems`
+HANA table when the two-layer kill switch is on. `srv/jobs/fetch-news-job.js`
+runs hourly (:37) against `news.sap.com/feed/`; each item is classified by
+`srv/lib/relevance-classifier.js` (embedding-first via `RelevanceSeedExemplars`,
+LLM fallback for the mid-band, keyword rules on any error).
+
+Admins triage at `/admin-ui/#content-moderation` — approve, reject, clear
+override, or reclassify a single item. Admin verdicts win over AI at read
+time. Homepage items are capped at 2, aged out after 14 days, English-only.
+
+Kill switches (either off → legacy RSS pass-through):
+- Env `HOMEPAGE_NEWS_RELEVANCE_ENABLED` (default `true`).
+- `HomepageConfig.newsRelevanceEnabled` (default `false`).
+
+Community Blog Posts (#1033) mirrors this pattern using the same
+`ContentModerationService` + `RelevanceSeedExemplars` shared seed set.
+
+---
+
 ## Personalization for signed-in users
 
 Issue #763 adds per-user reordering + filtering + a "For you" row.
