@@ -11,6 +11,12 @@ describe('computeSnapshotEtag', () => {
     expect(computeSnapshotEtag({ computedAt: ts, slots }))
       .toBe(computeSnapshotEtag({ computedAt: ts, slots: [...slots] }));
   });
+  it('is input-order independent — canonicalizes by slotOrder', () => {
+    const s1 = { slotOrder: 1, conceptSlug: 'cap',  missionSlugs: ['a'] };
+    const s2 = { slotOrder: 2, conceptSlug: 'hana', missionSlugs: ['b'] };
+    expect(computeSnapshotEtag({ computedAt: ts, slots: [s1, s2] }))
+      .toBe(computeSnapshotEtag({ computedAt: ts, slots: [s2, s1] }));
+  });
   it('changes when a missionSlug changes', () => {
     const a = { computedAt: ts, slots: [{ slotOrder: 1, conceptSlug: 'cap', missionSlugs: ['a','b','c','d'] }] };
     const b = { computedAt: ts, slots: [{ slotOrder: 1, conceptSlug: 'cap', missionSlugs: ['a','b','c','X'] }] };
