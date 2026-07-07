@@ -38,7 +38,13 @@ const CLASSIFIER_UPDATE_COLS = [
  * @returns {Promise<{fetched:number,upserted:number,classified:number,skippedNoChange:number,nonEnglish:number,errors:number}>}
  */
 export async function runFetchNews(_logId, _opts) {
-  const items = await fetchRssItems(SAP_NEWS_RSS_URL, { limit: 100 });
+  let items = [];
+  try {
+    items = await fetchRssItems(SAP_NEWS_RSS_URL, { limit: 100 });
+  } catch (e) {
+    LOG.warn(`fetchRssItems threw (contract violation — fetcher should swallow): ${e.message}`);
+    return { fetched: 0, upserted: 0, classified: 0, skippedNoChange: 0, nonEnglish: 0, errors: 1 };
+  }
   const summary = { fetched: items.length, upserted: 0, classified: 0, skippedNoChange: 0, nonEnglish: 0, errors: 0 };
   const db = cds.db ?? await cds.connect.to('db');
   const { NewsItems } = cds.entities('com.sap.developers.ims.external');

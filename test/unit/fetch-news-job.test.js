@@ -104,4 +104,12 @@ describe('fetch-news-job', () => {
     const [row] = await db.run(SELECT.from('com.sap.developers.ims.external.NewsItems'));
     expect(row.sourceId).toBe('https://news.sap.com/a/');
   });
+
+  it('returns summary with errors=1 when fetchRssItems throws', async () => {
+    rssMock.mockRejectedValue(new Error('network kaboom'));
+    const summary = await runFetchNews();
+    expect(summary.errors).toBe(1);
+    expect(summary.fetched).toBe(0);
+    expect(classifyMock).not.toHaveBeenCalled();
+  });
 });
