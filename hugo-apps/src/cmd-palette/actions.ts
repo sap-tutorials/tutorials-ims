@@ -137,12 +137,13 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
     },
   },
 
-  // EXPLORE group — the 7 homepage verb-spine routes plus the Knowledge
-  // Graph Explorer. Order matches the verb-spine partial at
-  // hugo/layouts/partials/homepage/verb-spine.html (LEARN, BUILD,
-  // INTEGRATE, MODEL, OPERATE, AI, CONNECT). Keep this list in sync if the
-  // spine ever gains an eighth verb; otherwise the palette will be out of
-  // date with the homepage's own primary nav.
+  // EXPLORE group — the 7 homepage verb-spine routes, three curated
+  // destinations (Concepts, Devtoberfest, Developer Advocates — #1036),
+  // and the Knowledge Graph Explorer. Order matches the verb-spine partial
+  // at hugo/layouts/partials/homepage/verb-spine.html (LEARN, BUILD,
+  // INTEGRATE, MODEL, OPERATE, AI, CONNECT). Keep the verb list in sync if
+  // the spine ever gains an eighth verb; otherwise the palette will be out
+  // of date with the homepage's own primary nav.
   {
     id: 'explore-learn',
     label: 'Learn — getting started with SAP for developers',
@@ -200,6 +201,30 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
     keywords: ['connect', 'community', 'events', 'advocates', 'codejam', 'devtoberfest', 'verb'],
     group: 'explore',
     run: navTo('/connect/'),
+  },
+  {
+    id: 'explore-concepts',
+    label: 'Concepts — index of every SAP concept in the knowledge graph',
+    icon: 'bullet-text',
+    keywords: ['concepts', 'index', 'glossary', 'terms', 'kg', 'knowledge'],
+    group: 'explore',
+    run: navTo('/concepts/'),
+  },
+  {
+    id: 'explore-devtoberfest',
+    label: 'Devtoberfest — annual SAP developer festival',
+    icon: 'calendar',
+    keywords: ['devtoberfest', 'festival', 'event', 'weekly', 'challenge', 'october'],
+    group: 'explore',
+    run: navTo('/devtoberfest/'),
+  },
+  {
+    id: 'explore-advocates',
+    label: 'Developer Advocates — meet the SAP DevRel team',
+    icon: 'group',
+    keywords: ['advocates', 'devrel', 'team', 'spokespeople', 'community', 'evangelists'],
+    group: 'explore',
+    run: navTo('/developer-advocates/'),
   },
   {
     id: 'explore-knowledge-graph',

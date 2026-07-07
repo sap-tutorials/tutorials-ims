@@ -60,7 +60,7 @@ describe('PALETTE_ACTIONS — EXPLORE group registration', () => {
     const explicitExplore = PALETTE_ACTIONS.filter(a => a.group === 'explore').length
     const explicitActions = PALETTE_ACTIONS.filter(a => a.group === 'actions').length
     const unset = PALETTE_ACTIONS.filter(a => a.group === undefined).length
-    expect(explicitExplore).toBeGreaterThanOrEqual(8)  // 7 verbs + KG
+    expect(explicitExplore).toBeGreaterThanOrEqual(11)  // 7 verbs + KG + 3 new curated
     expect(unset + explicitActions).toBe(PALETTE_ACTIONS.length - explicitExplore)
   })
 })
@@ -98,5 +98,54 @@ describe('keyword-driven discoverability', () => {
   it('case-insensitive multi-token match (e.g. "Knowledge GRAPH" hits KG)', () => {
     const matched = PALETTE_ACTIONS.filter(a => fuzzyMatch(a, 'Knowledge GRAPH')).map(a => a.id)
     expect(matched).toContain('explore-knowledge-graph')
+  })
+})
+
+describe('#1036 — Concepts / Devtoberfest / Developer Advocates nav entries', () => {
+  it('includes explore-concepts, explore-devtoberfest, explore-advocates in the EXPLORE group', () => {
+    const exploreIds = PALETTE_ACTIONS.filter(a => a.group === 'explore').map(a => a.id)
+    expect(exploreIds).toEqual(expect.arrayContaining([
+      'explore-concepts',
+      'explore-devtoberfest',
+      'explore-advocates',
+    ]))
+  })
+
+  it('places the three new entries between explore-connect and explore-knowledge-graph', () => {
+    const explore = PALETTE_ACTIONS.filter(a => a.group === 'explore').map(a => a.id)
+    const iConnect = explore.indexOf('explore-connect')
+    const iKG      = explore.indexOf('explore-knowledge-graph')
+    const iConcepts     = explore.indexOf('explore-concepts')
+    const iDevtoberfest = explore.indexOf('explore-devtoberfest')
+    const iAdvocates    = explore.indexOf('explore-advocates')
+    expect(iConnect).toBeGreaterThanOrEqual(0)
+    expect(iKG).toBeGreaterThan(iConnect)
+    for (const idx of [iConcepts, iDevtoberfest, iAdvocates]) {
+      expect(idx).toBeGreaterThan(iConnect)
+      expect(idx).toBeLessThan(iKG)
+    }
+  })
+
+  it.each<[string, string, string]>([
+    ['concepts',      'explore-concepts',      '/concepts/'],
+    ['glossary',      'explore-concepts',      '/concepts/'],
+    ['devtoberfest',  'explore-devtoberfest',  '/devtoberfest/'],
+    ['festival',      'explore-devtoberfest',  '/devtoberfest/'],
+    ['advocates',     'explore-advocates',     '/developer-advocates/'],
+    ['devrel',        'explore-advocates',     '/developer-advocates/'],
+  ])('keyword %j matches %s and its run navigates to %s', (query, expectedId, expectedHref) => {
+    const matched = PALETTE_ACTIONS.filter(a => fuzzyMatch(a, query)).map(a => a.id)
+    expect(matched).toContain(expectedId)
+    // Assert the run closure navigates to the expected href by stubbing
+    // window.location.href assignment.
+    const entry = PALETTE_ACTIONS.find(a => a.id === expectedId)!
+    const originalHref = window.location.href
+    let assigned = ''
+    Object.defineProperty(window, 'location', {
+      value: { get href() { return originalHref }, set href(v) { assigned = v } },
+      configurable: true,
+    })
+    entry.run(() => {})
+    expect(assigned).toBe(expectedHref)
   })
 })
