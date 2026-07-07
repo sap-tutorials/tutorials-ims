@@ -176,19 +176,26 @@ service AdminService {
   @odata.draft.enabled
   entity LegacyRedirects as projection on ims.LegacyRedirects;
 
-  // #1052: `@odata.draft.enabled` is required for FE V4 Object Page to show
-  // the Edit button. Without drafts (or sticky sessions), the OP renders in
-  // display-only mode — the Delete toolbar action still shows because Delete
-  // was not restricted, but PATCH is unreachable from the UI. Peer FE-rendered
-  // admin surfaces (VerbDefinitions, ShelfDefinitions below) already follow
-  // this exact pattern (draft-enabled + Insert/Delete locked down). The other
-  // singletons (ChatSettings, KnowledgeGraphSettings, NavigatorSettings, etc.)
-  // render via custom XML views and so don't need drafts. HomepageConfig is
-  // the only singleton on the FE Object Page template.
+  // #1052 follow-up: `@odata.singleton` is INCOMPATIBLE with
+  // `@odata.draft.enabled` — the singleton contract omits the key from the
+  // URL, but CAP's draft runtime still requires `ID` for `draftActivate`
+  // (verified live: `POST /HomepageConfig(IsActiveEntity=false)/AdminService.draftActivate`
+  // returns 400 "Key \"ID\" is missing for entity \"AdminService.HomepageConfig\"").
+  // FE V4 detects the broken round-trip and renders the OP read-only — no
+  // Edit button. #1052 added `@odata.draft.enabled` but kept `@odata.singleton`,
+  // so `draftEdit` succeeded but `draftActivate` couldn't be driven from FE.
+  //
+  // Fix: expose as a regular keyed entity. The auto-init handler at
+  // srv/admin-service.js:601 already writes a single row with a fixed UUID
+  // (00000000-0000-0000-0000-00000000c8ae), so the "there is exactly one
+  // row" invariant still holds. Matches the peer pattern used by
+  // VerbDefinitions / ShelfDefinitions / LegacyRedirects (draft-enabled +
+  // Insert/Delete locked down + Update allowed). Deep-link shape becomes
+  // `/admin/HomepageConfig(00000000-0000-0000-0000-00000000c8ae)`, wired
+  // through app/admin-shell/webapp/controller/Shell.controller.js.
   //
   // No @Common.ValueList fields on this entity → the #1019 @cap-js/ai
   // AICore-kind-resolution hazard does not apply (would have blocked Save).
-  @odata.singleton
   @odata.draft.enabled
   @Capabilities.ChangeTracking : { Supported: false }
   @Capabilities.InsertRestrictions.Insertable : false
