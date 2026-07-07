@@ -19,4 +19,5 @@
 {{ $css := resources.Get "css/homepage.css" }}
 <link rel="stylesheet" href="{{ $css.RelPermalink }}">
 <script type="module" src="/js/homepage-bands.js?v={{ now.Unix }}"></script>
+<script type="module" src="/js/featured-topics-carousel.js?v={{ now.Unix }}"></script>
 {{ end }}
