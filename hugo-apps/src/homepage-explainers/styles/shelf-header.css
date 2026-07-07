@@ -27,6 +27,24 @@
   color: var(--sapContent_LabelColor, #6a6d70);
   font-weight: 700;
   line-height: 1.4;
+  /* (#1039) Icon + label sit on a shared row so the glyph reads as a
+   * companion to the section title, not a separate bullet. `inline-flex`
+   * keeps the <h2> block-level in the outer flex container while
+   * aligning the icon vertically with the uppercase label text. */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* (#1039) Shelf-section pictogram (Start here → learning-assistant, etc.).
+ * Sized to the label cap-height so it reads as inline with the heading
+ * rather than a separate tile. `aria-hidden` on the element itself hides
+ * it from AT — the <h2> text carries the semantics. */
+.verb-shelf__icon {
+  width: 1.15em;
+  height: 1.15em;
+  color: var(--sapContent_IconColor, var(--sapTextColor, #1d2d3e));
+  flex: 0 0 auto;
 }
 
 /* The default .hp-popover-icon lives inline; here we want it flush with the

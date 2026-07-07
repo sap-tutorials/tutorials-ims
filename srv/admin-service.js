@@ -643,10 +643,10 @@ export default class AdminService extends cds.ApplicationService {
     // Same pattern as VerbDefinitions. Values MUST agree with
     // db/data/com.sap.developers.ims-ShelfDefinitions.csv.
     const SHELF_DEFAULTS = [
-      { shelfKey: 'START_HERE',   label: 'Start here',      sortOrder: 10 },
-      { shelfKey: 'REFERENCE',    label: 'Reference',       sortOrder: 20 },
-      { shelfKey: 'TOOLS',        label: 'Tools & samples', sortOrder: 30 },
-      { shelfKey: 'KEEP_CURRENT', label: 'Keep current',    sortOrder: 40 },
+      { shelfKey: 'START_HERE',   label: 'Start here',      iconName: 'learning-assistant', sortOrder: 10 },
+      { shelfKey: 'REFERENCE',    label: 'Reference',       iconName: 'document',           sortOrder: 20 },
+      { shelfKey: 'TOOLS',        label: 'Tools & samples', iconName: 'wrench',             sortOrder: 30 },
+      { shelfKey: 'KEEP_CURRENT', label: 'Keep current',    iconName: 'newspaper',          sortOrder: 40 },
     ];
     this.before('READ', 'ShelfDefinitions', async () => {
       const existing = await SELECT.from('com.sap.developers.ims.ShelfDefinitions').columns('shelfKey');

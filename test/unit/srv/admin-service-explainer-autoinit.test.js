@@ -82,10 +82,10 @@ describe('AdminService — VerbDefinitions/ShelfDefinitions auto-init (#759 PR 1
         join(import.meta.dirname, '../../../db/data/com.sap.developers.ims-ShelfDefinitions.csv'),
         'utf8'
       );
-      // CSV columns: ID;shelfKey;label;sortOrder;tagline;whyItMatters;authoringStatus
+      // CSV columns: ID;shelfKey;label;iconName;sortOrder;tagline;whyItMatters;authoringStatus
       const csvRows = csv.split(/\r?\n/).slice(1).filter(Boolean).map(line => {
-        const [, shelfKey, label, sortOrder] = line.split(';');
-        return { shelfKey, label, sortOrder: Number(sortOrder) };
+        const [, shelfKey, label, iconName, sortOrder] = line.split(';');
+        return { shelfKey, label, iconName, sortOrder: Number(sortOrder) };
       });
       await db.run(DELETE.from('com.sap.developers.ims.ShelfDefinitions'));
       await project.get('/admin/ShelfDefinitions', ADMIN_AUTH);
@@ -94,6 +94,7 @@ describe('AdminService — VerbDefinitions/ShelfDefinitions auto-init (#759 PR 1
         const dbRow = dbRows.find(r => r.shelfKey === csvRow.shelfKey);
         expect(dbRow, `shelfKey ${csvRow.shelfKey} missing in DB`).toBeDefined();
         expect(dbRow.label).toBe(csvRow.label);
+        expect(dbRow.iconName).toBe(csvRow.iconName);
         expect(dbRow.sortOrder).toBe(csvRow.sortOrder);
       }
     });

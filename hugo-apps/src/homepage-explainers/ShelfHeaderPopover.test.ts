@@ -27,6 +27,26 @@ describe('ShelfHeaderPopover', () => {
     expect(wrapper.find('.hp-flip').exists()).toBe(false);
   });
 
+  // (#1039) Optional pictogram to the left of the label.
+  it('renders <ui5-icon> when iconName is set', () => {
+    const wrapper = mount(ShelfHeaderPopover, {
+      props: { ...BASE_PROPS, iconName: 'learning-assistant' },
+    });
+    const icon = wrapper.find('h2.hp-shelf-header__label ui5-icon.verb-shelf__icon');
+    expect(icon.exists()).toBe(true);
+    expect(icon.attributes('name')).toBe('learning-assistant');
+    expect(icon.attributes('aria-hidden')).toBe('true');
+  });
+
+  it('renders NO <ui5-icon> when iconName is empty or omitted', () => {
+    const wrapper = mount(ShelfHeaderPopover, {
+      props: { ...BASE_PROPS, iconName: '' },
+    });
+    expect(wrapper.find('ui5-icon.verb-shelf__icon').exists()).toBe(false);
+    // Label still renders.
+    expect(wrapper.find('h2.hp-shelf-header__label').text()).toBe('Start here');
+  });
+
   it('renders the ⓘ button when at least one explainer field is set', () => {
     const wrapper = mount(ShelfHeaderPopover, { props: BASE_PROPS });
     expect(wrapper.find('[aria-label*="More about"]').exists()).toBe(true);

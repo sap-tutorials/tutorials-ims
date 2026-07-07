@@ -138,6 +138,15 @@ import "@ui5/webcomponents-icons/dist/developer-settings.js";
 import "@ui5/webcomponents-icons/dist/chain-link.js";
 import "@ui5/webcomponents-icons/dist/favorite.js";
 import "@ui5/webcomponents-icons/dist/unfavorite.js";
+// (#1039) Shelf-section pictograms rendered by hugo/layouts/verb/list.html
+// on the four shelves (Start here → learning-assistant, above; Reference
+// → document; Tools & samples → wrench; Keep current → newspaper). Values
+// are editable in the ShelfDefinitions admin app, so an editor can pick
+// any registered Fiori glyph — additional names may need registrations
+// here on the same "silent glyph miss" pattern as the verb tiles above.
+import "@ui5/webcomponents-icons/dist/document.js";
+import "@ui5/webcomponents-icons/dist/wrench.js";
+import "@ui5/webcomponents-icons/dist/newspaper.js";
 // U12: reader-mode toggle in shellbar (documents → decline on activation).
 import "@ui5/webcomponents-icons/dist/documents.js";
 import "@ui5/webcomponents-icons/dist/decline.js";

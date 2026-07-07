@@ -3114,6 +3114,7 @@ annotate AdminService.ShelfDefinitions with @(
   UI.LineItem : [
     { Value: shelfKey,        Label: 'Shelf key' },
     { Value: label,           Label: 'Label' },
+    { Value: iconName,        Label: 'Icon' },
     { Value: sortOrder,       Label: 'Sort order' },
     { Value: authoringStatus, Label: 'Status', Criticality: authoringStatus }
   ],
@@ -3128,6 +3129,7 @@ annotate AdminService.ShelfDefinitions with @(
   UI.FieldGroup #Identity : { Data : [
     { Value: shelfKey,   Label: 'Shelf key' },
     { Value: label,      Label: 'Label' },
+    { Value: iconName,   Label: 'Icon' },
     { Value: sortOrder,  Label: 'Sort order' }
   ]},
   UI.FieldGroup #Explainer : { Data : [
