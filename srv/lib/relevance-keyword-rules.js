@@ -13,7 +13,7 @@ export const ALLOWLIST = [
 
 export const BLOCKLIST = [
   'earnings', 'Q1', 'Q2', 'Q3', 'Q4', 'revenue', 'guidance', 'CEO', 'CFO',
-  'partnership', 'sponsorship', 'celebrat', 'award', 'champion of the year',
+  'partnership', 'sponsorship', 'celebrate', 'celebrates', 'celebrated', 'celebrating', 'celebration', 'award', 'champion of the year',
   'HR', 'board of directors',
 ];
 

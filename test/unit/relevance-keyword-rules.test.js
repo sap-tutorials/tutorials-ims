@@ -26,4 +26,13 @@ describe('classifyByKeywords', () => {
   it('tolerates null description', () => {
     expect(classifyByKeywords({ title: 'CAP API demo', description: null }).verdict).toBe('relevant');
   });
+  it('tolerates undefined title', () => {
+    expect(classifyByKeywords({ title: undefined, description: 'API sample' }).verdict).toBe('relevant');
+  });
+  it('blocklist matches inflected forms of "celebrate"', () => {
+    for (const w of ['celebrates', 'celebrated', 'celebration', 'celebrating']) {
+      const r = classifyByKeywords({ title: `SAP ${w} the launch`, description: 'API news' });
+      expect(r.verdict, `for word "${w}"`).toBe('not-relevant');
+    }
+  });
 });
