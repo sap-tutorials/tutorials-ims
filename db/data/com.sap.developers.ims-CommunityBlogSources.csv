@@ -1,0 +1,4 @@
+ID;label;feedUrl;topicSlug;isActive;sortOrder;managed
+00000000-0000-0000-0000-000000c81001;Community — Technology (all blogs);https://community.sap.com/khhcw49343/rss/Community?interaction.style=blog;community-technology;true;10;true
+00000000-0000-0000-0000-000000c81002;Technology Blogs by SAP;https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-sap;technology-sap;true;20;true
+00000000-0000-0000-0000-000000c81003;Technology Blogs by Members;https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-members;technology-members;true;30;true
