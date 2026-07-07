@@ -1,0 +1,13 @@
+ID;label;text;active;note
+10340001-0000-0000-0000-000000000001;relevant;A new SAP Cloud Application Programming Model release adds Java 22 support, updated CDS syntax, and improvements to the cds CLI.;true;canonical CAP release
+10340001-0000-0000-0000-000000000002;relevant;Tutorial walking through building a Fiori Elements app on BTP with UI5 web components and a CAP backend.;true;tutorial exemplar
+10340001-0000-0000-0000-000000000003;relevant;Announcement of new AI Core deployment templates and updated @sap-ai-sdk client with code samples for chat completion and embeddings.;true;AI SDK exemplar
+10340001-0000-0000-0000-000000000004;relevant;Guide to deploying a Node.js microservice to Kyma using SAP BTP service bindings and the Destination Service API.;true;deployment exemplar
+10340001-0000-0000-0000-000000000005;relevant;How to use the new HANA Cloud vector engine for RAG with Python samples and REST API examples.;true;HANA exemplar
+10340001-0000-0000-0000-000000000006;relevant;Deep dive into the ABAP Cloud released APIs for RAP business objects with code samples.;true;ABAP Cloud exemplar
+10340001-0000-0000-0000-000000000101;not-relevant;SAP announces strong Q2 earnings and updated revenue guidance for the fiscal year alongside CEO comments.;true;earnings exemplar
+10340001-0000-0000-0000-000000000102;not-relevant;New partnership between SAP and a global systems integrator to drive customer transformation projects across EMEA.;true;partnership exemplar
+10340001-0000-0000-0000-000000000103;not-relevant;SAP CFO celebrates receiving industry award for financial leadership at annual gala.;true;award exemplar
+10340001-0000-0000-0000-000000000104;not-relevant;Announcement of new board of directors appointments and organizational changes for the upcoming fiscal year.;true;board exemplar
+10340001-0000-0000-0000-000000000105;not-relevant;SAP champions of the year recognized in HR-led celebration at global sales kickoff event.;true;HR / recognition exemplar
+10340001-0000-0000-0000-000000000106;not-relevant;Recap of executive keynote at industry conference discussing high-level strategy without technical detail.;true;marketing keynote exemplar
