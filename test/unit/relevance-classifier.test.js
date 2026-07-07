@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import cds from '@sap/cds';
 
 const seedMock = vi.fn();
 const embedMock = vi.fn();
@@ -106,5 +107,40 @@ describe('relevance-classifier', () => {
     keywordMock.mockReturnValue({ verdict: 'not-relevant', reason: '' });
     const r = await classify({ title: 't', description: 'd', sourceType: 'sap-news' });
     expect(r.source).toBe('fallback-keyword');
+  });
+
+  it('exhausted LLM budget → keyword fallback (no LLM call)', async () => {
+    embedMock.mockResolvedValue([AMBIG_VEC]);
+    keywordMock.mockReturnValue({ verdict: 'not-relevant', reason: 'budget' });
+
+    // readMargin() and reserveLlmBudget() use `cds.db ?? cds.connect.to('db')`.
+    // We set cds.db to a fake so they short-circuit and never call connect.to.
+    // Both helpers use string entity references so no loaded model is required.
+    const today = new Date().toISOString().slice(0, 10);
+    let callCount = 0;
+    const fakeDb = {
+      run: vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // readMargin() SELECT → default margin keeps item in mid-band
+          return Promise.resolve([{ newsRelevanceMargin: 0.15 }]);
+        }
+        // reserveLlmBudget() SELECT → budget exhausted
+        return Promise.resolve([{
+          newsRelevanceLlmBudgetPerDay: 0,
+          newsRelevanceLlmCallsToday: 0,
+          newsRelevanceLlmCallsCountedOn: today,
+        }]);
+      }),
+    };
+    const origDb = cds.db;
+    cds.db = fakeDb;
+    try {
+      const r = await classify({ title: 't', description: 'd', sourceType: 'sap-news' });
+      expect(r.source).toBe('fallback-keyword');
+      expect(llmMock).not.toHaveBeenCalled();
+    } finally {
+      cds.db = origDb;
+    }
   });
 });

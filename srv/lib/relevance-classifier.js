@@ -43,17 +43,79 @@ function maxCosine(itemVec, seedVecs) {
 
 async function readMargin() {
   try {
-    // Node 22 hazard: use cds.entities(NAMESPACE).ChatSettings, not bare projection.
+    // Node 22 hazard: use string entity reference so tests can stub cds.db
+    // without needing a bootstrapped cds model.
     const db = cds.db ?? await cds.connect.to('db');
-    const { ChatSettings } = cds.entities('com.sap.developers.ims');
     const [row] = await db.run(
-      SELECT.from(ChatSettings).columns('newsRelevanceMargin').limit(1),
+      SELECT.from('com.sap.developers.ims.ChatSettings').columns('newsRelevanceMargin').limit(1),
     );
     if (row?.newsRelevanceMargin != null) return Number(row.newsRelevanceMargin);
   } catch (e) {
     LOG.warn(`readMargin failed, using default ${DEFAULT_MARGIN}: ${e.message}`);
   }
   return DEFAULT_MARGIN;
+}
+
+/**
+ * Reserve one LLM call against the daily budget stored in ChatSettings.
+ *
+ * Resets the counter when newsRelevanceLlmCallsCountedOn is not today.
+ * Increments atomically before the call so concurrent classifiers count
+ * correctly.
+ *
+ * Fail-open: any read/write error returns { granted: true } so a DB hiccup
+ * does not block classification — the LLM path has its own catch → keyword
+ * fallback anyway.
+ *
+ * @returns {Promise<{ granted: boolean }>}
+ */
+async function reserveLlmBudget() {
+  try {
+    const db = cds.db ?? await cds.connect.to('db');
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+    // Use a string entity reference so tests can stub cds.db without needing
+    // a bootstrapped cds model (same pattern as hybrid tests).
+    const [row] = await db.run(
+      SELECT.from('com.sap.developers.ims.ChatSettings')
+        .columns('newsRelevanceLlmBudgetPerDay', 'newsRelevanceLlmCallsToday', 'newsRelevanceLlmCallsCountedOn')
+        .limit(1),
+    );
+    if (!row) return { granted: true }; // no settings row yet → fail-open
+
+    const budget = row.newsRelevanceLlmBudgetPerDay ?? 100;
+    const countedOn = row.newsRelevanceLlmCallsCountedOn
+      ? String(row.newsRelevanceLlmCallsCountedOn).slice(0, 10)
+      : null;
+
+    // Day rolled over — reset counter.
+    if (countedOn !== today) {
+      await db.run(
+        UPDATE('com.sap.developers.ims.ChatSettings').set({
+          newsRelevanceLlmCallsToday: 1,
+          newsRelevanceLlmCallsCountedOn: today,
+        }),
+      );
+      return { granted: true };
+    }
+
+    const callsToday = row.newsRelevanceLlmCallsToday ?? 0;
+    if (callsToday >= budget) {
+      LOG.warn(`LLM daily budget exhausted (${callsToday}/${budget}); skipping LLM classify`);
+      return { granted: false };
+    }
+
+    // Increment before the call to prevent races on concurrent classifiers.
+    await db.run(
+      UPDATE('com.sap.developers.ims.ChatSettings').set({
+        newsRelevanceLlmCallsToday: callsToday + 1,
+      }),
+    );
+    return { granted: true };
+  } catch (e) {
+    LOG.warn(`reserveLlmBudget failed (fail-open): ${e.message}`);
+    return { granted: true };
+  }
 }
 
 function keywordFallback({ title, description, error }) {
@@ -204,6 +266,10 @@ export async function classify({ title, description, sourceType }) {
   }
 
   // ── Step 4: LLM fallback for mid-band ────────────────────────────────────
+  const budget = await reserveLlmBudget();
+  if (!budget.granted) {
+    return keywordFallback({ title, description, error: new Error('LLM daily budget exhausted') });
+  }
   try {
     return await llmClassify({ title, description, sourceType });
   } catch (e) {
