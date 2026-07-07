@@ -4,10 +4,17 @@
 // — no per-row state in the schema; the popover queries live via
 // /admin/secretWarnings() so today's warning state is always fresh.
 //
+// #1018: in addition to expiry, the cron now probes credstore presence for
+// EVERY tracked row. A row whose `expiresAt` is far in the future but whose
+// value never landed in credstore (or was silently lost during a binding
+// transition) is treated as CRITICAL with reason='missing-value' so the
+// popover and the daily PipelineLog both surface it.
+//
 // Returns a structured summary for the scheduler's PipelineLog row so admins
 // can audit the daily run history.
 
 import cds from '@sap/cds';
+import { checkSecretPresence } from '../lib/secret-presence.js';
 
 const LOG = cds.log('jobs/secret-expiry-check');
 
@@ -36,20 +43,44 @@ export function classifySeverity(daysRemaining) {
 
 /**
  * Run the daily expiry check. Returns a structured summary for PipelineLog.
+ *
+ * The cron passes `force: true` to `checkSecretPresence` so the daily
+ * probe bypasses the 5-min presence cache and always hits credstore fresh.
+ *
+ * @param {object} [deps] — Optional dependency-injection seam for tests.
+ *   Use `deps.checkSecretPresence` to stub the credstore probe. Default is
+ *   the shared implementation from srv/lib/secret-presence.js.
  * @returns {Promise<{ critical: number, warning: number, info: number,
- *                     total: number, criticalKeys: string[] }>}
+ *                     missingValues: number, total: number,
+ *                     criticalKeys: string[] }>}
  */
-export async function runSecretExpiryCheck() {
+export async function runSecretExpiryCheck(deps = {}) {
+  const probe = deps.checkSecretPresence ?? checkSecretPresence;
   const { Secrets } = cds.entities('com.sap.developers.ims');
-  const rows = await SELECT.from(Secrets)
-    .columns('key', 'expiresAt')
-    .where({ expiresAt: { '!=': null } });
+  // #1018: read ALL tracked rows, not just those with an expiresAt. A row
+  // without a rotation policy can still have a missing value — the old
+  // `expiresAt: { '!=': null }` filter would have hidden today's exact
+  // CONTENT_API_KEY failure mode.
+  const rows = await SELECT.from(Secrets).columns('key', 'expiresAt');
 
   const now = new Date();
-  const counts = { critical: 0, warning: 0, info: 0 };
+  const counts = { critical: 0, warning: 0, info: 0, missingValues: 0 };
   const criticalKeys = [];
 
   for (const row of rows) {
+    // Presence probe first — a missing value trumps expiry classification.
+    // Bypass the shared 5-min cache so the daily run is always fresh.
+    const present = await probe(row.key, { force: true });
+    if (!present) {
+      counts.critical += 1;
+      counts.missingValues += 1;
+      criticalKeys.push(row.key);
+      LOG.warn(`secret ${row.key} value missing from credstore (row in HANA, credstore returned null)`);
+      continue;
+    }
+    // Only classify by expiry for rows that HAVE an expiresAt. Rows without
+    // a policy but WITH a value are silent — same posture as pre-#1018.
+    if (!row.expiresAt) continue;
     const days = daysUntil(row.expiresAt, now);
     const severity = classifySeverity(days);
     if (severity === 'CRITICAL') {
@@ -70,6 +101,7 @@ export async function runSecretExpiryCheck() {
     critical: counts.critical,
     warning: counts.warning,
     info: counts.info,
+    missingValues: counts.missingValues,
     criticalKeys: criticalKeys.slice(0, 5),  // truncate for readable PipelineLog summary
   };
 }

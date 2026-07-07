@@ -15,6 +15,7 @@ import * as advocateHandlers from './handlers/advocate-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
+import { checkSecretPresence, invalidatePresence } from './lib/secret-presence.js';
 import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
@@ -392,6 +393,36 @@ export default class AdminService extends cds.ApplicationService {
       } catch (err) {
         cds.log('kg-wcc').warn(
           `admin-service: isolated flag lookup failed on Tutorials; leaving field unset (${err?.message ?? err})`,
+        );
+      }
+    });
+
+    // #1018 — populate the virtual `hasValue : Boolean` field on each
+    // Secrets row. Fires on every /admin-ui/#secrets List Report refresh.
+    // Uses the shared 5-min presence cache so the 11-row LR doesn't hammer
+    // credstore on every $refresh. Fail-quiet: on any error, leave the
+    // field unset (Fiori renders null boolean as no badge — better than
+    // showing "missing" for what might be a transient credstore blip).
+    //
+    // Purpose: today's failure mode (2026-07-06) was a row that showed
+    // `lastRotatedAt` set + happy admin-UI status, but the credstore
+    // itself had no value. Admin visually indistinguishable from a
+    // working row. This surface makes the miss obvious in the LR.
+    this.after('READ', 'Secrets', async (rows, req) => {
+      const arr = Array.isArray(rows) ? rows : [rows];
+      const keys = arr.filter(Boolean).map((r) => r.key).filter(Boolean);
+      if (keys.length === 0) return;
+      try {
+        const entries = await Promise.all(
+          keys.map(async (k) => [k, await checkSecretPresence(k)]),
+        );
+        const presence = new Map(entries);
+        for (const r of arr) {
+          if (r && r.key) r.hasValue = presence.get(r.key) ?? false;
+        }
+      } catch (err) {
+        cds.log('admin-service').warn(
+          `Secrets hasValue lookup failed; leaving field unset (${err?.message ?? err})`,
         );
       }
     });
@@ -1968,15 +1999,47 @@ export default class AdminService extends cds.ApplicationService {
     // admin-shell notifications popover. Read-only — no DB writes.
     // Imports daysUntil + classifySeverity from the cron module to share
     // the threshold + UTC-truncation contract.
+    //
+    // #1018: in addition to expiry, this handler now emits a synthetic
+    // CRITICAL entry for any tracked row whose value is missing from
+    // credstore. Same reason='missing-value' string the cron uses, so the
+    // popover surface is symmetric with the daily PipelineLog summary.
     this.on('secretWarnings', async (req) => {
       const { Secrets } = cds.entities('com.sap.developers.ims');
+      // Read ALL rows — a row without expiresAt can still have a missing
+      // value and must surface as CRITICAL (see the cron for the same
+      // pattern). Rows with no expiry AND a present value stay silent.
       const rows = await SELECT.from(Secrets)
-        .columns('key', 'description', 'expiresAt', 'rotationOwner', 'rotationDocsUrl')
-        .where({ expiresAt: { '!=': null } });
+        .columns('key', 'description', 'expiresAt', 'rotationOwner', 'rotationDocsUrl');
+
+      // Presence probe per row. Uses the shared 5-min cache — the popover
+      // polls every ~30s while the tab is active; we want a warm cache
+      // between polls but a stale-safe refresh so admins see a save
+      // take effect within one cache window.
+      const presenceEntries = await Promise.all(
+        rows.map(async (row) => [row.key, await checkSecretPresence(row.key)]),
+      );
+      const presence = new Map(presenceEntries);
 
       const now = new Date();
       const warnings = [];
       for (const row of rows) {
+        // Missing-value warning first — a row with no credstore value is
+        // CRITICAL regardless of expiresAt (probably shouldn't have an
+        // expiresAt either, but we don't second-guess the metadata).
+        if (!presence.get(row.key)) {
+          warnings.push({
+            key: row.key,
+            description: row.description ?? '',
+            daysRemaining: null,
+            severity: 'CRITICAL',
+            reason: 'missing-value',
+            rotationOwner: row.rotationOwner ?? '',
+            rotationDocsUrl: row.rotationDocsUrl ?? '',
+          });
+          continue;
+        }
+        if (!row.expiresAt) continue;
         const daysRemaining = daysUntil(row.expiresAt, now);
         const severity = classifySeverity(daysRemaining);
         if (!severity) continue;
@@ -1985,12 +2048,21 @@ export default class AdminService extends cds.ApplicationService {
           description: row.description ?? '',
           daysRemaining,
           severity,
+          reason: 'expiry',
           rotationOwner: row.rotationOwner ?? '',
           rotationDocsUrl: row.rotationDocsUrl ?? '',
         });
       }
 
-      warnings.sort((a, b) => a.daysRemaining - b.daysRemaining);
+      // Sort: missing-value (daysRemaining === null) first, then by
+      // ascending daysRemaining. Null sorts to the front intentionally —
+      // Number(null) === 0 would collide with "expiring today"; explicit
+      // partition keeps the two classes visually separate in the popover.
+      warnings.sort((a, b) => {
+        if (a.daysRemaining == null && b.daysRemaining != null) return -1;
+        if (b.daysRemaining == null && a.daysRemaining != null) return 1;
+        return (a.daysRemaining ?? 0) - (b.daysRemaining ?? 0);
+      });
       return warnings;
     });
 
@@ -2075,6 +2147,28 @@ export default class AdminService extends cds.ApplicationService {
       }
     };
 
+    // Verify a credstore write actually landed. #1018: on 2026-07-06 a
+    // CONTENT_API_KEY save via /admin-ui/#secrets returned 2xx from the
+    // credstore but never persisted — the row stayed unreachable until the
+    // envsubst fallback was stripped in PR #980 and every publish 503'd.
+    // writeSecret throws on non-2xx, but not on 2xx-with-empty-body / silent
+    // no-op / mTLS+JWE transport oddities (the credstore path went through
+    // three fixes: PR #586, PR #588, PR #602). One extra round-trip per save
+    // — the operation is rare (manual rotation) so latency doesn't matter.
+    // readSecret returns null on 404 (never written) or throws on transport
+    // error; either shape means the write claim is unverified.
+    const verifyWritten = async (req, alias, expected) => {
+      let observed;
+      try {
+        observed = await readSecret(alias);
+      } catch (err) {
+        return req.reject(500, `credstore write ${alias}: read-back failed: ${err.message ?? err}`);
+      }
+      if (observed !== expected) {
+        return req.reject(500, `credstore write ${alias}: read-back mismatch (write claimed success but value did not persist)`);
+      }
+    };
+
     // ────────────────────────────────────────────────────────────────────
     this.on('setSecretValue', 'Secrets', async (req) => {
       const row = await loadSecretRow(req);
@@ -2083,6 +2177,9 @@ export default class AdminService extends cds.ApplicationService {
         return req.reject(400, 'value (non-empty string) is required');
       }
       await writeSecret(row.key, value);
+      // #1018: read-back guard — see verifyWritten helper above for the
+      // 2026-07-06 CONTENT_API_KEY silent-failure context.
+      await verifyWritten(req, row.key, value);
       // Hot-flush the shared secret-resolver cache so the next read picks up
       // the fresh value immediately (or null after a clear) — symmetric for
       // all credstore-fronted secrets (GITHUB_DISPATCH_TOKEN, SMTP_PASS,
@@ -2091,6 +2188,10 @@ export default class AdminService extends cds.ApplicationService {
       // 5-min TTL window. The rebuild-trigger.js `invalidateDispatchTokenCache`
       // export is a thin shim over this same call kept for direct callers.
       invalidateSecret(row.key);
+      // #1018: also flush the presence cache so the LR badge + popover
+      // reflect the save on the next refresh (≤5 min TTL) instead of
+      // waiting up to the resolver's separate window.
+      invalidatePresence(row.key);
       // IMPORTANT 2 (quality-review): emit audit event immediately after the
       // external credstore mutation succeeds. The subsequent stampRotated() is
       // a HANA UPDATE that may fail / abort — if it does, the credstore has
@@ -2133,9 +2234,12 @@ export default class AdminService extends cds.ApplicationService {
       // 32 bytes hex = 64-char string. Strong enough for salt + api-key.
       const newValue = randomBytes(32).toString('hex');
       await writeSecret(row.key, newValue);
+      // #1018: read-back guard — see verifyWritten helper above.
+      await verifyWritten(req, row.key, newValue);
       // See setSecretValue above — same universal hot-flush for any rotated
       // secret, not just GITHUB_DISPATCH_TOKEN.
       invalidateSecret(row.key);
+      invalidatePresence(row.key);
       // IMPORTANT 2 (quality-review): see setSecretValue for the same race.
       // Emit the write event BEFORE stampRotated in case HANA UPDATE fails.
       // The 'SecretValueRotated' event below is still emitted (richer payload)
@@ -2172,6 +2276,9 @@ export default class AdminService extends cds.ApplicationService {
       // becomes null on the next resolveSecret() call instead of returning
       // the stale TTL'd value.
       invalidateSecret(row.key);
+      // #1018: also drop the presence cache so the LR flips to "missing"
+      // on the next refresh instead of showing stale "present".
+      invalidatePresence(row.key);
       // No HANA mutation; explicit audit event needed.
       await auditEvent('SecretValueCleared', {
         user: req.user?.id,

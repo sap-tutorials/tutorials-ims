@@ -593,6 +593,94 @@ jobs:
           gh pr comment "$PR_NUMBER" --body-file .hana-snapshots/pr-comment.md
           echo "Posted comment to PR #$PR_NUMBER"
 
+      - name: Post-deploy credstore smoke — /content/publish/begin
+        # #1018 — proves the freshly-deployed tutorials-srv can actually
+        # RESOLVE its credstore-fronted secrets. The rebuild-content
+        # workflow was our previous canary for this; on 2026-07-06 it took
+        # ~an hour after cf deploy to fire and reveal that CONTENT_API_KEY
+        # was silently missing from credstore (envsubst fallback stripped
+        # by PR #980, credstore write during 2026-06-23 mTLS/JWE transition
+        # had never landed). This step shifts detection to seconds after
+        # deploy.
+        #
+        # Expected outcomes:
+        #   400 — server accepted the Bearer, rejected the empty payload.
+        #         Credstore is resolvable; guard passes.
+        #   401 — Bearer missing / malformed (shouldn't happen given we
+        #         send one). Fails.
+        #   403 — Bearer present but doesn't match server's resolved value.
+        #         Means CI's CONTENT_API_KEY GH secret has drifted from
+        #         what the credstore holds. Fails.
+        #   503 — server's resolveSecret('CONTENT_API_KEY') returned null.
+        #         This is exactly the 2026-07-06 failure. Fails.
+        #   any other — network / cold start / DNS. Fails, retry the
+        #         deploy or investigate. Retries once after 30 s before
+        #         failing to absorb slow cold starts (fresh MTA-deployed
+        #         apps take ~15-45 s to answer traffic).
+        #
+        # QA is not smoked here — QA has its own CONTENT_API_KEY_QA and
+        # the rebuild-content-qa workflow is the canary for that surface.
+        env:
+          CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
+        run: |
+          set -euo pipefail
+          case "${{ steps.env.outputs.target }}" in
+            dev)  SRV_URL="${{ vars.SRV_URL_DEV }}" ;;
+            qa)   echo "::notice::skipping publish-endpoint smoke on QA (uses CONTENT_API_KEY_QA — separate canary via rebuild-content-qa.yml)"; exit 0 ;;
+            prod) SRV_URL="${{ vars.SRV_URL_PROD }}" ;;
+            *)    echo "::error::unknown target ${{ steps.env.outputs.target }}"; exit 1 ;;
+          esac
+          if [ -z "$SRV_URL" ]; then
+            echo "::error::SRV_URL not set for target ${{ steps.env.outputs.target }} — cannot smoke publish endpoint"
+            exit 1
+          fi
+          if [ -z "${CONTENT_API_KEY:-}" ]; then
+            echo "::error::CONTENT_API_KEY GH secret is empty — smoke would false-positive as 403"
+            exit 1
+          fi
+
+          probe() {
+            curl -sS -o /tmp/publish-begin.body -w '%{http_code}' \
+              --max-time 20 \
+              -X POST \
+              -H "Authorization: Bearer $CONTENT_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{}' \
+              "$SRV_URL/content/publish/begin" || echo "000"
+          }
+
+          STATUS=$(probe)
+          echo "First probe: HTTP $STATUS"
+          if [ "$STATUS" = "000" ] || [ "$STATUS" = "502" ] || [ "$STATUS" = "504" ]; then
+            echo "Cold-start retry in 30 s…"
+            sleep 30
+            STATUS=$(probe)
+            echo "Second probe: HTTP $STATUS"
+          fi
+
+          BODY=$(head -c 500 /tmp/publish-begin.body 2>/dev/null || true)
+
+          case "$STATUS" in
+            400)
+              echo "::notice title=Credstore smoke::PASS — publish endpoint accepted the bearer and rejected empty payload (400 as expected)"
+              ;;
+            401|403)
+              echo "::error title=Credstore smoke::FAIL — CI CONTENT_API_KEY does not match server's resolved value (HTTP $STATUS). CI GH secret has drifted from credstore. Rotate at /admin-ui/#secrets and update the GH secret to match."
+              echo "Response body (first 500 chars): $BODY"
+              exit 1
+              ;;
+            503)
+              echo "::error title=Credstore smoke::FAIL — server returned 503 'Content API not configured'. resolveSecret('CONTENT_API_KEY') returned null → credstore has no value for this alias. Set it via /admin-ui/#secrets on ${SRV_URL}. This is the 2026-07-06 (#1018) failure mode."
+              echo "Response body (first 500 chars): $BODY"
+              exit 1
+              ;;
+            *)
+              echo "::error title=Credstore smoke::FAIL — unexpected HTTP $STATUS from $SRV_URL/content/publish/begin"
+              echo "Response body (first 500 chars): $BODY"
+              exit 1
+              ;;
+          esac
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

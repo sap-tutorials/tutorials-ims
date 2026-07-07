@@ -26,6 +26,21 @@ sap.ui.define([
     return "None";
   }
 
+  // #1018: derive UI badge state from the server-populated `hasValue`
+  // virtual field. Server never returns undefined for hasValue on the
+  // /admin/Secrets endpoint (after('READ') hook populates it for every
+  // row); on the off chance the hook failed and left it unset, we
+  // conservatively render "Unknown" rather than a false green.
+  function deriveValueBadge(hasValue) {
+    if (hasValue === true) {
+      return { state: "Success", text: "Present", icon: "sap-icon://accept" };
+    }
+    if (hasValue === false) {
+      return { state: "Error", text: "Missing", icon: "sap-icon://alert" };
+    }
+    return { state: "None", text: "Unknown", icon: "" };
+  }
+
   return Controller.extend("sap.tutorials.admin.secrets.controller.Secrets", {
     onInit: function () {
       this.getView().setModel(new JSONModel({ items: [] }), "secrets");
@@ -46,6 +61,14 @@ sap.ui.define([
         .then(function (body) {
           var items = (body.value || []).map(function (row) {
             row.expiryState = deriveExpiryState(row.expiresAt);
+            // #1018: hasValue comes from srv/admin-service.js after('READ')
+            // hook (`checkSecretPresence`). Absent when the hook failed
+            // (transport error probing credstore) — badge falls back to
+            // "Unknown" state rather than misleading Success.
+            var badge = deriveValueBadge(row.hasValue);
+            row.valueState = badge.state;
+            row.valueStateText = badge.text;
+            row.valueStateIcon = badge.icon;
             return row;
           });
           oModel.setData({ items: items });
