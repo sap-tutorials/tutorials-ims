@@ -39,6 +39,22 @@ describe('selectFeaturedTopics', () => {
     expect(out[0].missionSlugs).toEqual(['cap-t1','cap-t2','cap-t3','cap-t4']);
   });
 
+  it('breaks sortOrder ties by createdAt ASC', () => {
+    const older = new Date('2026-01-01T00:00:00Z');
+    const newer = new Date('2026-06-01T00:00:00Z');
+    const editorial = [
+      { conceptId: 'e2', conceptSlug: 'b', conceptName: 'B', conceptStatus: 'ACTIVE', conceptPublishedAt: NOW, displayTitle: 'B', sortOrder: 50, validFrom: null, validUntil: null, missionSlugs: null, isActive: true, createdAt: newer },
+      { conceptId: 'e1', conceptSlug: 'a', conceptName: 'A', conceptStatus: 'ACTIVE', conceptPublishedAt: NOW, displayTitle: 'A', sortOrder: 50, validFrom: null, validUntil: null, missionSlugs: null, isActive: true, createdAt: older },
+    ];
+    const tutorialRanksByConcept = new Map([
+      ['a', [{ tutorialSlug: 'a1', score: 1 }]],
+      ['b', [{ tutorialSlug: 'b1', score: 1 }]],
+    ]);
+    const tutorialsBySlug = new Set(['a1', 'b1']);
+    const out = selectFeaturedTopics({ editorial, kgCandidates: [], communityByConcept: new Map(), tutorialRanksByConcept, tutorialsBySlug, targetCount: 8, missionsPerSlide: 4, now: NOW });
+    expect(out.map(s => s.conceptSlug)).toEqual(['a', 'b']);
+  });
+
   it('honors editorial missionSlugs override when all slugs are active', () => {
     const editorial = [
       { conceptId: 'e1', conceptSlug: 'cap', conceptName: 'CAP', conceptStatus: 'ACTIVE', conceptPublishedAt: NOW, displayTitle: null, sortOrder: 10, validFrom: null, validUntil: null, missionSlugs: ['cap-t5','cap-t3'], isActive: true, createdAt: NOW },
