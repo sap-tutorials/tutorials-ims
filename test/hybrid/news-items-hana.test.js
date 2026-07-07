@@ -177,4 +177,37 @@ describe.runIf(isSafeForWrites())('NewsItems entity (hybrid HANA)', () => {
       expect(Array.isArray(items)).toBe(true);
     });
   });
+
+  describe('AI reclassify invariants', () => {
+    it('reclassify-style UPDATE of AI columns leaves admin columns intact', async () => {
+      if (!isSafeForWrites()) return;
+      const sourceId = `${TEST_PREFIX}invariant_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      createdSourceIds.push(sourceId);
+      const { NewsItems } = cds.entities('com.sap.developers.ims.external');
+      const db = await cds.connect.to('db');
+      // seed a row
+      await db.run(INSERT.into('com.sap.developers.ims.external.NewsItems').entries({
+        sourceId, link: 'https://news.sap.com/inv', title: 'invariant',
+        description: 'inv', publishedAt: new Date().toISOString(), language: 'en',
+        contentHash: 'h1',
+        aiVerdict: 'not-relevant', aiReason: 'wrong', aiVerdictSource: 'embedding',
+        aiConfidence: 0.4, aiVerdictAt: new Date().toISOString(),
+        lastFetchedAt: new Date().toISOString(),
+      }));
+      // set admin fields
+      await db.run(UPDATE('com.sap.developers.ims.external.NewsItems')
+        .set({ adminVerdict: 'approve', adminBy: 'sa@example.com', adminNote: 'invariant note' })
+        .where({ sourceId }));
+      // simulate reclassify (AI columns only)
+      await db.run(UPDATE('com.sap.developers.ims.external.NewsItems')
+        .set({ aiVerdict: 'relevant', aiReason: 'updated', aiVerdictSource: 'llm', aiConfidence: 0.9, aiVerdictAt: new Date().toISOString() })
+        .where({ sourceId }));
+      const [row] = await db.run(SELECT.from('com.sap.developers.ims.external.NewsItems').where({ sourceId }));
+      expect(row.aiVerdict).toBe('relevant');
+      expect(row.aiReason).toBe('updated');
+      expect(row.adminVerdict).toBe('approve');       // preserved
+      expect(row.adminBy).toBe('sa@example.com');     // preserved
+      expect(row.adminNote).toBe('invariant note');   // preserved
+    });
+  });
 });
