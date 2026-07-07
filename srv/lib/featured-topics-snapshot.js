@@ -41,8 +41,16 @@ async function loadInputs(tx) {
   const rankRows = await tx.run(SELECT.from(ConceptRank).columns('slug','score').orderBy('score desc','slug asc'));
   const conceptMetaBySlug = new Map();
   if (rankRows.length) {
-    const rows = await tx.run(SELECT.from(Concepts).columns('ID','slug','name','status','publishedAt').where({ slug: { in: rankRows.map(r => lower(r.slug)) } }));
-    for (const r of rows) conceptMetaBySlug.set(lower(r.slug), r);
+    // Fetch all Concepts and filter in Node — a WHERE slug IN (…) over
+    // thousands of ConceptRank slugs blows HANA's max packet size ("Failed
+    // to set parameters, maximum packet size exceeded"). 5,895 rows × 5
+    // short columns is well under 2 MB, so unbounded read is safe.
+    const rankedSlugs = new Set(rankRows.map(r => lower(r.slug)));
+    const rows = await tx.run(SELECT.from(Concepts).columns('ID','slug','name','status','publishedAt'));
+    for (const r of rows) {
+      const s = lower(r.slug);
+      if (rankedSlugs.has(s)) conceptMetaBySlug.set(s, r);
+    }
   }
   const kgCandidates = rankRows.map(r => {
     const meta = conceptMetaBySlug.get(lower(r.slug)) || {};
