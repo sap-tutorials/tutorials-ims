@@ -1,18 +1,10 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Content Moderation</title>
-    <script id="sap-ui-bootstrap"
-      src="https://sdk.openui5.org/1.136.0/resources/sap-ui-core.js"
-      data-sap-ui-theme="sap_horizon"
-      data-sap-ui-async="true"
-      data-sap-ui-oninit="module:sap/ui/core/ComponentSupport"></script>
-  </head>
-  <body class="sapUiBody">
-    <div data-sap-ui-component
-         data-name="sap.tutorials.admin.contentModeration"
-         data-id="container"
-         data-settings='{"id" : "content-moderation"}'></div>
-  </body>
-</html>
+<html><head><meta charset="utf-8"><title>Content Moderation</title>
+<script id="sap-ui-bootstrap" src="resources/sap-ui-core.js"
+        data-sap-ui-theme="sap_horizon"
+        data-sap-ui-resource-roots='{"sap.tutorials.admin.contentModeration":"./"}'
+        data-sap-ui-async="true"
+        data-sap-ui-on-init="module:sap/ui/core/ComponentSupport"></script>
+</head><body class="sapUiBody" id="content">
+  <div data-sap-ui-component data-name="sap.tutorials.admin.contentModeration" data-id="container" data-settings='{"id":"content-moderation"}'></div>
+</body></html>
