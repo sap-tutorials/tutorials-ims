@@ -23,10 +23,32 @@
     "TOOLS"        "Tools & samples"
     "KEEP_CURRENT" "Keep current" -}}
 
+{{- /* Look up this verb's baked definition so the hero can surface the long
+       whyItMatters description (same copy that appears on the homepage
+       flip-tile rollover). Falls back silently when the baked data or the
+       whyItMatters field is missing — keeps local dev without the fetcher
+       step working. */ -}}
+{{- $bakedVerbs := slice -}}
+{{- with site.Data.verb_definitions }}{{ $bakedVerbs = .verbs | default slice }}{{ end -}}
+{{- $verbDef := index (where $bakedVerbs "verbKey" $verbKey) 0 -}}
+{{- $verbWhy := "" -}}
+{{- with $verbDef }}{{ $verbWhy = .whyItMatters | default "" }}{{ end -}}
+
 <article class="verb-page" data-verb="{{ $verbKey | lower }}">
   <header class="verb-page__hero">
     <h1>{{ .Title }}</h1>
-    <p>{{ .Description }}</p>
+    <p class="verb-page__hero-tagline">{{ .Description }}</p>
+    {{- /* whyItMatters is stored as multi-paragraph plain text with
+           blank-line separators. Split on \n\n and emit one <p> per
+           paragraph so it renders like the flip-card back face. */ -}}
+    {{- with $verbWhy -}}
+      <div class="verb-page__hero-why">
+        {{- range (split . "\n\n") -}}
+          {{- $para := trim . " \t\r\n" -}}
+          {{- if $para }}<p>{{ $para }}</p>{{ end -}}
+        {{- end -}}
+      </div>
+    {{- end -}}
   </header>
 
   {{- /* Optional prose body from the verb's _index.md — rendered above shelves
