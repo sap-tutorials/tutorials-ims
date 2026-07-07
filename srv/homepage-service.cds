@@ -19,6 +19,33 @@ using { com.sap.developers.ims.HomepageShelves } from '../db/homepage';
 // the /api namespace removes the overlap entirely. The approuter route
 // `^/homepage/(.*)$` (authenticationType: 'none') is the public ingress.
 
+// (#1032) Featured missions carousel types — declared outside service so they
+// resolve as named types (mirrors PersonalizedEnvelope pattern above).
+type FeaturedTopicMissionCard {
+  slug          : String;
+  kind          : String;
+  title         : String;
+  description   : String;
+  level         : String;
+  time          : Integer;
+  primaryTag    : String;
+  tutorialCount : Integer;
+  href          : String;
+  isNew         : Boolean;
+}
+type FeaturedTopicSlide {
+  slotOrder    : Integer;
+  source       : String;
+  conceptSlug  : String;
+  displayTitle : String;
+  missions     : many FeaturedTopicMissionCard;
+}
+type FeaturedTopicsPayload {
+  computedAt : Timestamp;
+  etag       : String;
+  snapshot   : many FeaturedTopicSlide;
+}
+
 @path: '/homepage'
 @requires: 'any'
 service HomepageService {
@@ -87,4 +114,8 @@ service HomepageService {
   // Public (inherits service-level @requires:'any') — anonymous beacons are fine.
   // surface is validated server-side against a fixed allowlist.
   action beaconApplied(surface: String) returns {};
+
+  // (#1032) Featured missions carousel snapshot. Public — no auth. 60s cache;
+  // ETag so the Vue island can hydrate cheaply.
+  function featuredTopics() returns FeaturedTopicsPayload;
 }

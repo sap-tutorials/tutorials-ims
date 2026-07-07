@@ -261,6 +261,27 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // (#1032) Build-time data for Hugo featured topics carousel — consumed by
+  // scripts/fetch-tutorials.ts at build time. Public, unauthenticated.
+  // Cache-Control 60s (Hugo fetches once per build, not per request).
+  app.get('/build/featured-topics', async (_req, res) => {
+    try {
+      const { readSnapshotForFeed } = await import('./lib/featured-topics-snapshot.js');
+      const tx = cds.tx({});
+      try {
+        const { computedAt, slots, etag } = await readSnapshotForFeed(tx);
+        res.set('Cache-Control', 'public, max-age=60');
+        res.set('ETag', etag);
+        res.json({ computedAt, etag, snapshot: slots, buildAt: new Date().toISOString() });
+      } finally {
+        await tx.commit();
+      }
+    } catch (err) {
+      console.error('[build/featured-topics]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/build/shelf-definitions', async (_req, res) => {
     try {
       const db = await cds.connect.to('db');
