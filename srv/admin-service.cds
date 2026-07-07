@@ -1,4 +1,5 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
+using { com.sap.developers.ims.external as external } from '../db/external-content';
 using from '../db/knowledge-graph-communities';
 using from '../db/knowledge-graph-ondemand';
 using from '../db/homepage-featured';
@@ -996,4 +997,28 @@ extend service AdminService with {
 
   @requires: 'SuperAdmin'
   action recomputeFeaturedTopics() returns { count : Integer; computedAt : Timestamp; };
+}
+
+// (#1031) Homepage video band admin surfaces.
+// - Videos: editable projection on ext.Videos (only `excludeFromHomepage` is
+//   admin-writable; other columns read-only via app/admin-annotations.cds).
+// - HomepageVideoRotationView: read-only join over the sidecar for the
+//   "what's in rotation now" viewer at /admin-ui/#video-rotation.
+// - recomputeHomepageVideoRotation: SuperAdmin manual trigger; runs the same
+//   body as the 4h cron. Precedent: recomputeFeaturedTopics (#1032).
+extend service AdminService with {
+  @odata.draft.enabled
+  @requires: 'Admin'
+  entity Videos as projection on external.Videos;
+
+  @readonly
+  @requires: 'Admin'
+  entity HomepageVideoRotationView as projection on ims.HomepageVideoRotation;
+
+  @requires: 'SuperAdmin'
+  action recomputeHomepageVideoRotation() returns {
+    inserted   : Integer;
+    poolSize   : Integer;
+    durationMs : Integer;
+  };
 }
