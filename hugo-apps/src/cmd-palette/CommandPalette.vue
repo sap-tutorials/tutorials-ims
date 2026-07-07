@@ -81,7 +81,49 @@
           </a>
         </template>
 
-        <div v-if="!actionResults.length && !exploreResults.length && !tutorialResults.length" class="cmdk__empty">
+        <template v-if="conceptResults.length">
+          <div class="cmdk__group-label">Concepts</div>
+          <a
+            v-for="(item, i) in conceptResults"
+            :key="`c-${item.id}`"
+            :href="`/concepts/${item.slug}/`"
+            :class="['cmdk__item', 'cmdk__item--link', { 'cmdk__item--active': activeIndex === actionResults.length + exploreResults.length + tutorialResults.length + i }]"
+            data-vt-card="navigator"
+            role="option"
+            :aria-selected="activeIndex === actionResults.length + exploreResults.length + tutorialResults.length + i"
+            @mouseenter="activeIndex = actionResults.length + exploreResults.length + tutorialResults.length + i"
+            @click="close()"
+          >
+            <span class="cmdk__item-icon" data-icon="bullet-text" aria-hidden="true"></span>
+            <span class="cmdk__item-content">
+              <span class="cmdk__item-label nav-card__title">{{ item.label }}</span>
+              <span v-if="item.hint" class="cmdk__item-hint">{{ item.hint }}</span>
+            </span>
+          </a>
+        </template>
+
+        <template v-if="kgResults.length">
+          <div class="cmdk__group-label">Knowledge Graph</div>
+          <a
+            v-for="(item, i) in kgResults"
+            :key="`k-${item.id}`"
+            :href="item.id.startsWith('kg-c-') ? `/concepts/${item.slug}/` : `/tutorials/${item.slug}`"
+            :class="['cmdk__item', 'cmdk__item--link', { 'cmdk__item--active': activeIndex === actionResults.length + exploreResults.length + tutorialResults.length + conceptResults.length + i }]"
+            data-vt-card="navigator"
+            role="option"
+            :aria-selected="activeIndex === actionResults.length + exploreResults.length + tutorialResults.length + conceptResults.length + i"
+            @mouseenter="activeIndex = actionResults.length + exploreResults.length + tutorialResults.length + conceptResults.length + i"
+            @click="close()"
+          >
+            <span class="cmdk__item-icon" data-icon="org-chart" aria-hidden="true"></span>
+            <span class="cmdk__item-content">
+              <span class="cmdk__item-label nav-card__title">{{ item.label }}</span>
+              <span v-if="item.hint" class="cmdk__item-hint">{{ item.hint }}</span>
+            </span>
+          </a>
+        </template>
+
+        <div v-if="!actionResults.length && !exploreResults.length && !tutorialResults.length && !conceptResults.length && !kgResults.length" class="cmdk__empty">
           <template v-if="searching">Searching…</template>
           <template v-else-if="query.trim().length < 2">Type to search tutorials, or pick an action.</template>
           <template v-else>No matches.</template>
@@ -110,6 +152,8 @@ const listRef = ref<HTMLElement | null>(null)
 const searching = ref(false)
 const tutorialResults = ref<PaletteAction[]>([])
 const tutorialRefs = ref<HTMLAnchorElement[]>([])
+const conceptResults = ref<PaletteAction[]>([])
+const kgResults = ref<PaletteAction[]>([])
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let pageActions: PaletteAction[] = []
@@ -146,6 +190,8 @@ function close() {
   query.value = ''
   activeIndex.value = 0
   tutorialResults.value = []
+  conceptResults.value = []
+  kgResults.value = []
 }
 
 function show() {
@@ -155,7 +201,9 @@ function show() {
 }
 
 function move(delta: number) {
-  const total = actionResults.value.length + exploreResults.value.length + tutorialResults.value.length
+  const total = actionResults.value.length + exploreResults.value.length
+             + tutorialResults.value.length + conceptResults.value.length
+             + kgResults.value.length
   if (!total) return
   activeIndex.value = (activeIndex.value + delta + total) % total
   scrollActiveIntoView()
@@ -172,23 +220,21 @@ function runActive() {
   const i = activeIndex.value
   const aLen = actionResults.value.length
   const eLen = exploreResults.value.length
-  if (i < aLen) {
-    runItem(actionResults.value[i])
+  const tLen = tutorialResults.value.length
+  const cLen = conceptResults.value.length
+  if (i < aLen) { runItem(actionResults.value[i]); return }
+  if (i < aLen + eLen) { runItem(exploreResults.value[i - aLen]); return }
+  if (i < aLen + eLen + tLen) {
+    const tIndex = i - aLen - eLen
+    const anchor = tutorialRefs.value[tIndex]
+    if (anchor) { close(); anchor.click(); return }
+    runItem(tutorialResults.value[tIndex]); return
+  }
+  if (i < aLen + eLen + tLen + cLen) {
+    runItem(conceptResults.value[i - aLen - eLen - tLen])
     return
   }
-  if (i < aLen + eLen) {
-    runItem(exploreResults.value[i - aLen])
-    return
-  }
-  const tIndex = i - aLen - eLen
-  const anchor = tutorialRefs.value[tIndex]
-  if (anchor) {
-    close()
-    anchor.click() // fires native click → cross-doc VT
-  } else {
-    // Fallback to the action's run closure (window.location.href)
-    runItem(tutorialResults.value[tIndex])
-  }
+  runItem(kgResults.value[i - aLen - eLen - tLen - cLen])
 }
 
 function runItem(item: PaletteAction | undefined) {
@@ -218,6 +264,10 @@ async function searchTutorials(term: string) {
     return
   }
   searching.value = true
+  // Race guard: capture the query string that produced this request. When
+  // the response lands, if the user has since typed something else,
+  // discard our results — they're stale.
+  const requestedQuery = term
   try {
     const params = new URLSearchParams()
     params.set('$search', term)
@@ -225,10 +275,11 @@ async function searchTutorials(term: string) {
     params.set('$filter', "taskType eq 'TUTORIAL'")
     const res = await fetch(`/search/SearchableItems?${params}`)
     if (!res.ok) {
-      tutorialResults.value = []
+      if (query.value.trim() === requestedQuery) tutorialResults.value = []
       return
     }
     const data = await res.json()
+    if (query.value.trim() !== requestedQuery) return  // stale — discard
     tutorialResults.value = (data.value || [])
       .filter((row: { slug: string | null }) => row.slug)
       .map((row: { ID: string; title: string; slug: string; description: string | null; primaryTag: string | null; averageTimeToComplete: number | null }) => {
@@ -246,16 +297,113 @@ async function searchTutorials(term: string) {
         }
       })
   } catch {
-    tutorialResults.value = []
+    if (query.value.trim() === requestedQuery) tutorialResults.value = []
   } finally {
-    searching.value = false
+    if (query.value.trim() === requestedQuery) searching.value = false
+  }
+}
+
+async function searchConcepts(term: string) {
+  if (term.length < 2) {
+    conceptResults.value = []
+    return
+  }
+  const requestedQuery = term
+  try {
+    const params = new URLSearchParams()
+    params.set('$search', term)
+    params.set('$top', '6')
+    params.set('$select', 'slug,name,description')
+    const res = await fetch(`/graph/PublishedConcepts?${params}`)
+    if (!res.ok) {
+      if (query.value.trim() === requestedQuery) conceptResults.value = []
+      return
+    }
+    const data = await res.json()
+    if (query.value.trim() !== requestedQuery) return  // stale — discard
+    conceptResults.value = (data.value || [])
+      .filter((row: { slug: string | null }) => row.slug)
+      .map((row: { slug: string; name: string; description: string | null }) => {
+        const desc = row.description ? row.description.slice(0, 60) : ''
+        const hint = desc ? `Concept · ${desc}${row.description && row.description.length > 60 ? '…' : ''}` : 'Concept'
+        return {
+          id: `concept-${row.slug}`,
+          label: row.name,
+          hint,
+          icon: 'bullet-text',
+          slug: row.slug,
+          run: (close: () => void) => {
+            close()
+            window.location.href = `/concepts/${row.slug}/`
+          },
+        }
+      })
+  } catch {
+    if (query.value.trim() === requestedQuery) conceptResults.value = []
+  }
+}
+
+async function searchKG(term: string) {
+  if (term.length < 2) {
+    kgResults.value = []
+    return
+  }
+  const requestedQuery = term
+  try {
+    const res = await fetch('/graph/searchKG', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ term, maxConcepts: 5, maxTutorials: 5 }),
+    })
+    if (!res.ok) {
+      if (query.value.trim() === requestedQuery) kgResults.value = []
+      return
+    }
+    const data = await res.json()
+    if (query.value.trim() !== requestedQuery) return  // stale — discard
+
+    // Dedupe: drop concepts whose slug already appears in CONCEPTS group,
+    // and tutorials whose slug already appears in TUTORIALS group.
+    const conceptSlugsSeen = new Set(conceptResults.value.map(c => c.slug).filter(Boolean))
+    const tutorialSlugsSeen = new Set(tutorialResults.value.map(t => t.slug).filter(Boolean))
+
+    const conceptRows: PaletteAction[] = (data.concepts || [])
+      .filter((c: { slug: string }) => c.slug && !conceptSlugsSeen.has(c.slug))
+      .map((c: { slug: string; name: string; score: number }) => ({
+        id: `kg-c-${c.slug}`,
+        label: c.name,
+        hint: `via KG · score ${c.score.toFixed(2)}`,
+        icon: 'org-chart',
+        slug: c.slug,
+        run: (close: () => void) => { close(); window.location.href = `/concepts/${c.slug}/` },
+      }))
+
+    const tutorialRows: PaletteAction[] = (data.tutorials || [])
+      .filter((t: { slug: string }) => t.slug && !tutorialSlugsSeen.has(t.slug))
+      .map((t: { slug: string; title: string; score: number }) => ({
+        id: `kg-t-${t.slug}`,
+        label: t.title,
+        hint: `via KG · score ${t.score.toFixed(2)}`,
+        icon: 'org-chart',
+        slug: t.slug,
+        run: (close: () => void) => { close(); window.location.href = `/tutorials/${t.slug}` },
+      }))
+
+    kgResults.value = [...conceptRows, ...tutorialRows]
+  } catch {
+    if (query.value.trim() === requestedQuery) kgResults.value = []
   }
 }
 
 watch(query, (v) => {
   activeIndex.value = 0
   if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => searchTutorials(v.trim()), 200)
+  const trimmed = v.trim()
+  debounceTimer = setTimeout(() => {
+    searchTutorials(trimmed)
+    searchConcepts(trimmed)
+    searchKG(trimmed)
+  }, 250)
 })
 
 onMounted(() => {

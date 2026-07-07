@@ -232,6 +232,25 @@ service KnowledgeGraphService @(path : '/graph') {
   function pathBetween(fromSlug : String, toSlug : String)    returns array of String;     // Phase 2 stub
   function conceptsForUser(userId : String)                   returns ConceptCoverage;     // Phase 2 stub
 
+  /**
+   * Anonymous KG search for the ⌘K command palette (issue #1036).
+   * Same seed/walk/hydrate/link-aggregate as expandSearchConcepts, MINUS
+   * the on-demand-extraction enqueue. Fail-open — never returns a warning.
+   */
+  action searchKG(term : String, maxConcepts : Integer, maxTutorials : Integer)
+    returns {
+      concepts  : many {
+        slug  : String;
+        name  : String;
+        score : Double;
+      };
+      tutorials : many {
+        slug  : String;
+        title : String;
+        score : Double;
+      };
+    };
+
   // ─── Admin curation actions (require KnowledgeGraph.Admin scope) ──────
   @requires : 'KnowledgeGraph.Admin'
   action runSparql(query : String) returns SparqlResult;
