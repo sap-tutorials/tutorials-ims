@@ -106,7 +106,11 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
 
     it('pushes the inner hash for Redirects and Config (pipelinelog/joblog precedent)', () => {
       expect(ctrl).toMatch(/setHash\("homepageRedirects&\/hp\/Redirects"\)/)
-      expect(ctrl).toMatch(/setHash\("homepageConfig&\/hp\/HomepageConfig"\)/)
+      // HomepageConfig was demoted from @odata.singleton to a keyed collection
+      // (see srv/admin-service.cds header comment); fixed singleton UUID from
+      // srv/admin-service.js:601 (HOMEPAGE_CONFIG_SINGLETON_ID) must be in the
+      // hash so the OP deep-link resolves.
+      expect(ctrl).toMatch(/setHash\("homepageConfig&\/hp\/HomepageConfig\(00000000-0000-0000-0000-00000000c8ae\)"\)/)
     })
 
     it('does NOT setHash for homepageShelves (defaults to inner ShelvesList route)', () => {

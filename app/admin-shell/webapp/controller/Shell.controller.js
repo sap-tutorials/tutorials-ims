@@ -142,7 +142,13 @@ sap.ui.define([
           HashChanger.getInstance().setHash("homepageRedirects&/hp/Redirects");
         }
         if (sKey === "homepageConfig") {
-          HashChanger.getInstance().setHash("homepageConfig&/hp/HomepageConfig");
+          // Fixed singleton UUID; matches auto-init handler at
+          // srv/admin-service.js:601 (HOMEPAGE_CONFIG_SINGLETON_ID).
+          // HomepageConfig used to be @odata.singleton but that combo is
+          // incompatible with @odata.draft.enabled (draftActivate requires
+          // the ID key), so it was demoted to a keyed collection with a
+          // single well-known row. See srv/admin-service.cds header comment.
+          HashChanger.getInstance().setHash("homepageConfig&/hp/HomepageConfig(00000000-0000-0000-0000-00000000c8ae)");
         }
       }
     },
