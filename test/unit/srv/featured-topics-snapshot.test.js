@@ -87,4 +87,70 @@ describe('featured-topics-snapshot', () => {
       expect(card.title).toBe('My Mission');
     });
   });
+
+  // Regression: recomputeSnapshot MUST NOT emit a `slug IN (…)` query over
+  // every ConceptRank row — HANA rejects it with "Failed to set parameters,
+  // maximum packet size exceeded" once ConceptRank grows past ~a few thousand
+  // rows. Fix: fetch all Concepts unbounded and filter in Node. We simulate
+  // by seeding many ConceptRank rows and asserting the run completes without
+  // any query in the trace carrying that many bound slug params.
+  it('does not emit an unbounded slug-IN query over ConceptRank (packet-size regression)', async () => {
+    await cds.tx(async (tx) => {
+      const { Concepts, HomepageFeaturedTopics, TutorialConceptLinks, TutorialRank, Tutorials, Missions, ConceptRank } = cds.entities(NS);
+      // Clean slate
+      await tx.run(DELETE.from(HomepageFeaturedTopics));
+      await tx.run(DELETE.from(TutorialConceptLinks));
+      await tx.run(DELETE.from(TutorialRank));
+      await tx.run(DELETE.from(ConceptRank));
+      await tx.run(DELETE.from(Tutorials));
+      await tx.run(DELETE.from(Missions));
+      await tx.run(DELETE.from(Concepts));
+
+      // Seed 3,000 ConceptRank rows — well past HANA's parameter batch ceiling
+      // for a single WHERE IN (…) clause, and enough that a regression would
+      // fail on real HANA even if SQLite tolerates it.
+      const N = 3000;
+      const now = new Date().toISOString();
+      const conceptRows = [];
+      const rankRows = [];
+      for (let i = 0; i < N; i++) {
+        conceptRows.push({ ID: cds.utils.uuid(), slug: `c-${i}`, name: `C ${i}`, status: 'ACTIVE', publishedAt: now });
+        rankRows.push({ slug: `c-${i}`, score: 1 / (i + 1), computedAt: now });
+      }
+      // batch inserts to stay under SQLite's own bound-param cap
+      for (let i = 0; i < N; i += 500) {
+        await tx.run(INSERT.into(Concepts).entries(conceptRows.slice(i, i + 500)));
+        await tx.run(INSERT.into(ConceptRank).entries(rankRows.slice(i, i + 500)));
+      }
+
+      // Instrument tx.run to capture CQN SELECT statements and their bound
+      // `in`-list sizes. Any list of ≥500 items would blow HANA's packet cap.
+      const oversized = [];
+      const origRun = tx.run.bind(tx);
+      tx.run = async (q, ...rest) => {
+        try {
+          const sel = q?.SELECT;
+          const where = sel?.where;
+          if (Array.isArray(where)) {
+            for (let i = 0; i < where.length; i++) {
+              if (where[i] === 'in' && where[i + 1]?.list) {
+                const listLen = where[i + 1].list.length;
+                if (listLen >= 500) {
+                  const col = where[i - 1]?.ref?.join('.') || '?';
+                  oversized.push({ col, listLen, from: sel.from?.ref?.[0] });
+                }
+              }
+            }
+          }
+        } catch { /* ignore */ }
+        return origRun(q, ...rest);
+      };
+
+      // Should complete without throwing (would fail on HANA if regressed).
+      const res = await recomputeSnapshot(tx);
+      expect(res.count).toBe(0); // no editorial, no eligible KG candidates without tutorial links
+
+      expect(oversized, `emitted oversized IN clause(s): ${JSON.stringify(oversized)}`).toEqual([]);
+    });
+  });
 });
