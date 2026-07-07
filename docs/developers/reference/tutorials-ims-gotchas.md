@@ -87,3 +87,7 @@ Cross-references:
 
 - **Personalization endpoint MUST set `X-Personalization: 1` and `Cache-Control: private, no-store`** — the approuter is documented to never cache this header combination. Dropping either header silently allows a shared cache to serve one user's personalized payload to another user or to anonymous visitors. The smoke test (`test/smoke/homepage-personalized.test.js`) asserts both headers on every deployed environment.
 - **Client-side ETag round-trip lives in `sessionStorage['sap-devs-homepage-personalized']`** — clearing sessionStorage forces the coordinator to fetch fresh (no `If-None-Match` header, 200 response). The session key is `sap-devs-homepage-personalized`; the bypass flag is `sap-devs-homepage-default`. Both are sessionStorage (not localStorage), so they clear on tab close.
+
+## Cron jobs
+
+- **Reshuffle-video-rotation cron is TRUNCATE + INSERT — must run inside a single transaction.** `srv/jobs/reshuffle-video-rotation.js` uses `cds.tx` to wrap `DELETE FROM HomepageVideoRotation` + bulk INSERT. If a future refactor splits these into two top-level `db.run(...)` calls, a mid-cycle failure will empty the sidecar and visitors will see anchor-only tiles until the next successful cron pass — silently. #1031.
