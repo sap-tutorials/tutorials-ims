@@ -1,3 +1,4 @@
+// Dormant since #1032: Row 5 teaser was replaced by the featured-missions carousel. Retained for potential future re-use — do not import unless the carousel gains a personalization hook.
 // hugo-apps/src/homepage-personalizer/teaser-rerank.ts
 // (#763) Reorders the Row-5 tutorial-teaser cards by the server-supplied slug array.
 // Existing DOM cards are moved; missing slugs are fetched via the callback and
