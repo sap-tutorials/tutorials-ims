@@ -38,6 +38,8 @@ const _state = (globalThis[STATE_KEY] ??= {
   shelves: new Map(),
   // (#1032) 60s cache for featuredTopics payload
   ft: { at: 0, payload: null },
+  // (#1034) 60s cache for NewsItems-backed news() handler
+  news: { at: 0, value: null },
 });
 
 /** Test-only: clear all cached values. (#639) */
@@ -45,12 +47,38 @@ export function _resetForTests() {
   _state.events = { at: 0, value: null };
   _state.shelves.clear();
   _state.ft = { at: 0, payload: null };
+  _state.news = { at: 0, value: null };  // #1034
 }
 
 /** (#1032) Invalidate the featuredTopics in-process cache. Called by admin-service
  *  after recomputeSnapshot so the public endpoint serves fresh data immediately. */
 export function resetFtCache() {
   _state.ft = { at: 0, payload: null };
+}
+
+/** (#1034) Invalidate the news in-process cache. Called by
+ *  content-moderation-service handlers after admin approve/reject writes
+ *  and by fetch-news-job at the end of every successful cron. */
+export function resetNewsCache() {
+  _state.news = { at: 0, value: null };
+}
+
+const NEWS_CACHE_MS = 60_000;
+const NEWS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+async function _isNewsRelevanceEnabled() {
+  if (process.env.HOMEPAGE_NEWS_RELEVANCE_ENABLED === 'false') return false;
+  try {
+    const db = await cds.connect.to('db');
+    const { HomepageConfig } = cds.entities('com.sap.developers.ims');
+    const [cfg] = await db.run(
+      SELECT.from(HomepageConfig).columns('newsRelevanceEnabled').limit(1),
+    );
+    return cfg?.newsRelevanceEnabled === true;
+  } catch (e) {
+    log.warn(`_isNewsRelevanceEnabled failed, treating as false: ${e.message}`);
+    return false;
+  }
 }
 
 // (#1032) Module-level 60s cache for featuredTopics payload.
@@ -219,9 +247,41 @@ export default class HomepageService extends cds.ApplicationService {
       return fetchRssItems(COMMUNITY_BLOGS_RSS_URL, { limit: 3 });
     });
 
-    // (#639) news() — SAP News RSS, max 2 items.
+    // (#1034) news() — filtered from NewsItems + admin override, 60s cache.
+    // Two-layer kill switch: env HOMEPAGE_NEWS_RELEVANCE_ENABLED=false or
+    // HomepageConfig.newsRelevanceEnabled !== true → legacy RSS pass-through.
     this.on('news', async () => {
-      return fetchRssItems(SAP_NEWS_RSS_URL, { limit: 2 });
+      const now = Date.now();
+      const enabled = await _isNewsRelevanceEnabled();
+      if (!enabled) {
+        return fetchRssItems(SAP_NEWS_RSS_URL, { limit: 2 });
+      }
+      if (_state.news.value !== null && (now - _state.news.at) < NEWS_CACHE_MS) {
+        return _state.news.value;
+      }
+      try {
+        const db = await cds.connect.to('db');
+        const { NewsItems } = cds.entities('com.sap.developers.ims.external');
+        const cutoff = new Date(now - NEWS_WINDOW_MS).toISOString();
+        const rows = await db.run(
+          SELECT.from(NewsItems)
+            .columns('title', 'link', 'publishedAt', 'description', 'aiVerdict', 'adminVerdict')
+            .where({ publishedAt: { '>=': cutoff }, language: 'en' })
+            .orderBy('publishedAt desc')
+            .limit(20),
+        );
+        const filtered = (rows || []).filter(r => {
+          if (r.adminVerdict === 'approve') return true;
+          if (r.adminVerdict === 'reject') return false;
+          return r.aiVerdict === 'relevant';
+        }).slice(0, 2).map(({ title, link, publishedAt, description }) =>
+          ({ title, link, publishedAt, description }));
+        _state.news = { at: now, value: filtered };
+        return filtered;
+      } catch (e) {
+        log.warn(`news() DB read failed, returning empty: ${e.message}`);
+        return [];
+      }
     });
 
     // (#639) shelves(verb) — HomepageShelves filtered by verb (optional), 5-min cache.
