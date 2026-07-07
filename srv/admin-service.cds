@@ -1,6 +1,7 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 using from '../db/knowledge-graph-communities';
 using from '../db/knowledge-graph-ondemand';
+using from '../db/homepage-featured';
 using from '../db/views';
 using from '../app/admin-annotations';
 
@@ -947,4 +948,29 @@ extend service AdminService with {
     missionSlug : String(255),
     title       : String(255)
   ) returns AdminService.Missions;
+}
+
+// (#1032) Featured missions carousel — editorial rows + read-only snapshot.
+// @assert.unique.concept on HomepageFeaturedTopics enforces one row per concept.
+// recomputeFeaturedTopics is SuperAdmin-gated (manual trigger); inline recompute
+// after CREATE/UPDATE/DELETE is handled in srv/admin-service.js.
+// Concepts is exposed read-only here as a value-help entity for the concept_ID
+// field on FeaturedTopics (Common.ValueList in app/admin-annotations.cds).
+extend service AdminService with {
+  @odata.draft.enabled
+  @requires: 'Admin'
+  entity FeaturedTopics as projection on ims.HomepageFeaturedTopics;
+
+  @readonly
+  @requires: 'Admin'
+  entity FeaturedTopicsSnapshotView as projection on ims.FeaturedTopicsSnapshot;
+
+  // (#1032) Value-help for concept_ID on FeaturedTopics.
+  // Read-only projection mirroring KnowledgeGraphService.Concepts.
+  @readonly
+  @requires: 'Admin'
+  entity Concepts as projection on ims.Concepts { ID, slug, name, status };
+
+  @requires: 'SuperAdmin'
+  action recomputeFeaturedTopics() returns { count : Integer; computedAt : Timestamp; };
 }

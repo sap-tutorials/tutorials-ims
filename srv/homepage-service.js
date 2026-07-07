@@ -23,6 +23,7 @@ import { resolveSecret } from './lib/secret-resolver.js';
 import { buildEnvelope, hashEnvelope } from './lib/homepage/personalized-envelope.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
 import * as metrics from './lib/metrics.js';
+import { readSnapshotForFeed } from './lib/featured-topics-snapshot.js';
 
 const log = cds.log('homepage-service');
 
@@ -35,12 +36,40 @@ const _state = (globalThis[STATE_KEY] ??= {
   events: { at: 0, value: null },
   // Map<verb|'', {at, value}> for shelves
   shelves: new Map(),
+  // (#1032) 60s cache for featuredTopics payload
+  ft: { at: 0, payload: null },
 });
 
 /** Test-only: clear all cached values. (#639) */
 export function _resetForTests() {
   _state.events = { at: 0, value: null };
   _state.shelves.clear();
+  _state.ft = { at: 0, payload: null };
+}
+
+/** (#1032) Invalidate the featuredTopics in-process cache. Called by admin-service
+ *  after recomputeSnapshot so the public endpoint serves fresh data immediately. */
+export function resetFtCache() {
+  _state.ft = { at: 0, payload: null };
+}
+
+// (#1032) Module-level 60s cache for featuredTopics payload.
+// Per-process; no cross-instance coherence needed (shifts only on nightly job
+// or admin save, both of which can tolerate a 60s lag).
+const FT_CACHE_MS = 60_000;
+
+async function _getFeaturedTopicsPayload() {
+  const now = Date.now();
+  if (_state.ft.payload && (now - _state.ft.at) < FT_CACHE_MS) return _state.ft.payload;
+  const tx = cds.tx({});
+  try {
+    const { computedAt, slots, etag } = await readSnapshotForFeed(tx);
+    const payload = { computedAt, etag, snapshot: slots };
+    _state.ft = { at: now, payload };
+    return payload;
+  } finally {
+    await tx.commit();
+  }
 }
 
 // (#639, #703) SAP Community RSS — blog posts feed. The Khoros endpoint
@@ -380,6 +409,26 @@ export default class HomepageService extends cds.ApplicationService {
             `</div>`,
         };
       });
+    });
+
+    // (#1032) featuredTopics() — unbound function with ETag + 304 support.
+    // Public (inherits service @requires:'any'). 60s in-process cache via _state.ft.
+    this.on('featuredTopics', async (req) => {
+      const payload = await _getFeaturedTopicsPayload();
+      const inm = req.req?.headers?.['if-none-match'];
+      if (inm && inm === payload.etag) {
+        if (req.res) {
+          req.res.setHeader('ETag', payload.etag);
+          req.res.setHeader('Cache-Control', 'public, max-age=60');
+          req.res.status(304).end();
+          return req.reject(-1);
+        }
+      }
+      if (req.res) {
+        req.res.setHeader('ETag', payload.etag);
+        req.res.setHeader('Cache-Control', 'public, max-age=60');
+      }
+      return payload;
     });
 
     // (#763 Task 19) beaconApplied — client fires once per surface per session

@@ -3419,3 +3419,80 @@ annotate AdminService.KgOnDemandRequests with @(
   Capabilities.UpdateRestrictions.Updatable : false,
   Capabilities.DeleteRestrictions.Deletable : false
 );
+
+// --- HomepageFeaturedTopics / FeaturedTopics (#1032) ---
+// Editorial overrides for the homepage featured missions carousel.
+// Each row pins one concept to a carousel slot with optional display-title
+// and mission-slug overrides. The snapshot (FeaturedTopicsSnapshot) is
+// materialised by recomputeSnapshot and read by the homepage feed endpoint.
+//
+// @UI.RecommendationState: 0 on the concept field is required to suppress
+// the @cap-js/ai RPT-1 hook that fires on every draft Create — the AICore
+// service kind is not resolved in DEV, causing a 500 on first-save.
+// Precedent: HomepageForYouCandidatesAdmin.personaTags (line ~3193).
+
+annotate AdminService.FeaturedTopics with @(
+  UI.HeaderInfo: {
+    TypeName: 'Featured Topic',
+    TypeNamePlural: 'Featured Topics',
+    Title: { Value: displayTitle }
+  },
+  UI.LineItem: [
+    { Value: concept_ID,    Label: 'Concept' },
+    { Value: displayTitle,  Label: 'Display Title' },
+    { Value: sortOrder,     Label: 'Order' },
+    { Value: validFrom,     Label: 'From' },
+    { Value: validUntil,    Label: 'Until' },
+    { Value: isActive,      Label: 'Active' },
+  ],
+  UI.SelectionFields: [ isActive ],
+  UI.FieldGroup #Main: { Data: [
+    { Value: concept_ID },
+    { Value: displayTitle },
+    { Value: sortOrder },
+    { Value: validFrom },
+    { Value: validUntil },
+    { Value: isActive },
+    { Value: missionSlugs, Label: 'Mission Slug Overrides' },
+    { Value: notes },
+  ]},
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Main', Label: 'Details' },
+  ],
+);
+
+annotate AdminService.FeaturedTopics with {
+  concept @(
+    // (#1032) Escape hatch: suppress the @cap-js/ai RPT-1 recommendation
+    // hook so a draft Create does not crash with "No service definition
+    // found for 'AICore'" on CF DEV. See memory cap-ai-plugin-aicore-kind-resolution.
+    UI.RecommendationState: 0,
+    Common.ValueList: {
+      CollectionPath: 'Concepts',
+      SearchSupported: true,
+      Parameters: [
+        { $Type: 'Common.ValueListParameterInOut',
+          LocalDataProperty: concept_ID, ValueListProperty: 'ID' },
+        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' },
+        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' },
+      ],
+    },
+  );
+};
+
+annotate AdminService.FeaturedTopicsSnapshotView with @(
+  UI.HeaderInfo: {
+    TypeName: 'Snapshot Slot',
+    TypeNamePlural: 'Snapshot Slots'
+  },
+  UI.LineItem: [
+    { Value: slotOrder },
+    { Value: source },
+    { Value: conceptSlug },
+    { Value: displayTitle },
+    { Value: computedAt },
+  ],
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable : false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);

@@ -50,6 +50,7 @@ import { runKgPageRank } from './kg-pagerank-job.js';
 import { runKgCommunities } from './kg-communities-job.js';
 import { runKgWcc } from './kg-wcc-job.js';
 import { runOnDemandDrain } from './kg-ondemand-job.js';
+import { runKgFeaturedTopics } from './kg-featured-topics-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -654,6 +655,18 @@ export function registerJobs() {
     ttlMs: 600000,
     description: 'Weakly-connected components over KG_PG_WORKSPACE — populates KgIsolation sidecar (#918)',
     fn: () => runKgWcc(),
+  });
+
+  // Daily at 04:13 UTC — recompute FeaturedTopicsSnapshot from ConceptRank +
+  // KgCommunity + editorial rows. Off-minute :13 avoids collision with
+  // secret-expiry-check at :11 and runs after PageRank (03:53) and
+  // communities (03:57). (#1032)
+  registerJob({
+    jobName: 'kg-featured-topics',
+    schedule: '13 4 * * *',
+    ttlMs: 600000,
+    description: 'Rebuild FeaturedTopicsSnapshot from KG signals + editorial rows',
+    fn: (logId) => runKgFeaturedTopics(logId),
   });
 
   // Weekly Sunday 02:00 — tutorial metadata review

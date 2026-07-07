@@ -26,10 +26,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
 const HUGO_DIR = join(REPO_ROOT, 'hugo');
 const BROWSE_JSON = join(HUGO_DIR, 'data', 'browse.json');
-// IMPORTANT: keep the backup OUTSIDE hugo/data/ — Hugo eagerly parses every file
+const FEATURED_TOPICS_JSON = join(HUGO_DIR, 'data', 'featured_topics.json');
+// IMPORTANT: keep backups OUTSIDE hugo/data/ — Hugo eagerly parses every file
 // in data/ as a data source and chokes on unknown extensions (e.g. .test-backup
 // → "unmarshal of format \"\" is not supported").
 const BROWSE_BACKUP = join(tmpdir(), 'hugo-homepage-partials-test-browse.backup.json');
+const FEATURED_TOPICS_BACKUP = join(tmpdir(), 'hugo-homepage-partials-test-featured.backup.json');
 const PUBLIC_DIR = join(HUGO_DIR, 'public');
 
 // Minimal but representative fixture — exercises the same shape fetch-tutorials
@@ -75,6 +77,36 @@ const FIXTURE_BROWSE = {
   buildAt: '2026-06-27T00:00:00Z',
 };
 
+// Minimal fixture for featured_topics.json (#1032 Row 5 carousel).
+// One slide with one tutorial card — enough to render hp-featured-carousel.
+const FIXTURE_FEATURED_TOPICS = {
+  computedAt: '2026-07-07T04:13:00.000Z',
+  etag: '"test-etag-1032"',
+  snapshot: [
+    {
+      slotOrder: 1,
+      source: 'editorial',
+      conceptSlug: 'test-concept',
+      displayTitle: 'Test Concept Topic',
+      missions: [
+        {
+          slug: 'test-tutorial',
+          kind: 'tutorial',
+          title: 'Test Tutorial',
+          description: 'A test tutorial.',
+          level: 'beginner',
+          time: 15,
+          primaryTag: 'Test',
+          tutorialCount: 1,
+          href: '/tutorials/test-tutorial',
+          isNew: false,
+        },
+      ],
+    },
+  ],
+  buildAt: '2026-07-07T04:13:00.000Z',
+};
+
 function hugoBinary(): string {
   // Honor a HUGO env override so CI can point at /tmp/hugo if it was downloaded
   // alongside the main MTA build (mta.yaml before-all curl) instead of relying
@@ -84,6 +116,7 @@ function hugoBinary(): string {
 
 describe('hugo homepage partials render against normalized browse.json', () => {
   let hadOriginal = false;
+  let hadFeaturedTopicsOriginal = false;
 
   beforeAll(() => {
     if (existsSync(BROWSE_JSON)) {
@@ -92,6 +125,15 @@ describe('hugo homepage partials render against normalized browse.json', () => {
     }
     mkdirSync(dirname(BROWSE_JSON), { recursive: true });
     writeFileSync(BROWSE_JSON, JSON.stringify(FIXTURE_BROWSE, null, 2), 'utf8');
+
+    // Seed featured_topics.json fixture (#1032) so the Row 5 carousel partial
+    // renders hp-featured-carousel in the homepage HTML.
+    if (existsSync(FEATURED_TOPICS_JSON)) {
+      hadFeaturedTopicsOriginal = true;
+      copyFileSync(FEATURED_TOPICS_JSON, FEATURED_TOPICS_BACKUP);
+    }
+    writeFileSync(FEATURED_TOPICS_JSON, JSON.stringify(FIXTURE_FEATURED_TOPICS, null, 2), 'utf8');
+
     rmSync(PUBLIC_DIR, { recursive: true, force: true });
   });
 
@@ -102,6 +144,12 @@ describe('hugo homepage partials render against normalized browse.json', () => {
       rmSync(BROWSE_BACKUP, { force: true });
     } else {
       rmSync(BROWSE_JSON, { force: true });
+    }
+    if (hadFeaturedTopicsOriginal) {
+      copyFileSync(FEATURED_TOPICS_BACKUP, FEATURED_TOPICS_JSON);
+      rmSync(FEATURED_TOPICS_BACKUP, { force: true });
+    } else {
+      rmSync(FEATURED_TOPICS_JSON, { force: true });
     }
   });
 
@@ -129,8 +177,8 @@ describe('hugo homepage partials render against normalized browse.json', () => {
     const homepageHtml = join(PUBLIC_DIR, 'index.html');
     expect(existsSync(homepageHtml), `expected ${homepageHtml} to exist`).toBe(true);
     const html = readFileSync(homepageHtml, 'utf8');
-    // tutorials-teaser.html emits <section class="hp-teaser" …>
-    expect(html).toContain('hp-teaser');
+    // featured-topics-carousel.html (Row 5, #1032) emits <section class="hp-featured-carousel" …>
+    expect(html).toContain('hp-featured-carousel');
   });
 
   it('renders the curated-paths section on /learn/', () => {

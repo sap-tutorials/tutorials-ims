@@ -27,6 +27,8 @@ import { runSeedApiDocs } from './lib/seed-api-docs.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
+import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
+import { resetFtCache } from './homepage-service.js';
 import * as metrics from './lib/metrics.js';
 import {
   listAlertSeverities,
@@ -2860,6 +2862,32 @@ export default class AdminService extends cds.ApplicationService {
     this.before(shelfEvents, HomepageShelves.drafts, checkPersonaTagsHandler);
     this.before(shelfEvents, HomepageForYouCandidatesAdmin, checkPersonaTagsHandler);
     this.before(shelfEvents, HomepageForYouCandidatesAdmin.drafts, checkPersonaTagsHandler);
+
+    // ── (#1032) Featured missions carousel admin handlers ──
+    // recomputeFeaturedTopics — SuperAdmin manual trigger to force a fresh
+    // snapshot materialisation without waiting for the nightly job.
+    this.on('recomputeFeaturedTopics', async () => {
+      const { count, computedAt } = await cds.tx(async (tx) => recomputeSnapshot(tx));
+      resetFtCache();
+      return { count, computedAt };
+    });
+
+    // After-SAVE on the draft-active flow: recompute the snapshot inline
+    // (≤8 rows, fast) so admins see the updated carousel immediately, then
+    // fire a debounced rebuild so hugo/data/featured_topics.json refreshes.
+    this.after(['CREATE', 'UPDATE', 'DELETE'], 'FeaturedTopics', async (_data, req) => {
+      try {
+        await cds.tx(async (tx) => recomputeSnapshot(tx));
+        resetFtCache();
+      } catch (err) {
+        cds.log('admin-featured').warn('inline recompute failed after write:', err.message);
+      }
+      try {
+        await scheduleRebuild('admin-featured-topics-write', { mode: 'catalog-only' });
+      } catch (err) {
+        cds.log('admin-featured').warn('rebuild dispatch failed:', err.message);
+      }
+    });
 
     await super.init();
 

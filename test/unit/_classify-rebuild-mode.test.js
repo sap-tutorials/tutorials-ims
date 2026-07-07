@@ -55,6 +55,8 @@ describe('classifyRebuildMode', () => {
     // #685: KG bound actions
     ['publishConcept',        'action', 'catalog-only', false, false, false],
     ['unpublishConcept',      'action', 'catalog-only', false, false, false],
+    // #1032: FeaturedTopics carousel
+    ['FeaturedTopics',        'crud', 'catalog-only', false, false, false],
     // Unrecognized action → safe default
     ['rotateSecretValue',     'action', 'full',         false, false, false],
     ['uploadPhoto',           'action', 'full',         false, false, false],

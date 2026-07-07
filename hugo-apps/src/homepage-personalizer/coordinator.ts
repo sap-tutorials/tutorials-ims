@@ -1,7 +1,6 @@
 import { readSessionCache, writeSessionCache, type Envelope } from './session-cache';
 import { applyVerbOrder } from './verb-order';
 import { renderBadge } from './personalized-badge';
-import { applyTeaserRerank, type FetchedCard } from './teaser-rerank';
 import { mountForYou } from './mount-for-you';
 import { applyShelfRerank } from './shelf-rerank';
 import { subscribeBroadcast } from './prefs-broadcast';
@@ -28,18 +27,6 @@ async function isSignedIn(): Promise<boolean> {
     const r = await fetch('/me', { credentials: 'include' });
     return r.ok;
   } catch { return false; }
-}
-
-// (#763 Task 12) Fetch card HTML for slugs missing from the Row-5 DOM.
-async function fetchMissingCards(slugs: string[]): Promise<FetchedCard[]> {
-  try {
-    const url = `/homepage/tutorialCards?slugs=${encodeURIComponent(JSON.stringify(slugs))}`;
-    const r = await fetch(url, { credentials: 'include' });
-    if (!r.ok) return [];
-    const body = await r.json();
-    // CAP wraps array responses in OData envelope { value: [...] } — unwrap.
-    return (Array.isArray(body) ? body : (body?.value ?? [])) as FetchedCard[];
-  } catch { return []; }
 }
 
 export async function boot(): Promise<void> {
@@ -81,12 +68,6 @@ function applyEnvelope(env: Envelope): void {
     env.profile ?? null,
     'personalized'
   );
-  // (#763 Task 12) Reorder Row-5 tutorial teaser cards by the server-supplied order.
-  void applyTeaserRerank(
-    document.querySelector<HTMLElement>('[data-personalize="teaser-rerank"]'),
-    env.teaserOrder ?? [],
-    fetchMissingCards
-  ).then(() => beaconApplied('teaser'));
   // (#763 Task 13) For-you row (Row 2b).
   mountForYou(
     document.querySelector<HTMLElement>('[data-personalize="for-you"]'),

@@ -50,9 +50,9 @@ Seven rows top-to-bottom on the homepage. Each verb also has a dedicated sub-pag
 │   LEFT — Weekly Developer News. RIGHT — 3-4 recent @sapdevs videos. │
 │   Runtime: /api/homepage/videos (15-min cache; YouTube Data API v3). │
 ├──────────────────────────────────────────────────────────────────────┤
-│ Row 5 · Tutorials catalog teaser                                     │
-│   6-8 featured cards. Build-time: hugo/data/browse.json.            │
-│   "Browse all tutorials →" → /tutorial-navigator/.                  │
+│ Row 5 · Featured missions carousel (topic-based, 8 slides × 4 missions)    │
+│   KG-driven topic slides with editorial override. SSR baseline:     │
+│   hugo/data/featured_topics.json. Runtime: /homepage/featuredTopics.│
 ├──────────────────────────────────────────────────────────────────────┤
 │ Row 6 · Community lane                                               │
 │   Columns: Developer Advocates · Community blogs · SAP News.         │
@@ -96,7 +96,7 @@ Three verb sub-pages carry an extra section beyond the four shelves:
 | Row 2 verb spine | `hugo/data/homepage_shelves.json` (baked from `GET /build/homepage-shelves`) | Rebuild on admin `HomepageShelves` save (debounced 60s dispatch) |
 | Row 3 events | `GET /api/homepage/events` | 60s server-side cache |
 | Row 4 videos | `GET /api/homepage/videos` | 15-min server-side cache; depends on `YOUTUBE_API_KEY` |
-| Row 5 tutorial teaser | `hugo/data/browse.json` (baked at build time) | Rebuild only |
+| Row 5 featured carousel | `hugo/data/featured_topics.json` (baked by `scripts/fetch-featured-topics.ts`) + runtime `/homepage/featuredTopics` | Nightly job at 04:13 UTC (`kg-featured-topics-job`) + editorial-save debounced rebuild (60s) |
 | Row 6 community | `/api/advocates` + `GET /api/homepage/communityBlogs` + `GET /api/homepage/news` | Advocates: 60s + SWR; RSS feeds: 30-min cache |
 | Row 7 directory footer | `hugo/data/homepage_shelves.json` | Same as Row 2 |
 
@@ -158,6 +158,21 @@ See **[Homepage explainer popovers](homepage-explainers.md)** for:
 - Vue islands (`verb-flip-tile`, `link-explainer-popover`) and their Hugo attach points
 - Admin UI surfaces under `/admin-ui/#verb-definitions`, `/admin-ui/#shelf-definitions`, and the Explainer facet on the Homepage Shelves Object Page
 - Authoring workflow for new BTP environments
+
+---
+
+## Featured missions carousel (#1032)
+
+Row 5 of the homepage was previously a static tutorials-catalog teaser. Issue #1032 replaces it with a KG-driven topic carousel: up to 8 slides, each showing up to 4 mission cards for a concept ranked by the nightly PageRank job.
+
+**Data flow:** The nightly `kg-featured-topics-job` (04:13 UTC) calls `recomputeSnapshot`, which joins `ConceptRank` × `HomepageFeaturedTopics` editorial rows × `KgCommunity` diversity filter, then materialises the result into `FeaturedTopicsSnapshot`. `scripts/fetch-featured-topics.ts` reads the snapshot via `GET /build/featured-topics` and writes `hugo/data/featured_topics.json` for SSR. At runtime, the Vue island (`hugo-apps/src/featured-topics-carousel/`) re-hydrates via `GET /homepage/featuredTopics()` with weak ETag / 304 caching.
+
+**Admin surface:** `/admin-ui/#featured-topics` — `FeaturedTopics` CRUD + manual `recomputeFeaturedTopics` action (SuperAdmin-gated).
+
+**Kill switch:** revert the Row 5 Hugo partial include (`hugo/layouts/partials/homepage/featured-topics-carousel.html`) to restore the previous teaser — no DB migration needed.
+
+**Spec:** `docs/superpowers/specs/2026-07-06-1032-featured-missions-carousel-design.md`
+**Plan:** `docs/superpowers/plans/2026-07-06-1032-featured-missions-carousel.md`
 
 ---
 

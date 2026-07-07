@@ -290,6 +290,12 @@
         "settings": {},
         "componentData": {},
         "lazy": true
+      },
+      "featuredTopicsComponent": {
+        "name": "sap.tutorials.admin.featuredTopics",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
       }
     },
     "services": {
@@ -355,6 +361,7 @@
         { "name": "verbDefinitions",  "pattern": "verb-definitions",  "target": [{"name": "verbDefinitionsTarget",  "prefix": "vd"}] },
         { "name": "shelfDefinitions", "pattern": "shelf-definitions", "target": [{"name": "shelfDefinitionsTarget", "prefix": "sd"}] },
         { "name": "forYou",           "pattern": "for-you",           "target": [{"name": "forYouTarget",           "prefix": "fy"}] },
+        { "name": "featuredTopics",   "pattern": "featured-topics",   "target": [{"name": "featuredTopicsTarget",   "prefix": "ft"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
@@ -587,6 +594,13 @@
           "id": "forYouTarget",
           "viewLevel": 1,
           "prefix": "fy"
+        },
+        "featuredTopicsTarget": {
+          "type": "Component",
+          "usage": "featuredTopicsComponent",
+          "id": "featuredTopicsTarget",
+          "viewLevel": 1,
+          "prefix": "ft"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",
