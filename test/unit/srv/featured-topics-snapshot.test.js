@@ -57,4 +57,34 @@ describe('featured-topics-snapshot', () => {
       expect(second.count).toBe(first.count);
     });
   });
+
+  it('emits mission card shape with /tutorials/mission-<slug> href', async () => {
+    await cds.tx(async (tx) => {
+      const { Concepts, HomepageFeaturedTopics, Missions, Tutorials, TutorialConceptLinks, TutorialRank } = cds.entities(NS);
+      // Clean up state from prior tests
+      await tx.run(DELETE.from(HomepageFeaturedTopics));
+      await tx.run(DELETE.from(TutorialConceptLinks));
+      await tx.run(DELETE.from(TutorialRank));
+      await tx.run(DELETE.from(Tutorials));
+      await tx.run(DELETE.from(Missions));
+      await tx.run(DELETE.from(Concepts));
+
+      const conceptId = cds.utils.uuid();
+      await tx.run(INSERT.into(Concepts).entries({ ID: conceptId, slug: 'mtest', name: 'Mission Test', status: 'ACTIVE', publishedAt: new Date().toISOString() }));
+      await tx.run(INSERT.into(Missions).entries({ ID: cds.utils.uuid(), slug: 'my-mission', title: 'My Mission' }));
+      await tx.run(INSERT.into(HomepageFeaturedTopics).entries({
+        ID: cds.utils.uuid(), concept_ID: conceptId, sortOrder: 5, isActive: true,
+        missionSlugs: ['my-mission'],
+      }));
+
+      const res = await recomputeSnapshot(tx);
+      expect(res.count).toBe(1);
+      const feed = await readSnapshotForFeed(tx);
+      expect(feed.slots).toHaveLength(1);
+      const card = feed.slots[0].missions[0];
+      expect(card.kind).toBe('mission');
+      expect(card.href).toBe('/tutorials/mission-my-mission');
+      expect(card.title).toBe('My Mission');
+    });
+  });
 });
