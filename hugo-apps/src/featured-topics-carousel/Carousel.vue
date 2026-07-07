@@ -5,6 +5,8 @@
     <div
       class="hp-featured-carousel__viewport"
       aria-live="polite"
+      tabindex="0"
+      @keydown="onKey"
     >
       <div
         v-for="(slide, i) in slides"
@@ -40,7 +42,7 @@
             role="tab"
             :aria-selected="i === active ? 'true' : 'false'"
             :aria-label="'Show ' + slide.displayTitle"
-            @click="jumpTo(i)"
+            @click="userJumpTo(i)"
           ></button>
         </li>
       </ol>
@@ -91,6 +93,21 @@ function togglePlay(): void {
   userPaused.value = !userPaused.value;
 }
 
+function userJumpTo(i: number): void {
+  jumpTo(i);
+  userPaused.value = true;
+}
+
+function onKey(e: KeyboardEvent): void {
+  if (e.key === 'ArrowLeft') {
+    prev();
+    e.preventDefault();
+  } else if (e.key === 'ArrowRight') {
+    next();
+    e.preventDefault();
+  }
+}
+
 useAutoAdvance({
   intervalMs: 30_000,
   enabled: autoAdvance,
@@ -112,5 +129,5 @@ useDeepLink({
 });
 
 // Expose for unit tests (test-utils cannot reach script-setup internals otherwise).
-defineExpose({ next, prev, jumpTo, togglePlay, active, userPaused, autoAdvance });
+defineExpose({ next, prev, jumpTo, userJumpTo, togglePlay, active, userPaused, autoAdvance });
 </script>

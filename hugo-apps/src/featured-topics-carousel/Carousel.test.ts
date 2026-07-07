@@ -57,4 +57,25 @@ describe('Carousel', () => {
     expect(w.find('.is-active .hp-featured-carousel__topic').text()).toBe('CAP');
     vi.useRealTimers();
   });
+
+  it('dot click stops auto-advance', async () => {
+    vi.useFakeTimers();
+    const w = mount(Carousel, { props: { root: fakeRoot(), initialEtag: '', initialSlides: slides } });
+    const dots = w.findAll('button[role="tab"]');
+    await dots[dots.length - 1].trigger('click');
+    expect(w.find('.is-active .hp-featured-carousel__topic').text()).toBe('HANA');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(w.find('.is-active .hp-featured-carousel__topic').text()).toBe('HANA'); // still HANA
+    vi.useRealTimers();
+  });
+
+  it('ArrowRight key advances and stops auto-advance', async () => {
+    vi.useFakeTimers();
+    const w = mount(Carousel, { props: { root: fakeRoot(), initialEtag: '', initialSlides: slides } });
+    await w.find('.hp-featured-carousel__viewport').trigger('keydown', { key: 'ArrowRight' });
+    expect(w.find('.is-active .hp-featured-carousel__topic').text()).toBe('HANA');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(w.find('.is-active .hp-featured-carousel__topic').text()).toBe('HANA');
+    vi.useRealTimers();
+  });
 });
