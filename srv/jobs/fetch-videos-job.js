@@ -47,6 +47,7 @@ import {
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
 import { resolveSecret } from '../lib/secret-resolver.js';
 import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
+import * as metrics from '../lib/metrics.js';
 
 const NAMESPACE_EXT = 'com.sap.developers.ims.external';
 const NAMESPACE_KG = 'com.sap.developers.ims';
@@ -401,6 +402,7 @@ export async function runFetchVideos(deps = {}) {
           })
           .where({ ID: row.ID });
         summary.statsUpdated++;
+        metrics.counter('homepage.videos.statistics_updated');
       }
     }
   } catch (err) {

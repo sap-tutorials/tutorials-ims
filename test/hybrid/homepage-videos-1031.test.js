@@ -39,10 +39,20 @@ describe.runIf(isSafeForWrites())('Homepage video band on HANA (#1031)', () => {
   });
 
   afterAll(async () => {
+    // Clean up rotation rows for any seeded videos first (FK-safe order — the
+    // sidecar's Association to Videos has @assert.notNull, so orphan rows would
+    // eventually block a Videos DELETE if @assert.integrity is enabled).
+    const seeded = await db.run(
+      SELECT.from(`${NS_EXT}.Videos`).columns('ID').where("slug LIKE '" + `vd-${TEST_TAG}` + "%'")
+    );
+    if (seeded.length) {
+      const ids = seeded.map(r => r.ID);
+      await db.run(DELETE.from(`${NS}.HomepageVideoRotation`).where({ video_ID: { in: ids } }));
+    }
     await db.run(DELETE.from(`${NS_EXT}.Videos`).where("slug LIKE '" + `vd-${TEST_TAG}` + "%'"));
   });
 
-  it('reshuffle cron writes rows and endpoint tags them kind=popular', async () => {
+  it('reshuffle cron writes rows and endpoint tags recent items with kind', async () => {
     const { runReshuffleVideoRotation } = await import('../../srv/jobs/reshuffle-video-rotation.js');
     const result = await runReshuffleVideoRotation();
     expect(result.inserted).toBeGreaterThanOrEqual(1);

@@ -3045,9 +3045,9 @@ annotate AdminService.HomepageConfig with @(
     { Value : videoBandEnabled,        Label : 'Show video band' },
     { Value : eventsBandEnabled,       Label : 'Show events band' },
     { Value : communityLaneEnabled,    Label : 'Show community lane' },
-    { Value: videoBandAnchorCount,        Label: 'Video band anchor slots' },
-    { Value: videoBandRotationCount,      Label: 'Video band rotation slots' },
-    { Value: videoBandRotationWindowDays, Label: 'Rotation window (days)' }
+    { Value : videoBandAnchorCount,        Label : 'Video band anchor slots' },
+    { Value : videoBandRotationCount,      Label : 'Video band rotation slots' },
+    { Value : videoBandRotationWindowDays, Label : 'Rotation window (days)' }
   ]}
 );
 

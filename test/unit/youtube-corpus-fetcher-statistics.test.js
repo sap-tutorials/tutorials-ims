@@ -2,7 +2,7 @@
 //
 // (#1031) Unit tests for youtube-corpus-fetcher.fetchStatistics.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   fetchStatistics,
   _setMockFetcher,

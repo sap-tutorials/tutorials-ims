@@ -176,6 +176,11 @@ describe('/homepage/videos merges anchors + rotation (#1031)', () => {
     await db.run(UPDATE(`${NS_EXT}.Videos`).set({ excludeFromHomepage: true }).where({ ID: excluded.ID }));
     await seed('keep1', 5);
 
+    // Also insert a rotation row pointing at the excluded video — must be filtered
+    // by the JOIN's where({'v.excludeFromHomepage': false}).
+    const excludedRotation = await SELECT.one.from(`${NS_EXT}.Videos`).columns('ID').where({ youtubeVideoId: 'excluded' });
+    await INSERT.into(`${NS}.HomepageVideoRotation`).entries([{ video_ID: excludedRotation.ID, rank: 1 }]);
+
     const srv = await cds.connect.to('HomepageService');
     const res = await srv.send('videos');
     expect(res.recent.find(r => r.videoId === 'excluded')).toBeUndefined();
