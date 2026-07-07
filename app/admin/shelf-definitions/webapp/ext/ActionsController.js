@@ -14,6 +14,29 @@ sap.ui.define([
     return `$${dollars}.${remainder.toString().padStart(2, '0')}`;
   }
 
+  // FE V4 (UI5 ≥ 1.108) does NOT populate `oEvent.getParameter("selectedContexts")`
+  // for custom manifest LineItem actions. The reliable path is
+  // `oEvent.getSource().getSelectedContexts()` on the ExtensionAPI. Older FE
+  // builds occasionally exposed `contexts` as a parameter, and the legacy
+  // `selectedContexts` name shipped by SmartTable is kept as a last-resort
+  // fallback so a future FE version bump can't silently regress. Cost of the
+  // wrong reader: "Mark selected as reviewed" toast-showed "Select one or
+  // more rows first" and the POST never left the browser, so AI_SEEDED rows
+  // never flipped. Verified against DEV UI5 1.136 that only
+  // `getSource().getSelectedContexts()` returns the selected rows.
+  function readSelectedContexts(oEvent) {
+    const src = oEvent.getSource?.();
+    if (src && typeof src.getSelectedContexts === "function") {
+      const ctxs = src.getSelectedContexts();
+      if (Array.isArray(ctxs) && ctxs.length > 0) return ctxs;
+    }
+    return (
+      oEvent.getParameter?.("contexts") ??
+      oEvent.getParameter?.("selectedContexts") ??
+      []
+    );
+  }
+
   async function postAdminAction(actionName, payload) {
     // CAP OData V4 + XSUAA approuter requires CSRF token on action invocations.
     // Same pattern as app/admin/categories/webapp/ext/CategoryActionsController.js.
@@ -87,7 +110,7 @@ sap.ui.define([
 
     onRegenerateSelected: async function (oEvent) {
       // Selected contexts come from the list report's selection model.
-      const selectedContexts = oEvent.getParameter?.("selectedContexts") ?? [];
+      const selectedContexts = readSelectedContexts(oEvent);
       const ids = selectedContexts.map(c => c.getObject().ID);
       if (ids.length === 0) {
         MessageToast.show("Select one or more rows first.");
@@ -118,7 +141,7 @@ sap.ui.define([
     },
 
     onMarkReviewedSelected: async function (oEvent) {
-      const selectedContexts = oEvent.getParameter?.("selectedContexts") ?? [];
+      const selectedContexts = readSelectedContexts(oEvent);
       const ids = selectedContexts.map(c => c.getObject().ID);
       if (ids.length === 0) {
         MessageToast.show("Select one or more rows first.");
