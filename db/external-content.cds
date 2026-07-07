@@ -421,6 +421,9 @@ entity CommunityEvents : cuid, managed {
   location          : String(500);                 // free-form; 'virtual' sentinel accepted
   scope             : String(20);                  // 'local' | 'regional' | 'virtual' | 'global'
   virtualOrInPerson : String(20);                  // 'virtual' | 'in-person' (derived)
+  region            : String(16) @assert.range enum {
+                        AMERICAS; EMEA; APJ; UNKNOWN;
+                      };                             // #1030 — derived at ingest
   startDate         : Date;                        // upstream 'date' — required
   endDate           : Date;                        // upstream 'end_date' — nullable
   contentHash       : String(64);
