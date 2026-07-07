@@ -63,16 +63,18 @@
   {{ range $shelfKey := slice "START_HERE" "REFERENCE" "TOOLS" "KEEP_CURRENT" }}
     {{- $items := where $verbShelves "shelf" $shelfKey -}}
     {{- if gt (len $items) 0 -}}
-      {{- /* Look up shelf-level tagline + whyItMatters + label from baked data,
-             with fallback to the hard-coded label dict. */ -}}
+      {{- /* Look up shelf-level tagline + whyItMatters + label + icon from
+             baked data, with fallback to the hard-coded label dict. */ -}}
       {{- $shelfDef := index (where $shelfDefs "shelfKey" $shelfKey) 0 -}}
       {{- $shelfLabel := "" -}}
       {{- $shelfTagline := "" -}}
       {{- $shelfWhy := "" -}}
+      {{- $shelfIcon := "" -}}
       {{- with $shelfDef -}}
         {{- $shelfLabel = .label -}}
         {{- $shelfTagline = .tagline | default "" -}}
         {{- $shelfWhy = .whyItMatters | default "" -}}
+        {{- $shelfIcon = .iconName | default "" -}}
       {{- end -}}
       {{- if not $shelfLabel -}}{{ $shelfLabel = index $fallbackLabels $shelfKey }}{{- end -}}
     <section class="verb-shelf verb-shelf--{{ $shelfKey | lower }}"
@@ -82,10 +84,14 @@
       <div data-island="shelf-header-popover"
            data-shelf-key="{{ $shelfKey }}"
            data-label="{{ $shelfLabel }}"
+           data-icon-name="{{ $shelfIcon }}"
            data-tagline="{{ $shelfTagline }}"
            data-why-it-matters="{{ $shelfWhy }}"
            class="verb-shelf__header-island">
-        <h2>{{ $shelfLabel }}</h2>
+        <h2>
+          {{- if $shelfIcon }}<ui5-icon name="{{ $shelfIcon }}" class="verb-shelf__icon" aria-hidden="true"></ui5-icon>{{ end -}}
+          {{ $shelfLabel }}
+        </h2>
       </div>
       <ul class="verb-shelf__list">
         {{ range sort $items "sortOrder" }}

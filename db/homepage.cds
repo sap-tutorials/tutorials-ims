@@ -115,6 +115,11 @@ entity VerbDefinitions : cuid, managed {
 entity ShelfDefinitions : cuid, managed {
   shelfKey        : HomepageShelf @mandatory @assert.range;
   label           : String(40)    @mandatory;
+  // (#1039) Optional Fiori icon name (e.g. 'learning-assistant', 'document',
+  // 'wrench', 'newspaper'). Rendered by the verb-page shelf header (verb
+  // sub-pages `/learn/`, `/build/`, etc.) inside <ui5-icon>. Empty → no icon;
+  // no default fallback glyph. Same pattern as VerbDefinitions.iconName.
+  iconName        : String(40);
   sortOrder       : Integer       default 100;
   tagline         : String(140);
   whyItMatters    : String(800);

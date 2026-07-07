@@ -25,6 +25,7 @@ import './styles/shelf-header.css';
 const props = defineProps<{
   shelfKey?: string;
   label: string;
+  iconName?: string;
   tagline?: string;
   whyItMatters?: string;
 }>();
@@ -97,7 +98,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="anchorEl" class="hp-shelf-header hp-popover-anchor">
-    <h2 class="hp-shelf-header__label">{{ label }}</h2>
+    <h2 class="hp-shelf-header__label">
+      <ui5-icon
+        v-if="iconName"
+        :name="iconName"
+        class="verb-shelf__icon"
+        aria-hidden="true"
+      ></ui5-icon>
+      <span class="hp-shelf-header__label-text">{{ label }}</span>
+    </h2>
     <button
       v-if="hasContent"
       ref="iconBtnEl"

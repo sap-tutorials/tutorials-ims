@@ -100,21 +100,21 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       expect(lines.length).toBe(5);
     });
     // See VerbDefinitions rationale above — same fix, same reason.
-    it('header uses ID;shelfKey;label;sortOrder (editable columns omitted intentionally)', () => {
-      expect(lines[0]).toBe('ID;shelfKey;label;sortOrder');
+    it('header uses ID;shelfKey;label;iconName;sortOrder (editable columns omitted intentionally)', () => {
+      expect(lines[0]).toBe('ID;shelfKey;label;iconName;sortOrder');
     });
     it('CSV must NOT include tagline/whyItMatters/authoringStatus (would trigger HDI wipe on any CSV-changing deploy)', () => {
       expect(lines[0]).not.toMatch(/tagline|whyItMatters|authoringStatus/);
     });
     it.each([
-      ['START_HERE', 'Start here', 10],
-      ['REFERENCE', 'Reference', 20],
-      ['TOOLS', 'Tools & samples', 30],
-      ['KEEP_CURRENT', 'Keep current', 40],
-    ])('row for %s has correct label + sortOrder', (shelfKey, label, sort) => {
+      ['START_HERE',   'Start here',       'learning-assistant', 10],
+      ['REFERENCE',    'Reference',        'document',           20],
+      ['TOOLS',        'Tools & samples',  'wrench',             30],
+      ['KEEP_CURRENT', 'Keep current',     'newspaper',          40],
+    ])('row for %s has correct label + icon + sortOrder', (shelfKey, label, icon, sort) => {
       const row = lines.find(l => l.includes(`;${shelfKey};`));
       expect(row).toBeDefined();
-      expect(row).toMatch(new RegExp(`;${shelfKey};${label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')};${sort}$`));
+      expect(row).toMatch(new RegExp(`;${shelfKey};${label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')};${icon};${sort}$`));
     });
   });
 });
