@@ -136,6 +136,11 @@ import "@ui5/webcomponents-icons/dist/customer-and-contacts.js";
 import "@ui5/webcomponents-icons/dist/learning-assistant.js";
 import "@ui5/webcomponents-icons/dist/developer-settings.js";
 import "@ui5/webcomponents-icons/dist/chain-link.js";
+// MODEL verb (#1029) — homepage tile + top-nav dropdown row + verb-page
+// header render `<ui5-icon name="database">`. Missed on the #1038 rollout
+// because the icon-imports guard was scoped to `dict "icon" "…"` and
+// verb-spine.html uses `dict "iconName" "…"`; guard widened in this PR.
+import "@ui5/webcomponents-icons/dist/database.js";
 import "@ui5/webcomponents-icons/dist/favorite.js";
 import "@ui5/webcomponents-icons/dist/unfavorite.js";
 // (#1039) Shelf-section pictograms rendered by hugo/layouts/verb/list.html

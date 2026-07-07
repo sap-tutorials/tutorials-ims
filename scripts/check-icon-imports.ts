@@ -107,21 +107,25 @@ export function stripComments(src: string): string {
 const ICON_RE = /(?<![-\w:])icon="([a-z][a-z0-9-]*)"/g;
 
 /**
- * Match Hugo `dict` literal entries of the form `"icon" "<name>"`.
+ * Match Hugo `dict` literal entries of the form `"icon" "<name>"` or
+ * `"iconName" "<name>"`.
  *
- * Verb-spine.html (hugo/layouts/partials/homepage/verb-spine.html lines 7-12)
- * stores its six tile icons in a `slice (dict … "icon" "<name>" …)` block
- * and expands them via `<ui5-icon name="{{ $vIcon }}">` at render time.
- * The static guard runs against pre-expansion source, so the literal
- * names are only visible inside the dict — ICON_RE never sees them.
+ * Verb-spine.html (hugo/layouts/partials/homepage/verb-spine.html) stores its
+ * seven tile icons in a `slice (dict … "iconName" "<name>" …)` block and
+ * expands them via `<ui5-icon name="{{ $vIcon }}">` at render time. The static
+ * guard runs against pre-expansion source, so the literal names are only
+ * visible inside the dict — ICON_RE never sees them.
  *
- * The pattern requires `"icon"` followed by whitespace and a quoted
- * UI5 icon-shaped name. Sweep of `hugo/` at design time found zero
- * matches outside verb-spine's 6 expected lines. The `"icon" "<name>"`
- * shape is specific enough to JSON-style key+value adjacency that
- * narrative prose, CSS, etc. don't collide.
+ * The pattern accepts either `"icon"` or `"iconName"` (the two spellings used
+ * across the Hugo layouts) followed by whitespace and a quoted UI5 icon-shaped
+ * name. `iconName` was missed originally (#1029 shipped a MODEL verb with
+ * `iconName: "database"` and no side-effect import — silent glyph miss on
+ * homepage tile + top-nav dropdown).
+ *
+ * The `"icon(Name)?" "<name>"` shape is specific enough to JSON-style key+value
+ * adjacency that narrative prose, CSS, etc. don't collide.
  */
-const HUGO_DICT_ICON_RE = /"icon"\s+"([a-z][a-z0-9-]*)"/g;
+const HUGO_DICT_ICON_RE = /"(?:icon|iconName)"\s+"([a-z][a-z0-9-]*)"/g;
 
 export function parseIconUsages(file: string, content: string): IconUsage[] {
   const stripped = stripComments(content);
