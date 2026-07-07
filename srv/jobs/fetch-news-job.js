@@ -12,6 +12,7 @@ import { fetchRssItems } from '../lib/homepage-rss-fetcher.js';
 import { canonicalizeLink } from '../lib/canonicalize-link.js';
 import { detectLanguageEn } from '../lib/detect-language-en.js';
 import { classify } from '../lib/relevance-classifier.js';
+import { resetNewsCache } from '../homepage-service.js';
 
 const LOG = cds.log('fetch-news');
 const SAP_NEWS_RSS_URL = 'https://news.sap.com/feed/';
@@ -133,12 +134,7 @@ export async function runFetchNews(_logId, _opts) {
   }
 
   // Invalidate the homepage in-process cache so admins see fresh verdicts fast.
-  try {
-    const mod = await import('../homepage-service.js');
-    mod.resetNewsCache?.();
-  } catch (e) {
-    LOG.warn(`resetNewsCache import failed: ${e.message}`);
-  }
+  try { resetNewsCache(); } catch (e) { LOG.warn(`resetNewsCache threw: ${e.message}`); }
 
   LOG.info(`fetch-news summary: ${JSON.stringify(summary)}`);
   return summary;

@@ -72,14 +72,14 @@ describe.runIf(isSafeForWrites())('NewsItems entity (hybrid HANA)', () => {
 
       // Now update with admin override
       await UPDATE(NewsItems, { sourceId: testSourceId }).set({
-        adminVerdict: 'approved',
+        adminVerdict: 'approve',
         adminNote: 'Approved by test',
         adminBy: 'test-user',
         adminAt: new Date().toISOString()
       });
 
       const updated = await SELECT.one.from(NewsItems, { sourceId: testSourceId });
-      expect(updated.adminVerdict).toBe('approved');
+      expect(updated.adminVerdict).toBe('approve');
       expect(updated.adminNote).toBe('Approved by test');
       expect(updated.adminBy).toBe('test-user');
       expect(updated.adminAt).toBeTruthy();

@@ -189,7 +189,7 @@ override, or reclassify a single item. Admin verdicts win over AI at read
 time. Homepage items are capped at 2, aged out after 14 days, English-only.
 
 Kill switches (either off → legacy RSS pass-through):
-- Env `HOMEPAGE_NEWS_RELEVANCE_ENABLED` (default `true`).
+- Env `HOMEPAGE_NEWS_RELEVANCE_ENABLED` (default: unset; only the literal string `false` disables — any other value, or absence, treats as enabled).
 - `HomepageConfig.newsRelevanceEnabled` (default `false`).
 
 Community Blog Posts (#1033) mirrors this pattern using the same

@@ -14,6 +14,8 @@ const LOG = cds.log('content-moderation-service');
 
 export default class ContentModerationService extends cds.ApplicationService {
   async init() {
+    await super.init();
+
     const { NewsItems, RelevanceSeedExemplars } = this.entities;
 
     // ------------------ Bound actions on NewsItems ------------------
@@ -109,7 +111,5 @@ export default class ContentModerationService extends cds.ApplicationService {
       const id = row?.ID ?? req?.params?.[0]?.ID;
       if (id) await recomputeEmbedding(id);
     });
-
-    await super.init();
   }
 }

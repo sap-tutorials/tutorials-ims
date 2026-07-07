@@ -13,7 +13,7 @@
 // (CDS loads homepage-service.js via Node's native ESM loader, bypassing Vitest's
 // module interceptor). This matches the pattern established in homepage-rss-fetcher.test.js.
 
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import cds from '@sap/cds';
 import { _resetForTests as resetRssFetcherCache } from '../../srv/lib/homepage-rss-fetcher.js';
 
@@ -43,6 +43,10 @@ describe('homepage news() with #1034 filter', () => {
     await db.run(UPDATE('com.sap.developers.ims.HomepageConfig').set({ newsRelevanceEnabled: false }));
     const mod = await import('../../srv/homepage-service.js');
     mod._resetForTests();
+    delete process.env.HOMEPAGE_NEWS_RELEVANCE_ENABLED;
+  });
+
+  afterEach(() => {
     delete process.env.HOMEPAGE_NEWS_RELEVANCE_ENABLED;
   });
 
