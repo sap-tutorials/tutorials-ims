@@ -134,6 +134,11 @@ modules:
     path: ../approuter
     build-parameters:
       builder: custom
+      # 30m instead of mbt's 10m default — approuter build cp's ~527MB
+      # (hugo/public 323M + hugo/public-qa 204M) into static/, which routinely
+      # runs 6-9 min on Windows. Killed at the 10-min mark 2026-07-07 mid-copy
+      # of public-qa; bumping gives headroom as content grows.
+      timeout: 30m
       commands:
         - npm install
         # cp -r is union, not sync — it ADDS files but never DELETES them. Renames in
