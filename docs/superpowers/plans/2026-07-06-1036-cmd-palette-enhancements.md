@@ -585,7 +585,7 @@ Also update the `describe('PALETTE_ACTIONS — EXPLORE group registration')` fir
 
 Note: the existing `actions.test.ts` currently expects `explore-model` at line 32 in the `expect.arrayContaining` list. It's there in the current registry — no change needed to that assertion.
 
-- [ ] **Step 2: Run to verify it fails** — `cd hugo-apps && npx vitest run src/cmd-palette/actions.test.ts` — expect the new `describe` block to FAIL: `expected [Array] to contain 'explore-concepts'`.
+- [ ] **Step 2: Run to verify it fails** — `npx vitest run hugo-apps/src/cmd-palette/actions.test.ts` — expect the new `describe` block to FAIL: `expected [Array] to contain 'explore-concepts'`.
 
 - [ ] **Step 3: Add the three entries in `hugo-apps/src/cmd-palette/actions.ts`** — locate the closing `},` of the `explore-connect` block (line ~203) and the opening `{` of the `explore-knowledge-graph` block (line ~204). Insert the following three entries between them:
 
@@ -628,7 +628,7 @@ Also update the top-of-EXPLORE comment (currently line ~140–145 in `actions.ts
   // of date with the homepage's own primary nav.
 ```
 
-- [ ] **Step 4: Run to verify it passes** — `cd hugo-apps && npx vitest run src/cmd-palette/actions.test.ts` — expect all tests PASS.
+- [ ] **Step 4: Run to verify it passes** — `npx vitest run hugo-apps/src/cmd-palette/actions.test.ts` — expect all tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -719,7 +719,7 @@ describe('CommandPalette — race guard on tutorial searcher', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd hugo-apps && npx vitest run src/cmd-palette/CommandPalette.test.ts` — expect the test to fail: `Stale result` appears in the palette because the current `searchTutorials` (line ~213 of the .vue file) unconditionally assigns `tutorialResults.value = ...` when the slow response lands.
+- [ ] **Step 2: Run to verify it fails** — `npx vitest run hugo-apps/src/cmd-palette/CommandPalette.test.ts` — expect the test to fail: `Stale result` appears in the palette because the current `searchTutorials` (line ~213 of the .vue file) unconditionally assigns `tutorialResults.value = ...` when the slow response lands.
 
 - [ ] **Step 3: Add the query-tag race guard to `searchTutorials`** — in `hugo-apps/src/cmd-palette/CommandPalette.vue`, replace the current `async function searchTutorials(term: string) { ... }` (line ~213) with:
 
@@ -782,9 +782,9 @@ watch(query, (v) => {
 })
 ```
 
-- [ ] **Step 4: Run to verify it passes** — `cd hugo-apps && npx vitest run src/cmd-palette/CommandPalette.test.ts` — expect PASS.
+- [ ] **Step 4: Run to verify it passes** — `npx vitest run hugo-apps/src/cmd-palette/CommandPalette.test.ts` — expect PASS.
 
-- [ ] **Step 5: Also run the existing test file to catch regressions** — `cd hugo-apps && npx vitest run src/cmd-palette/actions.test.ts` — expect PASS.
+- [ ] **Step 5: Also run the existing test file to catch regressions** — `npx vitest run hugo-apps/src/cmd-palette/actions.test.ts` — expect PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -856,7 +856,7 @@ describe('CommandPalette — CONCEPTS group', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd hugo-apps && npx vitest run src/cmd-palette/CommandPalette.test.ts` — expect the new tests to fail: no `Concepts` heading rendered.
+- [ ] **Step 2: Run to verify it fails** — `npx vitest run hugo-apps/src/cmd-palette/CommandPalette.test.ts` — expect the new tests to fail: no `Concepts` heading rendered.
 
 - [ ] **Step 3: Modify `CommandPalette.vue`** — three edits:
 
@@ -990,7 +990,7 @@ function runActive() {
         <div v-if="!actionResults.length && !exploreResults.length && !tutorialResults.length && !conceptResults.length" class="cmdk__empty">
 ```
 
-- [ ] **Step 4: Run to verify it passes** — `cd hugo-apps && npx vitest run src/cmd-palette/CommandPalette.test.ts src/cmd-palette/actions.test.ts` — expect all PASS.
+- [ ] **Step 4: Run to verify it passes** — `npx vitest run hugo-apps/src/cmd-palette/CommandPalette.test.ts hugo-apps/src/cmd-palette/actions.test.ts` — expect all PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1086,7 +1086,7 @@ describe('CommandPalette — KNOWLEDGE GRAPH group', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd hugo-apps && npx vitest run src/cmd-palette/CommandPalette.test.ts` — expect the new tests to fail.
+- [ ] **Step 2: Run to verify it fails** — `npx vitest run hugo-apps/src/cmd-palette/CommandPalette.test.ts` — expect the new tests to fail.
 
 - [ ] **Step 3: Modify `CommandPalette.vue`** — parallel edits to Task 6:
 
@@ -1234,7 +1234,7 @@ function runActive() {
         <div v-if="!actionResults.length && !exploreResults.length && !tutorialResults.length && !conceptResults.length && !kgResults.length" class="cmdk__empty">
 ```
 
-- [ ] **Step 4: Run to verify it passes** — `cd hugo-apps && npx vitest run src/cmd-palette/CommandPalette.test.ts src/cmd-palette/actions.test.ts` — expect all PASS.
+- [ ] **Step 4: Run to verify it passes** — `npx vitest run hugo-apps/src/cmd-palette/CommandPalette.test.ts hugo-apps/src/cmd-palette/actions.test.ts` — expect all PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1250,7 +1250,7 @@ git commit -m "feat(#1036): palette — KNOWLEDGE GRAPH group with cosine-ranked
 **Files:**
 - No new source files. This task exercises the change end-to-end and files the alias follow-up.
 
-- [ ] **Step 1: Run all cmd-palette tests together** — `cd hugo-apps && npx vitest run src/cmd-palette/` — expect all PASS.
+- [ ] **Step 1: Run all cmd-palette tests together** — `npx vitest run hugo-apps/src/cmd-palette/` — expect all PASS.
 
 - [ ] **Step 2: Run all server-side KG tests together** — `npx vitest run test/kg-search-kg-handler.test.js test/kg-search-kg-action.test.js test/kg-joule-tool-expand-concepts.test.js` — expect all PASS (the Joule tool test is included to catch any accidental cross-file regression on shared helpers).
 
