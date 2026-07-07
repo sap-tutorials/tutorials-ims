@@ -297,6 +297,12 @@
         "settings": {},
         "componentData": {},
         "lazy": true
+      },
+      "contentModerationComponent": {
+        "name": "sap.tutorials.admin.contentModeration",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
       }
     },
     "services": {

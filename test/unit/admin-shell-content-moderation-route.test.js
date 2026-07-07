@@ -19,4 +19,10 @@ describe('admin-shell #1034 route', () => {
     expect(t).toBeTruthy();
     expect(t.prefix).toBe('cm');
   });
+
+  it('registers contentModerationComponent in componentUsages block', () => {
+    const cu = m['sap.ui5'].componentUsages;
+    expect(cu?.contentModerationComponent).toBeTruthy();
+    expect(cu.contentModerationComponent.name).toBe('sap.tutorials.admin.contentModeration');
+  });
 });
