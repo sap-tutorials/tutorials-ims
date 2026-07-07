@@ -146,15 +146,25 @@ describe('CommandPalette — KNOWLEDGE GRAPH group', () => {
     const groupLabels = wrapper.findAll('.cmdk__group-label').map(w => w.text())
     expect(groupLabels).toEqual(expect.arrayContaining(['Tutorials', 'Concepts', 'Knowledge Graph']))
 
-    // Deduped: the KG row for cds-annotations must NOT appear again under KG.
-    const kgRows = wrapper.findAll('.cmdk__group-label').at(-1)!
-      .element.parentElement!.querySelectorAll('.cmdk__item')
-    const kgLabels = Array.from(kgRows).map(el => el.textContent || '')
-    expect(kgLabels.join(' ')).toContain('CDS Associations')
-    expect(kgLabels.join(' ')).toContain('Fresh KG tutorial')
-    // dup checks — labels are still allowed to APPEAR in the DOM under
-    // their non-KG group; we care that they don't appear under KG.
-    const kgSectionText = Array.from(kgRows).map(el => el.textContent).join(' ')
+    // Deduped: walk forward from the "Knowledge Graph" label, collecting
+    // .cmdk__item siblings until the next group label (or end of list).
+    // Vue <template> emits no wrapper element, so all group children share
+    // the same parent (.cmdk__list).
+    const listEl = wrapper.find('.cmdk__list').element
+    const children = Array.from(listEl.children)
+    const kgLabelIdx = children.findIndex(
+      el => el.classList.contains('cmdk__group-label') && el.textContent === 'Knowledge Graph'
+    )
+    expect(kgLabelIdx).toBeGreaterThanOrEqual(0)
+    const kgItems: Element[] = []
+    for (let i = kgLabelIdx + 1; i < children.length; i++) {
+      const el = children[i]
+      if (el.classList.contains('cmdk__group-label')) break
+      if (el.classList.contains('cmdk__item')) kgItems.push(el)
+    }
+    const kgSectionText = kgItems.map(el => el.textContent ?? '').join(' ')
+    expect(kgSectionText).toContain('CDS Associations')
+    expect(kgSectionText).toContain('Fresh KG tutorial')
     // The dup 'Existing tutorial' from KG should be filtered out of the KG section.
     // (It legitimately still shows under TUTORIALS.)
     expect(kgSectionText).not.toContain('Existing tutorial')

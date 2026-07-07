@@ -102,7 +102,7 @@
           </a>
         </template>
 
-        <div v-if="kgResults.length" class="cmdk__group">
+        <template v-if="kgResults.length">
           <div class="cmdk__group-label">Knowledge Graph</div>
           <a
             v-for="(item, i) in kgResults"
@@ -121,7 +121,7 @@
               <span v-if="item.hint" class="cmdk__item-hint">{{ item.hint }}</span>
             </span>
           </a>
-        </div>
+        </template>
 
         <div v-if="!actionResults.length && !exploreResults.length && !tutorialResults.length && !conceptResults.length && !kgResults.length" class="cmdk__empty">
           <template v-if="searching">Searching…</template>
