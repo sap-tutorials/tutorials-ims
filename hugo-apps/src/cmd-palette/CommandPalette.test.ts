@@ -5,6 +5,14 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import CommandPalette from './CommandPalette.vue'
 
+function makeFetchMock(routes: Record<string, unknown>) {
+  return vi.fn(async (url: string) => {
+    const key = Object.keys(routes).find(k => (url as string).includes(k))
+    const body = key ? routes[key] : { value: [] }
+    return { ok: true, json: async () => body }
+  })
+}
+
 describe('CommandPalette — race guard on tutorial searcher', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -53,5 +61,54 @@ describe('CommandPalette — race guard on tutorial searcher', () => {
 
     expect(wrapper.text()).not.toContain('Stale result')
     expect(wrapper.text()).toContain('Fresh result')
+  })
+})
+
+describe('CommandPalette — CONCEPTS group', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+
+  afterEach(() => { vi.useRealTimers() })
+
+  it('renders a CONCEPTS group with concept-name search results', async () => {
+    globalThis.fetch = makeFetchMock({
+      '/search/SearchableItems':   { value: [] },
+      '/graph/PublishedConcepts':  { value: [
+        { slug: 'cds-annotations',       name: 'CDS Annotations',       description: 'Metadata on CDS entities' },
+        { slug: 'cds-associations',      name: 'CDS Associations',      description: 'Relations between entities' },
+      ]},
+    }) as unknown as typeof fetch
+
+    const wrapper = mount(CommandPalette)
+    ;(window as unknown as { openCommandPalette: () => void }).openCommandPalette()
+    await flushPromises()
+
+    await wrapper.find('input.cmdk__input').setValue('cds')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Concepts')          // group heading
+    expect(wrapper.text()).toContain('CDS Annotations')
+    expect(wrapper.text()).toContain('CDS Associations')
+
+    const conceptAnchor = wrapper.find('a[href="/concepts/cds-annotations/"]')
+    expect(conceptAnchor.exists()).toBe(true)
+  })
+
+  it('hides the CONCEPTS group when no concept results are returned', async () => {
+    globalThis.fetch = makeFetchMock({
+      '/search/SearchableItems':   { value: [{ ID: 't', title: 'Only tutorial', slug: 'only', description: '', primaryTag: null, averageTimeToComplete: null }] },
+      '/graph/PublishedConcepts':  { value: [] },
+    }) as unknown as typeof fetch
+
+    const wrapper = mount(CommandPalette)
+    ;(window as unknown as { openCommandPalette: () => void }).openCommandPalette()
+    await flushPromises()
+    await wrapper.find('input.cmdk__input').setValue('xyz')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+
+    const groupLabels = wrapper.findAll('.cmdk__group-label').map(w => w.text())
+    expect(groupLabels).not.toContain('Concepts')
+    expect(wrapper.text()).toContain('Only tutorial')
   })
 })
