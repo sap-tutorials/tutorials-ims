@@ -3044,7 +3044,10 @@ annotate AdminService.HomepageConfig with @(
     { Value : developerNewsPlaylistId, Label : 'Developer News playlist ID (YouTube)' },
     { Value : videoBandEnabled,        Label : 'Show video band' },
     { Value : eventsBandEnabled,       Label : 'Show events band' },
-    { Value : communityLaneEnabled,    Label : 'Show community lane' }
+    { Value : communityLaneEnabled,    Label : 'Show community lane' },
+    { Value: videoBandAnchorCount,        Label: 'Video band anchor slots' },
+    { Value: videoBandRotationCount,      Label: 'Video band rotation slots' },
+    { Value: videoBandRotationWindowDays, Label: 'Rotation window (days)' }
   ]}
 );
 
@@ -3493,6 +3496,71 @@ annotate AdminService.FeaturedTopicsSnapshotView with @(
     { Value: conceptSlug },
     { Value: displayTitle },
     { Value: computedAt },
+  ],
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable : false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);
+
+// --- (#1031) Videos + HomepageVideoRotation admin surfaces ---
+// Videos: single-column editability (excludeFromHomepage) with statistics
+// columns visible read-only. Toolbar surfaces recomputeHomepageVideoRotation
+// (SuperAdmin-gated by the CDS annotation on the action itself).
+
+annotate AdminService.Videos with @(
+  UI.HeaderInfo: {
+    TypeName: 'Video',
+    TypeNamePlural: 'Videos',
+    Title: { Value: title }
+  },
+  UI.LineItem: [
+    { Value: title,               Label: 'Title' },
+    { Value: channelTitle,        Label: 'Channel' },
+    { Value: publishedAt,         Label: 'Published' },
+    { Value: viewCount,           Label: 'Views' },
+    { Value: likeCount,           Label: 'Likes' },
+    { Value: excludeFromHomepage, Label: 'Excluded' },
+    { $Type: 'UI.DataFieldForAction',
+      Action: 'AdminService.recomputeHomepageVideoRotation',
+      Label: 'Recompute rotation' },
+  ],
+  UI.SelectionFields: [ excludeFromHomepage ],
+  UI.FieldGroup #Main: { Data: [
+    { Value: title,               Label: 'Title' },
+    { Value: channelTitle,        Label: 'Channel' },
+    { Value: publishedAt,         Label: 'Published' },
+    { Value: viewCount,           Label: 'View count' },
+    { Value: likeCount,           Label: 'Like count' },
+    { Value: commentCount,        Label: 'Comment count' },
+    { Value: statsLastFetchedAt,  Label: 'Stats last refreshed' },
+    { Value: excludeFromHomepage, Label: 'Exclude from homepage' },
+  ]},
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Main', Label: 'Details' },
+  ],
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);
+
+annotate AdminService.Videos with {
+  title              @Common.FieldControl: #ReadOnly;
+  channelTitle       @Common.FieldControl: #ReadOnly;
+  publishedAt        @Common.FieldControl: #ReadOnly;
+  viewCount          @Common.FieldControl: #ReadOnly;
+  likeCount          @Common.FieldControl: #ReadOnly;
+  commentCount       @Common.FieldControl: #ReadOnly;
+  statsLastFetchedAt @Common.FieldControl: #ReadOnly;
+};
+
+annotate AdminService.HomepageVideoRotationView with @(
+  UI.HeaderInfo: {
+    TypeName: 'Rotation slot',
+    TypeNamePlural: 'Rotation slots'
+  },
+  UI.LineItem: [
+    { Value: rank,     Label: 'Rank' },
+    { Value: video_ID, Label: 'Video' },
+    { Value: pickedAt, Label: 'Picked at' },
   ],
   Capabilities.InsertRestrictions.Insertable: false,
   Capabilities.UpdateRestrictions.Updatable : false,

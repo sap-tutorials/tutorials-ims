@@ -34,7 +34,9 @@
         { "key": "shelfDefinitions",  "title": "Shelf Explainers" },
         { "key": "forYou",            "title": "For-you Candidates" },
         { "key": "homepageRedirects", "title": "Redirects" },
-        { "key": "homepageConfig",    "title": "Config" }
+        { "key": "homepageConfig",    "title": "Config" },
+        { "key": "videos",            "title": "Videos" },
+        { "key": "videoRotation",     "title": "Video Rotation" }
       ]
     },
     {
