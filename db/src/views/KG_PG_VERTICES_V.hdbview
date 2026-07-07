@@ -16,16 +16,40 @@ VIEW "KG_PG_VERTICES_V" AS
   FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTS"
   WHERE STATUS = 'ACTIVE'
   UNION ALL
-  -- Tutorial vertices — synthesized from the link table because tutorials
-  -- don't live in a KG-specific table.
-  SELECT DISTINCT
-    CAST('tutorial:' || t.SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
-    'tutorial'                                   AS "VERTEX_TYPE",
-    t.SLUG                                       AS "SLUG",
-    t.TITLE                                      AS "LABEL",
-    NULL                                         AS "STATUS"
-  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" tcl
-  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t.ID = tcl.TUTORIAL_ID
+  -- Tutorial vertices — one row per Tutorials row.
+  --
+  -- Prior to this fix the arm SELECTed FROM TutorialConceptLinks JOIN
+  -- Tutorials, on the assumption that "tutorials without concept links
+  -- don't matter to the graph." That was wrong once the edge view grew
+  -- beyond the 2-predicate spike:
+  --
+  --   taggedWith / aboutProduct : TutorialTags → Tutorials
+  --   partOf tutorial→mission   : CompletionPathItems → Tutorials
+  --   coCompletedWith           : CoCompletions.SOURCESLUG / .TARGETSLUG
+  --   extends (target side)     : tcl.EXTENDSTUTORIAL_ID (unlinked target)
+  --
+  -- A tutorial can appear as an edge endpoint via any of these arms WITHOUT
+  -- having a TutorialConceptLinks row. When that happens the graph engine's
+  -- workspace validator rejects the whole workspace at KG_LOUVAIN_GRAPH
+  -- runtime with error [4907] range 3:
+  --   "Source or target column contains an invalid vertex key
+  --    'tutorial:<slug>'"
+  -- (Distinct from range 1's EDGE_KEY dup/NULL check that #1020 fixed —
+  -- same error code, different subcondition.) Diagnosed against DEV: e.g.
+  -- 'cp-sdk-android-flows-stores' has 0 TutorialConceptLinks rows but 4
+  -- taggedWith edges.
+  --
+  -- Fix: emit one vertex per Tutorials row directly. Tutorials.slug is
+  -- @assert.unique.slug so DISTINCT is unnecessary. Mirrors the missions
+  -- and groups arms below, added in #919 for the same reason.
+  SELECT
+    CAST('tutorial:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+    'tutorial'                                 AS "VERTEX_TYPE",
+    SLUG                                       AS "SLUG",
+    TITLE                                      AS "LABEL",
+    NULL                                       AS "STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
+  WHERE SLUG IS NOT NULL
   UNION ALL
   -- Mission vertices. Missions have a STATUS column ('ACTIVE' /
   -- 'DELETED') — use it directly. #919 added missions to support the
