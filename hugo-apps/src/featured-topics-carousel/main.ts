@@ -25,5 +25,5 @@ roots.forEach((root) => {
   const controls = root.querySelector('.hp-featured-carousel__controls');
   if (viewport) viewport.innerHTML = '';
   if (controls) controls.innerHTML = '';
-  createApp(Carousel, { root, initialEtag: etag, initialSlides }).mount(root, true);
+  createApp(Carousel, { root, initialEtag: etag, initialSlides }).mount(root);
 });
