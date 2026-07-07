@@ -24,6 +24,15 @@ Two defenses are in place after #1021:
 1. **Belt-and-suspenders in `runWithLock`** — every tick DELETEs its own outbox row in the `finally` block, so a future synchronous throw still leaves the outbox clean.
 2. **`forceUnwedge` UI** — when belt-and-suspenders wasn't in place yet (or the DELETE itself failed), operators can clear the wedge from the Cron health panel.
 
+### Wedge detection thresholds
+
+A row is flagged as wedged when **both** of the following are true:
+
+- The row has `target='queue'`, `task=<jobName>`, `status='processing'` on `cds.outbox.Messages`. (Real column semantics — the `target` column is the literal string `'queue'`, not `cron.<jobName>`. The job name lives in the `task` column, populated by `srv.schedule(...).as(jobName)`.)
+- The row has been in flight for **more than 60 minutes** OR its own next-scheduled-fire has already passed.
+
+The 60-minute hard floor (added 2026-07-07) exists so daily / weekly / monthly jobs don't hide a wedge for hours-to-days waiting for the cron iterator to declare a period elapsed. It's larger than the longest legitimate scheduled run in this project (extractConcepts, ~40 min).
+
 ## Runbook
 
 ### 1. Confirm the wedge
