@@ -74,10 +74,10 @@ annotate ContentModerationService.NewsItems with @(
     { $Type: 'UI.DataField', Value: adminVerdict,    Label: 'Admin verdict' },
     { $Type: 'UI.DataField', Value: adminNote,       Label: 'Admin note' },
     { $Type: 'UI.DataField', Value: aiVerdictAt,     Label: 'Last classified' },
-    { $Type: 'UI.DataFieldForAction', Action: 'ContentModerationService.approve',       Label: 'Approve' },
-    { $Type: 'UI.DataFieldForAction', Action: 'ContentModerationService.reject',        Label: 'Reject' },
-    { $Type: 'UI.DataFieldForAction', Action: 'ContentModerationService.clearOverride', Label: 'Clear override' },
-    { $Type: 'UI.DataFieldForAction', Action: 'ContentModerationService.reclassify',    Label: 'Reclassify' }
+    { $Type: 'UI.DataFieldForAction', Action: 'ContentModerationService.NewsItems/approve',       Label: 'Approve' },
+    { $Type: 'UI.DataFieldForAction', Action: 'ContentModerationService.NewsItems/reject',        Label: 'Reject' },
+    { $Type: 'UI.DataFieldForAction', Action: 'ContentModerationService.NewsItems/clearOverride', Label: 'Clear override' },
+    { $Type: 'UI.DataFieldForAction', Action: 'ContentModerationService.NewsItems/reclassify',    Label: 'Reclassify' }
   ]
 );
 
