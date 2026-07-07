@@ -48,6 +48,7 @@
       "sap.tutorials.admin.tags": "./components/tags",
       "sap.tutorials.admin.categories": "./components/categories",
       "sap.tutorials.admin.concepts": "./components/concepts",
+      "sap.tutorials.admin.contentModeration": "./components/content-moderation",
       "sap.tutorials.admin.advocates": "./components/advocates",
       "sap.tutorials.admin.alerts": "./components/alerts",
       "sap.tutorials.admin.accomplishments": "./components/accomplishments",
@@ -368,6 +369,7 @@
         { "name": "metrics", "pattern": "metrics", "target": "metricsTarget" },
         { "name": "dataExport", "pattern": "dataExport", "target": "dataExportTarget" },
         { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" },
+        { "name": "contentModeration", "pattern": "content-moderation", "target": [{"name": "contentModerationTarget", "prefix": "cm"}] },
         { "name": "noAccess", "pattern": "noAccess", "target": "noAccessTarget" }
       ],
       "targets": {
@@ -625,6 +627,13 @@
         "dataExportTarget": {
           "viewName": "DataExport",
           "viewLevel": 1
+        },
+        "contentModerationTarget": {
+          "type": "Component",
+          "usage": "contentModerationComponent",
+          "id": "contentModerationTarget",
+          "viewLevel": 1,
+          "prefix": "cm"
         },
         "privacyTarget": {
           "viewName": "Privacy",
