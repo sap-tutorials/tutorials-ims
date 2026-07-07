@@ -41,18 +41,23 @@ function esc(s: string): string {
 /** Build card-mission HTML mirroring card-mission.html partial. */
 function buildMissionHtml(m: Record<string, any>): string {
   const levelLabel = capFirst(m.level || '');
-  const timeLabel  = formatTime(Number(m.time) || 0);
+  // TODO: aggregate time + tutorialCount from completion-path tutorials when data is available
+  const timeLabel  = m.time && Number(m.time) > 0 ? formatTime(Number(m.time)) : null;
   const tutCount   = m.tutorialCount ? `<span class="nav-card__meta-sep">&middot;</span><span class="nav-card__meta-item">${esc(String(m.tutorialCount))} Tutorials</span>` : '';
+  const metaItems: string[] = [];
+  if (levelLabel) metaItems.push(`<span class="nav-card__meta-item">${FOLDER_SVG} ${esc(levelLabel)}</span>`);
+  if (timeLabel) {
+    if (metaItems.length) metaItems.push(`<span class="nav-card__meta-sep">&middot;</span>`);
+    metaItems.push(`<span class="nav-card__meta-item">${CLOCK_SVG} ${esc(timeLabel)}</span>`);
+  }
+  const metaLine = (metaItems.length || tutCount)
+    ? `<div class="nav-card__meta">${metaItems.join('')}${tutCount}</div>`
+    : '';
   return `<a href="${esc(m.href || (m.slug ? `/tutorials/${encodeURIComponent(m.slug)}/` : '#'))}" class="nav-card" data-vt-card="navigator">
 <div class="nav-card__type nav-card__type--mission">MISSION</div>
 <h3 class="nav-card__title">${esc(m.title || '')}</h3>
 <p class="nav-card__desc">${esc(m.description || '')}</p>
-<div class="nav-card__meta">
-<span class="nav-card__meta-item">${FOLDER_SVG} ${esc(levelLabel)}</span>
-<span class="nav-card__meta-sep">&middot;</span>
-<span class="nav-card__meta-item">${CLOCK_SVG} ${esc(timeLabel)}</span>
-${tutCount}
-</div>
+${metaLine}
 <div class="nav-card__tag">${TAG_SVG} ${esc(m.primaryTag || '')}</div>
 </a>`;
 }
@@ -86,7 +91,7 @@ export function useHydrate(opts: UseHydrateOptions): void {
     try {
       const headers: Record<string, string> = { Accept: 'application/json' };
       if (opts.etag) headers['If-None-Match'] = opts.etag;
-      const res = await fetch('/api/homepage/featuredTopics()', { headers });
+      const res = await fetch('/homepage/featuredTopics()', { headers });
       if (res.status === 304) return;
       if (!res.ok) return;
       const body = await res.json();
@@ -100,8 +105,9 @@ export function useHydrate(opts: UseHydrateOptions): void {
           missionsHtml: (s.missions || []).map(buildCardHtml).join(''),
         }));
       if (slides.length) opts.onFresh(slides);
-    } catch {
-      // Silently keep SSR content on any fetch/parse error.
+    } catch (err) {
+      // Keep SSR content on any fetch/parse error; warn in dev so failures are visible.
+      if (typeof console !== 'undefined') console.warn('[featured-carousel] hydration failed', err);
     }
   });
 }

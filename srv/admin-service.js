@@ -27,6 +27,7 @@ import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
 import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
+import { resetFtCache } from './homepage-service.js';
 import * as metrics from './lib/metrics.js';
 import {
   listAlertSeverities,
@@ -2698,6 +2699,7 @@ export default class AdminService extends cds.ApplicationService {
     // snapshot materialisation without waiting for the nightly job.
     this.on('recomputeFeaturedTopics', async () => {
       const { count, computedAt } = await cds.tx(async (tx) => recomputeSnapshot(tx));
+      resetFtCache();
       return { count, computedAt };
     });
 
@@ -2707,6 +2709,7 @@ export default class AdminService extends cds.ApplicationService {
     this.after(['CREATE', 'UPDATE', 'DELETE'], 'FeaturedTopics', async (_data, req) => {
       try {
         await cds.tx(async (tx) => recomputeSnapshot(tx));
+        resetFtCache();
       } catch (err) {
         cds.log('admin-featured').warn('inline recompute failed after write:', err.message);
       }

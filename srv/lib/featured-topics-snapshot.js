@@ -85,10 +85,10 @@ async function loadInputs(tx) {
   }
 
   const tutorialsBySlug = new Set();
-  const tuts = await tx.run(SELECT.from(Tutorials).columns('slug'));
+  const tuts = await tx.run(SELECT.from(Tutorials).columns('slug').where(`status = 'ACTIVE' or status is null`));
   for (const t of tuts) tutorialsBySlug.add(lower(t.slug));
   try {
-    const missions = await tx.run(SELECT.from(Missions).columns('slug'));
+    const missions = await tx.run(SELECT.from(Missions).columns('slug').where(`status = 'ACTIVE' or status is null`));
     for (const m of missions) tutorialsBySlug.add(lower(m.slug));
   } catch (err) {
     LOG.warn('Missions read failed in loadInputs; slug set will be incomplete:', err.message);
@@ -135,7 +135,8 @@ export async function readSnapshotForFeed(tx) {
     // (a) Tutorial metadata via CDS QL — excludes LargeString to avoid LOB locator expiry on HANA
     const tRows = await tx.run(SELECT.from(Tutorials)
       .columns('slug','title','experienceTag','averageTimeToComplete','primaryTag')
-      .where({ slug: { in: slugList } }));
+      .where({ slug: { in: slugList } })
+      .and(`status = 'ACTIVE' or status is null`));
 
     // (b) Tutorial descriptions via a separate query — LOB-safe on HANA
     const db = await cds.connect.to('db');
@@ -172,7 +173,8 @@ export async function readSnapshotForFeed(tx) {
     try {
       const mRows = await tx.run(SELECT.from(Missions)
         .columns('slug','title','primaryTag')
-        .where({ slug: { in: slugList } }));
+        .where({ slug: { in: slugList } })
+        .and(`status = 'ACTIVE' or status is null`));
       for (const c of mRows) {
         const slug = lower(c.slug);
         cardBySlug.set(slug, {

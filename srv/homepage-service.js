@@ -47,6 +47,12 @@ export function _resetForTests() {
   _state.ft = { at: 0, payload: null };
 }
 
+/** (#1032) Invalidate the featuredTopics in-process cache. Called by admin-service
+ *  after recomputeSnapshot so the public endpoint serves fresh data immediately. */
+export function resetFtCache() {
+  _state.ft = { at: 0, payload: null };
+}
+
 // (#1032) Module-level 60s cache for featuredTopics payload.
 // Per-process; no cross-instance coherence needed (shifts only on nightly job
 // or admin save, both of which can tolerate a 60s lag).
