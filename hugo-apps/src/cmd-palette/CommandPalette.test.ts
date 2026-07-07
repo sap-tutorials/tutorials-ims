@@ -62,6 +62,34 @@ describe('CommandPalette — race guard on tutorial searcher', () => {
     expect(wrapper.text()).not.toContain('Stale result')
     expect(wrapper.text()).toContain('Fresh result')
   })
+
+  it('encodes $filter spaces as %20 (not +) so CAP 10 OData accepts the URL (#1057)', async () => {
+    // Regression: URLSearchParams form-urlencodes spaces to `+`, but CAP 10's
+    // OData parser rejects `+` in $filter — only %20 is valid whitespace between
+    // tokens. Ensure the palette builds the query with encodeURIComponent so a
+    // space inside `taskType eq 'TUTORIAL'` renders as %20.
+    let searchableUrl = ''
+    globalThis.fetch = vi.fn(async (url: string) => {
+      if (url.includes('/search/SearchableItems')) searchableUrl = url
+      return { ok: true, json: async () => ({ value: [] }) }
+    }) as unknown as typeof fetch
+
+    const wrapper = mount(CommandPalette)
+    ;(window as unknown as { openCommandPalette: () => void }).openCommandPalette()
+    await flushPromises()
+
+    await wrapper.find('input.cmdk__input').setValue('abap')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+
+    // The filter value MUST NOT contain a raw `+` — CAP 10 400s on that.
+    expect(searchableUrl).toContain('/search/SearchableItems')
+    // Extract the $filter param specifically. Spaces inside its value must be %20.
+    const filterMatch = searchableUrl.match(/[?&]\$filter=([^&]*)/) || searchableUrl.match(/[?&]%24filter=([^&]*)/)
+    expect(filterMatch).not.toBeNull()
+    expect(filterMatch![1]).not.toContain('+')
+    expect(filterMatch![1]).toContain('%20')
+  })
 })
 
 describe('CommandPalette — CONCEPTS group', () => {
