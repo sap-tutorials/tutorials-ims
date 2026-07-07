@@ -268,10 +268,22 @@ view MyTutorialsBestPriority as
   }
   group by tutorial_ID, userUuid;
 
+// #1063 — `repositoryName` used to source from `m.repository.name` (i.e.
+// TutorialMeta.repository_ID → TutorialRepositories.name). That chain is
+// empty in DEV: TutorialMeta.repository_ID is null on all 2930 rows (only
+// the legacy backfill script writes it; the publish flow never has),
+// AND TutorialRepositories is missing rows for the flagship "Tutorials"
+// repo entirely — so even a fresh migrator pass would not repair the
+// case. The authoritative live-repo mapping is RepoCatalog, populated on
+// every content publish by srv/lib/repo-catalog.js: 1381/1381 rows have
+// `repo` populated, covering all 19 distinct repo names including
+// "Tutorials". Left-join keeps historic/orphan rows null-safe (same
+// behavior as pre-fix when the join missed).
 view MyTutorialsView as
   select from MyTutorialsBestPriority as b
     inner join ims.Tutorials      as t on t.ID = b.tutorial_ID
     inner join ims.TutorialMeta   as m on m.tutorial.ID = t.ID
+    left  join ims.RepoCatalog    as rc on rc.slug = t.slug
   {
     key t.ID                                as tutorial_ID,
     key b.userUuid                          as userId,
@@ -287,7 +299,7 @@ view MyTutorialsView as
     m.firstNotificationDate,
     m.owner                                 as owner,
     m.ownerEmail                            as ownerEmail,
-    m.repository.name                       as repositoryName : String,
+    rc.repo                                 as repositoryName : String,
     case when m.monitoredStatus = 'ACTIVE'
          then true else false end           as monitored : Boolean,
     days_between(m.reviewedDate, $now)      as daysSinceReview : Integer
@@ -321,6 +333,7 @@ view MyMonitoredTutorialsView as
     inner join ims.Tutorials      as t on t.ID = mon.tutorial.ID
     left  join ims.Users          as u on u.ID = mon.user.ID
     left  join ims.TutorialMeta   as m on m.tutorial.ID = t.ID
+    left  join ims.RepoCatalog    as rc on rc.slug = t.slug
   {
     key t.ID                                as tutorial_ID,
     key u.uuid                              as userId,
@@ -335,7 +348,10 @@ view MyMonitoredTutorialsView as
     m.firstNotificationDate,
     m.owner                                 as owner,
     m.ownerEmail                            as ownerEmail,
-    m.repository.name                       as repositoryName : String,
+    // #1063 — same source change as MyTutorialsView; see the comment
+    // block above that view for why RepoCatalog replaces the
+    // TutorialMeta.repository → TutorialRepositories.name chain.
+    rc.repo                                 as repositoryName : String,
     case when m.monitoredStatus = 'ACTIVE'
          then true else false end           as monitored : Boolean,
     days_between(m.reviewedDate, $now)      as daysSinceReview : Integer
