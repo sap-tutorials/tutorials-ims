@@ -402,11 +402,14 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
       const missLine = warnCalls.find((s) => s.includes('[Users-row miss]'));
       expect(missLine).toBeDefined();
       // Diagnostic MUST include the endpoint (so multi-endpoint miss batches
-      // are distinguishable), the resolved sapId (to correlate with the
-      // Users table), and the email claim (to identify the human).
+      // are distinguishable) and the resolved sapId (direct FK into Users.sapId).
       expect(missLine).toContain('endpoint=MyOwnedTutorials');
       expect(missLine).toContain('resolved-sapId=no-such-user');
-      expect(missLine).toContain('attr.email=ghost@example.com');
+      // PII gate: the caller's email and free-text user.id are user-identifiable
+      // information and MUST NOT appear in application logs. sapId alone is
+      // sufficient for the correlation the log line documents.
+      expect(missLine).not.toContain('ghost@example.com');
+      expect(missLine).not.toContain('attr.email');
     } finally {
       authorLog.warn = originalWarn;
     }

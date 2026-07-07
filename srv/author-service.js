@@ -23,14 +23,14 @@ const osVariantsLimiter = createRateLimiter({ windowMs: OS_VARIANTS_WINDOW_MS })
 //
 // Log it at WARN so `cf logs tutorials-srv --recent | grep 'Users-row miss'`
 // surfaces the diagnostic on the next report of "endpoint X returned 0
-// tutorials." The log line includes the resolved sapId (from the JWT) and
-// the caller's email claim so ops can correlate against the Users table
-// without needing the raw JWT.
+// tutorials." The line carries ONLY the resolved sapId (JWT `user_uuid`
+// claim) — that value is a direct FK into `Users.sapId`, which is enough
+// for ops to correlate the miss against the Users table without shipping
+// PII (email / free-text user.id) into application logs.
 function warnUsersRowMiss(log, endpoint, user) {
   const sapId = resolveUserSapId(user);
   log.warn(
-    `[Users-row miss] endpoint=${endpoint} user.id=${user?.id ?? '<none>'} ` +
-    `resolved-sapId=${sapId ?? '<none>'} attr.email=${user?.attr?.email ?? '<none>'} ` +
+    `[Users-row miss] endpoint=${endpoint} resolved-sapId=${sapId ?? '<none>'} ` +
     `— returning 0 rows. Check the token's user_uuid claim against Users.sapId.`
   );
 }
