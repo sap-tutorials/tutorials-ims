@@ -6,12 +6,34 @@ import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
-import { resolveDbUser } from './lib/resolve-db-user.js';
+import { resolveDbUser, resolveUserSapId } from './lib/resolve-db-user.js';
 
 const OS_VALUES = ['Windows', 'macOS', 'Linux', 'BAS'];
 const OS_VARIANTS_LIMIT = 60;             // calls per hour per author
 const OS_VARIANTS_WINDOW_MS = 60 * 60 * 1000;
 const osVariantsLimiter = createRateLimiter({ windowMs: OS_VARIANTS_WINDOW_MS });
+
+// #1027 — MyTutorials-family endpoints silently return {"value": []} when the
+// authenticated caller has no matching Users row (`resolveDbUser` returns null).
+// That's indistinguishable from "you legitimately own zero tutorials," which
+// obscures the real failure mode: a token whose `user_uuid` claim doesn't
+// match any `Users.sapId`. Cost the #1027 investigation the better part of
+// an afternoon (Sage extension had a stale OAuth clientId → tokens with an
+// audience-mismatched user identity → 0 rows returned silently).
+//
+// Log it at WARN so `cf logs tutorials-srv --recent | grep 'Users-row miss'`
+// surfaces the diagnostic on the next report of "endpoint X returned 0
+// tutorials." The log line includes the resolved sapId (from the JWT) and
+// the caller's email claim so ops can correlate against the Users table
+// without needing the raw JWT.
+function warnUsersRowMiss(log, endpoint, user) {
+  const sapId = resolveUserSapId(user);
+  log.warn(
+    `[Users-row miss] endpoint=${endpoint} user.id=${user?.id ?? '<none>'} ` +
+    `resolved-sapId=${sapId ?? '<none>'} attr.email=${user?.attr?.email ?? '<none>'} ` +
+    `— returning 0 rows. Check the token's user_uuid claim against Users.sapId.`
+  );
+}
 
 // #777 followup (2026-06-30) — MyTutorialsView keys on Users.uuid (the
 // CAP-context-friendly identifier exposed as MyTutorialsView.userId).
@@ -104,8 +126,12 @@ export default cds.service.impl(async function () {
     if (!dbUser?.uuid) {
       // No Users row for this caller — could be a fresh-login user whose
       // row hasn't been auto-provisioned yet, or a test context with no
-      // matching sapId. Return zero rows rather than 401: the user IS
-      // authenticated; they simply own no tutorials.
+      // matching sapId, or (#1027) a token minted against a stale XSUAA
+      // client whose user_uuid doesn't match any Users.sapId. Return zero
+      // rows rather than 401: the user IS authenticated; they simply own
+      // no tutorials. Log at WARN so the diagnostic is grep-able next
+      // time — see warnUsersRowMiss.
+      warnUsersRowMiss(cds.log('author-service'), 'MyTutorials', req.user);
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }
@@ -123,6 +149,7 @@ export default cds.service.impl(async function () {
     }
     const dbUser = await resolveDbUser(req.user, ['uuid']);
     if (!dbUser?.uuid) {
+      warnUsersRowMiss(cds.log('author-service'), 'MyAuthoredTutorials', req.user);
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }
@@ -142,6 +169,7 @@ export default cds.service.impl(async function () {
     }
     const dbUser = await resolveDbUser(req.user, ['uuid']);
     if (!dbUser?.uuid) {
+      warnUsersRowMiss(cds.log('author-service'), 'MyOwnedTutorials', req.user);
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }

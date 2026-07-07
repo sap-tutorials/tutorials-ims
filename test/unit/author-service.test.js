@@ -381,6 +381,56 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
     );
     expect(rows).toHaveLength(0);
   });
+
+  // #1027 — diagnostic surface: when the caller authenticates but has no
+  // matching Users row (stale OAuth clientId, wrong IdP, un-provisioned
+  // token, ...), the handler MUST log a WARN so `cf logs tutorials-srv
+  // --recent | grep 'Users-row miss'` finds it. Silent 0-row responses
+  // hid the real failure mode on #1027 for the better part of an
+  // afternoon; the log line is the fix.
+  it('logs a Users-row miss WARN when caller has no matching Users row (#1027)', async () => {
+    const authorLog = cds.log('author-service');
+    const originalWarn = authorLog.warn;
+    const warnCalls = [];
+    authorLog.warn = (...args) => { warnCalls.push(args.join(' ')); };
+    try {
+      const srv = await cds.connect.to('AuthorService');
+      await srv.tx(
+        { user: { id: 'no-such-user', attr: { email: 'ghost@example.com' }, roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      const missLine = warnCalls.find((s) => s.includes('[Users-row miss]'));
+      expect(missLine).toBeDefined();
+      // Diagnostic MUST include the endpoint (so multi-endpoint miss batches
+      // are distinguishable), the resolved sapId (to correlate with the
+      // Users table), and the email claim (to identify the human).
+      expect(missLine).toContain('endpoint=MyOwnedTutorials');
+      expect(missLine).toContain('resolved-sapId=no-such-user');
+      expect(missLine).toContain('attr.email=ghost@example.com');
+    } finally {
+      authorLog.warn = originalWarn;
+    }
+  });
+
+  // Corollary: when the caller DOES resolve to a Users row, no miss log fires.
+  // Guards against a regression where the WARN emits on every request.
+  it('does NOT log a Users-row miss when the caller resolves cleanly (#1027)', async () => {
+    const authorLog = cds.log('author-service');
+    const originalWarn = authorLog.warn;
+    const warnCalls = [];
+    authorLog.warn = (...args) => { warnCalls.push(args.join(' ')); };
+    try {
+      const srv = await cds.connect.to('AuthorService');
+      await srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      const missLine = warnCalls.find((s) => s.includes('[Users-row miss]'));
+      expect(missLine).toBeUndefined();
+    } finally {
+      authorLog.warn = originalWarn;
+    }
+  });
 });
 
 // #923 — toggleMonitor action tests. The action is the CAP equivalent of
