@@ -285,6 +285,13 @@
 .verb-page__hero { padding: 2rem 0 1rem; border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5); margin-bottom: 2rem; }
 .verb-page__hero h1 { font-size: 2.5rem; font-weight: 600; color: var(--sapTextColor, #32363a); margin: 0 0 0.5rem; }
 .verb-page__hero p { font-size: 1.125rem; color: var(--sapContent_LabelColor, #6a6d70); margin: 0; max-width: 720px; }
+/* Long-form whyItMatters paragraphs (same copy as the homepage flip-tile
+   rollover). Rendered as a subparagraph below the short tagline — smaller
+   than the tagline, body-copy line-height, wider max-width so multi-line
+   paragraphs breathe. */
+.verb-page__hero-why { margin: 0.75rem 0 0; max-width: 780px; }
+.verb-page__hero-why p { font-size: 1rem; line-height: 1.6; color: var(--sapContent_LabelColor, #6a6d70); margin: 0 0 0.75rem; max-width: none; }
+.verb-page__hero-why p:last-child { margin-bottom: 0; }
 
 /* Optional editorial body from _index.md (#1035 — Joule Studio) */
 .verb-page__body { max-width: 780px; margin: 0 0 2.5rem; color: var(--sapTextColor, #32363a); font-size: 1rem; line-height: 1.6; }

@@ -199,6 +199,7 @@ export default defineConfig({
             { text: '0006 — Authorship vs. ownership semantics', link: '/decisions/0006-authorship-vs-ownership-semantics' }
           ]},
           { text: '@cap-js/ai plugin',         link: '/developers/reference/cap-ai-plugin' },
+          { text: 'Adding a verb (checklist)', link: '/developers/reference/adding-a-verb' },
           { text: 'CAP / CDS gotchas',         link: '/developers/reference/cap-cds-gotchas' },
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
           { text: 'Design decisions',          link: '/developers/reference/design-decisions' },

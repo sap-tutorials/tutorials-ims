@@ -269,10 +269,18 @@ async function searchTutorials(term: string) {
   // discard our results — they're stale.
   const requestedQuery = term
   try {
-    const params = new URLSearchParams()
-    params.set('$search', term)
-    params.set('$top', '6')
-    params.set('$filter', "taskType eq 'TUTORIAL'")
+    // #1057: `URLSearchParams.toString()` form-urlencodes spaces as `+`. CAP 10's
+    // OData parser rejects `+` in `$filter` (only `%20` is valid between tokens),
+    // so a value like `taskType eq 'TUTORIAL'` needs percent-encoded whitespace.
+    // Build the query string manually with `encodeURIComponent` so every space
+    // renders as `%20`, not `+`.
+    const params = [
+      ['$search', term],
+      ['$top', '6'],
+      ['$filter', "taskType eq 'TUTORIAL'"],
+    ]
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&')
     const res = await fetch(`/search/SearchableItems?${params}`)
     if (!res.ok) {
       if (query.value.trim() === requestedQuery) tutorialResults.value = []

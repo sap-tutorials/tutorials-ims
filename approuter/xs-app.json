@@ -178,7 +178,7 @@
       "authenticationType": "xsuaa"
     },
     {
-      "source": "^/graph/(neighborhood(?:Full)?|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path)(\\(.*\\))?(/.*)?(\\?.*)?$",
+      "source": "^/graph/(neighborhood(?:Full)?|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path|searchKG|PublishedConcepts)(\\(.*\\))?(/.*)?(\\?.*)?$",
       "target": "/graph/$1$2$3$4",
       "destination": "srv-api",
       "authenticationType": "none"

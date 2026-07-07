@@ -59,7 +59,9 @@ describe('AdminService — VerbDefinitions/ShelfDefinitions auto-init (#759 PR 1
         join(import.meta.dirname, '../../../db/data/com.sap.developers.ims-VerbDefinitions.csv'),
         'utf8'
       );
-      // CSV columns: ID;verbKey;label;iconName;sortOrder;tagline;whyItMatters;authoringStatus
+      // CSV columns: ID;verbKey;label;iconName;sortOrder
+      // (#1029-followup) tagline/whyItMatters/authoringStatus intentionally
+      // omitted from the CSV — see docs/developers/reference/hana-hdi-gotchas.md.
       const csvRows = csv.split(/\r?\n/).slice(1).filter(Boolean).map(line => {
         const [, verbKey, label, iconName, sortOrder] = line.split(';');
         return { verbKey, label, iconName, sortOrder: Number(sortOrder) };
@@ -82,7 +84,9 @@ describe('AdminService — VerbDefinitions/ShelfDefinitions auto-init (#759 PR 1
         join(import.meta.dirname, '../../../db/data/com.sap.developers.ims-ShelfDefinitions.csv'),
         'utf8'
       );
-      // CSV columns: ID;shelfKey;label;iconName;sortOrder;tagline;whyItMatters;authoringStatus
+      // CSV columns: ID;shelfKey;label;iconName;sortOrder
+      // (#1029-followup) tagline/whyItMatters/authoringStatus intentionally
+      // omitted from the CSV — see docs/developers/reference/hana-hdi-gotchas.md.
       const csvRows = csv.split(/\r?\n/).slice(1).filter(Boolean).map(line => {
         const [, shelfKey, label, iconName, sortOrder] = line.split(';');
         return { shelfKey, label, iconName, sortOrder: Number(sortOrder) };

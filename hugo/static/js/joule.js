@@ -552,12 +552,20 @@
 
     let assistantBubble = null;
     let assistantText = '';
+    const toolChips = [];
 
     function ensureBubble() {
       if (assistantBubble) return assistantBubble;
       typingEl.remove();
       assistantBubble = appendMessage('assistant', '');
       return assistantBubble;
+    }
+
+    // Transient "Searching for X…" breadcrumbs emitted on tool frames should
+    // disappear once the assistant's turn ends — leaving them wedged next to
+    // the final answer clutters the transcript on every subsequent turn.
+    function clearToolChips() {
+      while (toolChips.length) toolChips.pop().remove();
     }
 
     let res;
@@ -585,12 +593,12 @@
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      if (isStale()) return;
+      if (isStale()) { clearToolChips(); return; }
       buf += decoder.decode(value, { stream: true });
       const events = buf.split('\n\n');
       buf = events.pop();
       for (const evt of events) {
-        if (isStale()) return;
+        if (isStale()) { clearToolChips(); return; }
         const line = evt.split('\n').find(l => l.startsWith('data:'));
         if (!line) continue;
         try {
@@ -605,6 +613,7 @@
             chip.className = 'joule-tool-chip';
             chip.textContent = `Searching for ${payload.args?.query || '…'}`;
             transcript.insertBefore(chip, assistantBubble);
+            toolChips.push(chip);
           } else if (payload.type === 'tutorial-cards') {
             if (Array.isArray(payload.items) && payload.items.length) {
               renderTutorialCards(payload.items);
@@ -621,9 +630,11 @@
             renderAnalyticsTable(payload);
           } else if (payload.type === 'done') {
             typingEl.remove();
+            clearToolChips();
             messages.push({ role: 'assistant', content: assistantText });
             saveHistory(messages);
           } else if (payload.type === 'error') {
+            clearToolChips();
             const bubble = ensureBubble();
             bubble.textContent = payload.reason === 'content_filter'
               ? "I can't help with that. Try asking about SAP tutorials."
@@ -633,6 +644,10 @@
         } catch { /* drop malformed event */ }
       }
     }
+    // Belt-and-suspenders: if the stream ended without a `done`/`error` frame
+    // (server crash, dropped connection), sweep any orphan chips before we
+    // return so the transcript is clean for the next turn.
+    clearToolChips();
   }
 
   async function _openImpl(opts) {
