@@ -28,7 +28,7 @@ import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
 import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
-import { resetFtCache } from './homepage-service.js';
+import { resetFtCache, resetCommunityBlogsCache } from './homepage-service.js';
 import * as metrics from './lib/metrics.js';
 import {
   listAlertSeverities,
@@ -717,8 +717,19 @@ export default class AdminService extends cds.ApplicationService {
           attemptCount:   0,
         })
         .where({ ID });
+      resetCommunityBlogsCache();
       return updated > 0;
     });
+
+    // (#1033) Invalidate the public /homepage/communityBlogs cache whenever
+    // an admin toggles pinned / adminOverride, deletes a post, or CRUDs a
+    // source. after-hooks fire on both direct writes and draft activation.
+    for (const target of ['CommunityBlogPosts', 'CommunityBlogSources']) {
+      this.after(['UPDATE', 'CREATE', 'DELETE'], target, () => {
+        try { resetCommunityBlogsCache(); }
+        catch (err) { /* best-effort */ }
+      });
+    }
 
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [

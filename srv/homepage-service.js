@@ -30,6 +30,7 @@ const log = cds.log('homepage-service');
 // (#639) Module-level caches — simple {at, value} shape, per-process.
 const EVENTS_TTL_MS = 60 * 1000;          // 60 s
 const SHELVES_TTL_MS = 5 * 60 * 1000;     // 5 min
+const COMMUNITY_BLOGS_TTL_MS = 60 * 1000; // (#1033) 60 s — DB-backed now, so cheap TTL
 
 const STATE_KEY = Symbol.for('com.sap.developers.ims:homepage-service');
 const _state = (globalThis[STATE_KEY] ??= {
@@ -38,6 +39,8 @@ const _state = (globalThis[STATE_KEY] ??= {
   shelves: new Map(),
   // (#1032) 60s cache for featuredTopics payload
   ft: { at: 0, payload: null },
+  // (#1033) 60s cache for the rewritten communityBlogs() endpoint
+  communityBlogs: { at: 0, value: null },
 });
 
 /** Test-only: clear all cached values. (#639) */
@@ -45,12 +48,20 @@ export function _resetForTests() {
   _state.events = { at: 0, value: null };
   _state.shelves.clear();
   _state.ft = { at: 0, payload: null };
+  _state.communityBlogs = { at: 0, value: null };
 }
 
 /** (#1032) Invalidate the featuredTopics in-process cache. Called by admin-service
  *  after recomputeSnapshot so the public endpoint serves fresh data immediately. */
 export function resetFtCache() {
   _state.ft = { at: 0, payload: null };
+}
+
+/** (#1033) Invalidate the communityBlogs in-process cache. Called by admin-service
+ *  after any UPDATE on CommunityBlogPosts or CommunityBlogSources so admin
+ *  overrides / pins reflect within a second. */
+export function resetCommunityBlogsCache() {
+  _state.communityBlogs = { at: 0, value: null };
 }
 
 // (#1032) Module-level 60s cache for featuredTopics payload.
@@ -211,12 +222,99 @@ export default class HomepageService extends cds.ApplicationService {
       return live;
     });
 
-    // (#639) communityBlogs() — SAP Community RSS, max 3 items.
-    // NOTE for spec-review: COMMUNITY_BLOGS_RSS_URL was not smoke-checked during
-    // implementation (no external network in this session). fetchRssItems returns
-    // [] on any failure so a wrong URL results in an empty Community lane, not a crash.
+    // (#639, #1033) communityBlogs() — reads CommunityBlogPosts from the DB.
+    // No longer hits SAP Community RSS at request time (the fetcher cron does
+    // that every 30 min and stores results). Selection:
+    //   Query A: pinned OR adminOverride=ALLOW OR (override null AND aiVerdict=DEVELOPER_RELEVANT)
+    //   Query B (only when A returns <3, the ≥3 floor pad): newest raw
+    //            candidates minus BLOCK'd rows, minus A's URLs.
+    // 60 s in-process cache; invalidated on admin edit via resetCommunityBlogsCache().
     this.on('communityBlogs', async () => {
-      return fetchRssItems(COMMUNITY_BLOGS_RSS_URL, { limit: 3 });
+      const now = Date.now();
+      if (_state.communityBlogs.value && (now - _state.communityBlogs.at) < COMMUNITY_BLOGS_TTL_MS) {
+        return _state.communityBlogs.value;
+      }
+
+      let value = [];
+      try {
+        const db = await cds.connect.to('db');
+        const { CommunityBlogPosts } = cds.entities('com.sap.developers.ims');
+
+        // Query A — approved pool. Three OR branches, each of which uses a
+        // structured predicate. To keep CDS QL happy across SQLite + HANA we
+        // run them as three separate SELECTs and merge in Node.
+        const [pinnedRows, allowRows, aiRows] = await Promise.all([
+          db.run(SELECT.from(CommunityBlogPosts)
+            .columns('title', 'sourceUrl as url', 'publishedAt', 'author', 'linkStatus')
+            .where({ pinned: true })),
+          db.run(SELECT.from(CommunityBlogPosts)
+            .columns('title', 'sourceUrl as url', 'publishedAt', 'author', 'linkStatus')
+            .where({ adminOverride: 'ALLOW', pinned: false })),
+          db.run(SELECT.from(CommunityBlogPosts)
+            .columns('title', 'sourceUrl as url', 'publishedAt', 'author', 'linkStatus')
+            .where({ aiVerdict: 'DEVELOPER_RELEVANT', adminOverride: null, pinned: false })),
+        ]);
+        const approved = [...pinnedRows, ...allowRows, ...aiRows]
+          .filter(r => r.linkStatus !== 'BROKEN');
+        // De-dup by url (in case a pinned row also has ALLOW — belt).
+        const seen = new Set();
+        const approvedUnique = [];
+        // pinned rows sort first; then admin ALLOW; then AI. Within each group,
+        // publishedAt desc.
+        const byPubDesc = (a, b) =>
+          new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0);
+        for (const bucket of [
+          pinnedRows.filter(r => r.linkStatus !== 'BROKEN').sort(byPubDesc),
+          allowRows.filter(r => r.linkStatus !== 'BROKEN').sort(byPubDesc),
+          aiRows.filter(r => r.linkStatus !== 'BROKEN').sort(byPubDesc),
+        ]) {
+          for (const r of bucket) {
+            if (!seen.has(r.url)) { seen.add(r.url); approvedUnique.push(r); }
+            if (approvedUnique.length >= 3) break;
+          }
+          if (approvedUnique.length >= 3) break;
+        }
+        value = approvedUnique.slice(0, 3);
+
+        // Query B — pad from raw candidates when approved pool <3.
+        // BLOCK still wins even in degraded mode.
+        if (value.length < 3) {
+          const need = 3 - value.length;
+          const padRows = await db.run(SELECT.from(CommunityBlogPosts)
+            .columns('title', 'sourceUrl as url', 'publishedAt', 'author', 'linkStatus', 'adminOverride')
+            .orderBy({ publishedAt: 'desc' })
+            .limit(50) // cap the scan; 50 is plenty for a 3-row pad
+          );
+          for (const r of padRows) {
+            if (r.adminOverride === 'BLOCK') continue;
+            if (r.linkStatus === 'BROKEN') continue;
+            if (seen.has(r.url)) continue;
+            seen.add(r.url);
+            value.push({ title: r.title, url: r.url, publishedAt: r.publishedAt, author: r.author });
+            if (value.length >= 3) break;
+          }
+          if (value.length < 3) {
+            metrics.counter('homepage.community_blogs[result=degraded_empty]');
+          } else {
+            metrics.counter('homepage.community_blogs[result=degraded]');
+          }
+        } else {
+          metrics.counter(`homepage.community_blogs[result=served,count=${value.length}]`);
+        }
+
+        // Strip the internal linkStatus/adminOverride fields before returning.
+        value = value.map(({ title, url, publishedAt, author }) => ({
+          title, url, publishedAt, author,
+        }));
+      } catch (err) {
+        log.warn('[communityBlogs] DB read failed:', err.message);
+        metrics.counter('homepage.community_blogs[result=error]');
+        // Return the previous cached value if any, else empty array. Never 500.
+        return _state.communityBlogs.value ?? [];
+      }
+
+      _state.communityBlogs = { at: now, value };
+      return value;
     });
 
     // (#639) news() — SAP News RSS, max 2 items.
