@@ -85,6 +85,14 @@ describe('relevance-classifier', () => {
     expect(embedMock).not.toHaveBeenCalled();
   });
 
+  it('one-side-empty seeds (relevant=[]) → keyword fallback', async () => {
+    seedMock.mockResolvedValue({ relevant: [], notRelevant: [new Float32Array([0, 1, 0])] });
+    keywordMock.mockReturnValue({ verdict: 'not-relevant', reason: '' });
+    const r = await classify({ title: 't', description: 'd', sourceType: 'sap-news' });
+    expect(r.source).toBe('fallback-keyword');
+    expect(embedMock).not.toHaveBeenCalled();
+  });
+
   it('embedding call fails → keyword fallback', async () => {
     embedMock.mockRejectedValue(new Error('AI Core down'));
     keywordMock.mockReturnValue({ verdict: 'not-relevant', reason: '' });
