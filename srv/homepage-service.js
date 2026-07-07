@@ -303,9 +303,20 @@ export default class HomepageService extends cds.ApplicationService {
         }
 
         // Strip the internal linkStatus/adminOverride fields before returning.
-        value = value.map(({ title, url, publishedAt, author }) => ({
-          title, url, publishedAt, author,
-        }));
+        // Defensive URL scheme check — protects visitors from any pre-fix
+        // rows already in the DB whose sourceUrl might have a javascript:
+        // or data: scheme. Belt to the fetcher's write-time check.
+        value = value
+          .filter(({ url }) => {
+            if (!url || typeof url !== 'string') return false;
+            try {
+              const p = new URL(url).protocol;
+              return p === 'https:' || p === 'http:';
+            } catch { return false; }
+          })
+          .map(({ title, url, publishedAt, author }) => ({
+            title, url, publishedAt, author,
+          }));
       } catch (err) {
         log.warn('[communityBlogs] DB read failed:', err.message);
         metrics.counter('homepage.community_blogs[result=error]');

@@ -65,10 +65,32 @@ export function isEnglish(item) {
 }
 
 /**
+ * Whitelist URL schemes we're willing to persist as `sourceUrl`. RSS feeds
+ * should always emit https, but an attacker-controlled feed (or, later, an
+ * admin-editable source that gets compromised) could try `javascript:` /
+ * `data:` / `vbscript:` links — those would end up in the visitor DOM via
+ * CommunityLane.vue's `<a :href>` binding, so we drop them at ingest time.
+ * The visitor endpoint applies the same check defensively (belt).
+ */
+function isSafeHttpUrl(u) {
+  if (!u || typeof u !== 'string') return false;
+  try {
+    const parsed = new URL(u);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Upsert one parsed item into CommunityBlogPosts.
  * Returns 'inserted' | 'updated' | 'skipped'.
  */
 async function upsertOne(db, sourceId, item) {
+  if (!isSafeHttpUrl(item.link)) {
+    log.warn(`upsertOne: dropping item with unsafe URL scheme: ${String(item.link).slice(0, 100)}`);
+    return 'skipped';
+  }
   const { CommunityBlogPosts } = cds.entities('com.sap.developers.ims');
   const existing = await db.run(
     SELECT.one.from(CommunityBlogPosts).columns('ID', 'aiVerdict').where({ sourceUrl: item.link })
@@ -110,7 +132,7 @@ async function upsertOne(db, sourceId, item) {
  * @returns {Promise<{fetched:number, inserted:number, updated:number, skippedLang:number, errored:number}>}
  */
 export async function fetchOneSource(source, { db } = {}) {
-  const stats = { fetched: 0, inserted: 0, updated: 0, skippedLang: 0, errored: 0 };
+  const stats = { fetched: 0, inserted: 0, updated: 0, skippedLang: 0, skippedUrl: 0, errored: 0 };
   const _db = db || await cds.connect.to('db');
 
   let res;
@@ -165,6 +187,7 @@ export async function fetchOneSource(source, { db } = {}) {
       const outcome = await upsertOne(_db, source.ID, item);
       if (outcome === 'inserted') stats.inserted++;
       else if (outcome === 'updated') stats.updated++;
+      else if (outcome === 'skipped') stats.skippedUrl++;
     } catch (err) {
       log.warn(`fetchOneSource: ${source.label}: item "${item.title}" upsert failed:`, err.message);
       stats.errored++;
@@ -193,7 +216,7 @@ export async function fetchAllSources() {
       .orderBy('sortOrder')
   );
 
-  const total = { sources: sources.length, fetched: 0, inserted: 0, updated: 0, skippedLang: 0, errored: 0 };
+  const total = { sources: sources.length, fetched: 0, inserted: 0, updated: 0, skippedLang: 0, skippedUrl: 0, errored: 0 };
   for (const s of sources) {
     try {
       const stats = await fetchOneSource(s, { db });
@@ -201,6 +224,7 @@ export async function fetchAllSources() {
       total.inserted    += stats.inserted;
       total.updated     += stats.updated;
       total.skippedLang += stats.skippedLang;
+      total.skippedUrl  += stats.skippedUrl;
       total.errored     += stats.errored;
     } catch (err) {
       // Any escape past fetchOneSource's own try/catch — extra belt.
@@ -211,7 +235,8 @@ export async function fetchAllSources() {
   log.info(
     `community-blogs-fetcher: ${total.sources} sources → ` +
     `fetched=${total.fetched} inserted=${total.inserted} ` +
-    `updated=${total.updated} skippedLang=${total.skippedLang} errored=${total.errored}`
+    `updated=${total.updated} skippedLang=${total.skippedLang} ` +
+    `skippedUrl=${total.skippedUrl} errored=${total.errored}`
   );
   return total;
 }

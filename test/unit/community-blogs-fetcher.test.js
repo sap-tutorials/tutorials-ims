@@ -158,4 +158,21 @@ describe('fetchOneSource', () => {
     expect(stats.errored).toBe(1);
     expect(stats.inserted).toBe(0);
   });
+
+  it('drops items with unsafe URL schemes (javascript:, data:) at ingest', async () => {
+    global.fetch = vi.fn(async () => fakeFetchResponse(xmlBody([
+      { title: 'Legit',         link: 'https://community.sap.com/t/ok-1' },
+      { title: 'XSS attempt',   link: 'javascript:alert(1)' },
+      { title: 'Data-URL',      link: 'data:text/html,<script>alert(1)</script>' },
+    ])));
+    const stats = await fetchOneSource(source, { db });
+    expect(stats.inserted).toBe(1);
+    expect(stats.skippedUrl).toBe(2);
+
+    const rows = await db.run(
+      SELECT.from(cds.entities('com.sap.developers.ims').CommunityBlogPosts)
+        .where({ sourceUrl: { in: ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>'] } })
+    );
+    expect(rows.length).toBe(0);
+  });
 });
