@@ -38,7 +38,15 @@ describe('featured-topics-snapshot', () => {
       expect(feed.slots).toHaveLength(1);
       expect(feed.slots[0].conceptSlug).toBe('cap');
       expect(feed.slots[0].source).toBe('EDITORIAL');
-      expect(feed.slots[0].missions[0].slug).toBe('cap-t1');
+      const card = feed.slots[0].missions[0];
+      expect(card.slug).toBe('cap-t1');
+      expect(card.kind).toBe('tutorial');
+      expect(card.title).toBe('CAP T1');
+      expect(card.href).toBe('/tutorials/cap-t1');
+      expect(card.tutorialCount).toBe(1);
+      expect(card).toHaveProperty('description');
+      expect(card).toHaveProperty('level');
+      expect(card.isNew).toBe(false);
     });
   });
 

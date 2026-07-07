@@ -90,7 +90,9 @@ async function loadInputs(tx) {
   try {
     const missions = await tx.run(SELECT.from(Missions).columns('slug'));
     for (const m of missions) tutorialsBySlug.add(lower(m.slug));
-  } catch { /* fixture may omit Missions */ }
+  } catch (err) {
+    LOG.warn('Missions read failed in loadInputs; slug set will be incomplete:', err.message);
+  }
 
   return { editorial, kgCandidates, communityByConcept, tutorialRanksByConcept, tutorialsBySlug };
 }
@@ -130,12 +132,65 @@ export async function readSnapshotForFeed(tx) {
 
   const cardBySlug = new Map();
   if (slugList.length) {
-    const tRows = await tx.run(SELECT.from(Tutorials).columns('slug','title','description').where({ slug: { in: slugList } }));
-    for (const c of tRows) cardBySlug.set(lower(c.slug), { slug: lower(c.slug), title: c.title, summary: c.description || null, imageUrl: null, kind: 'tutorial' });
+    // (a) Tutorial metadata via CDS QL — excludes LargeString to avoid LOB locator expiry on HANA
+    const tRows = await tx.run(SELECT.from(Tutorials)
+      .columns('slug','title','experienceTag','averageTimeToComplete','primaryTag')
+      .where({ slug: { in: slugList } }));
+
+    // (b) Tutorial descriptions via a separate query — LOB-safe on HANA
+    const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+    let descBySlug = new Map();
+    if (isHana) {
+      const placeholders = slugList.map(() => '?').join(',');
+      const descRows = await db.run(
+        `SELECT "SLUG", "DESCRIPTION" FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS" WHERE "SLUG" IN (${placeholders})`,
+        slugList
+      );
+      descBySlug = new Map(descRows.map(r => [lower(r.SLUG ?? r.slug), r.DESCRIPTION ?? r.description ?? '']));
+    } else {
+      const descRows = await tx.run(SELECT.from(Tutorials).columns('slug','description').where({ slug: { in: slugList } }));
+      descBySlug = new Map(descRows.map(r => [lower(r.slug), r.description || '']));
+    }
+
+    for (const c of tRows) {
+      const slug = lower(c.slug);
+      cardBySlug.set(slug, {
+        slug,
+        kind: 'tutorial',
+        title: c.title,
+        description: descBySlug.get(slug) || '',
+        level: c.experienceTag || null,
+        time: c.averageTimeToComplete || null,
+        primaryTag: c.primaryTag || null,
+        tutorialCount: 1,
+        href: `/tutorials/${slug}`,
+        isNew: false,
+      });
+    }
+
     try {
-      const mRows = await tx.run(SELECT.from(Missions).columns('slug','title','description').where({ slug: { in: slugList } }));
-      for (const c of mRows) cardBySlug.set(lower(c.slug), { slug: lower(c.slug), title: c.title, summary: c.description || null, imageUrl: null, kind: 'mission' });
-    } catch { /* fixture may omit Missions */ }
+      const mRows = await tx.run(SELECT.from(Missions)
+        .columns('slug','title','primaryTag')
+        .where({ slug: { in: slugList } }));
+      for (const c of mRows) {
+        const slug = lower(c.slug);
+        cardBySlug.set(slug, {
+          slug,
+          kind: 'mission',
+          title: c.title,
+          description: '',
+          level: null,
+          time: null,
+          primaryTag: c.primaryTag || null,
+          tutorialCount: null,
+          href: `/tutorials/mission-${slug}`,
+          isNew: false,
+        });
+      }
+    } catch (err) {
+      LOG.warn('Missions read failed in readSnapshotForFeed; mission slots will be missing:', err.message);
+    }
   }
 
   const computedAt = rows[0].computedAt;
