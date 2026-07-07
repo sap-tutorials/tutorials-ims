@@ -156,7 +156,7 @@ onMounted(() => {
 
     <!-- Community blogs column -->
     <div class="hb-community-lane__col">
-      <h3 class="hb-community-lane__col-title">Community Blogs</h3>
+      <h3 class="hb-community-lane__col-title">Community Blog Posts</h3>
 
       <div v-if="blogLoading" aria-hidden="true">
         <div v-for="i in 3" :key="i" class="hb-community-lane__skel hb-community-lane__skel--blog"></div>
