@@ -82,8 +82,12 @@ export async function runKgCommunities() {
     await db.tx(async (tx) => {
       await tx.run(`TRUNCATE TABLE ${KG_COMMUNITY_TABLE}`);
       const now = new Date().toISOString();
+      // Identifiers must be quoted-uppercase: the .hdbtable declares them unquoted,
+      // so HANA stores them upper-case in the catalog (COMMUNITYID, not communityId).
+      // Same pattern as srv/lib/embedding-pipeline.js:119. Mixed-case quoted names
+      // fail with "invalid column name" because quoted identifiers are case-sensitive.
       const insertSql = `INSERT INTO ${KG_COMMUNITY_TABLE}
-        ("communityId","vertexKey","vertexType","slug","detectedAt","communityFingerprint")
+        ("COMMUNITYID","VERTEXKEY","VERTEXTYPE","SLUG","DETECTEDAT","COMMUNITYFINGERPRINT")
         VALUES (?, ?, ?, ?, ?, ?)`;
       for (let i = 0; i < rows.length; i += INSERT_BATCH_SIZE) {
         const batch = rows.slice(i, i + INSERT_BATCH_SIZE).map((r) => {
