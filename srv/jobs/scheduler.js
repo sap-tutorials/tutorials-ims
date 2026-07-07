@@ -45,6 +45,7 @@ import { runHomepageLinkHealth } from './homepage-link-health.js';
 import { runGcExternalContent } from './gc-external-content-job.js';
 import { runFetchLearningJourneys } from './fetch-learning-journeys-job.js';
 import { runFetchBlogPosts } from './fetch-blog-posts-job.js';
+import { runFetchNews } from './fetch-news-job.js';
 import { runMaterializeCoCompletions } from './materialize-co-completions.js';
 import { runKgPageRank } from './kg-pagerank-job.js';
 import { runKgCommunities } from './kg-communities-job.js';
@@ -754,6 +755,16 @@ export function registerJobs() {
     ttlMs: 30 * 60 * 1000,
     description: 'Fetch SAP Community blog posts + extract concepts (daily)',
     fn: runFetchBlogPosts,
+  });
+
+  // #1034 SAP News developer-relevance filter.
+  // Hourly at :37 — free slot verified against all registerJob() calls above.
+  registerJob({
+    jobName:     'fetch-news',
+    schedule:    '37 * * * *',
+    ttlMs:       10 * 60 * 1000,
+    description: 'Fetch news.sap.com/feed/ hourly and classify developer relevance',
+    fn:          () => runFetchNews(),
   });
 
   // Weekly Sunday at 03:07 — Phase 4.3 Discovery Missions extraction (#447).
