@@ -110,6 +110,9 @@ import "@ui5/webcomponents-icons/dist/course-book.js";
 // (#713 wired it into CI). Without this import the menu row's glyph slot
 // is allocated but never paints.
 import "@ui5/webcomponents-icons/dist/org-chart.js";
+// API top-nav popover item — icon="command-line-interfaces". Same "glyph
+// slot painted blank" symptom as org-chart above when the import is missing.
+import "@ui5/webcomponents-icons/dist/command-line-interfaces.js";
 import "@ui5/webcomponents-icons/dist/flight.js";
 import "@ui5/webcomponents-icons/dist/sys-monitor.js";
 import "@ui5/webcomponents-icons/dist/complete.js";
