@@ -1,4 +1,4 @@
-// hugo-apps/apps/homepage-events-band/src/main.ts
+// hugo-apps/src/homepage-events-band/main.ts
 // #1030 — Placeholder mount point. Task 17 replaces this with real mount code.
 
 // Intentionally minimal: just marks the entry point for the Vite build.

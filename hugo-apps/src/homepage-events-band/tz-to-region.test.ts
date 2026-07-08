@@ -1,6 +1,6 @@
-// hugo-apps/apps/homepage-events-band/test/tz-to-region.spec.ts
+// hugo-apps/src/homepage-events-band/tz-to-region.test.ts
 import { describe, it, expect } from 'vitest';
-import { tzToRegion } from '../src/tz-to-region';
+import { tzToRegion } from './tz-to-region';
 
 describe('tzToRegion', () => {
   it.each([

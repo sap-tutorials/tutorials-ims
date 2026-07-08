@@ -17,7 +17,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts', 'scripts/**/__tests__/**/*.test.ts', 'srv/**/__tests__/**/*.test.{js,ts}', 'app/analytics-explorer/src/**/__tests__/**/*.test.ts', 'app/explore/src/**/__tests__/**/*.test.ts', 'hugo-apps/src/**/*.{test,spec}.{js,ts}', 'hugo-apps/apps/**/*.{test,spec}.{js,ts}'],
+          include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts', 'scripts/**/__tests__/**/*.test.ts', 'srv/**/__tests__/**/*.test.{js,ts}', 'app/analytics-explorer/src/**/__tests__/**/*.test.ts', 'app/explore/src/**/__tests__/**/*.test.ts', 'hugo-apps/src/**/*.{test,spec}.{js,ts}'],
           exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**'],
           // testTimeout raised to 30s because the `test/unit/check-*.test.ts`
           // cluster spawns `npx tsx <script>` per-`it` — cold TSX + child process

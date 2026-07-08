@@ -1,4 +1,4 @@
-// hugo-apps/apps/homepage-events-band/src/region-storage.ts
+// hugo-apps/src/homepage-events-band/region-storage.ts
 // #1030 — localStorage helpers for the events-band region chip.
 
 import type { Region } from './tz-to-region';

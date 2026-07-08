@@ -1,4 +1,4 @@
-// hugo-apps/apps/homepage-events-band/src/tz-to-region.ts
+// hugo-apps/src/homepage-events-band/tz-to-region.ts
 //
 // #1030 — Coarse IANA-timezone → homepage-region hint. Runs once on first
 // mount for signed-out visitors, or signed-in visitors who never set
