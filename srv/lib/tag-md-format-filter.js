@@ -9,15 +9,17 @@
 // query (Sage tag-search, follow-up to #824) crashes with a HANA SQL
 // error surfaced as a generic HTTP 500.
 //
-// STRATEGY (two-phase):
+// STRATEGY (two-phase, with a bypass for unsafe literals):
 //   1. Before READ: rewrite any leaf `{ref: ['mdFormat']}` in the CQN
-//      filter tree to `{ref: ['titlePath']}`. `titlePath` is a strict
-//      SUPERSET of every value `mdFormat` can produce for plain-word
-//      searches (mdFormat is a lowercased/hyphenated derivative). This
-//      lets the DB push down and narrow 10K+ rows to a small candidate
-//      set. Hyphen-containing search terms will UNDER-match at the SQL
-//      layer (since titlePath has spaces, not hyphens); the handler
-//      compensates by broadening the ceiling in the service handler.
+//      filter tree to `{ref: ['titlePath']}`. `titlePath` is a SUPERSET of
+//      every value `mdFormat` can produce ONLY for plain-word searches
+//      (mdFormat is a lowercased/hyphenated derivative of titlePath). If
+//      the literal contains `>` or `-` — characters that appear in mdFormat
+//      but never in titlePath — the rewrite becomes a strict UNDER-set and
+//      would return zero rows even for tags that do match. In that case
+//      (see containsUnsafeMdFormatLiteral / #1075) the handler skips SQL
+//      narrowing entirely and scans up to MD_FORMAT_SCAN_CEILING rows so
+//      the JS post-filter can find the true match.
 //   2. After READ + applyMdFormat: re-evaluate the ORIGINAL filter tree
 //      against the enriched rows in JS. This drops false positives and
 //      preserves exact `mdFormat` semantics.
@@ -37,6 +39,19 @@
 const MD_FORMAT_FIELD = 'mdFormat';
 const FALLBACK_FIELD = 'titlePath';
 
+// Characters that appear in `mdFormat` values but never in `titlePath`:
+//   `>`  — separator between first/last titlePath segments (mdFormat-only)
+//   `-`  — collapse of any non-alphanumeric run in a segment (mdFormat-only;
+//          titlePath keeps the original space, `.`, `&`, etc.)
+//
+// When a Sage-style `contains(tolower(mdFormat), '<literal>')` predicate has
+// a literal containing either character, the SQL rewrite to `titlePath` is a
+// strict UNDER-set (not the SUPERSET the file header assumes), so the DB
+// short-circuits to zero rows and the JS post-filter never sees the true
+// match. Detected literals bypass SQL narrowing entirely — see
+// containsUnsafeMdFormatLiteral / #1075.
+const MD_FORMAT_ONLY_CHARS = /[>-]/;
+
 // ---------------------------------------------------------------------------
 // containsMdFormatRef — cheap sniff test on a CQN where[] tree.
 // ---------------------------------------------------------------------------
@@ -54,6 +69,60 @@ function walkForMdFormat(node) {
   if (Array.isArray(node.args)) return node.args.some(walkForMdFormat);
   if (Array.isArray(node.xpr)) return node.xpr.some(walkForMdFormat);
   if (Array.isArray(node.list)) return node.list.some(walkForMdFormat);
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// containsUnsafeMdFormatLiteral — return true if the CQN where[] tree
+// contains any predicate node that compares/matches `mdFormat` against a
+// value literal (possibly wrapped in tolower/toupper) whose string form
+// includes a character that never appears in `titlePath` (`>` or `-`).
+//
+// When this returns true, `rewriteWhereForPushdown` is unsafe: the SQL
+// rewrite from mdFormat → titlePath would produce a strict UNDER-set match
+// (zero rows for the SAP Community case reported in #1075). Callers should
+// clear the SQL where clause and let the JS post-filter run against the
+// full scan-ceiling result.
+// ---------------------------------------------------------------------------
+
+export function containsUnsafeMdFormatLiteral(where) {
+  if (!Array.isArray(where) || where.length === 0) return false;
+  return walkForUnsafeMdFormatLiteral(where);
+}
+
+function walkForUnsafeMdFormatLiteral(node) {
+  if (node == null) return false;
+  if (Array.isArray(node)) return node.some(walkForUnsafeMdFormatLiteral);
+  if (typeof node !== 'object') return false;
+  // A function/comparison node touching mdFormat: check every val leaf in
+  // the args tree for the unsafe characters. `mdFormat` refs may sit
+  // anywhere in the sub-tree (typically the first arg wrapped in tolower).
+  if (nodeReferencesMdFormat(node)) {
+    if (subtreeHasUnsafeValLiteral(node)) return true;
+  }
+  // Recurse — nested xpr / args / list may host another mdFormat clause.
+  if (Array.isArray(node.args) && node.args.some(walkForUnsafeMdFormatLiteral)) return true;
+  if (Array.isArray(node.xpr) && node.xpr.some(walkForUnsafeMdFormatLiteral)) return true;
+  if (Array.isArray(node.list) && node.list.some(walkForUnsafeMdFormatLiteral)) return true;
+  return false;
+}
+
+function nodeReferencesMdFormat(node) {
+  if (node == null || typeof node !== 'object') return false;
+  if (Array.isArray(node.ref) && node.ref[0] === MD_FORMAT_FIELD) return true;
+  if (Array.isArray(node.args) && node.args.some(nodeReferencesMdFormat)) return true;
+  if (Array.isArray(node.xpr) && node.xpr.some(nodeReferencesMdFormat)) return true;
+  return false;
+}
+
+function subtreeHasUnsafeValLiteral(node) {
+  if (node == null || typeof node !== 'object') return false;
+  if ('val' in node && typeof node.val === 'string' && MD_FORMAT_ONLY_CHARS.test(node.val)) {
+    return true;
+  }
+  if (Array.isArray(node.args) && node.args.some(subtreeHasUnsafeValLiteral)) return true;
+  if (Array.isArray(node.xpr) && node.xpr.some(subtreeHasUnsafeValLiteral)) return true;
+  if (Array.isArray(node.list) && node.list.some(subtreeHasUnsafeValLiteral)) return true;
   return false;
 }
 

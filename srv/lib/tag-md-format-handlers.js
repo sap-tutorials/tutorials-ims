@@ -7,7 +7,10 @@
 //     (previously inline in author-service.js / admin-service.js).
 //   * The before('READ') interceptor that rewrites $filter predicates on
 //     the virtual `mdFormat` field to `titlePath` for SQL push-down and
-//     stages a JS post-filter for after('READ') (#837).
+//     stages a JS post-filter for after('READ') (#837). When the literal
+//     contains mdFormat-only chars (`>` or `-`), the SQL narrowing would
+//     under-match — so the interceptor drops the WHERE clause entirely and
+//     lets the scan-ceiling + JS post-filter carry the query (#1075).
 //
 // Attach with:
 //     const { attachTagsMdFormatHandlers } = require('./lib/tag-md-format-handlers.js');
@@ -19,6 +22,7 @@
 import { applyMdFormat } from './tag-md-format.js';
 import {
   containsMdFormatRef,
+  containsUnsafeMdFormatLiteral,
   rewriteWhereForPushdown,
   buildRowMatcher,
 } from './tag-md-format-filter.js';
@@ -51,8 +55,18 @@ export function attachTagsMdFormatHandlers(srv, entityName) {
     };
     req._mdFormatFilterStash = stash;
 
-    // Rewrite the filter for SQL push-down (mdFormat -> titlePath).
-    SELECT.where = rewriteWhereForPushdown(originalWhere);
+    // Rewrite the filter for SQL push-down (mdFormat -> titlePath) UNLESS
+    // any mdFormat comparison uses a literal that contains characters
+    // exclusive to the mdFormat form (`>` or `-`). In that case the SQL
+    // rewrite is a strict UNDER-set — e.g. `contains(titlePath, 'topic>sap-community')`
+    // matches zero rows even though `Topic : SAP Community` is the intended
+    // hit. Skip SQL narrowing on unsafe literals so the JS post-filter
+    // (which knows the real mdFormat value) can find them (#1075).
+    if (containsUnsafeMdFormatLiteral(originalWhere)) {
+      SELECT.where = undefined;
+    } else {
+      SELECT.where = rewriteWhereForPushdown(originalWhere);
+    }
 
     // Broaden pagination to a bounded ceiling. after('READ') will apply
     // the exact predicate, then re-apply order, skip, top, count.
