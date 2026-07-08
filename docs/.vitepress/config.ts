@@ -154,6 +154,7 @@ export default defineConfig({
           { text: 'AI-author CI setup',        link: '/developers/operations/ai-author-ci-setup' },
           { text: 'BTP destinations (SCI / NGDS)', link: '/developers/operations/btp-destinations' },
           { text: 'BTP role migration',        link: '/developers/operations/btp-role-migration' },
+          { text: 'Content moderation runbook', link: '/developers/operations/content-moderation-runbook' },
           { text: 'Dedupe Step rows',          link: '/developers/operations/dedupe-step-rows' },
           { text: 'Migration from IMS',        link: '/developers/operations/migration-from-ims' },
           { text: 'Deployment',                link: '/developers/operations/deployment' },
