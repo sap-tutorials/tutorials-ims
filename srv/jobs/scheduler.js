@@ -867,6 +867,24 @@ export function registerJobs() {
     },
   });
 
+  // #1030 — Every 6 h at minute 17 (off :00/:30 to avoid stampede). Keeps the
+  // Row 3 homepage events band fresh without incurring LLM cost — this job
+  // ONLY re-pulls Khoros + RSS and upserts CommunityEvents (title, url,
+  // location, region, ...). The twice-weekly fetch-community-events job
+  // above still owns embedding + concept-link extraction.
+  //
+  // Spec: docs/superpowers/specs/2026-07-07-1030-homepage-codejams-autopull-design.md §5
+  registerJob({
+    jobName: 'refresh-community-events',
+    schedule: '17 */6 * * *',
+    ttlMs: 10 * 60 * 1000,        // 10 min — job is lightweight, no LLM cost
+    description: 'Refresh CommunityEvents (CodeJams + Devtoberfest) for homepage — no LLM (6h cadence)',
+    fn: async (logId, opts) => {
+      const { runRefreshCommunityEvents } = await import('./refresh-community-events-job.js');
+      return runRefreshCommunityEvents(logId, opts);
+    },
+  });
+
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
   // Prunes content rows past lastSeenAt + 2×TTL when not pinned. Cascade-deletes
   // link entity rows via CDS Compositions on the parent entity, plus an explicit
