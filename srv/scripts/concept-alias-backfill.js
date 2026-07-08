@@ -183,7 +183,7 @@ export async function runBackfill({ dryRun = false, force = false, onlySlug, lim
         await db.run(INSERT.into(ConceptAliases).entries(row))
         written++
       } catch (err) {
-        if (/unique|assert/i.test(err.message)) { skipped++ } else { throw err }
+        if (/unique|@assert\.unique/i.test(err.message)) { skipped++ } else { throw err }
       }
     }
     process.stderr.write(`${c.slug}\t${written}\t${skipped}\t${Date.now() - t0}\n`)
