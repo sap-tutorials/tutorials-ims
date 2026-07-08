@@ -19,28 +19,31 @@ describe('HomepageService endpoints', () => {
     expect(Array.isArray(out)).toBe(true);
   });
 
-  it('events() queries the Events DB entity and returns mapped rows', async () => {
-    // Bust the 60s module cache populated by the previous test (which ran against
-    // an empty Events table). Without this the new row is invisible until TTL expiry.
+  it('events() queries CommunityEvents and returns mapped rows (#1030)', async () => {
+    // Bust the 60s module cache populated by the previous test.
     resetHomepageCaches();
 
     const db = await cds.connect.to('db');
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
-    await db.run(INSERT.into('com.sap.developers.ims.Events').entries({
+    const { CommunityEvents } = cds.entities('com.sap.developers.ims.external');
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    await db.run(INSERT.into(CommunityEvents).entries({
       ID: cds.utils.uuid(),
-      name: '__TEST__ Future event',
+      title: '__TEST__ Future CodeJam',
       startDate: tomorrow,
-      eventType: 'CODEJAM',
+      eventType: 'codejam',
+      region: 'EMEA',
+      virtualOrInPerson: 'in-person',
     }));
 
     const out = await svc.send('events', {});
     expect(Array.isArray(out)).toBe(true);
-    const synthetic = out.find(e => e.title === '__TEST__ Future event');
+    const synthetic = out.find(e => e.title === '__TEST__ Future CodeJam');
     // If this assertion fails, the CDS QL .where() syntax in homepage-service.js
-    // is broken again — the prior `.where('startDate >= ?', ...)` raw-placeholder
-    // form threw at parse time and the catch path silently returned [].
+    // is broken or the CommunityEvents entity is not being queried.
     expect(synthetic).toBeTruthy();
-    expect(synthetic.format).toBe('CODEJAM');
+    expect(synthetic.format).toBe('codejam');
+    expect(synthetic.region).toBe('EMEA');
+    expect(synthetic.isVirtual).toBe(false);
   });
 
   it('videos() returns shape { featured, recent, error }', async () => {
