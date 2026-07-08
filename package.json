@@ -149,7 +149,7 @@
     "@cap-js/data-inspector": "1.0.5",
     "@cap-js/graphql": "0.14.0",
     "@cap-js/hana": "^3.0.1",
-    "@cap-js/mcp": "1.1.0",
+    "@cap-js/mcp": "1.1.1",
     "@cap-js/ord": "^1.9.1",
     "@cap-js/sqlite": "^3.0.2",
     "@cap-js/telemetry": "^2.0.1",
@@ -239,11 +239,6 @@
         "[production]": {
           "kind": "telemetry-to-cloud-logging"
         }
-      },
-      "ai": {
-        "mcp": {
-          "path": "/mcp"
-        }
       }
     },
     "hana": {
@@ -254,7 +249,7 @@
     },
     "ord": {
       "namespace": "sap.tutorials",
-      "description": "SAP Developer Tutorial Platform \u00e2\u20ac\u201d progress tracking, mission management, and real-time event dashboards for developers.sap.com",
+      "description": "SAP Developer Tutorial Platform â€” progress tracking, mission management, and real-time event dashboards for developers.sap.com",
       "policyLevels": [
         "sap:core:v1"
       ],
@@ -267,8 +262,7 @@
       }
     },
     "mcp": {
-      "per_action_tool": true,
-      "path": "/mcp"
+      "per_action_tool": true
     }
   }
 }

@@ -48,8 +48,10 @@ type FeaturedTopicsPayload {
 
 @path: '/homepage'
 @requires: 'any'
-@odata
-@mcp
+// (#912) `@mcp` alone is a single-protocol shortcut that REPLACES the OData
+// mount. Explicit list keeps OData reachable at /homepage/... and adds MCP.
+// This service does not adopt GraphQL (unlike SearchService/KG).
+@protocol: ['odata', 'mcp']
 service HomepageService {
 
   // EventCard maps from ims.Events (startDate/name) to the homepage shape.
