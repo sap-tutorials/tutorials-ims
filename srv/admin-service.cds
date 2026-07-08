@@ -1,6 +1,9 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
+using { com.sap.developers.ims.external as external } from '../db/external-content';
 using from '../db/knowledge-graph-communities';
 using from '../db/knowledge-graph-ondemand';
+using from '../db/community-blogs';
+using from '../db/homepage-featured';
 using from '../db/views';
 using from '../app/admin-annotations';
 
@@ -175,12 +178,35 @@ service AdminService {
   @odata.draft.enabled
   entity LegacyRedirects as projection on ims.LegacyRedirects;
 
-  @odata.singleton
+  // #1052 follow-up: `@odata.singleton` is INCOMPATIBLE with
+  // `@odata.draft.enabled` — the singleton contract omits the key from the
+  // URL, but CAP's draft runtime still requires `ID` for `draftActivate`
+  // (verified live: `POST /HomepageConfig(IsActiveEntity=false)/AdminService.draftActivate`
+  // returns 400 "Key \"ID\" is missing for entity \"AdminService.HomepageConfig\"").
+  // FE V4 detects the broken round-trip and renders the OP read-only — no
+  // Edit button. #1052 added `@odata.draft.enabled` but kept `@odata.singleton`,
+  // so `draftEdit` succeeded but `draftActivate` couldn't be driven from FE.
+  //
+  // Fix: expose as a regular keyed entity. The auto-init handler at
+  // srv/admin-service.js:601 already writes a single row with a fixed UUID
+  // (00000000-0000-0000-0000-00000000c8ae), so the "there is exactly one
+  // row" invariant still holds. Matches the peer pattern used by
+  // VerbDefinitions / ShelfDefinitions / LegacyRedirects (draft-enabled +
+  // Insert/Delete locked down + Update allowed). Deep-link shape becomes
+  // `/admin/HomepageConfig(00000000-0000-0000-0000-00000000c8ae)`, wired
+  // through app/admin-shell/webapp/controller/Shell.controller.js.
+  //
+  // No @Common.ValueList fields on this entity → the #1019 @cap-js/ai
+  // AICore-kind-resolution hazard does not apply (would have blocked Save).
+  @odata.draft.enabled
   @Capabilities.ChangeTracking : { Supported: false }
+  @Capabilities.InsertRestrictions.Insertable : false
+  @Capabilities.DeleteRestrictions.Deletable  : false
+  @Capabilities.UpdateRestrictions.Updatable  : true
   entity HomepageConfig as projection on ims.HomepageConfig;
 
   // (#759) Per-verb and per-shelf explainer content. Both have fixed
-  // cardinality (6 verbs / 4 shelves); CRUD lockdown lives in the
+  // cardinality (7 verbs / 4 shelves); CRUD lockdown lives in the
   // Fiori admin app annotations (PR 3). Projection itself is
   // unconstrained — same shape as HomepageConfig. Change-tracking is
   // off (matches HomepageConfig — singleton-set config, not a catalog).
@@ -197,6 +223,23 @@ service AdminService {
     action markReviewed() returns { processed : Integer; skipped : Integer; cost : String };
     action regenerate()   returns { processed : Integer; skipped : Integer; cost : String };
   };
+
+  // (#1033) Community Blog Posts admin surface. Sources = admin-editable
+  // list of RSS feed URLs; Posts = fetched candidates + AI verdict + admin
+  // override. Draft-enabled so admins get the standard Fiori edit round-trip.
+  //
+  // No @Common.ValueList on either projection — deliberately sidesteps the
+  // @cap-js/ai AICore-kind-resolution hazard (memory: cap-ai-plugin-aicore-kind-resolution).
+  //
+  // reclassifyCommunityBlogPost resets a row to PENDING with attemptCount=0
+  // so the classifier drain picks it up on the next 15-min tick.
+  @odata.draft.enabled
+  entity CommunityBlogSources as projection on ims.CommunityBlogSources;
+
+  @odata.draft.enabled
+  entity CommunityBlogPosts   as projection on ims.CommunityBlogPosts;
+
+  action reclassifyCommunityBlogPost(ID: UUID) returns Boolean;
 
   // (#763) For-you candidate pool — admin editing surface.
   // Validator in admin-service.js rejects unknown persona tags at save time.
@@ -317,6 +360,17 @@ service AdminService {
       // per job. Empty for monthly crons whose next firing falls outside the
       // window — nextRunIso still populated via fallback.
       nextRunsIso : array of String;
+      wedged      : Boolean;                                    // #1021
+    };
+
+    // #1023: currently-executing scheduled jobs. Read from PipelineLog rows
+    // where pipelineType='SCHEDULED_JOB' AND status='RUNNING'; jobName pulled
+    // from metadata JSON (see srv/jobs/scheduler.js: logPipelineStart writes
+    // { jobName }). Powers the Cron health tile's RUNNING state so operators
+    // can tell "job is executing right now" apart from "last run failed."
+    action listRunningJobs() returns array of {
+      jobName   : String;
+      startedAt : Timestamp;
     };
 
     action runJob(jobName: String) returns {
@@ -325,6 +379,16 @@ service AdminService {
       skipped   : Boolean;
       reason    : String;
       startedAt : Timestamp;
+    };
+
+    // #1021: DELETE the stuck cds.outbox.Messages row for jobName. Used
+    // by the Cron health panel's "Force unwedge" button. DELETE-only —
+    // does NOT auto-trigger a run. Emits SecurityEvent audit with
+    // outcome='unwedged'.
+    action forceUnwedge(jobName: String) returns {
+      jobName   : String;
+      cleared   : Boolean;
+      reason    : String;
     };
   };
 
@@ -741,8 +805,16 @@ service AdminService {
   // Phase 2-B (#464): Secrets-visibility metadata-only.
   // Full CRUD over tracked-secret rows. NOT @odata.singleton — this is a list,
   // not a singleton (unlike ChatSettings / KnowledgeGraphSettings).
+  //
+  // #1018: `hasValue` is a virtual Boolean populated by an after('READ')
+  // handler in admin-service.js that probes BTP Credential Store per row
+  // (5-min cached). Renders as a red "Missing value" badge in the FE List
+  // Report — see app/admin-annotations.cds for the UI.Criticality wiring.
   @requires: 'Admin'
-  entity Secrets as projection on ims.Secrets actions {
+  entity Secrets as projection on ims.Secrets {
+    *,
+    virtual null as hasValue : Boolean
+  } actions {
 
     // Phase 2-C (#465): Set a secret's value in BTP Credential Store.
     // Overwrites if value already exists. Stamps lastRotatedAt as a
@@ -798,12 +870,18 @@ service AdminService {
   // Severity-classified expiry warnings, used by the admin-shell notifications
   // popover. Read-only function (NOT action) — invokable via GET; no CSRF
   // token required for the popover fetch.
+  //
+  // #1018: the `reason` field discriminates 'expiry' (row's expiresAt is
+  // within the CRITICAL/WARNING/INFO thresholds) from 'missing-value' (row
+  // exists in HANA but its credstore value is null / unreachable). Missing
+  // values are always CRITICAL and always have daysRemaining=null.
   @requires: 'Admin'
   function secretWarnings() returns array of {
     ![key]            : String(120);
     description       : String(500);
     daysRemaining     : Integer;
     severity          : String(10);
+    reason            : String(20);   // 'expiry' | 'missing-value'
     rotationOwner     : String(120);
     rotationDocsUrl   : String(500);
   };
@@ -912,4 +990,53 @@ extend service AdminService with {
     missionSlug : String(255),
     title       : String(255)
   ) returns AdminService.Missions;
+}
+
+// (#1032) Featured missions carousel — editorial rows + read-only snapshot.
+// @assert.unique.concept on HomepageFeaturedTopics enforces one row per concept.
+// recomputeFeaturedTopics is SuperAdmin-gated (manual trigger); inline recompute
+// after CREATE/UPDATE/DELETE is handled in srv/admin-service.js.
+// Concepts is exposed read-only here as a value-help entity for the concept_ID
+// field on FeaturedTopics (Common.ValueList in app/admin-annotations.cds).
+extend service AdminService with {
+  @odata.draft.enabled
+  @requires: 'Admin'
+  entity FeaturedTopics as projection on ims.HomepageFeaturedTopics;
+
+  @readonly
+  @requires: 'Admin'
+  entity FeaturedTopicsSnapshotView as projection on ims.FeaturedTopicsSnapshot;
+
+  // (#1032) Value-help for concept_ID on FeaturedTopics.
+  // Read-only projection mirroring KnowledgeGraphService.Concepts.
+  @readonly
+  @requires: 'Admin'
+  entity Concepts as projection on ims.Concepts { ID, slug, name, status };
+
+  @requires: 'SuperAdmin'
+  action recomputeFeaturedTopics() returns { count : Integer; computedAt : Timestamp; };
+}
+
+// (#1031) Homepage video band admin surfaces.
+// - Videos: editable projection on ext.Videos (only `excludeFromHomepage` is
+//   admin-writable; other columns read-only via app/admin-annotations.cds).
+// - HomepageVideoRotationView: read-only join over the sidecar for the
+//   "what's in rotation now" viewer at /admin-ui/#video-rotation.
+// - recomputeHomepageVideoRotation: SuperAdmin manual trigger; runs the same
+//   body as the 4h cron. Precedent: recomputeFeaturedTopics (#1032).
+extend service AdminService with {
+  @odata.draft.enabled
+  @requires: 'Admin'
+  entity Videos as projection on external.Videos;
+
+  @readonly
+  @requires: 'Admin'
+  entity HomepageVideoRotationView as projection on ims.HomepageVideoRotation;
+
+  @requires: 'SuperAdmin'
+  action recomputeHomepageVideoRotation() returns {
+    inserted   : Integer;
+    poolSize   : Integer;
+    durationMs : Integer;
+  };
 }

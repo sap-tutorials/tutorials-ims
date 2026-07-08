@@ -117,12 +117,19 @@ function fakeRes({ status = 200, body = '' } = {}) {
 
 describe('setSecretValue (#465)', () => {
   it('happy-path: writes credstore + stamps lastRotatedAt', async () => {
+    // #1018: writer path now issues a POST followed by a GET (read-back
+    // verify). The mock returns 201 to the write and a real JWE envelope
+    // matching `newval` to the read — same value → guard passes.
     _fetchHandler = async (url, init) => {
-      expect(String(url)).toContain('/password');
-      expect(init.method).toBe('POST');
-      const body = JSON.parse(init.body);
-      expect(body).toEqual({ name: 'TEST_SET_OK', value: 'newval' });
-      return fakeRes({ status: 201 });
+      if ((init?.method ?? 'GET') === 'POST') {
+        expect(String(url)).toContain('/password');
+        const body = JSON.parse(init.body);
+        expect(body).toEqual({ name: 'TEST_SET_OK', value: 'newval' });
+        return fakeRes({ status: 201 });
+      }
+      // read-back
+      const jwe = await makeJwe(JSON.stringify({ value: 'newval' }));
+      return fakeRes({ status: 200, body: jwe });
     };
     const { ID } = await seedSecret({ key: 'TEST_SET_OK' });
     const result = await callAction('setSecretValue', ID, { value: 'newval' });
@@ -135,15 +142,49 @@ describe('setSecretValue (#465)', () => {
     await expect(callAction('setSecretValue', ID, { value: '' }))
       .rejects.toMatchObject({ code: 400 });
   });
+
+  // #1018 — silent-write-failure guard. If the credstore returns 2xx to
+  // the POST but a subsequent read returns 404 (or a mismatched value),
+  // treat the write as unverified and 500 the operation. Regression
+  // canary for the 2026-07-06 CONTENT_API_KEY silent-drift outage.
+  it('#1018: read-back miss (write claimed OK, read returned null) fails with 500', async () => {
+    _fetchHandler = async (url, init) => {
+      if ((init?.method ?? 'GET') === 'POST') {
+        return fakeRes({ status: 201 });   // write "succeeded"
+      }
+      return fakeRes({ status: 404 });     // …but value not readable
+    };
+    const { ID } = await seedSecret({ key: 'TEST_SET_MISS_1018' });
+    await expect(callAction('setSecretValue', ID, { value: 'newval' }))
+      .rejects.toMatchObject({ code: 500 });
+  });
+
+  it('#1018: read-back mismatch (stale value) fails with 500', async () => {
+    _fetchHandler = async (url, init) => {
+      if ((init?.method ?? 'GET') === 'POST') {
+        return fakeRes({ status: 201 });
+      }
+      const jwe = await makeJwe(JSON.stringify({ value: 'STALE_DIFFERENT_VALUE' }));
+      return fakeRes({ status: 200, body: jwe });
+    };
+    const { ID } = await seedSecret({ key: 'TEST_SET_MISMATCH_1018' });
+    await expect(callAction('setSecretValue', ID, { value: 'newval' }))
+      .rejects.toMatchObject({ code: 500 });
+  });
 });
 
 describe('rotateSecretValue (#465)', () => {
   it('self-gen kind (salt): mints 64-char hex + writes', async () => {
     let observedValue = null;
     _fetchHandler = async (url, init) => {
-      const body = JSON.parse(init.body);
-      observedValue = body.value;
-      return fakeRes({ status: 201 });
+      if ((init?.method ?? 'GET') === 'POST') {
+        const body = JSON.parse(init.body);
+        observedValue = body.value;
+        return fakeRes({ status: 201 });
+      }
+      // read-back — echo the just-written value so the #1018 guard passes
+      const jwe = await makeJwe(JSON.stringify({ value: observedValue }));
+      return fakeRes({ status: 200, body: jwe });
     };
     const { ID } = await seedSecret({ key: 'TEST_ROT_SALT', kind: 'salt' });
     const result = await callAction('rotateSecretValue', ID);
@@ -154,7 +195,15 @@ describe('rotateSecretValue (#465)', () => {
   });
 
   it('self-gen kind (content-api-key): same shape', async () => {
-    _fetchHandler = async () => fakeRes({ status: 201 });
+    let observedValue = null;
+    _fetchHandler = async (url, init) => {
+      if ((init?.method ?? 'GET') === 'POST') {
+        observedValue = JSON.parse(init.body).value;
+        return fakeRes({ status: 201 });
+      }
+      const jwe = await makeJwe(JSON.stringify({ value: observedValue }));
+      return fakeRes({ status: 200, body: jwe });
+    };
     const { ID } = await seedSecret({ key: 'TEST_ROT_API', kind: 'content-api-key' });
     const result = await callAction('rotateSecretValue', ID);
     expect(result.rotated).toBe(true);
@@ -173,6 +222,19 @@ describe('rotateSecretValue (#465)', () => {
     expect(result.reason).toBe('vendor-side');
     expect(result.rotationDocsUrl).toBe('https://docs.example.com/rotate');
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  // #1018 — self-gen rotation must also gate on read-back verify.
+  it('#1018: self-gen rotation with missing read-back fails with 500', async () => {
+    _fetchHandler = async (url, init) => {
+      if ((init?.method ?? 'GET') === 'POST') {
+        return fakeRes({ status: 201 });
+      }
+      return fakeRes({ status: 404 });   // read-back can't see the write
+    };
+    const { ID } = await seedSecret({ key: 'TEST_ROT_MISS_1018', kind: 'salt' });
+    await expect(callAction('rotateSecretValue', ID))
+      .rejects.toMatchObject({ code: 500 });
   });
 });
 

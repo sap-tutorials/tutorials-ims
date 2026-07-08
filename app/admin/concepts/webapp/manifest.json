@@ -98,6 +98,12 @@
                       "visible": true,
                       "enabled": true,
                       "text": "{i18n>triggerRebuildButton}"
+                    },
+                    "publishAllConcepts": {
+                      "press": "sap.tutorials.admin.concepts.ext.ConceptActionsController.onPublishAllConcepts",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>publishAllConceptsButton}"
                     }
                   }
                 }

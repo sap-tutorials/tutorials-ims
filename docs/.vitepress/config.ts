@@ -154,6 +154,7 @@ export default defineConfig({
           { text: 'AI-author CI setup',        link: '/developers/operations/ai-author-ci-setup' },
           { text: 'BTP destinations (SCI / NGDS)', link: '/developers/operations/btp-destinations' },
           { text: 'BTP role migration',        link: '/developers/operations/btp-role-migration' },
+          { text: 'Content moderation runbook', link: '/developers/operations/content-moderation-runbook' },
           { text: 'Dedupe Step rows',          link: '/developers/operations/dedupe-step-rows' },
           { text: 'Migration from IMS',        link: '/developers/operations/migration-from-ims' },
           { text: 'Deployment',                link: '/developers/operations/deployment' },
@@ -179,6 +180,7 @@ export default defineConfig({
           { text: 'Content rollback',          link: '/developers/operations/content-rollback' },
           { text: 'Rotate CONTENT_API_KEY',    link: '/developers/operations/rotate-content-api-key' },
           { text: 'Runtime config',            link: '/developers/operations/runtime-config' },
+          { text: 'Scheduler troubleshooting', link: '/developers/operations/scheduler-troubleshooting' },
           { text: 'Secrets tracking',          link: '/developers/operations/secrets-tracking' },
           { text: 'SMTP credentials rotation', link: '/developers/operations/smtp-credentials-rotation' },
           { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
@@ -198,6 +200,7 @@ export default defineConfig({
             { text: '0006 — Authorship vs. ownership semantics', link: '/decisions/0006-authorship-vs-ownership-semantics' }
           ]},
           { text: '@cap-js/ai plugin',         link: '/developers/reference/cap-ai-plugin' },
+          { text: 'Adding a verb (checklist)', link: '/developers/reference/adding-a-verb' },
           { text: 'CAP / CDS gotchas',         link: '/developers/reference/cap-cds-gotchas' },
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
           { text: 'Design decisions',          link: '/developers/reference/design-decisions' },

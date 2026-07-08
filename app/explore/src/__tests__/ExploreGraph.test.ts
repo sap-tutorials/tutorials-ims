@@ -25,20 +25,45 @@ vi.mock('sigma', () => ({
 
 const mockGraphInstances: any[] = []
 
-vi.mock('graphology', () => ({
-  default: class {
+// Mock BOTH the default Graph export and the MultiDirectedGraph named export.
+// The component uses MultiDirectedGraph to allow parallel edges between the
+// same pair of nodes (different predicate types). The mock enforces the same
+// contract as real graphology: the default `Graph` refuses a second edge
+// between an existing (source, target) pair regardless of key, while
+// `MultiDirectedGraph` allows unique-keyed parallel edges. Without this
+// realism the pre-#1015 regression (two `teaches`/`requires` edges between
+// the same tutorials) passed unit tests and only crashed on live.
+//
+// The factory body is inlined into vi.mock() below because vi.mock is
+// hoisted above top-level declarations and cannot reference outer classes.
+vi.mock('graphology', () => {
+  class MockGraphBase {
     nodes = new Map<string, any>()
     edges = new Map<string, any>()
-    constructor() { mockGraphInstances.push(this) }
+    isMulti: boolean
+    constructor(isMulti: boolean) {
+      this.isMulti = isMulti
+      mockGraphInstances.push(this)
+    }
     addNode(id: string, attrs: any) { this.nodes.set(id, attrs); return this }
     addEdgeWithKey(key: string, s: string, o: string, attrs: any) {
+      if (this.edges.has(key)) {
+        throw new Error(`UsageGraphError: Graph.addEdgeWithKey: an edge with key "${key}" already exists.`)
+      }
+      if (!this.isMulti) {
+        for (const edge of this.edges.values()) {
+          if (edge.s === s && edge.o === o) {
+            throw new Error(`UsageGraphError: Graph.addEdgeWithKey: an edge linking "${s}" to "${o}" already exists.`)
+          }
+        }
+      }
       this.edges.set(key, { s, o, ...attrs })
       return key
     }
     hasEdge(key: string) { return this.edges.has(key) }
     getNodeAttributes(id: string) { return this.nodes.get(id) }
+    getNodeAttribute(id: string, attr: string) { return this.nodes.get(id)?.[attr] }
     forEachEdge(...args: any[]) {
-      // If 1 arg: callback over all edges. If 3 args: source, target, callback.
       const callback = args[args.length - 1]
       if (typeof callback !== 'function') return
       if (args.length === 1) {
@@ -60,7 +85,11 @@ vi.mock('graphology', () => ({
       return this.edges.get(key)?.[attr]
     }
   }
-}))
+  return {
+    default: class extends MockGraphBase { constructor() { super(false) } },
+    MultiDirectedGraph: class extends MockGraphBase { constructor() { super(true) } },
+  }
+})
 
 vi.mock('graphology-layout-forceatlas2', () => ({
   default: { assign: vi.fn() }
@@ -142,6 +171,29 @@ describe('ExploreGraph', () => {
     await nextTick()
     expect(mockGraphInstances[0].edges.size).toBe(1)
     unmount()
+  })
+
+  // Regression #1015 (KG About page investigation surfaced this crash on live):
+  // Two tutorials can be linked by more than one predicate — e.g. one tutorial
+  // both `teaches` and `requires` the same concept, or `teaches` overlaps
+  // `relatedTo` between two tutorials. graphology's default `new Graph()`
+  // rejects the second edge with `UsageGraphError: an edge linking A to B
+  // already exists`, halting the SPA at boot. The component must use
+  // MultiDirectedGraph so parallel edges with unique keys are allowed.
+  it('allows parallel edges between the same pair of nodes with different predicates', async () => {
+    const parallelEdges = {
+      nodes: fixture.nodes,
+      edges: [
+        { s: 't:a', p: 'teaches' as const, o: 'c:x' },
+        { s: 't:a', p: 'requires' as const, o: 'c:x' },
+      ],
+    }
+    expect(() => {
+      const { unmount } = mountExploreGraph(parallelEdges)
+      unmount()
+    }).not.toThrow()
+    expect(mockGraphInstances[0].edges.size).toBe(2)
+    expect(mockGraphInstances[0].isMulti).toBe(true)
   })
 
   it('emits nodeClick when Sigma fires clickNode', async () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { VERB_DEFAULTS, SHELF_DEFAULTS } from '../../../srv/lib/homepage/verb-shelf-defaults.js';   // #1089
 
 const SCHEMA = readFileSync(join(import.meta.dirname, '../../../db/homepage.cds'), 'utf8');
 
@@ -61,28 +62,32 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       'utf8'
     );
     const lines = csv.trim().split(/\r?\n/);
-    it('has header + 6 rows', () => {
-      expect(lines.length).toBe(7);
+    it('has header + one row per VERB_DEFAULTS entry', () => {   // #1089
+      expect(lines.length).toBe(VERB_DEFAULTS.length + 1);
     });
-    it('header uses ID;verbKey;label;iconName;sortOrder;tagline;whyItMatters;authoringStatus', () => {
-      expect(lines[0]).toBe('ID;verbKey;label;iconName;sortOrder;tagline;whyItMatters;authoringStatus');
+    // (#1029-followup) CSV intentionally omits tagline/whyItMatters/authoringStatus
+    // so HDI .hdbtabledata never wipes admin-authored explainer content on redeploy.
+    // Those columns fall back to CDS defaults on initial INSERT via the runtime
+    // auto-init at srv/admin-service.js:630. See
+    // docs/developers/reference/hana-hdi-gotchas.md for the mechanism.
+    it('header uses ID;verbKey;label;iconName;sortOrder (editable columns omitted intentionally)', () => {
+      expect(lines[0]).toBe('ID;verbKey;label;iconName;sortOrder');
+    });
+    it('CSV must NOT include tagline/whyItMatters/authoringStatus (would trigger HDI wipe on any CSV-changing deploy)', () => {
+      expect(lines[0]).not.toMatch(/tagline|whyItMatters|authoringStatus/);
     });
     it.each([
       ['LEARN', 'Learn', 'learning-assistant', 10],
       ['BUILD', 'Build', 'developer-settings', 20],
       ['INTEGRATE', 'Integrate', 'chain-link', 30],
+      ['MODEL', 'Model', 'database', 35],
       ['OPERATE', 'Operate', 'settings', 40],
       ['AI', 'Extend with AI', 'da', 50],
       ['CONNECT', 'Connect', 'customer-and-contacts', 60],
     ])('row for %s has correct label + icon + sortOrder', (verbKey, label, icon, sort) => {
       const row = lines.find(l => l.includes(`;${verbKey};`));
       expect(row).toBeDefined();
-      expect(row).toContain(`;${verbKey};${label};${icon};${sort};`);
-    });
-    it('every row has authoringStatus=BLANK and empty tagline/whyItMatters', () => {
-      lines.slice(1).forEach(line => {
-        expect(line).toMatch(/;;;BLANK$/);
-      });
+      expect(row).toMatch(new RegExp(`;${verbKey};${label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')};${icon};${sort}$`));
     });
   });
 
@@ -92,26 +97,25 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       'utf8'
     );
     const lines = csv.trim().split(/\r?\n/);
-    it('has header + 4 rows', () => {
-      expect(lines.length).toBe(5);
+    it('has header + one row per SHELF_DEFAULTS entry', () => {   // #1089
+      expect(lines.length).toBe(SHELF_DEFAULTS.length + 1);
     });
-    it('header uses ID;shelfKey;label;sortOrder;tagline;whyItMatters;authoringStatus', () => {
-      expect(lines[0]).toBe('ID;shelfKey;label;sortOrder;tagline;whyItMatters;authoringStatus');
+    // See VerbDefinitions rationale above — same fix, same reason.
+    it('header uses ID;shelfKey;label;iconName;sortOrder (editable columns omitted intentionally)', () => {
+      expect(lines[0]).toBe('ID;shelfKey;label;iconName;sortOrder');
+    });
+    it('CSV must NOT include tagline/whyItMatters/authoringStatus (would trigger HDI wipe on any CSV-changing deploy)', () => {
+      expect(lines[0]).not.toMatch(/tagline|whyItMatters|authoringStatus/);
     });
     it.each([
-      ['START_HERE', 'Start here', 10],
-      ['REFERENCE', 'Reference', 20],
-      ['TOOLS', 'Tools & samples', 30],
-      ['KEEP_CURRENT', 'Keep current', 40],
-    ])('row for %s has correct label + sortOrder', (shelfKey, label, sort) => {
+      ['START_HERE',   'Start here',       'learning-assistant', 10],
+      ['REFERENCE',    'Reference',        'document',           20],
+      ['TOOLS',        'Tools & samples',  'wrench',             30],
+      ['KEEP_CURRENT', 'Keep current',     'newspaper',          40],
+    ])('row for %s has correct label + icon + sortOrder', (shelfKey, label, icon, sort) => {
       const row = lines.find(l => l.includes(`;${shelfKey};`));
       expect(row).toBeDefined();
-      expect(row).toContain(`;${shelfKey};${label};${sort};`);
-    });
-    it('every row has authoringStatus=BLANK and empty tagline/whyItMatters', () => {
-      lines.slice(1).forEach(line => {
-        expect(line).toMatch(/;;;BLANK$/);
-      });
+      expect(row).toMatch(new RegExp(`;${shelfKey};${label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')};${icon};${sort}$`));
     });
   });
 });

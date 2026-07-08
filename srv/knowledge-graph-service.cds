@@ -33,9 +33,10 @@
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
 @requires : 'any'
-@odata
-@graphql
-@mcp
+// See note on SearchService: single-protocol shortcuts (`@graphql`, `@mcp`)
+// REPLACE the default OData mount. Explicit dual list keeps /graph/Concepts,
+// /graph/neighborhood, etc. reachable. `@mcp` added by #912.
+@protocol: ['odata', 'graphql', 'mcp']
 service KnowledgeGraphService @(path : '/graph') {
 
   // ─── Projections (curation introspection + admin tooling) ─────────────
@@ -64,6 +65,13 @@ service KnowledgeGraphService @(path : '/graph') {
 
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
 
+  // #1046 — writable projection so the Concept OP's inline sub-table can
+  // CREATE/UPDATE/DELETE aliases. Auth inherited from the service
+  // (@requires: 'any' at line 33), but writes are only reachable through
+  // an authenticated admin session because the FE OP requires Author
+  // scope — same posture as the writable `Concepts` projection above.
+  entity ConceptAliases as projection on ims.ConceptAliases;
+
   /**
    * Publishable subset of Concepts — the projection the Hugo build script
    * (PR 2/3) reads via /build/concepts. Excludes never-published rows,
@@ -73,6 +81,23 @@ service KnowledgeGraphService @(path : '/graph') {
   @cds.query.limit: 200
   entity PublishedConcepts as projection on ims.Concepts {
     ID, slug, name, description, publishedAt, publishedBy, status
+  } where publishedAt is not null and status = 'ACTIVE';
+
+  /**
+   * #1046 — PublishedConcepts + a searchable alias blob for the ⌘K
+   * palette's CONCEPTS group. aliasSearchBlob is a comma-joined lowercase
+   * alias string stored directly on Concepts and kept fresh by the
+   * after-write hook in srv/knowledge-graph-service.js. HANA $search
+   * evaluates it at storage-plane time so queries like "SLT" match
+   * sap-landscape-transformation even before the after-READ hook fires.
+   *
+   * Inherits @requires: 'any' from the service — anonymous-safe.
+   */
+  @readonly
+  @cds.search: { name, description, aliasSearchBlob }
+  entity PublishedConceptsWithAliases as projection on ims.Concepts {
+    ID, slug, name, description, publishedAt, publishedBy, status,
+    aliasSearchBlob
   } where publishedAt is not null and status = 'ACTIVE';
 
   // ─── Type definitions ──────────────────────────────────────────────────
@@ -260,6 +285,25 @@ service KnowledgeGraphService @(path : '/graph') {
     limit         : Integer
   ) returns array of TutorialRef;
 
+  /**
+   * Anonymous KG search for the ⌘K command palette (issue #1036).
+   * Same seed/walk/hydrate/link-aggregate as expandSearchConcepts, MINUS
+   * the on-demand-extraction enqueue. Fail-open — never returns a warning.
+   */
+  action searchKG(term : String, maxConcepts : Integer, maxTutorials : Integer)
+    returns {
+      concepts  : many {
+        slug  : String;
+        name  : String;
+        score : Double;
+      };
+      tutorials : many {
+        slug  : String;
+        title : String;
+        score : Double;
+      };
+    };
+
   // ─── Admin curation actions (require KnowledgeGraph.Admin scope) ──────
   @requires : 'KnowledgeGraph.Admin'
   action runSparql(query : String) returns SparqlResult;
@@ -282,6 +326,21 @@ service KnowledgeGraphService @(path : '/graph') {
 
   @requires : 'KnowledgeGraph.Admin'
   action triggerGraphRebuild() returns RebuildResult;
+
+  // #1080 — bulk publish. Sets publishedAt=$now and publishedBy=<user> on
+  // every ACTIVE Concepts row where publishedAt IS NULL. Idempotent
+  // (already-published rows are skipped by the WHERE clause). Returns the
+  // number of rows affected. Single UPDATE statement — does NOT fan-out to
+  // per-row publishConcept invocations, so downstream hooks (audit only,
+  // for now — publishConcept doesn't rebuild the graph either) fire once
+  // with an aggregate payload rather than N times.
+  //
+  // Rationale: the extraction pipeline can generate ~60 concepts/day on
+  // DEV. Row-by-row curation via multi-select is unworkable at that scale;
+  // admins need a "publish everything I've reviewed" escape hatch. Spot-
+  // review before publishing via the isPublished=false filter.
+  @requires : 'KnowledgeGraph.Admin'
+  action publishAllConcepts() returns { publishedCount : Integer };
 }
 
 // publishConcept / unpublishConcept are BOUND actions on Concepts so Fiori
@@ -304,6 +363,15 @@ extend entity KnowledgeGraphService.Concepts with actions {
 // stays null (Fiori renders `null` boolean as no badge). Added via
 // `extend ... with columns` so the base projection line stays a
 // legal-syntax `projection on ... excluding { embedding }`.
+//
+// #1080 — virtual `isPublished` is a Boolean projection of `publishedAt IS
+// NOT NULL`, stamped by the same after('READ') decorator. Filtering on the
+// raw `publishedAt` column gives Fiori a date picker (bad UX for a yes/no
+// curation question). The virtual field surfaces a proper Yes/No dropdown
+// in the admin FilterBar; a before('READ') CQN rewrite translates
+// `isPublished eq true|false` into `publishedAt IS (NOT) NULL` so the
+// filter still pushes down to HANA.
 extend KnowledgeGraphService.Concepts with columns {
-  virtual isolated : Boolean
+  virtual isolated    : Boolean,
+  virtual isPublished : Boolean
 };

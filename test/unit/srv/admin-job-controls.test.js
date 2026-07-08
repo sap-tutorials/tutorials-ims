@@ -16,7 +16,7 @@
 // export are shared. Without this, registerJob() in the test would not be
 // visible to the AdminService handler.
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
 
@@ -232,5 +232,211 @@ describe('AdminService.JobControls', () => {
     const rows = await callListJobs();
     const row = rows.find(r => r.jobName === jobName);
     expect(row.nextRunsIso.length).toBe(50);
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // #1023: listRunningJobs — reads PipelineLog rows still in RUNNING
+  // state and extracts jobName from metadata JSON.
+  // ─────────────────────────────────────────────────────────────────
+  async function callListRunningJobs() {
+    return admin.tx({ user: ADMIN_USER }, (tx) =>
+      tx.send({ event: 'listRunningJobs', entity: 'AdminService.JobControls' })
+    );
+  }
+
+  async function insertPipelineRow({ id, status, jobName, pipelineType = 'SCHEDULED_JOB', startedAt = new Date().toISOString() }) {
+    const { PipelineLog } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(PipelineLog).entries({
+      ID: id,
+      pipelineType,
+      status,
+      startedAt,
+      initiator: 'system',
+      metadata: jobName != null ? JSON.stringify({ jobName }) : null,
+    });
+  }
+
+  it('listRunningJobs returns only SCHEDULED_JOB rows with status=RUNNING', async () => {
+    const { PipelineLog } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(PipelineLog);
+    await insertPipelineRow({ id: 'r1', status: 'RUNNING', jobName: 'alpha' });
+    // Finished job — must NOT show up.
+    await insertPipelineRow({ id: 'r2', status: 'SUCCESS', jobName: 'beta' });
+    // Failed job — must NOT show up.
+    await insertPipelineRow({ id: 'r3', status: 'FAILED', jobName: 'gamma' });
+    // Non-scheduled RUNNING pipeline (e.g. CONTENT_PUBLISH) — must NOT show up.
+    await insertPipelineRow({ id: 'r4', status: 'RUNNING', jobName: 'delta', pipelineType: 'CONTENT_PUBLISH' });
+
+    const rows = await callListRunningJobs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].jobName).toBe('alpha');
+    expect(rows[0].startedAt).toBeTruthy();
+  });
+
+  it('listRunningJobs skips rows with unparseable / missing metadata', async () => {
+    const { PipelineLog } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(PipelineLog);
+    await insertPipelineRow({ id: 'r1', status: 'RUNNING', jobName: 'good' });
+    // Garbage metadata — must be skipped, not throw.
+    await INSERT.into(PipelineLog).entries({
+      ID: 'r2',
+      pipelineType: 'SCHEDULED_JOB',
+      status: 'RUNNING',
+      startedAt: new Date().toISOString(),
+      initiator: 'system',
+      metadata: '{not-json',
+    });
+    // Missing metadata — must be skipped.
+    await INSERT.into(PipelineLog).entries({
+      ID: 'r3',
+      pipelineType: 'SCHEDULED_JOB',
+      status: 'RUNNING',
+      startedAt: new Date().toISOString(),
+      initiator: 'system',
+      metadata: null,
+    });
+
+    const rows = await callListRunningJobs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].jobName).toBe('good');
+  });
+
+  it('listRunningJobs returns [] when no scheduled jobs are running', async () => {
+    const { PipelineLog } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(PipelineLog);
+    const rows = await callListRunningJobs();
+    expect(rows).toEqual([]);
+  });
+
+  // #1021 — wedge detection in listJobs()
+  // NOTE: plan named helpers callListJobs() and registerTestJob(name, schedule).
+  // callListJobs() already exists (line 65). registerTestJob does not exist;
+  // registerWithSchedule(jobName, schedule) is the pre-existing equivalent
+  // and is used below (adaptation option b — no renaming of existing helpers).
+  //
+  // IMPORTANT (Windows module-identity / Vitest ESM mock limitation):
+  // cds.test('serve') loads admin-service.js via cds.utils._import, which on
+  // Windows issues import(new URL('file://'+path).href). This bypasses Vitest's
+  // ESM live-binding mock interceptor so vi.spyOn on scheduler-wedge exports
+  // has no effect on the handler's copy — same documented limitation as
+  // AdminService.generate*Explainers tests (admin-service-explainer-actions.test.js)
+  // and kg-path-v2-handler-flag.test.js. Workaround: globalThis injection hooks
+  // (__TEST_loadStuckOutboxTargets, __TEST_isRowStale) checked
+  // by the listJobs handler. Production never sets these globals.
+  describe('JobControls.listJobs — wedged field', () => {
+    afterEach(() => {
+      delete globalThis.__TEST_loadStuckOutboxTargets;
+      delete globalThis.__TEST_isRowStale;
+    });
+
+    it('returns wedged: false for a job with no outbox row', async () => {
+      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map();
+      const jobs = await callListJobs();
+      for (const job of jobs) {
+        expect(job.wedged).toBe(false);
+      }
+    });
+
+    it('returns wedged: false for a job with a processing row inside its expected tick window', async () => {
+      const rowTs = new Date('2026-07-06T12:07:00Z');
+      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map([['test-window-ok', rowTs]]);
+      globalThis.__TEST_isRowStale = () => false; // not stale → wedged=false
+      registerWithSchedule('test-window-ok', '*/1 * * * *');
+      const jobs = await callListJobs();
+      const job = jobs.find(j => j.jobName === 'test-window-ok');
+      expect(job.wedged).toBe(false);
+    });
+
+    it('returns wedged: true when a processing row exists AND we are past next fire', async () => {
+      const rowTs = new Date('2026-07-06T12:07:00Z');
+      globalThis.__TEST_loadStuckOutboxTargets = async () => new Map([['test-wedged', rowTs]]);
+      globalThis.__TEST_isRowStale = () => true; // stale → wedged=true
+      registerWithSchedule('test-wedged', '*/1 * * * *');
+      const jobs = await callListJobs();
+      const job = jobs.find(j => j.jobName === 'test-wedged');
+      expect(job.wedged).toBe(true);
+    });
+
+    it('fails open — returns all wedged: false when loadStuckOutboxTargets rejects', async () => {
+      globalThis.__TEST_loadStuckOutboxTargets = async () => { throw new Error('outbox unreachable'); };
+      const jobs = await callListJobs();
+      for (const job of jobs) {
+        expect(job.wedged).toBe(false);
+      }
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // #1021 — forceUnwedge operator recovery action
+  //
+  // NOTE (ESM identity adaptation — same constraint as Task 3 wedge tests):
+  // cds.test('serve') loads admin-service.js via cds.utils._import (Windows
+  // file:// URL path) which bypasses Vitest's ESM live-binding interceptor.
+  // vi.spyOn on scheduler-wedge or admin-service exports does NOT intercept
+  // the handler's copy of those bindings. Strategy B (pre-flight flag #1):
+  // globalThis seams (__TEST_deleteStuckOutboxRow, __TEST_emitJobAudit)
+  // checked by the forceUnwedge handler. Production never sets these globals.
+  // ─────────────────────────────────────────────────────────────────
+
+  async function callForceUnwedge(jobName) {
+    return admin.tx({ user: ADMIN_USER }, (tx) =>
+      tx.send({ event: 'forceUnwedge', entity: 'AdminService.JobControls', data: { jobName } })
+    );
+  }
+
+  describe('JobControls.forceUnwedge', () => {
+    afterEach(() => {
+      delete globalThis.__TEST_deleteStuckOutboxRow;
+      delete globalThis.__TEST_emitJobAudit;
+    });
+
+    it('rejects with 400 for missing jobName', async () => {
+      await expect(callForceUnwedge(undefined)).rejects.toMatchObject({ code: 400 });
+    });
+
+    it('rejects with 400 for jobName longer than MAX_JOB_NAME_LEN', async () => {
+      const huge = 'x'.repeat(200);
+      await expect(callForceUnwedge(huge)).rejects.toMatchObject({ code: 400 });
+    });
+
+    it('rejects with 400 for unknown jobName', async () => {
+      await expect(callForceUnwedge('never-registered')).rejects.toMatchObject({ code: 400 });
+    });
+
+    it('returns cleared: true when deleteStuckOutboxRow reports a delete', async () => {
+      registerWithSchedule('test-unwedge-ok', '*/1 * * * *');
+      globalThis.__TEST_deleteStuckOutboxRow = async () => true;
+      const result = await callForceUnwedge('test-unwedge-ok');
+      expect(result.cleared).toBe(true);
+      expect(result.reason).toBeFalsy();
+      expect(result.jobName).toBe('test-unwedge-ok');
+    });
+
+    it('returns cleared: false with reason when no row was found', async () => {
+      registerWithSchedule('test-unwedge-none', '*/1 * * * *');
+      globalThis.__TEST_deleteStuckOutboxRow = async () => false;
+      const result = await callForceUnwedge('test-unwedge-none');
+      expect(result.cleared).toBe(false);
+      expect(result.reason).toMatch(/No stuck outbox row/i);
+    });
+
+    it('emits audit with outcome=unwedged before the DELETE (strategy B: globalThis seam)', async () => {
+      // Rationale: vi.spyOn on emitJobAudit export doesn't intercept the
+      // handler's internal binding (ESM namespace frozen at load time, same
+      // issue as listJobs wedge tests). globalThis.__TEST_emitJobAudit is
+      // the canonical workaround for this repo — matches Task 3's pattern.
+      registerWithSchedule('test-unwedge-audit', '*/1 * * * *');
+      const auditCalls = [];
+      globalThis.__TEST_emitJobAudit = async (opts) => { auditCalls.push(opts); };
+      globalThis.__TEST_deleteStuckOutboxRow = async () => true;
+      await callForceUnwedge('test-unwedge-audit');
+      // Flush setImmediate so the fire-and-forget audit call executes.
+      await new Promise(resolve => setImmediate(resolve));
+      expect(auditCalls.length).toBe(1);
+      expect(auditCalls[0]).toMatchObject({
+        jobName: 'test-unwedge-audit',
+        outcome: 'unwedged',
+      });
+    });
   });
 });

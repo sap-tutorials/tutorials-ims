@@ -4,7 +4,7 @@
 // HomepageShelves payload.
 //
 // Verifies that the deployed srv actually serves:
-//   1. /build/verb-definitions — 200, 6 verbs, 60s Cache-Control.
+//   1. /build/verb-definitions — 200, 7 verbs, 60s Cache-Control.
 //   2. /build/shelf-definitions — 200, 4 shelves.
 //   3. /build/homepage-shelves — each row carries the new tagline,
 //      whyItMatters, and authoringStatus fields.
@@ -14,16 +14,19 @@
 
 import { describe, it, expect } from 'vitest';
 import { SRV_URL, fetchWithRetry } from './smoke.config.js';
+import { VERB_DEFAULTS, SHELF_DEFAULTS } from '../../srv/lib/homepage/verb-shelf-defaults.js';   // #1089
 
 describe('Smoke — build feeds for homepage explainers (#759 PR 1)', () => {
   describe('/build/verb-definitions', () => {
-    it('returns 200 with 6 verbs', async () => {
+    it('returns 200 with VERB_DEFAULTS.length verbs', async () => {
+      // (#1029) 7th verb MODEL added — data-platform lane.
+      // (#1089) row count derived from VERB_DEFAULTS (single source of truth).
       const res = await fetchWithRetry(`${SRV_URL}/build/verb-definitions`);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toMatch(/application\/json/);
       const body = await res.json();
       expect(Array.isArray(body.verbs)).toBe(true);
-      expect(body.verbs.length).toBe(6);
+      expect(body.verbs.length).toBe(VERB_DEFAULTS.length);
     });
 
     it('sets 60s Cache-Control', async () => {
@@ -33,13 +36,13 @@ describe('Smoke — build feeds for homepage explainers (#759 PR 1)', () => {
   });
 
   describe('/build/shelf-definitions', () => {
-    it('returns 200 with 4 shelves', async () => {
+    it('returns 200 with SHELF_DEFAULTS.length shelves', async () => {
       const res = await fetchWithRetry(`${SRV_URL}/build/shelf-definitions`);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toMatch(/application\/json/);
       const body = await res.json();
       expect(Array.isArray(body.shelves)).toBe(true);
-      expect(body.shelves.length).toBe(4);
+      expect(body.shelves.length).toBe(SHELF_DEFAULTS.length);
     });
   });
 

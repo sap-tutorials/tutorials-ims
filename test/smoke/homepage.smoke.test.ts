@@ -26,7 +26,8 @@ describe.skipIf(!BASE)('Developer homepage smoke', () => {
     expect(html).toMatch(/data-island=["']?videos["']?/);
   });
 
-  it.each(['learn', 'build', 'integrate', 'operate', 'ai', 'connect'])('GET /%s/ returns the verb sub-page', async (verb) => {
+  it.each(['learn', 'build', 'integrate', 'model', 'operate', 'ai', 'connect'])('GET /%s/ returns the verb sub-page', async (verb) => {
+    // (#1029) MODEL added as 7th verb — data-platform lane.
     const res = await fetch(`${BASE}/${verb}/`);
     expect(res.status).toBe(200);
     const html = await res.text();
@@ -62,5 +63,17 @@ describe.skipIf(!BASE)('Developer homepage smoke', () => {
     const res = await fetch(BASE + '/nonexistent.html', { redirect: 'manual' });
     expect([404, 200]).toContain(res.status);  // 200 if it accidentally exists; never 301
     expect(res.status).not.toBe(301);
+  });
+});
+
+describe.skipIf(!BASE)('Video band #1031 kind field', () => {
+  it('GET /homepage/videos returns items tagged kind: anchor|popular', async () => {
+    const res = await fetch(BASE + '/homepage/videos');
+    expect(res.status).toBe(200);
+    const body: { recent: Array<{ kind?: string }> } = await res.json();
+    expect(Array.isArray(body.recent)).toBe(true);
+    for (const item of body.recent) {
+      expect(['anchor', 'popular']).toContain(item.kind);
+    }
   });
 });

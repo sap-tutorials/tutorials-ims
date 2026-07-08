@@ -1,0 +1,149 @@
+{
+  "_version": "1.65.0",
+  "sap.cloud": {
+    "service": "tutorials",
+    "public": true
+  },
+  "sap.app": {
+    "id": "sap.tutorials.admin.shell",
+    "type": "application",
+    "title": "Admin Console",
+    "description": "Unified admin shell for tutorial platform management",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "adminService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      },
+      "authorService": {
+        "uri": "/author/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "deviceTypes": { "desktop": true, "tablet": true, "phone": true }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.m": {},
+        "sap.f": {},
+        "sap.tnt": {},
+        "sap.ui.core": {},
+        "sap.ui.layout": {},
+        "sap.ui.table": {},
+        "sap.suite.ui.microchart": {}
+      }
+    },
+    "resourceRoots": {
+      "__generated__": "componentResourceRoots"
+    },
+    "models": {
+      "admin": {
+        "dataSource": "adminService",
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": false
+        }
+      },
+      "author": {
+        "dataSource": "authorService",
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": false
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.shell.i18n.i18n" }
+      }
+    },
+    "componentUsages": {
+      "__generated__": "componentUsages"
+    },
+    "services": {
+      "ShellUIService": {
+        "factoryName": "sap.tutorials.admin.shell.services.ShellUIService"
+      }
+    },
+    "resources": {
+      "css": [
+        { "uri": "css/style.css" }
+      ]
+    },
+    "rootView": {
+      "viewName": "sap.tutorials.admin.shell.view.Shell",
+      "type": "XML",
+      "id": "shell"
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.m.routing.Router",
+        "async": true,
+        "viewType": "XML",
+        "viewPath": "sap.tutorials.admin.shell.view",
+        "controlId": "contentArea",
+        "controlAggregation": "pages",
+        "clearControlAggregation": false
+      },
+      "routes": [
+        { "__generated__": "componentRoutes" },
+        { "name": "feedbackDashboard", "pattern": "feedback/dashboard", "target": "feedbackDashboardTarget" },
+        { "name": "board", "pattern": "board", "target": "boardTarget" },
+        { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
+        { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
+        { "name": "metrics", "pattern": "metrics", "target": "metricsTarget" },
+        { "name": "dataExport", "pattern": "dataExport", "target": "dataExportTarget" },
+        { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" },
+        { "name": "noAccess", "pattern": "noAccess", "target": "noAccessTarget" }
+      ],
+      "targets": {
+        "__generated__": "componentTargets",
+        "feedbackDashboardTarget": {
+          "viewName": "TutorialFeedbackDashboard",
+          "viewLevel": 1
+        },
+        "boardTarget": {
+          "viewName": "Board",
+          "viewLevel": 1
+        },
+        "dashboardTarget": {
+          "viewName": "TutorialDashboard",
+          "viewLevel": 1
+        },
+        "statisticsTarget": {
+          "viewName": "Statistics",
+          "viewLevel": 1
+        },
+        "metricsTarget": {
+          "viewName": "Metrics",
+          "viewLevel": 1
+        },
+        "dataExportTarget": {
+          "viewName": "DataExport",
+          "viewLevel": 1
+        },
+        "privacyTarget": {
+          "viewName": "Privacy",
+          "viewLevel": 1
+        },
+        "noAccessTarget": {
+          "viewName": "NoAccess",
+          "viewLevel": 1
+        }
+      },
+      "bypassed": {
+        "target": "dashboardTarget"
+      }
+    }
+  }
+}

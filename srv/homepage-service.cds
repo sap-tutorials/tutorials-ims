@@ -19,6 +19,33 @@ using { com.sap.developers.ims.HomepageShelves } from '../db/homepage';
 // the /api namespace removes the overlap entirely. The approuter route
 // `^/homepage/(.*)$` (authenticationType: 'none') is the public ingress.
 
+// (#1032) Featured missions carousel types — declared outside service so they
+// resolve as named types (mirrors PersonalizedEnvelope pattern above).
+type FeaturedTopicMissionCard {
+  slug          : String;
+  kind          : String;
+  title         : String;
+  description   : String;
+  level         : String;
+  time          : Integer;
+  primaryTag    : String;
+  tutorialCount : Integer;
+  href          : String;
+  isNew         : Boolean;
+}
+type FeaturedTopicSlide {
+  slotOrder    : Integer;
+  source       : String;
+  conceptSlug  : String;
+  displayTitle : String;
+  missions     : many FeaturedTopicMissionCard;
+}
+type FeaturedTopicsPayload {
+  computedAt : Timestamp;
+  etag       : String;
+  snapshot   : many FeaturedTopicSlide;
+}
+
 @path: '/homepage'
 @requires: 'any'
 @odata
@@ -26,7 +53,21 @@ using { com.sap.developers.ims.HomepageShelves } from '../db/homepage';
 service HomepageService {
 
   // EventCard maps from ims.Events (startDate/name) to the homepage shape.
-  type EventCard   { title: String; startsAt: Timestamp; location: String; format: String; register: String; }
+  // #1030 — EventCard is served by CommunityEvents when eventsBandAutoPullEnabled=true,
+  // else falls back to legacy Events entity. eventType/region/isVirtual are new;
+  // title/startsAt/location remain compatible with legacy consumers.
+  type EventCard {
+    title:     String;
+    startsAt:  Timestamp;
+    endsAt:    Timestamp;
+    location:  String;
+    format:    String;
+    register:  String;
+    url:       String;
+    eventType: String;
+    region:    String;
+    isVirtual: Boolean;
+  }
   type VideoItem   { videoId: String; title: String; thumbnail: String; publishedAt: Timestamp; }
   type VideoPayload { featured: VideoItem; recent: array of VideoItem; error: String; }
   type RssItem     { title: String; link: String; publishedAt: Timestamp; description: String; }
@@ -38,7 +79,9 @@ service HomepageService {
   type HitEntry    { id: UUID; count: Integer; }
 
   // (#639) Live data band endpoints — all public, no XSUAA scope required.
-  function events()              returns array of EventCard;
+  // #1030 — region: 'ALL' | 'AMERICAS' | 'EMEA' | 'APJ' | 'VIRTUAL' (default 'ALL')
+  // includeVirtual: Boolean (default true). Invalid region values coerce to 'ALL'.
+  function events(region: String, includeVirtual: Boolean) returns array of EventCard;
   function videos()              returns VideoPayload;
   function communityBlogs()      returns array of RssItem;
   function news()                returns array of RssItem;
@@ -73,6 +116,7 @@ service HomepageService {
     shelfOverrides  : ShelfOverrideMap;
     videoFilterTags : array of String;
     rssFilterTags   : array of String;
+    eventsRegion    : String;                     // #1030 — user's preferredEventRegion; null = unset
   }
 
   @(requires: 'authenticated-user')
@@ -110,4 +154,8 @@ service HomepageService {
    * @returns     Recent video items with videoId, title, thumbnail, publishedAt.
    */
   function get_recent_videos(limit : Integer) returns array of VideoItem;
+
+  // (#1032) Featured missions carousel snapshot. Public — no auth. 60s cache;
+  // ETag so the Vue island can hydrate cheaply.
+  function featuredTopics() returns FeaturedTopicsPayload;
 }

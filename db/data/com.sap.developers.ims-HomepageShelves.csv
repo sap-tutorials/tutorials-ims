@@ -41,8 +41,10 @@ ID;verb;shelf;sortOrder;title;url;description;badge;isExternal;isActive
 66333900-0001-0004-0001-000000000009;OPERATE;TOOLS;90;SAP Development Tools;https://tools.hana.ondemand.com;Download Eclipse plugins, CLIs, HANA client, and SDKs;;true;true
 66333900-0001-0005-0001-000000000001;AI;START_HERE;10;BTP AI Best Practices;https://btp-ai-bp.docs.sap/;Curated guides and architecture patterns for building AI apps on BTP;;true;true
 66333900-0001-0005-0001-000000000002;AI;START_HERE;20;AI Skills Library;https://skills.cloud.sap/;Searchable catalog of certified AI skills built on SAP BTP;;true;true
+66333900-0001-0005-0001-000000000009;AI;START_HERE;25;Joule Studio;https://help.sap.com/docs/joule-studio;Low-code authoring environment for custom Joule skills, prompts, and tool integrations — next-generation edition (Q3 2026);NEW;true;true
 66333900-0001-0005-0001-000000000003;AI;START_HERE;30;Your First Joule Extension;/tutorial-navigator/;Tutorial series for building custom Joule extensions with the AI SDK;;false;true
 66333900-0001-0005-0001-000000000004;AI;REFERENCE;40;SAP Joule;https://help.sap.com/docs/joule;Docs for SAP's generative-AI copilot embedded across SAP products;;true;true
+66333900-0001-0005-0001-000000000010;AI;REFERENCE;45;Joule Studio (Classic);https://help.sap.com/docs/joule-studio#classic;Classic Joule Studio edition — GA since December 2025 — for teams already shipping skills today;;true;true
 66333900-0001-0005-0001-000000000005;AI;REFERENCE;50;SAP AI Core;https://help.sap.com/docs/sap-ai-core;Runtime for training and serving ML + GenAI models on BTP;;true;true
 66333900-0001-0005-0001-000000000006;AI;REFERENCE;60;SAP AI Launchpad;https://help.sap.com/docs/sap-ai-launchpad;Web UI to manage AI scenarios, models, and deployments on BTP;;true;true
 66333900-0001-0005-0001-000000000007;AI;TOOLS;70;AI4U Use Case Repository;https://ai4u-website.cfapps.eu10-004.hana.ondemand.com;50+ real-world AI projects built on SAP BTP — searchable by scenario;;true;true

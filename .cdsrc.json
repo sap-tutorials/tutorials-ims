@@ -8,7 +8,7 @@
     "target": "gen",
     "tasks": [
       { "for": "hana", "src": "db", "dest": "db" },
-      { "for": "nodejs", "src": "srv", "dest": "srv", "options": { "model": ["srv", "db", "app"] } },
+      { "for": "nodejs", "src": "srv", "dest": "srv", "options": { "model": ["srv", "db", "app", "@cap-js/data-inspector"] } },
       { "for": "hana", "src": "db-qa", "dest": "db-qa", "options": { "model": ["db-qa"] } },
       { "for": "nodejs", "src": "srv-qa", "dest": "srv-qa", "options": { "model": ["srv-qa", "db-qa"] } }
     ]

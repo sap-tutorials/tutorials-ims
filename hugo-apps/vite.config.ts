@@ -249,6 +249,8 @@ export default defineConfig({
         'concepts-filter': resolve(__dirname, 'src/concepts-filter/main.ts'),
         'homepage-explainers': resolve(__dirname, 'src/homepage-explainers/index.ts'),
         'homepage-personalizer': resolve(__dirname, 'src/homepage-personalizer/index.ts'),
+        'featured-topics-carousel': resolve(__dirname, 'src/featured-topics-carousel/main.ts'),
+        'homepage-events-band': resolve(__dirname, 'src/homepage-events-band/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',

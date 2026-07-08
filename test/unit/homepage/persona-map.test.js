@@ -9,8 +9,10 @@ describe('computeVerbOrder', () => {
   it('developer role leads with build', () => {
     const r = computeVerbOrder({ role: 'developer' });
     expect(r[0]).toBe('build');
-    expect(r).toHaveLength(6);
-    expect(new Set(r).size).toBe(6);
+    // (#1089) Derive expected verb count from BASE_ORDER (single source of truth).
+    // A future verb addition in persona-map.js should NOT silently regress this.
+    expect(r).toHaveLength(BASE_ORDER.length);
+    expect(new Set(r).size).toBe(BASE_ORDER.length);
   });
 
   it('architect role leads with integrate', () => {
@@ -30,19 +32,19 @@ describe('computeVerbOrder', () => {
   });
 
   it('tilts a strictly-heaviest verb up one slot', () => {
-    // developer base: [build, learn, integrate, ai, operate, connect]
+    // (#1029) developer base is now: [build, learn, integrate, ai, model, operate, connect]
     // ai has the most tagged shelves → moves from index 3 to index 2.
     const r = computeVerbOrder({ role: 'developer' }, { ai: 5, integrate: 2 });
-    expect(r).toEqual(['build', 'learn', 'ai', 'integrate', 'operate', 'connect']);
+    expect(r).toEqual(['build', 'learn', 'ai', 'integrate', 'model', 'operate', 'connect']);
   });
 
   it('does not tilt when the heaviest verb is already at index 0 or 1', () => {
     const r = computeVerbOrder({ role: 'developer' }, { build: 10 });
-    expect(r).toEqual(['build', 'learn', 'integrate', 'ai', 'operate', 'connect']);
+    expect(r).toEqual(['build', 'learn', 'integrate', 'ai', 'model', 'operate', 'connect']);
   });
 
   it('does not tilt on a tie for heaviest', () => {
     const r = computeVerbOrder({ role: 'developer' }, { ai: 5, operate: 5 });
-    expect(r).toEqual(['build', 'learn', 'integrate', 'ai', 'operate', 'connect']);
+    expect(r).toEqual(['build', 'learn', 'integrate', 'ai', 'model', 'operate', 'connect']);
   });
 });

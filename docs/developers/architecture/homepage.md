@@ -27,6 +27,7 @@ The homepage redesign (issue #639) replaces `developers.sap.com/` with a new top
 | **Resolver** | Legacy-redirects resolver (`srv/lib/legacy-redirects-resolver.js`) | Loads `LegacyRedirects` from DB, refreshes hourly |
 | **Approuter** | Loader + hit counter (`approuter/lib/`) | Loads `redirectsActive` at startup, records `POST /api/homepage/recordRedirectHits` |
 | **Cron** | Link-health job (`srv/jobs/homepage-link-health.js`) | Nightly 04:00; updates `HomepageShelves.linkStatus` |
+| **Cron** | Reshuffle video rotation (`srv/jobs/reshuffle-video-rotation.js`) | Every 4h @ :19; ranks `ext.Videos` by view velocity into `HomepageVideoRotation` |
 
 ---
 
@@ -44,15 +45,18 @@ Seven rows top-to-bottom on the homepage. Each verb also has a dedicated sub-pag
 │   Each tile previews the Start Here shelf + links to /<verb>/.       │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Row 3 · Events band                                                  │
-│   3-4 upcoming events. Runtime: /api/homepage/events (60s cache).   │
+│   6 upcoming events, auto-pulled from CommunityEvents, region-      │
+│   filtered per user preference. Runtime: /homepage/events (60s      │
+│   per-key cache; flag: HomepageConfig.eventsBandAutoPullEnabled).   │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Row 4 · SAPDevs video band                                           │
-│   LEFT — Weekly Developer News. RIGHT — 3-4 recent @sapdevs videos. │
+│   LEFT — Weekly Developer News. RIGHT — up to 6 tiles: 3 newest      │
+│   (anchors) + 3 popular (rotation, every 4h). #1031                  │
 │   Runtime: /api/homepage/videos (15-min cache; YouTube Data API v3). │
 ├──────────────────────────────────────────────────────────────────────┤
-│ Row 5 · Tutorials catalog teaser                                     │
-│   6-8 featured cards. Build-time: hugo/data/browse.json.            │
-│   "Browse all tutorials →" → /tutorial-navigator/.                  │
+│ Row 5 · Featured missions carousel (topic-based, 8 slides × 4 missions)    │
+│   KG-driven topic slides with editorial override. SSR baseline:     │
+│   hugo/data/featured_topics.json. Runtime: /homepage/featuredTopics.│
 ├──────────────────────────────────────────────────────────────────────┤
 │ Row 6 · Community lane                                               │
 │   Columns: Developer Advocates · Community blogs · SAP News.         │
@@ -94,9 +98,9 @@ Three verb sub-pages carry an extra section beyond the four shelves:
 |-----|-------------|---------------------|
 | Row 1 hero | Static (Hugo front matter) | Rebuild only |
 | Row 2 verb spine | `hugo/data/homepage_shelves.json` (baked from `GET /build/homepage-shelves`) | Rebuild on admin `HomepageShelves` save (debounced 60s dispatch) |
-| Row 3 events | `GET /api/homepage/events` | 60s server-side cache |
+| Row 3 events | `GET /homepage/events?region=<X>&includeVirtual=<b>` — 60s per-key cache; sourced from `CommunityEvents` when `HomepageConfig.eventsBandAutoPullEnabled=true` else legacy `Events` entity | 60s per-key server-side cache |
 | Row 4 videos | `GET /api/homepage/videos` | 15-min server-side cache; depends on `YOUTUBE_API_KEY` |
-| Row 5 tutorial teaser | `hugo/data/browse.json` (baked at build time) | Rebuild only |
+| Row 5 featured carousel | `hugo/data/featured_topics.json` (baked by `scripts/fetch-featured-topics.ts`) + runtime `/homepage/featuredTopics` | Nightly job at 04:13 UTC (`kg-featured-topics-job`) + editorial-save debounced rebuild (60s) |
 | Row 6 community | `/api/advocates` + `GET /api/homepage/communityBlogs` + `GET /api/homepage/news` | Advocates: 60s + SWR; RSS feeds: 30-min cache |
 | Row 7 directory footer | `hugo/data/homepage_shelves.json` | Same as Row 2 |
 
@@ -161,6 +165,42 @@ See **[Homepage explainer popovers](homepage-explainers.md)** for:
 
 ---
 
+## Featured missions carousel (#1032)
+
+Row 5 of the homepage was previously a static tutorials-catalog teaser. Issue #1032 replaces it with a KG-driven topic carousel: up to 8 slides, each showing up to 4 mission cards for a concept ranked by the nightly PageRank job.
+
+**Data flow:** The nightly `kg-featured-topics-job` (04:13 UTC) calls `recomputeSnapshot`, which joins `ConceptRank` × `HomepageFeaturedTopics` editorial rows × `KgCommunity` diversity filter, then materialises the result into `FeaturedTopicsSnapshot`. `scripts/fetch-featured-topics.ts` reads the snapshot via `GET /build/featured-topics` and writes `hugo/data/featured_topics.json` for SSR. At runtime, the Vue island (`hugo-apps/src/featured-topics-carousel/`) re-hydrates via `GET /homepage/featuredTopics()` with weak ETag / 304 caching.
+
+**Admin surface:** `/admin-ui/#featured-topics` — `FeaturedTopics` CRUD + manual `recomputeFeaturedTopics` action (SuperAdmin-gated).
+
+**Kill switch:** revert the Row 5 Hugo partial include (`hugo/layouts/partials/homepage/featured-topics-carousel.html`) to restore the previous teaser — no DB migration needed.
+
+**Spec:** `docs/superpowers/specs/2026-07-06-1032-featured-missions-carousel-design.md`
+**Plan:** `docs/superpowers/plans/2026-07-06-1032-featured-missions-carousel.md`
+
+---
+
+## SAP News (developer-relevance filter — #1034)
+
+The homepage `/homepage/news` handler serves items from the `NewsItems`
+HANA table when the two-layer kill switch is on. `srv/jobs/fetch-news-job.js`
+runs hourly (:37) against `news.sap.com/feed/`; each item is classified by
+`srv/lib/relevance-classifier.js` (embedding-first via `RelevanceSeedExemplars`,
+LLM fallback for the mid-band, keyword rules on any error).
+
+Admins triage at `/admin-ui/#content-moderation` — approve, reject, clear
+override, or reclassify a single item. Admin verdicts win over AI at read
+time. Homepage items are capped at 2, aged out after 14 days, English-only.
+
+Kill switches (either off → legacy RSS pass-through):
+- Env `HOMEPAGE_NEWS_RELEVANCE_ENABLED` (default: unset; only the literal string `false` disables — any other value, or absence, treats as enabled).
+- `HomepageConfig.newsRelevanceEnabled` (default `false`).
+
+Community Blog Posts (#1033) mirrors this pattern using the same
+`ContentModerationService` + `RelevanceSeedExemplars` shared seed set.
+
+---
+
 ## Personalization for signed-in users
 
 Issue #763 adds per-user reordering + filtering + a "For you" row.
@@ -184,6 +224,9 @@ See **[homepage-personalization.md](homepage-personalization.md)** for:
 | Approuter → srv unavailable at startup | Legacy-redirects resolver skips load and logs a warning; middleware retries on the next request. No boot crash. |
 | `HomepageConfig` missing | Admin auto-init handler creates the singleton on first READ with safe defaults (`videoBandEnabled: true`, `eventsBandEnabled: true`, `communityLaneEnabled: true`). Consistent with the pattern used by `ChatSettings`, `DisplaySettings`, etc. |
 | `YOUTUBE_API_KEY` not set | `youtube-fetcher.js` returns an empty array; video band degrades gracefully to the static link card. |
+| Reshuffle cron throws | `HomepageVideoRotation` untouched (single-tx ROLLBACK). Stale rotation continues to serve. |
+| `HomepageVideoRotation` empty (fresh deploy) | Response returns anchors only; client renders 3 tiles until first cron pass. |
+| Statistics fetch fails in `fetch-videos-job` | Snippet upsert already succeeded; view/like counts stay stale. Rotation deprioritises null-viewCount rows to bottom. |
 
 ---
 
@@ -216,3 +259,27 @@ The current implementation provides **discovery-shaped starter prompts** but the
 A future enhancement would teach the chat orchestrator to call `/api/homepage/shelves?verb=<v>` and `/api/homepage/redirectsActive`, treating the catalog rows as first-class retrieval sources alongside tutorial content. On a `homepage` or `verb-<key>` page-kind, the handler would prioritise catalog-shelf citations over tutorial-step citations and link out to the appropriate destination URL.
 
 That work is out of scope for issue #639 and lives as a future follow-up. The infrastructure (catalog data + endpoint + admin-curated content) is already in place.
+
+---
+
+## CodeJams auto-pull (#1030)
+
+Issue #1030 rewrites Row 3 (events band) to pull from `CommunityEvents` automatically and adds per-user region preference.
+
+**Spec:** [docs/superpowers/specs/2026-07-07-1030-homepage-codejams-autopull-design.md](../../superpowers/specs/2026-07-07-1030-homepage-codejams-autopull-design.md)
+**Plan:** [docs/superpowers/plans/2026-07-07-1030-homepage-codejams-autopull.md](../../superpowers/plans/2026-07-07-1030-homepage-codejams-autopull.md)
+
+---
+
+## Video band rotation (#1031)
+
+Row 4's right stack expands from 3 to 6 tiles (configurable via `HomepageConfig.videoBandAnchorCount` + `videoBandRotationCount`). Anchors always show the most recently published videos; the rotation slot set is materialised into `HomepageVideoRotation` every 4h by `srv/jobs/reshuffle-video-rotation.js`, ranked by view velocity (views per day since publishedAt) over the trailing `videoBandRotationWindowDays` (default 90).
+
+**Admin surfaces:**
+- `/admin-ui/#videos` — toggle `excludeFromHomepage` per video; manual `recomputeHomepageVideoRotation` action (SuperAdmin-gated).
+- `/admin-ui/#video-rotation` — read-only view of the current rotation.
+- `/admin-ui/#homepageConfig` — tuning knobs.
+
+**Kill switches:**
+1. `videoBandRotationCount = 0` → anchor-only (existing 3-tile behaviour). Zero deploy.
+2. `videoBandEnabled = false` → whole band disabled (unchanged from before).

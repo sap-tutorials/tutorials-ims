@@ -2520,6 +2520,10 @@ annotate KnowledgeGraphService.Concepts with {
   // cleared by unpublishConcept; never user-edited.
   publishedAt     @Common.Label: 'Published'      @Common.FieldControl: #ReadOnly;
   publishedBy     @Common.Label: 'Published By'   @Common.FieldControl: #ReadOnly;
+  // #1080 — virtual Boolean projection of `publishedAt IS NOT NULL`.
+  // Populated by after('READ', 'Concepts'); filterable via a
+  // before('READ') CQN rewrite. Read-only — no PATCH path.
+  isPublished     @Common.Label: 'Published?'     @Common.FieldControl: #ReadOnly;
   // #918 — populated by after('READ', 'Concepts') decorator in
   // knowledge-graph-service.js from the KgIsolation sidecar.
   isolated        @Common.Label: 'Isolated'       @Common.FieldControl: #ReadOnly;
@@ -2533,7 +2537,7 @@ annotate KnowledgeGraphService.Concepts with @(
     Description    : { Value: slug }
   },
 
-  UI.SelectionFields: [ status, slug, isolated ],
+  UI.SelectionFields: [ status, isPublished, slug, isolated ],
 
   UI.LineItem: [
     { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
@@ -2587,7 +2591,8 @@ annotate KnowledgeGraphService.Concepts with @(
     { $Type: 'UI.ReferenceFacet', Label: 'General',         Target: '@UI.FieldGroup#General' },
     { $Type: 'UI.ReferenceFacet', Label: 'Tutorials',       Target: 'links/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Outgoing edges',  Target: 'outgoingEdges/@UI.LineItem' },
-    { $Type: 'UI.ReferenceFacet', Label: 'Incoming edges',  Target: 'incomingEdges/@UI.LineItem' }
+    { $Type: 'UI.ReferenceFacet', Label: 'Incoming edges',  Target: 'incomingEdges/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Aliases',         Target: 'aliases/@UI.LineItem' }
   ],
 
   // Phase 3 (#446) — Publish / Unpublish toolbar actions.
@@ -2595,6 +2600,11 @@ annotate KnowledgeGraphService.Concepts with @(
   // context — no parameter dialog. The Action reference matches the canonical
   // form used by AdminService.Tutorials/rebuildContent at line 609 above
   // (`<Service>.<actionName>`; FE V4 resolves the binding from context).
+  //
+  // #1080 "Publish All Unpublished" is UNBOUND (no row-context) and needs
+  // a confirmation dialog — wired via app/admin/concepts/webapp/manifest.json
+  // + ConceptActionsController.onPublishAllConcepts, mirroring the existing
+  // previewMerges / triggerGraphRebuild toolbar buttons.
   UI.Identification: [
     {
       $Type : 'UI.DataFieldForAction',
@@ -2650,6 +2660,21 @@ annotate KnowledgeGraphService.ConceptEdges with @UI: {
     { $Type: 'UI.DataField', Value: predicate,   Label: 'Predicate' },
     { $Type: 'UI.DataField', Value: confidence,  Label: 'Confidence' },
     { $Type: 'UI.DataField', Value: status,      Label: 'Status' }
+  ]
+};
+
+// --- #1046 ConceptAliases — inline sub-table on the Concept OP "Aliases" facet
+annotate KnowledgeGraphService.ConceptAliases with {
+  alias      @Common.Label: 'Alias';
+  source     @Common.Label: 'Source';
+  modifiedAt @Common.Label: 'Modified At';
+};
+
+annotate KnowledgeGraphService.ConceptAliases with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: alias,      Label: 'Alias' },
+    { $Type: 'UI.DataField', Value: source,     Label: 'Source' },
+    { $Type: 'UI.DataField', Value: modifiedAt, Label: 'Modified At' }
   ]
 };
 
@@ -3026,16 +3051,35 @@ annotate AdminService.LegacyRedirects {
   hitCount   @Common.Label: 'Hits';
 };
 
+// HomepageConfig is a @odata.singleton — the Object Page renders standalone
+// (no LR list). It MUST declare UI.Facets that reference the field group;
+// without a facet, FE V4 renders only the header + Delete button and the
+// form body stays blank (repro: #948/#1010 follow-up — page opened blank).
 annotate AdminService.HomepageConfig with @(
   UI.HeaderInfo : {
     TypeName       : 'Homepage config',
-    TypeNamePlural : 'Homepage configs'
+    TypeNamePlural : 'Homepage configs',
+    Title          : { Value : 'Homepage config' }
   },
+  UI.Facets : [
+    { $Type : 'UI.ReferenceFacet', ID : 'MainFacet', Label : 'General',
+      Target : '@UI.FieldGroup#Main' }
+  ],
   UI.FieldGroup #Main : { Data : [
     { Value : developerNewsPlaylistId, Label : 'Developer News playlist ID (YouTube)' },
     { Value : videoBandEnabled,        Label : 'Show video band' },
     { Value : eventsBandEnabled,       Label : 'Show events band' },
-    { Value : communityLaneEnabled,    Label : 'Show community lane' }
+    { Value : communityLaneEnabled,    Label : 'Show community lane' },
+    // (#763) Master kill switch for the personalized-homepage feature.
+    // Default false at first migration; admin flips this on to expose
+    // the "Personalized for you · Adjust · See default" badge and the
+    // For-You row on the homepage. Without the toggle rendered here,
+    // /homepage/personalized 204s and the badge never injects.
+    { Value : personalizationEnabled,  Label : 'Enable personalized homepage' },
+    // (#1031) Video band expand + rotation tuning knobs.
+    { Value : videoBandAnchorCount,        Label : 'Video band anchor slots' },
+    { Value : videoBandRotationCount,      Label : 'Video band rotation slots' },
+    { Value : videoBandRotationWindowDays, Label : 'Rotation window (days)' }
   ]}
 );
 
@@ -3105,6 +3149,7 @@ annotate AdminService.ShelfDefinitions with @(
   UI.LineItem : [
     { Value: shelfKey,        Label: 'Shelf key' },
     { Value: label,           Label: 'Label' },
+    { Value: iconName,        Label: 'Icon' },
     { Value: sortOrder,       Label: 'Sort order' },
     { Value: authoringStatus, Label: 'Status', Criticality: authoringStatus }
   ],
@@ -3119,6 +3164,7 @@ annotate AdminService.ShelfDefinitions with @(
   UI.FieldGroup #Identity : { Data : [
     { Value: shelfKey,   Label: 'Shelf key' },
     { Value: label,      Label: 'Label' },
+    { Value: iconName,   Label: 'Icon' },
     { Value: sortOrder,  Label: 'Sort order' }
   ]},
   UI.FieldGroup #Explainer : { Data : [
@@ -3182,13 +3228,25 @@ annotate AdminService.HomepageForYouCandidatesAdmin with @(
 );
 
 annotate AdminService.HomepageForYouCandidatesAdmin with {
+  // @UI.RecommendationState: 0 opts these two fields out of the @cap-js/ai
+  // RPT-1 recommendation hook (docs/developers/reference/cap-ai-plugin.md).
+  // Without the opt-out, draft POST → read-after-write fires the plugin's
+  // handler at @cap-js/ai/lib/handlers/recommendations.js:99, which calls
+  // cds.connect.to('AICore') and throws "No service definition found for
+  // 'AICore'" on CF DEV (the aicore VCAP binding is present, but the
+  // plugin's profile-default kind resolution isn't landing) — surfaces to
+  // the user as "Internal Server Error" on Create. RPT-1 predictions add
+  // nothing here anyway: PersonaTagChoices is a small fixed enum, not the
+  // free-text ValueList the plugin is designed for.
   personaTags   @Common.Label: 'Persona tags (positive)'
+                @UI.RecommendationState: 0
                 @Common.ValueList: {
                   CollectionPath: 'PersonaTagChoices',
                   Parameters: [{ $Type: 'Common.ValueListParameterInOut',
                                  LocalDataProperty: personaTags, ValueListProperty: 'tag' }]
                 };
   personaHidden @Common.Label: 'Persona hidden (exclude)'
+                @UI.RecommendationState: 0
                 @Common.ValueList: {
                   CollectionPath: 'PersonaTagChoices',
                   Parameters: [{ $Type: 'Common.ValueListParameterInOut',
@@ -3394,6 +3452,148 @@ annotate AdminService.KgOnDemandRequests with @(
       { Value: llmCompletionTokens }
     ]}
   },
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable : false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);
+
+// --- HomepageFeaturedTopics / FeaturedTopics (#1032) ---
+// Editorial overrides for the homepage featured missions carousel.
+// Each row pins one concept to a carousel slot with optional display-title
+// and mission-slug overrides. The snapshot (FeaturedTopicsSnapshot) is
+// materialised by recomputeSnapshot and read by the homepage feed endpoint.
+//
+// @UI.RecommendationState: 0 on the concept field is required to suppress
+// the @cap-js/ai RPT-1 hook that fires on every draft Create — the AICore
+// service kind is not resolved in DEV, causing a 500 on first-save.
+// Precedent: HomepageForYouCandidatesAdmin.personaTags (line ~3193).
+
+annotate AdminService.FeaturedTopics with @(
+  UI.HeaderInfo: {
+    TypeName: 'Featured Topic',
+    TypeNamePlural: 'Featured Topics',
+    Title: { Value: displayTitle }
+  },
+  UI.LineItem: [
+    { Value: concept_ID,    Label: 'Concept' },
+    { Value: displayTitle,  Label: 'Display Title' },
+    { Value: sortOrder,     Label: 'Order' },
+    { Value: validFrom,     Label: 'From' },
+    { Value: validUntil,    Label: 'Until' },
+    { Value: isActive,      Label: 'Active' },
+  ],
+  UI.SelectionFields: [ isActive ],
+  UI.FieldGroup #Main: { Data: [
+    { Value: concept_ID },
+    { Value: displayTitle },
+    { Value: sortOrder },
+    { Value: validFrom },
+    { Value: validUntil },
+    { Value: isActive },
+    { Value: missionSlugs, Label: 'Mission Slug Overrides' },
+    { Value: notes },
+  ]},
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Main', Label: 'Details' },
+  ],
+);
+
+annotate AdminService.FeaturedTopics with {
+  concept @(
+    // (#1032) Escape hatch: suppress the @cap-js/ai RPT-1 recommendation
+    // hook so a draft Create does not crash with "No service definition
+    // found for 'AICore'" on CF DEV. See memory cap-ai-plugin-aicore-kind-resolution.
+    UI.RecommendationState: 0,
+    Common.ValueList: {
+      CollectionPath: 'Concepts',
+      SearchSupported: true,
+      Parameters: [
+        { $Type: 'Common.ValueListParameterInOut',
+          LocalDataProperty: concept_ID, ValueListProperty: 'ID' },
+        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' },
+        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' },
+      ],
+    },
+  );
+};
+
+annotate AdminService.FeaturedTopicsSnapshotView with @(
+  UI.HeaderInfo: {
+    TypeName: 'Snapshot Slot',
+    TypeNamePlural: 'Snapshot Slots'
+  },
+  UI.LineItem: [
+    { Value: slotOrder },
+    { Value: source },
+    { Value: conceptSlug },
+    { Value: displayTitle },
+    { Value: computedAt },
+  ],
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable : false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);
+
+// --- (#1031) Videos + HomepageVideoRotation admin surfaces ---
+// Videos: single-column editability (excludeFromHomepage) with statistics
+// columns visible read-only. Toolbar surfaces recomputeHomepageVideoRotation
+// (SuperAdmin-gated by the CDS annotation on the action itself).
+
+annotate AdminService.Videos with @(
+  UI.HeaderInfo: {
+    TypeName: 'Video',
+    TypeNamePlural: 'Videos',
+    Title: { Value: title }
+  },
+  UI.LineItem: [
+    { Value: title,               Label: 'Title' },
+    { Value: channelTitle,        Label: 'Channel' },
+    { Value: publishedAt,         Label: 'Published' },
+    { Value: viewCount,           Label: 'Views' },
+    { Value: likeCount,           Label: 'Likes' },
+    { Value: excludeFromHomepage, Label: 'Excluded' },
+    { $Type: 'UI.DataFieldForAction',
+      Action: 'AdminService.recomputeHomepageVideoRotation',
+      Label: 'Recompute rotation' },
+  ],
+  UI.SelectionFields: [ excludeFromHomepage ],
+  UI.FieldGroup #Main: { Data: [
+    { Value: title,               Label: 'Title' },
+    { Value: channelTitle,        Label: 'Channel' },
+    { Value: publishedAt,         Label: 'Published' },
+    { Value: viewCount,           Label: 'View count' },
+    { Value: likeCount,           Label: 'Like count' },
+    { Value: commentCount,        Label: 'Comment count' },
+    { Value: statsLastFetchedAt,  Label: 'Stats last refreshed' },
+    { Value: excludeFromHomepage, Label: 'Exclude from homepage' },
+  ]},
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Main', Label: 'Details' },
+  ],
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);
+
+annotate AdminService.Videos with {
+  title              @Common.FieldControl: #ReadOnly;
+  channelTitle       @Common.FieldControl: #ReadOnly;
+  publishedAt        @Common.FieldControl: #ReadOnly;
+  viewCount          @Common.FieldControl: #ReadOnly;
+  likeCount          @Common.FieldControl: #ReadOnly;
+  commentCount       @Common.FieldControl: #ReadOnly;
+  statsLastFetchedAt @Common.FieldControl: #ReadOnly;
+};
+
+annotate AdminService.HomepageVideoRotationView with @(
+  UI.HeaderInfo: {
+    TypeName: 'Rotation slot',
+    TypeNamePlural: 'Rotation slots'
+  },
+  UI.LineItem: [
+    { Value: rank,     Label: 'Rank' },
+    { Value: video_ID, Label: 'Video' },
+    { Value: pickedAt, Label: 'Picked at' },
+  ],
   Capabilities.InsertRestrictions.Insertable: false,
   Capabilities.UpdateRestrictions.Updatable : false,
   Capabilities.DeleteRestrictions.Deletable : false

@@ -45,15 +45,20 @@ import { runHomepageLinkHealth } from './homepage-link-health.js';
 import { runGcExternalContent } from './gc-external-content-job.js';
 import { runFetchLearningJourneys } from './fetch-learning-journeys-job.js';
 import { runFetchBlogPosts } from './fetch-blog-posts-job.js';
+import { runFetchNews } from './fetch-news-job.js';
 import { runMaterializeCoCompletions } from './materialize-co-completions.js';
 import { runKgPageRank } from './kg-pagerank-job.js';
 import { runKgCommunities } from './kg-communities-job.js';
 import { runKgWcc } from './kg-wcc-job.js';
 import { runOnDemandDrain } from './kg-ondemand-job.js';
+import { runKgFeaturedTopics } from './kg-featured-topics-job.js';
+import { runCommunityBlogsFetch } from './community-blogs-fetch-job.js';
+import { runCommunityBlogsClassify } from './community-blogs-classify-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
+import { deleteStuckOutboxRow } from '../lib/scheduler-wedge.js';
 import cds from '@sap/cds';
 
 const instanceId = process.env.CF_INSTANCE_INDEX || '0';
@@ -166,6 +171,16 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
     LOG.error(`Job ${jobName} failed:`, errorMessage);
     await logPipelineEnd(logId, 'FAILED', jobName, errorMessage);
   } finally {
+    // #1021: belt-and-suspenders — clear any stuck cds.outbox.Messages
+    // row for this jobName before recording JobLastRun. Runs on every
+    // tick (success and failure) so that a future framework bug that
+    // fails to flip status on success still cannot wedge us. Wrapped
+    // in try/catch inside the helper — never fails the cron.
+    try {
+      await deleteStuckOutboxRow(jobName);
+    } catch (err) {
+      LOG.warn(`deleteStuckOutboxRow(${jobName}) threw unexpectedly: ${err.message}`);
+    }
     try {
       await recordJobLastRun(jobName, outcome, errorMessage);
     } catch (err) {
@@ -645,6 +660,18 @@ export function registerJobs() {
     fn: () => runKgWcc(),
   });
 
+  // Daily at 04:13 UTC — recompute FeaturedTopicsSnapshot from ConceptRank +
+  // KgCommunity + editorial rows. Off-minute :13 avoids collision with
+  // secret-expiry-check at :11 and runs after PageRank (03:53) and
+  // communities (03:57). (#1032)
+  registerJob({
+    jobName: 'kg-featured-topics',
+    schedule: '13 4 * * *',
+    ttlMs: 600000,
+    description: 'Rebuild FeaturedTopicsSnapshot from KG signals + editorial rows',
+    fn: (logId) => runKgFeaturedTopics(logId),
+  });
+
   // Weekly Sunday 02:00 — tutorial metadata review
   registerJob({
     jobName: 'tutorial-metadata-review',
@@ -730,6 +757,16 @@ export function registerJobs() {
     ttlMs: 30 * 60 * 1000,
     description: 'Fetch SAP Community blog posts + extract concepts (daily)',
     fn: runFetchBlogPosts,
+  });
+
+  // #1034 SAP News developer-relevance filter.
+  // Hourly at :37 — free slot verified against all registerJob() calls above.
+  registerJob({
+    jobName:     'fetch-news',
+    schedule:    '37 * * * *',
+    ttlMs:       10 * 60 * 1000,
+    description: 'Fetch news.sap.com/feed/ hourly and classify developer relevance',
+    fn:          () => runFetchNews(),
   });
 
   // Weekly Sunday at 03:07 — Phase 4.3 Discovery Missions extraction (#447).
@@ -843,6 +880,24 @@ export function registerJobs() {
     },
   });
 
+  // #1030 — Every 6 h at minute 17 (off :00/:30 to avoid stampede). Keeps the
+  // Row 3 homepage events band fresh without incurring LLM cost — this job
+  // ONLY re-pulls Khoros + RSS and upserts CommunityEvents (title, url,
+  // location, region, ...). The twice-weekly fetch-community-events job
+  // above still owns embedding + concept-link extraction.
+  //
+  // Spec: docs/superpowers/specs/2026-07-07-1030-homepage-codejams-autopull-design.md §5
+  registerJob({
+    jobName: 'refresh-community-events',
+    schedule: '17 */6 * * *',
+    ttlMs: 10 * 60 * 1000,        // 10 min — job is lightweight, no LLM cost
+    description: 'Refresh CommunityEvents (CodeJams + Devtoberfest) for homepage — no LLM (6h cadence)',
+    fn: async (logId, opts) => {
+      const { runRefreshCommunityEvents } = await import('./refresh-community-events-job.js');
+      return runRefreshCommunityEvents(logId, opts);
+    },
+  });
+
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
   // Prunes content rows past lastSeenAt + 2×TTL when not pinned. Cascade-deletes
   // link entity rows via CDS Compositions on the parent entity, plus an explicit
@@ -878,6 +933,22 @@ export function registerJobs() {
     ttlMs: 30 * 60 * 1000,
     description: 'Nightly link-health check for HomepageShelves entries',
     fn: runHomepageLinkHealth,
+  });
+
+  // (#1031) Every 4h at :19 past — reshuffle HomepageVideoRotation with the
+  // top-N videos by view velocity. Off-minute (:19) avoids the 03:11 fetch-videos,
+  // 03:57 kg-communities, 04:00 homepage-link-health, 04:07 kg-wcc, and 04:13
+  // kg-featured-topics slots. Lazy-import matches the fetch-videos pattern above
+  // and keeps boot fast.
+  registerJob({
+    jobName: 'reshuffle-video-rotation',
+    schedule: '19 */4 * * *',
+    ttlMs: 5 * 60 * 1000,
+    description: 'Reshuffle homepage video rotation (top-N by view velocity, every 4h)',
+    fn: async () => {
+      const { runReshuffleVideoRotation } = await import('./reshuffle-video-rotation.js');
+      return runReshuffleVideoRotation();
+    },
   });
 
   // #805 — every 5 minutes, rotate the metrics module into MetricSnapshots rows.
@@ -923,6 +994,28 @@ export function registerJobs() {
     ttlMs: 2 * 60 * 1000,
     description: 'On-demand knowledge-graph extraction drain (#948)',
     fn: runOnDemandDrain,
+  });
+
+  // (#1033) Community Blog Posts — fetch every 30 min at :17 and :47
+  // past the hour (off-cycle minutes per the memory rule about avoiding
+  // :00 / :30 thundering herd).
+  registerJob({
+    jobName: 'community-blogs-fetch',
+    schedule: '17,47 * * * *',
+    ttlMs: 5 * 60 * 1000,
+    description: 'Fetch SAP Community RSS feeds into CommunityBlogPosts (#1033)',
+    fn: runCommunityBlogsFetch,
+  });
+
+  // (#1033) Community Blog Posts — classify PENDING rows every 15 min
+  // at :07, :22, :37, :52. Off-minute cadence chosen to avoid overlap
+  // with the fetch job.
+  registerJob({
+    jobName: 'community-blogs-classify',
+    schedule: '7,22,37,52 * * * *',
+    ttlMs: 2 * 60 * 1000,
+    description: 'Drain PENDING CommunityBlogPosts through AI relevance classifier (#1033)',
+    fn: runCommunityBlogsClassify,
   });
 
   LOG.info('All scheduled jobs registered');

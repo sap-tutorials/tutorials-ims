@@ -3,6 +3,9 @@
    Reference: hugo/assets/css/home.css for token names and spacing rhythm.
 */
 
+/* ===== Per-band partials ===== */
+@import "homepage/_events-band.css";
+
 /* ===== Page shell ===== */
 .developer-homepage {
   display: flex;
@@ -38,7 +41,11 @@
 /* ===== Verb spine (row 2) ===== */
 .hp-verbs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* (#1029) 7 columns since MODEL was added. Breakpoints below tuned to
+     avoid a lonely orphan tile at intermediate widths — 4+3 wrap at
+     901–1200px instead of 3+3+1, and full 7-across only kicks in above
+     1200px where the ~163px/col leaves room for "Extend with AI". */
+  grid-template-columns: repeat(7, 1fr);
   gap: 0.75rem;
   list-style: none;
   padding: 0;
@@ -51,9 +58,12 @@
   }
 }
 
-@media (min-width: 901px) and (max-width: 1100px) {
+@media (min-width: 901px) and (max-width: 1200px) {
+  /* (#1029) Intermediate widths: 4-col wrap so 7 tiles land as 4+3, not
+     3+3+1 with an orphan on the last row. The old 3-col rule at
+     ≤1100px produced a lonely tile whenever the spine grew past 6. */
   .hp-verbs {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -187,7 +197,13 @@
 /* ===== Directory footer (row 7) ===== */
 .hp-directory {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* (#1029) auto-fit with a 180px minimum lets the browser fit as many
+     columns as the container comfortably holds — 7 across at ~1440px,
+     dropping to 6/5/4 at narrower widths without an explicit
+     breakpoint per verb count. Each column stays wide enough that
+     link titles like "SAP Business Application Studio" don't wrap
+     to three lines. */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1.5rem;
   padding: 2rem 1rem;
   border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);
@@ -196,6 +212,9 @@
 
 @media (max-width: 900px) {
   .hp-directory {
+    /* On narrow viewports pin to 2 cols so the mobile stack stays
+       predictable — auto-fit would otherwise let a single column
+       expand to full width and destroy the section rhythm. */
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -230,7 +249,7 @@
   text-decoration: underline;
 }
 
-/* Utility links row — spans full width below the 6 verb columns */
+/* Utility links row — spans full width below the 7 verb columns */
 .hp-directory__utility {
   grid-column: 1 / -1;
   border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);
@@ -269,6 +288,21 @@
 .verb-page__hero { padding: 2rem 0 1rem; border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5); margin-bottom: 2rem; }
 .verb-page__hero h1 { font-size: 2.5rem; font-weight: 600; color: var(--sapTextColor, #32363a); margin: 0 0 0.5rem; }
 .verb-page__hero p { font-size: 1.125rem; color: var(--sapContent_LabelColor, #6a6d70); margin: 0; max-width: 720px; }
+/* Long-form whyItMatters paragraphs (same copy as the homepage flip-tile
+   rollover). Rendered as a subparagraph below the short tagline — smaller
+   than the tagline, body-copy line-height, wider max-width so multi-line
+   paragraphs breathe. */
+.verb-page__hero-why { margin: 0.75rem 0 0; max-width: 780px; }
+.verb-page__hero-why p { font-size: 1rem; line-height: 1.6; color: var(--sapContent_LabelColor, #6a6d70); margin: 0 0 0.75rem; max-width: none; }
+.verb-page__hero-why p:last-child { margin-bottom: 0; }
+
+/* Optional editorial body from _index.md (#1035 — Joule Studio) */
+.verb-page__body { max-width: 780px; margin: 0 0 2.5rem; color: var(--sapTextColor, #32363a); font-size: 1rem; line-height: 1.6; }
+.verb-page__body h2 { font-size: 1.5rem; font-weight: 600; margin: 1.5rem 0 0.75rem; color: var(--sapTextColor, #32363a); }
+.verb-page__body h3 { font-size: 1.15rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: var(--sapTextColor, #32363a); }
+.verb-page__body p { margin: 0 0 1rem; }
+.verb-page__body ul { margin: 0 0 1rem; padding-left: 1.25rem; }
+.verb-page__body a { color: var(--sapLinkColor, #0064d9); }
 
 .verb-shelf { margin-bottom: 2.5rem; }
 .verb-shelf h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sapContent_LabelColor, #6a6d70); font-weight: 700; margin: 0 0 1rem; }
@@ -366,3 +400,39 @@
 [data-personalize="teaser-rerank"] { min-height: 320px; }
 .personalized-badge-slot { min-height: 32px; padding: .25rem .5rem; }
 .personalized-badge { display: flex; gap: .5em; align-items: center; }
+
+/* Row 5 featured topics carousel — #1032 */
+.hp-featured-carousel { position: relative; }
+/* When the baked snapshot is empty (deploy raced the nightly job, or JSON
+   was never refreshed), the Vue island hydrates from /homepage/featuredTopics()
+   on mount. Hide the empty shell during that window so users don't see a
+   lonely "Featured missions" header with no cards. If JS is disabled or the
+   fetch fails, the row simply stays hidden — the same UX as the pre-fix
+   behavior. */
+.hp-featured-carousel--pending { display: none; }
+.hp-featured-carousel__header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
+.hp-featured-carousel__viewport { position: relative; min-height: 22rem; }
+.hp-featured-carousel__slide { transition: opacity 300ms ease, transform 300ms ease; opacity: 1; transform: translateX(0); }
+.hp-featured-carousel__slide.hidden { display: none; }
+.hp-featured-carousel__slide.is-fading-out { opacity: 0; transform: translateX(-10px); }
+.hp-featured-carousel__slide.is-fading-in  { opacity: 0; transform: translateX(10px); }
+.hp-featured-carousel__topic { font-size: 1.125rem; margin-bottom: 0.75rem; }
+.hp-featured-carousel__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+@media (max-width: 900px) { .hp-featured-carousel__grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .hp-featured-carousel__grid { grid-template-columns: 1fr; } }
+.hp-featured-carousel__controls { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; justify-content: center; }
+.hp-featured-carousel__controls button { background: transparent; border: 1px solid var(--sapList_BorderColor, #e5e5e5); border-radius: 4px; padding: 0.25rem 0.5rem; cursor: pointer; }
+.hp-featured-carousel__dots { list-style: none; padding: 0; margin: 0; display: flex; gap: 0.375rem; }
+.hp-featured-carousel__dots button {
+  width: 0.625rem; height: 0.625rem; border-radius: 50%; border: 0;
+  background: var(--sapContent_LabelColor, #6a6d70); opacity: 0.35;
+  cursor: pointer; padding: 0;
+}
+.hp-featured-carousel__dots button[aria-selected="true"] { opacity: 1; }
+.hp-featured-carousel__see-all { color: var(--sapLinkColor, #0070f3); text-decoration: none; }
+.hp-featured-carousel__see-all:hover { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) {
+  .hp-featured-carousel__slide,
+  .hp-featured-carousel__slide.is-fading-out,
+  .hp-featured-carousel__slide.is-fading-in { transition: none; transform: none; }
+}

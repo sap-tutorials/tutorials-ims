@@ -1,0 +1,66 @@
+{{- /* featured-topics-carousel.html — issue #1032 row 5.
+       Reads .Site.Data.featured_topics (populated by scripts/fetch-tutorials.ts
+       calling GET /build/featured-topics). Renders up to 8 SSR slides so the
+       first paint is instant + SEO-visible. The Vue island (data-app hook)
+       rehydrates with fresher data via /homepage/featuredTopics() + If-None-Match.
+
+       Snapshot shape (per task 8):
+         { computedAt, etag, snapshot: [{ slotOrder, source, conceptSlug,
+           displayTitle, missions: [{ slug, kind, title, description, level,
+           time, primaryTag, tutorialCount, href, isNew }] }], buildAt, error }
+
+       Card dispatch: kind=mission → card-mission.html, kind=tutorial → card-tutorial.html.
+
+       IMPORTANT: We ALWAYS emit the <section data-app="featured-topics-carousel">
+       shell — even when the baked snapshot is empty — so the Vue island's
+       useHydrate can still fetch /homepage/featuredTopics() and populate the
+       row from live CAP data. Without the shell, a stale/empty baked JSON
+       (as shipped once by 03d42355 before the nightly PageRank + snapshot
+       job first ran) would silently hide Row 5 for the entire deploy
+       lifetime — no client-side rescue possible. The .hp-featured-carousel--pending
+       modifier lets CSS hide the empty header until hydration fills in
+       slides. */ -}}
+{{- $ft := .Site.Data.featured_topics | default (dict "snapshot" slice "etag" "") -}}
+{{- $slides := $ft.snapshot | default slice -}}
+<section class="hp-featured-carousel{{ if eq (len $slides) 0 }} hp-featured-carousel--pending{{ end }}"
+         data-app="featured-topics-carousel"
+         data-etag="{{ $ft.etag }}"
+         aria-roledescription="carousel"
+         aria-label="Featured missions by topic">
+  <div class="hp-featured-carousel__header">
+    <h2 id="hp-featured-title" class="hp-band__title">Featured missions</h2>
+    <a class="hp-featured-carousel__see-all" href="/tutorial-navigator/">Browse all →</a>
+  </div>
+  <div class="hp-featured-carousel__viewport" aria-live="polite">
+    {{- range $i, $slide := $slides -}}
+    <div class="hp-featured-carousel__slide {{ if eq $i 0 }}is-active{{ else }}hidden{{ end }}"
+         id="featured-{{ $slide.conceptSlug }}"
+         role="group"
+         aria-roledescription="slide"
+         aria-label="{{ $slide.displayTitle }}, slide {{ add $i 1 }} of {{ len $slides }}">
+      <h3 class="hp-featured-carousel__topic">{{ $slide.displayTitle }}</h3>
+      <div class="hp-featured-carousel__grid cards">
+        {{- range $slide.missions -}}
+          {{- if eq .kind "mission" -}}{{ partial "browse/_partials/card-mission.html" . }}{{- end -}}
+          {{- if eq .kind "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" . }}{{- end -}}
+        {{- end -}}
+      </div>
+    </div>
+    {{- end -}}
+  </div>
+  <nav class="hp-featured-carousel__controls" aria-label="Carousel controls">
+    <button type="button" data-action="prev" aria-label="Previous topic">&#x2039;</button>
+    <button type="button" data-action="play-pause" aria-label="Pause auto-advance" aria-pressed="false">&#x23F8;</button>
+    <button type="button" data-action="next" aria-label="Next topic">&#x203A;</button>
+    <ol class="hp-featured-carousel__dots" role="tablist">
+      {{- range $i, $slide := $slides -}}
+      <li role="presentation">
+        <button type="button" role="tab" data-slide-index="{{ $i }}"
+                aria-selected="{{ if eq $i 0 }}true{{ else }}false{{ end }}"
+                aria-label="Show {{ $slide.displayTitle }}">
+        </button>
+      </li>
+      {{- end -}}
+    </ol>
+  </nav>
+</section>

@@ -1,11 +1,16 @@
 {{ define "main" }}
-{{- /* verb/list.html — verb sub-page layout (#639) + #759 PR 2.
+{{- /* verb/list.html — verb sub-page layout (#639) + #759 PR 2 + #1020.
 
        PR 2 additions:
-       - Shelf-section <h2> wrapped with data-island="verb-flip-tile" mount
+       - Shelf-section <h2> with a companion ⓘ popover mount
        - Each link card wrapped with data-island="link-explainer-popover"
        - Shelf labels + explainer content read from site.Data.shelf_definitions
-         with graceful fallback to the hard-coded label dict. */ -}}
+         with graceful fallback to the hard-coded label dict.
+
+       #1020: shelf headers switched from data-island="verb-flip-tile" (flip
+       card, reserved ~96 px of vertical space per header) to
+       data-island="shelf-header-popover" (inline <h2> + ⓘ). Cards now sit
+       tight against their heading with no empty gap. */ -}}
 {{- $verbKey := .Params.verbKey -}}
 {{- $allShelves := (.Site.Data.homepage_shelves.shelves) | default slice -}}
 {{- $verbShelves := where $allShelves "verb" $verbKey -}}
@@ -18,38 +23,75 @@
     "TOOLS"        "Tools & samples"
     "KEEP_CURRENT" "Keep current" -}}
 
+{{- /* Look up this verb's baked definition so the hero can surface the long
+       whyItMatters description (same copy that appears on the homepage
+       flip-tile rollover). Falls back silently when the baked data or the
+       whyItMatters field is missing — keeps local dev without the fetcher
+       step working. */ -}}
+{{- $bakedVerbs := slice -}}
+{{- with site.Data.verb_definitions }}{{ $bakedVerbs = .verbs | default slice }}{{ end -}}
+{{- $verbDef := index (where $bakedVerbs "verbKey" $verbKey) 0 -}}
+{{- $verbWhy := "" -}}
+{{- with $verbDef }}{{ $verbWhy = .whyItMatters | default "" }}{{ end -}}
+
 <article class="verb-page" data-verb="{{ $verbKey | lower }}">
   <header class="verb-page__hero">
     <h1>{{ .Title }}</h1>
-    <p>{{ .Description }}</p>
+    <p class="verb-page__hero-tagline">{{ .Description }}</p>
+    {{- /* whyItMatters is stored as multi-paragraph plain text with
+           blank-line separators. Split on \n\n and emit one <p> per
+           paragraph so it renders like the flip-card back face. */ -}}
+    {{- with $verbWhy -}}
+      <div class="verb-page__hero-why">
+        {{- range (split . "\n\n") -}}
+          {{- $para := trim . " \t\r\n" -}}
+          {{- if $para }}<p>{{ $para }}</p>{{ end -}}
+        {{- end -}}
+      </div>
+    {{- end -}}
   </header>
+
+  {{- /* Optional prose body from the verb's _index.md — rendered above shelves
+         so editorial context (e.g. Joule Studio classic vs. next-gen, #1035)
+         can call out featured items before the auto-generated link tree. */ -}}
+  {{- with .Content -}}
+    <section class="verb-page__body">
+      {{ . }}
+    </section>
+  {{- end -}}
 
   {{ range $shelfKey := slice "START_HERE" "REFERENCE" "TOOLS" "KEEP_CURRENT" }}
     {{- $items := where $verbShelves "shelf" $shelfKey -}}
     {{- if gt (len $items) 0 -}}
-      {{- /* Look up shelf-level tagline + whyItMatters + label from baked data,
-             with fallback to the hard-coded label dict. */ -}}
+      {{- /* Look up shelf-level tagline + whyItMatters + label + icon from
+             baked data, with fallback to the hard-coded label dict. */ -}}
       {{- $shelfDef := index (where $shelfDefs "shelfKey" $shelfKey) 0 -}}
       {{- $shelfLabel := "" -}}
       {{- $shelfTagline := "" -}}
       {{- $shelfWhy := "" -}}
+      {{- $shelfIcon := "" -}}
       {{- with $shelfDef -}}
         {{- $shelfLabel = .label -}}
         {{- $shelfTagline = .tagline | default "" -}}
         {{- $shelfWhy = .whyItMatters | default "" -}}
+        {{- $shelfIcon = .iconName | default "" -}}
       {{- end -}}
       {{- if not $shelfLabel -}}{{ $shelfLabel = index $fallbackLabels $shelfKey }}{{- end -}}
     <section class="verb-shelf verb-shelf--{{ $shelfKey | lower }}"
              data-personalize="shelf-rerank"
              data-verb="{{ $verbKey | lower }}"
              data-shelf="{{ $shelfKey | lower }}">
-      <div data-island="verb-flip-tile"
+      <div data-island="shelf-header-popover"
            data-shelf-key="{{ $shelfKey }}"
            data-label="{{ $shelfLabel }}"
+           data-icon-name="{{ $shelfIcon }}"
            data-tagline="{{ $shelfTagline }}"
            data-why-it-matters="{{ $shelfWhy }}"
            class="verb-shelf__header-island">
-        <h2>{{ $shelfLabel }}</h2>
+        <h2>
+          {{- if $shelfIcon }}<ui5-icon name="{{ $shelfIcon }}" class="verb-shelf__icon" aria-hidden="true"></ui5-icon>{{ end -}}
+          {{ $shelfLabel }}
+        </h2>
       </div>
       <ul class="verb-shelf__list">
         {{ range sort $items "sortOrder" }}

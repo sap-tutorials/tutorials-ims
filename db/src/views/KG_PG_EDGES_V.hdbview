@@ -124,7 +124,19 @@ VIEW "KG_PG_EDGES_V" AS
   -- Tag identity is Tags.name (Tags entity has no dedicated slug column;
   -- RDF projection at srv/lib/kg-projection.js:1027-1028 uses NAME too).
   -- Filter NULL names (Tags.name is nullable per the live schema).
-  SELECT
+  --
+  -- DISTINCT is mandatory: Tags.NAME is NOT unique in the live schema
+  -- (e.g. "SAP SuccessFactors Workforce Planning" appears 4× on DEV).
+  -- 309 duplicate EDGE_KEYs observed on DEV before this fix — same-name
+  -- Tags rows link the same tutorial twice, yielding identical
+  -- 'tw|slug|name' composites. HANA's graph engine rejects duplicate
+  -- EDGE_KEYs at KG_LOUVAIN_GRAPH runtime with error [4907]:
+  --   "Column KG_PG_EDGES_V.EDGE_KEY contains duplicates or NULL values"
+  -- Because tag identity in the graph is NAME (not the surrogate Tags.ID),
+  -- collapsing same-name links to a single edge matches the RDF projector's
+  -- semantic — one (tutorial, tag-name) → one edge. Mirrors the DISTINCT
+  -- on the `teaches` and `partOf tutorial→mission` arms above.
+  SELECT DISTINCT
     CAST('tw|' || t.SLUG || '|' || tg.NAME AS NVARCHAR(600)) AS "EDGE_KEY",
     CAST('tutorial:' || t.SLUG AS NVARCHAR(280))             AS "SOURCE",
     CAST('tag:'      || tg.NAME AS NVARCHAR(280))            AS "TARGET",

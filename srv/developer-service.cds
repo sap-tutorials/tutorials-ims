@@ -2,7 +2,9 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 
 @path: '/api'
 @requires: 'any'
-@graphql
+// See note on SearchService: `@graphql` alone REPLACES the OData mount and
+// 404's /api/completeStep, /api/setKhorosLink, /api/getKhorosProfile, etc.
+@protocol: ['odata', 'graphql']
 service DeveloperService {
 
   // Exposed entities (restricted projections)
@@ -212,6 +214,12 @@ service DeveloperService {
     role       : String,
     cloud      : String
   ) returns LearningPreferences;
+
+  // #1030 — Homepage Row 3 events band region preference. Null = clear (fall
+  // through to browser-TZ hint on next visit). VIRTUAL and ALL are UI filter
+  // modes; AMERICAS/EMEA/APJ are physical regions.
+  @(requires: 'authenticated-user')
+  action setPreferredEventRegion(region : String) returns Boolean;
 
   // Issue #566 — SAP Community (Khoros) profile linkage. Display-only unlock
   // in v1; foundation for future Devtoberfest-style consumers.

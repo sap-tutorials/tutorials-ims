@@ -1,12 +1,17 @@
 namespace com.sap.developers.ims;
 
 using { managed, cuid } from '@sap/cds/common';
+using { com.sap.developers.ims.external as ext } from './external-content';
 
 // Source-of-truth for every shelf entry on the new homepage and verb sub-pages.
 // Spec: docs/superpowers/specs/2026-06-27-639-developer-homepage-design.md §10.1
 
 type HomepageVerb : String enum {
-  LEARN; BUILD; INTEGRATE; OPERATE; AI; CONNECT;
+  // (#1029) MODEL is the data-platform verb — HANA Cloud, Datasphere,
+  // Business Data Cloud, SAC. Slotted between INTEGRATE and OPERATE
+  // (sortOrder 35) so the spine reads app → integration → data-as-product
+  // → run → AI → community. CAP CDS stays under BUILD (app-modeling).
+  LEARN; BUILD; INTEGRATE; MODEL; OPERATE; AI; CONNECT;
 }
 
 type HomepageShelf : String enum {
@@ -85,6 +90,19 @@ entity HomepageConfig : cuid, managed {
   // Default false at first migration so a deploy doesn't flip the page
   // for every signed-in user; admin enables via /admin-ui/#homepage.
   personalizationEnabled  : Boolean default false;
+  // #1030 — feature flag for the auto-pulled events band. When false, the
+  // endpoint falls back to reading the legacy manually-curated `Events` entity
+  // (the pre-#1030 behavior), giving us a redeploy-free rollback path.
+  eventsBandAutoPullEnabled : Boolean default true;
+  // (#1031) Video band tuning knobs. Total tiles = anchor + rotation (deduped
+  // by youtubeVideoId). Set videoBandRotationCount = 0 to disable the
+  // popularity slots while keeping the band otherwise unchanged.
+  videoBandAnchorCount        : Integer default 3;
+  videoBandRotationCount      : Integer default 3;
+  videoBandRotationWindowDays : Integer default 90;
+  // #1034 SAP News developer-relevance filter rollout flag. Two-layer with
+  // env HOMEPAGE_NEWS_RELEVANCE_ENABLED: either falsy → legacy pass-through.
+  newsRelevanceEnabled    : Boolean default false;
 }
 
 // (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
@@ -104,13 +122,18 @@ entity VerbDefinitions : cuid, managed {
 
 // (#759) Per-shelf-category explainer content. Cardinality is fixed
 // (4 rows, one per HomepageShelf enum value). Content is shared across
-// all 6 verb sub-pages — REFERENCE means the same thing on /learn/ and
+// all 7 verb sub-pages — REFERENCE means the same thing on /learn/ and
 // /operate/. The admin Fiori app (PR 3) enforces the fixed cardinality;
 // the DB schema itself is open. Spec §2.3.
 @assert.unique.shelfKey: [shelfKey]
 entity ShelfDefinitions : cuid, managed {
   shelfKey        : HomepageShelf @mandatory @assert.range;
   label           : String(40)    @mandatory;
+  // (#1039) Optional Fiori icon name (e.g. 'learning-assistant', 'document',
+  // 'wrench', 'newspaper'). Rendered by the verb-page shelf header (verb
+  // sub-pages `/learn/`, `/build/`, etc.) inside <ui5-icon>. Empty → no icon;
+  // no default fallback glyph. Same pattern as VerbDefinitions.iconName.
+  iconName        : String(40);
   sortOrder       : Integer       default 100;
   tagline         : String(140);
   whyItMatters    : String(800);
@@ -135,4 +158,20 @@ entity HomepageForYouCandidates : cuid, managed {
   active        : Boolean       default true;
   linkStatus    : HomepageLinkStatus default 'UNKNOWN' @assert.range;
   lastChecked   : Timestamp;
+}
+/**
+ * (#1031) Materialised rotation slot set for the homepage video band.
+ *
+ * Rewritten every 4h by srv/jobs/reshuffle-video-rotation.js and on-demand
+ * by AdminService.recomputeHomepageVideoRotation. Read by
+ * HomepageService.videos() as the "popular / recently active" pool that
+ * fills slots after the anchor slots.
+ *
+ * Sidecar pattern parallels FeaturedTopicsSnapshot (#1032), ConceptRank,
+ * TutorialRank, KgIsolation.
+ */
+entity HomepageVideoRotation : cuid {
+  video    : Association to ext.Videos @assert.notNull;
+  rank     : Integer @assert.notNull;   // 1 = highest velocity in rotation
+  pickedAt : Timestamp @cds.on.insert: $now;
 }

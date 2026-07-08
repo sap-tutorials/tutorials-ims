@@ -26,7 +26,7 @@ describe('mergeOtherResources — 4-array variadic (Phase 4.4)', () => {
     ];
 
     const result = mergeOtherResources(journeys, blogs, missions, videos);
-    expect(result).toHaveLength(5);
+    expect(result).toHaveLength(MAX_OTHER_RESOURCES);   // #1089
     expect(result.map(r => r.slug)).toEqual([
       'vd-abc12345',  // overlap=9
       'vd-xyz67890',  // overlap=8

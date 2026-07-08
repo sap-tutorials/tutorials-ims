@@ -1,0 +1,33 @@
+name: api-docs drift check
+
+on:
+  pull_request:
+    paths:
+      # The public YAML seed rendered by the api-endpoint-table shortcode.
+      - 'hugo/data/api_endpoints.yaml'
+      # The canonical internal inventory the YAML must stay in sync with.
+      - 'docs/developers/operations/testing-endpoints.md'
+      # The drift script + its Hugo shortcode + its npm wrapper, so a
+      # regression in any of them surfaces on the PR that touches them.
+      - 'scripts/check-api-docs-drift.cjs'
+      - 'hugo/layouts/shortcodes/api-endpoint-table.html'
+      - 'package.json'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Check /api-docs/ YAML ↔ testing-endpoints.md drift
+        # #1040 follow-up. Every row in hugo/data/api_endpoints.yaml must
+        # also appear (verbatim path OR every driftMarker) in the internal
+        # canonical inventory. Rows tagged `skipDrift: true` are exempt.
+        # ~1 sec; no DB or Hugo build.
+        run: npm run check:api-docs-drift

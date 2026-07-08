@@ -9,7 +9,7 @@
 // tests (where emitJobAudit is defined). Here we just verify the
 // lock-held PATH returns the expected shape.
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
 
@@ -82,5 +82,83 @@ describe('runWithLock — JobLastRun retrofit + manual-trigger opts', () => {
     expect(row).toBeTruthy();
     expect(row.lastErrorMessage).toBe('boom');
     expect(row.lastErrorAt).toBeTruthy();
+  });
+});
+
+// #1021: belt-and-suspenders — DELETE the stuck outbox row on every
+// tick (success or failure). The DELETE call must happen inside
+// runWithLock's finally block. In-memory SQLite has no cds.outbox
+// schema so the DELETE is a no-op here; we spy on the helper to
+// assert it was invoked in the right order.
+import * as wedge from '../../../srv/lib/scheduler-wedge.js';
+import { vi } from 'vitest';
+
+describe('runWithLock — belt-and-suspenders outbox wedge recovery (#1021)', () => {
+  beforeAll(async () => {
+    await cds.deploy([
+      path.join(process.cwd(), 'db'),
+      path.join(process.cwd(), 'srv'),
+    ]).to('sqlite::memory:');
+  });
+
+  afterAll(async () => {
+    await cds.disconnect();
+  });
+
+  beforeEach(async () => {
+    _resetJobRegistry();
+    const { JobLastRun } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(JobLastRun);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('runWithLock invokes deleteStuckOutboxRow in finally on success', async () => {
+    const spy = vi.spyOn(wedge, 'deleteStuckOutboxRow').mockResolvedValue(false);
+    registerJob({
+      jobName: 'test-belt-success',
+      schedule: '0 0 1 1 *',
+      ttlMs: 60000,
+      description: 'unit test — belt on success',
+      fn: async () => ({ ok: true }),
+    });
+    await runJobByName('test-belt-success');
+    expect(spy).toHaveBeenCalledWith('test-belt-success');
+    spy.mockRestore();
+  });
+
+  it('runWithLock invokes deleteStuckOutboxRow in finally on failure', async () => {
+    const spy = vi.spyOn(wedge, 'deleteStuckOutboxRow').mockResolvedValue(false);
+    registerJob({
+      jobName: 'test-belt-fail',
+      schedule: '0 0 1 1 *',
+      ttlMs: 60000,
+      description: 'unit test — belt on failure',
+      fn: async () => { throw new Error('boom'); },
+    });
+    await runJobByName('test-belt-fail');
+    expect(spy).toHaveBeenCalledWith('test-belt-fail');
+    spy.mockRestore();
+  });
+
+  it('runWithLock still records JobLastRun even if deleteStuckOutboxRow throws', async () => {
+    const spy = vi.spyOn(wedge, 'deleteStuckOutboxRow')
+      .mockRejectedValue(new Error('DELETE went sideways'));
+    registerJob({
+      jobName: 'test-belt-throws',
+      schedule: '0 0 1 1 *',
+      ttlMs: 60000,
+      description: 'unit test — DELETE error does not skip JobLastRun',
+      fn: async () => ({ ok: true }),
+    });
+    await runJobByName('test-belt-throws');
+    // Even though the DELETE spy rejected, JobLastRun must land.
+    const { JobLastRun } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(JobLastRun).where({ jobName: 'test-belt-throws' });
+    expect(row).toBeTruthy();
+    expect(row.lastSuccessAt).toBeTruthy();
+    spy.mockRestore();
   });
 });

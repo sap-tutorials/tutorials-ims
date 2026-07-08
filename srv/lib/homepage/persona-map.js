@@ -1,16 +1,19 @@
 //
 // (#763) Static persona → verb-order map. Not admin-editable in v1 —
 // verb order is a strong design choice. Design §7.1.
+// (#1029) MODEL slotted between INTEGRATE and OPERATE in base order.
+// Per-role tilts extended by inserting 'model' at a sensible position
+// for each persona — architects lean on it heavily, sysadmins less so.
 
 export const BASE_ORDER = Object.freeze(
-  ['learn', 'build', 'integrate', 'operate', 'ai', 'connect']
+  ['learn', 'build', 'integrate', 'model', 'operate', 'ai', 'connect']
 );
 
 const ROLE_TILT = Object.freeze({
-  developer: ['build', 'learn', 'integrate', 'ai', 'operate', 'connect'],
-  architect: ['integrate', 'build', 'operate', 'learn', 'ai', 'connect'],
-  sysadmin:  ['operate', 'integrate', 'build', 'connect', 'learn', 'ai'],
-  student:   ['learn', 'build', 'ai', 'integrate', 'connect', 'operate'],
+  developer: ['build', 'learn', 'integrate', 'ai', 'model', 'operate', 'connect'],
+  architect: ['integrate', 'model', 'build', 'operate', 'learn', 'ai', 'connect'],
+  sysadmin:  ['operate', 'integrate', 'build', 'model', 'connect', 'learn', 'ai'],
+  student:   ['learn', 'build', 'ai', 'integrate', 'model', 'connect', 'operate'],
 });
 
 function heaviestUnique(counts) {

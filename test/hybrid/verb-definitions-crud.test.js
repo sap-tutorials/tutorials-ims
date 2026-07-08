@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { isSafeForWrites } from './_guard.js';
+import { VERB_DEFAULTS, VERB_KEYS_SORTED } from '../../srv/lib/homepage/verb-shelf-defaults.js';   // #1089
 
 describe.runIf(isSafeForWrites())('VerbDefinitions — admin CRUD on HANA (#759 PR 1)', () => {
   let db;
@@ -12,16 +13,16 @@ describe.runIf(isSafeForWrites())('VerbDefinitions — admin CRUD on HANA (#759 
     );
   });
 
-  it('AdminService.VerbDefinitions returns 6 rows after auto-init', async () => {
+  it('AdminService.VerbDefinitions returns VERB_DEFAULTS.length rows after auto-init', async () => {
     const admin = await cds.connect.to('AdminService');
     const rows = await admin.run(SELECT.from('AdminService.VerbDefinitions'));
-    expect(rows.length).toBe(6);
+    expect(rows.length).toBe(VERB_DEFAULTS.length);
   });
 
-  it('all 6 enum values are represented exactly once', async () => {
+  it('all VERB_DEFAULTS enum values are represented exactly once', async () => {
     const rows = await db.run(SELECT.from('com.sap.developers.ims.VerbDefinitions'));
     const keys = rows.map(r => r.verbKey).sort();
-    expect(keys).toEqual(['AI', 'BUILD', 'CONNECT', 'INTEGRATE', 'LEARN', 'OPERATE']);
+    expect(keys).toEqual([...VERB_KEYS_SORTED]);
   });
 
   it('@assert.unique.verbKey rejects duplicate insert', async () => {

@@ -40,23 +40,35 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(() => registerJob({ jobName: 'dup', schedule: '0 1 * * *', ttlMs: 1000, description: 'x', fn: async () => 'b' })).toThrow(/Duplicate jobName/);
   });
 
-  it('registerJobs() registers exactly 36 jobs (lockstep)', async () => {
+  it('registerJobs() registers exactly 41 jobs (lockstep)', async () => {
     // The full registerJobs() schedules crons against node-cron. We run it
     // in a fresh test context; the test isolates by resetting the registry
     // in beforeEach and again in afterAll (below).
     registerJobs();
-    // #916 adds kg-pagerank         (32 -> 33)
-    // #917 adds kg-communities      (33 -> 34)
-    // #918 adds kg-wcc              (34 -> 35)
-    // #948 adds kg-ondemand-drain   (35 -> 36)
-    expect(_getJobRegistry().size).toBe(36);
+    // #916  adds kg-pagerank              (32 -> 33)
+    // #917  adds kg-communities           (33 -> 34)
+    // #918  adds kg-wcc                   (34 -> 35)
+    // #948  adds kg-ondemand-drain        (35 -> 36)
+    // #1032 adds kg-featured-topics       (36 -> 37)
+    // #1033 adds community-blogs-fetch    (37 -> 38)
+    // #1033 adds community-blogs-classify (38 -> 39)
+    // #1031 adds reshuffle-video-rotation (39 -> 40)
+    // #1034 adds fetch-news               (40 -> 41)
+    // #1030 adds refresh-community-events (41 -> 42)
+    expect(_getJobRegistry().size).toBe(42);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
+    expect(names).toContain('refresh-community-events');
     expect(names).toContain('kg-pagerank');
     expect(names).toContain('kg-communities');
     expect(names).toContain('kg-wcc');
     expect(names).toContain('kg-ondemand-drain');
+    expect(names).toContain('kg-featured-topics');
+    expect(names).toContain('community-blogs-fetch');
+    expect(names).toContain('community-blogs-classify');
+    expect(names).toContain('reshuffle-video-rotation');
+    expect(names).toContain('fetch-news');
   });
 
   it('runJobByName(unknownName) throws', async () => {

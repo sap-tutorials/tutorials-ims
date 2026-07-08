@@ -202,4 +202,31 @@ describe('scripts/check-icon-imports.ts', () => {
     expect(r.stderr).toMatch(/verb-spine\.html:1/);
     expect(r.stderr).toMatch(/import "@ui5\/webcomponents-icons\/dist\/learning-assistant\.js"/);
   });
+
+  // Same dict trap, `iconName` spelling. verb-spine.html shifted from
+  // `"icon"` to `"iconName"` when the dict grew a `label` alongside the
+  // glyph — the #1029 MODEL rollout hit this: `dict … "iconName" "database"`
+  // had no matching import, guard silently passed, and the homepage +
+  // top-nav dropdown paint an empty icon slot in production.
+  it('passes when Hugo dict "iconName" "<name>" has a matching import', () => {
+    writeFile(root, 'hugo/layouts/partials/homepage/verb-spine.html',
+      `{{- \$verbDefs := slice (dict "verbKey" "MODEL" "iconName" "database") -}}\n`);
+    writeFile(root, 'hugo/assets/js/ui5-bootstrap.ts',
+      `import "@ui5/webcomponents-icons/dist/database.js";\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 unique icon\(s\) referenced/);
+  });
+
+  it('fails when Hugo dict "iconName" "<name>" has no matching import', () => {
+    writeFile(root, 'hugo/layouts/partials/homepage/verb-spine.html',
+      `{{- \$verbDefs := slice (dict "verbKey" "MODEL" "iconName" "database") -}}\n`);
+    writeFile(root, 'hugo/assets/js/ui5-bootstrap.ts',
+      `import "@ui5/webcomponents-icons/dist/dark-mode.js";\n`);
+    const r = run(root);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/icon="database" is not imported/);
+    expect(r.stderr).toMatch(/verb-spine\.html:1/);
+    expect(r.stderr).toMatch(/import "@ui5\/webcomponents-icons\/dist\/database\.js"/);
+  });
 });

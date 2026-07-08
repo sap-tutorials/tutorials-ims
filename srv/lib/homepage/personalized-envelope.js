@@ -7,9 +7,9 @@ import crypto from 'node:crypto';
 import { rankShelves, rankForYou } from './persona-scoring.js';
 import { computeVerbOrder } from './persona-map.js';
 
-const VERBS_UPPER = ['LEARN','BUILD','INTEGRATE','OPERATE','AI','CONNECT'];
+const VERBS_UPPER = ['LEARN','BUILD','INTEGRATE','MODEL','OPERATE','AI','CONNECT'];
 const VERB_TO_LOWER = { LEARN:'learn', BUILD:'build', INTEGRATE:'integrate',
-                        OPERATE:'operate', AI:'ai', CONNECT:'connect' };
+                        MODEL:'model', OPERATE:'operate', AI:'ai', CONNECT:'connect' };
 
 // Cloud-provider fan-out: knowing you're on aws is useful; we always
 // include btp too because SAP-first content dominates the corpus.
@@ -87,7 +87,7 @@ function buildShelfOverrides(shelves, profile) {
   return overrides;
 }
 
-export function buildEnvelope({ profile, shelves, forYouCandidates, teaserSlugs }) {
+export function buildEnvelope({ profile, shelves, forYouCandidates, teaserSlugs, preferredEventRegion }) {
   const p = profile || {};
   const verbOrder = computeVerbOrder(p, tagCountsPerVerb(shelves, p));
 
@@ -109,6 +109,7 @@ export function buildEnvelope({ profile, shelves, forYouCandidates, teaserSlugs 
     shelfOverrides,
     videoFilterTags: deriveVideoFilterTags(p),
     rssFilterTags: deriveRssFilterTags(p),
+    eventsRegion: preferredEventRegion ?? null,          // #1030
   };
 }
 

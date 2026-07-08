@@ -1,0 +1,55 @@
+/* hugo-apps/src/homepage-explainers/styles/shelf-header.css
+ *
+ * Inline shelf-header (#1020). The popover-anchor default in popover.css is
+ * `display: inline`, which is right for a mid-sentence icon after a wrapped
+ * link, but for the shelf header we want the block-level heading with the ⓘ
+ * riding on the trailing baseline. `display: flex; align-items: baseline`
+ * gives us both: the <h2> keeps its intrinsic block layout, and the icon
+ * sits next to the label text (not the block bottom).
+ *
+ * The popover container itself is unchanged — same absolute-positioned
+ * .hp-popover primitive as LinkExplainerPopover, which already handles
+ * placement above/below and left/center/right alignment.
+ */
+.hp-shelf-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  /* Match the existing .verb-shelf h2 spacing so cards below stay tight. */
+  margin: 0 0 1rem;
+}
+
+.hp-shelf-header__label {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  font-weight: 700;
+  line-height: 1.4;
+  /* (#1039) Icon + label sit on a shared row so the glyph reads as a
+   * companion to the section title, not a separate bullet. `inline-flex`
+   * keeps the <h2> block-level in the outer flex container while
+   * aligning the icon vertically with the uppercase label text. */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* (#1039) Shelf-section pictogram (Start here → learning-assistant, etc.).
+ * Sized to the label cap-height so it reads as inline with the heading
+ * rather than a separate tile. `aria-hidden` on the element itself hides
+ * it from AT — the <h2> text carries the semantics. */
+.verb-shelf__icon {
+  width: 1.15em;
+  height: 1.15em;
+  color: var(--sapContent_IconColor, var(--sapTextColor, #1d2d3e));
+  flex: 0 0 auto;
+}
+
+/* The default .hp-popover-icon lives inline; here we want it flush with the
+ * heading baseline. `vertical-align: baseline` handles the ⓘ SVG within the
+ * button, and the flex parent aligns the button itself. */
+.hp-shelf-header__icon {
+  vertical-align: baseline;
+}

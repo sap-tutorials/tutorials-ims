@@ -76,10 +76,14 @@
       <!-- #756: Cron health tile extended from the Phase 4.5 (#746) baseline.
            Schedule + Next run columns sourced from AdminService.JobControls.listJobs(),
            Last success + Last error sourced from AdminService.JobLastRun.
+           #1023: Status column reflects live PipelineLog RUNNING state via
+           AdminService.JobControls.listRunningJobs(), classified by the
+           job-controls-helpers.classifyJobStatus formatter.
            Controller does the JOIN client-side into a JSONModel at
            jobControls>/jobs; the Run now button invokes runJob(jobName) and
            optimistically flips isRunning for the busy spinner. -->
-      <Panel headerText="Cron health" expandable="true" expanded="true" class="sapUiSmallMargin">
+      <Panel headerText="Cron health" expandable="true" expanded="true" class="sapUiSmallMargin"
+             expand=".onCronPanelExpand">
         <!-- #750: 24-hour SVG timeline ribbon. Built client-side in
              Board.controller.js _loadJobControls() via CronTimelineHelpers.
              sanitizeContent="false" because the SVG is hand-emitted by our
@@ -88,6 +92,8 @@
         <Table id="cronHealthTable" items="{jobControls>/jobs}" growing="true" growingThreshold="40">
           <columns>
             <Column><Text text="Job" /></Column>
+            <!-- #1023: RUNNING / OK / FAILED / STALE / NEVER categorical. -->
+            <Column><Text text="Status" /></Column>
             <Column><Text text="Schedule" /></Column>
             <Column><Text text="Next run" /></Column>
             <!-- #750: forward-visibility column. Renders the first 3 entries
@@ -96,12 +102,22 @@
             <Column><Text text="Next 3 runs" /></Column>
             <Column><Text text="Last success" /></Column>
             <Column><Text text="Last error" /></Column>
+            <!-- #1021: wedge indicator — shows 'Wedged' badge when the CAP outbox
+                 has a stuck processing row for this job. Deliberately separate from
+                 the #1023 run-status column so an operator can tell at a glance
+                 "job is stuck in outbox" vs "job is currently running". -->
+            <Column><Text text="Outbox" /></Column>
             <Column hAlign="End"><Text text="Trigger" /></Column>
           </columns>
           <items>
             <ColumnListItem>
               <cells>
                 <Text text="{jobControls>jobName}" tooltip="{jobControls>description}" />
+                <!-- #1023: ObjectStatus renders coloured pill; tooltip shows
+                     elapsed time when RUNNING, otherwise blank. -->
+                <ObjectStatus text="{jobControls>statusLabel}"
+                              state="{jobControls>statusState}"
+                              tooltip="{path: 'jobControls>runningSince', formatter: '.formatElapsedSince'}" />
                 <Text text="{jobControls>schedule}" class="kg-mono" />
                 <Text text="{path: 'jobControls>nextRunIso', formatter: '.formatNextRun'}" />
                 <!-- #750: three stacked relative-time lines. Missing slots render
@@ -113,8 +129,25 @@
                 </VBox>
                 <Text text="{path: 'jobControls>lastSuccessAt', formatter: '.formatRelativeTime'}" />
                 <Text text="{jobControls>lastErrorMessage}" tooltip="{jobControls>lastErrorMessage}" />
-                <Button text="Run now" type="Emphasized" press=".onRunJob"
-                        busy="{jobControls>isRunning}" busyIndicatorDelay="0" />
+                <!-- #1021: outbox wedge indicator. Only visible when wedged=true
+                     (CAP outbox has a stuck processing row). State=Error renders
+                     a red pill so it draws the eye without being confused with
+                     the #1023 run-status column. -->
+                <ObjectStatus
+                  text="{= ${jobControls>wedged} ? 'Wedged' : '' }"
+                  state="{= ${jobControls>wedged} ? 'Error' : 'None' }"
+                  visible="{jobControls>wedged}" />
+                <!-- #1021: wrap in HBox so the Force unwedge button sits inline
+                     next to Run now; visible only when wedged. -->
+                <HBox>
+                  <Button text="Run now" type="Emphasized" press=".onRunJob"
+                          busy="{jobControls>isRunning}" busyIndicatorDelay="0" />
+                  <Button text="Force unwedge" type="Reject" icon="sap-icon://unlocked"
+                          press=".onForceUnwedge"
+                          visible="{jobControls>wedged}"
+                          busy="{jobControls>isUnwedging}" busyIndicatorDelay="0"
+                          class="sapUiTinyMarginBegin" />
+                </HBox>
               </cells>
             </ColumnListItem>
           </items>

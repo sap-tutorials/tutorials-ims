@@ -77,8 +77,8 @@ afterAll(async () => {
   await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
     WHERE LOWER("slug") LIKE '__test__kg-communities-%'`);
   await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
-    WHERE LOWER("vertexKey") LIKE 'tutorial:__test__kg-communities-%'
-       OR LOWER("vertexKey") LIKE 'concept:__test__kg-communities-%'`);
+    WHERE LOWER("VERTEXKEY") LIKE 'tutorial:__test__kg-communities-%'
+       OR LOWER("VERTEXKEY") LIKE 'concept:__test__kg-communities-%'`);
   await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS"
     WHERE "tutorial_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
     WHERE LOWER("slug") LIKE '__test__kg-communities-%')`);
@@ -97,12 +97,14 @@ describe('kg-communities nightly job (hybrid)', () => {
     expect(summary.rowCount).toBeGreaterThan(0);
     expect(Number.isFinite(summary.durationMs)).toBe(true);
 
+    // Quoted UPPERCASE — .hdbtable declares columns unquoted so HANA stores
+    // them upper-case in the catalog; mixed-case quoted names miss.
     const rows = await db.run(
-      `SELECT "communityId","vertexKey" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
-       WHERE LOWER("vertexKey") LIKE 'tutorial:__test__kg-communities-%'`
+      `SELECT "COMMUNITYID","VERTEXKEY" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
+       WHERE LOWER("VERTEXKEY") LIKE 'tutorial:__test__kg-communities-%'`
     );
     const communityOf = Object.fromEntries(
-      rows.map((r) => [r.vertexKey.replace(/^tutorial:/, ''), Number(r.communityId)])
+      rows.map((r) => [r.VERTEXKEY.replace(/^tutorial:/, ''), Number(r.COMMUNITYID)])
     );
 
     const aCommunities = new Set(A_TUTS.map((s) => communityOf[s]));
@@ -115,11 +117,11 @@ describe('kg-communities nightly job (hybrid)', () => {
   it('promoteCommunityToMission drafts a Mission with all A-tutorials, sorted A→Z', async () => {
     await runKgCommunities();
     const aRows = await db.run(
-      `SELECT DISTINCT "communityId" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
-       WHERE "vertexKey" = ?`,
+      `SELECT DISTINCT "COMMUNITYID" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
+       WHERE "VERTEXKEY" = ?`,
       [`tutorial:${A_TUTS[0]}`]
     );
-    const aCommunityId = Number(aRows[0].communityId);
+    const aCommunityId = Number(aRows[0].COMMUNITYID);
 
     const AdminService = await cds.connect.to('AdminService');
     const missionSlug = `${P}mission`;
@@ -157,11 +159,11 @@ describe('kg-communities nightly job (hybrid)', () => {
     // must still identify the A cluster as promoted, keyed off content.
     await runKgCommunities();
     const aRowsBefore = await db.run(
-      `SELECT DISTINCT "communityId" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
-       WHERE "vertexKey" = ?`,
+      `SELECT DISTINCT "COMMUNITYID" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
+       WHERE "VERTEXKEY" = ?`,
       [`tutorial:${A_TUTS[0]}`]
     );
-    const aCommunityIdBefore = Number(aRowsBefore[0].communityId);
+    const aCommunityIdBefore = Number(aRowsBefore[0].COMMUNITYID);
 
     const AdminService = await cds.connect.to('AdminService');
     const missionSlug = `${P}mission-fp`;
@@ -181,11 +183,11 @@ describe('kg-communities nightly job (hybrid)', () => {
 
     const expectedFp = computeKgCommunityFingerprint(A_TUTS);
     const aRowsAfter = await db.run(
-      `SELECT "communityFingerprint" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
-       WHERE "vertexKey" = ?`,
+      `SELECT "COMMUNITYFINGERPRINT" FROM "COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY"
+       WHERE "VERTEXKEY" = ?`,
       [`tutorial:${A_TUTS[0]}`]
     );
-    expect(aRowsAfter[0].communityFingerprint).toBe(expectedFp);
+    expect(aRowsAfter[0].COMMUNITYFINGERPRINT).toBe(expectedFp);
 
     // The materialized alreadyPromoted column on KgCommunitySummaryV
     // (via LEFT JOIN Missions on communityFingerprint) must be true for

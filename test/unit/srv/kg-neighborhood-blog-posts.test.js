@@ -10,7 +10,7 @@
 // test for the neighborhood path lives at the integration layer.
 
 import { describe, it, expect } from 'vitest';
-import { mergeOtherResources } from '../../../srv/lib/kg-neighborhood-merge.js';
+import { mergeOtherResources, MAX_OTHER_RESOURCES } from '../../../srv/lib/kg-neighborhood-merge.js';
 
 describe('mergeOtherResources — Phase 4.2 cross-type ranking', () => {
   it('unions journey + blog rows, sorts by overlap desc, caps top-5', () => {
@@ -28,7 +28,7 @@ describe('mergeOtherResources — Phase 4.2 cross-type ranking', () => {
     expect(result.map(x => x.slug)).toEqual(['j1', 'bp-1', 'j2', 'bp-2']);
   });
 
-  it('caps at 5 total when there are more than 5 rows across both types', () => {
+  it('caps at MAX_OTHER_RESOURCES total when there are more than that many rows across both types', () => {
     const journeys = Array.from({ length: 4 }, (_, i) => ({
       type: 'learning-journey', slug: `j${i}`, overlapCount: 10 - i,
     }));
@@ -37,7 +37,7 @@ describe('mergeOtherResources — Phase 4.2 cross-type ranking', () => {
     }));
 
     const result = mergeOtherResources(journeys, blogs);
-    expect(result).toHaveLength(5);
+    expect(result).toHaveLength(MAX_OTHER_RESOURCES);   // #1089
     // First five by overlap desc: j0(10), j1(9), j2(8), bp-0(8), j3(7) → top-5
     expect(result[0]).toMatchObject({ slug: 'j0', overlapCount: 10 });
     expect(result[4].overlapCount).toBeGreaterThanOrEqual(7);

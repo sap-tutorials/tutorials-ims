@@ -10,7 +10,7 @@ describe('buildUserState', () => {
     });
     expect(state.completedSlugs).toBeInstanceOf(Set);
     expect(state.completedSlugs.size).toBe(0);
-    expect(state.profile).toEqual({ deployment: null, role: null, cloud: null });
+    expect(state.profile).toEqual({ deployment: null, role: null, cloud: null, preferredEventRegion: null });
     expect(Object.isFrozen(state)).toBe(true);
     expect(Object.isFrozen(state.profile)).toBe(true);
   });
@@ -33,7 +33,7 @@ describe('buildUserState', () => {
       loadCompletedMissionSlugs: async () => [],
       loadProfile:               async () => ({ deployment: 'onprem' }),
     });
-    expect(state.profile).toEqual({ deployment: 'onprem', role: null, cloud: null });
+    expect(state.profile).toEqual({ deployment: 'onprem', role: null, cloud: null, preferredEventRegion: null });
   });
 });
 
@@ -88,7 +88,7 @@ describe('buildUserState — override merge (PR 6)', () => {
       makeFakeDeps({ deployment: 'onprem', role: null, cloud: null }),
       { override: { deployment: 'cloud' } }
     );
-    expect(state.profile).toEqual({ deployment: 'cloud', role: null, cloud: null });
+    expect(state.profile).toEqual({ deployment: 'cloud', role: null, cloud: null, preferredEventRegion: null });
   });
 
   it('respects null fields in override merge — partial override + real profile preserved', async () => {
@@ -98,7 +98,7 @@ describe('buildUserState — override merge (PR 6)', () => {
       makeFakeDeps({ deployment: 'onprem', role: 'developer', cloud: null }),
       { override: { deployment: 'cloud' } }
     );
-    expect(state.profile).toEqual({ deployment: 'cloud', role: 'developer', cloud: null });
+    expect(state.profile).toEqual({ deployment: 'cloud', role: 'developer', cloud: null, preferredEventRegion: null });
   });
 
   it('fingerprint-cache isolation: override-mode and learner-mode produce distinct fingerprints', async () => {

@@ -58,6 +58,18 @@
       >{{ CLOUD_LABEL[value] || value }}</ui5-option>
     </ui5-select>
 
+    <label>
+      Homepage events region
+      <select v-model="prefs.preferredEventRegion" @change="dirty = true">
+        <option :value="null">Not set (auto-detect from your timezone)</option>
+        <option value="AMERICAS">Americas</option>
+        <option value="EMEA">EMEA</option>
+        <option value="APJ">APJ</option>
+        <option value="VIRTUAL">Virtual only</option>
+        <option value="ALL">All events</option>
+      </select>
+    </label>
+
     <ui5-button design="Emphasized" :disabled="!dirty || saving" @click="onSave">
       {{ saving ? 'Saving…' : 'Save preferences' }}
     </ui5-button>
@@ -75,7 +87,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue';
 import { csrfFetch } from '@shared/csrf-fetch';
-import { broadcastPreferencesChanged } from '../homepage-personalizer/prefs-broadcast';
 // PR 6: import vocabulary from the single source of truth (single source of
 // truth is srv/lib/branch/profile-fields.js — also imported by the action
 // handler and used by the schema-drift guard test). Vite resolves the relative
@@ -108,8 +119,8 @@ const CLOUD_LABEL: Record<string, string> = {
 type ProfileField = 'deployment' | 'role' | 'cloud';
 type ProfileValue = string | null;
 
-const prefs = reactive<{ deployment: ProfileValue; role: ProfileValue; cloud: ProfileValue }>({
-  deployment: null, role: null, cloud: null,
+const prefs = reactive<{ deployment: ProfileValue; role: ProfileValue; cloud: ProfileValue; preferredEventRegion: ProfileValue }>({
+  deployment: null, role: null, cloud: null, preferredEventRegion: null,
 });
 const dirty = ref(false);
 const status = ref<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -149,6 +160,7 @@ onMounted(async () => {
         prefs.deployment = row.deployment ?? null;
         prefs.role = row.role ?? null;
         prefs.cloud = row.cloud ?? null;
+        prefs.preferredEventRegion = row.preferredEventRegion ?? null;
       }
     }
   } catch {
@@ -209,10 +221,19 @@ async function onSave() {
       }),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    await csrfFetch('/api/setPreferredEventRegion', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ region: prefs.preferredEventRegion }),
+    });
     status.value = 'saved';
     dirty.value = false;
     savedTimer = window.setTimeout(() => { if (status.value === 'saved') status.value = 'idle'; }, 3000);
-    try { broadcastPreferencesChanged(); } catch {}
+    try {
+      const bc = new BroadcastChannel('sap-devs-prefs');
+      bc.postMessage({ type: 'preferences-changed', eventsRegion: prefs.preferredEventRegion });
+      bc.close();
+    } catch { /* older browsers */ }
   } catch {
     status.value = 'error';
     // A11y: focus the first Select for the user to retry

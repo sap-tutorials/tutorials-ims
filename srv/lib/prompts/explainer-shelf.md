@@ -3,7 +3,7 @@
 You are writing concise guidance for one of four shelf categories used on every
 verb sub-page of the SAP developer portal (`/learn/`, `/build/`, etc.). The four
 shelves are: START_HERE, REFERENCE, TOOLS, KEEP_CURRENT. The same explainer
-shows up on all six verb sub-pages — the shelf concept is verb-independent.
+shows up on all seven verb sub-pages — the shelf concept is verb-independent.
 
 ## Audience
 

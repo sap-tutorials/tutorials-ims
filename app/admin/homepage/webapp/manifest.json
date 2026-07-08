@@ -69,7 +69,7 @@
           "target": "RedirectOP"
         },
         {
-          "pattern": "Config:?query:",
+          "pattern": "HomepageConfig({key}):?query:",
           "name": "ConfigOP",
           "target": "ConfigOP"
         }

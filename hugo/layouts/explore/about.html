@@ -23,15 +23,75 @@
     <h2 id="kg-arch">How it's built</h2>
     <!-- security-reviewed: readFile of a static repo asset; not user-supplied -->
     {{ readFile "static/img/knowledge-graph/architecture.svg" | safeHTML }}
-    <p>
-      Every night, a CAP cron job hands each tutorial's markdown to
-      <strong>SAP AI Core</strong>. The model extracts concepts (e.g. <em>CAP</em>,
-      <em>SAPUI5</em>, <em>HANA Cloud</em>) and the edges between them — what a
-      tutorial <em>teaches</em>, what it <em>requires</em>. Those facts are stored
-      as canonical CDS entities in <strong>SAP HANA Cloud</strong> and projected
-      into the database's built-in <strong>Knowledge Graph Engine</strong>, where
-      SPARQL queries answer "what should I learn next?" in single-digit milliseconds.
-    </p>
+    <div class="kg-overview__diagram-cols">
+      <div class="kg-overview__diagram-col">
+        <p>
+          Every night, a CAP cron job hands each tutorial's markdown to
+          <strong>SAP AI Core</strong>. The model extracts concepts (e.g. <em>CAP</em>,
+          <em>SAPUI5</em>, <em>HANA Cloud</em>) and the edges between them — what a
+          tutorial <em>teaches</em>, what it <em>requires</em>. Those facts are stored
+          as canonical CDS entities in <strong>SAP HANA Cloud</strong>, then projected
+          into two of the database's built-in graph engines: the
+          <strong>Knowledge Graph Engine</strong>, where SPARQL answers
+          "what should I learn next?" in single-digit milliseconds, and a
+          <strong>Property Graph</strong> workspace, where GraphScript algorithms
+          (SHORTEST_PATH for Joule's learning paths, PageRank for authority ranking,
+          Louvain for community detection, weakly-connected-components for isolation
+          checks) run over the same tutorials and concepts. One database, two graph
+          shapes, no ETL between them.
+        </p>
+      </div>
+      <div class="kg-overview__diagram-col">
+        <p>
+          Tutorials are only the anchor corpus. Alongside them, nightly fetchers
+          pull in the wider SAP developer ecosystem and run the same
+          concept-extraction pipeline over every item, so a search for
+          <em>CAP</em> or <em>HANA Cloud</em> reaches across all of it:
+          <strong>Learning Journeys</strong> from
+          <a href="https://learning.sap.com" target="_blank" rel="noopener">learning.sap.com</a>,
+          <strong>blog posts</strong> from the
+          <a href="https://community.sap.com" target="_blank" rel="noopener">SAP Community</a>,
+          <strong>Discovery Center missions and BTP services</strong> from
+          <a href="https://discovery-center.cloud.sap" target="_blank" rel="noopener">discovery-center.cloud.sap</a>,
+          <strong>videos</strong> from the
+          <a href="https://youtube.com/@sapdevs" target="_blank" rel="noopener">SAP Developers YouTube channel</a>
+          (including SAP Developer News and Tech Bytes),
+          <strong>API references</strong> from the
+          <a href="https://api.sap.com" target="_blank" rel="noopener">SAP Business Accelerator Hub</a>,
+          canonical <strong>code samples</strong> from the
+          <a href="https://github.com/SAP-samples" target="_blank" rel="noopener">SAP-samples GitHub org</a>,
+          and <strong>upcoming community events</strong> (CodeJams, Devtoberfest,
+          TechEd, user groups). A dedicated <strong>Help Docs</strong> corpus
+          merges four documentation surfaces into one:
+        </p>
+        <ul class="kg-overview__source-list">
+          <li>
+            <a href="https://help.sap.com" target="_blank" rel="noopener">help.sap.com</a>
+            — official SAP product documentation.
+          </li>
+          <li>
+            <a href="https://cap.cloud.sap" target="_blank" rel="noopener">cap.cloud.sap</a>
+            — the CAP framework docs (Node.js and Java).
+          </li>
+          <li>
+            <a href="https://ui5.sap.com" target="_blank" rel="noopener">ui5.sap.com</a>
+            — SAPUI5 SDK reference, API, and samples.
+          </li>
+          <li>
+            <a href="https://architecture.learning.sap.com" target="_blank" rel="noopener">architecture.learning.sap.com</a>
+            — the SAP Architecture Center: North Star docs, AI-golden-path
+            guides, and reference blueprints from
+            <code>SAP/architecture-center</code>.
+          </li>
+        </ul>
+        <p>
+          Every resource — tutorial, journey, blog post, mission, video, API,
+          sample, help doc, event — lands on the same concept vocabulary, so the
+          graph you explore is one graph across all of it, not a dozen siloed
+          catalogs sitting next to each other.
+        </p>
+      </div>
+    </div>
   </section>
 
   <!-- ============================================================
@@ -41,19 +101,19 @@
     <h2 id="kg-corpus">What's in the graph</h2>
     <div class="kg-overview__corpus">
       <div class="kg-overview__corpus-card">
-        <div class="icon" aria-hidden="true">📚</div>
+        <i class="icon sap-icon sap-icon--course-book" aria-hidden="true"></i>
         <h3>Tutorials</h3>
         <span class="count" data-kg-count="tutorials">—</span>
         <p>Every tutorial in the <code>sap-tutorials/*</code> GitHub org. Edges: <em>teaches Concept</em>, <em>requires Concept</em>.</p>
       </div>
       <div class="kg-overview__corpus-card">
-        <div class="icon" aria-hidden="true">🧠</div>
+        <i class="icon sap-icon sap-icon--lightbulb" aria-hidden="true"></i>
         <h3>Concepts</h3>
         <span class="count" data-kg-count="concepts">—</span>
         <p>AI-extracted topics — CAP, SAPUI5, HANA Cloud, … Edges: <em>requires Concept</em>, <em>relatedTo Concept</em>.</p>
       </div>
       <div class="kg-overview__corpus-card">
-        <div class="icon" aria-hidden="true">🛤️</div>
+        <i class="icon sap-icon sap-icon--journey-arrive" aria-hidden="true"></i>
         <h3>Missions &amp; groups</h3>
         <span class="count" data-kg-count="missionsAndGroups">—</span>
         <p>Curated learning paths. Edges: <em>containsTutorial</em>.</p>
@@ -70,6 +130,10 @@
       <a class="kg-overview__tech-badge is-hana" href="https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-administration-guide/knowledge-graph-engine" target="_blank" rel="noopener">
         <h3>SAP HANA Cloud Knowledge Graph Engine</h3>
         <p>RDF triple store; SPARQL via <code>SYS.SPARQL_EXECUTE</code>.</p>
+      </a>
+      <a class="kg-overview__tech-badge is-hana" href="https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-graph-reference/sap-hana-cloud-sap-hana-database-graph-reference" target="_blank" rel="noopener">
+        <h3>SAP HANA Cloud Property Graph</h3>
+        <p>GraphScript algorithms — SHORTEST_PATH, PageRank, Louvain, WCC — over the same vertices &amp; edges.</p>
       </a>
       <a class="kg-overview__tech-badge is-hana" href="https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-vector-engine-guide/sap-hana-cloud-sap-hana-database-vector-engine-guide" target="_blank" rel="noopener">
         <h3>SAP HANA Cloud Vector Engine</h3>
@@ -92,20 +156,22 @@
         <p>The runtime.</p>
       </a>
       <p class="kg-overview__tech-callout">
-        All three HANA tiles run on the same SAP HANA Cloud instance — that's the multi-model story.
+        All four HANA tiles run on the same SAP HANA Cloud instance — that's the multi-model story.
       </p>
     </div>
   </section>
 
   <!-- ============================================================
        5. SURFACES GRID
+       All four surface previews are placeholder SVGs — replace with
+       real product screenshots when captured. See issue #1015.
        ============================================================ -->
   <section class="kg-overview__section" aria-labelledby="kg-surfaces">
     <h2 id="kg-surfaces">Where you see it in action</h2>
     <div class="kg-overview__surfaces">
       <article class="kg-overview__surface-card">
         <div class="img-frame">
-          <img src="/img/knowledge-graph/surfaces/explore.png" alt="The /explore/ interactive visualization with a force-directed layout of concepts and tutorials.">
+          <img src="/img/knowledge-graph/surfaces/explore.svg" alt="The /explore/ interactive visualization with a force-directed layout of concepts and tutorials.">
         </div>
         <div class="body">
           <h3>Live graph at <code>/explore/</code></h3>
@@ -115,12 +181,12 @@
       </article>
       <article class="kg-overview__surface-card">
         <div class="img-frame">
-          <img src="/img/knowledge-graph/surfaces/sidebar.png" alt="A tutorial-page sidebar listing prerequisites, related tutorials, and suggested next steps.">
+          <img src="/img/knowledge-graph/surfaces/sidebar.svg" alt="A tutorial-page sidebar listing prerequisites, related tutorials, and suggested next steps.">
         </div>
         <div class="body">
           <h3>On every tutorial page</h3>
           <p>A sidebar surfaces prerequisites, related tutorials, and suggested next steps based on the concepts a tutorial teaches.</p>
-          <a class="secondary" href="/tutorials/abap-cloud-getting-started/">See it on a tutorial →</a>
+          <a class="secondary" href="/tutorials/cap-simple-nodejs-service/">See it on a tutorial →</a>
         </div>
       </article>
       <article class="kg-overview__surface-card">

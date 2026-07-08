@@ -10,7 +10,7 @@ import { PROFILE_FIELDS } from './profile-fields.js';
 const EMPTY_STATE = Object.freeze({
   completedSlugs: new Set(),
   completedMissionSlugs: new Set(),
-  profile: Object.freeze({ deployment: null, role: null, cloud: null }),
+  profile: Object.freeze({ deployment: null, role: null, cloud: null, preferredEventRegion: null }),
 });
 
 /**

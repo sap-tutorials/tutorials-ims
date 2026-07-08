@@ -381,6 +381,59 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
     );
     expect(rows).toHaveLength(0);
   });
+
+  // #1027 — diagnostic surface: when the caller authenticates but has no
+  // matching Users row (stale OAuth clientId, wrong IdP, un-provisioned
+  // token, ...), the handler MUST log a WARN so `cf logs tutorials-srv
+  // --recent | grep 'Users-row miss'` finds it. Silent 0-row responses
+  // hid the real failure mode on #1027 for the better part of an
+  // afternoon; the log line is the fix.
+  it('logs a Users-row miss WARN when caller has no matching Users row (#1027)', async () => {
+    const authorLog = cds.log('author-service');
+    const originalWarn = authorLog.warn;
+    const warnCalls = [];
+    authorLog.warn = (...args) => { warnCalls.push(args.join(' ')); };
+    try {
+      const srv = await cds.connect.to('AuthorService');
+      await srv.tx(
+        { user: { id: 'no-such-user', attr: { email: 'ghost@example.com' }, roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      const missLine = warnCalls.find((s) => s.includes('[Users-row miss]'));
+      expect(missLine).toBeDefined();
+      // Diagnostic MUST include the endpoint (so multi-endpoint miss batches
+      // are distinguishable) and the resolved sapId (direct FK into Users.sapId).
+      expect(missLine).toContain('endpoint=MyOwnedTutorials');
+      expect(missLine).toContain('resolved-sapId=no-such-user');
+      // PII gate: the caller's email and free-text user.id are user-identifiable
+      // information and MUST NOT appear in application logs. sapId alone is
+      // sufficient for the correlation the log line documents.
+      expect(missLine).not.toContain('ghost@example.com');
+      expect(missLine).not.toContain('attr.email');
+    } finally {
+      authorLog.warn = originalWarn;
+    }
+  });
+
+  // Corollary: when the caller DOES resolve to a Users row, no miss log fires.
+  // Guards against a regression where the WARN emits on every request.
+  it('does NOT log a Users-row miss when the caller resolves cleanly (#1027)', async () => {
+    const authorLog = cds.log('author-service');
+    const originalWarn = authorLog.warn;
+    const warnCalls = [];
+    authorLog.warn = (...args) => { warnCalls.push(args.join(' ')); };
+    try {
+      const srv = await cds.connect.to('AuthorService');
+      await srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      const missLine = warnCalls.find((s) => s.includes('[Users-row miss]'));
+      expect(missLine).toBeUndefined();
+    } finally {
+      authorLog.warn = originalWarn;
+    }
+  });
 });
 
 // #923 — toggleMonitor action tests. The action is the CAP equivalent of
@@ -603,9 +656,23 @@ describe('MyTutorialsView #385 PR-3 shape', () => {
     expect(inactiveRow.monitored).toBe(false);
   });
 
-  it('repositoryName is null when TutorialMeta.repository_ID is unset (chain query NULL-safe)', async () => {
-    // Fixture above seeds rows without a repository_ID — chain returns null.
+  it('repositoryName sources from RepoCatalog.repo when a matching slug row exists (#1063)', async () => {
+    const { RepoCatalog } = cds.entities('com.sap.developers.ims');
+    // The 't-pr3-active' fixture seeded above has slug 'pr3-active'.
+    // Seed the matching RepoCatalog row and verify the view returns it.
+    await INSERT.into(RepoCatalog).entries({
+      slug: 'pr3-active',
+      repo: 'Tutorials',
+      owner: null, branch: null, visibility: null, defaultLang: null,
+      topics: null, lastSyncedAt: new Date().toISOString(), payload: '{}'
+    });
     const row = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: 't-pr3-active' });
+    expect(row.repositoryName).toBe('Tutorials');
+  });
+
+  it('repositoryName is null when no RepoCatalog row matches the slug (#1063 left-join is null-safe)', async () => {
+    // 't-pr3-inactive' has slug 'pr3-inactive' and was NOT seeded into RepoCatalog above.
+    const row = await SELECT.one.from(MyTutorialsView).where({ tutorial_ID: 't-pr3-inactive' });
     expect(row.repositoryName).toBeNull();
   });
 });

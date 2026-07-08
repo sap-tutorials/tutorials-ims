@@ -15,6 +15,7 @@ import * as advocateHandlers from './handlers/advocate-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
+import { checkSecretPresence, invalidatePresence } from './lib/secret-presence.js';
 import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
@@ -26,14 +27,19 @@ import { runSeedApiDocs } from './lib/seed-api-docs.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
+import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
+import { resetFtCache, resetCommunityBlogsCache } from './homepage-service.js';
+import { runReshuffleVideoRotation } from './jobs/reshuffle-video-rotation.js';
 import * as metrics from './lib/metrics.js';
 import {
   listAlertSeverities,
   listAlertAudiences,
 } from './lib/alert-enums.js';
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
+import { deleteStuckOutboxRow, loadStuckOutboxTargets, isRowStale } from './lib/scheduler-wedge.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
 import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
+import { VERB_DEFAULTS, SHELF_DEFAULTS } from './lib/homepage/verb-shelf-defaults.js';   // #1089
 import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
@@ -68,7 +74,7 @@ const MAX_JOB_NAME_LEN = 100;
  *
  * Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.8
  *
- * @param {{jobName: string, user?: string, outcome: 'started'|'success'|'error', durationMs?: number, startedAt?: Date}} opts
+ * @param {{jobName: string, user?: string, outcome: 'started'|'success'|'error'|'unwedged', durationMs?: number, startedAt?: Date}} opts
  * @returns {Promise<void>}
  */
 export async function emitJobAudit({ jobName, user, outcome, durationMs = null, startedAt = null }) {
@@ -395,6 +401,36 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // #1018 — populate the virtual `hasValue : Boolean` field on each
+    // Secrets row. Fires on every /admin-ui/#secrets List Report refresh.
+    // Uses the shared 5-min presence cache so the 11-row LR doesn't hammer
+    // credstore on every $refresh. Fail-quiet: on any error, leave the
+    // field unset (Fiori renders null boolean as no badge — better than
+    // showing "missing" for what might be a transient credstore blip).
+    //
+    // Purpose: today's failure mode (2026-07-06) was a row that showed
+    // `lastRotatedAt` set + happy admin-UI status, but the credstore
+    // itself had no value. Admin visually indistinguishable from a
+    // working row. This surface makes the miss obvious in the LR.
+    this.after('READ', 'Secrets', async (rows, req) => {
+      const arr = Array.isArray(rows) ? rows : [rows];
+      const keys = arr.filter(Boolean).map((r) => r.key).filter(Boolean);
+      if (keys.length === 0) return;
+      try {
+        const entries = await Promise.all(
+          keys.map(async (k) => [k, await checkSecretPresence(k)]),
+        );
+        const presence = new Map(entries);
+        for (const r of arr) {
+          if (r && r.key) r.hasValue = presence.get(r.key) ?? false;
+        }
+      } catch (err) {
+        cds.log('admin-service').warn(
+          `Secrets hasValue lookup failed; leaving field unset (${err?.message ?? err})`,
+        );
+      }
+    });
+
     // Ensure singleton row exists for ChatSettings (defensive — seed CSV
     // populates this on cds deploy; this covers fresh in-memory test DBs).
     const CHAT_SETTINGS_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8a7';
@@ -579,22 +615,16 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
-    // #759: VerbDefinitions auto-init. Cardinality is exactly 6 — one
-    // per HomepageVerb enum value. Seed CSV in
+    // #759: VerbDefinitions auto-init. Cardinality is exactly 7 (#1029) —
+    // one per HomepageVerb enum value. Seed CSV in
     // db/data/com.sap.developers.ims-VerbDefinitions.csv is canonical;
     // this handler is the defensive runtime fallback (matches
-    // HomepageConfig pattern above). Values MUST agree with the CSV.
-    const VERB_DEFAULTS = [
-      { verbKey: 'LEARN',     label: 'Learn',          iconName: 'learning-assistant',    sortOrder: 10 },
-      { verbKey: 'BUILD',     label: 'Build',          iconName: 'developer-settings',    sortOrder: 20 },
-      { verbKey: 'INTEGRATE', label: 'Integrate',      iconName: 'chain-link',            sortOrder: 30 },
-      { verbKey: 'OPERATE',   label: 'Operate',        iconName: 'settings',              sortOrder: 40 },
-      { verbKey: 'AI',        label: 'Extend with AI', iconName: 'da',                    sortOrder: 50 },
-      { verbKey: 'CONNECT',   label: 'Connect',        iconName: 'customer-and-contacts', sortOrder: 60 },
-    ];
+    // HomepageConfig pattern above). Defaults imported from
+    // ./lib/homepage/verb-shelf-defaults.js — same module tests derive
+    // expected row counts from (#1089).
     this.before('READ', 'VerbDefinitions', async () => {
       const existing = await SELECT.from('com.sap.developers.ims.VerbDefinitions').columns('verbKey');
-      if (existing.length >= 6) return;
+      if (existing.length >= VERB_DEFAULTS.length) return;
       const have = new Set(existing.map(r => r.verbKey));
       const missing = VERB_DEFAULTS
         .filter(d => !have.has(d.verbKey))
@@ -605,17 +635,10 @@ export default class AdminService extends cds.ApplicationService {
     });
 
     // #759: ShelfDefinitions auto-init. Cardinality is exactly 4.
-    // Same pattern as VerbDefinitions. Values MUST agree with
-    // db/data/com.sap.developers.ims-ShelfDefinitions.csv.
-    const SHELF_DEFAULTS = [
-      { shelfKey: 'START_HERE',   label: 'Start here',      sortOrder: 10 },
-      { shelfKey: 'REFERENCE',    label: 'Reference',       sortOrder: 20 },
-      { shelfKey: 'TOOLS',        label: 'Tools & samples', sortOrder: 30 },
-      { shelfKey: 'KEEP_CURRENT', label: 'Keep current',    sortOrder: 40 },
-    ];
+    // Same pattern as VerbDefinitions.
     this.before('READ', 'ShelfDefinitions', async () => {
       const existing = await SELECT.from('com.sap.developers.ims.ShelfDefinitions').columns('shelfKey');
-      if (existing.length >= 4) return;
+      if (existing.length >= SHELF_DEFAULTS.length) return;
       const have = new Set(existing.map(r => r.shelfKey));
       const missing = SHELF_DEFAULTS
         .filter(d => !have.has(d.shelfKey))
@@ -624,6 +647,77 @@ export default class AdminService extends cds.ApplicationService {
         await INSERT.into('com.sap.developers.ims.ShelfDefinitions').entries(missing);
       }
     });
+
+    // (#1033) CommunityBlogSources auto-init. Defensive runtime fallback
+    // mirroring the seed CSV in db/data — protects fresh subaccounts where
+    // the CSV hasn't landed yet (or the auto-init fires before the DB
+    // deployer). Only inserts if the table is empty; individual missing
+    // rows are NOT re-inserted (that would fight admin deletes).
+    const COMMUNITY_BLOG_SOURCE_DEFAULTS = [
+      {
+        ID:        '00000000-0000-0000-0000-000000c81001',
+        label:     'Community — Technology (all blogs)',
+        feedUrl:   'https://community.sap.com/khhcw49343/rss/Community?interaction.style=blog',
+        topicSlug: 'community-technology',
+        isActive:  true,
+        sortOrder: 10,
+        managed:   true,
+      },
+      {
+        ID:        '00000000-0000-0000-0000-000000c81002',
+        label:     'Technology Blogs by SAP',
+        feedUrl:   'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-sap',
+        topicSlug: 'technology-sap',
+        isActive:  true,
+        sortOrder: 20,
+        managed:   true,
+      },
+      {
+        ID:        '00000000-0000-0000-0000-000000c81003',
+        label:     'Technology Blogs by Members',
+        feedUrl:   'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-members',
+        topicSlug: 'technology-members',
+        isActive:  true,
+        sortOrder: 30,
+        managed:   true,
+      },
+    ];
+    this.before('READ', 'CommunityBlogSources', async () => {
+      const existing = await SELECT.from('com.sap.developers.ims.CommunityBlogSources').columns('ID');
+      if (existing.length > 0) return;
+      await INSERT.into('com.sap.developers.ims.CommunityBlogSources')
+        .entries(COMMUNITY_BLOG_SOURCE_DEFAULTS);
+    });
+
+    // (#1033) Reclassify — resets a CommunityBlogPosts row so the
+    // classifier drain re-picks it on the next 15-min tick. SuperAdmin
+    // gate via req.user.is('Admin') is enforced by the service's
+    // @requires: 'Admin' — this handler runs only if authenticated.
+    this.on('reclassifyCommunityBlogPost', async (req) => {
+      const { ID } = req.data;
+      if (!ID) return req.reject(400, 'ID is required');
+      const updated = await UPDATE('com.sap.developers.ims.CommunityBlogPosts')
+        .set({
+          aiVerdict:      'PENDING',
+          aiClassifiedAt: null,
+          aiReason:       null,
+          aiConfidence:   null,
+          attemptCount:   0,
+        })
+        .where({ ID });
+      resetCommunityBlogsCache();
+      return updated > 0;
+    });
+
+    // (#1033) Invalidate the public /homepage/communityBlogs cache whenever
+    // an admin toggles pinned / adminOverride, deletes a post, or CRUDs a
+    // source. after-hooks fire on both direct writes and draft activation.
+    for (const target of ['CommunityBlogPosts', 'CommunityBlogSources']) {
+      this.after(['UPDATE', 'CREATE', 'DELETE'], target, () => {
+        try { resetCommunityBlogsCache(); }
+        catch (err) { /* best-effort */ }
+      });
+    }
 
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
@@ -1966,15 +2060,47 @@ export default class AdminService extends cds.ApplicationService {
     // admin-shell notifications popover. Read-only — no DB writes.
     // Imports daysUntil + classifySeverity from the cron module to share
     // the threshold + UTC-truncation contract.
+    //
+    // #1018: in addition to expiry, this handler now emits a synthetic
+    // CRITICAL entry for any tracked row whose value is missing from
+    // credstore. Same reason='missing-value' string the cron uses, so the
+    // popover surface is symmetric with the daily PipelineLog summary.
     this.on('secretWarnings', async (req) => {
       const { Secrets } = cds.entities('com.sap.developers.ims');
+      // Read ALL rows — a row without expiresAt can still have a missing
+      // value and must surface as CRITICAL (see the cron for the same
+      // pattern). Rows with no expiry AND a present value stay silent.
       const rows = await SELECT.from(Secrets)
-        .columns('key', 'description', 'expiresAt', 'rotationOwner', 'rotationDocsUrl')
-        .where({ expiresAt: { '!=': null } });
+        .columns('key', 'description', 'expiresAt', 'rotationOwner', 'rotationDocsUrl');
+
+      // Presence probe per row. Uses the shared 5-min cache — the popover
+      // polls every ~30s while the tab is active; we want a warm cache
+      // between polls but a stale-safe refresh so admins see a save
+      // take effect within one cache window.
+      const presenceEntries = await Promise.all(
+        rows.map(async (row) => [row.key, await checkSecretPresence(row.key)]),
+      );
+      const presence = new Map(presenceEntries);
 
       const now = new Date();
       const warnings = [];
       for (const row of rows) {
+        // Missing-value warning first — a row with no credstore value is
+        // CRITICAL regardless of expiresAt (probably shouldn't have an
+        // expiresAt either, but we don't second-guess the metadata).
+        if (!presence.get(row.key)) {
+          warnings.push({
+            key: row.key,
+            description: row.description ?? '',
+            daysRemaining: null,
+            severity: 'CRITICAL',
+            reason: 'missing-value',
+            rotationOwner: row.rotationOwner ?? '',
+            rotationDocsUrl: row.rotationDocsUrl ?? '',
+          });
+          continue;
+        }
+        if (!row.expiresAt) continue;
         const daysRemaining = daysUntil(row.expiresAt, now);
         const severity = classifySeverity(daysRemaining);
         if (!severity) continue;
@@ -1983,12 +2109,21 @@ export default class AdminService extends cds.ApplicationService {
           description: row.description ?? '',
           daysRemaining,
           severity,
+          reason: 'expiry',
           rotationOwner: row.rotationOwner ?? '',
           rotationDocsUrl: row.rotationDocsUrl ?? '',
         });
       }
 
-      warnings.sort((a, b) => a.daysRemaining - b.daysRemaining);
+      // Sort: missing-value (daysRemaining === null) first, then by
+      // ascending daysRemaining. Null sorts to the front intentionally —
+      // Number(null) === 0 would collide with "expiring today"; explicit
+      // partition keeps the two classes visually separate in the popover.
+      warnings.sort((a, b) => {
+        if (a.daysRemaining == null && b.daysRemaining != null) return -1;
+        if (b.daysRemaining == null && a.daysRemaining != null) return 1;
+        return (a.daysRemaining ?? 0) - (b.daysRemaining ?? 0);
+      });
       return warnings;
     });
 
@@ -2073,6 +2208,28 @@ export default class AdminService extends cds.ApplicationService {
       }
     };
 
+    // Verify a credstore write actually landed. #1018: on 2026-07-06 a
+    // CONTENT_API_KEY save via /admin-ui/#secrets returned 2xx from the
+    // credstore but never persisted — the row stayed unreachable until the
+    // envsubst fallback was stripped in PR #980 and every publish 503'd.
+    // writeSecret throws on non-2xx, but not on 2xx-with-empty-body / silent
+    // no-op / mTLS+JWE transport oddities (the credstore path went through
+    // three fixes: PR #586, PR #588, PR #602). One extra round-trip per save
+    // — the operation is rare (manual rotation) so latency doesn't matter.
+    // readSecret returns null on 404 (never written) or throws on transport
+    // error; either shape means the write claim is unverified.
+    const verifyWritten = async (req, alias, expected) => {
+      let observed;
+      try {
+        observed = await readSecret(alias);
+      } catch (err) {
+        return req.reject(500, `credstore write ${alias}: read-back failed: ${err.message ?? err}`);
+      }
+      if (observed !== expected) {
+        return req.reject(500, `credstore write ${alias}: read-back mismatch (write claimed success but value did not persist)`);
+      }
+    };
+
     // ────────────────────────────────────────────────────────────────────
     this.on('setSecretValue', 'Secrets', async (req) => {
       const row = await loadSecretRow(req);
@@ -2081,6 +2238,9 @@ export default class AdminService extends cds.ApplicationService {
         return req.reject(400, 'value (non-empty string) is required');
       }
       await writeSecret(row.key, value);
+      // #1018: read-back guard — see verifyWritten helper above for the
+      // 2026-07-06 CONTENT_API_KEY silent-failure context.
+      await verifyWritten(req, row.key, value);
       // Hot-flush the shared secret-resolver cache so the next read picks up
       // the fresh value immediately (or null after a clear) — symmetric for
       // all credstore-fronted secrets (GITHUB_DISPATCH_TOKEN, SMTP_PASS,
@@ -2089,6 +2249,10 @@ export default class AdminService extends cds.ApplicationService {
       // 5-min TTL window. The rebuild-trigger.js `invalidateDispatchTokenCache`
       // export is a thin shim over this same call kept for direct callers.
       invalidateSecret(row.key);
+      // #1018: also flush the presence cache so the LR badge + popover
+      // reflect the save on the next refresh (≤5 min TTL) instead of
+      // waiting up to the resolver's separate window.
+      invalidatePresence(row.key);
       // IMPORTANT 2 (quality-review): emit audit event immediately after the
       // external credstore mutation succeeds. The subsequent stampRotated() is
       // a HANA UPDATE that may fail / abort — if it does, the credstore has
@@ -2131,9 +2295,12 @@ export default class AdminService extends cds.ApplicationService {
       // 32 bytes hex = 64-char string. Strong enough for salt + api-key.
       const newValue = randomBytes(32).toString('hex');
       await writeSecret(row.key, newValue);
+      // #1018: read-back guard — see verifyWritten helper above.
+      await verifyWritten(req, row.key, newValue);
       // See setSecretValue above — same universal hot-flush for any rotated
       // secret, not just GITHUB_DISPATCH_TOKEN.
       invalidateSecret(row.key);
+      invalidatePresence(row.key);
       // IMPORTANT 2 (quality-review): see setSecretValue for the same race.
       // Emit the write event BEFORE stampRotated in case HANA UPDATE fails.
       // The 'SecretValueRotated' event below is still emitted (richer payload)
@@ -2170,6 +2337,9 @@ export default class AdminService extends cds.ApplicationService {
       // becomes null on the next resolveSecret() call instead of returning
       // the stale TTL'd value.
       invalidateSecret(row.key);
+      // #1018: also drop the presence cache so the LR flips to "missing"
+      // on the next refresh instead of showing stale "present".
+      invalidatePresence(row.key);
       // No HANA mutation; explicit audit event needed.
       await auditEvent('SecretValueCleared', {
         user: req.user?.id,
@@ -2389,6 +2559,24 @@ export default class AdminService extends cds.ApplicationService {
       const registry = _getJobRegistry();
       const now = new Date();
       const horizon = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      // #1021: fetch stuck outbox targets in one pass — fail-open (empty
+      // Map on any error) so a detection fault never masks legitimate rows.
+      //
+      // TEST-INJECTION HOOK: cds.test('serve') loads this file via
+      // cds.utils._import (file:// URL on Windows) which bypasses Vitest's
+      // ESM mock interceptor. globalThis.__TEST_loadStuckOutboxTargets and
+      // globalThis.__TEST_isRowStale let unit tests inject
+      // fakes without vi.mock. Production never sets these globals.
+      const _loadStuck = globalThis.__TEST_loadStuckOutboxTargets ?? loadStuckOutboxTargets;
+      const _isStale = globalThis.__TEST_isRowStale ?? isRowStale;
+
+      let stuckByJob;
+      try {
+        stuckByJob = await _loadStuck();
+      } catch (err) {
+        LOG.warn(`listJobs: loadStuckOutboxTargets failed: ${err.message}`);
+        stuckByJob = new Map();
+      }
 
       return Array.from(registry.values()).map(job => {
         let nextRunsIso = [];
@@ -2404,6 +2592,10 @@ export default class AdminService extends cds.ApplicationService {
         } catch (err) {
           LOG.warn(`listJobs: cron-parser failed on '${job.schedule}': ${err.message}`);
         }
+        // #1021: wedged iff a processing outbox row exists for this job
+        // AND the row's own timestamp has been surpassed by the next fire.
+        const rowStartedAt = stuckByJob.get(job.jobName);
+        const wedged = !!rowStartedAt && _isStale(job.schedule, rowStartedAt, now);
         return {
           jobName: job.jobName,
           schedule: job.schedule,
@@ -2411,8 +2603,48 @@ export default class AdminService extends cds.ApplicationService {
           description: job.description,
           nextRunIso,
           nextRunsIso,
+          wedged,
         };
       });
+    });
+
+    // #1023: return currently-executing scheduled jobs so the Cron health
+    // tile can distinguish RUNNING from a stale last-completed failure.
+    // Reads PipelineLog rows written by srv/jobs/scheduler.js:runWithLock
+    // (via srv/lib/pipeline-log.js:logPipelineStart) that haven't been
+    // finalized yet. jobName lives inside metadata JSON, extracted here
+    // rather than via HANA JSON_VALUE so the code paths stay identical
+    // across SQLite (unit tests) and HANA (hybrid + prod).
+    this.on('listRunningJobs', 'JobControls', async () => {
+      const { PipelineLog } = cds.entities('com.sap.developers.ims');
+      let rows;
+      try {
+        rows = await SELECT.from(PipelineLog)
+          .columns('metadata', 'startedAt')
+          .where({ pipelineType: 'SCHEDULED_JOB', status: 'RUNNING' });
+      } catch (err) {
+        LOG.warn(`listRunningJobs SELECT failed: ${err.message ?? err}`);
+        return [];
+      }
+      const out = [];
+      for (const row of rows || []) {
+        let jobName = null;
+        if (row.metadata) {
+          try {
+            const parsed = JSON.parse(row.metadata);
+            if (parsed && typeof parsed.jobName === 'string') {
+              jobName = parsed.jobName;
+            }
+          } catch (err) {
+            // Malformed metadata JSON — skip this row, don't fail the whole read.
+            LOG.warn(`listRunningJobs: unparseable metadata: ${err.message ?? err}`);
+          }
+        }
+        if (jobName) {
+          out.push({ jobName, startedAt: row.startedAt });
+        }
+      }
+      return out;
     });
 
     this.on('runJob', 'JobControls', async (req) => {
@@ -2452,7 +2684,45 @@ export default class AdminService extends cds.ApplicationService {
       };
     });
 
-    // ── Rebuild-button action (issue: rebuild-button) ──
+    // #1021: forceUnwedge — DELETE the stuck cds.outbox.Messages row
+    // for jobName. DELETE-only; operators click "Run now" separately if
+    // they want the missed run to fire immediately.
+    this.on('forceUnwedge', 'JobControls', async (req) => {
+      const { jobName } = req.data;
+      if (typeof jobName !== 'string' || jobName.length === 0 || jobName.length > MAX_JOB_NAME_LEN) {
+        return req.reject(400, `Invalid jobName (must be non-empty string <=${MAX_JOB_NAME_LEN} chars)`);
+      }
+      const registry = _getJobRegistry();
+      if (!registry.has(jobName)) {
+        return req.reject(400, `Unknown jobName: ${jobName}`);
+      }
+      const user = req.user?.id ?? 'unknown';
+      const startedAt = new Date();
+
+      // Audit BEFORE the DELETE so an audit row always exists even if
+      // the DELETE later fails. Fire-and-forget — audit failure never
+      // fails the action.
+      // TEST-INJECTION HOOK: globalThis.__TEST_emitJobAudit lets unit
+      // tests verify audit calls without ESM spy limitations (same
+      // pattern as __TEST_loadStuckOutboxTargets in listJobs).
+      const _emitAudit = globalThis.__TEST_emitJobAudit ?? emitJobAudit;
+      setImmediate(() => {
+        _emitAudit({ jobName, user, outcome: 'unwedged', startedAt })
+          .catch(err => LOG.warn(`forceUnwedge audit failed: ${err.message}`));
+      });
+
+      // TEST-INJECTION HOOK: globalThis.__TEST_deleteStuckOutboxRow lets
+      // unit tests control the deletion result without real DB operations.
+      const _deleteRow = globalThis.__TEST_deleteStuckOutboxRow ?? deleteStuckOutboxRow;
+      const cleared = await _deleteRow(jobName);
+      return {
+        jobName,
+        cleared,
+        reason: cleared
+          ? null
+          : 'No stuck outbox row found (already clear, or CAP outbox not present)',
+      };
+    });
     // Bound action on Tutorials. Resolves slug, audit-logs intent, dispatches
     // a slug-targeted rebuild via scheduleRebuild's 60s debounce. Shared body
     // lives in srv/lib/rebuild-action-handler.js so AuthorService can reuse it
@@ -2651,6 +2921,39 @@ export default class AdminService extends cds.ApplicationService {
     this.before(shelfEvents, HomepageShelves.drafts, checkPersonaTagsHandler);
     this.before(shelfEvents, HomepageForYouCandidatesAdmin, checkPersonaTagsHandler);
     this.before(shelfEvents, HomepageForYouCandidatesAdmin.drafts, checkPersonaTagsHandler);
+
+    // ── (#1032) Featured missions carousel admin handlers ──
+    // recomputeFeaturedTopics — SuperAdmin manual trigger to force a fresh
+    // snapshot materialisation without waiting for the nightly job.
+    this.on('recomputeFeaturedTopics', async () => {
+      const { count, computedAt } = await cds.tx(async (tx) => recomputeSnapshot(tx));
+      resetFtCache();
+      return { count, computedAt };
+    });
+
+    // (#1031) recomputeHomepageVideoRotation — SuperAdmin manual trigger.
+    // Same code path as the 4h cron; used for the DEV cutover to populate
+    // HomepageVideoRotation immediately without waiting for the next tick.
+    this.on('recomputeHomepageVideoRotation', async () => {
+      return runReshuffleVideoRotation();
+    });
+
+    // After-SAVE on the draft-active flow: recompute the snapshot inline
+    // (≤8 rows, fast) so admins see the updated carousel immediately, then
+    // fire a debounced rebuild so hugo/data/featured_topics.json refreshes.
+    this.after(['CREATE', 'UPDATE', 'DELETE'], 'FeaturedTopics', async (_data, req) => {
+      try {
+        await cds.tx(async (tx) => recomputeSnapshot(tx));
+        resetFtCache();
+      } catch (err) {
+        cds.log('admin-featured').warn('inline recompute failed after write:', err.message);
+      }
+      try {
+        await scheduleRebuild('admin-featured-topics-write', { mode: 'catalog-only' });
+      } catch (err) {
+        cds.log('admin-featured').warn('rebuild dispatch failed:', err.message);
+      }
+    });
 
     await super.init();
 

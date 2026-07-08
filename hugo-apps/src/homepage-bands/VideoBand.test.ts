@@ -96,4 +96,57 @@ describe('VideoBand.vue', () => {
     expect(wrapper.findAll('a.hb-video-band__recent-card')).toHaveLength(0);
     wrapper.unmount();
   });
+
+  it('renders 6 tiles when the server returns anchors + rotation with kind field', async () => {
+    const payload = {
+      featured: { videoId: 'f', title: 'Feat', thumbnail: 'https://yt/f.jpg', publishedAt: '2026-07-06T00:00:00Z' },
+      recent: [
+        { videoId: 'a1', title: 'Anchor 1', thumbnail: 'https://yt/a1.jpg', publishedAt: '2026-07-05T00:00:00Z', kind: 'anchor' },
+        { videoId: 'a2', title: 'Anchor 2', thumbnail: 'https://yt/a2.jpg', publishedAt: '2026-07-04T00:00:00Z', kind: 'anchor' },
+        { videoId: 'a3', title: 'Anchor 3', thumbnail: 'https://yt/a3.jpg', publishedAt: '2026-07-03T00:00:00Z', kind: 'anchor' },
+        { videoId: 'p1', title: 'Popular 1', thumbnail: 'https://yt/p1.jpg', publishedAt: '2026-05-01T00:00:00Z', kind: 'popular' },
+        { videoId: 'p2', title: 'Popular 2', thumbnail: 'https://yt/p2.jpg', publishedAt: '2026-04-01T00:00:00Z', kind: 'popular' },
+        { videoId: 'p3', title: 'Popular 3', thumbnail: 'https://yt/p3.jpg', publishedAt: '2026-03-01T00:00:00Z', kind: 'popular' },
+      ],
+      error: null,
+    };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(payload), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })));
+
+    const wrapper = mount(VideoBand, { attachTo: document.body });
+    for (let i = 0; i < 6; i++) await flushPromises();
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+
+    const cards = wrapper.findAll('a.hb-video-band__recent-card');
+    expect(cards).toHaveLength(6);
+    // Only rotation cards carry the Popular chip.
+    const chips = wrapper.findAll('.hb-video-band__chip');
+    expect(chips).toHaveLength(3);
+    for (const chip of chips) expect(chip.text()).toBe('Popular');
+    // First 3 cards must NOT have a chip.
+    for (let i = 0; i < 3; i++) {
+      expect(cards[i].find('.hb-video-band__chip').exists()).toBe(false);
+    }
+    wrapper.unmount();
+  });
+
+  it('renders anchor-only when server returns rotation of length 0', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      featured: null,
+      recent: [
+        { videoId: 'a1', title: 'Only anchor', thumbnail: '', publishedAt: '2026-07-05T00:00:00Z', kind: 'anchor' },
+      ],
+      error: null,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })));
+
+    const wrapper = mount(VideoBand, { attachTo: document.body });
+    for (let i = 0; i < 6; i++) await flushPromises();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findAll('a.hb-video-band__recent-card')).toHaveLength(1);
+    expect(wrapper.find('.hb-video-band__chip').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });

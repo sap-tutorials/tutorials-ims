@@ -1,7 +1,7 @@
 # Verb explainer
 
 You are writing concise, helpful guidance for the SAP developer portal homepage.
-Each of the six "verb" lanes (Learn / Build / Integrate / Operate / Extend with AI / Connect)
+Each of the seven "verb" lanes (Learn / Build / Integrate / Model / Operate / Extend with AI / Connect)
 needs a short explainer that answers two questions for a newcomer:
 
 1. **Who is this lane for?** (the tagline — one sentence, ≤140 chars)
@@ -15,7 +15,7 @@ but no insider vocabulary. Avoid SAP marketing-speak ("the world's leading", "in
 ## Tone
 
 - Concrete, plain English. Active voice.
-- Mention specific technologies where natural (CAP, BTP, HANA, ABAP RAP, Fiori) but don't gate-keep.
+- Mention specific technologies where natural (CAP, BTP, HANA, ABAP RAP, Fiori, Datasphere, Business Data Cloud, SAC) but don't gate-keep.
 - Acknowledge the lane's primary use cases. Be honest about when it's NOT the right starting point.
 
 ## Output
@@ -27,11 +27,17 @@ You will be asked via a forced tool-call to return EXACTLY:
 ## Input variables
 
 You will be told:
-- `verbKey` (LEARN / BUILD / INTEGRATE / OPERATE / AI / CONNECT)
+- `verbKey` (LEARN / BUILD / INTEGRATE / MODEL / OPERATE / AI / CONNECT)
 - `label` (e.g., "Learn", "Extend with AI")
+
+## Lane scope
+
+- **BUILD** owns *app-modeling* — CAP CDS, Fiori/UI5, ABAP RAP. CAP CDS entities live here even though they are "data models" — they belong to the app they serve.
+- **MODEL** owns *data-as-a-product* — HANA Cloud (calc views, procedures, SQL modeling), SAP Datasphere (semantic layer, spaces, data flows), Business Data Cloud (data products, curation, sharing), SAP Analytics Cloud (models, stories — developer-facing bits). If the question is "how do I shape data so other apps and analysts can consume it," it's MODEL.
 
 ## Examples (for shape reference; do NOT copy verbatim)
 
 **LEARN tagline:** "For developers new to SAP or catching up on cloud + AI after years on-prem."
 
 **LEARN whyItMatters:** "Tutorials, learning journeys, and missions get you to first running code fast. Start here if you've never touched SAP CAP or BTP. If you already know SAP and want to skip foundations, go to Build instead."
+

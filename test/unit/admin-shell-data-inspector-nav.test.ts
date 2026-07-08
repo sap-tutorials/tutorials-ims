@@ -98,4 +98,41 @@ describe('admin-shell Data Inspector wiring (#999)', () => {
       })
     }
   })
+
+  describe('package.json — runtime dep placement', () => {
+    // @cap-js/data-inspector registers DataInspectorService at plugin-load
+    // time (cds-plugin.js) which mounts /odata/v4/data-inspector/. CF's
+    // nodejs_buildpack runs `npm install` with NODE_ENV=production, which
+    // skips devDependencies. If the plugin sits in devDependencies, the srv
+    // container has no plugin at boot → OData 404 → Fiori UI loads its
+    // index.html from the approuter but can't reach mainService and the
+    // user sees an approuter/UI 404. Keep it in dependencies.
+    const pkg = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'))
+
+    it('lives in dependencies, not devDependencies', () => {
+      expect(pkg.dependencies?.['@cap-js/data-inspector']).toBeTruthy()
+      expect(pkg.devDependencies?.['@cap-js/data-inspector']).toBeUndefined()
+    })
+  })
+
+  describe('.cdsrc.json — srv build-task model list', () => {
+    // Even with the plugin installed at runtime (#1041), cds build --production
+    // won't include DataInspectorService in gen/srv/srv/csn.json unless the
+    // plugin's model is on the srv task's `options.model` list. .cdsrc.json
+    // uses an EXPLICIT model list (["srv","db","app"]), which overrides
+    // CDS's default plugin-model auto-discovery via cds.requires. Without
+    // this pin, DataInspectorService is missing from the prebuilt CSN and
+    // the runtime never mounts /odata/v4/data-inspector/, even though the
+    // plugin package is on disk. Symptom: approuter static UI loads, then
+    // every mainService call 404s → user sees a 404 page.
+    const cdsrc = JSON.parse(readFileSync(path.join(REPO_ROOT, '.cdsrc.json'), 'utf8'))
+    const srvTask = cdsrc.build?.tasks?.find(
+      (t: any) => t.for === 'nodejs' && t.src === 'srv'
+    )
+
+    it('includes @cap-js/data-inspector in the srv nodejs task model list', () => {
+      expect(srvTask, 'srv nodejs build task must exist').toBeTruthy()
+      expect(srvTask.options?.model).toContain('@cap-js/data-inspector')
+    })
+  })
 })

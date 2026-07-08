@@ -18,6 +18,7 @@ Search (Ctrl-F) for the error message you're seeing, the API you're using, or th
 - [HANA SPARQL per-graph ACL — creator owns the graph](#hana-sparql-per-graph-acl-creator-owns-the-graph)
 - [KG SPARQL DEFINER procedures — the canonical pattern](#kg-sparql-definer-procedures-the-canonical-pattern)
 - [node-sql-parser dialect for HANA — use Postgresql, never MySQL](#node-sql-parser-dialect-for-hana-use-postgresql-never-mysql)
+- [Auto-CSV replaces admin-editable columns on every CSV-changing deploy](#auto-csv-replaces-admin-editable-columns-on-every-csv-changing-deploy)
 - [HDI .hdbindex syntax — three rules](#hdi-hdbindex-syntax-three-rules)
 - [HDI deploys can silently wipe data on retry](#hdi-deploys-can-silently-wipe-data-on-retry)
 - [.hdbgrants files have no comment keys](#hdbgrants-files-have-no-comment-keys)
@@ -527,3 +528,37 @@ Surfaced 2026-06-17 during the [project_fix_duplicate_slugs] live merge of 123 T
 - Wrap the per-row merge in `db.tx` so a partial failure rolls back rather than half-merging.
 
 Related: [project_fix_duplicate_slugs], [feedback_audit_all_callers_of_buggy_primitive] (the publish path's slug upsert had the right contract; the migrator didn't audit-and-mirror it).
+
+---
+
+## Auto-CSV replaces admin-editable columns on every CSV-changing deploy
+
+Discovered 2026-07-07 after #1029 (add MODEL verb) shipped and all 7 `VerbDefinitions` rows had their `tagline` / `whyItMatters` / `authoringStatus` reset to empty/`BLANK`. Only the MODEL tile showed as visibly-broken on the homepage — the other 6 verbs still rendered content because their tagline+whyItMatters were cached in `hugo/data/verb_definitions.json` from a pre-wipe Hugo rebuild.
+
+**The mechanism:** `cds build --production` auto-generates `db/gen/data/*.hdbtabledata` from every `db/data/*.csv`. Each `.hdbtabledata` lists **every column present in the CSV** under `"import_columns"`. HDI treats these as authoritative snapshots — on every deploy where the CSV file's hash changed, HDI re-imports the entire file, overwriting every row on every listed column. Unchanged CSVs are skipped (idempotent).
+
+**When it bites you:** Entities where the seed CSV lists columns that are meant to be edited at runtime (admin UI writes, AI-generated content, user-driven updates) — usually as empty-string placeholders or default enum values. Adding a single new row to that CSV — or any commit that changes the file's hash for any reason — silently wipes all admin-authored content back to those placeholders. In #1029, `VerbDefinitions.csv` gained one row (MODEL) and every row's editable columns were reset; `ShelfDefinitions.csv` was unchanged that PR and survived; `HomepageShelves.csv` was structurally safe because its CSV didn't list the editable columns in the first place.
+
+**Diagnosis:**
+- After a deploy, admin-authored content in a CSV-seeded table is gone
+- Symptom: all rows have identical placeholder values in editable columns; `MODIFIEDAT` / `MODIFIEDBY` are `NULL` (auto-CSV doesn't touch managed columns because it doesn't know about them)
+- Table isn't dropped — row IDs match the CSV exactly, just re-imported
+
+**The fix (shipped in this PR):** Strip admin-editable columns from the CSV. CAP only generates `import_columns` for columns present in the CSV file. `db/data/com.sap.developers.ims-VerbDefinitions.csv` and `db/data/com.sap.developers.ims-ShelfDefinitions.csv` now list only the structural columns (`ID`, `verbKey`/`shelfKey`, `label`, `iconName`/none, `sortOrder`). Editable columns (`tagline`, `whyItMatters`, `authoringStatus`) rely on:
+
+1. CDS column DEFAULT annotations for on-insert state (`authoringStatus : AuthoringStatus default 'BLANK'`; `tagline` and `whyItMatters` are nullable, default to `NULL`)
+2. The runtime `before('READ')` auto-init handler at [srv/admin-service.js:630](https://github.com/sap-tutorials/tutorials-ims/blob/main/srv/admin-service.js#L630), which inserts missing rows on first read — canonical CAP pattern for singleton/small-cardinality tables that don't fit the auto-CSV shape
+
+`.hdbtabledata` now only touches the structural columns. Editable columns are never wiped again.
+
+**Why not a runbook or explicit-seed script here:** Because the runtime auto-init handler already covers the empty-table case at first read (see `srv/admin-service.js:630`), an out-of-band explicit-seed script would duplicate that logic and become another thing to remember. For **runtime-mutable singleton configs** where no auto-init handler exists (ChatSettings, DisplaySettings, HomepageConfig, ImsConfig, KnowledgeGraphSettings, NavigatorSettings, SearchSettings, TenantSettings, UiEventsSettings), an explicit-seed + runbook approach is the intended next step — see the "Follow-ups" section of the PR that introduced this section.
+
+**Does NOT help:** `db/undeploy.json`. That artifact governs artifact *removal*, not per-column write protection. HDI has no built-in "preserve column on redeploy" flag for `.hdbtabledata`.
+
+**When adding a new admin-editable table:**
+- Never include admin-editable columns in the seed CSV
+- Include only the structural + identity columns HDI needs to enforce uniqueness (`ID`, unique key columns)
+- Rely on CDS DEFAULTs for the initial-value semantics
+- Add a `before('READ')` auto-init handler (canonical pattern at `srv/admin-service.js:630`) if the table is small-cardinality and known-empty on fresh subaccounts
+
+**Related:** [Adding, renaming, or removing a homepage verb](adding-a-verb.md) — Section 1 spells out the CSV editing rule for verb-list evolution.

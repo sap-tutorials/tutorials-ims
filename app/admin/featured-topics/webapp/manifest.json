@@ -1,0 +1,84 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.featuredTopics",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "FeaturedTopics-manage": {
+          "semanticObject": "FeaturedTopics",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.featuredTopics.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "name": "FeaturedTopicsList", "pattern": ":?query:", "target": "FeaturedTopicsListTarget" },
+        { "name": "FeaturedTopicsOP",   "pattern": "FeaturedTopics({key}):?query:", "target": "FeaturedTopicsOPTarget" }
+      ],
+      "targets": {
+        "FeaturedTopicsListTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ListReport",
+          "id": "FeaturedTopicsListTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/FeaturedTopics",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "FeaturedTopics": { "detail": { "route": "FeaturedTopicsOP" } }
+              }
+            }
+          }
+        },
+        "FeaturedTopicsOPTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ObjectPage",
+          "id": "FeaturedTopicsOPTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/FeaturedTopics",
+              "editableHeaderContent": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

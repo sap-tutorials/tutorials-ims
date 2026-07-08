@@ -1,6 +1,7 @@
 // test/unit/homepage/personalized-envelope.test.js
 import { describe, it, expect } from 'vitest';
 import { buildEnvelope, hashEnvelope } from '../../../srv/lib/homepage/personalized-envelope.js';
+import { BASE_ORDER } from '../../../srv/lib/homepage/persona-map.js';
 
 const dev = { role: 'developer', deployment: 'cloud', cloud: 'aws' };
 const shelves = [
@@ -20,7 +21,7 @@ describe('buildEnvelope', () => {
     for (const k of ['profile','verbOrder','forYou','teaserOrder','shelfOverrides','videoFilterTags','rssFilterTags']) {
       expect(env[k]).toBeDefined();
     }
-    expect(env.verbOrder).toHaveLength(6);
+    expect(env.verbOrder).toHaveLength(BASE_ORDER.length);   // #1089
   });
 
   it('includes hidden shelf IDs per verb', () => {
@@ -63,5 +64,20 @@ describe('hashEnvelope', () => {
     const other = { role: 'student', deployment: null, cloud: null };
     const b = buildEnvelope({ profile: other, shelves, forYouCandidates: [], teaserSlugs: [] });
     expect(hashEnvelope(a)).not.toBe(hashEnvelope(b));
+  });
+});
+
+describe('#1030 eventsRegion', () => {
+  it('emits null when preferredEventRegion is not passed', () => {
+    const env = buildEnvelope({ profile: {}, shelves: [], forYouCandidates: [], teaserSlugs: [] });
+    expect(env.eventsRegion).toBeNull();
+  });
+
+  it('emits the passed value', () => {
+    const env = buildEnvelope({
+      profile: {}, shelves: [], forYouCandidates: [], teaserSlugs: [],
+      preferredEventRegion: 'EMEA',
+    });
+    expect(env.eventsRegion).toBe('EMEA');
   });
 });

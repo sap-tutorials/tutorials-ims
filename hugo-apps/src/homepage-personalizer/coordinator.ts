@@ -1,7 +1,6 @@
 import { readSessionCache, writeSessionCache, type Envelope } from './session-cache';
 import { applyVerbOrder } from './verb-order';
 import { renderBadge } from './personalized-badge';
-import { applyTeaserRerank, type FetchedCard } from './teaser-rerank';
 import { mountForYou } from './mount-for-you';
 import { applyShelfRerank } from './shelf-rerank';
 import { subscribeBroadcast } from './prefs-broadcast';
@@ -17,29 +16,19 @@ export function isDefaultViewActive(): boolean {
   } catch { return false; }
 }
 
-function looksSignedIn(): boolean {
-  return typeof document !== 'undefined'
-    && /(?:^|;\s*)JSESSIONID=/.test(document.cookie || '');
-}
-
+// (#1093) The previous `looksSignedIn` (JSESSIONID cookie sniff) + `/me` probe
+// were dead code on this deployment. Approuter session cookies are HttpOnly, so
+// `document.cookie` is always empty; and `/me` falls through xs-app.json to
+// Hugo's static "My Completions" page which returns 200 HTML for everyone.
+// `/auth/user` is the XSUAA-gated JSON identity endpoint (see xs-app.json).
 async function isSignedIn(): Promise<boolean> {
-  if (looksSignedIn()) return true;
   try {
-    const r = await fetch('/me', { credentials: 'include' });
-    return r.ok;
-  } catch { return false; }
-}
-
-// (#763 Task 12) Fetch card HTML for slugs missing from the Row-5 DOM.
-async function fetchMissingCards(slugs: string[]): Promise<FetchedCard[]> {
-  try {
-    const url = `/homepage/tutorialCards?slugs=${encodeURIComponent(JSON.stringify(slugs))}`;
-    const r = await fetch(url, { credentials: 'include' });
-    if (!r.ok) return [];
+    const r = await fetch('/auth/user', { credentials: 'include' });
+    if (!r.ok) return false;
+    if (!(r.headers.get('content-type') || '').includes('json')) return false;
     const body = await r.json();
-    // CAP wraps array responses in OData envelope { value: [...] } — unwrap.
-    return (Array.isArray(body) ? body : (body?.value ?? [])) as FetchedCard[];
-  } catch { return []; }
+    return !!body?.authenticated;
+  } catch { return false; }
 }
 
 export async function boot(): Promise<void> {
@@ -58,14 +47,23 @@ export async function boot(): Promise<void> {
     if (resp.status === 204 || resp.status === 401) return;
     if (resp.status === 304) { applyEnvelope(cached!.payload); return; }
     if (!resp.ok) return;
+    // (#1093) Approuter returns 200 + HTML login page for stale sessions; do
+    // not let `resp.json()` throw and get swallowed by the outer catch.
+    if (!(resp.headers.get('content-type') || '').includes('json')) {
+      // eslint-disable-next-line no-console
+      console.warn('[homepage-personalizer] non-JSON response from', ENDPOINT, '— assuming auth expired');
+      return;
+    }
 
     const payload = (await resp.json()) as Envelope;
     writeSessionCache(payload);
     applyEnvelope(payload);
     subscribeBroadcast(payload.hash, (next) => applyEnvelope(next));
   } catch (e) {
+    // (#1093) Bumped from console.debug — this branch was silently hiding auth
+    // failures for months. Warn is the minimum bar for post-mortem visibility.
     // eslint-disable-next-line no-console
-    console.debug('[homepage-personalizer] boot failed', e);
+    console.warn('[homepage-personalizer] boot failed', e);
   }
 }
 
@@ -81,12 +79,6 @@ function applyEnvelope(env: Envelope): void {
     env.profile ?? null,
     'personalized'
   );
-  // (#763 Task 12) Reorder Row-5 tutorial teaser cards by the server-supplied order.
-  void applyTeaserRerank(
-    document.querySelector<HTMLElement>('[data-personalize="teaser-rerank"]'),
-    env.teaserOrder ?? [],
-    fetchMissingCards
-  ).then(() => beaconApplied('teaser'));
   // (#763 Task 13) For-you row (Row 2b).
   mountForYou(
     document.querySelector<HTMLElement>('[data-personalize="for-you"]'),

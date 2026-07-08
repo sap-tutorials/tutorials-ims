@@ -26,6 +26,7 @@ import cds from '@sap/cds';
 import { createHash } from 'node:crypto';
 import { fetchAllEvents as defaultFetchAllEvents, canonicalizeEventSlug } from '../lib/events/index.js';
 import { decodeHtmlEntities } from '../lib/events/text-normalize.js';
+import { regionFromLocation } from '../lib/events/region-from-location.js';
 import { extractConceptsFromCommunityEvent } from '../lib/community-event-extract.js';
 import { defaultCallModel } from '../lib/code-check-llm.js';
 import { embed as defaultEmbed } from '../lib/embedding-client.js';
@@ -155,6 +156,7 @@ export async function runFetchCommunityEvents(logId, opts = {}) {
         const location = decodeHtmlEntities(row.location ?? '');
         const virtualOrInPerson = (location && location.toLowerCase() === 'virtual') || row.scope === 'virtual' ? 'virtual' : 'in-person';
         if (virtualOrInPerson === 'virtual') summary.virtualCount++;
+        const region = regionFromLocation(location);   // #1030 — parity with refresh job
         const rawDescription = decodeHtmlEntities(row.description ?? '');
         const description = rawDescription && rawDescription.trim().length > 0
           ? rawDescription
@@ -176,6 +178,7 @@ export async function runFetchCommunityEvents(logId, opts = {}) {
           location: location || '',
           scope: row.scope ?? '',
           virtualOrInPerson,
+          region,                                        // #1030
           startDate: row.date,
           endDate: row.end_date || null,
           contentHash,

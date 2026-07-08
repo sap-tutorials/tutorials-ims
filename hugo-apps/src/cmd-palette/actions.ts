@@ -70,14 +70,19 @@ function toggleTheme(close: () => void) {
 
 function openJoule(close: () => void) {
   close()
-  // joule-panel.html partial wires itself to a global toggle. If unavailable
-  // we silently no-op — better than a broken-looking action.
-  const fn = (window as unknown as { openJoulePanel?: () => void }).openJoulePanel
-  if (typeof fn === 'function') fn()
-  else {
-    const panel = document.getElementById('joule-panel') as HTMLElement | null
-    if (panel) panel.setAttribute('open', '')
+  // joule.js exposes `window.joule.open()` — attached synchronously (before
+  // its async config load resolves) with an internal _pendingOpen queue, so
+  // it's safe to call whether or not the panel bootstrap has finished.
+  // Fallback: flip the panel's `hidden` attribute directly (the partial uses
+  // the HTML `hidden` boolean, not `open`) so ⌘K still opens *something*
+  // when joule.js failed to load — better than a silent no-op.
+  const j = (window as unknown as { joule?: { open?: (opts?: unknown) => void } }).joule
+  if (j && typeof j.open === 'function') {
+    j.open()
+    return
   }
+  const panel = document.getElementById('joule-panel') as HTMLElement | null
+  if (panel) panel.hidden = false
 }
 
 function navTo(href: string) {
@@ -137,12 +142,13 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
     },
   },
 
-  // EXPLORE group — the 6 homepage verb-spine routes plus the Knowledge
-  // Graph Explorer. Order matches the verb-spine partial at
-  // hugo/layouts/partials/homepage/verb-spine.html (LEARN, BUILD,
-  // INTEGRATE, OPERATE, AI, CONNECT). Keep this list in sync if the spine
-  // ever gains a seventh verb; otherwise the palette will be out of date
-  // with the homepage's own primary nav.
+  // EXPLORE group — the 7 homepage verb-spine routes, three curated
+  // destinations (Concepts, Devtoberfest, Developer Advocates — #1036),
+  // and the Knowledge Graph Explorer. Order matches the verb-spine partial
+  // at hugo/layouts/partials/homepage/verb-spine.html (LEARN, BUILD,
+  // INTEGRATE, MODEL, OPERATE, AI, CONNECT). Keep the verb list in sync if
+  // the spine ever gains an eighth verb; otherwise the palette will be out
+  // of date with the homepage's own primary nav.
   {
     id: 'explore-learn',
     label: 'Learn — getting started with SAP for developers',
@@ -166,6 +172,16 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
     keywords: ['integrate', 'integration', 'api', 'events', 'connectivity', 'destination', 'verb'],
     group: 'explore',
     run: navTo('/integrate/'),
+  },
+  {
+    // (#1029) MODEL — data-platform verb: HANA Cloud, Datasphere, Business
+    // Data Cloud, SAP Analytics Cloud. CAP CDS stays under BUILD.
+    id: 'explore-model',
+    label: 'Model — HANA Cloud, Datasphere, Business Data Cloud, SAC',
+    icon: 'database',
+    keywords: ['model', 'data', 'hana', 'datasphere', 'bdc', 'business data cloud', 'sac', 'analytics', 'calc view', 'semantic', 'verb'],
+    group: 'explore',
+    run: navTo('/model/'),
   },
   {
     id: 'explore-operate',
@@ -192,12 +208,44 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
     run: navTo('/connect/'),
   },
   {
+    id: 'explore-concepts',
+    label: 'Concepts — index of every SAP concept in the knowledge graph',
+    icon: 'bullet-text',
+    keywords: ['concepts', 'index', 'glossary', 'terms', 'kg', 'knowledge'],
+    group: 'explore',
+    run: navTo('/concepts/'),
+  },
+  {
+    id: 'explore-devtoberfest',
+    label: 'Devtoberfest — annual SAP developer festival',
+    icon: 'calendar',
+    keywords: ['devtoberfest', 'festival', 'event', 'weekly', 'challenge', 'october'],
+    group: 'explore',
+    run: navTo('/devtoberfest/'),
+  },
+  {
+    id: 'explore-advocates',
+    label: 'Developer Advocates — meet the SAP DevRel team',
+    icon: 'group',
+    keywords: ['advocates', 'devrel', 'team', 'spokespeople', 'community', 'evangelists'],
+    group: 'explore',
+    run: navTo('/developer-advocates/'),
+  },
+  {
     id: 'explore-knowledge-graph',
     label: 'Knowledge Graph Explorer',
     icon: 'org-chart',
     keywords: ['knowledge graph', 'kg', 'graph', 'concepts', 'map', 'network', 'explore', 'visualization'],
     group: 'explore',
     run: navTo('/explore/'),
+  },
+  {
+    id: 'explore-api-docs',
+    label: 'API — HTTP services, sap-devs CLI, MCP server, and feeds',
+    icon: 'command-line',
+    keywords: ['api', 'apis', 'graphql', 'odata', 'rest', 'cli', 'sap-devs', 'mcp', 'feed', 'rss', 'edmx', 'openapi', 'schema', 'developer', 'programmatic'],
+    group: 'explore',
+    run: navTo('/api-docs/'),
   },
 ]
 

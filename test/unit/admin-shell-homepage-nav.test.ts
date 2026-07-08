@@ -18,12 +18,14 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
       const group = nav.groups.find((g: any) => g.key === 'homepageGroup')
       expect(group, 'homepageGroup must exist at top level').toBeTruthy()
       // Order matters: Shelves first, then the two explainer apps (#759),
-      // then For-you candidates (#763), then Redirects and Config. Any reorder
-      // here is a UI regression.
+      // then For-you candidates (#763), then Redirects and Config, and
+      // finally the two video admin surfaces (#1031). Any reorder here is
+      // a UI regression.
       expect(group.items.map((i: any) => i.key)).toEqual([
         'homepageShelves', 'verbDefinitions', 'shelfDefinitions',
         'forYou',
         'homepageRedirects', 'homepageConfig',
+        'videos', 'videoRotation',
       ])
     })
 
@@ -83,6 +85,15 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
       expect(ctrl).toMatch(/homepageConfig:\s*"homepageConfig"/)
     })
 
+    // #763 — For-you Candidates nav-key must be wired into the controller's
+    // lookup table. Without this, onNavItemSelect silently no-ops (nothing in
+    // NAV_KEY_TO_ROUTE → the `if (sRoute)` guard skips navTo) and the sidebar
+    // click does nothing at all: no URL change, no error, no network call.
+    it('maps the forYou nav-key in NAV_KEY_TO_ROUTE + NAV_KEY_TO_TITLE (#763)', () => {
+      expect(ctrl).toMatch(/forYou:\s*"forYou"/)
+      expect(ctrl).toMatch(/forYou:\s*"For-you Candidates"/)
+    })
+
     it('has titles for the three new nav-keys', () => {
       // Note: NAV_KEY_TO_TITLE uses "Homepage Shelves" / "Homepage Redirects" /
       // "Homepage Config" (used as the page-header / document title), while
@@ -97,7 +108,11 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
 
     it('pushes the inner hash for Redirects and Config (pipelinelog/joblog precedent)', () => {
       expect(ctrl).toMatch(/setHash\("homepageRedirects&\/hp\/Redirects"\)/)
-      expect(ctrl).toMatch(/setHash\("homepageConfig&\/hp\/Config"\)/)
+      // HomepageConfig was demoted from @odata.singleton to a keyed collection
+      // (see srv/admin-service.cds header comment); fixed singleton UUID from
+      // srv/admin-service.js:601 (HOMEPAGE_CONFIG_SINGLETON_ID) must be in the
+      // hash so the OP deep-link resolves.
+      expect(ctrl).toMatch(/setHash\("homepageConfig&\/hp\/HomepageConfig\(00000000-0000-0000-0000-00000000c8ae\)"\)/)
     })
 
     it('does NOT setHash for homepageShelves (defaults to inner ShelvesList route)', () => {

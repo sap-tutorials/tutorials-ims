@@ -52,6 +52,10 @@ const CATALOG_ONLY_ENTITIES = new Set([
   // mode rebuilds the full set of /build/* feeds in ~1 min wall-clock.
   'VerbDefinitions',
   'ShelfDefinitions',
+  // #1032: FeaturedTopics admin writes affect the featured topics carousel
+  // served from /build/featured-topics, not tutorial-page HTML. catalog-only
+  // mode rebuilds the full set in ~1 min wall-clock.
+  'FeaturedTopics',
 ]);
 
 // Entities whose CRUD targets a specific tutorial. Re-fetch one markdown,

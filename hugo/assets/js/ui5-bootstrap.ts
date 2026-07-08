@@ -110,6 +110,9 @@ import "@ui5/webcomponents-icons/dist/course-book.js";
 // (#713 wired it into CI). Without this import the menu row's glyph slot
 // is allocated but never paints.
 import "@ui5/webcomponents-icons/dist/org-chart.js";
+// API top-nav popover item — icon="command-line-interfaces". Same "glyph
+// slot painted blank" symptom as org-chart above when the import is missing.
+import "@ui5/webcomponents-icons/dist/command-line-interfaces.js";
 import "@ui5/webcomponents-icons/dist/flight.js";
 import "@ui5/webcomponents-icons/dist/sys-monitor.js";
 import "@ui5/webcomponents-icons/dist/complete.js";
@@ -136,8 +139,22 @@ import "@ui5/webcomponents-icons/dist/customer-and-contacts.js";
 import "@ui5/webcomponents-icons/dist/learning-assistant.js";
 import "@ui5/webcomponents-icons/dist/developer-settings.js";
 import "@ui5/webcomponents-icons/dist/chain-link.js";
+// MODEL verb (#1029) — homepage tile + top-nav dropdown row + verb-page
+// header render `<ui5-icon name="database">`. Missed on the #1038 rollout
+// because the icon-imports guard was scoped to `dict "icon" "…"` and
+// verb-spine.html uses `dict "iconName" "…"`; guard widened in this PR.
+import "@ui5/webcomponents-icons/dist/database.js";
 import "@ui5/webcomponents-icons/dist/favorite.js";
 import "@ui5/webcomponents-icons/dist/unfavorite.js";
+// (#1039) Shelf-section pictograms rendered by hugo/layouts/verb/list.html
+// on the four shelves (Start here → learning-assistant, above; Reference
+// → document; Tools & samples → wrench; Keep current → newspaper). Values
+// are editable in the ShelfDefinitions admin app, so an editor can pick
+// any registered Fiori glyph — additional names may need registrations
+// here on the same "silent glyph miss" pattern as the verb tiles above.
+import "@ui5/webcomponents-icons/dist/document.js";
+import "@ui5/webcomponents-icons/dist/wrench.js";
+import "@ui5/webcomponents-icons/dist/newspaper.js";
 // U12: reader-mode toggle in shellbar (documents → decline on activation).
 import "@ui5/webcomponents-icons/dist/documents.js";
 import "@ui5/webcomponents-icons/dist/decline.js";

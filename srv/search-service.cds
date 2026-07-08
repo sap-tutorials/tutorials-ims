@@ -15,9 +15,12 @@ type FacetResult {
 
 @path: '/search'
 @requires: 'any'
-@odata
-@graphql
-@mcp
+// NB: MUST be `@protocol: ['odata', 'graphql', 'mcp']`, not the `@graphql` /
+// `@mcp` single-protocol shortcuts. Either shortcut alone REPLACES the default
+// OData mount, leaving `/search/SearchableItems` 404 while the other protocol
+// still resolves. `@graphql` regression cost 218 unit tests on 2026-07-05
+// (misattributed to HCQL, reverted in #1004). `@mcp` added by #912.
+@protocol: ['odata', 'graphql', 'mcp']
 service SearchService {
 
   // Per-element fuzziness threshold: entity-level @Search.fuzzinessThreshold

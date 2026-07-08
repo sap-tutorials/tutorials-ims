@@ -169,6 +169,46 @@
   line-height: 1.6;
 }
 
+/* Two-column layout for the "How it's built" prose.
+   Falls back to a single column on narrow viewports. */
+.kg-overview__diagram-cols {
+  max-width: 64rem;
+  margin: 1.5rem auto 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+.kg-overview__diagram-col > p,
+.kg-overview__diagram-col > ul {
+  max-width: none;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.kg-overview__diagram-col > * + * {
+  margin-top: 1rem;
+}
+
+.kg-overview__source-list {
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+.kg-overview__source-list li {
+  margin: .35rem 0;
+}
+.kg-overview__source-list code {
+  font-size: .9em;
+}
+
+@media (max-width: 780px) {
+  .kg-overview__diagram-cols {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    max-width: 48rem;
+  }
+}
+
 /* Corpus grid */
 .kg-overview__corpus {
   display: grid;
@@ -182,7 +222,13 @@
   padding: 1.5rem;
   text-align: center;
 }
-.kg-overview__corpus-card .icon { font-size: 2rem; line-height: 1; margin-bottom: .5rem; }
+.kg-overview__corpus-card .icon {
+  font-size: 2.5rem;
+  line-height: 1;
+  margin-bottom: .5rem;
+  color: var(--sapBrandColor, #0a6ed1);
+  display: inline-block;
+}
 .kg-overview__corpus-card h3 { margin: 0 0 .25rem; font-size: 1.125rem; }
 .kg-overview__corpus-card .count {
   display: block;

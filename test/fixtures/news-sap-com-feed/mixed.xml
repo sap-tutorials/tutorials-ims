@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>New CAP release brings Java 22</title>
+    <link>https://news.sap.com/2026/07/cap-10/</link>
+    <pubDate>Mon, 06 Jul 2026 09:00:00 +0000</pubDate>
+    <description>The CAP framework is the future of SAP development for developers.</description>
+    <guid isPermaLink="false">news-1</guid>
+  </item>
+  <item>
+    <title>Q2 earnings update</title>
+    <link>https://news.sap.com/2026/07/earnings/?utm_source=rss</link>
+    <pubDate>Mon, 06 Jul 2026 08:00:00 +0000</pubDate>
+    <description>The board of directors will meet to discuss revenue and guidance.</description>
+  </item>
+  <item>
+    <title>Nachrichten aus SAP</title>
+    <link>https://news.sap.com/2026/07/de/</link>
+    <pubDate>Mon, 06 Jul 2026 07:00:00 +0000</pubDate>
+    <description>Ein deutscher Text ohne englische Funktionswoerter.</description>
+  </item>
+</channel></rss>
