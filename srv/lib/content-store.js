@@ -396,14 +396,26 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
           // On HANA, BLOBs come back as locator-bound streams when mixed with
           // metadata. Use raw SQL to materialize content as a buffer up front,
           // matching the same pattern used in the serve handler.
-          const placeholders = slugs.length ? slugs.map(() => '?').join(',') : "''";
-          carryRows = await db.run(
+          //
+          // Packet-size guard (memory: cqn-where-in-hana-packet-cap.md; same
+          // class as PR #1108): the prior form sent one placeholder per
+          // fresh slug (~7,315 on a full publish) which blew HANA's parameter
+          // batch. Fetch ALL prev-version rows unbounded and filter freshly-
+          // written slugs in Node — `NOT IN` chunking is wrong (each chunk
+          // still returns rows in other chunks), and row count at a single
+          // manifest version is bounded by the tutorial catalog.
+          //
+          // NOTE: This materializes prev-version BLOBs in memory. Content is
+          // gzip-compressed; catalog worst case ~200 MB. Kept in sync with
+          // srv/lib/content-publish-session.js:carryForwardUnchanged.
+          const freshSlugSet = new Set(slugs);
+          const allPrev = await db.run(
             `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
                FROM "${hanaTableName()}"
-              WHERE "VERSION" = ? AND "SLUG" NOT IN (${placeholders})`,
-            [prevVersion, ...slugs]
+              WHERE "VERSION" = ?`,
+            [prevVersion]
           );
-          carryRows = carryRows.map((r) => ({
+          carryRows = allPrev.filter((r) => !freshSlugSet.has(r.SLUG)).map((r) => ({
             slug: r.SLUG,
             content: r.CONTENT,
             contentHash: r.CONTENTHASH,

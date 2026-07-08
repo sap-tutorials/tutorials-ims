@@ -1105,14 +1105,29 @@ async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getAc
     // On HANA, BLOBs come back as locator-bound streams when mixed with
     // metadata. Use raw SQL to materialize content as a buffer up front,
     // matching the same pattern used in the serve handler.
-    const placeholders = slugs.length ? slugs.map(() => '?').join(',') : "''";
-    carryRows = await db.run(
+    //
+    // Packet-size guard (memory: cqn-where-in-hana-packet-cap.md; same
+    // class as #1103 and PR #1108): a raw `SLUG NOT IN (?, ?, …)` with
+    // one placeholder per fresh slug (~7,315 on a full publish) blows
+    // HANA's parameter batch. Fetch ALL prev-version rows unbounded
+    // and filter freshly-written slugs in Node — `NOT IN` chunking is
+    // wrong (`NOT IN (chunk1)` still returns rows in chunk2/3/…), and
+    // the row-count at a single manifest version is bounded by the
+    // tutorial catalog (~7,315), well under the 5 MB budget once BLOBs
+    // are pulled row-at-a-time by iterating in Node.
+    //
+    // NOTE: This DOES materialize all BLOBs for the previously-ACTIVE
+    // version in memory. Content is gzip-compressed; catalog worst
+    // case ~200 MB. If that becomes a memory pressure issue, split by
+    // slug prefix or version-range instead.
+    const freshSlugSet = new Set(slugs);
+    const allPrev = await db.run(
       `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
          FROM "${hanaTableName()}"
-        WHERE "VERSION" = ? AND "SLUG" NOT IN (${placeholders})`,
-      [prevVersion, ...slugs]
+        WHERE "VERSION" = ?`,
+      [prevVersion]
     );
-    carryRows = carryRows.map((r) => ({
+    carryRows = allPrev.filter((r) => !freshSlugSet.has(r.SLUG)).map((r) => ({
       slug: r.SLUG,
       content: r.CONTENT,
       contentHash: r.CONTENTHASH,
@@ -1196,27 +1211,38 @@ async function recomputeProgressForChangedTutorials(namespace, newVersion) {
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
   const { table, idCol, slugCol } = tutorialsTableInfo(namespace, isHana);
 
-  // Resolve all slugs → tutorialIds in ONE query.
+  // Resolve all slugs → tutorialIds. Chunk the IN-list to stay under
+  // HANA's parameter batch (memory: cqn-where-in-hana-packet-cap.md;
+  // same class as PR #1108). Positive IN chunks correctly — union of
+  // per-chunk hits is the same as the single unbounded query. Prior
+  // implementation sent one placeholder per slug (~7,315) which blew
+  // the packet cap on every commit.
   const lowerSlugs = slugs.map(s => s.toLowerCase());
-  let hits;
-  try {
-    const placeholders = lowerSlugs.map(() => '?').join(',');
-    hits = await db.run(
-      `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${placeholders})`,
-      lowerSlugs
-    );
-  } catch (e) {
-    // Fallback: some HANA driver versions reject positional placeholders for
-    // IN (...). Interpolate a sanitized single-quoted list. Slugs are
-    // case-folded already and the DB schema constrains them, but the
-    // single-quote escape is belt-and-suspenders.
-    LOG.warn(`recomputeProgressForChangedTutorials: positional bind failed (${e.message}); falling back to inline literal`);
-    const lit = lowerSlugs.map(s => `'${String(s).replace(/'/g, "''")}'`).join(',');
-    hits = await db.run(
-      `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${lit})`
-    );
+  const CHUNK = 500;
+  const hits = [];
+  for (let i = 0; i < lowerSlugs.length; i += CHUNK) {
+    const chunk = lowerSlugs.slice(i, i + CHUNK);
+    let batch;
+    try {
+      const placeholders = chunk.map(() => '?').join(',');
+      batch = await db.run(
+        `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${placeholders})`,
+        chunk
+      );
+    } catch (e) {
+      // Fallback: some HANA driver versions reject positional placeholders for
+      // IN (...). Interpolate a sanitized single-quoted list. Slugs are
+      // case-folded already and the DB schema constrains them, but the
+      // single-quote escape is belt-and-suspenders.
+      LOG.warn(`recomputeProgressForChangedTutorials: positional bind failed (${e.message}); falling back to inline literal`);
+      const lit = chunk.map(s => `'${String(s).replace(/'/g, "''")}'`).join(',');
+      batch = await db.run(
+        `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${lit})`
+      );
+    }
+    if (batch) hits.push(...batch);
   }
-  const tutorialIds = (hits || [])
+  const tutorialIds = hits
     .map(h => h.ID ?? h.id)
     .filter(id => typeof id === 'string' && id.length > 0);
   if (tutorialIds.length === 0) return;
