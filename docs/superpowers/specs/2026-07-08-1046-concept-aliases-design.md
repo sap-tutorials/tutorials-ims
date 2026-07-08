@@ -58,7 +58,8 @@ Notes:
 - HANA index on `aliasLower` via a `.hdbindex` artifact (`INDEX name ON ConceptAliases(aliasLower)` — no SQL verbs per the HDI-artifacts constraint documented in `docs/developers/reference/hana-hdi-gotchas.md`).
 - `source` lets an admin filter LLM-generated rows vs hand-added ones.
 - Cascade-delete on Concept DELETE is automatic via the composition.
-- A tiny `AliasSources { key code : String(20); label : String; }` reference table seeded from `db/data/AliasSources.csv` (3 rows: `LLM`, `ADMIN`, `SEED`) powers the source dropdown. The table has no admin-editable columns, so CSV replays are safe against the `csv-changes-wipe-editable-columns` regression.
+- A tiny `AliasSources` reference table for a value-help dropdown on the `source` field is **deferred** — see the admin UI section for the `@cap-js/ai` rationale.
+- Cascade-delete on Concept DELETE is automatic via the composition.
 
 ### Backend — `srv/knowledge-graph-service.cds` + `.js`
 
@@ -163,58 +164,62 @@ Per-concept payload: `{name, description, top-3 linking tutorial titles}`.
 
 ### Admin UI — sub-table facet on the Concept Object Page
 
-**Where:** `app/admin/concepts/webapp/annotations.cds` (facet + line-item annotations) and `srv/admin-service.cds` (composition exposure).
+**Where the Concept OP actually lives:** The `/admin-ui/#concepts` tile's manifest binds to `/graph/` — i.e., `KnowledgeGraphService`, not `AdminService`. All existing Concept OP annotations (Facets, LineItem, FieldGroup #General, Identification actions) sit in `app/admin-annotations.cds` under `annotate KnowledgeGraphService.Concepts with @(...)` at line ~2528. The new aliases facet and its child `ConceptAliases` annotations extend that same block — no `AdminService` changes needed.
 
-**Facet annotation:**
+**Files:**
+
+- `srv/knowledge-graph-service.cds` — expose the composition through the writable `Concepts` projection AND declare a `ConceptAliases` projection so FE can round-trip it.
+- `app/admin-annotations.cds` — add one new Facet entry to the existing Concept `@UI.Facets` array + a new `annotate KnowledgeGraphService.ConceptAliases with { @UI.LineItem ... }` block.
+- `srv/knowledge-graph-service.js` — before-write hook on `ConceptAliases` that lowercases `aliasLower`.
+
+**Service wiring in `srv/knowledge-graph-service.cds`:**
+
+The existing writable `Concepts` projection at line 61 is `entity Concepts as projection on ims.Concepts excluding { embedding };` — with `excluding`, the composition `aliases` (defined on the base entity in `db/knowledge-graph.cds`) is auto-included. So the change is small:
 
 ```cds
-annotate service.Concepts with @UI.Facets : [
-  // ... existing facets (Info, Extraction, Publication, Links, Edges) ...
-  { $Type: 'UI.ReferenceFacet',
-    ID: 'AliasesFacet',
-    Label: '{i18n>facet.aliases}',
-    Target: 'aliases/@UI.LineItem'
-  }
-];
+// Add — writable so FE draft can insert/update/delete alias rows.
+entity ConceptAliases as projection on ims.ConceptAliases;
+```
 
-annotate service.ConceptAliases with @UI.LineItem : [
-  { $Type: 'UI.DataField', Value: alias,      Label: '{i18n>col.alias}' },
-  { $Type: 'UI.DataField', Value: source,     Label: '{i18n>col.source}' },
-  { $Type: 'UI.DataField', Value: modifiedAt, Label: '{i18n>col.modifiedAt}' }
-];
+The `Concepts` projection itself needs no edit; the composition flows through.
 
-annotate service.ConceptAliases with {
-  alias  @title: '{i18n>col.alias}';
-  source @title: '{i18n>col.source}';
+**Facet annotation (append to the existing `UI.Facets` array in `app/admin-annotations.cds:2586`):**
+
+```cds
+UI.Facets: [
+  { $Type: 'UI.ReferenceFacet', Label: 'General',        Target: '@UI.FieldGroup#General' },
+  { $Type: 'UI.ReferenceFacet', Label: 'Tutorials',      Target: 'links/@UI.LineItem' },
+  { $Type: 'UI.ReferenceFacet', Label: 'Outgoing edges', Target: 'outgoingEdges/@UI.LineItem' },
+  { $Type: 'UI.ReferenceFacet', Label: 'Incoming edges', Target: 'incomingEdges/@UI.LineItem' },
+  { $Type: 'UI.ReferenceFacet', Label: 'Aliases',        Target: 'aliases/@UI.LineItem' }   // ← new
+],
+```
+
+**New `ConceptAliases` annotation block (append after existing `TutorialConceptLinks`/`ConceptEdges` blocks at ~line 2650):**
+
+```cds
+annotate KnowledgeGraphService.ConceptAliases with {
+  alias      @Common.Label: 'Alias';
+  source     @Common.Label: 'Source';
+  modifiedAt @Common.Label: 'Modified At';
+};
+
+annotate KnowledgeGraphService.ConceptAliases with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: alias,      Label: 'Alias' },
+    { $Type: 'UI.DataField', Value: source,     Label: 'Source' },
+    { $Type: 'UI.DataField', Value: modifiedAt, Label: 'Modified At' }
+  ]
 };
 ```
 
-**Admin service wiring (`srv/admin-service.cds`):**
+**Draft posture:** The existing `Concepts` projection is writable but *not* draft-enabled (see the comment at line 42 explaining this is intentional — direct PATCH for `name`/`description`). Aliases inherit the same posture: inline CREATE/UPDATE/DELETE on `ConceptAliases` via the composition, no draft round-trip. FE inline-create in a sub-table facet works with a non-draft parent — it uses immediate deep-CREATE against `/graph/Concepts(<uuid>)/aliases`.
 
-The existing admin `Concepts` projection at `srv/admin-service.cds:1014` today is:
-
-```cds
-entity Concepts as projection on ims.Concepts { ID, slug, name, status };
-```
-
-Extend the column list to expose the composition so FE can discover it:
-
-```cds
-entity Concepts as projection on ims.Concepts {
-  ID, slug, name, status,
-  aliases
-};
-
-@cds.autoexpose entity ConceptAliases as projection on ims.ConceptAliases;
-```
-
-The composition itself is declared once on the base entity in `db/knowledge-graph.cds` (via `extend entity Concepts with { aliases : ... }`); the admin projection just references it by name.
-
-**Before-write hook (`srv/admin-service.js`):**
+**Before-write hook (`srv/knowledge-graph-service.js`):**
 
 ```js
 srv.before(['CREATE', 'UPDATE'], 'ConceptAliases', (req) => {
-  if (req.data.alias) {
+  if (typeof req.data.alias === 'string') {
     req.data.aliasLower = req.data.alias.toLowerCase().trim()
   }
 })
@@ -223,15 +228,17 @@ srv.before(['CREATE', 'UPDATE'], 'ConceptAliases', (req) => {
 **UX:**
 
 - Admin opens `/admin-ui/#concepts` → clicks a concept row → sees an "Aliases" facet with a table (empty state: "No aliases yet").
-- Standard FE "Add" opens a create-row dialog with `alias` (freeform) + `source` (defaults to `ADMIN` on inline-create; the admin UI never writes `LLM`).
-- Save flows through FE draft → activate — the before-hook lowercases `aliasLower`, `@assert.unique.conceptAlias` runs on activate. Duplicates surface as the standard "Value already exists" toast.
+- Standard FE inline-create adds an alias row. `source` defaults to `LLM` per the CDS default; the admin overrides to `ADMIN` in the row-detail (simplest UX; no custom controller).
+- Save fires an immediate deep-CREATE. The before-hook lowercases `aliasLower`; `@assert.unique.conceptAlias` runs at commit. Duplicates surface as the standard "Value already exists" toast.
 - Delete a row through standard FE row-action.
 
-**No new controller extension** — clean FE draft round-trip, unlike `ConceptActionsController` which hand-rolls HTTP POSTs for `mergeConcepts`/`vetoConcept`.
+**No new controller extension** — reuses standard FE plumbing. `ConceptActionsController` stays untouched.
 
 **Guard against `@cap-js/ai` crash:**
 
-- The `alias` field is short freeform text. Do NOT annotate it with `@Common.ValueList` — the `@cap-js/ai` plugin's after-write hook fires on every draft Create with a ValueList field and crashes on the AICore binding (documented in `docs/developers/reference/cap-ai-plugin.md` and the memory file `cap-ai-plugin-aicore-kind-resolution.md`). If future work wants recommendations here, add `@UI.RecommendationState: 0` per that escape hatch.
+- The `alias` field is short freeform text. Do NOT annotate it with `@Common.ValueList` — the `@cap-js/ai` plugin's after-write hook fires on every Create with a ValueList field and crashes on the AICore binding (documented in `docs/developers/reference/cap-ai-plugin.md` and the memory file `cap-ai-plugin-aicore-kind-resolution.md`). If future work wants recommendations here, add `@UI.RecommendationState: 0` per that escape hatch.
+
+**Value-help for `source`:** Deferred to a follow-up. In v1, `source` is a plain freeform String(20) with a CDS `default 'LLM'`. Admins type `ADMIN` when editing manually. Adding a `AliasSources` reference table + `@Common.ValueList` triggers the `@cap-js/ai` hazard above; the three-value enum isn't worth the risk in v1. Documented as a non-goal below.
 
 ### Palette front-end — `hugo-apps/src/cmd-palette/CommandPalette.vue`
 
@@ -313,16 +320,14 @@ One-off backfill (once, before first user hit)
 - No search-highlight of which alias matched. Adds UI complexity for marginal value.
 - No feedback loop from palette clicks to concept extraction quality (that's #948's on-demand path, a different subsystem).
 - No scheduled re-backfill job. Concept growth cadence doesn't justify one yet.
+- No `AliasSources` value-help table. Three-value enum isn't worth the `@cap-js/ai` risk in v1; freeform String with a CDS default suffices.
 
 ## Files touched
 
 New:
 
-- `db/knowledge-graph.cds` (extend — new entity + composition)
-- `db/data/AliasSources.csv` + `.hdbtabledata` companion
-- `db/src/indexes/ConceptAliases_aliasLower.hdbindex` (or wherever `.hdbindex` files live in this repo — the plan step confirms)
 - `srv/scripts/concept-alias-backfill.js`
-- `app/admin/concepts/webapp/annotations.cds` — extend with the aliases facet (or the equivalent existing file — plan will confirm)
+- `db/src/IDX_CONCEPT_ALIASES_LOWER.hdbindex`
 - `test/kg-concept-aliases.test.js`
 - `test/palette-published-concepts-with-aliases.test.js`
 - `test/hybrid/kg-aliases-hybrid.test.js`
@@ -330,11 +335,11 @@ New:
 
 Modified:
 
-- `srv/knowledge-graph-service.cds` (add `PublishedConceptsWithAliases` + `ConceptAliases` projection)
-- `srv/knowledge-graph-service.js` (add after-READ hydrator)
-- `srv/admin-service.cds` (extend Concepts with `aliases`, expose `ConceptAliases`)
-- `srv/admin-service.js` (before-write hook lowercasing `aliasLower`)
-- `hugo-apps/src/cmd-palette/CommandPalette.vue` (URL swap only)
-- Existing static-check test that greps `srv/knowledge-graph-service.cds` — extend with the `@cds.search` assertion
+- `db/knowledge-graph.cds` (add `ConceptAliases` entity + extend `Concepts` with `aliases` composition)
+- `srv/knowledge-graph-service.cds` (add `PublishedConceptsWithAliases` + `ConceptAliases` projections)
+- `srv/knowledge-graph-service.js` (add after-READ hydrator on `PublishedConceptsWithAliases` + before-write lowercasing hook on `ConceptAliases`)
+- `app/admin-annotations.cds` (add "Aliases" facet entry + `ConceptAliases` LineItem/Label annotations)
+- `hugo-apps/src/cmd-palette/CommandPalette.vue` (URL swap only, ~line 325)
+- One existing static-check test — extend with the `@cds.search` regression assertion
 
 Estimated effort: **2–3 hours + one backfill run**, matching the issue's estimate.
