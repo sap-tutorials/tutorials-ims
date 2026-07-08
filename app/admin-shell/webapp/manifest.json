@@ -48,6 +48,7 @@
       "sap.tutorials.admin.tags": "./components/tags",
       "sap.tutorials.admin.categories": "./components/categories",
       "sap.tutorials.admin.concepts": "./components/concepts",
+      "sap.tutorials.admin.contentModeration": "./components/content-moderation",
       "sap.tutorials.admin.advocates": "./components/advocates",
       "sap.tutorials.admin.alerts": "./components/alerts",
       "sap.tutorials.admin.accomplishments": "./components/accomplishments",
@@ -296,6 +297,24 @@
         "settings": {},
         "componentData": {},
         "lazy": true
+      },
+      "videosComponent": {
+        "name": "sap.tutorials.admin.videos",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "videoRotationComponent": {
+        "name": "sap.tutorials.admin.videoRotation",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "contentModerationComponent": {
+        "name": "sap.tutorials.admin.contentModeration",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
       }
     },
     "services": {
@@ -362,12 +381,15 @@
         { "name": "shelfDefinitions", "pattern": "shelf-definitions", "target": [{"name": "shelfDefinitionsTarget", "prefix": "sd"}] },
         { "name": "forYou",           "pattern": "for-you",           "target": [{"name": "forYouTarget",           "prefix": "fy"}] },
         { "name": "featuredTopics",   "pattern": "featured-topics",   "target": [{"name": "featuredTopicsTarget",   "prefix": "ft"}] },
+        { "name": "videos",         "pattern": "videos",         "target": [{"name": "videosTarget",         "prefix": "vi"}] },
+        { "name": "videoRotation",  "pattern": "video-rotation", "target": [{"name": "videoRotationTarget",  "prefix": "vr"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
         { "name": "metrics", "pattern": "metrics", "target": "metricsTarget" },
         { "name": "dataExport", "pattern": "dataExport", "target": "dataExportTarget" },
         { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" },
+        { "name": "contentModeration", "pattern": "content-moderation", "target": [{"name": "contentModerationTarget", "prefix": "cm"}] },
         { "name": "noAccess", "pattern": "noAccess", "target": "noAccessTarget" }
       ],
       "targets": {
@@ -602,6 +624,20 @@
           "viewLevel": 1,
           "prefix": "ft"
         },
+        "videosTarget": {
+          "type": "Component",
+          "usage": "videosComponent",
+          "id": "videosTarget",
+          "viewLevel": 1,
+          "prefix": "vi"
+        },
+        "videoRotationTarget": {
+          "type": "Component",
+          "usage": "videoRotationComponent",
+          "id": "videoRotationTarget",
+          "viewLevel": 1,
+          "prefix": "vr"
+        },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",
           "viewLevel": 1
@@ -625,6 +661,13 @@
         "dataExportTarget": {
           "viewName": "DataExport",
           "viewLevel": 1
+        },
+        "contentModerationTarget": {
+          "type": "Component",
+          "usage": "contentModerationComponent",
+          "id": "contentModerationTarget",
+          "viewLevel": 1,
+          "prefix": "cm"
         },
         "privacyTarget": {
           "viewName": "Privacy",

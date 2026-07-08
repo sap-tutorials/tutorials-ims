@@ -1,7 +1,7 @@
 // test/unit/homepage-service-endpoints.test.js
 // Tests for HomepageService (#639) — verifies each endpoint returns the documented shape.
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import cds from '@sap/cds';
 import { _resetForTests as resetHomepageCaches } from '../../srv/homepage-service.js';
 
@@ -105,6 +105,102 @@ describe('HomepageService endpoints', () => {
   it('news() returns array', async () => {
     const out = await svc.send('news', {});
     expect(Array.isArray(out)).toBe(true);
+  });
+});
+
+describe('/homepage/videos merges anchors + rotation (#1031)', () => {
+  const NS_EXT = 'com.sap.developers.ims.external';
+  const NS = 'com.sap.developers.ims';
+  const HOMEPAGE_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8ae';
+
+  beforeEach(async () => {
+    const db = await cds.connect.to('db');
+    await db.run(DELETE.from(`${NS}.HomepageVideoRotation`));
+    await db.run(DELETE.from(`${NS_EXT}.Videos`));
+    await db.run(DELETE.from(`${NS}.HomepageConfig`));
+    await UPSERT.into(`${NS}.HomepageConfig`).entries({
+      ID: HOMEPAGE_CONFIG_SINGLETON_ID,
+      videoBandEnabled: true,
+      videoBandAnchorCount: 3,
+      videoBandRotationCount: 3,
+    });
+  });
+
+  async function seed(videoId, daysAgo) {
+    await INSERT.into(`${NS_EXT}.Videos`).entries({
+      slug: `vd-${videoId}`, title: `V-${videoId}`, description: '',
+      url: '', youtubeVideoId: videoId,
+      publishedAt: new Date(Date.now() - daysAgo * 86400_000).toISOString(),
+      channelTitle: 'SAP Developers', thumbnailUrl: `https://y/${videoId}.jpg`,
+      sourceId: videoId, contentHash: `h-${videoId}`, viewCount: 0,
+      excludeFromHomepage: false,
+    });
+    return SELECT.one.from(`${NS_EXT}.Videos`).columns('ID').where({ youtubeVideoId: videoId });
+  }
+
+  it('returns anchors tagged kind=anchor and rotation tagged kind=popular', async () => {
+    await seed('newest1', 1);
+    await seed('newest2', 2);
+    await seed('newest3', 3);
+    const pop1 = await seed('pop1', 30);
+    const pop2 = await seed('pop2', 60);
+    await INSERT.into(`${NS}.HomepageVideoRotation`).entries([
+      { video_ID: pop1.ID, rank: 1 },
+      { video_ID: pop2.ID, rank: 2 },
+    ]);
+
+    const srv = await cds.connect.to('HomepageService');
+    const res = await srv.send('videos');
+    const anchors = res.recent.filter(r => r.kind === 'anchor');
+    const populars = res.recent.filter(r => r.kind === 'popular');
+    expect(anchors.map(a => a.videoId)).toEqual(['newest1', 'newest2', 'newest3']);
+    expect(populars.map(p => p.videoId)).toEqual(['pop1', 'pop2']);
+  });
+
+  it('dedupes rotation entries that are already in anchors', async () => {
+    const a = await seed('shared', 1);
+    await seed('newest2', 2);
+    await seed('newest3', 3);
+    await INSERT.into(`${NS}.HomepageVideoRotation`).entries([
+      { video_ID: a.ID, rank: 1 },
+    ]);
+
+    const srv = await cds.connect.to('HomepageService');
+    const res = await srv.send('videos');
+    const ids = res.recent.map(r => r.videoId);
+    expect(new Set(ids).size).toBe(ids.length);       // no dupes
+    expect(ids.filter(x => x === 'shared')).toHaveLength(1);
+    expect(res.recent.find(r => r.videoId === 'shared').kind).toBe('anchor');
+  });
+
+  it('honors excludeFromHomepage on both anchors and rotation', async () => {
+    const db = await cds.connect.to('db');
+    const excluded = await seed('excluded', 1);
+    await db.run(UPDATE(`${NS_EXT}.Videos`).set({ excludeFromHomepage: true }).where({ ID: excluded.ID }));
+    await seed('keep1', 5);
+
+    // Also insert a rotation row pointing at the excluded video — must be filtered
+    // by the JOIN's where({'v.excludeFromHomepage': false}).
+    const excludedRotation = await SELECT.one.from(`${NS_EXT}.Videos`).columns('ID').where({ youtubeVideoId: 'excluded' });
+    await INSERT.into(`${NS}.HomepageVideoRotation`).entries([{ video_ID: excludedRotation.ID, rank: 1 }]);
+
+    const srv = await cds.connect.to('HomepageService');
+    const res = await srv.send('videos');
+    expect(res.recent.find(r => r.videoId === 'excluded')).toBeUndefined();
+  });
+
+  it('when videoBandRotationCount = 0, returns anchors only', async () => {
+    const db = await cds.connect.to('db');
+    await db.run(UPDATE(`${NS}.HomepageConfig`).set({ videoBandAnchorCount: 1, videoBandRotationCount: 0 })
+      .where({ ID: HOMEPAGE_CONFIG_SINGLETON_ID }));
+    await seed('a', 1);
+    const pop = await seed('p', 30);
+    await INSERT.into(`${NS}.HomepageVideoRotation`).entries([{ video_ID: pop.ID, rank: 1 }]);
+
+    const srv = await cds.connect.to('HomepageService');
+    const res = await srv.send('videos');
+    expect(res.recent.map(r => r.videoId)).toEqual(['a']);
+    expect(res.recent.every(r => r.kind === 'anchor')).toBe(true);
   });
 });
 

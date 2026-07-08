@@ -28,7 +28,8 @@ import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
 import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
-import { resetFtCache } from './homepage-service.js';
+import { resetFtCache, resetCommunityBlogsCache } from './homepage-service.js';
+import { runReshuffleVideoRotation } from './jobs/reshuffle-video-rotation.js';
 import * as metrics from './lib/metrics.js';
 import {
   listAlertSeverities,
@@ -659,6 +660,77 @@ export default class AdminService extends cds.ApplicationService {
         await INSERT.into('com.sap.developers.ims.ShelfDefinitions').entries(missing);
       }
     });
+
+    // (#1033) CommunityBlogSources auto-init. Defensive runtime fallback
+    // mirroring the seed CSV in db/data — protects fresh subaccounts where
+    // the CSV hasn't landed yet (or the auto-init fires before the DB
+    // deployer). Only inserts if the table is empty; individual missing
+    // rows are NOT re-inserted (that would fight admin deletes).
+    const COMMUNITY_BLOG_SOURCE_DEFAULTS = [
+      {
+        ID:        '00000000-0000-0000-0000-000000c81001',
+        label:     'Community — Technology (all blogs)',
+        feedUrl:   'https://community.sap.com/khhcw49343/rss/Community?interaction.style=blog',
+        topicSlug: 'community-technology',
+        isActive:  true,
+        sortOrder: 10,
+        managed:   true,
+      },
+      {
+        ID:        '00000000-0000-0000-0000-000000c81002',
+        label:     'Technology Blogs by SAP',
+        feedUrl:   'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-sap',
+        topicSlug: 'technology-sap',
+        isActive:  true,
+        sortOrder: 20,
+        managed:   true,
+      },
+      {
+        ID:        '00000000-0000-0000-0000-000000c81003',
+        label:     'Technology Blogs by Members',
+        feedUrl:   'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-members',
+        topicSlug: 'technology-members',
+        isActive:  true,
+        sortOrder: 30,
+        managed:   true,
+      },
+    ];
+    this.before('READ', 'CommunityBlogSources', async () => {
+      const existing = await SELECT.from('com.sap.developers.ims.CommunityBlogSources').columns('ID');
+      if (existing.length > 0) return;
+      await INSERT.into('com.sap.developers.ims.CommunityBlogSources')
+        .entries(COMMUNITY_BLOG_SOURCE_DEFAULTS);
+    });
+
+    // (#1033) Reclassify — resets a CommunityBlogPosts row so the
+    // classifier drain re-picks it on the next 15-min tick. SuperAdmin
+    // gate via req.user.is('Admin') is enforced by the service's
+    // @requires: 'Admin' — this handler runs only if authenticated.
+    this.on('reclassifyCommunityBlogPost', async (req) => {
+      const { ID } = req.data;
+      if (!ID) return req.reject(400, 'ID is required');
+      const updated = await UPDATE('com.sap.developers.ims.CommunityBlogPosts')
+        .set({
+          aiVerdict:      'PENDING',
+          aiClassifiedAt: null,
+          aiReason:       null,
+          aiConfidence:   null,
+          attemptCount:   0,
+        })
+        .where({ ID });
+      resetCommunityBlogsCache();
+      return updated > 0;
+    });
+
+    // (#1033) Invalidate the public /homepage/communityBlogs cache whenever
+    // an admin toggles pinned / adminOverride, deletes a post, or CRUDs a
+    // source. after-hooks fire on both direct writes and draft activation.
+    for (const target of ['CommunityBlogPosts', 'CommunityBlogSources']) {
+      this.after(['UPDATE', 'CREATE', 'DELETE'], target, () => {
+        try { resetCommunityBlogsCache(); }
+        catch (err) { /* best-effort */ }
+      });
+    }
 
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
@@ -2870,6 +2942,13 @@ export default class AdminService extends cds.ApplicationService {
       const { count, computedAt } = await cds.tx(async (tx) => recomputeSnapshot(tx));
       resetFtCache();
       return { count, computedAt };
+    });
+
+    // (#1031) recomputeHomepageVideoRotation — SuperAdmin manual trigger.
+    // Same code path as the 4h cron; used for the DEV cutover to populate
+    // HomepageVideoRotation immediately without waiting for the next tick.
+    this.on('recomputeHomepageVideoRotation', async () => {
+      return runReshuffleVideoRotation();
     });
 
     // After-SAVE on the draft-active flow: recompute the snapshot inline

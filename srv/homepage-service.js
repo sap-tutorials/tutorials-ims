@@ -34,6 +34,7 @@ const EVENTS_CACHE_MAX = 16;              // #1030 — LRU cap
 const VALID_REGIONS = new Set(['ALL', 'AMERICAS', 'EMEA', 'APJ', 'VIRTUAL']);
 const REFRESH_TYPES = ['codejam', 'devtoberfest'];   // #1030 — same as refresh cron
 const SHELVES_TTL_MS = 5 * 60 * 1000;     // 5 min
+const COMMUNITY_BLOGS_TTL_MS = 60 * 1000; // (#1033) 60 s — DB-backed now, so cheap TTL
 
 const STATE_KEY = Symbol.for('com.sap.developers.ims:homepage-service');
 const _state = (globalThis[STATE_KEY] ??= {
@@ -43,6 +44,10 @@ const _state = (globalThis[STATE_KEY] ??= {
   shelves: new Map(),
   // (#1032) 60s cache for featuredTopics payload
   ft: { at: 0, payload: null },
+  // (#1033) 60s cache for the rewritten communityBlogs() endpoint
+  communityBlogs: { at: 0, value: null },
+  // (#1034) 60s cache for NewsItems-backed news() handler
+  news: { at: 0, value: null },
 });
 
 /** Test-only: clear all cached values. (#639) */
@@ -50,12 +55,46 @@ export function _resetForTests() {
   _state.events = new Map();
   _state.shelves.clear();
   _state.ft = { at: 0, payload: null };
+  _state.communityBlogs = { at: 0, value: null };  // #1033
+  _state.news = { at: 0, value: null };            // #1034
 }
 
 /** (#1032) Invalidate the featuredTopics in-process cache. Called by admin-service
  *  after recomputeSnapshot so the public endpoint serves fresh data immediately. */
 export function resetFtCache() {
   _state.ft = { at: 0, payload: null };
+}
+
+/** (#1033) Invalidate the communityBlogs in-process cache. Called by admin-service
+ *  after any UPDATE on CommunityBlogPosts or CommunityBlogSources so admin
+ *  overrides / pins reflect within a second. */
+export function resetCommunityBlogsCache() {
+  _state.communityBlogs = { at: 0, value: null };
+}
+
+/** (#1034) Invalidate the news in-process cache. Called by
+ *  content-moderation-service handlers after admin approve/reject writes
+ *  and by fetch-news-job at the end of every successful cron. */
+export function resetNewsCache() {
+  _state.news = { at: 0, value: null };
+}
+
+const NEWS_CACHE_MS = 60_000;
+const NEWS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+async function _isNewsRelevanceEnabled() {
+  if (process.env.HOMEPAGE_NEWS_RELEVANCE_ENABLED === 'false') return false;
+  try {
+    const db = await cds.connect.to('db');
+    const { HomepageConfig } = cds.entities('com.sap.developers.ims');
+    const [cfg] = await db.run(
+      SELECT.from(HomepageConfig).columns('newsRelevanceEnabled').limit(1),
+    );
+    return cfg?.newsRelevanceEnabled === true;
+  } catch (e) {
+    log.warn(`_isNewsRelevanceEnabled failed, treating as false: ${e.message}`);
+    return false;
+  }
 }
 
 // (#1032) Module-level 60s cache for featuredTopics payload.
@@ -228,14 +267,16 @@ export default class HomepageService extends cds.ApplicationService {
       return value;
     });
 
-    // (#639) videos() — reads HomepageConfig flag, fetches YouTube data. (#1007) with
-    // read-through fallback to the persistent `ext.Videos` table when the live YouTube
-    // call fails or comes back with an empty `recent`. The in-memory 15-min cache in
-    // youtube-fetcher.js does NOT survive a srv restart (per-process globalThis), so
-    // an MTA deploy plus a temporarily-broken YouTube playlistId was enough to empty
-    // the band on DEV. `ext.Videos` is refreshed twice weekly by
-    // srv/jobs/fetch-videos-job.js (Sun+Wed @ 03:11 UTC) — a stale-by-a-few-days list
-    // beats an empty band.
+    // (#1031, extends #639/#1007) videos() — merges three sources into a single
+    // {featured, recent, error} payload.
+    //
+    //   - featured  ← YouTube playlist (developerNewsPlaylistId), unchanged.
+    //   - recent    ← [anchors from ext.Videos ORDER BY publishedAt DESC,
+    //                   popular from HomepageVideoRotation ORDER BY rank ASC],
+    //                 deduped by youtubeVideoId, each tagged kind: 'anchor'|'popular'.
+    //   - fallback  ← if the DB path yields zero rows AND fetchSapDevsVideos gave
+    //                 us live.recent, wrap those as kind:'anchor' (preserves the
+    //                 #1007 pre-rotation behavior — never a 500).
     this.on('videos', async () => {
       let cfg;
       try {
@@ -248,12 +289,12 @@ export default class HomepageService extends cds.ApplicationService {
         log.warn('[videos] HomepageConfig read failed:', err.message);
       }
 
-      // If videoBandEnabled is explicitly false, return disabled payload.
-      // A missing config row (fresh subaccount, no AdminService auto-init yet) is treated as
-      // "use defaults" (enabled=true) — the admin can explicitly disable later.
       if (cfg?.videoBandEnabled === false) {
         return { featured: null, recent: [], error: 'disabled' };
       }
+
+      const anchorCount   = Number.isFinite(cfg?.videoBandAnchorCount)   ? cfg.videoBandAnchorCount   : 3;
+      const rotationCount = Number.isFinite(cfg?.videoBandRotationCount) ? cfg.videoBandRotationCount : 3;
 
       const apiKey = await resolveSecret('YOUTUBE_API_KEY', { logTag: '[homepage-service/videos]' });
       const live = await fetchSapDevsVideos({
@@ -262,58 +303,216 @@ export default class HomepageService extends cds.ApplicationService {
         channelHandle: '@sapdevs',
       });
 
-      // Live path succeeded with data — return as-is.
-      if (!live.error && (live.recent?.length ?? 0) > 0) return live;
-
-      // (#1007) Fallback: read the persistent Videos corpus written by
-      // srv/jobs/fetch-videos-job.js. Best-effort; on any failure fall back to
-      // whatever `live` produced (matches previous behavior — never a 500).
+      // Anchors from ext.Videos.
+      let anchors = [];
       try {
         const db = await cds.connect.to('db');
         const { Videos } = cds.entities('com.sap.developers.ims.external');
-        const rows = await db.run(
+        anchors = await db.run(
           SELECT.from(Videos)
             .columns('youtubeVideoId', 'title', 'thumbnailUrl', 'publishedAt')
+            .where({ excludeFromHomepage: false })
             .orderBy({ publishedAt: 'desc' })
-            .limit(3)
+            .limit(anchorCount)
         );
-        if (rows?.length) {
-          metrics.counter('homepage.videos.fallback[result=hit]');
-          const recent = rows.map(r => ({
-            videoId:     r.youtubeVideoId,
-            title:       r.title,
-            thumbnail:   r.thumbnailUrl,
-            publishedAt: r.publishedAt,
-          }));
-          // Reuse live.featured if the playlist call happened to return one; otherwise
-          // promote the newest row so the featured slot never depends on a
-          // playlistId misconfig (see issue #1007 root cause 2).
-          const featured = live.featured ?? recent[0];
-          return { featured, recent, error: live.error ?? null };
-        }
-        metrics.counter('homepage.videos.fallback[result=empty]');
       } catch (err) {
-        metrics.counter('homepage.videos.fallback[result=error]');
-        log.warn('[videos] fallback SELECT from ext.Videos failed:', err.message);
+        metrics.counter('homepage.videos.anchors[result=error]');
+        log.warn('[videos] anchors SELECT failed:', err.message);
       }
 
-      // No live data, no fallback data — return whatever live gave us (typically
-      // {featured:null, recent:[], error:'…'}) so the client can render its
-      // error state.
-      return live;
+      // Rotation from HomepageVideoRotation (skip when rotationCount = 0).
+      let rotation = [];
+      if (rotationCount > 0) {
+        try {
+          const db = await cds.connect.to('db');
+          rotation = await db.run(
+            SELECT.from('com.sap.developers.ims.HomepageVideoRotation as r')
+              .join('com.sap.developers.ims.external.Videos as v').on('r.video_ID = v.ID')
+              .columns(
+                'v.youtubeVideoId as youtubeVideoId',
+                'v.title as title',
+                'v.thumbnailUrl as thumbnailUrl',
+                'v.publishedAt as publishedAt',
+                'r.rank as rank',
+              )
+              .where({ 'v.excludeFromHomepage': false })
+              .orderBy({ 'r.rank': 'asc' })
+              .limit(rotationCount)
+          );
+        } catch (err) {
+          metrics.counter('homepage.videos.rotation.read[result=error]');
+          log.warn('[videos] rotation SELECT failed:', err.message);
+        }
+      }
+
+      const toItem = (r, kind) => ({
+        videoId:     r.youtubeVideoId,
+        title:       r.title,
+        thumbnail:   r.thumbnailUrl,
+        publishedAt: r.publishedAt,
+        kind,
+      });
+
+      const anchorIds = new Set(anchors.map(a => a.youtubeVideoId));
+      const rotationDeduped = rotation.filter(r => !anchorIds.has(r.youtubeVideoId));
+      let recent = [
+        ...anchors.map(a => toItem(a, 'anchor')),
+        ...rotationDeduped.map(r => toItem(r, 'popular')),
+      ];
+
+      // #1007 fallback — never a 500 when the DB path is dry.
+      if (recent.length === 0 && (live.recent?.length ?? 0) > 0) {
+        metrics.counter('homepage.videos.fallback[result=hit]');
+        recent = live.recent.map(r => ({ ...r, kind: 'anchor' }));
+      } else if (recent.length === 0) {
+        metrics.counter('homepage.videos.fallback[result=empty]');
+      }
+
+      const featured = live.featured ?? recent[0] ?? null;
+      return { featured, recent, error: live.error ?? null };
     });
 
-    // (#639) communityBlogs() — SAP Community RSS, max 3 items.
-    // NOTE for spec-review: COMMUNITY_BLOGS_RSS_URL was not smoke-checked during
-    // implementation (no external network in this session). fetchRssItems returns
-    // [] on any failure so a wrong URL results in an empty Community lane, not a crash.
+    // (#639, #1033) communityBlogs() — reads CommunityBlogPosts from the DB.
+    // No longer hits SAP Community RSS at request time (the fetcher cron does
+    // that every 30 min and stores results). Selection:
+    //   Query A: pinned OR adminOverride=ALLOW OR (override null AND aiVerdict=DEVELOPER_RELEVANT)
+    //   Query B (only when A returns <3, the ≥3 floor pad): newest raw
+    //            candidates minus BLOCK'd rows, minus A's URLs.
+    // 60 s in-process cache; invalidated on admin edit via resetCommunityBlogsCache().
     this.on('communityBlogs', async () => {
-      return fetchRssItems(COMMUNITY_BLOGS_RSS_URL, { limit: 3 });
+      const now = Date.now();
+      if (_state.communityBlogs.value && (now - _state.communityBlogs.at) < COMMUNITY_BLOGS_TTL_MS) {
+        return _state.communityBlogs.value;
+      }
+
+      let value = [];
+      try {
+        const db = await cds.connect.to('db');
+        const { CommunityBlogPosts } = cds.entities('com.sap.developers.ims');
+
+        // Query A — approved pool. Three OR branches, each of which uses a
+        // structured predicate. To keep CDS QL happy across SQLite + HANA we
+        // run them as three separate SELECTs and merge in Node.
+        const [pinnedRows, allowRows, aiRows] = await Promise.all([
+          db.run(SELECT.from(CommunityBlogPosts)
+            .columns('title', 'sourceUrl as url', 'publishedAt', 'author', 'linkStatus')
+            .where({ pinned: true })),
+          db.run(SELECT.from(CommunityBlogPosts)
+            .columns('title', 'sourceUrl as url', 'publishedAt', 'author', 'linkStatus')
+            .where({ adminOverride: 'ALLOW', pinned: false })),
+          db.run(SELECT.from(CommunityBlogPosts)
+            .columns('title', 'sourceUrl as url', 'publishedAt', 'author', 'linkStatus')
+            .where({ aiVerdict: 'DEVELOPER_RELEVANT', adminOverride: null, pinned: false })),
+        ]);
+        const approved = [...pinnedRows, ...allowRows, ...aiRows]
+          .filter(r => r.linkStatus !== 'BROKEN');
+        // De-dup by url (in case a pinned row also has ALLOW — belt).
+        const seen = new Set();
+        const approvedUnique = [];
+        // pinned rows sort first; then admin ALLOW; then AI. Within each group,
+        // publishedAt desc.
+        const byPubDesc = (a, b) =>
+          new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0);
+        for (const bucket of [
+          pinnedRows.filter(r => r.linkStatus !== 'BROKEN').sort(byPubDesc),
+          allowRows.filter(r => r.linkStatus !== 'BROKEN').sort(byPubDesc),
+          aiRows.filter(r => r.linkStatus !== 'BROKEN').sort(byPubDesc),
+        ]) {
+          for (const r of bucket) {
+            if (!seen.has(r.url)) { seen.add(r.url); approvedUnique.push(r); }
+            if (approvedUnique.length >= 3) break;
+          }
+          if (approvedUnique.length >= 3) break;
+        }
+        value = approvedUnique.slice(0, 3);
+
+        // Query B — pad from raw candidates when approved pool <3.
+        // BLOCK still wins even in degraded mode.
+        if (value.length < 3) {
+          const need = 3 - value.length;
+          const padRows = await db.run(SELECT.from(CommunityBlogPosts)
+            .columns('title', 'sourceUrl as url', 'publishedAt', 'author', 'linkStatus', 'adminOverride')
+            .orderBy({ publishedAt: 'desc' })
+            .limit(50) // cap the scan; 50 is plenty for a 3-row pad
+          );
+          for (const r of padRows) {
+            if (r.adminOverride === 'BLOCK') continue;
+            if (r.linkStatus === 'BROKEN') continue;
+            if (seen.has(r.url)) continue;
+            seen.add(r.url);
+            value.push({ title: r.title, url: r.url, publishedAt: r.publishedAt, author: r.author });
+            if (value.length >= 3) break;
+          }
+          if (value.length < 3) {
+            metrics.counter('homepage.community_blogs[result=degraded_empty]');
+          } else {
+            metrics.counter('homepage.community_blogs[result=degraded]');
+          }
+        } else {
+          metrics.counter(`homepage.community_blogs[result=served,count=${value.length}]`);
+        }
+
+        // Strip the internal linkStatus/adminOverride fields before returning.
+        // Defensive URL scheme check — protects visitors from any pre-fix
+        // rows already in the DB whose sourceUrl might have a javascript:
+        // or data: scheme. Belt to the fetcher's write-time check.
+        value = value
+          .filter(({ url }) => {
+            if (!url || typeof url !== 'string') return false;
+            try {
+              const p = new URL(url).protocol;
+              return p === 'https:' || p === 'http:';
+            } catch { return false; }
+          })
+          .map(({ title, url, publishedAt, author }) => ({
+            title, url, publishedAt, author,
+          }));
+      } catch (err) {
+        log.warn('[communityBlogs] DB read failed:', err.message);
+        metrics.counter('homepage.community_blogs[result=error]');
+        // Return the previous cached value if any, else empty array. Never 500.
+        return _state.communityBlogs.value ?? [];
+      }
+
+      _state.communityBlogs = { at: now, value };
+      return value;
     });
 
-    // (#639) news() — SAP News RSS, max 2 items.
+    // (#1034) news() — filtered from NewsItems + admin override, 60s cache.
+    // Two-layer kill switch: env HOMEPAGE_NEWS_RELEVANCE_ENABLED=false or
+    // HomepageConfig.newsRelevanceEnabled !== true → legacy RSS pass-through.
     this.on('news', async () => {
-      return fetchRssItems(SAP_NEWS_RSS_URL, { limit: 2 });
+      const now = Date.now();
+      const enabled = await _isNewsRelevanceEnabled();
+      if (!enabled) {
+        return fetchRssItems(SAP_NEWS_RSS_URL, { limit: 2 });
+      }
+      if (_state.news.value !== null && (now - _state.news.at) < NEWS_CACHE_MS) {
+        return _state.news.value;
+      }
+      try {
+        const db = await cds.connect.to('db');
+        const { NewsItems } = cds.entities('com.sap.developers.ims.external');
+        const cutoff = new Date(now - NEWS_WINDOW_MS).toISOString();
+        const rows = await db.run(
+          SELECT.from(NewsItems)
+            .columns('title', 'link', 'publishedAt', 'description', 'aiVerdict', 'adminVerdict')
+            .where({ publishedAt: { '>=': cutoff }, language: 'en' })
+            .orderBy('publishedAt desc')
+            .limit(20),
+        );
+        const filtered = (rows || []).filter(r => {
+          if (r.adminVerdict === 'approve') return true;
+          if (r.adminVerdict === 'reject') return false;
+          return r.aiVerdict === 'relevant';
+        }).slice(0, 2).map(({ title, link, publishedAt, description }) =>
+          ({ title, link, publishedAt, description }));
+        _state.news = { at: now, value: filtered };
+        return filtered;
+      } catch (e) {
+        log.warn(`news() DB read failed, returning empty: ${e.message}`);
+        return [];
+      }
     });
 
     // (#639) shelves(verb) — HomepageShelves filtered by verb (optional), 5-min cache.

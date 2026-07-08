@@ -653,6 +653,13 @@ entity ChatSettings : cuid, managed {
   // Same cheap cost profile as kgSearchExpansionEnabled (1 embed + 1 cosine
   // scan + 1-hop walk, per query, cached 5 min in-process).
   searchKgRerankEnabled    : Boolean default true;
+
+  // #1034 SAP News developer-relevance filter.
+  newsRelevanceLlmBudgetPerDay   : Integer default 100;
+  newsRelevanceMargin            : Decimal(4, 3) default 0.150;
+  newsFetchCadenceMinutes        : Integer default 60;
+  newsRelevanceLlmCallsToday     : Integer default 0;
+  newsRelevanceLlmCallsCountedOn : Date;
 }
 
 // Phase 2-A foundation (#463). Mirrors the ChatSettings singleton pattern.

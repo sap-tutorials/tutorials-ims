@@ -107,6 +107,37 @@ sap.ui.define([
       }
     },
 
+    // #1080 — bulk publish. All ACTIVE concepts with publishedAt IS NULL
+    // get published in one UPDATE. Idempotent — running twice has no
+    // effect beyond the first invocation. Extraction generates ~60/day so
+    // running it periodically is expected. Confirmation prompt because
+    // the operation is admin-visible and irreversible without a bulk
+    // unpublish counterpart (unpublishConcept is per-row).
+    onPublishAllConcepts: function () {
+      MessageBox.confirm(
+        "Publish ALL currently unpublished ACTIVE concepts? " +
+          "This sets publishedAt for every row where it is null and makes them visible on /explore/about/ and downstream concept pages.",
+        {
+          title: "Confirm bulk publish",
+          onClose: async function (action) {
+            if (action !== MessageBox.Action.OK) return;
+            MessageToast.show("Publishing all unpublished concepts — this may take a moment…");
+            try {
+              const result = await postAction("publishAllConcepts", {});
+              const count = (result && result.publishedCount) || 0;
+              if (count === 0) {
+                MessageToast.show("No unpublished concepts — nothing to do.");
+              } else {
+                MessageToast.show("Published " + count + " concept(s).");
+              }
+            } catch (err) {
+              MessageBox.error("Bulk publish failed: " + (err && err.message ? err.message : String(err)));
+            }
+          }
+        }
+      );
+    },
+
     // ---- Object Page bound actions ---------------------------------------
     //
     // The OP context binds to /Concepts(<UUID>); reading the row's ID is the

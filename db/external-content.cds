@@ -215,6 +215,20 @@ entity Videos : cuid, managed {
   lastSeenAt        : Timestamp;
   pinUntil          : Timestamp;
 
+  // (#1031) Popularity statistics — refreshed by srv/jobs/fetch-videos-job.js.
+  // Integer64 because YouTube view counts routinely exceed 32-bit for popular
+  // clips. All four columns are nullable so freshly-inserted rows can carry no
+  // statistics until the next fetch-videos-job pass fills them in.
+  viewCount           : Integer64;
+  likeCount           : Integer64;
+  commentCount        : Integer64;
+  statsLastFetchedAt  : Timestamp;
+
+  // (#1031) Curation flag — excludes video from BOTH homepage anchors and
+  // the rotation pool. Admins toggle via /admin-ui/#videos.
+  @title: 'Exclude from homepage'
+  excludeFromHomepage : Boolean default false;
+
   links    : Composition of many VideoConceptLinks on links.video = $self;
   services : Composition of many VideoServices    on services.video = $self;
 }
@@ -445,3 +459,49 @@ entity CommunityEventConceptLinks : cuid {
 }
 
 annotate CommunityEventConceptLinks with @assert.unique.pair : [event, concept];
+
+/**
+ * #1034 SAP News developer-relevance filter.
+ * NewsItems is populated by srv/jobs/fetch-news-job.js from news.sap.com/feed/;
+ * each row carries an AI verdict + optional admin override that homepage
+ * SELECTs against. sourceId is the RSS <guid> if the feed emits one, else
+ * canonicalizeLink(link). Admin override wins at read time.
+ */
+entity NewsItems : managed {
+  key sourceId       : String(200);
+      link           : String(500) not null;
+      title          : String(500) not null;
+      description    : LargeString;
+      publishedAt    : Timestamp;
+      language       : String(10);
+      contentHash    : String(64);
+      // AI verdict
+      aiVerdict      : String(20);
+      aiReason       : String(500);
+      aiVerdictSource: String(20);
+      aiConfidence   : Decimal(4, 3);
+      aiVerdictAt    : Timestamp;
+      aiModel        : String(100);
+      // Admin override (wins over AI at read time)
+      adminVerdict   : String(20);
+      adminNote      : String(500);
+      adminBy        : String(255);
+      adminAt        : Timestamp;
+      // Ops
+      lastFetchedAt  : Timestamp;
+      classifyError  : String(500);
+}
+
+/**
+ * #1034 Shared seed exemplars for the source-agnostic relevance classifier.
+ * Used by SAP News now, Community Blog Posts (#1033) later. The embedding
+ * column is computed by an after-CREATE/UPDATE handler in
+ * srv/content-moderation-service.js — do NOT include it in the CSV seed.
+ */
+entity RelevanceSeedExemplars : cuid, managed {
+  label     : String(20) not null;
+  text      : LargeString not null;
+  embedding : Vector(1536);
+  active    : Boolean default true;
+  note      : String(500);
+}

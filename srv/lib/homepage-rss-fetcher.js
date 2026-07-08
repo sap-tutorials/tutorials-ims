@@ -12,6 +12,7 @@
 
 import cds from '@sap/cds';
 import { safeFetch } from './safe-fetch.js';
+import { parseRss, RSS_FETCH_HEADERS } from './rss-parse.js';
 
 const log = cds.log('homepage-rss-fetcher');
 
@@ -33,49 +34,9 @@ export function _resetForTests() {
 
 // --- Internal helpers -------------------------------------------------------
 
-/**
- * Parse <item> blocks from an RSS XML string.
- * Returns an array of { title, link, publishedAt, description }.
- * Drops items missing title or link.
- * publishedAt is ISO 8601 or null when absent / unparseable.
- */
-function parseRss(xml) {
-  const items = [];
-  const itemRe = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
-  let m;
-  while ((m = itemRe.exec(xml)) !== null) {
-    const block = m[1];
-    const title = (block.match(/<title>([\s\S]*?)<\/title>/i) || [])[1]
-      ?.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
-    const link  = (block.match(/<link>([\s\S]*?)<\/link>/i) || [])[1]
-      ?.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
-    const date  = (block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) || [])[1]
-      ?.trim();
-    const desc  = (block.match(/<description>([\s\S]*?)<\/description>/i) || [])[1]
-      ?.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
-
-    // Drop incomplete items (title and link are required)
-    if (!title || !link) continue;
-
-    let publishedAt = null;
-    if (date) {
-      const parsed = new Date(date);
-      if (!isNaN(parsed.getTime())) {
-        publishedAt = parsed.toISOString();
-      } else {
-        log.warn(`homepage-rss-fetcher: unparseable pubDate "${date}"`);
-      }
-    }
-
-    items.push({
-      title,
-      link,
-      publishedAt,
-      description: desc || null,
-    });
-  }
-  return items;
-}
+// (#1033) parseRss extracted into srv/lib/rss-parse.js so the Community Blog
+// Posts fetcher can reuse it. Original semantics preserved; the shared helper
+// also exposes item-level language which we ignore here.
 
 // --- Public API -------------------------------------------------------------
 
@@ -99,10 +60,14 @@ export async function fetchRssItems(url, { limit = 5 } = {}) {
     // #895: safeFetch validates protocol, rejects private/link-local
     // addresses, and re-checks the guard on every 3xx hop. Prevents any
     // future admin-editable RSS URL from pivoting to IMDS or internal CF.
+    // #1033: browser-shaped UA + Accept header. Cloudflare returns 403 to
+    // the default Node fetch UA on community.sap.com feeds; this fixes
+    // the silently-empty Community lane the site has been running with.
     res = await safeFetch(url, {
       allowedProtocols: ['https:'],
       timeoutMs: TIMEOUT_MS,
       maxRedirects: 3,
+      fetchInit: { headers: RSS_FETCH_HEADERS },
     });
   } catch (err) {
     // Network error / timeout / SSRF_BLOCKED -- do NOT cache; next call will retry
@@ -125,7 +90,7 @@ export async function fetchRssItems(url, { limit = 5 } = {}) {
     return [];
   }
 
-  const items = parseRss(xml).sort(
+  const items = parseRss(xml, { log }).sort(
     (a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0),
   );
 

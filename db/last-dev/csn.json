@@ -2014,6 +2014,41 @@
             "val": true
           },
           "@cds.persistence.name": "SEARCHKGRERANKENABLED"
+        },
+        "newsRelevanceLlmBudgetPerDay": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 100
+          },
+          "@cds.persistence.name": "NEWSRELEVANCELLMBUDGETPERDAY"
+        },
+        "newsRelevanceMargin": {
+          "type": "cds.Decimal",
+          "precision": 4,
+          "scale": 3,
+          "default": {
+            "val": "0.150",
+            "literal": "number"
+          },
+          "@cds.persistence.name": "NEWSRELEVANCEMARGIN"
+        },
+        "newsFetchCadenceMinutes": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 60
+          },
+          "@cds.persistence.name": "NEWSFETCHCADENCEMINUTES"
+        },
+        "newsRelevanceLlmCallsToday": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "NEWSRELEVANCELLMCALLSTODAY"
+        },
+        "newsRelevanceLlmCallsCountedOn": {
+          "type": "cds.Date",
+          "@cds.persistence.name": "NEWSRELEVANCELLMCALLSCOUNTEDON"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"

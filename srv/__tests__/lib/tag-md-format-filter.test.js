@@ -16,6 +16,7 @@ import {
   rewriteWhereForPushdown,
   buildRowMatcher,
   containsMdFormatRef,
+  containsUnsafeMdFormatLiteral,
 } from '../../lib/tag-md-format-filter.js';
 
 // CQN fragments used by the OData $filter parser — mirrored from
@@ -66,6 +67,52 @@ describe('containsMdFormatRef', () => {
   it('returns false when only non-mdFormat refs are present', () => {
     const where = [cqn_containsTolower('name', 'business')];
     expect(containsMdFormatRef(where)).toBe(false);
+  });
+});
+
+describe('containsUnsafeMdFormatLiteral — #1075 bypass detector', () => {
+  it('returns false for undefined / empty where', () => {
+    expect(containsUnsafeMdFormatLiteral(undefined)).toBe(false);
+    expect(containsUnsafeMdFormatLiteral([])).toBe(false);
+  });
+
+  it('returns false for a plain-word mdFormat literal (safe for titlePath rewrite)', () => {
+    const where = [cqn_containsTolower('mdFormat', 'business')];
+    expect(containsUnsafeMdFormatLiteral(where)).toBe(false);
+  });
+
+  it('returns true when the literal contains the mdFormat segment separator `>`', () => {
+    // Exact shape from the #1075 report: contains(tolower(mdFormat),'topic>sap-community')
+    const where = [cqn_containsTolower('mdFormat', 'topic>sap-community')];
+    expect(containsUnsafeMdFormatLiteral(where)).toBe(true);
+  });
+
+  it('returns true when the literal contains a hyphen — the alnum-collapse marker', () => {
+    const where = [cqn_containsTolower('mdFormat', 'sap-community')];
+    expect(containsUnsafeMdFormatLiteral(where)).toBe(true);
+  });
+
+  it('detects the unsafe literal inside an OR chain', () => {
+    // The full Sage query from #1075.
+    const where = [
+      cqn_containsTolower('name', 'topic>sap-community'),
+      'or',
+      cqn_containsTolower('mdFormat', 'topic>sap-community'),
+    ];
+    expect(containsUnsafeMdFormatLiteral(where)).toBe(true);
+  });
+
+  it('ignores unsafe chars sitting on a non-mdFormat comparison', () => {
+    // If somebody filters `contains(name, 'topic>x')` — the SQL rewrite is
+    // fine because `name` maps 1:1 to a real column. Only mdFormat-bound
+    // literals should trigger the bypass.
+    const where = [cqn_containsTolower('name', 'topic>sap-community')];
+    expect(containsUnsafeMdFormatLiteral(where)).toBe(false);
+  });
+
+  it('handles the tolower(val) wrapping on the RHS', () => {
+    const where = [cqn_containsTolowerTolower('mdFormat', 'Topic>SAP-Community')];
+    expect(containsUnsafeMdFormatLiteral(where)).toBe(true);
   });
 });
 

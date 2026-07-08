@@ -45,12 +45,15 @@ import { runHomepageLinkHealth } from './homepage-link-health.js';
 import { runGcExternalContent } from './gc-external-content-job.js';
 import { runFetchLearningJourneys } from './fetch-learning-journeys-job.js';
 import { runFetchBlogPosts } from './fetch-blog-posts-job.js';
+import { runFetchNews } from './fetch-news-job.js';
 import { runMaterializeCoCompletions } from './materialize-co-completions.js';
 import { runKgPageRank } from './kg-pagerank-job.js';
 import { runKgCommunities } from './kg-communities-job.js';
 import { runKgWcc } from './kg-wcc-job.js';
 import { runOnDemandDrain } from './kg-ondemand-job.js';
 import { runKgFeaturedTopics } from './kg-featured-topics-job.js';
+import { runCommunityBlogsFetch } from './community-blogs-fetch-job.js';
+import { runCommunityBlogsClassify } from './community-blogs-classify-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -756,6 +759,16 @@ export function registerJobs() {
     fn: runFetchBlogPosts,
   });
 
+  // #1034 SAP News developer-relevance filter.
+  // Hourly at :37 — free slot verified against all registerJob() calls above.
+  registerJob({
+    jobName:     'fetch-news',
+    schedule:    '37 * * * *',
+    ttlMs:       10 * 60 * 1000,
+    description: 'Fetch news.sap.com/feed/ hourly and classify developer relevance',
+    fn:          () => runFetchNews(),
+  });
+
   // Weekly Sunday at 03:07 — Phase 4.3 Discovery Missions extraction (#447).
   // Off-minute (:07) per the project's cron-collision-avoidance convention
   // (well-separated from :13 journey and :23 blog crons).
@@ -922,6 +935,22 @@ export function registerJobs() {
     fn: runHomepageLinkHealth,
   });
 
+  // (#1031) Every 4h at :19 past — reshuffle HomepageVideoRotation with the
+  // top-N videos by view velocity. Off-minute (:19) avoids the 03:11 fetch-videos,
+  // 03:57 kg-communities, 04:00 homepage-link-health, 04:07 kg-wcc, and 04:13
+  // kg-featured-topics slots. Lazy-import matches the fetch-videos pattern above
+  // and keeps boot fast.
+  registerJob({
+    jobName: 'reshuffle-video-rotation',
+    schedule: '19 */4 * * *',
+    ttlMs: 5 * 60 * 1000,
+    description: 'Reshuffle homepage video rotation (top-N by view velocity, every 4h)',
+    fn: async () => {
+      const { runReshuffleVideoRotation } = await import('./reshuffle-video-rotation.js');
+      return runReshuffleVideoRotation();
+    },
+  });
+
   // #805 — every 5 minutes, rotate the metrics module into MetricSnapshots rows.
   // NO job-lock: both CF instances write independently under the composite
   // primary key (windowStart, metric, instanceId). See spec § Rollout.
@@ -965,6 +994,28 @@ export function registerJobs() {
     ttlMs: 2 * 60 * 1000,
     description: 'On-demand knowledge-graph extraction drain (#948)',
     fn: runOnDemandDrain,
+  });
+
+  // (#1033) Community Blog Posts — fetch every 30 min at :17 and :47
+  // past the hour (off-cycle minutes per the memory rule about avoiding
+  // :00 / :30 thundering herd).
+  registerJob({
+    jobName: 'community-blogs-fetch',
+    schedule: '17,47 * * * *',
+    ttlMs: 5 * 60 * 1000,
+    description: 'Fetch SAP Community RSS feeds into CommunityBlogPosts (#1033)',
+    fn: runCommunityBlogsFetch,
+  });
+
+  // (#1033) Community Blog Posts — classify PENDING rows every 15 min
+  // at :07, :22, :37, :52. Off-minute cadence chosen to avoid overlap
+  // with the fetch job.
+  registerJob({
+    jobName: 'community-blogs-classify',
+    schedule: '7,22,37,52 * * * *',
+    ttlMs: 2 * 60 * 1000,
+    description: 'Drain PENDING CommunityBlogPosts through AI relevance classifier (#1033)',
+    fn: runCommunityBlogsClassify,
   });
 
   LOG.info('All scheduled jobs registered');

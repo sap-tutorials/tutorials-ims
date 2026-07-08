@@ -1,6 +1,7 @@
 namespace com.sap.developers.ims;
 
 using { managed, cuid } from '@sap/cds/common';
+using { com.sap.developers.ims.external as ext } from './external-content';
 
 // Source-of-truth for every shelf entry on the new homepage and verb sub-pages.
 // Spec: docs/superpowers/specs/2026-06-27-639-developer-homepage-design.md §10.1
@@ -93,6 +94,15 @@ entity HomepageConfig : cuid, managed {
   // endpoint falls back to reading the legacy manually-curated `Events` entity
   // (the pre-#1030 behavior), giving us a redeploy-free rollback path.
   eventsBandAutoPullEnabled : Boolean default true;
+  // (#1031) Video band tuning knobs. Total tiles = anchor + rotation (deduped
+  // by youtubeVideoId). Set videoBandRotationCount = 0 to disable the
+  // popularity slots while keeping the band otherwise unchanged.
+  videoBandAnchorCount        : Integer default 3;
+  videoBandRotationCount      : Integer default 3;
+  videoBandRotationWindowDays : Integer default 90;
+  // #1034 SAP News developer-relevance filter rollout flag. Two-layer with
+  // env HOMEPAGE_NEWS_RELEVANCE_ENABLED: either falsy → legacy pass-through.
+  newsRelevanceEnabled    : Boolean default false;
 }
 
 // (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
@@ -148,4 +158,20 @@ entity HomepageForYouCandidates : cuid, managed {
   active        : Boolean       default true;
   linkStatus    : HomepageLinkStatus default 'UNKNOWN' @assert.range;
   lastChecked   : Timestamp;
+}
+/**
+ * (#1031) Materialised rotation slot set for the homepage video band.
+ *
+ * Rewritten every 4h by srv/jobs/reshuffle-video-rotation.js and on-demand
+ * by AdminService.recomputeHomepageVideoRotation. Read by
+ * HomepageService.videos() as the "popular / recently active" pool that
+ * fills slots after the anchor slots.
+ *
+ * Sidecar pattern parallels FeaturedTopicsSnapshot (#1032), ConceptRank,
+ * TutorialRank, KgIsolation.
+ */
+entity HomepageVideoRotation : cuid {
+  video    : Association to ext.Videos @assert.notNull;
+  rank     : Integer @assert.notNull;   // 1 = highest velocity in rotation
+  pickedAt : Timestamp @cds.on.insert: $now;
 }

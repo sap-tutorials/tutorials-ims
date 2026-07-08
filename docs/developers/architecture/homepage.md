@@ -27,6 +27,7 @@ The homepage redesign (issue #639) replaces `developers.sap.com/` with a new top
 | **Resolver** | Legacy-redirects resolver (`srv/lib/legacy-redirects-resolver.js`) | Loads `LegacyRedirects` from DB, refreshes hourly |
 | **Approuter** | Loader + hit counter (`approuter/lib/`) | Loads `redirectsActive` at startup, records `POST /api/homepage/recordRedirectHits` |
 | **Cron** | Link-health job (`srv/jobs/homepage-link-health.js`) | Nightly 04:00; updates `HomepageShelves.linkStatus` |
+| **Cron** | Reshuffle video rotation (`srv/jobs/reshuffle-video-rotation.js`) | Every 4h @ :19; ranks `ext.Videos` by view velocity into `HomepageVideoRotation` |
 
 ---
 
@@ -49,7 +50,8 @@ Seven rows top-to-bottom on the homepage. Each verb also has a dedicated sub-pag
 │   per-key cache; flag: HomepageConfig.eventsBandAutoPullEnabled).   │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Row 4 · SAPDevs video band                                           │
-│   LEFT — Weekly Developer News. RIGHT — 3-4 recent @sapdevs videos. │
+│   LEFT — Weekly Developer News. RIGHT — up to 6 tiles: 3 newest      │
+│   (anchors) + 3 popular (rotation, every 4h). #1031                  │
 │   Runtime: /api/homepage/videos (15-min cache; YouTube Data API v3). │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Row 5 · Featured missions carousel (topic-based, 8 slides × 4 missions)    │
@@ -178,6 +180,27 @@ Row 5 of the homepage was previously a static tutorials-catalog teaser. Issue #1
 
 ---
 
+## SAP News (developer-relevance filter — #1034)
+
+The homepage `/homepage/news` handler serves items from the `NewsItems`
+HANA table when the two-layer kill switch is on. `srv/jobs/fetch-news-job.js`
+runs hourly (:37) against `news.sap.com/feed/`; each item is classified by
+`srv/lib/relevance-classifier.js` (embedding-first via `RelevanceSeedExemplars`,
+LLM fallback for the mid-band, keyword rules on any error).
+
+Admins triage at `/admin-ui/#content-moderation` — approve, reject, clear
+override, or reclassify a single item. Admin verdicts win over AI at read
+time. Homepage items are capped at 2, aged out after 14 days, English-only.
+
+Kill switches (either off → legacy RSS pass-through):
+- Env `HOMEPAGE_NEWS_RELEVANCE_ENABLED` (default: unset; only the literal string `false` disables — any other value, or absence, treats as enabled).
+- `HomepageConfig.newsRelevanceEnabled` (default `false`).
+
+Community Blog Posts (#1033) mirrors this pattern using the same
+`ContentModerationService` + `RelevanceSeedExemplars` shared seed set.
+
+---
+
 ## Personalization for signed-in users
 
 Issue #763 adds per-user reordering + filtering + a "For you" row.
@@ -201,6 +224,9 @@ See **[homepage-personalization.md](homepage-personalization.md)** for:
 | Approuter → srv unavailable at startup | Legacy-redirects resolver skips load and logs a warning; middleware retries on the next request. No boot crash. |
 | `HomepageConfig` missing | Admin auto-init handler creates the singleton on first READ with safe defaults (`videoBandEnabled: true`, `eventsBandEnabled: true`, `communityLaneEnabled: true`). Consistent with the pattern used by `ChatSettings`, `DisplaySettings`, etc. |
 | `YOUTUBE_API_KEY` not set | `youtube-fetcher.js` returns an empty array; video band degrades gracefully to the static link card. |
+| Reshuffle cron throws | `HomepageVideoRotation` untouched (single-tx ROLLBACK). Stale rotation continues to serve. |
+| `HomepageVideoRotation` empty (fresh deploy) | Response returns anchors only; client renders 3 tiles until first cron pass. |
+| Statistics fetch fails in `fetch-videos-job` | Snippet upsert already succeeded; view/like counts stay stale. Rotation deprioritises null-viewCount rows to bottom. |
 
 ---
 
@@ -242,3 +268,18 @@ Issue #1030 rewrites Row 3 (events band) to pull from `CommunityEvents` automati
 
 **Spec:** [docs/superpowers/specs/2026-07-07-1030-homepage-codejams-autopull-design.md](../../superpowers/specs/2026-07-07-1030-homepage-codejams-autopull-design.md)
 **Plan:** [docs/superpowers/plans/2026-07-07-1030-homepage-codejams-autopull.md](../../superpowers/plans/2026-07-07-1030-homepage-codejams-autopull.md)
+
+---
+
+## Video band rotation (#1031)
+
+Row 4's right stack expands from 3 to 6 tiles (configurable via `HomepageConfig.videoBandAnchorCount` + `videoBandRotationCount`). Anchors always show the most recently published videos; the rotation slot set is materialised into `HomepageVideoRotation` every 4h by `srv/jobs/reshuffle-video-rotation.js`, ranked by view velocity (views per day since publishedAt) over the trailing `videoBandRotationWindowDays` (default 90).
+
+**Admin surfaces:**
+- `/admin-ui/#videos` — toggle `excludeFromHomepage` per video; manual `recomputeHomepageVideoRotation` action (SuperAdmin-gated).
+- `/admin-ui/#video-rotation` — read-only view of the current rotation.
+- `/admin-ui/#homepageConfig` — tuning knobs.
+
+**Kill switches:**
+1. `videoBandRotationCount = 0` → anchor-only (existing 3-tile behaviour). Zero deploy.
+2. `videoBandEnabled = false` → whole band disabled (unchanged from before).

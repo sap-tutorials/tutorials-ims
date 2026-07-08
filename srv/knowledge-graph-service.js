@@ -293,6 +293,75 @@ export function rankNeighborhood(
 export const _internals = { GROUP_KEYS, TOP_N, DEFAULT_WEIGHT, coCompletionBoost, isFullySubset };
 
 // ============================================================
+// rewriteIsPublishedFilter — #1080
+//
+// Walks a CQN `where` array in place and rewrites any comparison of the
+// virtual `isPublished` column into a `publishedAt IS (NOT) NULL` check.
+// The virtual has no SQL column backing it, so the default push-down
+// would emit `WHERE "isPublished" = TRUE` and HANA would reject the
+// query with "column not found."
+//
+// CQN grammar recap: a `where` array is a flat list of tokens interleaved
+// with `'and' | 'or' | 'not'` connectives. Comparison triples appear as
+//   [{ ref: [...] }, 'eq' | 'ne' | '=' | '!=', { val: ... }]
+// Nested groups appear as `{ xpr: [...] }` — recurse into those too so
+// FE-composed filters like `(status eq 'ACTIVE' and isPublished eq false)`
+// are covered.
+//
+// Only literal booleans are rewritten. Anything else (e.g. `isPublished
+// eq null`) is left alone — the DB error surface will be a clear
+// column-not-found rather than a silent semantic swap.
+//
+// Exported so unit tests can assert against the transformed CQN without
+// standing up a full CAP server.
+// ============================================================
+export function rewriteIsPublishedFilter(where) {
+  if (!Array.isArray(where)) return;
+  for (let i = 0; i < where.length; i++) {
+    const node = where[i];
+    // Recurse into nested groups: `{ xpr: [...] }`
+    if (node && Array.isArray(node.xpr)) {
+      rewriteIsPublishedFilter(node.xpr);
+      continue;
+    }
+    // Triple detection: token at i is `{ ref: ['isPublished'] }` and
+    // the next two form the operator + value.
+    if (
+      node && Array.isArray(node.ref) && node.ref.length === 1 &&
+      node.ref[0] === 'isPublished'
+    ) {
+      const op = where[i + 1];
+      const rhs = where[i + 2];
+      if (
+        (op === 'eq' || op === '=' || op === 'ne' || op === '!=') &&
+        rhs && typeof rhs.val === 'boolean'
+      ) {
+        // `isPublished eq true`  → publishedAt != null  (compiled to IS NOT NULL)
+        // `isPublished eq false` → publishedAt =  null  (compiled to IS NULL)
+        // `isPublished ne true`  → publishedAt =  null
+        // `isPublished ne false` → publishedAt != null
+        //
+        // CAP's SQL builder maps `= null` / `!= null` to
+        // `IS NULL` / `IS NOT NULL` at compile time — see @sap/cds
+        // db-service SQL emitters. Emitting the sugar-CQN shape is
+        // safer than hand-rolling `[ref, 'is', 'not', 'null']` tokens,
+        // whose spelling varies across CAP minor versions.
+        const wantPublished =
+          (op === 'eq' || op === '=') ? rhs.val : !rhs.val;
+        where.splice(i, 3,
+          { ref: ['publishedAt'] },
+          wantPublished ? '!=' : '=',
+          { val: null },
+        );
+        // Advance past the replacement so we don't rescan the rewritten
+        // triple. splice inserted 3 elements starting at i.
+        i += 2;
+      }
+    }
+  }
+}
+
+// ============================================================
 // PageRank rank-map loader (#916).
 //
 // Reads ConceptRank + TutorialRank sidecars and returns a shape the
@@ -777,8 +846,26 @@ export default cds.service.impl(async function () {
   // to the client.
   //
   // Spec: docs/superpowers/specs/2026-07-04-918-kg-wcc-isolation-design.md
+  //
+  // #1080 — this handler also stamps the virtual `isPublished : Boolean`
+  // from the already-projected `publishedAt` column so admins get a Yes/No
+  // filter on the Concepts list report (raw publishedAt gave them a date
+  // picker). The paired before('READ') rewrite pushes the FE filter down
+  // to HANA as `publishedAt IS (NOT) NULL`.
   this.after('READ', 'Concepts', async (rows, req) => {
     if (!Array.isArray(rows) || rows.length === 0) return;
+
+    // isPublished projection — cheap, uses already-selected columns.
+    // Only stamp when publishedAt is projected (FE selects it via
+    // LineItem/HeaderInfo); leave unset otherwise so bespoke queries
+    // that excluded publishedAt don't see a misleading `false`.
+    for (const r of rows) {
+      if (Object.prototype.hasOwnProperty.call(r, 'publishedAt')) {
+        r.isPublished = r.publishedAt != null;
+      }
+    }
+
+    // isolated lookup (#918).
     const slugs = rows.map((r) => r.slug).filter(Boolean);
     if (slugs.length === 0) return;
     try {
@@ -796,6 +883,26 @@ export default cds.service.impl(async function () {
       log.warn(
         `kg-service: isolated flag lookup failed on Concepts; leaving field unset (${err?.message ?? err})`,
       );
+    }
+  });
+
+  // ─── before(READ, Concepts) — #1080 isPublished CQN rewrite ────────────
+  //
+  // Fiori's FilterBar sends `$filter=isPublished eq true|false` as a
+  // regular comparison. Because `isPublished` is a virtual field (no SQL
+  // column backing it), the default push-down would emit
+  // `WHERE "isPublished" = TRUE` — HANA rejects with a column-not-found
+  // at query time.
+  //
+  // Rewrite the CQN tree in-place: any `{ ref: ['isPublished'] } eq
+  // { val: true|false }` triple becomes `publishedAt IS (NOT) NULL`. Walks
+  // nested `and`/`or` groups produced by FE's filter composition. Non-
+  // boolean values (defensive path — FE only emits booleans) are left
+  // alone.
+  this.before('READ', 'Concepts', (req) => {
+    const where = req.query?.SELECT?.where;
+    if (Array.isArray(where) && where.length > 0) {
+      rewriteIsPublishedFilter(where);
     }
   });
 
@@ -1481,6 +1588,41 @@ export default cds.service.impl(async function () {
       .set({ publishedAt: null, publishedBy: null })
       .where({ ID: conceptId });
     if (!count) return req.reject(404, `Concept ${conceptId} not found`);
+  });
+
+  // ─── publishAllConcepts — #1080 bulk publish ───────────────────────────
+  //
+  // Sets publishedAt=$now, publishedBy=<user> on every ACTIVE Concepts
+  // row where publishedAt IS NULL. One UPDATE statement — idempotent
+  // (already-published rows filtered out by WHERE). Concept extraction
+  // generates ~60/day on DEV; per-row multi-select doesn't scale, so
+  // admins get a "publish everything I've reviewed" escape hatch. Spot-
+  // review via the isPublished=false filter before invoking.
+  //
+  // Aggregate audit (KnowledgeGraphPublishAllConcepts) with the row
+  // count. Does NOT fan out per-row audit entries — publishConcept
+  // itself doesn't audit anyway, and 5k+ per-row events would drown the
+  // audit log.
+  this.on('publishAllConcepts', async (req) => {
+    const { Concepts } = cds.entities(NAMESPACE);
+    const user = req.user?.id ?? 'anonymous';
+    const now = new Date().toISOString();
+    try {
+      const publishedCount = await UPDATE(Concepts)
+        .set({ publishedAt: now, publishedBy: user })
+        .where({ status: 'ACTIVE', publishedAt: null });
+      await audit('KnowledgeGraphPublishAllConcepts', {
+        user,
+        publishedCount: publishedCount ?? 0,
+      });
+      log.info(
+        `kg-service: publishAllConcepts by ${user} — ${publishedCount ?? 0} concepts published`,
+      );
+      return { publishedCount: publishedCount ?? 0 };
+    } catch (err) {
+      log.error(`kg-service: publishAllConcepts failed: ${err.message ?? err}`);
+      return req.error(500, `Bulk publish failed: ${err.message ?? 'unknown error'}`);
+    }
   });
 
   // ─── triggerGraphRebuild — admin force-rebuild ─────────────────────────

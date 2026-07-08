@@ -78,3 +78,16 @@ Then remove the `AICore` block from `cds.requires` in `package.json` and redeplo
 - CAP release notes: <https://cap.cloud.sap/docs/releases/2026/jun26#new-ai-core-plugin>
 - Design spec: [../../superpowers/specs/2026-07-04-959-cap-ai-plugin-adoption-design.md](../../superpowers/specs/2026-07-04-959-cap-ai-plugin-adoption-design.md)
 - Issue: [#959](https://github.com/sap-tutorials/tutorials-ims/issues/959)
+
+---
+
+### #1034 exception: developer-relevance classifier does NOT use `@cap-js/ai`
+
+The `srv/lib/relevance-classifier.js` module used by the SAP News developer-
+relevance filter goes through `@sap-ai-sdk` (`AzureOpenAiEmbeddingClient`,
+`OrchestrationClient`) directly rather than through `@cap-js/ai`. Reason:
+the plugin's `AICore` `kind`-resolution fires on any draft-Create write with
+`@Common.ValueList` fields and throws "No service definition for AICore"
+when `cds.requires.AICore.kind` is unset at runtime (VCAP presence alone is
+insufficient). Bypassing the plugin sidesteps that failure path entirely.
+See also `MEMORY.md > cap-ai-plugin-aicore-kind-resolution`.
