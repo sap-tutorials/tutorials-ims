@@ -56,4 +56,29 @@ describe('#1046 KnowledgeGraphService.ConceptAliases', () => {
     })
     expect(data.aliasLower).toBe('idoc')
   })
+
+  it('POST triggers after-write hook that materializes Concepts.aliasSearchBlob', async () => {
+    const { Concepts } = cds.entities('com.sap.developers.ims')
+    // Seed a fresh concept — cannot reuse test-concept-1046 because earlier tests
+    // have already altered its alias state.
+    await INSERT.into(Concepts).entries({
+      slug: 'test-concept-1046-blob',
+      name: 'Test Concept Blob',
+      status: 'ACTIVE'
+    })
+    const conceptId = (await SELECT.one.from(Concepts).where({ slug: 'test-concept-1046-blob' })).ID
+
+    // POST through the OData service so the before-write (aliasLower) and
+    // after-write (aliasSearchBlob re-aggregation) hooks both fire.
+    const { data } = await project.post('/graph/ConceptAliases', {
+      concept_ID: conceptId,
+      alias: 'BlobTest',
+      source: 'ADMIN'
+    })
+    expect(data.aliasLower).toBe('blobtest')
+
+    // The after-write hook should have re-aggregated aliasSearchBlob on the parent.
+    const row = await SELECT.one.from(Concepts).where({ ID: conceptId })
+    expect(row.aliasSearchBlob).toMatch(/blobtest/)
+  })
 })
