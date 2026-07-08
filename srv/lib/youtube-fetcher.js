@@ -110,7 +110,17 @@ export async function fetchSapDevsVideos({ apiKey, playlistId, channelHandle }) 
         featured = {
           videoId:     item.resourceId?.videoId ?? null,
           title:       item.title ?? null,
-          thumbnail:   item.thumbnails?.high?.url ?? null,
+          // Featured tile is displayed at ~720px wide (3fr column in
+          // VideoBand.vue's 3fr/2fr grid); `high` is only 480×360 AND
+          // 4:3 so it letterboxes inside the 16:9 aspect-ratio frame.
+          // Prefer maxres (1280×720, native 16:9) → standard (640×480)
+          // → high. All tiers come back in the same playlistItems
+          // response, so no extra HTTP call or quota cost. The `recent`
+          // tiles below stay on `high` since they render at 96×54 CSS px.
+          thumbnail:   item.thumbnails?.maxres?.url
+                    ?? item.thumbnails?.standard?.url
+                    ?? item.thumbnails?.high?.url
+                    ?? null,
           publishedAt: item.publishedAt ?? null,
         };
       }
