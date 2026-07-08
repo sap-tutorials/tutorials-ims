@@ -59,6 +59,55 @@ function parseAliases(raw) {
 }
 
 /**
+ * Pre-load the top-3 linking tutorial titles per concept.
+ * Used to enrich the LLM prompt with usage context per spec §"LLM backfill".
+ * IN-array is chunked at 50 IDs to avoid HANA packet-size overflows (#1032).
+ *
+ * @param {object} db - CDS db connection
+ * @param {string[]} conceptIds - list of Concepts.ID values to look up
+ * @param {object} entities - destructured from cds.entities(NAMESPACE)
+ * @returns {Promise<Map<string, string[]>>} Map of concept_ID → up to 3 tutorial titles
+ */
+async function loadTopTutorialTitles(db, conceptIds, entities) {
+  if (conceptIds.length === 0) return new Map()
+  const { TutorialConceptLinks } = entities
+  const { Tutorials } = cds.entities('com.sap.developers.ims')
+  const CHUNK = 50
+  const byConcept = new Map()
+  for (let i = 0; i < conceptIds.length; i += CHUNK) {
+    const chunk = conceptIds.slice(i, i + CHUNK)
+    // Fetch links for this chunk.
+    const links = await db.run(
+      SELECT.from(TutorialConceptLinks)
+        .columns('concept_ID', 'tutorial_ID')
+        .where({ concept_ID: { in: chunk }, predicate: 'teaches' })
+    )
+    if (links.length === 0) continue
+    // Collect unique tutorial IDs needed.
+    const tutorialIds = [...new Set(links.map(l => l.tutorial_ID).filter(Boolean))]
+    if (tutorialIds.length === 0) continue
+    // Fetch tutorial titles in chunks.
+    const TCHUNK = 50
+    const titleMap = new Map()
+    for (let j = 0; j < tutorialIds.length; j += TCHUNK) {
+      const tChunk = tutorialIds.slice(j, j + TCHUNK)
+      const rows = await db.run(
+        SELECT.from(Tutorials).columns('ID', 'title').where({ ID: { in: tChunk } })
+      )
+      for (const r of rows) titleMap.set(r.ID, r.title)
+    }
+    // Aggregate up to 3 titles per concept.
+    for (const link of links) {
+      if (!byConcept.has(link.concept_ID)) byConcept.set(link.concept_ID, [])
+      const arr = byConcept.get(link.concept_ID)
+      const title = titleMap.get(link.tutorial_ID)
+      if (arr.length < 3 && title) arr.push(title)
+    }
+  }
+  return byConcept
+}
+
+/**
  * Core backfill logic. Exported for testability.
  *
  * @param {object} [opts]
@@ -77,7 +126,7 @@ export async function runBackfill({ dryRun = false, force = false, onlySlug, lim
   }
 
   const db = await cds.connect.to('db')
-  const { Concepts, ConceptAliases } = cds.entities('com.sap.developers.ims')
+  const { Concepts, ConceptAliases, TutorialConceptLinks } = cds.entities('com.sap.developers.ims')
 
   // Resolve model + deploymentId — throws when ChatSettings and env-var
   // fallbacks are both absent (surfaces missing AI Core config immediately).
@@ -115,6 +164,20 @@ export async function runBackfill({ dryRun = false, force = false, onlySlug, lim
     `Backfill targets: ${targets.length} concept(s). dry-run=${dryRun} force=${force}\n`
   )
 
+  // Pre-load top-3 linking tutorial titles per concept so the LLM prompt
+  // includes usage context (spec §"LLM backfill"). Chunked at 50 to avoid
+  // HANA packet overflows (#1032). Fail-open: on error, no titles are passed.
+  let linkingTitlesMap = new Map()
+  try {
+    linkingTitlesMap = await loadTopTutorialTitles(
+      db,
+      targets.map(c => c.ID),
+      { TutorialConceptLinks }
+    )
+  } catch (err) {
+    process.stderr.write(`warn: tutorial title pre-load failed (${err.message}) — continuing without context\n`)
+  }
+
   let consecutiveFailures = 0
 
   // Sequential loop — no p-limit dependency. Keeps the AI Core request rate
@@ -131,10 +194,12 @@ export async function runBackfill({ dryRun = false, force = false, onlySlug, lim
       }
     }
 
-    // Build the user prompt with concept metadata.
+    // Build the user prompt with concept metadata and linking tutorial context.
+    const linkingTutorialTitles = linkingTitlesMap.get(c.ID) || []
     const userPrompt = JSON.stringify({
       name: c.name || '',
       description: c.description || '',
+      linkingTutorialTitles,
     })
 
     // Call SAP Generative AI Hub.
