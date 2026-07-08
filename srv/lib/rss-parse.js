@@ -59,6 +59,20 @@ export function parseRss(xml, { log } = {}) {
       ?.replace(/<!\[CDATA\[|\]\]>/g, '').trim().toLowerCase();
     const language = itemLangRaw || channelLangRaw || null;
 
+    // (#1034) <guid> — stable RSS item identifier when present. Falls back
+    // to null; the news cron canonicalizes <link> when guid is missing.
+    const guid = (block.match(/<guid\b[^>]*>([\s\S]*?)<\/guid>/i) || [])[1]
+      ?.replace(/<!\[CDATA\[|\]\]>/g, '').trim() || null;
+
+    // (#1034) <category> — zero or more tags per item. Empty array when absent.
+    const categories = [];
+    const catRe = /<category\b[^>]*>([\s\S]*?)<\/category>/gi;
+    let catM;
+    while ((catM = catRe.exec(block)) !== null) {
+      const c = catM[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+      if (c) categories.push(c);
+    }
+
     // Drop incomplete items (title and link are required)
     if (!title || !link) continue;
 
@@ -79,6 +93,8 @@ export function parseRss(xml, { log } = {}) {
       description: desc || null,
       author,
       language,
+      guid,
+      categories,
     });
   }
   return items;

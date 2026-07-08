@@ -96,6 +96,9 @@ entity HomepageConfig : cuid, managed {
   videoBandAnchorCount        : Integer default 3;
   videoBandRotationCount      : Integer default 3;
   videoBandRotationWindowDays : Integer default 90;
+  // #1034 SAP News developer-relevance filter rollout flag. Two-layer with
+  // env HOMEPAGE_NEWS_RELEVANCE_ENABLED: either falsy → legacy pass-through.
+  newsRelevanceEnabled    : Boolean default false;
 }
 
 // (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
