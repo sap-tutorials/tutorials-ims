@@ -9,7 +9,11 @@ describe('youtube-fetcher', () => {
       if (url.includes('playlistItems')) {
         return new Response(JSON.stringify({ items: [
           { snippet: { resourceId: { videoId: 'feat1' }, title: 'Developer News Ep 99',
-            thumbnails: { high: { url: 'https://yt/feat1.jpg' } },
+            thumbnails: {
+              high:     { url: 'https://yt/feat1-hq.jpg' },
+              standard: { url: 'https://yt/feat1-sd.jpg' },
+              maxres:   { url: 'https://yt/feat1-maxres.jpg' },
+            },
             publishedAt: '2026-06-26T15:00:00Z' } }
         ]}), { status: 200 });
       }
@@ -27,8 +31,40 @@ describe('youtube-fetcher', () => {
     }));
     const out = await fetchSapDevsVideos({ apiKey: 'test', playlistId: 'PLxxx', channelHandle: '@sapdevs' });
     expect(out.featured.videoId).toBe('feat1');
+    // Featured tile is displayed large (~720px wide) — prefer the maxres tier
+    // when available. `recent` tiles stay on `high` since they render at 96×54.
+    expect(out.featured.thumbnail).toBe('https://yt/feat1-maxres.jpg');
     expect(out.recent).toHaveLength(3);
     expect(out.error).toBeNull();
+  });
+
+  it('falls back to standard then high when maxres is absent (featured)', async () => {
+    // Not every video has a maxres tier (pre-HD uploads, vertical / Shorts
+    // content, or the odd Tech Byte encode). Assert the fallback chain
+    // maxres → standard → high so those featured tiles still get the biggest
+    // available image instead of null-thumbnailing.
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (url.includes('playlistItems')) {
+        return new Response(JSON.stringify({ items: [
+          { snippet: { resourceId: { videoId: 'feat2' }, title: 'Older ep',
+            thumbnails: {
+              high:     { url: 'https://yt/feat2-hq.jpg' },
+              standard: { url: 'https://yt/feat2-sd.jpg' },
+              // no maxres
+            },
+            publishedAt: '2020-01-01T00:00:00Z' } }
+        ]}), { status: 200 });
+      }
+      if (url.includes('search')) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url.includes('channels')) {
+        return new Response(JSON.stringify({ items: [{ id: 'UC_x' }] }), { status: 200 });
+      }
+      return new Response('{}', { status: 404 });
+    }));
+    const out = await fetchSapDevsVideos({ apiKey: 'test', playlistId: 'PLxxx', channelHandle: '@sapdevs' });
+    expect(out.featured.thumbnail).toBe('https://yt/feat2-sd.jpg');
   });
 
   it('returns error metadata on 403 (quota)', async () => {
