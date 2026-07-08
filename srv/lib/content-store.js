@@ -1258,22 +1258,35 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
     const sizeMap = Object.fromEntries(contentRows.map(r => [r.slug, r.sizeBytes]));
 
-    // Fetch tutorial metadata for published slugs (excluding INACTIVE — soft-deleted)
-    const tutRows = await SELECT.from(Tutorials)
-      .where({ slug: { in: slugs }, status: { '!=': 'INACTIVE' } })
-      .columns('ID', 'slug', 'title', 'description', 'primaryTag', 'experienceTag', 'averageTimeToComplete');
+    // Fetch tutorial metadata for published slugs (excluding INACTIVE — soft-deleted).
+    // On a full publish `slugs` is ~7,315 entries; a `.where({slug:{in:slugs}})`
+    // here would send one bound param per slug and blow HANA's packet cap
+    // (memory note: cqn-where-in-hana-packet-cap.md; same class as #1063 and
+    // #1103). Fetch Tutorials unbounded (~7,315 rows × ~8 short cols ≪ 5 MB)
+    // and filter into `slugSet` in Node. Single fetch also lets us classify
+    // ACTIVE vs INACTIVE in Node instead of running the second IN-query below.
+    const slugSet = new Set(slugs);
+    const allTutRows = await SELECT.from(Tutorials)
+      .columns('ID', 'slug', 'title', 'description', 'primaryTag', 'experienceTag', 'averageTimeToComplete', 'status');
+    const tutRows = allTutRows.filter(t => slugSet.has(t.slug) && t.status !== 'INACTIVE');
+    const inactiveSlugs = new Set(
+      allTutRows.filter(t => slugSet.has(t.slug) && t.status === 'INACTIVE').map(t => t.slug)
+    );
 
     const tutMap = Object.fromEntries(tutRows.map(t => [t.slug, t]));
     const tutIds = tutRows.map(t => t.ID).filter(Boolean);
+    const tutIdSet = new Set(tutIds);
 
-    // Fetch step counts per tutorial via CDS QL
+    // Fetch step counts per tutorial. Same reasoning as above — Steps is
+    // one row per (tutorial, step index), so bounded by
+    // Tutorials × average-steps-per-tutorial (~7K × ~20 ≈ 140K short rows,
+    // still under budget). Unbounded fetch + Node filter avoids the packet cap.
     let stepMap = {};
     if (tutIds.length > 0) {
-      const allSteps = await SELECT.from(Steps)
-        .where({ tutorial_ID: { in: tutIds } })
-        .columns('tutorial_ID');
+      const allSteps = await SELECT.from(Steps).columns('tutorial_ID');
       const counts = {};
       for (const s of allSteps) {
+        if (!tutIdSet.has(s.tutorial_ID)) continue;
         counts[s.tutorial_ID] = (counts[s.tutorial_ID] || 0) + 1;
       }
       // Map tutorial ID back to slug
@@ -1282,19 +1295,21 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       }
     }
 
-    // Fetch display tags per tutorial via CDS QL
+    // Fetch display tags per tutorial. Same pattern.
     let tagMap = {};       // tutSlug -> labels[]   (for displayTags, presentation)
     let tagSlugMap = {};   // tutSlug -> titlePath[] (for displayTagSlugs, equality joins)
     if (tutIds.length > 0) {
-      const ttRows = await SELECT.from(TutorialTags)
-        .where({ tutorial_ID: { in: tutIds } })
-        .columns('tutorial_ID', 'tag_ID');
+      const allTtRows = await SELECT.from(TutorialTags).columns('tutorial_ID', 'tag_ID');
+      const ttRows = allTtRows.filter(r => tutIdSet.has(r.tutorial_ID));
 
-      const tagIds = [...new Set(ttRows.map(r => r.tag_ID))];
-      if (tagIds.length > 0) {
-        const tagEntities = await SELECT.from(Tags)
-          .where({ ID: { in: tagIds } })
-          .columns('ID', 'titlePath', 'label', 'name');
+      const tagIdsFound = [...new Set(ttRows.map(r => r.tag_ID))];
+      const tagIdSet = new Set(tagIdsFound);
+      if (tagIdsFound.length > 0) {
+        // Tag counts are typically in the low thousands (fine today), but the
+        // same packet-cap risk exists in principle; keep unbounded-fetch +
+        // Node-filter pattern for uniformity.
+        const allTagEntities = await SELECT.from(Tags).columns('ID', 'titlePath', 'label', 'name');
+        const tagEntities = allTagEntities.filter(t => tagIdSet.has(t.ID));
         const tagMetaMap = Object.fromEntries(tagEntities.map(t => [t.ID, {
           slug: t.titlePath,
           label: t.label || humanizeFallback(t.titlePath || t.name),
@@ -1311,14 +1326,6 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         }
       }
     }
-
-    // Build set of inactive slugs to exclude from nav
-    const inactiveSlugs = new Set(
-      (await SELECT.from(Tutorials)
-        .where({ slug: { in: slugs }, status: 'INACTIVE' })
-        .columns('slug'))
-        .map(r => r.slug)
-    );
 
     const tutorials = contentRows
       .filter(r =>
@@ -1484,10 +1491,18 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
           }
 
           // Bucket dispatch — fetch in one round trip, classify, then write.
+          // Chunk the slug IN-list to stay under HANA's packet cap. Admin
+          // callers pick their own batch size; no server-side hard cap today
+          // (cqn-where-in-hana-packet-cap.md).
           const lowered = slugs.map(s => String(s).toLowerCase());
-          const rows = await SELECT.from(Tutorials)
-            .where({ slug: { in: lowered } })
-            .columns('ID', 'slug', 'status', 'redirectTo_ID');
+          const rows = [];
+          for (let i = 0; i < lowered.length; i += 500) {
+            const chunk = lowered.slice(i, i + 500);
+            const batch = await SELECT.from(Tutorials)
+              .where({ slug: { in: chunk } })
+              .columns('ID', 'slug', 'status', 'redirectTo_ID');
+            rows.push(...batch);
+          }
 
           const bySlug = new Map(rows.map(r => [String(r.slug).toLowerCase(), r]));
           const purged = [], alreadyInactive = [], notFound = [], redirected = [];

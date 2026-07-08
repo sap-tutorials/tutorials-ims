@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 import { decodeDescription } from '../../../srv/lib/featured-topics-snapshot.js';
+import { instrumentInLimit } from '../../helpers/assert-no-oversized-in.js';
 
 describe('decodeDescription (HANA NCLOB → utf-8 string)', () => {
   // (#1032 followup) On HANA, LargeString/NCLOB columns come back from the
@@ -152,32 +153,18 @@ describe('featured-topics-snapshot', () => {
 
       // Instrument tx.run to capture CQN SELECT statements and their bound
       // `in`-list sizes. Any list of ≥500 items would blow HANA's packet cap.
-      const oversized = [];
-      const origRun = tx.run.bind(tx);
-      tx.run = async (q, ...rest) => {
-        try {
-          const sel = q?.SELECT;
-          const where = sel?.where;
-          if (Array.isArray(where)) {
-            for (let i = 0; i < where.length; i++) {
-              if (where[i] === 'in' && where[i + 1]?.list) {
-                const listLen = where[i + 1].list.length;
-                if (listLen >= 500) {
-                  const col = where[i - 1]?.ref?.join('.') || '?';
-                  oversized.push({ col, listLen, from: sel.from?.ref?.[0] });
-                }
-              }
-            }
-          }
-        } catch { /* ignore */ }
-        return origRun(q, ...rest);
-      };
+      // Shared helper — see test/helpers/assert-no-oversized-in.js.
+      const guard = instrumentInLimit(tx, { limit: 500 });
 
-      // Should complete without throwing (would fail on HANA if regressed).
-      const res = await recomputeSnapshot(tx);
-      expect(res.count).toBe(0); // no editorial, no eligible KG candidates without tutorial links
+      try {
+        // Should complete without throwing (would fail on HANA if regressed).
+        const res = await recomputeSnapshot(tx);
+        expect(res.count).toBe(0); // no editorial, no eligible KG candidates without tutorial links
+      } finally {
+        guard.restore();
+      }
 
-      expect(oversized, `emitted oversized IN clause(s): ${JSON.stringify(oversized)}`).toEqual([]);
+      expect(guard.oversized, `emitted oversized IN clause(s): ${JSON.stringify(guard.oversized)}`).toEqual([]);
     });
   });
 });

@@ -20,7 +20,7 @@ import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
-import { cleanupChangeLog } from './jobs/cleanup.js';
+import { cleanupChangeLog, cleanupUnusedTags } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
 import { runSeedApiDocs } from './lib/seed-api-docs.js';
@@ -1259,15 +1259,14 @@ export default class AdminService extends cds.ApplicationService {
       return await purgeStaleChangelog({ entities });
     });
 
-    this.on('cleanupUnusedTags', async (req) => {
-      const usedTagIds = await SELECT.from(TutorialTags).columns('tag_ID');
-      const usedSet = new Set(usedTagIds.map(r => r.tag_ID));
-      const allTags = await SELECT.from(Tags).columns('ID');
-      const unused = allTags.filter(t => !usedSet.has(t.ID));
-      if (unused.length === 0) return 0;
-      const unusedIds = unused.map(t => t.ID);
-      await DELETE.from(Tags).where({ ID: { in: unusedIds } });
-      return unused.length;
+    this.on('cleanupUnusedTags', async () => {
+      // Delegate to the canonical implementation in srv/jobs/cleanup.js.
+      // Prior inline copy issued an unchunked `DELETE FROM Tags WHERE ID IN
+      // (?, ?, …)` over every unused Tag ID; on production Tag counts (into
+      // the thousands after seeded taxonomies) that blew HANA's packet cap
+      // (memory: cqn-where-in-hana-packet-cap.md). The exported helper uses
+      // `deleteInChunks` — single source of truth, matches the nightly cron.
+      return await cleanupUnusedTags();
     });
 
     this.on('previewTagImport', async (req) => {

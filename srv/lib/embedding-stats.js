@@ -67,9 +67,14 @@ export async function computeEmbeddingStats() {
   const slugs = files.map((f) => f.slug);
   const activeSlugSet = new Set(slugs);
 
-  // Tutorials matching active slugs
-  const tutorials = await SELECT.from(Tutorials).columns('ID', 'slug').where({ slug: { in: slugs } });
+  // Tutorials matching active slugs. Fetch unbounded + filter in Node — on a
+  // full-repo publish `slugs` is ~7,315 entries, and a `.where({slug:{in:slugs}})`
+  // would send one bound parameter per slug and blow HANA's packet cap
+  // (memory: cqn-where-in-hana-packet-cap.md; same class as #1063/#1103).
+  const allTutorials = await SELECT.from(Tutorials).columns('ID', 'slug');
+  const tutorials = allTutorials.filter((t) => activeSlugSet.has(t.slug));
   const tIds = tutorials.map((t) => t.ID);
+  const tIdSet = new Set(tIds);
   const tToSlug = new Map(tutorials.map((t) => [t.ID, t.slug]));
 
   let totalSteps = 0;
@@ -79,13 +84,17 @@ export async function computeEmbeddingStats() {
   const slugsWithEmbeddingsSet = new Set();
 
   if (tIds.length > 0) {
-    const stepRows = await SELECT.from(Steps)
-      .columns('tutorial_ID', 'stepOrder', 'contentHash')
-      .where({ tutorial_ID: { in: tIds } });
+    // Same rationale as Tutorials fetch above: unbounded scan of Steps and
+    // TutorialEmbedding, filter by tIdSet in Node. Steps is bounded by
+    // (tutorials × avg-steps) ≈ 140K short rows; TutorialEmbedding by
+    // (steps × embed model dimensions) — both under budget.
+    const allStepRows = await SELECT.from(Steps)
+      .columns('tutorial_ID', 'stepOrder', 'contentHash');
+    const stepRows = allStepRows.filter((s) => tIdSet.has(s.tutorial_ID));
 
-    const embedRows = await SELECT.from(TutorialEmbedding)
-      .columns('tutorial_ID', 'stepNumber', 'contentHash')
-      .where({ tutorial_ID: { in: tIds } });
+    const allEmbedRows = await SELECT.from(TutorialEmbedding)
+      .columns('tutorial_ID', 'stepNumber', 'contentHash');
+    const embedRows = allEmbedRows.filter((e) => tIdSet.has(e.tutorial_ID));
 
     // `(tutorial_ID, stepNumber)` is the join key. TutorialEmbedding stores
     // stepNumber (1-based, matches Steps.stepOrder), not the Step PK.
