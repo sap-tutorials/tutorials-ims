@@ -3,7 +3,10 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
+    "generate-manifest": "node scripts/generate-manifest.js",
+    "prestart": "npm run generate-manifest",
     "start": "ui5 serve --open index.html",
+    "prebuild": "npm run generate-manifest",
     "build": "ui5 build --clean-dest --dest dist && node scripts/copy-components.js"
   },
   "devDependencies": {
