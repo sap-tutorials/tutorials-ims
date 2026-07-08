@@ -1,0 +1,135 @@
+# hugo/data/api_endpoints.yaml
+#
+# Canonical, public-safe inventory of the HTTP surfaces linked from
+# /api-docs/. Rendered by the `api-endpoint-table` shortcode. Drift
+# against docs/developers/operations/testing-endpoints.md is enforced
+# by scripts/check-api-docs-drift.cjs (CI: .github/workflows/api-docs-drift.yml).
+#
+# ─── How the drift check works ──────────────────────────────────────
+# For every row, at least one of `path` or every element of `driftMarkers`
+# must appear (verbatim substring) in
+# docs/developers/operations/testing-endpoints.md. Rows tagged
+# `skipDrift: true` (e.g. schema-only placeholders like
+# `<odata-path>/$metadata`) are exempt.
+#
+# Wildcard/summary rows use `driftMarkers` to pin at least one concrete
+# path that must exist. The drift check is one-way — testing-endpoints.md
+# is intentionally broader than this file.
+#
+# ─── When you edit this file ────────────────────────────────────────
+# Either the exact `path`, or every string in `driftMarkers`, must ALSO
+# exist verbatim in testing-endpoints.md. Add / update the row there
+# too, or the PR will fail api-docs-drift.
+#
+# Distinct from db/data/api-docs.yaml — that YAML feeds the Business
+# Accelerator Hub cache (#746) and is unrelated to this page.
+
+sections:
+
+  public:
+    columns: [path, purpose]
+    rows:
+      - path: "/graphql/public"
+        auth: "None"
+        purpose: 'GraphQL over published content — concepts, tutorials, missions, search. Full page: <a href="/api-docs/graphql/">GraphQL API</a>.'
+        linkPath: true
+        skipDrift: true  # GraphQL endpoint documented on /api-docs/graphql/, not testing-endpoints.md
+      - path: "/homepage/*"
+        auth: "None"
+        purpose: '<code>HomepageService</code> — the same feed the homepage islands consume (<code>/api/homepage/events</code>, <code>/api/homepage/videos</code>, <code>/api/homepage/communityBlogs</code>, <code>/api/homepage/news</code>, <code>/api/homepage/shelves?verb=&lt;v&gt;</code>, <code>/api/homepage/redirectsActive</code>, <code>/api/alerts</code>).'
+        driftMarkers:
+          - "/api/homepage/events"
+          - "/api/homepage/videos"
+          - "/api/homepage/shelves"
+      - path: "/search/*"
+        auth: "None"
+        purpose: '<code>SearchService</code> — word-boundary search across tutorials, missions, groups, concepts.'
+        driftMarkers:
+          - "/search/"
+          - "SearchService"
+      - path: "/graph/*"
+        auth: "None"
+        purpose: '<code>KnowledgeGraphService</code> — published concept projections, <code>/graph/explore-data</code> (bulk graph JSON), <code>/graph/path?from=&amp;to=</code> (shortest-path).'
+        driftMarkers:
+          - "/graph/explore-data"
+          - "/graph/path"
+      - path: "/content/tutorials/{slug}"
+        auth: "None"
+        purpose: 'Dynamic tutorial HTML — served from HANA (gzip BLOBs), not the filesystem. AppRouter routes <code>/tutorials/*</code> here.'
+      - path: "/build/*"
+        auth: "None"
+        purpose: 'Build-time catalog feeds — <code>/build/catalog</code>, <code>/build/navigator</code>, <code>/build/slug-mapping</code>, <code>/build/repo-catalog</code>, <code>/build/concepts</code>, <code>/build/homepage-shelves</code>, <code>/build/verb-definitions</code>, <code>/build/shelf-definitions</code>. Read-only; consumed by Hugo at build time and by the AppRouter.'
+        driftMarkers:
+          - "/build/catalog"
+          - "/build/navigator"
+          - "/build/concepts"
+      - path: "/api/advocates"
+        auth: "None"
+        purpose: 'List of active <a href="/developer-advocates/">Developer Advocates</a>. ETag + <code>max-age=60, stale-while-revalidate=600</code>. Photo bytes via <code>/api/advocates/:slug/photo[?size=thumb]</code>.'
+      - path: "/health"
+        auth: "None"
+        purpose: 'Liveness + database round-trip probes (<code>/health</code>, <code>/health/db</code>).'
+        driftMarkers:
+          - "/health"
+          - "/health/db"
+
+  developer:
+    columns: [path, purpose]
+    rows:
+      - path: "/graphql"
+        auth: "XSUAA"
+        purpose: 'Full GraphQL — everything in <code>/graphql/public</code> plus user-scoped reads on <code>DeveloperService</code>.'
+        linkPath: true
+        skipDrift: true  # GraphQL endpoint documented on /api-docs/graphql/, not testing-endpoints.md
+      - path: "/api/"
+        auth: "XSUAA"
+        purpose: '<code>DeveloperService</code> — self-service progress, preferences, tutorial completion state.'
+        driftMarkers:
+          - "/api/"
+          - "DeveloperService"
+      - path: "/api/v1/"
+        auth: "XSUAA"
+        purpose: '<code>ConsolidationService</code> — legacy-shape bulk reads over published entities. Kept for the IMS-migration compatibility layer.'
+        driftMarkers:
+          - "/api/v1/"
+          - "ConsolidationService"
+      - path: "/api/recommendations"
+        auth: "XSUAA"
+        purpose: 'Personalized "what''s next" (embedding centroid + co-completion blend).'
+      - path: "/auth/user"
+        auth: "XSUAA"
+        purpose: 'The current identity''s <code>{ id, email, name }</code>.'
+      - path: "/api/qrcode?url=..."
+        auth: "XSUAA"
+        purpose: 'QR PNG generation.'
+        driftMarkers: ["/api/qrcode"]
+      - path: "/api/codecheck"
+        auth: "XSUAA"
+        purpose: 'AI code-check (gated on <code>ChatSettings.codeCheckEnabled</code>; 30/hr per user).'
+      - path: "/chat/stream"
+        auth: "XSUAA"
+        purpose: 'Joule chat streaming endpoint (Server-Sent Events).'
+
+  feeds:
+    columns: [path, format, contents]
+    rows:
+      - path: "/index.xml"
+        auth: "None"
+        format: "RSS 2.0"
+        contents: "Site-wide feed (Hugo default)."
+        skipDrift: true
+      - path: "/tutorials/index.xml"
+        auth: "None"
+        format: "RSS 2.0"
+        contents: "Tutorial listings."
+        skipDrift: true
+      - path: "/graphql/schema.graphql"
+        auth: "None"
+        format: "GraphQL SDL"
+        contents: "Published every release."
+        skipDrift: true
+      - path: "<odata-path>/$metadata"
+        auth: "None"
+        format: "EDMX / CSDL"
+        contents: "Machine-readable schema for every OData service listed above."
+        skipDrift: true

@@ -1,0 +1,64 @@
+{{/*
+  api-endpoint-table shortcode
+  ────────────────────────────
+
+  Renders one section of hugo/data/api_endpoints.yaml as an HTML <table>.
+
+  Usage:
+    {{< api-endpoint-table section="public" >}}
+    {{< api-endpoint-table section="developer" >}}
+    {{< api-endpoint-table section="feeds" >}}
+
+  A section is defined by its `columns` list; each row supplies values for
+  those keys plus any of `path`, `purpose`, `format`, `contents`. Setting
+  `linkPath: true` on a row wraps the path cell in an <a>.
+
+  Drift with docs/developers/operations/testing-endpoints.md is enforced
+  by scripts/check-api-docs-drift.cjs (workflow: api-docs-drift.yml).
+
+  ─── security-reviewed: 2026-07-08 (#1040 follow-up) ─────────────────
+  This shortcode calls `safeHTML` on every cell so the YAML seed can use
+  <code>/<a> for readability. The YAML file is repo-committed and
+  edited only via PR review, matching the trust model used by the
+  homepage-shelves + verb-definitions data files.
+*/}}
+{{- $section := .Get "section" -}}
+{{- if not $section -}}
+  {{- errorf "api-endpoint-table: `section` param required (%s)" .Position -}}
+{{- end -}}
+{{- $data := index site.Data.api_endpoints.sections $section -}}
+{{- if not $data -}}
+  {{- errorf "api-endpoint-table: section %q not found in hugo/data/api_endpoints.yaml (%s)" $section .Position -}}
+{{- end -}}
+{{- $cols := $data.columns -}}
+<div class="api-endpoint-table" data-section="{{ $section }}">
+<table>
+  <thead>
+    <tr>
+      {{- range $cols -}}
+        <th>{{ . | humanize }}</th>
+      {{- end -}}
+    </tr>
+  </thead>
+  <tbody>
+    {{- range $row := $data.rows -}}
+      <tr>
+        {{- range $col := $cols -}}
+          {{- $val := index $row $col -}}
+          <td>
+            {{- if and (eq $col "path") $row.linkPath -}}
+              <a href="{{ $val }}"><code>{{ $val }}</code></a>
+            {{- else if eq $col "path" -}}
+              <code>{{ $val }}</code>
+            {{- else -}}
+              {{/* security-reviewed: cells are PR-reviewed in hugo/data/api_endpoints.yaml. */ -}}
+              {{/* Trusted HTML fragments are intentional so <code>, <a> etc. render inline. */ -}}
+              {{- $val | safeHTML -}}
+            {{- end -}}
+          </td>
+        {{- end -}}
+      </tr>
+    {{- end -}}
+  </tbody>
+</table>
+</div>

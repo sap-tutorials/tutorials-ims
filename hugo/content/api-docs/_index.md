@@ -14,16 +14,7 @@ developers.sap.com is a developer site. Everything the browser sees is available
 
 No token required. Safe to hit from a browser, a Lambda, or `curl` on a laptop.
 
-| Path | Purpose |
-|---|---|
-| [`/graphql/public`](/graphql/public) | GraphQL over published content — concepts, tutorials, missions, search. Full page: [GraphQL API](/api-docs/graphql/). |
-| `/homepage/*` | `HomepageService` — the same feed the homepage islands consume (`/api/homepage/events`, `/api/homepage/videos`, `/api/homepage/communityBlogs`, `/api/homepage/news`, `/api/homepage/shelves?verb=<v>`, `/api/homepage/redirectsActive`, `/api/alerts`). |
-| `/search/*` | `SearchService` — word-boundary search across tutorials, missions, groups, concepts. |
-| `/graph/*` | `KnowledgeGraphService` — published concept projections, `/graph/explore-data` (bulk graph JSON), `/graph/path?from=&to=` (shortest-path). |
-| `/content/tutorials/:slug` | Dynamic tutorial HTML — served from HANA (gzip BLOBs), not the filesystem. AppRouter routes `/tutorials/*` here. |
-| `/build/*` | Build-time catalog feeds — `/build/catalog`, `/build/navigator`, `/build/slug-mapping`, `/build/repo-catalog`, `/build/concepts`, `/build/homepage-shelves`, `/build/verb-definitions`, `/build/shelf-definitions`. Read-only; consumed by Hugo at build time and by the AppRouter. |
-| `/api/advocates` | List of active [Developer Advocates](/developer-advocates/). ETag + `max-age=60, stale-while-revalidate=600`. Photo bytes via `/api/advocates/:slug/photo[?size=thumb]`. |
-| `/health` / `/health/db` | Liveness + database round-trip probes. |
+{{< api-endpoint-table section="public" >}}
 
 Every OData service also serves `$metadata` (EDMX / CSDL) at `<path>/$metadata` — point a code-gen client at that URL and you're done.
 
@@ -31,16 +22,7 @@ Every OData service also serves `$metadata` (EDMX / CSDL) at `<path>/$metadata` 
 
 For scripting against **your own** progress + preferences. Requires an XSUAA bearer with the `Tutorial.API` scope (granted via the **Tutorials API Consumer** role collection). See [Getting a token](/api-docs/graphql/#getting-a-token) on the GraphQL page for the OAuth2 auth-code+PKCE and client-credentials flows.
 
-| Path | Purpose |
-|---|---|
-| [`/graphql`](/graphql) | Full GraphQL — everything in `/graphql/public` plus user-scoped reads on `DeveloperService`. |
-| `/api/*` | `DeveloperService` — self-service progress, preferences, tutorial completion state. |
-| `/api/v1/*` | `ConsolidationService` — legacy-shape bulk reads over published entities. Kept for the IMS-migration compatibility layer. |
-| `/api/recommendations` | Personalized "what's next" (embedding centroid + co-completion blend). |
-| `/auth/user` | The current identity's `{ id, email, name }`. |
-| `/api/qrcode?url=…` | QR PNG generation. |
-| `/api/codecheck` | AI code-check (gated on `ChatSettings.codeCheckEnabled`; 30/hr per user). |
-| `/chat/stream` | Joule chat SSE stream. |
+{{< api-endpoint-table section="developer" >}}
 
 Full endpoint inventory + auth scopes: [`docs/developers/operations/testing-endpoints.md`](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/developers/operations/testing-endpoints.md).
 
@@ -103,12 +85,7 @@ Once connected, ask your agent "what's new in SAP" or paste an SAP error and it 
 
 ## Feeds
 
-| Path | Format | Contents |
-|---|---|---|
-| `/index.xml` | RSS 2.0 | Site-wide feed (Hugo default). |
-| `/tutorials/index.xml` | RSS 2.0 | Tutorial listings. |
-| `/graphql/schema.graphql` | GraphQL SDL | Published every release. |
-| `<odata-path>/$metadata` | EDMX / CSDL | Machine-readable schema for every OData service listed above. |
+{{< api-endpoint-table section="feeds" >}}
 
 ## Reference documentation
 
