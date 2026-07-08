@@ -322,7 +322,7 @@ async function searchConcepts(term: string) {
     params.set('$search', term)
     params.set('$top', '6')
     params.set('$select', 'slug,name,description')
-    const res = await fetch(`/graph/PublishedConcepts?${params}`)
+    const res = await fetch(`/graph/PublishedConceptsWithAliases?${params}`)
     if (!res.ok) {
       if (query.value.trim() === requestedQuery) conceptResults.value = []
       return

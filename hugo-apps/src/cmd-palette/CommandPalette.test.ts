@@ -100,7 +100,7 @@ describe('CommandPalette — CONCEPTS group', () => {
   it('renders a CONCEPTS group with concept-name search results', async () => {
     globalThis.fetch = makeFetchMock({
       '/search/SearchableItems':   { value: [] },
-      '/graph/PublishedConcepts':  { value: [
+      '/graph/PublishedConceptsWithAliases':  { value: [
         { slug: 'cds-annotations',       name: 'CDS Annotations',       description: 'Metadata on CDS entities' },
         { slug: 'cds-associations',      name: 'CDS Associations',      description: 'Relations between entities' },
       ]},
@@ -125,7 +125,7 @@ describe('CommandPalette — CONCEPTS group', () => {
   it('hides the CONCEPTS group when no concept results are returned', async () => {
     globalThis.fetch = makeFetchMock({
       '/search/SearchableItems':   { value: [{ ID: 't', title: 'Only tutorial', slug: 'only', description: '', primaryTag: null, averageTimeToComplete: null }] },
-      '/graph/PublishedConcepts':  { value: [] },
+      '/graph/PublishedConceptsWithAliases':  { value: [] },
     }) as unknown as typeof fetch
 
     const wrapper = mount(CommandPalette)
@@ -149,7 +149,7 @@ describe('CommandPalette — KNOWLEDGE GRAPH group', () => {
       '/search/SearchableItems':  { value: [
         { ID: 't1', title: 'Existing tutorial', slug: 'existing-tut', description: '', primaryTag: null, averageTimeToComplete: null },
       ]},
-      '/graph/PublishedConcepts': { value: [
+      '/graph/PublishedConceptsWithAliases': { value: [
         { slug: 'cds-annotations', name: 'CDS Annotations', description: 'Metadata on entities' },
       ]},
       '/graph/searchKG':          {
@@ -204,7 +204,7 @@ describe('CommandPalette — KNOWLEDGE GRAPH group', () => {
     globalThis.fetch = vi.fn(async (url: string) => {
       if (url.includes('/graph/searchKG')) return { ok: false, status: 500, json: async () => ({}) }
       if (url.includes('/search/SearchableItems')) return { ok: true, json: async () => ({ value: [] }) }
-      if (url.includes('/graph/PublishedConcepts'))  return { ok: true, json: async () => ({ value: [] }) }
+      if (url.includes('/graph/PublishedConceptsWithAliases'))  return { ok: true, json: async () => ({ value: [] }) }
       return { ok: false, json: async () => ({}) }
     }) as unknown as typeof fetch
 
