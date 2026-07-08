@@ -32,6 +32,7 @@
     "preflight:ai-quiz-smoke": "tsx scripts/preflight-ai-quiz-smoke.ts",
     "prebuild:parsers-bundle": "esbuild scripts/parsers/index.ts --bundle --platform=node --format=esm --outfile=srv-qa/lib/parsers.bundle.mjs --external:node:* --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
     "check:security-annotations": "node scripts/check-hugo-safe-html.cjs",
+    "check:api-docs-drift": "node scripts/check-api-docs-drift.cjs",
     "prebuild": "npm run prebuild:parsers-bundle && npm run check:security-annotations",
     "fetch-tutorials:qa": "tsx scripts/fetch-tutorials.ts --target hugo --channel qa",
     "build:qa": "hugo --source hugo --config ../hugo.qa.toml --minify && tsx scripts/verify-qa-build.ts hugo/public-qa",
