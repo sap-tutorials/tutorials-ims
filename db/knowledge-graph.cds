@@ -218,5 +218,6 @@ entity ConceptAliases : cuid, managed {
 annotate ConceptAliases with @assert.unique.conceptAlias : [concept, aliasLower];
 
 extend entity Concepts with {
-  aliases : Composition of many ConceptAliases on aliases.concept = $self;
+  aliases         : Composition of many ConceptAliases on aliases.concept = $self;
+  aliasSearchBlob : String(2000); // #1046 — materialized alias search blob, populated by after-write on ConceptAliases (Step 6). Never populated by CSV or the admin UI directly.
 }
