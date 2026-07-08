@@ -1,6 +1,33 @@
 // test/unit/srv/featured-topics-snapshot.test.js
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
+import { decodeDescription } from '../../../srv/lib/featured-topics-snapshot.js';
+
+describe('decodeDescription (HANA NCLOB → utf-8 string)', () => {
+  // (#1032 followup) On HANA, LargeString/NCLOB columns come back from the
+  // node driver as Node Buffer instances. Without decoding, JSON.stringify
+  // in the /build/featured-topics and /homepage/featuredTopics() responses
+  // would emit `{ "type": "Buffer", "data": [...] }` and the Vue island's
+  // v-html card template would render that JSON blob as visible garbage.
+  it('decodes a Buffer to its UTF-8 string', () => {
+    const buf = Buffer.from('Sign up for a trial account on SAP BTP.', 'utf-8');
+    expect(decodeDescription(buf)).toBe('Sign up for a trial account on SAP BTP.');
+  });
+
+  it('decodes multi-byte UTF-8 (e.g. accented characters) correctly', () => {
+    const buf = Buffer.from('Configuración de SAP BTP · démarrer', 'utf-8');
+    expect(decodeDescription(buf)).toBe('Configuración de SAP BTP · démarrer');
+  });
+
+  it('passes strings through unchanged', () => {
+    expect(decodeDescription('already a string')).toBe('already a string');
+  });
+
+  it('normalises null / undefined to empty string', () => {
+    expect(decodeDescription(null)).toBe('');
+    expect(decodeDescription(undefined)).toBe('');
+  });
+});
 
 describe('featured-topics-snapshot', () => {
   let recomputeSnapshot, readSnapshotForFeed;
