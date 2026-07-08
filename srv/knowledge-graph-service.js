@@ -808,6 +808,37 @@ export default cds.service.impl(async function () {
     }
   });
 
+  // #1046 — hydrate aliasSearchBlob on PublishedConceptsWithAliases so the
+  // palette's OData $search on this projection matches concept aliases.
+  // One IN-query batches all rows returned by the caller ($top≤6 from palette
+  // — no unbounded-fetch risk of the shape that broke featured missions in
+  // #1032). Fail-open: any exception leaves aliasSearchBlob undefined, and
+  // the palette gracefully drops the row.
+  this.after('READ', 'PublishedConceptsWithAliases', async (rows, req) => {
+    try {
+      const list = Array.isArray(rows) ? rows : (rows ? [rows] : [])
+      if (list.length === 0) return
+      const ids = list.map(r => r.ID).filter(Boolean)
+      if (ids.length === 0) return
+      const { ConceptAliases } = cds.entities('com.sap.developers.ims')
+      const aliasRows = await cds.tx(req).run(
+        SELECT.from(ConceptAliases)
+          .columns('concept_ID', 'aliasLower')
+          .where({ concept_ID: { in: ids } })
+      )
+      const byConcept = new Map()
+      for (const a of aliasRows) {
+        if (!byConcept.has(a.concept_ID)) byConcept.set(a.concept_ID, [])
+        byConcept.get(a.concept_ID).push(a.aliasLower)
+      }
+      for (const r of list) {
+        r.aliasSearchBlob = (byConcept.get(r.ID) || []).join(',')
+      }
+    } catch (err) {
+      cds.log('kg-search').warn?.('aliasSearchBlob hydrate failed:', err.message)
+    }
+  });
+
   // ─── neighborhood(slug) ────────────────────────────────────────────────
   this.on('neighborhood', async (req) => {
     const { slug } = req.data;

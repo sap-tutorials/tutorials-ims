@@ -81,6 +81,22 @@ service KnowledgeGraphService @(path : '/graph') {
     ID, slug, name, description, publishedAt, publishedBy, status
   } where publishedAt is not null and status = 'ACTIVE';
 
+  /**
+   * #1046 — PublishedConcepts + a searchable alias blob for the ⌘K
+   * palette's CONCEPTS group. aliasSearchBlob is a comma-joined lowercase
+   * alias string populated at READ time by the after-READ hook in
+   * srv/knowledge-graph-service.js. HANA $search hits it via @cds.search
+   * so queries like "SLT" match sap-landscape-transformation.
+   *
+   * Inherits @requires: 'any' from the service — anonymous-safe.
+   */
+  @readonly
+  @cds.search: { name, description, aliasSearchBlob }
+  entity PublishedConceptsWithAliases as projection on ims.Concepts {
+    ID, slug, name, description, publishedAt, publishedBy, status,
+    virtual null as aliasSearchBlob : String(2000)
+  } where publishedAt is not null and status = 'ACTIVE';
+
   // ─── Type definitions ──────────────────────────────────────────────────
   type ConceptRef {
     slug        : String;
