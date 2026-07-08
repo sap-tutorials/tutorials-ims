@@ -19,7 +19,7 @@ describe('mergeOtherResources — 3-array variadic (Phase 4.3)', () => {
     ];
 
     const result = mergeOtherResources(journeys, blogs, missions);
-    expect(result).toHaveLength(5);
+    expect(result).toHaveLength(MAX_OTHER_RESOURCES);   // #1089
     expect(result[0].slug).toBe('m1');  // overlap=9
     expect(result[1].slug).toBe('m2');  // overlap=8
     expect(result[2].slug).toBe('b1');  // overlap=7

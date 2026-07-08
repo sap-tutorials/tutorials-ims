@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { VERB_DEFAULTS, SHELF_DEFAULTS } from '../../../srv/lib/homepage/verb-shelf-defaults.js';   // #1089
 
 const SCHEMA = readFileSync(join(import.meta.dirname, '../../../db/homepage.cds'), 'utf8');
 
@@ -61,8 +62,8 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       'utf8'
     );
     const lines = csv.trim().split(/\r?\n/);
-    it('has header + 7 rows', () => {
-      expect(lines.length).toBe(8);
+    it('has header + one row per VERB_DEFAULTS entry', () => {   // #1089
+      expect(lines.length).toBe(VERB_DEFAULTS.length + 1);
     });
     // (#1029-followup) CSV intentionally omits tagline/whyItMatters/authoringStatus
     // so HDI .hdbtabledata never wipes admin-authored explainer content on redeploy.
@@ -96,8 +97,8 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       'utf8'
     );
     const lines = csv.trim().split(/\r?\n/);
-    it('has header + 4 rows', () => {
-      expect(lines.length).toBe(5);
+    it('has header + one row per SHELF_DEFAULTS entry', () => {   // #1089
+      expect(lines.length).toBe(SHELF_DEFAULTS.length + 1);
     });
     // See VerbDefinitions rationale above — same fix, same reason.
     it('header uses ID;shelfKey;label;iconName;sortOrder (editable columns omitted intentionally)', () => {

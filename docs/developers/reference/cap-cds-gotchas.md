@@ -669,3 +669,15 @@ Stable observations across CAP 10.x:
 The `test/hybrid/cron-service-schedule.test.js` reads the outbox broadly and filters in JS specifically because column-name casing may differ between HANA and SQLite. `srv/lib/scheduler-wedge.js` follows the same pattern.
 
 **Never use `CDS_OUTBOX_MESSAGES` directly except in the HANA escape hatch documented at `docs/developers/operations/scheduler-troubleshooting.md`.**
+
+---
+
+## Test hygiene — see `test-hygiene.md`
+
+When a test asserts against a domain vocabulary count (verb registry, profile
+vocab, event-type list, etc.), import the source-of-truth constant and derive
+the expectation. Bare integer literals in `toHaveLength(<N>)` /
+`.length).toBe(<N>)` drift silently when the vocab legitimately grows in a
+separate PR. See [test-hygiene.md](./test-hygiene.md) for the pattern, a
+registry of known source-of-truth constants, and when NOT to convert (fixture
+counts, drift-guard freezes, column-width caps). Filed under issue #1089.

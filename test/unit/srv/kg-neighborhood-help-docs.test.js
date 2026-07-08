@@ -6,7 +6,7 @@
 // the top-5 total behavior with 7 types present.
 
 import { describe, it, expect } from 'vitest';
-import { mergeOtherResources } from '../../../srv/lib/kg-neighborhood-merge.js';
+import { mergeOtherResources, MAX_OTHER_RESOURCES } from '../../../srv/lib/kg-neighborhood-merge.js';
 
 describe('kg-neighborhood-merge with help-docs (7-array)', () => {
   it('7-array merge respects overlapCount sort across all types', () => {
@@ -44,11 +44,11 @@ describe('kg-neighborhood-merge with help-docs (7-array)', () => {
     });
   });
 
-  it('top-5 cap applies across 7 types when help-doc dominates', () => {
+  it('top-K cap applies across 7 types when help-doc dominates', () => {
     const many = Array.from({ length: 10 }, (_, i) => ({
       type: 'help-doc', slug: `hd-${i}`, title: `HD${i}`, url: 'x', overlapCount: 10 - i,
     }));
     const result = mergeOtherResources([], [], [], [], [], [], many);
-    expect(result).toHaveLength(5);
+    expect(result).toHaveLength(MAX_OTHER_RESOURCES);   // #1089
   });
 });
