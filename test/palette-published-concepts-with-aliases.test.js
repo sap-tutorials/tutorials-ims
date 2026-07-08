@@ -25,6 +25,29 @@ describe('#1046 PublishedConceptsWithAliases', () => {
       { concept_ID: conceptId, alias: 'SLT',      aliasLower: 'slt',      source: 'SEED' },
       { concept_ID: conceptId, alias: 'S/4HANA',  aliasLower: 's/4hana',  source: 'SEED' }
     ])
+    // Seed data bypasses the after-write hook (it uses cds.run INSERT directly).
+    // Manually populate aliasSearchBlob to match what the hook would have written.
+    await UPDATE(Concepts).set({ aliasSearchBlob: 'slt,s/4hana' }).where({ ID: conceptId })
+
+    // Alias-only match concept — 'IDoc' does NOT appear anywhere in name or description.
+    // This is the honest guard: $search=IDoc must match solely through aliasSearchBlob.
+    await INSERT.into(Concepts).entries({
+      slug: 'intermediate-document',
+      name: 'Intermediate Document',
+      description: 'EDI standard exchange format for cross-system integration',
+      status: 'ACTIVE',
+      publishedAt: new Date().toISOString(),
+      publishedBy: 'test'
+    })
+    const idocRow = await SELECT.one.from(Concepts).where({ slug: 'intermediate-document' })
+    await INSERT.into(ConceptAliases).entries({
+      concept_ID: idocRow.ID,
+      alias: 'IDoc',
+      aliasLower: 'idoc',
+      source: 'SEED'
+    })
+    // Manually populate aliasSearchBlob since the direct INSERT bypasses the after-write hook.
+    await UPDATE(Concepts).set({ aliasSearchBlob: 'idoc' }).where({ ID: idocRow.ID })
   })
 
   it('hydrates aliasSearchBlob on read', async () => {
@@ -51,4 +74,15 @@ describe('#1046 PublishedConceptsWithAliases', () => {
     const { data } = await project.get('/graph/PublishedConceptsWithAliases?$search=xyzzy-nomatch&$top=6')
     expect(data.value).toEqual([])
   })
+
+  // Honest alias-only guard: 'IDoc' appears neither in name ('Intermediate Document')
+  // nor description ('EDI standard exchange format for cross-system integration').
+  // A match here proves aliasSearchBlob is actually driving the $search result —
+  // not the name/description columns.
+  it('matches "IDoc" via alias when neither name nor description contain "IDoc"', async () => {
+    const { data } = await project.get('/graph/PublishedConceptsWithAliases?$search=IDoc&$top=6')
+    const slugs = (data.value || []).map(r => r.slug)
+    expect(slugs).toContain('intermediate-document')
+  })
 })
+
