@@ -23,6 +23,7 @@ vi.mock('@sap-ai-sdk/orchestration', () => ({
 }));
 vi.mock('../../srv/lib/chat-settings-resolver.js', () => ({
   resolveChatLlmSettings: (...a) => settingsMock(...a),
+  resolveEmbeddingSettings: async () => ({ model: 'text-embedding-3-small' }),
 }));
 
 const { classify } = await import('../../srv/lib/relevance-classifier.js');
@@ -47,6 +48,21 @@ describe('relevance-classifier', () => {
     expect(r.source).toBe('embedding');
     expect(r.confidence).toBeGreaterThan(0.5);
     expect(llmMock).not.toHaveBeenCalled();
+  });
+
+  // Regression guard for the #1078 miss: embed() was called without a model
+  // arg, propagating undefined to AzureOpenAiEmbeddingClient(undefined) and
+  // throwing "Cannot read properties of undefined (reading 'modelName')" on
+  // every classifier call. Every observed row in production landed as
+  // fallback-keyword because of this — assert the model reaches embed().
+  it('passes an embedding model name to embed() — never undefined', async () => {
+    embedMock.mockResolvedValue([ITEM_VEC]);
+    await classify({ title: 't', description: 'd', sourceType: 'sap-news' });
+    expect(embedMock).toHaveBeenCalledTimes(1);
+    const [inputs, model] = embedMock.mock.calls[0];
+    expect(inputs).toEqual(['t\n\nd']);
+    expect(typeof model).toBe('string');
+    expect(model.length).toBeGreaterThan(0);
   });
 
   it('high negative margin → verdict "not-relevant", source "embedding"', async () => {
