@@ -239,6 +239,14 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
     group: 'explore',
     run: navTo('/explore/'),
   },
+  {
+    id: 'explore-api-docs',
+    label: 'API — HTTP services, sap-devs CLI, MCP server, and feeds',
+    icon: 'command-line',
+    keywords: ['api', 'apis', 'graphql', 'odata', 'rest', 'cli', 'sap-devs', 'mcp', 'feed', 'rss', 'edmx', 'openapi', 'schema', 'developer', 'programmatic'],
+    group: 'explore',
+    run: navTo('/api-docs/'),
+  },
 ]
 
 /**
