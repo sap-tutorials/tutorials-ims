@@ -50,7 +50,7 @@ describe('LearningPreferences.vue', () => {
       'POST /api/setLearningPreferences': async () => {
         return { body: { deployment: 'cloud', role: null, cloud: null } };
       },
-      'POST /api/developer/setPreferredEventRegion': async () => ({ body: true }),
+      'POST /api/setPreferredEventRegion': async () => ({ body: true }),
     });
     vi.stubGlobal('fetch', vi.fn(async (url, init) => {
       if (init?.method === 'POST' && url === '/api/setLearningPreferences') (global as any).__lastPost = JSON.parse(init.body as string);

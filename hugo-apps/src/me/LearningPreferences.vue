@@ -221,10 +221,9 @@ async function onSave() {
       }),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    await fetch('/api/developer/setPreferredEventRegion', {
+    await csrfFetch('/api/setPreferredEventRegion', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ region: prefs.preferredEventRegion }),
     });
     status.value = 'saved';

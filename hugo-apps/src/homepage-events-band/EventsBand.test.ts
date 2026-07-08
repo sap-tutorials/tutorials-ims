@@ -31,6 +31,7 @@ describe('EventsBand', () => {
     await new Promise(r => setTimeout(r, 0));
     await w.vm.$nextTick();
     expect(w.findAll('.event-card')).toHaveLength(6);
+    expect((global.fetch as any).mock.calls[0][0]).toMatch(/^\/homepage\/events\?/);
   });
 
   it('renders empty state when the endpoint returns []', async () => {
@@ -66,12 +67,11 @@ describe('EventsBand', () => {
     await new Promise(r => setTimeout(r, 0));
     await w.findAll('.events-band__chip')[2].trigger('click');   // EMEA
     await new Promise(r => setTimeout(r, 0));
-    // The EMEA events fetch is the last call (.at(-1)); .at(-2) would be
-    // beaconApplied fired in onMounted (setPreferredEventRegion is skipped
-    // because isSignedIn() returns false without a JSESSIONID cookie or
-    // __homepagePersonalized in the test environment).
+    // The EMEA events fetch is the last call (.at(-1)); setPreferredEventRegion
+    // is skipped because isSignedIn() returns false without a JSESSIONID cookie
+    // or __homepagePersonalized in the test environment.
     const lastCall = (global.fetch as any).mock.calls.at(-1)[0] as string;
-    expect(lastCall).toContain('region=EMEA');
+    expect(lastCall).toMatch(/^\/homepage\/events\?.*region=EMEA/);
     expect(localStorage.getItem('sap-devs-homepage-events-region')).toBe('EMEA');
   });
 });

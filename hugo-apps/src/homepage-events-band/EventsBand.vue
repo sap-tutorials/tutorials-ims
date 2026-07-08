@@ -1,12 +1,13 @@
 <script setup lang="ts">
 // #1030 — Row 3 homepage events band.
-// Fetches /api/homepage/events, renders 6 cards, exposes a 5-chip filter.
+// Fetches /homepage/events, renders 6 cards, exposes a 5-chip filter.
 // Initial region priority: envelope.eventsRegion > localStorage > TZ hint > 'ALL'.
 
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import type { Region } from './tz-to-region';
 import { tzToRegion } from './tz-to-region';
 import { readLocalStorageRegion, writeLocalStorageRegion } from './region-storage';
+import { csrfFetch } from '@shared/csrf-fetch';
 
 type EventCard = {
   title: string;
@@ -50,7 +51,7 @@ async function refetch(r: Region) {
   // ALL/VIRTUAL don't need includeVirtual (server picks the right semantics).
   if (r !== 'ALL' && r !== 'VIRTUAL') params.set('includeVirtual', 'true');
   try {
-    const resp = await fetch(`/api/homepage/events?${params}`, {
+    const resp = await fetch(`/homepage/events?${params}`, {
       credentials: 'include',
       headers: currentEtag ? { 'If-None-Match': currentEtag } : {},
     });
@@ -70,17 +71,16 @@ async function refetch(r: Region) {
 }
 
 function isSignedIn(): boolean {
-  return document.cookie.includes('JSESSIONID') || Boolean((window as any).__homepagePersonalized);
+  return /(?:^|;\s*)JSESSIONID=/.test(document.cookie) || Boolean((window as any).__homepagePersonalized);
 }
 
 async function onChipClick(next: Region) {
   region.value = next;
   writeLocalStorageRegion(next);
   if (isSignedIn()) {
-    fetch('/api/developer/setPreferredEventRegion', {
+    csrfFetch('/api/setPreferredEventRegion', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ region: next }),
     }).catch(() => { /* fire-and-forget */ });
   }
@@ -90,11 +90,6 @@ async function onChipClick(next: Region) {
 onMounted(async () => {
   region.value = resolveInitialRegion();
   await refetch(region.value);
-  // Fire the hint_used metric once per session — server-side counter.
-  fetch('/api/homepage/beaconApplied', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    credentials: 'include', body: JSON.stringify({ surface: 'events-band' }),
-  }).catch(() => {});
 
   try {
     bc = new BroadcastChannel('sap-devs-prefs');
