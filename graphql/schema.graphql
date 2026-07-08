@@ -1104,6 +1104,8 @@ type com_sap_developers_ims_Concepts {
   links(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialConceptLinks_filter], orderBy: [com_sap_developers_ims_TutorialConceptLinks_orderBy]): com_sap_developers_ims_TutorialConceptLinks_connection
   outgoingEdges(top: Int, skip: Int, filter: [com_sap_developers_ims_ConceptEdges_filter], orderBy: [com_sap_developers_ims_ConceptEdges_orderBy]): com_sap_developers_ims_ConceptEdges_connection
   incomingEdges(top: Int, skip: Int, filter: [com_sap_developers_ims_ConceptEdges_filter], orderBy: [com_sap_developers_ims_ConceptEdges_orderBy]): com_sap_developers_ims_ConceptEdges_connection
+  aliases(top: Int, skip: Int, filter: [com_sap_developers_ims_ConceptAliases_filter], orderBy: [com_sap_developers_ims_ConceptAliases_orderBy]): com_sap_developers_ims_ConceptAliases_connection
+  aliasSearchBlob: String
 }
 
 """
@@ -1184,6 +1186,45 @@ input com_sap_developers_ims_ConceptEdges_orderBy {
   status: SortDirection
   extractedAt: SortDirection
   modelVersion: SortDirection
+}
+
+type com_sap_developers_ims_ConceptAliases_connection {
+  nodes: [com_sap_developers_ims_ConceptAliases]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_ConceptAliases {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  concept: com_sap_developers_ims_Concepts
+  alias: String
+  aliasLower: String
+  source: String
+}
+
+input com_sap_developers_ims_ConceptAliases_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  alias: [String_filter]
+  aliasLower: [String_filter]
+  source: [String_filter]
+}
+
+input com_sap_developers_ims_ConceptAliases_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  alias: SortDirection
+  aliasLower: SortDirection
+  source: SortDirection
 }
 
 type DeveloperService_TutorialCategories_connection {
@@ -1744,7 +1785,9 @@ type KnowledgeGraphService {
   Concepts(top: Int, skip: Int, filter: [KnowledgeGraphService_Concepts_filter], orderBy: [KnowledgeGraphService_Concepts_orderBy]): KnowledgeGraphService_Concepts_connection
   TutorialConceptLinks(top: Int, skip: Int, filter: [KnowledgeGraphService_TutorialConceptLinks_filter], orderBy: [KnowledgeGraphService_TutorialConceptLinks_orderBy]): KnowledgeGraphService_TutorialConceptLinks_connection
   ConceptEdges(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptEdges_filter], orderBy: [KnowledgeGraphService_ConceptEdges_orderBy]): KnowledgeGraphService_ConceptEdges_connection
+  ConceptAliases(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptAliases_filter], orderBy: [KnowledgeGraphService_ConceptAliases_orderBy]): KnowledgeGraphService_ConceptAliases_connection
   PublishedConcepts(top: Int, skip: Int, filter: [KnowledgeGraphService_PublishedConcepts_filter], orderBy: [KnowledgeGraphService_PublishedConcepts_orderBy]): KnowledgeGraphService_PublishedConcepts_connection
+  PublishedConceptsWithAliases(top: Int, skip: Int, filter: [KnowledgeGraphService_PublishedConceptsWithAliases_filter], orderBy: [KnowledgeGraphService_PublishedConceptsWithAliases_orderBy]): KnowledgeGraphService_PublishedConceptsWithAliases_connection
 }
 
 type KnowledgeGraphService_Concepts_connection {
@@ -1771,7 +1814,10 @@ type KnowledgeGraphService_Concepts {
   links(top: Int, skip: Int, filter: [KnowledgeGraphService_TutorialConceptLinks_filter], orderBy: [KnowledgeGraphService_TutorialConceptLinks_orderBy]): KnowledgeGraphService_TutorialConceptLinks_connection
   outgoingEdges(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptEdges_filter], orderBy: [KnowledgeGraphService_ConceptEdges_orderBy]): KnowledgeGraphService_ConceptEdges_connection
   incomingEdges(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptEdges_filter], orderBy: [KnowledgeGraphService_ConceptEdges_orderBy]): KnowledgeGraphService_ConceptEdges_connection
+  aliases(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptAliases_filter], orderBy: [KnowledgeGraphService_ConceptAliases_orderBy]): KnowledgeGraphService_ConceptAliases_connection
+  aliasSearchBlob: String
   isolated: Boolean
+  isPublished: Boolean
 }
 
 type KnowledgeGraphService_TutorialConceptLinks_connection {
@@ -1870,6 +1916,45 @@ input KnowledgeGraphService_ConceptEdges_orderBy {
   modelVersion: SortDirection
 }
 
+type KnowledgeGraphService_ConceptAliases_connection {
+  nodes: [KnowledgeGraphService_ConceptAliases]
+  totalCount: Int
+}
+
+type KnowledgeGraphService_ConceptAliases {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  concept: KnowledgeGraphService_Concepts
+  alias: String
+  aliasLower: String
+  source: String
+}
+
+input KnowledgeGraphService_ConceptAliases_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  alias: [String_filter]
+  aliasLower: [String_filter]
+  source: [String_filter]
+}
+
+input KnowledgeGraphService_ConceptAliases_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  alias: SortDirection
+  aliasLower: SortDirection
+  source: SortDirection
+}
+
 input KnowledgeGraphService_Concepts_filter {
   ID: [ID_filter]
   createdAt: [Timestamp_filter]
@@ -1885,7 +1970,9 @@ input KnowledgeGraphService_Concepts_filter {
   lastSeenAt: [Timestamp_filter]
   publishedAt: [Timestamp_filter]
   publishedBy: [String_filter]
+  aliasSearchBlob: [String_filter]
   isolated: [Boolean_filter]
+  isPublished: [Boolean_filter]
 }
 
 input KnowledgeGraphService_Concepts_orderBy {
@@ -1903,7 +1990,9 @@ input KnowledgeGraphService_Concepts_orderBy {
   lastSeenAt: SortDirection
   publishedAt: SortDirection
   publishedBy: SortDirection
+  aliasSearchBlob: SortDirection
   isolated: SortDirection
+  isPublished: SortDirection
 }
 
 type KnowledgeGraphService_PublishedConcepts_connection {
@@ -1939,6 +2028,44 @@ input KnowledgeGraphService_PublishedConcepts_orderBy {
   publishedAt: SortDirection
   publishedBy: SortDirection
   status: SortDirection
+}
+
+type KnowledgeGraphService_PublishedConceptsWithAliases_connection {
+  nodes: [KnowledgeGraphService_PublishedConceptsWithAliases]
+  totalCount: Int
+}
+
+type KnowledgeGraphService_PublishedConceptsWithAliases {
+  ID: ID
+  slug: String
+  name: String
+  description: String
+  publishedAt: Timestamp
+  publishedBy: String
+  status: String
+  aliasSearchBlob: String
+}
+
+input KnowledgeGraphService_PublishedConceptsWithAliases_filter {
+  ID: [ID_filter]
+  slug: [String_filter]
+  name: [String_filter]
+  description: [String_filter]
+  publishedAt: [Timestamp_filter]
+  publishedBy: [String_filter]
+  status: [String_filter]
+  aliasSearchBlob: [String_filter]
+}
+
+input KnowledgeGraphService_PublishedConceptsWithAliases_orderBy {
+  ID: SortDirection
+  slug: SortDirection
+  name: SortDirection
+  description: SortDirection
+  publishedAt: SortDirection
+  publishedBy: SortDirection
+  status: SortDirection
+  aliasSearchBlob: SortDirection
 }
 
 type SearchService {
@@ -2512,6 +2639,8 @@ input com_sap_developers_ims_Concepts_C {
   links: [com_sap_developers_ims_TutorialConceptLinks_C]
   outgoingEdges: [com_sap_developers_ims_ConceptEdges_C]
   incomingEdges: [com_sap_developers_ims_ConceptEdges_C]
+  aliases: [com_sap_developers_ims_ConceptAliases_C]
+  aliasSearchBlob: String
 }
 
 input com_sap_developers_ims_ConceptEdges_C {
@@ -2528,6 +2657,18 @@ input com_sap_developers_ims_ConceptEdges_C {
   status: String
   extractedAt: Timestamp
   modelVersion: String
+}
+
+input com_sap_developers_ims_ConceptAliases_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  concept: com_sap_developers_ims_Concepts_C
+  alias: String
+  aliasLower: String
+  source: String
 }
 
 input DeveloperService_TutorialCategories_C {
@@ -2933,7 +3074,9 @@ type KnowledgeGraphService_input {
   Concepts: KnowledgeGraphService_Concepts_input
   TutorialConceptLinks: KnowledgeGraphService_TutorialConceptLinks_input
   ConceptEdges: KnowledgeGraphService_ConceptEdges_input
+  ConceptAliases: KnowledgeGraphService_ConceptAliases_input
   PublishedConcepts: KnowledgeGraphService_PublishedConcepts_input
+  PublishedConceptsWithAliases: KnowledgeGraphService_PublishedConceptsWithAliases_input
 }
 
 type KnowledgeGraphService_Concepts_input {
@@ -2961,7 +3104,10 @@ input KnowledgeGraphService_Concepts_C {
   links: [KnowledgeGraphService_TutorialConceptLinks_C]
   outgoingEdges: [KnowledgeGraphService_ConceptEdges_C]
   incomingEdges: [KnowledgeGraphService_ConceptEdges_C]
+  aliases: [KnowledgeGraphService_ConceptAliases_C]
+  aliasSearchBlob: String
   isolated: Boolean
+  isPublished: Boolean
 }
 
 input KnowledgeGraphService_TutorialConceptLinks_C {
@@ -2996,6 +3142,18 @@ input KnowledgeGraphService_ConceptEdges_C {
   modelVersion: String
 }
 
+input KnowledgeGraphService_ConceptAliases_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  concept: KnowledgeGraphService_Concepts_C
+  alias: String
+  aliasLower: String
+  source: String
+}
+
 input KnowledgeGraphService_Concepts_U {
   createdAt: Timestamp
   createdBy: String
@@ -3014,7 +3172,10 @@ input KnowledgeGraphService_Concepts_U {
   links: [KnowledgeGraphService_TutorialConceptLinks_C]
   outgoingEdges: [KnowledgeGraphService_ConceptEdges_C]
   incomingEdges: [KnowledgeGraphService_ConceptEdges_C]
+  aliases: [KnowledgeGraphService_ConceptAliases_C]
+  aliasSearchBlob: String
   isolated: Boolean
+  isPublished: Boolean
 }
 
 type KnowledgeGraphService_TutorialConceptLinks_input {
@@ -3059,6 +3220,23 @@ input KnowledgeGraphService_ConceptEdges_U {
   modelVersion: String
 }
 
+type KnowledgeGraphService_ConceptAliases_input {
+  create(input: [KnowledgeGraphService_ConceptAliases_C]!): [KnowledgeGraphService_ConceptAliases]
+  update(filter: [KnowledgeGraphService_ConceptAliases_filter]!, input: KnowledgeGraphService_ConceptAliases_U!): [KnowledgeGraphService_ConceptAliases]
+  delete(filter: [KnowledgeGraphService_ConceptAliases_filter]!): Int
+}
+
+input KnowledgeGraphService_ConceptAliases_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  concept: KnowledgeGraphService_Concepts_C
+  alias: String
+  aliasLower: String
+  source: String
+}
+
 type KnowledgeGraphService_PublishedConcepts_input {
   create(input: [KnowledgeGraphService_PublishedConcepts_C]!): [KnowledgeGraphService_PublishedConcepts]
   update(filter: [KnowledgeGraphService_PublishedConcepts_filter]!, input: KnowledgeGraphService_PublishedConcepts_U!): [KnowledgeGraphService_PublishedConcepts]
@@ -3082,6 +3260,33 @@ input KnowledgeGraphService_PublishedConcepts_U {
   publishedAt: Timestamp
   publishedBy: String
   status: String
+}
+
+type KnowledgeGraphService_PublishedConceptsWithAliases_input {
+  create(input: [KnowledgeGraphService_PublishedConceptsWithAliases_C]!): [KnowledgeGraphService_PublishedConceptsWithAliases]
+  update(filter: [KnowledgeGraphService_PublishedConceptsWithAliases_filter]!, input: KnowledgeGraphService_PublishedConceptsWithAliases_U!): [KnowledgeGraphService_PublishedConceptsWithAliases]
+  delete(filter: [KnowledgeGraphService_PublishedConceptsWithAliases_filter]!): Int
+}
+
+input KnowledgeGraphService_PublishedConceptsWithAliases_C {
+  ID: ID
+  slug: String
+  name: String
+  description: String
+  publishedAt: Timestamp
+  publishedBy: String
+  status: String
+  aliasSearchBlob: String
+}
+
+input KnowledgeGraphService_PublishedConceptsWithAliases_U {
+  slug: String
+  name: String
+  description: String
+  publishedAt: Timestamp
+  publishedBy: String
+  status: String
+  aliasSearchBlob: String
 }
 
 type SearchService_input {
