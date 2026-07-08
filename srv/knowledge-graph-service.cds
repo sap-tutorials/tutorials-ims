@@ -273,6 +273,21 @@ service KnowledgeGraphService @(path : '/graph') {
 
   @requires : 'KnowledgeGraph.Admin'
   action triggerGraphRebuild() returns RebuildResult;
+
+  // #1080 — bulk publish. Sets publishedAt=$now and publishedBy=<user> on
+  // every ACTIVE Concepts row where publishedAt IS NULL. Idempotent
+  // (already-published rows are skipped by the WHERE clause). Returns the
+  // number of rows affected. Single UPDATE statement — does NOT fan-out to
+  // per-row publishConcept invocations, so downstream hooks (audit only,
+  // for now — publishConcept doesn't rebuild the graph either) fire once
+  // with an aggregate payload rather than N times.
+  //
+  // Rationale: the extraction pipeline can generate ~60 concepts/day on
+  // DEV. Row-by-row curation via multi-select is unworkable at that scale;
+  // admins need a "publish everything I've reviewed" escape hatch. Spot-
+  // review before publishing via the isPublished=false filter.
+  @requires : 'KnowledgeGraph.Admin'
+  action publishAllConcepts() returns { publishedCount : Integer };
 }
 
 // publishConcept / unpublishConcept are BOUND actions on Concepts so Fiori
@@ -295,6 +310,15 @@ extend entity KnowledgeGraphService.Concepts with actions {
 // stays null (Fiori renders `null` boolean as no badge). Added via
 // `extend ... with columns` so the base projection line stays a
 // legal-syntax `projection on ... excluding { embedding }`.
+//
+// #1080 — virtual `isPublished` is a Boolean projection of `publishedAt IS
+// NOT NULL`, stamped by the same after('READ') decorator. Filtering on the
+// raw `publishedAt` column gives Fiori a date picker (bad UX for a yes/no
+// curation question). The virtual field surfaces a proper Yes/No dropdown
+// in the admin FilterBar; a before('READ') CQN rewrite translates
+// `isPublished eq true|false` into `publishedAt IS (NOT) NULL` so the
+// filter still pushes down to HANA.
 extend KnowledgeGraphService.Concepts with columns {
-  virtual isolated : Boolean
+  virtual isolated    : Boolean,
+  virtual isPublished : Boolean
 };

@@ -2520,6 +2520,10 @@ annotate KnowledgeGraphService.Concepts with {
   // cleared by unpublishConcept; never user-edited.
   publishedAt     @Common.Label: 'Published'      @Common.FieldControl: #ReadOnly;
   publishedBy     @Common.Label: 'Published By'   @Common.FieldControl: #ReadOnly;
+  // #1080 — virtual Boolean projection of `publishedAt IS NOT NULL`.
+  // Populated by after('READ', 'Concepts'); filterable via a
+  // before('READ') CQN rewrite. Read-only — no PATCH path.
+  isPublished     @Common.Label: 'Published?'     @Common.FieldControl: #ReadOnly;
   // #918 — populated by after('READ', 'Concepts') decorator in
   // knowledge-graph-service.js from the KgIsolation sidecar.
   isolated        @Common.Label: 'Isolated'       @Common.FieldControl: #ReadOnly;
@@ -2533,7 +2537,7 @@ annotate KnowledgeGraphService.Concepts with @(
     Description    : { Value: slug }
   },
 
-  UI.SelectionFields: [ status, slug, isolated ],
+  UI.SelectionFields: [ status, isPublished, slug, isolated ],
 
   UI.LineItem: [
     { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
@@ -2595,6 +2599,11 @@ annotate KnowledgeGraphService.Concepts with @(
   // context — no parameter dialog. The Action reference matches the canonical
   // form used by AdminService.Tutorials/rebuildContent at line 609 above
   // (`<Service>.<actionName>`; FE V4 resolves the binding from context).
+  //
+  // #1080 "Publish All Unpublished" is UNBOUND (no row-context) and needs
+  // a confirmation dialog — wired via app/admin/concepts/webapp/manifest.json
+  // + ConceptActionsController.onPublishAllConcepts, mirroring the existing
+  // previewMerges / triggerGraphRebuild toolbar buttons.
   UI.Identification: [
     {
       $Type : 'UI.DataFieldForAction',
