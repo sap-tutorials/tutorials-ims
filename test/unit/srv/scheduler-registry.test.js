@@ -40,20 +40,21 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(() => registerJob({ jobName: 'dup', schedule: '0 1 * * *', ttlMs: 1000, description: 'x', fn: async () => 'b' })).toThrow(/Duplicate jobName/);
   });
 
-  it('registerJobs() registers exactly 40 jobs (lockstep)', async () => {
+  it('registerJobs() registers exactly 41 jobs (lockstep)', async () => {
     // The full registerJobs() schedules crons against node-cron. We run it
     // in a fresh test context; the test isolates by resetting the registry
     // in beforeEach and again in afterAll (below).
     registerJobs();
-    // #916 adds kg-pagerank                (32 -> 33)
-    // #917 adds kg-communities             (33 -> 34)
-    // #918 adds kg-wcc                     (34 -> 35)
-    // #948 adds kg-ondemand-drain          (35 -> 36)
-    // #1032 adds kg-featured-topics        (36 -> 37)
-    // #1033 adds community-blogs-fetch     (37 -> 38)
-    // #1033 adds community-blogs-classify  (38 -> 39)
-    // #1034 adds fetch-news                (39 -> 40)
-    expect(_getJobRegistry().size).toBe(40);
+    // #916  adds kg-pagerank              (32 -> 33)
+    // #917  adds kg-communities           (33 -> 34)
+    // #918  adds kg-wcc                   (34 -> 35)
+    // #948  adds kg-ondemand-drain        (35 -> 36)
+    // #1032 adds kg-featured-topics       (36 -> 37)
+    // #1033 adds community-blogs-fetch    (37 -> 38)
+    // #1033 adds community-blogs-classify (38 -> 39)
+    // #1031 adds reshuffle-video-rotation (39 -> 40)
+    // #1034 adds fetch-news               (40 -> 41)
+    expect(_getJobRegistry().size).toBe(41);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
@@ -64,6 +65,7 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(names).toContain('kg-featured-topics');
     expect(names).toContain('community-blogs-fetch');
     expect(names).toContain('community-blogs-classify');
+    expect(names).toContain('reshuffle-video-rotation');
     expect(names).toContain('fetch-news');
   });
 

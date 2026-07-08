@@ -298,6 +298,18 @@
         "componentData": {},
         "lazy": true
       },
+      "videosComponent": {
+        "name": "sap.tutorials.admin.videos",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "videoRotationComponent": {
+        "name": "sap.tutorials.admin.videoRotation",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
       "contentModerationComponent": {
         "name": "sap.tutorials.admin.contentModeration",
         "settings": {},
@@ -369,6 +381,8 @@
         { "name": "shelfDefinitions", "pattern": "shelf-definitions", "target": [{"name": "shelfDefinitionsTarget", "prefix": "sd"}] },
         { "name": "forYou",           "pattern": "for-you",           "target": [{"name": "forYouTarget",           "prefix": "fy"}] },
         { "name": "featuredTopics",   "pattern": "featured-topics",   "target": [{"name": "featuredTopicsTarget",   "prefix": "ft"}] },
+        { "name": "videos",         "pattern": "videos",         "target": [{"name": "videosTarget",         "prefix": "vi"}] },
+        { "name": "videoRotation",  "pattern": "video-rotation", "target": [{"name": "videoRotationTarget",  "prefix": "vr"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
@@ -609,6 +623,20 @@
           "id": "featuredTopicsTarget",
           "viewLevel": 1,
           "prefix": "ft"
+        },
+        "videosTarget": {
+          "type": "Component",
+          "usage": "videosComponent",
+          "id": "videosTarget",
+          "viewLevel": 1,
+          "prefix": "vi"
+        },
+        "videoRotationTarget": {
+          "type": "Component",
+          "usage": "videoRotationComponent",
+          "id": "videoRotationTarget",
+          "viewLevel": 1,
+          "prefix": "vr"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",

@@ -49,7 +49,10 @@ sap.ui.define([
     tenant: "tenant",
     verbDefinitions: "verbDefinitions",
     shelfDefinitions: "shelfDefinitions",
-    forYou: "forYou"
+    forYou: "forYou",
+    featuredTopics: "featuredTopics",
+    videos: "videos",
+    videoRotation: "videoRotation"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -95,7 +98,10 @@ sap.ui.define([
     tenant: "Tenant",
     verbDefinitions: "Verb definitions",
     shelfDefinitions: "Shelf definitions",
-    forYou: "For-you Candidates"
+    forYou: "For-you Candidates",
+    featuredTopics: "Featured Topics",
+    videos: "Videos",
+    videoRotation: "Video Rotation"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {

@@ -1,0 +1,84 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.videos",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Videos-manage": {
+          "semanticObject": "Videos",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.videos.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "name": "VideosList", "pattern": ":?query:", "target": "VideosListTarget" },
+        { "name": "VideosOP",   "pattern": "Videos({key}):?query:", "target": "VideosOPTarget" }
+      ],
+      "targets": {
+        "VideosListTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ListReport",
+          "id": "VideosListTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/Videos",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Videos": { "detail": { "route": "VideosOP" } }
+              }
+            }
+          }
+        },
+        "VideosOPTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ObjectPage",
+          "id": "VideosOPTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/Videos",
+              "editableHeaderContent": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

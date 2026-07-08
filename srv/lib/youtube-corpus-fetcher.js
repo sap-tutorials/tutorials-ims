@@ -133,3 +133,42 @@ export async function fetchSapDevsVideoCorpus({
 
   return allVideos;
 }
+
+/**
+ * (#1031) Batch-fetch YouTube video statistics for a list of video IDs.
+ *
+ * YouTube's videos?part=statistics endpoint accepts up to 50 comma-separated
+ * IDs per request at a cost of 1 quota unit each (vs. 100 for search). This
+ * function batches at 50, deserialises numeric statistics into numbers, and
+ * returns a Map keyed by videoId.
+ *
+ * IDs missing from the response (deleted / made private) are omitted from
+ * the Map — callers should treat "absent" as "unknown", not zero.
+ *
+ * @param {object} opts
+ * @param {string}   opts.apiKey
+ * @param {string[]} opts.videoIds
+ * @returns {Promise<Map<string, { viewCount: number, likeCount: number, commentCount: number }>>}
+ */
+export async function fetchStatistics({ apiKey, videoIds }) {
+  const result = new Map();
+  if (!videoIds || videoIds.length === 0) return result;
+  if (!apiKey) throw new Error('youtube-corpus-fetcher.fetchStatistics: apiKey required');
+
+  const BATCH = 50;
+  for (let i = 0; i < videoIds.length; i += BATCH) {
+    const chunk = videoIds.slice(i, i + BATCH);
+    const idParam = encodeURIComponent(chunk.join(','));
+    const url = `${API_BASE}/videos?part=statistics&id=${idParam}&key=${encodeURIComponent(apiKey)}`;
+    const data = await fetchJson(url);
+    for (const item of data.items ?? []) {
+      const s = item.statistics ?? {};
+      result.set(item.id, {
+        viewCount:    Number(s.viewCount ?? 0),
+        likeCount:    Number(s.likeCount ?? 0),
+        commentCount: Number(s.commentCount ?? 0),
+      });
+    }
+  }
+  return result;
+}
