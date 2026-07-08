@@ -87,7 +87,7 @@ function buildShelfOverrides(shelves, profile) {
   return overrides;
 }
 
-export function buildEnvelope({ profile, shelves, forYouCandidates, teaserSlugs }) {
+export function buildEnvelope({ profile, shelves, forYouCandidates, teaserSlugs, preferredEventRegion }) {
   const p = profile || {};
   const verbOrder = computeVerbOrder(p, tagCountsPerVerb(shelves, p));
 
@@ -109,6 +109,7 @@ export function buildEnvelope({ profile, shelves, forYouCandidates, teaserSlugs 
     shelfOverrides,
     videoFilterTags: deriveVideoFilterTags(p),
     rssFilterTags: deriveRssFilterTags(p),
+    eventsRegion: preferredEventRegion ?? null,          // #1030
   };
 }
 

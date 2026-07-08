@@ -401,7 +401,7 @@ export default class HomepageService extends cds.ApplicationService {
       const [prefsRow, shelves, forYou, featuredRows] = await Promise.all([
         dbUser?.ID
           ? SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID })
-              .columns('deployment', 'role', 'cloud')
+              .columns('deployment', 'role', 'cloud', 'preferredEventRegion')
           : Promise.resolve(null),
         SELECT.from(HomepageShelves).where({ isActive: true })
           .columns('ID', 'verb', 'shelf', 'sortOrder', 'title',
@@ -436,6 +436,7 @@ export default class HomepageService extends cds.ApplicationService {
 
       const envelope = buildEnvelope({
         profile, shelves, forYouCandidates: forYou, teaserSlugs,
+        preferredEventRegion: prefsRow?.preferredEventRegion ?? null,    // #1030
       });
       envelope.hash = hashEnvelope(envelope);
 

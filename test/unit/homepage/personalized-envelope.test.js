@@ -65,3 +65,18 @@ describe('hashEnvelope', () => {
     expect(hashEnvelope(a)).not.toBe(hashEnvelope(b));
   });
 });
+
+describe('#1030 eventsRegion', () => {
+  it('emits null when preferredEventRegion is not passed', () => {
+    const env = buildEnvelope({ profile: {}, shelves: [], forYouCandidates: [], teaserSlugs: [] });
+    expect(env.eventsRegion).toBeNull();
+  });
+
+  it('emits the passed value', () => {
+    const env = buildEnvelope({
+      profile: {}, shelves: [], forYouCandidates: [], teaserSlugs: [],
+      preferredEventRegion: 'EMEA',
+    });
+    expect(env.eventsRegion).toBe('EMEA');
+  });
+});
