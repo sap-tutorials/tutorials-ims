@@ -2,6 +2,7 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 using { com.sap.developers.ims.external as external } from '../db/external-content';
 using from '../db/knowledge-graph-communities';
 using from '../db/knowledge-graph-ondemand';
+using from '../db/community-blogs';
 using from '../db/homepage-featured';
 using from '../db/views';
 using from '../app/admin-annotations';
@@ -222,6 +223,23 @@ service AdminService {
     action markReviewed() returns { processed : Integer; skipped : Integer; cost : String };
     action regenerate()   returns { processed : Integer; skipped : Integer; cost : String };
   };
+
+  // (#1033) Community Blog Posts admin surface. Sources = admin-editable
+  // list of RSS feed URLs; Posts = fetched candidates + AI verdict + admin
+  // override. Draft-enabled so admins get the standard Fiori edit round-trip.
+  //
+  // No @Common.ValueList on either projection — deliberately sidesteps the
+  // @cap-js/ai AICore-kind-resolution hazard (memory: cap-ai-plugin-aicore-kind-resolution).
+  //
+  // reclassifyCommunityBlogPost resets a row to PENDING with attemptCount=0
+  // so the classifier drain picks it up on the next 15-min tick.
+  @odata.draft.enabled
+  entity CommunityBlogSources as projection on ims.CommunityBlogSources;
+
+  @odata.draft.enabled
+  entity CommunityBlogPosts   as projection on ims.CommunityBlogPosts;
+
+  action reclassifyCommunityBlogPost(ID: UUID) returns Boolean;
 
   // (#763) For-you candidate pool — admin editing surface.
   // Validator in admin-service.js rejects unknown persona tags at save time.
