@@ -18,12 +18,14 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
       const group = nav.groups.find((g: any) => g.key === 'homepageGroup')
       expect(group, 'homepageGroup must exist at top level').toBeTruthy()
       // Order matters: Shelves first, then the two explainer apps (#759),
-      // then For-you candidates (#763), then Redirects and Config. Any reorder
-      // here is a UI regression.
+      // then For-you candidates (#763), then Redirects and Config, and
+      // finally the two video admin surfaces (#1031). Any reorder here is
+      // a UI regression.
       expect(group.items.map((i: any) => i.key)).toEqual([
         'homepageShelves', 'verbDefinitions', 'shelfDefinitions',
         'forYou',
         'homepageRedirects', 'homepageConfig',
+        'videos', 'videoRotation',
       ])
     })
 
