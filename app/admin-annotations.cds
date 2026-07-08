@@ -3045,6 +3045,13 @@ annotate AdminService.HomepageConfig with @(
     { Value : videoBandEnabled,        Label : 'Show video band' },
     { Value : eventsBandEnabled,       Label : 'Show events band' },
     { Value : communityLaneEnabled,    Label : 'Show community lane' },
+    // (#763) Master kill switch for the personalized-homepage feature.
+    // Default false at first migration; admin flips this on to expose
+    // the "Personalized for you · Adjust · See default" badge and the
+    // For-You row on the homepage. Without the toggle rendered here,
+    // /homepage/personalized 204s and the badge never injects.
+    { Value : personalizationEnabled,  Label : 'Enable personalized homepage' },
+    // (#1031) Video band expand + rotation tuning knobs.
     { Value : videoBandAnchorCount,        Label : 'Video band anchor slots' },
     { Value : videoBandRotationCount,      Label : 'Video band rotation slots' },
     { Value : videoBandRotationWindowDays, Label : 'Rotation window (days)' }
