@@ -1,7 +1,9 @@
 // hugo-apps/src/homepage-events-band/main.ts
-// #1030 — Placeholder mount point. Task 17 replaces this with real mount code.
+// #1030 — mount the events band on [data-app="homepage-events-band"].
 
-// Intentionally minimal: just marks the entry point for the Vite build.
-// The actual component mount (Vue createApp onto [data-app="homepage-events-band"])
-// will be wired in Task 17.
-export {};
+import { createApp } from 'vue';
+import EventsBand from './EventsBand.vue';
+
+document.querySelectorAll<HTMLElement>('[data-app="homepage-events-band"]').forEach((el) => {
+  createApp(EventsBand).mount(el);
+});
