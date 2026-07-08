@@ -11,6 +11,9 @@ let embedMock;
 vi.mock('../../srv/lib/embedding-client.js', () => ({
   embed: (...args) => embedMock(...args),
 }));
+vi.mock('../../srv/lib/chat-settings-resolver.js', () => ({
+  resolveEmbeddingSettings: async () => ({ model: 'text-embedding-3-small' }),
+}));
 
 const {
   getSeedEmbeddings,
@@ -31,6 +34,19 @@ describe('relevance-seed-embeddings', () => {
     expect(relevant.length).toBeGreaterThanOrEqual(3);
     expect(notRelevant.length).toBeGreaterThanOrEqual(3);
     expect(embedMock).toHaveBeenCalledTimes(1); // one batched embed call
+  });
+
+  // Regression guard for the #1078 miss: seed loader called embed() without a
+  // model arg; AzureOpenAiEmbeddingClient(undefined) threw on every hourly
+  // fetch-news tick, so the classifier's Step-1 try silently fell back to
+  // keyword rules and no news item ever scored on the embedding path.
+  it('passes an embedding model name to embed() on initial load', async () => {
+    await getSeedEmbeddings();
+    expect(embedMock).toHaveBeenCalledTimes(1);
+    const [inputs, model] = embedMock.mock.calls[0];
+    expect(Array.isArray(inputs)).toBe(true);
+    expect(typeof model).toBe('string');
+    expect(model.length).toBeGreaterThan(0);
   });
 
   it('races share the in-flight promise (single embed call)', async () => {

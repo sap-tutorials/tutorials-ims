@@ -10,10 +10,14 @@ import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 import { getSeedEmbeddings } from './relevance-seed-embeddings.js';
 import { embed } from './embedding-client.js';
 import { classifyByKeywords } from './relevance-keyword-rules.js';
-import { resolveChatLlmSettings } from './chat-settings-resolver.js';
+import { resolveChatLlmSettings, resolveEmbeddingSettings } from './chat-settings-resolver.js';
 
 const LOG = cds.log('relevance-classifier');
 const DEFAULT_MARGIN = 0.15;
+// Metadata label written to NewsItems.aiModel / CommunityBlogPosts.aiModel
+// when a verdict is decided by embedding cosine. The actual model used for
+// each embed() call is resolved via resolveEmbeddingSettings() so operator
+// overrides in ChatSettings.embeddingModel (or CHAT_EMBEDDING_MODEL env) win.
 const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 
 // ---------------------------------------------------------------------------
@@ -232,7 +236,8 @@ export async function classify({ title, description, sourceType }) {
     }
 
     const text = `${title}\n\n${description ?? ''}`;
-    const [vec] = await embed([text]);
+    const { model } = await resolveEmbeddingSettings();
+    const [vec] = await embed([text], model);
     itemVec = vec;
   } catch (e) {
     LOG.warn(`embedding path failed: ${e.message}; keyword fallback`);

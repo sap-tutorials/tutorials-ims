@@ -6,6 +6,7 @@
 
 import cds from '@sap/cds';
 import { embed } from './embedding-client.js';
+import { resolveEmbeddingSettings } from './chat-settings-resolver.js';
 
 const LOG = cds.log('relevance-seed-embeddings');
 
@@ -35,7 +36,8 @@ async function loadAll() {
     LOG.warn('No active RelevanceSeedExemplars — classifier will fall back to keyword rules');
     return new Map();
   }
-  const vectors = await embed(usable.map(r => r.text));
+  const { model } = await resolveEmbeddingSettings();
+  const vectors = await embed(usable.map(r => r.text), model);
   const m = new Map();
   for (let i = 0; i < usable.length; i++) {
     m.set(usable[i].ID, { label: usable[i].label, vec: vectors[i], text: usable[i].text });
@@ -61,7 +63,8 @@ async function recomputeStale(staleIds) {
   const targets = rows.filter(r =>
     staleIds.has(r.ID) && r.text && r.text.trim().length > 0);
   if (targets.length === 0) return;
-  const vectors = await embed(targets.map(r => r.text));
+  const { model } = await resolveEmbeddingSettings();
+  const vectors = await embed(targets.map(r => r.text), model);
   for (let i = 0; i < targets.length; i++) {
     _cache.set(targets[i].ID, { label: targets[i].label, vec: vectors[i], text: targets[i].text });
   }
