@@ -4,7 +4,7 @@
 // Mirrors test/unit/srv/kg-neighborhood-merge.test.js pattern.
 
 import { describe, it, expect } from 'vitest';
-import { mergeOtherResources } from '../../../srv/lib/kg-neighborhood-merge.js';
+import { mergeOtherResources, MAX_OTHER_RESOURCES } from '../../../srv/lib/kg-neighborhood-merge.js';
 
 describe('kg-neighborhood-merge with samples (6-array)', () => {
   it('6-array merge respects overlapCount sort across all types', () => {
@@ -31,11 +31,11 @@ describe('kg-neighborhood-merge with samples (6-array)', () => {
     });
   });
 
-  it('top-5 cap applies across 6 types when one type dominates', () => {
+  it('top-K cap applies across 6 types when one type dominates', () => {
     const many = Array.from({ length: 10 }, (_, i) => ({
       type: 'sample', slug: `sa-${i}`, title: `SA${i}`, url: 'x', overlapCount: 10 - i,
     }));
     const result = mergeOtherResources([], [], [], [], [], many);
-    expect(result).toHaveLength(5);
+    expect(result).toHaveLength(MAX_OTHER_RESOURCES);   // #1089
   });
 });

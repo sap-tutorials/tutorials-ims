@@ -5,7 +5,7 @@
 // is a sanity test that the 5th type co-exists with the prior 4.
 
 import { describe, it, expect } from 'vitest';
-import { mergeOtherResources } from '../../../srv/lib/kg-neighborhood-merge.js';
+import { mergeOtherResources, MAX_OTHER_RESOURCES } from '../../../srv/lib/kg-neighborhood-merge.js';
 
 describe('kg-neighborhood-merge with api-docs', () => {
   it('5-array merge respects overlapCount sort across all types', () => {
@@ -31,11 +31,11 @@ describe('kg-neighborhood-merge with api-docs', () => {
     });
   });
 
-  it('top-5 cap applies across 5 types when one type dominates', () => {
+  it('top-K cap applies across 5 types when one type dominates', () => {
     const apiDocs = Array.from({ length: 10 }, (_, i) => ({
       type: 'api-doc', slug: `ad-${i}`, title: `AD${i}`, url: 'x', overlapCount: 10 - i,
     }));
     const result = mergeOtherResources([], [], [], [], apiDocs);
-    expect(result).toHaveLength(5);
+    expect(result).toHaveLength(MAX_OTHER_RESOURCES);   // #1089
   });
 });

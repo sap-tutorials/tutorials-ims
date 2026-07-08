@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { isSafeForWrites } from './_guard.js';
+import { SHELF_DEFAULTS, SHELF_KEYS_SORTED } from '../../srv/lib/homepage/verb-shelf-defaults.js';   // #1089
 
 describe.runIf(isSafeForWrites())('ShelfDefinitions — admin CRUD on HANA (#759 PR 1)', () => {
   let db;
@@ -12,16 +13,16 @@ describe.runIf(isSafeForWrites())('ShelfDefinitions — admin CRUD on HANA (#759
     );
   });
 
-  it('AdminService.ShelfDefinitions returns 4 rows after auto-init', async () => {
+  it('AdminService.ShelfDefinitions returns SHELF_DEFAULTS.length rows after auto-init', async () => {
     const admin = await cds.connect.to('AdminService');
     const rows = await admin.run(SELECT.from('AdminService.ShelfDefinitions'));
-    expect(rows.length).toBe(4);
+    expect(rows.length).toBe(SHELF_DEFAULTS.length);
   });
 
-  it('all 4 enum values are represented exactly once', async () => {
+  it('all SHELF_DEFAULTS enum values are represented exactly once', async () => {
     const rows = await db.run(SELECT.from('com.sap.developers.ims.ShelfDefinitions'));
     const keys = rows.map(r => r.shelfKey).sort();
-    expect(keys).toEqual(['KEEP_CURRENT', 'REFERENCE', 'START_HERE', 'TOOLS']);
+    expect(keys).toEqual([...SHELF_KEYS_SORTED]);
   });
 
   it('@assert.unique.shelfKey rejects duplicate insert', async () => {

@@ -2,6 +2,10 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  VERB_DEFAULTS, SHELF_DEFAULTS,
+  VERB_KEYS_SORTED, SHELF_KEYS_SORTED,
+} from '../../../srv/lib/homepage/verb-shelf-defaults.js';   // #1089
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -13,26 +17,27 @@ describe('AdminService — VerbDefinitions/ShelfDefinitions auto-init (#759 PR 1
     db = await cds.connect.to('db');
   });
 
-  it('auto-creates 7 VerbDefinitions rows when reading an empty table', async () => {
-    // (#1029) MODEL added as 7th verb.
+  it('auto-creates one VerbDefinitions row per VERB_DEFAULTS entry when reading an empty table', async () => {
+    // (#1029) MODEL added as 7th verb. (#1089) cardinality now derived
+    // from VERB_DEFAULTS — vocab expansions no longer silently regress.
     await db.run(DELETE.from('com.sap.developers.ims.VerbDefinitions'));
     const res = await project.get('/admin/VerbDefinitions', ADMIN_AUTH);
     expect(res.status).toBe(200);
     const rows = res.data.value;
-    expect(rows.length).toBe(7);
+    expect(rows.length).toBe(VERB_DEFAULTS.length);
     const keys = rows.map(r => r.verbKey).sort();
-    expect(keys).toEqual(['AI', 'BUILD', 'CONNECT', 'INTEGRATE', 'LEARN', 'MODEL', 'OPERATE']);
+    expect(keys).toEqual([...VERB_KEYS_SORTED]);
     expect(rows.every(r => r.authoringStatus === 'BLANK')).toBe(true);
   });
 
-  it('auto-creates 4 ShelfDefinitions rows when reading an empty table', async () => {
+  it('auto-creates one ShelfDefinitions row per SHELF_DEFAULTS entry when reading an empty table', async () => {
     await db.run(DELETE.from('com.sap.developers.ims.ShelfDefinitions'));
     const res = await project.get('/admin/ShelfDefinitions', ADMIN_AUTH);
     expect(res.status).toBe(200);
     const rows = res.data.value;
-    expect(rows.length).toBe(4);
+    expect(rows.length).toBe(SHELF_DEFAULTS.length);
     const keys = rows.map(r => r.shelfKey).sort();
-    expect(keys).toEqual(['KEEP_CURRENT', 'REFERENCE', 'START_HERE', 'TOOLS']);
+    expect(keys).toEqual([...SHELF_KEYS_SORTED]);
   });
 
   it('idempotent — second read does not duplicate', async () => {
@@ -41,7 +46,7 @@ describe('AdminService — VerbDefinitions/ShelfDefinitions auto-init (#759 PR 1
     const count = await db.run(
       SELECT.from('com.sap.developers.ims.VerbDefinitions').columns('count(*) as n')
     );
-    expect(count[0].n).toBe(7);
+    expect(count[0].n).toBe(VERB_DEFAULTS.length);
   });
 
   it('idempotent — second ShelfDefinitions read does not duplicate', async () => {
@@ -50,7 +55,7 @@ describe('AdminService — VerbDefinitions/ShelfDefinitions auto-init (#759 PR 1
     const count = await db.run(
       SELECT.from('com.sap.developers.ims.ShelfDefinitions').columns('count(*) as n')
     );
-    expect(count[0].n).toBe(4);
+    expect(count[0].n).toBe(SHELF_DEFAULTS.length);
   });
 
   describe('handler defaults agree with seed CSVs', () => {

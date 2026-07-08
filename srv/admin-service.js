@@ -39,6 +39,7 @@ import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
 import { deleteStuckOutboxRow, loadStuckOutboxTargets, isRowStale } from './lib/scheduler-wedge.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
 import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
+import { VERB_DEFAULTS, SHELF_DEFAULTS } from './lib/homepage/verb-shelf-defaults.js';   // #1089
 import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
@@ -618,19 +619,12 @@ export default class AdminService extends cds.ApplicationService {
     // one per HomepageVerb enum value. Seed CSV in
     // db/data/com.sap.developers.ims-VerbDefinitions.csv is canonical;
     // this handler is the defensive runtime fallback (matches
-    // HomepageConfig pattern above). Values MUST agree with the CSV.
-    const VERB_DEFAULTS = [
-      { verbKey: 'LEARN',     label: 'Learn',          iconName: 'learning-assistant',    sortOrder: 10 },
-      { verbKey: 'BUILD',     label: 'Build',          iconName: 'developer-settings',    sortOrder: 20 },
-      { verbKey: 'INTEGRATE', label: 'Integrate',      iconName: 'chain-link',            sortOrder: 30 },
-      { verbKey: 'MODEL',     label: 'Model',          iconName: 'database',              sortOrder: 35 },
-      { verbKey: 'OPERATE',   label: 'Operate',        iconName: 'settings',              sortOrder: 40 },
-      { verbKey: 'AI',        label: 'Extend with AI', iconName: 'da',                    sortOrder: 50 },
-      { verbKey: 'CONNECT',   label: 'Connect',        iconName: 'customer-and-contacts', sortOrder: 60 },
-    ];
+    // HomepageConfig pattern above). Defaults imported from
+    // ./lib/homepage/verb-shelf-defaults.js — same module tests derive
+    // expected row counts from (#1089).
     this.before('READ', 'VerbDefinitions', async () => {
       const existing = await SELECT.from('com.sap.developers.ims.VerbDefinitions').columns('verbKey');
-      if (existing.length >= 7) return;
+      if (existing.length >= VERB_DEFAULTS.length) return;
       const have = new Set(existing.map(r => r.verbKey));
       const missing = VERB_DEFAULTS
         .filter(d => !have.has(d.verbKey))
@@ -641,17 +635,10 @@ export default class AdminService extends cds.ApplicationService {
     });
 
     // #759: ShelfDefinitions auto-init. Cardinality is exactly 4.
-    // Same pattern as VerbDefinitions. Values MUST agree with
-    // db/data/com.sap.developers.ims-ShelfDefinitions.csv.
-    const SHELF_DEFAULTS = [
-      { shelfKey: 'START_HERE',   label: 'Start here',      iconName: 'learning-assistant', sortOrder: 10 },
-      { shelfKey: 'REFERENCE',    label: 'Reference',       iconName: 'document',           sortOrder: 20 },
-      { shelfKey: 'TOOLS',        label: 'Tools & samples', iconName: 'wrench',             sortOrder: 30 },
-      { shelfKey: 'KEEP_CURRENT', label: 'Keep current',    iconName: 'newspaper',          sortOrder: 40 },
-    ];
+    // Same pattern as VerbDefinitions.
     this.before('READ', 'ShelfDefinitions', async () => {
       const existing = await SELECT.from('com.sap.developers.ims.ShelfDefinitions').columns('shelfKey');
-      if (existing.length >= 4) return;
+      if (existing.length >= SHELF_DEFAULTS.length) return;
       const have = new Set(existing.map(r => r.shelfKey));
       const missing = SHELF_DEFAULTS
         .filter(d => !have.has(d.shelfKey))

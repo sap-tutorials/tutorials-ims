@@ -139,6 +139,10 @@ describe('buildOtherResourcesByType — Task 5 of #850', () => {
       helpDoc: 2,
     });
     const result = buildOtherResourcesByType(byType, 15);
+    // Fixture seeds 7 of the 8 corpora (community-event omitted), so 7 is
+    // the fixture count — NOT derivable from RESOURCE_TYPE_CONFIG.length.
+    // Priorities [10..70] pin the render-order contract for the 7 seeded
+    // corpora. #1089 audit reclassified this as FIXTURE, not vocab-derived.
     expect(result).toHaveLength(7);
     const priorities = result.map((e) => e.config.priority);
     expect(priorities).toEqual([10, 20, 30, 40, 50, 60, 70]);

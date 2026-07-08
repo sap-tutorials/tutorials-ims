@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
+import { VERB_DEFAULTS, SHELF_DEFAULTS } from '../../../srv/lib/homepage/verb-shelf-defaults.js';   // #1089
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -18,8 +19,9 @@ describe('/build/verb-definitions + /build/shelf-definitions (#759 PR 1)', () =>
       expect(Array.isArray(res.data.verbs)).toBe(true);
     });
 
-    it('returns 7 rows after auto-init', async () => {
-      // (#1029) MODEL added as 7th verb.
+    it('returns one row per VERB_DEFAULTS entry after auto-init', async () => {
+      // (#1029) MODEL added as 7th verb. (#1089) derives cardinality from
+      // VERB_DEFAULTS — vocab expansions must land in one place.
       // Trigger auto-init first by reading via AdminService (this fires
       // the before('READ', 'VerbDefinitions', ...) handler from Task 9).
       // The /build/verb-definitions endpoint reads directly from the
@@ -27,7 +29,7 @@ describe('/build/verb-definitions + /build/shelf-definitions (#759 PR 1)', () =>
       // auto-init itself. Pre-seed via AdminService.
       await project.get('/admin/VerbDefinitions', ADMIN_AUTH);
       const res = await project.get('/build/verb-definitions');
-      expect(res.data.verbs.length).toBe(7);
+      expect(res.data.verbs.length).toBe(VERB_DEFAULTS.length);
     });
 
     it('sets 60s Cache-Control header', async () => {
@@ -60,11 +62,11 @@ describe('/build/verb-definitions + /build/shelf-definitions (#759 PR 1)', () =>
   });
 
   describe('/build/shelf-definitions', () => {
-    it('returns 200 with shelves array of 4', async () => {
+    it('returns 200 with shelves array of SHELF_DEFAULTS.length', async () => {   // #1089
       await project.get('/admin/ShelfDefinitions', ADMIN_AUTH);
       const res = await project.get('/build/shelf-definitions');
       expect(res.status).toBe(200);
-      expect(res.data.shelves.length).toBe(4);
+      expect(res.data.shelves.length).toBe(SHELF_DEFAULTS.length);
     });
 
     it('sets 60s Cache-Control header', async () => {

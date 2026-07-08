@@ -9,8 +9,10 @@ describe('computeVerbOrder', () => {
   it('developer role leads with build', () => {
     const r = computeVerbOrder({ role: 'developer' });
     expect(r[0]).toBe('build');
-    expect(r).toHaveLength(7);
-    expect(new Set(r).size).toBe(7);
+    // (#1089) Derive expected verb count from BASE_ORDER (single source of truth).
+    // A future verb addition in persona-map.js should NOT silently regress this.
+    expect(r).toHaveLength(BASE_ORDER.length);
+    expect(new Set(r).size).toBe(BASE_ORDER.length);
   });
 
   it('architect role leads with integrate', () => {

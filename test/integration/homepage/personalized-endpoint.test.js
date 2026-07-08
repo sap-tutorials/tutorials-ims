@@ -12,6 +12,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
+import { BASE_ORDER } from '../../../srv/lib/homepage/persona-map.js';   // #1089
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -54,7 +55,7 @@ describe('GET /homepage/personalized', () => {
     expect(r.headers['cache-control']).toContain('no-store');
     expect(r.headers['x-personalization']).toBe('1');
     expect(r.data.hash).toBeDefined();
-    expect(r.data.verbOrder).toHaveLength(7);
+    expect(r.data.verbOrder).toHaveLength(BASE_ORDER.length);   // #1089
     expect(r.data.shelfOverrides).toBeDefined();
   });
 
