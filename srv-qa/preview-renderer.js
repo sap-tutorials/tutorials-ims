@@ -90,6 +90,12 @@ export async function renderPreview(markdown, rulesVr) {
       rulesVrSource: rulesVr && rulesVr.trim() ? rulesVr : '',
       // [#655] Precomputed AI-involved flag for <body data-has-ai="…">.
       hasAi,
+      // #1102: allow base64-inlined raster images in preview. Sage inlines
+      // relative image references as data: URLs before POST so authors can
+      // preview screenshots without a pre-preview commit. sanitize-html
+      // narrows to image/(png|jpeg|gif|webp); SVG data URLs stay blocked.
+      // Production publish + Hugo build paths keep the default allowlist.
+      allowDataUrls: true,
     });
     const contentDir = join(tmpDirPath, 'content', 'tutorials', '__preview__');
     mkdirSync(contentDir, { recursive: true });

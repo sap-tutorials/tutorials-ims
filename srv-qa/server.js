@@ -95,7 +95,11 @@ cds.on('bootstrap', (app) => {
 
   app.post('/preview/render',
     requireAuthorScope,
-    express.json({ limit: '1mb' }),
+    // #1102: 50 MB body cap accommodates base64-inlined tutorial screenshots
+    // (Sage inlines relative image refs before POST so authors can preview
+    // without a pre-preview commit). Base64 adds ~33% overhead — a 50 MB
+    // request body corresponds to ~37 MB of raw image bytes.
+    express.json({ limit: '50mb' }),
     async (req, res) => {
       const t0 = Date.now();
       let slot;

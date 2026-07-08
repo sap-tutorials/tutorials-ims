@@ -152,3 +152,35 @@ describe('renderPreview with rulesVr', () => {
     fetchSpy.mockRestore();
   });
 });
+
+// #1102: data:image/*;base64 URLs must survive sanitization on the preview
+// path (Sage inlines relative image references before POST). The `echo` stub
+// mode round-trips the composed markdown back through the response, so we
+// can assert the sanitizer preserved the data URL end-to-end.
+describe('renderPreview with data: image URLs (#1102)', () => {
+  const PNG_1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  it('passes data:image/png;base64,... through the pipeline', async () => {
+    process.env.HUGO_STUB_MODE = 'echo';
+    const md = `---\ntitle: T\ndescription: D\nparser: v2\n---\n\n### Step 1\n\n![screenshot](data:image/png;base64,${PNG_1x1})\n`;
+    const { html, status } = await renderPreview(md);
+    expect(status).toBe('ok');
+    // The composed markdown is HTML-escaped into <pre id="echo-src">. The
+    // data URL sits there as escaped text — if the sanitizer had stripped
+    // it, the base64 body would be gone.
+    expect(html).toContain('data:image/png;base64,');
+    expect(html).toContain(PNG_1x1.slice(0, 40));
+  });
+
+  it('strips data:image/svg+xml URLs even on the preview path', async () => {
+    process.env.HUGO_STUB_MODE = 'echo';
+    // SVG data URLs can carry <script>/onload; sanitize-html rejects them
+    // regardless of the allowDataUrls opt-in.
+    const svgAttack = 'data:image/svg+xml;utf8,%3Csvg%20onload%3D%22alert(1)%22%3E%3C%2Fsvg%3E';
+    const md = `---\ntitle: T\ndescription: D\nparser: v2\n---\n\n### Step 1\n\n<img src="${svgAttack}" alt="x">\n`;
+    const { html, status } = await renderPreview(md);
+    expect(status).toBe('ok');
+    expect(html).not.toContain('data:image/svg+xml');
+    expect(html).not.toContain('onload');
+  });
+});

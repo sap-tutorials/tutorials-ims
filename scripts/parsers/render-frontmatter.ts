@@ -46,6 +46,13 @@ export interface RenderHugoFrontmatterArgs {
    * author_profile values don't produce stray keys in built Hugo pages.
    */
   githubLogin?: string | null
+  /**
+   * When true, `<img src="data:image/...;base64,...">` references pass
+   * through sanitization for the raster MIME allowlist in sanitize-html.ts.
+   * Preview-only opt-in (srv-qa/preview-renderer.js); published content
+   * stays on the default HTTPS-scheme allowlist.
+   */
+  allowDataUrls?: boolean
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -71,6 +78,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     rulesVrSource,
     hasAi,
     githubLogin,
+    allowDataUrls,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -144,7 +152,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 
   const stepsMd = steps.map(step =>
-    `{{% tutorial-step number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" %}}\n\n${escapeHugoDelimiters(stripDangerousHtml(step.content))}\n\n{{% /tutorial-step %}}`
+    `{{% tutorial-step number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" %}}\n\n${escapeHugoDelimiters(stripDangerousHtml(step.content, { allowDataUrls }))}\n\n{{% /tutorial-step %}}`
   ).join('\n\n')
 
   const content = `${frontmatter}${stepsMd}\n`

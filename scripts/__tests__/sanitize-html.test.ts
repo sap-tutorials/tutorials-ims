@@ -356,4 +356,77 @@ describe('stripDangerousHtml', () => {
       expect(out).toContain('placeholder')
     })
   })
+
+  // #1102: opt-in `data:` image URLs for the VSCode author-preview endpoint.
+  // Default behaviour stays lockdown; preview-renderer.js passes
+  // { allowDataUrls: true } via renderHugoFrontmatter → stripDangerousHtml.
+  describe('allowDataUrls option (#1102)', () => {
+    // Tiny 1x1 red PNG, base64.
+    const PNG_1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    const dataPng = (payload: string = PNG_1x1) => `data:image/png;base64,${payload}`
+
+    it('default (no options) strips data: image URLs — parity with pre-#1102 behaviour', () => {
+      const input = `<img src="${dataPng()}" alt="screenshot">`
+      // sanitize-html drops the src as a disallowed scheme, then <img> with
+      // no src falls out entirely. Preserves the production security posture.
+      expect(stripDangerousHtml(input)).not.toContain('data:image/png')
+    })
+
+    it('allowDataUrls:true passes through data:image/png URLs', () => {
+      const input = `<img src="${dataPng()}" alt="screenshot">`
+      const out = stripDangerousHtml(input, { allowDataUrls: true })
+      expect(out).toContain('data:image/png;base64,')
+      expect(out).toContain('alt="screenshot"')
+    })
+
+    it('allowDataUrls:true passes through the four raster MIME types', () => {
+      for (const mime of ['image/png', 'image/jpeg', 'image/gif', 'image/webp']) {
+        const input = `<img src="data:${mime};base64,${PNG_1x1}" alt="x">`
+        const out = stripDangerousHtml(input, { allowDataUrls: true })
+        expect(out, `${mime} should survive`).toContain(`data:${mime}`)
+      }
+    })
+
+    it('allowDataUrls:true STILL drops data:image/svg+xml — SVG data URLs can carry script', () => {
+      // Attack vector: `data:image/svg+xml;utf8,<svg onload="fetch(...)">`.
+      // Even with data URLs enabled for preview, SVG must remain blocked at
+      // the sanitizer layer so a screenshot-inlining path doesn't quietly
+      // become an XSS vector.
+      const svgAttack = `<img src="data:image/svg+xml;utf8,%3Csvg%20onload%3D%22alert(1)%22%3E%3C%2Fsvg%3E" alt="x">`
+      const out = stripDangerousHtml(svgAttack, { allowDataUrls: true })
+      expect(out).not.toContain('data:image/svg+xml')
+    })
+
+    it('allowDataUrls:true drops non-image data URLs (e.g. text/html)', () => {
+      // Another attack vector — `data:text/html,<script>...</script>` in
+      // an <img src> won't execute (browsers don't run script in image
+      // contexts), but stripping it keeps the sanitizer's contract narrow.
+      const input = `<img src="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==" alt="x">`
+      const out = stripDangerousHtml(input, { allowDataUrls: true })
+      expect(out).not.toContain('data:text/html')
+    })
+
+    it('allowDataUrls:true drops malformed data URLs (no MIME)', () => {
+      const input = `<img src="data:garbage" alt="x">`
+      const out = stripDangerousHtml(input, { allowDataUrls: true })
+      expect(out).not.toContain('data:')
+    })
+
+    it('allowDataUrls:true does not affect regular http(s) img src', () => {
+      const input = '<img src="https://raw.githubusercontent.com/x.png" alt="a">'
+      const out = stripDangerousHtml(input, { allowDataUrls: true })
+      expect(out).toContain('https://raw.githubusercontent.com/x.png')
+    })
+
+    it('allowDataUrls:true does not permit data: URLs in <a href>', () => {
+      // `<a href="data:text/html,...">` is a classic phishing vector — the
+      // opt-in is scoped to <img>, not global.
+      const input = `<a href="data:text/html;base64,PGh0bWw+ZXZpbDwvaHRtbD4=">click</a>`
+      const out = stripDangerousHtml(input, { allowDataUrls: true })
+      expect(out).not.toContain('data:text/html')
+      // The <a> tag itself survives with the href stripped, matching the
+      // existing javascript: href test above.
+      expect(out).toContain('click')
+    })
+  })
 })

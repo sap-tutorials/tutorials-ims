@@ -138,67 +138,146 @@ const ALLOWED_ATTRS: Record<string, Array<string | { name: string; multiple?: bo
 // safer: any future dangerous scheme is blocked by default.
 const ALLOWED_SCHEMES = ['http', 'https', 'mailto']
 
-const SANITIZE_OPTS: sanitizeHtml.IOptions = {
-  allowedTags: ALLOWED_TAGS,
-  allowedAttributes: ALLOWED_ATTRS,
-  allowedSchemes: ALLOWED_SCHEMES,
-  // No protocol-relative URLs (//evil.example/x.js).
-  allowProtocolRelative: false,
-  allowedIframeHostnames: [...ALLOWED_IFRAME_HOSTNAMES],
-  allowedIframeRelativeUrls: false,
-  // Strip the tag, keep the inner text (matches the previous regex's
-  // behaviour for safe-but-unknown tags).
-  disallowedTagsMode: 'discard',
-  // For these tags, BOTH the tag and the inner content are dropped.
-  // Prior regex left script/style content as visible text (silly: it can't
-  // execute, but it leaks the payload). sanitize-html's default is the
-  // strict behaviour — adopt it for genuinely dangerous tags. Exclude
-  // `option` and `noscript` from this list: `<option list>` appears in one
-  // catalog tutorial as plain text inside backticks (`hdbinst [<option list>]`)
-  // and dropping the inner content corrupts the example. Both are inert
-  // outside their parent elements (`<select>` / non-JS environments) and
-  // sanitize-html still strips them since they aren't on the allowlist.
-  nonTextTags: ['script', 'style', 'textarea'],
-  allowedSchemesAppliedToAttributes: ['href', 'src', 'cite'],
-  parser: {
-    // Default lower-case tag names so nonTextTags matches `<SCRIPT>` etc.
-    // Pseudo-tag preservation happens BEFORE we hit the parser via
-    // escapePseudoTags(), so this doesn't impact author placeholders.
-    lowerCaseAttributeNames: false,
-  },
-  transformTags: {
-    iframe: (tagName, attribs) => {
-      // Validate iframe src before sanitize-html processes it.
-      // This ensures iframes from off-allowlist hosts or with dangerous
-      // schemes are completely removed (not left as empty shells).
-      // We return `{ tagName: '', attribs: {} }` to tell sanitize-html
-      // to remove the tag entirely.
-      const src = attribs.src
-      if (!src) {
-        // No src at all — drop the iframe.
-        return { tagName: '', attribs: {} }
-      }
+// Raster image MIME types accepted inside `data:` URLs when the caller
+// opts into `allowDataUrls: true` (preview-only). `image/svg+xml` is
+// deliberately excluded — SVG can carry `<script>` / `onload=` even when
+// carried in a data URL, so allowing it would re-open the XSS surface
+// #135 closed. Author-committed .svg files still work fine on the
+// published site because they're served with proper HTTP transport, not
+// inlined into markdown.
+const ALLOWED_DATA_IMAGE_MIME = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+])
 
-      try {
-        // Parse the URL to check the hostname. For relative URLs (e.g.,
-        // `/api/foo`), the URL constructor throws, which we catch below.
-        const parsed = new URL(src)
-        const isAllowedHost = ALLOWED_IFRAME_HOSTNAMES.includes(parsed.hostname)
-        if (!isAllowedHost) {
-          // Off-allowlist host — drop it.
+// `data:<mime>;base64,<payload>` — capture the MIME type so we can vet
+// it against the allowlist above. Case-insensitive match; MIME comparison
+// is done in lower-case.
+const DATA_URL_MIME_RE = /^data:([a-z0-9+.\-]+\/[a-z0-9+.\-]+)(?:;[^,]*)?,/i
+
+export interface StripDangerousHtmlOptions {
+  /**
+   * Permit `data:` URLs in `<img src>` for raster image MIME types
+   * (`image/png`, `image/jpeg`, `image/gif`, `image/webp`). Off by
+   * default; production publish + Hugo build stay on the current allowlist
+   * so published content can't embed data URLs. Opt-in exists for the
+   * VSCode author-preview endpoint (`srv-qa/preview-renderer.js`), where
+   * authors post markdown with base64-inlined screenshots and expect them
+   * to render. SVG data URLs stay blocked in every path.
+   */
+  allowDataUrls?: boolean
+}
+
+function buildSanitizeOpts(options: StripDangerousHtmlOptions = {}): sanitizeHtml.IOptions {
+  const { allowDataUrls = false } = options
+  // Base allowlist stays http/https/mailto for every tag. When data URLs
+  // are enabled, ONLY <img> gets the additional `data` scheme — via
+  // allowedSchemesByTag, which overrides allowedSchemes per tag. Adding
+  // `data` to the global allowedSchemes would also permit
+  // `<a href="data:text/html,...">` (phishing) and other attribute
+  // vectors; scoping to <img> keeps the surface minimal. The <img>
+  // transformTags hook further narrows to the raster MIME allowlist.
+  const allowedSchemesByTag: Record<string, string[]> = allowDataUrls
+    ? { img: [...ALLOWED_SCHEMES, 'data'] }
+    : {}
+
+  return {
+    allowedTags: ALLOWED_TAGS,
+    allowedAttributes: ALLOWED_ATTRS,
+    allowedSchemes: ALLOWED_SCHEMES,
+    allowedSchemesByTag,
+    // No protocol-relative URLs (//evil.example/x.js).
+    allowProtocolRelative: false,
+    allowedIframeHostnames: [...ALLOWED_IFRAME_HOSTNAMES],
+    allowedIframeRelativeUrls: false,
+    // Strip the tag, keep the inner text (matches the previous regex's
+    // behaviour for safe-but-unknown tags).
+    disallowedTagsMode: 'discard',
+    // For these tags, BOTH the tag and the inner content are dropped.
+    // Prior regex left script/style content as visible text (silly: it can't
+    // execute, but it leaks the payload). sanitize-html's default is the
+    // strict behaviour — adopt it for genuinely dangerous tags. Exclude
+    // `option` and `noscript` from this list: `<option list>` appears in one
+    // catalog tutorial as plain text inside backticks (`hdbinst [<option list>]`)
+    // and dropping the inner content corrupts the example. Both are inert
+    // outside their parent elements (`<select>` / non-JS environments) and
+    // sanitize-html still strips them since they aren't on the allowlist.
+    nonTextTags: ['script', 'style', 'textarea'],
+    allowedSchemesAppliedToAttributes: ['href', 'src', 'cite'],
+    parser: {
+      // Default lower-case tag names so nonTextTags matches `<SCRIPT>` etc.
+      // Pseudo-tag preservation happens BEFORE we hit the parser via
+      // escapePseudoTags(), so this doesn't impact author placeholders.
+      lowerCaseAttributeNames: false,
+    },
+    transformTags: {
+      // When data URLs are enabled, gate each `<img>` on the MIME allowlist
+      // above. Non-data src (http/https) short-circuits through unchanged;
+      // sanitize-html's own scheme check handles those. When data URLs are
+      // NOT enabled, no img hook is registered and sanitize-html strips
+      // any data URL at the scheme stage as before.
+      ...(allowDataUrls
+        ? {
+            img: (tagName: string, attribs: Record<string, string>) => {
+              const src = attribs.src
+              if (!src || !src.toLowerCase().startsWith('data:')) {
+                return { tagName, attribs }
+              }
+              const m = src.match(DATA_URL_MIME_RE)
+              if (!m) {
+                // Malformed data URL — drop the img entirely rather than
+                // leave a broken tag.
+                return { tagName: '', attribs: {} }
+              }
+              const mime = m[1].toLowerCase()
+              if (!ALLOWED_DATA_IMAGE_MIME.has(mime)) {
+                // SVG data URL or any other non-raster MIME — drop.
+                return { tagName: '', attribs: {} }
+              }
+              return { tagName, attribs }
+            },
+          }
+        : {}),
+      iframe: (tagName: string, attribs: Record<string, string>) => {
+        // Validate iframe src before sanitize-html processes it.
+        // This ensures iframes from off-allowlist hosts or with dangerous
+        // schemes are completely removed (not left as empty shells).
+        // We return `{ tagName: '', attribs: {} }` to tell sanitize-html
+        // to remove the tag entirely.
+        const src = attribs.src
+        if (!src) {
+          // No src at all — drop the iframe.
           return { tagName: '', attribs: {} }
         }
-        // Host is allowlisted, proceed.
-        return { tagName, attribs }
-      } catch (e) {
-        // Relative URLs or malformed URLs fail to parse.
-        // allowedIframeRelativeUrls: false will strip them, but the
-        // empty tag would remain. Drop here to avoid the empty shell.
-        return { tagName: '', attribs: {} }
-      }
+
+        try {
+          // Parse the URL to check the hostname. For relative URLs (e.g.,
+          // `/api/foo`), the URL constructor throws, which we catch below.
+          const parsed = new URL(src)
+          const isAllowedHost = (ALLOWED_IFRAME_HOSTNAMES as readonly string[]).includes(parsed.hostname)
+          if (!isAllowedHost) {
+            // Off-allowlist host — drop it.
+            return { tagName: '', attribs: {} }
+          }
+          // Host is allowlisted, proceed.
+          return { tagName, attribs }
+        } catch (e) {
+          // Relative URLs or malformed URLs fail to parse.
+          // allowedIframeRelativeUrls: false will strip them, but the
+          // empty tag would remain. Drop here to avoid the empty shell.
+          return { tagName: '', attribs: {} }
+        }
+      },
     },
-  },
+  }
 }
+
+// Default (production) options — data URLs blocked. Preserved as a module
+// constant so the hot path avoids re-building the options object per call.
+const SANITIZE_OPTS: sanitizeHtml.IOptions = buildSanitizeOpts()
+const SANITIZE_OPTS_ALLOW_DATA: sanitizeHtml.IOptions = buildSanitizeOpts({ allowDataUrls: true })
 
 // Cheap pre-check: if a line has no plausible HTML tag (a `<name>` token
 // closed by `>` on the same line), skip the HTML parser. This preserves
@@ -207,7 +286,8 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
 // sanitize-html would otherwise entity-encode or mangle.
 const TAG_LIKE_RE = /<\/?[a-zA-Z][a-zA-Z0-9:._-]*[^<>]*>/
 
-export function stripDangerousHtml(content: string): string {
+export function stripDangerousHtml(content: string, options: StripDangerousHtmlOptions = {}): string {
+  const opts = options.allowDataUrls ? SANITIZE_OPTS_ALLOW_DATA : SANITIZE_OPTS
   const lines = content.split('\n')
   let inCodeFence = false
   let fenceChar = ''
@@ -230,13 +310,13 @@ export function stripDangerousHtml(content: string): string {
       return line
     }
 
-    return sanitizeLine(line)
+    return sanitizeLine(line, opts)
   })
 
   return result.join('\n')
 }
 
-function sanitizeLine(line: string): string {
+function sanitizeLine(line: string, opts: sanitizeHtml.IOptions): string {
   if (!TAG_LIKE_RE.test(line)) return line
   // Pull markdown autolinks aside before sanitize-html sees them.
   const autolinks: string[] = []
@@ -244,7 +324,7 @@ function sanitizeLine(line: string): string {
     autolinks.push(url)
     return ` ${AUTOLINK_TOKEN}${autolinks.length - 1} `
   })
-  let sanitized = sanitizeHtml(escapePseudoTags(stashed), SANITIZE_OPTS)
+  let sanitized = sanitizeHtml(escapePseudoTags(stashed), opts)
   // Restore autolinks. Goldmark will render `<https://...>` as a link.
   sanitized = sanitized.replace(new RegExp(` ${AUTOLINK_TOKEN}(\\d+) `, 'g'), (_match, idx: string) => {
     return `<${autolinks[Number(idx)]}>`
