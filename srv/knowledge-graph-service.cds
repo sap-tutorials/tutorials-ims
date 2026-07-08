@@ -33,9 +33,10 @@
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
 @requires : 'any'
-// See note on SearchService: `@graphql` alone REPLACES the OData mount and
-// 404's /graph/Concepts, /graph/neighborhood, etc. Use dual protocols.
-@protocol: ['odata', 'graphql']
+// See note on SearchService: single-protocol shortcuts (`@graphql`, `@mcp`)
+// REPLACE the default OData mount. Explicit dual list keeps /graph/Concepts,
+// /graph/neighborhood, etc. reachable. `@mcp` added by #912.
+@protocol: ['odata', 'graphql', 'mcp']
 service KnowledgeGraphService @(path : '/graph') {
 
   // ─── Projections (curation introspection + admin tooling) ─────────────
@@ -77,6 +78,7 @@ service KnowledgeGraphService @(path : '/graph') {
    * unpublished (publishedAt cleared by admin), VETOED, and MERGED.
    */
   @readonly
+  @cds.query.limit: 200
   entity PublishedConcepts as projection on ims.Concepts {
     ID, slug, name, description, publishedAt, publishedBy, status
   } where publishedAt is not null and status = 'ACTIVE';
@@ -255,6 +257,33 @@ service KnowledgeGraphService @(path : '/graph') {
   function neighborhoodFull(slug : String)                    returns NeighborhoodFullResult;
   function pathBetween(fromSlug : String, toSlug : String)    returns array of String;     // Phase 2 stub
   function conceptsForUser(userId : String)                   returns ConceptCoverage;     // Phase 2 stub
+
+  // ─── MCP curated functions (Task 10 of #912) ──────────────────────────
+  /**
+   * Tutorials that teach concepts this tutorial depends on. Answers "what
+   * should I learn first?". Backed by the same graph the sidebar uses.
+   *
+   * @param tutorial_slug Tutorial slug (lowercase).
+   * @param depth         Max returned entries (default 10, hard max 50).
+   * @returns             Prerequisite tutorials ordered by strength.
+   */
+  function kg_prerequisites(
+    tutorial_slug : String,
+    depth         : Integer
+  ) returns array of TutorialRef;
+
+  /**
+   * Tutorials that build on what this one teaches. Answers "what should I
+   * learn next?". PageRank-blended (#916) when enabled.
+   *
+   * @param tutorial_slug Tutorial slug (lowercase).
+   * @param limit         Max returned entries (default 10, hard max 50).
+   * @returns             Next-step tutorials ordered by strength.
+   */
+  function kg_what_to_learn_next(
+    tutorial_slug : String,
+    limit         : Integer
+  ) returns array of TutorialRef;
 
   /**
    * Anonymous KG search for the ⌘K command palette (issue #1036).

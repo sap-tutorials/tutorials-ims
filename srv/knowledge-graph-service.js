@@ -1350,6 +1350,44 @@ export default cds.service.impl(async function () {
     return result;
   });
 
+  // ─── kg_prerequisites — MCP curated tool (Task 10 of #912) ──────────────
+  // Slices the `prerequisitesOf` arm from `neighborhood()` so MCP clients
+  // get a focused "what should I learn first?" answer without consuming the
+  // full NeighborhoodResult payload. Depth defaults to 10, hard-capped at 50.
+  this.on('kg_prerequisites', async (req) => {
+    const slug = (req.data.tutorial_slug ?? '').toLowerCase();
+    const depth = Math.min(Math.max(req.data.depth ?? 10, 1), 50);
+    if (!slug) return [];
+    try {
+      const nb = await this.send('neighborhood', { slug });
+      const arm = nb?.prerequisitesOf ?? [];
+      return arm.slice(0, depth);
+    } catch (e) {
+      log.error(`kg-service: kg_prerequisites(${slug}) failed — ${e.message ?? e}`);
+      req.error({ code: 'KG_LOOKUP_FAILED', message: e.message });
+      return [];
+    }
+  });
+
+  // ─── kg_what_to_learn_next — MCP curated tool (Task 10 of #912) ─────────
+  // Slices the `whatToLearnNext` arm from `neighborhood()` so MCP clients
+  // get a focused "what should I learn next?" answer. PageRank-blended when
+  // KG_PAGERANK_ENABLED=true (#916). Limit defaults to 10, hard-capped at 50.
+  this.on('kg_what_to_learn_next', async (req) => {
+    const slug = (req.data.tutorial_slug ?? '').toLowerCase();
+    const limit = Math.min(Math.max(req.data.limit ?? 10, 1), 50);
+    if (!slug) return [];
+    try {
+      const nb = await this.send('neighborhood', { slug });
+      const arm = nb?.whatToLearnNext ?? [];
+      return arm.slice(0, limit);
+    } catch (e) {
+      log.error(`kg-service: kg_what_to_learn_next(${slug}) failed — ${e.message ?? e}`);
+      req.error({ code: 'KG_LOOKUP_FAILED', message: e.message });
+      return [];
+    }
+  });
+
   // ─── pathBetween — property-graph v2 with fail-open v1 fallback (#913) ─
   this.on('pathBetween', async (req) => {
     const { fromSlug, toSlug } = req.data;

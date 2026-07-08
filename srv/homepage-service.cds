@@ -48,6 +48,10 @@ type FeaturedTopicsPayload {
 
 @path: '/homepage'
 @requires: 'any'
+// (#912) `@mcp` alone is a single-protocol shortcut that REPLACES the OData
+// mount. Explicit list keeps OData reachable at /homepage/... and adds MCP.
+// This service does not adopt GraphQL (unlike SearchService/KG).
+@protocol: ['odata', 'mcp']
 service HomepageService {
 
   // EventCard maps from ims.Events (startDate/name) to the homepage shape.
@@ -131,6 +135,27 @@ service HomepageService {
   // Public (inherits service-level @requires:'any') — anonymous beacons are fine.
   // surface is validated server-side against a fixed allowlist.
   action beaconApplied(surface: String) returns {};
+
+  // (#912) MCP curated tools — news + videos bands.
+
+  /**
+   * Recent SAP developer news items — the same feed the homepage news band
+   * shows. Bounded by `limit`; use this to answer "what's new in SAP?".
+   *
+   * @param limit Max items to return (default 10, hard max 50).
+   * @returns     Recent RSS items ordered by publish date desc.
+   */
+  function get_recent_news(limit : Integer) returns array of RssItem;
+
+  /**
+   * Recent SAP developer videos from the persistent Videos corpus, ordered
+   * by publish date desc. The corpus is refreshed twice-weekly by the
+   * fetch-videos-job cron. Use this to discover recent SAP developer videos.
+   *
+   * @param limit Max items to return (default 10, hard max 50).
+   * @returns     Recent video items with videoId, title, thumbnail, publishedAt.
+   */
+  function get_recent_videos(limit : Integer) returns array of VideoItem;
 
   // (#1032) Featured missions carousel snapshot. Public — no auth. 60s cache;
   // ETag so the Vue island can hydrate cheaply.

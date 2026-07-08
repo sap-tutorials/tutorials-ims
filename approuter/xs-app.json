@@ -313,6 +313,13 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/mcp/(.*)$",
+      "target": "/mcp/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/tutorials-qa/_nav\\.json$",
       "target": "/content/nav",
       "destination": "srv-qa-api",

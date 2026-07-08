@@ -236,6 +236,204 @@ export default class SearchService extends cds.ApplicationService {
       attachSearchRank(req.query, tokens, kgFragment);
     });
 
+    /**
+     * MCP curated tool: fuzzy full-text search across published tutorials.
+     *
+     * @param query      Search terms (word-boundary matching, stopword-filtered).
+     * @param tags       Optional exact-match filter on tutorial primary tag.
+     * @param experience Optional experience-level filter.
+     * @param limit      Max results (default 10, hard max 100).
+     * @returns          Array of { slug, title, snippet, tags } ordered by relevance.
+     */
+    this.on('search_tutorials', async (req) => {
+      const { query, tags, experience } = req.data;
+      const limit = Math.min(Math.max(req.data.limit ?? 10, 1), 100);
+
+      const { SearchableItems } = this.entities;
+      const q = SELECT.from(SearchableItems)
+        .columns('slug', 'title', 'description', 'primaryTag', 'experienceTag')
+        .limit(limit)
+        .where({ taskType: 'TUTORIAL' });
+
+      // Apply word-boundary search across title/description/primaryTag/tagBag.
+      // Reuses the same predicate builder as the OData $search handler so the
+      // match semantics are identical (stopword-filtered, separator-normalised).
+      // attachSearchRank appends _searchRank to SELECT.columns and prepends
+      // _searchRank DESC to ORDER BY so results are ranked by relevance before
+      // the DB applies the LIMIT — consistent with the OData $search path.
+      if (query) {
+        const tokens = applyWordBoundarySearch(q, query);
+        attachSearchRank(q, tokens);
+      }
+
+      if (tags?.length) q.where({ primaryTag: { in: tags } });
+      if (experience)   q.where({ experienceTag: experience });
+
+      const rows = await cds.db.run(q);
+      return rows.map(r => ({
+        slug:    (r.slug ?? '').toLowerCase(),
+        title:   r.title ?? '',
+        snippet: (r.description ?? '').slice(0, 240),
+        tags:    r.primaryTag ? [r.primaryTag] : [],
+      }));
+    });
+
+    /**
+     * MCP curated tool: list published missions with tutorial counts.
+     *
+     * @param tags  Optional primaryTag filter (any-match).
+     * @param limit Max results (default 20, hard max 50).
+     * @returns     Array of { slug, title, description, tutorialCount } ordered by title.
+     */
+    this.on('list_missions', async (req) => {
+      const { tags } = req.data;
+      const limit = Math.min(Math.max(req.data.limit ?? 20, 1), 50);
+      const { Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+
+      const mq = SELECT.from(Missions)
+        .columns('ID', 'slug', 'title', 'description')
+        .where({ published: true })
+        .orderBy('title asc')
+        .limit(limit);
+
+      if (tags?.length) mq.where({ primaryTag: { in: tags } });
+
+      const missions = await cds.db.run(mq);
+      if (!missions.length) return [];
+
+      // Two-query approach: avoid fragile CQL aggregate JOIN on SQLite.
+      // Fetch CompletionPathItems counts grouped by mission_ID via
+      // CompletionPaths (which carries the mission_ID foreign key).
+      const missionIds = missions.map(m => m.ID);
+      const paths = await cds.db.run(
+        SELECT.from(CompletionPaths)
+          .columns('ID', 'mission_ID')
+          .where({ mission_ID: { in: missionIds } })
+      );
+      const pathIds = paths.map(p => p.ID);
+      const countByMission = new Map(missionIds.map(id => [id, 0]));
+      if (pathIds.length) {
+        const items = await cds.db.run(
+          SELECT.from(CompletionPathItems)
+            .columns('path_ID')
+            .where({ path_ID: { in: pathIds }, taskType: 'TUTORIAL' })
+        );
+        for (const path of paths) {
+          const n = items.filter(i => i.path_ID === path.ID).length;
+          countByMission.set(path.mission_ID, (countByMission.get(path.mission_ID) ?? 0) + n);
+        }
+      }
+
+      return missions.map(m => ({
+        slug:          (m.slug ?? '').toLowerCase(),
+        title:         m.title ?? '',
+        description:   m.description ?? '',
+        tutorialCount: countByMission.get(m.ID) ?? 0,
+      }));
+    });
+
+    /**
+     * MCP curated tool: fetch a published mission by slug with ordered tutorial list.
+     *
+     * @param slug Mission slug (lowercased server-side; case-insensitive).
+     * @returns    { slug, title, description, tutorials: [{ slug, title, order }] }
+     *             or null when no published mission matches.
+     */
+    this.on('get_mission', async (req) => {
+      const slug = (req.data.slug ?? '').toLowerCase();
+      if (!slug) return null;
+
+      const { Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+
+      const mission = await SELECT.one.from(Missions)
+        .columns('ID', 'slug', 'title', 'description')
+        .where({ slug, published: true });
+      if (!mission) return null;
+
+      // Two-query pattern (mirrors list_missions): fetch paths for this mission,
+      // then items in those paths filtered to TUTORIAL taskType only.
+      const paths = await cds.db.run(
+        SELECT.from(CompletionPaths)
+          .columns('ID')
+          .where({ mission_ID: mission.ID })
+      );
+      const pathIds = paths.map(p => p.ID);
+
+      let tutorials = [];
+      if (pathIds.length) {
+        const items = await cds.db.run(
+          SELECT.from(CompletionPathItems)
+            .columns('tutorial_ID', 'itemOrder')
+            .where({ path_ID: { in: pathIds }, taskType: 'TUTORIAL' })
+            .orderBy('itemOrder asc')
+        );
+        if (items.length) {
+          const tutorialIds = items.map(i => i.tutorial_ID).filter(Boolean);
+          if (tutorialIds.length) {
+            const { Tutorials } = cds.entities('com.sap.developers.ims');
+            const tutRows = await cds.db.run(
+              SELECT.from(Tutorials)
+                .columns('ID', 'slug', 'title')
+                .where({ ID: { in: tutorialIds } })
+            );
+            const tutMap = new Map(tutRows.map(t => [t.ID, t]));
+            tutorials = items
+              .map(i => {
+                const tut = tutMap.get(i.tutorial_ID);
+                if (!tut) return null;
+                return {
+                  slug:  (tut.slug ?? '').toLowerCase(),
+                  title: tut.title ?? '',
+                  order: i.itemOrder ?? 0,
+                };
+              })
+              .filter(Boolean);
+          }
+        }
+      }
+
+      return {
+        slug:        (mission.slug ?? '').toLowerCase(),
+        title:       mission.title ?? '',
+        description: mission.description ?? '',
+        tutorials,
+      };
+    });
+
+    /**
+     * MCP curated tool: fetch an ACTIVE tutorial by slug with ordered step list.
+     *
+     * @param slug  Tutorial slug (case-insensitive; lowercased server-side).
+     * @returns     { slug, title, description, tags, steps } or null when
+     *              the slug is empty, unknown, or the tutorial is INACTIVE.
+     */
+    this.on('get_tutorial', async (req) => {
+      const slug = (req.data.slug ?? '').toLowerCase();
+      if (!slug) return null;
+
+      const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
+
+      const tutorial = await SELECT.one.from(Tutorials)
+        .columns('ID', 'slug', 'title', 'description', 'primaryTag')
+        .where({ slug, status: 'ACTIVE' });
+      if (!tutorial) return null;
+
+      const stepRows = await cds.db.run(
+        SELECT.from(Steps)
+          .columns('stepOrder', 'title')
+          .where({ tutorial_ID: tutorial.ID, status: 'ACTIVE' })
+          .orderBy('stepOrder asc')
+      );
+
+      return {
+        slug:        (tutorial.slug ?? '').toLowerCase(),
+        title:       tutorial.title ?? '',
+        description: tutorial.description ?? '',
+        tags:        tutorial.primaryTag ? [tutorial.primaryTag] : [],
+        steps:       stepRows.map(s => ({ number: s.stepOrder, title: s.title ?? '' })),
+      };
+    });
+
     this.on('getFacets', async (req) => {
       const { search, taskTypes, experience } = req.data;
 
