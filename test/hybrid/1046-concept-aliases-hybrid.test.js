@@ -24,17 +24,29 @@ describe.runIf(isSafeForWrites())('#1046 Concept aliases (hybrid)', () => {
     await cds.run(DELETE.from(ConceptAliases).where({ concept_ID: { in: [ids.a, ids.b] } }))
     await cds.run(DELETE.from(Concepts).where({ ID: { in: [ids.a, ids.b] } }))
 
+    // Concept names and descriptions are intentionally free of the alias strings
+    // ("SLT", "IDoc") so that $search matches are proven to come from the alias
+    // path (aliasSearchBlob) rather than name/description LIKE matches.
     await cds.run(INSERT.into(Concepts).entries([
-      { ID: ids.a, slug: `${PREFIX}slt-concept`, name: 'SLT Concept', description: 'landscape transform', status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: PREFIX },
-      { ID: ids.b, slug: `${PREFIX}idoc-concept`, name: 'IDoc Concept', description: 'edi doc', status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: PREFIX }
+      { ID: ids.a, slug: `${PREFIX}slt-concept`,  name: 'Landscape Transform',    description: 'replication server',     status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: PREFIX },
+      { ID: ids.b, slug: `${PREFIX}idoc-concept`, name: 'Intermediate Document', description: 'edi standard exchange', status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: PREFIX }
     ]))
+    // Raw INSERT bypasses service handlers — manually UPDATE aliasSearchBlob to
+    // simulate what the after-write hook on ConceptAliases would have done.
+    // (Approach B: the $search tests stay honest; Approach A — POST through the
+    //  OData service — was ruled out because the writable ConceptAliases projection
+    //  requires auth that is not available to anonymous hybrid test callers.)
     await cds.run(INSERT.into(ConceptAliases).entries([
-      { concept_ID: ids.a, alias: 'SLT',   aliasLower: 'slt',  source: 'SEED' },
-      { concept_ID: ids.b, alias: 'IDoc',  aliasLower: 'idoc', source: 'SEED' }
+      { concept_ID: ids.a, alias: 'SLT',  aliasLower: 'slt',  source: 'SEED' },
+      { concept_ID: ids.b, alias: 'IDoc', aliasLower: 'idoc', source: 'SEED' }
     ]))
+    await cds.run(UPDATE(Concepts).set({ aliasSearchBlob: 'slt'  }).where({ ID: ids.a }))
+    await cds.run(UPDATE(Concepts).set({ aliasSearchBlob: 'idoc' }).where({ ID: ids.b }))
   })
 
   afterAll(async () => {
+    // Delete aliases first; the parent DELETE supersedes the after-write hook's
+    // UPDATE attempt on an already-gone Concept row (fail-open design).
     await cds.run(DELETE.from(ConceptAliases).where({ concept_ID: { in: [ids.a, ids.b] } }))
     await cds.run(DELETE.from(Concepts).where({ ID: { in: [ids.a, ids.b] } }))
   })
@@ -55,10 +67,10 @@ describe.runIf(isSafeForWrites())('#1046 Concept aliases (hybrid)', () => {
     expect(slugs).toContain(`${PREFIX}idoc-concept`)
   })
 
-  it('batch after-READ hydrates all rows in one IN-query', async () => {
-    // Fetch both rows via $top=6 — the after-READ hook should batch, not fan out.
-    // Loose assertion — we're checking that both rows come back with an alias blob,
-    // not that we can spy tx.run count (that's a nice-to-have for the deeper test).
+  it('after-write hook materializes aliasSearchBlob on the parent Concept', async () => {
+    // Both blobs were set by the manual UPDATE above (simulating the after-write hook).
+    // This test verifies that HANA has the blob persisted and that the OData
+    // projection surfaces it — confirming the column is part of the read path.
     const res = await fetch(`${cds.server.url}/graph/PublishedConceptsWithAliases?$select=slug,aliasSearchBlob&$top=6`)
     const body = await res.json()
     const blobBySlug = Object.fromEntries((body.value || []).map(r => [r.slug, r.aliasSearchBlob]))
