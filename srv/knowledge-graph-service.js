@@ -810,10 +810,11 @@ export default cds.service.impl(async function () {
 
   // #1046 — hydrate aliasSearchBlob on PublishedConceptsWithAliases so the
   // palette's OData $search on this projection matches concept aliases.
-  // One IN-query batches all rows returned by the caller ($top≤6 from palette
-  // — no unbounded-fetch risk of the shape that broke featured missions in
-  // #1032). Fail-open: any exception leaves aliasSearchBlob undefined, and
-  // the palette gracefully drops the row.
+  // The projection is public (@requires:'any') so callers may return many rows.
+  // The IN-query is chunked at 50 IDs per batch to avoid HANA packet-size
+  // overflows — same fix applied to featured missions in #1032.
+  // Fail-open: any exception leaves aliasSearchBlob undefined, and the palette
+  // gracefully drops the row.
   this.after('READ', 'PublishedConceptsWithAliases', async (rows, req) => {
     try {
       const list = Array.isArray(rows) ? rows : (rows ? [rows] : [])
@@ -821,15 +822,19 @@ export default cds.service.impl(async function () {
       const ids = list.map(r => r.ID).filter(Boolean)
       if (ids.length === 0) return
       const { ConceptAliases } = cds.entities('com.sap.developers.ims')
-      const aliasRows = await cds.tx(req).run(
-        SELECT.from(ConceptAliases)
-          .columns('concept_ID', 'aliasLower')
-          .where({ concept_ID: { in: ids } })
-      )
+      const CHUNK = 50
       const byConcept = new Map()
-      for (const a of aliasRows) {
-        if (!byConcept.has(a.concept_ID)) byConcept.set(a.concept_ID, [])
-        byConcept.get(a.concept_ID).push(a.aliasLower)
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK)
+        const aliasRows = await cds.tx(req).run(
+          SELECT.from(ConceptAliases)
+            .columns('concept_ID', 'aliasLower')
+            .where({ concept_ID: { in: chunk } })
+        )
+        for (const a of aliasRows) {
+          if (!byConcept.has(a.concept_ID)) byConcept.set(a.concept_ID, [])
+          byConcept.get(a.concept_ID).push(a.aliasLower)
+        }
       }
       for (const r of list) {
         r.aliasSearchBlob = (byConcept.get(r.ID) || []).join(',')
