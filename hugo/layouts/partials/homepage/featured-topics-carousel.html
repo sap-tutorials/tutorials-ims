@@ -2,7 +2,7 @@
        Reads .Site.Data.featured_topics (populated by scripts/fetch-tutorials.ts
        calling GET /build/featured-topics). Renders up to 8 SSR slides so the
        first paint is instant + SEO-visible. The Vue island (data-app hook)
-       rehydrates with fresher data via /api/homepage/featuredTopics + If-None-Match.
+       rehydrates with fresher data via /homepage/featuredTopics() + If-None-Match.
 
        Snapshot shape (per task 8):
          { computedAt, etag, snapshot: [{ slotOrder, source, conceptSlug,
@@ -10,11 +10,19 @@
            time, primaryTag, tutorialCount, href, isNew }] }], buildAt, error }
 
        Card dispatch: kind=mission → card-mission.html, kind=tutorial → card-tutorial.html.
-       Falls back gracefully when snapshot is empty or absent (Row 5 disappears). */ -}}
-{{- $ft := .Site.Data.featured_topics -}}
+
+       IMPORTANT: We ALWAYS emit the <section data-app="featured-topics-carousel">
+       shell — even when the baked snapshot is empty — so the Vue island's
+       useHydrate can still fetch /homepage/featuredTopics() and populate the
+       row from live CAP data. Without the shell, a stale/empty baked JSON
+       (as shipped once by 03d42355 before the nightly PageRank + snapshot
+       job first ran) would silently hide Row 5 for the entire deploy
+       lifetime — no client-side rescue possible. The .hp-featured-carousel--pending
+       modifier lets CSS hide the empty header until hydration fills in
+       slides. */ -}}
+{{- $ft := .Site.Data.featured_topics | default (dict "snapshot" slice "etag" "") -}}
 {{- $slides := $ft.snapshot | default slice -}}
-{{- if gt (len $slides) 0 -}}
-<section class="hp-featured-carousel"
+<section class="hp-featured-carousel{{ if eq (len $slides) 0 }} hp-featured-carousel--pending{{ end }}"
          data-app="featured-topics-carousel"
          data-etag="{{ $ft.etag }}"
          aria-roledescription="carousel"
@@ -56,4 +64,3 @@
     </ol>
   </nav>
 </section>
-{{- end -}}

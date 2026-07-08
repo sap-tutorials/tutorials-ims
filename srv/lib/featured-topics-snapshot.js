@@ -10,6 +10,21 @@ const LOG = cds.log('featured-topics');
 
 const lower = (x) => (x == null ? x : String(x).toLowerCase());
 
+/**
+ * Decode a raw description value from a HANA NCLOB column.
+ *
+ * The HANA node driver returns NCLOB values as Node Buffer instances. If left
+ * raw, JSON.stringify emits `{ "type": "Buffer", "data": [...] }` — the Vue
+ * island's v-html card template then renders that JSON blob as visible
+ * garbage in the description slot. Exported so unit tests can guard the
+ * behavior without spinning up a HANA connection.
+ */
+export function decodeDescription(raw) {
+  if (raw == null) return '';
+  if (Buffer.isBuffer(raw)) return raw.toString('utf-8');
+  return String(raw);
+}
+
 async function loadInputs(tx) {
   const { HomepageFeaturedTopics, Concepts, ConceptRank, TutorialRank, KgCommunity, TutorialConceptLinks, Tutorials, Missions } = cds.entities(NS);
 
@@ -156,7 +171,14 @@ export async function readSnapshotForFeed(tx) {
         `SELECT "SLUG", "DESCRIPTION" FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS" WHERE "SLUG" IN (${placeholders})`,
         slugList
       );
-      descBySlug = new Map(descRows.map(r => [lower(r.SLUG ?? r.slug), r.DESCRIPTION ?? r.description ?? '']));
+      // (#1032 followup) NCLOB columns come back from the HANA node driver as
+      // Node Buffer instances. Decode to UTF-8 up front (see decodeDescription
+      // above) so both the /build/featured-topics build-time fetch and the
+      // /homepage/featuredTopics() hydration payload carry plain strings.
+      descBySlug = new Map(descRows.map(r => {
+        const slug = lower(r.SLUG ?? r.slug);
+        return [slug, decodeDescription(r.DESCRIPTION ?? r.description)];
+      }));
     } else {
       const descRows = await tx.run(SELECT.from(Tutorials).columns('slug','description').where({ slug: { in: slugList } }));
       descBySlug = new Map(descRows.map(r => [lower(r.slug), r.description || '']));

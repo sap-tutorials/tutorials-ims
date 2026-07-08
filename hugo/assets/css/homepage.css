@@ -403,6 +403,13 @@
 
 /* Row 5 featured topics carousel — #1032 */
 .hp-featured-carousel { position: relative; }
+/* When the baked snapshot is empty (deploy raced the nightly job, or JSON
+   was never refreshed), the Vue island hydrates from /homepage/featuredTopics()
+   on mount. Hide the empty shell during that window so users don't see a
+   lonely "Featured missions" header with no cards. If JS is disabled or the
+   fetch fails, the row simply stays hidden — the same UX as the pre-fix
+   behavior. */
+.hp-featured-carousel--pending { display: none; }
 .hp-featured-carousel__header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
 .hp-featured-carousel__viewport { position: relative; min-height: 22rem; }
 .hp-featured-carousel__slide { transition: opacity 300ms ease, transform 300ms ease; opacity: 1; transform: translateX(0); }

@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useAutoAdvance } from './composables/useAutoAdvance';
 import { useHydrate } from './composables/useHydrate';
 import { useDeepLink } from './composables/useDeepLink';
@@ -70,6 +70,16 @@ const reducedMotion = ref(
   matchMedia('(prefers-reduced-motion: reduce)').matches
 );
 const autoAdvance = computed(() => !userPaused.value && !reducedMotion.value);
+
+// #1032 fallback path — Hugo partial always emits the section (so JS can
+// hydrate a stale/empty baked snapshot), tagged with .hp-featured-carousel--pending
+// while empty. Reveal the row as soon as we have slides — from SSR or hydration.
+// If hydration never fires (no JS, network fail, /homepage/featuredTopics() returns
+// empty), the row stays hidden, preserving the pre-fix "silent no-show" UX for
+// the truly-empty case.
+watch(slides, (next) => {
+  if (next.length > 0) props.root.classList.remove('hp-featured-carousel--pending');
+}, { immediate: true });
 
 function jumpTo(i: number): void {
   if (i < 0 || i >= slides.value.length) return;
