@@ -50,9 +50,10 @@ describe('LearningPreferences.vue', () => {
       'POST /api/setLearningPreferences': async () => {
         return { body: { deployment: 'cloud', role: null, cloud: null } };
       },
+      'POST /api/developer/setPreferredEventRegion': async () => ({ body: true }),
     });
     vi.stubGlobal('fetch', vi.fn(async (url, init) => {
-      if (init?.method === 'POST') (global as any).__lastPost = JSON.parse(init.body as string);
+      if (init?.method === 'POST' && url === '/api/setLearningPreferences') (global as any).__lastPost = JSON.parse(init.body as string);
       return await fetchMock(url, init);
     }));
     const wrapper = mount(LearningPreferences);
@@ -107,10 +108,11 @@ describe('LearningPreferences.vue', () => {
 
   it('5. __none__ → null round-trip: pick "— No preference —" → Save → POST body has deployment: null', async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      if (init?.method === 'POST') {
+      if (init?.method === 'POST' && url === '/api/setLearningPreferences') {
         (global as any).__post = JSON.parse(init.body as string);
         return { ok: true, json: async () => ({}) };
       }
+      if (init?.method === 'POST') return { ok: true, json: async () => ({}) };
       if (url.endsWith('LearningPreferences')) {
         return { ok: true, json: async () => ({ value: [{ deployment: 'cloud', role: 'developer', cloud: 'btp' }] }) };
       }
