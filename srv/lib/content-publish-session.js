@@ -147,7 +147,16 @@ export function createSessionHelpers({ namespace }) {
       // misclassify as transient, retry to exhaustion, and abort the session.
       // DELETE-before-INSERT is correct on both HANA and SQLite and keeps the
       // INSERT path simple.
-      await DELETE.from(ContentFiles).where({ version: session.version, slug: { in: slugs } });
+      //
+      // Chunk the slug IN-list to stay under HANA's parameter-batch ceiling
+      // (see docs/developers/reference/hana-hdi-gotchas.md and memory note
+      // cqn-where-in-hana-packet-cap.md). Typical append batch is 50, but the
+      // legacy publishHandler allowed up to 5000 in a single call — chunking
+      // is belt-and-suspenders in case a caller sends a large batch.
+      for (let i = 0; i < slugs.length; i += 500) {
+        const chunk = slugs.slice(i, i + 500);
+        await DELETE.from(ContentFiles).where({ version: session.version, slug: { in: chunk } });
+      }
 
       // Insert in groups of 50 — same batch size publishHandler uses.
       for (let i = 0; i < entries.length; i += 50) {
@@ -243,25 +252,35 @@ export function createSessionHelpers({ namespace }) {
   async function detectReverts(newVersion, freshSlugs) {
     if (!freshSlugs.length) return [];
     const { ContentFiles } = cds.entities(namespace);
+    // On full-repo publishes freshSlugs is ~7,315 entries. A `.where({slug:
+    // {in: freshSlugs}})` here would send one bound parameter per slug and
+    // blow HANA's packet cap (memory note: cqn-where-in-hana-packet-cap.md;
+    // same class as #1063 and #1103). Fetch the two versioned windows
+    // unbounded and filter into `freshSet` in Node. ContentFiles pruned
+    // to (retained versions × slugs) ≈ ~22K short rows without BLOBs stays
+    // comfortably under the 5 MB per-read budget the memory note specifies.
+    const freshSet = new Set(freshSlugs);
 
     // 1. Incoming hashes for this version (only slugs that have a sourceHash
     //    — null-sourceHash rows can't be checked).
-    const incoming = await SELECT.from(ContentFiles)
+    const incoming = (await SELECT.from(ContentFiles)
       .columns('slug', 'sourceHash')
-      .where({ version: newVersion, slug: { in: freshSlugs } })
-      .and({ sourceHash: { '!=': null } });
+      .where({ version: newVersion })
+      .and({ sourceHash: { '!=': null } })
+    ).filter(r => freshSet.has(r.slug));
     if (!incoming.length) return [];
 
     const incomingMap = new Map(incoming.map((r) => [r.slug, r.sourceHash]));
-    const slugsWithSrc = [...incomingMap.keys()];
+    const slugsWithSrcSet = new Set(incomingMap.keys());
 
-    // 2. All prior versions of those slugs (newest-first).
-    const priors = await SELECT.from(ContentFiles)
+    // 2. All prior versions of those slugs (newest-first). Same reasoning as
+    //    §1: fetch versioned rows unbounded and filter by slug in Node.
+    const priors = (await SELECT.from(ContentFiles)
       .columns('slug', 'sourceHash', 'version')
-      .where({ slug: { in: slugsWithSrc } })
-      .and({ version: { '<': newVersion } })
+      .where({ version: { '<': newVersion } })
       .and({ sourceHash: { '!=': null } })
-      .orderBy({ slug: 'asc', version: 'desc' });
+      .orderBy({ slug: 'asc', version: 'desc' })
+    ).filter(r => slugsWithSrcSet.has(r.slug));
 
     // 3. Per slug, walk newest-first: find V_div (most recent prior hash that
     //    differs from incoming). If incoming appears in any version older
@@ -273,7 +292,7 @@ export function createSessionHelpers({ namespace }) {
     }
 
     const rejected = [];
-    for (const slug of slugsWithSrc) {
+    for (const slug of slugsWithSrcSet) {
       const incomingHash = incomingMap.get(slug);
       const history = bySlug.get(slug) || [];
 
@@ -357,7 +376,13 @@ export function createSessionHelpers({ namespace }) {
     const rejectedReverts = await detectReverts(newVersion, freshSlugs);
     if (rejectedReverts.length) {
       LOG.warn(`[content/publish/commit] #672 rejecting ${rejectedReverts.length} revert(s): ${rejectedReverts.join(', ')}`);
-      await DELETE.from(ContentFiles).where({ version: newVersion, slug: { in: rejectedReverts } });
+      // Chunk to stay under HANA's packet cap: rejectedReverts can in
+      // principle be as large as freshSlugs (~7,315 on a full publish).
+      // Same rationale as the appendToSession DELETE above.
+      for (let i = 0; i < rejectedReverts.length; i += 500) {
+        const chunk = rejectedReverts.slice(i, i + 500);
+        await DELETE.from(ContentFiles).where({ version: newVersion, slug: { in: chunk } });
+      }
       const rejectedSet = new Set(rejectedReverts);
       freshSlugs = freshSlugs.filter((s) => !rejectedSet.has(s));
     }

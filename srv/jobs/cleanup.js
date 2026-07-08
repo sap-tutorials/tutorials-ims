@@ -13,7 +13,7 @@ import cds from '@sap/cds';
  */
 const DELETE_IN_CHUNK_SIZE = 500;
 
-async function deleteInChunks(entity, key, ids, chunkSize = DELETE_IN_CHUNK_SIZE) {
+export async function deleteInChunks(entity, key, ids, chunkSize = DELETE_IN_CHUNK_SIZE) {
   if (!ids || ids.length === 0) return 0;
   let total = 0;
   for (let i = 0; i < ids.length; i += chunkSize) {

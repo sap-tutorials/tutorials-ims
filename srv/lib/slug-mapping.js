@@ -41,10 +41,15 @@ export async function findMissingSlugs() {
 
   if (items.length === 0) return [];
 
-  const taskLegacyIds = items.map(i => i.taskLegacyId);
-  const tutorials = await SELECT.from(Tutorials)
+  // Admin diagnostic driven by every `CompletionPathItems` row where
+  // taskType='TUTORIAL' — grows monotonically with mission/group count.
+  // Fetch driving tables unbounded and filter into Sets in Node to stay
+  // under HANA's packet cap (memory: cqn-where-in-hana-packet-cap.md;
+  // same class as #1063/#1103).
+  const taskLegacyIdSet = new Set(items.map(i => i.taskLegacyId));
+  const tutorials = (await SELECT.from(Tutorials)
     .columns('legacyId', 'slug')
-    .where({ legacyId: { in: taskLegacyIds } });
+  ).filter(t => taskLegacyIdSet.has(t.legacyId));
 
   const missingSlugs = new Set(
     tutorials.filter(t => !t.slug).map(t => t.legacyId)
@@ -52,13 +57,13 @@ export async function findMissingSlugs() {
 
   if (missingSlugs.size === 0) return [];
 
-  const pathIds = [...new Set(items.filter(i => missingSlugs.has(i.taskLegacyId)).map(i => i.path_ID))];
-  const paths = await SELECT.from(CompletionPaths).where({ ID: { in: pathIds } });
+  const pathIdSet = new Set(items.filter(i => missingSlugs.has(i.taskLegacyId)).map(i => i.path_ID));
+  const paths = (await SELECT.from(CompletionPaths)).filter(p => pathIdSet.has(p.ID));
   const pathMap = new Map(paths.map(p => [p.ID, p]));
 
-  const missionIds = [...new Set(paths.map(p => p.mission_ID).filter(Boolean))];
-  const missions = missionIds.length > 0
-    ? await SELECT.from(Missions).where({ ID: { in: missionIds } })
+  const missionIdSet = new Set(paths.map(p => p.mission_ID).filter(Boolean));
+  const missions = missionIdSet.size > 0
+    ? (await SELECT.from(Missions)).filter(m => missionIdSet.has(m.ID))
     : [];
   const missionMap = new Map(missions.map(m => [m.ID, m]));
 

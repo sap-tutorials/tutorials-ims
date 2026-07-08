@@ -20,6 +20,7 @@
 
 import cds from '@sap/cds';
 import { PER_TYPE_TTL_DAYS } from '../lib/external-content-ttl.js';
+import { deleteInChunks } from './cleanup.js';
 
 const LOG = cds.log('gc-external-content');
 const NAMESPACE = 'com.sap.developers.ims.external';
@@ -115,19 +116,22 @@ export async function runGcExternalContent() {
     //    OTHER (non-stale) journeys, which would leave dangling FK refs.
     //    Hand-coded sweeps live here per content-type; 4.2-4.6 add their
     //    own branches as needed.
+    //
+    //    Both DELETEs below chunk the ID IN-list via `deleteInChunks` from
+    //    srv/jobs/cleanup.js — with HelpDocs (potentially thousands of
+    //    scraped SAP Help pages) and Videos, staleIds can exceed HANA's
+    //    packet cap (memory: cqn-where-in-hana-packet-cap.md).
     if (entityName === 'LearningJourneys') {
       const { LearningJourneyPrerequisites } = entities;
       if (LearningJourneyPrerequisites) {
-        await DELETE.from(LearningJourneyPrerequisites).where({
-          prerequisite_ID: { in: staleIds },
-        });
+        await deleteInChunks(LearningJourneyPrerequisites, 'prerequisite_ID', staleIds);
       }
     }
 
     // 3. Delete the parent rows. CAP cascades the journey-side compositions
     //    (LearningJourneyConceptLinks rows + LearningJourneyPrerequisites
     //    rows where journey_ID is in staleIds).
-    const deleted = await DELETE.from(entity).where({ ID: { in: staleIds } });
+    const deleted = await deleteInChunks(entity, 'ID', staleIds);
 
     summary[contentType] = `deleted=${deleted ?? 0}`;
     if (deleted > 0) {
