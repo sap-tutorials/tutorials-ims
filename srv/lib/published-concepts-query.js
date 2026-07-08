@@ -76,17 +76,31 @@ export async function buildConceptsPayload(db) {
   }
 
   const ids = published.map(c => c.ID);
+  // HANA "Failed to set parameters, maximum packet size exceeded" fires
+  // once `ids` grows past a few thousand (5,946 published concepts as of
+  // 2026-07-08). Every `.where({ concept_ID: { in: ids } })` below sends
+  // one bound parameter per element; on HANA the packet blows and the
+  // whole /build/concepts endpoint 500s, taking `npm run fetch-concepts`
+  // (and therefore `npm run build:all`) with it.
+  //
+  // Same class of defect as #1063 (kg-featured-topics — slug IN over all
+  // ConceptRank). Same repair pattern: fetch link tables unbounded and
+  // filter into `idsSet` in Node. Link-table sizes verified against DEV
+  // before shipping (TutorialConceptLinks=8407, ConceptEdges=6246, others
+  // smaller); a few short columns × single-digit-thousand rows stays well
+  // under 2 MB per read.
+  const idsSet = new Set(ids);
 
   // 2. Tutorials that teach each published concept (predicate='teaches').
-  const teachesRows = await db.run(
+  const teachesRows = (await db.run(
     SELECT.from(TutorialConceptLinks)
       .columns(
         'concept_ID',
         'tutorial.slug as tutorial_slug',
         'tutorial.title as tutorial_title'
       )
-      .where({ concept_ID: { in: ids }, predicate: 'teaches' })
-  );
+      .where({ predicate: 'teaches' })
+  )).filter(r => idsSet.has(r.concept_ID));
   const teachesByConcept = groupBy(
     // Defensive: drop orphan rows where the joined Tutorial side is null.
     // The schema cascade (#787) makes this impossible going forward; the
@@ -98,26 +112,26 @@ export async function buildConceptsPayload(db) {
   );
 
   // 3. Outgoing edges (requires + relatedTo) per concept.
-  const outgoingRows = await db.run(
+  const outgoingRows = (await db.run(
     SELECT.from(ConceptEdges)
       .columns(
         'source_ID', 'predicate',
         'target.slug as target_slug',
         'target.name as target_name'
       )
-      .where({ source_ID: { in: ids }, status: 'ACTIVE' })
-  );
+      .where({ status: 'ACTIVE' })
+  )).filter(r => idsSet.has(r.source_ID));
 
   // 4. Incoming "requires" edges per concept (so the page can show "required by").
-  const incomingRows = await db.run(
+  const incomingRows = (await db.run(
     SELECT.from(ConceptEdges)
       .columns(
         'target_ID', 'predicate',
         'source.slug as source_slug',
         'source.name as source_name'
       )
-      .where({ target_ID: { in: ids }, status: 'ACTIVE', predicate: 'requires' })
-  );
+      .where({ status: 'ACTIVE', predicate: 'requires' })
+  )).filter(r => idsSet.has(r.target_ID));
 
   const requiresByConcept = groupBy(
     outgoingRows.filter(r => r.predicate === 'requires'),
@@ -139,7 +153,7 @@ export async function buildConceptsPayload(db) {
   // Pull all journey links for the published-concept IDs in one query and
   // group server-side. Empty when the cron hasn't yet populated journeys —
   // each concept then gets an empty array (preserves shape).
-  const journeyRows = await db.run(
+  const journeyRows = (await db.run(
     SELECT.from(LearningJourneyConceptLinks)
       .columns(
         'concept_ID',
@@ -149,8 +163,7 @@ export async function buildConceptsPayload(db) {
         'journey.level as journey_level',
         'journey.durationHours as journey_durationHours'
       )
-      .where({ concept_ID: { in: ids } })
-  );
+  )).filter(r => idsSet.has(r.concept_ID));
   const learningJourneysByConcept = groupBy(
     journeyRows,
     'concept_ID',
@@ -168,7 +181,7 @@ export async function buildConceptsPayload(db) {
   // dialects. Newest 8 posts per concept (post-grouping cap).
   let blogPostsByConcept = {};
   if (ids.length > 0) {
-    const blogRows = await db.run(
+    const blogRows = (await db.run(
       SELECT.from(BlogPostConceptLinks)
         .columns(
           'concept_ID',
@@ -178,8 +191,7 @@ export async function buildConceptsPayload(db) {
           'post.authorName as post_authorName',
           'post.postedAt as post_postedAt'
         )
-        .where({ concept_ID: { in: ids } })
-    );
+    )).filter(r => idsSet.has(r.concept_ID));
     // Group then cap at 8 newest per concept (postedAt desc).
     const grouped = groupBy(blogRows, 'concept_ID', r => ({
       slug: (r.post_slug || '').toLowerCase(),
@@ -203,7 +215,7 @@ export async function buildConceptsPayload(db) {
   // ordered by mission.effortLevel asc (easier missions first).
   let discoveryMissionsByConcept = {};
   if (ids.length > 0) {
-    const missionLinks = await db.run(
+    const missionLinks = (await db.run(
       SELECT.from(DiscoveryMissionConceptLinks)
         .columns(
           'concept_ID',
@@ -213,10 +225,8 @@ export async function buildConceptsPayload(db) {
           'mission.effortLevel as effortLevel',
           'mission.categorySlug as categorySlug',
         )
-        .where({ concept_ID: { in: ids } })
         .orderBy('mission.effortLevel asc')
-        .limit(8 * ids.length)
-    );
+    )).filter(r => idsSet.has(r.concept_ID));
     const groupedMissions = groupBy(missionLinks, 'concept_ID', r => ({
       slug: r.missionSlug,
       title: r.title,
@@ -236,7 +246,7 @@ export async function buildConceptsPayload(db) {
   // payload only needs title/url/thumbnailUrl/channelTitle/publishedAt.
   let videosByConcept = {};
   if (ids.length > 0) {
-    const videoLinks = await db.run(
+    const videoLinks = (await db.run(
       SELECT.from(VideoConceptLinks)
         .columns(
           'concept_ID',
@@ -247,10 +257,8 @@ export async function buildConceptsPayload(db) {
           'video.channelTitle as channelTitle',
           'video.publishedAt as publishedAt',
         )
-        .where({ concept_ID: { in: ids } })
         .orderBy('video.publishedAt desc')
-        .limit(8 * ids.length)
-    );
+    )).filter(r => idsSet.has(r.concept_ID));
     const groupedVideos = groupBy(videoLinks, 'concept_ID', r => ({
       slug: r.videoSlug,
       title: r.title,
@@ -272,7 +280,7 @@ export async function buildConceptsPayload(db) {
   // §10.1).
   let apiDocsByConcept = {};
   if (ids.length > 0) {
-    const apiDocLinks = await db.run(
+    const apiDocLinks = (await db.run(
       SELECT.from(ApiDocConceptLinks)
         .columns(
           'concept_ID',
@@ -282,10 +290,8 @@ export async function buildConceptsPayload(db) {
           'apiDoc.category as category',
           'apiDoc.apiType as apiType',
         )
-        .where({ concept_ID: { in: ids } })
         .orderBy('apiDoc.category asc', 'apiDoc.title asc')
-        .limit(8 * ids.length)
-    );
+    )).filter(r => idsSet.has(r.concept_ID));
     const groupedApiDocs = groupBy(apiDocLinks, 'concept_ID', r => ({
       slug: r.apiDocSlug,
       title: r.title,
@@ -306,7 +312,7 @@ export async function buildConceptsPayload(db) {
   // safety, §10.1, 3rd of 4 read sites).
   let samplesByConcept = {};
   if (ids.length > 0) {
-    const sampleLinks = await db.run(
+    const sampleLinks = (await db.run(
       SELECT.from(SampleConceptLinks)
         .columns(
           'concept_ID',
@@ -317,10 +323,8 @@ export async function buildConceptsPayload(db) {
           'sample.stars as stars',
           'sample.lastCommitAt as lastCommitAt',
         )
-        .where({ concept_ID: { in: ids } })
         .orderBy('sample.stars desc', 'sample.lastCommitAt desc')
-        .limit(8 * ids.length)
-    );
+    )).filter(r => idsSet.has(r.concept_ID));
     const groupedSamples = groupBy(sampleLinks, 'concept_ID', r => ({
       slug: r.sampleSlug,
       title: r.title,
@@ -343,7 +347,7 @@ export async function buildConceptsPayload(db) {
   // (LOB-locator safety, §10.1, 3rd of 4 read sites).
   let helpDocsByConcept = {};
   if (ids.length > 0) {
-    const helpDocLinks = await db.run(
+    const helpDocLinks = (await db.run(
       SELECT.from(HelpDocConceptLinks)
         .columns(
           'concept_ID',
@@ -356,10 +360,8 @@ export async function buildConceptsPayload(db) {
           'helpDoc.url as url',
           'helpDoc.product as product',
         )
-        .where({ concept_ID: { in: ids } })
         .orderBy('helpDoc.source asc', 'helpDoc.title asc')
-        .limit(8 * ids.length)
-    );
+    )).filter(r => idsSet.has(r.concept_ID));
     const groupedHelpDocs = groupBy(helpDocLinks, 'concept_ID', r => ({
       slug: r.slug,
       title: r.title,
@@ -384,20 +386,22 @@ export async function buildConceptsPayload(db) {
   // (LOB-locator safety, §10.1, 4th read site).
   let communityEventsByConcept = {};
   if (ids.length > 0) {
-    const eventLinks = await db.run(
+    const eventLinks = (await db.run(
       SELECT.from(CommunityEventConceptLinks)
         .columns('concept_ID', 'event_ID', 'snippet', 'confidence')
-        .where({ concept_ID: { in: ids } })
-    );
+    )).filter(r => idsSet.has(r.concept_ID));
     const eventIds = [...new Set(eventLinks.map(l => l.event_ID))];
+    const eventIdsSet = new Set(eventIds);
     const eventsById = new Map();
     if (eventIds.length > 0) {
-      const eventRows = await db.run(
+      // Same unbounded-fetch + Node-filter pattern as the concept_ID reads
+      // above; a WHERE ID IN (…) over thousands of event IDs would recreate
+      // the packet-size bug on the CommunityEvents side.
+      const eventRows = (await db.run(
         SELECT.from(CommunityEvents)
           .columns('ID', 'slug', 'title', 'url', 'eventType', 'location', 'scope',
                    'virtualOrInPerson', 'startDate', 'endDate', 'lastSeenAt')
-          .where({ ID: { in: eventIds } })
-      );
+      )).filter(r => eventIdsSet.has(r.ID));
       for (const r of eventRows) eventsById.set(r.ID, r);
     }
     const grouped = {};
