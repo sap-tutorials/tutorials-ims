@@ -1,5 +1,14 @@
 // test/unit/homepage-events-endpoint.test.js
-// #1030 — HomepageService.events() region+virtual filter + cache + flag.
+// #1030 — HomepageService.events() semantics.
+//
+// Semantics (updated 2026-07-08 after field regression: AMERICAS-TZ users
+// saw a naked "See the full events calendar" link because DEV had 0
+// AMERICAS codejams):
+//
+//   - Manual Events entity rows → always included (admin-curated, region-agnostic)
+//   - Devtoberfest CommunityEvents → always included (inherently virtual/global)
+//   - CodeJam CommunityEvents     → honor region + includeVirtual filter
+//   - Merged, sorted by startsAt asc, capped at 6.
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import cds from '@sap/cds';
@@ -14,14 +23,13 @@ test.in(__dirname, '..', '..');
 test('serve', 'all', '--in-memory');
 
 async function seedCommunityEvent(overrides = {}) {
-  const db = await cds.connect.to('db');
   const { CommunityEvents } = cds.entities(NS_EXT);
   await INSERT.into(CommunityEvents).entries({
     ID: cds.utils.uuid(),
     slug: `ce-${Math.random().toString(36).slice(2, 10)}`,
     eventType: 'codejam',
     source: 'khoros',
-    title: 'Test event',
+    title: 'Test codejam',
     url: 'https://example.com/e',
     sourceId: `codejam/${Math.random()}`,
     location: 'Berlin, Germany',
@@ -36,8 +44,19 @@ async function seedCommunityEvent(overrides = {}) {
   });
 }
 
+async function seedManualEvent(overrides = {}) {
+  const { Events } = cds.entities(NS);
+  await INSERT.into(Events).entries({
+    ID: cds.utils.uuid(),
+    name: 'Manual event',
+    startDate: '2099-06-01T00:00:00Z',
+    timeZone: 'UTC',
+    eventType: 'manual',
+    ...overrides,
+  });
+}
+
 async function ensureHomepageConfig(fields = {}) {
-  const db = await cds.connect.to('db');
   const { HomepageConfig } = cds.entities(NS);
   const existing = await SELECT.one.from(HomepageConfig).where({ ID: HOMEPAGE_CONFIG_SINGLETON_ID });
   if (existing) {
@@ -50,13 +69,16 @@ async function ensureHomepageConfig(fields = {}) {
 describe('HomepageService.events()', () => {
   beforeEach(async () => {
     _resetForTests();
-    const db = await cds.connect.to('db');
     const { CommunityEvents } = cds.entities(NS_EXT);
+    const { Events } = cds.entities(NS);
     await DELETE.from(CommunityEvents);
+    await DELETE.from(Events);
     await ensureHomepageConfig({ eventsBandAutoPullEnabled: true });
   });
 
-  it('region=EMEA returns only EMEA + virtual rows', async () => {
+  // ── CodeJam region filter (the surface that gets narrowed) ─────────────
+
+  it('region=EMEA returns EMEA + virtual codejams', async () => {
     await seedCommunityEvent({ region: 'EMEA' });
     await seedCommunityEvent({ region: 'AMERICAS' });
     await seedCommunityEvent({ region: 'UNKNOWN', virtualOrInPerson: 'virtual', location: 'virtual' });
@@ -66,7 +88,7 @@ describe('HomepageService.events()', () => {
     expect(rows.every(r => r.region === 'EMEA' || r.isVirtual)).toBe(true);
   });
 
-  it('region=VIRTUAL returns only virtual rows', async () => {
+  it('region=VIRTUAL returns only virtual codejams', async () => {
     await seedCommunityEvent({ region: 'EMEA' });
     await seedCommunityEvent({ region: 'UNKNOWN', virtualOrInPerson: 'virtual', location: 'virtual' });
     const svc = await cds.connect.to('HomepageService');
@@ -75,7 +97,7 @@ describe('HomepageService.events()', () => {
     expect(rows[0].isVirtual).toBe(true);
   });
 
-  it('region=ALL, includeVirtual=false excludes virtual rows', async () => {
+  it('region=ALL, includeVirtual=false excludes virtual codejams', async () => {
     await seedCommunityEvent({ region: 'EMEA' });
     await seedCommunityEvent({ region: 'UNKNOWN', virtualOrInPerson: 'virtual', location: 'virtual' });
     const svc = await cds.connect.to('HomepageService');
@@ -84,7 +106,7 @@ describe('HomepageService.events()', () => {
     expect(rows[0].isVirtual).toBe(false);
   });
 
-  it('region=EMEA, includeVirtual=false excludes virtual rows', async () => {
+  it('region=EMEA, includeVirtual=false excludes virtual codejams', async () => {
     await seedCommunityEvent({ region: 'EMEA' });
     await seedCommunityEvent({ region: 'UNKNOWN', virtualOrInPerson: 'virtual', location: 'virtual' });
     const svc = await cds.connect.to('HomepageService');
@@ -100,23 +122,60 @@ describe('HomepageService.events()', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('caps result at 6 items', async () => {
-    for (let i = 0; i < 10; i++) await seedCommunityEvent({ region: 'EMEA' });
+  // ── Manual Events + Devtoberfest are region-agnostic (the fix) ─────────
+
+  it('manual Events rows appear regardless of region', async () => {
+    await seedManualEvent({ name: 'TechEd Berlin', startDate: '2099-10-01T00:00:00Z' });
+    await seedCommunityEvent({ region: 'APJ', title: 'APJ codejam' });
+    const svc = await cds.connect.to('HomepageService');
+
+    // AMERICAS filter: manual event still shows even though no AMERICAS codejam exists.
+    const rows = await svc.send('events', { region: 'AMERICAS' });
+    expect(rows.some(r => r.title === 'TechEd Berlin')).toBe(true);
+    // The APJ codejam is filtered out for AMERICAS.
+    expect(rows.some(r => r.title === 'APJ codejam')).toBe(false);
+  });
+
+  it('Devtoberfest rows appear regardless of region', async () => {
+    await seedCommunityEvent({ eventType: 'devtoberfest', region: 'UNKNOWN', virtualOrInPerson: 'virtual', title: 'Devtoberfest 2099' });
+    await seedCommunityEvent({ eventType: 'codejam', region: 'APJ', title: 'APJ codejam' });
+    const svc = await cds.connect.to('HomepageService');
+
+    // AMERICAS filter: devtoberfest still shows.
+    const rows = await svc.send('events', { region: 'AMERICAS' });
+    expect(rows.some(r => r.title === 'Devtoberfest 2099')).toBe(true);
+    expect(rows.some(r => r.title === 'APJ codejam')).toBe(false);
+  });
+
+  it('devtoberfest is not affected by includeVirtual=false', async () => {
+    // Devtoberfest is inherently global; the region + virtual filter only
+    // narrows codejams. A user turning off virtual should still see it.
+    await seedCommunityEvent({ eventType: 'devtoberfest', region: 'UNKNOWN', virtualOrInPerson: 'virtual', title: 'Devtoberfest 2099' });
+    const svc = await cds.connect.to('HomepageService');
+    const rows = await svc.send('events', { region: 'AMERICAS', includeVirtual: false });
+    expect(rows.some(r => r.title === 'Devtoberfest 2099')).toBe(true);
+  });
+
+  // ── Merge + ordering ──────────────────────────────────────────────────
+
+  it('merged output caps at 6 items', async () => {
+    for (let i = 0; i < 5; i++) await seedManualEvent({ name: `M${i}`, startDate: `2099-0${i + 1}-01T00:00:00Z` });
+    for (let i = 0; i < 5; i++) await seedCommunityEvent({ region: 'EMEA', startDate: `2099-0${i + 1}-15` });
     const svc = await cds.connect.to('HomepageService');
     const rows = await svc.send('events', { region: 'EMEA' });
     expect(rows).toHaveLength(6);
   });
 
-  it('orders by startDate ascending', async () => {
-    await seedCommunityEvent({ region: 'EMEA', startDate: '2099-06-01' });
-    await seedCommunityEvent({ region: 'EMEA', startDate: '2099-01-01' });
-    await seedCommunityEvent({ region: 'EMEA', startDate: '2099-03-01' });
+  it('orders merged output by startsAt ascending', async () => {
+    await seedManualEvent({ name: 'M-mid', startDate: '2099-03-15T00:00:00Z' });
+    await seedCommunityEvent({ region: 'EMEA', title: 'CJ-early', startDate: '2099-01-01' });
+    await seedCommunityEvent({ region: 'EMEA', title: 'CJ-late',  startDate: '2099-06-01' });
     const svc = await cds.connect.to('HomepageService');
     const rows = await svc.send('events', { region: 'EMEA' });
-    expect(rows.map(r => r.startsAt)).toEqual(['2099-01-01', '2099-03-01', '2099-06-01']);
+    expect(rows.map(r => r.title)).toEqual(['CJ-early', 'M-mid', 'CJ-late']);
   });
 
-  it('filters out past events', async () => {
+  it('filters out past codejams', async () => {
     await seedCommunityEvent({ region: 'EMEA', startDate: '1999-01-01' });
     await seedCommunityEvent({ region: 'EMEA', startDate: '2099-01-01' });
     const svc = await cds.connect.to('HomepageService');
@@ -124,18 +183,16 @@ describe('HomepageService.events()', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('feature flag OFF falls back to legacy Events entity shape', async () => {
+  // ── Feature flag + cache ──────────────────────────────────────────────
+
+  it('feature flag OFF falls back to legacy manual-Events-only shape', async () => {
     await ensureHomepageConfig({ eventsBandAutoPullEnabled: false });
-    const db = await cds.connect.to('db');
-    const { Events, CommunityEvents } = cds.entities(NS);
-    await INSERT.into(Events).entries({
-      ID: cds.utils.uuid(), name: 'Legacy manual event', startDate: '2099-01-01', timeZone: 'UTC', eventType: 'manual',
-    });
-    await seedCommunityEvent({ region: 'EMEA', title: 'AutoPull event' });
+    await seedManualEvent({ name: 'Legacy manual event', startDate: '2099-01-01T00:00:00Z' });
+    await seedCommunityEvent({ region: 'EMEA', title: 'AutoPull codejam' });
     const svc = await cds.connect.to('HomepageService');
     const rows = await svc.send('events', { region: 'EMEA' });
     expect(rows).toHaveLength(1);
-    expect(rows[0].title).toBe('Legacy manual event');   // came from legacy Events, not CommunityEvents
+    expect(rows[0].title).toBe('Legacy manual event');
   });
 
   it('cache keys are isolated per (region, includeVirtual)', async () => {
@@ -144,6 +201,7 @@ describe('HomepageService.events()', () => {
     const emea = await svc.send('events', { region: 'EMEA' });
     const americas = await svc.send('events', { region: 'AMERICAS' });
     expect(emea).toHaveLength(1);
+    // AMERICAS: no manual events seeded, no codejams match → empty.
     expect(americas).toHaveLength(0);
   });
 });

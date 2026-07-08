@@ -16,7 +16,6 @@
 // Spec: docs/superpowers/specs/2026-06-27-639-developer-homepage-design.md
 
 import cds from '@sap/cds';
-import { mergeEvents } from './lib/homepage-events-merger.js';
 import { fetchSapDevsVideos } from './lib/youtube-fetcher.js';
 import { fetchRssItems } from './lib/homepage-rss-fetcher.js';
 import { resolveSecret } from './lib/secret-resolver.js';
@@ -32,7 +31,6 @@ const EVENTS_TTL_MS = 60 * 1000;          // 60 s
 const EVENTS_CACHE_MAX = 16;              // #1030 — LRU cap
 
 const VALID_REGIONS = new Set(['ALL', 'AMERICAS', 'EMEA', 'APJ', 'VIRTUAL']);
-const REFRESH_TYPES = ['codejam', 'devtoberfest'];   // #1030 — same as refresh cron
 const SHELVES_TTL_MS = 5 * 60 * 1000;     // 5 min
 const COMMUNITY_BLOGS_TTL_MS = 60 * 1000; // (#1033) 60 s — DB-backed now, so cheap TTL
 
@@ -130,17 +128,65 @@ const SAP_NEWS_RSS_URL = 'https://news.sap.com/feed/';
 // (#639) Singleton HomepageConfig UUID (must match admin-service.js seed ID)
 const HOMEPAGE_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8ae';
 
-// #1030 — CommunityEvents-backed events query (auto-pull path).
-async function _communityEventsForBand(region, includeVirtual) {
+// #1030 — Map a CommunityEvents row to the wire EventCard shape.
+function _mapCommunityRow(e) {
+  return {
+    title:     e.title || '',
+    startsAt:  e.startDate || null,
+    endsAt:    e.endDate || null,
+    location:  e.location || '',
+    url:       e.url || null,
+    format:    e.eventType || '',        // legacy shape compat
+    register:  null,                     // legacy shape compat
+    eventType: e.eventType || null,
+    region:    e.region || 'UNKNOWN',
+    isVirtual: e.virtualOrInPerson === 'virtual',
+  };
+}
+
+// #1030 (2026-07-08) — Manual Events entity rows, ALWAYS included on the
+// auto-pull path regardless of region filter. Curated by admins in the
+// `/admin-ui/#events` LR (Devtoberfest, TechEd, etc.).
+async function _manualEventsAlways(db) {
   try {
-    const db = await cds.connect.to('db');
+    const { Events } = cds.entities('com.sap.developers.ims');
+    const nowIso = new Date().toISOString();
+    const raw = await db.run(
+      SELECT.from(Events)
+        .columns('name', 'startDate', 'timeZone', 'eventType')
+        .where`startDate >= ${nowIso}`
+        .orderBy('startDate asc')
+        .limit(6)
+    );
+    return (raw ?? []).map(e => ({
+      title:     e.name       || '',
+      startsAt:  e.startDate  || null,
+      endsAt:    null,
+      location:  e.timeZone   || '',
+      url:       null,
+      format:    e.eventType  || '',
+      register:  null,
+      eventType: e.eventType  || null,
+      region:    'UNKNOWN',
+      isVirtual: false,
+    }));
+  } catch (err) {
+    log.warn('[events] manual Events query failed:', err.message);
+    return [];
+  }
+}
+
+// #1030 (2026-07-08) — Region-filtered CodeJams from CommunityEvents.
+// This is the ONLY event type that honors the region/includeVirtual filter.
+async function _codejamsForRegion(db, region, includeVirtual) {
+  try {
     const { CommunityEvents } = cds.entities('com.sap.developers.ims.external');
-    const nowIso = new Date().toISOString().slice(0, 10);   // YYYY-MM-DD; startDate is Date
+    const nowIso = new Date().toISOString().slice(0, 10);   // YYYY-MM-DD
 
     let q = SELECT.from(CommunityEvents)
       .columns('title', 'startDate', 'endDate', 'location', 'url',
                'eventType', 'region', 'virtualOrInPerson')
-      .where`eventType in ${REFRESH_TYPES}`
+      .where`eventType = ${'codejam'}`
       .and`startDate >= ${nowIso}`;
 
     if (region === 'VIRTUAL') {
@@ -154,22 +200,58 @@ async function _communityEventsForBand(region, includeVirtual) {
     }
 
     const rows = await db.run(q.orderBy('startDate asc').limit(6));
-    return (rows ?? []).map(e => ({
-      title:     e.title || '',
-      startsAt:  e.startDate || null,
-      endsAt:    e.endDate || null,
-      location:  e.location || '',
-      url:       e.url || null,
-      format:    e.eventType || '',        // legacy shape compat
-      register:  null,                     // legacy shape compat
-      eventType: e.eventType || null,
-      region:    e.region || 'UNKNOWN',
-      isVirtual: e.virtualOrInPerson === 'virtual',
-    }));
+    return (rows ?? []).map(_mapCommunityRow);
   } catch (err) {
-    log.warn('[events] CommunityEvents query failed:', err.message);
+    log.warn('[events] CommunityEvents codejam query failed:', err.message);
     return [];
   }
+}
+
+// #1030 (2026-07-08) — Devtoberfest rows in CommunityEvents.
+// Always included, region-agnostic (Devtoberfest is inherently virtual/global).
+async function _devtoberfestAlways(db) {
+  try {
+    const { CommunityEvents } = cds.entities('com.sap.developers.ims.external');
+    const nowIso = new Date().toISOString().slice(0, 10);
+    const rows = await db.run(
+      SELECT.from(CommunityEvents)
+        .columns('title', 'startDate', 'endDate', 'location', 'url',
+                 'eventType', 'region', 'virtualOrInPerson')
+        .where`eventType = ${'devtoberfest'}`
+        .and`startDate >= ${nowIso}`
+        .orderBy('startDate asc')
+        .limit(6)
+    );
+    return (rows ?? []).map(_mapCommunityRow);
+  } catch (err) {
+    log.warn('[events] CommunityEvents devtoberfest query failed:', err.message);
+    return [];
+  }
+}
+
+// #1030 (2026-07-08) — Auto-pull path: merge always-on rows (manual Events +
+// Devtoberfest) with region-filtered CodeJams. Sort by start date, cap at 6.
+//
+// Semantics (revised after 2026-07-08 field bug: AMERICAS-TZ users saw an
+// empty band because DEV had 0 AMERICAS codejams):
+//   - Manual Events → always included (admin-curated, region-agnostic)
+//   - Devtoberfest  → always included (inherently virtual/global)
+//   - CodeJams      → region filter applies (spec §6.2)
+async function _communityEventsForBand(region, includeVirtual) {
+  const db = await cds.connect.to('db');
+  const [manual, devtoberfest, codejams] = await Promise.all([
+    _manualEventsAlways(db),
+    _devtoberfestAlways(db),
+    _codejamsForRegion(db, region, includeVirtual),
+  ]);
+  const merged = [...manual, ...devtoberfest, ...codejams];
+  // Sort by startsAt ascending; nulls sink to the end.
+  merged.sort((a, b) => {
+    const ta = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
+    const tb = b.startsAt ? new Date(b.startsAt).getTime() : Number.POSITIVE_INFINITY;
+    return ta - tb;
+  });
+  return merged.slice(0, 6);
 }
 
 // #1030 — Fallback to the manual Events entity (rollback path when
