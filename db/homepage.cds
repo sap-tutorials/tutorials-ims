@@ -89,6 +89,10 @@ entity HomepageConfig : cuid, managed {
   // Default false at first migration so a deploy doesn't flip the page
   // for every signed-in user; admin enables via /admin-ui/#homepage.
   personalizationEnabled  : Boolean default false;
+  // #1030 — feature flag for the auto-pulled events band. When false, the
+  // endpoint falls back to reading the legacy manually-curated `Events` entity
+  // (the pre-#1030 behavior), giving us a redeploy-free rollback path.
+  eventsBandAutoPullEnabled : Boolean default true;
 }
 
 // (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
