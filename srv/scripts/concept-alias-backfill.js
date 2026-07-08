@@ -21,6 +21,7 @@
 
 import cds from '@sap/cds'
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration'
+import { pathToFileURL } from 'node:url'
 import { resolveChatLlmSettings } from '../lib/chat-settings-resolver.js'
 
 const MAX_ALIASES_PER_CONCEPT = 8
@@ -194,7 +195,7 @@ export async function runBackfill({ dryRun = false, force = false, onlySlug, lim
 // CLI entrypoint — parse argv, call runBackfill.
 // Only executes when this file is the main script (not when imported as a module).
 // ---------------------------------------------------------------------------
-if (import.meta.url === `file://${process.argv[1]}`.replace(/\\/g, '/')) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = new Map()
   for (let i = 2; i < process.argv.length; i++) {
     const a = process.argv[i]
