@@ -36,7 +36,7 @@
 
 import cds from '@sap/cds';
 import { createHash } from 'node:crypto';
-import { fetchSapDevsVideoCorpus } from '../lib/youtube-corpus-fetcher.js';
+import { fetchSapDevsVideoCorpus, fetchStatistics } from '../lib/youtube-corpus-fetcher.js';
 import { extractConceptsFromVideo } from '../lib/video-extract.js';
 import { defaultCallModel } from '../lib/code-check-llm.js';
 import { embed as defaultEmbed } from '../lib/embedding-client.js';
@@ -47,6 +47,7 @@ import {
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
 import { resolveSecret } from '../lib/secret-resolver.js';
 import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
+import * as metrics from '../lib/metrics.js';
 
 const NAMESPACE_EXT = 'com.sap.developers.ims.external';
 const NAMESPACE_KG = 'com.sap.developers.ims';
@@ -89,6 +90,7 @@ export async function runFetchVideos(deps = {}) {
     completionTokens: 0,
     errors: 0,
     budgetExhausted: false,
+    statsUpdated: 0,
   };
 
   // 1. Budget gate. deps.budgetOverride wins (test-injected); otherwise read
@@ -376,6 +378,36 @@ export async function runFetchVideos(deps = {}) {
       LOG.error(`fetch-videos: extract failed for ${e.slug}: ${err.message}`);
       summary.errors++;
     }
+  }
+
+  // 9. (#1031) Statistics second pass — batch-refresh viewCount/likeCount/
+  //    commentCount for the full corpus so the reshuffle cron has current
+  //    signal to rank against. Statistics failures log-warn but do not
+  //    abort the cycle — snippet upserts already succeeded above.
+  try {
+    const allRows = await SELECT.from(Videos).columns('ID', 'youtubeVideoId');
+    const ids = allRows.map(r => r.youtubeVideoId).filter(Boolean);
+    if (ids.length > 0) {
+      const stats = await fetchStatistics({ apiKey, videoIds: ids });
+      const statsNow = new Date().toISOString();
+      for (const row of allRows) {
+        const s = stats.get(row.youtubeVideoId);
+        if (!s) continue;
+        await UPDATE(Videos)
+          .set({
+            viewCount:          s.viewCount,
+            likeCount:          s.likeCount,
+            commentCount:       s.commentCount,
+            statsLastFetchedAt: statsNow,
+          })
+          .where({ ID: row.ID });
+        summary.statsUpdated++;
+        metrics.counter('homepage.videos.statistics_updated');
+      }
+    }
+  } catch (err) {
+    LOG.warn(`fetch-videos: statistics pass failed: ${err.message}`);
+    summary.errors++;
   }
 
   LOG.info(`fetch-videos: cycle complete ${JSON.stringify(summary)}`);

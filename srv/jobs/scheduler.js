@@ -906,6 +906,22 @@ export function registerJobs() {
     fn: runHomepageLinkHealth,
   });
 
+  // (#1031) Every 4h at :19 past — reshuffle HomepageVideoRotation with the
+  // top-N videos by view velocity. Off-minute (:19) avoids the 03:11 fetch-videos,
+  // 03:57 kg-communities, 04:00 homepage-link-health, 04:07 kg-wcc, and 04:13
+  // kg-featured-topics slots. Lazy-import matches the fetch-videos pattern above
+  // and keeps boot fast.
+  registerJob({
+    jobName: 'reshuffle-video-rotation',
+    schedule: '19 */4 * * *',
+    ttlMs: 5 * 60 * 1000,
+    description: 'Reshuffle homepage video rotation (top-N by view velocity, every 4h)',
+    fn: async () => {
+      const { runReshuffleVideoRotation } = await import('./reshuffle-video-rotation.js');
+      return runReshuffleVideoRotation();
+    },
+  });
+
   // #805 — every 5 minutes, rotate the metrics module into MetricSnapshots rows.
   // NO job-lock: both CF instances write independently under the composite
   // primary key (windowStart, metric, instanceId). See spec § Rollout.

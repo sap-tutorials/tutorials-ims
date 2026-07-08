@@ -29,6 +29,7 @@ import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
 import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
 import { resetFtCache, resetCommunityBlogsCache } from './homepage-service.js';
+import { runReshuffleVideoRotation } from './jobs/reshuffle-video-rotation.js';
 import * as metrics from './lib/metrics.js';
 import {
   listAlertSeverities,
@@ -2941,6 +2942,13 @@ export default class AdminService extends cds.ApplicationService {
       const { count, computedAt } = await cds.tx(async (tx) => recomputeSnapshot(tx));
       resetFtCache();
       return { count, computedAt };
+    });
+
+    // (#1031) recomputeHomepageVideoRotation — SuperAdmin manual trigger.
+    // Same code path as the 4h cron; used for the DEV cutover to populate
+    // HomepageVideoRotation immediately without waiting for the next tick.
+    this.on('recomputeHomepageVideoRotation', async () => {
+      return runReshuffleVideoRotation();
     });
 
     // After-SAVE on the draft-active flow: recompute the snapshot inline

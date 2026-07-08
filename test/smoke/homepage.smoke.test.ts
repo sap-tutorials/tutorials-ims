@@ -65,3 +65,15 @@ describe.skipIf(!BASE)('Developer homepage smoke', () => {
     expect(res.status).not.toBe(301);
   });
 });
+
+describe.skipIf(!BASE)('Video band #1031 kind field', () => {
+  it('GET /homepage/videos returns items tagged kind: anchor|popular', async () => {
+    const res = await fetch(BASE + '/homepage/videos');
+    expect(res.status).toBe(200);
+    const body: { recent: Array<{ kind?: string }> } = await res.json();
+    expect(Array.isArray(body.recent)).toBe(true);
+    for (const item of body.recent) {
+      expect(['anchor', 'popular']).toContain(item.kind);
+    }
+  });
+});

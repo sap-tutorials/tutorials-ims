@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { applyVideoFilter } from '../homepage-personalizer/video-filter';
 
 interface VideoItem {
@@ -8,6 +8,7 @@ interface VideoItem {
   thumbnail?: string;
   publishedAt?: string;
   tags?: string[];
+  kind?: 'anchor' | 'popular';
 }
 
 interface VideosResponse {
@@ -28,8 +29,6 @@ function thumbUrl(item: VideoItem): string {
 function watchUrl(videoId: string): string {
   return `https://youtube.com/watch?v=${videoId}`;
 }
-
-const recentSlice = computed(() => recent.value.slice(0, 3));
 
 function readVideoTags(): string[] {
   try {
@@ -132,10 +131,10 @@ onMounted(async () => {
         </a>
       </div>
 
-      <!-- Recent stack (right column) -->
-      <div v-if="recentSlice.length" class="hb-video-band__stack">
+      <!-- Recent stack (right column) — anchors + rotation, up to N tiles -->
+      <div v-if="recent.length" class="hb-video-band__stack">
         <a
-          v-for="(vid, idx) in recentSlice"
+          v-for="(vid, idx) in recent"
           :key="idx"
           :href="watchUrl(vid.videoId)"
           target="_blank"
@@ -143,6 +142,11 @@ onMounted(async () => {
           class="hb-video-band__recent-card"
           :aria-label="'Watch: ' + vid.title"
         >
+          <span
+            v-if="vid.kind === 'popular'"
+            class="hb-video-band__chip"
+            aria-label="Popular video"
+          >Popular</span>
           <img
             :src="thumbUrl(vid)"
             :alt="vid.title"
@@ -266,6 +270,7 @@ onMounted(async () => {
 
 /* Recent stack */
 .hb-video-band__recent-card {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
@@ -296,6 +301,20 @@ onMounted(async () => {
   color: var(--sapTextColor, #32363a);
   line-height: 1.35;
   font-weight: 500;
+}
+
+.hb-video-band__chip {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--sapInformativeBackground, #e8f2ff);
+  color: var(--sapInformativeTextColor, #0064d9);
+  font-weight: 600;
+  z-index: 1;
+  line-height: 1.2;
 }
 
 /* Error card */

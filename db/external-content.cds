@@ -215,6 +215,20 @@ entity Videos : cuid, managed {
   lastSeenAt        : Timestamp;
   pinUntil          : Timestamp;
 
+  // (#1031) Popularity statistics — refreshed by srv/jobs/fetch-videos-job.js.
+  // Integer64 because YouTube view counts routinely exceed 32-bit for popular
+  // clips. All four columns are nullable so freshly-inserted rows can carry no
+  // statistics until the next fetch-videos-job pass fills them in.
+  viewCount           : Integer64;
+  likeCount           : Integer64;
+  commentCount        : Integer64;
+  statsLastFetchedAt  : Timestamp;
+
+  // (#1031) Curation flag — excludes video from BOTH homepage anchors and
+  // the rotation pool. Admins toggle via /admin-ui/#videos.
+  @title: 'Exclude from homepage'
+  excludeFromHomepage : Boolean default false;
+
   links    : Composition of many VideoConceptLinks on links.video = $self;
   services : Composition of many VideoServices    on services.video = $self;
 }
