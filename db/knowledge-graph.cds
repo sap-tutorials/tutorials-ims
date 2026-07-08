@@ -197,3 +197,26 @@ entity TutorialRank {
       score      : Double;
       computedAt : Timestamp;
 }
+
+/**
+ * Search synonyms for concepts — LLM-backfilled, admin-editable (#1046).
+ * Powers the ⌘K palette's CONCEPTS group so acronym queries hit
+ * (e.g. "SLT" → sap-landscape-transformation).
+ *
+ * aliasLower is populated by a before('CREATE'|'UPDATE') hook on
+ * KnowledgeGraphService — kept case-preserved in `alias` so admins see
+ * natural casing (IDoc, S/4HANA), matched case-insensitively via a
+ * HANA index on `aliasLower`.
+ */
+entity ConceptAliases : cuid, managed {
+  concept    : Association to Concepts @assert.notNull;
+  alias      : String(120) @assert.notNull;
+  aliasLower : String(120);
+  source     : String(20) default 'LLM';   // 'LLM' | 'ADMIN' | 'SEED'
+}
+
+annotate ConceptAliases with @assert.unique.conceptAlias : [concept, aliasLower];
+
+extend entity Concepts with {
+  aliases : Composition of many ConceptAliases on aliases.concept = $self;
+}
