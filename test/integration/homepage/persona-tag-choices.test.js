@@ -1,13 +1,19 @@
 // test/integration/homepage/persona-tag-choices.test.js
 //
 // (#763) Integration test for AdminService.PersonaTagChoices value-help entity.
-// Verifies that GET /admin/PersonaTagChoices returns all 13 KNOWN_TAGS as
-// { tag } rows, including spot-checks for 'role:developer' and 'cloud:btp'.
+// Verifies that GET /admin/PersonaTagChoices returns every KNOWN_TAG as a
+// { tag } row, including spot-checks for 'role:developer' and 'cloud:btp'.
+//
+// The expected row count is derived from KNOWN_TAGS (single source of truth
+// in srv/lib/homepage/persona-tag-validator.js) so vocab expansions in
+// srv/lib/branch/profile-fields.js (e.g. #1030 preferredEventRegion) don't
+// silently fail this suite.
 //
 // Auth: admin/admin (matches .cdsrc.json mock users).
 
 import { describe, it, expect } from 'vitest';
 import cds from '@sap/cds';
+import { KNOWN_TAGS } from '../../../srv/lib/homepage/persona-tag-validator.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -19,12 +25,13 @@ describe('PersonaTagChoices value-help entity', () => {
     expect(r.status).toBe(200);
   });
 
-  it('returns exactly 13 tag rows', async () => {
+  it('returns one row per KNOWN_TAG', async () => {
     const r = await project.get('/admin/PersonaTagChoices', adminAuth);
     expect(r.status).toBe(200);
     const items = r.data?.value ?? r.data;
     expect(Array.isArray(items)).toBe(true);
-    expect(items).toHaveLength(13);
+    expect(items).toHaveLength(KNOWN_TAGS.length);
+    expect(new Set(items.map((row) => row.tag))).toEqual(new Set(KNOWN_TAGS));
   });
 
   it('every row has a non-empty tag field', async () => {
