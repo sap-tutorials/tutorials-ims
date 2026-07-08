@@ -64,6 +64,13 @@ service KnowledgeGraphService @(path : '/graph') {
 
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
 
+  // #1046 — writable projection so the Concept OP's inline sub-table can
+  // CREATE/UPDATE/DELETE aliases. Auth inherited from the service
+  // (@requires: 'any' at line 33), but writes are only reachable through
+  // an authenticated admin session because the FE OP requires Author
+  // scope — same posture as the writable `Concepts` projection above.
+  entity ConceptAliases as projection on ims.ConceptAliases;
+
   /**
    * Publishable subset of Concepts — the projection the Hugo build script
    * (PR 2/3) reads via /build/concepts. Excludes never-published rows,
@@ -72,6 +79,23 @@ service KnowledgeGraphService @(path : '/graph') {
   @readonly
   entity PublishedConcepts as projection on ims.Concepts {
     ID, slug, name, description, publishedAt, publishedBy, status
+  } where publishedAt is not null and status = 'ACTIVE';
+
+  /**
+   * #1046 — PublishedConcepts + a searchable alias blob for the ⌘K
+   * palette's CONCEPTS group. aliasSearchBlob is a comma-joined lowercase
+   * alias string stored directly on Concepts and kept fresh by the
+   * after-write hook in srv/knowledge-graph-service.js. HANA $search
+   * evaluates it at storage-plane time so queries like "SLT" match
+   * sap-landscape-transformation even before the after-READ hook fires.
+   *
+   * Inherits @requires: 'any' from the service — anonymous-safe.
+   */
+  @readonly
+  @cds.search: { name, description, aliasSearchBlob }
+  entity PublishedConceptsWithAliases as projection on ims.Concepts {
+    ID, slug, name, description, publishedAt, publishedBy, status,
+    aliasSearchBlob
   } where publishedAt is not null and status = 'ACTIVE';
 
   // ─── Type definitions ──────────────────────────────────────────────────

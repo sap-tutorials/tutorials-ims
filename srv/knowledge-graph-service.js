@@ -832,7 +832,59 @@ export default cds.service.impl(async function () {
     }
   });
 
-  // ─── after(READ, Concepts) — #918 WCC isolation flag ───────────────────
+  // ─── #1046 ConceptAliases — normalize aliasLower on write ──────────────
+  // Populates aliasLower so the palette $search matches case-insensitively
+  // and the @assert.unique.conceptAlias constraint fires on the right value.
+  this.before(['CREATE', 'UPDATE'], 'ConceptAliases', (req) => {
+    if (typeof req.data.alias === 'string') {
+      req.data.aliasLower = req.data.alias.toLowerCase().trim()
+    }
+  });
+
+  // ─── #1046 ConceptAliases — stash conceptId before DELETE ──────────────
+  // CAP's after-DELETE gives us only the alias row's ID; by then the row is
+  // gone so we can't SELECT concept_ID from it. Stash it on req._conceptId
+  // during the before-DELETE while the row still exists.
+  this.before('DELETE', 'ConceptAliases', async (req) => {
+    if (!req.data?.ID) return
+    try {
+      const { ConceptAliases } = cds.entities('com.sap.developers.ims')
+      const row = await cds.tx(req).run(
+        SELECT.one.from(ConceptAliases).columns('concept_ID').where({ ID: req.data.ID })
+      )
+      if (row?.concept_ID) req._conceptId = row.concept_ID
+    } catch (_) {
+      // Fail-open — if we can't stash the id the after-DELETE blob refresh is
+      // a no-op, leaving the stale blob in place rather than 500-ing the write.
+    }
+  });
+
+  // ─── #1046 ConceptAliases — materialize aliasSearchBlob on parent ───────
+  // Whenever an alias is added, changed, or removed, re-aggregate all
+  // remaining alias rows and store the comma-joined blob on the parent
+  // Concept.  HANA's $search predicate evaluates the real column at
+  // storage-plane time (BEFORE after-READ hooks fire), so queries like
+  // "SLT" can match sap-landscape-transformation without an after-READ pass.
+  //
+  // Fail-open: a refresh failure leaves the stale blob in place rather than
+  // 500-ing the write.
+  this.after(['CREATE', 'UPDATE', 'DELETE'], 'ConceptAliases', async (_res, req) => {
+    const { Concepts, ConceptAliases } = cds.entities('com.sap.developers.ims')
+    try {
+      // For CREATE/UPDATE, concept_ID is in req.data.
+      // For DELETE, the row is already gone — use the id stashed by before-DELETE.
+      let conceptId = req.data?.concept_ID ?? req._conceptId
+      if (!conceptId) return
+      // Re-aggregate all remaining alias rows for the concept.
+      const remaining = await cds.tx(req).run(
+        SELECT.from(ConceptAliases).columns('aliasLower').where({ concept_ID: conceptId })
+      )
+      const blob = remaining.map(r => r.aliasLower).filter(Boolean).join(',')
+      await cds.tx(req).run(UPDATE(Concepts).set({ aliasSearchBlob: blob }).where({ ID: conceptId }))
+    } catch (err) {
+      cds.log('kg-search').warn?.('aliasSearchBlob refresh failed:', err.message)
+    }
+  });
   //
   // Populate the virtual `isolated : Boolean` field on each Concepts row
   // from the KgIsolation sidecar (populated nightly by

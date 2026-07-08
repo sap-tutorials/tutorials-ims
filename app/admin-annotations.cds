@@ -2591,7 +2591,8 @@ annotate KnowledgeGraphService.Concepts with @(
     { $Type: 'UI.ReferenceFacet', Label: 'General',         Target: '@UI.FieldGroup#General' },
     { $Type: 'UI.ReferenceFacet', Label: 'Tutorials',       Target: 'links/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Outgoing edges',  Target: 'outgoingEdges/@UI.LineItem' },
-    { $Type: 'UI.ReferenceFacet', Label: 'Incoming edges',  Target: 'incomingEdges/@UI.LineItem' }
+    { $Type: 'UI.ReferenceFacet', Label: 'Incoming edges',  Target: 'incomingEdges/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Aliases',         Target: 'aliases/@UI.LineItem' }
   ],
 
   // Phase 3 (#446) — Publish / Unpublish toolbar actions.
@@ -2659,6 +2660,21 @@ annotate KnowledgeGraphService.ConceptEdges with @UI: {
     { $Type: 'UI.DataField', Value: predicate,   Label: 'Predicate' },
     { $Type: 'UI.DataField', Value: confidence,  Label: 'Confidence' },
     { $Type: 'UI.DataField', Value: status,      Label: 'Status' }
+  ]
+};
+
+// --- #1046 ConceptAliases — inline sub-table on the Concept OP "Aliases" facet
+annotate KnowledgeGraphService.ConceptAliases with {
+  alias      @Common.Label: 'Alias';
+  source     @Common.Label: 'Source';
+  modifiedAt @Common.Label: 'Modified At';
+};
+
+annotate KnowledgeGraphService.ConceptAliases with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: alias,      Label: 'Alias' },
+    { $Type: 'UI.DataField', Value: source,     Label: 'Source' },
+    { $Type: 'UI.DataField', Value: modifiedAt, Label: 'Modified At' }
   ]
 };
 
