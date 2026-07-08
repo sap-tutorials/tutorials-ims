@@ -1095,7 +1095,7 @@ cds.on('served', () => {
       }
 
       const tools = await toolsForContext({ pageContext: effectivePageContext, isAdmin });
-      const system = buildSystemPrompt(effectivePageContext, {
+      const system = await buildSystemPrompt(effectivePageContext, {
         firstName: user.attr?.given_name || user.attr?.givenName || '',
         lastName:  user.attr?.family_name || user.attr?.familyName || ''
       });

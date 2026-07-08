@@ -1,3 +1,5 @@
+import { sliceStep } from './tutorial-step-slicer.js';
+
 const PERSONA = `You are Joule, an AI assistant embedded in the SAP Tutorial Platform. You ONLY answer questions about SAP tutorials and directly related topics (SAP technologies, the tutorial content, how to complete a step). If asked about anything else, politely redirect: "I can only help with SAP tutorials. Want me to find one about <topic>?". Never invent tutorial slugs, step numbers, or URLs. If you don't know, call the searchTutorials tool or say so.`;
 
 const ADMIN_PERSONA = `You are Joule, an AI assistant embedded in the SAP
@@ -81,7 +83,18 @@ const MAX_ROSTER_ENTRIES = 50;
 
 const STEP_TEXT_BUDGET = 4000;
 
-function tutorialLayer(ctx) {
+async function tutorialLayer(ctx) {
+  // Server-side slicer fallback (Phase 2 #1105): if client omitted
+  // currentStepText but named a slug+step, fetch step content from the
+  // shared slicer. Enables programmatic Joule callers without a DOM
+  // and hardens against client-cached-stale pages.
+  if (ctx.slug && ctx.currentStep && !ctx.currentStepText) {
+    try {
+      const slice = await sliceStep(ctx.slug, ctx.currentStep);
+      if (slice) ctx.currentStepText = slice.text;
+    } catch { /* fall through — interactive DOM path stays unaffected */ }
+  }
+
   const lines = [ctx.title ? `Current page: tutorial "${ctx.title}".` : 'Current page: a tutorial.'];
   if (ctx.description) lines.push(`Description: ${ctx.description}`);
   if (Array.isArray(ctx.tags) && ctx.tags.length) lines.push(`Tags: ${ctx.tags.join(', ')}`);
@@ -269,9 +282,9 @@ function advocatesLayer(ctx) {
   return lines.join('\n');
 }
 
-function pageLayer(pageContext) {
+async function pageLayer(pageContext) {
   switch (pageContext?.kind) {
-    case 'tutorial':     return tutorialLayer(pageContext);
+    case 'tutorial':     return await tutorialLayer(pageContext);
     case 'search':       return searchLayer(pageContext);
     case 'mission':      return collectionLayer(pageContext, 'mission');
     case 'group':        return collectionLayer(pageContext, 'group');
@@ -288,7 +301,7 @@ function userLayer(user) {
   return `The user's name is ${name}. Use it sparingly.`;
 }
 
-export function buildSystemPrompt(pageContext, user) {
+export async function buildSystemPrompt(pageContext, user) {
   const kind = pageContext?.kind;
   const isAdmin = kind === 'admin';
   const isDevtoberfest = kind === 'devtoberfest';
@@ -312,6 +325,6 @@ export function buildSystemPrompt(pageContext, user) {
   const layers = [persona];
   if (!isDevtoberfest && !isAdvocates) layers.push(RAG_GUIDANCE);
   if (!isAdmin && !isDevtoberfest && !isAdvocates) layers.push(PROGRESS_GUIDANCE);
-  layers.push(pageLayer(pageContext), userLayer(user));
+  layers.push(await pageLayer(pageContext), userLayer(user));
   return layers.filter(Boolean).join('\n\n');
 }
