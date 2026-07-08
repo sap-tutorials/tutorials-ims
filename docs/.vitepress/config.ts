@@ -87,6 +87,7 @@ export default defineConfig({
           { text: 'Overview',                 link: '/end-users/' },
           { text: 'Getting started',          link: '/end-users/getting-started' },
           { text: 'Using Joule chat',         link: '/end-users/using-joule-chat' },
+          { text: 'MCP quickstart',           link: '/end-users/mcp-quickstart' },
           { text: 'Progress and completions', link: '/end-users/progress-and-completions' },
           { text: 'Privacy and cookies',      link: '/end-users/privacy-and-cookies' },
           { text: 'Accessibility',            link: '/end-users/accessibility' },
@@ -167,6 +168,7 @@ export default defineConfig({
           { text: 'KG grantor setup',          link: '/developers/operations/kg-grantor-setup' },
           { text: 'Live probing',              link: '/developers/operations/live-probing' },
           { text: 'Load testing',              link: '/developers/operations/load-testing' },
+          { text: 'MCP server',                link: '/developers/operations/mcp-server' },
           { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
           { text: 'Phase 4 code-check eval',   link: '/developers/operations/phase-4-codecheck-eval' },
           { text: 'Postmortems', collapsed: true, items: [
@@ -209,6 +211,7 @@ export default defineConfig({
           { text: 'HANA / HDI / SQL gotchas',  link: '/developers/reference/hana-hdi-gotchas' },
           { text: 'HCQL protocol adapter support', link: '/developers/reference/hcql-support' },
           { text: 'Iframe allowlist',          link: '/developers/reference/iframe-allowlist' },
+          { text: 'MCP server tool reference', link: '/developers/reference/mcp-server' },
           { text: 'Sage extension migration',  link: '/developers/reference/sage-extension-migration' },
           { text: 'Test hygiene',              link: '/developers/reference/test-hygiene' },
           { text: 'Theme variants',            link: '/developers/reference/theme-variants' },

@@ -2055,6 +2055,7 @@
     },
     "com.sap.developers.ims.DevtoberfestConfig": {
       "kind": "entity",
+      "doc": "Per-Devtoberfest-event configuration row. Multi-row by design: one\nrow per past/current/future Devtoberfest cycle, with exactly one row\nmarked `isActive` at a time for public-facing queries.\n\nLifecycle:\n  - Admin creates one row per Devtoberfest cycle via Fiori Elements\n    LR/OP at /admin-ui/#/devtoberfest (draft-enabled).\n  - Exactly one row carries isActive=true. Toggling the flag on a\n    draft activation auto-deactivates the previously-active row in\n    the same transaction — enforced by a CDS handler in\n    srv/admin-service.js.\n  - Public handlers (statusHandler, termsHandler, joule tool, etc.)\n    query `WHERE isActive=true`. Zero active rows → 503\n    EVENT_NOT_CONFIGURED.\n  - termsVersion bump forces re-acceptance for unregistered users\n    mid-flow (via 412 from /api/devtoberfest/join).\n\nSpec: docs/superpowers/specs/2026-06-24-devtoberfest-config-multi-row-draft-design.md\n(supersedes singleton sections of 2026-06-22-devtoberfest-homepage-design.md §5.1)",
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -2130,6 +2131,7 @@
     },
     "com.sap.developers.ims.EventRegistrations": {
       "kind": "entity",
+      "doc": "One row per (user, event) registration. The @assert.unique.userEvent\nconstraint makes POST /api/devtoberfest/join idempotent — a second\ncall for the same pair fails at the DB layer, which the handler\ntranslates to HTTP 409.\n\nSpec: docs/superpowers/specs/2026-06-22-devtoberfest-homepage-design.md §5.2",
       "@assert.unique.userEvent": [
         {
           "=": "user"
@@ -2819,6 +2821,7 @@
     },
     "com.sap.developers.ims.UIEvent": {
       "kind": "entity",
+      "doc": "UIEvent — anonymous client-side telemetry for the / vs /browse/ A/B test (#204).\n\nDeliberately NOT @PersonalData: sessionId is per-tab anonymous (browser-generated\nUUID v4 in sessionStorage, cleared on tab close). userAgent is truncated. No\nuserId, IP, or fingerprint. Stays outside the anonymization cascade. See\ndocs/superpowers/specs/2026-06-04-ab-instrumentation-design.md.",
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {

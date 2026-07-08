@@ -820,5 +820,43 @@ export default class HomepageService extends cds.ApplicationService {
       metrics.counter(`homepage.personalized.applied[surface=${surface}]`);
       return {};
     });
+
+    // (#912) get_recent_news — MCP curated tool.
+    // Calls fetchRssItems directly with the caller-supplied limit so MCP
+    // callers can request more than the 2-item homepage cap. The existing
+    // news() handler is hardcoded to limit:2; proxying through it would
+    // silently truncate any request for more items.
+    this.on('get_recent_news', async (req) => {
+      const limit = Math.min(Math.max(req.data?.limit ?? 10, 1), 50);
+      return fetchRssItems(SAP_NEWS_RSS_URL, { limit });
+    });
+
+    // (#912) get_recent_videos — MCP curated tool.
+    // Reads ext.Videos directly (skip live YouTube fetch — it caps at 3 and
+    // needs an API key that is not required here). The corpus is refreshed
+    // twice-weekly by srv/jobs/fetch-videos-job.js.  Returns [] on any DB
+    // failure so callers never see a 500.
+    this.on('get_recent_videos', async (req) => {
+      const limit = Math.min(Math.max(req.data?.limit ?? 10, 1), 50);
+      try {
+        const db = await cds.connect.to('db');
+        const { Videos } = cds.entities('com.sap.developers.ims.external');
+        const rows = await db.run(
+          SELECT.from(Videos)
+            .columns('youtubeVideoId', 'title', 'thumbnailUrl', 'publishedAt')
+            .orderBy({ publishedAt: 'desc' })
+            .limit(limit)
+        );
+        return (rows || []).map((r) => ({
+          videoId:     r.youtubeVideoId ?? '',
+          title:       r.title ?? '',
+          thumbnail:   r.thumbnailUrl ?? '',
+          publishedAt: r.publishedAt ?? null,
+        }));
+      } catch (err) {
+        log.warn('[get_recent_videos] DB query failed:', err.message);
+        return [];
+      }
+    });
   }
 }
