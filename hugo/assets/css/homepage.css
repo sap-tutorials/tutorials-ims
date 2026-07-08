@@ -3,6 +3,9 @@
    Reference: hugo/assets/css/home.css for token names and spacing rhythm.
 */
 
+/* ===== Per-band partials ===== */
+@import "homepage/_events-band.css";
+
 /* ===== Page shell ===== */
 .developer-homepage {
   display: flex;

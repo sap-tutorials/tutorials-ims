@@ -1,0 +1,155 @@
+/* hugo/assets/css/homepage/_events-band.css — #1030
+   Styles for the Row 3 events band: chip strip, 6-card grid, skeleton loader.
+   Uses SAP Horizon CSS tokens consistent with sibling islands.
+   Companion Vue island: hugo-apps/src/homepage-events-band/EventsBand.vue
+*/
+
+/* ===== Chip strip ===== */
+.events-band__chips {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.events-band__chip {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--sapContent_ForegroundBorderColor, #ccc);
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--sapTextColor, #32363a);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.events-band__chip--active {
+  background: var(--sapButton_Selected_Background, #0854a0);
+  color: var(--sapButton_Selected_TextColor, #fff);
+  border-color: transparent;
+}
+
+.events-band__chip:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0854a0);
+  outline-offset: 2px;
+}
+
+/* ===== Card grid ===== */
+.events-band__cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .events-band__cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .events-band__cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Event card ===== */
+.event-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  text-decoration: none;
+  border: 1px solid var(--sapContent_ForegroundBorderColor, #e5e5e5);
+  border-radius: 4px;
+  color: inherit;
+  background: var(--sapList_Background, #fff);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.event-card:hover {
+  border-color: var(--sapButton_Selected_Background, #0854a0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  text-decoration: none;
+}
+
+.event-card__type {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin-bottom: 0.25rem;
+}
+
+.event-card__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  margin: 0.25rem 0 0.5rem;
+  line-height: 1.4;
+}
+
+.event-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin-top: auto;
+}
+
+/* ===== Skeleton loader ===== */
+/* Chip strip skeleton — wider pills than card skeletons */
+.events-band__chips--skeleton .events-band__chip--skeleton {
+  display: inline-block;
+  width: 5rem;
+  height: 2rem;
+  border-color: transparent;
+  background: linear-gradient(90deg, #f4f4f4 25%, #ececec 50%, #f4f4f4 75%);
+  background-size: 200% 100%;
+  animation: eventskel 1.5s infinite;
+  cursor: default;
+}
+
+/* Vary first chip width so it reads as "All" */
+.events-band__chips--skeleton .events-band__chip--skeleton:first-child {
+  width: 3.5rem;
+}
+
+.event-card--skeleton {
+  min-height: 8rem;
+  background: linear-gradient(90deg, #f4f4f4 25%, #ececec 50%, #f4f4f4 75%);
+  background-size: 200% 100%;
+  animation: eventskel 1.5s infinite;
+  border-color: transparent;
+}
+
+@keyframes eventskel {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ===== Loading / empty / error states (rendered by Vue island) ===== */
+.events-band__loading,
+.events-band__empty {
+  padding: 1rem 0;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+.events-band__empty a {
+  color: var(--sapLinkColor, #0070f3);
+}
+
+.events-band__empty a:hover {
+  text-decoration: underline;
+}
+
+/* ===== Reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  .event-card--skeleton,
+  .events-band__chips--skeleton .events-band__chip--skeleton {
+    animation: none;
+  }
+  .event-card {
+    transition: none;
+  }
+}
