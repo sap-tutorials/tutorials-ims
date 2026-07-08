@@ -763,6 +763,15 @@ export default cds.service.impl(async function () {
     }
   });
 
+  // ─── #1046 ConceptAliases — normalize aliasLower on write ──────────────
+  // Populates aliasLower so the palette $search matches case-insensitively
+  // and the @assert.unique.conceptAlias constraint fires on the right value.
+  this.before(['CREATE', 'UPDATE'], 'ConceptAliases', (req) => {
+    if (typeof req.data.alias === 'string') {
+      req.data.aliasLower = req.data.alias.toLowerCase().trim()
+    }
+  });
+
   // ─── after(READ, Concepts) — #918 WCC isolation flag ───────────────────
   //
   // Populate the virtual `isolated : Boolean` field on each Concepts row

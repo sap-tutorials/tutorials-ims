@@ -31,4 +31,29 @@ describe('#1046 KnowledgeGraphService.ConceptAliases', () => {
     expect(data.alias).toBe('IDoc')
     expect(data.aliasLower).toBe('idoc')  // Task 4 will make this pass; expect a fail here.
   })
+
+  it('rejects a duplicate (concept, aliasLower) pair', async () => {
+    // First insert of 'IDoc' happens in the earlier `it`. This is 'idoc'.
+    await expect(project.post('/graph/ConceptAliases', {
+      concept_ID: conceptId,
+      alias: 'idoc',
+      source: 'ADMIN'
+    })).rejects.toThrow(/unique|assert/i)
+  })
+
+  it('allows the same alias on a different concept', async () => {
+    const { Concepts } = cds.entities('com.sap.developers.ims')
+    await INSERT.into(Concepts).entries({
+      slug: 'test-concept-1046-b',
+      name: 'Test Concept 1046 B',
+      status: 'ACTIVE'
+    })
+    const otherId = (await SELECT.one.from(Concepts).where({ slug: 'test-concept-1046-b' })).ID
+    const { data } = await project.post('/graph/ConceptAliases', {
+      concept_ID: otherId,
+      alias: 'IDoc',
+      source: 'ADMIN'
+    })
+    expect(data.aliasLower).toBe('idoc')
+  })
 })
