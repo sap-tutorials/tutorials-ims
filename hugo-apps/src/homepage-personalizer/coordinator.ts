@@ -16,16 +16,18 @@ export function isDefaultViewActive(): boolean {
   } catch { return false; }
 }
 
-function looksSignedIn(): boolean {
-  return typeof document !== 'undefined'
-    && /(?:^|;\s*)JSESSIONID=/.test(document.cookie || '');
-}
-
+// (#1093) The previous `looksSignedIn` (JSESSIONID cookie sniff) + `/me` probe
+// were dead code on this deployment. Approuter session cookies are HttpOnly, so
+// `document.cookie` is always empty; and `/me` falls through xs-app.json to
+// Hugo's static "My Completions" page which returns 200 HTML for everyone.
+// `/auth/user` is the XSUAA-gated JSON identity endpoint (see xs-app.json).
 async function isSignedIn(): Promise<boolean> {
-  if (looksSignedIn()) return true;
   try {
-    const r = await fetch('/me', { credentials: 'include' });
-    return r.ok;
+    const r = await fetch('/auth/user', { credentials: 'include' });
+    if (!r.ok) return false;
+    if (!(r.headers.get('content-type') || '').includes('json')) return false;
+    const body = await r.json();
+    return !!body?.authenticated;
   } catch { return false; }
 }
 
@@ -45,14 +47,23 @@ export async function boot(): Promise<void> {
     if (resp.status === 204 || resp.status === 401) return;
     if (resp.status === 304) { applyEnvelope(cached!.payload); return; }
     if (!resp.ok) return;
+    // (#1093) Approuter returns 200 + HTML login page for stale sessions; do
+    // not let `resp.json()` throw and get swallowed by the outer catch.
+    if (!(resp.headers.get('content-type') || '').includes('json')) {
+      // eslint-disable-next-line no-console
+      console.warn('[homepage-personalizer] non-JSON response from', ENDPOINT, '— assuming auth expired');
+      return;
+    }
 
     const payload = (await resp.json()) as Envelope;
     writeSessionCache(payload);
     applyEnvelope(payload);
     subscribeBroadcast(payload.hash, (next) => applyEnvelope(next));
   } catch (e) {
+    // (#1093) Bumped from console.debug — this branch was silently hiding auth
+    // failures for months. Warn is the minimum bar for post-mortem visibility.
     // eslint-disable-next-line no-console
-    console.debug('[homepage-personalizer] boot failed', e);
+    console.warn('[homepage-personalizer] boot failed', e);
   }
 }
 
