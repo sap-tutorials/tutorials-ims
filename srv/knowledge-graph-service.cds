@@ -64,6 +64,13 @@ service KnowledgeGraphService @(path : '/graph') {
 
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
 
+  // #1046 — writable projection so the Concept OP's inline sub-table can
+  // CREATE/UPDATE/DELETE aliases. Auth inherited from the service
+  // (@requires: 'any' at line 33), but writes are only reachable through
+  // an authenticated admin session because the FE OP requires Author
+  // scope — same posture as the writable `Concepts` projection above.
+  entity ConceptAliases as projection on ims.ConceptAliases;
+
   /**
    * Publishable subset of Concepts — the projection the Hugo build script
    * (PR 2/3) reads via /build/concepts. Excludes never-published rows,
