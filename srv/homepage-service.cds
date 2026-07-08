@@ -51,7 +51,21 @@ type FeaturedTopicsPayload {
 service HomepageService {
 
   // EventCard maps from ims.Events (startDate/name) to the homepage shape.
-  type EventCard   { title: String; startsAt: Timestamp; location: String; format: String; register: String; }
+  // #1030 — EventCard is served by CommunityEvents when eventsBandAutoPullEnabled=true,
+  // else falls back to legacy Events entity. eventType/region/isVirtual are new;
+  // title/startsAt/location remain compatible with legacy consumers.
+  type EventCard {
+    title:     String;
+    startsAt:  Timestamp;
+    endsAt:    Timestamp;
+    location:  String;
+    format:    String;
+    register:  String;
+    url:       String;
+    eventType: String;
+    region:    String;
+    isVirtual: Boolean;
+  }
   type VideoItem   { videoId: String; title: String; thumbnail: String; publishedAt: Timestamp; }
   type VideoPayload { featured: VideoItem; recent: array of VideoItem; error: String; }
   type RssItem     { title: String; link: String; publishedAt: Timestamp; description: String; }
@@ -63,7 +77,9 @@ service HomepageService {
   type HitEntry    { id: UUID; count: Integer; }
 
   // (#639) Live data band endpoints — all public, no XSUAA scope required.
-  function events()              returns array of EventCard;
+  // #1030 — region: 'ALL' | 'AMERICAS' | 'EMEA' | 'APJ' | 'VIRTUAL' (default 'ALL')
+  // includeVirtual: Boolean (default true). Invalid region values coerce to 'ALL'.
+  function events(region: String, includeVirtual: Boolean) returns array of EventCard;
   function videos()              returns VideoPayload;
   function communityBlogs()      returns array of RssItem;
   function news()                returns array of RssItem;
@@ -98,6 +114,7 @@ service HomepageService {
     shelfOverrides  : ShelfOverrideMap;
     videoFilterTags : array of String;
     rssFilterTags   : array of String;
+    eventsRegion    : String;                     // #1030 — user's preferredEventRegion; null = unset
   }
 
   @(requires: 'authenticated-user')

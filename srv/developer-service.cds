@@ -215,6 +215,12 @@ service DeveloperService {
     cloud      : String
   ) returns LearningPreferences;
 
+  // #1030 — Homepage Row 3 events band region preference. Null = clear (fall
+  // through to browser-TZ hint on next visit). VIRTUAL and ALL are UI filter
+  // modes; AMERICAS/EMEA/APJ are physical regions.
+  @(requires: 'authenticated-user')
+  action setPreferredEventRegion(region : String) returns Boolean;
+
   // Issue #566 — SAP Community (Khoros) profile linkage. Display-only unlock
   // in v1; foundation for future Devtoberfest-style consumers.
   @(requires: 'authenticated-user')

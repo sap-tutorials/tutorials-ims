@@ -1,12 +1,31 @@
-{{- /* events-band.html — spec §6 row 3.
-       EventsBand Vue island (Task 20) hydrates on mount, fetching
-       /homepage/events.
+{{- /* hugo/layouts/partials/homepage/events-band.html — #1030 Row 3.
+       EventsBand Vue island (homepage-events-band.js) hydrates on mount,
+       fetching /api/homepage/events.
 
-       The <h2> heading lives in the OUTER <section> wrapper so it
-       survives Vue's mount (createApp(...).mount(el) replaces el's
-       innerHTML, which would wipe a placeholder heading inside the
-       data-island element). Vue mounts into the inner <div>. */ -}}
-<section id="hp-events" class="hp-band" aria-labelledby="hp-events-title">
-  <h2 id="hp-events-title" class="hp-band__title">Upcoming events</h2>
-  <div data-island="events"></div>
+       Mount point: <section data-app="homepage-events-band">.
+       Vue's createApp(...).mount(el) replaces the section's innerHTML, so
+       the skeleton below is the first-paint state only — visible until JS
+       hydrates. The skeleton is aria-hidden so screen readers skip it.
+
+       Script tag lives in index.html, not here, following the
+       featured-topics-carousel canonical pattern. CSS is injected by
+       the Vite cssInjectedByJsPlugin — no explicit <link> tag needed.
+
+       The section uses the shared .hp-band + .hp-band__title grammar
+       from homepage.css so the pre-hydration layout matches the live view.
+       Additional events-band-specific styles live in
+       hugo/assets/css/homepage/_events-band.css (imported by homepage.css).
+*/ -}}
+<section class="hp-band homepage-events-band" data-app="homepage-events-band" aria-label="Upcoming events">
+  <h2 class="hp-band__title">Upcoming events</h2>
+
+  {{- /* Skeleton chip strip — replaced by Vue on hydration */ -}}
+  <div class="events-band__chips events-band__chips--skeleton" aria-hidden="true">
+    {{ range seq 5 }}<span class="events-band__chip events-band__chip--skeleton"></span>{{ end }}
+  </div>
+
+  {{- /* Skeleton cards — 6 cards matching the desktop 3×2 grid */ -}}
+  <div class="events-band__cards events-band__cards--skeleton" aria-hidden="true">
+    {{ range seq 6 }}<div class="event-card event-card--skeleton"></div>{{ end }}
+  </div>
 </section>

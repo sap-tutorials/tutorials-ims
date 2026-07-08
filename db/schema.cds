@@ -219,6 +219,12 @@ entity UserLearningPreferences : managed {
   // widen on a String(20) column is additive only — no data migration needed
   // (existing 'btp'/'aws'/'gcp' rows stay valid).
   cloud          : String(20) @assert.range enum { btp; aws; azure; gcp; alibaba; oracle; ibm; };
+  // #1030 — homepage Row 3 events band region preference. Null = never set,
+  // client falls through to browser-TZ hint. VIRTUAL/ALL are UI filter modes
+  // (never appear on CommunityEvents.region — that column uses UNKNOWN sentinel).
+  preferredEventRegion : String(16) @assert.range enum {
+                            AMERICAS; EMEA; APJ; VIRTUAL; ![ALL];
+                         };
 }
 
 entity DeveloperEnvironmentTabs : cuid, LegacyKeyed {

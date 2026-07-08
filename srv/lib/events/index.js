@@ -33,6 +33,7 @@ export function _resetMockFetchers() { _mockKhoros = null; _mockRss = null; }
  */
 export async function fetchAllEvents(opts = {}) {
   const now = opts.now ?? new Date();
+  const typesAllowlist = opts.typesAllowlist ?? null;   // #1030 — filter to a subset of EVENT_TYPES
   const perSource = {
     khoros: { rowsFetched: 0, fetcherRejected: false, reason: null },
     rss:    { rowsFetched: 0, fetcherRejected: false, reason: null },
@@ -50,6 +51,7 @@ export async function fetchAllEvents(opts = {}) {
 
   const tasks = [];
   for (const et of EVENT_TYPES) {
+    if (typesAllowlist && !typesAllowlist.includes(et.id)) continue;   // #1030
     if (et.source === 'khoros') {
       tasks.push({ key: 'khoros', task: () => fetchKhoros(et.khorosBoardId, et.id, et.defaultScope, { now, timeoutMs: opts.timeoutMs }) });
     } else if (et.source === 'rss') {

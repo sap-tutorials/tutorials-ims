@@ -8,6 +8,7 @@ import { resolveUserSapId } from './lib/resolve-db-user.js';
 import { resolveUser as khorosResolveUser } from './lib/khoros-client.js';
 import * as khorosCache from './lib/khoros-cache.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
+import * as metrics from './lib/metrics.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
@@ -806,6 +807,51 @@ export default class DeveloperService extends cds.ApplicationService {
         });
       }
       return SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID });
+    });
+
+    // #1030 — Homepage Row 3 events band region preference.
+    this.on('setPreferredEventRegion', async (req) => {
+      const value = req.data?.region === null || req.data?.region === '' ? null : String(req.data?.region ?? '').toUpperCase();
+
+      // Validate: null OR a value from the vocab. JS validation is the runtime
+      // gate (memory: @assert.range fires only at the OData protocol layer, not
+      // on programmatic CQL writes from action handlers).
+      if (value !== null && !PROFILE_VOCAB.preferredEventRegion.includes(value)) {
+        return req.error(400, `region: must be one of [${PROFILE_VOCAB.preferredEventRegion.join(', ')}] or null`);
+      }
+
+      // Auto-provision Users row (mirrors setLearningPreferences).
+      const sapId = resolveUserSapId(req.user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+      let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
+      if (!dbUser) {
+        const newUser = {
+          uuid: req.user.id,
+          sapId,
+          legacyId: await getNextLegacyId('Users', db),
+          email: req.user.attr?.email || '',
+          firstName: req.user.attr?.given_name || '',
+          lastName: req.user.attr?.family_name || '',
+        };
+        await INSERT.into(dbUsers).entries(newUser);
+        dbUser = await SELECT.one.from(dbUsers).where({ sapId });
+      }
+
+      // SELECT-then-INSERT-or-UPDATE (codebase-wide idiom, zero direct UPSERTs).
+      const existing = await SELECT.one.from(UserLearningPreferences)
+        .where({ user_ID: dbUser.ID });
+      if (existing) {
+        await UPDATE(UserLearningPreferences)
+          .where({ user_ID: dbUser.ID })
+          .set({ preferredEventRegion: value });
+      } else {
+        await INSERT.into(UserLearningPreferences).entries({
+          user_ID: dbUser.ID,
+          preferredEventRegion: value,
+        });
+      }
+      metrics.counter(`homepage.events.pref_set[region=${value ?? 'null'}]`);
+      return true;
     });
 
     // ── Khoros community link handlers (issue #566) ──────────────────────────

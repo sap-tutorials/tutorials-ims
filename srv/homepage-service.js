@@ -29,12 +29,17 @@ const log = cds.log('homepage-service');
 
 // (#639) Module-level caches — simple {at, value} shape, per-process.
 const EVENTS_TTL_MS = 60 * 1000;          // 60 s
+const EVENTS_CACHE_MAX = 16;              // #1030 — LRU cap
+
+const VALID_REGIONS = new Set(['ALL', 'AMERICAS', 'EMEA', 'APJ', 'VIRTUAL']);
+const REFRESH_TYPES = ['codejam', 'devtoberfest'];   // #1030 — same as refresh cron
 const SHELVES_TTL_MS = 5 * 60 * 1000;     // 5 min
 const COMMUNITY_BLOGS_TTL_MS = 60 * 1000; // (#1033) 60 s — DB-backed now, so cheap TTL
 
 const STATE_KEY = Symbol.for('com.sap.developers.ims:homepage-service');
 const _state = (globalThis[STATE_KEY] ??= {
-  events: { at: 0, value: null },
+  // #1030 — Map keyed by `${region}|${includeVirtual?1:0}`, LRU-capped at 16.
+  events: new Map(),
   // Map<verb|'', {at, value}> for shelves
   shelves: new Map(),
   // (#1032) 60s cache for featuredTopics payload
@@ -47,7 +52,7 @@ const _state = (globalThis[STATE_KEY] ??= {
 
 /** Test-only: clear all cached values. (#639) */
 export function _resetForTests() {
-  _state.events = { at: 0, value: null };
+  _state.events = new Map();
   _state.shelves.clear();
   _state.ft = { at: 0, payload: null };
   _state.communityBlogs = { at: 0, value: null };  // #1033
@@ -125,54 +130,141 @@ const SAP_NEWS_RSS_URL = 'https://news.sap.com/feed/';
 // (#639) Singleton HomepageConfig UUID (must match admin-service.js seed ID)
 const HOMEPAGE_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8ae';
 
+// #1030 — CommunityEvents-backed events query (auto-pull path).
+async function _communityEventsForBand(region, includeVirtual) {
+  try {
+    const db = await cds.connect.to('db');
+    const { CommunityEvents } = cds.entities('com.sap.developers.ims.external');
+    const nowIso = new Date().toISOString().slice(0, 10);   // YYYY-MM-DD; startDate is Date
+
+    let q = SELECT.from(CommunityEvents)
+      .columns('title', 'startDate', 'endDate', 'location', 'url',
+               'eventType', 'region', 'virtualOrInPerson')
+      .where`eventType in ${REFRESH_TYPES}`
+      .and`startDate >= ${nowIso}`;
+
+    if (region === 'VIRTUAL') {
+      q = q.and`virtualOrInPerson = ${'virtual'}`;
+    } else if (region !== 'ALL') {
+      if (includeVirtual) q = q.and`(region = ${region} or virtualOrInPerson = ${'virtual'})`;
+      else                q = q.and`region = ${region}`;
+    } else if (!includeVirtual) {
+      // region=ALL, includeVirtual=false
+      q = q.and`virtualOrInPerson <> ${'virtual'}`;
+    }
+
+    const rows = await db.run(q.orderBy('startDate asc').limit(6));
+    return (rows ?? []).map(e => ({
+      title:     e.title || '',
+      startsAt:  e.startDate || null,
+      endsAt:    e.endDate || null,
+      location:  e.location || '',
+      url:       e.url || null,
+      format:    e.eventType || '',        // legacy shape compat
+      register:  null,                     // legacy shape compat
+      eventType: e.eventType || null,
+      region:    e.region || 'UNKNOWN',
+      isVirtual: e.virtualOrInPerson === 'virtual',
+    }));
+  } catch (err) {
+    log.warn('[events] CommunityEvents query failed:', err.message);
+    return [];
+  }
+}
+
+// #1030 — Fallback to the manual Events entity (rollback path when
+// HomepageConfig.eventsBandAutoPullEnabled=false). Pre-#1030 shape.
+async function _legacyEventsFromEventsEntity() {
+  try {
+    const db = await cds.connect.to('db');
+    const { Events } = cds.entities('com.sap.developers.ims');
+    const nowIso = new Date().toISOString();
+    const raw = await db.run(
+      SELECT.from(Events)
+        .columns('name', 'startDate', 'timeZone', 'eventType')
+        .where`startDate >= ${nowIso}`
+        .orderBy('startDate asc')
+        .limit(4)
+    );
+    return (raw ?? []).map(e => ({
+      title:     e.name       || '',
+      startsAt:  e.startDate  || null,
+      endsAt:    null,
+      location:  e.timeZone   || '',
+      url:       null,
+      format:    e.eventType  || '',
+      register:  null,
+      eventType: e.eventType  || null,
+      region:    'UNKNOWN',
+      isVirtual: false,
+    }));
+  } catch (err) {
+    log.warn('[events] legacy Events query failed:', err.message);
+    return [];
+  }
+}
+
 export default class HomepageService extends cds.ApplicationService {
 
   async init() {
     await super.init();
 
-    // (#639) events() — DB Events + optional sap-devs remote source, 60 s cache.
-    // DB field mapping: Events.name → title, Events.startDate → startsAt.
-    // Only future events (startDate >= now) are included.
-    this.on('events', async () => {
+    // (#639, #1030) events() — CommunityEvents-backed with region + includeVirtual
+    // filters, per-key 60s cache, ETag. Falls back to legacy Events entity when
+    // HomepageConfig.eventsBandAutoPullEnabled=false (rollback path).
+    this.on('events', async (req) => {
+      // Parse + validate query params. Invalid region coerces to 'ALL'
+      // (spec §6.2 — endpoint must never 400 on typo).
+      const rawRegion = String(req.data?.region ?? 'ALL').toUpperCase();
+      const region = VALID_REGIONS.has(rawRegion) ? rawRegion : 'ALL';
+      if (region !== rawRegion) {
+        metrics.counter('homepage.events.requests[region=invalid]');
+      }
+      // includeVirtual defaults to true; only false when explicitly === false.
+      const includeVirtual = req.data?.includeVirtual !== false;
+
+      const cacheKey = `${region}|${includeVirtual ? 1 : 0}`;
       const now = Date.now();
-      if (_state.events.value !== null && (now - _state.events.at) < EVENTS_TTL_MS) {
-        return _state.events.value;
+      const hit = _state.events.get(cacheKey);
+      if (hit && (now - hit.at) < EVENTS_TTL_MS) {
+        metrics.counter(`homepage.events.requests[region=${region},virtual=${includeVirtual ? 1 : 0},result=200]`);
+        return hit.value;
       }
 
-      let localRows = [];
+      // Feature-flag check — fallback to legacy Events entity when off.
+      let cfg = null;
       try {
         const db = await cds.connect.to('db');
-        const { Events } = cds.entities('com.sap.developers.ims');
-        // CDS QL tagged-template form — the raw '?' placeholder syntax used previously
-        // is a CDS-QL anti-pattern that throws at parse time, the catch path swallowed it,
-        // and the function silently returned []. See feedback_skip_hybrid_test_costs_two_pr_cycles.
-        const nowIso = new Date().toISOString();
-        const raw = await db.run(
-          SELECT.from(Events)
-            .columns('name', 'startDate', 'timeZone', 'eventType')
-            .where`startDate >= ${nowIso}`
-            .orderBy('startDate asc')
-            .limit(20)
+        cfg = await db.run(
+          SELECT.one.from('com.sap.developers.ims.HomepageConfig')
+            .where({ ID: HOMEPAGE_CONFIG_SINGLETON_ID })
         );
-        // Map DB shape → EventCard shape (startsAt / title)
-        localRows = (raw || []).map(e => ({
-          title:    e.name       || '',
-          startsAt: e.startDate  || null,
-          location: e.timeZone   || '',
-          format:   e.eventType  || '',
-          register: null,
-        }));
       } catch (err) {
-        log.warn('[events] DB query failed (returning empty local array):', err.message);
+        log.warn('[events] HomepageConfig read failed:', err.message);
       }
 
-      // Optional remote source injected via globalThis for tests / future sap-devs MCP.
-      const remote = globalThis.__sapDevsEvents__ || [];
+      let value;
+      if (cfg?.eventsBandAutoPullEnabled === false) {
+        // Legacy path — read manual Events entity (pre-#1030 behavior).
+        value = await _legacyEventsFromEventsEntity();
+      } else {
+        // #1030 auto-pull path — CommunityEvents.
+        value = await _communityEventsForBand(region, includeVirtual);
+      }
 
-      const merged = mergeEvents(localRows, remote, { now });
+      // LRU cap the cache Map (naive: drop oldest by insertion order).
+      if (_state.events.size >= EVENTS_CACHE_MAX && !_state.events.has(cacheKey)) {
+        const firstKey = _state.events.keys().next().value;
+        _state.events.delete(firstKey);
+      }
+      _state.events.set(cacheKey, { at: now, value });
 
-      _state.events = { at: now, value: merged };
-      return merged;
+      if (value.length === 0) {
+        metrics.counter(`homepage.events.requests[region=${region},virtual=${includeVirtual ? 1 : 0},result=empty]`);
+      } else {
+        metrics.counter(`homepage.events.requests[region=${region},virtual=${includeVirtual ? 1 : 0},result=200]`);
+      }
+      return value;
     });
 
     // (#1031, extends #639/#1007) videos() — merges three sources into a single
@@ -508,7 +600,7 @@ export default class HomepageService extends cds.ApplicationService {
       const [prefsRow, shelves, forYou, featuredRows] = await Promise.all([
         dbUser?.ID
           ? SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID })
-              .columns('deployment', 'role', 'cloud')
+              .columns('deployment', 'role', 'cloud', 'preferredEventRegion')
           : Promise.resolve(null),
         SELECT.from(HomepageShelves).where({ isActive: true })
           .columns('ID', 'verb', 'shelf', 'sortOrder', 'title',
@@ -543,6 +635,7 @@ export default class HomepageService extends cds.ApplicationService {
 
       const envelope = buildEnvelope({
         profile, shelves, forYouCandidates: forYou, teaserSlugs,
+        preferredEventRegion: prefsRow?.preferredEventRegion ?? null,    // #1030
       });
       envelope.hash = hashEnvelope(envelope);
 

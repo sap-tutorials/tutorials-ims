@@ -54,10 +54,12 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     // #1033 adds community-blogs-classify (38 -> 39)
     // #1031 adds reshuffle-video-rotation (39 -> 40)
     // #1034 adds fetch-news               (40 -> 41)
-    expect(_getJobRegistry().size).toBe(41);
+    // #1030 adds refresh-community-events (41 -> 42)
+    expect(_getJobRegistry().size).toBe(42);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
+    expect(names).toContain('refresh-community-events');
     expect(names).toContain('kg-pagerank');
     expect(names).toContain('kg-communities');
     expect(names).toContain('kg-wcc');

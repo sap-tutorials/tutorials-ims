@@ -45,7 +45,9 @@ Seven rows top-to-bottom on the homepage. Each verb also has a dedicated sub-pag
 │   Each tile previews the Start Here shelf + links to /<verb>/.       │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Row 3 · Events band                                                  │
-│   3-4 upcoming events. Runtime: /api/homepage/events (60s cache).   │
+│   6 upcoming events, auto-pulled from CommunityEvents, region-      │
+│   filtered per user preference. Runtime: /homepage/events (60s      │
+│   per-key cache; flag: HomepageConfig.eventsBandAutoPullEnabled).   │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Row 4 · SAPDevs video band                                           │
 │   LEFT — Weekly Developer News. RIGHT — up to 6 tiles: 3 newest      │
@@ -96,7 +98,7 @@ Three verb sub-pages carry an extra section beyond the four shelves:
 |-----|-------------|---------------------|
 | Row 1 hero | Static (Hugo front matter) | Rebuild only |
 | Row 2 verb spine | `hugo/data/homepage_shelves.json` (baked from `GET /build/homepage-shelves`) | Rebuild on admin `HomepageShelves` save (debounced 60s dispatch) |
-| Row 3 events | `GET /api/homepage/events` | 60s server-side cache |
+| Row 3 events | `GET /homepage/events?region=<X>&includeVirtual=<b>` — 60s per-key cache; sourced from `CommunityEvents` when `HomepageConfig.eventsBandAutoPullEnabled=true` else legacy `Events` entity | 60s per-key server-side cache |
 | Row 4 videos | `GET /api/homepage/videos` | 15-min server-side cache; depends on `YOUTUBE_API_KEY` |
 | Row 5 featured carousel | `hugo/data/featured_topics.json` (baked by `scripts/fetch-featured-topics.ts`) + runtime `/homepage/featuredTopics` | Nightly job at 04:13 UTC (`kg-featured-topics-job`) + editorial-save debounced rebuild (60s) |
 | Row 6 community | `/api/advocates` + `GET /api/homepage/communityBlogs` + `GET /api/homepage/news` | Advocates: 60s + SWR; RSS feeds: 30-min cache |
@@ -257,6 +259,15 @@ The current implementation provides **discovery-shaped starter prompts** but the
 A future enhancement would teach the chat orchestrator to call `/api/homepage/shelves?verb=<v>` and `/api/homepage/redirectsActive`, treating the catalog rows as first-class retrieval sources alongside tutorial content. On a `homepage` or `verb-<key>` page-kind, the handler would prioritise catalog-shelf citations over tutorial-step citations and link out to the appropriate destination URL.
 
 That work is out of scope for issue #639 and lives as a future follow-up. The infrastructure (catalog data + endpoint + admin-curated content) is already in place.
+
+---
+
+## CodeJams auto-pull (#1030)
+
+Issue #1030 rewrites Row 3 (events band) to pull from `CommunityEvents` automatically and adds per-user region preference.
+
+**Spec:** [docs/superpowers/specs/2026-07-07-1030-homepage-codejams-autopull-design.md](../../superpowers/specs/2026-07-07-1030-homepage-codejams-autopull-design.md)
+**Plan:** [docs/superpowers/plans/2026-07-07-1030-homepage-codejams-autopull.md](../../superpowers/plans/2026-07-07-1030-homepage-codejams-autopull.md)
 
 ---
 
