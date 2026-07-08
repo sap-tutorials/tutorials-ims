@@ -73,7 +73,10 @@
       "sap.tutorials.admin.homepage": "./components/homepage",
       "sap.tutorials.admin.shelfDefinitions": "./components/shelf-definitions",
       "sap.tutorials.admin.verbDefinitions": "./components/verb-definitions",
-      "sap.tutorials.admin.forYou": "./components/for-you"
+      "sap.tutorials.admin.forYou": "./components/for-you",
+      "sap.tutorials.admin.featuredTopics": "./components/featured-topics",
+      "sap.tutorials.admin.videos": "./components/videos",
+      "sap.tutorials.admin.videoRotation": "./components/video-rotation"
     },
     "models": {
       "admin": {
