@@ -45,7 +45,7 @@ describe('#1113 rankTutorialsByQueryVector HANA branch', () => {
     const phase1 = db._runs[0]
     // Allow optional table alias prefix (e.g. te.EMBEDDING) — #1113 fix added aliases.
     expect(phase1.sql).toMatch(/MAX\s*\(\s*COSINE_SIMILARITY\s*\(\s*(?:\w+\.)?\s*EMBEDDING\s*,\s*TO_REAL_VECTOR\s*\(\s*\?\s*\)\s*\)\s*\)/i)
-    expect(phase1.sql).toMatch(/GROUP\s+BY\s+(?:\w+\.)?\s*TUTORIAL_ID/i)
+    expect(phase1.sql).toMatch(/GROUP\s+BY\s+(?:te\.)?TUTORIAL_ID/i)
     expect(phase1.sql).toMatch(/SELECT\s+TOP\s+\?/i)
     expect(phase1.params[0]).toBe(5)
     expect(phase1.params[1].split(',')).toHaveLength(1536)

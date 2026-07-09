@@ -97,14 +97,15 @@ export async function rankTutorialsByQueryVector({ db, queryVector, limit = 5 })
 
     // Phase 1: HANA does the cosine + top-K in one round-trip.
     // JOIN to Tutorials to enforce the ACTIVE gate — mirrors the SQLite branch. #1113 fix.
+    // #1113 Task 6: aliases MUST be double-quoted — HANA folds unquoted identifiers to uppercase (see kg-hana-cosine hybrid test).
     const ranked = await db.run(
-      `SELECT TOP ? te.TUTORIAL_ID as tutorial_id,
-              MAX(COSINE_SIMILARITY(te.EMBEDDING, TO_REAL_VECTOR(?))) AS score
+      `SELECT TOP ? te.TUTORIAL_ID as "tutorial_id",
+              MAX(COSINE_SIMILARITY(te.EMBEDDING, TO_REAL_VECTOR(?))) AS "score"
        FROM COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING te
        JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS t ON t.ID = te.TUTORIAL_ID
        WHERE te.EMBEDDING IS NOT NULL AND t.STATUS = 'ACTIVE'
        GROUP BY te.TUTORIAL_ID
-       ORDER BY score DESC`,
+       ORDER BY "score" DESC`,
       [limit, vecStr]
     ) || [];
     if (ranked.length === 0) return [];
