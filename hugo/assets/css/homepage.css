@@ -68,8 +68,12 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--sapButton_Selected_Background, #0854a0);
-  background: rgba(8, 84, 160, 0.08);
+  /* Readable pill: brand-link text over a neutral hover tint. Both tokens are
+     defined with proper light/dark values in sap-theme-vars.css, so contrast
+     holds in both themes. The prior `color: --sapButton_Selected_Background`
+     rendered text and fill in the same hue → invisible label (#1116 regress). */
+  color: var(--sapLinkColor, #0064d9);
+  background: var(--sapList_Hover_Background, rgba(0, 112, 242, 0.06));
   padding: 0.2rem 0.55rem;
   border-radius: 999px;
   margin-bottom: 0.5rem;
