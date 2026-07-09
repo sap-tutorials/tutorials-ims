@@ -5,6 +5,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const argv = Object.fromEntries(
   process.argv.slice(2).reduce((acc, tok, i, arr) => {
@@ -20,7 +21,7 @@ if (!tenant || !region || !baseUrl || !out) {
 }
 
 fs.mkdirSync(out, { recursive: true });
-const srcDir = 'approuter/static/.well-known';
+const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../approuter/static/.well-known');
 for (const fname of fs.readdirSync(srcDir)) {
   if (!fname.endsWith('.template')) continue;
   const raw = fs.readFileSync(path.join(srcDir, fname), 'utf8');
