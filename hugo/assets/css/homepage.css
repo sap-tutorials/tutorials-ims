@@ -396,7 +396,103 @@
 }
 [data-personalize="verb-order"] { min-height: 240px; }
 [data-personalize="for-you"][hidden] { display: none; }
-[data-personalize="for-you"] { min-height: 200px; }
+/* No min-height reservation on the for-you row: the coordinator hides
+   the section entirely for anonymous / unmatched users, so pre-hydration
+   we don't want to occupy 200px of blank space above the events band. */
+
+/* For-you row header — h2 + "because" chip on one line. */
+.for-you-row__header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.for-you-row__header .hp-band__title { margin: 0; }
+.for-you-row__because {
+  font-size: 0.8125rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--sapButton_Lite_Background, #eaecee);
+}
+.for-you-row__because:empty { display: none; }
+
+/* For-you cards — horizontal grid, matches the .cards grammar used by
+   tutorial-teaser and the featured carousel. */
+.for-you-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+@media (max-width: 1100px) { .for-you-cards { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 800px)  { .for-you-cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px)  { .for-you-cards { grid-template-columns: 1fr; } }
+
+.for-you-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--sapBaseColor, #fff);
+  border: 1px solid var(--sapContent_ForegroundBorderColor, #e4e7ed);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.for-you-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.for-you-card__thumb {
+  aspect-ratio: 16 / 9;
+  background: var(--sapList_HeaderBackground, #f5f6f7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.for-you-card__thumb img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.for-you-card__thumb--placeholder {
+  background: linear-gradient(135deg, #eaf2ff 0%, #d9e6ff 100%);
+}
+.for-you-card__kind-icon {
+  font-size: 2rem;
+  opacity: 0.75;
+}
+.for-you-card__body {
+  padding: 0.75rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+.for-you-card__kind {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+.for-you-card__title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.35;
+  color: var(--sapTextColor, #32363a);
+}
+.for-you-card__desc {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 [data-personalize="teaser-rerank"] { min-height: 320px; }
 .personalized-badge-slot { min-height: 32px; padding: .25rem .5rem; }
 .personalized-badge { display: flex; gap: .5em; align-items: center; }

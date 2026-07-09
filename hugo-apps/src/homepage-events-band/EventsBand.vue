@@ -61,7 +61,10 @@ async function refetch(r: Region) {
     }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     currentEtag = resp.headers.get('ETag');
-    rows.value = await resp.json();
+    // CAP OData function-imports envelope arrays as `{value: [...]}`.
+    // Bare-array fallback keeps fixtures + non-OData mounts working.
+    const body = await resp.json();
+    rows.value = Array.isArray(body?.value) ? body.value : Array.isArray(body) ? body : [];
   } catch (err) {
     console.debug('[homepage-events-band] fetch failed', err);
     errored.value = true;
