@@ -146,6 +146,12 @@
       "scope": "$XSAPPNAME.Admin"
     },
     {
+      "source": "^/pats/(.*)$",
+      "target": "/pats/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
       "source": "^/admin/(.*)$",
       "target": "/admin/$1",
       "destination": "srv-api",

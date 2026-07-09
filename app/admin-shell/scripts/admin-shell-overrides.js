@@ -73,7 +73,8 @@ module.exports = {
     'for-you',
     'featured-topics',
     'videos',
-    'video-rotation'
+    'video-rotation',
+    'pats'
   ],
 
   //
@@ -147,7 +148,8 @@ module.exports = {
     'featured-topics': 'ft',
     videos: 'vi',
     'video-rotation': 'vr',
-    'content-moderation': 'cm'
+    'content-moderation': 'cm',
+    pats: 'pt'
   },
 
   //
