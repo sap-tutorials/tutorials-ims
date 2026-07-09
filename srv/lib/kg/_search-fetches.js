@@ -99,3 +99,33 @@ export async function fetchLinks(db, conceptIds) {
     conceptIds,
   ) || []
 }
+
+/**
+ * Hydrate Tutorial metadata (id, slug, title) for a set of tutorial IDs.
+ * Sibling of `fetchConceptsByIds` — same two-phase "IDs first, then metadata"
+ * pattern that avoids selecting BLOBs alongside metadata on HANA. Added by
+ * #1113 as the metadata-hydration step for the rewritten on-demand cosine
+ * rank (srv/lib/kg/on-demand-cosine-rank.js), which fetches tutorial IDs
+ * from a HANA cosine query and hydrates slug/title in a second small query.
+ *
+ * Returns rows with lowercased keys regardless of dialect. Rows that don't
+ * exist are silently dropped.
+ */
+export async function fetchTutorialsByIds(db, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return []
+  const placeholders = ids.map(() => '?').join(',')
+  if (isHana(db)) {
+    return await db.run(
+      `SELECT ID as id, SLUG as slug, TITLE as title
+       FROM COM_SAP_DEVELOPERS_IMS_TUTORIALS
+       WHERE ID IN (${placeholders})`,
+      ids,
+    ) || []
+  }
+  return await db.run(
+    `SELECT ID as id, slug, title
+     FROM com_sap_developers_ims_Tutorials
+     WHERE ID IN (${placeholders})`,
+    ids,
+  ) || []
+}
