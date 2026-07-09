@@ -53,7 +53,7 @@ async function fetchCandidates(db) {
        WHERE STATUS = 'ACTIVE'
          AND PUBLISHEDAT IS NOT NULL
          AND MERGEDINTO_ID IS NULL
-         AND (EMBEDDING IS NULL OR EMBEDDING_VEC IS NULL)`
+         AND (EMBEDDING IS NULL OR EMBEDDINGVEC IS NULL)`
     ) || [];
   }
   return await db.run(
@@ -132,7 +132,7 @@ export async function runConceptEmbeddingBackfill({ db, embedClient, telemetry, 
         if (isHana(dbHandle)) {
           await dbHandle.run(
             `UPDATE COM_SAP_DEVELOPERS_IMS_CONCEPTS
-             SET EMBEDDING = ?, EMBEDDING_VEC = TO_REAL_VECTOR(?)
+             SET EMBEDDING = ?, EMBEDDINGVEC = TO_REAL_VECTOR(?)
              WHERE ID = ?`,
             [blob, vecStr, id]
           );

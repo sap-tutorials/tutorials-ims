@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move KG cosine similarity from JS-side scan (20 s cold) to HANA vector engine (<500 ms) by adding a `Vector(1536)` column to `Concepts`, backfilling it, and rewriting three helper functions to use `COSINE_SIMILARITY(EMBEDDING_VEC, TO_REAL_VECTOR(?))`.
+**Goal:** Move KG cosine similarity from JS-side scan (20 s cold) to HANA vector engine (<500 ms) by adding a `Vector(1536)` column to `Concepts`, backfilling it, and rewriting three helper functions to use `COSINE_SIMILARITY(EMBEDDINGVEC, TO_REAL_VECTOR(?))`.
 
 **Architecture:** Two-table treatment — `Concepts` gets a new `embeddingVec` column (kept alongside the legacy `embedding` BLOB for rollback safety); `TutorialEmbedding` already stores `REAL_VECTOR(1536)` so needs only a query rewrite. One shared serialization helper produces the HANA vector string literal; each cosine callsite issues one SQL round-trip.
 
@@ -15,7 +15,7 @@
 - Sanity-deploy schema changes locally before commit: `npx cds deploy --to sqlite::memory:` (catches `@assert.unique.*` and other runtime-only errors). Runs the same code path CI uses.
 - Never SELECT a HANA BLOB alongside metadata in one CDS QL query — LOB locators expire. Use raw `db.run()`. `embeddingVec` (REAL_VECTOR) is NOT a BLOB and is exempt from this rule; the `embedding` BLOB column that remains during transition still is.
 - Never write raw SQL for regular entities (project rule: `cds.ql` or CQL). The cosine helpers are an existing exception because HANA cosine + REAL_VECTOR is not modelable through CDS QL today; document any new raw SQL with a comment referencing this plan.
-- Concept row count on DEV today: 5,946. Query cost sensitivity is real; keep `TOP ?` bound and `WHERE EMBEDDING_VEC IS NOT NULL` explicit.
+- Concept row count on DEV today: 5,946. Query cost sensitivity is real; keep `TOP ?` bound and `WHERE EMBEDDINGVEC IS NOT NULL` explicit.
 - All 8 project-scope constraints from `CLAUDE.md` still apply (never store secrets, use `@requires`, no @sap/* private packages, etc.). Nothing in this PR touches those surfaces.
 - Vitest hybrid project requires `cf login` — hybrid tests run only via `npm run test:hybrid`, never `npm test`. Bare `vitest <file>` silently skips hybrid setup — always pass `--project hybrid` for ad-hoc hybrid runs.
 - No changes to public API contracts (`topConceptsByCosine`, `rankTutorialsByQueryVector`, `computeKgSignal`, LLM-tool response envelopes). Signature-preserving refactor only.
@@ -51,7 +51,7 @@
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: A new nullable `Vector(1536)` column on `Concepts`, exposed to CAP as `embeddingVec`, materializing in HANA as `EMBEDDING_VEC REAL_VECTOR(1536)`. All later tasks reference this column name.
+- Produces: A new nullable `Vector(1536)` column on `Concepts`, exposed to CAP as `embeddingVec`, materializing in HANA as `EMBEDDINGVEC REAL_VECTOR(1536)`. All later tasks reference this column name.
 
 - [ ] **Step 1: Read the current CDS to find the exact insertion point**
 
@@ -82,9 +82,9 @@ Expected: `/> successfully deployed to in-memory database.` No `UNIQUE constrain
 
 - [ ] **Step 5: Verify the generated HDI artifact carries the new column**
 
-Run: `grep -A2 'EMBEDDING_VEC\|EMBEDDING' gen/db/src/gen/com.sap.developers.ims-Concepts.hdbtable | head -10`
+Run: `grep -A2 'EMBEDDINGVEC\|EMBEDDING' gen/db/src/gen/com.sap.developers.ims-Concepts.hdbtable | head -10`
 
-Expected: two lines, one for `EMBEDDING LargeBinary` (or `NCLOB` / `BLOB` depending on CDS version) and one for `EMBEDDING_VEC REAL_VECTOR(1536)`. If only the first line appears, the CDS edit didn't take — go back to Step 2.
+Expected: two lines, one for `EMBEDDING LargeBinary` (or `NCLOB` / `BLOB` depending on CDS version) and one for `EMBEDDINGVEC REAL_VECTOR(1536)`. If only the first line appears, the CDS edit didn't take — go back to Step 2.
 
 - [ ] **Step 6: Commit**
 
@@ -104,7 +104,7 @@ git -c core.autocrlf=false commit -m "feat(#1113): add Concepts.embeddingVec Vec
 
 **Interfaces:**
 - Consumes: `Concepts.embeddingVec` column from Task 1.
-- Produces: After a manual job kick post-deploy, all rows where `EMBEDDING IS NOT NULL AND EMBEDDING_VEC IS NULL` get `EMBEDDING_VEC` populated with `TO_REAL_VECTOR('[<1536 comma-separated 6-decimal floats>]')`. The vector-string serialization convention (`Array.from(vec, x => x.toFixed(6)).join(',')` wrapped in `[…]`) is what Task 3 and Task 4 also produce for the query side — keep it identical.
+- Produces: After a manual job kick post-deploy, all rows where `EMBEDDING IS NOT NULL AND EMBEDDINGVEC IS NULL` get `EMBEDDINGVEC` populated with `TO_REAL_VECTOR('[<1536 comma-separated 6-decimal floats>]')`. The vector-string serialization convention (`Array.from(vec, x => x.toFixed(6)).join(',')` wrapped in `[…]`) is what Task 3 and Task 4 also produce for the query side — keep it identical.
 
 - [ ] **Step 1: Read the current backfill job structure**
 
@@ -173,7 +173,7 @@ Expected: FAIL — the current code writes only `embedding`; `embeddingVec` is N
 
 - [ ] **Step 5: Extend `fetchCandidates` to include rows missing the vector column**
 
-Edit `srv/jobs/concept-embedding-backfill.js`. Change the `fetchCandidates` function's `WHERE EMBEDDING IS NULL` clause to `WHERE EMBEDDING IS NULL OR EMBEDDING_VEC IS NULL` on both dialect branches:
+Edit `srv/jobs/concept-embedding-backfill.js`. Change the `fetchCandidates` function's `WHERE EMBEDDING IS NULL` clause to `WHERE EMBEDDING IS NULL OR EMBEDDINGVEC IS NULL` on both dialect branches:
 
 ```js
 async function fetchCandidates(db) {
@@ -187,7 +187,7 @@ async function fetchCandidates(db) {
        WHERE STATUS = 'ACTIVE'
          AND PUBLISHEDAT IS NOT NULL
          AND MERGEDINTO_ID IS NULL
-         AND (EMBEDDING IS NULL OR EMBEDDING_VEC IS NULL)`
+         AND (EMBEDDING IS NULL OR EMBEDDINGVEC IS NULL)`
     ) || [];
   }
   return await db.run(
@@ -214,7 +214,7 @@ In the same file, find the UPDATE block near the `encodeEmbedding` call (origina
         if (isHana(dbHandle)) {
           await dbHandle.run(
             `UPDATE COM_SAP_DEVELOPERS_IMS_CONCEPTS
-             SET EMBEDDING = ?, EMBEDDING_VEC = TO_REAL_VECTOR(?)
+             SET EMBEDDING = ?, EMBEDDINGVEC = TO_REAL_VECTOR(?)
              WHERE ID = ?`,
             [blob, vecStr, id]
           );
@@ -302,9 +302,9 @@ describe('#1113 topConceptsByCosine HANA branch', () => {
     const { sql, params } = db._runs[0]
 
     // Uses the vector engine.
-    expect(sql).toMatch(/COSINE_SIMILARITY\s*\(\s*EMBEDDING_VEC\s*,\s*TO_REAL_VECTOR\s*\(\s*\?\s*\)\s*\)/i)
+    expect(sql).toMatch(/COSINE_SIMILARITY\s*\(\s*EMBEDDINGVEC\s*,\s*TO_REAL_VECTOR\s*\(\s*\?\s*\)\s*\)/i)
     // Guards against the transient state during backfill.
-    expect(sql).toMatch(/EMBEDDING_VEC\s+IS\s+NOT\s+NULL/i)
+    expect(sql).toMatch(/EMBEDDINGVEC\s+IS\s+NOT\s+NULL/i)
     // Publish gate preserved.
     expect(sql).toMatch(/STATUS\s*=\s*'ACTIVE'/i)
     expect(sql).toMatch(/PUBLISHEDAT\s+IS\s+NOT\s+NULL/i)
@@ -365,7 +365,7 @@ Edit `srv/lib/kg/concept-embedding-query.js`. Replace the entire HANA branch (or
 
 ```js
   if (isHana(db)) {
-    // #1113: single-round-trip cosine using HANA's vector engine. `EMBEDDING_VEC`
+    // #1113: single-round-trip cosine using HANA's vector engine. `EMBEDDINGVEC`
     // is REAL_VECTOR(1536) added in the same PR. `TO_REAL_VECTOR(?)` accepts a
     // JSON-array string literal — the driver's binary REAL_VECTOR wire format
     // is undocumented and rejects arbitrary blobs (we hit "dimension of
@@ -373,15 +373,15 @@ Edit `srv/lib/kg/concept-embedding-query.js`. Replace the entire HANA branch (or
     // below Float32 precision but well above cosine sensitivity — identical
     // inputs still score 1.0 to ~5 places.
     //
-    // WHERE EMBEDDING_VEC IS NOT NULL guards the transient state during
+    // WHERE EMBEDDINGVEC IS NOT NULL guards the transient state during
     // backfill; rows without a populated vector just don't appear as seeds.
     // The on-demand extraction path (#948) already handles the "no seeds" case.
     const vecStr = '[' + Array.from(q, x => x.toFixed(6)).join(',') + ']'
     return await db.run(
       `SELECT TOP ? ID as id, SLUG as slug, NAME as name,
-              COSINE_SIMILARITY(EMBEDDING_VEC, TO_REAL_VECTOR(?)) AS score
+              COSINE_SIMILARITY(EMBEDDINGVEC, TO_REAL_VECTOR(?)) AS score
        FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS
-       WHERE ${gate} AND EMBEDDING_VEC IS NOT NULL
+       WHERE ${gate} AND EMBEDDINGVEC IS NOT NULL
        ORDER BY score DESC`,
       [limit, vecStr],
     ) || []
@@ -802,7 +802,7 @@ describe.runIf(isSafeForWrites())('#1113 HANA cosine (hybrid)', () => {
     const [{ MISSING }] = await db.run(
       `SELECT COUNT(*) AS MISSING FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS
        WHERE STATUS = 'ACTIVE' AND PUBLISHEDAT IS NOT NULL AND MERGEDINTO_ID IS NULL
-         AND EMBEDDING IS NOT NULL AND EMBEDDING_VEC IS NULL`
+         AND EMBEDDING IS NOT NULL AND EMBEDDINGVEC IS NULL`
     )
     expect(MISSING, 'no ACTIVE row should have BLOB but null vector column post-backfill').toBe(0)
   }, 5 * 60 * 1000)  // Up to 5 minutes for a full backfill on cold DB.
@@ -977,7 +977,7 @@ mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
 cd ..
 ```
 
-Expected: 5-min deploy. HDI adds `EMBEDDING_VEC REAL_VECTOR(1536)` with NULLs; `tutorials-srv` and `tutorials-approuter` cycle. Watch for errors.
+Expected: 5-min deploy. HDI adds `EMBEDDINGVEC REAL_VECTOR(1536)` with NULLs; `tutorials-srv` and `tutorials-approuter` cycle. Watch for errors.
 
 - [ ] **Step 7: Kick the backfill job manually**
 
@@ -1003,7 +1003,7 @@ cds bind --exec -- node -e "
     const [{ MISSING }] = await db.run(\`
       SELECT COUNT(*) AS MISSING FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS
       WHERE STATUS='ACTIVE' AND PUBLISHEDAT IS NOT NULL AND MERGEDINTO_ID IS NULL
-        AND EMBEDDING IS NOT NULL AND EMBEDDING_VEC IS NULL\`);
+        AND EMBEDDING IS NOT NULL AND EMBEDDINGVEC IS NULL\`);
     console.log('rows still missing embeddingVec:', MISSING);
     process.exit(MISSING > 0 ? 1 : 0);
   })();

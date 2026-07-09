@@ -32,9 +32,9 @@ describe('#1113 topConceptsByCosine HANA branch', () => {
     const { sql, params } = db._runs[0]
 
     // Uses the vector engine.
-    expect(sql).toMatch(/COSINE_SIMILARITY\s*\(\s*EMBEDDING_VEC\s*,\s*TO_REAL_VECTOR\s*\(\s*\?\s*\)\s*\)/i)
+    expect(sql).toMatch(/COSINE_SIMILARITY\s*\(\s*EMBEDDINGVEC\s*,\s*TO_REAL_VECTOR\s*\(\s*\?\s*\)\s*\)/i)
     // Guards against the transient state during backfill.
-    expect(sql).toMatch(/EMBEDDING_VEC\s+IS\s+NOT\s+NULL/i)
+    expect(sql).toMatch(/EMBEDDINGVEC\s+IS\s+NOT\s+NULL/i)
     // Publish gate preserved.
     expect(sql).toMatch(/STATUS\s*=\s*'ACTIVE'/i)
     expect(sql).toMatch(/PUBLISHEDAT\s+IS\s+NOT\s+NULL/i)

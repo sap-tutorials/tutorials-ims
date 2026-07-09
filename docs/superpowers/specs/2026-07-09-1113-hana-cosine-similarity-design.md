@@ -62,11 +62,11 @@ computeKgSignal (unchanged public API from #1112)
         ↓
         ONE HANA round-trip:
             SELECT TOP N ID, SLUG, NAME,
-                   COSINE_SIMILARITY(EMBEDDING_VEC, TO_REAL_VECTOR(?)) AS score
+                   COSINE_SIMILARITY(EMBEDDINGVEC, TO_REAL_VECTOR(?)) AS score
             FROM   COM_SAP_DEVELOPERS_IMS_CONCEPTS
             WHERE  STATUS='ACTIVE' AND PUBLISHEDAT IS NOT NULL
                    AND MERGEDINTO_ID IS NULL
-                   AND EMBEDDING_VEC IS NOT NULL
+                   AND EMBEDDINGVEC IS NOT NULL
             ORDER BY score DESC
         ↓
         seed set (5–200 ms expected)
@@ -80,7 +80,7 @@ computeKgSignal (unchanged public API from #1112)
 
 | Table | Current column type | Change |
 |---|---|---|
-| `Concepts` (5,946 active rows) | `EMBEDDING BLOB` | Add `EMBEDDING_VEC REAL_VECTOR(1536)`; backfill; keep BLOB for rollback |
+| `Concepts` (5,946 active rows) | `EMBEDDING BLOB` | Add `EMBEDDINGVEC REAL_VECTOR(1536)`; backfill; keep BLOB for rollback |
 | `TutorialEmbedding` (step-level) | `EMBEDDING REAL_VECTOR(1536)` | **No schema change** — just rewrite the query |
 
 ### What stays the same
@@ -126,9 +126,9 @@ entity Concepts : cuid, managed {
    npx cds build --production
    ```
 2. Merge PR. Standard full MTA deploy runs `tutorials-db-deployer` — HDI adds
-   `EMBEDDING_VEC REAL_VECTOR(1536)` column with NULLs.
+   `EMBEDDINGVEC REAL_VECTOR(1536)` column with NULLs.
 3. Manually trigger `concept-embedding-backfill` via `/admin-ui/#jobs` (or wait
-   for its scheduled run). It sees `EMBEDDING_VEC IS NULL` on all 5,946 rows
+   for its scheduled run). It sees `EMBEDDINGVEC IS NULL` on all 5,946 rows
    and fills them.
 4. Backfill finishes; cosine query path lights up.
 
@@ -136,7 +136,7 @@ entity Concepts : cuid, managed {
 
 - **HDI adds column but deploy fails elsewhere:** empty column, existing BLOB
   intact, pre-#1113 JS-cosine path unaffected.
-- **Backfill job errors on a row:** `WHERE EMBEDDING_VEC IS NOT NULL` guard
+- **Backfill job errors on a row:** `WHERE EMBEDDINGVEC IS NOT NULL` guard
   skips it; it returns to the pool for the next run. Only impact: that
   concept is not seed-eligible until backfilled.
 - **HANA cosine misbehaves in prod:** git-revert code PR. BLOB still
@@ -161,9 +161,9 @@ export async function topConceptsByCosine({ db, queryVector, limit = 5 }) {
     const vecStr = '[' + Array.from(queryVector, x => x.toFixed(6)).join(',') + ']'
     return await db.run(
       `SELECT TOP ? ID as id, SLUG as slug, NAME as name,
-              COSINE_SIMILARITY(EMBEDDING_VEC, TO_REAL_VECTOR(?)) AS score
+              COSINE_SIMILARITY(EMBEDDINGVEC, TO_REAL_VECTOR(?)) AS score
        FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS
-       WHERE ${gate} AND EMBEDDING_VEC IS NOT NULL
+       WHERE ${gate} AND EMBEDDINGVEC IS NOT NULL
        ORDER BY score DESC`,
       [limit, vecStr]
     ) || []
@@ -183,7 +183,7 @@ export async function topConceptsByCosine({ db, queryVector, limit = 5 }) {
   parse per query is trivial next to 20 s of BLOB streaming.
 - **`TOP ?` bound param:** parameterizes `limit` so plan cache works
   across callers (5 for KG signal, up to 10 for expand).
-- **`EMBEDDING_VEC IS NOT NULL`:** covers the transient state during
+- **`EMBEDDINGVEC IS NOT NULL`:** covers the transient state during
   backfill. Rows not yet backfilled simply don't appear as seeds; on-demand
   extraction (#948) already handles the "no seeds" case.
 
@@ -242,14 +242,14 @@ for free.
 `srv/jobs/concept-embedding-backfill.js` gets two adjustments:
 
 1. **Candidate query:** change `WHERE EMBEDDING IS NULL` to
-   `WHERE EMBEDDING IS NULL OR EMBEDDING_VEC IS NULL` so rows with a BLOB
+   `WHERE EMBEDDING IS NULL OR EMBEDDINGVEC IS NULL` so rows with a BLOB
    but no vector column get filled.
 2. **UPDATE:** write both columns:
    ```js
    const vecStr = '[' + Array.from(vec, x => x.toFixed(6)).join(',') + ']';
    await dbHandle.run(
      `UPDATE COM_SAP_DEVELOPERS_IMS_CONCEPTS
-      SET EMBEDDING = ?, EMBEDDING_VEC = TO_REAL_VECTOR(?) WHERE ID = ?`,
+      SET EMBEDDING = ?, EMBEDDINGVEC = TO_REAL_VECTOR(?) WHERE ID = ?`,
      [blob, vecStr, id]
    );
    ```
@@ -267,10 +267,10 @@ untouched.
 **New:** `test/unit/kg/concept-embedding-query-hana.test.js` — structural
 probe with mocked `db.run`:
 
-- SQL contains `COSINE_SIMILARITY(EMBEDDING_VEC, TO_REAL_VECTOR(?))`.
+- SQL contains `COSINE_SIMILARITY(EMBEDDINGVEC, TO_REAL_VECTOR(?))`.
 - Vector param is `[...]` string with exactly 1,536 comma-separated floats.
 - `TOP ?` param carries the caller's `limit`.
-- `WHERE ... EMBEDDING_VEC IS NOT NULL` present.
+- `WHERE ... EMBEDDINGVEC IS NOT NULL` present.
 
 Sibling test for `on-demand-cosine-rank.js` covering the
 `MAX(COSINE_SIMILARITY(...)) GROUP BY TUTORIAL_ID` shape.
@@ -280,7 +280,7 @@ Sibling test for `on-demand-cosine-rank.js` covering the
 **New:** `test/hybrid/kg-hana-cosine.test.js` — three tests:
 
 1. **Backfill smoke:** run `runConceptEmbeddingBackfill`, then assert
-   `SELECT COUNT(*) FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS WHERE EMBEDDING_VEC
+   `SELECT COUNT(*) FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS WHERE EMBEDDINGVEC
    IS NULL AND STATUS='ACTIVE'` is 0 (or converges to 0 across two runs).
 2. **Latency SLO:** wall-clock a `topConceptsByCosine({limit:5})` call.
    Assert < 1,500 ms (10× safety margin over expected 100–200 ms).
@@ -301,7 +301,7 @@ CI workflow changes.
 
 1. `curl -sI https://tutorial-system-dev-tutorials-srv.../health` → 200.
 2. hana-cli: `SELECT COUNT(*) FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS WHERE
-   EMBEDDING_VEC IS NULL AND STATUS='ACTIVE' AND PUBLISHEDAT IS NOT NULL
+   EMBEDDINGVEC IS NULL AND STATUS='ACTIVE' AND PUBLISHEDAT IS NOT NULL
    AND MERGEDINTO_ID IS NULL` returns 0.
 3. Navigator: cold `POST /chat/stream` < 5 s; warm < 1 s.
 4. Metrics rollup: `search.kg.rerank.ms` p95 < 500 ms in first 5-min
