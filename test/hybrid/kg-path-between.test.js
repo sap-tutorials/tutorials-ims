@@ -26,24 +26,30 @@ async function callPathBetween(db, fromIri, toIri) {
   return r?.RESPONSE?.toString?.() || r?.RESPONSE || ''
 }
 
-// Parse SPARQL XML results with matchAll() to sidestep stateful regex pitfalls
-// (and the security-hook false positive on RegExp.exec()).
-function parseResults(xml) {
-  if (!xml) return []
-  const out = []
-  for (const m of xml.matchAll(/<result>([\s\S]*?)<\/result>/g)) {
-    const block = m[1]
-    const bindings = {}
-    for (const bm of block.matchAll(/<binding name="([^"]+)">[\s\S]*?<(uri|literal)[^>]*>([^<]+)</g)) {
-      bindings[bm[1]] = bm[3]
-    }
-    out.push(bindings)
+// Parse SPARQL-results+JSON bindings into flat { name: value } rows. KG_QUERY
+// requests `Accept: application/sparql-results+json`, so the proc emits JSON,
+// not XML (#1129 — the prior XML parser here silently returned [] against the
+// real proc, mirroring the parsePathSparql production bug).
+function parseResults(json) {
+  if (!json || typeof json !== 'string') return []
+  let parsed
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    return []
   }
-  return out
+  const bindings = Array.isArray(parsed?.results?.bindings) ? parsed.results.bindings : []
+  return bindings.map(b => {
+    const row = {}
+    for (const [name, cell] of Object.entries(b)) {
+      if (cell && typeof cell === 'object' && 'value' in cell) row[name] = cell.value
+    }
+    return row
+  })
 }
 
 // Production-realistic source tutorial. Verified via Task 2 smoke probe that
-// this slug pair returns valid SPARQL XML with PREREQ arm populated.
+// this slug pair returns valid SPARQL-results+JSON with PREREQ arm populated.
 const FROM_TUT = 'https://developers.sap.com/kg/tutorial/abap-dev-enhance-cds-view'
 const TO_TUT = 'https://developers.sap.com/kg/tutorial/btp-cap-beginner-bas-wizard'
 

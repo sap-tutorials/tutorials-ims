@@ -150,7 +150,7 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
 
   // Step 6: Call findPath (extracted to srv/lib/kg-path.js — same module
   // used by GET /graph/path. The shared helper handles slug→IRI conversion,
-  // kgQuery dispatch, and XML parse; we keep telemetry + dedup + hydration
+  // kgQuery dispatch, and JSON parse; we keep telemetry + dedup + hydration
   // + markdown rendering here.)
   let rawCandidates
   try {

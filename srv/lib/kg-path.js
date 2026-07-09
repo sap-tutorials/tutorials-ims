@@ -6,10 +6,11 @@
 // - srv/lib/graph-path-route.js (Phase 3 Track 3-B public HTTP endpoint
 //   GET /graph/path — returns JSON for the /explore/ overlay).
 //
-// The SPARQL execution + XML parse lives here. Consumers wrap the result
+// The SPARQL execution + JSON parse lives here. Consumers wrap the result
 // in their preferred shape; this module stays small and pure.
 //
 // Issue #446, Phase 3 Track 3-B PR 5/6.
+// #1129: parse fixed from XML → SPARQL-results+JSON (proc emits JSON).
 
 import { kgQuery } from './kg-sparql-client.js'
 
@@ -47,45 +48,69 @@ export async function findPath({ db, fromSlug, toSlug }) {
 }
 
 /**
- * Parse the SPARQL XML response from PATH_BETWEEN into a structured array.
+ * Parse the SPARQL-results+JSON response from PATH_BETWEEN into a structured
+ * array.
  *
- * Binding shape (verified against the Joule tool's existing parser):
- *   <result>
- *     <binding name="b"><uri>https://developers.sap.com/kg/tutorial/&lt;slug&gt;</uri></binding>
- *     <binding name="pathType"><literal>PREREQ|CO_COMPLETED|SHARED_CONCEPT</literal></binding>
- *     <binding name="pathTypeRank"><literal datatype="...integer">1|2|3</literal></binding>
- *     <binding name="hopCount"><literal datatype="...integer">N</literal></binding>
- *   </result>
+ * KG_QUERY.hdbprocedure calls SYS_SPARQL_EXECUTE with
+ * `Accept: application/sparql-results+json`, so the response is JSON — NOT
+ * XML — for every query type. Binding shape (verified against DEV HANA
+ * 2026-07-09):
+ *   {
+ *     "head": { "vars": ["b","pathType","pathTypeRank","hopCount"] },
+ *     "results": { "bindings": [
+ *       { "b":            { "type":"uri",     "value":"https://developers.sap.com/kg/tutorial/<slug>" },
+ *         "pathType":     { "type":"literal", "value":"PREREQ|CO_COMPLETED|SHARED_CONCEPT" },
+ *         "pathTypeRank": { "type":"literal", "datatype":"...#int", "value":"1|2|3" },
+ *         "hopCount":     { "type":"literal", "datatype":"...#int", "value":"N" } },
+ *       ...
+ *     ] }
+ *   }
  *
- * Rows missing `b`, `pathType`, or `pathTypeRank` are dropped silently
- * (same behaviour as the original Joule parser at
- * srv/lib/kg/joule-tool-find-path.js:198). `hopCount` defaults to 0
- * when absent.
+ * HISTORY (#1129): this parser previously used an XML `<result>` regex, which
+ * matched the (never-live) XML shape our unit-test fixtures fed it but NOT the
+ * JSON the proc actually emits. Result: it silently returned [] in production,
+ * so every /graph/path and Joule find-learning-path call 404'd "No path found"
+ * despite a fully-populated 83k-triple graph. Same class of bug fixed for
+ * EXPLORE_GRAPH_BULK on 2026-06-28 (see srv/lib/kg-explore-data.js
+ * parseExploreBindings); this brings PATH_BETWEEN in line.
  *
- * The literal-element regex tolerates an optional `datatype="..."` attribute
- * because the SPARQL XML serializer emits typed literals for the integer
- * bindings — the original Joule parser matched the same shape.
+ * Fails soft on any non-JSON body (e.g. an XML regression) — returns [] rather
+ * than throwing, mirroring parseExploreBindings. Rows missing `b`, `pathType`,
+ * or `pathTypeRank` are dropped; `hopCount` defaults to 0 when absent.
  *
- * @param {string} xml - SPARQL XML response body (the `.response` field
- *                       of a kgQuery() return value)
+ * @param {string} json - SPARQL JSON response body (the `.response` field
+ *                        of a kgQuery() return value)
  * @returns {Array<{slug:string, pathType:string, pathTypeRank:number, hopCount:number}>}
  */
-export function parsePathSparql(xml) {
-  if (!xml || typeof xml !== 'string') return []
+export function parsePathSparql(json) {
+  if (!json || typeof json !== 'string') return []
+
+  let parsed
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    // Non-JSON (e.g. legacy XML if the proc's Accept header ever regresses).
+    // Fail soft — never throw. The empty result surfaces as an upstream 404.
+    return []
+  }
+
+  const bindings =
+    parsed && parsed.results && Array.isArray(parsed.results.bindings)
+      ? parsed.results.bindings
+      : []
+
   const steps = []
-  for (const m of xml.matchAll(/<result>([\s\S]*?)<\/result>/g)) {
-    const block = m[1]
-    const bMatch = block.match(/<binding name="b">\s*<uri>([^<]+)<\/uri>/)
-    const ptMatch = block.match(/<binding name="pathType">\s*<literal[^>]*>([^<]+)</)
-    const rankMatch = block.match(/<binding name="pathTypeRank">\s*<literal[^>]*>([^<]+)</)
-    const hopMatch = block.match(/<binding name="hopCount">\s*<literal[^>]*>([^<]+)</)
+  for (const b of bindings) {
+    const tutorialIri = b?.b?.value
+    const pathType = b?.pathType?.value
+    const rankRaw = b?.pathTypeRank?.value
 
-    if (!bMatch || !ptMatch || !rankMatch) continue
+    // Required trio — drop the row if any is absent (matches the prior
+    // Joule parser semantics at srv/lib/kg/joule-tool-find-path.js).
+    if (tutorialIri == null || pathType == null || rankRaw == null) continue
 
-    const tutorialIri = bMatch[1].trim()
-    const pathType = ptMatch[1].trim()
-    const pathTypeRank = parseInt(rankMatch[1].trim(), 10)
-    const hopCount = hopMatch ? parseInt(hopMatch[1].trim(), 10) : 0
+    const pathTypeRank = parseInt(rankRaw, 10)
+    const hopCount = b?.hopCount?.value != null ? parseInt(b.hopCount.value, 10) : 0
 
     // Convert tutorial IRI to bare slug; preserve unknown IRIs as-is so a
     // stale projection row surfaces in logs rather than crashing the parse.
