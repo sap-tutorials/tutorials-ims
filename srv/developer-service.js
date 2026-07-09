@@ -9,6 +9,7 @@ import { resolveUser as khorosResolveUser } from './lib/khoros-client.js';
 import * as khorosCache from './lib/khoros-cache.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
 import * as metrics from './lib/metrics.js';
+import * as mcpDev from './lib/mcp-developer-tools.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
@@ -953,6 +954,13 @@ export default class DeveloperService extends cds.ApplicationService {
       }
       return { ...persisted, name: upstream.name, rank: upstream.rank, avatarUrl: upstream.avatarUrl || persisted.avatarUrl };
     });
+
+    // Phase 2 (#1105) — authenticated MCP curated tools
+    this.on('get_my_tutorials',       mcpDev.handleGetMyTutorials);
+    this.on('get_my_missions',        mcpDev.handleGetMyMissions);
+    this.on('get_my_events',          mcpDev.handleGetMyEvents);
+    this.on('get_my_completed_steps', mcpDev.handleGetMyCompletedSteps);
+    this.on('get_tutorial_step',      mcpDev.handleGetTutorialStep);
 
     await super.init();
   }

@@ -4,7 +4,7 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 @requires: 'any'
 // See note on SearchService: `@graphql` alone REPLACES the OData mount and
 // 404's /api/completeStep, /api/setKhorosLink, /api/getKhorosProfile, etc.
-@protocol: ['odata', 'graphql']
+@protocol: ['odata', 'graphql', 'mcp']
 service DeveloperService {
 
   // Exposed entities (restricted projections)
