@@ -5,21 +5,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../srv/lib/kg-sparql-client.js', () => ({
+  // KG_ADMIN_RUNSPARQL emits SPARQL-results+JSON (Accept:
+  // application/sparql-results+json), not XML (#1129 — matching the real proc
+  // output; the prior XML fixture masked a parser bug in concepts-for-user.js).
   kgAdminRunSparql: vi.fn(async () => ({
-    response: `<?xml version="1.0"?>
-<sparql xmlns="http://www.w3.org/2005/sparql-results#">
-  <head><variable name="c"/><variable name="status"/></head>
-  <results>
-    <result>
-      <binding name="c"><uri>https://developers.sap.com/kg/concept/cap-handlers</uri></binding>
-      <binding name="status"><literal>COMPLETED</literal></binding>
-    </result>
-    <result>
-      <binding name="c"><uri>https://developers.sap.com/kg/concept/cap-cds-query</uri></binding>
-      <binding name="status"><literal>IN_PROGRESS</literal></binding>
-    </result>
-  </results>
-</sparql>`,
+    response: JSON.stringify({
+      head: { vars: ['c', 'status'] },
+      results: {
+        bindings: [
+          {
+            c: { type: 'uri', value: 'https://developers.sap.com/kg/concept/cap-handlers' },
+            status: { type: 'literal', value: 'COMPLETED' },
+          },
+          {
+            c: { type: 'uri', value: 'https://developers.sap.com/kg/concept/cap-cds-query' },
+            status: { type: 'literal', value: 'IN_PROGRESS' },
+          },
+        ],
+      },
+    }),
     headers: '',
     latencyMs: 12,
   })),

@@ -79,26 +79,37 @@ function makeTelemetry() {
 }
 
 /**
- * Build a minimal SPARQL XML response for the PATH_BETWEEN query shape.
- * binding name "b" = tutorial IRI, "pathType", "pathTypeRank", "hopCount"
+ * Build a minimal SPARQL-results+JSON response for the PATH_BETWEEN query
+ * shape — the format KG_QUERY actually emits (Accept:
+ * application/sparql-results+json). binding "b" = tutorial IRI, plus
+ * "pathType", "pathTypeRank", "hopCount". (#1129: was XML; the proc never
+ * emitted XML, so the old fixtures masked the parser bug — see
+ * srv/lib/kg-path.js parsePathSparql history.)
  */
-function buildXmlResponse(results) {
-  const body = results
-    .map(
-      r => `
-    <result>
-      <binding name="b"><uri>https://developers.sap.com/kg/tutorial/${r.slug}</uri></binding>
-      <binding name="pathType"><literal>${r.pathType}</literal></binding>
-      <binding name="pathTypeRank"><literal datatype="http://www.w3.org/2001/XMLSchema#integer">${r.rank}</literal></binding>
-      <binding name="hopCount"><literal datatype="http://www.w3.org/2001/XMLSchema#integer">0</literal></binding>
-    </result>`
-    )
-    .join('')
-  return `<?xml version="1.0"?><sparql><results>${body}</results></sparql>`
+function buildJsonResponse(results) {
+  return JSON.stringify({
+    head: { vars: ['b', 'pathType', 'pathTypeRank', 'hopCount'] },
+    results: {
+      bindings: results.map(r => ({
+        b: { type: 'uri', value: `https://developers.sap.com/kg/tutorial/${r.slug}` },
+        pathType: { type: 'literal', value: r.pathType },
+        pathTypeRank: {
+          type: 'literal',
+          datatype: 'http://www.w3.org/2001/XMLSchema#int',
+          value: String(r.rank),
+        },
+        hopCount: {
+          type: 'literal',
+          datatype: 'http://www.w3.org/2001/XMLSchema#int',
+          value: '0',
+        },
+      })),
+    },
+  })
 }
 
-function emptyXml() {
-  return `<?xml version="1.0"?><sparql><results></results></sparql>`
+function emptyJson() {
+  return JSON.stringify({ head: { vars: [] }, results: { bindings: [] } })
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +163,7 @@ describe('findLearningPathHandler — fromSlug resolution', () => {
   })
 
   it('uses provided fromSlug and calls kgQuery with correct params', async () => {
-    kgQuery.mockResolvedValue({ response: emptyXml(), headers: '', latencyMs: 10 })
+    kgQuery.mockResolvedValue({ response: emptyJson(), headers: '', latencyMs: 10 })
 
     await findLearningPathHandler({
       db: makeDb(),
@@ -169,7 +180,7 @@ describe('findLearningPathHandler — fromSlug resolution', () => {
   })
 
   it('infers fromSlug from user TaskRecords and emits fromSlugInferred:true', async () => {
-    kgQuery.mockResolvedValue({ response: emptyXml(), headers: '', latencyMs: 10 })
+    kgQuery.mockResolvedValue({ response: emptyJson(), headers: '', latencyMs: 10 })
 
     const db = makeDb({ taskRecordSlug: 'hana-cloud-intro' })
     const tel = makeTelemetry()
@@ -192,7 +203,7 @@ describe('findLearningPathHandler — fromSlug resolution', () => {
   })
 
   it('anchors to toSlug when no fromSlug + zero TaskRecords, emits unanchored:true', async () => {
-    kgQuery.mockResolvedValue({ response: emptyXml(), headers: '', latencyMs: 10 })
+    kgQuery.mockResolvedValue({ response: emptyJson(), headers: '', latencyMs: 10 })
 
     const db = makeDb({ taskRecordSlug: null })
     const tel = makeTelemetry()
@@ -213,7 +224,7 @@ describe('findLearningPathHandler — fromSlug resolution', () => {
   })
 
   it('anchors to toSlug when user is anonymous (no user.id), emits unanchored:true + hasUserId:false', async () => {
-    kgQuery.mockResolvedValue({ response: emptyXml(), headers: '', latencyMs: 10 })
+    kgQuery.mockResolvedValue({ response: emptyJson(), headers: '', latencyMs: 10 })
 
     const tel = makeTelemetry()
 
@@ -238,7 +249,7 @@ describe('findLearningPathHandler — result parsing and rendering', () => {
 
   it('parses XML and renders both tutorial entries with their titles', async () => {
     kgQuery.mockResolvedValue({
-      response: buildXmlResponse([
+      response: buildJsonResponse([
         { slug: 'abap-intro', pathType: 'PREREQ', rank: 1 },
         { slug: 'cap-getting-started', pathType: 'CO_COMPLETED', rank: 2 },
       ]),
@@ -266,7 +277,7 @@ describe('findLearningPathHandler — result parsing and rendering', () => {
 
   it('returns "no path found" message when XML has no candidates', async () => {
     kgQuery.mockResolvedValue({
-      response: emptyXml(),
+      response: emptyJson(),
       headers: '',
       latencyMs: 5,
     })
@@ -285,7 +296,7 @@ describe('findLearningPathHandler — result parsing and rendering', () => {
 
   it('promotes toSlug to position 1 when exactTargetReached', async () => {
     kgQuery.mockResolvedValue({
-      response: buildXmlResponse([
+      response: buildJsonResponse([
         { slug: 'intermediate-step', pathType: 'PREREQ', rank: 1 },
         { slug: 'target-tutorial', pathType: 'CO_COMPLETED', rank: 2 },
       ]),
@@ -315,7 +326,7 @@ describe('findLearningPathHandler — result parsing and rendering', () => {
 
   it('deduplicates by slug — lowest pathTypeRank wins (PREREQ over CO_COMPLETED over SHARED)', async () => {
     kgQuery.mockResolvedValue({
-      response: buildXmlResponse([
+      response: buildJsonResponse([
         { slug: 'dup-tutorial', pathType: 'PREREQ', rank: 1 },
         { slug: 'dup-tutorial', pathType: 'CO_COMPLETED', rank: 2 },
         { slug: 'dup-tutorial', pathType: 'SHARED_CONCEPT', rank: 3 },
@@ -347,7 +358,7 @@ describe('findLearningPathHandler — result parsing and rendering', () => {
 
   it('renders estimated time in minutes', async () => {
     kgQuery.mockResolvedValue({
-      response: buildXmlResponse([
+      response: buildJsonResponse([
         { slug: 'timed-tutorial', pathType: 'SHARED_CONCEPT', rank: 3 },
       ]),
       headers: '',
@@ -378,7 +389,7 @@ describe('findLearningPathHandler — user-coverage filter', () => {
 
   it('filters out fully-covered candidates (leaves no-path message when only one candidate is covered)', async () => {
     kgQuery.mockResolvedValue({
-      response: buildXmlResponse([
+      response: buildJsonResponse([
         { slug: 'covered-tutorial', pathType: 'PREREQ', rank: 1 },
       ]),
       headers: '',
@@ -414,7 +425,7 @@ describe('findLearningPathHandler — user-coverage filter', () => {
 
   it('never drops toSlug even if fully covered by user concepts', async () => {
     kgQuery.mockResolvedValue({
-      response: buildXmlResponse([
+      response: buildJsonResponse([
         { slug: 'covered-target', pathType: 'PREREQ', rank: 1 },
       ]),
       headers: '',
@@ -456,7 +467,7 @@ describe('findLearningPathHandler — telemetry', () => {
   })
 
   it('emits path_requested first then path_returned with numeric latencyMs', async () => {
-    kgQuery.mockResolvedValue({ response: emptyXml(), headers: '', latencyMs: 8 })
+    kgQuery.mockResolvedValue({ response: emptyJson(), headers: '', latencyMs: 8 })
 
     const tel = makeTelemetry()
     await findLearningPathHandler({

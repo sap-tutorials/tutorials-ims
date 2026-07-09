@@ -107,17 +107,29 @@ LIMIT 5000`
     return { learned: [], partial: [], truncatedAt500 }
   }
 
-  // Step 5: parse XML with matchAll.
-  const xml = sparqlResult?.response || ''
+  // Step 5: parse the SPARQL-results+JSON response. KG_ADMIN_RUNSPARQL
+  // requests `Accept: application/sparql-results+json`, so the body is JSON,
+  // not XML (#1129 — the prior XML regex silently returned no concepts for
+  // every user, quietly degrading Joule path personalization; same root
+  // cause as parsePathSparql in srv/lib/kg-path.js).
+  const body = sparqlResult?.response || ''
   const learned = new Set()
   const partial = new Set()
-  for (const m of xml.matchAll(/<result>([\s\S]*?)<\/result>/g)) {
-    const block = m[1]
-    const cMatch = block.match(/<binding name="c">\s*<uri>([^<]+)<\/uri>/)
-    const sMatch = block.match(/<binding name="status">\s*<literal[^>]*>([^<]+)</)
-    if (!cMatch || !sMatch) continue
-    const conceptIri = cMatch[1]
-    const status = sMatch[1]
+  let parsed
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    // Fail soft on non-JSON (e.g. an XML regression) — treat as "no data".
+    parsed = null
+  }
+  const bindings =
+    parsed && parsed.results && Array.isArray(parsed.results.bindings)
+      ? parsed.results.bindings
+      : []
+  for (const b of bindings) {
+    const conceptIri = b?.c?.value
+    const status = b?.status?.value
+    if (conceptIri == null || status == null) continue
     const conceptSlug = conceptIri.startsWith(CONCEPT_IRI_PREFIX)
       ? conceptIri.slice(CONCEPT_IRI_PREFIX.length)
       : conceptIri
