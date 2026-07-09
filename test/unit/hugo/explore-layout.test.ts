@@ -36,6 +36,25 @@ describe('hugo/layouts/explore/single.html', () => {
     expect(html).toMatch(/\/explore-ui\/main-/)
   })
 
+  it('places the bundle <link>/<script> OUTSIDE #explore-app (#1131 regression)', () => {
+    // The Vue app mounts into #explore-app and REPLACES its children. If the
+    // stylesheet <link> or module <script> live INSIDE that div, Vue wipes the
+    // <link> from the DOM before the browser applies it → the Sigma canvas
+    // container collapses to 0 height and throws "Container has no height",
+    // rendering an empty page. Assert the CSS link appears before the
+    // #explore-app opening tag in the success branch.
+    const cssIdx = html.indexOf('/explore-ui/assets/')
+    const jsIdx = html.indexOf('/explore-ui/main-')
+    const mountIdx = html.indexOf('id="explore-app"')
+    expect(cssIdx).toBeGreaterThanOrEqual(0)
+    expect(jsIdx).toBeGreaterThanOrEqual(0)
+    expect(mountIdx).toBeGreaterThanOrEqual(0)
+    // Both assets must be emitted before the mount container opens, so they
+    // sit outside it and survive Vue's mount-time innerHTML replacement.
+    expect(cssIdx).toBeLessThan(mountIdx)
+    expect(jsIdx).toBeLessThan(mountIdx)
+  })
+
   it('defines a "main" Hugo block (inherits from baseof.html)', () => {
     expect(html).toMatch(/\{\{\s*define\s+"main"\s*\}\}/)
   })
