@@ -576,24 +576,6 @@
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
-.for-you-card__thumb {
-  aspect-ratio: 16 / 9;
-  background: var(--sapList_HeaderBackground, #f5f6f7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-.for-you-card__thumb img {
-  width: 100%; height: 100%; object-fit: cover; display: block;
-}
-.for-you-card__thumb--placeholder {
-  background: linear-gradient(135deg, #eaf2ff 0%, #d9e6ff 100%);
-}
-.for-you-card__kind-icon {
-  font-size: 2rem;
-  opacity: 0.75;
-}
 .for-you-card__body {
   padding: 0.75rem 1rem 1rem;
   display: flex;

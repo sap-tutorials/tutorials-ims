@@ -2,10 +2,6 @@
   <div class="for-you-cards cards">
     <template v-for="item in items" :key="item.ID">
       <a v-if="linkFor(item)" :href="linkFor(item)!" class="for-you-card">
-        <div class="for-you-card__thumb" :class="{ 'for-you-card__thumb--placeholder': !safeImage(item.imageUrl) }">
-          <img v-if="safeImage(item.imageUrl)" :src="safeImage(item.imageUrl)!" alt="" loading="lazy" />
-          <span v-else class="for-you-card__kind-icon" aria-hidden="true">{{ kindEmoji(item.kind) }}</span>
-        </div>
         <div class="for-you-card__body">
           <span class="for-you-card__kind">{{ kindLabel(item.kind) }}</span>
           <h3 class="for-you-card__title">{{ item.title }}</h3>
@@ -30,17 +26,6 @@ function kindLabel(kind: string): string {
     case 'video':    return 'Video';
     case 'shelf':    return 'Resource';
     default:         return kind || 'Resource';
-  }
-}
-
-function kindEmoji(kind: string): string {
-  switch (kind) {
-    case 'tutorial': return '📘';
-    case 'mission':  return '🎯';
-    case 'blog':     return '✍️';
-    case 'video':    return '▶️';
-    case 'shelf':    return '📚';
-    default:         return '✨';
   }
 }
 
@@ -96,17 +81,5 @@ function linkFor(it: ForYouItem): string | null {
       // Unknown kind → drop, don't guess.
       return null;
   }
-}
-
-function safeImage(url: string): string | null {
-  if (!url) return null;
-  // Same-origin absolute path — must NOT be protocol-relative ('//host/x').
-  if (url.startsWith('/') && !url.startsWith('//')) return url;
-  // External images: require an explicit http(s) scheme in the raw string,
-  // then confirm via URL parsing that the resolved protocol is http(s).
-  // Rejecting protocol-relative here avoids the parser-differential where
-  // '//evil.com/x.png' resolves against the page origin.
-  if (!url.startsWith('https://') && !url.startsWith('http://')) return null;
-  return isHttpUrl(url) ? url : null;
 }
 </script>
