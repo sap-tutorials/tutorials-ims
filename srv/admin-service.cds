@@ -5,6 +5,7 @@ using from '../db/knowledge-graph-ondemand';
 using from '../db/community-blogs';
 using from '../db/homepage-featured';
 using from '../db/views';
+using from '../db/mcp-pats';
 using from '../app/admin-annotations';
 
 @path: '/admin'
@@ -1038,5 +1039,24 @@ extend service AdminService with {
     inserted   : Integer;
     poolSize   : Integer;
     durationMs : Integer;
+  };
+}
+
+// Phase 2 (#1105): Personal Access Tokens admin surfaces.
+// MyPATs: user-scoped projection — each authenticated user sees only their own PATs.
+// PATsAdmin: admin-only audit view — all users' PATs, metadata only (no plaintext, no hash).
+extend service AdminService with {
+  // User-owned PATs (Phase 2 #1105). Everyone sees their own rows only.
+  @(requires: 'authenticated-user')
+  @(restrict: [{ grant: '*', to: 'Everyone', where: 'user.email = $user.id' }])
+  entity MyPATs as projection on ims.PATs {
+    ID, name, prefix, scopes, createdAt, expiresAt, lastUsedAt, revokedAt, createdFromIP
+  };
+
+  // Admin-only view for audit (all users' PATs). No plaintext, no hash — metadata only.
+  @(requires: 'Admin')
+  @readonly entity PATsAdmin as projection on ims.PATs {
+    ID, user.email as userEmail, name, prefix, scopes,
+    createdAt, expiresAt, lastUsedAt, revokedAt, createdFromIP
   };
 }
