@@ -73,7 +73,7 @@
     "predev": "npm run copy-joule-vendor && node -e \"var r=require('fs').existsSync('srv/data/admin-docs-index.json')?{status:0}:require('child_process').spawnSync('npx',['tsx','scripts/build-admin-docs-index.ts'],{stdio:'inherit',shell:true});if(r.status!==0)process.exit(r.status||1)\"",
     "prewatch": "node -e \"var r=require('fs').existsSync('srv/data/admin-docs-index.json')?{status:0}:require('child_process').spawnSync('npx',['tsx','scripts/build-admin-docs-index.ts'],{stdio:'inherit',shell:true});if(r.status!==0)process.exit(r.status||1)\"",
     "prebuild:cds": "npx tsx scripts/build-admin-docs-index.ts",
-    "dev": "hugo server --source hugo",
+    "dev": "node scripts/ensure-explore-manifest.cjs && hugo server --source hugo",
     "predocs:dev": "node scripts/copy-sap-fonts.cjs",
     "docs:dev": "vitepress dev docs",
     "predocs:build": "node scripts/copy-sap-fonts.cjs && node scripts/check-docs-sidebar.cjs",
