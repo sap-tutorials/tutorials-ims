@@ -13,10 +13,6 @@ import * as metrics from './metrics.js';
 const LOG = cds.log('mcp-dev');
 const SVC = 'DeveloperService';
 
-function toolCounter(tool, tokenSource, outcome) {
-  metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${tokenSource},outcome=${outcome}]`);
-}
-
 function tokenSource(req) {
   return req.user?.tokenSource ?? 'anon';
 }
