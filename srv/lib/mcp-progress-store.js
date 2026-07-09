@@ -101,6 +101,7 @@ export async function getMyEvents(user, { when = 'upcoming', limit = 20 } = {}) 
  * write tools delegate to the existing action, which DOES honor attempts.
  */
 export async function getMyCompletedSteps(user, slug) {
+  if (!slug || typeof slug !== 'string') return null;
   const dbUser = await resolveDbUser(user);
   if (!dbUser) return null;
   const { Tutorials, Steps, TaskRecords } = cds.entities(NS);
