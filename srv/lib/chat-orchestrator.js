@@ -606,7 +606,10 @@ export async function dispatchTool(name, args, user) {
       const requester = user?.id
         ? { id: user.id, kind: 'user' }
         : { kind: 'anon' };
-      return await expandSearchConceptsHandler({ db, embedClient, args, requester });
+      // #1111: pass embeddingModel too so computeKgSignal's embedInputs fallback
+      // path (used when the shared cache miss triggers a fresh embed) picks the
+      // same model as the direct embedClient.
+      return await expandSearchConceptsHandler({ db, embedClient, embeddingModel: model, args, requester });
     } catch (err) {
       LOG.warn('expandSearchConcepts dispatch failed:', err.message);
       return { queryEcho: args?.query ?? '', concepts: [], tutorials: [], warning: 'dispatch_failed' };

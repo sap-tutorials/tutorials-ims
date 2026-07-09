@@ -116,6 +116,9 @@ export function _setTestEmbedClient(client) {
  * @typedef {object} KgSignal
  * @property {Map<string, number>}  slugScores      slug → aggregate KG score (~0..1.5)
  * @property {Map<string, string>}  slugRationale   slug → "Teaches A and B"
+ * @property {Map<string, string>}  slugTitle       slug → tutorial title (added #1111 so
+ *                                                  expandSearchConcepts can reuse the
+ *                                                  cached signal without a second DB round-trip)
  * @property {Array<{slug:string,name:string,score:number}>} topConcepts
  * @property {number}               computedAt      ms epoch
  * @property {number}               latencyMs
@@ -125,6 +128,7 @@ export function _setTestEmbedClient(client) {
 const EMPTY_SIGNAL = Object.freeze({
   slugScores: new Map(),
   slugRationale: new Map(),
+  slugTitle: new Map(),
   topConcepts: [],
 });
 
@@ -132,6 +136,7 @@ function makeEmpty(warning) {
   return {
     slugScores: new Map(),
     slugRationale: new Map(),
+    slugTitle: new Map(),
     topConcepts: [],
     computedAt: Date.now(),
     latencyMs: 0,
@@ -314,25 +319,27 @@ async function _computeUncached({ key, phrase, db, embedClient, embeddingModel, 
     const conceptScoreById = new Map(allConcepts.map((c) => [c.id, c.score]));
     const conceptNameById = new Map(allConcepts.map((c) => [c.id, c.name]));
 
-    const perTutorial = new Map(); // tutorial_id → { slug, score, contribs: [{ conceptId, contribution }] }
+    const perTutorial = new Map(); // tutorial_id → { slug, title, score, contribs: [{ conceptId, contribution }] }
     for (const l of links) {
       const cs = conceptScoreById.get(l.concept_id) ?? 0;
       const contribution = cs * (Number(l.confidence) || 0);
       let bucket = perTutorial.get(l.tutorial_id);
       if (!bucket) {
-        bucket = { slug: l.tutorial_slug, score: 0, contribs: [] };
+        bucket = { slug: l.tutorial_slug, title: l.title, score: 0, contribs: [] };
         perTutorial.set(l.tutorial_id, bucket);
       }
       bucket.score += contribution;
       bucket.contribs.push({ conceptId: l.concept_id, contribution });
     }
 
-    // ---- 5. Build slugScores + slugRationale maps.
+    // ---- 5. Build slugScores + slugRationale + slugTitle maps.
     const slugScores = new Map();
     const slugRationale = new Map();
+    const slugTitle = new Map();
     for (const bucket of perTutorial.values()) {
       if (!bucket.slug || typeof bucket.slug !== 'string') continue;
       slugScores.set(bucket.slug, Number(bucket.score.toFixed(4)));
+      if (bucket.title) slugTitle.set(bucket.slug, bucket.title);
 
       const topTwo = bucket.contribs
         .sort((x, y) => y.contribution - x.contribution)
@@ -350,6 +357,7 @@ async function _computeUncached({ key, phrase, db, embedClient, embeddingModel, 
     const signal = {
       slugScores,
       slugRationale,
+      slugTitle,
       topConcepts: allConcepts.map((c) => ({
         slug: c.slug,
         name: c.name,
