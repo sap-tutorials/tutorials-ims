@@ -17,7 +17,13 @@ const WHEN_EVT   = ['upcoming', 'past', 'registered'];
 
 async function requireDbUser(req) {
   const dbUser = await resolveDbUser(req.user);
-  if (!dbUser) return req.reject(401, 'unable to resolve user');
+  if (!dbUser) {
+    // WARN-log the miss so a stale-OAuth-clientId or unmigrated user shows up
+    // in logs rather than a silent 401 (see resolveDbUser silent-resolution
+    // fact / #1049). req.reject throws, so callers never see a return value.
+    LOG.warn('[mcp-dev] resolveDbUser miss', { userId: req.user?.id, tokenSource: req.user?.tokenSource });
+    return req.reject(401, 'unable to resolve user');
+  }
   return dbUser;
 }
 
@@ -27,7 +33,7 @@ export async function handleGetMyTutorials(req) {
   catch (e) { return req.reject(400, e.message); }
   const limit = clampLimit(req.data.limit, 20, 50);
   const dbUser = await requireDbUser(req);
-  if (dbUser === undefined) return; // req.reject was called
+  if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive for mock contexts
   return store.getMyTutorials(req.user, { status, limit });
 }
 
@@ -37,7 +43,7 @@ export async function handleGetMyMissions(req) {
   catch (e) { return req.reject(400, e.message); }
   const limit = clampLimit(req.data.limit, 10, 50);
   const dbUser = await requireDbUser(req);
-  if (dbUser === undefined) return;
+  if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive
   return store.getMyMissions(req.user, { status, limit });
 }
 
@@ -47,7 +53,7 @@ export async function handleGetMyEvents(req) {
   catch (e) { return req.reject(400, e.message); }
   const limit = clampLimit(req.data.limit, 20, 50);
   const dbUser = await requireDbUser(req);
-  if (dbUser === undefined) return;
+  if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive
   return store.getMyEvents(req.user, { when, limit });
 }
 
@@ -55,7 +61,7 @@ export async function handleGetMyCompletedSteps(req) {
   const { slug } = req.data;
   if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
   const dbUser = await requireDbUser(req);
-  if (dbUser === undefined) return;
+  if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive
   const result = await store.getMyCompletedSteps(req.user, slug.toLowerCase());
   if (result === null) return req.reject(404, `tutorial not found: ${slug}`);
   return result;

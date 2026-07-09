@@ -4,7 +4,7 @@
 //   get_my_tutorials, get_my_missions, get_my_events,
 //   get_my_completed_steps, get_tutorial_step
 //
-// (#912 Task 11)
+// (#1105 Task 11)
 //
 // Auth pattern: basic-auth username becomes req.user.id, which resolveUserSapId
 // falls back to as sapId. Seed Users with sapId == the basic-auth username.
@@ -59,11 +59,15 @@ describe('DeveloperService authenticated MCP read tools', () => {
 
     // TaskRecords for get_my_tutorials:
     //   u1 has tut-a COMPLETED and tut-b IN_PROGRESS
-    //   u2 has tut-a COMPLETED (should not show up for u1)
+    //   u2 has tut-a COMPLETED and tut-c IN_PROGRESS — neither should leak to
+    //   u1. The u2 IN_PROGRESS row (tut-c) is the isolation tripwire: if the
+    //   store dropped its user filter, u1's status='all'/'in_progress' calls
+    //   would surface tut-c.
     await INSERT.into(TaskRecords).entries([
       { ID: 'tr-1', user_ID: 'u1-id', taskLegacyId: 1001, taskType: 'TUTORIAL', status: 'COMPLETED', attemptNumber: 1 },
       { ID: 'tr-2', user_ID: 'u1-id', taskLegacyId: 1002, taskType: 'TUTORIAL', status: 'IN_PROGRESS', attemptNumber: 1 },
       { ID: 'tr-3', user_ID: 'u2-id', taskLegacyId: 1001, taskType: 'TUTORIAL', status: 'COMPLETED', attemptNumber: 1 },
+      { ID: 'tr-4', user_ID: 'u2-id', taskLegacyId: 1003, taskType: 'TUTORIAL', status: 'IN_PROGRESS', attemptNumber: 1 },
       // STEP records for u1 on tut-a (all 3 steps completed)
       { ID: 'tr-s1', user_ID: 'u1-id', taskLegacyId: 2001, taskType: 'STEP', status: 'COMPLETED', attemptNumber: 1 },
       { ID: 'tr-s2', user_ID: 'u1-id', taskLegacyId: 2002, taskType: 'STEP', status: 'COMPLETED', attemptNumber: 1 },
@@ -76,10 +80,25 @@ describe('DeveloperService authenticated MCP read tools', () => {
       `/api/get_my_tutorials(status='in_progress',limit=10)`,
       auth1
     );
-    // u1 has exactly one in_progress tutorial: tut-b
+    // u1 has exactly one in_progress tutorial: tut-b. u2's in_progress tut-c
+    // must NOT appear — asserting the slug (not just the count) makes a
+    // dropped-user-filter leak fail here rather than pass silently.
     expect(data.value).toHaveLength(1);
     expect(data.value[0].slug).toBe('tut-b');
     expect(data.value[0].status).toBe('in_progress');
+    expect(data.value.map(r => r.slug)).not.toContain('tut-c'); // u2's row must not leak
+  });
+
+  it('get_my_tutorials isolates users — status=all returns only u1 slugs', async () => {
+    const { data } = await project.get(
+      `/api/get_my_tutorials(status='all',limit=50)`,
+      auth1
+    );
+    const slugs = data.value.map(r => r.slug).sort();
+    // u1's two tutorials only. u2 also has tut-a (COMPLETED) + tut-c
+    // (IN_PROGRESS); if the store's user filter regressed, tut-c would appear
+    // and this would be length 3.
+    expect(slugs).toEqual(['tut-a', 'tut-b']);
   });
 
   it('get_my_tutorials clamps limit to 50', async () => {
