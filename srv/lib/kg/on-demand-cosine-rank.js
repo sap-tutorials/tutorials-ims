@@ -3,21 +3,19 @@
 // Rank ACTIVE tutorials by MAX cosine similarity between a query vector
 // and any TutorialEmbedding step of that tutorial.
 //
-// Vector(1536) is a HANA BLOB — LOB expiry applies. Two-phase pattern:
-//   1. IDs + metadata only (no BLOB).
-//   2. Hydrate embeddings by ID in a second raw-SQL pass on HANA.
-// Same shape as srv/lib/kg/concept-embedding-query.js.
+// #1113: HANA branch now uses HANA's native COSINE_SIMILARITY over the
+// existing REAL_VECTOR(1536) column — one SQL round-trip for ranking,
+// one small IN-list for metadata hydration. No LOB locator issue because
+// TutorialEmbedding.EMBEDDING is REAL_VECTOR, not a BLOB.
 //
-// SQLite tests use raw db.run() for both phases because CDS QL INSERT
-// serializes Buffer as JSON {"type":"Buffer","data":[...]} rather than
-// a plain binary payload. Raw SQL SELECT returns a consistent base64 or
-// JSON string that decodeEmbedding handles. HANA always uses raw SQL for
-// LOB-locator safety.
+// SQLite branch unchanged — small dev dataset; JS-side cosine over BLOBs.
 //
 // Result: top-K { tutorialId, slug, title, score } sorted by score DESC.
 //
-// Spec: docs/superpowers/specs/2026-07-05-948-kg-ondemand-triggers-design.md §1
-// Issue: #948
+// Spec: docs/superpowers/specs/2026-07-09-1113-hana-cosine-similarity-design.md
+// Issue: #1113
+
+import { fetchTutorialsByIds } from './_search-fetches.js';
 
 const DIMS = 1536;
 const BYTES_PER_FLOAT = 4;
@@ -76,6 +74,11 @@ function isHana(db) {
  * Rank ACTIVE tutorials by MAX cosine similarity between queryVector and
  * any TutorialEmbedding step.
  *
+ * #1113: HANA branch now uses the vector engine (COSINE_SIMILARITY over
+ * REAL_VECTOR(1536) — the column type TutorialEmbedding already had). One
+ * SQL round-trip for the ranking, one small IN-list for metadata hydration.
+ * SQLite branch unchanged — small dev dataset, JS-side cosine is fine.
+ *
  * @param {object} opts
  * @param {object} opts.db          cds.connect.to('db') handle
  * @param {Float32Array|number[]} opts.queryVector  1536-dim query embedding
@@ -87,47 +90,60 @@ export async function rankTutorialsByQueryVector({ db, queryVector, limit = 5 })
     ? queryVector
     : Float32Array.from(queryVector);
 
-  // Phase 1: fetch ACTIVE tutorial IDs + metadata (no BLOB).
-  // Use raw db.run() on both paths so the embedding BLOB comes back as a
-  // consistent base64 string (same as concept-embedding-query.js's SQLite path).
-  // CDS QL INSERT serializes Buffer as JSON {type:"Buffer",data:[...]};
-  // raw SQL SELECT returns it as a base64 string that decodeEmbedding handles.
-  let activeTutorials;
   if (isHana(db)) {
-    activeTutorials = await db.run(
-      `SELECT ID, SLUG, TITLE FROM COM_SAP_DEVELOPERS_IMS_TUTORIALS WHERE STATUS = 'ACTIVE'`
-    );
-    if (!activeTutorials || activeTutorials.length === 0) return [];
-    activeTutorials = activeTutorials.map(r => ({ ID: r.ID, slug: r.SLUG, title: r.TITLE }));
-  } else {
-    const rows = await db.run(
-      `SELECT ID, slug, title FROM com_sap_developers_ims_Tutorials WHERE status = 'ACTIVE'`
-    );
-    if (!rows || rows.length === 0) return [];
-    activeTutorials = rows;
+    // Serialize as HANA REAL_VECTOR string literal — same convention as
+    // concept-embedding-query.js and the backfill job. See #1113 spec.
+    const vecStr = '[' + Array.from(q, x => x.toFixed(6)).join(',') + ']';
+
+    // Phase 1: HANA does the cosine + top-K in one round-trip.
+    // JOIN to Tutorials to enforce the ACTIVE gate — mirrors the SQLite branch. #1113 fix.
+    // #1113 Task 6: aliases MUST be double-quoted — HANA folds unquoted identifiers to uppercase (see kg-hana-cosine hybrid test).
+    const ranked = await db.run(
+      `SELECT TOP ? te.TUTORIAL_ID as "tutorial_id",
+              MAX(COSINE_SIMILARITY(te.EMBEDDING, TO_REAL_VECTOR(?))) AS "score"
+       FROM COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING te
+       JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS t ON t.ID = te.TUTORIAL_ID
+       WHERE te.EMBEDDING IS NOT NULL AND t.STATUS = 'ACTIVE'
+       GROUP BY te.TUTORIAL_ID
+       ORDER BY "score" DESC`,
+      [limit, vecStr]
+    ) || [];
+    if (ranked.length === 0) return [];
+
+    // Phase 2: hydrate slug/title for the winners. Delegates to _search-fetches.
+    const ids = ranked.map(r => r.tutorial_id);
+    const metaRows = await fetchTutorialsByIds(db, ids);
+    const metaById = new Map(metaRows.map(m => [m.id, m]));
+
+    return ranked
+      .map(r => {
+        const meta = metaById.get(r.tutorial_id);
+        return meta
+          ? { tutorialId: r.tutorial_id, slug: meta.slug, title: meta.title, score: r.score }
+          : null;
+      })
+      .filter(Boolean);
   }
 
-  const metaById = new Map(activeTutorials.map(t => [t.ID, t]));
-
-  // Phase 2: fetch embeddings for ACTIVE tutorials only.
-  // On HANA: raw db.run() to avoid LOB locator expiry.
-  // On SQLite: also raw db.run() so the BLOB comes back as a base64 string
-  //   (CDS QL returns Buffer serialized as {"type":"Buffer","data":[...]} JSON).
+  // SQLite path — unchanged. Small dev dataset; JS-side cosine over the full
+  // TutorialEmbedding table + ACTIVE Tutorials join. See git history for
+  // the pre-#1113 implementation.
+  const rows = await db.run(
+    `SELECT ID, slug, title FROM com_sap_developers_ims_Tutorials WHERE status = 'ACTIVE'`
+  );
+  if (!rows || rows.length === 0) return [];
+  const metaById = new Map(rows.map(t => [t.ID, t]));
   const ids = [...metaById.keys()];
-  let rows;
-  if (isHana(db)) {
-    const placeholders = ids.map(() => '?').join(',');
-    const sql = `SELECT TUTORIAL_ID, STEPNUMBER, EMBEDDING FROM COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING WHERE TUTORIAL_ID IN (${placeholders})`;
-    rows = await db.run(sql, ids);
-  } else {
-    const placeholders = ids.map(() => '?').join(',');
-    const sql = `SELECT tutorial_ID, stepNumber, embedding FROM com_sap_developers_ims_TutorialEmbedding WHERE tutorial_ID IN (${placeholders})`;
-    rows = await db.run(sql, ids);
-  }
+  const placeholders = ids.map(() => '?').join(',');
+  const embRows = await db.run(
+    `SELECT tutorial_ID, stepNumber, embedding
+     FROM com_sap_developers_ims_TutorialEmbedding
+     WHERE tutorial_ID IN (${placeholders})`,
+    ids
+  );
 
-  // Compute MAX(cosine) per tutorial.
   const bestByTutorial = new Map();
-  for (const r of rows) {
+  for (const r of embRows) {
     const tid = r.tutorial_ID ?? r.TUTORIAL_ID;
     const emb = decodeEmbedding(r.embedding ?? r.EMBEDDING);
     if (!emb) continue;
@@ -136,7 +152,7 @@ export async function rankTutorialsByQueryVector({ db, queryVector, limit = 5 })
     if (c > prev) bestByTutorial.set(tid, c);
   }
 
-  const scored = [...bestByTutorial.entries()]
+  return [...bestByTutorial.entries()]
     .map(([tid, score]) => {
       const meta = metaById.get(tid);
       return meta ? { tutorialId: tid, slug: meta.slug, title: meta.title, score } : null;
@@ -144,6 +160,4 @@ export async function rankTutorialsByQueryVector({ db, queryVector, limit = 5 })
     .filter(Boolean)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
-
-  return scored;
 }

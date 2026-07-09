@@ -37,34 +37,30 @@ export async function topConceptsByCosine({ db, queryVector, limit = 5 }) {
   const gate = "STATUS = 'ACTIVE' AND PUBLISHEDAT IS NOT NULL AND MERGEDINTO_ID IS NULL"
 
   if (isHana(db)) {
-    // Step 1: IDs + metadata only (no BLOB)
-    const metaRows = await db.run(
-      `SELECT ID, SLUG, NAME FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS WHERE ${gate}`
-    )
-    if (!metaRows || metaRows.length === 0) return []
-    // Step 2: Hydrate embeddings in bounded batches to avoid huge IN clauses
-    const scored = []
-    const BATCH = 200
-    for (let i = 0; i < metaRows.length; i += BATCH) {
-      const chunk = metaRows.slice(i, i + BATCH)
-      const placeholders = chunk.map(() => '?').join(',')
-      const embRows = await db.run(
-        `SELECT ID, EMBEDDING FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS WHERE ID IN (${placeholders})`,
-        chunk.map(r => r.ID)
-      )
-      const embMap = new Map()
-      for (const r of embRows || []) {
-        const v = decodeEmbedding(r.EMBEDDING)
-        if (v) embMap.set(r.ID, v)
-      }
-      for (const meta of chunk) {
-        const v = embMap.get(meta.ID)
-        if (!v) continue
-        scored.push({ id: meta.ID, slug: meta.SLUG, name: meta.NAME, score: cosine(q, v) })
-      }
-    }
-    scored.sort((a, b) => b.score - a.score)
-    return scored.slice(0, limit)
+    // #1113: single-round-trip cosine using HANA's vector engine. `EMBEDDINGVEC`
+    // (materialized as EMBEDDINGVEC in HANA — camelCase → uppercase, no underscore,
+    // CAP convention) is REAL_VECTOR(1536) added in the same PR. `TO_REAL_VECTOR(?)`
+    // accepts a JSON-array string literal — the driver's binary REAL_VECTOR wire
+    // format is undocumented and rejects arbitrary blobs (we hit "dimension of
+    // 3172474880" during exploration). 6-decimal precision on the query side is
+    // below Float32 precision but well above cosine sensitivity — identical
+    // inputs still score 1.0 to ~5 places.
+    //
+    // WHERE EMBEDDINGVEC IS NOT NULL guards the transient state during
+    // backfill; rows without a populated vector just don't appear as seeds.
+    // The on-demand extraction path (#948) already handles the "no seeds" case.
+    // Aliases MUST be double-quoted for HANA to preserve lowercase — HANA folds
+    // unquoted identifiers to uppercase, so `AS score` returns key `SCORE` and
+    // callers expecting `.score` get `undefined`. Same for `id`/`slug`/`name`.
+    const vecStr = '[' + Array.from(q, x => x.toFixed(6)).join(',') + ']'
+    return await db.run(
+      `SELECT TOP ? ID as "id", SLUG as "slug", NAME as "name",
+              COSINE_SIMILARITY(EMBEDDINGVEC, TO_REAL_VECTOR(?)) AS "score"
+       FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS
+       WHERE ${gate} AND EMBEDDINGVEC IS NOT NULL
+       ORDER BY "score" DESC`,
+      [limit, vecStr],
+    ) || []
   }
 
   // SQLite path — small dataset in tests, full scan is fine.

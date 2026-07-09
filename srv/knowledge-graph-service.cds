@@ -59,7 +59,7 @@ service KnowledgeGraphService @(path : '/graph') {
   // (never projected) and the project's "LargeBinary stays off OData unless
   // tagged @Core.MediaType" convention.
   @cds.redirection.target
-  entity Concepts                       as projection on ims.Concepts excluding { embedding };
+  entity Concepts                       as projection on ims.Concepts excluding { embedding, embeddingVec };
 
   @readonly entity ConceptEdges         as projection on ims.ConceptEdges;
 

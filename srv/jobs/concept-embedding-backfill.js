@@ -43,8 +43,9 @@ async function resolveModel() {
 }
 
 async function fetchCandidates(db) {
-  // Publish gate: ACTIVE + published + not merged; embedding IS NULL for backfill.
-  // (Concepts has no embeddedAt column — schema-add is out of scope for #943.)
+  // #1113: pick up rows missing EITHER the legacy BLOB OR the new vector column.
+  // Rows with a BLOB but no vector column are the transition case — they'll get
+  // both columns re-written in the UPDATE below. See spec §Backfill.
   if (isHana(db)) {
     return await db.run(
       `SELECT ID as id, SLUG as slug, NAME as name, DESCRIPTION as description
@@ -52,7 +53,7 @@ async function fetchCandidates(db) {
        WHERE STATUS = 'ACTIVE'
          AND PUBLISHEDAT IS NOT NULL
          AND MERGEDINTO_ID IS NULL
-         AND EMBEDDING IS NULL`
+         AND (EMBEDDING IS NULL OR EMBEDDINGVEC IS NULL)`
     ) || [];
   }
   return await db.run(
@@ -61,7 +62,7 @@ async function fetchCandidates(db) {
      WHERE status = 'ACTIVE'
        AND publishedAt IS NOT NULL
        AND mergedInto_ID IS NULL
-       AND embedding IS NULL`
+       AND (embedding IS NULL OR embeddingVec IS NULL)`
   ) || [];
 }
 
@@ -124,15 +125,26 @@ export async function runConceptEmbeddingBackfill({ db, embedClient, telemetry, 
           throw new Error(`bad vector length ${vec?.length ?? 'null'}`);
         }
         const blob = encodeEmbedding(vec);
+        // #1113: also serialize as HANA REAL_VECTOR string literal so the vector
+        // column populates. 6-decimal precision is well above cosine sensitivity;
+        // matches the query-side serialization in srv/lib/kg/concept-embedding-query.js.
+        const vecStr = '[' + Array.from(vec, x => x.toFixed(6)).join(',') + ']';
         if (isHana(dbHandle)) {
           await dbHandle.run(
-            `UPDATE COM_SAP_DEVELOPERS_IMS_CONCEPTS SET EMBEDDING = ? WHERE ID = ?`,
-            [blob, id]
+            `UPDATE COM_SAP_DEVELOPERS_IMS_CONCEPTS
+             SET EMBEDDING = ?, EMBEDDINGVEC = TO_REAL_VECTOR(?)
+             WHERE ID = ?`,
+            [blob, vecStr, id]
           );
         } else {
+          // SQLite has no REAL_VECTOR — store the string form so the unit test
+          // can observe the second column is filled. HANA is the only path
+          // that runs the fast cosine query; SQLite tests exercise the JS fallback.
           await dbHandle.run(
-            `UPDATE com_sap_developers_ims_Concepts SET embedding = ? WHERE ID = ?`,
-            [blob, id]
+            `UPDATE com_sap_developers_ims_Concepts
+             SET embedding = ?, embeddingVec = ?
+             WHERE ID = ?`,
+            [blob, vecStr, id]
           );
         }
         processed++;

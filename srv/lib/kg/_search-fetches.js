@@ -11,6 +11,12 @@
 // don't have to think about dialects. Both variants use raw `db.run()` with
 // positional placeholders (no `cds.ql` builder mixing).
 //
+// #1113: HANA folds UNQUOTED aliases to uppercase — all HANA-branch aliases
+// MUST be double-quoted (e.g. `ID as "id"`) so raw db.run() rows come back
+// with the lowercase keys consumers read. Verified by live probe. SQLite
+// branches use physical lowercase column names and stay unquoted (SQLite is
+// case-insensitive and does not uppercase unquoted aliases).
+//
 // See also: srv/lib/kg/concept-embedding-query.js — the cosine layer over
 // Concepts.embedding (BLOB, Float32 LE, 1536 dims) — for the LOB-locator
 // avoidance pattern this file mirrors.
@@ -31,7 +37,7 @@ export async function fetchEdges(db, sourceIds) {
   const placeholders = sourceIds.map(() => '?').join(',')
   if (isHana(db)) {
     return await db.run(
-      `SELECT SOURCE_ID as source_id, TARGET_ID as target_id, PREDICATE as predicate, CONFIDENCE as confidence
+      `SELECT SOURCE_ID as "source_id", TARGET_ID as "target_id", PREDICATE as "predicate", CONFIDENCE as "confidence"
        FROM COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES
        WHERE PREDICATE IN ('requires','relatedTo') AND SOURCE_ID IN (${placeholders})`,
       sourceIds,
@@ -56,7 +62,7 @@ export async function fetchConceptsByIds(db, ids) {
   const placeholders = ids.map(() => '?').join(',')
   if (isHana(db)) {
     return await db.run(
-      `SELECT ID as id, SLUG as slug, NAME as name
+      `SELECT ID as "id", SLUG as "slug", NAME as "name"
        FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS
        WHERE ID IN (${placeholders})
          AND STATUS = 'ACTIVE' AND PUBLISHEDAT IS NOT NULL AND MERGEDINTO_ID IS NULL`,
@@ -82,8 +88,8 @@ export async function fetchLinks(db, conceptIds) {
   const placeholders = conceptIds.map(() => '?').join(',')
   if (isHana(db)) {
     return await db.run(
-      `SELECT l.CONCEPT_ID as concept_id, l.TUTORIAL_ID as tutorial_id, l.CONFIDENCE as confidence,
-              t.SLUG as tutorial_slug, t.TITLE as title
+      `SELECT l.CONCEPT_ID as "concept_id", l.TUTORIAL_ID as "tutorial_id", l.CONFIDENCE as "confidence",
+              t.SLUG as "tutorial_slug", t.TITLE as "title"
        FROM COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS l
        JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS t ON t.ID = l.TUTORIAL_ID
        WHERE l.PREDICATE = 'teaches' AND l.CONCEPT_ID IN (${placeholders})`,
@@ -97,5 +103,35 @@ export async function fetchLinks(db, conceptIds) {
      JOIN com_sap_developers_ims_Tutorials t ON t.ID = l.tutorial_ID
      WHERE l.predicate = 'teaches' AND l.concept_ID IN (${placeholders})`,
     conceptIds,
+  ) || []
+}
+
+/**
+ * Hydrate Tutorial metadata (id, slug, title) for a set of tutorial IDs.
+ * Sibling of `fetchConceptsByIds` — same two-phase "IDs first, then metadata"
+ * pattern that avoids selecting BLOBs alongside metadata on HANA. Added by
+ * #1113 as the metadata-hydration step for the rewritten on-demand cosine
+ * rank (srv/lib/kg/on-demand-cosine-rank.js), which fetches tutorial IDs
+ * from a HANA cosine query and hydrates slug/title in a second small query.
+ *
+ * Returns rows with lowercased keys regardless of dialect. Rows that don't
+ * exist are silently dropped.
+ */
+export async function fetchTutorialsByIds(db, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return []
+  const placeholders = ids.map(() => '?').join(',')
+  if (isHana(db)) {
+    return await db.run(
+      `SELECT ID as "id", SLUG as "slug", TITLE as "title"
+       FROM COM_SAP_DEVELOPERS_IMS_TUTORIALS
+       WHERE ID IN (${placeholders})`,
+      ids,
+    ) || []
+  }
+  return await db.run(
+    `SELECT ID as id, slug, title
+     FROM com_sap_developers_ims_Tutorials
+     WHERE ID IN (${placeholders})`,
+    ids,
   ) || []
 }
