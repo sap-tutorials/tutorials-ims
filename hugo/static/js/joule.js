@@ -552,6 +552,22 @@
 
     let assistantBubble = null;
     let assistantText = '';
+    // When the LLM decides to call a tool mid-answer, its prose for that turn
+    // ends without any trailing separator, and the FOLLOWING turn's deltas
+    // begin with a new sentence (typically "Now let me fetch…"). The server
+    // streams the two turns as one logical answer, so we accumulate both
+    // into `assistantText` for a single rendered bubble. Without a
+    // separator, markdown-it sees no `\n\n` between the two prose chunks and
+    // renders them as one run-on paragraph — the exact symptom Tom reported
+    // for the "Ask Joule for tutorial improvement suggestions" flow, where
+    // several analytics/step-content tool calls stitch three turns of prose
+    // into a single unreadable wall of text.
+    //
+    // Fix: after any tool-related SSE frame, mark that the next delta starts
+    // a new turn. When that delta arrives, insert a paragraph break before
+    // appending it — but only if the accumulated text doesn't already end
+    // with one and the incoming delta doesn't already start with one.
+    let needsTurnBreak = false;
     const toolChips = [];
 
     function ensureBubble() {
@@ -604,29 +620,46 @@
         try {
           const payload = JSON.parse(line.slice(5).trim());
           if (payload.type === 'delta') {
+            if (needsTurnBreak && payload.content) {
+              // Only insert if the accumulated text doesn't already end with a
+              // paragraph break and the incoming delta doesn't already open
+              // with one. Being permissive here avoids stacking `\n\n\n\n` if
+              // the model happens to end a turn cleanly.
+              const endsBlank = /\n\s*\n\s*$/.test(assistantText);
+              const startsBlank = /^\s*\n/.test(payload.content);
+              if (!endsBlank && !startsBlank) {
+                assistantText += '\n\n';
+              }
+              needsTurnBreak = false;
+            }
             assistantText += payload.content;
             window.__jouleRender.setMarkdown(ensureBubble(), assistantText);
             scrollToBottom(body);
           } else if (payload.type === 'tool') {
             typingEl.remove();
+            needsTurnBreak = true;
             const chip = document.createElement('div');
             chip.className = 'joule-tool-chip';
             chip.textContent = `Searching for ${payload.args?.query || '…'}`;
             transcript.insertBefore(chip, assistantBubble);
             toolChips.push(chip);
           } else if (payload.type === 'tutorial-cards') {
+            needsTurnBreak = true;
             if (Array.isArray(payload.items) && payload.items.length) {
               renderTutorialCards(payload.items);
             }
           } else if (payload.type === 'doc-citations') {
+            needsTurnBreak = true;
             if (Array.isArray(payload.items) && payload.items.length) {
               renderDocCitations(payload.items);
             }
           } else if (payload.type === 'step-citations') {
+            needsTurnBreak = true;
             if (Array.isArray(payload.items) && payload.items.length) {
               renderStepCitations(payload.items);
             }
           } else if (payload.type === 'analytics-result') {
+            needsTurnBreak = true;
             renderAnalyticsTable(payload);
           } else if (payload.type === 'done') {
             typingEl.remove();
