@@ -3,11 +3,11 @@ import cds from '@sap/cds';
 
 let model;
 
-describe('PATs schema and AdminService.MyPATs projection', () => {
+describe('PATs schema and PatService.MyPATs projection', () => {
   beforeAll(async () => {
-    // Load db model + admin service so we can inspect CSN definitions.
+    // Load db model + pat service so we can inspect CSN definitions.
     // Using cds.load with the full db folder ensures transitive deps (schema.cds etc.) resolve.
-    model = await cds.load('srv/admin-service.cds');
+    model = await cds.load('srv/pat-service.cds');
   });
 
   it('defines com.sap.developers.ims.PATs', () => {
@@ -19,8 +19,8 @@ describe('PATs schema and AdminService.MyPATs projection', () => {
     }
   });
 
-  it('exposes AdminService.MyPATs scoped by user.ID', () => {
-    const proj = model.definitions['AdminService.MyPATs'];
+  it('exposes PatService.MyPATs scoped by user.ID', () => {
+    const proj = model.definitions['PatService.MyPATs'];
     expect(proj).toBeDefined();
   });
 

@@ -8,12 +8,10 @@ const project = cds.test('serve', '--project', '.', '--in-memory');
 // alice@example.com is used as sapId (resolveUserSapId falls back to user.id in unit/basic-auth contexts).
 const ALICE_ID = 'alice@example.com';
 const aliceUser = { id: ALICE_ID };
-// AdminService is @requires:'Admin' at service level; unit tests must pass Admin role
-// to pass the service gate. The actions themselves carry @(requires:'authenticated-user')
-// which is the correct production annotation for the approuter-ingress path.
-const ALICE_ROLES = { 'authenticated-user': true, Admin: true };
+// PatService is @requires:'authenticated-user' at service level; unit tests must pass that role.
+const ALICE_ROLES = { 'authenticated-user': true };
 
-/** Call an unbound AdminService action as the given user. */
+/** Call an unbound PatService action as the given user. */
 async function callAction(srv, event, data, user = aliceUser) {
   return srv.tx(
     { user: { id: user.id, roles: ALICE_ROLES } },
@@ -21,11 +19,11 @@ async function callAction(srv, event, data, user = aliceUser) {
   );
 }
 
-describe('AdminService.mintPAT + revokePAT', () => {
+describe('PatService.mintPAT + revokePAT', () => {
   let srv;
 
   beforeAll(async () => {
-    srv = await cds.connect.to('AdminService');
+    srv = await cds.connect.to('PatService');
     const { Users } = cds.entities('com.sap.developers.ims');
     // Upsert — idempotent if test suite restarts.
     const existing = await SELECT.one.from(Users).where({ sapId: ALICE_ID });

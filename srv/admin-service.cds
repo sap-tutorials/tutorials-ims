@@ -1043,28 +1043,15 @@ extend service AdminService with {
 }
 
 // Phase 2 (#1105): Personal Access Tokens admin surfaces.
-// MyPATs: user-scoped projection — each authenticated user sees only their own PATs.
-// PATsAdmin: admin-only audit view — all users' PATs, metadata only (no plaintext, no hash).
+// MyPATs + mintPAT + revokePAT moved to PatService (@path: '/pats') — AdminService's
+// service-level @requires: 'Admin' gate blocked authenticated-user actions before the
+// operation-level check could run. PatService carries @requires: 'authenticated-user'.
+// PATsAdmin stays here: Admin scope is appropriate for the audit projection.
 extend service AdminService with {
-  // User-owned PATs (Phase 2 #1105). Everyone sees their own rows only.
-  @(requires: 'authenticated-user')
-  @(restrict: [{ grant: '*', to: 'Everyone', where: 'user.email = $user.id' }])
-  entity MyPATs as projection on ims.PATs {
-    ID, name, prefix, scopes, createdAt, expiresAt, lastUsedAt, revokedAt, createdFromIP
-  };
-
   // Admin-only view for audit (all users' PATs). No plaintext, no hash — metadata only.
   @(requires: 'Admin')
   @readonly entity PATsAdmin as projection on ims.PATs {
     ID, user.email as userEmail, name, prefix, scopes,
     createdAt, expiresAt, lastUsedAt, revokedAt, createdFromIP
   };
-
-  // PAT mint (Phase 2 #1105). Returns plaintext exactly once.
-  @(requires: 'authenticated-user')
-  action mintPAT(name: String(80), scopes: array of String, ttlDays: Integer)
-    returns { ID: UUID; token: String; prefix: String; expiresAt: Timestamp };
-
-  @(requires: 'authenticated-user')
-  action revokePAT(ID: UUID) returns { ok: Boolean; revokedAt: Timestamp };
 }

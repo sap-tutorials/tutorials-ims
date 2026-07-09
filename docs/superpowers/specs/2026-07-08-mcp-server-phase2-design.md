@@ -309,6 +309,12 @@ Surgical disable: `KG_STEP_SLICER_ENABLED=false` env var short-circuits `sliceSt
 
 Alternative to full OAuth for headless agents (CI, VS Code extensions, `mcp-remote`). OAuth handles browser agents; PATs handle everyone else. Both converge on the same handlers.
 
+> **Design fix (2026-07-09, #1105):** User-facing PAT projection + actions live on a new
+> `PatService` (`@path: '/pats'`, `@requires: 'authenticated-user'`), NOT on `AdminService`.
+> `AdminService` carries `@requires: 'Admin'` at service level, which blocked authenticated-user
+> calls at the gate before any operation-level check ran. `PATsAdmin` (audit view) stays on
+> `AdminService` — Admin scope is appropriate there.
+
 ### Schema — new `db/mcp-pats.cds`
 
 ```cds

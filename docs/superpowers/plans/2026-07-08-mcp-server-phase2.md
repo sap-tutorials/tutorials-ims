@@ -1079,7 +1079,7 @@ git push
 
 **Interfaces:**
 - Consumes: `com.sap.developers.ims.Users` (existing entity).
-- Produces: `com.sap.developers.ims.PATs` entity with the schema from the spec; `AdminService.MyPATs` projection scoped to `req.user`.
+- Produces: `com.sap.developers.ims.PATs` entity with the schema from the spec; `PatService.MyPATs` projection scoped to `req.user`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1088,7 +1088,7 @@ Create `test/unit/mcp-pats-schema.test.js`:
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 
-describe('PATs schema and AdminService.MyPATs projection', () => {
+describe('PATs schema and PatService.MyPATs projection', () => {
   beforeAll(async () => {
     await cds.test('serve').in(process.cwd());
   });
@@ -1102,7 +1102,7 @@ describe('PATs schema and AdminService.MyPATs projection', () => {
     }
   });
 
-  it('exposes AdminService.MyPATs scoped by user.ID', () => {
+  it('exposes PatService.MyPATs scoped by user.ID', () => {
     const svc = cds.services.AdminService;
     expect(svc).toBeDefined();
     const proj = cds.entities('AdminService').MyPATs;
@@ -1186,7 +1186,7 @@ git add db/mcp-pats.cds srv/admin-service.cds db/last-dev/csn.json test/unit/mcp
 git commit -m "feat(#1105): PATs entity + AdminService projections
 
 New com.sap.developers.ims.PATs entity with SHA-256 hashHex, coarse
-scopes ('read'/'write'), user-scoped AdminService.MyPATs projection, and
+scopes ('read'/'write'), user-scoped PatService.MyPATs projection, and
 Admin-only AdminService.PATsAdmin (metadata-only, no plaintext or hash).
 @assert.unique.hashHex guards against SHA-256 second-preimage.
 
@@ -1198,17 +1198,25 @@ git push
 
 ## Task 8: PAT mint + revoke actions
 
+> **Design fix (2026-07-09):** Task 8 originally shipped `mintPAT` + `revokePAT` on `AdminService`,
+> but `AdminService` has `@requires: 'Admin'` at service level — a regular authenticated user calling
+> `/admin/mintPAT` was blocked at the service gate before the operation-level check could run,
+> defeating "users mint their own tokens." Moved user-facing projection + actions to a new
+> `PatService` (`@path: '/pats'`, `@requires: 'authenticated-user'`). `PATsAdmin` stays on
+> `AdminService` — Admin scope is appropriate for that audit projection.
+
 **Files:**
-- Modify: `srv/admin-service.cds`
-- Modify: `srv/admin-service.js`
+- Create: `srv/pat-service.cds`
+- Create: `srv/pat-service.js`
+- Modify: `srv/admin-service.cds` (keep only `PATsAdmin`)
 - Create: `srv/lib/mcp-pat-actions.js`
 - Test: `test/unit/mcp-pats-service.test.js`
 
 **Interfaces:**
 - Consumes: `PATs` entity from Task 7, `resolveDbUser` from `srv/lib/resolve-db-user.js`.
 - Produces:
-  - `AdminService.mintPAT(name: String, scopes: array of String, ttlDays: Integer)` → `{ token, prefix, expiresAt, ID }`
-  - `AdminService.revokePAT(ID: UUID)` → `{ ok: Boolean, revokedAt: Timestamp }`
+  - `PatService.mintPAT(name: String, scopes: array of String, ttlDays: Integer)` → `{ token, prefix, expiresAt, ID }`
+  - `PatService.revokePAT(ID: UUID)` → `{ ok: Boolean, revokedAt: Timestamp }`
   - `srv/lib/mcp-pat-actions.js` exports `handleMintPAT`, `handleRevokePAT`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1219,7 +1227,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import crypto from 'node:crypto';
 
-describe('AdminService.mintPAT + revokePAT', () => {
+describe('PatService.mintPAT + revokePAT', () => {
   let POST;
 
   beforeAll(async () => {
@@ -1412,7 +1420,7 @@ Expected: PASS (4 assertions).
 
 ```bash
 git add srv/admin-service.cds srv/admin-service.js srv/lib/mcp-pat-actions.js test/unit/mcp-pats-service.test.js
-git commit -m "feat(#1105): AdminService.mintPAT + revokePAT actions
+git commit -m "feat(#1105): PatService.mintPAT + revokePAT actions
 
 Plaintext returned exactly once in mint response, SHA-256 hex stored,
 ttlDays clamped [1, 365], scope allowlist ('read'/'write'), non-admin
@@ -2870,12 +2878,12 @@ Append to `srv/lib/metrics.js` (adapt to the existing registry factory function)
 ```js
 export const mcpPatMintTotal = registerCounter({
   name: 'mcp_pat_mint_total',
-  help: 'PATs minted via AdminService.mintPAT'
+  help: 'PATs minted via PatService.mintPAT'
 });
 
 export const mcpPatRevokeTotal = registerCounter({
   name: 'mcp_pat_revoke_total',
-  help: 'PATs revoked via AdminService.revokePAT'
+  help: 'PATs revoked via PatService.revokePAT'
 });
 
 export const mcpPatAuthTotal = registerCounter({
@@ -2986,7 +2994,7 @@ git push
 - Test: `test/unit/admin-shell-manifest-generator.test.js` (extend — asserts new tile discovered)
 
 **Interfaces:**
-- Consumes: `AdminService.MyPATs` from Task 7, `AdminService.mintPAT`/`revokePAT` from Task 8.
+- Consumes: `PatService.MyPATs` from Task 7, `PatService.mintPAT`/`revokePAT` from Task 8.
 - Produces: `/admin-ui/#pats` route via the discovery-driven admin-shell manifest scan.
 
 - [ ] **Step 1: Read the admin-shell manifest-generator conventions**
@@ -3036,7 +3044,7 @@ Create `app/admin-shell/webapp/components/pats/manifest.json`:
     "description": "{{appDescription}}",
     "dataSources": {
       "mainService": {
-        "uri": "/admin/",
+        "uri": "/pats/",
         "type": "OData",
         "settings": {
           "odataVersion": "4.0"
@@ -3161,7 +3169,7 @@ Append to `app/admin-annotations.cds`:
 ```cds
 using { AdminService } from '../srv/admin-service';
 
-annotate AdminService.MyPATs with @UI: {
+annotate PatService.MyPATs with @UI: {
   HeaderInfo: {
     TypeName: 'Personal Access Token',
     TypeNamePlural: 'Personal Access Tokens',
@@ -3195,8 +3203,8 @@ annotate AdminService.MyPATs with @UI: {
   }
 };
 
-annotate AdminService.mintPAT with @Common.QuickInfo: '{i18n>Action.mint}';
-annotate AdminService.revokePAT with @Common.QuickInfo: '{i18n>Action.revoke}';
+annotate PatService.mintPAT with @Common.QuickInfo: '{i18n>Action.mint}';
+annotate PatService.revokePAT with @Common.QuickInfo: '{i18n>Action.revoke}';
 ```
 
 - [ ] **Step 8: Run manifest-generator test to verify pass**
@@ -3224,7 +3232,7 @@ git commit -m "feat(#1105): Fiori Elements page for PATs at /admin-ui/#pats
 
 New componentUsage 'pats' in the admin shell (discovery-driven from
 manifest scan — no hand-curated list). FE List Report over
-AdminService.MyPATs scoped to req.user; FE Object Page for detail.
+PatService.MyPATs scoped to req.user; FE Object Page for detail.
 mintPAT action shows the full plaintext in a one-time modal
 (pattern matches /admin-ui/#secrets).
 
