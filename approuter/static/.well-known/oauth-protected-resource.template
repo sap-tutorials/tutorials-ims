@@ -1,0 +1,6 @@
+{
+  "resource": "${BASE_URL}/mcp-auth",
+  "authorization_servers": ["${BASE_URL}"],
+  "scopes_supported": ["Tutorial.MCP"],
+  "bearer_methods_supported": ["header"]
+}

@@ -1,0 +1,10 @@
+{
+  "issuer": "https://${XSUAA_TENANT}.authentication.${XSUAA_REGION}.hana.ondemand.com",
+  "authorization_endpoint": "https://${XSUAA_TENANT}.authentication.${XSUAA_REGION}.hana.ondemand.com/oauth/authorize",
+  "token_endpoint": "https://${XSUAA_TENANT}.authentication.${XSUAA_REGION}.hana.ondemand.com/oauth/token",
+  "response_types_supported": ["code"],
+  "grant_types_supported": ["authorization_code", "refresh_token"],
+  "code_challenge_methods_supported": ["S256"],
+  "scopes_supported": ["openid", "Tutorial.MCP"],
+  "token_endpoint_auth_methods_supported": ["none"]
+}

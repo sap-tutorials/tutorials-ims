@@ -24,6 +24,10 @@ modules:
   - name: tutorials-approuter
     parameters:
       app-name: tutorials-dev-approuter
+      env:
+        XSUAA_TENANT: "tutorial-system"
+        XSUAA_REGION: "eu10-005"
+        APPROUTER_BASE_URL: "https://developers-dev.cfapps.eu10-005.hana.ondemand.com"
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
