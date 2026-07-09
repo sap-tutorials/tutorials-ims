@@ -1102,10 +1102,10 @@ describe('PATs schema and PatService.MyPATs projection', () => {
     }
   });
 
-  it('exposes PatService.MyPATs scoped by user.ID', () => {
-    const svc = cds.services.AdminService;
+  it('exposes PatService.MyPATs scoped by user.email', () => {
+    const svc = cds.services.PatService;
     expect(svc).toBeDefined();
-    const proj = cds.entities('AdminService').MyPATs;
+    const proj = cds.entities('PatService').MyPATs;
     expect(proj).toBeDefined();
   });
 
