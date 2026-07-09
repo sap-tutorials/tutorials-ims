@@ -1059,4 +1059,12 @@ extend service AdminService with {
     ID, user.email as userEmail, name, prefix, scopes,
     createdAt, expiresAt, lastUsedAt, revokedAt, createdFromIP
   };
+
+  // PAT mint (Phase 2 #1105). Returns plaintext exactly once.
+  @(requires: 'authenticated-user')
+  action mintPAT(name: String(80), scopes: array of String, ttlDays: Integer)
+    returns { ID: UUID; token: String; prefix: String; expiresAt: Timestamp };
+
+  @(requires: 'authenticated-user')
+  action revokePAT(ID: UUID) returns { ok: Boolean; revokedAt: Timestamp };
 }
