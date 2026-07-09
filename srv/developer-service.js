@@ -304,6 +304,7 @@ export default class DeveloperService extends cds.ApplicationService {
         attemptNumber: maxAttempt + 1,
         supersededRecordCount: liveRows.length,
         previousAttemptCompletedAt,
+        tokenSource: req.user?.tokenSource ?? null,
       });
 
       return {
@@ -961,6 +962,8 @@ export default class DeveloperService extends cds.ApplicationService {
     this.on('get_my_events',          mcpDev.handleGetMyEvents);
     this.on('get_my_completed_steps', mcpDev.handleGetMyCompletedSteps);
     this.on('get_tutorial_step',      mcpDev.handleGetTutorialStep);
+    this.on('complete_step',          mcpDev.handleCompleteStep);
+    this.on('reset_tutorial_progress', mcpDev.handleResetTutorialProgress);
 
     await super.init();
   }

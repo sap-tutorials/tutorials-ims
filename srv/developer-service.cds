@@ -69,12 +69,15 @@ service DeveloperService {
   // the emit call in srv/developer-service.js (handler emits user,
   // tutorialSlug, attemptNumber, supersededRecordCount,
   // previousAttemptCompletedAt). `user` is dbUser.ID, NOT the email.
+  // Extended 2026-07-09 (#1105) with tokenSource (nullable) so admins can
+  // distinguish browser-driven from MCP-driven resets.
   event TutorialProgressReset : {
     user                       : String;
     tutorialSlug               : String;
     attemptNumber              : Integer;
     supersededRecordCount      : Integer;
     previousAttemptCompletedAt : DateTime;
+    tokenSource                : String; // null | 'jwt' | 'pat'
   };
 
   @(requires: 'authenticated-user')

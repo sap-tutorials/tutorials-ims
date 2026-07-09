@@ -76,4 +76,31 @@ extend service DeveloperService {
     textLength  : Integer;
     totalSteps  : Integer;
   };
+
+  /** Mark a step of a tutorial as completed for the signed-in user.
+      Idempotent: re-completing an already-completed step is a no-op.
+      PAT callers must carry write scope; JWT/OAuth (browser) callers are
+      always allowed.
+      @param slug        Lowercase canonical tutorial slug.
+      @param stepNumber  1-indexed step number. */
+  @(requires: 'authenticated-user')
+  action complete_step(slug: String, stepNumber: Integer) returns {
+    completedSteps : array of Integer;
+    points         : Integer;
+  };
+
+  /** Reset the signed-in user's progress on a tutorial. Supersedes the
+      current attempt and starts a fresh one; emits a TutorialProgressReset
+      audit event with the old attempt's metadata and a nullable tokenSource
+      field ('pat' | null) so admins can distinguish MCP-driven from
+      browser-driven resets.
+      PAT callers must carry write scope; JWT/OAuth (browser) callers are
+      always allowed.
+      @param slug  Lowercase canonical tutorial slug. */
+  @(requires: 'authenticated-user')
+  action reset_tutorial_progress(slug: String) returns {
+    newAttemptNumber           : Integer;
+    previousAttemptCompletedAt : DateTime;
+    supersededRecordCount      : Integer;
+  };
 }

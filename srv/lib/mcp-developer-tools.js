@@ -84,3 +84,52 @@ export async function handleGetTutorialStep(req) {
     totalSteps: slice.totalSteps,
   };
 }
+
+/**
+ * complete_step is a pure delegation to the existing completeStep action.
+ * One code path so the audit trail fires identically for browser and MCP callers.
+ *
+ * PAT scope gate: a PAT with scopes=['read'] only must NOT be allowed to mutate
+ * progress. JWT/OAuth callers (browser) have no tokenSource and are always allowed.
+ */
+export async function handleCompleteStep(req) {
+  // Scope gate: PAT callers must carry the 'pat-write' pseudo-role.
+  // JWT/OAuth callers (tokenSource !== 'pat') are unaffected.
+  if (req.user?.tokenSource === 'pat' && !req.user.is('pat-write')) {
+    return req.reject(403, 'this token lacks write scope');
+  }
+  const { slug, stepNumber } = req.data;
+  if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
+  if (!Number.isInteger(stepNumber) || stepNumber < 1)
+    return req.reject(400, 'stepNumber must be a positive integer');
+  const srv = (req._?.service) ?? cds.services.DeveloperService;
+  return srv.send({
+    event: 'completeStep',
+    data: { slug: slug.toLowerCase(), stepNumber },
+    user: req.user,
+  });
+}
+
+/**
+ * reset_tutorial_progress is a pure delegation to the existing
+ * resetTutorialProgress action. The existing handler emits the
+ * TutorialProgressReset audit event with the tokenSource field from req.user
+ * (set by the PAT middleware, or null for JWT/OAuth callers).
+ *
+ * PAT scope gate: read-only PATs are rejected with 403.
+ */
+export async function handleResetTutorialProgress(req) {
+  // Scope gate: PAT callers must carry the 'pat-write' pseudo-role.
+  // JWT/OAuth callers (tokenSource !== 'pat') are unaffected.
+  if (req.user?.tokenSource === 'pat' && !req.user.is('pat-write')) {
+    return req.reject(403, 'this token lacks write scope');
+  }
+  const { slug } = req.data;
+  if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
+  const srv = (req._?.service) ?? cds.services.DeveloperService;
+  return srv.send({
+    event: 'resetTutorialProgress',
+    data: { slug: slug.toLowerCase() },
+    user: req.user,
+  });
+}
