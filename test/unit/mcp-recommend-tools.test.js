@@ -138,13 +138,18 @@ describe('HomepageService recommendation MCP tools', () => {
     expect(slugs).not.toContain('cap-getting-started');
   });
 
-  it('get_my_recommended_tutorials returns [] for user with no persona match', async () => {
+  it('get_my_recommended_tutorials falls back to the unweighted pool for a user with no persona', async () => {
     // nopref@ex.com has no UserLearningPreferences → all-null profile.
-    // All candidates have personaTags — a null profile matches nothing via rankForYou.
+    // rankForYou matches nothing, so the handler degrades to the unweighted
+    // active pool sorted by sortOrder (new users still get the curated set,
+    // not an empty envelope — Task 13 review decision).
     cds.context = { user: new cds.User({ id: 'nopref@ex.com' }) };
     const results = await HomepageService.send('get_my_recommended_tutorials', { limit: 10 });
     expect(Array.isArray(results)).toBe(true);
-    expect(results).toHaveLength(0);
+    expect(results.length).toBeGreaterThan(0);          // fallback delivered something
+    expect(results.every(r => typeof r.slug === 'string')).toBe(true);
+    // Only tutorial-kind rows in the tutorial tool's output.
+    expect(results.map(r => r.slug)).not.toContain('build-cap-mission');
   });
 
   it('get_my_recommended_tutorials clamps limit at 20', async () => {

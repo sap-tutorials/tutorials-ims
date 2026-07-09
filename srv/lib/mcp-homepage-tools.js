@@ -43,17 +43,31 @@ async function fetchRankedCandidates(profile, kind, limit) {
     .columns('ID', 'kind', 'targetSlug', 'title', 'description',
              'personaTags', 'personaWeight', 'personaHidden', 'sortOrder');
 
-  // rankForYou returns entries that match persona tags, sorted by score+sortOrder.
-  // min:0 so we return results even when persona has no tags (profile all-null).
-  const ranked = rankForYou(candidates, profile, { min: 0, max: limit * 4 });
-  return ranked
-    .filter(c => c.kind === kind)
-    .slice(0, limit)
-    .map(c => ({
-      slug:        c.targetSlug ?? null,
-      title:       c.title      ?? null,
-      description: c.description ?? null,
-    }));
+  const shape = (c) => ({
+    slug:        c.targetSlug ?? null,
+    title:       c.title      ?? null,
+    description: c.description ?? null,
+  });
+
+  // Persona-weighted path: rankForYou scores by persona-tag overlap.
+  const ranked = rankForYou(candidates, profile, { min: 0, max: limit * 4 })
+    .filter(c => c.kind === kind);
+
+  // Fallback: rankForYou returns nothing when the profile has no persona tags
+  // (brand-new user, or one who never set UserLearningPreferences). A "my
+  // recommendations" tool must still surface something rather than an empty
+  // list, so degrade to the unweighted active pool sorted by admin-curated
+  // sortOrder. (Controller decision on Task 13 review — new users get the
+  // curated default set, not an empty envelope.)
+  if (ranked.length === 0) {
+    return candidates
+      .filter(c => c.kind === kind)
+      .sort((a, b) => (a.sortOrder ?? 100) - (b.sortOrder ?? 100))
+      .slice(0, limit)
+      .map(shape);
+  }
+
+  return ranked.slice(0, limit).map(shape);
 }
 
 /**
