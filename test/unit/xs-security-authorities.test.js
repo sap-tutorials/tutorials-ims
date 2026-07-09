@@ -107,13 +107,24 @@ describe('Tutorial.MCP scope (#1105)', () => {
     for (const path of ['xs-security.json', '.deploy/xs-security.json']) {
       const content = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'));
       const uris = content['oauth2-configuration']?.['redirect-uris'] ?? [];
+      // RFC 8252 §7.3 — loopback with port-wildcard + fixed callback path.
+      // Custom-scheme wildcards (mcp://*) and unbounded-port loopbacks
+      // (http://localhost/*) are OAuth open-redirect hazards; the security
+      // review pass caught them and the plan was patched.
       for (const required of [
-        'http://localhost/*',
-        'http://127.0.0.1/*',
-        'mcp://*',
+        'http://127.0.0.1:*/callback',
+        'http://localhost:*/callback',
         'https://developers.sap.com/callback'
       ]) {
         expect(uris).toContain(required);
+      }
+      // Anti-regression: the hazardous patterns must NOT reappear.
+      for (const hazardous of [
+        'http://localhost/*',
+        'http://127.0.0.1/*',
+        'mcp://*'
+      ]) {
+        expect(uris).not.toContain(hazardous);
       }
     }
   });
