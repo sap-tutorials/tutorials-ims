@@ -3,14 +3,142 @@
    Reference: hugo/assets/css/home.css for token names and spacing rhythm.
 */
 
-/* ===== Per-band partials ===== */
-@import "homepage/_events-band.css";
+/* ===== Per-band partials =====
+   Hugo's asset pipeline uses `resources.Get` here (no postcss), so raw
+   @import statements emit as literal CSS @import — the browser then
+   404s on /css/homepage/*.css because Hugo doesn't publish the partial
+   files as static assets. Everything band-specific must live inline
+   below. Source of truth for the events-band chunk is
+   hugo/assets/css/homepage/_events-band.css (kept in sync manually). */
+
+/* Events band (#1030) */
+.events-band__chips {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.events-band__chip {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--sapContent_ForegroundBorderColor, #ccc);
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--sapTextColor, #32363a);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.events-band__chip--active {
+  background: var(--sapButton_Selected_Background, #0854a0);
+  color: var(--sapButton_Selected_TextColor, #fff);
+  border-color: transparent;
+}
+.events-band__chip:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0854a0);
+  outline-offset: 2px;
+}
+.events-band__cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+@media (max-width: 900px) { .events-band__cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .events-band__cards { grid-template-columns: 1fr; } }
+.event-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  text-decoration: none;
+  border: 1px solid var(--sapContent_ForegroundBorderColor, #e5e5e5);
+  border-radius: 8px;
+  color: inherit;
+  background: var(--sapBaseColor, #fff);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.event-card:hover {
+  border-color: var(--sapButton_Selected_Background, #0854a0);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+.event-card__type {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sapButton_Selected_Background, #0854a0);
+  background: rgba(8, 84, 160, 0.08);
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  margin-bottom: 0.5rem;
+}
+.event-card__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  margin: 0.25rem 0 0.75rem;
+  line-height: 1.4;
+  /* Clamp to 2 lines so cards stay same height across a row */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.event-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--sapContent_ForegroundBorderColor, #eaecee);
+}
+.event-card__date { font-weight: 600; color: var(--sapTextColor, #32363a); }
+
+/* Skeleton loader */
+.events-band__chips--skeleton .events-band__chip--skeleton {
+  display: inline-block;
+  width: 5rem;
+  height: 2rem;
+  border-color: transparent;
+  background: linear-gradient(90deg, #f4f4f4 25%, #ececec 50%, #f4f4f4 75%);
+  background-size: 200% 100%;
+  animation: eventskel 1.5s infinite;
+  cursor: default;
+}
+.events-band__chips--skeleton .events-band__chip--skeleton:first-child { width: 3.5rem; }
+.event-card--skeleton {
+  min-height: 8rem;
+  background: linear-gradient(90deg, #f4f4f4 25%, #ececec 50%, #f4f4f4 75%);
+  background-size: 200% 100%;
+  animation: eventskel 1.5s infinite;
+  border-color: transparent;
+}
+@keyframes eventskel {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.events-band__loading,
+.events-band__empty {
+  padding: 1rem 0;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+.events-band__empty a { color: var(--sapLinkColor, #0070f3); }
+.events-band__empty a:hover { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) {
+  .event-card--skeleton,
+  .events-band__chips--skeleton .events-band__chip--skeleton { animation: none; }
+  .event-card { transition: none; }
+}
 
 /* ===== Page shell ===== */
 .developer-homepage {
   display: flex;
   flex-direction: column;
-  gap: 3rem;
+  gap: 2rem;
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem 1rem;

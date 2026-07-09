@@ -19,11 +19,32 @@ const roots = document.querySelectorAll<HTMLElement>('[data-app="featured-topics
 roots.forEach((root) => {
   const etag = root.getAttribute('data-etag') || '';
   const initialSlides = readInitialFromDom(root);
-  // Clear SSR inner content before Vue mounts to avoid double-rendering.
-  // Vue will re-render the same DOM structure reactively.
+
+  // Vue's `createApp(...).mount(el)` REPLACES el.innerHTML with the
+  // component's render output. The SSR-emitted <h2>Featured missions</h2>
+  // and Browse-all link live inside the <section>, so a direct mount on
+  // the section wiped them from the DOM on hydration. Mount instead into
+  // a dedicated [data-vue-root] child so the header survives.
+  //
+  // We also drop the SSR viewport + controls (Vue re-renders them) but
+  // keep the header intact.
+  const header = root.querySelector('.hp-featured-carousel__header');
   const viewport = root.querySelector('.hp-featured-carousel__viewport');
   const controls = root.querySelector('.hp-featured-carousel__controls');
-  if (viewport) viewport.innerHTML = '';
-  if (controls) controls.innerHTML = '';
-  createApp(Carousel, { root, initialEtag: etag, initialSlides }).mount(root);
+  if (viewport) viewport.remove();
+  if (controls) controls.remove();
+
+  let target = root.querySelector<HTMLElement>('[data-vue-root]');
+  if (!target) {
+    target = document.createElement('div');
+    target.setAttribute('data-vue-root', '');
+    // Insert AFTER the header so the visual order matches the SSR paint.
+    if (header && header.parentElement === root) {
+      header.insertAdjacentElement('afterend', target);
+    } else {
+      root.appendChild(target);
+    }
+  }
+
+  createApp(Carousel, { root, initialEtag: etag, initialSlides }).mount(target);
 });
