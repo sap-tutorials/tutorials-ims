@@ -25,6 +25,7 @@ import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
 import * as alertsPublic from './routes/alerts-public.js';
 import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
 import { resolveUser, captureUserMiddleware } from './lib/resolve-user.js';
+import { patMiddleware } from './lib/mcp-pat-middleware.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
@@ -422,6 +423,11 @@ cds.on('bootstrap', (app) => {
   // and return 404. Body parser runs here; auth + business logic are bound
   // lazily in 'served' via chatStreamHandler.
   app.post('/chat/stream', express.json({ limit: '64kb' }), (req, res, next) => chatStreamHandler(req, res, next));
+
+  // PAT middleware — resolves Bearer pat_... to synthetic req.user on /mcp-pat/*.
+  // Must run BEFORE @cap-js/mcp mounts, and only for the /mcp-pat/ prefix so a
+  // stray Bearer header on /api or /chat is never misinterpreted (Phase 2 #1105).
+  app.use('/mcp-pat', (req, res, next) => patMiddleware(req, res, next));
 
   // Same: reserve GET /admin/embeddings/stats BEFORE CAP mounts AdminService
   // at /admin. Auth + business logic bound lazily in 'served'.
