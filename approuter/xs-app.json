@@ -313,11 +313,40 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/.well-known/oauth-authorization-server$",
+      "target": "/.well-known/oauth-authorization-server",
+      "localDir": "static",
+      "authenticationType": "none",
+      "cacheControl": "public, max-age=300"
+    },
+    {
+      "source": "^/.well-known/oauth-protected-resource$",
+      "target": "/.well-known/oauth-protected-resource",
+      "localDir": "static",
+      "authenticationType": "none",
+      "cacheControl": "public, max-age=300"
+    },
+    {
       "source": "^/mcp/(.*)$",
       "target": "/mcp/$1",
       "destination": "srv-api",
       "authenticationType": "none",
       "csrfProtection": false
+    },
+    {
+      "source": "^/mcp-pat/(.*)$",
+      "target": "/mcp-pat/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/mcp-auth/(.*)$",
+      "target": "/mcp-auth/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false,
+      "scope": "$XSAPPNAME.Tutorial.MCP"
     },
     {
       "source": "^/tutorials-qa/_nav\\.json$",

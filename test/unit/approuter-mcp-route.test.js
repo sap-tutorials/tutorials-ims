@@ -47,4 +47,40 @@ describe('approuter /mcp/* route (#912)', () => {
     expect(catchAllIdx).toBeGreaterThan(-1);
     expect(mcpIdx, 'the /mcp/* route must be listed before the catch-all').toBeLessThan(catchAllIdx);
   });
+
+  it('mounts /.well-known/oauth-authorization-server anonymous', () => {
+    const route = xsapp.routes.find((r) => r.source === '^/.well-known/oauth-authorization-server$');
+    expect(route).toBeDefined();
+    expect(route.authenticationType).toBe('none');
+  });
+
+  it('mounts /.well-known/oauth-protected-resource anonymous', () => {
+    const route = xsapp.routes.find((r) => r.source === '^/.well-known/oauth-protected-resource$');
+    expect(route).toBeDefined();
+    expect(route.authenticationType).toBe('none');
+  });
+
+  it('mounts /mcp-pat/* anonymous with csrfProtection false', () => {
+    const route = xsapp.routes.find((r) => r.source === '^/mcp-pat/(.*)$');
+    expect(route).toBeDefined();
+    expect(route.authenticationType).toBe('none');
+    expect(route.csrfProtection).toBe(false);
+  });
+
+  it('mounts /mcp-auth/* xsuaa with Tutorial.MCP scope gate', () => {
+    const route = xsapp.routes.find((r) => r.source === '^/mcp-auth/(.*)$');
+    expect(route).toBeDefined();
+    expect(route.authenticationType).toBe('xsuaa');
+    expect(route.csrfProtection).toBe(false);
+    expect(route.scope).toBe('$XSAPPNAME.Tutorial.MCP');
+  });
+
+  it('orders /mcp-auth/* AFTER /mcp-pat/* AFTER /mcp/*', () => {
+    const idxAnon = xsapp.routes.findIndex((r) => r.source === '^/mcp/(.*)$');
+    const idxPat = xsapp.routes.findIndex((r) => r.source === '^/mcp-pat/(.*)$');
+    const idxAuth = xsapp.routes.findIndex((r) => r.source === '^/mcp-auth/(.*)$');
+    expect(idxAnon).toBeGreaterThanOrEqual(0);
+    expect(idxPat).toBeGreaterThan(idxAnon);
+    expect(idxAuth).toBeGreaterThan(idxPat);
+  });
 });
