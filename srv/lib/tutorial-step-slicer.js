@@ -14,6 +14,7 @@ import { gunzipSync } from 'node:zlib';
 import { Readable } from 'node:stream';
 import LRUCache from 'lru-cache';
 import * as cheerio from 'cheerio';
+import * as metrics from './metrics.js';
 
 const NS = 'com.sap.developers.ims';
 const LOG = cds.log('mcp-slicer');
@@ -51,7 +52,10 @@ async function loadAndParse(slug) {
 
   const cacheKey = `${slug}::${version}`;
   const hit = cache.get(cacheKey);
-  if (hit) return hit;
+  if (hit) {
+    metrics.counter('mcp.slice[outcome=hit]');
+    return hit;
+  }
 
   const { ContentFiles } = cds.entities(NS);
   const [meta] = await SELECT.from(ContentFiles)
@@ -67,6 +71,7 @@ async function loadAndParse(slug) {
       .columns('content');
   } catch (err) {
     LOG.warn(`slicer: BLOB fetch failed for ${slug}`, err.message);
+    metrics.counter('mcp.slice[outcome=error]');
     return null;
   }
 
@@ -76,6 +81,7 @@ async function loadAndParse(slug) {
     html = gunzipSync(buffer).toString('utf8');
   } catch (err) {
     LOG.warn(`slicer: gunzip failed for ${slug}`, err.message);
+    metrics.counter('mcp.slice[outcome=error]');
     return null;
   }
 
@@ -93,11 +99,14 @@ async function loadAndParse(slug) {
 
   if (steps.size === 0) {
     LOG.warn(`slicer: no <section class="step"> found for ${slug}; content may be malformed`);
+    metrics.counter('mcp.slice[outcome=error]');
     return null;
   }
 
   const result = { steps, totalSteps: steps.size };
   cache.set(cacheKey, result);
+  metrics.counter('mcp.slice[outcome=miss]');
+  metrics.gauge('mcp.slice.cache_size', cache.size);
   return result;
 }
 

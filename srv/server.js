@@ -424,6 +424,16 @@ cds.on('bootstrap', (app) => {
   // lazily in 'served' via chatStreamHandler.
   app.post('/chat/stream', express.json({ limit: '64kb' }), (req, res, next) => chatStreamHandler(req, res, next));
 
+  // MCP_AUTH_ENABLED kill switch — when explicitly set to 'false', return 503
+  // for all /mcp-auth and /mcp-pat routes. This must come BEFORE the PAT
+  // middleware registration so the kill switch short-circuits the whole stack.
+  // (Phase 2 Task 15 #1105)
+  if (process.env.MCP_AUTH_ENABLED === 'false') {
+    app.use('/mcp-auth', (_req, res) => res.status(503).send('Phase 2 MCP auth disabled'));
+    app.use('/mcp-pat',  (_req, res) => res.status(503).send('Phase 2 MCP auth disabled'));
+    cds.log('mcp').warn('MCP_AUTH_ENABLED=false — /mcp-auth and /mcp-pat return 503');
+  }
+
   // PAT middleware — resolves Bearer pat_... to synthetic req.user on /mcp-pat/*.
   // Must run BEFORE @cap-js/mcp mounts, and only for the /mcp-pat/ prefix so a
   // stray Bearer header on /api or /chat is never misinterpreted (Phase 2 #1105).

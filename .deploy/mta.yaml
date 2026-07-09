@@ -80,6 +80,10 @@ modules:
       KNOWLEDGE_GRAPH_ENABLED: 'false'
       KG_EXTRACT_BUILD_CAP: '200'
       KG_MERGE_SIM_THRESHOLD: '0.92'
+      # Phase 2 MCP feature flags (Task 15 #1105). Default 'true'. Override via cf set-env.
+      MCP_AUTH_ENABLED: 'true'
+      MCP_PAT_MINT_ENABLED: 'true'
+      KG_STEP_SLICER_ENABLED: 'true'
       # NOTE: CONTENT_API_KEY, GITHUB_DISPATCH_TOKEN, SMTP_HOST/PORT/USER/FROM
       # and REBUILD_TARGET_ENV used to live here. All resolved from the BTP
       # Credential Store now (via srv/lib/secret-resolver.js) or TenantSettings

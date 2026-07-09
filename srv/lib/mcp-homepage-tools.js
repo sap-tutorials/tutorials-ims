@@ -8,9 +8,27 @@ import cds from '@sap/cds';
 import { resolveUserSapId } from './resolve-db-user.js';
 import { rankForYou, isHidden } from './homepage/persona-scoring.js';
 import { clampLimit } from './mcp-arg-validators.js';
+import * as metrics from './metrics.js';
 
 const LOG = cds.log('mcp-homepage');
 const NS  = 'com.sap.developers.ims';
+const SVC = 'HomepageService';
+
+function tokenSource(req) {
+  return req.user?.tokenSource ?? 'anon';
+}
+
+async function withToolMetrics(tool, req, fn) {
+  const ts = tokenSource(req);
+  try {
+    const result = await fn();
+    metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${ts},outcome=ok]`);
+    return result;
+  } catch (err) {
+    metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${ts},outcome=error]`);
+    throw err;
+  }
+}
 
 /**
  * Resolve the user's persona profile from UserLearningPreferences.
@@ -79,10 +97,12 @@ async function fetchRankedCandidates(profile, kind, limit) {
  * Authenticated (HomepageService @requires:'authenticated-user').
  */
 export async function handleGetMyRecommendedTutorials(req) {
-  const limit = clampLimit(req.data.limit, 10, 20);
-  const profile = await resolvePersona(req);
-  LOG.debug('[get_my_recommended_tutorials] limit=%d profile=%o', limit, profile);
-  return fetchRankedCandidates(profile, 'tutorial', limit);
+  return withToolMetrics('get_my_recommended_tutorials', req, async () => {
+    const limit = clampLimit(req.data.limit, 10, 20);
+    const profile = await resolvePersona(req);
+    LOG.debug('[get_my_recommended_tutorials] limit=%d profile=%o', limit, profile);
+    return fetchRankedCandidates(profile, 'tutorial', limit);
+  });
 }
 
 /**
@@ -90,8 +110,10 @@ export async function handleGetMyRecommendedTutorials(req) {
  * Authenticated (HomepageService @requires:'authenticated-user').
  */
 export async function handleGetMyRecommendedMissions(req) {
-  const limit = clampLimit(req.data.limit, 5, 10);
-  const profile = await resolvePersona(req);
-  LOG.debug('[get_my_recommended_missions] limit=%d profile=%o', limit, profile);
-  return fetchRankedCandidates(profile, 'mission', limit);
+  return withToolMetrics('get_my_recommended_missions', req, async () => {
+    const limit = clampLimit(req.data.limit, 5, 10);
+    const profile = await resolvePersona(req);
+    LOG.debug('[get_my_recommended_missions] limit=%d profile=%o', limit, profile);
+    return fetchRankedCandidates(profile, 'mission', limit);
+  });
 }

@@ -8,6 +8,7 @@
 import cds from '@sap/cds';
 import crypto from 'node:crypto';
 import LRUCache from 'lru-cache';
+import * as metrics from './metrics.js';
 
 const LOG = cds.log('mcp-pat');
 const NS = 'com.sap.developers.ims';
@@ -105,7 +106,12 @@ export async function patMiddleware(req, res, next) {
     if (entry) _cache.set(hashHex, entry);
   }
 
-  if (!isValid(entry)) return respond401(res);
+  if (!isValid(entry)) {
+    const outcome = !entry ? 'miss' : entry.revokedAt ? 'revoked' : 'expired';
+    metrics.counter(`mcp.pat.auth[outcome=${outcome}]`);
+    return respond401(res);
+  }
+  metrics.counter('mcp.pat.auth[outcome=hit]');
   installSyntheticUser(req, entry);
   bumpLastUsed(entry.patId);
   return next();

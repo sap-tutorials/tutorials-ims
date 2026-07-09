@@ -8,8 +8,31 @@ import { resolveDbUser } from './resolve-db-user.js';
 import { sliceStep } from './tutorial-step-slicer.js';
 import { assertEnum, clampLimit } from './mcp-arg-validators.js';
 import * as store from './mcp-progress-store.js';
+import * as metrics from './metrics.js';
 
 const LOG = cds.log('mcp-dev');
+const SVC = 'DeveloperService';
+
+function toolCounter(tool, tokenSource, outcome) {
+  metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${tokenSource},outcome=${outcome}]`);
+}
+
+function tokenSource(req) {
+  return req.user?.tokenSource ?? 'anon';
+}
+
+/** Fire-and-forget tool invocation counter. Emitted at handler exit. */
+async function withToolMetrics(tool, req, fn) {
+  const ts = tokenSource(req);
+  try {
+    const result = await fn();
+    metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${ts},outcome=ok]`);
+    return result;
+  } catch (err) {
+    metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${ts},outcome=error]`);
+    throw err;
+  }
+}
 
 const STATUS_TUT = ['in_progress', 'completed', 'all'];
 const STATUS_MIS = ['in_progress', 'completed', 'not_started', 'all'];
@@ -28,61 +51,71 @@ async function requireDbUser(req) {
 }
 
 export async function handleGetMyTutorials(req) {
-  const status = req.data.status ?? 'all';
-  try { assertEnum({ name: 'status', value: status, allowed: STATUS_TUT }); }
-  catch (e) { return req.reject(400, e.message); }
-  const limit = clampLimit(req.data.limit, 20, 50);
-  const dbUser = await requireDbUser(req);
-  if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive for mock contexts
-  return store.getMyTutorials(req.user, { status, limit });
+  return withToolMetrics('get_my_tutorials', req, async () => {
+    const status = req.data.status ?? 'all';
+    try { assertEnum({ name: 'status', value: status, allowed: STATUS_TUT }); }
+    catch (e) { return req.reject(400, e.message); }
+    const limit = clampLimit(req.data.limit, 20, 50);
+    const dbUser = await requireDbUser(req);
+    if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive for mock contexts
+    return store.getMyTutorials(req.user, { status, limit });
+  });
 }
 
 export async function handleGetMyMissions(req) {
-  const status = req.data.status ?? 'all';
-  try { assertEnum({ name: 'status', value: status, allowed: STATUS_MIS }); }
-  catch (e) { return req.reject(400, e.message); }
-  const limit = clampLimit(req.data.limit, 10, 50);
-  const dbUser = await requireDbUser(req);
-  if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive
-  return store.getMyMissions(req.user, { status, limit });
+  return withToolMetrics('get_my_missions', req, async () => {
+    const status = req.data.status ?? 'all';
+    try { assertEnum({ name: 'status', value: status, allowed: STATUS_MIS }); }
+    catch (e) { return req.reject(400, e.message); }
+    const limit = clampLimit(req.data.limit, 10, 50);
+    const dbUser = await requireDbUser(req);
+    if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive
+    return store.getMyMissions(req.user, { status, limit });
+  });
 }
 
 export async function handleGetMyEvents(req) {
-  const when = req.data.when ?? 'upcoming';
-  try { assertEnum({ name: 'when', value: when, allowed: WHEN_EVT }); }
-  catch (e) { return req.reject(400, e.message); }
-  const limit = clampLimit(req.data.limit, 20, 50);
-  const dbUser = await requireDbUser(req);
-  if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive
-  return store.getMyEvents(req.user, { when, limit });
+  return withToolMetrics('get_my_events', req, async () => {
+    const when = req.data.when ?? 'upcoming';
+    try { assertEnum({ name: 'when', value: when, allowed: WHEN_EVT }); }
+    catch (e) { return req.reject(400, e.message); }
+    const limit = clampLimit(req.data.limit, 20, 50);
+    const dbUser = await requireDbUser(req);
+    if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive
+    return store.getMyEvents(req.user, { when, limit });
+  });
 }
 
 export async function handleGetMyCompletedSteps(req) {
-  const { slug } = req.data;
-  if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
-  const dbUser = await requireDbUser(req);
-  if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive
-  const result = await store.getMyCompletedSteps(req.user, slug.toLowerCase());
-  if (result === null) return req.reject(404, `tutorial not found: ${slug}`);
-  return result;
+  return withToolMetrics('get_my_completed_steps', req, async () => {
+    const { slug } = req.data;
+    if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
+    const dbUser = await requireDbUser(req);
+    if (dbUser === undefined) return; // unreachable (req.reject throws) — defensive
+    const result = await store.getMyCompletedSteps(req.user, slug.toLowerCase());
+    if (result === null) return req.reject(404, `tutorial not found: ${slug}`);
+    return result;
+  });
 }
 
 /** Also re-used by SearchService (anonymous mount) via the same handler symbol. */
 export async function handleGetTutorialStep(req) {
-  const { slug, stepNumber } = req.data;
-  if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
-  if (!Number.isInteger(stepNumber) || stepNumber < 1)
-    return req.reject(400, 'stepNumber must be a positive integer');
-  const slice = await sliceStep(slug.toLowerCase(), stepNumber);
-  if (!slice) return req.reject(404, 'step not found');
-  return {
-    slug: slug.toLowerCase(),
-    stepNumber,
-    stepTitle: slice.stepTitle,
-    html:      slice.html,
-    textLength: slice.text.length,
-    totalSteps: slice.totalSteps,
-  };
+  return withToolMetrics('get_tutorial_step', req, async () => {
+    const { slug, stepNumber } = req.data;
+    if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
+    if (!Number.isInteger(stepNumber) || stepNumber < 1)
+      return req.reject(400, 'stepNumber must be a positive integer');
+    const slice = await sliceStep(slug.toLowerCase(), stepNumber);
+    if (!slice) return req.reject(404, 'step not found');
+    return {
+      slug: slug.toLowerCase(),
+      stepNumber,
+      stepTitle: slice.stepTitle,
+      html:      slice.html,
+      textLength: slice.text.length,
+      totalSteps: slice.totalSteps,
+    };
+  });
 }
 
 /**
@@ -93,20 +126,22 @@ export async function handleGetTutorialStep(req) {
  * progress. JWT/OAuth callers (browser) have no tokenSource and are always allowed.
  */
 export async function handleCompleteStep(req) {
-  // Scope gate: PAT callers must carry the 'pat-write' pseudo-role.
-  // JWT/OAuth callers (tokenSource !== 'pat') are unaffected.
-  if (req.user?.tokenSource === 'pat' && !req.user.is('pat-write')) {
-    return req.reject(403, 'this token lacks write scope');
-  }
-  const { slug, stepNumber } = req.data;
-  if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
-  if (!Number.isInteger(stepNumber) || stepNumber < 1)
-    return req.reject(400, 'stepNumber must be a positive integer');
-  const srv = (req._?.service) ?? cds.services.DeveloperService;
-  return srv.send({
-    event: 'completeStep',
-    data: { slug: slug.toLowerCase(), stepNumber },
-    user: req.user,
+  return withToolMetrics('complete_step', req, async () => {
+    // Scope gate: PAT callers must carry the 'pat-write' pseudo-role.
+    // JWT/OAuth callers (tokenSource !== 'pat') are unaffected.
+    if (req.user?.tokenSource === 'pat' && !req.user.is('pat-write')) {
+      return req.reject(403, 'this token lacks write scope');
+    }
+    const { slug, stepNumber } = req.data;
+    if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
+    if (!Number.isInteger(stepNumber) || stepNumber < 1)
+      return req.reject(400, 'stepNumber must be a positive integer');
+    const srv = (req._?.service) ?? cds.services.DeveloperService;
+    return srv.send({
+      event: 'completeStep',
+      data: { slug: slug.toLowerCase(), stepNumber },
+      user: req.user,
+    });
   });
 }
 
@@ -119,17 +154,19 @@ export async function handleCompleteStep(req) {
  * PAT scope gate: read-only PATs are rejected with 403.
  */
 export async function handleResetTutorialProgress(req) {
-  // Scope gate: PAT callers must carry the 'pat-write' pseudo-role.
-  // JWT/OAuth callers (tokenSource !== 'pat') are unaffected.
-  if (req.user?.tokenSource === 'pat' && !req.user.is('pat-write')) {
-    return req.reject(403, 'this token lacks write scope');
-  }
-  const { slug } = req.data;
-  if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
-  const srv = (req._?.service) ?? cds.services.DeveloperService;
-  return srv.send({
-    event: 'resetTutorialProgress',
-    data: { slug: slug.toLowerCase() },
-    user: req.user,
+  return withToolMetrics('reset_tutorial_progress', req, async () => {
+    // Scope gate: PAT callers must carry the 'pat-write' pseudo-role.
+    // JWT/OAuth callers (tokenSource !== 'pat') are unaffected.
+    if (req.user?.tokenSource === 'pat' && !req.user.is('pat-write')) {
+      return req.reject(403, 'this token lacks write scope');
+    }
+    const { slug } = req.data;
+    if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
+    const srv = (req._?.service) ?? cds.services.DeveloperService;
+    return srv.send({
+      event: 'resetTutorialProgress',
+      data: { slug: slug.toLowerCase() },
+      user: req.user,
+    });
   });
 }
