@@ -22,7 +22,7 @@
        slides. */ -}}
 {{- $ft := .Site.Data.featured_topics | default (dict "snapshot" slice "etag" "") -}}
 {{- $slides := $ft.snapshot | default slice -}}
-<section class="hp-featured-carousel{{ if eq (len $slides) 0 }} hp-featured-carousel--pending{{ end }}"
+<section class="hp-band hp-featured-carousel{{ if eq (len $slides) 0 }} hp-featured-carousel--pending{{ end }}"
          data-app="featured-topics-carousel"
          data-etag="{{ $ft.etag }}"
          aria-roledescription="carousel"

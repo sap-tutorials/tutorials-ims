@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import EventsBand from './EventsBand.vue';
 
 const CARD = {
@@ -28,7 +28,7 @@ describe('EventsBand', () => {
   it('renders 6 cards from the endpoint', async () => {
     mockFetch(Array(6).fill(CARD));
     const w = mount(EventsBand);
-    await new Promise(r => setTimeout(r, 0));
+    await flushPromises();
     await w.vm.$nextTick();
     expect(w.findAll('.event-card')).toHaveLength(6);
     expect((global.fetch as any).mock.calls[0][0]).toMatch(/^\/homepage\/events\?/);
@@ -37,9 +37,19 @@ describe('EventsBand', () => {
   it('renders empty state when the endpoint returns []', async () => {
     mockFetch([]);
     const w = mount(EventsBand);
-    await new Promise(r => setTimeout(r, 0));
+    await flushPromises();
     await w.vm.$nextTick();
     expect(w.text()).toContain('No upcoming events');
+  });
+
+  // (regression) CAP OData function-imports envelope arrays as `{value:[...]}`.
+  // Ensure that shape hydrates cards instead of assigning the whole object.
+  it('unwraps OData `{value:[...]}` envelope like the live endpoint', async () => {
+    mockFetch({ '@odata.context': '$metadata#Collection(x)', value: Array(6).fill(CARD) });
+    const w = mount(EventsBand);
+    await flushPromises();
+    await w.vm.$nextTick();
+    expect(w.findAll('.event-card')).toHaveLength(6);
   });
 
   it('initial region priority: envelope > localStorage > TZ', async () => {

@@ -1,16 +1,19 @@
 <template>
-  <ul class="for-you-cards">
+  <div class="for-you-cards cards">
     <template v-for="item in items" :key="item.ID">
-      <li v-if="linkFor(item)">
-        <a :href="linkFor(item)!">
-          <img v-if="item.imageUrl && safeImage(item.imageUrl)" :src="safeImage(item.imageUrl)!" alt="" />
-          <h3>{{ item.title }}</h3>
-          <p v-if="item.description">{{ item.description }}</p>
-          <span class="kind">{{ item.kind }}</span>
-        </a>
-      </li>
+      <a v-if="linkFor(item)" :href="linkFor(item)!" class="for-you-card">
+        <div class="for-you-card__thumb" :class="{ 'for-you-card__thumb--placeholder': !safeImage(item.imageUrl) }">
+          <img v-if="safeImage(item.imageUrl)" :src="safeImage(item.imageUrl)!" alt="" loading="lazy" />
+          <span v-else class="for-you-card__kind-icon" aria-hidden="true">{{ kindEmoji(item.kind) }}</span>
+        </div>
+        <div class="for-you-card__body">
+          <span class="for-you-card__kind">{{ kindLabel(item.kind) }}</span>
+          <h3 class="for-you-card__title">{{ item.title }}</h3>
+          <p v-if="item.description" class="for-you-card__desc">{{ item.description }}</p>
+        </div>
+      </a>
     </template>
-  </ul>
+  </div>
 </template>
 <script setup lang="ts">
 interface ForYouItem {
@@ -19,9 +22,31 @@ interface ForYouItem {
 }
 defineProps<{ items: ForYouItem[] }>();
 
+function kindLabel(kind: string): string {
+  switch (kind) {
+    case 'tutorial': return 'Tutorial';
+    case 'mission':  return 'Mission';
+    case 'blog':     return 'Blog';
+    case 'video':    return 'Video';
+    case 'shelf':    return 'Resource';
+    default:         return kind || 'Resource';
+  }
+}
+
+function kindEmoji(kind: string): string {
+  switch (kind) {
+    case 'tutorial': return '📘';
+    case 'mission':  return '🎯';
+    case 'blog':     return '✍️';
+    case 'video':    return '▶️';
+    case 'shelf':    return '📚';
+    default:         return '✨';
+  }
+}
+
 // Only http(s) URLs are permitted for external targets. Anything else
 // (javascript:, data:, vbscript:, protocol-relative //evil.com) resolves
-// to null → item is dropped from the list entirely (see <li v-if> above).
+// to null → item is dropped from the list entirely (see v-if above).
 // Admins own For-you candidates, but this defends against a compromised
 // admin session or a data-import mistake — the personalization surface
 // must never emit an active javascript: URL or a cross-origin link the

@@ -119,7 +119,7 @@ function onKey(e: KeyboardEvent): void {
 }
 
 useAutoAdvance({
-  intervalMs: 30_000,
+  intervalMs: 8_000,
   enabled: autoAdvance,
   container: () => props.root,
   tick: () => jumpTo((active.value + 1) % Math.max(1, slides.value.length)),
