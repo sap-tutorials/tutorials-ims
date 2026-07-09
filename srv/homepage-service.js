@@ -19,6 +19,7 @@ import cds from '@sap/cds';
 import { fetchSapDevsVideos } from './lib/youtube-fetcher.js';
 import { fetchRssItems } from './lib/homepage-rss-fetcher.js';
 import { resolveSecret } from './lib/secret-resolver.js';
+import * as mcpHp from './lib/mcp-homepage-tools.js';
 import { buildEnvelope, hashEnvelope } from './lib/homepage/personalized-envelope.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
 import * as metrics from './lib/metrics.js';
@@ -858,5 +859,9 @@ export default class HomepageService extends cds.ApplicationService {
         return [];
       }
     });
+
+    // (#1105 Task 13) Recommendation MCP tools — authenticated, persona-weighted.
+    this.on('get_my_recommended_tutorials', mcpHp.handleGetMyRecommendedTutorials);
+    this.on('get_my_recommended_missions',  mcpHp.handleGetMyRecommendedMissions);
   }
 }
