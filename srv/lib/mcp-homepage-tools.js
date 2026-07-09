@@ -6,7 +6,7 @@
 
 import cds from '@sap/cds';
 import { resolveUserSapId } from './resolve-db-user.js';
-import { rankForYou } from './homepage/persona-scoring.js';
+import { rankForYou, isHidden } from './homepage/persona-scoring.js';
 import { clampLimit } from './mcp-arg-validators.js';
 
 const LOG = cds.log('mcp-homepage');
@@ -59,9 +59,13 @@ async function fetchRankedCandidates(profile, kind, limit) {
   // list, so degrade to the unweighted active pool sorted by admin-curated
   // sortOrder. (Controller decision on Task 13 review — new users get the
   // curated default set, not an empty envelope.)
+  //
+  // Still honor personaHidden: rankForYou excludes hidden candidates, so the
+  // fallback must too, or a candidate explicitly hidden for this persona would
+  // reappear via the fallback path (security-review finding on Task 13).
   if (ranked.length === 0) {
     return candidates
-      .filter(c => c.kind === kind)
+      .filter(c => c.kind === kind && !isHidden(c, profile))
       .sort((a, b) => (a.sortOrder ?? 100) - (b.sortOrder ?? 100))
       .slice(0, limit)
       .map(shape);

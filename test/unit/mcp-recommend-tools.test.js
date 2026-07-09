@@ -79,12 +79,32 @@ describe('HomepageService recommendation MCP tools', () => {
         personaTags:   ['role:developer'],
         personaWeight: 99, sortOrder: 0, active: false,
       },
+      // Hidden for role:qa — used by the fallback-respects-personaHidden test.
+      // sortOrder 0 so it would sort FIRST if the fallback failed to exclude it.
+      {
+        ID: 'cand-hidden-qa', kind: 'tutorial', targetSlug: 'secret-qa-tut',
+        title: 'QA-hidden Tutorial', description: 'Hidden from QA persona',
+        personaTags:   [], personaHidden: ['role:qa'],
+        personaWeight: 0, sortOrder: 0, active: true,
+      },
     ]);
 
     // Seed a second user without preferences for the "no persona match" test.
     await INSERT.into(Users).entries({
       ID: 'nopref-id', sapId: 'nopref@ex.com', uuid: 'uuid-nopref',
       displayName: 'NoPrefs', email: 'nopref@ex.com',
+    });
+
+    // Third user with a role:qa persona — none of the developer-tagged
+    // candidates match qa, so rankForYou returns empty and the fallback fires.
+    // The cand-hidden-qa candidate is personaHidden for qa and must NOT leak
+    // through the fallback (security-review finding on Task 13).
+    await INSERT.into(Users).entries({
+      ID: 'qa-id', sapId: 'qa-user@ex.com', uuid: 'uuid-qa',
+      displayName: 'QaUser', email: 'qa-user@ex.com',
+    });
+    await INSERT.into(UserLearningPreferences).entries({
+      user_ID: 'qa-id', role: 'qa',
     });
   });
 
@@ -150,6 +170,20 @@ describe('HomepageService recommendation MCP tools', () => {
     expect(results.every(r => typeof r.slug === 'string')).toBe(true);
     // Only tutorial-kind rows in the tutorial tool's output.
     expect(results.map(r => r.slug)).not.toContain('build-cap-mission');
+  });
+
+  it('fallback still honors personaHidden — a candidate hidden for the caller persona is omitted', async () => {
+    // qa-user@ex.com has role:qa. None of the developer-tagged candidates
+    // match, so rankForYou is empty and the fallback fires. cand-hidden-qa is
+    // active and kind=tutorial with sortOrder 0 (would sort FIRST), but it is
+    // personaHidden: ['role:qa'] — the fallback must exclude it.
+    cds.context = { user: new cds.User({ id: 'qa-user@ex.com' }) };
+    const results = await HomepageService.send('get_my_recommended_tutorials', { limit: 10 });
+    expect(Array.isArray(results)).toBe(true);
+    expect(results.length).toBeGreaterThan(0);          // fallback delivered the non-hidden pool
+    expect(results.map(r => r.slug)).not.toContain('secret-qa-tut'); // hidden one excluded
+    // Non-hidden developer candidates still surface via the fallback.
+    expect(results.map(r => r.slug)).toContain('cap-getting-started');
   });
 
   it('get_my_recommended_tutorials clamps limit at 20', async () => {
