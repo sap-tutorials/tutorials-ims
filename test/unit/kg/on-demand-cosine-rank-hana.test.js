@@ -43,11 +43,14 @@ describe('#1113 rankTutorialsByQueryVector HANA branch', () => {
 
     // Phase 1: cosine + MAX aggregate
     const phase1 = db._runs[0]
-    expect(phase1.sql).toMatch(/MAX\s*\(\s*COSINE_SIMILARITY\s*\(\s*EMBEDDING\s*,\s*TO_REAL_VECTOR\s*\(\s*\?\s*\)\s*\)\s*\)/i)
-    expect(phase1.sql).toMatch(/GROUP\s+BY\s+TUTORIAL_ID/i)
+    // Allow optional table alias prefix (e.g. te.EMBEDDING) — #1113 fix added aliases.
+    expect(phase1.sql).toMatch(/MAX\s*\(\s*COSINE_SIMILARITY\s*\(\s*(?:\w+\.)?\s*EMBEDDING\s*,\s*TO_REAL_VECTOR\s*\(\s*\?\s*\)\s*\)\s*\)/i)
+    expect(phase1.sql).toMatch(/GROUP\s+BY\s+(?:\w+\.)?\s*TUTORIAL_ID/i)
     expect(phase1.sql).toMatch(/SELECT\s+TOP\s+\?/i)
     expect(phase1.params[0]).toBe(5)
     expect(phase1.params[1].split(',')).toHaveLength(1536)
+    // #1113 fix: ACTIVE gate must be present to match SQLite branch behavior.
+    expect(phase1.sql).toMatch(/STATUS\s*=\s*'ACTIVE'/i)
 
     // Phase 2: metadata by ID (delegated to fetchTutorialsByIds)
     const phase2 = db._runs[1]

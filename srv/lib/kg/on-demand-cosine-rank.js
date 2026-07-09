@@ -96,12 +96,14 @@ export async function rankTutorialsByQueryVector({ db, queryVector, limit = 5 })
     const vecStr = '[' + Array.from(q, x => x.toFixed(6)).join(',') + ']';
 
     // Phase 1: HANA does the cosine + top-K in one round-trip.
+    // JOIN to Tutorials to enforce the ACTIVE gate — mirrors the SQLite branch. #1113 fix.
     const ranked = await db.run(
-      `SELECT TOP ? TUTORIAL_ID as tutorial_id,
-              MAX(COSINE_SIMILARITY(EMBEDDING, TO_REAL_VECTOR(?))) AS score
-       FROM COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING
-       WHERE EMBEDDING IS NOT NULL
-       GROUP BY TUTORIAL_ID
+      `SELECT TOP ? te.TUTORIAL_ID as tutorial_id,
+              MAX(COSINE_SIMILARITY(te.EMBEDDING, TO_REAL_VECTOR(?))) AS score
+       FROM COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING te
+       JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS t ON t.ID = te.TUTORIAL_ID
+       WHERE te.EMBEDDING IS NOT NULL AND t.STATUS = 'ACTIVE'
+       GROUP BY te.TUTORIAL_ID
        ORDER BY score DESC`,
       [limit, vecStr]
     ) || [];
