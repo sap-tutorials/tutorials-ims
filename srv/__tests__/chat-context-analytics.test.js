@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { buildSystemPrompt } from '../lib/chat-context.js';
 
 describe('chat-context analytics-builder pageContext (Phase 5)', () => {
-  it('renders currentSpec + lastResult when tool === analytics-builder', () => {
-    const prompt = buildSystemPrompt({
+  it('renders currentSpec + lastResult when tool === analytics-builder', async () => {
+    const prompt = await buildSystemPrompt({
       kind: 'admin',
       tool: 'analytics-builder',
       currentSpec: {
@@ -19,14 +19,14 @@ describe('chat-context analytics-builder pageContext (Phase 5)', () => {
     expect(prompt).toMatch(/generateAnalyticsQuery|explainAnalyticsResult/);
   });
 
-  it('handles admin pageContext without analytics-builder gracefully', () => {
-    const prompt = buildSystemPrompt({ kind: 'admin', tool: 'changelog' }, null);
+  it('handles admin pageContext without analytics-builder gracefully', async () => {
+    const prompt = await buildSystemPrompt({ kind: 'admin', tool: 'changelog' }, null);
     expect(prompt).toMatch(/admin/i);
     expect(prompt).not.toMatch(/TaskRecords/);
   });
 
-  it('no-op when on a non-admin page', () => {
-    const prompt = buildSystemPrompt({ kind: 'tutorial', slug: 'x' }, null);
+  it('no-op when on a non-admin page', async () => {
+    const prompt = await buildSystemPrompt({ kind: 'tutorial', slug: 'x' }, null);
     expect(prompt).not.toMatch(/analytics-builder/i);
   });
 });
