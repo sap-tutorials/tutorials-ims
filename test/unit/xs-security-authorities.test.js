@@ -74,3 +74,47 @@ describe('Tutorial.API scope (#996)', () => {
     }
   });
 });
+
+describe('Tutorial.MCP scope (#1105)', () => {
+  it('declares Tutorial.MCP scope in both xs-security files', () => {
+    for (const path of ['xs-security.json', '.deploy/xs-security.json']) {
+      const content = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'));
+      const names = content.scopes.map(s => s.name);
+      expect(names).toContain('$XSAPPNAME.Tutorial.MCP');
+    }
+  });
+
+  it('declares TutorialMCP role template in both xs-security files', () => {
+    for (const path of ['xs-security.json', '.deploy/xs-security.json']) {
+      const content = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'));
+      const tpl = content['role-templates'].find(t => t.name === 'TutorialMCP');
+      expect(tpl).toBeDefined();
+      expect(tpl['scope-references']).toContain('$XSAPPNAME.Tutorial.MCP');
+      expect(tpl['scope-references']).toContain('$XSAPPNAME.Everyone');
+    }
+  });
+
+  it('declares "Tutorials MCP Users" role collection in both xs-security files', () => {
+    for (const path of ['xs-security.json', '.deploy/xs-security.json']) {
+      const content = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'));
+      const rc = content['role-collections'].find(r => r.name === 'Tutorials MCP Users');
+      expect(rc).toBeDefined();
+      expect(rc['role-template-references']).toContain('$XSAPPNAME.TutorialMCP');
+    }
+  });
+
+  it('oauth2-configuration.redirect-uris includes MCP client callback patterns in both xs-security files', () => {
+    for (const path of ['xs-security.json', '.deploy/xs-security.json']) {
+      const content = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'));
+      const uris = content['oauth2-configuration']?.['redirect-uris'] ?? [];
+      for (const required of [
+        'http://localhost/*',
+        'http://127.0.0.1/*',
+        'mcp://*',
+        'https://developers.sap.com/callback'
+      ]) {
+        expect(uris).toContain(required);
+      }
+    }
+  });
+});

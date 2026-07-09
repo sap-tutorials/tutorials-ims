@@ -13,7 +13,8 @@
     { "name": "$XSAPPNAME.Tutorial.Author",    "description": "QA channel author preview (unpublished tutorials at /tutorials-qa/*)" },
     { "name": "$XSAPPNAME.KnowledgeGraph.Admin", "description": "Knowledge graph admin: merge/veto concepts, run raw SPARQL" },
     { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" },
-    { "name": "$XSAPPNAME.Tutorial.API",       "description": "External GraphQL API access for user-scoped reads (issue #996)" }
+    { "name": "$XSAPPNAME.Tutorial.API",       "description": "External GraphQL API access for user-scoped reads (issue #996)" },
+    { "name": "$XSAPPNAME.Tutorial.MCP",       "description": "MCP protocol access — authenticated tutorial reads/writes" }
   ],
   "role-templates": [
     {
@@ -65,6 +66,11 @@
       "name": "TutorialApiConsumer",
       "description": "External developer / partner consuming the tutorials GraphQL API",
       "scope-references": ["$XSAPPNAME.Tutorial.API", "$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "TutorialMCP",
+      "description": "MCP authenticated user (progress reads/writes, recommendations)",
+      "scope-references": ["$XSAPPNAME.Tutorial.MCP", "$XSAPPNAME.Everyone"]
     }
   ],
   "role-collections": [
@@ -128,6 +134,11 @@
         "$XSAPPNAME.TutorialApiConsumer",
         "$XSAPPNAME.Everyone"
       ]
+    },
+    {
+      "name": "Tutorials MCP Users",
+      "description": "Authenticated MCP access to tutorials at /mcp-auth/*",
+      "role-template-references": ["$XSAPPNAME.TutorialMCP", "$XSAPPNAME.Everyone"]
     }
   ],
   "authorities": [
@@ -136,7 +147,11 @@
   "oauth2-configuration": {
     "redirect-uris": [
       "https://*.cfapps.*.hana.ondemand.com/**",
-      "vscode://sap-tutorials.sage-tutorial-extension/**"
+      "vscode://sap-tutorials.sage-tutorial-extension/**",
+      "http://localhost/*",
+      "http://127.0.0.1/*",
+      "mcp://*",
+      "https://developers.sap.com/callback"
     ]
   }
 }
