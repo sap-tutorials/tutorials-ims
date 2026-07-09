@@ -12,6 +12,7 @@
 import cds from '@sap/cds';
 import crypto from 'node:crypto';
 import { resolveDbUser } from './resolve-db-user.js';
+import { invalidateCacheByPatId } from './mcp-pat-middleware.js';
 
 const VALID_SCOPES = new Set(['read', 'write']);
 const MIN_TTL = 1;
@@ -82,5 +83,8 @@ export async function handleRevokePAT(req) {
 
   const revokedAt = new Date();
   await UPDATE(PATs).set({ revokedAt }).where({ ID });
+  // Immediately purge the middleware cache — closes the 60s TTL revocation
+  // gap on single-instance deploys (security-review fix, #1105).
+  invalidateCacheByPatId(ID);
   return { ok: true, revokedAt };
 }

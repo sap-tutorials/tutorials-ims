@@ -13,7 +13,20 @@ const LOG = cds.log('mcp-pat');
 const NS = 'com.sap.developers.ims';
 
 // TTL 60s — bounded revocation window << any credible attack duration.
+// For instant revocation, `handleRevokePAT` in mcp-pat-actions.js calls
+// `invalidateCacheByPatId(patId)` after the UPDATE succeeds — closes the
+// 60s TTL gap on single-instance deploys. Multi-instance revocation is a
+// follow-up (would need pub/sub or shared cache).
 export const _cache = new LRUCache({ max: 5000, ttl: 60 * 1000 });
+
+/** Purge the cache entry for the PAT with the given ID.
+ *  Called from `handleRevokePAT` to close the 60s TTL revocation gap.
+ *  O(cache-size); acceptable at max 5000 entries. */
+export function invalidateCacheByPatId(patId) {
+  for (const [hashHex, entry] of _cache.entries()) {
+    if (entry.patId === patId) _cache.delete(hashHex);
+  }
+}
 
 function respond401(res, err = 'invalid_token') {
   res.setHeader('WWW-Authenticate', `Bearer error="${err}"`);
@@ -21,15 +34,28 @@ function respond401(res, err = 'invalid_token') {
 }
 
 function installSyntheticUser(req, cached) {
+  const scopes = Array.isArray(cached.scopes) ? cached.scopes : [];
+  const scopeRoles = new Set();
+  // Scope → pseudo-role mapping (Phase 2 #1105, security-review fix).
+  // Write handlers (complete_step, reset_tutorial_progress on Task 12) MUST
+  // gate on 'pat-write' via @requires. Read handlers stay at
+  // @requires: 'authenticated-user' — every PAT that reaches this line has
+  // already passed the 'authenticated-user' predicate via the shared
+  // `role === 'authenticated-user'` branch below.
+  if (scopes.includes('read')) scopeRoles.add('pat-read');
+  if (scopes.includes('write')) scopeRoles.add('pat-write');
+
   req.user = {
     id: cached.email,
-    is: (role) => role === 'authenticated-user' || (Array.isArray(cached.roles) && cached.roles.includes(role)),
+    is: (role) => role === 'authenticated-user'
+      || scopeRoles.has(role)
+      || (Array.isArray(cached.roles) && cached.roles.includes(role)),
     attr: cached.attr ?? {},
     tokenSource: 'pat',
     authInfo: { token: { userId: cached.sapId } },
     _dbUserId: cached.userId,
     _patId: cached.patId,
-    _patScopes: cached.scopes
+    _patScopes: scopes
   };
 }
 

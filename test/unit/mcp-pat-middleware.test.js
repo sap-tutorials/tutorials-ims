@@ -21,6 +21,15 @@ describe('mcp-pat-middleware', () => {
       prefix: 'pat_abcd1234', hashHex, scopes: ['read'],
       expiresAt: new Date(Date.now() + 60_000)
     });
+    // Write-scoped PAT — covers the scope-bypass regression case: a read-only
+    // PAT must NOT grant pat-write; a write-scoped one must.
+    const writeToken = 'pat_write0001_' + 'c'.repeat(48);
+    const writeHash = crypto.createHash('sha256').update(writeToken).digest('hex');
+    await INSERT.into(PATs).entries({
+      ID: 'pat-write-uuid', user_ID: 'mw-user-uuid', name: 'writer',
+      prefix: 'pat_write0001', hashHex: writeHash, scopes: ['read', 'write'],
+      expiresAt: new Date(Date.now() + 60_000)
+    });
     await INSERT.into(PATs).entries({
       ID: 'pat-revoked-uuid', user_ID: 'mw-user-uuid', name: 'revoked',
       prefix: 'pat_revoked1', hashHex: crypto.createHash('sha256').update('pat_revoked1_' + 'b'.repeat(48)).digest('hex'),
@@ -67,6 +76,14 @@ describe('mcp-pat-middleware', () => {
     expect(req.user).toBeDefined();
     expect(req.user.tokenSource).toBe('pat');
     expect(req.user.is('authenticated-user')).toBe(true);
+    // sapId path: authInfo.token.userId is what resolveDbUser reads first.
+    // The seed above does not set sapId, so the value flows through as null —
+    // the assertion locks the SHAPE that resolveDbUser depends on.
+    expect(req.user.authInfo?.token).toBeDefined();
+    // Scope pseudo-roles (security-review fix): read-only PAT grants pat-read,
+    // NOT pat-write. Task 12's write handlers gate on pat-write.
+    expect(req.user.is('pat-read')).toBe(true);
+    expect(req.user.is('pat-write')).toBe(false);
   });
 
   it('rejects a revoked PAT with 401', async () => {
@@ -93,5 +110,26 @@ describe('mcp-pat-middleware', () => {
     const req2 = mockReq('Bearer pat_abcd1234_' + 'a'.repeat(48));
     await patMiddleware(req2, mockRes(), vi.fn());
     expect(_cache.size).toBe(1); // still one entry, second was a cache hit
+  });
+
+  it('grants pat-write to a write-scoped PAT', async () => {
+    _cache.clear();
+    const req = mockReq('Bearer pat_write0001_' + 'c'.repeat(48));
+    const res = mockRes(); const next = vi.fn();
+    await patMiddleware(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(req.user.is('pat-read')).toBe(true);
+    expect(req.user.is('pat-write')).toBe(true);
+  });
+
+  it('invalidateCacheByPatId purges the specific PAT entry', async () => {
+    const { invalidateCacheByPatId } = await import('../../srv/lib/mcp-pat-middleware.js');
+    _cache.clear();
+    // Warm cache with both active + write-scoped PATs.
+    await patMiddleware(mockReq('Bearer pat_abcd1234_' + 'a'.repeat(48)), mockRes(), vi.fn());
+    await patMiddleware(mockReq('Bearer pat_write0001_' + 'c'.repeat(48)), mockRes(), vi.fn());
+    expect(_cache.size).toBe(2);
+    invalidateCacheByPatId('pat-active-uuid');
+    expect(_cache.size).toBe(1);
   });
 });
