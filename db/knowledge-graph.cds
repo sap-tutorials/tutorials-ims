@@ -24,7 +24,8 @@ entity Concepts : cuid, managed {
   slug            : String(80) @assert.unique;     // 'cap-handlers'
   name            : String(120);                    // 'CAP Service Handlers'
   description     : String(500);                    // LLM-generated, admin-editable
-  embedding       : LargeBinary;                    // centroid vector for similarity merge
+  embedding       : LargeBinary;                    // legacy raw Float32-LE BLOB (retained for rollback per #1113 spec)
+  embeddingVec    : Vector(1536);                   // #1113: HANA-native REAL_VECTOR for server-side cosine
   status          : String(20) default 'ACTIVE';    // ACTIVE | MERGED | VETOED
   mergedInto      : Association to Concepts;        // if MERGED, points to canonical
   extractionCount : Integer default 0;              // # tutorials that contributed
