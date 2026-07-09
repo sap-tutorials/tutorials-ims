@@ -602,7 +602,7 @@ git push
 
 ---
 
-## Task 4: XSUAA scope + role template + role collection
+## Task 4: XSUAA scope + role + role collection + expanded redirect URIs
 
 **Files:**
 - Modify: `xs-security.json`
@@ -611,7 +611,9 @@ git push
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: XSUAA scope `$XSAPPNAME.Tutorial.MCP`, role template `TutorialMCP`, role collection `Tutorials MCP Users`, OAuth client `sb-tutorials-mcp` (PKCE-only). Task 6 will reference this scope in the approuter route.
+- Produces: XSUAA scope `$XSAPPNAME.Tutorial.MCP`, role template `TutorialMCP`, role collection `Tutorials MCP Users`, extended `oauth2-configuration.redirect-uris` for MCP client callbacks (localhost, 127.0.0.1, mcp://, prod callback). Task 6 will reference this scope in the approuter route.
+
+**Design note (updated 2026-07-09 during implementation):** The spec's Section 2 originally called for a separate `sb-tutorials-mcp` OAuth client (PKCE-only, no secret). XSUAA's `xs-security.json` schema doesn't support multiple named clients under one instance — `oauth2-configuration` is a single top-level object with one `redirect-uris` array. Rather than provision a second XSUAA instance (doubles management surface), Phase 2 extends the existing app's redirect-uri allowlist. PKCE is client-side: MCP clients send `code_verifier` + `S256` challenge against the default XSUAA `clientid` and simply omit `client_secret`. XSUAA's token endpoint accepts PKCE public-client flow this way. Consequence: the same redirect URIs are technically allowed for the existing web + VS Code flows too — not a security regression, just a slightly broader allowlist. Task 5's `.well-known/oauth-authorization-server` still points at the same XSUAA `token_endpoint`; nothing else in the design changes.
 
 - [ ] **Step 1: Extend the drift-guard test first (TDD-for-config)**
 
@@ -644,18 +646,18 @@ it('declares "Tutorials MCP Users" role collection in both xs-security files', (
   }
 });
 
-it('declares sb-tutorials-mcp OAuth2 client (PKCE-only) in both xs-security files', () => {
+it('oauth2-configuration.redirect-uris includes MCP client callback patterns in both xs-security files', () => {
   for (const path of ['xs-security.json', '.deploy/xs-security.json']) {
     const content = JSON.parse(fs.readFileSync(path, 'utf8'));
-    const client = content['oauth2-configuration']?.['clients']?.find(c => c.id === 'sb-tutorials-mcp');
-    expect(client).toBeDefined();
-    expect(client.secret).toBeUndefined();
-    expect(client['redirect-uris']).toEqual(expect.arrayContaining([
-      'https://developers.sap.com/callback',
+    const uris = content['oauth2-configuration']?.['redirect-uris'] ?? [];
+    for (const required of [
       'http://localhost/*',
       'http://127.0.0.1/*',
-      'mcp://*'
-    ]));
+      'mcp://*',
+      'https://developers.sap.com/callback'
+    ]) {
+      expect(uris).toContain(required);
+    }
   }
 });
 ```
@@ -663,7 +665,7 @@ it('declares sb-tutorials-mcp OAuth2 client (PKCE-only) in both xs-security file
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/unit/xs-security-authorities.test.js`
-Expected: FAIL — 4 new cases fail because the scope/template/collection/client don't exist yet.
+Expected: FAIL — 4 new cases fail because the scope/template/collection/redirect-uris don't exist yet.
 
 - [ ] **Step 3: Add scope to both `xs-security.json` files**
 
@@ -694,27 +696,17 @@ In `role-collections`, insert:
 }
 ```
 
-- [ ] **Step 6: Add OAuth2 client to both files**
+- [ ] **Step 6: Extend `oauth2-configuration.redirect-uris` in both files**
 
-Add (or extend the existing) `oauth2-configuration.clients` array with:
-```json
-{
-  "id": "sb-tutorials-mcp",
-  "authorities-inheritance": false,
-  "redirect-uris": [
-    "https://developers.sap.com/callback",
-    "http://localhost/*",
-    "http://127.0.0.1/*",
-    "mcp://*"
-  ],
-  "token-validity": 3600,
-  "refresh-token-validity": 2592000,
-  "grant-types": ["authorization_code", "refresh_token"],
-  "allow-public-client": true
-}
+Add four new entries to the existing `redirect-uris` array (preserve the existing `https://*.cfapps.*.hana.ondemand.com/**` and `vscode://sap-tutorials.sage-tutorial-extension/**`):
+```
+"http://localhost/*",
+"http://127.0.0.1/*",
+"mcp://*",
+"https://developers.sap.com/callback"
 ```
 
-If `oauth2-configuration` does not exist at all, wrap in `{ "oauth2-configuration": { "clients": [ ... ] } }`.
+DO NOT add a separate `clients` sub-array or a new client_id — Phase 2 uses the existing XSUAA app's default client with PKCE (code_verifier + S256).
 
 - [ ] **Step 7: Run test to verify it passes**
 
@@ -725,12 +717,16 @@ Expected: PASS (all cases including the 4 new ones).
 
 ```bash
 git add xs-security.json .deploy/xs-security.json test/unit/xs-security-authorities.test.js
-git commit -m "feat(#1105): add Tutorial.MCP scope + TutorialMCP role + PKCE-only OAuth client
+git commit -m "feat(#1105): add Tutorial.MCP scope + TutorialMCP role + MCP redirect URIs
 
 Dual-file drift rule enforced by the extended xs-security-authorities
-test. New PKCE-only OAuth2 client sb-tutorials-mcp for MCP OAuth 2.1
-flow (no secret; redirect-uris include http://localhost/*,
-http://127.0.0.1/*, mcp://*, and the prod callback).
+test. oauth2-configuration.redirect-uris extended with the MCP client
+callback patterns (localhost, 127.0.0.1, mcp://, prod callback) — the
+existing default XSUAA client is reused with PKCE (public-client flow,
+no secret). No separate sb-tutorials-mcp client — XSUAA's schema only
+supports one oauth2-configuration per instance, and provisioning a
+second instance for MCP alone doubles role-collection management for
+no security gain over the extend-allowlist approach.
 
 Refs #1105."
 git push
