@@ -31,6 +31,36 @@ async function mcpFetch(pathAndQuery, body) {
   });
 }
 
+describeIf('MCP smoke — Phase 2 routes and discovery', { timeout: 20_000 }, () => {
+  // ─── Phase 2: auth-gated routes ─────────────────────────────────────────
+  it('/mcp-auth/api returns 401 without a JWT (auth route is gated)', async () => {
+    const res = await mcpFetch('/mcp-auth/api', {
+      jsonrpc: '2.0', id: 10, method: 'tools/list',
+    });
+    // approuter/XSUAA rejects unauthenticated requests to /mcp-auth/*.
+    expect(res.status).toBe(401);
+  });
+
+  it('/mcp-pat/api returns 401 without a PAT (PAT middleware rejects)', async () => {
+    const res = await mcpFetch('/mcp-pat/api', {
+      jsonrpc: '2.0', id: 11, method: 'tools/list',
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('/.well-known/oauth-authorization-server returns 200 with JSON content-type', async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/.well-known/oauth-authorization-server`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+  });
+
+  it('/.well-known/oauth-protected-resource returns 200 with JSON content-type', async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/.well-known/oauth-protected-resource`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+  });
+});
+
 describeIf('MCP smoke — deployed target', { timeout: 20_000 }, () => {
   it('initialize on /mcp/search returns 200', async () => {
     const res = await mcpFetch(MCP_SEARCH, {
