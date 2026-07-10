@@ -47,6 +47,21 @@ describe('renderPreview', () => {
     expect(r.html).toContain('synthetic stub failure');
   });
 
+  // #1102: Real Hugo writes fatal build/startup errors to STDOUT (not stderr),
+  // and --quiet --logLevel error keeps stderr empty. The renderer must capture
+  // stdout so the diagnostic reaches the error page instead of an empty <pre>.
+  // Regression guard for the empty-<pre> error page reported by Sage.
+  it('surfaces stdout diagnostics on Hugo failure (empty-<pre> regression)', async () => {
+    process.env.HUGO_STUB_MODE = 'fail-stdout';
+    const r = await renderPreview(sampleMarkdown);
+    expect(r.status).toBe('render_error');
+    // The real Hugo error text must appear in the returned HTML, not be lost.
+    expect(r.html).toContain('failed to load modules');
+    expect(r.html).toContain('synthetic stdout-only failure');
+    // And the <pre> must not be empty.
+    expect(r.html).not.toMatch(/<pre[^>]*>\s*<\/pre>/);
+  });
+
   it('returns render_error HTML on Hugo timeout', async () => {
     process.env.HUGO_STUB_MODE = 'hang';
     process.env.PREVIEW_HUGO_TIMEOUT_MS = '300';

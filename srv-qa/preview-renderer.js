@@ -114,8 +114,27 @@ export async function renderPreview(markdown, rulesVr) {
       return { html: errorHtml('Preview timed out', 'Render exceeded time budget.'), status: 'render_error', durationMs: Date.now() - t0, bytes: 0, _tmpDir: tmpDirPath };
     }
     if (result.exitCode !== 0) {
-      const tail = result.stderr.split('\n').slice(-40).join('\n');
-      return { html: errorHtml('Preview render error', tail), status: 'render_error', durationMs: Date.now() - t0, bytes: 0, _tmpDir: tmpDirPath };
+      // #1102: Hugo writes its fatal build/startup errors (e.g. "failed to
+      // load modules: failed to apply mounts") to stdout, and emits warnings
+      // on stderr. runHugo now captures both — prefer the combined diagnostic
+      // so the error page's <pre> carries the real cause instead of an empty
+      // box (the symptom Sage reported). Fall back to the exit code when both
+      // streams are silent, so the page is never blank.
+      const combined = [result.stdout, result.stderr]
+        .map(s => (s || '').trim())
+        .filter(Boolean)
+        .join('\n')
+        .split('\n')
+        .slice(-40)
+        .join('\n');
+      const detail = combined || `Hugo exited with code ${result.exitCode} but produced no diagnostic output on stdout or stderr.`;
+      // #1102: also log the failure server-side so `cf logs tutorials-srv-qa`
+      // shows the real Hugo cause without needing the browser error page.
+      console.error(JSON.stringify({
+        event: 'preview.render', status: 'render_error',
+        exitCode: result.exitCode, hugoDetail: detail.slice(0, 2000),
+      }));
+      return { html: errorHtml('Preview render error', detail), status: 'render_error', durationMs: Date.now() - t0, bytes: 0, _tmpDir: tmpDirPath };
     }
 
     const out = join(tmpDirPath, 'public', 'tutorials', '__preview__', 'index.html');
@@ -134,18 +153,24 @@ function runHugo(bin, args, timeoutMs) {
     // Production target is Linux (CF). On win32 dev machines, child.kill('SIGKILL')
     // calls TerminateProcess on the direct child only — grandchildren may leak.
     // Acceptable trade-off: timeouts are rare in dev, and CF deploys don't hit this path.
-    const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = ''; let timedOut = false;
-    const STDERR_CAP = 256 * 1024;
+    //
+    // #1102: Capture BOTH stdout and stderr. Hugo writes fatal build/startup
+    // errors to stdout (not stderr); with stdout previously set to 'ignore'
+    // those diagnostics were discarded, so any Hugo failure surfaced as an
+    // error page with an empty <pre>. Both streams are now piped and capped.
+    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = ''; let stderr = ''; let timedOut = false;
+    const STREAM_CAP = 256 * 1024;
     const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
-    child.stderr.on('data', d => { if (stderr.length < STDERR_CAP) stderr += d.toString(); });
+    child.stdout.on('data', d => { if (stdout.length < STREAM_CAP) stdout += d.toString(); });
+    child.stderr.on('data', d => { if (stderr.length < STREAM_CAP) stderr += d.toString(); });
     child.on('close', (code) => {
       clearTimeout(timer);
-      resolve({ exitCode: code, stderr, timedOut });
+      resolve({ exitCode: code, stdout, stderr, timedOut });
     });
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ exitCode: -1, stderr: stderr + '\n' + err.message, timedOut });
+      resolve({ exitCode: -1, stdout, stderr: stderr + '\n' + err.message, timedOut });
     });
   });
 }
