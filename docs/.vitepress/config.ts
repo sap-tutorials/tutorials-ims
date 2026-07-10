@@ -146,7 +146,8 @@ export default defineConfig({
           { text: 'Khoros community link',            link: '/developers/architecture/khoros-link' },
           { text: 'Knowledge graph',                  link: '/developers/architecture/knowledge-graph' },
           { text: 'Observability',                    link: '/developers/architecture/observability' },
-          { text: 'Scaling playbook',                 link: '/developers/architecture/scaling-playbook' }
+          { text: 'Scaling playbook',                 link: '/developers/architecture/scaling-playbook' },
+          { text: 'MCP server',                       link: '/developers/architecture/mcp-server' }
         ]},
         { text: 'Operations', items: [
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },

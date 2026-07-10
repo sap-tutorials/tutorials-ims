@@ -467,6 +467,160 @@ curl -X POST "http://localhost:4004/mcp/search" \
 
 Success responses come back wrapped in the standard `result.content[0].text` envelope with the handler's return value JSON-stringified. Failure responses use the standard JSON-RPC `error` object.
 
+---
+
+## Phase 2: Authenticated tools
+
+Phase 2 adds nine authenticated tools across two services: seven on `DeveloperService` (user progress + step content) and two on `HomepageService` (personalized recommendations). All nine require a valid XSUAA JWT or a PAT with at least `read` scope.
+
+### Route decision matrix
+
+| Client type | Route | Auth mechanism |
+| --- | --- | --- |
+| Browser agent (Claude Desktop OAuth) | `/mcp-auth/api` | OAuth 2.1 + PKCE via XSUAA/IAS |
+| Headless agent (Claude Code, CI, VS Code extension) | `/mcp-pat/api` | Bearer PAT (`pat_...`) |
+| Anonymous / public content | `/mcp/*` | none |
+
+`/mcp-auth/*` carries the full XSUAA bearer from the approuter. `/mcp-pat/*` is handled by `srv/lib/mcp-pat-middleware.js` before the CAP runtime sees the request — the middleware resolves the PAT to a synthetic `req.user` and attaches `tokenSource: 'pat'`. Both paths converge on `resolveDbUser()` and the same CAP handlers.
+
+### 9. `get_my_tutorials`
+
+**Purpose.** The authenticated user's tutorials filtered by progress status.
+
+**Endpoint.** `/mcp-auth/api` or `/mcp-pat/api`  **Auth.** `@requires: 'authenticated-user'`
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `status` | `String` | no | `'in_progress'`, `'completed'`, `'all'` (default). |
+| `limit` | `Integer` | no | Default 20, max 50. |
+
+**Return shape.** `array of TutorialProgress` — slug, title, progress fields. See `srv/developer-service.cds`.
+
+---
+
+### 10. `get_my_missions`
+
+**Purpose.** The authenticated user's missions filtered by status.
+
+**Endpoint.** `/mcp-auth/api` or `/mcp-pat/api`  **Auth.** `@requires: 'authenticated-user'`
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `status` | `String` | no | `'in_progress'`, `'completed'`, `'not_started'`, `'all'` (default). |
+| `limit` | `Integer` | no | Default 10, max 50. |
+
+---
+
+### 11. `get_my_events`
+
+**Purpose.** The authenticated user's registered events.
+
+**Endpoint.** `/mcp-auth/api` or `/mcp-pat/api`  **Auth.** `@requires: 'authenticated-user'`
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `when` | `String` | no | `'upcoming'` (default), `'past'`, `'registered'`. |
+| `limit` | `Integer` | no | Default 20, max 50. |
+
+---
+
+### 12. `get_my_completed_steps`
+
+**Purpose.** Step numbers the user has completed for a specific tutorial.
+
+**Endpoint.** `/mcp-auth/api` or `/mcp-pat/api`  **Auth.** `@requires: 'authenticated-user'`
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `slug` | `String` | yes | Tutorial slug (lowercased server-side). |
+
+**Return shape.** `array of Integer` — the completed step numbers. Returns 404 for unknown slugs.
+
+---
+
+### 13. `get_tutorial_step`
+
+**Purpose.** Full HTML slice of a tutorial step. Available on both the anonymous (`/mcp/search`) and authenticated (`/mcp-auth/api`) routes — authenticated callers also emit a `tokenSource`-tagged metric.
+
+**Endpoint.** `/mcp/search`, `/mcp-auth/api`, or `/mcp-pat/api`  **Auth.** None required (anonymous mount), or `@requires: 'authenticated-user'` (authenticated mount).
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `slug` | `String` | yes | Tutorial slug. |
+| `stepNumber` | `Integer` | yes | 1-based step number. |
+
+**Return shape.**
+
+```jsonc
+{
+  "slug":       "string",
+  "stepNumber": 1,
+  "stepTitle":  "string",
+  "html":       "string (HTML fragment, gzip-decoded from HANA BLOB)",
+  "textLength": 0,
+  "totalSteps": 0
+}
+```
+
+Returns 404 if the tutorial or step is not in the content store. Backed by `srv/lib/tutorial-step-slicer.js`; LRU-cached per `slug::activeManifestVersion`. Disabled if `KG_STEP_SLICER_ENABLED=false`.
+
+---
+
+### 14. `complete_step`
+
+**Purpose.** Mark a tutorial step as completed. Writes progress; requires `pat-write` pseudo-role for PAT callers.
+
+**Endpoint.** `/mcp-auth/api` or `/mcp-pat/api`  **Auth.** `@requires: 'authenticated-user'`. PAT callers need `scopes: ['read', 'write']`.
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `slug` | `String` | yes | Tutorial slug. |
+| `stepNumber` | `Integer` | yes | 1-based step number. |
+
+Delegates to the existing `completeStep` action — the same audit trail fires for browser and MCP callers.
+
+---
+
+### 15. `reset_tutorial_progress`
+
+**Purpose.** Reset all step progress for a tutorial. Writes progress; requires `pat-write` pseudo-role for PAT callers. Emits `TutorialProgressReset` audit event with `tokenSource` field.
+
+**Endpoint.** `/mcp-auth/api` or `/mcp-pat/api`  **Auth.** `@requires: 'authenticated-user'`. PAT callers need `scopes: ['read', 'write']`.
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `slug` | `String` | yes | Tutorial slug. |
+
+---
+
+### 16. `get_my_recommended_tutorials`
+
+**Purpose.** Persona-ranked tutorial recommendations from `HomepageForYouCandidates`.
+
+**Endpoint.** `/mcp-auth/homepage` or `/mcp-pat/homepage`  **Auth.** `@requires: 'authenticated-user'`
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `limit` | `Integer` | no | Default 10, max 50. |
+
+**Return shape.** `array of TutorialRef` (slug, title, snippet, tags) — ranked by persona fit. Anonymous users (no `UserLearningPreferences`) receive the un-personalized pool.
+
+---
+
+### 17. `get_my_recommended_missions`
+
+**Purpose.** Persona-ranked mission recommendations from `HomepageForYouCandidates`.
+
+**Endpoint.** `/mcp-auth/homepage` or `/mcp-pat/homepage`  **Auth.** `@requires: 'authenticated-user'`
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `limit` | `Integer` | no | Default 10, max 50. |
+
+**Return shape.** `array of MissionRef` (slug, title, description, tutorialCount).
+
+---
+
 ## Related
 
 - End-user quickstart (Claude Desktop / Claude Code wiring): [docs/end-users/mcp-quickstart.md](../../end-users/mcp-quickstart.md)
