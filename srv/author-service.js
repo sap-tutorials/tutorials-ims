@@ -7,6 +7,7 @@ import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
 import { resolveDbUser, resolveUserSapId } from './lib/resolve-db-user.js';
+import { AUTHOR_EXPOSED_ENTITIES } from './lib/author-exposed-entities.js'; // #1089
 
 const OS_VALUES = ['Windows', 'macOS', 'Linux', 'BAS'];
 const OS_VARIANTS_LIMIT = 60;             // calls per hour per author
@@ -102,17 +103,12 @@ export default cds.service.impl(async function () {
   // with the admin Analytics tile. If a future task adds an author SQL
   // surface, switch to dialect-aware computation like analytics-service.js
   // does (it uppercases on HANA).
-  this.on('listExposedEntities', () => [
-    { name: 'CompletionAnalytics',        sqlName: 'com_sap_developers_ims_CompletionAnalytics',        label: 'Completion analytics' },
-    { name: 'CodeCheckSubmissions',       sqlName: 'com_sap_developers_ims_CodeCheckSubmissions',       label: 'Code check submissions' },
-    { name: 'ValidateAnswerSubmissions',  sqlName: 'com_sap_developers_ims_ValidateAnswerSubmissions',  label: 'Validation submissions' },
-    { name: 'ActiveLearnersDaily',        sqlName: 'com_sap_developers_ims_ActiveLearnersDaily',        label: 'Active learners (daily)' },
-    { name: 'AnalyticsBranchPerformance', sqlName: 'com_sap_developers_ims_AnalyticsBranchPerformance', label: 'Branch performance' },
-    { name: 'AnalyticsBranchTopPick',     sqlName: 'com_sap_developers_ims_AnalyticsBranchTopPick',     label: 'Branch top pick' },
-    { name: 'Tasks',                      sqlName: 'com_sap_developers_ims_Tasks',                      label: 'Tasks' },
-    { name: 'TaskRecords',                sqlName: 'com_sap_developers_ims_TaskRecords',                label: 'Task records' },
-    { name: 'UIEvents',                   sqlName: 'com_sap_developers_ims_UIEvent',                    label: 'UI events' },
-  ]);
+  //
+  // (#1089) The curated set lives in ./lib/author-exposed-entities.js so tests
+  // derive their expected count from AUTHOR_EXPOSED_ENTITIES.length instead of
+  // hardcoding it. Return fresh (mutable, deep) copies so callers can't mutate
+  // the frozen source-of-truth.
+  this.on('listExposedEntities', () => AUTHOR_EXPOSED_ENTITIES.map((e) => ({ ...e })));
 
   this.before('READ', MyTutorials, async (req) => {
     if (!req.user?.id || req.user.id === 'anonymous') {
