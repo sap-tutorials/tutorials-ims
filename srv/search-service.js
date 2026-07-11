@@ -267,8 +267,14 @@ export default class SearchService extends cds.ApplicationService {
         attachSearchRank(q, tokens);
       }
 
-      if (tags?.length) q.where({ primaryTag: { in: tags } });
-      if (experience)   q.where({ experienceTag: experience });
+      // Clamp caller-controlled `tags` before it reaches the CQN builder.
+      // Anonymous MCP callers control this array; an unbounded {in: tags}
+      // emits one bound param per element and blows the HANA packet size
+      // (same defect class as #1103/#1108/#1110). 50 is well above any
+      // legitimate tag-filter use.
+      const tagList = Array.isArray(tags) ? tags.slice(0, 50) : [];
+      if (tagList.length) q.where({ primaryTag: { in: tagList } });
+      if (experience)     q.where({ experienceTag: experience });
 
       const rows = await cds.db.run(q);
       return rows.map(r => ({
@@ -297,7 +303,11 @@ export default class SearchService extends cds.ApplicationService {
         .orderBy('title asc')
         .limit(limit);
 
-      if (tags?.length) mq.where({ primaryTag: { in: tags } });
+      // Clamp caller-controlled `tags` (anonymous MCP surface) — see the
+      // note in search_tutorials. Prevents an unbounded {in: tags} from
+      // blowing the HANA packet size.
+      const tagList = Array.isArray(tags) ? tags.slice(0, 50) : [];
+      if (tagList.length) mq.where({ primaryTag: { in: tagList } });
 
       const missions = await cds.db.run(mq);
       if (!missions.length) return [];
@@ -374,10 +384,17 @@ export default class SearchService extends cds.ApplicationService {
             const { Tutorials } = cds.entities('com.sap.developers.ims');
             const tutRows = await cds.db.run(
               SELECT.from(Tutorials)
-                .columns('ID', 'slug', 'title')
+                .columns('ID', 'slug', 'title', 'status')
                 .where({ ID: { in: tutorialIds } })
             );
-            const tutMap = new Map(tutRows.map(t => [t.ID, t]));
+            // Drop soft-deleted (INACTIVE) tutorials so anonymous MCP callers
+            // never see tombstones. Match views.cds semantics exactly:
+            // ACTIVE = (status is null OR status = 'ACTIVE'). A DB-side
+            // `status != 'INACTIVE'` would wrongly discard null-status rows.
+            const isActive = (s) => s == null || s === 'ACTIVE';
+            const tutMap = new Map(
+              tutRows.filter(t => isActive(t.status)).map(t => [t.ID, t]),
+            );
             tutorials = items
               .map(i => {
                 const tut = tutMap.get(i.tutorial_ID);

@@ -34,6 +34,27 @@ describe('MCP curated tool: search_tutorials', () => {
     expect(results.length).toBeLessThanOrEqual(100);
   });
 
+  it('clamps caller-controlled tags at 50 before CQN build (#1111)', async () => {
+    // Anonymous MCP callers control `tags`; an unbounded {in: tags} blows
+    // the HANA packet size. The handler must slice(0, 50) before the where().
+    const runSpy = vi.spyOn(cds.db, 'run').mockResolvedValueOnce([]);
+    const tags = Array.from({ length: 500 }, (_, i) => `tag-${i}`);
+
+    await SearchService.send('search_tutorials', { tags });
+
+    expect(runSpy).toHaveBeenCalledOnce();
+    const cqn = runSpy.mock.calls[0][0];
+    // Walk the where tree for the primaryTag {in: [...]} predicate.
+    const flat = JSON.stringify(cqn?.SELECT?.where ?? []);
+    const inList = cqn.SELECT.where
+      .map(t => t?.list)
+      .find(Array.isArray);
+    expect(inList, `where did not contain an in-list: ${flat}`).toBeDefined();
+    expect(inList.length).toBe(50);
+
+    runSpy.mockRestore();
+  });
+
   it('does not read req.user (anonymous tier)', async () => {
     // Call without any auth context — must not throw.
     const results = await SearchService.send('search_tutorials', { query: 'x' });
@@ -93,6 +114,23 @@ describe('MCP curated tool: list_missions', () => {
     const results = await SearchService.send('list_missions', { limit: 999 });
     expect(results.length).toBeLessThanOrEqual(50);
   });
+
+  it('clamps caller-controlled tags at 50 before CQN build (#1111)', async () => {
+    const runSpy = vi.spyOn(cds.db, 'run').mockResolvedValueOnce([]);
+    const tags = Array.from({ length: 500 }, (_, i) => `tag-${i}`);
+
+    await SearchService.send('list_missions', { tags });
+
+    expect(runSpy).toHaveBeenCalledOnce();
+    const cqn = runSpy.mock.calls[0][0];
+    const inList = cqn.SELECT.where
+      .map(t => t?.list)
+      .find(Array.isArray);
+    expect(inList).toBeDefined();
+    expect(inList.length).toBe(50);
+
+    runSpy.mockRestore();
+  });
 });
 
 describe('MCP curated tool: get_mission', () => {
@@ -103,6 +141,7 @@ describe('MCP curated tool: get_mission', () => {
   const PATH_ID     = 'bbbbbbbb-7777-0000-0000-000000000001';
   const TUT1_ID     = 'cccccccc-7777-0000-0000-000000000001';
   const TUT2_ID     = 'cccccccc-7777-0000-0000-000000000002';
+  const TUT_INACTIVE_ID = 'cccccccc-7777-0000-0000-000000000099';
   const UNPUB_ID    = 'dddddddd-7777-0000-0000-000000000001';
   const PATH2_ID    = 'eeeeeeee-7777-0000-0000-000000000001';
 
@@ -120,6 +159,9 @@ describe('MCP curated tool: get_mission', () => {
     await INSERT.into(Tutorials).entries([
       { ID: TUT1_ID, slug: 'tut-alpha', title: 'Tutorial Alpha', status: 'ACTIVE' },
       { ID: TUT2_ID, slug: 'tut-beta',  title: 'Tutorial Beta',  status: 'ACTIVE' },
+      // Soft-deleted tutorial wired into the same mission path — must NOT
+      // surface via the anonymous MCP tool (#1111 finding #3, tombstone leak).
+      { ID: TUT_INACTIVE_ID, slug: 'tut-gamma', title: 'Tutorial Gamma', status: 'INACTIVE' },
     ]);
 
     // Seed one published mission with slug 'test-mission'.
@@ -171,6 +213,15 @@ describe('MCP curated tool: get_mission', () => {
         taskType:    'TUTORIAL',
         tutorial_ID: TUT2_ID,
         itemOrder:   2,
+      },
+      // Path item pointing at the INACTIVE tutorial — item is a valid
+      // TUTORIAL row, but the target tutorial is soft-deleted.
+      {
+        ID:          'ffffffff-7777-0000-0000-000000000099',
+        path_ID:     PATH_ID,
+        taskType:    'TUTORIAL',
+        tutorial_ID: TUT_INACTIVE_ID,
+        itemOrder:   3,
       },
     ]);
   });
@@ -230,6 +281,16 @@ describe('MCP curated tool: get_mission', () => {
     // Spot-check the slugs returned for each tutorial item.
     expect(result.tutorials[0].slug).toBe('tut-alpha');
     expect(result.tutorials[1].slug).toBe('tut-beta');
+  });
+
+  it('excludes INACTIVE (soft-deleted) tutorials from the returned list (#1111)', async () => {
+    const result = await SearchService.send('get_mission', { slug: 'test-mission' });
+    expect(result).not.toBeNull();
+    // Three path items are seeded (alpha, beta, gamma) but gamma's tutorial
+    // is INACTIVE — a tombstone. Anonymous MCP callers must never see it.
+    const slugs = result.tutorials.map(t => t.slug);
+    expect(slugs).not.toContain('tut-gamma');
+    expect(slugs).toEqual(['tut-alpha', 'tut-beta']);
   });
 });
 
