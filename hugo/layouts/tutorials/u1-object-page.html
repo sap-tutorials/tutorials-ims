@@ -436,8 +436,10 @@
 <script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
 {{ end }}
 
+{{ if not site.Params.previewMode }}
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
+{{ end }}
 <script type="module" src="/js/nav-dropdown.js"></script>
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/tutorial-pip-launcher.js"></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/tutorial-pip.js"></script>{{ end }}
