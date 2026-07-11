@@ -24,6 +24,16 @@ export function resolveImageURLs(content: string, opts: ImageResolveOpts): strin
     )
   }
 
-  result = result.replace(/<!--\s*(?:border|size:\s*\d+px)\s*-->\s*(!\[)/g, '$1')
+  // Strip the authoring directive comment (`<!-- border -->`, `<!-- size:540px -->`,
+  // or any combination like `<!-- border; size:540px -->`) that prefixes an image.
+  // If this comment survives into the body, goldmark treats the leading `<!--` as
+  // the start of an HTML block and consumes the trailing `![…]` as raw HTML text,
+  // so the image never renders (#1137). The directives may appear in either order,
+  // separated by `;` and/or whitespace. Only comments composed solely of these
+  // known directives are stripped — unrelated comments are left intact.
+  result = result.replace(
+    /<!--\s*(?:border|size:\s*\d+px)(?:\s*;?\s*(?:border|size:\s*\d+px))*\s*-->\s*(!\[)/g,
+    '$1'
+  )
   return result
 }
