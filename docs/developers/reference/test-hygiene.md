@@ -44,6 +44,7 @@ should be reused rather than duplicated in tests, docs, or fixture files.
 | Cross-corpus render cap in KG neighborhood merge | `MAX_OTHER_RESOURCES` | `srv/lib/kg-neighborhood-merge.js` |
 | KG corpus type/priority table | `RESOURCE_TYPE_CONFIG` | `srv/lib/kg-resource-type-config.js` |
 | Live event-type registry | `EVENT_TYPES` | `srv/lib/events/index.js` |
+| AuthorService analytics entity picker (curated set) | `AUTHOR_EXPOSED_ENTITIES` | `srv/lib/author-exposed-entities.js` |
 
 If your domain isn't listed and you're about to hardcode a count of N in a test
 where N reflects the shape of a module-level array/enum, promote the constant
@@ -79,6 +80,30 @@ An ESLint / Vitest-beforeAll rule could flag files that:
 
 Weak signal — many co-imports are unrelated to the assertion — but cheap to
 add and catches the exact PR shape that motivated issue #1089.
+
+## Audit log
+
+The full `test/` + `srv/__tests__/` sweep for issue #1089 ran 2026-07-11
+(~440 `toHaveLength(<N>)` + ~124 `.length).toBe(<N>)` occurrences scanned).
+Nearly all are safe (fixture counts, `toHaveLength(0)`, HTTP status arrays,
+column-width caps, embedding-vector widths, pagination/batch sizes). The
+converted candidates:
+
+| File | Was | Now derives from |
+|---|---|---|
+| `test/integration/homepage/persona-tag-choices.test.js` | `toHaveLength(13)` | `KNOWN_TAGS.length` (PR #1088) |
+| `test/unit/srv/admin-service-explainer-autoinit.test.js` | `toBe(7)` / `toBe(4)` | `VERB_DEFAULTS.length` / `SHELF_DEFAULTS.length` (prior #1089 work) |
+| `test/hybrid/{verb,shelf}-definitions-crud.test.js` | `toBe(7)` / `toBe(4)` | `VERB_DEFAULTS.length` / `SHELF_DEFAULTS.length` (prior #1089 work) |
+| `test/unit/srv/admin-service-explainer-actions.test.js` | `toBe(7)`, `toBe(5)` | `VERB_DEFAULTS.length`, `VERB_DEFAULTS.length - 2` |
+| `test/unit/author-service-analytics.test.js` | `toHaveLength(9)` | `AUTHOR_EXPOSED_ENTITIES.length` |
+| `test/hybrid/617-author-tutorials.test.js` | `toHaveLength(9)` | `AUTHOR_EXPOSED_ENTITIES.length` |
+
+Deliberately **left as frozen drift guards** (converting would defeat their
+purpose — see "What NOT to convert"):
+
+- `test/unit/kg-graph-rebuild-predicate-counts.test.js` — `toBe(9)` on the
+  `PREDICATE_TO_COUNT_FIELD` map size is *itself* the canary that fails CI when
+  a projection predicate is added without a count column.
 
 ## Related
 
