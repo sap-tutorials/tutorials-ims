@@ -14,6 +14,15 @@ if (mode === 'fail') {
   process.stderr.write('ERROR rendering: synthetic stub failure\n');
   process.exit(1);
 }
+// #1102: Real Hugo writes its build/startup errors (e.g. "failed to load
+// modules: failed to apply mounts") to STDOUT, not stderr, and with
+// --quiet --logLevel error the stderr stream stays empty. This mode models
+// that: non-zero exit, diagnostic on stdout, stderr silent. It is the exact
+// shape that produced the empty-<pre> error page reported in issue #1102.
+if (mode === 'fail-stdout') {
+  process.stdout.write('Total in 8 ms\nError: failed to load modules: synthetic stdout-only failure\n');
+  process.exit(1);
+}
 if (mode === 'xss') {
   process.stderr.write('ERROR: <script>alert("x")</script> & friends\n');
   process.exit(1);
