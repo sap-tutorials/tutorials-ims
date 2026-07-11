@@ -126,6 +126,109 @@ No MCP-specific counters are exported yet. The general `srv-error-rate` alert on
 
 The approuter reserves `/mcp-auth/*` for the authenticated MCP surface (Phase 2 — MCP calls that require an XSUAA bearer, e.g. tools that read a user's tutorial progress). **Do not squat on this prefix** for anything else. When Phase 2 lands, the plan is to mount an OAuth-protected sibling of the current adapter under `/mcp-auth/*` while keeping the anonymous `/mcp/*` surface unchanged.
 
+## Phase 2 operations
+
+### Minting a fixture PAT for smoke tests
+
+Smoke tests can verify PAT-authenticated routes by setting the `MCP_SMOKE_PAT` env var before running `npm run test:smoke`. To mint a fixture token:
+
+1. Sign in to `<env-base>/admin-ui/#pats` as a user with `Tutorials MCP Users` role collection.
+2. Click **New token**, name it `smoke-fixture`, scopes `read`, TTL 365 days.
+3. Copy the displayed `pat_...` value — shown once only.
+4. Store it in the env's BTP Credential Store as secret name `mcp-smoke-pat` (or set `MCP_SMOKE_PAT` for local runs).
+
+For emergency rotation without the admin UI (not recommended), call the endpoint directly:
+
+```bash
+curl -X POST https://<approuter-url>/pats/mintPAT \
+  -H "Authorization: Bearer <xsuaa-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "smoke-fixture", "scopes": ["read"], "ttlDays": 365 }'
+```
+
+> The PAT mint UI is tracked as follow-up issue #1132. Until it ships, minting goes through the API endpoint above or via the `/admin-ui/#pats` admin page.
+
+### Flipping the feature flags
+
+Three Phase 2 feature flags control the MCP surface. All default to `true` (enabled).
+
+```bash
+# Disable the authenticated MCP surface entirely
+cf set-env tutorials-srv MCP_AUTH_ENABLED false && cf restart tutorials-srv
+
+# Disable PAT minting (existing PATs continue to work)
+cf set-env tutorials-srv MCP_PAT_MINT_ENABLED false && cf restart tutorials-srv
+
+# Disable the step-HTML slicer (get_tutorial_step returns 404 for all slugs)
+cf set-env tutorials-srv KG_STEP_SLICER_ENABLED false && cf restart tutorials-srv
+```
+
+To restore a flag to default, `cf unset-env tutorials-srv <NAME> && cf restart tutorials-srv` (unset = default `true`).
+
+### Granting `Tutorials MCP Users` role collection
+
+The `Tutorials MCP Users` BTP role collection grants `Tutorial.MCP` scope — required for OAuth-authenticated access to `/mcp-auth/*`. Assign it per-user:
+
+```bash
+# Single user
+btp assign security/role-collection "Tutorials MCP Users" \
+  --to-user <email> \
+  --subaccount <subaccount-id>
+```
+
+For batch assignment (e.g. all IAS users in a team), use the bulk-assign script:
+
+```bash
+node scripts/btp-role-collection-sync.js \
+  --collection "Tutorials MCP Users" \
+  --users emails.txt \
+  --subaccount <subaccount-id>
+```
+
+Alternatively, assign the role collection via the BTP cockpit: **Security → Role Collections → Tutorials MCP Users → Users → Add**.
+
+### Reading the MCP metrics
+
+Phase 2 emits custom `metrics.counter()` events (embedded labels format). Query them via the standard Prometheus scrape:
+
+**PAT authentication failure rate** (last 5 minutes):
+
+```promql
+rate(mcp_pat_auth_total{outcome!="hit"}[5m]) / rate(mcp_pat_auth_total[5m])
+```
+
+**Step-slicer cache hit rate**:
+
+```promql
+rate(mcp.slice_total{outcome="hit"}[5m]) / rate(mcp.slice_total[5m])
+```
+
+**Tool call error rate per service**:
+
+```promql
+rate(mcp_tool_total{outcome="error"}[5m]) / rate(mcp_tool_total[5m])
+```
+
+Raw counter names (as logged by `metrics.counter()`):
+
+- `mcp.tool[service=DeveloperService,tool=<name>,tokenSource=<pat|anon>,outcome=ok|error]`
+- `mcp.tool[service=HomepageService,tool=<name>,tokenSource=<pat|anon>,outcome=ok|error]`
+- `mcp.slice[outcome=hit|miss]`
+- `mcp_pat_auth[outcome=hit|miss|expired|invalid]`
+
+### Reading the audit trail for authenticated tool calls
+
+The `TutorialProgressReset` audit event (emitted by `reset_tutorial_progress`) now carries a `tokenSource` field. Filter for MCP-originating resets:
+
+```sql
+SELECT * FROM "COM_SAP_DEVELOPERS_IMS_AUDITLOG"
+WHERE "EVENTSOURCETYPE" = 'TutorialProgressReset'
+  AND "TOKENSOURCE" IS NOT NULL
+ORDER BY "CREATEDAT" DESC;
+```
+
+`tokenSource = 'pat'` = PAT caller; `tokenSource = null` = JWT/OAuth browser caller. `tokenSource` is visible in the existing observability surface — see [docs/developers/architecture/observability.md](../architecture/observability.md).
+
 ## References
 
 - Adapter: [`@cap-js/mcp` on npm](https://www.npmjs.com/package/@cap-js/mcp)

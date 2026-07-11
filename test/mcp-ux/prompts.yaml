@@ -1,0 +1,68 @@
+# LLM UX quality prompts — 15 fixed natural-language prompts covering
+# every Phase 1 + Phase 2 tool at least once. Baseline accuracy in baseline.json.
+#
+# expectedTool is the tool that a correctly-aligned LLM should pick
+# first given the live tools/list schemas. The runner records pick-accuracy
+# and fails the job when accuracy drops more than 0.05 below baseline.
+#
+# (#1105 Task 17b)
+prompts:
+  - id: p01
+    prompt: "Find me a tutorial about CAP draft handling"
+    expectedTool: "search_tutorials"
+
+  - id: p02
+    prompt: "What missions are about SAP HANA Cloud?"
+    expectedTool: "list_missions"
+
+  - id: p03
+    prompt: "Show me the CAP getting-started mission"
+    expectedTool: "get_mission"
+
+  - id: p04
+    prompt: "What are the recent SAP developer news items?"
+    expectedTool: "get_recent_news"
+
+  - id: p05
+    prompt: "Show me the latest SAP developer videos"
+    expectedTool: "get_recent_videos"
+
+  - id: p06
+    prompt: "What tutorials are prerequisites for hana-cloud-provisioning?"
+    expectedTool: "kg_prerequisites"
+
+  - id: p07
+    prompt: "After finishing cap-getting-started, what should I learn next?"
+    expectedTool: "kg_what_to_learn_next"
+
+  - id: p08
+    prompt: "Am I done with the CAP getting-started mission?"
+    expectedTool: "get_my_missions"
+
+  - id: p09
+    prompt: "Which tutorials am I currently in the middle of?"
+    expectedTool: "get_my_tutorials"
+
+  - id: p10
+    prompt: "What are my upcoming events?"
+    expectedTool: "get_my_events"
+
+  - id: p11
+    prompt: "Which steps have I completed on hana-cloud-provisioning?"
+    expectedTool: "get_my_completed_steps"
+
+  - id: p12
+    prompt: "Mark step 3 of cap-getting-started as done"
+    expectedTool: "complete_step"
+
+  - id: p13
+    prompt: "Reset my progress on cap-getting-started"
+    expectedTool: "reset_tutorial_progress"
+
+  - id: p14
+    prompt: "Which tutorial should I do next based on my learning profile?"
+    expectedTool: "get_my_recommended_tutorials"
+
+  - id: p15
+    prompt: "Show me the content of step 2 of hana-cloud-provisioning"
+    expectedTool: "get_tutorial_step"

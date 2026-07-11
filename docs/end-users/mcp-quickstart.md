@@ -118,6 +118,105 @@ The server speaks Streamable HTTP. Clients may send `Accept: application/json` o
 - **First response is slow (5–15s).** Cold start. The CAP backend spins down when idle. Subsequent requests are fast.
 - **Nothing returns and no error.** Anonymous IP throttle. Back off and retry.
 
+## Sign in with Claude Desktop (OAuth)
+
+Phase 2 adds authenticated tools under `/mcp-auth/*` — your tutorial progress, events, and personalized recommendations. To use them, sign in with your SAP universal ID via OAuth.
+
+Edit `claude_desktop_config.json` and point at the authenticated endpoint:
+
+```json
+{
+  "mcpServers": {
+    "sap-developers-auth": {
+      "url": "<base>/mcp-auth/api"
+    }
+  }
+}
+```
+
+Claude Desktop discovers the OAuth server automatically via the `.well-known/oauth-authorization-server` document served at `<base>`. On first connection it opens a browser tab for consent (PKCE, no client secret required). After approval, the access token is stored by Claude Desktop and refreshed silently.
+
+**Available authenticated tools** (DeveloperService + HomepageService):
+
+| Tool | What it does |
+| --- | --- |
+| `get_my_tutorials` | Your in-progress and completed tutorials |
+| `get_my_missions` | Your mission progress |
+| `get_my_events` | Your registered upcoming events |
+| `get_my_completed_steps` | Completed step numbers for a specific tutorial |
+| `get_tutorial_step` | Full HTML content of a tutorial step |
+| `complete_step` | Mark a step done |
+| `reset_tutorial_progress` | Reset all progress on a tutorial |
+| `get_my_recommended_tutorials` | Persona-ranked tutorial recommendations |
+| `get_my_recommended_missions` | Persona-ranked mission recommendations |
+
+> **Note:** The PAT mint UI follow-up is tracked in issue #1132. Until that ships, tokens can be minted via the API endpoint documented in [mcp-server.md](../developers/reference/mcp-server.md).
+
+## Sign in with Claude Code (OAuth via mcp-remote)
+
+Claude Code's native HTTP client handles OAuth automatically when the server advertises `.well-known/oauth-authorization-server`. Add a `.mcp.json` at your project root:
+
+```json
+{
+  "mcpServers": {
+    "sap-developers-auth": {
+      "type": "http",
+      "url": "<base>/mcp-auth/api"
+    },
+    "sap-developers-search": {
+      "type": "http",
+      "url": "<base>/mcp/search"
+    }
+  }
+}
+```
+
+For clients that only speak stdio, bridge through `mcp-remote` which handles the OAuth PKCE handshake and forwards authenticated requests:
+
+```bash
+npm install -g mcp-remote
+```
+
+```json
+{
+  "mcpServers": {
+    "sap-developers-auth": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "<base>/mcp-auth/api"]
+    }
+  }
+}
+```
+
+On first run, `mcp-remote` opens your browser for the OAuth consent flow. After approval the token is cached in `~/.mcp-auth/`.
+
+## Headless / CI with a Personal Access Token
+
+For CI pipelines, scripts, and headless agents that cannot complete an interactive OAuth flow, use a Personal Access Token (PAT).
+
+**Mint a PAT:**
+
+1. Sign in to `<base>/admin-ui/#pats` as a user with the `Tutorials MCP Users` role collection.
+2. Click **New token**, give it a name, select scopes (`read` for read-only tools; `read write` to allow `complete_step` and `reset_tutorial_progress`), set a TTL.
+3. Copy the displayed token — it is shown once only. The server stores only a SHA-256 hash.
+
+**Configure your MCP client:**
+
+```json
+{
+  "mcpServers": {
+    "sap-developers-auth": {
+      "url": "<base>/mcp-pat/api",
+      "headers": {
+        "Authorization": "Bearer pat_..."
+      }
+    }
+  }
+}
+```
+
+PATs are validated by the `mcp-pat-middleware` in the CAP backend. An expired or revoked PAT returns 401.
+
 ## What's next
 
-Phase 2 will add authenticated tools under `/mcp-auth/*` — writing progress, submitting event codes, personalized recommendations tied to your SAP universal ID. Phase 3 opens deeper knowledge-graph tools (concept expansion, community browsing, on-demand extraction). Both phases are on the roadmap after PROD cutover; the `/mcp-auth/*` namespace is reserved now so client configs won't need to change later.
+Phase 3 will open deeper knowledge-graph tools (concept expansion, community browsing, on-demand extraction). The `/mcp/*`, `/mcp-auth/*`, and `/mcp-pat/*` namespaces are stable — client configs will not need to change.

@@ -1,0 +1,23 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "accuracy": 0,
+  "seededAt": "2026-07-10T00:00:00.000Z",
+  "_note": "Seed accuracy=0 — first real CI run will overwrite this with actual accuracy. The regression gate fires only when accuracy drops more than 0.05 below this file's accuracy value. With accuracy=0 the gate never fires until a real run seeds a non-zero baseline.",
+  "results": {
+    "p01": { "prompt": "Find me a tutorial about CAP draft handling", "expectedTool": "search_tutorials", "pickedTool": null, "correct": false },
+    "p02": { "prompt": "What missions are about SAP HANA Cloud?", "expectedTool": "list_missions", "pickedTool": null, "correct": false },
+    "p03": { "prompt": "Show me the CAP getting-started mission", "expectedTool": "get_mission", "pickedTool": null, "correct": false },
+    "p04": { "prompt": "What are the recent SAP developer news items?", "expectedTool": "get_recent_news", "pickedTool": null, "correct": false },
+    "p05": { "prompt": "Show me the latest SAP developer videos", "expectedTool": "get_recent_videos", "pickedTool": null, "correct": false },
+    "p06": { "prompt": "What tutorials are prerequisites for hana-cloud-provisioning?", "expectedTool": "kg_prerequisites", "pickedTool": null, "correct": false },
+    "p07": { "prompt": "After finishing cap-getting-started, what should I learn next?", "expectedTool": "kg_what_to_learn_next", "pickedTool": null, "correct": false },
+    "p08": { "prompt": "Am I done with the CAP getting-started mission?", "expectedTool": "get_my_missions", "pickedTool": null, "correct": false },
+    "p09": { "prompt": "Which tutorials am I currently in the middle of?", "expectedTool": "get_my_tutorials", "pickedTool": null, "correct": false },
+    "p10": { "prompt": "What are my upcoming events?", "expectedTool": "get_my_events", "pickedTool": null, "correct": false },
+    "p11": { "prompt": "Which steps have I completed on hana-cloud-provisioning?", "expectedTool": "get_my_completed_steps", "pickedTool": null, "correct": false },
+    "p12": { "prompt": "Mark step 3 of cap-getting-started as done", "expectedTool": "complete_step", "pickedTool": null, "correct": false },
+    "p13": { "prompt": "Reset my progress on cap-getting-started", "expectedTool": "reset_tutorial_progress", "pickedTool": null, "correct": false },
+    "p14": { "prompt": "Which tutorial should I do next based on my learning profile?", "expectedTool": "get_my_recommended_tutorials", "pickedTool": null, "correct": false },
+    "p15": { "prompt": "Show me the content of step 2 of hana-cloud-provisioning", "expectedTool": "get_tutorial_step", "pickedTool": null, "correct": false }
+  }
+}

@@ -15,6 +15,12 @@ modules:
       app-name: tutorials-prod-approuter
       instances: 2
       keep-existing-routes: true
+      env:
+        # TODO: verify exact prod tenant string — using developers-sap as placeholder
+        # (matches the xsuaa-imsprod service name pattern and the SAP developers portal domain)
+        XSUAA_TENANT: "developers-sap"
+        XSUAA_REGION: "eu10"
+        APPROUTER_BASE_URL: "https://developers.sap.com"
     properties:
       # REBUILD_API_KEY was formerly injected here — removed in PR #903
       # rollout step 3 (#871 follow-up). APPROUTER_URL followed the same

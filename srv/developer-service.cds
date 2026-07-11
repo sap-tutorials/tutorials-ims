@@ -4,7 +4,7 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 @requires: 'any'
 // See note on SearchService: `@graphql` alone REPLACES the OData mount and
 // 404's /api/completeStep, /api/setKhorosLink, /api/getKhorosProfile, etc.
-@protocol: ['odata', 'graphql']
+@protocol: ['odata', 'graphql', 'mcp']
 service DeveloperService {
 
   // Exposed entities (restricted projections)
@@ -69,12 +69,15 @@ service DeveloperService {
   // the emit call in srv/developer-service.js (handler emits user,
   // tutorialSlug, attemptNumber, supersededRecordCount,
   // previousAttemptCompletedAt). `user` is dbUser.ID, NOT the email.
+  // Extended 2026-07-09 (#1105) with tokenSource (nullable) so admins can
+  // distinguish browser-driven from MCP-driven resets.
   event TutorialProgressReset : {
     user                       : String;
     tutorialSlug               : String;
     attemptNumber              : Integer;
     supersededRecordCount      : Integer;
     previousAttemptCompletedAt : DateTime;
+    tokenSource                : String; // null | 'jwt' | 'pat'
   };
 
   @(requires: 'authenticated-user')

@@ -86,7 +86,8 @@
       "sap.tutorials.admin.forYou": "./components/for-you",
       "sap.tutorials.admin.featuredTopics": "./components/featured-topics",
       "sap.tutorials.admin.videos": "./components/videos",
-      "sap.tutorials.admin.videoRotation": "./components/video-rotation"
+      "sap.tutorials.admin.videoRotation": "./components/video-rotation",
+      "sap.tutorials.admin.pats": "./components/pats"
     },
     "models": {
       "admin": {
@@ -327,6 +328,12 @@
       },
       "videoRotationComponent": {
         "name": "sap.tutorials.admin.videoRotation",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "patsComponent": {
+        "name": "sap.tutorials.admin.pats",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -761,6 +768,16 @@
           ]
         },
         {
+          "name": "pats",
+          "pattern": "pats",
+          "target": [
+            {
+              "name": "patsTarget",
+              "prefix": "pt"
+            }
+          ]
+        },
+        {
           "name": "feedbackDashboard",
           "pattern": "feedback/dashboard",
           "target": "feedbackDashboardTarget"
@@ -1053,6 +1070,13 @@
           "id": "videoRotationTarget",
           "viewLevel": 1,
           "prefix": "vr"
+        },
+        "patsTarget": {
+          "type": "Component",
+          "usage": "patsComponent",
+          "id": "patsTarget",
+          "viewLevel": 1,
+          "prefix": "pt"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",

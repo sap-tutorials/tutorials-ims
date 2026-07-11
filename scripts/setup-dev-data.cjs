@@ -197,6 +197,42 @@ const dryRun = args.includes('--dry-run');
     }
   }
 
+  // --- Step 4: Seed MCP hybrid-test fixture user ---
+  //
+  // Idempotent INSERT for the fixture user used by test/hybrid/mcp-*.test.js.
+  // The user needs sapId set so resolveDbUser() can resolve it from a basic-auth
+  // header. Email + sapId are both unique constraints; skip silently if already
+  // present (cds.ql upsert pattern — SELECT first, INSERT only when missing).
+  if (!skipCleanup) {
+    console.log('\n=== Step 4: Seeding MCP hybrid-test fixture user ===');
+    const FIXTURE_EMAIL  = 'mcp-hybrid-test@sap.example';
+    const FIXTURE_SAP_ID = 'mcp-hybrid-test';
+    try {
+      const existing = await db.run(
+        `SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_USERS" WHERE "EMAIL" = ? OR "SAPID" = ?`,
+        [FIXTURE_EMAIL, FIXTURE_SAP_ID]
+      );
+      if (existing.length > 0) {
+        console.log(`  Fixture user already exists (ID: ${existing[0].ID}) — skipping`);
+      } else {
+        if (!dryRun) {
+          const newId = require('crypto').randomUUID();
+          await db.run(
+            `INSERT INTO "COM_SAP_DEVELOPERS_IMS_USERS" ("ID", "EMAIL", "DISPLAYNAME", "SAPID")
+             VALUES (?, ?, ?, ?)`,
+            [newId, FIXTURE_EMAIL, 'MCP Hybrid Test', FIXTURE_SAP_ID]
+          );
+          console.log(`  Fixture user created: ${FIXTURE_EMAIL} (ID: ${newId})`);
+        } else {
+          console.log(`  Would insert fixture user: ${FIXTURE_EMAIL}`);
+        }
+      }
+    } catch (e) {
+      // If the USERS table doesn't exist yet (fresh env before deploy), skip gracefully.
+      console.log(`  Could not seed fixture user (table may not exist yet): ${e.message}`);
+    }
+  }
+
   console.log('\nDone.');
   process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

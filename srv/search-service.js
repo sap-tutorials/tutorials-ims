@@ -1,6 +1,7 @@
 import cds from '@sap/cds';
 import { computeKgSignal, buildKgRankFragment } from './lib/search-kg-signal.js';
 import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
+import { handleGetTutorialStep } from './lib/mcp-developer-tools.js';
 
 const LOG = cds.log('search-service');
 
@@ -472,6 +473,11 @@ export default class SearchService extends cds.ApplicationService {
         tagCounts,
       };
     });
+
+    // (#1105 Task 13) Anonymous get_tutorial_step — reuses the DeveloperService
+    // handler symbol. Published tutorial HTML is public; no auth required
+    // (@requires:'any' on the CDS declaration in search-service-mcp.cds).
+    this.on('get_tutorial_step', handleGetTutorialStep);
 
     return super.init();
   }

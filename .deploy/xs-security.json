@@ -3,68 +3,146 @@
   "tenant-mode": "dedicated",
   "description": "Deployment creates a dedicated XSUAA instance (tutorials-xsuaa) via org.cloudfoundry.managed-service in mta.yaml.",
   "scopes": [
-    { "name": "$XSAPPNAME.Admin",              "description": "Full admin access" },
-    { "name": "$XSAPPNAME.SuperAdmin",         "description": "Elevated admin access (publish/unpublish)" },
-    { "name": "$XSAPPNAME.ContentAuthor",      "description": "Create and edit content" },
-    { "name": "$XSAPPNAME.DeveloperApp",       "description": "Developer operations" },
-    { "name": "$XSAPPNAME.MobileApp",          "description": "Mobile app features" },
-    { "name": "$XSAPPNAME.DisplayApp",         "description": "Read-only UI access" },
-    { "name": "$XSAPPNAME.ConsolidationScope", "description": "Account merge operations (SCI technical user)" },
-    { "name": "$XSAPPNAME.Tutorial.Author",    "description": "QA channel author preview (unpublished tutorials at /tutorials-qa/*)" },
-    { "name": "$XSAPPNAME.KnowledgeGraph.Admin", "description": "Knowledge graph admin: merge/veto concepts, run raw SPARQL" },
-    { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" },
-    { "name": "$XSAPPNAME.Tutorial.API",       "description": "External GraphQL API access for user-scoped reads (issue #996)" }
+    {
+      "name": "$XSAPPNAME.Admin",
+      "description": "Full admin access"
+    },
+    {
+      "name": "$XSAPPNAME.SuperAdmin",
+      "description": "Elevated admin access (publish/unpublish)"
+    },
+    {
+      "name": "$XSAPPNAME.ContentAuthor",
+      "description": "Create and edit content"
+    },
+    {
+      "name": "$XSAPPNAME.DeveloperApp",
+      "description": "Developer operations"
+    },
+    {
+      "name": "$XSAPPNAME.MobileApp",
+      "description": "Mobile app features"
+    },
+    {
+      "name": "$XSAPPNAME.DisplayApp",
+      "description": "Read-only UI access"
+    },
+    {
+      "name": "$XSAPPNAME.ConsolidationScope",
+      "description": "Account merge operations (SCI technical user)"
+    },
+    {
+      "name": "$XSAPPNAME.Tutorial.Author",
+      "description": "QA channel author preview (unpublished tutorials at /tutorials-qa/*)"
+    },
+    {
+      "name": "$XSAPPNAME.KnowledgeGraph.Admin",
+      "description": "Knowledge graph admin: merge/veto concepts, run raw SPARQL"
+    },
+    {
+      "name": "$XSAPPNAME.Everyone",
+      "description": "Baseline access"
+    },
+    {
+      "name": "$XSAPPNAME.Tutorial.API",
+      "description": "External GraphQL API access for user-scoped reads (issue #996)"
+    },
+    {
+      "name": "$XSAPPNAME.Tutorial.MCP",
+      "description": "MCP protocol access — authenticated tutorial reads/writes"
+    }
   ],
   "role-templates": [
     {
       "name": "Admin",
       "description": "Administrator",
-      "scope-references": ["$XSAPPNAME.Admin", "$XSAPPNAME.KnowledgeGraph.Admin", "$XSAPPNAME.Everyone"]
+      "scope-references": [
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.KnowledgeGraph.Admin",
+        "$XSAPPNAME.Everyone"
+      ]
     },
     {
       "name": "SuperAdmin",
       "description": "Elevated Administrator (can publish/unpublish)",
-      "scope-references": ["$XSAPPNAME.SuperAdmin", "$XSAPPNAME.Admin", "$XSAPPNAME.KnowledgeGraph.Admin", "$XSAPPNAME.Everyone"]
+      "scope-references": [
+        "$XSAPPNAME.SuperAdmin",
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.KnowledgeGraph.Admin",
+        "$XSAPPNAME.Everyone"
+      ]
     },
     {
       "name": "ContentAuthor",
       "description": "Content Author",
-      "scope-references": ["$XSAPPNAME.ContentAuthor", "$XSAPPNAME.DisplayApp", "$XSAPPNAME.Everyone"]
+      "scope-references": [
+        "$XSAPPNAME.ContentAuthor",
+        "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.Everyone"
+      ]
     },
     {
       "name": "DeveloperApp",
       "description": "Developer",
-      "scope-references": ["$XSAPPNAME.DeveloperApp", "$XSAPPNAME.Everyone"]
+      "scope-references": [
+        "$XSAPPNAME.DeveloperApp",
+        "$XSAPPNAME.Everyone"
+      ]
     },
     {
       "name": "MobileApp",
       "description": "Mobile Application User",
-      "scope-references": ["$XSAPPNAME.MobileApp", "$XSAPPNAME.DisplayApp", "$XSAPPNAME.Everyone"]
+      "scope-references": [
+        "$XSAPPNAME.MobileApp",
+        "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.Everyone"
+      ]
     },
     {
       "name": "DisplayApp",
       "description": "Read-only user",
-      "scope-references": ["$XSAPPNAME.DisplayApp", "$XSAPPNAME.Everyone"]
+      "scope-references": [
+        "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.Everyone"
+      ]
     },
     {
       "name": "ConsolidationScope",
       "description": "Account consolidation (SCI)",
-      "scope-references": ["$XSAPPNAME.ConsolidationScope"]
+      "scope-references": [
+        "$XSAPPNAME.ConsolidationScope"
+      ]
     },
     {
       "name": "TutorialAuthor",
       "description": "QA channel author (preview unpublished tutorials)",
-      "scope-references": ["$XSAPPNAME.Tutorial.Author", "$XSAPPNAME.Everyone"]
+      "scope-references": [
+        "$XSAPPNAME.Tutorial.Author",
+        "$XSAPPNAME.Everyone"
+      ]
     },
     {
       "name": "Everyone",
       "description": "Baseline",
-      "scope-references": ["$XSAPPNAME.Everyone"]
+      "scope-references": [
+        "$XSAPPNAME.Everyone"
+      ]
     },
     {
       "name": "TutorialApiConsumer",
       "description": "External developer / partner consuming the tutorials GraphQL API",
-      "scope-references": ["$XSAPPNAME.Tutorial.API", "$XSAPPNAME.Everyone"]
+      "scope-references": [
+        "$XSAPPNAME.Tutorial.API",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "TutorialMCP",
+      "description": "MCP authenticated user (progress reads/writes, recommendations)",
+      "scope-references": [
+        "$XSAPPNAME.Tutorial.MCP",
+        "$XSAPPNAME.Everyone"
+      ]
     }
   ],
   "role-collections": [
@@ -128,6 +206,14 @@
         "$XSAPPNAME.TutorialApiConsumer",
         "$XSAPPNAME.Everyone"
       ]
+    },
+    {
+      "name": "Tutorials MCP Users",
+      "description": "Authenticated MCP access to tutorials at /mcp-auth/*",
+      "role-template-references": [
+        "$XSAPPNAME.TutorialMCP",
+        "$XSAPPNAME.Everyone"
+      ]
     }
   ],
   "authorities": [
@@ -136,7 +222,10 @@
   "oauth2-configuration": {
     "redirect-uris": [
       "https://*.cfapps.*.hana.ondemand.com/**",
-      "vscode://sap-tutorials.sage-tutorial-extension/**"
+      "vscode://sap-tutorials.sage-tutorial-extension/**",
+      "https://developers.sap.com/callback",
+      "http://127.0.0.1:*/callback",
+      "http://localhost:*/callback"
     ]
   }
 }

@@ -1,0 +1,84 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.pats",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/pats/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "PATs-manage": {
+          "semanticObject": "PATs",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.pats.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "name": "PATsList", "pattern": ":?query:", "target": "PATsListTarget" },
+        { "name": "PATsOP",   "pattern": "MyPATs({key}):?query:", "target": "PATsOPTarget" }
+      ],
+      "targets": {
+        "PATsListTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ListReport",
+          "id": "PATsListTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/MyPATs",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "MyPATs": { "detail": { "route": "PATsOP" } }
+              }
+            }
+          }
+        },
+        "PATsOPTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ObjectPage",
+          "id": "PATsOPTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/MyPATs",
+              "editableHeaderContent": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

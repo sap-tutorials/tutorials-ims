@@ -71,6 +71,14 @@
       ]
     },
     {
+      "key": "account",
+      "title": "Account",
+      "icon": "sap-icon://person-placeholder",
+      "items": [
+        { "key": "pats", "title": "Personal Access Tokens" }
+      ]
+    },
+    {
       "key": "system",
       "title": "System",
       "icon": "sap-icon://action-settings",

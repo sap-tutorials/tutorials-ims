@@ -4,14 +4,14 @@ import { buildSystemPrompt } from '../srv/lib/chat-context.js';
 describe('buildSystemPrompt', () => {
   const user = { firstName: 'Tom', lastName: 'Jung' };
 
-  it('always includes the Joule persona and scope guard', () => {
-    const out = buildSystemPrompt({ kind: 'generic' }, user);
+  it('always includes the Joule persona and scope guard', async () => {
+    const out = await buildSystemPrompt({ kind: 'generic' }, user);
     expect(out).toMatch(/You are Joule/);
     expect(out).toMatch(/SAP tutorials/);
   });
 
-  it('injects tutorial details for kind=tutorial', () => {
-    const out = buildSystemPrompt({
+  it('injects tutorial details for kind=tutorial', async () => {
+    const out = await buildSystemPrompt({
       kind: 'tutorial',
       title: 'Build with CAP',
       description: 'Hands-on intro',
@@ -25,14 +25,14 @@ describe('buildSystemPrompt', () => {
     expect(out).toMatch(/cap, nodejs/);
   });
 
-  it('directs the model to call searchTutorials first on kind=search', () => {
-    const out = buildSystemPrompt({ kind: 'search', query: 'hana', filters: ['hana'] }, user);
+  it('directs the model to call searchTutorials first on kind=search', async () => {
+    const out = await buildSystemPrompt({ kind: 'search', query: 'hana', filters: ['hana'] }, user);
     expect(out).toMatch(/searchTutorials/);
     expect(out).toMatch(/hana/);
   });
 
-  it('lists contained tutorials for mission/group', () => {
-    const out = buildSystemPrompt({
+  it('lists contained tutorials for mission/group', async () => {
+    const out = await buildSystemPrompt({
       kind: 'mission',
       title: 'Become a CAP dev',
       tutorials: [{ title: 'A' }, { title: 'B' }]
@@ -41,20 +41,20 @@ describe('buildSystemPrompt', () => {
     expect(out).toMatch(/A.*B/s);
   });
 
-  it('omits the user name when no user is supplied', () => {
-    const out = buildSystemPrompt({ kind: 'generic' }, null);
+  it('omits the user name when no user is supplied', async () => {
+    const out = await buildSystemPrompt({ kind: 'generic' }, null);
     expect(out).not.toMatch(/Tom/);
   });
 
-  it('handles missing optional tutorial fields gracefully', () => {
-    expect(() => buildSystemPrompt({ kind: 'tutorial', title: 'X' }, user)).not.toThrow();
-    const out = buildSystemPrompt({ kind: 'tutorial' }, user);
+  it('handles missing optional tutorial fields gracefully', async () => {
+    await expect(buildSystemPrompt({ kind: 'tutorial', title: 'X' }, user)).resolves.toBeDefined();
+    const out = await buildSystemPrompt({ kind: 'tutorial' }, user);
     expect(out).not.toMatch(/unknown/);
     expect(out).not.toMatch(/undefined/);
   });
 
-  it('omits untitled items from mission/group tutorial lists', () => {
-    const out = buildSystemPrompt({
+  it('omits untitled items from mission/group tutorial lists', async () => {
+    const out = await buildSystemPrompt({
       kind: 'mission',
       title: 'Mixed mission',
       tutorials: [{ title: 'A' }, {}]
@@ -63,8 +63,8 @@ describe('buildSystemPrompt', () => {
     expect(out).toMatch(/A/);
   });
 
-  it('preserves the blank-line layer separator between persona and page layer', () => {
-    const out = buildSystemPrompt({ kind: 'generic' }, user);
+  it('preserves the blank-line layer separator between persona and page layer', async () => {
+    const out = await buildSystemPrompt({ kind: 'generic' }, user);
     expect(out).toMatch(/\n\n/);
   });
 
@@ -77,8 +77,8 @@ describe('buildSystemPrompt', () => {
     links: [{ kind: 'LinkedIn', url: 'https://linkedin.com/in/thomas-jung' }]
   };
 
-  it('uses ADVOCATES_PERSONA and includes roster details for kind=advocates', () => {
-    const out = buildSystemPrompt({ kind: 'advocates', advocates: [ADVOCATE_FIXTURE] }, user);
+  it('uses ADVOCATES_PERSONA and includes roster details for kind=advocates', async () => {
+    const out = await buildSystemPrompt({ kind: 'advocates', advocates: [ADVOCATE_FIXTURE] }, user);
     expect(out).toMatch(/Developer Advocates page/);
     expect(out).toMatch(/Thomas Jung/);
     expect(out).toMatch(/AMERICAS/);
@@ -87,35 +87,35 @@ describe('buildSystemPrompt', () => {
     expect(out).toMatch(/bridge.*covers/i);
   });
 
-  it('skips RAG_GUIDANCE and PROGRESS_GUIDANCE for kind=advocates', () => {
-    const out = buildSystemPrompt({ kind: 'advocates', advocates: [ADVOCATE_FIXTURE] }, user);
+  it('skips RAG_GUIDANCE and PROGRESS_GUIDANCE for kind=advocates', async () => {
+    const out = await buildSystemPrompt({ kind: 'advocates', advocates: [ADVOCATE_FIXTURE] }, user);
     expect(out).not.toMatch(/getRelevantSteps/);
     expect(out).not.toMatch(/getUserProgress tool/);
   });
 
-  it('falls back to empty-roster guidance when advocates=[]', () => {
-    const out = buildSystemPrompt({ kind: 'advocates', advocates: [] }, user);
+  it('falls back to empty-roster guidance when advocates=[]', async () => {
+    const out = await buildSystemPrompt({ kind: 'advocates', advocates: [] }, user);
     expect(out).toMatch(/has not loaded yet/);
     expect(out).toMatch(/searchTutorials/);
   });
 
-  it('does not throw when advocates is not an array', () => {
-    expect(() =>
+  it('does not throw when advocates is not an array', async () => {
+    await expect(
       buildSystemPrompt({ kind: 'advocates', advocates: 'not-an-array' }, user)
-    ).not.toThrow();
-    const out = buildSystemPrompt({ kind: 'advocates', advocates: 'not-an-array' }, user);
+    ).resolves.toBeDefined();
+    const out = await buildSystemPrompt({ kind: 'advocates', advocates: 'not-an-array' }, user);
     expect(out).toMatch(/has not loaded yet/);
   });
 
-  it('regression: admin path still includes RAG_GUIDANCE', () => {
-    const out = buildSystemPrompt({ kind: 'admin', tool: 'analytics-builder' }, user);
+  it('regression: admin path still includes RAG_GUIDANCE', async () => {
+    const out = await buildSystemPrompt({ kind: 'admin', tool: 'analytics-builder' }, user);
     expect(out).toMatch(/getRelevantSteps/);
   });
 });
 
 describe('buildSystemPrompt — BRANCHING_GUIDANCE', () => {
-  it('appends BRANCHING_GUIDANCE on tutorial pages with branchContext', () => {
-    const prompt = buildSystemPrompt({
+  it('appends BRANCHING_GUIDANCE on tutorial pages with branchContext', async () => {
+    const prompt = await buildSystemPrompt({
       kind: 'tutorial',
       title: 'Configure database',
       slug: 'configure-database',
@@ -130,8 +130,8 @@ describe('buildSystemPrompt — BRANCHING_GUIDANCE', () => {
     expect(prompt).toMatch(/getBranchRecommendation/);
   });
 
-  it('does NOT append BRANCHING_GUIDANCE on tutorial pages WITHOUT branchContext', () => {
-    const prompt = buildSystemPrompt({
+  it('does NOT append BRANCHING_GUIDANCE on tutorial pages WITHOUT branchContext', async () => {
+    const prompt = await buildSystemPrompt({
       kind: 'tutorial',
       title: 'Plain tutorial',
       slug: 'plain',
@@ -140,8 +140,8 @@ describe('buildSystemPrompt — BRANCHING_GUIDANCE', () => {
     expect(prompt).not.toMatch(/getBranchRecommendation/);
   });
 
-  it('appends BRANCHING_GUIDANCE on mission pages with altGroupsCount > 0', () => {
-    const prompt = buildSystemPrompt({
+  it('appends BRANCHING_GUIDANCE on mission pages with altGroupsCount > 0', async () => {
+    const prompt = await buildSystemPrompt({
       kind: 'mission',
       title: 'BTP CAP onboarding',
       altGroupsCount: 1,
@@ -149,8 +149,8 @@ describe('buildSystemPrompt — BRANCHING_GUIDANCE', () => {
     expect(prompt).toMatch(/getBranchRecommendation/);
   });
 
-  it('does NOT append BRANCHING_GUIDANCE on mission pages with altGroupsCount: 0 or absent', () => {
-    const prompt = buildSystemPrompt({
+  it('does NOT append BRANCHING_GUIDANCE on mission pages with altGroupsCount: 0 or absent', async () => {
+    const prompt = await buildSystemPrompt({
       kind: 'mission',
       title: 'No-branches mission',
     }, null);

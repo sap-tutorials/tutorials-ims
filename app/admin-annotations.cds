@@ -3598,3 +3598,52 @@ annotate AdminService.HomepageVideoRotationView with @(
   Capabilities.UpdateRestrictions.Updatable : false,
   Capabilities.DeleteRestrictions.Deletable : false
 );
+
+// --- Personal Access Tokens (#1105) ---
+// List Report + Object Page over PatService.MyPATs.
+// The dataSource for this FE app is /pats/ (PatService), NOT /admin/
+// (AdminService). Annotations reference PatService directly.
+//
+// mintPAT and revokePAT are unbound service-level actions (not bound to
+// MyPATs), so DataFieldForAction on LineItem is not applicable.
+// The mint button requires a custom controller extension or use of the
+// action's URI directly. This is noted as a follow-up in the task report.
+using PatService from '../srv/pat-service';
+
+annotate PatService.MyPATs with @(
+  UI.HeaderInfo: {
+    TypeName: 'Personal Access Token',
+    TypeNamePlural: 'Personal Access Tokens',
+    Title: { Value: name },
+    Description: { Value: prefix }
+  },
+  UI.SelectionFields: [ name, revokedAt ],
+  UI.LineItem: [
+    { Value: name,        Label: 'Name' },
+    { Value: prefix,      Label: 'Prefix' },
+    { Value: scopes,      Label: 'Scopes' },
+    { Value: createdAt,   Label: 'Created' },
+    { Value: expiresAt,   Label: 'Expires' },
+    { Value: lastUsedAt,  Label: 'Last Used' },
+    { Value: revokedAt,   Label: 'Revoked' }
+  ],
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', ID: 'DetailsFacet', Label: 'Details',
+      Target: '@UI.FieldGroup#Details' }
+  ],
+  UI.FieldGroup #Details: {
+    Data: [
+      { Value: name },
+      { Value: prefix },
+      { Value: scopes },
+      { Value: createdAt },
+      { Value: expiresAt },
+      { Value: lastUsedAt },
+      { Value: revokedAt },
+      { Value: createdFromIP, Label: 'Created From IP' }
+    ]
+  },
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable : false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);

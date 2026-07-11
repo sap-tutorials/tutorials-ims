@@ -1,0 +1,69 @@
+name: MCP LLM UX (weekly)
+# Weekly quality check: measures how accurately Claude Haiku 4.5 picks the
+# correct MCP tool for 15 natural-language prompts. Regression fails when
+# pick-accuracy drops more than 0.05 below the seeded baseline.json.
+#
+# NOT part of per-PR CI — runs Monday 09:00 UTC only (or via workflow_dispatch).
+# Requires ANTHROPIC_API_KEY secret and a local CAP instance started in the job.
+#
+# First real run: overwrites baseline.json with actual accuracy (accuracy=0 seed).
+# Commit the updated baseline.json after the first successful run.
+#
+# (#1105 Task 17b)
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # Monday 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  llm-ux:
+    name: MCP LLM UX quality check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start CAP dev server (anonymous MCP routes only)
+        run: |
+          # Start cds watch in the background. The LLM-UX runner only hits
+          # anonymous routes (/mcp/search, /mcp/homepage, /mcp/graph), so
+          # no HANA binding is needed — SQLite in-memory is sufficient for
+          # tool schema discovery.
+          npx cds watch &
+          # Wait until the anonymous MCP endpoint is reachable (max 60s).
+          for i in $(seq 1 20); do
+            if curl -sf -X POST http://localhost:4004/mcp/search \
+                 -H 'Content-Type: application/json' \
+                 -H 'Accept: application/json' \
+                 -d '{"jsonrpc":"2.0","id":0,"method":"tools/list"}' \
+                 | grep -q '"tools"'; then
+              echo "CAP MCP endpoint is ready."
+              break
+            fi
+            echo "Waiting for CAP... (attempt $i/20)"
+            sleep 3
+          done
+
+      - name: Run LLM UX accuracy check
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MCP_LLM_UX_BASE: http://localhost:4004
+        run: npm run test:llm-ux
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-ux-results-${{ github.run_id }}
+          path: test/mcp-ux/baseline.json
+          retention-days: 90

@@ -5,6 +5,7 @@ using from '../db/knowledge-graph-ondemand';
 using from '../db/community-blogs';
 using from '../db/homepage-featured';
 using from '../db/views';
+using from '../db/mcp-pats';
 using from '../app/admin-annotations';
 
 @path: '/admin'
@@ -1038,5 +1039,19 @@ extend service AdminService with {
     inserted   : Integer;
     poolSize   : Integer;
     durationMs : Integer;
+  };
+}
+
+// Phase 2 (#1105): Personal Access Tokens admin surfaces.
+// MyPATs + mintPAT + revokePAT moved to PatService (@path: '/pats') — AdminService's
+// service-level @requires: 'Admin' gate blocked authenticated-user actions before the
+// operation-level check could run. PatService carries @requires: 'authenticated-user'.
+// PATsAdmin stays here: Admin scope is appropriate for the audit projection.
+extend service AdminService with {
+  // Admin-only view for audit (all users' PATs). No plaintext, no hash — metadata only.
+  @(requires: 'Admin')
+  @readonly entity PATsAdmin as projection on ims.PATs {
+    ID, user.email as userEmail, name, prefix, scopes,
+    createdAt, expiresAt, lastUsedAt, revokedAt, createdFromIP
   };
 }
