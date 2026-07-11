@@ -15,8 +15,21 @@ function getHugoTimeoutMs() {
 function getPreviewSitePath() {
   return process.env.PREVIEW_SITE_PATH ?? PREVIEW_SITE_PATH_DEFAULT;
 }
-function getHugoBin() {
-  return process.env.PREVIEW_HUGO_BIN ?? join(process.cwd(), 'node_modules', '.bin', 'hugo');
+export function getHugoBin() {
+  if (process.env.PREVIEW_HUGO_BIN) return process.env.PREVIEW_HUGO_BIN;
+  // #1102: Prefer the REAL hugo-extended vendor binary over the node_modules/
+  // .bin/hugo symlink. That symlink points at hugo-extended/lib/cli.js — a
+  // Node shim with a `#!/usr/bin/env node` shebang. On Cloud Foundry the
+  // nodejs buildpack installs node at /home/vcap/deps/0/bin/node, which is NOT
+  // on PATH for the child that preview-renderer spawns, so `/usr/bin/env node`
+  // fails with "node: No such file or directory" and Hugo exits 1 with no
+  // output on either stream (the empty-<pre> symptom reported by Sage). The
+  // vendor binary is a native Hugo executable with no node dependency, so
+  // invoke it directly.
+  const vendorBin = join(process.cwd(), 'node_modules', 'hugo-extended', 'vendor', process.platform === 'win32' ? 'hugo.exe' : 'hugo');
+  if (existsSync(vendorBin)) return vendorBin;
+  // Fallback: the .bin shim (works locally where node is on PATH).
+  return join(process.cwd(), 'node_modules', '.bin', process.platform === 'win32' ? 'hugo.exe' : 'hugo');
 }
 function getHugoArgsPrefix() {
   const raw = process.env.PREVIEW_HUGO_ARGS_PREFIX;

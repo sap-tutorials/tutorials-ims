@@ -1,7 +1,9 @@
 // test/srv-qa/preview-renderer.test.js
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { existsSync } from 'node:fs';
-import { renderPreview } from '../../srv-qa/preview-renderer.js';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { renderPreview, getHugoBin } from '../../srv-qa/preview-renderer.js';
 
 const STUB = new URL('../fixtures/hugo-stub.mjs', import.meta.url).pathname;
 
@@ -197,5 +199,47 @@ describe('renderPreview with data: image URLs (#1102)', () => {
     expect(status).toBe('ok');
     expect(html).not.toContain('data:image/svg+xml');
     expect(html).not.toContain('onload');
+  });
+});
+
+// #1102: getHugoBin must prefer the real hugo-extended vendor binary over the
+// node_modules/.bin/hugo symlink. On Cloud Foundry the .bin symlink is a Node
+// shim (`#!/usr/bin/env node`) that fails because `node` isn't on the spawned
+// child's PATH — Hugo then exits 1 with no output, the empty-<pre> symptom.
+describe('getHugoBin resolution (#1102)', () => {
+  let cwdSpy;
+  let tmpRoot;
+  beforeEach(() => {
+    // The top-level beforeEach sets PREVIEW_HUGO_BIN=process.execPath for the
+    // renderPreview stub tests; clear it so these resolution tests exercise
+    // the vendor/shim fallback logic rather than the override short-circuit.
+    delete process.env.PREVIEW_HUGO_BIN;
+  });
+  afterEach(() => {
+    delete process.env.PREVIEW_HUGO_BIN;
+    cwdSpy?.mockRestore();
+    if (tmpRoot) { rmSync(tmpRoot, { recursive: true, force: true }); tmpRoot = null; }
+  });
+
+  it('honours PREVIEW_HUGO_BIN override above everything', () => {
+    process.env.PREVIEW_HUGO_BIN = '/custom/hugo';
+    expect(getHugoBin()).toBe('/custom/hugo');
+  });
+
+  it('prefers the vendor binary when present', () => {
+    tmpRoot = mkdtempSync(join(tmpdir(), 'hugobin-'));
+    const vendorDir = join(tmpRoot, 'node_modules', 'hugo-extended', 'vendor');
+    mkdirSync(vendorDir, { recursive: true });
+    const binName = process.platform === 'win32' ? 'hugo.exe' : 'hugo';
+    writeFileSync(join(vendorDir, binName), '');
+    cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpRoot);
+    expect(getHugoBin()).toBe(join(vendorDir, binName));
+  });
+
+  it('falls back to the .bin shim when no vendor binary exists', () => {
+    tmpRoot = mkdtempSync(join(tmpdir(), 'hugobin-'));
+    cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpRoot);
+    const binName = process.platform === 'win32' ? 'hugo.exe' : 'hugo';
+    expect(getHugoBin()).toBe(join(tmpRoot, 'node_modules', '.bin', binName));
   });
 });
