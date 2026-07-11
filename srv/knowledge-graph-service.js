@@ -1363,8 +1363,10 @@ export default cds.service.impl(async function () {
       const arm = nb?.prerequisitesOf ?? [];
       return arm.slice(0, depth);
     } catch (e) {
+      // Fail-open like the get_recent_videos sibling: log server-side, return
+      // []. Do NOT echo e.message back — anonymous MCP callers must not see
+      // internal error detail (info-disclosure, #1111).
       log.error(`kg-service: kg_prerequisites(${slug}) failed — ${e.message ?? e}`);
-      req.error({ code: 'KG_LOOKUP_FAILED', message: e.message });
       return [];
     }
   });
@@ -1382,8 +1384,8 @@ export default cds.service.impl(async function () {
       const arm = nb?.whatToLearnNext ?? [];
       return arm.slice(0, limit);
     } catch (e) {
+      // Fail-open like the get_recent_videos sibling — no e.message echo (#1111).
       log.error(`kg-service: kg_what_to_learn_next(${slug}) failed — ${e.message ?? e}`);
-      req.error({ code: 'KG_LOOKUP_FAILED', message: e.message });
       return [];
     }
   });

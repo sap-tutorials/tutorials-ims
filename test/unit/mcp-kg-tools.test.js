@@ -215,6 +215,19 @@ describe('MCP curated tools: KnowledgeGraphService', () => {
 
       expect(Array.isArray(results)).toBe(true);
     });
+
+    it('fails open on neighborhood error — returns [] without echoing e.message (#1111)', async () => {
+      const SECRET = 'ORA-00942: table SENSITIVE_INTERNAL does not exist';
+      spyNeighborhood(() => { throw new Error(SECRET); });
+
+      // Must resolve to [] (fail-open), NOT reject — a rejection would carry
+      // the error message to the anonymous MCP caller.
+      const results = await KG.send('kg_prerequisites', { tutorial_slug: 'test-tutorial' });
+
+      expect(results).toEqual([]);
+      // Belt-and-braces: nothing the caller can observe leaks the raw message.
+      expect(JSON.stringify(results)).not.toContain(SECRET);
+    });
   });
 
   // ─────────────────────────────────────────────────────────────
@@ -292,6 +305,16 @@ describe('MCP curated tools: KnowledgeGraphService', () => {
       const results = await KG.send('kg_what_to_learn_next', { tutorial_slug: 'test-tutorial' });
 
       expect(Array.isArray(results)).toBe(true);
+    });
+
+    it('fails open on neighborhood error — returns [] without echoing e.message (#1111)', async () => {
+      const SECRET = 'ORA-00942: table SENSITIVE_INTERNAL does not exist';
+      spyNeighborhood(() => { throw new Error(SECRET); });
+
+      const results = await KG.send('kg_what_to_learn_next', { tutorial_slug: 'test-tutorial' });
+
+      expect(results).toEqual([]);
+      expect(JSON.stringify(results)).not.toContain(SECRET);
     });
   });
 });
