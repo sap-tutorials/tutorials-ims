@@ -153,6 +153,15 @@ modules:
         # analytics-ui, scanner-ui all need this; everything not under static/ here
         # (e.g. node_modules, package.json) is preserved.
         - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/explore-ui static/data-inspector-ui static/qa
+        # CAP-sourced Hugo sections (concepts, developer-advocates, browse) are
+        # generated at build time from /build/* endpoints. Because `cp -r` is
+        # union (see comment above), a build against a backend with FEWER rows
+        # overwrites index.html but leaves stale sub-pages from a prior build
+        # serving 200s — so /concepts/ can render "No published concepts yet"
+        # while thousands of /concepts/<slug>/ ghost pages still resolve. Wipe
+        # these before the union cp so the deployed tree exactly matches
+        # hugo/public. This was the 2026-07-12 empty-concepts incident.
+        - rm -rf static/concepts static/developer-advocates static/browse
         - cp -r ../hugo/public/. static/
         - rm -rf static/tutorials
         - mkdir -p static/qa
