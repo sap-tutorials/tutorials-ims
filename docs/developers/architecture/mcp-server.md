@@ -70,7 +70,7 @@ If `resolveDbUser` returns null (user not in the DB, stale OAuth clientId, or un
 
 ## Shared step-HTML slicer
 
-`srv/lib/tutorial-step-slicer.js` is the single implementation for extracting a step's HTML from the HANA content BLOB. Three consumers:
+`srv/lib/tutorial-step-slicer.js` is the single implementation for extracting a step's HTML from the HANA content BLOB. Four consumers:
 
 1. `DeveloperService.get_tutorial_step` (authenticated MCP, `/mcp-auth/*`)
 2. `SearchService.get_tutorial_step` (anonymous MCP, `/mcp/search`)
