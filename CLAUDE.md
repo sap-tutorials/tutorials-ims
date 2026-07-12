@@ -88,7 +88,11 @@ Subsystem one-liners:
 - **Canonical local deploy** (CI is bypassed for most ad-hoc deploys):
 
   ```bash
-  npm run build:all                       # Hugo MUST finish before mbt build
+  # Point CAP_BASE_URL at the DEPLOYED backend so CAP-sourced pages (/concepts/,
+  # advocates, homepage shelves) bake with real content. build:deploy fails fast
+  # if CAP_BASE_URL is unset/localhost — guards the 2026-07-12 empty-concepts incident.
+  export CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com"
+  npm run build:deploy                    # Hugo MUST finish before mbt build
   cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
   ```
 
