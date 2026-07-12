@@ -74,7 +74,16 @@ export async function handleMintPAT(req) {
 }
 
 export async function handleRevokePAT(req) {
-  const { ID } = req.data;
+  // #1132: revokePAT is now a BOUND action on PatService.MyPATs. FE V4
+  // supplies the row key via `req.params` (the last entry is this entity's
+  // key object). We fall back to `req.data.ID` so the handler still works if
+  // ever invoked as an unbound action (older callers / direct sends).
+  const boundKey = Array.isArray(req.params) && req.params.length
+    ? req.params[req.params.length - 1]
+    : null;
+  const ID = boundKey?.ID ?? req.data?.ID;
+  if (!ID) return req.error(400, 'ID is required');
+
   const dbUser = await resolveDbUser(req.user);
   if (!dbUser) return req.error(401, 'unable to resolve user');
 

@@ -1,0 +1,50 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  xmlns:f="sap.ui.layout.form">
+  <!-- #1132: One-time plaintext display of a freshly minted PAT. The token is
+       NEVER persisted or re-shown (server stores only its SHA-256 hash). The
+       warning strip makes the one-time nature explicit; the copy button puts
+       the value on the clipboard. Modelled on the /admin-ui/#secrets reveal UX. -->
+  <Dialog
+    id="patMintedDialog"
+    title="{i18n>minted.dialogTitle}"
+    contentWidth="560px"
+    contentHeight="auto"
+    afterClose=".onMintedAfterClose">
+    <VBox class="sapUiContentPadding">
+      <MessageStrip
+        text="{i18n>minted.warning}"
+        type="Warning"
+        showIcon="true"
+        class="sapUiSmallMarginBottom" />
+
+      <Label text="{i18n>minted.fieldToken}" labelFor="patMintedTokenInput" />
+      <HBox alignItems="Center" class="sapUiTinyMarginTop">
+        <Input
+          id="patMintedTokenInput"
+          value="{minted>/token}"
+          editable="false"
+          width="100%" />
+        <Button
+          icon="sap-icon://copy"
+          tooltip="{i18n>minted.buttonCopy}"
+          press=".onCopyToken"
+          class="sapUiTinyMarginBegin" />
+      </HBox>
+
+      <Text text="{i18n>minted.prefixHint}" class="sapUiSmallMarginTop" />
+    </VBox>
+
+    <buttons>
+      <Button
+        text="{i18n>minted.buttonCopy}"
+        icon="sap-icon://copy"
+        press=".onCopyToken" />
+      <Button
+        text="{i18n>minted.buttonClose}"
+        type="Emphasized"
+        press=".onMintedClose" />
+    </buttons>
+  </Dialog>
+</core:FragmentDefinition>

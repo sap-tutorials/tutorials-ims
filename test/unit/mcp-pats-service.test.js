@@ -19,6 +19,14 @@ async function callAction(srv, event, data, user = aliceUser) {
   );
 }
 
+/** Call a bound PatService action (e.g. revokePAT on MyPATs) as the given user. */
+async function callBoundAction(srv, event, entity, params, user = aliceUser) {
+  return srv.tx(
+    { user: { id: user.id, roles: ALICE_ROLES } },
+    (tx) => tx.send({ event, entity, params, data: {} })
+  );
+}
+
 describe('PatService.mintPAT + revokePAT', () => {
   let srv;
 
@@ -81,7 +89,9 @@ describe('PatService.mintPAT + revokePAT', () => {
       scopes: ['read'],
       ttlDays: 30
     });
-    await callAction(srv, 'revokePAT', { ID: minted.ID });
+    // #1132: revokePAT is now a BOUND action on MyPATs — invoke with the row
+    // key via `params` rather than passing ID in the action data.
+    await callBoundAction(srv, 'revokePAT', 'MyPATs', [{ ID: minted.ID }]);
 
     const { PATs } = cds.entities('com.sap.developers.ims');
     const [row] = await SELECT.from(PATs).where({ ID: minted.ID });
