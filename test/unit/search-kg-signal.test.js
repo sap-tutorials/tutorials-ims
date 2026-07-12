@@ -145,6 +145,26 @@ describe('search-kg-signal', () => {
     expect(s.slugScores.size).toBe(0)
   })
 
+  // #1114: db.run() on HANA ignores AbortSignal, so a slow cosine (or any DB
+  // leg) must be raced against the wall-clock deadline — the caller returns
+  // warning=timeout without waiting for the query to drain.
+  it('honours timeoutMs — a hanging DB leg returns warning=timeout fast', async () => {
+    const embedClient = { embed: async () => Float32Array.from(unit(0)) }
+    // db stub: embed already resolved; the FIRST db.run() (cosine) never resolves.
+    const hangingDb = {
+      kind: 'sqlite',
+      run: () => new Promise(() => {}),  // never resolves, never rejects
+    }
+    const t0 = Date.now()
+    const s = await computeKgSignal({ phrase: 'hangs in db', db: hangingDb, embedClient, timeoutMs: 40 })
+    const elapsed = Date.now() - t0
+    expect(s.warning).toBe('timeout')
+    expect(s.slugScores.size).toBe(0)
+    // Must return near the deadline, not hang forever. Generous ceiling to
+    // avoid flake on loaded CI, but far below any "waited for the query" value.
+    expect(elapsed).toBeLessThan(1000)
+  })
+
   // ---- Rationale + scoring shape
 
   it('rationale combines top-2 contributing concept names', async () => {
