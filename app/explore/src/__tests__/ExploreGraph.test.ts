@@ -63,6 +63,14 @@ vi.mock('graphology', () => {
     hasEdge(key: string) { return this.edges.has(key) }
     getNodeAttributes(id: string) { return this.nodes.get(id) }
     getNodeAttribute(id: string, attr: string) { return this.nodes.get(id)?.[attr] }
+    setNodeAttribute(id: string, attr: string, value: any) {
+      const node = this.nodes.get(id)
+      if (node) node[attr] = value
+    }
+    forEachNode(callback: (id: string, attrs: any) => void) {
+      if (typeof callback !== 'function') return
+      for (const [id, attrs] of this.nodes) callback(id, attrs)
+    }
     forEachEdge(...args: any[]) {
       const callback = args[args.length - 1]
       if (typeof callback !== 'function') return
@@ -229,6 +237,63 @@ describe('ExploreGraph', () => {
     const [, attrs] = [...graph.edges.entries()][0]
     expect(attrs.color).toBe('#ff6b35')
     expect(attrs.size).toBe(3)
+    unmount()
+  })
+
+  // Regression #1131: /graph/path returns a ranked candidate list, NOT a
+  // connected walk — production paths almost never share direct graph edges
+  // between consecutive nodes, so the edge-only overlay silently no-oped.
+  // The overlay must highlight the path NODES (which always exist) so it works
+  // regardless of edge topology. Fade off-path nodes so the path stands out.
+  it('highlights path nodes and fades off-path nodes when path prop is set', async () => {
+    const pathFixture = {
+      nodes: [
+        { id: 't:a', type: 'tutorial' as const, label: 'A', slug: 'a' },
+        { id: 't:b', type: 'tutorial' as const, label: 'B', slug: 'b' },
+        // Off-path node — no direct edge to either path node (the real-world
+        // shape: path tutorials relate indirectly via shared concepts).
+        { id: 't:c', type: 'tutorial' as const, label: 'C', slug: 'c' },
+      ],
+      // No edge between the two path nodes at all — mirrors live DEV data
+      // where 0 of the consecutive path pairs share a direct edge.
+      edges: [{ s: 't:a', p: 'teaches' as const, o: 't:c' }],
+      path: ['t:a', 't:b'],
+    }
+    const { unmount } = mountExploreGraph(pathFixture)
+    await nextTick()
+    const graph = mockGraphInstances[0]
+    // Path nodes recolored to SAP-orange highlight and enlarged.
+    expect(graph.nodes.get('t:a').color).toBe('#ff6b35')
+    expect(graph.nodes.get('t:a').size).toBe(10)
+    expect(graph.nodes.get('t:b').color).toBe('#ff6b35')
+    expect(graph.nodes.get('t:b').size).toBe(10)
+    // Off-path node faded to light grey.
+    expect(graph.nodes.get('t:c').color).toBe('#d9d9d9')
+    unmount()
+  })
+
+  // Clearing the path (From/To emptied) must restore every node to its
+  // type-default color and default size — no stale orange/faded styling.
+  it('resets node styling to type defaults when path prop clears', async () => {
+    const pathFixture = {
+      nodes: [
+        { id: 't:a', type: 'tutorial' as const, label: 'A', slug: 'a' },
+        { id: 't:b', type: 'tutorial' as const, label: 'B', slug: 'b' },
+      ],
+      edges: [] as { s: string; p: 'teaches'; o: string }[],
+      path: ['t:a', 't:b'],
+    }
+    const { app, unmount } = mountExploreGraph(pathFixture)
+    await nextTick()
+    const graph = mockGraphInstances[0]
+    expect(graph.nodes.get('t:a').color).toBe('#ff6b35')
+    // Clear the path prop; the watcher should reset node styling.
+    app._instance!.props.path = null
+    await nextTick()
+    // tutorial type default is #0a6ed1, default size 4.
+    expect(graph.nodes.get('t:a').color).toBe('#0a6ed1')
+    expect(graph.nodes.get('t:a').size).toBe(4)
+    expect(graph.nodes.get('t:b').color).toBe('#0a6ed1')
     unmount()
   })
 })

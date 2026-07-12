@@ -86,12 +86,23 @@ async function onFindPath(p: { from: string; to: string }) {
     // Build the path-node-id chain. Prepend the source ('from') because
     // the server-side PATH_BETWEEN returns target-side candidates only;
     // the source isn't included in the response steps.
+    //
+    // Dedup GLOBALLY, not just consecutive repeats: /graph/path returns a
+    // ranked candidate list that can repeat a slug non-consecutively (live DEV
+    // showed `abap-environment-enhance-cds-view` appearing 4× across the
+    // steps). A consecutive-only guard let those duplicates survive into
+    // pathNodeIds; a Set collapses them to one highlighted node (#1131).
     const ids: string[] = []
-    const fromId = resolveNodeId(p.from)
-    if (fromId) ids.push(fromId)
+    const seen = new Set<string>()
+    const pushId = (id: string | null) => {
+      if (id && !seen.has(id)) {
+        seen.add(id)
+        ids.push(id)
+      }
+    }
+    pushId(resolveNodeId(p.from))
     for (const step of result.steps) {
-      const id = resolveNodeId(step.slug)
-      if (id && id !== ids[ids.length - 1]) ids.push(id)
+      pushId(resolveNodeId(step.slug))
     }
     if (ids.length < 2) {
       pathNodeIds.value = null
