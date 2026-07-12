@@ -29,6 +29,7 @@ entity CommunityBlogSources : cuid, managed {
   isActive    : Boolean default true;
   sortOrder   : Integer default 100;
   managed     : Boolean default false;
+  apiQuery    : String(500); // (#1144) LiQL WHERE predicate for the Khoros transport
 }
 annotate CommunityBlogSources with @assert.unique.label   : [label];
 annotate CommunityBlogSources with @assert.unique.feedUrl : [feedUrl];
