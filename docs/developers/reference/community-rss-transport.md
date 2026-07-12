@@ -74,6 +74,13 @@ community-authored titles.
   wipe). A source with no `apiQuery` degrades to `curl` on its raw `feedUrl`.
 - **Homepage lane:** `homepage-rss-fetcher.js` derives `board.id='<id>'` from the
   feed URL's `?board.id=` param (`apiQueryFromFeedUrl`); no board.id → curl fallback.
+  In practice the homepage community lane is served from the DB
+  (`HomepageService.communityBlogs()` reads `CommunityBlogPosts`, which the cron
+  populates), and the only URLs passed to `fetchRssItems` today (the `news.sap.com`
+  feed and the community aggregate feed) carry **no** `board.id` — so they take the
+  curl fallback, not the Khoros path. The board.id derivation exists so that a
+  board-scoped homepage feed URL would automatically use Khoros, but no such caller
+  exists yet.
 
 ## SSRF guard is preserved
 
