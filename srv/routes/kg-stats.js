@@ -30,6 +30,11 @@ async function computePayload() {
     cds.entities('com.sap.developers.ims');
 
   // Four COUNT queries + one MAX. Run in parallel — they're independent.
+  // Tutorials: status='ACTIVE' is the public-visible gate. DELETE flips status
+  // to INACTIVE (admin-service.js:1013) so the public side 404s/redirects;
+  // legacy IMS-migrated rows also carry an undeclared status='DELETED'. A
+  // positive allow-list on ACTIVE excludes both — do NOT use `!= 'INACTIVE'`,
+  // which would still count the DELETED rows.
   // Concepts: status='ACTIVE' AND publishedAt IS NOT NULL is the documented
   // public-published gate (db/knowledge-graph.cds:36-39).
   // ConceptEdges: only ACTIVE edges count; VETOED edges are admin-suppressed.
@@ -37,7 +42,11 @@ async function computePayload() {
   // has firstSeenAt/lastSeenAt/publishedAt but NOT extractedAt.
   const [tutCount, conCount, edgeCount, misCount, grpCount, maxExtracted] =
     await Promise.all([
-      db.run(SELECT.from(Tutorials).columns('count(*) as n')),
+      db.run(
+        SELECT.from(Tutorials)
+          .where({ status: 'ACTIVE' })
+          .columns('count(*) as n')
+      ),
       db.run(
         SELECT.from(Concepts)
           .where({ status: 'ACTIVE', publishedAt: { '!=': null } })
