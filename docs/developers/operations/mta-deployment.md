@@ -84,8 +84,13 @@ export CONTENT_API_KEY="<DEV-content-api-key — fetch from BTP credstore, do NO
 cf set-env tutorials-srv CONTENT_API_KEY "$CONTENT_API_KEY"
 cf restart tutorials-srv
 
-# Build Hugo site
-npm run build:all
+# Build Hugo site — point CAP_BASE_URL at the DEPLOYED backend so CAP-sourced
+# pages (/concepts/, /developer-advocates/, homepage shelves) bake with real
+# content instead of the empty local CAP. build:deploy fails fast if
+# CAP_BASE_URL is unset or localhost (guards the 2026-07-12 empty-concepts
+# incident). Use `npm run build:all` directly ONLY for local dev builds.
+export CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com"
+npm run build:deploy
 
 # Delta-aware publish (only changed files uploaded)
 CAP_BASE_URL="https://<srv-url>" npm run publish-content
@@ -231,7 +236,9 @@ Writes the current `Tutorials Admin`, `Tutorials SuperAdmin`, `Tutorials Develop
 cf target
 # org: tutorial-system, space: dev
 
-npm run build:all
+# Bake CAP content against the DEPLOYED backend (not empty local CAP).
+export CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com"
+npm run build:deploy
 cd .deploy && mbt build
 
 # The new mtar filename reflects the new ID:
@@ -329,7 +336,7 @@ If `cf purge-mta` is not available (older multiapps plugin), `cf undeploy tutori
 If `cf deploy` of `tutorials-ims_1.0.0.mtar` fails partway through, the XSUAA descriptor update may have already landed. To roll back to `tutorials-poc`:
 
 1. Revert this PR locally: `git checkout main && git pull && git revert <merge-commit>`.
-2. `npm run build:all && cd .deploy && mbt build && cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext -f`.
+2. `export CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" && npm run build:deploy && cd .deploy && mbt build && cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext -f`.
 3. The deploy adopts the same services again — `xsappname` flips back to `tutorials-poc`.
 4. After the revert deploy completes, verify assignments with `node scripts/migrate-role-collections.cjs --inventory .migration-data/role-collections-pre-rename.json --verify`. If anything was lost during the failed forward attempt, `--restore --commit` re-asserts from the snapshot.
 
