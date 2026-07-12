@@ -2,6 +2,7 @@ import cds from '@sap/cds';
 import express from 'express';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
+import { selfHealOnDeploy } from './lib/deploy-self-heal.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
@@ -691,6 +692,34 @@ cds.on('served', async () => {
         cds.log('purge-stale-changelog').warn(
           'Auto-purge failed (non-fatal):',
           err.message,
+        );
+      });
+  }
+
+  // Self-heal CAP-sourced approuter static content after each CF deploy.
+  // A `cf deploy` can ship an empty /concepts/ index (built against a local
+  // CAP with no published concepts) AND resets the approuter's ephemeral disk,
+  // reverting whatever a content-rebuild had pushed. On the first boot under a
+  // NEW deploy version, dispatch a catalog-only rebuild that re-fetches from
+  // THIS backend (which has the data) and re-pushes fresh static content.
+  // Keyed on VCAP_APPLICATION.application_version via a JobLocks sentinel so it
+  // runs exactly once per deploy — crash-restarts of the same droplet reuse
+  // the same version and skip. Fail-open; never crashes boot. See
+  // srv/lib/deploy-self-heal.js and the 2026-07-12 empty-concepts incident.
+  if (!globalThis.__deploySelfHealAttempted) {
+    globalThis.__deploySelfHealAttempted = true;
+    selfHealOnDeploy()
+      .then((res) => {
+        if (res.triggered) {
+          cds.log('deploy-self-heal').info(
+            'Dispatched catalog-only rebuild to refresh approuter static content after deploy',
+          );
+        }
+      })
+      .catch((err) => {
+        cds.log('deploy-self-heal').warn(
+          'Deploy self-heal failed (non-fatal):',
+          err.message ?? err,
         );
       });
   }
