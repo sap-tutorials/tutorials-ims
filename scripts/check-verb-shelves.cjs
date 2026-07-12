@@ -28,9 +28,11 @@
 // that setting. Mirrors scripts/check-explore-bundle-manifest.cjs.
 //
 // Exit codes:
-//   0  every baked verb has >=1 active shelf row.
-//   1  a data file is missing/unreadable, OR at least one verb baked empty.
-//      Stderr names every offending verb + the likely fix.
+//   0  every baked verb has >=1 active shelf row (a per-verb explainer-content
+//      warning may still print — see findExplainerDrift).
+//   1  a data file is missing/unreadable, at least one verb baked with zero
+//      shelf rows, OR every verb baked with empty explainer text (the SQLite-
+//      drift signature). Stderr names the offenders + the likely fix.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -69,7 +71,44 @@ function findEmptyVerbs(verbDefs, shelvesDoc) {
   };
 }
 
-module.exports = { findEmptyVerbs };
+// ---------------------------------------------------------------------------
+// Explainer-content drift (issue #1029, second regression — the homepage
+// verb flip tiles showing "More details coming soon.").
+//
+// tagline + whyItMatters are admin-authored and live ONLY in HANA — they were
+// deliberately stripped from the seed CSV in #1059 (auto-CSV would wipe them on
+// every deploy). So a build that fetches from a CSV-seeded SQLite backend bakes
+// EVERY verb with empty explainer text, and VerbFlipTile.vue renders the
+// "More details coming soon." placeholder on all of them.
+//
+// The discriminator is subtle: authoringStatus=BLANK + empty content is a
+// LEGITIMATE state on a fresh subaccount (content genuinely not written yet),
+// so we must NOT hard-fail per-empty-verb — that would block valid builds.
+// The unambiguous drift signature is ALL verbs empty: a real HANA feed for
+// this project has all 7 authored, and a fresh subaccount that truly has zero
+// authored explainers has nothing to lose by shipping placeholders. When SOME
+// but not all verbs are empty, we WARN (likely legitimate partial authoring)
+// rather than fail.
+// ---------------------------------------------------------------------------
+function findExplainerDrift(verbDefs) {
+  const verbs = Array.isArray(verbDefs && verbDefs.verbs) ? verbDefs.verbs : [];
+  const hasText = (v) => {
+    const t = v && v.tagline;
+    const w = v && v.whyItMatters;
+    return (typeof t === 'string' && t.trim() !== '') ||
+           (typeof w === 'string' && w.trim() !== '');
+  };
+  const emptyExplainers = verbs.filter((v) => !hasText(v)).map((v) => v && v.verbKey);
+  const verbCount = verbs.length;
+  return {
+    emptyExplainers,
+    verbCount,
+    // All verbs empty (and there is at least one verb) == SQLite-drift signature.
+    allEmpty: verbCount > 0 && emptyExplainers.length === verbCount,
+  };
+}
+
+module.exports = { findEmptyVerbs, findExplainerDrift };
 
 // ---------------------------------------------------------------------------
 // CLI (only when run directly, so the pure core imports cleanly under Vitest).
@@ -115,6 +154,24 @@ function main() {
   if (empties.length > 0) {
     fail([`verb(s) with ZERO active shelf rows: ${empties.join(', ')}`,
           `(baked ${shelfCount} shelf rows across ${verbsWithRows} verbs; ${verbCount} verbs defined)`]);
+  }
+
+  // Explainer-content drift: hard-fail only on the all-empty SQLite signature;
+  // warn (don't fail) on partial emptiness — that can be legitimate fresh-
+  // subaccount state.
+  const { emptyExplainers, allEmpty } = findExplainerDrift(verbDefs);
+  if (allEmpty) {
+    fail([`ALL ${verbCount} verbs have empty tagline + whyItMatters.`,
+          'Every homepage flip tile will render "More details coming soon."',
+          'tagline/whyItMatters live only in HANA (stripped from the seed CSV in',
+          '#1059), so this is the signature of a build against CSV-seeded SQLite',
+          'instead of HANA. Fix: fetch verb-definitions from a HANA-backed CAP',
+          '(cds bind --exec -- cds serve) before building.']);
+  }
+  if (emptyExplainers.length > 0) {
+    console.warn(`[build:hugo] verb-shelf guard WARN — ${emptyExplainers.length} verb(s) have no ` +
+                 `explainer text (flip tile shows "More details coming soon."): ${emptyExplainers.join(', ')}. ` +
+                 `Author via /admin-ui/#verb-definitions if this is unexpected.`);
   }
 
   console.log(`[build:hugo] verb-shelf guard OK — all ${verbCount} verbs have shelf content ` +
