@@ -39,13 +39,21 @@ function xmlEscape(s) {
     .replace(/'/g, '&apos;');
 }
 
-// Escape the CDATA terminator so field content cannot break out of its
-// <![CDATA[...]]> section (xml-injection). Splits every "]]>" across two
-// CDATA sections: "]]" + "]]><![CDATA[" + ">". Normal blog content never
-// contains "]]>", so this is a no-op in practice — it closes the injection
-// vector for crafted/edge content only.
+// Escape CDATA content so it cannot break out of its <![CDATA[...]]> section.
+//
+// Two escapes applied in order:
+//   1. CDATA terminator: "]]>" → "]]]]><![CDATA[>" (splits across two sections)
+//   2. Closing tag sequences: "</" → "<]]><![CDATA[/" (makes </title> etc.
+//      non-contiguous in the raw XML, preventing parseRss regex truncation).
+//      After CDATA-stripping by the consumer the character data collapses
+//      back to "</" so the round-trip is lossless.
+//
+// Normal blog content never contains "]]>" or deliberately crafted "</title>"
+// sequences, so both escapes are no-ops in practice.
 function cdataEscape(s) {
-  return String(s ?? '').replace(/]]>/g, ']]]]><![CDATA[>');
+  return String(s ?? '')
+    .replace(/]]>/g, ']]]]><![CDATA[>')
+    .replace(/<\//g, '<]]><![CDATA[/');
 }
 
 export function validateApiQuery(apiQuery) {

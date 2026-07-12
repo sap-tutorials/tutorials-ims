@@ -103,6 +103,33 @@ describe('itemsToRssXml → parseRss round-trip', () => {
     expect(items[0].title).toContain('evil');
     expect(items[0].title).toContain('tail');
   });
+
+  it('closing tag </title> inside subject round-trips without truncation (#1144)', () => {
+    // A literal </title> inside CDATA would cause parseRss regex to match the
+    // premature closing tag and yield a truncated title. The cdataEscape fix
+    // splits "</" across CDATA boundaries so </title> never appears contiguously
+    // in the CDATA content while the parsed value is still the full original string.
+    const xml = itemsToRssXml([{
+      view_href: 'https://community.sap.com/x/ba-p/2',
+      subject: 'foo </title> bar',
+      teaser: 'desc with </description> inside',
+      post_time: '2026-01-01T00:00:00.000+00:00',
+      author: { login: 'u' },
+    }]);
+    // The CDATA content inside <title>...</title> must NOT contain </title>
+    // as a literal sequence (the escape splits "</" across CDATA boundaries).
+    const titleCdata = xml.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? '';
+    expect(titleCdata).not.toContain('</title>');
+    const descCdata = xml.match(/<description>([\s\S]*?)<\/description>/)?.[1] ?? '';
+    expect(descCdata).not.toContain('</description>');
+
+    const items = parseRss(xml);
+    // Must yield exactly one item (not truncated to 0 or split into garbage)
+    expect(items).toHaveLength(1);
+    // Title and description must round-trip to their original literal values
+    expect(items[0].title).toBe('foo </title> bar');
+    expect(items[0].description).toBe('desc with </description> inside');
+  });
 });
 
 describe('khorosFetch', () => {

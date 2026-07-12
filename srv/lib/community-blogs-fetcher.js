@@ -238,7 +238,7 @@ export async function fetchAllSources() {
   const { CommunityBlogSources } = cds.entities('com.sap.developers.ims');
   const sources = await db.run(
     SELECT.from(CommunityBlogSources)
-      .columns('ID', 'label', 'feedUrl', 'topicSlug')
+      .columns('ID', 'label', 'feedUrl', 'topicSlug', 'apiQuery')
       .where({ isActive: true })
       .orderBy('sortOrder')
   );
