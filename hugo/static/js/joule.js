@@ -237,6 +237,67 @@
     }
   }
 
+  function safeExternalHref(url) {
+    try {
+      const u = new URL(url);
+      return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+    } catch { return null; }
+  }
+
+  const EXTERNAL_TYPE_LABELS = {
+    'learning-journey': 'Learning Journey',
+    'blog-post': 'Blog Post',
+    'discovery-mission': 'Discovery Mission',
+    'video': 'Video',
+    'api-doc': 'API Doc',
+    'sample': 'Code Sample',
+    'help-doc': 'Help Doc',
+    'community-event': 'Community Event',
+  };
+
+  function renderExternalContentCards(items) {
+    const wrap = document.createElement('div');
+    wrap.className = 'joule-external-content';
+    const heading = document.createElement('p');
+    heading.className = 'joule-external-content__heading';
+    heading.textContent = 'Related content';
+    wrap.appendChild(heading);
+    const ul = document.createElement('ul');
+    for (const it of items) {
+      if (!it || typeof it.url !== 'string') continue;
+      const href = safeExternalHref(it.url);
+      if (!href) continue;
+      const li = document.createElement('li');
+      li.className = 'joule-external-content__item';
+
+      const label = document.createElement('span');
+      label.className = 'joule-external-content__type';
+      label.textContent = EXTERNAL_TYPE_LABELS[it.type] || it.type || 'Resource';
+      li.appendChild(label);
+
+      const a = document.createElement('a');
+      a.className = 'joule-external-content__link';
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = it.title || it.slug || href;
+      li.appendChild(a);
+
+      if (it.trustTier === 'community') {
+        const tier = document.createElement('span');
+        tier.className = 'joule-external-content__tier';
+        tier.textContent = ' (community)';
+        li.appendChild(tier);
+      }
+      ul.appendChild(li);
+    }
+    if (ul.childElementCount > 0) {
+      wrap.appendChild(ul);
+      transcript.appendChild(wrap);
+      scrollToBottom(body);
+    }
+  }
+
   function renderAnalyticsTable(parsed) {
     const rows = Array.isArray(parsed?.rows) ? parsed.rows : [];
     const wrap = document.createElement('div');
@@ -658,6 +719,8 @@
             if (Array.isArray(payload.items) && payload.items.length) {
               renderStepCitations(payload.items);
             }
+          } else if (payload.type === 'external-content-cards') {
+            renderExternalContentCards(payload.items || []);
           } else if (payload.type === 'analytics-result') {
             needsTurnBreak = true;
             renderAnalyticsTable(payload);
