@@ -150,7 +150,7 @@ Claude Desktop discovers the OAuth server automatically via the `.well-known/oau
 | `get_my_recommended_tutorials` | Persona-ranked tutorial recommendations |
 | `get_my_recommended_missions` | Persona-ranked mission recommendations |
 
-> **Note:** The PAT mint UI follow-up is tracked in issue #1132. Until that ships, tokens can be minted via the API endpoint documented in [mcp-server.md](../developers/reference/mcp-server.md).
+> **Mint a PAT:** open [`/admin-ui/#pats`](../developers/reference/mcp-server.md) and use the **Mint** action, or call the mint endpoint documented in [mcp-server.md](../developers/reference/mcp-server.md). The token is shown once at mint time — copy it immediately.
 
 ## Sign in with Claude Code (OAuth via mcp-remote)
 

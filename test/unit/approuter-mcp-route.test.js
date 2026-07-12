@@ -60,6 +60,33 @@ describe('approuter /mcp/* route (#912)', () => {
     expect(route.authenticationType).toBe('none');
   });
 
+  // Regression guard for the #1105 live bug: the broad ORD route
+  // `^/.well-known/(.*)$` → srv-api (added by @cap-js/ord) is first-match-wins
+  // and, if listed first, shadows the two specific static OAuth discovery
+  // routes below — so MCP clients get a 404 on the discovery docs and cannot
+  // auto-configure. Approuter matches routes top-to-bottom, so the specific
+  // static OAuth routes MUST precede the broad srv-api catch.
+  it('orders both OAuth discovery routes BEFORE the broad /.well-known/* srv-api route', () => {
+    const idxBroad = xsapp.routes.findIndex((r) => r.source === '^/.well-known/(.*)$');
+    const idxAuthServer = xsapp.routes.findIndex(
+      (r) => r.source === '^/.well-known/oauth-authorization-server$',
+    );
+    const idxProtRes = xsapp.routes.findIndex(
+      (r) => r.source === '^/.well-known/oauth-protected-resource$',
+    );
+    expect(idxBroad, 'broad /.well-known/* route missing').toBeGreaterThan(-1);
+    expect(idxAuthServer).toBeGreaterThan(-1);
+    expect(idxProtRes).toBeGreaterThan(-1);
+    expect(
+      idxAuthServer,
+      'oauth-authorization-server must precede the broad /.well-known/* srv-api route',
+    ).toBeLessThan(idxBroad);
+    expect(
+      idxProtRes,
+      'oauth-protected-resource must precede the broad /.well-known/* srv-api route',
+    ).toBeLessThan(idxBroad);
+  });
+
   it('mounts /mcp-pat/* anonymous with csrfProtection false', () => {
     const route = xsapp.routes.find((r) => r.source === '^/mcp-pat/(.*)$');
     expect(route).toBeDefined();

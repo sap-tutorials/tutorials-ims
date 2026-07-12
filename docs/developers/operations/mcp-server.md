@@ -225,6 +225,30 @@ ORDER BY "CREATEDAT" DESC;
 
 `tokenSource = 'pat'` = PAT caller; `tokenSource = null` = JWT/OAuth browser caller. `tokenSource` is visible in the existing observability surface — see [docs/developers/architecture/observability.md](../architecture/observability.md).
 
+## Migration note for the sap-devs CLI / MCP owner
+
+The `sap-devs` CLI and its bundled MCP server are a **downstream consumer** of this surface. When they wire up to the hosted endpoints, hand the owner the following so no assumptions leak from Phase 1:
+
+**Endpoint map**
+
+| Consumer shape | URL | Auth |
+| --- | --- | --- |
+| Anonymous curated tools (Phase 1, unchanged) | `<base>/mcp/search`, `/mcp/homepage`, `/mcp/graph` | none |
+| Authenticated / personalized tools (browser agent) | `<base>/mcp-auth/api` | OAuth 2.1 + PKCE via XSUAA; requires the `Tutorial.MCP` scope |
+| Authenticated / personalized tools (headless CLI, CI) | `<base>/mcp-pat/api` | `Authorization: Bearer pat_…` |
+
+`<base>` on Dev is `https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com`. (Note this is the **actual CF route**, not the vanity `developers-dev.*` host — confirm the current route with `cf routes` before hardcoding.)
+
+**What the owner must do**
+
+1. **Prefer PAT for the CLI.** A CLI is a headless agent — route personalized calls through `/mcp-pat/api` with a PAT minted at `/admin-ui/#pats`. Reserve `/mcp-auth/api` (interactive OAuth) for GUI clients like Claude Desktop.
+2. **Auto-discovery.** OAuth clients read `<base>/.well-known/oauth-authorization-server` and `<base>/.well-known/oauth-protected-resource` to self-configure. These are served statically by the approuter — if a client 404s on them, the approuter route order regressed (the specific static routes must precede the broad `^/.well-known/(.*)$` ORD route; guarded by `test/unit/approuter-mcp-route.test.js`).
+3. **Scope grant.** Interactive OAuth users need the `Tutorials MCP Users` role collection (grants `Tutorial.MCP`) — see [Granting `Tutorials MCP Users` role collection](#granting-tutorials-mcp-users-role-collection) above. PAT callers do **not** need the XSUAA scope; the PAT's own `scopes` array (`read` / `write`) governs access.
+4. **Do not depend on `@sap/`-internal MCP behavior.** The adapter is the public `@cap-js/mcp`; tool names and the `/mcp*` namespaces are stable across Phase 2→3 (Phase 3 only *adds* tools). Client configs will not need to change on the Phase 3 rollout.
+5. **Rate limits & failure modes.** Both authenticated paths converge on the same CAP handlers and rate limits as the anonymous surface — see [Rate limiting](#rate-limiting) and [Common failures](#common-failures). An expired/revoked PAT returns 401.
+
+File any downstream integration issues against this repo referencing #1105, and cross-link the sap-devs-side tracking issue here once it exists.
+
 ## References
 
 - Adapter: [`@cap-js/mcp` on npm](https://www.npmjs.com/package/@cap-js/mcp)
