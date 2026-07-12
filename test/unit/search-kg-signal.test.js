@@ -90,6 +90,27 @@ describe('search-kg-signal', () => {
     expect(a).toBe(b)
   })
 
+  it('topConcepts entries carry the concept id (for external-content fetch)', async () => {
+    const embedClient = { embed: async () => Float32Array.from(unit(0)) }
+    const s = await computeKgSignal({ phrase: 'async abap', db, embedClient })
+    expect(s.topConcepts.length).toBeGreaterThan(0)
+    for (const c of s.topConcepts) {
+      expect(typeof c.id).toBe('string')
+      expect(c.id.length).toBeGreaterThan(0)
+    }
+    // The seeded concept 'async-abap' must be present by id.
+    expect(s.topConcepts.some(c => c.id === 'c-async')).toBe(true)
+  })
+
+  it('buildKgRankFragment output is unchanged by the id addition', async () => {
+    const embedClient = { embed: async () => Float32Array.from(unit(0)) }
+    const s = await computeKgSignal({ phrase: 'async abap', db, embedClient })
+    const frag = buildKgRankFragment(s)
+    // Fragment references slugs + numeric scores only — never concept ids.
+    expect(frag).not.toMatch(/\bc-async\b|\bc-rap\b|\bc-other\b/)
+    expect(frag).toMatch(/when 'abap-async-rap' then/)
+  })
+
   // ---- Empty / disabled
 
   it('returns empty signal when enabled=false without calling embed', async () => {

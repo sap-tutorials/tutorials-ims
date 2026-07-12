@@ -119,7 +119,7 @@ export function _setTestEmbedClient(client) {
  * @property {Map<string, string>}  slugTitle       slug → tutorial title (added #1111 so
  *                                                  expandSearchConcepts can reuse the
  *                                                  cached signal without a second DB round-trip)
- * @property {Array<{slug:string,name:string,score:number}>} topConcepts
+ * @property {Array<{id:string,slug:string,name:string,score:number}>} topConcepts
  * @property {number}               computedAt      ms epoch
  * @property {number}               latencyMs
  * @property {string=}              warning         'timeout' | 'embed_failed' | 'db_error' | 'kg_empty' | 'disabled'
@@ -391,6 +391,7 @@ async function _computeUncached({ key, phrase, db, embedClient, embeddingModel, 
       slugRationale,
       slugTitle,
       topConcepts: allConcepts.map((c) => ({
+        id: c.id,
         slug: c.slug,
         name: c.name,
         score: Number(c.score.toFixed(4)),

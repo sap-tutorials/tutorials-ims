@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildToolRegistry,
   buildSystemPromptLines,
+  dispatchTool,
 } from '../srv/lib/chat-orchestrator.js';
 
 describe('chat-orchestrator kgSearchExpansionEnabled gating', () => {
@@ -64,5 +65,39 @@ describe('chat-orchestrator buildSystemPromptLines — search-expansion guidance
       });
       expect(lines.join('\n')).not.toMatch(/expandSearchConcepts/);
     }
+  });
+});
+
+describe('#1125 findRelatedContent gating', () => {
+  it('registers findRelatedContent when kgRelatedContentEnabled=true', () => {
+    const tools = buildToolRegistry({ settings: { kgRelatedContentEnabled: true } });
+    expect(tools.some(t => t.function?.name === 'findRelatedContent')).toBe(true);
+  });
+  it('omits findRelatedContent when kgRelatedContentEnabled=false', () => {
+    const tools = buildToolRegistry({ settings: { kgRelatedContentEnabled: false } });
+    expect(tools.some(t => t.function?.name === 'findRelatedContent')).toBe(false);
+  });
+  it('omits findRelatedContent on devtoberfest pages regardless of flag', () => {
+    const tools = buildToolRegistry({ settings: { kgRelatedContentEnabled: true }, pageContext: { kind: 'devtoberfest' } });
+    expect(tools.some(t => t.function?.name === 'findRelatedContent')).toBe(false);
+  });
+  it('omits findRelatedContent on advocates pages regardless of flag', () => {
+    const tools = buildToolRegistry({ settings: { kgRelatedContentEnabled: true }, pageContext: { kind: 'advocates' } });
+    expect(tools.some(t => t.function?.name === 'findRelatedContent')).toBe(false);
+  });
+  it('adds a system-prompt line when flag on, none when off', () => {
+    const on = buildSystemPromptLines({ settings: { kgRelatedContentEnabled: true } });
+    expect(on.some(l => /findRelatedContent/.test(l))).toBe(true);
+    const off = buildSystemPromptLines({ settings: { kgRelatedContentEnabled: false } });
+    expect(off.some(l => /findRelatedContent/.test(l))).toBe(false);
+  });
+});
+
+describe('#1125 dispatchTool findRelatedContent', () => {
+  it('returns an empty-content envelope for an empty query without throwing', async () => {
+    const out = await dispatchTool('findRelatedContent', { query: '   ' }, { id: 'u1' });
+    expect(out).toHaveProperty('externalContent');
+    expect(Array.isArray(out.externalContent)).toBe(true);
+    expect(out.externalContent).toEqual([]);
   });
 });

@@ -2015,6 +2015,13 @@
           },
           "@cds.persistence.name": "SEARCHKGRERANKENABLED"
         },
+        "kgRelatedContentEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": true
+          },
+          "@cds.persistence.name": "KGRELATEDCONTENTENABLED"
+        },
         "newsRelevanceLlmBudgetPerDay": {
           "type": "cds.Integer",
           "default": {

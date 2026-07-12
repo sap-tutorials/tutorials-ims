@@ -654,6 +654,13 @@ entity ChatSettings : cuid, managed {
   // scan + 1-hop walk, per query, cached 5 min in-process).
   searchKgRerankEnabled    : Boolean default true;
 
+  // Knowledge Graph external-content recommendation tool (#1125). When true,
+  // findRelatedContent is registered on the standard learner/admin path. Reuses
+  // the same cached embed+cosine as kgSearchExpansionEnabled, then fans out over
+  // the 8 external-content link tables (bounded by the <=5 concept set). Default
+  // true (cheap, cache-reused); toggle off if telemetry shows problems.
+  kgRelatedContentEnabled : Boolean default true;
+
   // #1034 SAP News developer-relevance filter.
   newsRelevanceLlmBudgetPerDay   : Integer default 100;
   newsRelevanceMargin            : Decimal(4, 3) default 0.150;
