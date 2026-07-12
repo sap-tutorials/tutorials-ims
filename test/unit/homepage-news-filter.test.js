@@ -38,6 +38,13 @@ describe('homepage news() with #1034 filter', () => {
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    // #1145: homepage-rss-fetcher now injects the curl transport into safeFetch
+    // by default (to beat Cloudflare's JA3 block on community.sap.com). The curl
+    // transport bypasses vi.stubGlobal('fetch', ...), so the legacy-path tests
+    // below would hit the real network. RSS_TRANSPORT=fetch reverts the fetcher
+    // to native fetch so the stubbed global fetch intercepts. Mirrors the guard
+    // in homepage-rss-fetcher.test.js.
+    process.env.RSS_TRANSPORT = 'fetch';
     resetRssFetcherCache();
     await db.run(DELETE.from('com.sap.developers.ims.external.NewsItems'));
     await db.run(UPDATE('com.sap.developers.ims.HomepageConfig').set({ newsRelevanceEnabled: false }));
@@ -48,6 +55,7 @@ describe('homepage news() with #1034 filter', () => {
 
   afterEach(() => {
     delete process.env.HOMEPAGE_NEWS_RELEVANCE_ENABLED;
+    delete process.env.RSS_TRANSPORT;
   });
 
   async function seedRow(overrides = {}) {
