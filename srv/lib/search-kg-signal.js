@@ -132,6 +132,35 @@ const EMPTY_SIGNAL = Object.freeze({
   topConcepts: [],
 });
 
+// ---------------------------------------------------------------------------
+// Wall-clock deadline race (#1114)
+// ---------------------------------------------------------------------------
+//
+// db.run() on HANA does NOT honor AbortSignal — passing { signal } only
+// cancels the embed leg (which goes over HTTP). Once a HANA query is in flight
+// (cosine, edge walk, link fetch) it runs to completion server-side regardless
+// of our timer, so the pre-#1114 `if (timedOut())` checks only fired AFTER the
+// query returned — the caller still waited the full ~20 s.
+//
+// Fix: race each DB leg against the remaining time to the deadline. If the
+// deadline wins we resolve to the DEADLINE sentinel and return warning=timeout
+// immediately; the orphaned HANA promise drains in the background and is GC'd
+// once it settles. This mirrors withTimeout() in srv/lib/kg-sparql-client.js
+// and srv/lib/kg-path-v2-client.js — the accepted tradeoff for read-only
+// queries that can't be cancelled cooperatively.
+const DEADLINE = Symbol('search-kg-signal:deadline');
+
+function raceDeadline(promise, deadline) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) return Promise.resolve(DEADLINE);
+  let timer;
+  const timeoutPromise = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(DEADLINE), remaining);
+    timer?.unref?.();
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 function makeEmpty(warning) {
   return {
     slugScores: new Map(),
@@ -251,8 +280,11 @@ async function _computeUncached({ key, phrase, db, embedClient, embeddingModel, 
     if (timedOut()) return _finalizeTimeout({ key, t0 });
 
     // ---- 2. Top-N cosine over Concepts.embedding (publish gate inside helper).
-    const seeds = await topConceptsByCosine({ db, queryVector, limit: MAX_SEED_CONCEPTS });
-    if (timedOut()) return _finalizeTimeout({ key, t0 });
+    const seeds = await raceDeadline(
+      topConceptsByCosine({ db, queryVector, limit: MAX_SEED_CONCEPTS }),
+      deadline,
+    );
+    if (seeds === DEADLINE) return _finalizeTimeout({ key, t0 });
     if (!seeds || seeds.length === 0) {
       const empty = makeEmpty('kg_empty');
       empty.latencyMs = Date.now() - t0;
@@ -264,8 +296,8 @@ async function _computeUncached({ key, phrase, db, embedClient, embeddingModel, 
 
     // ---- 3. 1-hop walk on ConceptEdges (requires, relatedTo).
     const seedById = new Map(seeds.map((s) => [s.id, s]));
-    const edges = await fetchEdges(db, seeds.map((s) => s.id));
-    if (timedOut()) return _finalizeTimeout({ key, t0 });
+    const edges = await raceDeadline(fetchEdges(db, seeds.map((s) => s.id)), deadline);
+    if (edges === DEADLINE) return _finalizeTimeout({ key, t0 });
 
     const boosted = new Map(seeds.map((s) => [s.id, { ...s }]));
     const neighbourIds = new Set();
@@ -286,8 +318,8 @@ async function _computeUncached({ key, phrase, db, embedClient, embeddingModel, 
 
     // Hydrate neighbour metadata (publish gate applies again — drops non-ACTIVE).
     if (neighbourIds.size > 0) {
-      const hydrated = await fetchConceptsByIds(db, [...neighbourIds]);
-      if (timedOut()) return _finalizeTimeout({ key, t0 });
+      const hydrated = await raceDeadline(fetchConceptsByIds(db, [...neighbourIds]), deadline);
+      if (hydrated === DEADLINE) return _finalizeTimeout({ key, t0 });
       const hydratedMap = new Map(hydrated.map((h) => [h.id, h]));
       for (const id of neighbourIds) {
         const meta = hydratedMap.get(id);
@@ -313,8 +345,8 @@ async function _computeUncached({ key, phrase, db, embedClient, embeddingModel, 
     }
 
     // ---- 4. Join TutorialConceptLinks; aggregate per tutorial.
-    const links = await fetchLinks(db, allConcepts.map((c) => c.id));
-    if (timedOut()) return _finalizeTimeout({ key, t0 });
+    const links = await raceDeadline(fetchLinks(db, allConcepts.map((c) => c.id)), deadline);
+    if (links === DEADLINE) return _finalizeTimeout({ key, t0 });
 
     const conceptScoreById = new Map(allConcepts.map((c) => [c.id, c.score]));
     const conceptNameById = new Map(allConcepts.map((c) => [c.id, c.name]));

@@ -126,6 +126,21 @@ describe('expandSearchConceptsHandler', () => {
     expect(out.concepts).toEqual([])
     expect(out.tutorials).toEqual([])
   })
+
+  // #1114: db.run() ignores AbortSignal on HANA — a hanging cosine/edge/link
+  // query must still return warning=timeout at the deadline, not stall the turn.
+  it('returns { warning: "timeout" } fast when a DB leg hangs (db.run ignores signal)', async () => {
+    const embedClientOk = { embed: async () => Float32Array.from(unit(0)) }
+    const hangingDb = { kind: 'sqlite', run: () => new Promise(() => {}) }  // never settles
+    const t0 = Date.now()
+    const out = await expandSearchConceptsHandler({
+      db: hangingDb, embedClient: embedClientOk, args: { query: 'db hangs here' }, timeoutMs: 40,
+    })
+    expect(out.warning).toBe('timeout')
+    expect(out.concepts).toEqual([])
+    expect(out.tutorials).toEqual([])
+    expect(Date.now() - t0).toBeLessThan(1000)
+  })
 })
 
 describe('expandSearchConcepts on-demand enqueue side-effect (#948)', () => {
