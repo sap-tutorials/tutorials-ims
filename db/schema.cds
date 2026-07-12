@@ -661,6 +661,18 @@ entity ChatSettings : cuid, managed {
   // true (cheap, cache-reused); toggle off if telemetry shows problems.
   kgRelatedContentEnabled : Boolean default true;
 
+  // Community-peers Joule tool (#1126). Default OFF — depends on the PROD
+  // Louvain rollout + nightly labeling being live, so it ships dark and is
+  // flipped on after PROD KgCommunity/KgCommunityLabel data is verified.
+  communityPeersEnabled           : Boolean default false;
+
+  // Daily LLM budget for kg-community-label-job (#1126). Mirrors the
+  // newsRelevance… counter pattern so a first-run backlog of new community
+  // fingerprints ramps over a few nights rather than spiking AI Core spend.
+  communityLabelLlmBudgetPerDay   : Integer default 50;
+  communityLabelLlmCallsToday     : Integer default 0;
+  communityLabelLlmCallsCountedOn : Date;
+
   // #1034 SAP News developer-relevance filter.
   newsRelevanceLlmBudgetPerDay   : Integer default 100;
   newsRelevanceMargin            : Decimal(4, 3) default 0.150;

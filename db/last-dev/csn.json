@@ -2022,6 +2022,31 @@
           },
           "@cds.persistence.name": "KGRELATEDCONTENTENABLED"
         },
+        "communityPeersEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "COMMUNITYPEERSENABLED"
+        },
+        "communityLabelLlmBudgetPerDay": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 50
+          },
+          "@cds.persistence.name": "COMMUNITYLABELLLMBUDGETPERDAY"
+        },
+        "communityLabelLlmCallsToday": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "COMMUNITYLABELLLMCALLSTODAY"
+        },
+        "communityLabelLlmCallsCountedOn": {
+          "type": "cds.Date",
+          "@cds.persistence.name": "COMMUNITYLABELLLMCALLSCOUNTEDON"
+        },
         "newsRelevanceLlmBudgetPerDay": {
           "type": "cds.Integer",
           "default": {
