@@ -189,32 +189,28 @@ Alternatively, assign the role collection via the BTP cockpit: **Security → Ro
 
 ### Reading the MCP metrics
 
-Phase 2 emits custom `metrics.counter()` events (embedded labels format). Query them via the standard Prometheus scrape:
+Phase 2 emits custom `metrics.counter()` events via the project's in-memory metrics producer (`srv/lib/metrics.js`) — **not** Prometheus. Counter names are dot-separated with labels embedded directly in the name string (e.g. `mcp.pat.auth[outcome=hit]`); there is no `_total` suffix and no per-label Prometheus dimension. Every 5 minutes `srv/jobs/metrics-rollup-job.js` snapshots and drains these counters into HANA `MetricSnapshots` rows and structured `cds.log('jobs/metrics-rollup')` lines. See [observability.md](../architecture/observability.md).
 
-**PAT authentication failure rate** (last 5 minutes):
+Query them from any of the observability surfaces:
 
-```promql
-rate(mcp_pat_auth_total{outcome!="hit"}[5m]) / rate(mcp_pat_auth_total[5m])
-```
+- **Admin UI** — `/admin-ui/#metrics` (live snapshot cards).
+- **CAP function** — `GET /admin/getMetricsSnapshot()` (XSUAA Admin scope) returns `{ counters, gauges, histograms }`; each MCP counter appears as a key in `counters` with its full label-embedded name.
+- **Express route** — `GET /admin/metrics/live` (Admin scope) — same shape, for on-call `curl` via an authenticated session.
+- **CF logs** — one `cds.log('jobs/metrics-rollup')` info line per counter per 5-minute boundary.
 
-**Step-slicer cache hit rate**:
+Raw counter names, exactly as emitted by `metrics.counter()` (grep the `counters` map from a snapshot for these prefixes):
 
-```promql
-rate(mcp.slice_total{outcome="hit"}[5m]) / rate(mcp.slice_total[5m])
-```
+- `mcp.pat.auth[outcome=hit|miss|revoked|expired]` — PAT middleware auth outcomes (`srv/lib/mcp-pat-middleware.js`). Anything other than `hit` is a rejected 401.
+- `mcp.pat.mint` / `mcp.pat.revoke` — PAT lifecycle actions (`srv/lib/mcp-pat-actions.js`).
+- `mcp.slice[outcome=hit|miss|error]` — step-HTML slicer cache/extraction outcomes (`srv/lib/tutorial-step-slicer.js`).
+- `mcp.tool[service=DeveloperService,tool=<name>,tokenSource=<pat|anon>,outcome=ok|error]` — authenticated DeveloperService tool calls (`srv/lib/mcp-developer-tools.js`).
+- `mcp.tool[service=HomepageService,tool=<name>,tokenSource=<pat|anon>,outcome=ok|error]` — authenticated HomepageService tool calls (`srv/lib/mcp-homepage-tools.js`).
 
-**Tool call error rate per service**:
+To compute a rate, take two `MetricSnapshots` rows (5 minutes apart) and subtract the counter values — the rollup zeroes counters on each drain, so a single snapshot already holds the delta for its 5-minute window. Example ratios:
 
-```promql
-rate(mcp_tool_total{outcome="error"}[5m]) / rate(mcp_tool_total[5m])
-```
-
-Raw counter names (as logged by `metrics.counter()`):
-
-- `mcp.tool[service=DeveloperService,tool=<name>,tokenSource=<pat|anon>,outcome=ok|error]`
-- `mcp.tool[service=HomepageService,tool=<name>,tokenSource=<pat|anon>,outcome=ok|error]`
-- `mcp.slice[outcome=hit|miss]`
-- `mcp_pat_auth[outcome=hit|miss|expired|invalid]`
+- **PAT auth failure rate** — `sum(mcp.pat.auth[outcome!=hit]) / sum(mcp.pat.auth[*])` over a window.
+- **Step-slicer cache hit rate** — `mcp.slice[outcome=hit] / (mcp.slice[outcome=hit] + mcp.slice[outcome=miss])`.
+- **Tool call error rate per service** — `mcp.tool[...,outcome=error] / mcp.tool[...,outcome=ok|error]`, grouped by the `service=` label embedded in the name.
 
 ### Reading the audit trail for authenticated tool calls
 

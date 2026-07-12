@@ -53,6 +53,13 @@ export async function getMyMissions(user, { status = 'all', limit = 10 } = {}) {
 /**
  * Events by when: 'upcoming' | 'past' | 'registered'.
  * Uses TaskRecords with taskType='MISSION'... no, Events is a separate query.
+ *
+ * NOTE: Events has NO `slug` column (see db/schema.cds — it's cuid + LegacyKeyed,
+ * identified by `legacyId` everywhere else: admin-service.js, display-service.js,
+ * event-stream-service.js all `WHERE legacyId = ?`). The MCP contract's `slug`
+ * field carries the stringified legacyId — the only stable per-event handle.
+ * Selecting a literal `slug` column here threw "slug not found in Events" on
+ * HANA for every real call (SQLite unit fallback never exercised this path).
  */
 export async function getMyEvents(user, { when = 'upcoming', limit = 20 } = {}) {
   const dbUser = await resolveDbUser(user);
@@ -68,21 +75,22 @@ export async function getMyEvents(user, { when = 'upcoming', limit = 20 } = {}) 
   let events = [];
   if (when === 'upcoming') {
     events = await SELECT.from(Events).where({ startDate: { '>=': now } })
-      .columns('ID', 'slug', 'name', 'eventType', 'startDate', 'endDate')
+      .columns('ID', 'legacyId', 'name', 'eventType', 'startDate', 'endDate')
       .orderBy('startDate asc').limit(limit);
   } else if (when === 'past') {
     events = await SELECT.from(Events).where({ endDate: { '<': now } })
-      .columns('ID', 'slug', 'name', 'eventType', 'startDate', 'endDate')
+      .columns('ID', 'legacyId', 'name', 'eventType', 'startDate', 'endDate')
       .orderBy('startDate desc').limit(limit);
   } else if (when === 'registered') {
     if (registeredIds.size === 0) return [];
     events = await SELECT.from(Events).where({ ID: { in: [...registeredIds] } })
-      .columns('ID', 'slug', 'name', 'eventType', 'startDate', 'endDate')
+      .columns('ID', 'legacyId', 'name', 'eventType', 'startDate', 'endDate')
       .orderBy('startDate desc').limit(limit);
   }
 
   return events.map(e => ({
-    slug: e.slug, name: e.name, eventType: e.eventType,
+    slug: e.legacyId != null ? String(e.legacyId) : null,
+    name: e.name, eventType: e.eventType,
     startDate: e.startDate, endDate: e.endDate,
     registered: registeredIds.has(e.ID)
   }));
