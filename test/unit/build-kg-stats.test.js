@@ -17,11 +17,15 @@ describe('GET /build/kg-stats', () => {
     await DELETE.from(Missions);
     await DELETE.from(Groups);
 
-    // Seed: 3 tutorials, 2 published concepts (1 draft excluded), 4 edges, 2 missions, 1 group.
+    // Seed: 3 ACTIVE tutorials (+ 2 non-public excluded), 2 published concepts (1 draft excluded), 4 edges, 2 missions, 1 group.
     await INSERT.into(Tutorials).entries([
-      { ID: '00000000-0000-0000-0000-000000000t01', slug: 'one',   title: 'One' },
-      { ID: '00000000-0000-0000-0000-000000000t02', slug: 'two',   title: 'Two' },
-      { ID: '00000000-0000-0000-0000-000000000t03', slug: 'three', title: 'Three' },
+      { ID: '00000000-0000-0000-0000-000000000t01', slug: 'one',   title: 'One',   status: 'ACTIVE' },
+      { ID: '00000000-0000-0000-0000-000000000t02', slug: 'two',   title: 'Two',   status: 'ACTIVE' },
+      { ID: '00000000-0000-0000-0000-000000000t03', slug: 'three', title: 'Three', status: 'ACTIVE' },
+      // Public-count gate is status='ACTIVE'. INACTIVE = soft-deleted (admin-service.js:1013);
+      // DELETED = legacy IMS-migrated status outside the declared TaskStatus enum. Both excluded.
+      { ID: '00000000-0000-0000-0000-000000000t04', slug: 'gone',    title: 'Gone',    status: 'INACTIVE' },
+      { ID: '00000000-0000-0000-0000-000000000t05', slug: 'deleted', title: 'Deleted', status: 'DELETED' },
     ]);
     await INSERT.into(Concepts).entries([
       // Concepts.status is ACTIVE | MERGED | VETOED (per db/knowledge-graph.cds:28).
@@ -58,7 +62,7 @@ describe('GET /build/kg-stats', () => {
     const { data, headers, status } = await project.axios.get('/build/kg-stats');
     expect(status).toBe(200);
     expect(data).toEqual({
-      tutorials: 3,
+      tutorials: 3,         // ACTIVE only (excludes the INACTIVE + DELETED rows)
       concepts: 2,          // ACTIVE + publishedAt NOT NULL (excludes 'unpub' AND 'merged')
       relationships: 3,     // ACTIVE only (excludes the VETOED edge)
       missionsAndGroups: 3, // 2 missions + 1 group
