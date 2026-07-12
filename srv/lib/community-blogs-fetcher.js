@@ -20,16 +20,20 @@ import cds from '@sap/cds';
 import { safeFetch } from './safe-fetch.js';
 import { parseRss, RSS_FETCH_HEADERS } from './rss-parse.js';
 import { curlFetch } from './curl-transport.js';
+import { buildKhorosUrl, khorosFetch } from './khoros-transport.js';
 import * as metrics from './metrics.js';
 
 const log = cds.log('community-blogs-fetcher');
 
-// Cloudflare on community.sap.com now blocks Node's TLS fingerprint (JA3),
-// not just the UA — see srv/lib/curl-transport.js. Route RSS through curl by
-// default; RSS_TRANSPORT=fetch reverts to native fetch without a redeploy
-// (cf set-env tutorials-srv RSS_TRANSPORT fetch && cf restart).
-const rssTransport = () =>
-  (process.env.RSS_TRANSPORT === 'fetch' ? undefined : curlFetch);
+// (#1144) Tri-state transport. Default 'khoros' hits the unauthenticated
+// Khoros LiQL JSON API (dodges the Cloudflare egress-IP 403 that curl also
+// hit — see memory cloudflare-ja3-blocks-node-fetch-not-ua). 'curl' reverts
+// to the #1145 curl transport (kill switch); 'fetch' uses native fetch on
+// the raw RSS feed (local/tests). Toggle: cf set-env RSS_TRANSPORT curl.
+function rssMode() {
+  const m = process.env.RSS_TRANSPORT;
+  return m === 'curl' || m === 'fetch' ? m : 'khoros';
+}
 
 const TIMEOUT_MS = 5000;
 const MAX_REDIRECTS = 3;
@@ -145,12 +149,26 @@ export async function fetchOneSource(source, { db } = {}) {
 
   let res;
   try {
-    res = await safeFetch(source.feedUrl, {
+    const mode = rssMode();
+    let target = source.feedUrl;
+    let fetchImpl;
+    let allowedHosts;
+    if (mode === 'khoros' && source.apiQuery) {
+      target = buildKhorosUrl(source.apiQuery);
+      fetchImpl = khorosFetch;
+      allowedHosts = new Set(['community.sap.com']);
+    } else if (mode === 'khoros' || mode === 'curl') {
+      // khoros mode with no apiQuery → degrade to curl on the raw RSS feed.
+      fetchImpl = curlFetch;
+    } // mode === 'fetch' → fetchImpl stays undefined (native fetch on RSS)
+
+    res = await safeFetch(target, {
       allowedProtocols: ['https:'],
+      allowedHosts,
       timeoutMs: TIMEOUT_MS,
       maxRedirects: MAX_REDIRECTS,
       fetchInit: { headers: RSS_FETCH_HEADERS },
-      fetchImpl: rssTransport(),
+      fetchImpl,
     });
   } catch (err) {
     log.warn(`fetchOneSource: ${source.label}: fetch failed:`, err.code || '', err.message);
