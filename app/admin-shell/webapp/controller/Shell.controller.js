@@ -52,7 +52,8 @@ sap.ui.define([
     forYou: "forYou",
     featuredTopics: "featuredTopics",
     videos: "videos",
-    videoRotation: "videoRotation"
+    videoRotation: "videoRotation",
+    pats: "pats"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -101,7 +102,8 @@ sap.ui.define([
     forYou: "For-you Candidates",
     featuredTopics: "Featured Topics",
     videos: "Videos",
-    videoRotation: "Video Rotation"
+    videoRotation: "Video Rotation",
+    pats: "Personal Access Tokens"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
