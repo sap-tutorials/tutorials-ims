@@ -3625,6 +3625,16 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }/* ── Mobile res
   align-items: center;
   gap: 0.375rem;
   margin-bottom: 0.5rem;
+}/* #1127: difficulty badge inside tutorial "teaches" cards — neutral pill
+   matching the .kg-api-type / .kg-language shape but with label weight to
+   distinguish a categorical tag from a monospaced type token. */.concept-card__meta .kg-difficulty {
+  display: inline-block;
+  padding: 0.05em 0.4em;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #556b82);
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
+  border-radius: 3px;
 }@media (max-width: 640px) {
   .concept-card-grid { gap: 0.75rem; }
   .concept-card { padding: 0.875rem; }

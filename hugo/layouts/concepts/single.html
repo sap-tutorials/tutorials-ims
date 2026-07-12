@@ -70,7 +70,9 @@
         <a class="concept-card" href="{{ $url }}" target="_blank" rel="noopener" data-journey-slug="{{ .slug }}">
           <span class="concept-card__type concept-card__type--external">Learning Journey <span class="kg-link-out" aria-hidden="true">↗</span></span>
           <span class="concept-card__title">{{ .title }}</span>
+          {{ if or .level .durationHours }}
           <span class="concept-card__meta">{{ with .level }}{{ title . }}{{ end }}{{ if and .level .durationHours }} · {{ end }}{{ with .durationHours }}{{ . }}h{{ end }}</span>
+          {{ end }}
         </a>
         {{ else }}
         <span class="concept-card" data-journey-slug="{{ .slug }}">
