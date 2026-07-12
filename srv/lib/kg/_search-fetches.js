@@ -135,3 +135,80 @@ export async function fetchTutorialsByIds(db, ids) {
     ids,
   ) || []
 }
+
+/**
+ * The 8 external-content UNION arms. Each maps a content-type key to its
+ * table, link table, link->content FK, and (optionally) an endDate column.
+ * `endCol` is null for every type except community-event (only entity with a
+ * date-aware TTL). NCLOB `description` is intentionally never selected.
+ *
+ * #1125. Mirrors the HANA/SQLite dialect branching in fetchLinks.
+ */
+const EXTERNAL_ARMS = [
+  { type: 'learning-journey',  base: 'LearningJourneys',   link: 'LearningJourneyConceptLinks',   fk: 'journey',  endCol: null },
+  { type: 'blog-post',         base: 'BlogPosts',          link: 'BlogPostConceptLinks',          fk: 'post',     endCol: null },
+  { type: 'discovery-mission', base: 'DiscoveryMissions',  link: 'DiscoveryMissionConceptLinks',  fk: 'mission',  endCol: null },
+  { type: 'video',             base: 'Videos',             link: 'VideoConceptLinks',             fk: 'video',    endCol: null },
+  { type: 'api-doc',           base: 'ApiDocs',            link: 'ApiDocConceptLinks',            fk: 'apiDoc',   endCol: null },
+  { type: 'sample',            base: 'Samples',            link: 'SampleConceptLinks',            fk: 'sample',   endCol: null },
+  { type: 'help-doc',          base: 'HelpDocs',           link: 'HelpDocConceptLinks',           fk: 'helpDoc',  endCol: null },
+  { type: 'community-event',   base: 'CommunityEvents',    link: 'CommunityEventConceptLinks',    fk: 'event',    endCol: 'endDate' },
+]
+
+/**
+ * Fetch external-content links for the given concept IDs, UNIONing all 8
+ * external link tables back to their content rows. Returns rows shaped
+ *   { content_type, concept_id, slug, title, url, confidence, last_seen_at, end_date }
+ * with lowercased keys regardless of dialect. `end_date` is null except for
+ * community-event rows.
+ *
+ * @param {object} db          CDS db handle (SQLite or HANA)
+ * @param {string[]} conceptIds
+ * @param {{types?: string[]}} [opts]  optional content-type allowlist
+ * @returns {Promise<Array<object>>}
+ */
+export async function fetchExternalContentLinks(db, conceptIds, { types } = {}) {
+  if (!Array.isArray(conceptIds) || conceptIds.length === 0) return []
+  const allow = Array.isArray(types) && types.length ? new Set(types) : null
+  const arms = EXTERNAL_ARMS.filter((a) => !allow || allow.has(a.type))
+  if (arms.length === 0) return []
+
+  const placeholders = conceptIds.map(() => '?').join(',')
+
+  if (isHana(db)) {
+    // HANA: physical table names are UPPERCASE with underscores; aliases
+    // double-quoted lowercase so raw rows carry lowercase keys (#1113).
+    const selects = arms.map((a) => {
+      const baseTbl = `COM_SAP_DEVELOPERS_IMS_EXTERNAL_${a.base.toUpperCase()}`
+      const linkTbl = `COM_SAP_DEVELOPERS_IMS_EXTERNAL_${a.link.toUpperCase()}`
+      const fkCol = `${a.fk.toUpperCase()}_ID`
+      const endExpr = a.endCol ? `b.${a.endCol.toUpperCase()}` : 'NULL'
+      return `SELECT '${a.type}' as "content_type", l.CONCEPT_ID as "concept_id",
+                     b.SLUG as "slug", b.TITLE as "title", b.URL as "url",
+                     l.CONFIDENCE as "confidence", b.LASTSEENAT as "last_seen_at",
+                     ${endExpr} as "end_date"
+              FROM ${linkTbl} l JOIN ${baseTbl} b ON b.ID = l.${fkCol}
+              WHERE l.CONCEPT_ID IN (${placeholders})`
+    })
+    const params = arms.flatMap(() => conceptIds)
+    return await db.run(selects.join('\nUNION ALL\n'), params) || []
+  }
+
+  // SQLite: logical table names with dotted namespace; physical lowercase
+  // columns. cds.deploy maps `com.sap.developers.ims.external.ApiDocs` to
+  // table `com_sap_developers_ims_external_ApiDocs`.
+  const selects = arms.map((a) => {
+    const baseTbl = `com_sap_developers_ims_external_${a.base}`
+    const linkTbl = `com_sap_developers_ims_external_${a.link}`
+    const fkCol = `${a.fk}_ID`
+    const endExpr = a.endCol ? `b.${a.endCol}` : 'NULL'
+    return `SELECT '${a.type}' as content_type, l.concept_ID as concept_id,
+                   b.slug as slug, b.title as title, b.url as url,
+                   l.confidence as confidence, b.lastSeenAt as last_seen_at,
+                   ${endExpr} as end_date
+            FROM ${linkTbl} l JOIN ${baseTbl} b ON b.ID = l.${fkCol}
+            WHERE l.concept_ID IN (${placeholders})`
+  })
+  const params = arms.flatMap(() => conceptIds)
+  return await db.run(selects.join('\nUNION ALL\n'), params) || []
+}
