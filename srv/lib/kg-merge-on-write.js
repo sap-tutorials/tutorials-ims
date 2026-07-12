@@ -60,16 +60,22 @@ function isHana(db) {
 export async function loadConceptRegistry(db) {
   const bySlug = new Map();
   const embeddings = new Map();
+  const retiredBySlug = new Map();
 
   const { Concepts } = cds.entities(NAMESPACE);
 
-  // Metadata pass (CDS QL is safe — no LOB).
+  // Metadata pass (CDS QL is safe — no LOB). Pull status so we can split
+  // ACTIVE (dedup target + embed registry) from RETIRED (reactivation target).
   const metaRows = await SELECT.from(Concepts)
-    .columns('ID', 'slug', 'name')
-    .where({ status: 'ACTIVE' });
+    .columns('ID', 'slug', 'name', 'status')
+    .where({ status: { in: ['ACTIVE', 'RETIRED'] } });
   for (const r of metaRows) {
     if (!r.slug) continue;
-    bySlug.set(r.slug, { ID: r.ID, slug: r.slug, name: r.name ?? '' });
+    if (r.status === 'RETIRED') {
+      retiredBySlug.set(r.slug, { ID: r.ID, slug: r.slug, name: r.name ?? '' });
+    } else {
+      bySlug.set(r.slug, { ID: r.ID, slug: r.slug, name: r.name ?? '' });
+    }
   }
 
   // Embedding pass.
@@ -96,7 +102,7 @@ export async function loadConceptRegistry(db) {
     }
   }
 
-  return { bySlug, embeddings };
+  return { bySlug, embeddings, retiredBySlug };
 }
 
 /**
@@ -170,7 +176,7 @@ export async function resolveConceptCandidates({
 }) {
   const resolved = [];
   const pendingMints = [];
-  const counters = { merged: 0, minted: 0, skippedNoEmbed: 0 };
+  const counters = { merged: 0, minted: 0, skippedNoEmbed: 0, reactivated: 0 };
 
   // Per-call dedup: if the same slug appears multiple times in `candidates`,
   // reuse the first decision (don't embed/mint twice in the same call).
@@ -198,6 +204,22 @@ export async function resolveConceptCandidates({
         slug: c.slug,
         conceptId: alreadyPending,
         action: 'minted',
+        confidence: c.confidence,
+      });
+      continue;
+    }
+
+    // 2b. Retired slug re-proposed (#1115). Resolve to the retired concept's
+    // ID with action 'reactivated'; the caller flips it back to ACTIVE in-tx.
+    // Skipping the embed/mint avoids a UNIQUE(slug) violation on INSERT.
+    const retired = registry.retiredBySlug?.get(c.slug);
+    if (retired) {
+      counters.reactivated++;
+      log?.info?.(`resolveConceptCandidates: reactivating retired "${c.slug}" (${retired.ID})`);
+      resolved.push({
+        slug: c.slug,
+        conceptId: retired.ID,
+        action: 'reactivated',
         confidence: c.confidence,
       });
       continue;
