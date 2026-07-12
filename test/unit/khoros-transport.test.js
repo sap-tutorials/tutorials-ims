@@ -85,6 +85,24 @@ describe('itemsToRssXml → parseRss round-trip', () => {
     const items = parseRss(xml);
     expect(items[0].title).toBe('A & B <tag> "q"');   // round-trips back to literal
   });
+
+  it('CDATA terminator ]]> in subject/teaser/author cannot inject raw XML', () => {
+    const xml = itemsToRssXml([{
+      view_href: 'https://community.sap.com/x/ba-p/1',
+      subject: 'evil ]]><script>alert(1)</script> tail',
+      teaser: 't',
+      post_time: '2026-01-01T00:00:00.000+00:00',
+      author: { login: 'u' },
+    }]);
+    // The raw ]]><script> sequence must not appear in the output
+    expect(xml).not.toMatch(/]]><script>/);
+    // After the split-CDATA escape, parseRss must still produce exactly one item
+    const items = parseRss(xml);
+    expect(items).toHaveLength(1);
+    // The injected text should survive as data (title round-trips with the payload text)
+    expect(items[0].title).toContain('evil');
+    expect(items[0].title).toContain('tail');
+  });
 });
 
 describe('khorosFetch', () => {

@@ -39,6 +39,15 @@ function xmlEscape(s) {
     .replace(/'/g, '&apos;');
 }
 
+// Escape the CDATA terminator so field content cannot break out of its
+// <![CDATA[...]]> section (xml-injection). Splits every "]]>" across two
+// CDATA sections: "]]" + "]]><![CDATA[" + ">". Normal blog content never
+// contains "]]>", so this is a no-op in practice — it closes the injection
+// vector for crafted/edge content only.
+function cdataEscape(s) {
+  return String(s ?? '').replace(/]]>/g, ']]]]><![CDATA[>');
+}
+
 export function validateApiQuery(apiQuery) {
   if (!apiQuery || typeof apiQuery !== 'string') return false;
   if (!ALLOWED_CHARS.test(apiQuery)) return false;
@@ -62,11 +71,11 @@ export function buildKhorosUrl(apiQuery) {
 export function itemsToRssXml(items) {
   const list = Array.isArray(items) ? items : [];
   const body = list.map((it) => {
-    const title = it.subject ?? '';
+    const title = cdataEscape(it.subject ?? '');
     const link = xmlEscape(it.view_href);
     const pubDate = it.post_time ? new Date(it.post_time).toISOString() : '';
-    const desc = it.teaser ?? '';
-    const author = it.author?.login ?? '';
+    const desc = cdataEscape(it.teaser ?? '');
+    const author = cdataEscape(it.author?.login ?? '');
     return (
       `<item>` +
       `<title><![CDATA[${title}]]></title>` +
