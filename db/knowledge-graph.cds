@@ -26,7 +26,7 @@ entity Concepts : cuid, managed {
   description     : String(500);                    // LLM-generated, admin-editable
   embedding       : LargeBinary;                    // legacy raw Float32-LE BLOB (retained for rollback per #1113 spec)
   embeddingVec    : Vector(1536);                   // #1113: HANA-native REAL_VECTOR for server-side cosine
-  status          : String(20) default 'ACTIVE';    // ACTIVE | MERGED | VETOED
+  status          : String(20) default 'ACTIVE';    // ACTIVE | MERGED | VETOED | RETIRED (#1115: orphan auto-retirement)
   mergedInto      : Association to Concepts;        // if MERGED, points to canonical
   extractionCount : Integer default 0;              // # tutorials that contributed
   firstSeenAt     : Timestamp @cds.on.insert : $now;
