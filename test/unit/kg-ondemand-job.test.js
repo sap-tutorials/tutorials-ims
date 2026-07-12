@@ -252,3 +252,80 @@ describe('runOnDemandDrain (#948)', () => {
     expect(row.lastError).toMatch(/persist boom/);
   });
 });
+
+describe('on-demand link-only (#1115)', () => {
+  beforeAll(async () => {
+    // CDS may already be deployed from the sibling describe; deploy is idempotent.
+    await cds.deploy(cds.env.roots).to('sqlite::memory:');
+  });
+
+  beforeEach(async () => {
+    const { KgOnDemandRequests, Tutorials, TutorialEmbedding, Concepts, TutorialConceptLinks } = cds.entities(NS);
+    await DELETE.from(TutorialConceptLinks);
+    await DELETE.from(KgOnDemandRequests);
+    await DELETE.from(TutorialEmbedding);
+    await DELETE.from(Concepts);
+    await DELETE.from(Tutorials);
+    delete process.env.KG_ONDEMAND_DRAIN_BATCH;
+    delete process.env.KG_ONDEMAND_TUTORIALS_PER_REQ;
+    delete process.env.KG_ONDEMAND_MAX_ATTEMPTS;
+    _resetSettingsCache();
+  });
+
+  it('links to an existing concept but never mints a new one', async () => {
+    const { Concepts, Tutorials, TutorialConceptLinks } = cds.entities(NS);
+    await setFlags({ enabled: true, onDemand: true });
+
+    // One existing ACTIVE concept the extraction will hit by exact slug.
+    await INSERT.into(Concepts).entries({
+      ID: 'e0000000-0000-0000-0000-000000000001', slug: 'existing-concept', name: 'Existing',
+      status: 'ACTIVE', embedding: Buffer.alloc(1536 * 4),
+    });
+    await INSERT.into(Tutorials).entries({
+      ID: 't0000000-0000-0000-0000-00000000000a', slug: 'ondemand-tut', title: 'OD Tut', status: 'ACTIVE',
+    });
+    await seedPending([{ query: 'anything' }]);
+
+    // rankTutorials → our one tutorial. extractOne → one existing slug (exact)
+    // + one novel slug (would-mint) both above 0.7.
+    const rankTutorials = async () => ([{ tutorialId: 't0000000-0000-0000-0000-00000000000a', slug: 'ondemand-tut', title: 'OD Tut', score: 0.9 }]);
+    const extractOne = async () => ({
+      teaches: [
+        { slug: 'existing-concept', name: 'Existing', confidence: 0.9 },
+        { slug: 'brand-new-concept', name: 'Brand New', confidence: 0.9 },
+      ],
+      extends: null, prerequisites: [], warnings: [], tokenUsage: { prompt: 0, completion: 0 },
+    });
+    const embed = makeEmbedMock();
+
+    const result = await runOnDemandDrain({ embed, rankTutorials, extractOne });
+
+    // No new concept minted — count stays 1.
+    const concepts = await SELECT.from(Concepts);
+    expect(concepts.length).toBe(1);
+    // Link to the existing concept written.
+    const links = await SELECT.from(TutorialConceptLinks).where({ concept_ID: 'e0000000-0000-0000-0000-000000000001' });
+    expect(links.length).toBe(1);
+    expect(result.mintsSkipped).toBeGreaterThanOrEqual(1);
+  });
+
+  it('drops a resolved link below the 0.7 on-demand floor', async () => {
+    const { Concepts, Tutorials, TutorialConceptLinks } = cds.entities(NS);
+    await setFlags({ enabled: true, onDemand: true });
+    await INSERT.into(Concepts).entries({
+      ID: 'e0000000-0000-0000-0000-000000000002', slug: 'low-conf-concept', name: 'Low', status: 'ACTIVE', embedding: Buffer.alloc(1536 * 4),
+    });
+    await INSERT.into(Tutorials).entries({
+      ID: 't0000000-0000-0000-0000-00000000000b', slug: 'lc-tut', title: 'LC', status: 'ACTIVE',
+    });
+    await seedPending([{ query: 'anything' }]);
+    const rankTutorials = async () => ([{ tutorialId: 't0000000-0000-0000-0000-00000000000b', slug: 'lc-tut', title: 'LC', score: 0.9 }]);
+    const extractOne = async () => ({
+      teaches: [{ slug: 'low-conf-concept', name: 'Low', confidence: 0.65 }],
+      extends: null, prerequisites: [], warnings: [], tokenUsage: { prompt: 0, completion: 0 },
+    });
+    await runOnDemandDrain({ embed: makeEmbedMock(), rankTutorials, extractOne });
+    const links = await SELECT.from(TutorialConceptLinks);
+    expect(links.length).toBe(0);
+  });
+});
