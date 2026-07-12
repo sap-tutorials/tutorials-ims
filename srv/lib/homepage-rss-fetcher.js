@@ -14,14 +14,25 @@ import cds from '@sap/cds';
 import { safeFetch } from './safe-fetch.js';
 import { parseRss, RSS_FETCH_HEADERS } from './rss-parse.js';
 import { curlFetch } from './curl-transport.js';
+import { buildKhorosUrl, khorosFetch } from './khoros-transport.js';
 
 const log = cds.log('homepage-rss-fetcher');
 
-// Same Cloudflare JA3 block as the community-blogs cron — route through curl
-// by default; RSS_TRANSPORT=fetch reverts to native fetch. See
-// srv/lib/curl-transport.js.
-const rssTransport = () =>
-  (process.env.RSS_TRANSPORT === 'fetch' ? undefined : curlFetch);
+// (#1144) Tri-state transport — see community-blogs-fetcher.js. Default khoros.
+function rssMode() {
+  const m = process.env.RSS_TRANSPORT;
+  return m === 'curl' || m === 'fetch' ? m : 'khoros';
+}
+
+// Derive a Khoros LiQL predicate from a community.sap.com RSS feed URL.
+// board feeds carry ?board.id=<id>; returns null if not derivable.
+function apiQueryFromFeedUrl(url) {
+  try {
+    const boardId = new URL(url).searchParams.get('board.id');
+    if (boardId && /^[A-Za-z0-9_-]+$/.test(boardId)) return `board.id='${boardId}'`;
+  } catch { /* fall through */ }
+  return null;
+}
 
 const TTL_MS     = 30 * 60 * 1000;  // 30 minutes
 const TIMEOUT_MS = 5000;             // 5 seconds
@@ -70,12 +81,25 @@ export async function fetchRssItems(url, { limit = 5 } = {}) {
     // #1033: browser-shaped UA + Accept header. Cloudflare returns 403 to
     // the default Node fetch UA on community.sap.com feeds; this fixes
     // the silently-empty Community lane the site has been running with.
-    res = await safeFetch(url, {
+    const mode = rssMode();
+    let target = url;
+    let fetchImpl;
+    let allowedHosts;
+    const apiQuery = mode === 'khoros' ? apiQueryFromFeedUrl(url) : null;
+    if (mode === 'khoros' && apiQuery) {
+      target = buildKhorosUrl(apiQuery);
+      fetchImpl = khorosFetch;
+      allowedHosts = new Set(['community.sap.com']);
+    } else if (mode === 'khoros' || mode === 'curl') {
+      fetchImpl = curlFetch;
+    }
+    res = await safeFetch(target, {
       allowedProtocols: ['https:'],
+      allowedHosts,
       timeoutMs: TIMEOUT_MS,
       maxRedirects: 3,
       fetchInit: { headers: RSS_FETCH_HEADERS },
-      fetchImpl: rssTransport(),
+      fetchImpl,
     });
   } catch (err) {
     // Network error / timeout / SSRF_BLOCKED -- do NOT cache; next call will retry

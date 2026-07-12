@@ -28,6 +28,7 @@ import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
 import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
+import { validateApiQuery } from './lib/khoros-transport.js';
 import { resetFtCache, resetCommunityBlogsCache } from './homepage-service.js';
 import { runReshuffleVideoRotation } from './jobs/reshuffle-video-rotation.js';
 import * as metrics from './lib/metrics.js';
@@ -659,34 +660,48 @@ export default class AdminService extends cds.ApplicationService {
         label:     'Community — Technology (all blogs)',
         feedUrl:   'https://community.sap.com/khhcw49343/rss/Community?interaction.style=blog',
         topicSlug: 'community-technology',
-        isActive:  true,
-        sortOrder: 10,
-        managed:   true,
+        isActive:  true, sortOrder: 10, managed: true,
+        apiQuery:  "category.id='technology' AND conversation.style='blog'",
       },
       {
         ID:        '00000000-0000-0000-0000-000000c81002',
         label:     'Technology Blogs by SAP',
         feedUrl:   'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-sap',
         topicSlug: 'technology-sap',
-        isActive:  true,
-        sortOrder: 20,
-        managed:   true,
+        isActive:  true, sortOrder: 20, managed: true,
+        apiQuery:  "board.id='technology-blog-sap'",
       },
       {
         ID:        '00000000-0000-0000-0000-000000c81003',
         label:     'Technology Blogs by Members',
         feedUrl:   'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-members',
         topicSlug: 'technology-members',
-        isActive:  true,
-        sortOrder: 30,
-        managed:   true,
+        isActive:  true, sortOrder: 30, managed: true,
+        apiQuery:  "board.id='technology-blog-members'",
       },
     ];
     this.before('READ', 'CommunityBlogSources', async () => {
-      const existing = await SELECT.from('com.sap.developers.ims.CommunityBlogSources').columns('ID');
-      if (existing.length > 0) return;
-      await INSERT.into('com.sap.developers.ims.CommunityBlogSources')
-        .entries(COMMUNITY_BLOG_SOURCE_DEFAULTS);
+      const CBS = 'com.sap.developers.ims.CommunityBlogSources';
+      const existing = await SELECT.from(CBS).columns('ID');
+      if (existing.length === 0) {
+        await INSERT.into(CBS).entries(COMMUNITY_BLOG_SOURCE_DEFAULTS);
+        return;
+      }
+      // Backfill apiQuery on managed rows that predate the #1144 column.
+      const byId = new Map(COMMUNITY_BLOG_SOURCE_DEFAULTS.map((d) => [d.ID, d.apiQuery]));
+      const stale = await SELECT.from(CBS).columns('ID').where({ managed: true, apiQuery: null });
+      for (const row of stale) {
+        const q = byId.get(row.ID);
+        if (q) await UPDATE(CBS).set({ apiQuery: q }).where({ ID: row.ID });
+      }
+    });
+
+    this.before(['CREATE', 'UPDATE'], 'CommunityBlogSources', (req) => {
+      const q = req.data?.apiQuery;
+      // Null/absent is allowed (source falls back to curl); only validate when set.
+      if (q != null && q !== '' && !validateApiQuery(q)) {
+        return req.reject(400, `Invalid apiQuery — allowed: field comparisons joined by AND/OR only`);
+      }
     });
 
     // (#1033) Reclassify — resets a CommunityBlogPosts row so the

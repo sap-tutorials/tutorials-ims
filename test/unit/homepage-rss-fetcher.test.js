@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchRssItems, _resetForTests } from '../../srv/lib/homepage-rss-fetcher.js';
 import { _setLookupForTests } from '../../srv/lib/safe-fetch.js';
+import * as curlTransport from '../../srv/lib/curl-transport.js';
 
 beforeEach(() => {
   _resetForTests();
@@ -83,5 +84,55 @@ describe('fetchRssItems', () => {
     const items = await fetchRssItems('https://x/rss', { limit: 5 });
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe('Good');
+  });
+});
+
+describe('fetchRssItems — khoros mode', () => {
+  beforeEach(() => { process.env.RSS_TRANSPORT = 'khoros'; _resetForTests(); });
+  afterEach(() => { delete process.env.RSS_TRANSPORT; vi.unstubAllGlobals(); });
+
+  it('derives board.id from the feed URL and hits the Khoros API', async () => {
+    const fetchSpy = vi.fn(async (u) => {
+      expect(u).toContain('community.sap.com/api/2.0/search');
+      expect(decodeURIComponent(u)).toContain("board.id='technology-blog-sap'");
+      return { ok: true, status: 200, headers: { get: () => null }, text: async () =>
+        JSON.stringify({ data: { items: [{ view_href: 'https://community.sap.com/x/ba-p/1',
+          subject: 'T', teaser: 'x', post_time: '2026-07-12T00:00:00.000+00:00', author: { login: 'u' } }] } }) };
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const items = await fetchRssItems(
+      'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-sap', { limit: 5 });
+    expect(items).toHaveLength(1);
+    expect(items[0].link).toBe('https://community.sap.com/x/ba-p/1');
+  });
+
+  it('rejects injection chars in board.id and falls back to curl transport', async () => {
+    const curlSpy = vi.spyOn(curlTransport, 'curlFetch').mockImplementation(async () => ({
+      ok: false,
+      status: 0,
+      headers: { get: () => null },
+      text: async () => '',
+    }));
+    // board.id contains SQL injection attempt
+    const maliciousUrl = "https://community.sap.com/khhcw49343/rss/board?board.id=x'%20OR%20'1'='1";
+    const items = await fetchRssItems(maliciousUrl, { limit: 5 });
+    expect(items).toEqual([]);
+    // Verify curlFetch was called (proof of fallback to curl transport)
+    expect(curlSpy).toHaveBeenCalled();
+  });
+
+  it('rejects missing board.id and falls back to curl transport', async () => {
+    const curlSpy = vi.spyOn(curlTransport, 'curlFetch').mockImplementation(async () => ({
+      ok: false,
+      status: 0,
+      headers: { get: () => null },
+      text: async () => '',
+    }));
+    // Feed URL with no board.id param (different query param type)
+    const urlNoBoardId = 'https://community.sap.com/khhcw49343/rss/Community?interaction.style=blog';
+    const items = await fetchRssItems(urlNoBoardId, { limit: 5 });
+    expect(items).toEqual([]);
+    // Verify curlFetch was called (proof of fallback to curl transport)
+    expect(curlSpy).toHaveBeenCalled();
   });
 });
