@@ -137,8 +137,18 @@ registered in `srv/jobs/scheduler.js` as job `kg-retire-orphans`.
   - `KG_RETIRE_ORPHANS_AGE_DAYS` (default `14`) — grace window so the Phase 4
     nightly extractors have time to attach external links before retirement.
 
-**First-run impact:** all 524 orphans are already >14d old (newest 2026-07-05),
-so the first run retires ~524 and the cosine-scan set drops to ~5,420.
+**First-run impact (corrected 2026-07-12 against live HANA):** there are 524
+true orphans (0 links across all 10 tables), but they were minted 2026-06-20 →
+2026-07-05, so on 2026-07-12 only **1** is older than the 14-day grace window —
+the rest cross the threshold on a rolling basis. The retirement therefore
+**ramps**: ~1 on the first run, climbing to ~524 by ~2026-07-19 as the cohort
+ages past 14 days (assuming the nightly Phase 4 extractors don't attach links
+to some of them first, which would spare those). The cosine-scan set drifts
+toward ~5,420 over that week rather than dropping in one night. This gradual
+ramp is the intended behavior of the grace window — it gives the external-link
+extractors time to rescue a concept before it retires. (An earlier draft of
+this section wrongly claimed "all 524 are already >14d old" — that was an
+arithmetic error: 2026-07-05 is 7 days before 2026-07-12, not 14.)
 
 ## 5. Component C — RETIRED status enum
 
