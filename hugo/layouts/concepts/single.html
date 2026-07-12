@@ -22,8 +22,22 @@
   {{ with .Params.teaches }}
   <section class="concept-page__section">
     <h2>Tutorials that teach this</h2>
-    <ul>
-      {{ range . }}<li><a href="/tutorials/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    <ul class="concept-card-grid">
+      {{ range . }}
+      <li>
+        <a class="concept-card" href="/tutorials/{{ .slug }}/">
+          <span class="concept-card__type concept-card__type--tutorial">Tutorial</span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ if or .experienceTag .stepCount }}
+          <span class="concept-card__meta">
+            {{ with .experienceTag }}<span class="kg-difficulty">{{ title . }}</span>{{ end }}
+            {{ if and .experienceTag .stepCount }} · {{ end }}
+            {{ with .stepCount }}{{ . }} step{{ if ne . 1 }}s{{ end }}{{ end }}
+          </span>
+          {{ end }}
+        </a>
+      </li>
+      {{ end }}
     </ul>
   </section>
   {{ end }}
@@ -47,23 +61,24 @@
     data-concept-slug="{{ $.Params.slug }}"
   >
     <h2>Learning journeys covering this</h2>
-    <ul>
+    <ul class="concept-card-grid">
       {{ range . }}
         {{ $url := .url }}
         {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
-        <li>
-          {{ if $isSafe }}
-          <a
-            href="{{ $url }}"
-            target="_blank"
-            rel="noopener"
-            data-journey-slug="{{ .slug }}"
-          >{{ .title }}</a>
-          {{ else }}
-          <span data-journey-slug="{{ .slug }}">{{ .title }}</span>
-          {{ end }}
-          · {{ title .level }} · {{ .durationHours }}h
-        </li>
+      <li>
+        {{ if $isSafe }}
+        <a class="concept-card" href="{{ $url }}" target="_blank" rel="noopener" data-journey-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Learning Journey <span class="kg-link-out" aria-hidden="true">↗</span></span>
+          <span class="concept-card__title">{{ .title }}</span>
+          <span class="concept-card__meta">{{ with .level }}{{ title . }}{{ end }}{{ if and .level .durationHours }} · {{ end }}{{ with .durationHours }}{{ . }}h{{ end }}</span>
+        </a>
+        {{ else }}
+        <span class="concept-card" data-journey-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Learning Journey</span>
+          <span class="concept-card__title">{{ .title }}</span>
+        </span>
+        {{ end }}
+      </li>
       {{ end }}
     </ul>
   </section>
@@ -103,27 +118,27 @@
     data-concept-slug="{{ $.Params.slug }}"
   >
     <h2>Docs explaining this concept</h2>
-    <ul class="kg-help-doc-list">
+    <ul class="concept-card-grid kg-help-doc-list">
       {{ range . }}
         {{ $url := .url }}
         {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
         {{ $href := $url }}
         {{ with .anchor }}{{ $href = printf "%s#%s" $url . }}{{ end }}
-        <li>
-          <span class="kg-help-source kg-help-source--{{ .source }}">{{ .sourceLabel }}</span>
-          {{ if $isSafe }}
-          <a
-            href="{{ $href }}"
-            target="_blank"
-            rel="noopener"
-            data-help-doc-slug="{{ .slug }}"
-          >{{ .title }} <span class="kg-link-out" aria-hidden="true">↗</span></a>
-          {{ else }}
-          <span data-help-doc-slug="{{ .slug }}">{{ .title }}</span>
-          {{ end }}
-          {{ with .anchorLabel }} <span class="kg-help-anchor">· {{ . }}</span>{{ end }}
-          {{ with .snippet }} <span class="kg-help-snippet">· {{ . }}</span>{{ end }}
-        </li>
+      <li>
+        {{ if $isSafe }}
+        <a class="concept-card" href="{{ $href }}" target="_blank" rel="noopener" data-help-doc-slug="{{ .slug }}">
+          <span class="concept-card__badges"><span class="kg-help-source kg-help-source--{{ .source }}">{{ .sourceLabel }}</span> <span class="kg-link-out" aria-hidden="true">↗</span></span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ with .snippet }}<span class="concept-card__body">{{ . }}</span>{{ end }}
+          {{ with .anchorLabel }}<span class="concept-card__meta kg-help-anchor">{{ . }}</span>{{ end }}
+        </a>
+        {{ else }}
+        <span class="concept-card" data-help-doc-slug="{{ .slug }}">
+          <span class="concept-card__badges"><span class="kg-help-source kg-help-source--{{ .source }}">{{ .sourceLabel }}</span></span>
+          <span class="concept-card__title">{{ .title }}</span>
+        </span>
+        {{ end }}
+      </li>
       {{ end }}
     </ul>
   </section>
@@ -153,23 +168,24 @@
     data-concept-slug="{{ $.Params.slug }}"
   >
     <h2>Blog posts discussing this</h2>
-    <ul>
+    <ul class="concept-card-grid">
       {{ range . }}
         {{ $url := .url }}
         {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
-        <li>
-          {{ if $isSafe }}
-          <a
-            href="{{ $url }}"
-            target="_blank"
-            rel="noopener"
-            data-blog-slug="{{ .slug }}"
-          >{{ .title }}</a>
-          {{ else }}
-          <span data-blog-slug="{{ .slug }}">{{ .title }}</span>
-          {{ end }}
-          · by {{ .authorName }} · {{ dateFormat "Jan 2, 2006" .postedAt }}
-        </li>
+      <li>
+        {{ if $isSafe }}
+        <a class="concept-card" href="{{ $url }}" target="_blank" rel="noopener" data-blog-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Blog <span class="kg-link-out" aria-hidden="true">↗</span></span>
+          <span class="concept-card__title">{{ .title }}</span>
+          <span class="concept-card__meta">by {{ .authorName }} · {{ dateFormat "Jan 2, 2006" .postedAt }}</span>
+        </a>
+        {{ else }}
+        <span class="concept-card" data-blog-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Blog</span>
+          <span class="concept-card__title">{{ .title }}</span>
+        </span>
+        {{ end }}
+      </li>
       {{ end }}
     </ul>
   </section>
@@ -199,24 +215,26 @@
     data-concept-slug="{{ $.Params.slug }}"
   >
     <h2>Discovery missions teaching this</h2>
-    <ul>
+    <ul class="concept-card-grid">
       {{ range . }}
         {{ $url := .url }}
         {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
-        <li>
-          {{ if $isSafe }}
-          <a
-            href="{{ $url }}"
-            target="_blank"
-            rel="noopener"
-            data-mission-slug="{{ .slug }}"
-          >{{ .title }}</a>
-          {{ else }}
-          <span data-mission-slug="{{ .slug }}">{{ .title }}</span>
+      <li>
+        {{ if $isSafe }}
+        <a class="concept-card" href="{{ $url }}" target="_blank" rel="noopener" data-mission-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Mission <span class="kg-link-out" aria-hidden="true">↗</span></span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ if or .effortLevel .categoryLabel }}
+          <span class="concept-card__meta">{{ if .effortLevel }}effort {{ .effortLevel }}{{ end }}{{ if and .effortLevel .categoryLabel }} · {{ end }}{{ if .categoryLabel }}{{ .categoryLabel }}{{ end }}</span>
           {{ end }}
-          {{ if .effortLevel }} · effort {{ .effortLevel }}{{ end }}
-          {{ if .categoryLabel }} · {{ .categoryLabel }}{{ end }}
-        </li>
+        </a>
+        {{ else }}
+        <span class="concept-card" data-mission-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Mission</span>
+          <span class="concept-card__title">{{ .title }}</span>
+        </span>
+        {{ end }}
+      </li>
       {{ end }}
     </ul>
   </section>
@@ -244,36 +262,27 @@
     data-concept-slug="{{ $.Params.slug }}"
   >
     <h2>Videos teaching this</h2>
-    <ul>
+    <ul class="concept-card-grid">
       {{ range . }}
         {{ $url := .url }}
         {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
-        <li>
-          {{ if $isSafe }}
-          <a
-            href="{{ $url }}"
-            target="_blank"
-            rel="noopener"
-            data-video-slug="{{ .slug }}"
-          >
-            {{ if .thumbnailUrl }}
-            <img
-              src="{{ .thumbnailUrl }}"
-              alt=""
-              class="kg-video-thumb"
-              loading="lazy"
-              width="120"
-              height="68"
-            >
-            {{ end }}
-            {{ .title }}
-          </a>
-          {{ else }}
-          <span data-video-slug="{{ .slug }}">{{ .title }}</span>
+      <li>
+        {{ if $isSafe }}
+        <a class="concept-card" href="{{ $url }}" target="_blank" rel="noopener" data-video-slug="{{ .slug }}">
+          {{ if .thumbnailUrl }}<img src="{{ .thumbnailUrl }}" alt="" class="concept-card__thumb" loading="lazy">{{ end }}
+          <span class="concept-card__type concept-card__type--external">Video <span class="kg-link-out" aria-hidden="true">↗</span></span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ if or .channelTitle .publishedAt }}
+          <span class="concept-card__meta">{{ with .channelTitle }}by {{ . }}{{ end }}{{ if and .channelTitle .publishedAt }} · {{ end }}{{ with .publishedAt }}{{ dateFormat "Jan 2, 2006" . }}{{ end }}</span>
           {{ end }}
-          {{ if .channelTitle }} · by {{ .channelTitle }}{{ end }}
-          {{ if .publishedAt }} · {{ dateFormat "Jan 2, 2006" .publishedAt }}{{ end }}
-        </li>
+        </a>
+        {{ else }}
+        <span class="concept-card" data-video-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Video</span>
+          <span class="concept-card__title">{{ .title }}</span>
+        </span>
+        {{ end }}
+      </li>
       {{ end }}
     </ul>
   </section>
@@ -304,24 +313,26 @@
     data-concept-slug="{{ $.Params.slug }}"
   >
     <h2>Official reference documentation</h2>
-    <ul>
+    <ul class="concept-card-grid">
       {{ range . }}
         {{ $url := .url }}
         {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
-        <li>
-          {{ if $isSafe }}
-          <a
-            href="{{ $url }}"
-            target="_blank"
-            rel="noopener"
-            data-api-doc-slug="{{ .slug }}"
-          >{{ .title }} <span class="kg-link-out" aria-hidden="true">↗</span></a>
-          {{ else }}
-          <span data-api-doc-slug="{{ .slug }}">{{ .title }}</span>
+      <li>
+        {{ if $isSafe }}
+        <a class="concept-card" href="{{ $url }}" target="_blank" rel="noopener" data-api-doc-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">API Doc <span class="kg-link-out" aria-hidden="true">↗</span></span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ if or .category .apiType }}
+          <span class="concept-card__meta">{{ if .category }}{{ .category }}{{ end }}{{ if and .category .apiType }} · {{ end }}{{ if .apiType }}<span class="kg-api-type">{{ .apiType }}</span>{{ end }}</span>
           {{ end }}
-          {{ if .category }} · {{ .category }}{{ end }}
-          {{ if .apiType }} · <span class="kg-api-type">{{ .apiType }}</span>{{ end }}
-        </li>
+        </a>
+        {{ else }}
+        <span class="concept-card" data-api-doc-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">API Doc</span>
+          <span class="concept-card__title">{{ .title }}</span>
+        </span>
+        {{ end }}
+      </li>
       {{ end }}
     </ul>
   </section>
@@ -356,25 +367,26 @@
     data-concept-slug="{{ $.Params.slug }}"
   >
     <h2>Code samples embodying this</h2>
-    <ul>
+    <ul class="concept-card-grid">
       {{ range . }}
         {{ $url := .url }}
         {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
-        <li>
-          {{ if $isSafe }}
-          <a
-            href="{{ $url }}"
-            target="_blank"
-            rel="noopener"
-            data-sample-slug="{{ .slug }}"
-          >{{ .title }} <span class="kg-link-out" aria-hidden="true">↗</span></a>
-          {{ else }}
-          <span data-sample-slug="{{ .slug }}">{{ .title }}</span>
+      <li>
+        {{ if $isSafe }}
+        <a class="concept-card" href="{{ $url }}" target="_blank" rel="noopener" data-sample-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Sample <span class="kg-link-out" aria-hidden="true">↗</span></span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ if or .language .stars .lastCommitAt }}
+          <span class="concept-card__meta">{{ if .language }}<span class="kg-language">{{ .language }}</span>{{ end }}{{ if .stars }} · {{ .stars }} stars{{ end }}{{ if .lastCommitAt }} · Updated {{ dateFormat "Jan 2006" .lastCommitAt }}{{ end }}</span>
           {{ end }}
-          {{ if .language }} · <span class="kg-language">{{ .language }}</span>{{ end }}
-          {{ if .stars }} · {{ .stars }} stars{{ end }}
-          {{ if .lastCommitAt }} · Updated {{ dateFormat "Jan 2006" .lastCommitAt }}{{ end }}
-        </li>
+        </a>
+        {{ else }}
+        <span class="concept-card" data-sample-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Sample</span>
+          <span class="concept-card__title">{{ .title }}</span>
+        </span>
+        {{ end }}
+      </li>
       {{ end }}
     </ul>
   </section>
@@ -401,22 +413,26 @@
     data-concept-slug="{{ $.Params.slug }}"
   >
     <h2>Upcoming hands-on events</h2>
-    <ul>
+    <ul class="concept-card-grid">
       {{ range . }}
         {{ $url := .url }}
         {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
-        <li>
-          {{ if $isSafe }}
-          <a href="{{ $url }}" target="_blank" rel="noopener" data-community-event-slug="{{ .slug }}">
-            {{ .title }} <span class="kg-link-out" aria-hidden="true">↗</span>
-          </a>
-          {{ else }}
-          <span data-community-event-slug="{{ .slug }}">{{ .title }}</span>
+      <li>
+        {{ if $isSafe }}
+        <a class="concept-card" href="{{ $url }}" target="_blank" rel="noopener" data-community-event-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Event <span class="kg-link-out" aria-hidden="true">↗</span></span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ if or .location .startDate (eq .virtualOrInPerson "virtual") }}
+          <span class="concept-card__meta">{{ if .location }}<span class="kg-event-location">{{ .location }}</span>{{ end }}{{ if .startDate }} · <span class="kg-event-date">{{ .startDate }}</span>{{ end }}{{ if eq .virtualOrInPerson "virtual" }} · <span class="kg-event-virtual" aria-label="Virtual event">🌐</span>{{ end }}</span>
           {{ end }}
-          {{ if .location }} · <span class="kg-event-location">{{ .location }}</span>{{ end }}
-          {{ if .startDate }} · <span class="kg-event-date">{{ .startDate }}</span>{{ end }}
-          {{ if eq .virtualOrInPerson "virtual" }} · <span class="kg-event-virtual" aria-label="Virtual event">🌐</span>{{ end }}
-        </li>
+        </a>
+        {{ else }}
+        <span class="concept-card" data-community-event-slug="{{ .slug }}">
+          <span class="concept-card__type concept-card__type--external">Event</span>
+          <span class="concept-card__title">{{ .title }}</span>
+        </span>
+        {{ end }}
+      </li>
       {{ end }}
     </ul>
   </section>
@@ -425,8 +441,16 @@
   {{ with .Params.requires }}
   <section class="concept-page__section">
     <h2>Prerequisites</h2>
-    <ul>
-      {{ range . }}<li><a href="/concepts/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    <ul class="concept-card-grid">
+      {{ range . }}
+      <li>
+        <a class="concept-card" href="/concepts/{{ .slug }}/">
+          <span class="concept-card__type concept-card__type--concept">Concept</span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ with .description }}<span class="concept-card__body">{{ . }}</span>{{ end }}
+        </a>
+      </li>
+      {{ end }}
     </ul>
   </section>
   {{ end }}
@@ -434,8 +458,16 @@
   {{ with .Params.requiredBy }}
   <section class="concept-page__section">
     <h2>Concepts that build on this</h2>
-    <ul>
-      {{ range . }}<li><a href="/concepts/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    <ul class="concept-card-grid">
+      {{ range . }}
+      <li>
+        <a class="concept-card" href="/concepts/{{ .slug }}/">
+          <span class="concept-card__type concept-card__type--concept">Concept</span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ with .description }}<span class="concept-card__body">{{ . }}</span>{{ end }}
+        </a>
+      </li>
+      {{ end }}
     </ul>
   </section>
   {{ end }}
@@ -443,8 +475,16 @@
   {{ with .Params.relatedTo }}
   <section class="concept-page__section">
     <h2>Related concepts</h2>
-    <ul>
-      {{ range . }}<li><a href="/concepts/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    <ul class="concept-card-grid">
+      {{ range . }}
+      <li>
+        <a class="concept-card" href="/concepts/{{ .slug }}/">
+          <span class="concept-card__type concept-card__type--concept">Concept</span>
+          <span class="concept-card__title">{{ .title }}</span>
+          {{ with .description }}<span class="concept-card__body">{{ . }}</span>{{ end }}
+        </a>
+      </li>
+      {{ end }}
     </ul>
   </section>
   {{ end }}
