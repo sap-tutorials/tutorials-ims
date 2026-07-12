@@ -56,7 +56,8 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     // #1034 adds fetch-news               (40 -> 41)
     // #1030 adds refresh-community-events (41 -> 42)
     // #1115 adds kg-retire-orphans        (42 -> 43)
-    expect(_getJobRegistry().size).toBe(43);
+    // #1126 adds kg-community-labels      (43 -> 44)
+    expect(_getJobRegistry().size).toBe(44);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
@@ -71,6 +72,7 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(names).toContain('reshuffle-video-rotation');
     expect(names).toContain('fetch-news');
     expect(names).toContain('kg-retire-orphans');
+    expect(names).toContain('kg-community-labels');
   });
 
   it('runJobByName(unknownName) throws', async () => {
