@@ -2811,6 +2811,10 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
    same radius, subtle shadow, hover lift, --sap* theme vars throughout so
    dark mode adapts automatically.
    ========================================================================== */
+.concept-page__section {
+  margin-bottom: 1.5rem;
+}
+
 .concept-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -2823,6 +2827,12 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
 .concept-card {
   display: flex;
   flex-direction: column;
+  /* #1127: content-box + height:100% made each card render 34px taller than
+     its grid track (padding 2×1rem + border 2×1px), overflowing onto the next
+     section's H2. border-box folds that padding+border into the 100% height so
+     the card exactly fills its cell — footer pinning via .concept-card__meta
+     margin-top:auto still works. */
+  box-sizing: border-box;
   height: 100%;
   background: var(--sapBaseColor, #fff);
   border: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
