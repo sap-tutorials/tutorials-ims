@@ -9,20 +9,6 @@ const { labelCommunityViaLlm } = vi.hoisted(() => {
 });
 vi.mock('../../../srv/lib/kg/community-label-llm.js', () => ({ labelCommunityViaLlm }));
 
-// In-memory fake db keyed by entity name; enough for the job's query shapes.
-function makeFakeDb({ summary, members, labels, titles, concepts, settings }) {
-  const upserts = [];
-  const db = {
-    _upserts: upserts,
-    async run(q) {
-      // The job uses cds.ql SELECT objects; we branch on a tagged _kind we set below.
-      if (typeof q === 'function') return q();
-      return [];
-    },
-  };
-  return { db, upserts };
-}
-
 import { runKgCommunityLabels, _computeForTest } from '../../../srv/jobs/kg-community-label-job.js';
 
 describe('runKgCommunityLabels (pure planner)', () => {
