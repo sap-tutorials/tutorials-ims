@@ -35,4 +35,28 @@ describe('/build/concepts (HTTP)', () => {
       expect(Array.isArray(c.teaches)).toBe(true)
     }
   })
+
+  it('teaches items carry experienceTag + stepCount when present; concept edges carry description', async () => {
+    const res = await project.get('/build/concepts')
+    // Find a concept with at least one teaches entry and at least one requires/relatedTo edge.
+    const withTeaches = res.data.concepts.find(c => c.teaches.length > 0)
+    if (withTeaches) {
+      const t = withTeaches.teaches[0]
+      expect(t).toHaveProperty('slug')
+      expect(t).toHaveProperty('title')
+      // experienceTag/stepCount are optional per-row; assert the keys are
+      // allowed shapes when present (string / number), never objects.
+      if ('experienceTag' in t) expect(typeof t.experienceTag).toBe('string')
+      if ('stepCount' in t) expect(typeof t.stepCount).toBe('number')
+    }
+    const withEdge = res.data.concepts.find(
+      c => c.requires.length > 0 || c.relatedTo.length > 0 || c.requiredBy.length > 0,
+    )
+    if (withEdge) {
+      const edge = [...withEdge.requires, ...withEdge.relatedTo, ...withEdge.requiredBy][0]
+      expect(edge).toHaveProperty('slug')
+      expect(edge).toHaveProperty('name')
+      if ('description' in edge) expect(typeof edge.description).toBe('string')
+    }
+  })
 })
