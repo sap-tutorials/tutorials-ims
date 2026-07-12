@@ -47,12 +47,12 @@ function isHana(db) {
   return db?.kind === 'hana' || db?.options?.kind === 'hana';
 }
 
-/** Read KG_RETIRE_ORPHANS_AGE_DAYS; default 14, fall back on NaN/negative. */
+/** Read KG_RETIRE_ORPHANS_AGE_DAYS; default 14, fall back on NaN/non-positive. */
 export function readAgeDays() {
   const raw = process.env.KG_RETIRE_ORPHANS_AGE_DAYS;
   if (raw === undefined || raw === null || raw === '') return 14;
   const n = Number.parseInt(raw, 10);
-  if (Number.isNaN(n) || n < 0) return 14;
+  if (Number.isNaN(n) || n <= 0) return 14;
   return n;
 }
 

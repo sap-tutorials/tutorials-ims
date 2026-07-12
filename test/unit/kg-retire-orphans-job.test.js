@@ -85,3 +85,15 @@ describe('runRetireOrphans (#1115)', () => {
     expect(res.retired).toBe(0);
   });
 });
+
+describe('readAgeDays guard (#1115)', () => {
+  afterEach(() => { delete process.env.KG_RETIRE_ORPHANS_AGE_DAYS; });
+  it('falls back to 14 when the env value is 0 (would otherwise retire everything)', () => {
+    process.env.KG_RETIRE_ORPHANS_AGE_DAYS = '0';
+    expect(readAgeDays()).toBe(14);
+  });
+  it('honors a positive override', () => {
+    process.env.KG_RETIRE_ORPHANS_AGE_DAYS = '30';
+    expect(readAgeDays()).toBe(30);
+  });
+});
