@@ -3599,15 +3599,22 @@ annotate AdminService.HomepageVideoRotationView with @(
   Capabilities.DeleteRestrictions.Deletable : false
 );
 
-// --- Personal Access Tokens (#1105) ---
+// --- Personal Access Tokens (#1105, #1132) ---
 // List Report + Object Page over PatService.MyPATs.
 // The dataSource for this FE app is /pats/ (PatService), NOT /admin/
 // (AdminService). Annotations reference PatService directly.
 //
-// mintPAT and revokePAT are unbound service-level actions (not bound to
-// MyPATs), so DataFieldForAction on LineItem is not applicable.
-// The mint button requires a custom controller extension or use of the
-// action's URI directly. This is noted as a follow-up in the task report.
+// #1132: revokePAT is now a BOUND action on MyPATs, exposed here as a
+// line-item DataFieldForAction (confirmation via @Common.IsActionCritical
+// on the CDS action). mintPAT stays an unbound service-level action wired as
+// a List Report toolbar button through a controller extension
+// (app/admin/pats/webapp/ext/PatActionsController) — mirrors the categories
+// admin app's toolbar-action pattern.
+//
+// `statusCriticality` + `statusText` are virtual fields populated by the
+// after('READ') hook in srv/pat-service.js (mirrors the secrets `hasValue`
+// pattern) so the list shows a red "Revoked" / green "Active" badge.
+// `revocable` gates the revoke button off already-revoked rows.
 using PatService from '../srv/pat-service';
 
 annotate PatService.MyPATs with @(
@@ -3619,9 +3626,14 @@ annotate PatService.MyPATs with @(
   },
   UI.SelectionFields: [ name, revokedAt ],
   UI.LineItem: [
+    { $Type: 'UI.DataFieldForAction',
+      Action: 'PatService.revokePAT',
+      Label: 'Revoke',
+      ![@UI.Importance]: #High },
     { Value: name,        Label: 'Name' },
     { Value: prefix,      Label: 'Prefix' },
     { Value: scopes,      Label: 'Scopes' },
+    { Value: statusText,  Label: 'Status', Criticality: statusCriticality },
     { Value: createdAt,   Label: 'Created' },
     { Value: expiresAt,   Label: 'Expires' },
     { Value: lastUsedAt,  Label: 'Last Used' },
@@ -3636,6 +3648,7 @@ annotate PatService.MyPATs with @(
       { Value: name },
       { Value: prefix },
       { Value: scopes },
+      { Value: statusText, Label: 'Status', Criticality: statusCriticality },
       { Value: createdAt },
       { Value: expiresAt },
       { Value: lastUsedAt },
@@ -3647,3 +3660,9 @@ annotate PatService.MyPATs with @(
   Capabilities.UpdateRestrictions.Updatable : false,
   Capabilities.DeleteRestrictions.Deletable : false
 );
+
+// #1132: hide the Revoke button on already-revoked rows. `revocable` is a
+// virtual boolean set by the after('READ') hook (true when revokedAt is null).
+annotate PatService.MyPATs actions {
+  revokePAT @( Core.OperationAvailable: revocable );
+};

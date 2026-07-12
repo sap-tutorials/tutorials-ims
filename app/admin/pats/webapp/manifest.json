@@ -63,6 +63,18 @@
               "initialLoad": "Enabled",
               "navigation": {
                 "MyPATs": { "detail": { "route": "PATsOP" } }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "MintTokenAction": {
+                      "press": "sap.tutorials.admin.pats.ext.PatActionsController.onMintToken",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>mint.action}"
+                    }
+                  }
+                }
               }
             }
           }
@@ -76,6 +88,15 @@
               "contextPath": "/MyPATs",
               "editableHeaderContent": false
             }
+          }
+        }
+      }
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "sap.tutorials.admin.pats.ext.PatActionsController"
           }
         }
       }

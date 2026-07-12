@@ -1,0 +1,44 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  xmlns:f="sap.ui.layout.form">
+  <!-- #1132: Mint a new Personal Access Token. Bound to the `mint` JSON model
+       (name / scopes / ttlDays). On Mint → PatService.mintPAT → the plaintext
+       token is shown ONCE in the reveal dialog (MintedTokenDialog fragment). -->
+  <Dialog
+    id="patMintDialog"
+    title="{i18n>mint.dialogTitle}"
+    contentWidth="480px"
+    contentHeight="auto">
+    <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+      <Label text="{i18n>mint.fieldName}" required="true" />
+      <Input value="{mint>/name}" placeholder="{i18n>mint.fieldNamePlaceholder}" maxLength="80" />
+
+      <Label text="{i18n>mint.fieldScopes}" required="true" />
+      <MultiComboBox
+        id="patMintScopes"
+        selectedKeys="{mint>/scopes}"
+        placeholder="{i18n>mint.fieldScopesPlaceholder}">
+        <core:Item key="read" text="read" />
+        <core:Item key="write" text="write" />
+      </MultiComboBox>
+
+      <Label text="{i18n>mint.fieldTtl}" />
+      <StepInput
+        value="{mint>/ttlDays}"
+        min="1"
+        max="365"
+        step="1"
+        description="{i18n>mint.fieldTtlUnit}" />
+    </f:SimpleForm>
+
+    <buttons>
+      <Button
+        text="{i18n>mint.buttonMint}"
+        type="Emphasized"
+        icon="sap-icon://add"
+        press=".onMintConfirm" />
+      <Button text="{i18n>mint.buttonCancel}" press=".onMintCancel" />
+    </buttons>
+  </Dialog>
+</core:FragmentDefinition>
