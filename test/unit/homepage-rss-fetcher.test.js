@@ -85,3 +85,23 @@ describe('fetchRssItems', () => {
     expect(items[0].title).toBe('Good');
   });
 });
+
+describe('fetchRssItems — khoros mode', () => {
+  beforeEach(() => { process.env.RSS_TRANSPORT = 'khoros'; _resetForTests(); });
+  afterEach(() => { delete process.env.RSS_TRANSPORT; vi.unstubAllGlobals(); });
+
+  it('derives board.id from the feed URL and hits the Khoros API', async () => {
+    const fetchSpy = vi.fn(async (u) => {
+      expect(u).toContain('community.sap.com/api/2.0/search');
+      expect(decodeURIComponent(u)).toContain("board.id='technology-blog-sap'");
+      return { ok: true, status: 200, headers: { get: () => null }, text: async () =>
+        JSON.stringify({ data: { items: [{ view_href: 'https://community.sap.com/x/ba-p/1',
+          subject: 'T', teaser: 'x', post_time: '2026-07-12T00:00:00.000+00:00', author: { login: 'u' } }] } }) };
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const items = await fetchRssItems(
+      'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-sap', { limit: 5 });
+    expect(items).toHaveLength(1);
+    expect(items[0].link).toBe('https://community.sap.com/x/ba-p/1');
+  });
+});
