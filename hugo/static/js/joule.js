@@ -720,6 +720,7 @@
               renderStepCitations(payload.items);
             }
           } else if (payload.type === 'external-content-cards') {
+            needsTurnBreak = true;
             renderExternalContentCards(payload.items || []);
           } else if (payload.type === 'analytics-result') {
             needsTurnBreak = true;
