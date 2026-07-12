@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildToolRegistry,
   buildSystemPromptLines,
+  dispatchTool,
 } from '../srv/lib/chat-orchestrator.js';
 
 describe('chat-orchestrator kgSearchExpansionEnabled gating', () => {
@@ -89,5 +90,14 @@ describe('#1125 findRelatedContent gating', () => {
     expect(on.some(l => /findRelatedContent/.test(l))).toBe(true);
     const off = buildSystemPromptLines({ settings: { kgRelatedContentEnabled: false } });
     expect(off.some(l => /findRelatedContent/.test(l))).toBe(false);
+  });
+});
+
+describe('#1125 dispatchTool findRelatedContent', () => {
+  it('returns an empty-content envelope for an empty query without throwing', async () => {
+    const out = await dispatchTool('findRelatedContent', { query: '   ' }, { id: 'u1' });
+    expect(out).toHaveProperty('externalContent');
+    expect(Array.isArray(out.externalContent)).toBe(true);
+    expect(out.externalContent).toEqual([]);
   });
 });

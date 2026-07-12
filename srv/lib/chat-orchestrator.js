@@ -657,6 +657,27 @@ export async function dispatchTool(name, args, user) {
     }
   }
 
+  if (name === 'findRelatedContent') {
+    try {
+      if (typeof args?.query !== 'string' || !args.query.trim()) {
+        return { queryEcho: '', externalContent: [] };
+      }
+      const db = await cds.connect.to('db');
+      const { model } = await resolveEmbeddingSettings();
+      const embedClient = defaultEmbedClient(model);
+      const { computeExternalContentSignal } = await import('./kg/external-content-signal.js');
+      const maxItems = typeof args?.maxItems === 'number' ? args.maxItems : undefined;
+      const types = Array.isArray(args?.types) ? args.types : undefined;
+      return await computeExternalContentSignal({
+        phrase: args.query, db, embedClient, embeddingModel: model,
+        enabled: true, types, maxItems,
+      });
+    } catch (err) {
+      LOG.warn('findRelatedContent dispatch failed:', err.message);
+      return { queryEcho: args?.query ?? '', externalContent: [], warning: 'dispatch_failed' };
+    }
+  }
+
   return { error: 'unknown_tool' };
 }
 
@@ -788,6 +809,8 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
           sse(res, { type: 'explanation', summary: result.summary, columns: result.columns, rows: result.rows, truncated: result.truncated });
         } else if (tc.name === 'getRelevantSteps' && Array.isArray(result) && result.length > 0) {
           sse(res, { type: 'step-citations', items: result });
+        } else if (tc.name === 'findRelatedContent' && result && Array.isArray(result.externalContent) && result.externalContent.length > 0) {
+          sse(res, { type: 'external-content-cards', items: result.externalContent });
         }
       }
 
