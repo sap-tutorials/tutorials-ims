@@ -217,6 +217,39 @@ const GET_DEVTOBERFEST_INFO_TOOL = {
   }
 };
 
+const FIND_RELATED_CONTENT_TOOL = {
+  type: 'function',
+  function: {
+    name: 'findRelatedContent',
+    description: [
+      'Find SAP external content (learning journeys, blog posts, Discovery',
+      'Center missions, videos, API docs, code samples, help docs, community',
+      'events) related to a topic, via the knowledge graph.',
+      'Use when the user asks for docs, videos, samples, blogs, learning',
+      'journeys, events, or "external content / resources" on a topic.',
+      'Authoritative items (SAP-authored docs/samples/videos/journeys/missions)',
+      'may be cited directly; community items (blog posts, events) should be',
+      'presented with soft attribution.',
+    ].join('\n'),
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Free-text topic. 1-200 chars.' },
+        types: {
+          type: 'array',
+          items: { type: 'string', enum: [
+            'learning-journey', 'blog-post', 'discovery-mission', 'video',
+            'api-doc', 'sample', 'help-doc', 'community-event',
+          ] },
+          description: 'Optional: restrict to these content types.',
+        },
+        maxItems: { type: 'integer', description: 'Cap on returned items. 1-20, default 8.' },
+      },
+      required: ['query'],
+    },
+  },
+};
+
 /**
  * Pure, synchronous tool-registry builder. Given the ChatSettings row (or a
  * plain-object subset in tests) plus pageContext/isAdmin, returns the list
@@ -275,6 +308,9 @@ export function buildToolRegistry({ settings, pageContext, isAdmin = false } = {
   if (settings?.kgSearchExpansionEnabled) {
     tools.push(EXPAND_SEARCH_CONCEPTS_TOOL);
   }
+  if (settings?.kgRelatedContentEnabled) {
+    tools.push(FIND_RELATED_CONTENT_TOOL);
+  }
   return tools;
 }
 
@@ -292,6 +328,11 @@ export function buildSystemPromptLines({ settings, pageContext, isAdmin = false 
   if (settings?.kgSearchExpansionEnabled) {
     lines.push(
       "When the user asks to find or search for tutorials on a topic, prefer calling `expandSearchConcepts` first, then `searchTutorials` for narrow keyword matches. Combine both signals in your response — mention the top concept relationships when they add clarity."
+    );
+  }
+  if (settings?.kgRelatedContentEnabled) {
+    lines.push(
+      "When the user asks for external content — docs, videos, code samples, blog posts, learning journeys, Discovery missions, or community events on a topic — call `findRelatedContent`. Cite authoritative items (SAP-authored docs, samples, videos, journeys, missions) directly; present community items (blog posts, events) with soft attribution like \"a community blog post by …\"."
     );
   }
   return lines;
@@ -786,4 +827,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, EXPAND_SEARCH_CONCEPTS_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, EXPAND_SEARCH_CONCEPTS_TOOL, FIND_RELATED_CONTENT_TOOL, toolsForContext };
