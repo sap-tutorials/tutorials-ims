@@ -17,6 +17,14 @@ const emit = defineEmits<{ nodeClick: [{ id: string; node: ExploreNode }] }>()
 // future themer touches one file.
 const PATH_EDGE_COLOR = '#ff6b35'   // SAP-friendly orange — high contrast vs the grey edges
 const PATH_EDGE_SIZE = 3
+// Path NODES carry the primary highlight: /graph/path (PATH_BETWEEN) returns a
+// ranked candidate list, not a connected walk, so consecutive path nodes almost
+// never share a direct graph edge (#1131). Recoloring the nodes works regardless
+// of edge topology; the edge recolor above is a bonus for the rare direct pairs.
+const PATH_NODE_COLOR = '#ff6b35'   // same SAP orange as the path edges
+const PATH_NODE_SIZE = 10           // ~2.5× the default node size (4) so on-path nodes pop
+const FADED_NODE_COLOR = '#d9d9d9'  // light grey — pushes off-path nodes into the background
+const DEFAULT_NODE_SIZE = 4         // must match the addNode size below
 
 const container = ref<HTMLDivElement | null>(null)
 // Defeat Vue 3.5 SFC template hoisting (which makes the container ref null
@@ -41,7 +49,7 @@ onMounted(() => {
     graph.addNode(n.id, {
       x: Math.random(),
       y: Math.random(),
-      size: 4,
+      size: DEFAULT_NODE_SIZE,
       label: n.label,
       color: colorForNodeType(n.type),
       ...n,
@@ -83,8 +91,16 @@ function applyPathOverlay(path: string[] | null): void {
   if (!graph) return
   const g = graph
 
-  // No path → reset every edge to its default predicate color/size.
+  // No path → reset every edge to its default predicate color/size, and every
+  // node to its type-default color/size (undoing any prior path highlight/fade).
   if (!path || path.length < 2) {
+    if (typeof g.forEachNode === 'function') {
+      g.forEachNode((id: string, attrs: any) => {
+        const type = attrs?.type as NodeType | undefined
+        g.setNodeAttribute(id, 'color', type ? colorForNodeType(type) : FADED_NODE_COLOR)
+        g.setNodeAttribute(id, 'size', DEFAULT_NODE_SIZE)
+      })
+    }
     if (typeof g.forEachEdge !== 'function') return
     g.forEachEdge((key: string, attrs: any) => {
       const type = attrs?.type as PredicateType | undefined
@@ -126,6 +142,23 @@ function applyPathOverlay(path: string[] | null): void {
       g.setEdgeAttribute(key, 'size', 1)
     }
   })
+
+  // Primary highlight: recolor/enlarge the path NODES and fade everything else.
+  // This is what makes the overlay visible for real /graph/path responses,
+  // which return a ranked candidate list rather than a connected walk (#1131) —
+  // the path nodes always exist even when no direct edges connect them.
+  if (typeof g.forEachNode === 'function') {
+    const pathNodeSet = new Set(path)
+    g.forEachNode((id: string) => {
+      if (pathNodeSet.has(id)) {
+        g.setNodeAttribute(id, 'color', PATH_NODE_COLOR)
+        g.setNodeAttribute(id, 'size', PATH_NODE_SIZE)
+      } else {
+        g.setNodeAttribute(id, 'color', FADED_NODE_COLOR)
+        g.setNodeAttribute(id, 'size', DEFAULT_NODE_SIZE)
+      }
+    })
+  }
 
   // Camera-fit to the bounding box of path nodes (#693). Compute the min/max
   // x/y across all path-node graphology attributes, then animate the camera
