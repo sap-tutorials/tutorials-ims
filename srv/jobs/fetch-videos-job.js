@@ -327,6 +327,17 @@ export async function runFetchVideos(deps = {}) {
         registry.embeddings.set(pc.ID, pc.embeddingVec);
       }
 
+      // #1115: flip any RETIRED concept whose slug was re-proposed back to ACTIVE.
+      // Must run before the link INSERTs so the FK target is ACTIVE when written.
+      const reactivatedIds = resolution.resolved
+        .filter((r) => r.action === 'reactivated')
+        .map((r) => r.conceptId);
+      if (reactivatedIds.length > 0) {
+        await UPDATE(Concepts)
+          .set({ status: 'ACTIVE', lastSeenAt: now })
+          .where({ ID: { in: reactivatedIds } });
+      }
+
       // Replace existing concept links for this video.
       await DELETE.from(VideoConceptLinks).where({ video_ID: videoRow.ID });
 

@@ -81,7 +81,7 @@ describe('resolveConceptCandidates', () => {
       action: 'exact',
     });
     expect(result.pendingMints).toHaveLength(0);
-    expect(result.counters).toEqual({ merged: 0, minted: 0, skippedNoEmbed: 0 });
+    expect(result.counters).toEqual({ merged: 0, minted: 0, skippedNoEmbed: 0, reactivated: 0 });
   });
 
   it('returns action=merged when embedded candidate is near a registry concept', async () => {
@@ -247,5 +247,59 @@ describe('loadConceptRegistry (sqlite path)', () => {
     expect(v).toBeInstanceOf(Float32Array);
     expect(v.length).toBe(4);
     expect(v[0]).toBeCloseTo(1, 5);
+  });
+});
+
+describe('loadConceptRegistry retiredBySlug (#1115)', () => {
+  beforeAll(async () => {
+    const schemaRoots = [
+      path.join(process.cwd(), 'db'),
+      path.join(process.cwd(), 'srv'),
+    ];
+    await cds.deploy(schemaRoots).to('sqlite::memory:');
+  });
+
+  afterAll(async () => {
+    await cds.disconnect();
+  });
+
+  it('loads RETIRED concepts into retiredBySlug, not bySlug', async () => {
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(Concepts);
+    await INSERT.into(Concepts).entries([
+      { ID: 'a0000000-0000-0000-0000-000000000001', slug: 'active-one', name: 'Active One', status: 'ACTIVE' },
+      { ID: 'a0000000-0000-0000-0000-000000000002', slug: 'retired-one', name: 'Retired One', status: 'RETIRED' },
+    ]);
+    const db = await cds.connect.to('db');
+    const reg = await loadConceptRegistry(db);
+    expect(reg.bySlug.has('active-one')).toBe(true);
+    expect(reg.bySlug.has('retired-one')).toBe(false);
+    expect(reg.retiredBySlug.has('retired-one')).toBe(true);
+    expect(reg.retiredBySlug.get('retired-one').ID).toBe('a0000000-0000-0000-0000-000000000002');
+  });
+});
+
+describe('resolveConceptCandidates reactivation (#1115)', () => {
+  it('resolves a retired slug to reactivated action, not a mint', async () => {
+    const registry = {
+      bySlug: new Map(),
+      embeddings: new Map(),
+      retiredBySlug: new Map([
+        ['dormant-concept', { ID: 'r0000000-0000-0000-0000-000000000009', slug: 'dormant-concept', name: 'Dormant Concept' }],
+      ]),
+    };
+    const embed = async () => [new Float32Array(1536).fill(0.1)];
+    const result = await resolveConceptCandidates({
+      candidates: [{ slug: 'dormant-concept', name: 'Dormant Concept', confidence: 0.9 }],
+      registry,
+      embed,
+      embeddingModel: 'text-embedding-3-small',
+      mergeThreshold: 0.85,
+    });
+    expect(result.pendingMints).toHaveLength(0);
+    expect(result.resolved).toHaveLength(1);
+    expect(result.resolved[0].action).toBe('reactivated');
+    expect(result.resolved[0].conceptId).toBe('r0000000-0000-0000-0000-000000000009');
+    expect(result.counters.reactivated).toBe(1);
   });
 });

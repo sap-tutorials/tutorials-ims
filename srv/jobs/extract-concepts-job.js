@@ -120,7 +120,7 @@ export async function runExtractConcepts(deps = {}) {
     // (lines marked "post-tx" near the bottom of the loop) when new concepts
     // are minted, so that subsequent tutorials in the same page see them
     // without re-issuing the registry SELECTs.
-    const { bySlug: registryBySlug, embeddings: registryEmbeddings } =
+    const { bySlug: registryBySlug, embeddings: registryEmbeddings, retiredBySlug: registryRetiredBySlug } =
       await loadConceptRegistry(db);
     // The legacy `registry` array (used as the LLM prompt's `existingConcepts`
     // hint) is rebuilt from the Map. Same shape as before.
@@ -199,7 +199,7 @@ export async function runExtractConcepts(deps = {}) {
         // is used by srv/jobs/fetch-learning-journeys-job.js.
         const candidateResolution = await resolveConceptCandidates({
           candidates: extraction.teaches,
-          registry: { bySlug: registryBySlug, embeddings: registryEmbeddings },
+          registry: { bySlug: registryBySlug, embeddings: registryEmbeddings, retiredBySlug: registryRetiredBySlug },
           embed,
           embeddingModel,
           mergeThreshold: MERGE_THRESHOLD,
@@ -212,6 +212,9 @@ export async function runExtractConcepts(deps = {}) {
           conceptId: r.conceptId,
           confidence: r.confidence,
         }));
+        const reactivatedIds = candidateResolution.resolved
+          .filter((r) => r.action === 'reactivated')
+          .map((r) => r.conceptId);
         const pendingNewConcepts = candidateResolution.pendingMints;
         errors += candidateResolution.counters.skippedNoEmbed;
         mergedAtExtract += candidateResolution.counters.merged;
@@ -274,6 +277,18 @@ export async function runExtractConcepts(deps = {}) {
                 extractionCount: 0,
                 lastSeenAt: nowIso,
               }),
+            );
+          }
+
+          // #1115: reactivate any RETIRED concept whose slug was re-proposed.
+          // Flipping to ACTIVE + fresh lastSeenAt inside the tx means the
+          // link write below references a now-ACTIVE row and the concept
+          // won't be re-retired (it now has a link).
+          if (reactivatedIds.length > 0) {
+            await tx.run(
+              UPDATE(Concepts)
+                .set({ status: 'ACTIVE', lastSeenAt: nowIso })
+                .where({ ID: { in: reactivatedIds } }),
             );
           }
 

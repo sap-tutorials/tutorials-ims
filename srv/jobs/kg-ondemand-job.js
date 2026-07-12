@@ -82,47 +82,64 @@ async function defaultExtractOne({ tutorial, callModel, registryArray }) {
 
 /**
  * Default persister — mirrors extract-concepts-job.js' merge-on-write +
- * link-write path focused on a single tutorial. Returns { created, merged }.
+ * link-write path focused on a single tutorial. Returns { created, merged, reactivated, linked, mintsSkipped }.
+ *
+ * On-demand link-only floor (#1115) — stricter than the nightly 0.6 floor
+ * in kg-extract.js. On-demand results are lower-trust than a full nightly pass.
  */
-async function defaultPersistExtraction({ db, tutorial, extraction, registryBySlug, registryEmbeddings, embed, embeddingModel, mergeThreshold }) {
+const ONDEMAND_LINK_MIN_CONFIDENCE = 0.7;
+
+async function defaultPersistExtraction({ db, tutorial, extraction, registryBySlug, registryEmbeddings, registryRetiredBySlug, embed, embeddingModel, mergeThreshold }) {
   const { Concepts, TutorialConceptLinks } = cds.entities(NS);
 
   const candidateResolution = await resolveConceptCandidates({
     candidates: extraction.teaches ?? [],
-    registry: { bySlug: registryBySlug, embeddings: registryEmbeddings },
+    registry: { bySlug: registryBySlug, embeddings: registryEmbeddings, retiredBySlug: registryRetiredBySlug },
     embed,
     embeddingModel,
     mergeThreshold,
     log: { warn: (m) => LOG.warn(m), info: () => {} },
   });
 
+  // #1115: on-demand is LINK-ONLY. Never INSERT pendingMints. Write links
+  // only for resolutions that reference an existing concept (exact / merged /
+  // reactivated) AND clear the 0.7 on-demand link floor.
+  const linkable = candidateResolution.resolved.filter(
+    (r) => r.action !== 'minted' && Number(r.confidence) >= ONDEMAND_LINK_MIN_CONFIDENCE,
+  );
+  const mintsSkipped = candidateResolution.resolved.filter((r) => r.action === 'minted').length;
+  const reactivatedIds = candidateResolution.resolved
+    .filter((r) => r.action === 'reactivated')
+    .map((r) => r.conceptId);
+
   await db.tx(async (tx) => {
-    if (candidateResolution.pendingMints.length > 0) {
-      for (const m of candidateResolution.pendingMints) {
-        await tx.run(INSERT.into(Concepts).entries({
-          ID: m.ID, slug: m.slug, name: m.name,
-          embedding: m.embeddingBuf, status: 'ACTIVE',
-        }));
-      }
+    // Reactivate any retired concept we're relinking (symmetry with the
+    // nightly extractor — a concept that matched a real query and now has a
+    // link should be ACTIVE again).
+    if (reactivatedIds.length > 0) {
+      await tx.run(
+        UPDATE(Concepts).set({ status: 'ACTIVE', lastSeenAt: new Date().toISOString() })
+          .where({ ID: { in: reactivatedIds } }),
+      );
     }
-    const linkRows = candidateResolution.resolved.map(r => ({
-      ID: cds.utils.uuid(),
-      tutorial_ID: tutorial.tutorialId ?? tutorial.ID,
-      concept_ID: r.conceptId,
-      predicate: 'teaches',
-      confidence: r.confidence,
-      extractedAt: new Date().toISOString(),
-    }));
-    if (linkRows.length > 0) {
-      for (const row of linkRows) {
-        await tx.run(INSERT.into(TutorialConceptLinks).entries(row));
-      }
+    for (const r of linkable) {
+      await tx.run(INSERT.into(TutorialConceptLinks).entries({
+        ID: cds.utils.uuid(),
+        tutorial_ID: tutorial.tutorialId ?? tutorial.ID,
+        concept_ID: r.conceptId,
+        predicate: 'teaches',
+        confidence: r.confidence,
+        extractedAt: new Date().toISOString(),
+      }));
     }
   });
 
   return {
-    created: candidateResolution.pendingMints.length,
+    created: 0,
     merged: candidateResolution.counters?.merged ?? 0,
+    reactivated: candidateResolution.counters?.reactivated ?? 0,
+    linked: linkable.length,
+    mintsSkipped,
   };
 }
 
@@ -179,14 +196,14 @@ export async function runOnDemandDrain(deps = {}) {
   // Load concept registry once per drain tick (same pattern as extract-concepts-job).
   // registryBySlug + registryEmbeddings are for resolveConceptCandidates (Map/Map).
   // registryArray is the flat array for extractConceptsFromTutorial prompt hint.
-  const { bySlug: registryBySlug, embeddings: registryEmbeddings } = await loadConceptRegistry(db);
+  const { bySlug: registryBySlug, embeddings: registryEmbeddings, retiredBySlug: registryRetiredBySlug } = await loadConceptRegistry(db);
   const registryArray = [...registryBySlug.values()].map(c => ({
     ID: c.ID,
     slug: c.slug,
     name: c.name,
   }));
 
-  let processed = 0, extracted = 0, failed = 0;
+  let processed = 0, extracted = 0, failed = 0, mintsSkipped = 0;
 
   for (const row of rows) {
     const rowT0 = Date.now();
@@ -234,6 +251,7 @@ export async function runOnDemandDrain(deps = {}) {
           extraction,
           registryBySlug,
           registryEmbeddings,
+          registryRetiredBySlug,
           embed: embedFn,
           embeddingModel,
           mergeThreshold: MERGE_THRESHOLD,
@@ -241,6 +259,7 @@ export async function runOnDemandDrain(deps = {}) {
         localExtracted++;
         localCreated += persisted.created ?? 0;
         localMerged  += persisted.merged ?? 0;
+        mintsSkipped += persisted.mintsSkipped ?? 0;
       }
 
       await UPDATE(KgOnDemandRequests)
@@ -294,5 +313,7 @@ export async function runOnDemandDrain(deps = {}) {
 
   const durationMs = Date.now() - t0;
   metrics.emit?.('kg_ondemand_drain_tick', { processed, extracted, failed, durationMs });
-  return { processed, extracted, failed, coalesced: 0, durationMs };
+  metrics.observe?.('kg_ondemand_drain_tick', { processed, extracted, failed, mintsSkipped, durationMs });
+  if (mintsSkipped > 0) metrics.counter?.('kg_ondemand_mints_skipped');
+  return { processed, extracted, failed, coalesced: 0, mintsSkipped, durationMs };
 }

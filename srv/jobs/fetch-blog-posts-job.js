@@ -287,6 +287,17 @@ export async function runFetchBlogPosts(deps = {}) {
         registry.embeddings.set(pc.ID, pc.embeddingVec);
       }
 
+      // #1115: flip any RETIRED concept whose slug was re-proposed back to ACTIVE.
+      // Must run before the link INSERTs so the FK target is ACTIVE when written.
+      const reactivatedIds = resolution.resolved
+        .filter((r) => r.action === 'reactivated')
+        .map((r) => r.conceptId);
+      if (reactivatedIds.length > 0) {
+        await UPDATE(Concepts)
+          .set({ status: 'ACTIVE', lastSeenAt: now })
+          .where({ ID: { in: reactivatedIds } });
+      }
+
       // Replace existing links for this post.
       await DELETE.from(BlogPostConceptLinks).where({ post_ID: postRow.ID });
 

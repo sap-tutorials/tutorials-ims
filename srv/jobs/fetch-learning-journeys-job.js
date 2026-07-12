@@ -339,6 +339,17 @@ export async function runFetchLearningJourneys(deps = {}) {
         registry.embeddings.set(pc.ID, pc.embeddingVec);
       }
 
+      // #1115: flip any RETIRED concept whose slug was re-proposed back to ACTIVE.
+      // Must run before the link INSERTs so the FK target is ACTIVE when written.
+      const reactivatedIds = resolution.resolved
+        .filter((r) => r.action === 'reactivated')
+        .map((r) => r.conceptId);
+      if (reactivatedIds.length > 0) {
+        await UPDATE(Concepts)
+          .set({ status: 'ACTIVE', lastSeenAt: now })
+          .where({ ID: { in: reactivatedIds } });
+      }
+
       // Dedup by conceptId: two distinct LLM-emitted slugs can resolve to
       // the same concept (one exact, one merged), but @assert.unique.journey
       // Concept rejects duplicate (journey, concept) pairs. Keep the highest-

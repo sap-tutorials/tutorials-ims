@@ -246,6 +246,17 @@ export async function runFetchApiDocs(deps = {}) {
         if (registry.embeddings) registry.embeddings.set(pc.ID, pc.embeddingVec);
       }
 
+      // #1115: flip any RETIRED concept whose slug was re-proposed back to ACTIVE.
+      // Must run before the link INSERTs so the FK target is ACTIVE when written.
+      const reactivatedIds = resolution.resolved
+        .filter((r) => r.action === 'reactivated')
+        .map((r) => r.conceptId);
+      if (reactivatedIds.length > 0) {
+        await UPDATE(Concepts)
+          .set({ status: 'ACTIVE', lastSeenAt: now })
+          .where({ ID: { in: reactivatedIds } });
+      }
+
       // Look up our row's ID for the link writes.
       const apiDocRow = await SELECT.one.from(ApiDocs).columns('ID').where({ slug });
       if (!apiDocRow) {

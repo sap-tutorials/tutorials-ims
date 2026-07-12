@@ -52,6 +52,7 @@ import { runKgCommunities } from './kg-communities-job.js';
 import { runKgWcc } from './kg-wcc-job.js';
 import { runOnDemandDrain } from './kg-ondemand-job.js';
 import { runKgFeaturedTopics } from './kg-featured-topics-job.js';
+import { runRetireOrphans } from './kg-retire-orphans-job.js';
 import { runCommunityBlogsFetch } from './community-blogs-fetch-job.js';
 import { runCommunityBlogsClassify } from './community-blogs-classify-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
@@ -670,6 +671,19 @@ export function registerJobs() {
     ttlMs: 600000,
     description: 'Rebuild FeaturedTopicsSnapshot from KG signals + editorial rows',
     fn: (logId) => runKgFeaturedTopics(logId),
+  });
+
+  // Daily 04:37 UTC — retire truly-orphaned concepts (#1115). Runs after
+  // WCC (04:07) and featured-topics (04:13) so it sees the fully settled
+  // nightly graph. Off-minute :37 per the scheduler convention. Fail-open:
+  // errors → PipelineLog FAILED, never break request-time reads.
+  // Spec: docs/superpowers/specs/2026-07-12-1115-kg-concept-durability-design.md
+  registerJob({
+    jobName: 'kg-retire-orphans',
+    schedule: '37 4 * * *',
+    ttlMs: 600000,
+    description: 'Retire zero-link ACTIVE concepts older than KG_RETIRE_ORPHANS_AGE_DAYS (#1115)',
+    fn: () => runRetireOrphans(),
   });
 
   // Weekly Sunday 02:00 — tutorial metadata review
