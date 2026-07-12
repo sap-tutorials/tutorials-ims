@@ -40,14 +40,17 @@ const T_PEER_A = { ID: 'T1126-0000-0000-0000-000000000002', slug: 'peer-alpha', 
 const T_PEER_B = { ID: 'T1126-0000-0000-0000-000000000003', slug: 'peer-bravo', title: 'Bravo Tutorial', status: 'ACTIVE' };
 const T_INACTIVE = { ID: 'T1126-0000-0000-0000-000000000004', slug: 'peer-inactive', title: 'Inactive Tutorial', status: 'INACTIVE' };
 const T_C2 = { ID: 'T1126-0000-0000-0000-000000000005', slug: 'comm2-only', title: 'Comm2 Tutorial', status: 'ACTIVE' };
+// NULL-status tutorial — treated as live per knowledge-graph-service.js:477-486
+const T_NULLSTATUS = { ID: 'T1126-0000-0000-0000-000000000007', slug: 'peer-nullstatus', title: 'Nullstatus Tutorial', status: null };
 
 // KgCommunity rows
 const KC = [
-  // community 1 — self + two active + one inactive
-  { communityId: COMM_ID, vertexKey: 'tutorial:self-slug',    vertexType: 'tutorial', slug: 'self-slug',    detectedAt: new Date().toISOString(), communityFingerprint: FP },
-  { communityId: COMM_ID, vertexKey: 'tutorial:peer-alpha',   vertexType: 'tutorial', slug: 'peer-alpha',   detectedAt: new Date().toISOString(), communityFingerprint: FP },
-  { communityId: COMM_ID, vertexKey: 'tutorial:peer-bravo',   vertexType: 'tutorial', slug: 'peer-bravo',   detectedAt: new Date().toISOString(), communityFingerprint: FP },
-  { communityId: COMM_ID, vertexKey: 'tutorial:peer-inactive',vertexType: 'tutorial', slug: 'peer-inactive',detectedAt: new Date().toISOString(), communityFingerprint: FP },
+  // community 1 — self + two active + one inactive + one null-status
+  { communityId: COMM_ID, vertexKey: 'tutorial:self-slug',       vertexType: 'tutorial', slug: 'self-slug',      detectedAt: new Date().toISOString(), communityFingerprint: FP },
+  { communityId: COMM_ID, vertexKey: 'tutorial:peer-alpha',      vertexType: 'tutorial', slug: 'peer-alpha',     detectedAt: new Date().toISOString(), communityFingerprint: FP },
+  { communityId: COMM_ID, vertexKey: 'tutorial:peer-bravo',      vertexType: 'tutorial', slug: 'peer-bravo',     detectedAt: new Date().toISOString(), communityFingerprint: FP },
+  { communityId: COMM_ID, vertexKey: 'tutorial:peer-inactive',   vertexType: 'tutorial', slug: 'peer-inactive',  detectedAt: new Date().toISOString(), communityFingerprint: FP },
+  { communityId: COMM_ID, vertexKey: 'tutorial:peer-nullstatus', vertexType: 'tutorial', slug: 'peer-nullstatus',detectedAt: new Date().toISOString(), communityFingerprint: FP },
   // community 2 — used for the no-label test
   { communityId: COMM_ID + 1, vertexKey: 'tutorial:comm2-only', vertexType: 'tutorial', slug: 'comm2-only', detectedAt: new Date().toISOString(), communityFingerprint: FP2 },
 ];
@@ -66,10 +69,10 @@ beforeAll(async () => {
   // Clean up any lingering test rows
   await db.run(DELETE.from(KgCommunity).where({ communityId: { in: [COMM_ID, COMM_ID + 1] } }));
   await db.run(DELETE.from(KgCommunityLabel).where({ communityFingerprint: { in: [FP, FP2] } }));
-  await db.run(DELETE.from(Tutorials).where({ ID: { in: [T_SELF.ID, T_PEER_A.ID, T_PEER_B.ID, T_INACTIVE.ID, T_C2.ID] } }));
+  await db.run(DELETE.from(Tutorials).where({ ID: { in: [T_SELF.ID, T_PEER_A.ID, T_PEER_B.ID, T_INACTIVE.ID, T_C2.ID, T_NULLSTATUS.ID] } }));
 
   // Seed
-  await db.run(INSERT.into(Tutorials).entries([T_SELF, T_PEER_A, T_PEER_B, T_INACTIVE, T_C2]));
+  await db.run(INSERT.into(Tutorials).entries([T_SELF, T_PEER_A, T_PEER_B, T_INACTIVE, T_C2, T_NULLSTATUS]));
   await db.run(INSERT.into(KgCommunity).entries(KC));
   await db.run(INSERT.into(KgCommunityLabel).entries([LABEL_ROW]));
 });
@@ -106,13 +109,23 @@ describe('findCommunityPeersHandler', () => {
 
   // (3) self excluded + limit cap + label attached
   it('excludes self, returns active siblings, attaches label', async () => {
-    const out = await findCommunityPeersHandler({ db, args: { tutorial_slug: 'self-slug', limit: 5 } });
+    const out = await findCommunityPeersHandler({ db, args: { tutorial_slug: 'self-slug', limit: 10 } });
     expect(out.label).toBe('The Cluster');
     expect(out.rationale).toBe('why it clusters');
     const slugs = out.peers.map((p) => p.slug).sort();
-    // self-slug excluded; peer-inactive excluded (status=INACTIVE); alpha+bravo returned
-    expect(slugs).toEqual(['peer-alpha', 'peer-bravo']);
+    // self-slug excluded; peer-inactive excluded (status=INACTIVE);
+    // alpha, bravo, and nullstatus (NULL status = treated as ACTIVE) returned
+    expect(slugs).toEqual(['peer-alpha', 'peer-bravo', 'peer-nullstatus']);
     expect(out.peers[0].url).toMatch(/\/tutorials\//);
+  });
+
+  it('includes NULL-status tutorial in peers and excludes INACTIVE', async () => {
+    const out = await findCommunityPeersHandler({ db, args: { tutorial_slug: 'self-slug', limit: 10 } });
+    const slugs = out.peers.map((p) => p.slug);
+    // NULL-status must be included (treated as ACTIVE per KG service convention)
+    expect(slugs).toContain('peer-nullstatus');
+    // INACTIVE must be excluded
+    expect(slugs).not.toContain('peer-inactive');
   });
 
   it('caps peers to the requested limit', async () => {

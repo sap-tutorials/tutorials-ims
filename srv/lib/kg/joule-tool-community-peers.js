@@ -68,19 +68,26 @@ export async function findCommunityPeersHandler({ db, args }) {
       .filter((s) => s !== slug);
     if (siblingSlugs.length === 0) return { peers: [], reason: 'singleton' };
 
-    // 3. Resolve to ACTIVE tutorials, ordered by title, capped to limit.
-    // Tutorials has no `published` column — status='ACTIVE' is the live filter.
-    // (Missions/Groups have published:Boolean; Tutorials do not.)
+    // 3. Resolve to live tutorials (status ACTIVE or NULL — NULL is treated as
+    // ACTIVE, matching knowledge-graph-service.js:477-486 and co-completion.js:18),
+    // ordered by title, capped to limit. Tutorials has no `published` column.
+    // NOTE: SQL `IN (...)` does not match NULL, so we cannot use
+    //   `.where({ slug: { in: siblingSlugs }, status: { in: ['ACTIVE', null] } })`.
+    // Instead: fetch status alongside slug/title and filter in JS.
+    // Community sibling sets are small (hard-capped 50) so this is fine.
     const tutRows = await db.run(
-      SELECT.from(Tutorials).columns('slug', 'title')
-        .where({ slug: { in: siblingSlugs }, status: 'ACTIVE' })
+      SELECT.from(Tutorials).columns('slug', 'title', 'status')
+        .where({ slug: { in: siblingSlugs } })
         .orderBy('title asc')
     );
-    const peers = tutRows.slice(0, limit).map((t) => ({
-      slug: t.slug,
-      title: t.title,
-      url: `https://developers.sap.com/tutorials/${t.slug}.html`,
-    }));
+    const peers = tutRows
+      .filter((t) => !t.status || t.status === 'ACTIVE')
+      .slice(0, limit)
+      .map((t) => ({
+        slug: t.slug,
+        title: t.title,
+        url: `https://developers.sap.com/tutorials/${t.slug}.html`,
+      }));
     if (peers.length === 0) return { peers: [], reason: 'no-published-peers' };
 
     // 4. Attach the cluster label if one exists.
