@@ -205,6 +205,7 @@ export default defineConfig({
           { text: '@cap-js/ai plugin',         link: '/developers/reference/cap-ai-plugin' },
           { text: 'Adding a verb (checklist)', link: '/developers/reference/adding-a-verb' },
           { text: 'CAP / CDS gotchas',         link: '/developers/reference/cap-cds-gotchas' },
+          { text: 'Community blog RSS transport', link: '/developers/reference/community-rss-transport' },
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
           { text: 'Design decisions',          link: '/developers/reference/design-decisions' },
           { text: 'External integrations',     link: '/developers/reference/external-integrations' },
