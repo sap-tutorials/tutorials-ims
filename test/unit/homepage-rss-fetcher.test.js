@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchRssItems, _resetForTests } from '../../srv/lib/homepage-rss-fetcher.js';
 import { _setLookupForTests } from '../../srv/lib/safe-fetch.js';
+import * as curlTransport from '../../srv/lib/curl-transport.js';
 
 beforeEach(() => {
   _resetForTests();
@@ -103,5 +104,35 @@ describe('fetchRssItems — khoros mode', () => {
       'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-sap', { limit: 5 });
     expect(items).toHaveLength(1);
     expect(items[0].link).toBe('https://community.sap.com/x/ba-p/1');
+  });
+
+  it('rejects injection chars in board.id and falls back to curl transport', async () => {
+    const curlSpy = vi.spyOn(curlTransport, 'curlFetch').mockImplementation(async () => ({
+      ok: false,
+      status: 0,
+      headers: { get: () => null },
+      text: async () => '',
+    }));
+    // board.id contains SQL injection attempt
+    const maliciousUrl = "https://community.sap.com/khhcw49343/rss/board?board.id=x'%20OR%20'1'='1";
+    const items = await fetchRssItems(maliciousUrl, { limit: 5 });
+    expect(items).toEqual([]);
+    // Verify curlFetch was called (proof of fallback to curl transport)
+    expect(curlSpy).toHaveBeenCalled();
+  });
+
+  it('rejects missing board.id and falls back to curl transport', async () => {
+    const curlSpy = vi.spyOn(curlTransport, 'curlFetch').mockImplementation(async () => ({
+      ok: false,
+      status: 0,
+      headers: { get: () => null },
+      text: async () => '',
+    }));
+    // Feed URL with no board.id param (different query param type)
+    const urlNoBoardId = 'https://community.sap.com/khhcw49343/rss/Community?interaction.style=blog';
+    const items = await fetchRssItems(urlNoBoardId, { limit: 5 });
+    expect(items).toEqual([]);
+    // Verify curlFetch was called (proof of fallback to curl transport)
+    expect(curlSpy).toHaveBeenCalled();
   });
 });
