@@ -23,10 +23,13 @@ export interface ConceptPayload {
   slug: string
   name: string
   description: string
-  teaches: { slug: string; title: string }[]
-  requires: { slug: string; name: string }[]
-  requiredBy: { slug: string; name: string }[]
-  relatedTo: { slug: string; name: string }[]
+  // #1127: teaches carries tutorial difficulty + step count (both plain
+  // columns — no NCLOB). requires/requiredBy/relatedTo carry the concept's
+  // String(500) description for the enriched card body.
+  teaches: { slug: string; title: string; experienceTag?: string; stepCount?: number }[]
+  requires: { slug: string; name: string; description?: string }[]
+  requiredBy: { slug: string; name: string; description?: string }[]
+  relatedTo: { slug: string; name: string; description?: string }[]
   // Phase 4.1 (#447): learning journeys covering this concept. Empty until the
   // weekly fetch-learning-journeys cron has populated LearningJourneyConceptLinks.
   learningJourneys?: Array<{
@@ -161,18 +164,33 @@ export function yamlEscape(s: string): string {
 }
 
 export function frontmatter(c: ConceptPayload): string {
-  // Empty arrays emit ` []` (leading space). The caller concatenates as
-  // `relatedTo:${refs(c.relatedTo)}`, so without the leading space the
-  // result is `relatedTo:[]` (no space after colon) — invalid YAML, fails
-  // Hugo's frontmatter parser. Surfaced when the first batch of published
-  // concepts ran through rebuild-content.yml on 2026-06-30 (workflow run
-  // 28445308441). Discovered because PR #802 newly invoked fetch-concepts
-  // in CI; the bug had been latent in #685's emission code since no real
-  // data had reached this code path until then.
-  const refs = (arr: { slug: string; title?: string; name?: string }[]) =>
-    arr.length === 0
-      ? ' []'
-      : '\n' + arr.map(r => `  - slug: ${yamlEscape(r.slug)}\n    title: ${yamlEscape(r.title ?? r.name ?? '')}`).join('\n')
+  // #1127: cross-link entries now carry optional enrichment fields —
+  // experienceTag/stepCount for tutorials (teaches), description for
+  // concepts (requires/requiredBy/relatedTo). Emitted only when present;
+  // empty arrays still serialize as " []" to keep the YAML valid (a bare
+  // `relatedTo:[]` with no space fails Hugo's frontmatter parser — see the
+  // 2026-06-30 rebuild incident).
+  type Ref = {
+    slug: string
+    title?: string
+    name?: string
+    experienceTag?: string
+    stepCount?: number
+    description?: string
+  }
+  const refs = (arr: Ref[]) => {
+    if (arr.length === 0) return ' []'
+    return '\n' + arr.map(r => {
+      const lines = [
+        `  - slug: ${yamlEscape(r.slug)}`,
+        `    title: ${yamlEscape(r.title ?? r.name ?? '')}`,
+      ]
+      if (r.experienceTag) lines.push(`    experienceTag: ${yamlEscape(r.experienceTag)}`)
+      if (r.stepCount != null) lines.push(`    stepCount: ${r.stepCount}`)
+      if (r.description) lines.push(`    description: ${yamlEscape(r.description)}`)
+      return lines.join('\n')
+    }).join('\n')
+  }
 
   // Phase 4.1 (#447): emit `learningJourneys` only when non-empty. The Hugo
   // concept template at layouts/concepts/single.html guards on `{{ with

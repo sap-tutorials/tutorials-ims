@@ -97,7 +97,9 @@ export async function buildConceptsPayload(db) {
       .columns(
         'concept_ID',
         'tutorial.slug as tutorial_slug',
-        'tutorial.title as tutorial_title'
+        'tutorial.title as tutorial_title',
+        'tutorial.experienceTag as tutorial_experienceTag',
+        'tutorial.stepCount as tutorial_stepCount'
       )
       .where({ predicate: 'teaches' })
   )).filter(r => idsSet.has(r.concept_ID));
@@ -108,7 +110,12 @@ export async function buildConceptsPayload(db) {
     // (manual SQL, migrations, schema regressions — see #789).
     teachesRows.filter(r => r.tutorial_slug != null && r.tutorial_title != null),
     'concept_ID',
-    r => ({ slug: r.tutorial_slug.toLowerCase(), title: r.tutorial_title })
+    r => ({
+      slug: r.tutorial_slug.toLowerCase(),
+      title: r.tutorial_title,
+      ...(r.tutorial_experienceTag != null ? { experienceTag: r.tutorial_experienceTag } : {}),
+      ...(r.tutorial_stepCount != null ? { stepCount: r.tutorial_stepCount } : {}),
+    })
   );
 
   // 3. Outgoing edges (requires + relatedTo) per concept.
@@ -117,7 +124,8 @@ export async function buildConceptsPayload(db) {
       .columns(
         'source_ID', 'predicate',
         'target.slug as target_slug',
-        'target.name as target_name'
+        'target.name as target_name',
+        'target.description as target_description'
       )
       .where({ status: 'ACTIVE' })
   )).filter(r => idsSet.has(r.source_ID));
@@ -128,7 +136,8 @@ export async function buildConceptsPayload(db) {
       .columns(
         'target_ID', 'predicate',
         'source.slug as source_slug',
-        'source.name as source_name'
+        'source.name as source_name',
+        'source.description as source_description'
       )
       .where({ status: 'ACTIVE', predicate: 'requires' })
   )).filter(r => idsSet.has(r.target_ID));
@@ -136,17 +145,29 @@ export async function buildConceptsPayload(db) {
   const requiresByConcept = groupBy(
     outgoingRows.filter(r => r.predicate === 'requires'),
     'source_ID',
-    r => ({ slug: r.target_slug.toLowerCase(), name: r.target_name })
+    r => ({
+      slug: r.target_slug.toLowerCase(),
+      name: r.target_name,
+      ...(r.target_description ? { description: r.target_description } : {}),
+    })
   );
   const relatedToByConcept = groupBy(
     outgoingRows.filter(r => r.predicate === 'relatedTo'),
     'source_ID',
-    r => ({ slug: r.target_slug.toLowerCase(), name: r.target_name })
+    r => ({
+      slug: r.target_slug.toLowerCase(),
+      name: r.target_name,
+      ...(r.target_description ? { description: r.target_description } : {}),
+    })
   );
   const requiredByConcept = groupBy(
     incomingRows,
     'target_ID',
-    r => ({ slug: r.source_slug.toLowerCase(), name: r.source_name })
+    r => ({
+      slug: r.source_slug.toLowerCase(),
+      name: r.source_name,
+      ...(r.source_description ? { description: r.source_description } : {}),
+    })
   );
 
   // 5. Phase 4.1 (#447 §2.6): learning journeys covering each concept.
