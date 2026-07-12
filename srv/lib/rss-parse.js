@@ -104,20 +104,41 @@ export function parseRss(xml, { log } = {}) {
  * Browser-shaped User-Agent used when fetching SAP Community feeds.
  *
  * Cloudflare returns HTTP 403 to the default Node fetch UA on the
- * community.sap.com feeds (verified 2026-07-07). A common desktop-browser
- * UA passes the challenge. This is a facts-of-life constant, not
- * admin-editable — if the challenge shape ever shifts, bump the constant.
+ * community.sap.com feeds. A common desktop-browser UA (plus the
+ * client-hint / Sec-Fetch headers below) passes the challenge. This is a
+ * facts-of-life constant, not admin-editable — if the challenge shape ever
+ * shifts, bump the constant.
+ *
+ * History: Chrome/120 passed as of 2026-07-07 but was 403'ing across all
+ * three feeds by 2026-07-12 as Cloudflare tightened its bot check. Bumped
+ * to Chrome/150 (matching the real desktop-Edge traffic hitting this app)
+ * and paired with matching Sec-CH-UA / Sec-Fetch client hints so the
+ * request fingerprint is internally consistent — a modern Chrome UA with
+ * no client hints is itself a bot tell.
  */
 export const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  '(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
 
 /**
  * Header set to use with safeFetch when hitting SAP Community RSS.
- * Includes an Accept header that some CDN edges use to pick the right
- * content-type variant.
+ *
+ * Beyond UA + Accept, we send the browser client-hint (`Sec-CH-UA*`) and
+ * fetch-metadata (`Sec-Fetch-*`) headers a real Chrome sends on a top-level
+ * navigation. Cloudflare's challenge cross-checks these against the UA;
+ * a Chrome UA arriving without them reads as an automated client and gets
+ * the 403. `Accept-Language: en` also nudges the English feed variant.
  */
 export const RSS_FETCH_HEADERS = Object.freeze({
   'User-Agent': BROWSER_UA,
   Accept: 'application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Sec-CH-UA': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+  'Sec-CH-UA-Mobile': '?0',
+  'Sec-CH-UA-Platform': '"Windows"',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
 });

@@ -8,10 +8,15 @@ beforeEach(() => {
   // #895: safeFetch does a DNS lookup on every hop. In unit tests we stub
   // it to return a public IP so the private-IP block passes.
   _setLookupForTests(async () => [{ address: '8.8.8.8', family: 4 }]);
+  // Production defaults to the curl transport (Cloudflare JA3 block — see
+  // srv/lib/curl-transport.js). These tests stub global.fetch, so pin the
+  // native-fetch path; the curl transport has its own test file.
+  process.env.RSS_TRANSPORT = 'fetch';
 });
 
 afterEach(() => {
   _setLookupForTests(null);
+  delete process.env.RSS_TRANSPORT;
 });
 
 const FAKE_RSS = `<?xml version="1.0"?><rss><channel>

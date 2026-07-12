@@ -101,6 +101,13 @@ export async function resolveAndCheckHost(hostname) {
  * @param {number=}      opts.timeoutMs         Default 10000.
  * @param {number=}      opts.maxRedirects      Default 3.
  * @param {object=}      opts.fetchInit
+ * @param {Function=}    opts.fetchImpl        Transport, default global fetch.
+ *                                             Injected for RSS to borrow a
+ *                                             non-Node TLS fingerprint (curl)
+ *                                             past Cloudflare's JA3 challenge.
+ *                                             MUST honor redirect:'manual'
+ *                                             semantics (no auto-follow) so the
+ *                                             per-hop guard below still runs.
  * @returns {Promise<Response>}
  * @throws Error with .code in {'SSRF_BLOCKED','TOO_MANY_REDIRECTS'}.
  */
@@ -111,7 +118,11 @@ export async function safeFetch(url, opts = {}) {
     timeoutMs = 10000,
     maxRedirects = 3,
     fetchInit = {},
+    // Lazily default to the global at CALL time (not module load) so tests
+    // that stubGlobal('fetch', ...) keep intercepting the native path.
+    fetchImpl,
   } = opts;
+  const doFetch = fetchImpl || ((u, init) => fetch(u, init));
 
   let current = url;
   for (let hop = 0; hop <= maxRedirects; hop++) {
@@ -139,10 +150,13 @@ export async function safeFetch(url, opts = {}) {
       err.code = 'SSRF_BLOCKED';
       throw err;
     }
-    const res = await fetch(current, {
+    const res = await doFetch(current, {
       ...fetchInit,
       redirect: 'manual',
       signal: AbortSignal.timeout(timeoutMs),
+      // Hint for non-fetch transports (curl) that can't read the AbortSignal
+      // deadline; native fetch ignores this unknown field.
+      __timeoutMs: timeoutMs,
     });
     if (res.status < 300 || res.status >= 400) {
       return res;
