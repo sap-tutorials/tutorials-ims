@@ -84,11 +84,15 @@ Every file below references the verb list by string. When you add, rename, or re
 
 ### 6. Runtime data seeding (post-deploy)
 
-For a NEW verb, you must seed `HomepageShelves` rows so `/<verb>/` renders shelf entries:
+For a NEW verb, you must seed `HomepageShelves` rows so `/<verb>/` renders shelf entries.
 
-- Insert ~12 rows (3 per shelf × 4 shelves — START_HERE / REFERENCE / TOOLS / KEEP_CURRENT) via `AdminService` or direct SQL, matching the tone of existing verbs
+**Preferred: seed rows in the CSV, not just at runtime.** `db/data/com.sap.developers.ims-HomepageShelves.csv` is safe to add shelf rows to — unlike `VerbDefinitions.csv`/`ShelfDefinitions.csv`, its columns (`title`/`url`/`description`/`badge`/`isExternal`/`isActive`) are content, not admin-authored explainer fields, so the [auto-CSV wipe](./hana-hdi-gotchas.md#auto-csv-replaces-admin-editable-columns-on-every-csv-changing-deploy) mechanism just re-imports the same values. Seeding in the CSV means a CSV-backed build (plain `cds watch`) bakes the verb page correctly instead of empty — the root cause of the #1029 MODEL regression, where MODEL's shelf content existed only in HANA and a SQLite-backed build shipped `/model/` with zero cards. **Before adding rows, confirm live HANA matches the CSV** (diff `MODIFIEDBY`/values) so the hash-change re-import doesn't revert an admin edit.
+
+Guidance for the rows:
+- Insert ~12 rows (3 per shelf × 4 shelves — START_HERE / REFERENCE / TOOLS / KEEP_CURRENT), matching the tone of existing verbs
 - Uniqueness constraint: `@assert.unique.verbUrl` on `(verb, url)` — same URL can appear under multiple verbs
 - Optionally run `AdminService.generateShelfEntryExplainers` to seed the per-link ⓘ popovers
+- The build guard `scripts/check-verb-shelves.cjs` (chained into `build:hugo`) fails the build if any defined verb bakes zero active shelf rows — so a missing-seed verb can no longer ship silently.
 
 ### 7. Tests that reference the count / enumeration
 
