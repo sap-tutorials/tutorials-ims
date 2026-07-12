@@ -266,6 +266,17 @@ export async function runFetchDiscoveryMissions(deps = {}) {
         registry.embeddings.set(pc.ID, pc.embeddingVec);
       }
 
+      // #1115: flip any RETIRED concept whose slug was re-proposed back to ACTIVE.
+      // Must run before the link INSERTs so the FK target is ACTIVE when written.
+      const reactivatedIds = resolution.resolved
+        .filter((r) => r.action === 'reactivated')
+        .map((r) => r.conceptId);
+      if (reactivatedIds.length > 0) {
+        await UPDATE(Concepts)
+          .set({ status: 'ACTIVE', lastSeenAt: now })
+          .where({ ID: { in: reactivatedIds } });
+      }
+
       // Replace existing concept links for this mission.
       await DELETE.from(DiscoveryMissionConceptLinks).where({ mission_ID: missionRow.ID });
 

@@ -103,7 +103,7 @@ concepts to newly relevant tutorials) — it just can no longer *grow* it.
 **New file:** `srv/jobs/kg-retire-orphans-job.js`, exported as `runRetireOrphans`,
 registered in `srv/jobs/scheduler.js` as job `kg-retire-orphans`.
 
-- **Schedule:** `23 4 * * *` (04:23 UTC). After WCC (04:07) and featured-topics
+- **Schedule:** `37 4 * * *` (04:37 UTC). After WCC (04:07) and featured-topics
   (04:13); off-minute per the scheduler convention. Retirement sees the fully
   settled nightly graph. `ttlMs: 600000`.
 - **Retirement criteria** — a concept is retired when ALL hold:
@@ -244,7 +244,7 @@ doc-change (annotation-only, but runtime-checked).
 | `srv/jobs/extract-concepts-job.js` | Handle `'reactivated'` — flip to ACTIVE in-tx, write link |
 | `srv/jobs/fetch-learning-journeys-job.js` (+ other Phase 4 mint callers) | Handle `'reactivated'` symmetrically |
 | `srv/jobs/kg-retire-orphans-job.js` | **New** — nightly retirement job |
-| `srv/jobs/scheduler.js` | Register `kg-retire-orphans` at `23 4 * * *` |
+| `srv/jobs/scheduler.js` | Register `kg-retire-orphans` at `37 4 * * *` |
 | `test/unit/kg-retire-orphans-job.test.js` | **New** — criteria + exclusion |
 | `test/unit/kg-ondemand-job.test.js` | Extend — link-only + floor |
 | `test/unit/kg-extract.test.js` / merge tests | Extend — reactivation path |

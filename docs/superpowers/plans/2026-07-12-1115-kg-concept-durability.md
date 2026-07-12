@@ -32,7 +32,7 @@
 | `srv/jobs/extract-concepts-job.js` | Handle `'reactivated'` — flip row to ACTIVE in-tx + write link |
 | `srv/jobs/kg-ondemand-job.js` | `defaultPersistExtraction` → link-only (drop mints), 0.7 floor, `mintsSkipped` |
 | `srv/jobs/kg-retire-orphans-job.js` | **New** — nightly retirement job |
-| `srv/jobs/scheduler.js` | Register `kg-retire-orphans` at `23 4 * * *` |
+| `srv/jobs/scheduler.js` | Register `kg-retire-orphans` at `37 4 * * *` |
 | `test/unit/srv/kg-merge-on-write.test.js` | Extend — reactivation path |
 | `test/unit/kg-ondemand-job.test.js` | Extend — link-only + floor |
 | `test/unit/kg-retire-orphans-job.test.js` | **New** — criteria + exclusion |
@@ -842,7 +842,7 @@ git commit -m "feat(#1115): kg-retire-orphans job — retire zero-link ACTIVE co
 
 **Interfaces:**
 - Consumes: `runRetireOrphans` from Task 5.
-- Produces: scheduled job `kg-retire-orphans` at `23 4 * * *`; also runnable via `AdminService.JobControls.runJob('kg-retire-orphans')`.
+- Produces: scheduled job `kg-retire-orphans` at `37 4 * * *`; also runnable via `AdminService.JobControls.runJob('kg-retire-orphans')`.
 
 - [ ] **Step 1: Add the import**
 
@@ -857,14 +857,14 @@ import { runRetireOrphans } from './kg-retire-orphans-job.js';
 In `registerJobs()`, after the `kg-featured-topics` block (schedule `13 4 * * *`, ~line 673), add:
 
 ```js
-  // Daily 04:23 UTC — retire truly-orphaned concepts (#1115). Runs after
+  // Daily 04:37 UTC — retire truly-orphaned concepts (#1115). Runs after
   // WCC (04:07) and featured-topics (04:13) so it sees the fully settled
-  // nightly graph. Off-minute :23 per the scheduler convention. Fail-open:
+  // nightly graph. Off-minute :37 per the scheduler convention. Fail-open:
   // errors → PipelineLog FAILED, never break request-time reads.
   // Spec: docs/superpowers/specs/2026-07-12-1115-kg-concept-durability-design.md
   registerJob({
     jobName: 'kg-retire-orphans',
-    schedule: '23 4 * * *',
+    schedule: '37 4 * * *',
     ttlMs: 600000,
     description: 'Retire zero-link ACTIVE concepts older than KG_RETIRE_ORPHANS_AGE_DAYS (#1115)',
     fn: () => runRetireOrphans(),
@@ -880,7 +880,7 @@ Expected: tests PASS, `compile OK`. (If a scheduler unit test exists — check `
 
 ```bash
 git add srv/jobs/scheduler.js
-git commit -m "feat(#1115): register kg-retire-orphans job at 04:23 UTC"
+git commit -m "feat(#1115): register kg-retire-orphans job at 04:37 UTC"
 ```
 
 ---
@@ -992,7 +992,7 @@ Expected: clean deploy.
 In `D:\projects\tutorials-poc\CLAUDE.md`, under "Top Gotchas", add:
 
 ```markdown
-- **`KG_RETIRE_ORPHANS_ENABLED` / `KG_RETIRE_ORPHANS_AGE_DAYS` (issue #1115)** — nightly `srv/jobs/kg-retire-orphans-job.js` at 04:23 UTC flips `Concepts.status` ACTIVE→RETIRED for concepts with zero links across all 10 link tables and `firstSeenAt` older than `KG_RETIRE_ORPHANS_AGE_DAYS` (default 14). RETIRED falls out of every read path (all filter `status='ACTIVE'` positively). Reversible: `cf set-env tutorials-srv KG_RETIRE_ORPHANS_ENABLED false` (off) or bulk `UPDATE Concepts SET status='ACTIVE' WHERE status='RETIRED'` (data revert). Companion fix: on-demand extraction (#948) is now **link-only** — it attaches existing concepts (0.7 floor) but never mints, and a re-proposed retired slug is reactivated in-tx by `kg-merge-on-write.js` (`retiredBySlug` + `action:'reactivated'`).
+- **`KG_RETIRE_ORPHANS_ENABLED` / `KG_RETIRE_ORPHANS_AGE_DAYS` (issue #1115)** — nightly `srv/jobs/kg-retire-orphans-job.js` at 04:37 UTC flips `Concepts.status` ACTIVE→RETIRED for concepts with zero links across all 10 link tables and `firstSeenAt` older than `KG_RETIRE_ORPHANS_AGE_DAYS` (default 14). RETIRED falls out of every read path (all filter `status='ACTIVE'` positively). Reversible: `cf set-env tutorials-srv KG_RETIRE_ORPHANS_ENABLED false` (off) or bulk `UPDATE Concepts SET status='ACTIVE' WHERE status='RETIRED'` (data revert). Companion fix: on-demand extraction (#948) is now **link-only** — it attaches existing concepts (0.7 floor) but never mints, and a re-proposed retired slug is reactivated in-tx by `kg-merge-on-write.js` (`retiredBySlug` + `action:'reactivated'`).
 ```
 
 - [ ] **Step 4: Commit**

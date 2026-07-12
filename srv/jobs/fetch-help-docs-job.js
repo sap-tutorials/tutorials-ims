@@ -298,6 +298,17 @@ export async function runFetchHelpDocs(logId, opts = {}) {
           if (registry.embeddings) registry.embeddings.set(pc.ID, pc.embeddingVec);
         }
 
+        // #1115: flip any RETIRED concept whose slug was re-proposed back to ACTIVE.
+        // Must run before the link INSERTs so the FK target is ACTIVE when written.
+        const reactivatedIds = resolution.resolved
+          .filter((r) => r.action === 'reactivated')
+          .map((r) => r.conceptId);
+        if (reactivatedIds.length > 0) {
+          await UPDATE(Concepts)
+            .set({ status: 'ACTIVE', lastSeenAt: now })
+            .where({ ID: { in: reactivatedIds } });
+        }
+
         // 13. Look up our helpDoc's ID.
         const hdRow = await SELECT.one.from(HelpDocs).columns('ID').where({ slug });
         if (!hdRow) {
