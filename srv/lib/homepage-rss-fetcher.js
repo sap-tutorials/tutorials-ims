@@ -13,8 +13,15 @@
 import cds from '@sap/cds';
 import { safeFetch } from './safe-fetch.js';
 import { parseRss, RSS_FETCH_HEADERS } from './rss-parse.js';
+import { curlFetch } from './curl-transport.js';
 
 const log = cds.log('homepage-rss-fetcher');
+
+// Same Cloudflare JA3 block as the community-blogs cron — route through curl
+// by default; RSS_TRANSPORT=fetch reverts to native fetch. See
+// srv/lib/curl-transport.js.
+const rssTransport = () =>
+  (process.env.RSS_TRANSPORT === 'fetch' ? undefined : curlFetch);
 
 const TTL_MS     = 30 * 60 * 1000;  // 30 minutes
 const TIMEOUT_MS = 5000;             // 5 seconds
@@ -68,6 +75,7 @@ export async function fetchRssItems(url, { limit = 5 } = {}) {
       timeoutMs: TIMEOUT_MS,
       maxRedirects: 3,
       fetchInit: { headers: RSS_FETCH_HEADERS },
+      fetchImpl: rssTransport(),
     });
   } catch (err) {
     // Network error / timeout / SSRF_BLOCKED -- do NOT cache; next call will retry

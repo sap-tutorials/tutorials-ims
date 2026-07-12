@@ -19,9 +19,17 @@
 import cds from '@sap/cds';
 import { safeFetch } from './safe-fetch.js';
 import { parseRss, RSS_FETCH_HEADERS } from './rss-parse.js';
+import { curlFetch } from './curl-transport.js';
 import * as metrics from './metrics.js';
 
 const log = cds.log('community-blogs-fetcher');
+
+// Cloudflare on community.sap.com now blocks Node's TLS fingerprint (JA3),
+// not just the UA — see srv/lib/curl-transport.js. Route RSS through curl by
+// default; RSS_TRANSPORT=fetch reverts to native fetch without a redeploy
+// (cf set-env tutorials-srv RSS_TRANSPORT fetch && cf restart).
+const rssTransport = () =>
+  (process.env.RSS_TRANSPORT === 'fetch' ? undefined : curlFetch);
 
 const TIMEOUT_MS = 5000;
 const MAX_REDIRECTS = 3;
@@ -142,6 +150,7 @@ export async function fetchOneSource(source, { db } = {}) {
       timeoutMs: TIMEOUT_MS,
       maxRedirects: MAX_REDIRECTS,
       fetchInit: { headers: RSS_FETCH_HEADERS },
+      fetchImpl: rssTransport(),
     });
   } catch (err) {
     log.warn(`fetchOneSource: ${source.label}: fetch failed:`, err.code || '', err.message);

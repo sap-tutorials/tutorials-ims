@@ -6,11 +6,19 @@
 //   2. Upsert semantics — new URL inserts as PENDING; existing URL refreshes
 //      title/publishedAt but preserves aiVerdict, aiReason, attemptCount.
 
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import cds from '@sap/cds';
 import { fetchOneSource, isEnglish } from '../../srv/lib/community-blogs-fetcher.js';
 
 cds.test('serve', '--project', '.', '--in-memory');
+
+// These tests stub global.fetch to inject fake RSS. Production defaults to the
+// curl transport (Cloudflare JA3 block — see srv/lib/curl-transport.js), which
+// would bypass the stub and shell out for real. Pin the native-fetch path so
+// the transport-independent parse/upsert logic under test keeps using the
+// stub. The curl transport itself is covered in test/unit/curl-transport.test.js.
+beforeEach(() => { process.env.RSS_TRANSPORT = 'fetch'; });
+afterEach(() => { delete process.env.RSS_TRANSPORT; });
 
 // -----------------------------------------------------------------------------
 // isEnglish — pure function, no CAP needed
