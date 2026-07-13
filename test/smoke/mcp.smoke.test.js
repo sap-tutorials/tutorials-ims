@@ -61,6 +61,43 @@ describeIf('MCP smoke — Phase 2 routes and discovery', { timeout: 20_000 }, ()
   });
 });
 
+describeIf('MCP smoke — Phase 3 graph service (resources/prompts)', { timeout: 20_000 }, () => {
+  const MCP_GRAPH = '/mcp/graph';
+
+  it('prompts/list returns >= 4 prompts on /mcp/graph', async () => {
+    const res = await mcpFetch(MCP_GRAPH, { jsonrpc: '2.0', id: 20, method: 'prompts/list', params: {} });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body?.result?.prompts.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('resources/list returns an array on /mcp/graph', async () => {
+    const res = await mcpFetch(MCP_GRAPH, { jsonrpc: '2.0', id: 21, method: 'resources/list', params: {} });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body?.result?.resources)).toBe(true);
+  });
+
+  it('prompts/get summarize_mission_for_beginner echoes mission_slug in message text', async () => {
+    const res = await mcpFetch(MCP_GRAPH, {
+      jsonrpc: '2.0', id: 22, method: 'prompts/get',
+      params: { name: 'summarize_mission_for_beginner', arguments: { mission_slug: 'cap-intro' } },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const text = body?.result?.messages?.[0]?.content?.text ?? '';
+    expect(text).toContain('cap-intro');
+  });
+
+  it('/mcp-admin/* returns 401 without a JWT (approuter XSUAA gate)', async () => {
+    const res = await mcpFetch('/mcp-admin/', {
+      jsonrpc: '2.0', id: 23, method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } },
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
 describeIf('MCP smoke — deployed target', { timeout: 20_000 }, () => {
   it('initialize on /mcp/search returns 200', async () => {
     const res = await mcpFetch(MCP_SEARCH, {
