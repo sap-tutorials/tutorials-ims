@@ -32,7 +32,13 @@ sap.ui.define([
         // disabled platform-wide" info strip. Flipping on activates the
         // branch recommender, getBranchRecommendation Joule tool, and
         // mission alt-group rendering (see docs/authors/pilot-runbook.md).
-        branchingEnabled: false
+        branchingEnabled: false,
+        // KG community peers (#1126). Default false to mirror the schema
+        // default (db/schema.cds:667). Flipping on registers the
+        // findCommunityPeers Joule tool; the budget caps the nightly
+        // labeling job's per-day LLM calls (db/schema.cds:672).
+        communityPeersEnabled: false,
+        communityLabelLlmBudgetPerDay: 50
       });
       this.getView().setModel(oJSON, "settings");
       this._loadSettings();
@@ -75,7 +81,9 @@ sap.ui.define([
             embeddingMinScore: data.embeddingMinScore != null ? data.embeddingMinScore : 0.25,
             validateAnswerEnabled: !!data.validateAnswerEnabled,
             codeCheckEnabled: !!data.codeCheckEnabled,
-            branchingEnabled: !!data.branchingEnabled
+            branchingEnabled: !!data.branchingEnabled,
+            communityPeersEnabled: !!data.communityPeersEnabled,
+            communityLabelLlmBudgetPerDay: data.communityLabelLlmBudgetPerDay != null ? data.communityLabelLlmBudgetPerDay : 50
           });
         })
         .catch(function (err) {
@@ -106,7 +114,9 @@ sap.ui.define([
         embeddingMinScore: data.embeddingMinScore === "" || data.embeddingMinScore == null ? null : Number(data.embeddingMinScore),
         validateAnswerEnabled: !!data.validateAnswerEnabled,
         codeCheckEnabled: !!data.codeCheckEnabled,
-        branchingEnabled: !!data.branchingEnabled
+        branchingEnabled: !!data.branchingEnabled,
+        communityPeersEnabled: !!data.communityPeersEnabled,
+        communityLabelLlmBudgetPerDay: parseInt(data.communityLabelLlmBudgetPerDay, 10) || 50
       };
 
       fetch("/admin/$metadata", {
