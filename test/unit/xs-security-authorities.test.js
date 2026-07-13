@@ -111,9 +111,18 @@ describe('Tutorial.MCP scope (#1105)', () => {
       // Custom-scheme wildcards (mcp://*) and unbounded-port loopbacks
       // (http://localhost/*) are OAuth open-redirect hazards; the security
       // review pass caught them and the plan was patched.
+      //
+      // Two fixed callback paths are allowlisted: `/callback` (Claude Desktop's
+      // native loopback) and `/oauth/callback` (what `mcp-remote` hardcodes).
+      // Both keep the RFC 8252 fixed-path requirement — no wildcard path is
+      // reopened. The `/oauth/callback` pair was added for #1105 criterion 8
+      // after a live handshake failed with "redirect_uri does not match the
+      // configuration": mcp-remote's callback path had no matching entry.
       for (const required of [
         'http://127.0.0.1:*/callback',
         'http://localhost:*/callback',
+        'http://127.0.0.1:*/oauth/callback',
+        'http://localhost:*/oauth/callback',
         'https://developers.sap.com/callback'
       ]) {
         expect(uris).toContain(required);
@@ -122,6 +131,8 @@ describe('Tutorial.MCP scope (#1105)', () => {
       for (const hazardous of [
         'http://localhost/*',
         'http://127.0.0.1/*',
+        'http://localhost:*/**',
+        'http://127.0.0.1:*/**',
         'mcp://*'
       ]) {
         expect(uris).not.toContain(hazardous);

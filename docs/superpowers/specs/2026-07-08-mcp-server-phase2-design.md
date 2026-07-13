@@ -133,6 +133,17 @@ Both files are templated per-environment during `mbt build` from `deploy/<env>.m
   - `refresh-token-validity: 2592000` (30 days)
   - No client secret (`authorities-inheritance: false`, PKCE-only)
 
+> **CORRECTION (2026-07-13, #1105 criterion-8 verification):** This bullet is **not
+> implementable as written** and was never built this way. XSUAA auto-creates exactly
+> one client per instance — `sb-<xsappname>!<suffix>` (here `sb-tutorials!t676072`) — and
+> its `oauth2-configuration` cannot define a second, differently-named client. The shipped
+> approach (see the implementation plan) reuses that single default client with PKCE and
+> extends its `redirect-uris` allowlist. Consumers must point `mcp-remote` at the real
+> `sb-tutorials!t676072` id via `--static-oauth-client-info`, **not** a fictional
+> `sb-tutorials-mcp`. The RFC 8252 hardening (commit `30dd44d8`) also replaced the
+> `http://localhost/*` / `mcp://*` wildcards above with fixed `/callback` +
+> `/oauth/callback` paths.
+
 `http://localhost/*` and `http://127.0.0.1/*` are what Claude Desktop's local callback server uses; `mcp://*` is the emerging MCP-native scheme.
 
 ### Approuter route stack (order matters — most-specific first)
