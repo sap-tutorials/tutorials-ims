@@ -262,7 +262,7 @@ export async function graphRebuild({ db, log, graphIri, batchSize } = {}) {
   // — a rebuild is exactly when its underlying data could have changed
   // (new concept published, status flipped), so we bust it too.
   bustTutorialTeachesCache();
-  bustNeighborhoodCache();
+  await bustNeighborhoodCache();
 
   logger.info(
     { graphVersion, tripleCount, durationMs, conceptCount, edgeCount, predicateCounts: predicateCountsObj },

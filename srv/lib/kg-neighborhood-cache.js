@@ -1,31 +1,40 @@
 // srv/lib/kg-neighborhood-cache.js
 //
-// In-process LRU cache for /graph/neighborhood responses.
+// Response cache for /graph/neighborhood, backed by the `cds-caching`
+// plugin (cap-js-community). PROTOTYPE for issue #1177 — replaces the former
+// hand-rolled in-process LRU (Map + manual TTL/eviction) with a CAP caching
+// service so we get tag-based invalidation, metrics, and (in prod) a shared
+// store across CF instances for free.
 //
-// Cache key: `${bucket}\x1f${slug}\x1f${graphVersion}`. When graphVersion
-// changes (nightly rebuild, or admin publish action triggers an ad-hoc
-// rebuild), previously cached entries become unreachable via lookup — and
-// get evicted naturally as the LRU fills with new-version entries.
+// ── Contract preserved from the LRU version ──────────────────────────────
+//   getCachedNeighborhood(slug, graphVersion, bucket?) -> value | undefined
+//   setCachedNeighborhood(slug, graphVersion, value, bucket?) -> void
+//   bustNeighborhoodCache() -> void   (wipes every bucket + version)
+// ...except every function is now ASYNC (the caching service connects over
+// the CAP runtime). All call sites already run inside async handlers, so
+// they simply `await`.
 //
-// The `bucket` parameter (default 'default') isolates responses served by
-// different handlers over the same (slug, graphVersion). The
-// `/graph/neighborhood` handler uses the 'default' bucket; the future
-// `/graph/neighborhoodFull` handler will use 'full'. `bustNeighborhoodCache()`
-// remains a global wipe — a graph rebuild invalidates both buckets together.
+// Cache key: `${bucket}\x1f${slug}\x1f${graphVersion}` — identical shape to
+// the old module, so keys stay graphVersion- and bucket-aware. When
+// graphVersion changes (nightly rebuild / admin publish) old-version keys are
+// unreachable AND graphRebuild() calls bustNeighborhoodCache() to free them.
 //
-// The cache holds the FULL response body the handler returns, so a hit
-// skips ALL remaining DB work (SPARQL, otherResources fan-out, title/publish
-// lookups). Second-view latency for a warm entry is ~1ms.
+// Invalidation: every entry is tagged NEIGHBORHOOD_TAG. bustNeighborhoodCache()
+// is a single deleteByTag() — matching the old global-wipe semantics (a graph
+// rebuild invalidates both the 'default' and 'full' buckets together).
 //
-// Wired into srv/knowledge-graph-service.js at the two TODO points the
-// original author left: line 580 (lookup after SPARQL round-trip) and
-// line 972 (store after everything is enriched).
+// TTL and eviction are now owned by the caching service (config in
+// package.json under cds.requires.caching), NOT this module — so the former
+// MAX_ENTRIES / insertion-order-LRU / fake-timer plumbing is gone.
 
-const MAX_ENTRIES = 500;
+import cds from '@sap/cds';
+
 const TTL_MS = 5 * 60 * 1000;
+const NEIGHBORHOOD_TAG = 'kg-neighborhood';
 
-// Allowed bucket names. Kept as a Set at module scope so validation is O(1)
-// and it's cheap to extend when a third response shape gets added.
+// Allowed bucket names — unchanged from the LRU version. 'default' = sidebar
+// neighborhood handler; 'full' = neighborhoodFull handler. Validation is O(1)
+// and cheap to extend when a third response shape lands.
 const ALLOWED_BUCKETS = new Set(['default', 'full']);
 
 function assertValidBucket(bucket) {
@@ -37,71 +46,83 @@ function assertValidBucket(bucket) {
   }
 }
 
-// Simple insertion-ordered LRU: Map iteration order is insertion order,
-// so `map.keys().next()` gives us the oldest key when we need to evict.
-// On every hit we re-insert to move to the tail.
-const cache = new Map();
-
 function makeKey(slug, graphVersion, bucket = 'default') {
   return `${bucket}\x1f${slug}\x1f${graphVersion ?? 'null'}`;
 }
 
+// Memoized connection to the caching service. cds.connect.to caches
+// internally too, but we keep our own promise so a burst of concurrent
+// lookups on a cold module shares one connect round-trip.
+let _cachePromise;
+function cache() {
+  if (!_cachePromise) _cachePromise = cds.connect.to('caching');
+  return _cachePromise;
+}
+
 /**
  * Look up a cached NeighborhoodResult by (slug, graphVersion, bucket).
- * Returns undefined on miss OR on TTL-expired entry.
- * On a hit, moves the entry to the tail (LRU refresh).
+ * Returns undefined on miss OR expired entry (TTL enforced by the store).
+ * Fail-open: any caching-service fault resolves to undefined (cache miss),
+ * so the handler falls through to the DB path rather than erroring.
  */
-export function getCachedNeighborhood(slug, graphVersion, bucket = 'default') {
+export async function getCachedNeighborhood(slug, graphVersion, bucket = 'default') {
   assertValidBucket(bucket);
-  const key = makeKey(slug, graphVersion, bucket);
-  const entry = cache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() - entry.cachedAt >= TTL_MS) {
-    cache.delete(key);
+  try {
+    const c = await cache();
+    const v = await c.get(makeKey(slug, graphVersion, bucket));
+    // cds-caching returns undefined/null on miss; normalize to undefined.
+    return v == null ? undefined : v;
+  } catch (err) {
+    cds.log('kg-neighborhood-cache').warn(`get failed, treating as miss: ${err.message}`);
     return undefined;
   }
-  // LRU refresh: delete + re-insert moves to tail.
-  cache.delete(key);
-  cache.set(key, entry);
-  return entry.value;
 }
 
 /**
- * Store a NeighborhoodResult in the cache. Evicts the oldest entry if the
- * cache is at capacity.
+ * Store a NeighborhoodResult. Tagged NEIGHBORHOOD_TAG so a single
+ * bustNeighborhoodCache() (deleteByTag) wipes every bucket + version.
+ * Fail-open: a store fault is logged and swallowed — a failed write just
+ * means the next read misses and recomputes.
  */
-export function setCachedNeighborhood(slug, graphVersion, value, bucket = 'default') {
+export async function setCachedNeighborhood(slug, graphVersion, value, bucket = 'default') {
   assertValidBucket(bucket);
-  const key = makeKey(slug, graphVersion, bucket);
-  // If we're at capacity AND this key isn't already present, evict oldest.
-  if (!cache.has(key) && cache.size >= MAX_ENTRIES) {
-    const oldest = cache.keys().next().value;
-    if (oldest !== undefined) cache.delete(oldest);
+  try {
+    const c = await cache();
+    await c.set(makeKey(slug, graphVersion, bucket), value, {
+      ttl: TTL_MS,
+      tags: [{ value: NEIGHBORHOOD_TAG }],
+    });
+  } catch (err) {
+    cds.log('kg-neighborhood-cache').warn(`set failed, entry not cached: ${err.message}`);
   }
-  cache.set(key, { value, cachedAt: Date.now() });
 }
 
 /**
- * Bust the entire cache. Called by graphRebuild() to free memory promptly
- * after a rebuild mints a new graphVersion (the old entries are already
- * unreachable via key lookup, but freeing them saves LRU headroom for
- * new-version entries). Wipes every bucket.
+ * Bust every neighborhood entry (all buckets, all versions) via the shared
+ * tag. Called by graphRebuild() after a new graphVersion is minted.
+ * Fail-open: a bust fault is logged; stale entries then expire via TTL.
  */
-export function bustNeighborhoodCache() {
-  cache.clear();
-}
-
-/**
- * Test seam: introspect cache state. Not for production callers.
- */
-export function _cacheStats() {
-  return { size: cache.size, maxEntries: MAX_ENTRIES, ttlMs: TTL_MS };
+export async function bustNeighborhoodCache() {
+  try {
+    const c = await cache();
+    await c.deleteByTag(NEIGHBORHOOD_TAG);
+  } catch (err) {
+    cds.log('kg-neighborhood-cache').warn(`bust failed, relying on TTL: ${err.message}`);
+  }
 }
 
 /**
  * Test seam: expose the key builder so tests can assert stability and
- * bucket-sensitivity without reaching into cache internals.
+ * bucket-sensitivity without reaching into the caching store.
  */
 export function _makeKey(slug, graphVersion, bucket = 'default') {
   return makeKey(slug, graphVersion, bucket);
+}
+
+/**
+ * Test seam: reset the memoized connection so a test that boots a fresh
+ * cds runtime doesn't reuse a stale service handle.
+ */
+export function _resetConnection() {
+  _cachePromise = undefined;
 }
