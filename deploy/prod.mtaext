@@ -15,12 +15,12 @@ modules:
       app-name: tutorials-prod-approuter
       instances: 2
       keep-existing-routes: true
-      env:
-        # TODO: verify exact prod tenant string — using developers-sap as placeholder
-        # (matches the xsuaa-imsprod service name pattern and the SAP developers portal domain)
-        XSUAA_TENANT: "developers-sap"
-        XSUAA_REGION: "eu10"
-        APPROUTER_BASE_URL: "https://developers.sap.com"
+      # NB: module-level `env:` is silently dropped at deploy time (see dev.mtaext).
+      # The former XSUAA_TENANT/XSUAA_REGION/APPROUTER_BASE_URL entries never
+      # reached the approuter runtime. OAuth discovery docs (#1105) are generated
+      # dynamically from the bound xsuaa VCAP credentials + request host, so no
+      # per-env config is needed — the prod tenant/region resolve automatically
+      # from the xsuaa-imsprod binding, resolving the old "verify prod tenant" TODO.
     properties:
       # REBUILD_API_KEY was formerly injected here — removed in PR #903
       # rollout step 3 (#871 follow-up). APPROUTER_URL followed the same
