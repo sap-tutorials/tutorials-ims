@@ -40,22 +40,66 @@ sap.ui.define([
   }
 
   // Resolve the active List Report view from whatever shape FE V4 hands the
-  // press handler (UI5 Event → getSource; else fall back to the known
-  // container-<app>---<view> id). Mirrors TagImportController._resolveView.
+  // press handler. FE V4 calls a plain-module toolbar handler with a CONTEXT
+  // ARRAY (not a UI5 Event), so `arg.getSource` is usually undefined — we must
+  // resolve the view by other means. We CANNOT hardcode the standalone FE id
+  // (`container-<app>---sap.fe.templates.ListReport.view.ListReport`): inside
+  // admin-shell this app runs as a componentUsage, so the real view id is the
+  // manifest routing-target id `sap.tutorials.admin.pats::PATsListTarget`. The
+  // hardcoded id resolved to null there → "Could not resolve the List Report
+  // view" on every Mint press in the shell, while standalone `cds watch` (which
+  // uses the container id) stayed green — so it shipped in #1132. (#1105)
+  //
+  // Robust strategy, in order:
+  //   1. Walk up from arg.getSource() when arg IS a UI5 Event.
+  //   2. Walk up from any known-stable FE control inside the ListReport (the
+  //      inner table id is deterministic) via ElementRegistry.
+  //   3. Scan ElementRegistry for the ListReport view by id suffix.
+  // All three are shell/standalone-agnostic.
+  function _viewFromControl(ctrl) {
+    while (ctrl && !(ctrl.isA && ctrl.isA("sap.ui.core.mvc.View"))) {
+      ctrl = ctrl.getParent && ctrl.getParent();
+    }
+    return ctrl || null;
+  }
+
   function _resolveView(arg) {
     if (_resolvedView) return _resolvedView;
     let candidate = null;
+
+    // (1) UI5 Event shape.
     if (arg && typeof arg.getSource === "function") {
-      candidate = arg.getSource();
-      while (candidate && !candidate.isA("sap.ui.core.mvc.View")) {
-        candidate = candidate.getParent && candidate.getParent();
+      candidate = _viewFromControl(arg.getSource());
+    }
+
+    // (2)/(3) Registry-based resolution — works in both the admin-shell
+    // (componentUsage id prefix `...::PATsListTarget`) and standalone.
+    if (!candidate) {
+      // sap/ui/core/ElementRegistry (Element.registry is deprecated as of 1.120).
+      const registry = sap.ui.require("sap/ui/core/ElementRegistry");
+      if (registry) {
+        // (2) Anchor on the deterministic inner-table id, then walk up.
+        const anchor = registry.get(
+          "sap.tutorials.admin.pats::PATsListTarget--fe::table::MyPATs::LineItem-innerTable"
+        );
+        candidate = _viewFromControl(anchor);
+
+        // (3) Fall back to scanning for the ListReport view by id suffix.
+        if (!candidate) {
+          registry.forEach(function (el, id) {
+            if (candidate) return;
+            if (
+              el.isA &&
+              el.isA("sap.ui.core.mvc.View") &&
+              /pats::PATsListTarget$/.test(id)
+            ) {
+              candidate = el;
+            }
+          });
+        }
       }
     }
-    if (!candidate) {
-      candidate = sap.ui.getCore().byId(
-        "container-sap.tutorials.admin.pats---sap.fe.templates.ListReport.view.ListReport"
-      );
-    }
+
     _resolvedView = candidate || null;
     return _resolvedView;
   }
