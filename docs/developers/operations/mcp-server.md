@@ -262,9 +262,21 @@ Phase 3 introduces four additional feature flags. All default to `true` (enabled
 
 ### `/mcp-admin/*` access control
 
-The approuter enforces XSUAA on `/mcp-admin/*` (no anonymous access). Inside the compose router each admin tool carries a per-action `@requires` annotation providing fine-grained gating on top of the approuter's scope check:
+The approuter enforces XSUAA on `/mcp-admin/*` (no anonymous access). Inside the compose router, `AdminService` carries `@requires: 'Admin'` at the **service level**, so that scope is ANDed with every per-tool scope before any admin tool is dispatched. Each admin tool additionally carries a per-action `@requires` annotation for finer gating. An admin caller therefore needs all three: the approuter's route scope, the service-level `Admin` scope, and the per-tool scope.
+
+Effective scope requirement per tool:
+
+| Tool | Approuter (route) | Service level | Per-tool |
+|---|---|---|---|
+| `merge_concepts` | `Tutorial.MCP` | `Admin` | `KnowledgeGraph.Admin` |
+| `promote_community_to_mission` | `Tutorial.MCP` | `Admin` | `SuperAdmin` |
+| `publish_content` | `Tutorial.MCP` | `Admin` | `SuperAdmin` |
+| `trigger_rebuild` | `Tutorial.MCP` | `Admin` | `Tutorial.Author` |
+
+> **A caller with `Tutorial.MCP` + `Tutorial.Author` but without `Admin` will receive a 403 from the service layer.** The `Admin` scope must be granted in addition to any per-tool scope.
 
 - `Tutorial.MCP` — required for all `/mcp-admin/*` access (enforced by approuter).
+- `Admin` — required by `AdminService` at the service level (ANDed with per-tool scope).
 - `KnowledgeGraph.Admin` — `merge_concepts`.
 - `SuperAdmin` — `promote_community_to_mission`, `publish_content`.
 - `Tutorial.Author` — `trigger_rebuild`.

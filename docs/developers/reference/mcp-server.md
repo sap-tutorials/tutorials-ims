@@ -645,6 +645,8 @@ Notes:
 
 These tools are mounted under `/mcp-admin/*` by `srv/lib/mcp-compose-router.js`. They require a valid XSUAA bearer with the scopes listed below — the approuter enforces XSUAA on `/mcp-admin/*`.
 
+> **All admin tools also require the service-level `Admin` scope** (CAP ANDs it with the per-tool scope shown). A caller with `Tutorial.MCP` + `Tutorial.Author` but without `Admin` will receive a 403 from the service layer.
+
 | Tool | Required scope | Wraps |
 |---|---|---|
 | `merge_concepts` | `KnowledgeGraph.Admin` | `KnowledgeGraphService.mergeConcepts` action |
@@ -658,7 +660,7 @@ These tools are mounted under `/mcp-admin/*` by `srv/lib/mcp-compose-router.js`.
 
 ## Phase 3 resources
 
-Three resource URI schemes are served at `/mcp/graph` and `/mcp-auth/api` via the compose layer:
+Three resource URI schemes are served by the compose router. The compose router is mounted at `/mcp/graph` (KnowledgeGraphService) and `/mcp/admin` (AdminService). These mounts are also reachable on the authenticated surfaces: the approuter rewrites `/mcp-auth/*` → srv `/mcp/*` and `/mcp-pat/*` → srv `/mcp/*`, so resources are accessible at all three surfaces. There is no `/mcp-auth/api` resources endpoint.
 
 | URI scheme | What it returns |
 |---|---|
