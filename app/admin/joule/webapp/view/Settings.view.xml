@@ -101,6 +101,31 @@
         </f:SimpleForm>
       </Panel>
 
+      <!-- KG community peers (issue #1126). communityPeersEnabled defaults OFF
+           in the schema (db/schema.cds:667). When on, the findCommunityPeers
+           Joule tool is registered and "what to learn next" answers surface
+           sibling tutorials from the same Louvain community plus the
+           LLM-generated cluster label. Depends on the nightly community
+           detection (03:57 UTC) + labeling (04:12 UTC) jobs having populated
+           KgCommunity / KgCommunityLabel — flipping this on with no cluster
+           data yields empty peer sets, not an error. communityLabelLlmBudgetPerDay
+           caps the labeling job's daily LLM calls. -->
+      <Panel headerText="{i18n>communityPeersSection}" expandable="true" expanded="true" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="{i18n>communityPeersEnabled}" />
+          <Switch state="{settings>/communityPeersEnabled}" />
+
+          <Label text="" />
+          <Text text="{i18n>communityPeersEnabledHelp}" wrapping="true" class="sapUiTinyMarginBottom" />
+
+          <Label text="{i18n>communityLabelBudget}" />
+          <StepInput value="{settings>/communityLabelLlmBudgetPerDay}" min="0" max="500" />
+
+          <Label text="" />
+          <Text text="{i18n>communityLabelBudgetHelp}" wrapping="true" />
+        </f:SimpleForm>
+      </Panel>
+
       <HBox class="sapUiSmallMarginTop">
         <Button text="{i18n>btnSave}" press=".onSave" type="Emphasized" class="sapUiTinyMarginEnd" />
         <Button text="{i18n>btnReload}" press=".onReload" />
