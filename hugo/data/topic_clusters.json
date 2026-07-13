@@ -1,5 +1,174 @@
 {
-  "clusters": [],
-  "buildAt": "1970-01-01T00:00:00.000Z",
+  "clusters": [
+    {
+      "label": "Broad SAP Developer Tutorial Collection",
+      "rationale": "This cluster spans the full breadth of SAP development topics—BTP, HANA, CAP, Fiori, IoT, ML, integration, and more—representing a comprehensive, general-purpose SAP developer learning library rather than a single focused theme.",
+      "communityFingerprint": "762e88f5abb7a9118937c4b5d5304a143bd6ebf7bfbd4033c34d97f8459cf268",
+      "tutorialCount": 1260,
+      "tutorials": [
+        {
+          "slug": "conversational-ai-speech-2-text-recorder",
+          "title": "Add Speech-to-Text to Your Chatbot (with recorder)",
+          "url": "/tutorials/conversational-ai-speech-2-text-recorder"
+        },
+        {
+          "slug": "data-warehouse-cloud-3-add-users",
+          "title": "Add Users and Assign Roles in SAP Data Warehouse Cloud",
+          "url": "/tutorials/data-warehouse-cloud-3-add-users"
+        },
+        {
+          "slug": "sapui5-insert-rest-api",
+          "title": "Add an External API call to your app (Slack)",
+          "url": "/tutorials/sapui5-insert-rest-api"
+        },
+        {
+          "slug": "sapui5-navigate-api",
+          "title": "Add navigation to your External API call (Slack)",
+          "url": "/tutorials/sapui5-navigate-api"
+        }
+      ]
+    },
+    {
+      "label": "SAP HANA Cloud Data Management",
+      "rationale": "All tutorials revolve around deploying, connecting, querying, modeling, migrating, and managing data within the SAP HANA Cloud ecosystem and its related tools and services.",
+      "communityFingerprint": "9bac05ebbc7c7b0b224bb3429f3f07151ac63157222ae31fe5d1b970d035ec73",
+      "tutorialCount": 302,
+      "tutorials": [
+        {
+          "slug": "hana-cloud-mission-extend-10",
+          "title": "Access Data from Amazon S3 in SAP HANA Cloud, SAP HANA Database",
+          "url": "/tutorials/hana-cloud-mission-extend-10"
+        },
+        {
+          "slug": "hana-cloud-mission-extend-11",
+          "title": "Access Data from Google BigQuery in SAP HANA Cloud, SAP HANA Database",
+          "url": "/tutorials/hana-cloud-mission-extend-11"
+        },
+        {
+          "slug": "hana-dbx-remote-sources",
+          "title": "Access Remote Sources with SAP HANA Database Explorer",
+          "url": "/tutorials/hana-dbx-remote-sources"
+        },
+        {
+          "slug": "hana-cloud-alerts-rest-api",
+          "title": "Access SAP HANA Cloud Alerts and Metrics using a REST API",
+          "url": "/tutorials/hana-cloud-alerts-rest-api"
+        }
+      ]
+    },
+    {
+      "label": "SAP BTP ABAP Environment Development",
+      "rationale": "The tutorials collectively cover the full spectrum of developing, deploying, and managing applications on SAP BTP ABAP Environment, including RAP business objects, Fiori elements, CDS views, authorizations, SaaS extensions, and integrations with S/4HANA and other SAP services.",
+      "communityFingerprint": "263f840114e89fc24f48d135ba65c1c329339a172a2d83b2ac5e1ec00758e23c",
+      "tutorialCount": 216,
+      "tutorials": [
+        {
+          "slug": "abap-environment-create-tile",
+          "title": "",
+          "url": "/tutorials/abap-environment-create-tile"
+        },
+        {
+          "slug": "btp-ea-onboard-07-cli",
+          "title": "Account Administration Using the SAP BTP Command Line Interface",
+          "url": "/tutorials/btp-ea-onboard-07-cli"
+        },
+        {
+          "slug": "abap-environment-portal-site-vscode",
+          "title": "Add Cloud Foundry App to Portal Site",
+          "url": "/tutorials/abap-environment-portal-site-vscode"
+        },
+        {
+          "slug": "abap-environment-portal-site-bas",
+          "title": "Add SAP BTP ABAP environment App to Portal Site",
+          "url": "/tutorials/abap-environment-portal-site-bas"
+        }
+      ]
+    },
+    {
+      "label": "SAP BTP Full-Stack App Development",
+      "rationale": "All tutorials collectively cover the end-to-end spectrum of building, deploying, and managing full-stack applications on SAP BTP, spanning UI development, backend services, cloud runtimes, chatbots, multitenancy, and DevOps tooling.",
+      "communityFingerprint": "db2646814b0609a17e1771c2ba941f7f3b54a39d8132187260322f1f2f5c095c",
+      "tutorialCount": 196,
+      "tutorials": [
+        {
+          "slug": "teched-2016-10",
+          "title": "ABC Analysis with SAP HANA PAL",
+          "url": "/tutorials/teched-2016-10"
+        },
+        {
+          "slug": "mobile-start-access-launchpad-site",
+          "title": "Access Your Launchpad Site with SAP Mobile Start",
+          "url": "/tutorials/mobile-start-access-launchpad-site"
+        },
+        {
+          "slug": "haas-dm-access-cross-container-schema",
+          "title": "Access a Classic Schema from SAP Web IDE Full-Stack",
+          "url": "/tutorials/haas-dm-access-cross-container-schema"
+        },
+        {
+          "slug": "personas-access-learning-sys",
+          "title": "Access the SAP Screen Personas Training System",
+          "url": "/tutorials/personas-access-learning-sys"
+        }
+      ]
+    },
+    {
+      "label": "SAP Build Low-Code Platform End-to-End",
+      "rationale": "All tutorials revolve around building, automating, and integrating solutions across the SAP Build suite—including Apps, Process Automation, Work Zone, and Code—on SAP BTP.",
+      "communityFingerprint": "961a78986da0d560a993b8892c5f8f19d7dac822919494ccad5fbe81e24c4451",
+      "tutorialCount": 185,
+      "tutorials": [
+        {
+          "slug": "codejam-01-homepage",
+          "title": "1 - Create the Product List Page",
+          "url": "/tutorials/codejam-01-homepage"
+        },
+        {
+          "slug": "joule-studio-codejam-1-build-lobby",
+          "title": "1 - Open and Explore the SAP Build Lobby",
+          "url": "/tutorials/joule-studio-codejam-1-build-lobby"
+        },
+        {
+          "slug": "codejam-10-action-post",
+          "title": "10 - Create Action Project to Post Data to CAP Service",
+          "url": "/tutorials/codejam-10-action-post"
+        },
+        {
+          "slug": "codejam-11-spa-rework",
+          "title": "11 - Expand Process to Add Rework Flow",
+          "url": "/tutorials/codejam-11-spa-rework"
+        }
+      ]
+    },
+    {
+      "label": "SAP Mobile Development Across Platforms",
+      "rationale": "All tutorials focus on building, configuring, and extending mobile applications using SAP's cross-platform toolkits—including MDK, BTP SDK for iOS and Android, Mobile Cards, and Mobile Services—across native iOS, Android, and low-code development approaches.",
+      "communityFingerprint": "10366de86d76843ee73827c848761a8798327ac1941ad45978d38088091c57fe",
+      "tutorialCount": 165,
+      "tutorials": [
+        {
+          "slug": "fiori-ios-hcpms-setup",
+          "title": "Access SAP Mobile Services",
+          "url": "/tutorials/fiori-ios-hcpms-setup"
+        },
+        {
+          "slug": "fiori-ios-scpms-starter-mission-06",
+          "title": "Adapt Your App to the Needs of a MacOS Application",
+          "url": "/tutorials/fiori-ios-scpms-starter-mission-06"
+        },
+        {
+          "slug": "sdk-android-app-link",
+          "title": "Add App Links to Android Apps",
+          "url": "/tutorials/sdk-android-app-link"
+        },
+        {
+          "slug": "cp-mobile-dev-kit-i18n-localization",
+          "title": "Add Internationalization and Localization to an MDK App",
+          "url": "/tutorials/cp-mobile-dev-kit-i18n-localization"
+        }
+      ]
+    }
+  ],
+  "buildAt": "2026-07-13T11:52:46.429Z",
   "error": null
 }
