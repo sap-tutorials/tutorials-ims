@@ -27,7 +27,8 @@ export function setup() {
     MODE === 'hot'
       ? slugs.tutorialSlugs.slice(0, Math.min(10, slugs.tutorialSlugs.length))
       : null;
-  return { ...slugs, hotSlugs };
+  // k6 0.51.0's Babel transpiler lacks object spread; use Object.assign.
+  return Object.assign({}, slugs, { hotSlugs: hotSlugs });
 }
 
 export default function (data) {
