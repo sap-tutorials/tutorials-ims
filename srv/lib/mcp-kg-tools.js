@@ -39,19 +39,27 @@ export async function handleSharedConcepts(req) {
 const EMPTY_NB = { prerequisites: [], whatToLearnNext: [], sharedConcepts: [], teaches: [] };
 
 /**
- * kg_neighborhood — full graph neighborhood (all arms). PageRank-blended
- * (#916) and isolated-flagged (#918) inside neighborhoodFull; this projects
- * the arms and normalizes `isolated` to a boolean. Fail-open -> empty arms.
+ * kg_neighborhood — full graph neighborhood (all four arms). PageRank-blended
+ * (#916); each tutorial arm item normalizes `isolated` to a boolean (always
+ * false in practice — KgIsolation is set on Concepts entity reads, not on
+ * neighborhood function results). Sources from `neighborhood` (NOT
+ * `neighborhoodFull`) because only `neighborhood` returns the `teaches` arm
+ * (concept items); `neighborhoodFull` deliberately omits it (#850 Task 5).
+ * Fail-open -> empty arms.
  */
 export async function handleNeighborhood(req) {
   const slug = (req.data.slug ?? '').toLowerCase();
   const depth = Math.min(Math.max(req.data.depth ?? 10, 1), 50);
   if (!slug) return { ...EMPTY_NB };
+  // norm handles both tutorial-arm items ({slug, weight, reason, title}) and
+  // concept items ({slug, name, description, published}) from the teaches arm:
+  // - title: prefer i.title (tutorial), fall back to i.name (concept), then slug
+  // - score: prefer i.score, fall back to i.weight (tutorial arm field), then 0
   const norm = (arm) => (arm ?? []).slice(0, depth).map((i) => ({
-    slug: i.slug, title: i.title ?? i.slug, score: i.score ?? 0, isolated: i.isolated === true,
+    slug: i.slug, title: i.title ?? i.name ?? i.slug, score: i.score ?? i.weight ?? 0, isolated: i.isolated === true,
   }));
   try {
-    const nb = await this.send('neighborhoodFull', { slug });
+    const nb = await this.send('neighborhood', { slug });
     return {
       prerequisites:   norm(nb?.prerequisitesOf),
       whatToLearnNext: norm(nb?.whatToLearnNext),

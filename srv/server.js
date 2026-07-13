@@ -469,11 +469,13 @@ cds.on('bootstrap', (app) => {
   // /mcp-admin/* (OAuth tier, admin tools) → /mcp/admin/* rewrite (Phase 3 WS2 #1106).
   // Mirrors /mcp-auth above. The approuter gates /mcp-admin/* with authenticationType:'xsuaa'
   // + scope:'Tutorial.MCP'; per-action @requires (Admin/SuperAdmin/etc.) hides individual
-  // tools at the adapter level. Kill switch: MCP_ADMIN_TOOLS_ENABLED=false returns 503
-  // before the rewrite so no requests reach the mount.
+  // tools at the adapter level. Kill switch: MCP_PHASE3_ENABLED=false or
+  // MCP_ADMIN_TOOLS_ENABLED=false both return 503 before the rewrite so no requests reach
+  // the mount. Docs guarantee: MCP_PHASE3_ENABLED=false → /mcp-admin/* returns 503.
   app.use((req, res, next) => {
     if (!req.url.startsWith('/mcp-admin/') && req.url !== '/mcp-admin') return next();
-    if (mcpFlags().adminTools === false) { return res.status(503).send('Phase 3 admin MCP disabled'); }
+    const f = mcpFlags();
+    if (f.phase3 === false || f.adminTools === false) { return res.status(503).send('Phase 3 admin MCP disabled'); }
     const rest = req.url.slice('/mcp-admin'.length) || '/';
     req.url = '/mcp/admin' + (rest === '/' ? '' : rest);
     if (req.originalUrl) req.originalUrl = req.url;

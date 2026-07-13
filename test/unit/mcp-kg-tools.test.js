@@ -353,32 +353,42 @@ describe('kg_shared_concepts', () => {
 });
 
 // ─── kg_neighborhood — direct-import unit tests (#1106) ──────────────────────
+// handleNeighborhood calls this.send('neighborhood', {slug}) — NOT 'neighborhoodFull'.
+// The mock must reflect the real neighborhood action's return shape:
+//   tutorial-arm items: {slug, title, weight, reason}  (title from enrichLiveTutorials)
+//   teaches items:      {slug, name, description, published}  (concepts, no title)
+// This test verifies that the handler sources teaches from neighborhood correctly.
 describe('kg_neighborhood', () => {
-  const fullResult = {
-    prerequisitesOf: [{ slug: 'p1', title: 'P1', score: 0.9, isolated: false }],
-    whatToLearnNext: [{ slug: 'n1', title: 'N1', score: 0.8 }],
-    sharedConcepts:  [{ slug: 's1', title: 'S1', score: 0.7, isolated: true }],
-    teaches:         [{ slug: 'c1', title: 'C1', score: 0.6 }],
+  // Reflect REAL neighborhood action return shape (not neighborhoodFull):
+  // - tutorial arms carry {slug, title, weight, reason} (title populated by enrichLiveTutorials)
+  // - teaches arm carries concept items {slug, name, description, published}
+  const neighborhoodResult = {
+    prerequisitesOf: [{ slug: 'p1', title: 'P1', weight: 0.9, reason: 'teaches a prerequisite concept', isolated: false }],
+    whatToLearnNext: [{ slug: 'n1', title: 'N1', weight: 0.8, reason: 'next step' }],
+    sharedConcepts:  [{ slug: 's1', title: 'S1', weight: 0.7, reason: 'shares concepts', isolated: true }],
+    teaches:         [{ slug: 'c1', name: 'Concept One', description: '', published: true }],
   };
 
-  it('projects all four arms with isolated defaulted to false', async () => {
-    const srv = { send: vi.fn(async () => fullResult) };
+  it('projects all four arms including teaches, with isolated defaulted to false', async () => {
+    const srv = { send: vi.fn(async () => neighborhoodResult) };
     const out = await handleNeighborhood.call(srv, { data: { slug: 'Foo', depth: 5 } });
-    expect(srv.send).toHaveBeenCalledWith('neighborhoodFull', { slug: 'foo' });
+    expect(srv.send).toHaveBeenCalledWith('neighborhood', { slug: 'foo' });
+    // tutorial arms: title from item.title, score from item.weight
     expect(out.prerequisites[0]).toEqual({ slug: 'p1', title: 'P1', score: 0.9, isolated: false });
     expect(out.sharedConcepts[0].isolated).toBe(true);
     expect(out.whatToLearnNext[0].isolated).toBe(false); // defaulted
-    expect(out.teaches[0].slug).toBe('c1');
+    // teaches arm: title falls back to item.name (concept item has no title), score from weight (undefined → 0)
+    expect(out.teaches[0]).toEqual({ slug: 'c1', title: 'Concept One', score: 0, isolated: false });
   });
 
   it('clamps depth to [1,50] and slices each arm', async () => {
-    const many = Array.from({ length: 60 }, (_, i) => ({ slug: `p${i}`, title: `P${i}`, score: 1 }));
-    const srv = { send: vi.fn(async () => ({ ...fullResult, prerequisitesOf: many })) };
+    const many = Array.from({ length: 60 }, (_, i) => ({ slug: `p${i}`, title: `P${i}`, weight: 1 }));
+    const srv = { send: vi.fn(async () => ({ ...neighborhoodResult, prerequisitesOf: many })) };
     const out = await handleNeighborhood.call(srv, { data: { slug: 'foo', depth: 999 } });
     expect(out.prerequisites).toHaveLength(50);
   });
 
-  it('fail-open: empty arms when neighborhoodFull throws', async () => {
+  it('fail-open: empty arms when neighborhood throws', async () => {
     const srv = { send: vi.fn(async () => { throw new Error('x'); }) };
     const out = await handleNeighborhood.call(srv, { data: { slug: 'foo' } });
     expect(out).toEqual({ prerequisites: [], whatToLearnNext: [], sharedConcepts: [], teaches: [] });
