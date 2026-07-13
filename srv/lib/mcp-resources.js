@@ -62,15 +62,19 @@ export async function readTutorialResource(slug, { db = cds.db, slicer = default
   const s = (slug ?? '').toLowerCase();
   try {
     const row = await db.run(
-      SELECT.one.from(`${NS}.Tutorials`).where({ slug: s }),
+      SELECT.one.from(`${NS}.Tutorials`).where({ slug: s, status: { '!=': 'INACTIVE' } }),
     );
+    // If the tutorial is absent (unpublished/soft-deleted), return empty envelope.
+    if (!row) {
+      return { contents: [jsonBlock(`tutorial://${s}`, { slug: s, title: s, totalSteps: 0, steps: [], tags: [] })] };
+    }
     // Tutorials.tags is Association to many TutorialTags — NOT a plain string.
     // v1 defers real tag expansion; return [] until tag-facet MCP tool lands.
     // TODO tags via TutorialTags assoc — expand when tag-facet MCP tool lands.
     const steps = (await slicer.sliceAllSteps(s)) ?? [];
     const meta = {
       slug:       s,
-      title:      row?.title ?? s,
+      title:      row.title ?? s,
       totalSteps: steps.length,
       steps:      steps.map((st) => ({ n: st.stepNumber, title: st.title })),
       tags:       [],
@@ -97,8 +101,13 @@ export async function readMissionResource(slug, { db = cds.db } = {}) {
   const s = (slug ?? '').toLowerCase();
   try {
     const row = await db.run(
-      SELECT.one.from(`${NS}.Missions`).where({ slug: s }),
+      SELECT.one.from(`${NS}.Missions`).where({ slug: s, published: true, status: 'ACTIVE' }),
     );
+
+    // If the mission is absent (unpublished/inactive), return empty envelope.
+    if (!row) {
+      return { contents: [jsonBlock(`mission://${s}`, { slug: s, title: s, tutorials: [] })] };
+    }
 
     // Step 1: get all CompletionPaths for this mission.
     const paths = await db.run(
@@ -189,15 +198,19 @@ export async function readConceptResource(id, { db = cds.db } = {}) {
  *
  * @param {string} entityFqn  Fully-qualified CDS entity name
  * @param {string} scheme     URI scheme prefix (tutorial, mission, concept)
- * @param {{ db?: object, active?: boolean, nameCol?: string }} opts
+ * @param {{ db?: object, active?: boolean, nameCol?: string, where?: object }} opts
  *   nameCol — the display-name column that actually exists on this entity.
  *   Tutorials/Missions: 'title'.  Concepts: 'name'.
  *   Selecting a column that doesn't exist causes CDS to throw; the caller
  *   must pass the correct value for the target entity.
+ *   active — shorthand for where:{status:'ACTIVE'} (concepts). Takes precedence over `where`.
+ *   where  — CDS-QL predicate object merged into the query (tutorials/missions visibility filter).
+ *            When both `active` and `where` are set, `active` takes precedence.
  */
-async function listResources(entityFqn, scheme, { db, active = false, nameCol = 'title' } = {}) {
+async function listResources(entityFqn, scheme, { db, active = false, nameCol = 'title', where = null } = {}) {
   let q = SELECT.from(entityFqn).columns('ID', 'slug', nameCol).limit(RESOURCE_LIST_CAP + 1);
   if (active) q = q.where({ status: 'ACTIVE' });
+  else if (where) q = q.where(where);
   let rows = [];
   try {
     rows = await db.run(q);
@@ -234,7 +247,7 @@ export function registerResources(server, { db = cds.db, slicer = defaultSlicer 
   server.registerResource(
     'tutorial',
     new ResourceTemplate('tutorial://{slug}', {
-      list: () => listResources(`${NS}.Tutorials`, 'tutorial', { db, nameCol: 'title' }),
+      list: () => listResources(`${NS}.Tutorials`, 'tutorial', { db, nameCol: 'title', where: { status: { '!=': 'INACTIVE' } } }),
     }),
     { title: 'Tutorial', description: 'A published SAP tutorial: metadata, step titles, and rendered HTML.' },
     async (_uri, { slug }) => readTutorialResource(slug, { db, slicer }),
@@ -244,7 +257,7 @@ export function registerResources(server, { db = cds.db, slicer = defaultSlicer 
   server.registerResource(
     'mission',
     new ResourceTemplate('mission://{slug}', {
-      list: () => listResources(`${NS}.Missions`, 'mission', { db, nameCol: 'title' }),
+      list: () => listResources(`${NS}.Missions`, 'mission', { db, nameCol: 'title', where: { published: true, status: 'ACTIVE' } }),
     }),
     { title: 'Mission', description: 'An SAP mission and its ordered tutorial path.' },
     async (_uri, { slug }) => readMissionResource(slug, { db }),

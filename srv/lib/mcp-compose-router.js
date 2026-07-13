@@ -120,10 +120,11 @@ export default function makeComposeRouter(srv) {
       await transport.handleRequest(req, res, req.body);
       await server.close();
     } catch (err) {
-      LOG.error(`compose request failed — ${err.message}`);
+      const correlationId = `mcpc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      LOG.error(`compose request failed [${correlationId}] — ${err.message}`);
       metrics.counter?.('mcp_compose_fallback_total');
       if (!res.headersSent) {
-        res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error: ' + err.message }, id: req.body?.id || null });
+        res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: `Internal error (id: ${correlationId})` }, id: req.body?.id || null });
       }
     }
   });
