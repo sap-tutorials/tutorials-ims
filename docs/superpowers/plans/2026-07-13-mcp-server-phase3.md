@@ -1024,7 +1024,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
-  GetPromptRequestSchema, ListPromptsRequestSchema,
+  GetPromptRequestSchema, ListPromptsRequestSchema, ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 // Adapter internals — deep imports (see spec "Deep-import risk").
 import {
@@ -1059,7 +1059,8 @@ export function flags() {
 export async function buildServer(server, srv, { entities, actions }, deps = {}) {
   const f = flags();
   const prefix = resolvePrefix(srv.definition);
-  // Tools — reuse adapter fns (injected in tests).
+  // Tools — reuse adapter fns (injected in tests). Defined here, invoked AFTER
+  // registerCapabilities below.
   const registerTools = deps.registerTools ?? (() => {
     const entityCount = Object.keys(entities).length;
     const actionCount = Object.keys(actions).length;
@@ -1067,24 +1068,34 @@ export async function buildServer(server, srv, { entities, actions }, deps = {})
       registerGenericReadTool(server, srv, entities, prefix);
       (cds.env.mcp?.per_action_tool ? registerPerActionTools : registerCallActionTool)(server, srv, actions, prefix);
       registerDescribeTool(server, srv, entities, actions, prefix);
+    } else {
+      // Adapter parity: an empty service still answers tools/list with {tools:[]}.
+      server.server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
     }
   });
-  registerTools();
 
+  // CRITICAL ORDERING (verified against the installed SDK): the SDK's
+  // setRequestHandler calls assertRequestHandlerCapability and THROWS
+  // "Server does not support <cap>" unless registerCapabilities ran FIRST.
+  // So build the full caps object and registerCapabilities BEFORE wiring any
+  // handlers (tools, resources, or prompts). Getting this wrong 500s every
+  // default request and prompts never work over HTTP.
   const caps = { tools: { listChanged: false } };
+  if (f.resources) caps.resources = { subscribe: false, listChanged: false };
+  if (f.prompts)   caps.prompts   = { listChanged: false };
+  server.server.registerCapabilities(caps);
+
+  registerTools();
 
   if (f.resources) {
     (deps.registerResourcesFn ?? realRegisterResources)(server, {});
-    caps.resources = { subscribe: false, listChanged: false };
   }
   if (f.prompts) {
     const map = deps.promptMap ?? promptMapSingleton();
     server.server.setRequestHandler(ListPromptsRequestSchema, () => ({ prompts: listPrompts(map) }));
     server.server.setRequestHandler(GetPromptRequestSchema, (req) => getPrompt(map, req.params.name, req.params.arguments ?? {}));
-    caps.prompts = { listChanged: false };
   }
 
-  server.server.registerCapabilities(caps);
   return server;
 }
 
