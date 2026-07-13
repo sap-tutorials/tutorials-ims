@@ -117,6 +117,3 @@ srv/lib/explore-bundle-manifest.json
 # OAuth discovery docs (#1105) — generated at mbt build time from *.template files.
 approuter/static/.well-known/oauth-authorization-server
 approuter/static/.well-known/oauth-protected-resource
-
-# SDD scratch (briefs, reports, review diffs) — not part of the feature
-.superpowers/
