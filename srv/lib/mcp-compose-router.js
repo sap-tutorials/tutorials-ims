@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
-  GetPromptRequestSchema, ListPromptsRequestSchema,
+  GetPromptRequestSchema, ListPromptsRequestSchema, ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 // Adapter internals — deep imports (see spec "Deep-import risk").
 import {
@@ -49,24 +49,31 @@ export async function buildServer(server, srv, { entities, actions }, deps = {})
       registerGenericReadTool(server, srv, entities, prefix);
       (cds.env.mcp?.per_action_tool ? registerPerActionTools : registerCallActionTool)(server, srv, actions, prefix);
       registerDescribeTool(server, srv, entities, actions, prefix);
+    } else {
+      // Mirror adapter parity: empty service must still respond to tools/list with {tools:[]}.
+      server.server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
     }
   });
-  registerTools();
 
+  // Build full caps FIRST, register ONCE, THEN wire request handlers.
+  // SDK's setRequestHandler calls assertRequestHandlerCapability which throws
+  // "Server does not support <capability>" if registerCapabilities hasn't been called yet.
   const caps = { tools: { listChanged: false } };
+  if (f.resources) caps.resources = { subscribe: false, listChanged: false };
+  if (f.prompts)   caps.prompts   = { listChanged: false };
+  server.server.registerCapabilities(caps);
+
+  registerTools();
 
   if (f.resources) {
     (deps.registerResourcesFn ?? realRegisterResources)(server, {});
-    caps.resources = { subscribe: false, listChanged: false };
   }
   if (f.prompts) {
     const map = deps.promptMap ?? promptMapSingleton();
     server.server.setRequestHandler(ListPromptsRequestSchema, () => ({ prompts: listPrompts(map) }));
     server.server.setRequestHandler(GetPromptRequestSchema, (req) => getPrompt(map, req.params.name, req.params.arguments ?? {}));
-    caps.prompts = { listChanged: false };
   }
 
-  server.server.registerCapabilities(caps);
   return server;
 }
 

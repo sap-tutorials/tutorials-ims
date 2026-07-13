@@ -1,5 +1,6 @@
 // test/unit/mcp-compose-router.test.js
 import { expect, describe, it, vi, beforeEach } from 'vitest';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // The compose router registers prompts capability + resources capability alongside tools.
 // We unit-test the capability wiring by invoking the exported buildServer() with fakes,
@@ -44,5 +45,19 @@ describe('mcp-compose-router capability wiring', () => {
     });
     expect(caps.resources).toBeUndefined();
     expect(caps.tools).toEqual({ listChanged: false });
+  });
+
+  it('real SDK McpServer: buildServer does not throw and advertises prompts capability', async () => {
+    // Regression guard for the critical ordering bug: SDK's setRequestHandler throws
+    // "Server does not support prompts" if registerCapabilities hasn't been called first.
+    const realServer = new McpServer({ name: 'test-svc', version: '1.0.0' });
+    await expect(
+      buildServer(realServer, { name: 'TestService', definition: {} }, { entities: {}, actions: {} }, {
+        registerTools: () => {},
+        registerResourcesFn: () => {},
+        promptMap: new Map([['p', { name: 'p', description: 'd', arguments: [], template: 't' }]]),
+      })
+    ).resolves.not.toThrow();
+    expect(realServer.server._capabilities).toMatchObject({ prompts: { listChanged: false } });
   });
 });
