@@ -36,7 +36,7 @@ import { expect, describe, it, beforeAll, afterAll, afterEach, vi } from 'vitest
 import path from 'node:path';
 import cds from '@sap/cds';
 import { _resetCacheForTests } from '../../srv/lib/runtime-config/kg-settings.js';
-import { handleSharedConcepts } from '../../srv/lib/mcp-kg-tools.js';
+import { handleSharedConcepts, handleNeighborhood } from '../../srv/lib/mcp-kg-tools.js';
 
 // Must be set BEFORE the service module is loaded.
 process.env.KNOWLEDGE_GRAPH_ENABLED = 'true';
@@ -349,5 +349,38 @@ describe('kg_shared_concepts', () => {
     const srv = { send: vi.fn() };
     expect(await handleSharedConcepts.call(srv, { data: { slug_a: 'A' }, srv })).toEqual([]);
     expect(srv.send).not.toHaveBeenCalled();
+  });
+});
+
+// ─── kg_neighborhood — direct-import unit tests (#1106) ──────────────────────
+describe('kg_neighborhood', () => {
+  const fullResult = {
+    prerequisitesOf: [{ slug: 'p1', title: 'P1', score: 0.9, isolated: false }],
+    whatToLearnNext: [{ slug: 'n1', title: 'N1', score: 0.8 }],
+    sharedConcepts:  [{ slug: 's1', title: 'S1', score: 0.7, isolated: true }],
+    teaches:         [{ slug: 'c1', title: 'C1', score: 0.6 }],
+  };
+
+  it('projects all four arms with isolated defaulted to false', async () => {
+    const srv = { send: vi.fn(async () => fullResult) };
+    const out = await handleNeighborhood.call(srv, { data: { slug: 'Foo', depth: 5 } });
+    expect(srv.send).toHaveBeenCalledWith('neighborhoodFull', { slug: 'foo' });
+    expect(out.prerequisites[0]).toEqual({ slug: 'p1', title: 'P1', score: 0.9, isolated: false });
+    expect(out.sharedConcepts[0].isolated).toBe(true);
+    expect(out.whatToLearnNext[0].isolated).toBe(false); // defaulted
+    expect(out.teaches[0].slug).toBe('c1');
+  });
+
+  it('clamps depth to [1,50] and slices each arm', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({ slug: `p${i}`, title: `P${i}`, score: 1 }));
+    const srv = { send: vi.fn(async () => ({ ...fullResult, prerequisitesOf: many })) };
+    const out = await handleNeighborhood.call(srv, { data: { slug: 'foo', depth: 999 } });
+    expect(out.prerequisites).toHaveLength(50);
+  });
+
+  it('fail-open: empty arms when neighborhoodFull throws', async () => {
+    const srv = { send: vi.fn(async () => { throw new Error('x'); }) };
+    const out = await handleNeighborhood.call(srv, { data: { slug: 'foo' } });
+    expect(out).toEqual({ prerequisites: [], whatToLearnNext: [], sharedConcepts: [], teaches: [] });
   });
 });

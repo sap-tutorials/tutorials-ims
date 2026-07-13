@@ -33,3 +33,31 @@ export async function handleSharedConcepts(req) {
     return [];
   }
 }
+
+const EMPTY_NB = { prerequisites: [], whatToLearnNext: [], sharedConcepts: [], teaches: [] };
+
+/**
+ * kg_neighborhood — full graph neighborhood (all arms). PageRank-blended
+ * (#916) and isolated-flagged (#918) inside neighborhoodFull; this projects
+ * the arms and normalizes `isolated` to a boolean. Fail-open -> empty arms.
+ */
+export async function handleNeighborhood(req) {
+  const slug = (req.data.slug ?? '').toLowerCase();
+  const depth = Math.min(Math.max(req.data.depth ?? 10, 1), 50);
+  if (!slug) return { ...EMPTY_NB };
+  const norm = (arm) => (arm ?? []).slice(0, depth).map((i) => ({
+    slug: i.slug, title: i.title ?? i.slug, score: i.score ?? 0, isolated: i.isolated === true,
+  }));
+  try {
+    const nb = await this.send('neighborhoodFull', { slug });
+    return {
+      prerequisites:   norm(nb?.prerequisitesOf),
+      whatToLearnNext: norm(nb?.whatToLearnNext),
+      sharedConcepts:  norm(nb?.sharedConcepts),
+      teaches:         norm(nb?.teaches),
+    };
+  } catch (e) {
+    log.error(`kg_neighborhood(${slug}) failed — ${e.message ?? e}`);
+    return { ...EMPTY_NB };
+  }
+}

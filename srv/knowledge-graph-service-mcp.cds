@@ -14,4 +14,16 @@ extend service KnowledgeGraphService {
     conceptSlug : String;
     name        : String;
   };
+
+  /** Fuller graph neighborhood for a tutorial: prerequisites, what-to-learn-next,
+      shared concepts, and concepts it teaches. PageRank-blended when enabled;
+      each entry flags whether the node is graph-isolated. Anonymous.
+      @param slug   Tutorial slug (lowercase canonical).
+      @param depth  Max entries per arm, [1, 50]. Default 10. */
+  function kg_neighborhood(slug: String, depth: Integer) returns {
+    prerequisites   : array of { slug: String; title: String; score: Double; isolated: Boolean };
+    whatToLearnNext : array of { slug: String; title: String; score: Double; isolated: Boolean };
+    sharedConcepts  : array of { slug: String; title: String; score: Double; isolated: Boolean };
+    teaches         : array of { slug: String; title: String; score: Double; isolated: Boolean };
+  };
 }
