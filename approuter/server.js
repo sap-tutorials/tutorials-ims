@@ -23,6 +23,7 @@ const { resolveSecret } = require('./lib/credstore-secret')
 const { getIndex, startAutoRefresh } = require('./lib/legacy-redirects-loader')
 const { bump, startAutoFlush } = require('./lib/hit-counter')
 const { safeFetch } = require('./lib/safe-fetch')
+const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
 // array) injected by the approuter framework when mta.yaml declares
@@ -504,6 +505,7 @@ ar.start({
     {
       insertMiddleware: {
         first: [
+          { path: '/', handler: wellKnownOAuthHandler },
           { path: '/admin/rebuild', handler: rebuildHandler },
           { path: '/', handler: imgCdnHandler },
           { path: '/', handler: legacyRedirectsHandler },
