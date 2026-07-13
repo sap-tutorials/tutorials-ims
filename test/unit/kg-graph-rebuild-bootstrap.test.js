@@ -28,6 +28,17 @@ vi.mock('../../srv/lib/kg-projection.js', () => ({
   projectTriples: (...args) => projectTriplesMock(...args),
 }));
 
+// Mock the neighborhood-result cache. Since #1177/#1178 this module is
+// backed by the cds-caching plugin, so its bustNeighborhoodCache() calls
+// cds.connect.to('caching') + cds.log() — neither exists on the minimal
+// @sap/cds stub below, and the fail-open catch handler's own cds.log()
+// throw would escape into graphRebuild(). This test verifies the SPARQL
+// wipe sequence, not cache behavior (that's kg-neighborhood-cache.test.js),
+// so stub the bust to a no-op.
+vi.mock('../../srv/lib/kg-neighborhood-cache.js', () => ({
+  bustNeighborhoodCache: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock @sap/cds. graphRebuild dynamically imports cds inside the
 // upsertGraphMetadata helper (`const cdsMod = await import('@sap/cds')`),
 // reads `cds.entities('com.sap.developers.ims').GraphMetadata`, and uses
