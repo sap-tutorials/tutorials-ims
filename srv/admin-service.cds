@@ -436,6 +436,14 @@ service AdminService {
   @readonly @cds.persistence.skip entity AlertSeverities  { key code : String(20); label : String(40); }
   @readonly @cds.persistence.skip entity AlertAudiences   { key code : String(20); label : String(40); }
   @readonly @cds.persistence.skip entity AdvocateRegions  { key code : String(16); label : String(40); }
+  // HomepageShelves verb & shelf dropdowns. Codes mirror the HomepageVerb /
+  // HomepageShelf enums in db/homepage.cds:9,17 exactly; @assert.range on the
+  // underlying fields rejects writes that bypass the dropdown. Distinct from
+  // VerbDefinitions/ShelfDefinitions (draft-enabled explainer-content entities)
+  // — these are clean {code,label} code lists, so the record-form @Common.ValueList
+  // makes verb/shelf RPT-1-eligible without coupling the picker to content rows.
+  @readonly @cds.persistence.skip entity VerbChoices      { key code : String(20); label : String(40); }
+  @readonly @cds.persistence.skip entity ShelfChoices     { key code : String(20); label : String(40); }
 
   // Code list for AdvocateLinks.kind — mirrors the enum on db/advocates.cds.
   // The two are kept in sync by hand; this list is the source of truth for

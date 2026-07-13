@@ -2995,8 +2995,30 @@ annotate AdminService.HomepageShelves with @(
 );
 
 annotate AdminService.HomepageShelves {
-  verb            @Common.ValueListWithFixedValues @Common.Label: 'Verb';
-  shelf           @Common.ValueListWithFixedValues @Common.Label: 'Shelf';
+  // verb & shelf carry BOTH @Common.ValueListWithFixedValues (inline dropdown
+  // render) AND the record-form @Common.ValueList (CollectionPath). The latter
+  // is what makes them RPT-1-eligible — @cap-js/ai keys on
+  // @Common.ValueList.CollectionPath (node_modules/@cap-js/ai/lib/csn-enhancements/
+  // recommendations.js:32), which @Common.ValueListWithFixedValues alone does
+  // not set. VerbChoices/ShelfChoices are @cds.persistence.skip {code,label}
+  // code lists served in-memory from srv/admin-service.js. Per-field opt-out:
+  // @UI.RecommendationState: 0.
+  verb            @Common.ValueListWithFixedValues @Common.Label: 'Verb'
+                  @Common.ValueList: {
+                    CollectionPath: 'VerbChoices',
+                    Parameters: [
+                      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: verb, ValueListProperty: 'code'  },
+                      { $Type: 'Common.ValueListParameterDisplayOnly',                          ValueListProperty: 'label' }
+                    ]
+                  };
+  shelf           @Common.ValueListWithFixedValues @Common.Label: 'Shelf'
+                  @Common.ValueList: {
+                    CollectionPath: 'ShelfChoices',
+                    Parameters: [
+                      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: shelf, ValueListProperty: 'code'  },
+                      { $Type: 'Common.ValueListParameterDisplayOnly',                           ValueListProperty: 'label' }
+                    ]
+                  };
   badge           @Common.ValueListWithFixedValues @Common.Label: 'Badge';
   linkStatus      @Common.ValueListWithFixedValues @Common.Label: 'Link health';
   authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
