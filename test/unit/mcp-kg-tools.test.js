@@ -335,7 +335,7 @@ describe('kg_shared_concepts', () => {
     };
     const req = { data: { slug_a: 'A', slug_b: 'B' }, srv };
     const out = await handleSharedConcepts.call(srv, req);
-    expect(out).toEqual([{ conceptSlug: 'c2', name: 'C2', score: expect.any(Number) }]);
+    expect(out).toEqual([{ conceptSlug: 'c2', name: 'C2' }]);
   });
 
   it('fail-open: returns [] when neighborhood throws, no error echo', async () => {

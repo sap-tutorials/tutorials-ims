@@ -25,7 +25,7 @@ export async function handleSharedConcepts(req) {
       const match = bByslug.get(c.slug);
       if (!match || seen.has(c.slug)) continue;
       seen.add(c.slug);
-      out.push({ conceptSlug: c.slug, name: c.title ?? c.name ?? c.slug, score: Math.min(c.score ?? 0, match.score ?? 0) });
+      out.push({ conceptSlug: c.slug, name: c.title ?? c.name ?? c.slug });
     }
     return out;
   } catch (e) {

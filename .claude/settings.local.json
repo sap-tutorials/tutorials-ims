@@ -24,10 +24,15 @@
       "Bash(rm .git/PR_BODY.md)",
       "Read(//d//**)",
       "Bash(rmdir D:/projects/tutorials-poc/.claude/worktrees/672-publish-staleness-guard)",
-      "mcp__sap-devs-server__search_events"
+      "mcp__sap-devs-server__search_events",
+      "Bash(jq 'del\\(.mcpServers[\"sap-devs-server\"]\\)' .mcp.json)",
+      "Bash(mv .mcp.json.tmp .mcp.json)",
+      "mcp__btp-live__GlobalAccount-list"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "sap-devs-server"
+    "sap-devs-server",
+    "sap-developers-auth"
   ]
 }

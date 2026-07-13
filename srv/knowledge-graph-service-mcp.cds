@@ -13,6 +13,5 @@ extend service KnowledgeGraphService {
   function kg_shared_concepts(slug_a: String, slug_b: String) returns array of {
     conceptSlug : String;
     name        : String;
-    score       : Double;
   };
 }
