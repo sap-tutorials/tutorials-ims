@@ -646,3 +646,48 @@
   .hp-featured-carousel__slide.is-fading-out,
   .hp-featured-carousel__slide.is-fading-in { transition: none; transform: none; }
 }
+
+/* ===== Topic cluster band (#1170) ===== */
+.hp-topic-clusters__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.hp-topic-clusters__cluster {
+  padding: 1rem;
+  border-radius: 8px;
+  background: var(--sapBaseColor, #fff);
+  border: 1px solid var(--sapList_BorderColor, #e5e5e5);
+}
+
+.hp-topic-clusters__label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  margin: 0 0 0.25rem;
+}
+
+.hp-topic-clusters__rationale {
+  font-size: 0.85rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin: 0 0 0.5rem;
+}
+
+.hp-topic-clusters__links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hp-topic-clusters__links a {
+  color: var(--sapLinkColor, #0070f3);
+  text-decoration: none;
+}
+
+.hp-topic-clusters__links a:hover {
+  text-decoration: underline;
+}
