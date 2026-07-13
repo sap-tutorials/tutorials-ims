@@ -435,10 +435,59 @@ cds.on('bootstrap', (app) => {
     cds.log('mcp').warn('MCP_AUTH_ENABLED=false — /mcp-auth and /mcp-pat return 503');
   }
 
-  // PAT middleware — resolves Bearer pat_... to synthetic req.user on /mcp-pat/*.
-  // Must run BEFORE @cap-js/mcp mounts, and only for the /mcp-pat/ prefix so a
-  // stray Bearer header on /api or /chat is never misinterpreted (Phase 2 #1105).
-  app.use('/mcp-pat', (req, res, next) => patMiddleware(req, res, next));
+  // /mcp-auth/* (OAuth tier) → /mcp/* rewrite (Phase 2 #1105). The approuter
+  // fronts /mcp-auth/* with authenticationType:'xsuaa' and forwards the real
+  // user JWT verbatim; srv serves MCP at /mcp/<svc> (e.g. /mcp/api), so we
+  // re-mount the path here. CAP's auth strategy picks up the forwarded JWT when
+  // the request reaches the /mcp/api mount, enforcing @requires:'authenticated-user'
+  // on the DeveloperService handlers. Root-level (not app.use('/mcp-auth',…)) for
+  // the same re-dispatch reason as the PAT block below. No credential check here
+  // — XSUAA already gated it at the approuter; anonymous JWTs are rejected by
+  // CAP auth at the mount.
+  app.use((req, _res, next) => {
+    if (!req.url.startsWith('/mcp-auth/') && req.url !== '/mcp-auth') return next();
+    const rest = req.url.slice('/mcp-auth'.length) || '/';
+    req.url = '/mcp' + rest;
+    if (req.originalUrl) req.originalUrl = req.url;
+    next();
+  });
+
+  // PAT middleware — resolves Bearer pat_... to synthetic req.user for the
+  // /mcp-pat/* prefix, then rewrites the URL to the real MCP mount (Phase 2 #1105).
+  //
+  // Mounted at ROOT (not app.use('/mcp-pat', …)) on purpose: CAP mounts the MCP
+  // adapter with app.use('/mcp/api', …) on the root app, so to re-dispatch there
+  // we must rewrite req.url on the SAME (root) routing context. A middleware
+  // mounted under '/mcp-pat' runs in a prefix-stripped sub-context and cannot
+  // re-match the sibling '/mcp' mount — that produced a 404 (verified).
+  //
+  // We gate on the /mcp-pat/ prefix manually so a stray Bearer pat_ header on
+  // /api or /chat is never misinterpreted. Services expose MCP at /mcp/<svc>
+  // (e.g. DeveloperService at /mcp/api — see cap-mcp-shadowed-by-odata-shared-path);
+  // /mcp-pat/api → /mcp/api, /mcp-pat/search → /mcp/search, etc.
+  app.use((req, res, next) => {
+    if (!req.url.startsWith('/mcp-pat/') && req.url !== '/mcp-pat') return next();
+    // /mcp-pat/* is the PAT tier — a Bearer pat_ token is mandatory here. The
+    // approuter fronts this route with authenticationType:'none' (the PAT, not
+    // XSUAA, is the credential), so we must reject a missing/non-PAT credential
+    // explicitly rather than letting it fall through to CAP's auth as anonymous.
+    const authz = req.headers?.authorization;
+    if (!authz || !authz.startsWith('Bearer pat_')) {
+      res.setHeader('WWW-Authenticate', 'Bearer error="invalid_token"');
+      return res.status(401).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: 'Authorization error (401): PAT required on /mcp-pat/*.' },
+        id: req.body?.id ?? null
+      });
+    }
+    return patMiddleware(req, res, (err) => {
+      if (err) return next(err);
+      const rest = req.url.slice('/mcp-pat'.length) || '/'; // '/api', '/search', …
+      req.url = '/mcp' + rest;
+      if (req.originalUrl) req.originalUrl = req.url;
+      next();
+    });
+  });
 
   // Same: reserve GET /admin/embeddings/stats BEFORE CAP mounts AdminService
   // at /admin. Auth + business logic bound lazily in 'served'.
