@@ -36,6 +36,7 @@ import { expect, describe, it, beforeAll, afterAll, afterEach, vi } from 'vitest
 import path from 'node:path';
 import cds from '@sap/cds';
 import { _resetCacheForTests } from '../../srv/lib/runtime-config/kg-settings.js';
+import { handleSharedConcepts } from '../../srv/lib/mcp-kg-tools.js';
 
 // Must be set BEFORE the service module is loaded.
 process.env.KNOWLEDGE_GRAPH_ENABLED = 'true';
@@ -316,5 +317,37 @@ describe('MCP curated tools: KnowledgeGraphService', () => {
       expect(results).toEqual([]);
       expect(JSON.stringify(results)).not.toContain(SECRET);
     });
+  });
+});
+
+// ─── kg_shared_concepts — direct-import unit tests (#1106) ───────────────────
+// These test the handler function directly (not via CDS service dispatch)
+// to keep them fast and isolated from HANA/SPARQL infrastructure.
+describe('kg_shared_concepts', () => {
+  it('returns concept overlap of two tutorials, deduped by conceptSlug', async () => {
+    // Fake service: neighborhood(slug_a) teaches concepts [c1,c2]; slug_b teaches [c2,c3].
+    const srv = {
+      send: vi.fn(async (_evt, { slug }) => ({
+        teaches: slug === 'a'
+          ? [{ slug: 'c1', title: 'C1', score: 0.9 }, { slug: 'c2', title: 'C2', score: 0.8 }]
+          : [{ slug: 'c2', title: 'C2', score: 0.7 }, { slug: 'c3', title: 'C3', score: 0.6 }],
+      })),
+    };
+    const req = { data: { slug_a: 'A', slug_b: 'B' }, srv };
+    const out = await handleSharedConcepts.call(srv, req);
+    expect(out).toEqual([{ conceptSlug: 'c2', name: 'C2', score: expect.any(Number) }]);
+  });
+
+  it('fail-open: returns [] when neighborhood throws, no error echo', async () => {
+    const srv = { send: vi.fn(async () => { throw new Error('boom'); }) };
+    const req = { data: { slug_a: 'A', slug_b: 'B' }, srv };
+    const out = await handleSharedConcepts.call(srv, req);
+    expect(out).toEqual([]);
+  });
+
+  it('returns [] when either slug missing', async () => {
+    const srv = { send: vi.fn() };
+    expect(await handleSharedConcepts.call(srv, { data: { slug_a: 'A' }, srv })).toEqual([]);
+    expect(srv.send).not.toHaveBeenCalled();
   });
 });
