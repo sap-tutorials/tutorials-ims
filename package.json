@@ -104,6 +104,7 @@
     "check:graphql-breaking": "tsx scripts/check-graphql-breaking.ts"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "@axe-core/playwright": "^4.12.1",
     "@cap-js/cds-test": "^1.0.1",
     "@lhci/cli": "^0.15.1",
