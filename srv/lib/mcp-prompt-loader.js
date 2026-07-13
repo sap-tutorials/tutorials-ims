@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { load as yamlLoad } from 'js-yaml';
 
-// NOTE: js-yaml 4.x `load()` uses DEFAULT_SCHEMA (no code execution) and is
+// NOTE: js-yaml 5.x `load()` uses DEFAULT_SCHEMA (no code execution) and is
 // safe for these trusted, in-repo prompt files — the Python `yaml.load` RCE
-// warning does not apply to js-yaml 4.x. Do not swap to a custom loader.
+// warning does not apply to js-yaml 5.x. Do not swap to a custom loader.
 const FM_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 
 /** Load and validate all prompt .md files in `dir`. Throws on malformed frontmatter. */
@@ -14,7 +14,8 @@ export function loadPrompts(dir) {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.md'));
   for (const file of files) {
     const raw = fs.readFileSync(path.join(dir, file), 'utf8');
-    const m = FM_RE.exec(raw);
+    const norm = raw.replace(/\r\n/g, '\n');
+    const m = FM_RE.exec(norm);
     if (!m) throw new Error(`mcp-prompt-loader: ${file} missing YAML frontmatter`);
     let fm;
     try { fm = yamlLoad(m[1]); } catch (e) { throw new Error(`mcp-prompt-loader: ${file} bad YAML — ${e.message}`); }
