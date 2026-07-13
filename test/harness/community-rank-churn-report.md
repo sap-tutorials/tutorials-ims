@@ -4,21 +4,25 @@
 **Weight tested:** `KG_COMMUNITY_WEIGHT=1.5` (candidate).
 **Query set:** `test/harness/community-rank-queries.json` (20 queries, topN=10).
 
-## Procedure (two-process, module-load env capture)
+## Procedure (two-process capture + compare)
 
-`KG_COMMUNITY_WEIGHT` is read once at module load, so OFF and ON are captured in
-separate processes and diffed:
+`KG_COMMUNITY_WEIGHT` is read once at module load by the SearchService, so a
+single process cannot toggle it. Capture raw ranked slug lists in two separate
+processes (OFF then ON), then compare:
 
 ```bash
-# OFF baseline
-KG_COMMUNITY_WEIGHT=0 npx cds bind --exec -- node test/harness/community-rank-churn.mjs > off.tsv
+# OFF baseline — capture raw ranked slugs per query
+KG_COMMUNITY_WEIGHT=0   npx cds bind --exec -- node test/harness/community-rank-churn.mjs capture > off.tsv
 # ON candidate
-KG_COMMUNITY_WEIGHT=1.5 npx cds bind --exec -- node test/harness/community-rank-churn.mjs > on.tsv
-# diff the two slug orderings per query (columns: query, tau, entered, left, maxShift)
+KG_COMMUNITY_WEIGHT=1.5 npx cds bind --exec -- node test/harness/community-rank-churn.mjs capture > on.tsv
+# compute per-query churn (tau distance, entered/left top-N, max shift) + mean tau
+node test/harness/community-rank-churn.mjs compare off.tsv on.tsv
 ```
 
-`searchKgRerankEnabled` must be `true` on ChatSettings for both runs (otherwise
-both are fuzzy-only and churn is trivially 0 — a meaningless comparison).
+`searchKgRerankEnabled` must be `true` on ChatSettings for BOTH capture runs
+(otherwise both are fuzzy-only and churn is trivially 0 — a meaningless
+comparison). Kendall-tau here is a DISTANCE: `0` = identical ordering (no
+churn), `1` = fully reversed. The enable criterion targets **mean tau < 0.15**.
 
 ## Churn metrics (per query)
 
