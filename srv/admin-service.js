@@ -29,6 +29,7 @@ import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
 import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
 import { validateApiQuery } from './lib/khoros-transport.js';
+import { COMMUNITY_BLOG_SOURCE_DEFAULTS, backfillManagedApiQuery } from './lib/community-blog-source-defaults.js';
 import { resetFtCache, resetCommunityBlogsCache } from './homepage-service.js';
 import { runReshuffleVideoRotation } from './jobs/reshuffle-video-rotation.js';
 import * as metrics from './lib/metrics.js';
@@ -654,32 +655,9 @@ export default class AdminService extends cds.ApplicationService {
     // the CSV hasn't landed yet (or the auto-init fires before the DB
     // deployer). Only inserts if the table is empty; individual missing
     // rows are NOT re-inserted (that would fight admin deletes).
-    const COMMUNITY_BLOG_SOURCE_DEFAULTS = [
-      {
-        ID:        '00000000-0000-0000-0000-000000c81001',
-        label:     'Community — Technology (all blogs)',
-        feedUrl:   'https://community.sap.com/khhcw49343/rss/Community?interaction.style=blog',
-        topicSlug: 'community-technology',
-        isActive:  true, sortOrder: 10, managed: true,
-        apiQuery:  "category.id='technology' AND conversation.style='blog'",
-      },
-      {
-        ID:        '00000000-0000-0000-0000-000000c81002',
-        label:     'Technology Blogs by SAP',
-        feedUrl:   'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-sap',
-        topicSlug: 'technology-sap',
-        isActive:  true, sortOrder: 20, managed: true,
-        apiQuery:  "board.id='technology-blog-sap'",
-      },
-      {
-        ID:        '00000000-0000-0000-0000-000000c81003',
-        label:     'Technology Blogs by Members',
-        feedUrl:   'https://community.sap.com/khhcw49343/rss/board?board.id=technology-blog-members',
-        topicSlug: 'technology-members',
-        isActive:  true, sortOrder: 30, managed: true,
-        apiQuery:  "board.id='technology-blog-members'",
-      },
-    ];
+    // Defaults + apiQuery backfill live in ./lib/community-blog-source-defaults.js
+    // so the cron path (fetchAllSources) shares the exact same source of
+    // truth — the READ hook is no longer the only place the backfill runs.
     this.before('READ', 'CommunityBlogSources', async () => {
       const CBS = 'com.sap.developers.ims.CommunityBlogSources';
       const existing = await SELECT.from(CBS).columns('ID');
@@ -688,12 +666,7 @@ export default class AdminService extends cds.ApplicationService {
         return;
       }
       // Backfill apiQuery on managed rows that predate the #1144 column.
-      const byId = new Map(COMMUNITY_BLOG_SOURCE_DEFAULTS.map((d) => [d.ID, d.apiQuery]));
-      const stale = await SELECT.from(CBS).columns('ID').where({ managed: true, apiQuery: null });
-      for (const row of stale) {
-        const q = byId.get(row.ID);
-        if (q) await UPDATE(CBS).set({ apiQuery: q }).where({ ID: row.ID });
-      }
+      await backfillManagedApiQuery(cds.db);
     });
 
     this.before(['CREATE', 'UPDATE'], 'CommunityBlogSources', (req) => {

@@ -69,9 +69,20 @@ community-authored titles.
 
 - **`community-blogs-fetch` cron:** each `CommunityBlogSources` row carries an
   `apiQuery` column (nullable, admin-editable, `#1144`). Seeded for the 3 managed
-  rows via `srv/admin-service.js` auto-init/backfill — **NOT** the seed CSV
-  (adding a column to `db/data/*.csv` triggers the `.hdbtabledata` editable-column
-  wipe). A source with no `apiQuery` degrades to `curl` on its raw `feedUrl`.
+  rows — **NOT** the seed CSV (adding a column to `db/data/*.csv` triggers the
+  `.hdbtabledata` editable-column wipe). The defaults and the backfill live in
+  **`srv/lib/community-blog-source-defaults.js`** (single source of truth), and
+  `backfillManagedApiQuery` is invoked from BOTH places that can be the first to
+  touch the table: `srv/admin-service.js`'s `before('READ')` hook AND the cron's
+  `fetchAllSources()`. The cron self-heals a NULL managed `apiQuery` in-flight, so
+  it no longer depends on an admin having opened the Sources page. A source with
+  no `apiQuery` (unmanaged/user-added) degrades to `curl` on its raw `feedUrl`.
+
+  > **History:** #1155 shipped the `apiQuery` column but left the only backfill in
+  > the admin READ hook. On DEV, nobody opened the Sources page post-deploy, so all
+  > 3 managed rows stayed NULL, every source fell back to curl, and curl 403'd from
+  > the CF egress IP → the feed silently went 4 days stale (diagnosed 2026-07-13).
+  > Moving the backfill into the cron path (this section) is the durable fix.
 - **Homepage lane:** `homepage-rss-fetcher.js` derives `board.id='<id>'` from the
   feed URL's `?board.id=` param (`apiQueryFromFeedUrl`); no board.id → curl fallback.
   In practice the homepage community lane is served from the DB
@@ -89,23 +100,26 @@ The transport is injected into `safeFetch(url, { fetchImpl })` exactly like
 `allowedHosts` is pinned to `new Set(['community.sap.com'])`, and the protocol
 allowlist + private-IP rejection + per-hop redirect re-check all still run.
 
-## ⚠️ Verification is deploy-and-observe
+## ✅ Verified working from CF egress (2026-07-13)
 
-`/api/2.0/*` is behind the **same Cloudflare edge** as `/rss`. Whether the JSON API
-returns 200 from the CF `eu10-005` egress IP **cannot be verified locally**
-(`cf ssh` is not authorized in `tutorial-system/dev`; a workstation 200 proves
-nothing about CF egress — that exact caveat masked the #1145 curl regression).
+`/api/2.0/*` is behind the **same Cloudflare edge** as `/rss`, so it was an open
+question whether the JSON API would also 403 from the CF `eu10-005` egress IP
+(that exact caveat masked the #1145 curl regression). **Resolved 2026-07-13:** a
+forced cron run on `tutorial-system/dev` logged
+`community-blogs-fetcher: 3 sources → fetched=60 ... errored=0` and
+`CommunityBlogPosts` populated 40 fresh rows. The Khoros JSON API path returns
+**200 from CF egress** — the IP-reputation block that killed native fetch and
+curl does **not** apply to it. No forward-proxy / Cloud Connector needed.
 
-After deploy, trigger the cron (admin board force-trigger) and confirm:
+To re-confirm after any deploy, trigger the cron (admin board force-trigger) and check:
 
 ```bash
 cf logs tutorials-srv --recent | grep community-blogs-fetcher
 # expect: fetched=<N>  with N>0  and  errored=0
 ```
 
-If it still 403s (`errored>=sources`), the API path is IP-blocked from CF egress
-too. Roll back with `RSS_TRANSPORT=curl` and escalate to a forward-proxy /
-Cloud-Connector egress (issue #1144 Option 2, not yet built).
+If it ever 403s again (`errored>=sources`), roll back with `RSS_TRANSPORT=curl` and
+escalate to a forward-proxy / Cloud-Connector egress (issue #1144 Option 2, not yet built).
 
 ## Test gotcha
 

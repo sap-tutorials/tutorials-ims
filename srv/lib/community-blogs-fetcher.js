@@ -21,6 +21,7 @@ import { safeFetch } from './safe-fetch.js';
 import { parseRss, RSS_FETCH_HEADERS } from './rss-parse.js';
 import { curlFetch } from './curl-transport.js';
 import { buildKhorosUrl, khorosFetch } from './khoros-transport.js';
+import { backfillManagedApiQuery } from './community-blog-source-defaults.js';
 import * as metrics from './metrics.js';
 
 const log = cds.log('community-blogs-fetcher');
@@ -235,6 +236,20 @@ export async function fetchOneSource(source, { db } = {}) {
  */
 export async function fetchAllSources() {
   const db = await cds.connect.to('db');
+
+  // (#1144) Self-heal apiQuery on managed rows BEFORE reading them. The
+  // AdminService before('READ') backfill only fires when an admin opens the
+  // Sources page — the cron bypasses it. Without this, managed rows deployed
+  // before #1155 seeded apiQuery stay NULL, every source degrades to the
+  // curl fallback, and curl 403s from the CF egress IP → all sources error.
+  // Fail-open: a backfill hiccup must not stop the fetch itself.
+  try {
+    const patched = await backfillManagedApiQuery(db);
+    if (patched > 0) log.info(`community-blogs-fetcher: backfilled apiQuery on ${patched} managed source(s)`);
+  } catch (err) {
+    log.warn('community-blogs-fetcher: apiQuery backfill failed (continuing):', err.message);
+  }
+
   const { CommunityBlogSources } = cds.entities('com.sap.developers.ims');
   const sources = await db.run(
     SELECT.from(CommunityBlogSources)
