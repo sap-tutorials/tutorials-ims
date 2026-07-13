@@ -43,6 +43,7 @@ import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings
 import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
 import { VERB_DEFAULTS, SHELF_DEFAULTS } from './lib/homepage/verb-shelf-defaults.js';   // #1089
 import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js';
+import * as mcpAdmin from './lib/mcp-admin-tools.js';   // #1106 Phase 3 (WS2) admin MCP tools
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -2961,6 +2962,14 @@ export default class AdminService extends cds.ApplicationService {
         cds.log('admin-featured').warn('rebuild dispatch failed:', err.message);
       }
     });
+
+    // #1106 Phase 3 (WS2) — admin curation MCP tools. Each handler delegates
+    // to an existing action/entry point; per-action @requires in
+    // srv/admin-service-mcp.cds is authoritative for auth.
+    this.on('merge_concepts', mcpAdmin.handleMergeConcepts);
+    this.on('promote_community_to_mission', mcpAdmin.handlePromoteCommunity);
+    this.on('trigger_rebuild', mcpAdmin.handleTriggerRebuild);
+    this.on('publish_content', mcpAdmin.handlePublishContent);
 
     await super.init();
 
