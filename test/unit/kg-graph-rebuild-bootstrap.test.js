@@ -49,6 +49,13 @@ vi.mock('@sap/cds', () => {
   };
   const cdsStub = {
     entities: () => ({ GraphMetadata: '__stub__' }),
+    // graphRebuild() -> bustNeighborhoodCache() (kg-neighborhood-cache.js,
+    // the #1177/#1178 cds-caching pilot) connects to the 'caching' service
+    // and, on any fault, logs via cds.log(...).warn(). No caching service is
+    // wired in unit tests, so connect must reject and log must be callable —
+    // otherwise the fail-open catch throws `cds.log is not a function`.
+    connect: { to: () => Promise.reject(new Error('no caching service in unit test')) },
+    log: () => ({ warn: () => {}, info: () => {}, error: () => {}, debug: () => {} }),
   };
   // CQL globals live on the default export AND on globalThis when the
   // real cds runtime initialises. Patch globalThis here so the
