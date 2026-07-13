@@ -360,15 +360,12 @@ describe('Phase 3 — resources + prompts on /mcp/graph (compose router)', () =>
 
   it('resources/list returns an array', async () => {
     const resp = await rpc('KnowledgeGraphService', 'resources/list', {});
-    // shape-only: in-memory contract DB has no seeded content rows; non-empty read
-    // is verified in test/hybrid/mcp-resources.test.js.
-    // NOTE: as of this task the assertion was tightened to toBeGreaterThan(0) and
-    // reverted because listResources in srv/lib/mcp-resources.js silently swallows
-    // a schema-mismatch error — it SELECTs 'name' on Tutorials/Missions (those
-    // entities have 'title', not 'name') and 'title' on Concepts (which has 'name'),
-    // causing CDS to throw and the catch to return []. That is a real bug in
-    // mcp-resources.js that needs a separate fix before non-empty can be asserted
-    // here. Tracked under #1106.
+    // shape-only: in-memory contract DB seeds no content rows (Tutorials/Missions/Concepts
+    // have 0 rows in the CSV seed set); non-empty list is verified in
+    // test/hybrid/mcp-resources.test.js.
+    // The column-mismatch bug (#1106) that formerly caused listResources to silently
+    // swallow a CDS throw and return [] has been fixed — the assertion is still
+    // shape-only because there are genuinely no seeded rows, not because of a bug.
     expect(Array.isArray(resp.result.resources)).toBe(true);
   });
 });

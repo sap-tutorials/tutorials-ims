@@ -16,7 +16,7 @@
 import { expect, describe, it, vi } from 'vitest';
 import {
   readTutorialResource, readMissionResource, readConceptResource,
-  registerResources, RESOURCE_LIST_CAP,
+  registerResources, RESOURCE_LIST_CAP, listResources,
 } from '../../srv/lib/mcp-resources.js';
 
 /**
@@ -125,5 +125,103 @@ describe('registerResources', () => {
 
   it('caps list results at RESOURCE_LIST_CAP', () => {
     expect(RESOURCE_LIST_CAP).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression test: listResources column selection (#1106 bugfix)
+// ---------------------------------------------------------------------------
+//
+// Option (a): use a column-inspecting fakeDb that throws if an unexpected
+// column is requested. This directly guards the SELECT.columns() call inside
+// listResources and would have caught the original bug (selecting 'name' on
+// Tutorials/Missions and 'title' on Concepts).
+//
+// The validation extracts the requested column names from q.SELECT.columns —
+// each element is either a plain string or a CDS ref object { ref: ['col'] }.
+
+describe('listResources column selection (regression #1106)', () => {
+  /**
+   * Build a db stub that THROWS if any column outside `allowedCols` is
+   * requested. This simulates what CDS itself does on a real database when
+   * a non-existent column is selected.
+   */
+  function columnGuardDb(allowedCols, rows = []) {
+    return {
+      run: vi.fn(async (q) => {
+        const cols = (q?.SELECT?.columns ?? []).map((c) =>
+          typeof c === 'string' ? c : (c?.ref?.[0] ?? c),
+        );
+        for (const col of cols) {
+          if (!allowedCols.includes(col)) {
+            throw new Error(
+              `Column "${col}" not found on entity — simulating CDS schema mismatch`,
+            );
+          }
+        }
+        return rows;
+      }),
+    };
+  }
+
+  it('Tutorials: selects ID, slug, title — does NOT select "name"', async () => {
+    const db = columnGuardDb(
+      ['ID', 'slug', 'title'],
+      [{ ID: '1', slug: 'cap-intro', title: 'CAP Intro' }],
+    );
+    const result = await listResources('com.sap.developers.ims.Tutorials', 'tutorial', {
+      db, nameCol: 'title',
+    });
+    expect(result.resources).toHaveLength(1);
+    expect(result.resources[0]).toMatchObject({
+      uri: 'tutorial://cap-intro',
+      name: 'CAP Intro',
+      mimeType: 'application/json',
+    });
+    // Confirm the db stub was called exactly once.
+    expect(db.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('Missions: selects ID, slug, title — does NOT select "name"', async () => {
+    const db = columnGuardDb(
+      ['ID', 'slug', 'title'],
+      [{ ID: '2', slug: 'mission-a', title: 'Mission A' }],
+    );
+    const result = await listResources('com.sap.developers.ims.Missions', 'mission', {
+      db, nameCol: 'title',
+    });
+    expect(result.resources).toHaveLength(1);
+    expect(result.resources[0]).toMatchObject({
+      uri: 'mission://mission-a',
+      name: 'Mission A',
+      mimeType: 'application/json',
+    });
+  });
+
+  it('Concepts: selects ID, slug, name — does NOT select "title"', async () => {
+    const db = columnGuardDb(
+      ['ID', 'slug', 'name', 'status'],
+      [{ ID: 'c1', slug: 'cap', name: 'CAP' }],
+    );
+    const result = await listResources('com.sap.developers.ims.Concepts', 'concept', {
+      db, active: true, nameCol: 'name',
+    });
+    expect(result.resources).toHaveLength(1);
+    expect(result.resources[0]).toMatchObject({
+      uri: 'concept://c1',
+      name: 'CAP',
+      mimeType: 'application/json',
+    });
+  });
+
+  it('Tutorials: returns {resources:[]} and does NOT throw when db throws column error', async () => {
+    // Verify the old broken behaviour — selecting 'name' on Tutorials — would
+    // have returned [] via the fail-open catch path.
+    const db = columnGuardDb(['ID', 'slug', 'title']); // 'name' not allowed
+    // Deliberately pass nameCol:'name' to simulate the old bug.
+    const result = await listResources('com.sap.developers.ims.Tutorials', 'tutorial', {
+      db, nameCol: 'name',
+    });
+    expect(result).toEqual({ resources: [] }); // fail-open catch returns []
   });
 });

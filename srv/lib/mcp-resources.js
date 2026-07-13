@@ -186,9 +186,17 @@ export async function readConceptResource(id, { db = cds.db } = {}) {
 /**
  * List resources of a given entity up to RESOURCE_LIST_CAP.
  * Returns `{ resources: [...] }` matching ListResourcesResult schema.
+ *
+ * @param {string} entityFqn  Fully-qualified CDS entity name
+ * @param {string} scheme     URI scheme prefix (tutorial, mission, concept)
+ * @param {{ db?: object, active?: boolean, nameCol?: string }} opts
+ *   nameCol — the display-name column that actually exists on this entity.
+ *   Tutorials/Missions: 'title'.  Concepts: 'name'.
+ *   Selecting a column that doesn't exist causes CDS to throw; the caller
+ *   must pass the correct value for the target entity.
  */
-async function listResources(entityFqn, scheme, { db, active = false } = {}) {
-  let q = SELECT.from(entityFqn).columns('ID', 'slug', 'name', 'title').limit(RESOURCE_LIST_CAP + 1);
+async function listResources(entityFqn, scheme, { db, active = false, nameCol = 'title' } = {}) {
+  let q = SELECT.from(entityFqn).columns('ID', 'slug', nameCol).limit(RESOURCE_LIST_CAP + 1);
   if (active) q = q.where({ status: 'ACTIVE' });
   let rows = [];
   try {
@@ -201,11 +209,13 @@ async function listResources(entityFqn, scheme, { db, active = false } = {}) {
   if (truncated) log.warn(`resources/list ${scheme}: truncated at ${RESOURCE_LIST_CAP}`);
   const items = rows.slice(0, RESOURCE_LIST_CAP).map((r) => ({
     uri:      `${scheme}://${scheme === 'concept' ? (r.ID ?? r.slug) : r.slug}`,
-    name:     r.title ?? r.name ?? r.slug ?? r.ID,
+    name:     r[nameCol] ?? r.slug ?? r.ID,
     mimeType: 'application/json',
   }));
   return { resources: items };
 }
+
+export { listResources };
 
 // ---------------------------------------------------------------------------
 // registerResources — called by the compose router
@@ -224,7 +234,7 @@ export function registerResources(server, { db = cds.db, slicer = defaultSlicer 
   server.registerResource(
     'tutorial',
     new ResourceTemplate('tutorial://{slug}', {
-      list: () => listResources(`${NS}.Tutorials`, 'tutorial', { db }),
+      list: () => listResources(`${NS}.Tutorials`, 'tutorial', { db, nameCol: 'title' }),
     }),
     { title: 'Tutorial', description: 'A published SAP tutorial: metadata, step titles, and rendered HTML.' },
     async (_uri, { slug }) => readTutorialResource(slug, { db, slicer }),
@@ -234,7 +244,7 @@ export function registerResources(server, { db = cds.db, slicer = defaultSlicer 
   server.registerResource(
     'mission',
     new ResourceTemplate('mission://{slug}', {
-      list: () => listResources(`${NS}.Missions`, 'mission', { db }),
+      list: () => listResources(`${NS}.Missions`, 'mission', { db, nameCol: 'title' }),
     }),
     { title: 'Mission', description: 'An SAP mission and its ordered tutorial path.' },
     async (_uri, { slug }) => readMissionResource(slug, { db }),
@@ -244,7 +254,7 @@ export function registerResources(server, { db = cds.db, slicer = defaultSlicer 
   server.registerResource(
     'concept',
     new ResourceTemplate('concept://{id}', {
-      list: () => listResources(`${NS}.Concepts`, 'concept', { db, active: true }),
+      list: () => listResources(`${NS}.Concepts`, 'concept', { db, active: true, nameCol: 'name' }),
     }),
     { title: 'Concept', description: 'A knowledge-graph concept (ACTIVE only) and the tutorials that teach it.' },
     async (_uri, { id }) => readConceptResource(id, { db }),
