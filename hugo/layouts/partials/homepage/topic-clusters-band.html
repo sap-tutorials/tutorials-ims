@@ -1,0 +1,32 @@
+{{- /* topic-clusters-band.html — issue #1170.
+       Reads .Site.Data.topic_clusters (populated by scripts/fetch-topic-clusters.ts
+       calling GET /build/topic-clusters). SSR-only — no Vue island, no hydration.
+
+       Payload shape:
+         { clusters: [{ label, rationale, communityFingerprint, tutorialCount,
+           tutorials: [{ slug, title, url }] }], buildAt, error }
+
+       EMPTY-SAFE BY OMISSION: unlike featured-topics (which always emits a shell
+       for its island to hydrate), this band has no island. When clusters is empty
+       or absent we render ZERO DOM — no <section>, no header — so an empty band
+       is truly hidden, never an empty box. */ -}}
+{{- $tc := .Site.Data.topic_clusters | default (dict "clusters" slice) -}}
+{{- $clusters := $tc.clusters | default slice -}}
+{{- if gt (len $clusters) 0 -}}
+<section class="hp-band hp-topic-clusters" aria-labelledby="hp-topic-clusters-title">
+  <h2 id="hp-topic-clusters-title" class="hp-band__title">Explore topic clusters</h2>
+  <div class="hp-topic-clusters__grid">
+    {{- range $clusters -}}
+    <div class="hp-topic-clusters__cluster" id="cluster-{{ .communityFingerprint }}">
+      <h3 class="hp-topic-clusters__label">{{ .label }}</h3>
+      {{- with .rationale }}<p class="hp-topic-clusters__rationale">{{ . }}</p>{{- end }}
+      <ul class="hp-topic-clusters__links">
+        {{- range .tutorials -}}
+        <li><a href="{{ .url }}">{{ .title }}</a></li>
+        {{- end -}}
+      </ul>
+    </div>
+    {{- end -}}
+  </div>
+</section>
+{{- end -}}
