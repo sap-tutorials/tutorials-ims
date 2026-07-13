@@ -113,8 +113,39 @@ export async function patMiddleware(req, res, next) {
   }
   metrics.counter('mcp.pat.auth[outcome=hit]');
   installSyntheticUser(req, entry);
+  // Strip the Bearer pat_ header so CAP's downstream xsuaa/ias auth strategy
+  // does NOT try to JWT-parse the PAT. jwt-auth / xssec do
+  // `if (!req.headers.authorization) return next()` (verified in
+  // @sap/cds/lib/srv/middlewares/auth/jwt-auth.js:31) — so with the header
+  // gone they no-op WITHOUT overwriting the user. Without this strip the
+  // strategy threw InvalidJwtError ("invalid base64") → 401, discarding the
+  // synthetic user (Phase 2 #1105 — deployed xsuaa path; local mocked-auth
+  // never JWT-parsed, so this was invisible until the live PAT probe).
+  //
+  // The synthetic user rides on `req.user`; `pinPatUserToContext` (registered
+  // after CAP's `auth` middleware in server.js) copies it onto cds.context.user
+  // inside the per-request ALS scope, where @cap-js/mcp's checkAuthorization
+  // reads it (auth.js: `const user = cds.context?.user`). We CANNOT set
+  // cds.context.user here — this bootstrap/root-scope middleware runs before
+  // CAP's context() establishes the per-request ALS context.
+  delete req.headers.authorization;
   bumpLastUsed(entry.patId);
   return next();
+}
+
+/**
+ * Post-auth middleware: copy the PAT synthetic user from req.user onto
+ * cds.context.user inside CAP's per-request ALS scope. Registered via
+ * cds.middlewares.add(..., { after: 'auth' }) in server.js so it runs AFTER
+ * context() has established cds.context and auth() has (harmlessly) no-op'd on
+ * the stripped header. Only acts on PAT requests (tokenSource==='pat'); a
+ * no-op for every other request. See patMiddleware above (Phase 2 #1105).
+ */
+export function pinPatUserToContext(req, _res, next) {
+  if (req.user?.tokenSource === 'pat' && cds.context) {
+    cds.context.user = req.user;
+  }
+  next();
 }
 
 export default patMiddleware;

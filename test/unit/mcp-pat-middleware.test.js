@@ -86,6 +86,28 @@ describe('mcp-pat-middleware', () => {
     expect(req.user.is('pat-write')).toBe(false);
   });
 
+  it('strips the Authorization header on a valid PAT (#1105 — xsuaa must not JWT-parse it)', async () => {
+    // The core production fix: after PAT auth, the Bearer pat_ header MUST be
+    // removed so CAP's downstream xsuaa/ias strategy no-ops (jwt-auth returns
+    // early on `!req.headers.authorization`) instead of throwing InvalidJwtError
+    // → 401. Without this the deployed PAT tier 401'd on every call.
+    const req = mockReq('Bearer pat_abcd1234_' + 'a'.repeat(48));
+    const res = mockRes(); const next = vi.fn();
+    await patMiddleware(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(req.headers.authorization).toBeUndefined();
+  });
+
+  it('does NOT strip the Authorization header when the PAT is invalid', async () => {
+    // A rejected PAT must leave the header intact (the request is 401'd here
+    // anyway) — we only strip after a successful auth.
+    const bad = 'Bearer pat_revoked1_' + 'b'.repeat(48);
+    const req = mockReq(bad); const res = mockRes(); const next = vi.fn();
+    await patMiddleware(req, res, next);
+    expect(res.statusCode).toBe(401);
+    expect(req.headers.authorization).toBe(bad);
+  });
+
   it('rejects a revoked PAT with 401', async () => {
     const req = mockReq('Bearer pat_revoked1_' + 'b'.repeat(48));
     const res = mockRes(); const next = vi.fn();
@@ -131,5 +153,32 @@ describe('mcp-pat-middleware', () => {
     expect(_cache.size).toBe(2);
     invalidateCacheByPatId('pat-active-uuid');
     expect(_cache.size).toBe(1);
+  });
+
+  describe('pinPatUserToContext', () => {
+    it('copies a PAT req.user onto cds.context.user', async () => {
+      const { pinPatUserToContext } = await import('../../srv/lib/mcp-pat-middleware.js');
+      const patUser = { id: 'mw@example.com', tokenSource: 'pat', is: () => true };
+      const req = { user: patUser };
+      const next = vi.fn();
+      // Run inside a CAP context so cds.context is defined.
+      await cds.tx({ user: new cds.User({ id: 'anonymous' }) }, () => {
+        pinPatUserToContext(req, {}, next);
+        expect(cds.context.user).toBe(patUser);
+      });
+      expect(next).toHaveBeenCalled();
+    });
+
+    it('is a no-op for non-PAT requests (does not touch cds.context.user)', async () => {
+      const { pinPatUserToContext } = await import('../../srv/lib/mcp-pat-middleware.js');
+      const jwtUser = new cds.User({ id: 'real@example.com' });
+      const req = { user: { id: 'real@example.com', tokenSource: 'jwt' } };
+      const next = vi.fn();
+      await cds.tx({ user: jwtUser }, () => {
+        pinPatUserToContext(req, {}, next);
+        expect(cds.context.user).toBe(jwtUser); // unchanged
+      });
+      expect(next).toHaveBeenCalled();
+    });
   });
 });
