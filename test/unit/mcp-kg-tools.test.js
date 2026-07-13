@@ -36,7 +36,7 @@ import { expect, describe, it, beforeAll, afterAll, afterEach, vi } from 'vitest
 import path from 'node:path';
 import cds from '@sap/cds';
 import { _resetCacheForTests } from '../../srv/lib/runtime-config/kg-settings.js';
-import { handleSharedConcepts, handleNeighborhood } from '../../srv/lib/mcp-kg-tools.js';
+import { handleSharedConcepts, handleNeighborhood, handleSearchConcepts } from '../../srv/lib/mcp-kg-tools.js';
 
 // Must be set BEFORE the service module is loaded.
 process.env.KNOWLEDGE_GRAPH_ENABLED = 'true';
@@ -382,5 +382,31 @@ describe('kg_neighborhood', () => {
     const srv = { send: vi.fn(async () => { throw new Error('x'); }) };
     const out = await handleNeighborhood.call(srv, { data: { slug: 'foo' } });
     expect(out).toEqual({ prerequisites: [], whatToLearnNext: [], sharedConcepts: [], teaches: [] });
+  });
+});
+
+// ─── kg_search_concepts — direct-import unit tests (#1106) ───────────────────
+describe('kg_search_concepts', () => {
+  it('delegates to searchKG with clamped maxes and maps query->term', async () => {
+    const srv = { send: vi.fn(async (_e, a) => ({
+      concepts: [{ slug: 'c', name: 'C', score: 1 }], tutorials: [{ slug: 't', title: 'T', score: 1 }],
+      _echo: a,
+    })) };
+    const out = await handleSearchConcepts.call(srv, { data: { query: 'draft', maxConcepts: 999, maxTutorials: 3 } });
+    expect(srv.send).toHaveBeenCalledWith('searchKG', { term: 'draft', maxConcepts: 25, maxTutorials: 3 });
+    expect(out.concepts[0].slug).toBe('c');
+  });
+
+  it('fail-open: {concepts:[],tutorials:[]} on throw', async () => {
+    const srv = { send: vi.fn(async () => { throw new Error('x'); }) };
+    expect(await handleSearchConcepts.call(srv, { data: { query: 'q' } }))
+      .toEqual({ concepts: [], tutorials: [] });
+  });
+
+  it('returns empty when query blank', async () => {
+    const srv = { send: vi.fn() };
+    expect(await handleSearchConcepts.call(srv, { data: { query: '  ' } }))
+      .toEqual({ concepts: [], tutorials: [] });
+    expect(srv.send).not.toHaveBeenCalled();
   });
 });

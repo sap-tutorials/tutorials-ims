@@ -26,4 +26,15 @@ extend service KnowledgeGraphService {
     sharedConcepts  : array of { slug: String; title: String; score: Double; isolated: Boolean };
     teaches         : array of { slug: String; title: String; score: Double; isolated: Boolean };
   };
+
+  /** Free-text search across knowledge-graph concepts and the tutorials that
+      teach them. Returns ranked concept and tutorial matches. Bridges on-demand
+      concept extraction when that feature is enabled. Anonymous.
+      @param query         Free-text search terms.
+      @param maxConcepts   Max concept results, [1, 25]. Default 25.
+      @param maxTutorials  Max tutorial results, [1, 25]. Default 10. */
+  function kg_search_concepts(query: String, maxConcepts: Integer, maxTutorials: Integer) returns {
+    concepts  : array of { slug: String; name: String; score: Double };
+    tutorials : array of { slug: String; title: String; score: Double };
+  };
 }

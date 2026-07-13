@@ -555,7 +555,7 @@ import { searchKgHandler } from './lib/kg/search-kg-handler.js';
 import { embed as embedInputs } from './lib/embedding-client.js';
 import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 import * as metrics from './lib/metrics.js';
-import { handleSharedConcepts, handleNeighborhood } from './lib/mcp-kg-tools.js';
+import { handleSharedConcepts, handleNeighborhood, handleSearchConcepts } from './lib/mcp-kg-tools.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -1398,6 +1398,10 @@ export default cds.service.impl(async function () {
   // ─── kg_neighborhood — MCP Phase 3 tool (#1106) ──────────────────────────
   // Full graph neighborhood for a tutorial (all four arms).
   this.on('kg_neighborhood', handleNeighborhood);
+
+  // ─── kg_search_concepts — MCP Phase 3 tool (#1106) ───────────────────────
+  // Free-text search across KG concepts and tutorials that teach them.
+  this.on('kg_search_concepts', handleSearchConcepts);
 
   // ─── pathBetween — property-graph v2 with fail-open v1 fallback (#913) ─
   this.on('pathBetween', async (req) => {

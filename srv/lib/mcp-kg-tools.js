@@ -2,6 +2,7 @@
 // Phase 3 (#1106) — KG deep-dive MCP tool handlers.
 // Registered onto KnowledgeGraphService via this.on() in knowledge-graph-service.js.
 import cds from '@sap/cds';
+import { clampLimit } from './mcp-arg-validators.js';
 const log = cds.log('mcp-kg');
 
 /**
@@ -59,5 +60,25 @@ export async function handleNeighborhood(req) {
   } catch (e) {
     log.error(`kg_neighborhood(${slug}) failed — ${e.message ?? e}`);
     return { ...EMPTY_NB };
+  }
+}
+
+/**
+ * kg_search_concepts — free-text concept + tutorial search. Delegates to the
+ * anonymous-safe searchKG action (same seed/walk/hydrate the palette uses),
+ * which bridges on-demand extraction (#948) only when KG_ONDEMAND_ENABLED.
+ * Fail-open -> empty result.
+ */
+export async function handleSearchConcepts(req) {
+  const term = (req.data.query ?? '').trim();
+  if (!term) return { concepts: [], tutorials: [] };
+  const maxConcepts = clampLimit(req.data.maxConcepts, 25, 25);
+  const maxTutorials = clampLimit(req.data.maxTutorials, 10, 25);
+  try {
+    const r = await this.send('searchKG', { term, maxConcepts, maxTutorials });
+    return { concepts: r?.concepts ?? [], tutorials: r?.tutorials ?? [] };
+  } catch (e) {
+    log.error(`kg_search_concepts(${term}) failed — ${e.message ?? e}`);
+    return { concepts: [], tutorials: [] };
   }
 }
