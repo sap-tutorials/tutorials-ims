@@ -26,7 +26,27 @@ const PROTECTED_RESOURCE_PATH = '/.well-known/oauth-protected-resource'
 
 // The MCP authenticated mount the resource metadata advertises.
 const MCP_RESOURCE_SUFFIX = '/mcp-auth'
-const MCP_SCOPE = 'Tutorial.MCP'
+
+// The MCP scope, in its short (application-local) form. XSUAA only grants it
+// at the /oauth/authorize endpoint under its FULLY-QUALIFIED name —
+// `<xsappname>.<scope>` (e.g. `tutorials!t676072.Tutorial.MCP`). A request for
+// the bare `Tutorial.MCP` is rejected with `invalid_scope` ("Tutorial.MCP is
+// invalid. Please use a valid scope name in the request"). mcp-remote copies
+// `scopes_supported` from these discovery docs verbatim into its authorize
+// request, so the docs MUST advertise the qualified form. See resolveScope().
+const MCP_SCOPE_SHORT = 'Tutorial.MCP'
+
+// Prefix the short MCP scope with the bound xsappname to produce the
+// fully-qualified, grantable scope name. Falls back to the short name only if
+// the binding is unavailable (same degraded path as resolveIssuer()).
+function resolveScope() {
+  try {
+    const vcap = JSON.parse(process.env.VCAP_SERVICES || '{}')
+    const xsappname = vcap.xsuaa && vcap.xsuaa[0] && vcap.xsuaa[0].credentials && vcap.xsuaa[0].credentials.xsappname
+    if (xsappname) return `${xsappname}.${MCP_SCOPE_SHORT}`
+  } catch { /* fall through */ }
+  return MCP_SCOPE_SHORT
+}
 
 // Derive the XSUAA OAuth issuer base (e.g.
 // https://tutorial-system.authentication.eu10-005.hana.ondemand.com) from the
@@ -66,7 +86,7 @@ function sendJson(res, status, body) {
   res.end(payload)
 }
 
-function authorizationServerMetadata(issuer) {
+function authorizationServerMetadata(issuer, scope) {
   return {
     issuer,
     authorization_endpoint: `${issuer}/oauth/authorize`,
@@ -74,16 +94,16 @@ function authorizationServerMetadata(issuer) {
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
-    scopes_supported: ['openid', MCP_SCOPE],
+    scopes_supported: ['openid', scope],
     token_endpoint_auth_methods_supported: ['none'],
   }
 }
 
-function protectedResourceMetadata(baseUrl, issuer) {
+function protectedResourceMetadata(baseUrl, issuer, scope) {
   return {
     resource: `${baseUrl}${MCP_RESOURCE_SUFFIX}`,
     authorization_servers: [issuer],
-    scopes_supported: [MCP_SCOPE],
+    scopes_supported: [scope],
     bearer_methods_supported: ['header'],
   }
 }
@@ -108,13 +128,15 @@ function wellKnownOAuthHandler(req, res, next) {
     return sendJson(res, 503, { error: 'oauth_metadata_unavailable' })
   }
 
+  const scope = resolveScope()
+
   if (pathOnly === AUTH_SERVER_PATH) {
-    return sendJson(res, 200, authorizationServerMetadata(issuer))
+    return sendJson(res, 200, authorizationServerMetadata(issuer, scope))
   }
 
   const baseUrl = resolveBaseUrl(req)
   if (!baseUrl) return sendJson(res, 503, { error: 'oauth_metadata_unavailable' })
-  return sendJson(res, 200, protectedResourceMetadata(baseUrl, issuer))
+  return sendJson(res, 200, protectedResourceMetadata(baseUrl, issuer, scope))
 }
 
 module.exports = {
@@ -122,6 +144,7 @@ module.exports = {
   // exported for unit tests
   resolveIssuer,
   resolveBaseUrl,
+  resolveScope,
   authorizationServerMetadata,
   protectedResourceMetadata,
   AUTH_SERVER_PATH,
