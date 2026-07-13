@@ -138,7 +138,7 @@ For builds that accept a pre-registered client, bridge through `mcp-remote`:
       "command": "npx",
       "args": [
         "-y", "mcp-remote", "<base>/mcp-auth/api",
-        "--static-oauth-client-id", "sb-tutorials-mcp"
+        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials!t676072\"}"
       ]
     }
   }
@@ -188,18 +188,27 @@ npm install -g mcp-remote
       "command": "npx",
       "args": [
         "-y", "mcp-remote", "<base>/mcp-auth/api",
-        "--static-oauth-client-id", "sb-tutorials-mcp"
+        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials!t676072\"}"
       ]
     }
   }
 }
 ```
 
-`sb-tutorials-mcp` is the shared **public** client (PKCE, no client secret) pre-registered in
-the XSUAA instance for MCP access. On first run, `mcp-remote` opens your browser for the SAP
-universal-ID consent flow; after approval the token is cached in `~/.mcp-auth/` and refreshed
+`sb-tutorials!t676072` is the **XSUAA-generated public client** for the `tutorials`
+application (XSUAA auto-creates exactly one `sb-<xsappname>!<instance-suffix>` client per
+instance — there is no separately-named MCP client). To confirm the current id for your
+environment, read the bound credentials: `cf env tutorials-srv` → `VCAP_SERVICES.xsuaa[0].credentials.clientid`.
+The flow uses PKCE with no client secret. On first run, `mcp-remote` opens your browser for the
+SAP universal-ID consent flow; after approval the token is cached in `~/.mcp-auth/` and refreshed
 silently. The server advertises its endpoints at `<base>/.well-known/oauth-authorization-server`,
 so `mcp-remote` discovers the authorize/token URLs automatically — you only supply the `client_id`.
+
+> **Flag note:** use `--static-oauth-client-info '{"client_id":"…"}'`, **not**
+> `--static-oauth-client-id`. The latter is not a real `mcp-remote` flag — it is silently
+> ignored, so `mcp-remote` falls back to Dynamic Client Registration and fails with
+> `does not support dynamic client registration`. Only `--static-oauth-client-info` (a JSON
+> blob carrying `client_id`) short-circuits registration.
 
 > **Simplest path for Claude Code:** skip OAuth entirely and use a
 > [Personal Access Token](#headless--ci-with-a-personal-access-token). The PAT path needs no
