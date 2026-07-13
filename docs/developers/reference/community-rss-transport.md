@@ -113,3 +113,37 @@ The Khoros transport uses **native `fetch`**, so khoros-mode unit tests CAN
 `vi.stubGlobal('fetch', ...)`. The **curl** transport shells out and does NOT go
 through `global.fetch` — tests exercising the curl path must set
 `RSS_TRANSPORT='fetch'` (or mock `curl-transport.js`) or they hit the real network.
+
+## Staleness alarm (`COMMUNITY_BLOGS_STALE_HOURS`)
+
+The `community-blogs-fetch` job (`srv/jobs/community-blogs-fetch-job.js`) can
+return HTTP 200 yet ingest **0 new posts** for days — a degraded transport (e.g.
+`apiQuery=NULL` → curl fallback → CF-egress 403) "succeeds" every tick with
+`inserted=0`. That mode went unnoticed for 4 days once (2026-07-13) because the
+only alarm fired when *all* sources errored, and a quiet zero-insert tick is
+recorded as a **success** on the `JobLastRun` cron-health tile.
+
+The job therefore also checks freshness: after a clean fetch it reads
+`MAX(createdAt)` from `CommunityBlogPosts` (the last time a genuinely *new* post
+landed — an updated-only tick does not reset it) and **throws** if that is older
+than `COMMUNITY_BLOGS_STALE_HOURS`. Throwing rides the cron chassis into the two
+admin-visible surfaces a thrown job error already hits — `JobLastRun.lastErrorAt`
++ `lastErrorMessage` (Cron-health tile) and a `PipelineLog` **FAILED** row (Job Log
+tile) — so a silent stall becomes loud without any new entity or endpoint.
+
+| Knob | Default | Meaning |
+|------|---------|---------|
+| `COMMUNITY_BLOGS_STALE_HOURS` | `48` | Throw when the newest ingested post is ≥ this many hours old. |
+| `COMMUNITY_BLOGS_STALE_HOURS=0` | — | **Disables** the staleness alarm (the age gauge is still emitted). |
+
+Notes:
+- **48h is deliberately loose.** The 3 managed boards (technology all-blogs /
+  by-SAP / by-members) produce multiple posts a day, so 48h of nothing is
+  anomalous, not a slow news day. A normal quiet tick never throws — only
+  sustained staleness does.
+- **Empty table (fresh env / first run) is not stale** — `MAX(createdAt)` is null,
+  the check is skipped.
+- A `community_blogs.newest_post_age_hours` **gauge** is emitted every run
+  (visible in `MetricSnapshots` / `GET /admin/metrics/live`) for trend analysis,
+  independent of whether the alarm fires.
+- Tune down for faster paging (`cf set-env tutorials-srv COMMUNITY_BLOGS_STALE_HOURS 24 && cf restart tutorials-srv`).
