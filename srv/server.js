@@ -27,7 +27,7 @@ import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
 import * as alertsPublic from './routes/alerts-public.js';
 import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
 import { resolveUser, captureUserMiddleware } from './lib/resolve-user.js';
-import { patMiddleware } from './lib/mcp-pat-middleware.js';
+import { patMiddleware, pinPatUserToContext } from './lib/mcp-pat-middleware.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
@@ -122,6 +122,17 @@ express.static = function(root, options) {
 };
 
 cds.on('bootstrap', (app) => {
+  // #1105: copy the PAT synthetic user (req.user, tokenSource==='pat') onto
+  // cds.context.user, immediately AFTER CAP's built-in `auth` middleware. The
+  // /mcp-pat/* bootstrap middleware (below) authenticates the PAT and strips
+  // the Bearer header so xsuaa/ias no-op; this step then re-asserts the PAT
+  // identity inside the per-request ALS scope so @cap-js/mcp's checkAuthorization
+  // (which reads cds.context.user) sees an authenticated user. No-op for
+  // non-PAT requests. Registered here (bootstrap) before services are served.
+  if (cds.middlewares?.add) {
+    cds.middlewares.add(pinPatUserToContext, { after: 'auth' });
+  }
+
   // Block CAP index page and Swagger UI in production unless explicitly enabled
   if (process.env.EXPOSE_CAP_UI !== 'true' && process.env.NODE_ENV === 'production') {
     app.use((req, res, next) => {
