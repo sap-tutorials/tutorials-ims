@@ -46,12 +46,12 @@ type FeaturedTopicsPayload {
   snapshot   : many FeaturedTopicSlide;
 }
 
-@path: '/homepage'
 @requires: 'any'
-// (#912) `@mcp` alone is a single-protocol shortcut that REPLACES the OData
-// mount. Explicit list keeps OData reachable at /homepage/... and adds MCP.
-// Spec architecture calls for graphql inclusion alongside odata and mcp.
-@protocol: ['odata', 'graphql', 'mcp']
+// #1105 fix: object-form @protocol so ONLY OData inherits `/homepage`. A
+// top-level `@path` + array `@protocol` collapsed all adapters onto `/homepage`
+// and shadowed MCP (see SearchService note + protocols/index.js). OData stays
+// at `/homepage`; mcp mounts at `/mcp/homepage`.
+@protocol: [{ kind: 'odata', path: '/homepage' }, 'graphql', { kind: 'mcp', path: '/mcp/homepage' }]
 service HomepageService {
 
   // EventCard maps from ims.Events (startDate/name) to the homepage shape.
