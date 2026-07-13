@@ -43,11 +43,20 @@ export async function handlePromoteCommunity(req) {
  * scheduleRebuild(reason, {mode, slug}) which dispatches the CI-validated
  * rebuild-content.yml workflow. Auto-infers slug-targeted mode when a slug is
  * given and mode is omitted (matches rebuild-content.yml — see CLAUDE.md).
+ * Slug must be lowercase alphanumeric with hyphens (max 80 chars).
+ * Mode must be one of 'full', 'slug-targeted', or 'catalog-only'.
  */
 export async function handleTriggerRebuild(req) {
   const schedule = req._schedule ?? realScheduleRebuild;
   const slug = req.data.slug ?? null;
+  if (slug !== null && !/^[a-z0-9][a-z0-9-]{0,79}$/.test(slug)) {
+    return req.reject(400, 'invalid slug: must be lowercase alphanumeric with hyphens');
+  }
+  const VALID_MODES = ['full', 'slug-targeted', 'catalog-only'];
   const mode = req.data.mode ?? (slug ? 'slug-targeted' : 'full');
+  if (!VALID_MODES.includes(mode)) {
+    return req.reject(400, `invalid mode: must be one of ${VALID_MODES.join(', ')}`);
+  }
   const who = req.user?.id ?? 'unknown';
   log.info(`trigger_rebuild by ${who} mode=${mode} slug=${slug ?? '-'}`);
   await schedule(`mcp:trigger_rebuild:${who}`, { mode, slug });
@@ -64,8 +73,11 @@ export async function handleTriggerRebuild(req) {
  * carry-forward — but NOT the #672 no-revert guard (that lives only in the
  * begin/append/commit session path in content-publish-session.js). This is an
  * emergency lever; trigger_rebuild (CI-validated) is the preferred path.
- * App-layer CONTENT_API_KEY auth is enforced explicitly below because the
- * synthetic-req invocation bypasses the Express contentAuthMiddleware.
+ *
+ * Auth: gated by CDS @requires:'SuperAdmin' AND the explicit 503 check for
+ * CONTENT_API_KEY. The Express contentAuthMiddleware is bypassed by the
+ * synthetic-req path — no Bearer header is forwarded or needed; the 503 guard
+ * is the app-layer gate.
  *
  * publishHandler expects `req.body.files[slug]` to be gzip-compressed,
  * base64-encoded HTML (it does `gunzipSync(Buffer.from(value, 'base64'))`).
@@ -85,7 +97,6 @@ export async function handlePublishContent(req) {
     ?? (await import('./content-store.js')).createContentHandlers;
   const { publishHandler } = createContentHandlers();
 
-  const apiKey = process.env.CONTENT_API_KEY;
   const fakeReq = {
     body: {
       trigger: `mcp:publish_content:${req.user?.id ?? 'unknown'}`,
@@ -95,9 +106,6 @@ export async function handlePublishContent(req) {
       sources: {},
     },
     headers: {
-      // Defense-in-depth: forward key in case a future refactor wires the
-      // middleware; this header is NOT what gates the call (see check above).
-      authorization: `Bearer ${apiKey}`,
       'x-initiator': `mcp:${req.user?.id ?? 'unknown'}`,
     },
     user: req.user,

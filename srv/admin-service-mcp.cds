@@ -54,10 +54,12 @@ extend service AdminService {
   /** EMERGENCY: publish pre-rendered tutorial HTML directly to the content store,
       bypassing CI. Side-effecting and destructive — prefer trigger_rebuild, which
       is CI-validated. The html payload must be gzip-compressed + base64-encoded
-      (as publish-content.ts sends). Requires Tutorial.Author.
+      (as publish-content.ts sends). Requires SuperAdmin. Auth: CDS @requires
+      enforces SuperAdmin; CONTENT_API_KEY must be configured or the call is
+      rejected 503 at the app layer (no Bearer header is forwarded).
       @param slug  Lowercase tutorial slug.
       @param html  gzip+base64-encoded rendered tutorial HTML to publish. */
-  @(requires: 'Tutorial.Author')
+  @(requires: 'SuperAdmin')
   action publish_content(slug: String, html: String) returns {
     published : Boolean;
     slug      : String;

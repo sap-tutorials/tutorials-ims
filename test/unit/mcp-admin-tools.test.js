@@ -73,6 +73,32 @@ describe('mcp-admin-tools', () => {
     expect(out.slug).toBe(null);
   });
 
+  it('trigger_rebuild rejects 400 on invalid slug', async () => {
+    const scheduleSpy = vi.fn();
+    const reject = vi.fn((code, msg) => { throw Object.assign(new Error(msg), { code }); });
+    await expect(handleTriggerRebuild.call({}, {
+      data: { slug: 'Bad Slug!', mode: 'slug-targeted' },
+      user: { id: 'a' },
+      reject,
+      _schedule: scheduleSpy,
+    })).rejects.toThrow('invalid slug');
+    expect(reject).toHaveBeenCalledWith(400, expect.stringContaining('invalid slug'));
+    expect(scheduleSpy).not.toHaveBeenCalled();
+  });
+
+  it('trigger_rebuild rejects 400 on invalid mode', async () => {
+    const scheduleSpy = vi.fn();
+    const reject = vi.fn((code, msg) => { throw Object.assign(new Error(msg), { code }); });
+    await expect(handleTriggerRebuild.call({}, {
+      data: { slug: 'my-tutorial', mode: 'nuke' },
+      user: { id: 'a' },
+      reject,
+      _schedule: scheduleSpy,
+    })).rejects.toThrow('invalid mode');
+    expect(reject).toHaveBeenCalledWith(400, expect.stringContaining('invalid mode'));
+    expect(scheduleSpy).not.toHaveBeenCalled();
+  });
+
   it('publish_content invokes the content-store publishHandler via a synthetic req/res (no reimplementation)', async () => {
     // Inject a fake publishHandler factory so we assert delegation, not the
     // real content-store DB path. The handler must build a single-slug body
