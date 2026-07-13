@@ -262,6 +262,26 @@ export default class AdminService extends cds.ApplicationService {
     // as @assert.range rejection on write). Labels are display-only.
     this.on('READ', 'AlertSeverities', () => listAlertSeverities());
     this.on('READ', 'AlertAudiences',  () => listAlertAudiences());
+    // HomepageShelves verb & shelf DDLBs. Codes mirror the HomepageVerb /
+    // HomepageShelf enums in db/homepage.cds:9,17 exactly (drift would surface
+    // as @assert.range rejection on write). The record-form @Common.ValueList
+    // bound to these makes verb/shelf RPT-1-eligible (@cap-js/ai keys on
+    // @Common.ValueList.CollectionPath). Labels are display-only.
+    this.on('READ', 'VerbChoices', () => [
+      { code: 'LEARN',     label: 'Learn'     },
+      { code: 'BUILD',     label: 'Build'     },
+      { code: 'INTEGRATE', label: 'Integrate' },
+      { code: 'MODEL',     label: 'Model'     },
+      { code: 'OPERATE',   label: 'Operate'   },
+      { code: 'AI',        label: 'AI'        },
+      { code: 'CONNECT',   label: 'Connect'   },
+    ]);
+    this.on('READ', 'ShelfChoices', () => [
+      { code: 'START_HERE',   label: 'Start here'   },
+      { code: 'REFERENCE',    label: 'Reference'    },
+      { code: 'TOOLS',        label: 'Tools'        },
+      { code: 'KEEP_CURRENT', label: 'Keep current' },
+    ]);
     this.on('READ', 'AdvocateRegions', () => [
       { code: 'AMERICAS', label: 'Americas' },
       { code: 'EMEA',     label: 'EMEA' },
