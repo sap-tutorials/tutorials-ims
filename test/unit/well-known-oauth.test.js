@@ -7,6 +7,7 @@ const {
   wellKnownOAuthHandler,
   resolveIssuer,
   resolveBaseUrl,
+  resolveScope,
   authorizationServerMetadata,
   protectedResourceMetadata,
 } = require('../../approuter/lib/well-known-oauth.js');
@@ -26,8 +27,10 @@ const SAVED_VCAP = process.env.VCAP_SERVICES;
 const SAVED_TENANT = process.env.XSUAA_TENANT;
 const SAVED_REGION = process.env.XSUAA_REGION;
 
-function setXsuaaBinding(url) {
-  process.env.VCAP_SERVICES = JSON.stringify({ xsuaa: [{ credentials: { url } }] });
+function setXsuaaBinding(url, xsappname) {
+  const credentials = { url };
+  if (xsappname) credentials.xsappname = xsappname;
+  process.env.VCAP_SERVICES = JSON.stringify({ xsuaa: [{ credentials }] });
 }
 
 describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', () => {
@@ -64,8 +67,22 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
       .toBe('https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com');
   });
 
+  it('resolves the fully-qualified scope from the bound xsappname', () => {
+    // XSUAA only grants the MCP scope under its <xsappname>.<scope> name; the
+    // bare short name is rejected with invalid_scope. mcp-remote copies
+    // scopes_supported verbatim, so the discovery docs must advertise the
+    // qualified form. Live-verified on Dev 2026-07-13 (#1105 criterion 8).
+    setXsuaaBinding('https://t.authentication.eu10.hana.ondemand.com', 'tutorials!t676072');
+    expect(resolveScope()).toBe('tutorials!t676072.Tutorial.MCP');
+  });
+
+  it('falls back to the short scope name when no xsappname is bound', () => {
+    delete process.env.VCAP_SERVICES;
+    expect(resolveScope()).toBe('Tutorial.MCP');
+  });
+
   it('authorization-server metadata has all RFC 8414 required fields', () => {
-    const m = authorizationServerMetadata('https://t.authentication.eu10.hana.ondemand.com');
+    const m = authorizationServerMetadata('https://t.authentication.eu10.hana.ondemand.com', 'tutorials!t676072.Tutorial.MCP');
     for (const key of [
       'issuer', 'authorization_endpoint', 'token_endpoint',
       'response_types_supported', 'grant_types_supported',
@@ -77,14 +94,29 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     expect(m.code_challenge_methods_supported).toContain('S256');
     expect(m.token_endpoint_auth_methods_supported).toContain('none');
     expect(m.authorization_endpoint).toBe('https://t.authentication.eu10.hana.ondemand.com/oauth/authorize');
+    // Must advertise the fully-qualified, grantable scope — not the bare name.
+    expect(m.scopes_supported).toContain('tutorials!t676072.Tutorial.MCP');
+    expect(m.scopes_supported).not.toContain('Tutorial.MCP');
   });
 
   it('protected-resource metadata has MCP 2025-06 required fields', () => {
-    const m = protectedResourceMetadata('https://host.example', 'https://t.authentication.eu10.hana.ondemand.com');
+    const m = protectedResourceMetadata('https://host.example', 'https://t.authentication.eu10.hana.ondemand.com', 'tutorials!t676072.Tutorial.MCP');
     expect(m.resource).toBe('https://host.example/mcp-auth');
     expect(m.authorization_servers).toEqual(['https://t.authentication.eu10.hana.ondemand.com']);
-    expect(m.scopes_supported).toContain('Tutorial.MCP');
+    expect(m.scopes_supported).toContain('tutorials!t676072.Tutorial.MCP');
     expect(m.bearer_methods_supported).toEqual(['header']);
+  });
+
+  it('served authorization-server doc advertises the qualified scope from the binding', () => {
+    setXsuaaBinding('https://tutorial-system.authentication.eu10-005.hana.ondemand.com', 'tutorials!t676072');
+    const res = mockRes();
+    wellKnownOAuthHandler(
+      { method: 'GET', url: '/.well-known/oauth-authorization-server', headers: { host: 'x.example' } },
+      res,
+      () => {},
+    );
+    const parsed = JSON.parse(res.body);
+    expect(parsed.scopes_supported).toContain('tutorials!t676072.Tutorial.MCP');
   });
 
   it('serves the authorization-server doc at its path with 200 + JSON', () => {

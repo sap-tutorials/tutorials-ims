@@ -118,21 +118,28 @@ describe('Tutorial.MCP scope (#1105)', () => {
       // reopened. The `/oauth/callback` pair was added for #1105 criterion 8
       // after a live handshake failed with "redirect_uri does not match the
       // configuration": mcp-remote's callback path had no matching entry.
+      //
+      // Only `http://localhost` loopbacks are allowed — NOT `http://127.0.0.1`.
+      // XSUAA rejects `http://` redirect URIs whose host is anything other than
+      // `localhost` ("Malformed redirect URIs detected … only 'localhost' is
+      // allowed"), discovered when `cf update-service` first re-applied this
+      // config for #1105. mcp-remote uses the `localhost` loopback anyway, so
+      // nothing real is lost.
       for (const required of [
-        'http://127.0.0.1:*/callback',
         'http://localhost:*/callback',
-        'http://127.0.0.1:*/oauth/callback',
         'http://localhost:*/oauth/callback',
         'https://developers.sap.com/callback'
       ]) {
         expect(uris).toContain(required);
       }
-      // Anti-regression: the hazardous patterns must NOT reappear.
+      // Anti-regression: hazardous / XSUAA-rejected patterns must NOT reappear.
       for (const hazardous of [
         'http://localhost/*',
         'http://127.0.0.1/*',
         'http://localhost:*/**',
         'http://127.0.0.1:*/**',
+        'http://127.0.0.1:*/callback',       // XSUAA rejects non-localhost http hosts
+        'http://127.0.0.1:*/oauth/callback', // XSUAA rejects non-localhost http hosts
         'mcp://*'
       ]) {
         expect(uris).not.toContain(hazardous);

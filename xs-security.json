@@ -224,9 +224,7 @@
       "https://*.cfapps.*.hana.ondemand.com/**",
       "vscode://sap-tutorials.sage-tutorial-extension/**",
       "https://developers.sap.com/callback",
-      "http://127.0.0.1:*/callback",
       "http://localhost:*/callback",
-      "http://127.0.0.1:*/oauth/callback",
       "http://localhost:*/oauth/callback"
     ]
   }
