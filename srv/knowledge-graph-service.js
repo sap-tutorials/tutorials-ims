@@ -1007,7 +1007,7 @@ export default cds.service.impl(async function () {
     // 3. Cache lookup — if we've already served this (slug, graphVersion)
     //    within the TTL window, return the cached result and skip ALL the
     //    downstream DB work. See srv/lib/kg-neighborhood-cache.js.
-    const cached = getCachedNeighborhood(slug, graphVersion);
+    const cached = await getCachedNeighborhood(slug, graphVersion);
     if (cached) return cached;
 
     // 4. Run the named query via the KG_QUERY procedure.
@@ -1168,7 +1168,7 @@ export default cds.service.impl(async function () {
     // 11. Cache-store — key = (slug, graphVersion). Next request for this
     //     tutorial with the same graphVersion hits the cache and skips ALL
     //     the DB work above. See srv/lib/kg-neighborhood-cache.js.
-    setCachedNeighborhood(slug, graphVersion, result);
+    await setCachedNeighborhood(slug, graphVersion, result);
     return result;
   });
 
@@ -1227,7 +1227,7 @@ export default cds.service.impl(async function () {
     }
 
     // 3. Cache lookup — 'full' bucket so we don't collide with the sidebar.
-    const cached = getCachedNeighborhood(slug, graphVersion, 'full');
+    const cached = await getCachedNeighborhood(slug, graphVersion, 'full');
     if (cached) return cached;
 
     const tutorialIri = TUTORIAL_IRI_PREFIX + slug;
@@ -1346,7 +1346,7 @@ export default cds.service.impl(async function () {
       typeConfig:            typeConfigForWire(),
     };
 
-    setCachedNeighborhood(slug, graphVersion, result, 'full');
+    await setCachedNeighborhood(slug, graphVersion, result, 'full');
     return result;
   });
 

@@ -82,8 +82,8 @@ beforeAll(async () => {
   }]));
 });
 
-beforeEach(() => {
-  cache.bustNeighborhoodCache();
+beforeEach(async () => {
+  await cache.bustNeighborhoodCache();
 });
 
 describe('neighborhood cache-hit short-circuit', () => {
@@ -103,10 +103,10 @@ describe('neighborhood cache-hit short-circuit', () => {
       typeConfig: [],
       _cacheSentinel: 'neighborhood-cache-hit-marker',
     };
-    cache.setCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, sentinel);
+    await cache.setCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, sentinel);
 
     // Sanity — the cache is populated for the (slug, gv, 'default') bucket.
-    expect(cache.getCachedNeighborhood(SLUG, TEST_GRAPH_VERSION)).toBe(sentinel);
+    expect(await cache.getCachedNeighborhood(SLUG, TEST_GRAPH_VERSION)).toEqual(sentinel);
 
     const res = await project.get(`/graph/neighborhood(slug='${SLUG}')`);
     expect(res.status).toBe(200);
@@ -130,9 +130,9 @@ describe('neighborhood cache-hit short-circuit', () => {
       typeConfig: [],
       _cacheSentinel: 'neighborhood-full-cache-hit-marker',
     };
-    cache.setCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, sentinel, 'full');
+    await cache.setCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, sentinel, 'full');
 
-    expect(cache.getCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, 'full')).toBe(sentinel);
+    expect(await cache.getCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, 'full')).toEqual(sentinel);
 
     const res = await project.get(`/graph/neighborhoodFull(slug='${SLUG}')`);
     expect(res.status).toBe(200);
@@ -167,8 +167,8 @@ describe('neighborhood cache-hit short-circuit', () => {
       otherResourcesByType: [], typeConfig: [],
       _cacheSentinel: 'full-marker',
     };
-    cache.setCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, sidebarSentinel /* default */);
-    cache.setCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, fullSentinel, 'full');
+    await cache.setCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, sidebarSentinel /* default */);
+    await cache.setCachedNeighborhood(SLUG, TEST_GRAPH_VERSION, fullSentinel, 'full');
 
     const sidebarRes = await project.get(`/graph/neighborhood(slug='${SLUG}')`);
     expect(sidebarRes.status).toBe(200);

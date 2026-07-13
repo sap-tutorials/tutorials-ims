@@ -17,9 +17,6 @@ import {
 } from '../../srv/lib/kg-neighborhood-full-helpers.js';
 import { RESOURCE_TYPE_CONFIG } from '../../srv/lib/kg-resource-type-config.js';
 import {
-  getCachedNeighborhood,
-  setCachedNeighborhood,
-  bustNeighborhoodCache,
   _makeKey,
 } from '../../srv/lib/kg-neighborhood-cache.js';
 
@@ -287,17 +284,10 @@ describe('KnowledgeGraphService.NeighborhoodFullResult CDS type — Task 5 of #8
 });
 
 describe('kg-neighborhood-cache — full bucket isolation for Task 5', () => {
-  beforeEach(() => bustNeighborhoodCache());
-
-  it('the `full` bucket is isolated from `default` for the same (slug, graphVersion)', () => {
-    const sidebar = { flavour: 'sidebar' };
-    const expanded = { flavour: 'expanded' };
-    setCachedNeighborhood('a', 'v1', sidebar, 'default');
-    setCachedNeighborhood('a', 'v1', expanded, 'full');
-    expect(getCachedNeighborhood('a', 'v1', 'default')).toBe(sidebar);
-    expect(getCachedNeighborhood('a', 'v1', 'full')).toBe(expanded);
-  });
-
+  // Runtime get/set/bust bucket-isolation coverage moved to
+  // test/unit/kg-neighborhood-cache.test.js, which boots the cds-caching
+  // service (#1177). This file keeps only the pure key-shape assertion,
+  // which needs no caching runtime.
   it('_makeKey includes the bucket prefix so `full` cannot collide with `default`', () => {
     const kFull = _makeKey('a', 'v1', 'full');
     const kDefault = _makeKey('a', 'v1', 'default');

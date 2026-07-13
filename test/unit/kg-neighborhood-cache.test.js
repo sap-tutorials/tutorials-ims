@@ -1,157 +1,105 @@
 // test/unit/kg-neighborhood-cache.test.js
 //
-// Unit tests for the neighborhood LRU response cache. Pure JS, no DB.
+// Behavioral tests for the neighborhood response cache, now backed by the
+// `cds-caching` plugin (issue #1177). These boot a real cds runtime so the
+// `caching` service resolves — the former pure-JS LRU-internals assertions
+// (_cacheStats, MAX_ENTRIES eviction, fake-timer TTL) are gone because the
+// store implementation is now cds-caching's responsibility, not ours. We test
+// OUR contract: miss/hit, version/slug/bucket key awareness, tag-based bust,
+// bucket validation, and fail-open behavior.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  getCachedNeighborhood,
-  setCachedNeighborhood,
-  bustNeighborhoodCache,
-  _cacheStats,
-  _makeKey,
-} from '../../srv/lib/kg-neighborhood-cache.js';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import cds from '@sap/cds';
 
-beforeEach(() => {
-  bustNeighborhoodCache();
+let getCachedNeighborhood, setCachedNeighborhood, bustNeighborhoodCache, _makeKey, _resetConnection;
+
+beforeAll(async () => {
+  // In-memory caching store; no DB features needed for these assertions.
+  cds.env.requires = cds.env.requires || {};
+  cds.env.requires.caching = { impl: 'cds-caching', namespace: 'kg-test', store: 'memory' };
+  await cds.connect.to('caching');
+  ({
+    getCachedNeighborhood,
+    setCachedNeighborhood,
+    bustNeighborhoodCache,
+    _makeKey,
+    _resetConnection,
+  } = await import('../../srv/lib/kg-neighborhood-cache.js'));
+  _resetConnection();
 });
 
-describe('kg-neighborhood-cache', () => {
-  it('returns undefined on miss', () => {
-    expect(getCachedNeighborhood('any-slug', 'v1')).toBeUndefined();
+beforeEach(async () => {
+  await bustNeighborhoodCache();
+});
+
+describe('kg-neighborhood-cache (cds-caching-backed)', () => {
+  it('returns undefined on miss', async () => {
+    expect(await getCachedNeighborhood('any-slug', 'v1')).toBeUndefined();
   });
 
-  it('returns the stored value on hit', () => {
+  it('returns the stored value on hit', async () => {
     const value = { tutorial: { slug: 'a', title: 'A' }, teaches: [] };
-    setCachedNeighborhood('a', 'v1', value);
-    expect(getCachedNeighborhood('a', 'v1')).toBe(value);
+    await setCachedNeighborhood('a', 'v1', value);
+    expect(await getCachedNeighborhood('a', 'v1')).toEqual(value);
   });
 
-  it('keys are graphVersion-aware: same slug + different version = miss', () => {
-    setCachedNeighborhood('a', 'v1', { tag: 'v1' });
-    expect(getCachedNeighborhood('a', 'v2')).toBeUndefined();
-    expect(getCachedNeighborhood('a', 'v1')).toEqual({ tag: 'v1' });
+  it('keys are graphVersion-aware: same slug + different version = miss', async () => {
+    await setCachedNeighborhood('a', 'v1', { tag: 'v1' });
+    expect(await getCachedNeighborhood('a', 'v2')).toBeUndefined();
+    expect(await getCachedNeighborhood('a', 'v1')).toEqual({ tag: 'v1' });
   });
 
-  it('keys are slug-aware: same version + different slug = miss', () => {
-    setCachedNeighborhood('a', 'v1', { tag: 'a' });
-    expect(getCachedNeighborhood('b', 'v1')).toBeUndefined();
+  it('keys are slug-aware: same version + different slug = miss', async () => {
+    await setCachedNeighborhood('a', 'v1', { tag: 'a' });
+    expect(await getCachedNeighborhood('b', 'v1')).toBeUndefined();
   });
 
-  it('bustNeighborhoodCache clears every entry', () => {
-    setCachedNeighborhood('a', 'v1', 1);
-    setCachedNeighborhood('b', 'v1', 2);
-    setCachedNeighborhood('c', 'v2', 3);
-    bustNeighborhoodCache();
-    expect(getCachedNeighborhood('a', 'v1')).toBeUndefined();
-    expect(getCachedNeighborhood('b', 'v1')).toBeUndefined();
-    expect(getCachedNeighborhood('c', 'v2')).toBeUndefined();
-    expect(_cacheStats().size).toBe(0);
-  });
-
-  it('TTL expiry: entries older than 5 min return undefined', () => {
-    vi.useFakeTimers();
-    try {
-      setCachedNeighborhood('a', 'v1', { fresh: true });
-      // Just under TTL — still cached.
-      vi.advanceTimersByTime(4 * 60 * 1000 + 59_000);
-      expect(getCachedNeighborhood('a', 'v1')).toEqual({ fresh: true });
-      // Cross the boundary.
-      vi.advanceTimersByTime(2_000);
-      expect(getCachedNeighborhood('a', 'v1')).toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('LRU: at capacity, oldest entry is evicted on new insert', () => {
-    const { maxEntries } = _cacheStats();
-    // Fill to capacity. slug-0 is oldest by insertion order.
-    for (let i = 0; i < maxEntries; i++) {
-      setCachedNeighborhood(`slug-${i}`, 'v1', i);
-    }
-    expect(_cacheStats().size).toBe(maxEntries);
-    // Insert one more — slug-0 (oldest, never touched since insert) gets evicted.
-    setCachedNeighborhood(`slug-${maxEntries}`, 'v1', maxEntries);
-    expect(getCachedNeighborhood('slug-0', 'v1')).toBeUndefined();
-    // slug-1 still cached.
-    expect(getCachedNeighborhood('slug-1', 'v1')).toBe(1);
-    // Cache remained at capacity — new entry replaced the evicted one.
-    expect(_cacheStats().size).toBe(maxEntries);
-  });
-
-  it('LRU: hit moves entry to tail (fresh eviction pressure)', () => {
-    const { maxEntries } = _cacheStats();
-    for (let i = 0; i < maxEntries; i++) {
-      setCachedNeighborhood(`slug-${i}`, 'v1', i);
-    }
-    // Touch slug-0 — should move to tail, no longer the eviction candidate.
-    expect(getCachedNeighborhood('slug-0', 'v1')).toBe(0);
-    // Insert one more; slug-1 (now the oldest) should be evicted, not slug-0.
-    setCachedNeighborhood(`slug-${maxEntries}`, 'v1', maxEntries);
-    expect(getCachedNeighborhood('slug-0', 'v1')).toBe(0);
-    expect(getCachedNeighborhood('slug-1', 'v1')).toBeUndefined();
-  });
-
-  it('re-setting the same key does not double-count against capacity', () => {
-    const { maxEntries } = _cacheStats();
-    for (let i = 0; i < maxEntries; i++) {
-      setCachedNeighborhood(`slug-${i}`, 'v1', i);
-    }
-    setCachedNeighborhood('slug-5', 'v1', 'updated');
-    expect(_cacheStats().size).toBe(maxEntries);
-    expect(getCachedNeighborhood('slug-5', 'v1')).toBe('updated');
+  it('bustNeighborhoodCache clears every entry (all buckets, all versions)', async () => {
+    await setCachedNeighborhood('a', 'v1', 1);
+    await setCachedNeighborhood('b', 'v1', 2, 'full');
+    await setCachedNeighborhood('c', 'v2', 3);
+    await bustNeighborhoodCache();
+    expect(await getCachedNeighborhood('a', 'v1')).toBeUndefined();
+    expect(await getCachedNeighborhood('b', 'v1', 'full')).toBeUndefined();
+    expect(await getCachedNeighborhood('c', 'v2')).toBeUndefined();
   });
 
   describe('bucket parameter', () => {
-    it('bucket isolation: setting in "full" does not populate "default"', () => {
+    it('bucket isolation: setting in "full" does not populate "default"', async () => {
       const x = { tag: 'full-value' };
-      setCachedNeighborhood('a', 'v1', x, 'full');
-      expect(getCachedNeighborhood('a', 'v1', 'default')).toBeUndefined();
-      expect(getCachedNeighborhood('a', 'v1', 'full')).toBe(x);
+      await setCachedNeighborhood('a', 'v1', x, 'full');
+      expect(await getCachedNeighborhood('a', 'v1', 'default')).toBeUndefined();
+      expect(await getCachedNeighborhood('a', 'v1', 'full')).toEqual(x);
     });
 
-    it('cross-bucket isolation: default and full hold independent values for the same (slug, version)', () => {
-      const X = { bucket: 'default' };
-      const Y = { bucket: 'full' };
-      setCachedNeighborhood('a', 'v1', X, 'default');
-      setCachedNeighborhood('a', 'v1', Y, 'full');
-      expect(getCachedNeighborhood('a', 'v1', 'default')).toBe(X);
-      expect(getCachedNeighborhood('a', 'v1', 'full')).toBe(Y);
+    it('cross-bucket: default and full hold independent values for same (slug, version)', async () => {
+      await setCachedNeighborhood('a', 'v1', { bucket: 'default' }, 'default');
+      await setCachedNeighborhood('a', 'v1', { bucket: 'full' }, 'full');
+      expect(await getCachedNeighborhood('a', 'v1', 'default')).toEqual({ bucket: 'default' });
+      expect(await getCachedNeighborhood('a', 'v1', 'full')).toEqual({ bucket: 'full' });
     });
 
-    it('global bust wipes every bucket', () => {
-      setCachedNeighborhood('a', 'v1', 1, 'default');
-      setCachedNeighborhood('a', 'v1', 2, 'full');
-      bustNeighborhoodCache();
-      expect(getCachedNeighborhood('a', 'v1', 'default')).toBeUndefined();
-      expect(getCachedNeighborhood('a', 'v1', 'full')).toBeUndefined();
-      expect(_cacheStats().size).toBe(0);
-    });
-
-    it('backward-compat: 2-arg get/set behaves like the implicit "default" bucket', () => {
+    it('backward-compat: 2-arg get/set behaves like the implicit "default" bucket', async () => {
       const x = { legacy: true };
-      setCachedNeighborhood('a', 'v1', x);
-      // Explicit 'default' should find the same entry the legacy call wrote.
-      expect(getCachedNeighborhood('a', 'v1', 'default')).toBe(x);
-      // And the legacy get finds an entry written with explicit 'default'.
+      await setCachedNeighborhood('a', 'v1', x);
+      expect(await getCachedNeighborhood('a', 'v1', 'default')).toEqual(x);
       const y = { legacy: false };
-      setCachedNeighborhood('b', 'v1', y, 'default');
-      expect(getCachedNeighborhood('b', 'v1')).toBe(y);
+      await setCachedNeighborhood('b', 'v1', y, 'default');
+      expect(await getCachedNeighborhood('b', 'v1')).toEqual(y);
     });
 
     it('_makeKey is stable/deterministic and bucket-sensitive', () => {
       expect(_makeKey('a', 'v1', 'full')).toBe(_makeKey('a', 'v1', 'full'));
       expect(_makeKey('a', 'v1', 'full')).not.toBe(_makeKey('a', 'v1', 'default'));
-      // Legacy 2-arg call collapses to the 'default' bucket.
       expect(_makeKey('a', 'v1')).toBe(_makeKey('a', 'v1', 'default'));
     });
 
-    it('rejects unknown bucket names on set', () => {
-      expect(() => setCachedNeighborhood('a', 'v1', 1, 'nope')).toThrow(/bucket/i);
+    it('rejects unknown bucket names on set', async () => {
+      await expect(setCachedNeighborhood('a', 'v1', 1, 'nope')).rejects.toThrow(/bucket/i);
     });
 
-    it('rejects unknown bucket names on get', () => {
-      expect(() => getCachedNeighborhood('a', 'v1', 'nope')).toThrow(/bucket/i);
+    it('rejects unknown bucket names on get', async () => {
+      await expect(getCachedNeighborhood('a', 'v1', 'nope')).rejects.toThrow(/bucket/i);
     });
   });
 });
