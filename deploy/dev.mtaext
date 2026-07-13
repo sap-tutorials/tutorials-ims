@@ -24,10 +24,14 @@ modules:
   - name: tutorials-approuter
     parameters:
       app-name: tutorials-dev-approuter
-      env:
-        XSUAA_TENANT: "tutorial-system"
-        XSUAA_REGION: "eu10-005"
-        APPROUTER_BASE_URL: "https://developers-dev.cfapps.eu10-005.hana.ondemand.com"
+      # NB: an `env:` block here is silently dropped at deploy time — MTA
+      # rejects module-level `env` params ("Parameter(s) {tutorials-approuter=
+      # [env]} are not supported… will be lost"). The former XSUAA_TENANT/
+      # XSUAA_REGION/APPROUTER_BASE_URL entries never reached the approuter's
+      # runtime, which is why the build-time .well-known substitution (#1105)
+      # silently produced ${…} placeholders. The OAuth discovery docs are now
+      # generated dynamically at runtime from the bound xsuaa VCAP credentials
+      # + the request host (approuter/lib/well-known-oauth.js) — no env needed.
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
