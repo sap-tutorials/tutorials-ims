@@ -466,6 +466,20 @@ cds.on('bootstrap', (app) => {
     next();
   });
 
+  // /mcp-admin/* (OAuth tier, admin tools) → /mcp/admin/* rewrite (Phase 3 WS2 #1106).
+  // Mirrors /mcp-auth above. The approuter gates /mcp-admin/* with authenticationType:'xsuaa'
+  // + scope:'Tutorial.MCP'; per-action @requires (Admin/SuperAdmin/etc.) hides individual
+  // tools at the adapter level. Kill switch: MCP_ADMIN_TOOLS_ENABLED=false returns 503
+  // before the rewrite so no requests reach the mount.
+  app.use((req, res, next) => {
+    if (!req.url.startsWith('/mcp-admin/') && req.url !== '/mcp-admin') return next();
+    if (mcpFlags().adminTools === false) { return res.status(503).send('Phase 3 admin MCP disabled'); }
+    const rest = req.url.slice('/mcp-admin'.length) || '/';
+    req.url = '/mcp/admin' + (rest === '/' ? '' : rest);
+    if (req.originalUrl) req.originalUrl = req.url;
+    next();
+  });
+
   // PAT middleware — resolves Bearer pat_... to synthetic req.user for the
   // /mcp-pat/* prefix, then rewrites the URL to the real MCP mount (Phase 2 #1105).
   //
@@ -527,7 +541,7 @@ cds.on('bootstrap', (app) => {
   // .router unwrap; that's only for CAP's HttpAdapter instances).
   if (mcpFlags().phase3) {
     // [ [ mcpPath, serviceName ], … ] — Phase 3 R/P services. AdminService (WS2).
-    const RP_MOUNTS = [['/mcp/graph', 'KnowledgeGraphService']];
+    const RP_MOUNTS = [['/mcp/graph', 'KnowledgeGraphService'], ['/mcp/admin', 'AdminService']];
     for (const [mcpPath, name] of RP_MOUNTS) {
       let composed = null; // built once, on first request
       app.use(mcpPath, (req, res, next) => {
