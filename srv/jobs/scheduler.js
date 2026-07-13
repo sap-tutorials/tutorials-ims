@@ -49,6 +49,7 @@ import { runFetchNews } from './fetch-news-job.js';
 import { runMaterializeCoCompletions } from './materialize-co-completions.js';
 import { runKgPageRank } from './kg-pagerank-job.js';
 import { runKgCommunities } from './kg-communities-job.js';
+import { runKgCommunityLabels } from './kg-community-label-job.js';
 import { runKgWcc } from './kg-wcc-job.js';
 import { runOnDemandDrain } from './kg-ondemand-job.js';
 import { runKgFeaturedTopics } from './kg-featured-topics-job.js';
@@ -637,6 +638,21 @@ export function registerJobs() {
     ttlMs: 600000,
     description: 'Nightly Louvain community detection over KG_PG_WORKSPACE — populates KgCommunity sidecar (#917)',
     fn: () => runKgCommunities(),
+  });
+
+  // Daily 04:12 UTC — LLM-label each Louvain community (#1126). Runs 15 min
+  // after kg-communities (03:57) so labels see the settled nightly membership,
+  // and before kg-featured-topics (04:13). Off-minute :12 avoids collisions.
+  // Skips communities whose full member set is unchanged; a per-day LLM budget
+  // on ChatSettings ramps a first-run backlog. Fail-open: errors -> PipelineLog
+  // FAILED, never break request-time reads (findCommunityPeers omits the label).
+  // Spec: docs/superpowers/specs/2026-07-12-1126-kg-communities-joule-design.md
+  registerJob({
+    jobName: 'kg-community-labels',
+    schedule: '12 4 * * *',
+    ttlMs: 900000,
+    description: 'LLM-label KG communities into KgCommunityLabel (#1126)',
+    fn: () => runKgCommunityLabels(),
   });
 
   // Daily 04:07 UTC — weakly-connected-components pass over the KG

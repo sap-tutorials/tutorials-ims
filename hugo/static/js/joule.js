@@ -298,6 +298,37 @@
     }
   }
 
+  function renderCommunityPeersCards(items, label) {
+    if (!Array.isArray(items) || !items.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'joule-community-peers';
+    if (label) {
+      const heading = document.createElement('p');
+      heading.className = 'joule-community-peers__heading';
+      heading.textContent = label;
+      wrap.appendChild(heading);
+    }
+    const ul = document.createElement('ul');
+    for (const it of items) {
+      if (!it || !SAFE_SLUG_RE.test(String(it.slug || ''))) continue;
+      const li = document.createElement('li');
+      li.className = 'joule-community-peers__item';
+      const a = document.createElement('a');
+      a.className = 'joule-community-peers__link';
+      a.href = `/tutorials/${it.slug}.html`;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = it.title || it.slug;
+      li.appendChild(a);
+      ul.appendChild(li);
+    }
+    if (ul.childElementCount > 0) {
+      wrap.appendChild(ul);
+      transcript.appendChild(wrap);
+      scrollToBottom(body);
+    }
+  }
+
   function renderAnalyticsTable(parsed) {
     const rows = Array.isArray(parsed?.rows) ? parsed.rows : [];
     const wrap = document.createElement('div');
@@ -722,6 +753,9 @@
           } else if (payload.type === 'external-content-cards') {
             needsTurnBreak = true;
             renderExternalContentCards(payload.items || []);
+          } else if (payload.type === 'community-peers-cards') {
+            needsTurnBreak = true;
+            renderCommunityPeersCards(payload.items || [], payload.label);
           } else if (payload.type === 'analytics-result') {
             needsTurnBreak = true;
             renderAnalyticsTable(payload);

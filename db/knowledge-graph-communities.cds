@@ -62,3 +62,22 @@ view KgCommunitySummaryV as
         max(kc.communityFingerprint)                                               as communityFingerprint : String(64),
         case when count(m.ID) > 0 then true else false end                         as alreadyPromoted      : Boolean
   } group by kc.communityId;
+
+// KgCommunityLabel — human-readable label per community (#1126). Keyed on the
+// stable communityFingerprint (#985), NOT the volatile Louvain communityId, so
+// a label survives nightly re-runs as long as the tutorial membership is
+// unchanged. Written by srv/jobs/kg-community-label-job.js; never CSV-seeded
+// (a .hdbtabledata would clobber generated values on redeploy).
+//
+// memberSlugsHash is the skip-key: the fingerprint hashes only tutorial-typed
+// slugs, but the label reflects the whole cluster, so the job re-labels only
+// when the full sorted member-slug set changes.
+@cds.autoexpose: false
+entity KgCommunityLabel {
+  key communityFingerprint : String(64);
+      label                : String(120);
+      rationale            : String(500);
+      memberSlugsHash      : String(64);
+      labeledAt            : Timestamp;
+      model                : String(100);
+}
