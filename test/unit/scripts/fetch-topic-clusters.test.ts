@@ -1,11 +1,21 @@
 // test/unit/scripts/fetch-topic-clusters.test.ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { readFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const OUT = join('hugo', 'data', 'topic_clusters.json');
 
 describe('fetch-topic-clusters script (#1170)', () => {
+  // The script writes to the git-tracked hugo/data/topic_clusters.json. Snapshot
+  // its committed content up front and restore it after the suite so a local run
+  // leaves the working tree clean (no spurious `git status` diff).
+  let original: string | null = null;
+  beforeAll(() => { original = existsSync(OUT) ? readFileSync(OUT, 'utf-8') : null; });
+  afterAll(() => {
+    if (original === null) { if (existsSync(OUT)) rmSync(OUT); }
+    else writeFileSync(OUT, original, 'utf-8');
+  });
+
   beforeEach(() => {
     mkdirSync(join('hugo', 'data'), { recursive: true });
     if (existsSync(OUT)) rmSync(OUT);
