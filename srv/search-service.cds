@@ -13,14 +13,17 @@ type FacetResult {
   tagCounts        : many FacetCount;
 };
 
-@path: '/search'
 @requires: 'any'
-// NB: MUST be `@protocol: ['odata', 'graphql', 'mcp']`, not the `@graphql` /
-// `@mcp` single-protocol shortcuts. Either shortcut alone REPLACES the default
-// OData mount, leaving `/search/SearchableItems` 404 while the other protocol
-// still resolves. `@graphql` regression cost 218 unit tests on 2026-07-05
-// (misattributed to HCQL, reverted in #1004). `@mcp` added by #912.
-@protocol: ['odata', 'graphql', 'mcp']
+// Protocol mounting (#1105 fix): use the OBJECT form so ONLY OData inherits
+// the legacy `/search` path. A bare `@path: '/search'` + `@protocol: ['odata',
+// 'graphql', 'mcp']` collapsed ALL THREE adapters onto `/search` (CAP source
+// protocols/index.js: a leading-slash path skips the per-protocol prefix), so
+// OData won POST and the MCP adapter was shadowed — `/mcp/search` 404'd and
+// Phase-1 MCP never actually served over HTTP. The object form below keeps
+// OData at `/search` (preserving `/search/SearchableItems` — the #1004 218-test
+// regression) while graphql mounts at its global `/graphql` and mcp at
+// `/mcp/search`. Do NOT collapse back to a top-level `@path`.
+@protocol: [{ kind: 'odata', path: '/search' }, 'graphql', { kind: 'mcp', path: '/mcp/search' }]
 service SearchService {
 
   // Per-element fuzziness threshold: entity-level @Search.fuzzinessThreshold

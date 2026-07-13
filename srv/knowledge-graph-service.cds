@@ -33,11 +33,13 @@
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
 @requires : 'any'
-// See note on SearchService: single-protocol shortcuts (`@graphql`, `@mcp`)
-// REPLACE the default OData mount. Explicit dual list keeps /graph/Concepts,
-// /graph/neighborhood, etc. reachable. `@mcp` added by #912.
-@protocol: ['odata', 'graphql', 'mcp']
-service KnowledgeGraphService @(path : '/graph') {
+// #1105 fix: object-form @protocol so ONLY OData inherits `/graph`. The inline
+// `@(path:'/graph')` + array `@protocol` collapsed all adapters onto `/graph`
+// and shadowed MCP (see SearchService note + protocols/index.js). OData stays
+// at `/graph` (keeping /graph/Concepts, /graph/neighborhood); mcp mounts at
+// `/mcp/graph`.
+@protocol: [{ kind: 'odata', path: '/graph' }, 'graphql', { kind: 'mcp', path: '/mcp/graph' }]
+service KnowledgeGraphService {
 
   // ─── Projections (curation introspection + admin tooling) ─────────────
   // `Concepts` is writable so admins can inline-edit `name` + `description`

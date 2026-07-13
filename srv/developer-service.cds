@@ -1,10 +1,11 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 
-@path: '/api'
 @requires: 'any'
-// See note on SearchService: `@graphql` alone REPLACES the OData mount and
-// 404's /api/completeStep, /api/setKhorosLink, /api/getKhorosProfile, etc.
-@protocol: ['odata', 'graphql', 'mcp']
+// #1105 fix: object-form @protocol so ONLY OData inherits `/api`. A top-level
+// `@path: '/api'` + array `@protocol` collapsed all adapters onto `/api`,
+// shadowing MCP (see SearchService note + protocols/index.js). OData stays at
+// `/api` (preserving /api/completeStep etc.); mcp mounts at `/mcp/api`.
+@protocol: [{ kind: 'odata', path: '/api' }, 'graphql', { kind: 'mcp', path: '/mcp/api' }]
 service DeveloperService {
 
   // Exposed entities (restricted projections)
