@@ -37,4 +37,18 @@ extend service KnowledgeGraphService {
     concepts  : array of { slug: String; name: String; score: Double };
     tutorials : array of { slug: String; title: String; score: Double };
   };
+
+  /** Surface a knowledge-graph community (Louvain cluster) by its stable
+      fingerprint: member tutorial slugs, the LLM-generated cluster label,
+      and whether it has been promoted to a mission. Read-only. Community
+      data is DEV-only until the promotion flow reaches production.
+      @param id  Community fingerprint (stable SHA-256 of sorted member slugs,
+                 NOT the volatile Louvain communityId). */
+  function kg_community(id: String) returns {
+    communityId           : String;
+    label                 : String;
+    memberTutorials       : array of { slug: String; title: String };
+    size                  : Integer;
+    promotedToMissionSlug : String;
+  };
 }

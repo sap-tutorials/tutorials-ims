@@ -36,7 +36,7 @@ import { expect, describe, it, beforeAll, afterAll, afterEach, vi } from 'vitest
 import path from 'node:path';
 import cds from '@sap/cds';
 import { _resetCacheForTests } from '../../srv/lib/runtime-config/kg-settings.js';
-import { handleSharedConcepts, handleNeighborhood, handleSearchConcepts } from '../../srv/lib/mcp-kg-tools.js';
+import { handleSharedConcepts, handleNeighborhood, handleSearchConcepts, handleCommunity } from '../../srv/lib/mcp-kg-tools.js';
 
 // Must be set BEFORE the service module is loaded.
 process.env.KNOWLEDGE_GRAPH_ENABLED = 'true';
@@ -408,5 +408,72 @@ describe('kg_search_concepts', () => {
     expect(await handleSearchConcepts.call(srv, { data: { query: '  ' } }))
       .toEqual({ concepts: [], tutorials: [] });
     expect(srv.send).not.toHaveBeenCalled();
+  });
+});
+
+// ─── kg_community — direct-import unit tests (#1106 Task 4) ──────────────────
+// Tests handleCommunity directly (not via CDS dispatch) to stay fast/isolated.
+// Real columns: KgCommunity.{slug, vertexType, communityFingerprint},
+//               KgCommunityLabel.{communityFingerprint, label},
+//               Missions.{slug, sourceKgCommunityFingerprint}.
+// The tool's `id` argument is the community FINGERPRINT (stable SHA-256),
+// NOT the volatile Louvain communityId.
+describe('kg_community', () => {
+  // Fake db whose run() dispatches by inspecting the compiled query's entity name.
+  function fakeDb(map) {
+    return {
+      run: vi.fn(async (q) => {
+        const ref = q?.SELECT?.from?.ref?.[0];
+        const name = (typeof ref === 'object' ? ref?.id : ref) ?? '';
+        const key = String(name).split('.').pop();
+        const rows = map[key] ?? [];
+        return q?.SELECT?.one ? (rows[0] ?? null) : rows;
+      }),
+    };
+  }
+
+  it('returns label, members by slug, size and promotion status by fingerprint', async () => {
+    const db = fakeDb({
+      KgCommunity:      [
+        { slug: 'a', vertexType: 'tutorial', communityFingerprint: 'fp1' },
+        { slug: 'b', vertexType: 'tutorial', communityFingerprint: 'fp1' },
+      ],
+      KgCommunityLabel: [{ label: 'Draft Handling', communityFingerprint: 'fp1' }],
+      Missions:         [{ slug: 'draft-mission' }],
+    });
+    const out = await handleCommunity.call({}, { data: { id: 'fp1' }, _db: db });
+    expect(out.label).toBe('Draft Handling');
+    expect(out.size).toBe(2);
+    expect(out.memberTutorials.map((m) => m.slug)).toEqual(['a', 'b']);
+    // slug-as-title: title equals slug (no title column in schema)
+    expect(out.memberTutorials[0].title).toBe('a');
+    expect(out.promotedToMissionSlug).toBe('draft-mission');
+    expect(out.communityId).toBe('fp1');
+  });
+
+  it('returns empty shell for unknown fingerprint (no throw)', async () => {
+    const db = fakeDb({});
+    const out = await handleCommunity.call({}, { data: { id: 'nope' }, _db: db });
+    expect(out.memberTutorials).toEqual([]);
+    expect(out.size).toBe(0);
+    expect(out.promotedToMissionSlug).toBeNull();
+    expect(out.label).toBeNull();
+    expect(out.communityId).toBe('nope');
+  });
+
+  it('returns empty shell for blank id without calling db', async () => {
+    const db = fakeDb({});
+    const out = await handleCommunity.call({}, { data: { id: '' }, _db: db });
+    expect(out.memberTutorials).toEqual([]);
+    expect(out.size).toBe(0);
+    expect(db.run).not.toHaveBeenCalled();
+  });
+
+  it('fail-open: returns shell without echoing error message on db throw', async () => {
+    const SECRET = 'SENSITIVE-internal-table-name';
+    const db = { run: vi.fn(async () => { throw new Error(SECRET); }) };
+    const out = await handleCommunity.call({}, { data: { id: 'fp-err' }, _db: db });
+    expect(out.memberTutorials).toEqual([]);
+    expect(JSON.stringify(out)).not.toContain(SECRET);
   });
 });
