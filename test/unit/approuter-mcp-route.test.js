@@ -48,43 +48,19 @@ describe('approuter /mcp/* route (#912)', () => {
     expect(mcpIdx, 'the /mcp/* route must be listed before the catch-all').toBeLessThan(catchAllIdx);
   });
 
-  it('mounts /.well-known/oauth-authorization-server anonymous', () => {
-    const route = xsapp.routes.find((r) => r.source === '^/.well-known/oauth-authorization-server$');
-    expect(route).toBeDefined();
-    expect(route.authenticationType).toBe('none');
-  });
-
-  it('mounts /.well-known/oauth-protected-resource anonymous', () => {
-    const route = xsapp.routes.find((r) => r.source === '^/.well-known/oauth-protected-resource$');
-    expect(route).toBeDefined();
-    expect(route.authenticationType).toBe('none');
-  });
-
-  // Regression guard for the #1105 live bug: the broad ORD route
-  // `^/.well-known/(.*)$` → srv-api (added by @cap-js/ord) is first-match-wins
-  // and, if listed first, shadows the two specific static OAuth discovery
-  // routes below — so MCP clients get a 404 on the discovery docs and cannot
-  // auto-configure. Approuter matches routes top-to-bottom, so the specific
-  // static OAuth routes MUST precede the broad srv-api catch.
-  it('orders both OAuth discovery routes BEFORE the broad /.well-known/* srv-api route', () => {
-    const idxBroad = xsapp.routes.findIndex((r) => r.source === '^/.well-known/(.*)$');
-    const idxAuthServer = xsapp.routes.findIndex(
-      (r) => r.source === '^/.well-known/oauth-authorization-server$',
-    );
-    const idxProtRes = xsapp.routes.findIndex(
-      (r) => r.source === '^/.well-known/oauth-protected-resource$',
-    );
-    expect(idxBroad, 'broad /.well-known/* route missing').toBeGreaterThan(-1);
-    expect(idxAuthServer).toBeGreaterThan(-1);
-    expect(idxProtRes).toBeGreaterThan(-1);
-    expect(
-      idxAuthServer,
-      'oauth-authorization-server must precede the broad /.well-known/* srv-api route',
-    ).toBeLessThan(idxBroad);
-    expect(
-      idxProtRes,
-      'oauth-protected-resource must precede the broad /.well-known/* srv-api route',
-    ).toBeLessThan(idxBroad);
+  // The OAuth discovery docs (#1105) are NOT served via xs-app.json static
+  // routes anymore — they are generated dynamically at runtime by the
+  // wellKnownOAuthHandler middleware in server.js (registered first in
+  // insertMiddleware.first, so it intercepts before xs-app routing). This
+  // replaced the build-time-substitution approach, which shipped
+  // unsubstituted ${…} placeholders. See approuter/lib/well-known-oauth.js
+  // and test/unit/well-known-oauth.test.js. Assert the dead static routes are
+  // GONE so nobody re-adds a shadowed/stale copy.
+  it('does NOT declare static xs-app routes for the OAuth discovery docs', () => {
+    const authServer = xsapp.routes.find((r) => r.source === '^/.well-known/oauth-authorization-server$');
+    const protRes = xsapp.routes.find((r) => r.source === '^/.well-known/oauth-protected-resource$');
+    expect(authServer, 'oauth-authorization-server is served dynamically, not via a static xs-app route').toBeUndefined();
+    expect(protRes, 'oauth-protected-resource is served dynamically, not via a static xs-app route').toBeUndefined();
   });
 
   it('mounts /mcp-pat/* anonymous with csrfProtection false', () => {
