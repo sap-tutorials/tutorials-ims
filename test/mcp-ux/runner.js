@@ -26,7 +26,7 @@
 import fs   from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import yaml from 'js-yaml';
+import { load as yamlLoad, FAILSAFE_SCHEMA } from 'js-yaml';
 import Anthropic from '@anthropic-ai/sdk';
 
 const __dir = path.dirname(fileURLToPath(import.meta.url));
@@ -49,7 +49,7 @@ async function loadPrompts() {
   const raw = fs.readFileSync(PROMPTS_FILE, 'utf8');
   // FAILSAFE_SCHEMA: strings/arrays/maps only — no custom tags, no type coercion.
   // prompts.yaml is a repo-checked asset but treat it as untrusted data anyway.
-  return yaml.load(raw, { schema: yaml.FAILSAFE_SCHEMA }).prompts;
+  return yamlLoad(raw, { schema: FAILSAFE_SCHEMA }).prompts;
 }
 
 async function fetchTools() {
