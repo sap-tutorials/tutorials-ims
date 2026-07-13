@@ -122,19 +122,30 @@ The server speaks Streamable HTTP. Clients may send `Accept: application/json` o
 
 Phase 2 adds authenticated tools under `/mcp-auth/*` — your tutorial progress, events, and personalized recommendations. To use them, sign in with your SAP universal ID via OAuth.
 
-Edit `claude_desktop_config.json` and point at the authenticated endpoint:
+> **If your Claude Desktop build uses native OAuth, it may fail with
+> `does not support dynamic client registration`** — the same XSUAA/DCR limitation described
+> in the Claude Code section below. XSUAA requires a **pre-registered** client, so clients
+> that insist on RFC 7591 self-registration cannot connect directly. If you hit this, bridge
+> through **`mcp-remote`** with the pre-registered `client_id` (see the Claude Code section),
+> or use a **[PAT](#headless--ci-with-a-personal-access-token)**.
+
+For builds that accept a pre-registered client, bridge through `mcp-remote`:
 
 ```json
 {
   "mcpServers": {
     "sap-developers-auth": {
-      "url": "<base>/mcp-auth/api"
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote", "<base>/mcp-auth/api",
+        "--static-oauth-client-id", "sb-tutorials-mcp"
+      ]
     }
   }
 }
 ```
 
-Claude Desktop discovers the OAuth server automatically via the `.well-known/oauth-authorization-server` document served at `<base>`. On first connection it opens a browser tab for consent (PKCE, no client secret required). After approval, the access token is stored by Claude Desktop and refreshed silently.
+On first connection `mcp-remote` opens a browser tab for consent (PKCE, no client secret required). The endpoints are discovered automatically from `<base>/.well-known/oauth-authorization-server`; you supply only the `client_id`. After approval, the token is cached and refreshed silently.
 
 **Available authenticated tools** (DeveloperService + HomepageService):
 
@@ -154,24 +165,17 @@ Claude Desktop discovers the OAuth server automatically via the `.well-known/oau
 
 ## Sign in with Claude Code (OAuth via mcp-remote)
 
-Claude Code's native HTTP client handles OAuth automatically when the server advertises `.well-known/oauth-authorization-server`. Add a `.mcp.json` at your project root:
+> **Claude Code's *native* `type: http` OAuth does NOT work against this server.** Its
+> built-in OAuth client requires **Dynamic Client Registration** (RFC 7591) — it tries to
+> `POST` to a `registration_endpoint` to self-register. XSUAA does not support DCR; OAuth
+> clients must be **pre-registered**. Pointing Claude Code's native HTTP client at
+> `/mcp-auth/api` fails with `SDK auth failed: Incompatible auth server: does not support
+> dynamic client registration`. Use **`mcp-remote`** (below), which accepts a pre-registered
+> `client_id`, or use a **[PAT](#headless--ci-with-a-personal-access-token)** (simplest for
+> Claude Code — no browser flow).
 
-```json
-{
-  "mcpServers": {
-    "sap-developers-auth": {
-      "type": "http",
-      "url": "<base>/mcp-auth/api"
-    },
-    "sap-developers-search": {
-      "type": "http",
-      "url": "<base>/mcp/search"
-    }
-  }
-}
-```
-
-For clients that only speak stdio, bridge through `mcp-remote` which handles the OAuth PKCE handshake and forwards authenticated requests:
+Bridge through `mcp-remote`, which performs the OAuth 2.1 authorization-code + PKCE handshake
+against the pre-registered public client and forwards the bearer to `/mcp-auth/api`:
 
 ```bash
 npm install -g mcp-remote
@@ -182,13 +186,24 @@ npm install -g mcp-remote
   "mcpServers": {
     "sap-developers-auth": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "<base>/mcp-auth/api"]
+      "args": [
+        "-y", "mcp-remote", "<base>/mcp-auth/api",
+        "--static-oauth-client-id", "sb-tutorials-mcp"
+      ]
     }
   }
 }
 ```
 
-On first run, `mcp-remote` opens your browser for the OAuth consent flow. After approval the token is cached in `~/.mcp-auth/`.
+`sb-tutorials-mcp` is the shared **public** client (PKCE, no client secret) pre-registered in
+the XSUAA instance for MCP access. On first run, `mcp-remote` opens your browser for the SAP
+universal-ID consent flow; after approval the token is cached in `~/.mcp-auth/` and refreshed
+silently. The server advertises its endpoints at `<base>/.well-known/oauth-authorization-server`,
+so `mcp-remote` discovers the authorize/token URLs automatically — you only supply the `client_id`.
+
+> **Simplest path for Claude Code:** skip OAuth entirely and use a
+> [Personal Access Token](#headless--ci-with-a-personal-access-token). The PAT path needs no
+> browser handshake and no pre-registered client.
 
 ## Headless / CI with a Personal Access Token
 
