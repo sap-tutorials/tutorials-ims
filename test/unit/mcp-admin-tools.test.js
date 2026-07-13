@@ -77,33 +77,63 @@ describe('mcp-admin-tools', () => {
     // Inject a fake publishHandler factory so we assert delegation, not the
     // real content-store DB path. The handler must build a single-slug body
     // and pass it through the existing validation/guards.
-    const publishHandler = vi.fn(async (req, res) => {
-      expect(req.body.files).toHaveProperty('my-slug');
-      res.status(201).json({ version: 7, filesWritten: 1 });
-    });
-    const factory = vi.fn(() => ({ publishHandler }));
-    const out = await handlePublishContent.call({}, {
-      data: { slug: 'my-slug', html: 'PGh0bWw+' },
-      user: { id: 'author@sap.example' },
-      _createContentHandlers: factory,
-    });
-    expect(publishHandler).toHaveBeenCalledTimes(1);
-    expect(out.published).toBe(true);
-    expect(out.slug).toBe('my-slug');
+    const saved = process.env.CONTENT_API_KEY;
+    process.env.CONTENT_API_KEY = 'test-key';
+    try {
+      const publishHandler = vi.fn(async (req, res) => {
+        expect(req.body.files).toHaveProperty('my-slug');
+        res.status(201).json({ version: 7, filesWritten: 1 });
+      });
+      const factory = vi.fn(() => ({ publishHandler }));
+      const out = await handlePublishContent.call({}, {
+        data: { slug: 'my-slug', html: 'PGh0bWw+' },
+        user: { id: 'author@sap.example' },
+        _createContentHandlers: factory,
+      });
+      expect(publishHandler).toHaveBeenCalledTimes(1);
+      expect(out.published).toBe(true);
+      expect(out.slug).toBe('my-slug');
+    } finally {
+      if (saved === undefined) delete process.env.CONTENT_API_KEY;
+      else process.env.CONTENT_API_KEY = saved;
+    }
   });
 
   it('publish_content rejects when publishHandler returns a 4xx/5xx status', async () => {
-    const publishHandler = vi.fn(async (req, res) => {
-      res.status(400).json({ error: 'bad payload' });
-    });
-    const factory = vi.fn(() => ({ publishHandler }));
-    const reject = vi.fn((code, msg) => { throw Object.assign(new Error(msg), { code }); });
-    await expect(handlePublishContent.call({}, {
-      data: { slug: 'my-slug', html: 'PGh0bWw+' },
-      user: { id: 'a' },
-      reject,
-      _createContentHandlers: factory,
-    })).rejects.toThrow('bad payload');
-    expect(reject).toHaveBeenCalledWith(400, 'bad payload');
+    const saved = process.env.CONTENT_API_KEY;
+    process.env.CONTENT_API_KEY = 'test-key';
+    try {
+      const publishHandler = vi.fn(async (req, res) => {
+        res.status(400).json({ error: 'bad payload' });
+      });
+      const factory = vi.fn(() => ({ publishHandler }));
+      const reject = vi.fn((code, msg) => { throw Object.assign(new Error(msg), { code }); });
+      await expect(handlePublishContent.call({}, {
+        data: { slug: 'my-slug', html: 'PGh0bWw+' },
+        user: { id: 'a' },
+        reject,
+        _createContentHandlers: factory,
+      })).rejects.toThrow('bad payload');
+      expect(reject).toHaveBeenCalledWith(400, 'bad payload');
+    } finally {
+      if (saved === undefined) delete process.env.CONTENT_API_KEY;
+      else process.env.CONTENT_API_KEY = saved;
+    }
+  });
+
+  it('publish_content rejects with 503 when CONTENT_API_KEY is not set', async () => {
+    const saved = process.env.CONTENT_API_KEY;
+    delete process.env.CONTENT_API_KEY;
+    try {
+      const reject = vi.fn((code, msg) => { throw Object.assign(new Error(msg), { code }); });
+      await expect(handlePublishContent.call({}, {
+        data: { slug: 'my-slug', html: 'PGh0bWw+' },
+        user: { id: 'a' },
+        reject,
+      })).rejects.toThrow('CONTENT_API_KEY not configured');
+      expect(reject).toHaveBeenCalledWith(503, expect.stringContaining('CONTENT_API_KEY not configured'));
+    } finally {
+      if (saved !== undefined) process.env.CONTENT_API_KEY = saved;
+    }
   });
 });

@@ -57,23 +57,30 @@ export async function handleTriggerRebuild(req) {
 /**
  * publish_content — EMERGENCY lever; prefer trigger_rebuild (CI-validated).
  * Reuses the DEPRECATED single-shot /content/publish entry point
- * (createContentHandlers().publishHandler) via a synthetic req/res so ALL
- * existing validation + no-revert / carry-forward guards run. We do NOT
- * bypass or re-implement publish.
+ * (createContentHandlers().publishHandler) via a synthetic req/res.
+ *
+ * NOTE: this invokes the DEPRECATED single-shot publishHandler, which runs
+ * files-validation, catalog-slug drop, size caps, publish lock, and
+ * carry-forward — but NOT the #672 no-revert guard (that lives only in the
+ * begin/append/commit session path in content-publish-session.js). This is an
+ * emergency lever; trigger_rebuild (CI-validated) is the preferred path.
+ * App-layer CONTENT_API_KEY auth is enforced explicitly below because the
+ * synthetic-req invocation bypasses the Express contentAuthMiddleware.
  *
  * publishHandler expects `req.body.files[slug]` to be gzip-compressed,
  * base64-encoded HTML (it does `gunzipSync(Buffer.from(value, 'base64'))`).
  * The caller supplies that already-encoded string as req.data.html — the MCP
  * tool does not gzip on the caller's behalf; the emergency payload must match
  * what publish-content.ts would have sent for one slug.
- *
- * Auth for the underlying handler: publishHandler reads a Bearer token from
- * `req.headers.authorization` and compares it (timing-safe) to the resolved
- * CONTENT_API_KEY. We forward `Bearer ${CONTENT_API_KEY}` from the process env
- * so the same auth path is exercised; if the key is unset the handler returns
- * 503 and we reject.
  */
 export async function handlePublishContent(req) {
+  // Explicit app-layer gate: the Express contentAuthMiddleware is skipped by
+  // the synthetic-req path, so we enforce the key presence here instead.
+  // publishHandler itself does NOT read the auth header in the synthetic path.
+  if (!process.env.CONTENT_API_KEY) {
+    return req.reject(503, 'publish_content unavailable: CONTENT_API_KEY not configured');
+  }
+
   const createContentHandlers = req._createContentHandlers
     ?? (await import('./content-store.js')).createContentHandlers;
   const { publishHandler } = createContentHandlers();
@@ -88,7 +95,9 @@ export async function handlePublishContent(req) {
       sources: {},
     },
     headers: {
-      authorization: apiKey ? `Bearer ${apiKey}` : undefined,
+      // Defense-in-depth: forward key in case a future refactor wires the
+      // middleware; this header is NOT what gates the call (see check above).
+      authorization: `Bearer ${apiKey}`,
       'x-initiator': `mcp:${req.user?.id ?? 'unknown'}`,
     },
     user: req.user,

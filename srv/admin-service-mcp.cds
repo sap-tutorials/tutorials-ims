@@ -2,6 +2,7 @@
 // Phase 3 (#1106) — admin curation MCP tools (WS2). AdminService carries
 // @requires:'Admin' at service level; each action below adds its own, more
 // specific @requires so CAP enforces before the @cap-js/mcp adapter dispatches.
+// Auth: AdminService is @requires:'Admin' service-level; each action ANDs its own scope (KnowledgeGraph.Admin/SuperAdmin/Tutorial.Author). Callers need Admin PLUS the action scope — intended for the admin-curation tier.
 // Doc-comments (first sentence ≥40 chars) become the MCP tool descriptions.
 //
 // @protocol is widened to expose MCP alongside OData. Object-form is REQUIRED
