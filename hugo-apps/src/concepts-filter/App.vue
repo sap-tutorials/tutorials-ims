@@ -225,13 +225,20 @@ function normaliseLetter(raw: string): string {
 </template>
 
 <style scoped>
+/* Theme-aware — every color / background reads from the SAP Horizon CSS
+   variables declared in hugo/assets/css/sap-theme-vars.css, with the
+   light-mode hex preserved as the var() fallback. Fixes dark-on-dark
+   invisibility of typed search text (#1169): the input previously forced
+   background:#fff with no color, so dark-mode's inherited light text was
+   white-on-white. Mirrors the same fix already applied to the surrounding
+   grid in layouts/concepts/list.html. */
 .concepts-filter {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   padding: 1rem;
   margin-bottom: 1rem;
-  background: #f5f6f7;
+  background: var(--sapNeutralBackground, #f5f6f7);
   border-radius: 6px;
 }
 .concepts-filter__row {
@@ -242,7 +249,7 @@ function normaliseLetter(raw: string): string {
 }
 .concepts-filter__label {
   font-size: 0.8125rem;
-  color: #515559;
+  color: var(--sapContent_LabelColor, #515559);
   font-weight: 500;
 }
 .concepts-filter__input {
@@ -250,33 +257,38 @@ function normaliseLetter(raw: string): string {
   min-width: 12rem;
   padding: 0.4rem 0.6rem;
   font: inherit;
-  border: 1px solid #d5dadc;
+  border: 1px solid var(--sapField_BorderColor, #d5dadc);
   border-radius: 4px;
-  background: #fff;
+  background: var(--sapField_Background, #fff);
+  color: var(--sapField_TextColor, #32363a);
+}
+.concepts-filter__input::placeholder {
+  color: var(--sapContent_LabelColor, #515559);
 }
 .concepts-filter__input:focus {
-  outline: 2px solid #0070f2;
+  outline: 2px solid var(--sapBrandColor, #0070f2);
   outline-offset: 1px;
 }
 .concepts-filter__select {
   padding: 0.4rem 0.5rem;
   font: inherit;
-  border: 1px solid #d5dadc;
+  border: 1px solid var(--sapField_BorderColor, #d5dadc);
   border-radius: 4px;
-  background: #fff;
+  background: var(--sapField_Background, #fff);
+  color: var(--sapField_TextColor, #32363a);
 }
 .concepts-filter__clear {
   padding: 0.4rem 0.7rem;
   font: inherit;
   font-size: 0.875rem;
-  border: 1px solid #d5dadc;
+  border: 1px solid var(--sapField_BorderColor, #d5dadc);
   border-radius: 4px;
-  background: #fff;
-  color: #0070f2;
+  background: var(--sapButton_Background, #fff);
+  color: var(--sapLinkColor, #0070f2);
   cursor: pointer;
 }
 .concepts-filter__clear:hover {
-  border-color: #0070f2;
+  border-color: var(--sapBrandColor, #0070f2);
 }
 .concepts-filter__alpha {
   display: flex;
@@ -288,23 +300,23 @@ function normaliseLetter(raw: string): string {
   padding: 0.25rem 0.4rem;
   font: inherit;
   font-size: 0.8125rem;
-  border: 1px solid #d5dadc;
+  border: 1px solid var(--sapField_BorderColor, #d5dadc);
   border-radius: 3px;
-  background: #fff;
-  color: #1d2d3e;
+  background: var(--sapButton_Background, #fff);
+  color: var(--sapTextColor, #1d2d3e);
   cursor: pointer;
 }
 .concepts-filter__alpha-btn:hover:not(.is-disabled) {
-  border-color: #0070f2;
+  border-color: var(--sapBrandColor, #0070f2);
 }
 .concepts-filter__alpha-btn.is-active {
-  background: #0070f2;
-  border-color: #0070f2;
-  color: #fff;
+  background: var(--sapButton_Emphasized_Background, #0070f2);
+  border-color: var(--sapButton_Emphasized_BorderColor, #0070f2);
+  color: var(--sapButton_Emphasized_TextColor, #fff);
 }
 .concepts-filter__alpha-btn.is-disabled {
-  color: #a4a7ab;
-  background: #f8f9fa;
+  color: var(--sapContent_DisabledTextColor, #a4a7ab);
+  background: var(--sapNeutralBackground, #f8f9fa);
   cursor: not-allowed;
 }
 </style>
