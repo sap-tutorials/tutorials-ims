@@ -1,7 +1,456 @@
 {
-  "computedAt": null,
-  "etag": "W/\"fd17d9f8c9a55fc3d8059fb4f22e0fb317a35fa2\"",
-  "snapshot": [],
-  "buildAt": "2026-07-07T17:16:58.366Z",
+  "computedAt": "2026-07-13T04:13:00.758Z",
+  "etag": "W/\"353ec25f8488e30e9c7294ee2b86081214e5ab49\"",
+  "snapshot": [
+    {
+      "slotOrder": 1,
+      "source": "KG",
+      "conceptSlug": "sap-btp-cockpit",
+      "displayTitle": "SAP BTP Cockpit Navigation",
+      "missions": [
+        {
+          "slug": "hcp-create-trial-account",
+          "kind": "tutorial",
+          "title": "Get an Account on SAP BTP Trial",
+          "description": "Sign up for a trial account on SAP BTP.",
+          "level": "beginner",
+          "time": 15,
+          "primaryTag": "products>sap-business-technology-platform",
+          "tutorialCount": 1,
+          "href": "/tutorials/hcp-create-trial-account",
+          "isNew": false
+        },
+        {
+          "slug": "cp-cf-create-destination",
+          "kind": "tutorial",
+          "title": "Create a Destination in the SAP BTP Cockpit",
+          "description": "Create a destination in the SAP BTP cockpit to allow application access to the Northwind OData services.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "software-product>sap-business-technology-platform",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-cf-create-destination",
+          "isNew": false
+        },
+        {
+          "slug": "hana-cloud-deploying",
+          "kind": "tutorial",
+          "title": "Deploy SAP HANA Cloud",
+          "description": "Create an instance of the SAP HANA Cloud in SAP BTP trial or free tier.",
+          "level": "beginner",
+          "time": 15,
+          "primaryTag": "products>sap-hana",
+          "tutorialCount": 1,
+          "href": "/tutorials/hana-cloud-deploying",
+          "isNew": false
+        },
+        {
+          "slug": "hana-cloud-mission-trial-2",
+          "kind": "tutorial",
+          "title": "Start Using SAP HANA Cloud Free Tier Service in SAP BTP Cockpit",
+          "description": "Learn how to get started with SAP HANA Cloud free tier service in the SAP Business Technology Platform (SAP BTP).",
+          "level": "beginner",
+          "time": 10,
+          "primaryTag": "software-product>sap-hana-cloud",
+          "tutorialCount": 1,
+          "href": "/tutorials/hana-cloud-mission-trial-2",
+          "isNew": false
+        }
+      ]
+    },
+    {
+      "slotOrder": 2,
+      "source": "KG",
+      "conceptSlug": "btp-destination-configuration",
+      "displayTitle": "BTP Destination Configuration (HTTP, RFC, MAIL)",
+      "missions": [
+        {
+          "slug": "cp-portal-cloud-foundry-gateway-connection",
+          "kind": "tutorial",
+          "title": "Connect SAP BTP to Your SAP Gateway Demo System Account (ES5)",
+          "description": "Create a connection between SAP BTP, Cloud Foundry environment and the SAP Gateway Demo System (ES5).",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "software-product>sap-build-work-zone--standard-edition",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-portal-cloud-foundry-gateway-connection",
+          "isNew": false
+        },
+        {
+          "slug": "cp-cf-create-destination",
+          "kind": "tutorial",
+          "title": "Create a Destination in the SAP BTP Cockpit",
+          "description": "Create a destination in the SAP BTP cockpit to allow application access to the Northwind OData services.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "software-product>sap-business-technology-platform",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-cf-create-destination",
+          "isNew": false
+        },
+        {
+          "slug": "cp-mobile-dev-kit-rest-api",
+          "kind": "tutorial",
+          "title": "Consume a REST API in an MDK App",
+          "description": "Create a fully functional multi-channel application consuming Petstore REST API.",
+          "level": "intermediate",
+          "time": 30,
+          "primaryTag": "software-product>mobile-development-kit-client",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-mobile-dev-kit-rest-api",
+          "isNew": false
+        },
+        {
+          "slug": "build-apps-workflow-es5",
+          "kind": "tutorial",
+          "title": "Populate Dropdown with Products",
+          "description": "Populate a dropdown field with product data, so that you can provide the user with a choice field.",
+          "level": "beginner",
+          "time": 10,
+          "primaryTag": "software-product>sap-build",
+          "tutorialCount": 1,
+          "href": "/tutorials/build-apps-workflow-es5",
+          "isNew": false
+        }
+      ]
+    },
+    {
+      "slotOrder": 3,
+      "source": "KG",
+      "conceptSlug": "sap-btp-trial-account-setup",
+      "displayTitle": "SAP BTP Trial Account Setup",
+      "missions": [
+        {
+          "slug": "hcp-create-trial-account",
+          "kind": "tutorial",
+          "title": "Get an Account on SAP BTP Trial",
+          "description": "Sign up for a trial account on SAP BTP.",
+          "level": "beginner",
+          "time": 15,
+          "primaryTag": "products>sap-business-technology-platform",
+          "tutorialCount": 1,
+          "href": "/tutorials/hcp-create-trial-account",
+          "isNew": false
+        },
+        {
+          "slug": "spa-subscribe-booster",
+          "kind": "tutorial",
+          "title": "Subscribe to SAP Build Process Automation",
+          "description": "Activate the SAP Build Process Automation service",
+          "level": "beginner",
+          "time": 15,
+          "primaryTag": "software-product>sap-build-process-automation",
+          "tutorialCount": 1,
+          "href": "/tutorials/spa-subscribe-booster",
+          "isNew": false
+        },
+        {
+          "slug": "cp-aibus-dox-booster-app",
+          "kind": "tutorial",
+          "title": "Use Trial to Set Up Account for SAP Document AI and Go to Application",
+          "description": "Get access to the SAP Document AI basic UI using a booster in SAP Business Technology Platform (SAP BTP) Trial that automatically creates a service instance, and subscribes you to the UI application for SAP Document AI.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "topic>machine-learning",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-aibus-dox-booster-app",
+          "isNew": false
+        },
+        {
+          "slug": "abap-environment-trial-onboarding",
+          "kind": "tutorial",
+          "title": "Create an SAP BTP ABAP Environment Trial User",
+          "description": "Create an trial user with SAP BTP ABAP environment.",
+          "level": "beginner",
+          "time": 15,
+          "primaryTag": "products>sap-btp--abap-environment",
+          "tutorialCount": 1,
+          "href": "/tutorials/abap-environment-trial-onboarding",
+          "isNew": false
+        }
+      ]
+    },
+    {
+      "slotOrder": 4,
+      "source": "KG",
+      "conceptSlug": "sap-hana-cloud-provisioning",
+      "displayTitle": "Provisioning an SAP HANA Cloud Database Instance",
+      "missions": [
+        {
+          "slug": "hana-cloud-deploying",
+          "kind": "tutorial",
+          "title": "Deploy SAP HANA Cloud",
+          "description": "Create an instance of the SAP HANA Cloud in SAP BTP trial or free tier.",
+          "level": "beginner",
+          "time": 15,
+          "primaryTag": "products>sap-hana",
+          "tutorialCount": 1,
+          "href": "/tutorials/hana-cloud-deploying",
+          "isNew": false
+        },
+        {
+          "slug": "hana-cloud-mission-trial-5",
+          "kind": "tutorial",
+          "title": "Import Data into SAP HANA Cloud, SAP HANA Database",
+          "description": "Learn in this tutorial how to use the SAP HANA database explorer to import the sample data needed for this mission from a tar.gz file.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "software-product>sap-hana-cloud",
+          "tutorialCount": 1,
+          "href": "/tutorials/hana-cloud-mission-trial-5",
+          "isNew": false
+        },
+        {
+          "slug": "hana-cloud-mission-trial-3",
+          "kind": "tutorial",
+          "title": "Provision an Instance of SAP HANA Cloud, SAP HANA Database",
+          "description": "Learn how to provision an instance of SAP HANA Cloud, SAP HANA database.",
+          "level": "beginner",
+          "time": 10,
+          "primaryTag": "software-product>sap-hana-cloud",
+          "tutorialCount": 1,
+          "href": "/tutorials/hana-cloud-mission-trial-3",
+          "isNew": false
+        },
+        {
+          "slug": "prepare-btp-cf",
+          "kind": "tutorial",
+          "title": "Prepare for Deployment in the SAP BTP, Cloud Foundry Runtime",
+          "description": "Learn how to prepare the subaccount in SAP BTP for application deployment in the SAP BTP, Cloud Foundry runtime.",
+          "level": "beginner",
+          "time": 30,
+          "primaryTag": "software-product-function>sap-cloud-application-programming-model",
+          "tutorialCount": 1,
+          "href": "/tutorials/prepare-btp-cf",
+          "isNew": false
+        }
+      ]
+    },
+    {
+      "slotOrder": 5,
+      "source": "KG",
+      "conceptSlug": "sap-build-process-automation",
+      "displayTitle": "SAP Build Process Automation Workflow Design",
+      "missions": [
+        {
+          "slug": "spa-create-process",
+          "kind": "tutorial",
+          "title": "Create a Business Process",
+          "description": "Create a Business Project and Process to build and extend business processes",
+          "level": "beginner",
+          "time": 10,
+          "primaryTag": "software-product>sap-build-process-automation",
+          "tutorialCount": 1,
+          "href": "/tutorials/spa-create-process",
+          "isNew": false
+        },
+        {
+          "slug": "spa-create-process-condition",
+          "kind": "tutorial",
+          "title": "Create a Process Condition",
+          "description": "Create a process condition to route the process based on business criteria",
+          "level": "beginner",
+          "time": 10,
+          "primaryTag": "software-product>sap-build-process-automation",
+          "tutorialCount": 1,
+          "href": "/tutorials/spa-create-process-condition",
+          "isNew": false
+        },
+        {
+          "slug": "spa-create-forms",
+          "kind": "tutorial",
+          "title": "Create and Configure Forms",
+          "description": "Add forms to start the business process, send tasks for approvals and notify business users",
+          "level": "beginner",
+          "time": 25,
+          "primaryTag": "software-product>sap-build-process-automation",
+          "tutorialCount": 1,
+          "href": "/tutorials/spa-create-forms",
+          "isNew": false
+        },
+        {
+          "slug": "spa-dox-create-process",
+          "kind": "tutorial",
+          "title": "Create an Invoice Approval Process",
+          "description": "Create the project and the first form for the Invoice Approval Process",
+          "level": "intermediate",
+          "time": 5,
+          "primaryTag": "software-product>sap-build-process-automation",
+          "tutorialCount": 1,
+          "href": "/tutorials/spa-dox-create-process",
+          "isNew": false
+        }
+      ]
+    },
+    {
+      "slotOrder": 6,
+      "source": "KG",
+      "conceptSlug": "sap-hana-database-explorer",
+      "displayTitle": "SAP HANA Database Explorer",
+      "missions": [
+        {
+          "slug": "hana-cloud-cap-create-database-cds",
+          "kind": "tutorial",
+          "title": "Create Database Artifacts Using Core Data Services (CDS) for SAP HANA Cloud",
+          "description": "Use SAP Cloud Application Programming Model (CAP) and Core Data Services (CDS) to generate SAP HANA Cloud basic database artifacts.",
+          "level": "beginner",
+          "time": 15,
+          "primaryTag": "products>sap-hana-cloud",
+          "tutorialCount": 1,
+          "href": "/tutorials/hana-cloud-cap-create-database-cds",
+          "isNew": false
+        },
+        {
+          "slug": "hana-cloud-mission-trial-5",
+          "kind": "tutorial",
+          "title": "Import Data into SAP HANA Cloud, SAP HANA Database",
+          "description": "Learn in this tutorial how to use the SAP HANA database explorer to import the sample data needed for this mission from a tar.gz file.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "software-product>sap-hana-cloud",
+          "tutorialCount": 1,
+          "href": "/tutorials/hana-cloud-mission-trial-5",
+          "isNew": false
+        },
+        {
+          "slug": "hana-cloud-create-db-project",
+          "kind": "tutorial",
+          "title": "Create an SAP HANA Database Project",
+          "description": "Create an SAP Business Application Studio HANA database project.",
+          "level": "beginner",
+          "time": 15,
+          "primaryTag": "products>sap-hana",
+          "tutorialCount": 1,
+          "href": "/tutorials/hana-cloud-create-db-project",
+          "isNew": false
+        },
+        {
+          "slug": "xsa-import-shine-data",
+          "kind": "tutorial",
+          "title": "Import Tables and Large Datasets (XS Advanced)",
+          "description": "Import SHINE sample tables and data using SAP Web IDE for SAP HANA.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "products>sap-hana",
+          "tutorialCount": 1,
+          "href": "/tutorials/xsa-import-shine-data",
+          "isNew": false
+        }
+      ]
+    },
+    {
+      "slotOrder": 7,
+      "source": "KG",
+      "conceptSlug": "service-keys-creation-consumption",
+      "displayTitle": "Service Keys Creation and Consumption",
+      "missions": [
+        {
+          "slug": "btp-integration-suite-nonsapconnectivity-settingup-suite",
+          "kind": "tutorial",
+          "title": "Preparing Your SAP Integration Suite Tenant",
+          "description": "Prepare your existing SAP Integration Suite tenant or set up a trial account.",
+          "level": "beginner",
+          "time": 25,
+          "primaryTag": "software-product>sap-integration-suite",
+          "tutorialCount": 1,
+          "href": "/tutorials/btp-integration-suite-nonsapconnectivity-settingup-suite",
+          "isNew": false
+        },
+        {
+          "slug": "cp-aibus-dox-web-oauth-token",
+          "kind": "tutorial",
+          "title": "Get OAuth Access Token for SAP Document AI via Web Browser",
+          "description": "Retrieve your OAuth access token, which will grant you access to SAP Document AI APIs.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "topic>machine-learning",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-aibus-dox-web-oauth-token",
+          "isNew": false
+        },
+        {
+          "slug": "cp-aibus-dox-booster-key",
+          "kind": "tutorial",
+          "title": "Use Trial to Set Up Account for SAP Document AI and Get Service Key",
+          "description": "Get access to the solution's Swagger UI using a booster in SAP Business Technology Platform (SAP BTP) Trial that automatically creates a service instance, and the associated service key for SAP Document AI.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "topic>machine-learning",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-aibus-dox-booster-key",
+          "isNew": false
+        },
+        {
+          "slug": "cp-aibus-dar-setup-postman",
+          "kind": "tutorial",
+          "title": "Set Up Postman to Call Data Attribute Recommendation APIs",
+          "description": "Import Postman environment and collection JSON sample code files to call the Data Attribute Recommendation APIs.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "topic>machine-learning",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-aibus-dar-setup-postman",
+          "isNew": false
+        }
+      ]
+    },
+    {
+      "slotOrder": 8,
+      "source": "KG",
+      "conceptSlug": "sap-btp-cloud-foundry-deployment",
+      "displayTitle": "SAP BTP Cloud Foundry Runtime Deployment and Operations",
+      "missions": [
+        {
+          "slug": "cp-cf-download-cli",
+          "kind": "tutorial",
+          "title": "Install the Cloud Foundry Command Line Interface (CLI)",
+          "description": "Download and install the CLI, which allows access via the command line.",
+          "level": "beginner",
+          "time": 15,
+          "primaryTag": "products>sap-btp--cloud-foundry-environment",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-cf-download-cli",
+          "isNew": false
+        },
+        {
+          "slug": "introduction",
+          "kind": "tutorial",
+          "title": "Introduction to Application Development Using CAP",
+          "description": "Learn about SAP Cloud Application Programming Model (CAP) and application development on SAP Business Technology Platform (BTP).",
+          "level": "beginner",
+          "time": 7,
+          "primaryTag": "software-product-function>sap-cloud-application-programming-model",
+          "tutorialCount": 1,
+          "href": "/tutorials/introduction",
+          "isNew": false
+        },
+        {
+          "slug": "cp-cf-dev-02-deploy-app",
+          "kind": "tutorial",
+          "title": "Deploy an App to SAP BTP, Cloud Foundry runtime",
+          "description": "Use SAP BTP cockpit to deploy an app to the Cloud Foundry runtime, then explore what was deployed and created.",
+          "level": "beginner",
+          "time": 5,
+          "primaryTag": "software-product>sap-business-technology-platform",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-cf-dev-02-deploy-app",
+          "isNew": false
+        },
+        {
+          "slug": "cp-cf-dev-03-service-instance",
+          "kind": "tutorial",
+          "title": "Create a Service Instance and Bind It to Your App",
+          "description": "Create an instance of the Application Logging service and bind it to your app, as a way to explore how services and apps are connected on the SAP BTP, Cloud Foundry runtime.",
+          "level": "beginner",
+          "time": 10,
+          "primaryTag": "software-product>sap-business-technology-platform",
+          "tutorialCount": 1,
+          "href": "/tutorials/cp-cf-dev-03-service-instance",
+          "isNew": false
+        }
+      ]
+    }
+  ],
+  "buildAt": "2026-07-13T11:52:45.277Z",
   "error": null
 }
