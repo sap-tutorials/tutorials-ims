@@ -621,6 +621,70 @@ Delegates to the existing `completeStep` action — the same audit trail fires f
 
 ---
 
+---
+
+## Phase 3 KG deep-dive tools (anonymous, `/mcp/graph`)
+
+Four additional tools on `KnowledgeGraphService`, reachable at `/mcp/graph`. All anonymous; no auth required.
+
+| Tool | Args | Returns |
+|---|---|---|
+| `kg_shared_concepts` | `slug_a`, `slug_b` | concept overlap `[{conceptSlug, name}]` |
+| `kg_neighborhood` | `slug`, `depth?` | four arms `{prerequisites, whatToLearnNext, sharedConcepts, teaches}` |
+| `kg_search_concepts` | `query`, `maxConcepts?`, `maxTutorials?` | `{concepts[], tutorials[]}` |
+| `kg_community` | `id` (community fingerprint) | `{communityId, label, memberTutorials[], size, promotedToMissionSlug}` |
+
+Notes:
+
+- **`kg_shared_concepts`** returns `{conceptSlug, name}` pairs — there is no `score` field (always-zero in the original algorithm, removed for clarity).
+- **`kg_community`** takes the community **fingerprint** (a stable `String(64)` key), not a numeric ID. Read-only; DEV-only until #917 promotion reaches PROD.
+
+---
+
+## Phase 3 admin tools (`/mcp-admin/*`, XSUAA-gated)
+
+These tools are mounted under `/mcp-admin/*` by `srv/lib/mcp-compose-router.js`. They require a valid XSUAA bearer with the scopes listed below — the approuter enforces XSUAA on `/mcp-admin/*`.
+
+| Tool | Required scope | Wraps |
+|---|---|---|
+| `merge_concepts` | `KnowledgeGraph.Admin` | `KnowledgeGraphService.mergeConcepts` action |
+| `promote_community_to_mission` | `SuperAdmin` | `AdminService.promoteCommunityToMission` action |
+| `trigger_rebuild` | `Tutorial.Author` | GitHub `rebuild-content.yml` workflow dispatch (preferred path) |
+| `publish_content` | `SuperAdmin` | In-process `POST /content/publish` (emergency lever; requires `CONTENT_API_KEY` configured — returns 503 otherwise) |
+
+> `publish_content` requires **SuperAdmin** (not `Tutorial.Author`) because it is an emergency lever that bypasses the normal CI validation path. Prefer `trigger_rebuild` for routine content updates.
+
+---
+
+## Phase 3 resources
+
+Three resource URI schemes are served at `/mcp/graph` and `/mcp-auth/api` via the compose layer:
+
+| URI scheme | What it returns |
+|---|---|
+| `tutorial://<slug>` | Tutorial metadata, step titles, and rendered HTML |
+| `mission://<slug>` | Mission and its ordered tutorial list |
+| `concept://<id>` | Knowledge-graph concept and the tutorials that teach it |
+
+Discover available resources with `resources/list`; fetch one with `resources/read <uri>`.
+
+---
+
+## Phase 3 prompts
+
+Four reusable prompt templates, discoverable via `prompts/list` on any Phase-3-enabled endpoint:
+
+| Prompt | Arguments | What it does |
+|---|---|---|
+| `summarize_mission_for_beginner` | `mission_slug` | Beginner-friendly mission summary |
+| `generate_lab_exercise` | `tutorial_slug`, `step?` | Hands-on lab from a tutorial step |
+| `explain_concept` | `concept_id` | Explains a KG concept and its tutorials |
+| `suggest_learning_path` | `from_slug`, `to_slug` | Ordered path between two tutorials |
+
+Invoke with `prompts/get`; the client fills in the arguments.
+
+---
+
 ## Related
 
 - End-user quickstart (Claude Desktop / Claude Code wiring): [docs/end-users/mcp-quickstart.md](../../end-users/mcp-quickstart.md)

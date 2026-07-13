@@ -91,6 +91,40 @@ Two OAuth discovery documents are served at the approuter level, enabling MCP 2.
 
 Both documents are served as static JSON by the approuter (`approuter/static/.well-known/`). No CAP backend round-trip. Their content-type is `application/json`.
 
+## Phase 3 — the compose layer
+
+`@cap-js/mcp@1.1.1` is **tools-only**: it has no API for registering MCP resources or prompts. Phase 3 adds `srv/lib/mcp-compose-router.js` to bridge this gap without forking the adapter.
+
+### How it works
+
+On each incoming request the compose router builds a per-request `McpServer` instance using the MCP TypeScript SDK. It then:
+
+1. Calls the adapter's exported tool-registration functions (`@cap-js/mcp/lib/tools`) to re-register all curated tools from the underlying `@cap-js/mcp`-managed services.
+2. Adds `registerResource` callbacks for the three URI schemes (`tutorial://`, `mission://`, `concept://`).
+3. Adds `registerPrompt` callbacks for the four prompt templates.
+
+The resulting `McpServer` advertises merged capabilities `{tools, resources, prompts}` on `initialize`, so clients see a single endpoint with all three capability types.
+
+### Mounting
+
+The compose router is registered in `cds.on('bootstrap', ...)` — before CAP's own `cds.protocols.mcp` adapter fires — so it wins the Express first-match race for `/mcp/graph` and `/mcp-admin/*`. The CAP adapter continues to serve `/mcp/search` and `/mcp/homepage` directly; `/mcp/graph` and `/mcp-admin/*` are owned by the compose layer.
+
+```
+/mcp/search        → @cap-js/mcp adapter   (SearchService, tools only)
+/mcp/homepage      → @cap-js/mcp adapter   (HomepageService, tools only)
+/mcp/graph         → mcp-compose-router.js (KnowledgeGraphService + resources + prompts)
+/mcp-admin/*       → mcp-compose-router.js (admin tools, XSUAA-gated)
+```
+
+### Fragile seam and fallback
+
+Deep-importing `@cap-js/mcp/lib/tools` is a **private-API seam**. If a future adapter update moves or renames those exports, the compose layer will fail to register tools on boot. Two guards protect against this:
+
+- **`MCP_PHASE3_ENABLED` flag** (default `true`) — when `false`, the compose router is never mounted; `@cap-js/mcp` serves all three services in tools-only mode and `/mcp-admin/*` returns 503.
+- **Fail-open fallback** — if `require('@cap-js/mcp/lib/tools')` throws on boot, the compose router logs a `WARN` and falls back to tools-only mode for `/mcp/graph` (same as Phase 2). The `mcp_compose_fallback_total` metric increments; a sustained non-zero value means the seam broke and manual intervention is needed (pin or patch the adapter, or disable Phase 3).
+
+See the Operations runbook for flag knobs and alert guidance.
+
 ## References
 
 - Design spec: `docs/superpowers/specs/2026-07-08-mcp-server-phase2-design.md`
