@@ -65,4 +65,18 @@ describe('SearchService — #945 wiring', () => {
     // Title-hit → fuzzy rank = 3, no KG contribution, searchScore = 3.
     expect(strong.searchScore).toBe(3);
   });
+
+  it('#1171: community term OFF by default — rank SQL identical to KG-only', async () => {
+    // KG_COMMUNITY_WEIGHT defaults to 0 in the unit env (no env var set), so the
+    // community fragment is '' and the emitted rank is byte-identical to #945.
+    // With no AI Core binding the KG fragment is also '' → pure fuzzy rank.
+    // A title hit therefore scores exactly 3 (proven in the sibling test above);
+    // re-assert here to lock the community term out of the default formula.
+    const res = await project.get(
+      "/search/SearchableItems?$search=kgprobe&$select=slug,searchScore&$top=5",
+    );
+    const strong = res.data.value.find(r => r.slug === 'kg-strong-tutorial');
+    expect(strong).toBeDefined();
+    expect(strong.searchScore).toBe(3);   // no community contribution added
+  });
 });

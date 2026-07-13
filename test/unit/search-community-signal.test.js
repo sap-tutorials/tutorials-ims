@@ -66,4 +66,9 @@ describe('buildCommunityRankFragment (#1171)', () => {
     const frag = await buildCommunityRankFragment({ signal: sig([['a1', 0.9]]), db: badDb, weight: 1.5 })
     expect(frag).toBe('')
   })
+
+  it('an OFF weight yields no fragment to concatenate (byte-identical rank)', async () => {
+    const frag = await buildCommunityRankFragment({ signal: sig([['a1', 0.9]]), db, weight: 0 })
+    expect(frag).toBe('')   // concatenating '' into rankSQL is a no-op
+  })
 })
