@@ -26,6 +26,15 @@ keywords = ["pat_"]
 
 [allowlist]
 description = "Project-specific false positives"
+# Suppress a specific historical finding by commit: docs/github-app-setup.md
+# (line 71, RuleID private-key) in commit 5153670f was an illustrative
+# GitHub App private-key EXAMPLE, not a live credential — and the file has
+# since been deleted from the tree. gitleaks scans full history (fetch-depth
+# 0), so without this the finding fails every PR. Confirmed a placeholder,
+# not a real key (2026-07-14).
+commits = [
+  "5153670f57cb30d9322af3603642fdaf980add74",
+]
 # Env-var references are the CORRECT, secret-free pattern — never flag them.
 regexes = [
   '''\$\{MCP_SAP_PAT[^}]*\}''',
