@@ -159,6 +159,7 @@ export default defineConfig({
           { text: 'Content moderation runbook', link: '/developers/operations/content-moderation-runbook' },
           { text: 'Dedupe Step rows',          link: '/developers/operations/dedupe-step-rows' },
           { text: 'Migration from IMS',        link: '/developers/operations/migration-from-ims' },
+          { text: 'Deploy checklist',          link: '/developers/operations/deploy-checklist' },
           { text: 'Deployment',                link: '/developers/operations/deployment' },
           { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
           { text: 'GitHub dispatch PAT rotation', link: '/developers/operations/github-dispatch-pat-rotation' },
