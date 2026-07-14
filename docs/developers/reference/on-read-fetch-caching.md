@@ -24,8 +24,11 @@ the last good response instead of blocking or erroring a page:
 All three previously used hand-rolled in-process caches (a `globalThis`-singleton `Map`
 or a bounded LRU). The migration preserves each source's original TTL and
 success/failure policy verbatim — it only swaps the *storage* for the shared service,
-which buys tag-based invalidation, metrics, and (in prod, once a shared store is
-configured) cross-CF-instance coherence.
+which buys tag-based invalidation, metrics, and cross-CF-instance coherence. As of
+issue #1179 the shared store **is** configured — the `caching` service uses the
+CDS-Database store (`store: "cds"`) with metrics persistence in the
+`[hybrid]`/`[production]` profiles, so these on-read caches are now coherent across CF
+instances in prod. See [cds-caching CDS-Database store + metrics](./cds-caching-store.md).
 
 ## Scope boundary — what is NOT cached here
 
