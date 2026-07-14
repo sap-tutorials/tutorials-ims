@@ -1,28 +1,29 @@
-// app/admin/kgCommunities/webapp/ext/KgCommunityActionsController.js
+// app/admin/kgCommunities/webapp/ext/KgCommunityActionsController.controller.js
 //
 // Curator-assist promote-time nudge for the KG Communities LR + OP (#1172).
 //
-// Why a PLAIN module (loader path <dotted>.js), NOT a .controller.js:
-// FE V4 resolves manifest `press` refs as plain modules. A .controller.js
-// suffix 404s on click. See app/admin/concepts/webapp/ext/
-// ConceptActionsController.js header + memory feedback_ui5_controller_suffix_collision.
+// Implemented as a ControllerExtension (mirrors app/admin/tags/webapp/ext/
+// TagImportController.controller.js). The manifest registers this under
+// sap.ui.controllerExtensions with controllerName
+// "sap.tutorials.admin.kgCommunities.ext.KgCommunityActionsController" —
+// NO ".controller" in the dotted name; the FE loader appends ".controller.js"
+// to resolve the file. press refs use the same dotted name.
 //
-// The Promote button is declared as a manifest custom action (see manifest.json
-// controlConfiguration) wired to onPromoteToMission. When the row's
-// server-computed coverageHigh flag is set, we interpose a MessageBox.warning
-// ("~X% already in <mission> — extend it instead?") before invoking the
-// existing unbound promoteCommunityToMission action via editFlow.invokeAction
-// (which opens FE's standard parameter dialog for communityId/missionSlug/title).
+// Inside a ControllerExtension, this.base is the FE page controller, so
+// this.base.editFlow and this.base.getView() are available (same access path
+// as TagImportController uses this.base.getView() / this.base.extensionAPI).
 //
 // SuperAdmin gating is unchanged and authoritative on the server
 // (@requires:'SuperAdmin' in srv/admin-service.cds). This warning is advisory.
 sap.ui.define([
+  "sap/ui/core/mvc/ControllerExtension",
   "sap/m/MessageBox"
-], function (MessageBox) {
+], function (ControllerExtension, MessageBox) {
   "use strict";
 
   // FE V4 hands the handler either an array [context], a single Context, or a
   // UI5 Event depending on LR-toolbar vs OP-header invocation. Resolve all.
+  // Module-level (not on the extension object) so it is pure and testable.
   function resolveCtx(arg) {
     if (!arg) return null;
     if (Array.isArray(arg)) return arg[0] || null;
@@ -36,26 +37,36 @@ sap.ui.define([
 
   var ACTION = "AdminService.promoteCommunityToMission";
 
-  return {
+  return ControllerExtension.extend("sap.tutorials.admin.kgCommunities.ext.KgCommunityActionsController", {
+
     onPromoteToMission: function (arg) {
       var ctx = resolveCtx(arg);
-      var editFlow = this.editFlow || (this.base && this.base.editFlow);
-      var view = (this.base && this.base.getView && this.base.getView()) ||
-                 (this.getView && this.getView());
+      var view = this.base.getView();
       var bundle = view && view.getModel("i18n") && view.getModel("i18n").getResourceBundle();
+
+      // Capture the "Promote anyway" label once — used both in actions array
+      // and in the onClose comparison to avoid getText() inconsistency (I1 fix).
+      var promoteAnyway = bundle ? bundle.getText("promoteAnyway") : "Promote anyway";
+
+      var self = this;
 
       var invoke = function () {
         // Opens FE's standard parameter dialog for the unbound action.
-        editFlow.invokeAction(ACTION, {
-          contexts: ctx || undefined,
-          model: view && view.getModel()
+        // For an unbound parameterized action, contexts is not required —
+        // the dialog collects communityId/missionSlug/title directly.
+        self.base.editFlow.invokeAction(ACTION, {
+          model: view.getModel()
         });
       };
 
+      // Guard: only call getProperty when ctx is non-null (m3 fix).
       var high = ctx && ctx.getProperty && ctx.getProperty("coverageHigh");
-      if (!high) { invoke(); return; }
+      if (!high) {
+        invoke();
+        return;
+      }
 
-      var pct = (ctx.getProperty("missionCoveragePct") != null) ? ctx.getProperty("missionCoveragePct") : "?";
+      var pct = ctx.getProperty("missionCoveragePct") != null ? ctx.getProperty("missionCoveragePct") : "?";
       var mission = ctx.getProperty("dominantMissionTitle") || "an existing mission";
       var msg = bundle
         ? bundle.getText("promoteHighCoverageWarning", [pct, mission])
@@ -65,14 +76,17 @@ sap.ui.define([
       MessageBox.warning(msg, {
         title: bundle ? bundle.getText("promoteHighCoverageTitle") : "High mission overlap",
         actions: [
-          bundle ? bundle.getText("promoteAnyway") : "Promote anyway",
+          promoteAnyway,
           MessageBox.Action.CANCEL
         ],
         emphasizedAction: MessageBox.Action.CANCEL,
         onClose: function (choice) {
-          if (choice === (bundle ? bundle.getText("promoteAnyway") : "Promote anyway")) invoke();
+          if (choice === promoteAnyway) {
+            invoke();
+          }
         }
       });
     }
-  };
+
+  });
 });
