@@ -3295,12 +3295,16 @@ annotate AdminService.HomepageForYouCandidatesAdmin with {
 // still-actionable communities. Precedent: TaskRecords SUPERSEDED
 // exclusion at line 1320 above.
 annotate AdminService.KgCommunities with {
-  communityId     @Common.Label: 'Community ID';
-  memberCount     @Common.Label: 'Members';
-  tutorialCount   @Common.Label: 'Tutorials';
-  topConceptSlugs @Common.Label: 'Top Concepts';
-  detectedAt      @Common.Label: 'Detected At';
-  alreadyPromoted @Common.Label: 'Already Promoted';
+  communityId          @Common.Label: 'Community ID';
+  memberCount          @Common.Label: 'Members';
+  tutorialCount        @Common.Label: 'Tutorials';
+  topConceptSlugs      @Common.Label: 'Top Concepts';
+  detectedAt           @Common.Label: 'Detected At';
+  alreadyPromoted      @Common.Label: 'Already Promoted';
+  // #1172 — curator-assist nudges.
+  missionCoveragePct   @Common.Label: 'Mission Coverage %';
+  dominantMissionTitle @Common.Label: 'Dominant Mission';
+  orphanTutorialCount  @Common.Label: 'Orphaned Tutorials';
 };
 
 annotate AdminService.KgCommunities with @(
@@ -3311,12 +3315,20 @@ annotate AdminService.KgCommunities with @(
       Title          : { Value: communityId },
       Description    : { Value: topConceptSlugs }
     },
-    SelectionFields : [ memberCount, detectedAt, alreadyPromoted ],
+    SelectionFields : [ memberCount, detectedAt, alreadyPromoted, missionCoveragePct, orphanTutorialCount ],
     LineItem : [
       { Value: communityId },
       { Value: memberCount },
       { Value: tutorialCount },
       { Value: topConceptSlugs },
+      // #1172 coverage nudge columns.
+      {
+        $Type: 'UI.DataField',
+        Value: missionCoveragePct,
+        Criticality: { $edmJson: { $If: [ { $Path: 'coverageHigh' }, 1, 3 ] } }
+      },
+      { Value: dominantMissionTitle },
+      { Value: orphanTutorialCount },
       { Value: detectedAt },
       { Value: alreadyPromoted }
     ],
@@ -3353,6 +3365,13 @@ annotate AdminService.KgCommunities with @(
       { Value: memberCount },
       { Value: tutorialCount },
       { Value: topConceptSlugs },
+      {
+        $Type: 'UI.DataField',
+        Value: missionCoveragePct,
+        Criticality: { $edmJson: { $If: [ { $Path: 'coverageHigh' }, 1, 3 ] } }
+      },
+      { Value: dominantMissionTitle },
+      { Value: orphanTutorialCount },
       { Value: detectedAt },
       { Value: alreadyPromoted }
     ]},
