@@ -1,0 +1,25 @@
+{
+  "topN": 10,
+  "queries": [
+    "abap",
+    "cap",
+    "hana",
+    "fiori elements",
+    "rap business object",
+    "btp destination service",
+    "cloud application programming",
+    "ui5 freestyle",
+    "sap build",
+    "integration suite",
+    "clean core",
+    "cds annotations",
+    "xsuaa authentication",
+    "event mesh",
+    "hana cloud vector engine",
+    "abap restful application programming model",
+    "side by side extension",
+    "workflow management",
+    "document information extraction",
+    "kyma serverless"
+  ]
+}

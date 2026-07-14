@@ -25,7 +25,7 @@
 
 import { embed as embedInputs } from './embedding-client.js';
 import { topConceptsByCosine } from './kg/concept-embedding-query.js';
-import { fetchEdges, fetchConceptsByIds, fetchLinks } from './kg/_search-fetches.js';
+import { fetchEdges, fetchConceptsByIds, fetchLinks, fetchCommunityFingerprints, fetchCommunityMembers } from './kg/_search-fetches.js';
 import * as metrics from './metrics.js';
 import cds from '@sap/cds';
 
@@ -40,6 +40,21 @@ const LOG = cds.log('search-kg-signal');
 // title (3) hits, so KG can rescue a semantically relevant tutorial that
 // misses on keywords while never dominating a title match.
 export const KG_WEIGHT = 2.0;
+
+// #1171 — community-overlap term. Separate, additive to KG_WEIGHT. Env-tuned
+// numeric knob (like KG_WEIGHT), NOT a per-request ChatSettings flag. Default 0
+// (OFF) → buildCommunityRankFragment short-circuits before any DB work and the
+// rank SQL stays byte-identical to the #945 formula.
+export const KG_COMMUNITY_WEIGHT = (() => {
+  const raw = Number.parseFloat(process.env.KG_COMMUNITY_WEIGHT);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0;
+})();
+
+// Anchor window: the top-K concept-overlap slugs whose communities we boost.
+export const COMMUNITY_TOP_K = 5;
+
+// Defensive cap on the total community-member row set (communities are small).
+const COMMUNITY_MEMBER_CAP = 200;
 
 // Max concepts to seed / walk-out from. Matches the expandSearchConcepts tool
 // default so the two paths return the same-shaped concept universe.
@@ -450,4 +465,64 @@ export function buildKgRankFragment(signal) {
   }
   if (parts.length === 0) return '';
   return `+ ${KG_WEIGHT.toFixed(2)} * (case slug ${parts.join(' ')} else 0 end)`;
+}
+
+/**
+ * Build the `+ KG_COMMUNITY_WEIGHT * (case slug when 'peer' then 1.0000 … else 0 end)`
+ * SQL fragment for the community-overlap term (#1171). Reuses the KG signal's
+ * already-computed slugScores as the anchor source — no new embed, no second
+ * concept walk. Fully self-contained fail-open.
+ *
+ * @param {object}   opts
+ * @param {KgSignal} opts.signal   signal from computeKgSignal()
+ * @param {object}   opts.db       CDS db handle (SQLite or HANA)
+ * @param {number}   opts.weight   KG_COMMUNITY_WEIGHT (0 = OFF)
+ * @param {number=}  opts.topK     anchor count (default COMMUNITY_TOP_K)
+ * @returns {Promise<string>}      SQL fragment or '' (nothing to add)
+ */
+export async function buildCommunityRankFragment({ signal, db, weight, topK = COMMUNITY_TOP_K }) {
+  // Short-circuit BEFORE any DB work — default config touches nothing.
+  if (!(weight > 0)) return '';
+  if (!signal || !signal.slugScores || signal.slugScores.size === 0) return '';
+
+  try {
+    // 1. Anchors — top-K slugs by concept-overlap score, descending.
+    const anchors = [...signal.slugScores.entries()]
+      .filter(([slug, score]) => typeof slug === 'string' && Number(score) > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, topK)
+      .map(([slug]) => slug.toLowerCase());
+    if (anchors.length === 0) return '';
+    const anchorSet = new Set(anchors);
+
+    // 2. Anchor → distinct community fingerprints (bounded .in, <= topK).
+    const fpRows = await fetchCommunityFingerprints(db, anchors);
+    const fingerprints = [...new Set(fpRows.map((r) => r.communityFingerprint).filter(Boolean))];
+    if (fingerprints.length === 0) return '';
+
+    // 3. Fingerprints → tutorial members (capped; filtered in Node).
+    const memberRows = await fetchCommunityMembers(db, fingerprints, COMMUNITY_MEMBER_CAP);
+
+    // 4. Peer set = members − anchors, lowercased + deduped.
+    const peers = new Set();
+    for (const r of memberRows) {
+      const slug = typeof r.slug === 'string' ? r.slug.toLowerCase() : '';
+      if (!slug || anchorSet.has(slug)) continue;
+      peers.add(slug);
+    }
+    if (peers.size === 0) return '';
+
+    // 5. Binary-boost CASE — same sanitize-then-inline pattern as buildKgRankFragment.
+    const parts = [];
+    for (const slug of peers) {
+      if (!SAFE_SLUG_RE.test(slug)) continue;
+      parts.push(`when '${slug}' then 1.0000`);
+    }
+    if (parts.length === 0) return '';
+    return `+ ${weight.toFixed(2)} * (case slug ${parts.join(' ')} else 0 end)`;
+  } catch (err) {
+    LOG.warn('buildCommunityRankFragment failed; community term collapses to 0', err.message);
+    metrics.counter('search.kg.community.error');
+    return '';
+  }
 }

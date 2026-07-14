@@ -1,5 +1,5 @@
 import cds from '@sap/cds';
-import { computeKgSignal, buildKgRankFragment } from './lib/search-kg-signal.js';
+import { computeKgSignal, buildKgRankFragment, buildCommunityRankFragment, KG_COMMUNITY_WEIGHT } from './lib/search-kg-signal.js';
 import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 import { handleGetTutorialStep } from './lib/mcp-developer-tools.js';
 
@@ -123,7 +123,7 @@ function _columnAnyTokenSQL(col, tokens) {
 //
 // Crucial: this runs INSIDE the SELECT, so the DB orders by rank BEFORE
 // applying $top/$skip. Title hits never get stranded on later pages.
-function attachSearchRank(query, tokens, kgFragment = '') {
+function attachSearchRank(query, tokens, kgFragment = '', communityFragment = '') {
   if (!Array.isArray(tokens) || tokens.length === 0) return;
 
   const titleOr = _columnAnyTokenSQL('title', tokens);
@@ -136,11 +136,13 @@ function attachSearchRank(query, tokens, kgFragment = '') {
   // is disabled / empty / timed-out — in that case the rank SQL is byte-identical
   // to the pre-#945 formula. Slugs in the fragment are pre-validated against
   // /^[a-z0-9-]+$/ so no quoting drama on the string-concat boundary.
+  // #1171: communityFragment is additive, independent of kgFragment. weight 0 => ''.
   const rankSQL =
     `(case when (${titleOr}) then 3 else 0 end ` +
     `+ case when (${descOr}) then 2 else 0 end ` +
     `+ case when (${primOr} or ${tagOr}) then 1 else 0 end` +
     (kgFragment ? ` ${kgFragment}` : '') +
+    (communityFragment ? ` ${communityFragment}` : '') +
     `)`;
 
   // cds.parse.expr is the documented public API for parsing an SQL expression
@@ -218,6 +220,7 @@ export default class SearchService extends cds.ApplicationService {
       // Fetch flag once per request. Failure to read ChatSettings → skip KG
       // silently and use fuzzy-only rank (same behaviour as flag=false).
       let kgFragment = '';
+      let communityFragment = '';
       try {
         const settings = await readChatSettings();
         if (settings?.searchKgRerankEnabled) {
@@ -229,12 +232,18 @@ export default class SearchService extends cds.ApplicationService {
             enabled: true,
           });
           kgFragment = buildKgRankFragment(signal);
+          // #1171 — additive, independent community-overlap term. weight 0 => ''.
+          communityFragment = await buildCommunityRankFragment({
+            signal,
+            db: cds.db,
+            weight: KG_COMMUNITY_WEIGHT,
+          });
         }
       } catch (err) {
         LOG.warn('KG signal computation failed; falling back to fuzzy-only rank', err.message);
       }
 
-      attachSearchRank(req.query, tokens, kgFragment);
+      attachSearchRank(req.query, tokens, kgFragment, communityFragment);
     });
 
     /**

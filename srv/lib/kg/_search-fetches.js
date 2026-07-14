@@ -137,6 +137,61 @@ export async function fetchTutorialsByIds(db, ids) {
 }
 
 /**
+ * Resolve anchor tutorial slugs → their KgCommunity fingerprints (#1171).
+ * Only tutorial-typed vertices. Bounded `.in()` — callers pass a small anchor
+ * set (<= COMMUNITY_TOP_K). Returns rows { slug, communityFingerprint } with
+ * lowercased keys regardless of dialect.
+ */
+export async function fetchCommunityFingerprints(db, slugs) {
+  if (!Array.isArray(slugs) || slugs.length === 0) return []
+  const placeholders = slugs.map(() => '?').join(',')
+  if (isHana(db)) {
+    return await db.run(
+      `SELECT SLUG as "slug", COMMUNITYFINGERPRINT as "communityFingerprint"
+       FROM COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY
+       WHERE VERTEXTYPE = 'tutorial' AND SLUG IN (${placeholders})`,
+      slugs,
+    ) || []
+  }
+  return await db.run(
+    `SELECT slug, communityFingerprint
+     FROM com_sap_developers_ims_KgCommunity
+     WHERE vertexType = 'tutorial' AND slug IN (${placeholders})`,
+    slugs,
+  ) || []
+}
+
+/**
+ * Fetch tutorial-typed members of the given community fingerprints (#1171).
+ * The fingerprint set is small (<= COMMUNITY_TOP_K distinct) so `.in()` is
+ * packet-safe; the RETURNED member set is capped at `cap` rows defensively
+ * (communities are small, but a pathological cluster shouldn't unbounded the
+ * fragment). Node-side de-dup/exclusion happens in the caller. Returns rows
+ * { slug, communityFingerprint } with lowercased keys regardless of dialect.
+ */
+export async function fetchCommunityMembers(db, fingerprints, cap) {
+  if (!Array.isArray(fingerprints) || fingerprints.length === 0) return []
+  const limit = Number.isInteger(cap) && cap > 0 ? cap : 200
+  const placeholders = fingerprints.map(() => '?').join(',')
+  if (isHana(db)) {
+    return await db.run(
+      `SELECT SLUG as "slug", COMMUNITYFINGERPRINT as "communityFingerprint"
+       FROM COM_SAP_DEVELOPERS_IMS_KGCOMMUNITY
+       WHERE VERTEXTYPE = 'tutorial' AND COMMUNITYFINGERPRINT IN (${placeholders})
+       LIMIT ${limit}`,
+      fingerprints,
+    ) || []
+  }
+  return await db.run(
+    `SELECT slug, communityFingerprint
+     FROM com_sap_developers_ims_KgCommunity
+     WHERE vertexType = 'tutorial' AND communityFingerprint IN (${placeholders})
+     LIMIT ${limit}`,
+    fingerprints,
+  ) || []
+}
+
+/**
  * The 8 external-content UNION arms. Each maps a content-type key to its
  * table, link table, link->content FK, and (optionally) an endDate column.
  * `endCol` is null for every type except community-event (only entity with a
