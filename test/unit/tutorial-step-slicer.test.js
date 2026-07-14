@@ -27,6 +27,12 @@ describe('tutorial-step-slicer', () => {
   let sliceStep, sliceAllSteps, invalidateSlug;
 
   beforeAll(async () => {
+    // In-memory caching store so the `caching` service resolves — the slice
+    // cache is now backed by cds-caching, not lru-cache (issue #1180).
+    cds.env.requires = cds.env.requires || {};
+    cds.env.requires.caching = { impl: 'cds-caching', namespace: 'slicer-test', store: 'memory' };
+    await cds.connect.to('caching');
+
     const { ContentManifest, ContentFiles } = cds.entities(NS);
     await INSERT.into(ContentManifest).entries({
       version: 1, status: 'ACTIVE'
@@ -37,7 +43,9 @@ describe('tutorial-step-slicer', () => {
       content: gzipSync(Buffer.from(FIXTURE_HTML)),
       mimeType: 'text/html'
     });
-    ({ sliceStep, sliceAllSteps, invalidateSlug } = await import('../../srv/lib/tutorial-step-slicer.js'));
+    const mod = await import('../../srv/lib/tutorial-step-slicer.js');
+    ({ sliceStep, sliceAllSteps, invalidateSlug } = mod);
+    mod._resetConnection();
   });
 
   it('returns the correct step for a valid stepNumber', async () => {
@@ -48,6 +56,24 @@ describe('tutorial-step-slicer', () => {
     expect(slice.text).toContain('cds init bookshop');
     expect(slice.text).not.toContain('<code>');
     expect(slice.totalSteps).toBe(3);
+  });
+
+  it('a cache hit returns an identical shape (Map rebuilt from the serialized entries array, #1180)', async () => {
+    // The value is stored as a serializable entries array, NOT a live Map — a
+    // production store (Redis/HANA) cannot round-trip a Map. This asserts the
+    // hit path rebuilds the Map so sliceStep/sliceAllSteps behave identically
+    // on a hit vs. a miss.
+    const first = await sliceStep('hello-cap', 3);   // miss → parse + cache
+    const second = await sliceStep('hello-cap', 3);  // hit  → rebuilt from entries
+    expect(second).toEqual(first);
+    expect(second.stepTitle).toBe('Start the server');
+    // sliceAllSteps iterates the rebuilt Map on a hit.
+    const meta = await sliceAllSteps('hello-cap');
+    expect(meta).toEqual([
+      { stepNumber: 1, title: 'Install CAP' },
+      { stepNumber: 2, title: 'Init the project' },
+      { stepNumber: 3, title: 'Start the server' }
+    ]);
   });
 
   it('returns null for a step out of range', async () => {
@@ -69,7 +95,7 @@ describe('tutorial-step-slicer', () => {
 
   it('invalidateSlug clears the cache for that slug', async () => {
     await sliceStep('hello-cap', 1); // warm cache
-    invalidateSlug('hello-cap');
+    await invalidateSlug('hello-cap');
     // A second call should re-hit the DB — assert by mutating and confirming re-read.
     const { ContentFiles } = cds.entities(NS);
     await UPDATE(ContentFiles).where({ slug: 'hello-cap' }).with({

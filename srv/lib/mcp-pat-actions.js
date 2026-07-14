@@ -96,8 +96,9 @@ export async function handleRevokePAT(req) {
   const revokedAt = new Date();
   await UPDATE(PATs).set({ revokedAt }).where({ ID });
   // Immediately purge the middleware cache — closes the 60s TTL revocation
-  // gap on single-instance deploys (security-review fix, #1105).
-  invalidateCacheByPatId(ID);
+  // gap (security-review fix, #1105). Now tag-based via the shared caching
+  // service (#1180), so revocation propagates across CF instances too.
+  await invalidateCacheByPatId(ID);
   metrics.counter('mcp.pat.revoke');
   return { ok: true, revokedAt };
 }

@@ -7,9 +7,15 @@ import crypto from 'node:crypto';
 cds.test('serve', '--project', '.', '--in-memory');
 
 describe('mcp-pat-middleware', () => {
-  let patMiddleware, _cache;
+  let patMiddleware, invalidateCacheByPatId, _resetConnection;
 
   beforeAll(async () => {
+    // Configure an in-memory caching store so the `caching` service resolves
+    // (issue #1180 — the PAT cache is now backed by cds-caching, not lru-cache).
+    cds.env.requires = cds.env.requires || {};
+    cds.env.requires.caching = { impl: 'cds-caching', namespace: 'pat-test', store: 'memory' };
+    await cds.connect.to('caching');
+
     const { Users, PATs } = cds.entities('com.sap.developers.ims');
     await INSERT.into(Users).entries({
       ID: 'mw-user-uuid', email: 'mw@example.com', displayName: 'Mw'
@@ -36,7 +42,16 @@ describe('mcp-pat-middleware', () => {
       scopes: ['read'], expiresAt: new Date(Date.now() + 60_000),
       revokedAt: new Date()
     });
-    ({ patMiddleware, _cache } = await import('../../srv/lib/mcp-pat-middleware.js'));
+    // Dedicated PAT for the cache-behavior tests below — revoked mid-test to
+    // prove cache-hit vs. invalidation semantics, so kept off the shared seeds.
+    await INSERT.into(PATs).entries({
+      ID: 'pat-cache-uuid', user_ID: 'mw-user-uuid', name: 'cache-probe',
+      prefix: 'pat_cache0001', hashHex: crypto.createHash('sha256').update('pat_cache0001_' + 'd'.repeat(48)).digest('hex'),
+      scopes: ['read'], expiresAt: new Date(Date.now() + 60_000)
+    });
+    ({ patMiddleware, invalidateCacheByPatId, _resetConnection } =
+      await import('../../srv/lib/mcp-pat-middleware.js'));
+    _resetConnection();
   });
 
   function mockReq(authz) {
@@ -124,18 +139,29 @@ describe('mcp-pat-middleware', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('caches successful auth for 60s', async () => {
-    _cache.clear();
-    const req1 = mockReq('Bearer pat_abcd1234_' + 'a'.repeat(48));
-    await patMiddleware(req1, mockRes(), vi.fn());
-    expect(_cache.size).toBe(1);
-    const req2 = mockReq('Bearer pat_abcd1234_' + 'a'.repeat(48));
-    await patMiddleware(req2, mockRes(), vi.fn());
-    expect(_cache.size).toBe(1); // still one entry, second was a cache hit
+  it('caches a successful auth (a DB revoke after warming is not seen until invalidation)', async () => {
+    // cds-caching owns TTL/eviction now (#1180); we assert OUR contract — a hit
+    // is served from cache, so a revoke written straight to the DB underneath
+    // is invisible until the entry is invalidated or expires.
+    const auth = 'Bearer pat_cache0001_' + 'd'.repeat(48);
+    // Warm the cache with a valid auth.
+    const req1 = mockReq(auth); const res1 = mockRes(); const next1 = vi.fn();
+    await patMiddleware(req1, res1, next1);
+    expect(next1).toHaveBeenCalled();
+    expect(req1.user?.tokenSource).toBe('pat');
+
+    // Revoke straight in the DB — bypasses invalidateCacheByPatId on purpose.
+    const { PATs } = cds.entities('com.sap.developers.ims');
+    await UPDATE(PATs).set({ revokedAt: new Date() }).where({ ID: 'pat-cache-uuid' });
+
+    // Second call still hits the cached (pre-revoke) entry → still authorized.
+    const req2 = mockReq(auth); const res2 = mockRes(); const next2 = vi.fn();
+    await patMiddleware(req2, res2, next2);
+    expect(next2).toHaveBeenCalled();
+    expect(res2.statusCode).toBe(200);
   });
 
   it('grants pat-write to a write-scoped PAT', async () => {
-    _cache.clear();
     const req = mockReq('Bearer pat_write0001_' + 'c'.repeat(48));
     const res = mockRes(); const next = vi.fn();
     await patMiddleware(req, res, next);
@@ -144,15 +170,15 @@ describe('mcp-pat-middleware', () => {
     expect(req.user.is('pat-write')).toBe(true);
   });
 
-  it('invalidateCacheByPatId purges the specific PAT entry', async () => {
-    const { invalidateCacheByPatId } = await import('../../srv/lib/mcp-pat-middleware.js');
-    _cache.clear();
-    // Warm cache with both active + write-scoped PATs.
-    await patMiddleware(mockReq('Bearer pat_abcd1234_' + 'a'.repeat(48)), mockRes(), vi.fn());
-    await patMiddleware(mockReq('Bearer pat_write0001_' + 'c'.repeat(48)), mockRes(), vi.fn());
-    expect(_cache.size).toBe(2);
-    invalidateCacheByPatId('pat-active-uuid');
-    expect(_cache.size).toBe(1);
+  it('invalidateCacheByPatId purges the entry so the next call re-reads the DB (revoked → 401)', async () => {
+    // Continues from the warmed+DB-revoked pat-cache-uuid above: invalidating
+    // its cache entry forces a fresh DB read, which now sees the revocation.
+    await invalidateCacheByPatId('pat-cache-uuid');
+    const req = mockReq('Bearer pat_cache0001_' + 'd'.repeat(48));
+    const res = mockRes(); const next = vi.fn();
+    await patMiddleware(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(401);
   });
 
   describe('pinPatUserToContext', () => {
