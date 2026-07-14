@@ -1,0 +1,39 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  xmlns:l="sap.ui.layout">
+  <Dialog
+    id="promoteDialog"
+    title="{i18n>promoteDialogTitle}"
+    contentWidth="480px"
+    busyIndicatorDelay="0"
+    busy="{viewState>/busy}">
+    <content>
+      <l:VerticalLayout class="sapUiSmallMargin" width="100%">
+        <Label text="{i18n>missionSlugLabel}" labelFor="promoteSlugInput" />
+        <Input
+          id="promoteSlugInput"
+          value="{viewState>/missionSlug}"
+          placeholder="e.g. my-new-mission"
+          width="100%" />
+        <Label text="{i18n>missionTitleLabel}" labelFor="promoteTitleInput" class="sapUiTinyMarginTop" />
+        <Input
+          id="promoteTitleInput"
+          value="{viewState>/title}"
+          placeholder="Mission display title"
+          width="100%" />
+      </l:VerticalLayout>
+    </content>
+    <beginButton>
+      <Button
+        text="{i18n>promoteConfirm}"
+        type="Emphasized"
+        press="onPromoteConfirm" />
+    </beginButton>
+    <endButton>
+      <Button
+        text="{i18n>promoteCancel}"
+        press="onPromoteCancel" />
+    </endButton>
+  </Dialog>
+</core:FragmentDefinition>

@@ -980,7 +980,19 @@ extend service AdminService with {
   @readonly
   entity KgCommunities as projection on ims.KgCommunitySummaryV {
     *,
-    virtual null as topConceptSlugs : String(255),
+    virtual null as topConceptSlugs      : String(255),
+    // #1172 — curator-assist nudges. Populated at read time by the
+    // after('READ','KgCommunities') decorator in srv/admin-service.js from a
+    // batched coverage computation (see srv/lib/kg-community-coverage.js).
+    // All null by default → fail-quiet renders no badge (mirrors #918
+    // `isolated`). missionCoveragePct / orphanTutorialCount are computed over
+    // TUTORIAL members only, against PUBLISHED missions only; left unset (not
+    // 0) for concept/tag-only communities.
+    virtual null as missionCoveragePct   : Integer,
+    virtual null as dominantMissionTitle : String(255),
+    virtual null as dominantMissionSlug  : String(255),
+    virtual null as orphanTutorialCount  : Integer,
+    virtual null as coverageHigh         : Boolean,
   };
 
   // OP-facing memberships. Rows keyed to (communityId, vertexKey).
