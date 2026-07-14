@@ -2907,6 +2907,22 @@ export default class AdminService extends cds.ApplicationService {
     // stay under HANA's bound-param cap (memory: cqn-where-in-hana-packet-cap).
     // Spec: docs/superpowers/specs/2026-07-14-1172-kg-community-curator-nudges-design.md
     const COVERAGE_SLUG_CHUNK = 500;
+
+    // Packet-safe chunked IN-query helper (memory: cqn-where-in-hana-packet-cap).
+    // Splits any unbounded id list into COVERAGE_SLUG_CHUNK-sized slices to stay
+    // under HANA's bound-param limit. SQLite unit tests would never catch an
+    // unbounded .in() blowing the packet cap; use this helper for ALL three IN
+    // queries in the coverage decorator.
+    async function selectInChunks(entity, idColumn, ids, columns) {
+      const out = [];
+      for (let i = 0; i < ids.length; i += COVERAGE_SLUG_CHUNK) {
+        const slice = ids.slice(i, i + COVERAGE_SLUG_CHUNK);
+        // slice is always non-empty here because i < ids.length guarantees at least one element.
+        out.push(...(await SELECT.from(entity).columns(...columns).where({ [idColumn]: { in: slice } })));
+      }
+      return out;
+    }
+
     this.after('READ', 'KgCommunities', async (rows) => {
       if (!rows) return;
       const list = Array.isArray(rows) ? rows : [rows];
@@ -2940,11 +2956,12 @@ export default class AdminService extends cds.ApplicationService {
         //       then join in Node to produce {slug, missionTitle, missionSlug} rows.
         // This avoids the path.mission.title cross-association projection which can
         // behave differently on Node 22 CI (see brief CQL path-navigation caveat).
+        // ALL three IN-queries use selectInChunks — see COVERAGE_SLUG_CHUNK comment above.
         const coveredRows = [];
         const slugArr = [...allSlugs];
         for (let i = 0; i < slugArr.length; i += COVERAGE_SLUG_CHUNK) {
           const chunk = slugArr.slice(i, i + COVERAGE_SLUG_CHUNK);
-          if (chunk.length === 0) continue;
+          // chunk is always non-empty here: i < slugArr.length guarantees at least one element.
 
           // Step (a): get slug + path_ID for this chunk of tutorial slugs.
           const pathItemRows = await SELECT.from(CompletionPathItems)
@@ -2956,19 +2973,19 @@ export default class AdminService extends cds.ApplicationService {
           if (!pathIds.length) continue;
 
           // Step (b): resolve path_IDs → CompletionPaths → mission_ID.
-          const pathRows = await SELECT.from(CompletionPaths)
-            .columns('ID', 'mission_ID')
-            .where({ ID: { in: pathIds } });
+          // Chunked: pathIds can exceed COVERAGE_SLUG_CHUNK when many slugs map to many paths.
+          const pathRows = await selectInChunks(CompletionPaths, 'ID', pathIds, ['ID', 'mission_ID']);
           const missionIds = [...new Set(pathRows.map((r) => r.mission_ID).filter(Boolean))];
           if (!missionIds.length) continue;
 
           // Step (c): fetch published missions only.
-          const missionRows = await SELECT.from(Missions)
-            .columns('ID', 'title', 'slug')
-            .where({ ID: { in: missionIds }, published: true });
+          // Chunked: missionIds can exceed COVERAGE_SLUG_CHUNK when many paths map to many missions.
+          const missionRows = await selectInChunks(Missions, 'ID', missionIds, ['ID', 'title', 'slug', 'published']);
 
-          // Step (d): join in Node.
-          const missionById = new Map(missionRows.map((m) => [m.ID, m]));
+          // Step (d): join in Node — filter to published-only here (published was fetched
+          // as a column so we can filter post-chunk-accumulation rather than duplicating
+          // WHERE logic across slices).
+          const missionById = new Map(missionRows.filter((m) => m.published === true).map((m) => [m.ID, m]));
           const pathToMission = new Map(
             pathRows
               .map((p) => {

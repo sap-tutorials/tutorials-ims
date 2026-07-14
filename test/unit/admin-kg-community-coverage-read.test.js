@@ -81,17 +81,16 @@ describe('after(READ, KgCommunities) coverage decorator (#1172)', () => {
     expect(row.coverageHigh).toBe(false); // 67 < 70 (default threshold)
   });
 
-  it('fail-quiet: a community with no CompletionPathItems returns 200 with topConceptSlugs intact', async () => {
-    // This test exercises the fail-quiet posture by reading a community that
-    // genuinely has no coverage data (no CompletionPathItems). The coverage
-    // fields will be null/undefined (not populated), but the response MUST
-    // be 200 and topConceptSlugs MUST still be present (independent decorator).
+  it('returns 200 with null coverage fields and topConceptSlugs present when no coverage data is seeded', async () => {
+    // This test reads a community with no CompletionPathItems seeded and asserts
+    // that the response is 200, coverage fields are null/absent for unseeded rows,
+    // and topConceptSlugs (the independent decorator) is present on every row.
     //
-    // Note: true throw-injection into the coverage query would require
-    // vi.spyOn on cds internals which is brittle; the true throw path is
-    // deferred to the Task 7 hybrid test where the db handle is mockable.
-    // This test guards the weaker 200-invariant: any community read succeeds
-    // and the topConceptSlugs decorator remains unaffected.
+    // TRUE THROW PATH (catch-branch): the decorator's try/catch block is exercised
+    // by the Task 7 hybrid test (test/hybrid/admin-kg-community-coverage-hybrid.test.js)
+    // where the db handle can be monkeypatched. Injecting a throw here would require
+    // vi.spyOn on @sap/cds SELECT internals which is fragile and breaks across CDS
+    // minor versions — honest-relabel applied per review finding 2.
     const res = await project.get('/admin/KgCommunities', {
       ...ADMIN_AUTH,
       validateStatus: () => true,
@@ -99,6 +98,14 @@ describe('after(READ, KgCommunities) coverage decorator (#1172)', () => {
     expect(res.status).toBe(200);
     const rows = res.data.value;
     expect(Array.isArray(rows)).toBe(true);
+    // Coverage fields must be null/absent for communities with no coverage data seeded.
+    // (The seeded COMMUNITY_ID row may have values; all OTHER rows must not.)
+    const unseeded = rows.filter((r) => r.communityId !== COMMUNITY_ID);
+    for (const r of unseeded) {
+      expect(r.missionCoveragePct == null).toBe(true);
+      expect(r.dominantMissionTitle == null).toBe(true);
+      expect(r.dominantMissionSlug == null).toBe(true);
+    }
     // topConceptSlugs decorator is independent — must be present on every row.
     expect(rows.every((r) => 'topConceptSlugs' in r)).toBe(true);
   });
