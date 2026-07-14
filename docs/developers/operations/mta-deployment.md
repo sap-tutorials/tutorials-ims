@@ -28,6 +28,12 @@ Resources (created by MTA):
 
 ## Step 1: Build & Deploy MTA
 
+> **Prefer the orchestrated path:** `npm run deploy -- --env <dev|qa|prod>` walks
+> every step (target guard → build → mbt → deploy → smoke gate) so none can be
+> skipped by a human or an AI. See the definitive
+> [Deploy Checklist](deploy-checklist.md). The steps below are the manual
+> equivalent.
+
 ```bash
 cd .deploy
 mbt build
