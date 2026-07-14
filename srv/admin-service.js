@@ -3040,7 +3040,7 @@ export default class AdminService extends cds.ApplicationService {
       await UPDATE(Users)
         .set({ khorosId: null, khorosLogin: null, khorosAvatarUrl: null, khorosLinkedAt: null })
         .where({ ID: userId });
-      if (prevKhorosId) khorosCache.evict(prevKhorosId);
+      if (prevKhorosId) await khorosCache.evict(prevKhorosId);
       cds.log('khoros').info('admin cleared khoros link', {
         adminEmail: req.user?.id, targetUserId: userId, prevKhorosId
       });

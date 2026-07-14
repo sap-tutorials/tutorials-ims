@@ -562,7 +562,7 @@ Phase 2 adds nine authenticated tools across two services: seven on `DeveloperSe
 }
 ```
 
-Returns 404 if the tutorial or step is not in the content store. Backed by `srv/lib/tutorial-step-slicer.js`; LRU-cached per `slug::activeManifestVersion`. Disabled if `KG_STEP_SLICER_ENABLED=false`.
+Returns 404 if the tutorial or step is not in the content store. Backed by `srv/lib/tutorial-step-slicer.js`; cached via the shared `caching` service (cds-caching, #1180) keyed by `slice:<slug>::<activeManifestVersion>`. Disabled if `KG_STEP_SLICER_ENABLED=false`.
 
 ---
 

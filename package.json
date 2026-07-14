@@ -73,6 +73,7 @@
     "check-deploy-cap-target": "node scripts/check-deploy-cap-target.cjs",
     "build:all": "npm run prebuild && npm run fetch-tutorials -- --regenerate && npm run fetch-concepts && npm run fetch-advocates && npm run fetch-homepage-shelves && npm run fetch-verb-definitions && npm run fetch-shelf-definitions && npm run fetch-featured-topics && npm run fetch-topic-clusters && npm run build:css && npm run build:apps && npm run build:analytics-explorer && npm run copy-joule-vendor && npm run build:explore && npm run build:hugo && npm run build:highlight && npm run build:display && npm run build:sdl",
     "build:deploy": "npm run check-deploy-cap-target && npm run build:all",
+    "deploy": "node scripts/deploy-mta.cjs",
     "build:admin": "npm --prefix app/admin-shell run build",
     "predev": "npm run copy-joule-vendor && node -e \"var r=require('fs').existsSync('srv/data/admin-docs-index.json')?{status:0}:require('child_process').spawnSync('npx',['tsx','scripts/build-admin-docs-index.ts'],{stdio:'inherit',shell:true});if(r.status!==0)process.exit(r.status||1)\"",
     "prewatch": "node -e \"var r=require('fs').existsSync('srv/data/admin-docs-index.json')?{status:0}:require('child_process').spawnSync('npx',['tsx','scripts/build-admin-docs-index.ts'],{stdio:'inherit',shell:true});if(r.status!==0)process.exit(r.status||1)\"",
@@ -179,7 +180,6 @@
     "hdb": "^2.29.5",
     "jose": "6.2.3",
     "js-yaml": "5.2.1",
-    "lru-cache": "7.18.3",
     "markdown-it": "^14.3.0",
     "mermaid": "^11.16.0",
     "multer": "2.2.0",
@@ -205,7 +205,19 @@
       "caching": {
         "impl": "cds-caching",
         "namespace": "kg",
-        "store": "memory"
+        "store": "memory",
+        "[hybrid]": {
+          "store": "cds",
+          "metrics": {
+            "enabled": true
+          }
+        },
+        "[production]": {
+          "store": "cds",
+          "metrics": {
+            "enabled": true
+          }
+        }
       },
       "db": {
         "[hybrid]": {

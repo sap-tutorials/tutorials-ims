@@ -26,7 +26,27 @@ export default defineConfig({
           // live here.
           testTimeout: 30_000,
           hookTimeout: 60000,
-          env: { NO_TELEMETRY: 'true' }
+          // Stamp a stable in-memory cds-caching config for every unit worker
+          // via env vars (cds reads `cds_requires_*` natively). This closes
+          // the fork-pool boot race (issue #1179 / #1177): several unit files
+          // dynamically import a SUT that may `cds.connect.to('caching')` at
+          // import time, and the per-file `beforeAll` that set the config
+          // could run *after* that connect — leaving an undefined-config
+          // window that raced two concurrent boots or stalled (~110s once).
+          // Env vars are present before any module loads, so the require entry
+          // always exists. Set via env (NOT a setupFiles that imports @sap/cds)
+          // because eagerly importing cds installs getter-only SELECT/INSERT/…
+          // globals that break tests which assign `globalThis.SELECT = {…}`.
+          // Per-file `beforeAll` namespace overrides still work — they narrow
+          // an already-valid config. Always `memory` here; the `cds` DB store
+          // only activates under [hybrid]/[production], run by the hybrid
+          // project, not this one.
+          env: {
+            NO_TELEMETRY: 'true',
+            cds_requires_caching_impl: 'cds-caching',
+            cds_requires_caching_namespace: 'unit-default',
+            cds_requires_caching_store: 'memory',
+          }
         },
         resolve: {
           alias: {

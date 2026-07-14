@@ -45,7 +45,7 @@ describe('homepage news() with #1034 filter', () => {
     // to native fetch so the stubbed global fetch intercepts. Mirrors the guard
     // in homepage-rss-fetcher.test.js.
     process.env.RSS_TRANSPORT = 'fetch';
-    resetRssFetcherCache();
+    await resetRssFetcherCache();
     await db.run(DELETE.from('com.sap.developers.ims.external.NewsItems'));
     await db.run(UPDATE('com.sap.developers.ims.HomepageConfig').set({ newsRelevanceEnabled: false }));
     const mod = await import('../../srv/homepage-service.js');

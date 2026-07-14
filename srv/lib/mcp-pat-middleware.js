@@ -7,26 +7,85 @@
 
 import cds from '@sap/cds';
 import crypto from 'node:crypto';
-import LRUCache from 'lru-cache';
 import * as metrics from './metrics.js';
 
 const LOG = cds.log('mcp-pat');
 const NS = 'com.sap.developers.ims';
 
-// TTL 60s — bounded revocation window << any credible attack duration.
-// For instant revocation, `handleRevokePAT` in mcp-pat-actions.js calls
-// `invalidateCacheByPatId(patId)` after the UPDATE succeeds — closes the
-// 60s TTL gap on single-instance deploys. Multi-instance revocation is a
-// follow-up (would need pub/sub or shared cache).
-export const _cache = new LRUCache({ max: 5000, ttl: 60 * 1000 });
+// PAT-auth cache, backed by the shared `caching` service (cds-caching plugin,
+// issue #1180 — replaces the former hand-rolled lru-cache). TTL 60s bounds the
+// revocation window << any credible attack duration. In prod (Redis/HANA store)
+// entries are shared across CF instances, so revocation now propagates fleet-wide
+// instead of per-instance.
+//
+// Cache key: `pat:<sha256(token)>`. Each entry is tagged `pat-id:<patId>` so a
+// single `deleteByTag` in `invalidateCacheByPatId` purges every cached hash for
+// one PAT — the tag-based successor to the old O(cache-size) entry walk, and it
+// now closes the 60s revocation gap on MULTI-instance deploys too.
+const TTL_MS = 60 * 1000;
 
-/** Purge the cache entry for the PAT with the given ID.
- *  Called from `handleRevokePAT` to close the 60s TTL revocation gap.
- *  O(cache-size); acceptable at max 5000 entries. */
-export function invalidateCacheByPatId(patId) {
-  for (const [hashHex, entry] of _cache.entries()) {
-    if (entry.patId === patId) _cache.delete(hashHex);
+function makeKey(hashHex) {
+  return `pat:${hashHex}`;
+}
+function patTag(patId) {
+  return `pat-id:${patId}`;
+}
+
+// Memoized connection to the caching service. See kg-neighborhood-cache.js
+// (#1177) for the same pattern — a burst of concurrent lookups on a cold
+// module shares one connect round-trip.
+let _cachePromise;
+function cache() {
+  if (!_cachePromise) _cachePromise = cds.connect.to('caching');
+  return _cachePromise;
+}
+
+/** Read a cached PAT entry by token hash. Fail-open: any caching-service
+ *  fault resolves to null (treated as a miss), so the middleware falls through
+ *  to the DB lookup rather than erroring on a request hot path. */
+async function cacheGet(hashHex) {
+  try {
+    const c = await cache();
+    const v = await c.get(makeKey(hashHex));
+    return v == null ? null : v;
+  } catch (err) {
+    LOG.warn(`cache get failed, treating as miss: ${err.message}`);
+    return null;
   }
+}
+
+/** Store a PAT entry, tagged for per-PAT invalidation. Fail-open: a store
+ *  fault is logged and swallowed — the next request just re-reads from the DB. */
+async function cacheSet(hashHex, entry) {
+  try {
+    const c = await cache();
+    await c.set(makeKey(hashHex), entry, {
+      ttl: TTL_MS,
+      tags: [{ value: patTag(entry.patId) }],
+    });
+  } catch (err) {
+    LOG.warn(`cache set failed, entry not cached: ${err.message}`);
+  }
+}
+
+/** Purge every cached entry for the PAT with the given ID.
+ *  Called from `handleRevokePAT` to close the 60s TTL revocation gap.
+ *  Now a single tag delete (fleet-wide on shared stores) instead of an
+ *  in-process entry walk. Fail-open: a fault is logged; entries then expire
+ *  via TTL. Async — the caller awaits. */
+export async function invalidateCacheByPatId(patId) {
+  try {
+    const c = await cache();
+    await c.deleteByTag(patTag(patId));
+  } catch (err) {
+    LOG.warn(`cache invalidate failed for ${patId}, relying on TTL: ${err.message}`);
+  }
+}
+
+/** Test seam: reset the memoized connection so a test booting a fresh cds
+ *  runtime doesn't reuse a stale service handle. */
+export function _resetConnection() {
+  _cachePromise = undefined;
 }
 
 function respond401(res, err = 'invalid_token') {
@@ -100,10 +159,10 @@ export async function patMiddleware(req, res, next) {
   const token = authz.slice('Bearer '.length);
   const hashHex = crypto.createHash('sha256').update(token).digest('hex');
 
-  let entry = _cache.get(hashHex);
+  let entry = await cacheGet(hashHex);
   if (!entry) {
     entry = await lookupPAT(hashHex);
-    if (entry) _cache.set(hashHex, entry);
+    if (entry) await cacheSet(hashHex, entry);
   }
 
   if (!isValid(entry)) {

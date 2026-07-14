@@ -100,6 +100,17 @@ The transport is injected into `safeFetch(url, { fetchImpl })` exactly like
 `allowedHosts` is pinned to `new Set(['community.sap.com'])`, and the protocol
 allowlist + private-IP rejection + per-hop redirect re-check all still run.
 
+## On-read caching sits above this transport (#1181)
+
+`fetchRssItems`'s **on-read** results (homepage `news()` legacy pass-through +
+`get_recent_news`) are cached in the shared `caching` service — see
+[on-read-fetch-caching.md](on-read-fetch-caching.md). The cache sits *above* the
+transport: transport resolution (`khoros`/`curl`/`fetch`) still happens on every
+cache **miss**, and RSS failures are **not** cached, so caching cannot mask a
+transport regression — a broken transport surfaces on the next request past the
+30-min TTL. This is orthogonal to the `community-blogs-fetch` **cron** path, which
+is not cached (it persists to `CommunityBlogPosts` in HANA).
+
 ## ✅ Verified working from CF egress (2026-07-13)
 
 `/api/2.0/*` is behind the **same Cloudflare edge** as `/rss`, so it was an open

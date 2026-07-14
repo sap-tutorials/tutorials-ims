@@ -896,7 +896,7 @@ export default class DeveloperService extends cds.ApplicationService {
         return { status: 'persist-failed' };
       }
       // Seed cache with exactly the shape getKhorosProfile reads back.
-      khorosCache.set(profile.id, {
+      await khorosCache.set(profile.id, {
         name: profile.name, rank: profile.rank, avatarUrl: profile.avatarUrl
       });
       cds.log('khoros').info('khoros linked', { sapId, khorosId: profile.id, khorosLogin: profile.login });
@@ -912,7 +912,7 @@ export default class DeveloperService extends cds.ApplicationService {
       await UPDATE(dbUsers)
         .set({ khorosId: null, khorosLogin: null, khorosAvatarUrl: null, khorosLinkedAt: null })
         .where({ ID: dbUser.ID });
-      if (prevKhorosId) khorosCache.evict(prevKhorosId);
+      if (prevKhorosId) await khorosCache.evict(prevKhorosId);
       cds.log('khoros').info('khoros unlinked', { sapId, khorosId: prevKhorosId });
       return { status: 'ok' };
     });
@@ -932,7 +932,7 @@ export default class DeveloperService extends cds.ApplicationService {
         avatarUrl: dbUser.khorosAvatarUrl || '',
         profileUrl: PROFILE_URL(dbUser.khorosId),
       };
-      const cached = khorosCache.get(dbUser.khorosId);
+      const cached = await khorosCache.get(dbUser.khorosId);
       if (cached) {
         return { ...persisted, name: cached.name, rank: cached.rank, avatarUrl: cached.avatarUrl || persisted.avatarUrl };
       }
@@ -949,7 +949,7 @@ export default class DeveloperService extends cds.ApplicationService {
         return { ...persisted, name: dbUser.khorosLogin || '', rank: '' };
       }
       // Refresh cache + write back avatar if it drifted.
-      khorosCache.set(upstream.id, { name: upstream.name, rank: upstream.rank, avatarUrl: upstream.avatarUrl });
+      await khorosCache.set(upstream.id, { name: upstream.name, rank: upstream.rank, avatarUrl: upstream.avatarUrl });
       if (upstream.avatarUrl && upstream.avatarUrl !== dbUser.khorosAvatarUrl) {
         await UPDATE(dbUsers).set({ khorosAvatarUrl: upstream.avatarUrl }).where({ ID: dbUser.ID });
       }

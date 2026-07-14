@@ -12,15 +12,40 @@
 import cds from '@sap/cds';
 import { gunzipSync } from 'node:zlib';
 import { Readable } from 'node:stream';
-import LRUCache from 'lru-cache';
 import * as cheerio from 'cheerio';
 import * as metrics from './metrics.js';
 
 const NS = 'com.sap.developers.ims';
 const LOG = cds.log('mcp-slicer');
 
-// LRU: 200 slugs × ~50KB avg = ~10MB RAM ceiling.
-const cache = new LRUCache({ max: 200, ttl: 30 * 60 * 1000 });
+// Step-slice cache, backed by the shared `caching` service (cds-caching plugin,
+// issue #1180 — replaces the former hand-rolled lru-cache). TTL 30 min; the
+// store owns eviction (no more max-200 ceiling to tune), and in prod a shared
+// store gives cross-instance coherence for free.
+//
+// Cache key: `slice:<slug>::<version>` — version-aware, so a content publish
+// that bumps ContentManifest.version orphans old keys automatically. Each entry
+// is tagged `slice-slug:<slug>` so `invalidateSlug` is a single deleteByTag.
+//
+// Value shape: the parsed step map is stored as an ARRAY of [stepNumber, step]
+// entries (`stepsEntries`), NOT a live Map — a serializing store (Redis/HANA in
+// prod) cannot round-trip a Map. `loadAndParse` rebuilds the Map on read.
+const TTL_MS = 30 * 60 * 1000;
+
+function sliceKey(slug, version) {
+  return `slice:${slug}::${version}`;
+}
+function slugTag(slug) {
+  return `slice-slug:${slug}`;
+}
+
+// Memoized connection to the caching service (same pattern as
+// kg-neighborhood-cache.js / mcp-pat-middleware.js, #1177/#1180).
+let _cachePromise;
+function cache() {
+  if (!_cachePromise) _cachePromise = cds.connect.to('caching');
+  return _cachePromise;
+}
 
 async function toBuffer(data) {
   if (Buffer.isBuffer(data)) return data;
@@ -50,11 +75,20 @@ async function loadAndParse(slug) {
   const version = await getActiveVersion();
   if (!version) return null;
 
-  const cacheKey = `${slug}::${version}`;
-  const hit = cache.get(cacheKey);
+  const cacheKey = sliceKey(slug, version);
+  // Fail-open on cache read: any caching-service fault → treat as miss and
+  // fall through to the DB path rather than erroring.
+  let hit;
+  try {
+    hit = await (await cache()).get(cacheKey);
+  } catch (err) {
+    LOG.warn(`slicer: cache get failed for ${slug}, treating as miss: ${err.message}`);
+    hit = null;
+  }
   if (hit) {
     metrics.counter('mcp.slice[outcome=hit]');
-    return hit;
+    // Rebuild the live Map from the serializable entries array.
+    return { steps: new Map(hit.stepsEntries), totalSteps: hit.totalSteps };
   }
 
   const { ContentFiles } = cds.entities(NS);
@@ -104,9 +138,19 @@ async function loadAndParse(slug) {
   }
 
   const result = { steps, totalSteps: steps.size };
-  cache.set(cacheKey, result);
+  // Store a serializable snapshot (entries array, not the live Map) tagged for
+  // per-slug invalidation. Fail-open: a store fault just means the next read
+  // misses and re-parses.
+  try {
+    await (await cache()).set(
+      cacheKey,
+      { stepsEntries: [...steps.entries()], totalSteps: steps.size },
+      { ttl: TTL_MS, tags: [{ value: slugTag(slug) }] },
+    );
+  } catch (err) {
+    LOG.warn(`slicer: cache set failed for ${slug}, entry not cached: ${err.message}`);
+  }
   metrics.counter('mcp.slice[outcome=miss]');
-  metrics.gauge('mcp.slice.cache_size', cache.size);
   return result;
 }
 
@@ -126,15 +170,26 @@ export async function sliceAllSteps(slug) {
     .map(([stepNumber, { title }]) => ({ stepNumber, title }));
 }
 
-export function invalidateSlug(slug) {
-  for (const key of cache.keys()) {
-    if (key.startsWith(`${slug}::`)) cache.delete(key);
+/** Invalidate every cached slice (all versions) for one slug via its tag.
+ *  Async — a single deleteByTag replaces the former key-prefix walk. Fail-open:
+ *  a fault is logged; stale entries then expire via TTL. */
+export async function invalidateSlug(slug) {
+  try {
+    await (await cache()).deleteByTag(slugTag(slug));
+  } catch (err) {
+    LOG.warn(`slicer: invalidate failed for ${slug}, relying on TTL: ${err.message}`);
   }
+}
+
+/** Test seam: reset the memoized connection so a test booting a fresh cds
+ *  runtime doesn't reuse a stale service handle. */
+export function _resetConnection() {
+  _cachePromise = undefined;
 }
 
 // Subscribe to content-publish events for automatic invalidation.
 cds.on('served', () => {
   cds.on('content.published', ({ slug }) => {
-    if (slug) invalidateSlug(slug);
+    if (slug) invalidateSlug(slug).catch(() => {});
   });
 });
