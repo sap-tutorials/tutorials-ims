@@ -117,3 +117,6 @@ srv/lib/explore-bundle-manifest.json
 # OAuth discovery docs (#1105) — generated at mbt build time from *.template files.
 approuter/static/.well-known/oauth-authorization-server
 approuter/static/.well-known/oauth-protected-resource
+
+# Local MCP client config — may hold personal PATs / server URLs; keep out of git.
+.mcp.json
