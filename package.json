@@ -205,7 +205,19 @@
       "caching": {
         "impl": "cds-caching",
         "namespace": "kg",
-        "store": "memory"
+        "store": "memory",
+        "[hybrid]": {
+          "store": "cds",
+          "metrics": {
+            "enabled": true
+          }
+        },
+        "[production]": {
+          "store": "cds",
+          "metrics": {
+            "enabled": true
+          }
+        }
       },
       "db": {
         "[hybrid]": {
