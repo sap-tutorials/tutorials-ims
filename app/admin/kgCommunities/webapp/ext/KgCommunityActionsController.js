@@ -32,7 +32,9 @@ sap.ui.define([
 ], function (Fragment, JSONModel, MessageBox, MessageToast) {
   "use strict";
 
-  // Module-level state — the LR and OP are singleton views so caching is safe.
+  // Module-level state.
+  // _dialog: tracked only to destroy the previous instance before recreating per
+  // open. NOT reused across views — see _openParamDialog for rationale.
   let _dialog = null;
   let _resolvedView = null;
 
@@ -109,7 +111,8 @@ sap.ui.define([
   }
 
   function _openParamDialog(view, communityId) {
-    // Initialise or reset the viewState model.
+    // Set or reset the viewState model on the CURRENT view BEFORE loading the
+    // fragment so initial bindings resolve against this view's model.
     let model = view.getModel("viewState");
     if (!model) {
       model = new JSONModel({ communityId: communityId, missionSlug: "", title: "", busy: false });
@@ -118,9 +121,23 @@ sap.ui.define([
       model.setData({ communityId: communityId, missionSlug: "", title: "", busy: false });
     }
 
+    // Always recreate the dialog against the current view (approach a — destroy
+    // and rebuild on every open).
+    //
+    // Rationale: the dialog is addDependent on whichever view first opened it.
+    // Its {viewState>/...} bindings resolve against THAT view's model. If the
+    // user opens from LR, cancels, navigates to OP and opens again, the cached
+    // dialog still references the LR view's viewState — inputs read/write the
+    // wrong model and onPromoteConfirm reads an empty viewState despite visible
+    // input. Additionally, UI5 may destroy the original dependent view on
+    // navigation, leaving _dialog in a destroyed state that throws on .open().
+    //
+    // The dialog is lightweight (2 inputs), so per-open recreation is acceptable.
     if (_dialog) {
-      _dialog.open();
-      return;
+      if (!_dialog.bIsDestroyed) {
+        _dialog.destroy();
+      }
+      _dialog = null;
     }
 
     Fragment.load({
@@ -143,13 +160,19 @@ sap.ui.define([
     onPromoteToMission: function (arg) {
       const view = _resolveView(arg);
       if (!view) {
+        // Bundle lookup requires a resolved view — chicken-and-egg here.
+        // Keep this error hardcoded; it should never surface in normal usage.
         MessageBox.error("Could not resolve the view. Please reload and try again.");
         return;
       }
 
       const ctx = _resolveCtx(arg);
       if (!ctx || ctx.getProperty("communityId") == null) {
-        MessageBox.error("No community selected. Please select a community row first.");
+        const bundle = _getBundle(view);
+        const msg = bundle
+          ? bundle.getText("noCommunitySelected")
+          : "No community selected. Please select a community row first.";
+        MessageBox.error(msg);
         return;
       }
 
@@ -218,7 +241,22 @@ sap.ui.define([
         model.setProperty("/busy", false);
         if (_dialog) _dialog.close();
 
-        const toastMsg = bundle ? bundle.getText("promoteSuccess") : "Draft mission created.";
+        // Single toast: if the created Mission ID is available use the hint
+        // message (which already contains the success context); otherwise show
+        // the plain success message. Two back-to-back MessageToast.show() calls
+        // are singleton-replaced — the second overwrites the first, so the user
+        // would never see the primary success text.
+        let toastMsg = bundle ? bundle.getText("promoteSuccess") : "Draft mission created.";
+        try {
+          const created = op.getBoundContext().getObject();
+          if (created && created.ID) {
+            toastMsg = bundle
+              ? bundle.getText("promoteNavigateHint", [created.ID])
+              : "Draft mission created (ID: " + created.ID + ").";
+          }
+        } catch (e) {
+          // No navigation context available; use plain success message.
+        }
         MessageToast.show(toastMsg);
 
         // Refresh the LR binding if reachable.
@@ -229,19 +267,6 @@ sap.ui.define([
           }
         } catch (e) {
           // Non-fatal; LR refresh is best-effort.
-        }
-
-        // Optionally surface the created Mission ID for navigation.
-        try {
-          const created = op.getBoundContext().getObject();
-          if (created && created.ID) {
-            const navMsg = bundle
-              ? bundle.getText("promoteNavigateHint", [created.ID])
-              : "Draft mission ID: " + created.ID;
-            MessageToast.show(navMsg);
-          }
-        } catch (e) {
-          // No navigation context available; skip silently.
         }
 
       }).catch(function (err) {
