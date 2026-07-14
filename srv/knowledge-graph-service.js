@@ -555,6 +555,7 @@ import { searchKgHandler } from './lib/kg/search-kg-handler.js';
 import { embed as embedInputs } from './lib/embedding-client.js';
 import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 import * as metrics from './lib/metrics.js';
+import { handleSharedConcepts, handleNeighborhood, handleSearchConcepts, handleCommunity } from './lib/mcp-kg-tools.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -1389,6 +1390,22 @@ export default cds.service.impl(async function () {
       return [];
     }
   });
+
+  // ─── kg_shared_concepts — MCP Phase 3 tool (#1106) ──────────────────────
+  // Concept overlap between two tutorials — the concepts BOTH teach.
+  this.on('kg_shared_concepts', handleSharedConcepts);
+
+  // ─── kg_neighborhood — MCP Phase 3 tool (#1106) ──────────────────────────
+  // Full graph neighborhood for a tutorial (all four arms).
+  this.on('kg_neighborhood', handleNeighborhood);
+
+  // ─── kg_search_concepts — MCP Phase 3 tool (#1106) ───────────────────────
+  // Free-text search across KG concepts and tutorials that teach them.
+  this.on('kg_search_concepts', handleSearchConcepts);
+
+  // ─── kg_community — MCP Phase 3 tool (#1106 Task 4) ──────────────────────
+  // Read-only Louvain community surfacing by stable communityFingerprint.
+  this.on('kg_community', handleCommunity);
 
   // ─── pathBetween — property-graph v2 with fail-open v1 fallback (#913) ─
   this.on('pathBetween', async (req) => {

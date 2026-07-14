@@ -28,6 +28,7 @@ import * as alertsPublic from './routes/alerts-public.js';
 import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
 import { resolveUser, captureUserMiddleware } from './lib/resolve-user.js';
 import { patMiddleware, pinPatUserToContext } from './lib/mcp-pat-middleware.js';
+import makeComposeRouter, { flags as mcpFlags } from './lib/mcp-compose-router.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
@@ -465,6 +466,22 @@ cds.on('bootstrap', (app) => {
     next();
   });
 
+  // /mcp-admin/* (OAuth tier, admin tools) → /mcp/admin/* rewrite (Phase 3 WS2 #1106).
+  // Mirrors /mcp-auth above. The approuter gates /mcp-admin/* with authenticationType:'xsuaa'
+  // + scope:'Tutorial.MCP'; per-action @requires (Admin/SuperAdmin/etc.) hides individual
+  // tools at the adapter level. Kill switch: MCP_PHASE3_ENABLED=false or
+  // MCP_ADMIN_TOOLS_ENABLED=false both return 503 before the rewrite so no requests reach
+  // the mount. Docs guarantee: MCP_PHASE3_ENABLED=false → /mcp-admin/* returns 503.
+  app.use((req, res, next) => {
+    if (!req.url.startsWith('/mcp-admin/') && req.url !== '/mcp-admin') return next();
+    const f = mcpFlags();
+    if (f.phase3 === false || f.adminTools === false) { return res.status(503).send('Phase 3 admin MCP disabled'); }
+    const rest = req.url.slice('/mcp-admin'.length) || '/';
+    req.url = '/mcp/admin' + (rest === '/' ? '' : rest);
+    if (req.originalUrl) req.originalUrl = req.url;
+    next();
+  });
+
   // PAT middleware — resolves Bearer pat_... to synthetic req.user for the
   // /mcp-pat/* prefix, then rewrites the URL to the real MCP mount (Phase 2 #1105).
   //
@@ -501,6 +518,47 @@ cds.on('bootstrap', (app) => {
       next();
     });
   });
+
+  // Phase 3 (#1106): mount the compose router for R/P-bearing services at their
+  // MCP path so it serves tools + resources + prompts instead of @cap-js/mcp's
+  // plain (tools-only) adapter.
+  //
+  // WHY HERE (bootstrap, not 'served'): Express matches first-registered. CAP
+  // mounts each service's @cap-js/mcp protocol adapter (/mcp/graph etc.) during
+  // its own serve step — AFTER 'bootstrap' fires. Registering our router in
+  // 'bootstrap' (same hook as the /mcp-auth and /mcp-pat rewrites above) wins
+  // the route ahead of the plugin's autowired mount. Mounting in 'served' would
+  // register after CAP's adapter and silently lose the race → tools-only
+  // (Phase-2) behavior, which fails SAFE but fails this task.
+  //
+  // Lazy service resolution: cds.services.<Name> is not connected yet at
+  // bootstrap. We defer the lookup + one-time compose-router build to the first
+  // request (which can only arrive after 'served'). If the service never comes
+  // up (e.g. KG disabled), we fall through to next() and CAP's plain adapter (or
+  // a 404) handles it.
+  //
+  // Path derivation: hardcoded per-service MCP paths — KnowledgeGraphService's
+  // @protocol pins {kind:'mcp', path:'/mcp/graph'}. WS2 adds /mcp/admin.
+  // makeComposeRouter returns a bare express.Router — mount it DIRECTLY (no
+  // .router unwrap; that's only for CAP's HttpAdapter instances).
+  if (mcpFlags().phase3) {
+    // [ [ mcpPath, serviceName ], … ] — Phase 3 R/P services. AdminService (WS2).
+    const RP_MOUNTS = [['/mcp/graph', 'KnowledgeGraphService'], ['/mcp/admin', 'AdminService']];
+    for (const [mcpPath, name] of RP_MOUNTS) {
+      let composed = null; // built once, on first request
+      app.use(mcpPath, (req, res, next) => {
+        if (composed === null) {
+          const srv = cds.services[name];
+          if (!srv) return next(); // service not up → let CAP/plain adapter handle it
+          composed = makeComposeRouter(srv);
+          cds.log('mcp-compose').info(`compose router mounted for ${name} at ${mcpPath}`);
+        }
+        return composed(req, res, next);
+      });
+    }
+  } else {
+    cds.log('mcp-compose').warn('MCP_PHASE3_ENABLED=false — compose router NOT mounted; @cap-js/mcp serves tools only');
+  }
 
   // Same: reserve GET /admin/embeddings/stats BEFORE CAP mounts AdminService
   // at /admin. Auth + business logic bound lazily in 'served'.

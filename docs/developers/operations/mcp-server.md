@@ -249,6 +249,52 @@ The `sap-devs` CLI and its bundled MCP server are a **downstream consumer** of t
 
 File any downstream integration issues against this repo referencing #1105, and cross-link the sap-devs-side tracking issue here once it exists.
 
+## Phase 3 flags & operations
+
+Phase 3 introduces four additional feature flags. All default to `true` (enabled). Toggle with `cf set-env tutorials-srv <FLAG> false && cf restart tutorials-srv`; restore with `cf unset-env tutorials-srv <FLAG> && cf restart tutorials-srv`.
+
+| Flag | Default | Effect when `false` |
+|---|---|---|
+| `MCP_PHASE3_ENABLED` | `true` | Compose router is not mounted; `@cap-js/mcp` serves all services in tools-only mode; `/mcp-admin/*` returns 503 |
+| `MCP_RESOURCES_ENABLED` | `true` | Resources capability is not advertised; `resources/list` and `resources/read` return "method not found" |
+| `MCP_PROMPTS_ENABLED` | `true` | Prompts capability is not advertised; `prompts/list` and `prompts/get` return "method not found" |
+| `MCP_ADMIN_TOOLS_ENABLED` | `true` | `/mcp-admin/*` returns 503 even when `MCP_PHASE3_ENABLED` is `true` |
+
+### `/mcp-admin/*` access control
+
+The approuter enforces XSUAA on `/mcp-admin/*` (no anonymous access). Inside the compose router, `AdminService` carries `@requires: 'Admin'` at the **service level**, so that scope is ANDed with every per-tool scope before any admin tool is dispatched. Each admin tool additionally carries a per-action `@requires` annotation for finer gating. An admin caller therefore needs all three: the approuter's route scope, the service-level `Admin` scope, and the per-tool scope.
+
+Effective scope requirement per tool:
+
+| Tool | Approuter (route) | Service level | Per-tool |
+|---|---|---|---|
+| `merge_concepts` | `Tutorial.MCP` | `Admin` | `KnowledgeGraph.Admin` |
+| `promote_community_to_mission` | `Tutorial.MCP` | `Admin` | `SuperAdmin` |
+| `publish_content` | `Tutorial.MCP` | `Admin` | `SuperAdmin` |
+| `trigger_rebuild` | `Tutorial.MCP` | `Admin` | `Tutorial.Author` |
+
+> **A caller with `Tutorial.MCP` + `Tutorial.Author` but without `Admin` will receive a 403 from the service layer.** The `Admin` scope must be granted in addition to any per-tool scope.
+
+- `Tutorial.MCP` — required for all `/mcp-admin/*` access (enforced by approuter).
+- `Admin` — required by `AdminService` at the service level (ANDed with per-tool scope).
+- `KnowledgeGraph.Admin` — `merge_concepts`.
+- `SuperAdmin` — `promote_community_to_mission`, `publish_content`.
+- `Tutorial.Author` — `trigger_rebuild`.
+
+`publish_content` also requires `CONTENT_API_KEY` to be configured at runtime — the tool returns 503 if the env var is absent. Prefer `trigger_rebuild` (GitHub workflow dispatch) for all routine content updates.
+
+### Phase 3 metrics
+
+Three new counters are emitted by the compose layer and follow the same `metrics.counter()` convention as Phase 2 — see [Reading the MCP metrics](#reading-the-mcp-metrics) above for how to query them.
+
+| Counter | What it measures | Alert threshold |
+|---|---|---|
+| `mcp_resource_read_total{scheme, outcome}` | `resources/read` calls by URI scheme (`tutorial`, `mission`, `concept`) and outcome (`ok`, `error`, `not_found`) | — |
+| `mcp_prompt_get_total{name}` | `prompts/get` calls by prompt name | — |
+| `mcp_compose_fallback_total` | Times the deep-import seam (`@cap-js/mcp/lib/tools`) failed on boot and Phase 3 fell back to tools-only | **Alert if sustained non-zero** — indicates the adapter was updated and the seam broke; pin the adapter version or disable `MCP_PHASE3_ENABLED` until fixed |
+
+The `mcp_compose_fallback_total` counter is the canary for the adapter deep-import seam. A single non-zero value after a deploy warrants investigation; sustained non-zero values across multiple deploys mean the compose layer is silently degraded.
+
 ## References
 
 - Adapter: [`@cap-js/mcp` on npm](https://www.npmjs.com/package/@cap-js/mcp)

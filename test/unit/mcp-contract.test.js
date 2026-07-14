@@ -59,7 +59,10 @@ import cds from '@sap/cds';
 const CURATED_TOOLS = {
   SearchService: ['search_tutorials', 'list_missions', 'get_mission', 'get_tutorial'],
   HomepageService: ['get_recent_news', 'get_recent_videos'],
-  KnowledgeGraphService: ['kg_prerequisites', 'kg_what_to_learn_next'],
+  KnowledgeGraphService: [
+    'kg_prerequisites', 'kg_what_to_learn_next',
+    'kg_shared_concepts', 'kg_neighborhood', 'kg_search_concepts', 'kg_community', // Phase 3
+  ],
 };
 
 // Expected CDS function parameters per curated tool.
@@ -73,6 +76,10 @@ const EXPECTED_PARAMS = {
   get_recent_videos:     ['limit'],
   kg_prerequisites:      ['tutorial_slug', 'depth'],
   kg_what_to_learn_next: ['tutorial_slug', 'limit'],
+  kg_shared_concepts:    ['slug_a', 'slug_b'],
+  kg_neighborhood:       ['slug', 'depth'],
+  kg_search_concepts:    ['query', 'maxConcepts', 'maxTutorials'],
+  kg_community:          ['id'],
 };
 
 // Phase 2 anonymous tools — enumerable without auth (SearchService @requires:'any').
@@ -110,7 +117,11 @@ beforeAll(async () => {
   // ── 3. Instantiate the MCP adapter directly for each service ────────────
   //       This bypasses the full CAP protocol-routing machinery so that only
   //       the MCP router is exposed over HTTP — no OData, no WebSocket.
+  //       KnowledgeGraphService uses the compose router (Phase 3) so that
+  //       resources + prompts capabilities are testable in the contract suite.
+  //       SearchService and HomepageService stay on the plain adapter.
   const McpAdapter = (await import('@cap-js/mcp/lib/index.js')).default;
+  const { default: makeComposeRouter } = await import('../../srv/lib/mcp-compose-router.js');
   const { default: express } = await import('express');
 
   const app = express();
@@ -119,7 +130,9 @@ beforeAll(async () => {
   for (const srv of [searchSrv, homeSrv, kgSrv]) {
     // Derive mount path from @path annotation or slugified service name.
     const svcPath = srv.definition?.['@path'] ?? `/${srv.name.toLowerCase()}`;
-    const router = McpAdapter(srv);
+    const router = srv.name === 'KnowledgeGraphService'
+      ? makeComposeRouter(srv)
+      : McpAdapter(srv);
     if (router) {
       app.use(svcPath, router.router ?? router);
       serviceEndpoints[srv.name] = svcPath;
@@ -178,6 +191,14 @@ async function listTools(serviceName) {
   if (!svcPath) throw new Error(`No MCP adapter registered for ${serviceName}`);
   const body = await mcpPost(svcPath, { jsonrpc: '2.0', id: 1, method: 'tools/list' });
   return body?.result?.tools ?? [];
+}
+
+/** POST a JSON-RPC method call to a named service. Returns the full parsed response. */
+let _rpcId = 100;
+async function rpc(serviceName, method, params) {
+  const svcPath = serviceEndpoints[serviceName];
+  if (!svcPath) throw new Error(`No MCP adapter registered for ${serviceName}`);
+  return mcpPost(svcPath, { jsonrpc: '2.0', id: ++_rpcId, method, params });
 }
 
 // ─── Contract assertions ──────────────────────────────────────────────────────
@@ -305,4 +326,46 @@ describe('Phase 2 MCP tools (anonymous)', () => {
       });
     });
   }
+});
+
+// ─── Phase 3 contract assertions — resources + prompts on /mcp/graph ─────────
+//
+// KnowledgeGraphService is mounted via makeComposeRouter() (not the plain
+// McpAdapter) so that the compose router's capabilities — tools AND resources
+// AND prompts — are exercised here.  SearchService + HomepageService remain on
+// the plain adapter (no Phase 3 capabilities there).
+
+describe('Phase 3 — resources + prompts on /mcp/graph (compose router)', () => {
+  it('initialize advertises tools + resources + prompts', async () => {
+    const resp = await rpc('KnowledgeGraphService', 'initialize', {
+      protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' },
+    });
+    expect(resp.result.capabilities.tools).toBeDefined();
+    expect(resp.result.capabilities.resources).toBeDefined();
+    expect(resp.result.capabilities.prompts).toBeDefined();
+  });
+
+  it('prompts/list returns >= 4 prompts', async () => {
+    const resp = await rpc('KnowledgeGraphService', 'prompts/list', {});
+    expect(resp.result.prompts.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('prompts/get interpolates a required arg (mission_slug)', async () => {
+    const resp = await rpc('KnowledgeGraphService', 'prompts/get', {
+      name: 'summarize_mission_for_beginner',
+      arguments: { mission_slug: 'cap-intro' },
+    });
+    expect(resp.result.messages[0].content.text).toContain('cap-intro');
+  });
+
+  it('resources/list returns an array', async () => {
+    const resp = await rpc('KnowledgeGraphService', 'resources/list', {});
+    // shape-only: in-memory contract DB seeds no content rows (Tutorials/Missions/Concepts
+    // have 0 rows in the CSV seed set); non-empty list is verified in
+    // test/hybrid/mcp-resources.test.js.
+    // The column-mismatch bug (#1106) that formerly caused listResources to silently
+    // swallow a CDS throw and return [] has been fixed — the assertion is still
+    // shape-only because there are genuinely no seeded rows, not because of a bug.
+    expect(Array.isArray(resp.result.resources)).toBe(true);
+  });
 });

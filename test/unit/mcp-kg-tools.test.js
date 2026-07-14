@@ -36,6 +36,7 @@ import { expect, describe, it, beforeAll, afterAll, afterEach, vi } from 'vitest
 import path from 'node:path';
 import cds from '@sap/cds';
 import { _resetCacheForTests } from '../../srv/lib/runtime-config/kg-settings.js';
+import { handleSharedConcepts, handleNeighborhood, handleSearchConcepts, handleCommunity } from '../../srv/lib/mcp-kg-tools.js';
 
 // Must be set BEFORE the service module is loaded.
 process.env.KNOWLEDGE_GRAPH_ENABLED = 'true';
@@ -316,5 +317,173 @@ describe('MCP curated tools: KnowledgeGraphService', () => {
       expect(results).toEqual([]);
       expect(JSON.stringify(results)).not.toContain(SECRET);
     });
+  });
+});
+
+// ─── kg_shared_concepts — direct-import unit tests (#1106) ───────────────────
+// These test the handler function directly (not via CDS service dispatch)
+// to keep them fast and isolated from HANA/SPARQL infrastructure.
+describe('kg_shared_concepts', () => {
+  it('returns concept overlap of two tutorials, deduped by conceptSlug', async () => {
+    // Fake service: neighborhood(slug_a) teaches concepts [c1,c2]; slug_b teaches [c2,c3].
+    const srv = {
+      send: vi.fn(async (_evt, { slug }) => ({
+        teaches: slug === 'a'
+          ? [{ slug: 'c1', title: 'C1', score: 0.9 }, { slug: 'c2', title: 'C2', score: 0.8 }]
+          : [{ slug: 'c2', title: 'C2', score: 0.7 }, { slug: 'c3', title: 'C3', score: 0.6 }],
+      })),
+    };
+    const req = { data: { slug_a: 'A', slug_b: 'B' }, srv };
+    const out = await handleSharedConcepts.call(srv, req);
+    expect(out).toEqual([{ conceptSlug: 'c2', name: 'C2' }]);
+  });
+
+  it('fail-open: returns [] when neighborhood throws, no error echo', async () => {
+    const srv = { send: vi.fn(async () => { throw new Error('boom'); }) };
+    const req = { data: { slug_a: 'A', slug_b: 'B' }, srv };
+    const out = await handleSharedConcepts.call(srv, req);
+    expect(out).toEqual([]);
+  });
+
+  it('returns [] when either slug missing', async () => {
+    const srv = { send: vi.fn() };
+    expect(await handleSharedConcepts.call(srv, { data: { slug_a: 'A' }, srv })).toEqual([]);
+    expect(srv.send).not.toHaveBeenCalled();
+  });
+});
+
+// ─── kg_neighborhood — direct-import unit tests (#1106) ──────────────────────
+// handleNeighborhood calls this.send('neighborhood', {slug}) — NOT 'neighborhoodFull'.
+// The mock must reflect the real neighborhood action's return shape:
+//   tutorial-arm items: {slug, title, weight, reason}  (title from enrichLiveTutorials)
+//   teaches items:      {slug, name, description, published}  (concepts, no title)
+// This test verifies that the handler sources teaches from neighborhood correctly.
+describe('kg_neighborhood', () => {
+  // Reflect REAL neighborhood action return shape (not neighborhoodFull):
+  // - tutorial arms carry {slug, title, weight, reason} (title populated by enrichLiveTutorials)
+  // - teaches arm carries concept items {slug, name, description, published}
+  const neighborhoodResult = {
+    prerequisitesOf: [{ slug: 'p1', title: 'P1', weight: 0.9, reason: 'teaches a prerequisite concept', isolated: false }],
+    whatToLearnNext: [{ slug: 'n1', title: 'N1', weight: 0.8, reason: 'next step' }],
+    sharedConcepts:  [{ slug: 's1', title: 'S1', weight: 0.7, reason: 'shares concepts', isolated: true }],
+    teaches:         [{ slug: 'c1', name: 'Concept One', description: '', published: true }],
+  };
+
+  it('projects all four arms including teaches, with isolated defaulted to false', async () => {
+    const srv = { send: vi.fn(async () => neighborhoodResult) };
+    const out = await handleNeighborhood.call(srv, { data: { slug: 'Foo', depth: 5 } });
+    expect(srv.send).toHaveBeenCalledWith('neighborhood', { slug: 'foo' });
+    // tutorial arms: title from item.title, score from item.weight
+    expect(out.prerequisites[0]).toEqual({ slug: 'p1', title: 'P1', score: 0.9, isolated: false });
+    expect(out.sharedConcepts[0].isolated).toBe(true);
+    expect(out.whatToLearnNext[0].isolated).toBe(false); // defaulted
+    // teaches arm: title falls back to item.name (concept item has no title), score from weight (undefined → 0)
+    expect(out.teaches[0]).toEqual({ slug: 'c1', title: 'Concept One', score: 0, isolated: false });
+  });
+
+  it('clamps depth to [1,50] and slices each arm', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({ slug: `p${i}`, title: `P${i}`, weight: 1 }));
+    const srv = { send: vi.fn(async () => ({ ...neighborhoodResult, prerequisitesOf: many })) };
+    const out = await handleNeighborhood.call(srv, { data: { slug: 'foo', depth: 999 } });
+    expect(out.prerequisites).toHaveLength(50);
+  });
+
+  it('fail-open: empty arms when neighborhood throws', async () => {
+    const srv = { send: vi.fn(async () => { throw new Error('x'); }) };
+    const out = await handleNeighborhood.call(srv, { data: { slug: 'foo' } });
+    expect(out).toEqual({ prerequisites: [], whatToLearnNext: [], sharedConcepts: [], teaches: [] });
+  });
+});
+
+// ─── kg_search_concepts — direct-import unit tests (#1106) ───────────────────
+describe('kg_search_concepts', () => {
+  it('delegates to searchKG with clamped maxes and maps query->term', async () => {
+    const srv = { send: vi.fn(async (_e, a) => ({
+      concepts: [{ slug: 'c', name: 'C', score: 1 }], tutorials: [{ slug: 't', title: 'T', score: 1 }],
+      _echo: a,
+    })) };
+    const out = await handleSearchConcepts.call(srv, { data: { query: 'draft', maxConcepts: 999, maxTutorials: 3 } });
+    expect(srv.send).toHaveBeenCalledWith('searchKG', { term: 'draft', maxConcepts: 25, maxTutorials: 3 });
+    expect(out.concepts[0].slug).toBe('c');
+  });
+
+  it('fail-open: {concepts:[],tutorials:[]} on throw', async () => {
+    const srv = { send: vi.fn(async () => { throw new Error('x'); }) };
+    expect(await handleSearchConcepts.call(srv, { data: { query: 'q' } }))
+      .toEqual({ concepts: [], tutorials: [] });
+  });
+
+  it('returns empty when query blank', async () => {
+    const srv = { send: vi.fn() };
+    expect(await handleSearchConcepts.call(srv, { data: { query: '  ' } }))
+      .toEqual({ concepts: [], tutorials: [] });
+    expect(srv.send).not.toHaveBeenCalled();
+  });
+});
+
+// ─── kg_community — direct-import unit tests (#1106 Task 4) ──────────────────
+// Tests handleCommunity directly (not via CDS dispatch) to stay fast/isolated.
+// Real columns: KgCommunity.{slug, vertexType, communityFingerprint},
+//               KgCommunityLabel.{communityFingerprint, label},
+//               Missions.{slug, sourceKgCommunityFingerprint}.
+// The tool's `id` argument is the community FINGERPRINT (stable SHA-256),
+// NOT the volatile Louvain communityId.
+describe('kg_community', () => {
+  // Fake db whose run() dispatches by inspecting the compiled query's entity name.
+  function fakeDb(map) {
+    return {
+      run: vi.fn(async (q) => {
+        const ref = q?.SELECT?.from?.ref?.[0];
+        const name = (typeof ref === 'object' ? ref?.id : ref) ?? '';
+        const key = String(name).split('.').pop();
+        const rows = map[key] ?? [];
+        return q?.SELECT?.one ? (rows[0] ?? null) : rows;
+      }),
+    };
+  }
+
+  it('returns label, members by slug, size and promotion status by fingerprint', async () => {
+    const db = fakeDb({
+      KgCommunity:      [
+        { slug: 'a', vertexType: 'tutorial', communityFingerprint: 'fp1' },
+        { slug: 'b', vertexType: 'tutorial', communityFingerprint: 'fp1' },
+      ],
+      KgCommunityLabel: [{ label: 'Draft Handling', communityFingerprint: 'fp1' }],
+      Missions:         [{ slug: 'draft-mission' }],
+    });
+    const out = await handleCommunity.call({}, { data: { id: 'fp1' }, _db: db });
+    expect(out.label).toBe('Draft Handling');
+    expect(out.size).toBe(2);
+    expect(out.memberTutorials.map((m) => m.slug)).toEqual(['a', 'b']);
+    // slug-as-title: title equals slug (no title column in schema)
+    expect(out.memberTutorials[0].title).toBe('a');
+    expect(out.promotedToMissionSlug).toBe('draft-mission');
+    expect(out.communityId).toBe('fp1');
+  });
+
+  it('returns empty shell for unknown fingerprint (no throw)', async () => {
+    const db = fakeDb({});
+    const out = await handleCommunity.call({}, { data: { id: 'nope' }, _db: db });
+    expect(out.memberTutorials).toEqual([]);
+    expect(out.size).toBe(0);
+    expect(out.promotedToMissionSlug).toBeNull();
+    expect(out.label).toBeNull();
+    expect(out.communityId).toBe('nope');
+  });
+
+  it('returns empty shell for blank id without calling db', async () => {
+    const db = fakeDb({});
+    const out = await handleCommunity.call({}, { data: { id: '' }, _db: db });
+    expect(out.memberTutorials).toEqual([]);
+    expect(out.size).toBe(0);
+    expect(db.run).not.toHaveBeenCalled();
+  });
+
+  it('fail-open: returns shell without echoing error message on db throw', async () => {
+    const SECRET = 'SENSITIVE-internal-table-name';
+    const db = { run: vi.fn(async () => { throw new Error(SECRET); }) };
+    const out = await handleCommunity.call({}, { data: { id: 'fp-err' }, _db: db });
+    expect(out.memberTutorials).toEqual([]);
+    expect(JSON.stringify(out)).not.toContain(SECRET);
   });
 });

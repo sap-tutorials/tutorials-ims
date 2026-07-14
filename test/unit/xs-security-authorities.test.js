@@ -40,6 +40,12 @@ describe.each(FILES)('%s — top-level authorities auto-grant', (relPath) => {
   it('does not auto-grant Tutorial.Author (A1 regression)', () => {
     expect(cfg.authorities).not.toContain('$XSAPPNAME.Tutorial.Author');
   });
+
+  it('defines Tutorial.MCP scope (gates /mcp-auth AND /mcp-admin routes)', () => {
+    const sec = JSON.parse(readFileSync(join(process.cwd(), relPath), 'utf8'));
+    const scopeNames = (sec.scopes ?? []).map((s) => s.name);
+    expect(scopeNames, `${relPath} must define $XSAPPNAME.Tutorial.MCP`).toContain('$XSAPPNAME.Tutorial.MCP');
+  });
 });
 
 describe('xs-security.json root vs .deploy copy — drift guard', () => {

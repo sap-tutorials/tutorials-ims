@@ -241,6 +241,29 @@ For CI pipelines, scripts, and headless agents that cannot complete an interacti
 
 PATs are validated by the `mcp-pat-middleware` in the CAP backend. An expired or revoked PAT returns 401.
 
+## Reading tutorial content as resources (Phase 3)
+
+MCP clients can read tutorials, missions, and concepts as first-class resources:
+
+- `tutorial://<slug>` — a tutorial's metadata, step titles, and rendered HTML.
+- `mission://<slug>` — a mission and its ordered tutorials.
+- `concept://<id>` — a knowledge-graph concept and the tutorials that teach it.
+
+List them with `resources/list`; read one with `resources/read` and the URI. Example (Claude Desktop): just ask "read tutorial://hcp-create-trial-account and summarize step 2".
+
+## Prompt templates (Phase 3)
+
+The server ships reusable prompt templates, discoverable via `prompts/list`:
+
+| Prompt | Arguments | What it does |
+|---|---|---|
+| `summarize_mission_for_beginner` | `mission_slug` | Beginner-friendly mission summary |
+| `generate_lab_exercise` | `tutorial_slug`, `step?` | A hands-on lab from a tutorial |
+| `explain_concept` | `concept_id` | Explains a KG concept and its tutorials |
+| `suggest_learning_path` | `from_slug`, `to_slug` | Ordered path between two tutorials |
+
+Invoke with `prompts/get`; the client fills the arguments.
+
 ## What's next
 
-Phase 3 will open deeper knowledge-graph tools (concept expansion, community browsing, on-demand extraction). The `/mcp/*`, `/mcp-auth/*`, and `/mcp-pat/*` namespaces are stable — client configs will not need to change.
+Phase 3 is shipping. The `/mcp/*`, `/mcp-auth/*`, and `/mcp-pat/*` namespaces are stable — client configs will not need to change.
