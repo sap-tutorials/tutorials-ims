@@ -1,0 +1,54 @@
+# .gitleaks.toml — config for the "secret scan (gitleaks)" workflow.
+#
+# Extends gitleaks' built-in default ruleset (broad coverage of AWS/GCP/GitHub
+# tokens, private keys, generic high-entropy assignments, etc.) and layers on a
+# project-specific allowlist so known-safe patterns don't produce false
+# positives that would train reviewers to ignore the check.
+#
+# See .github/workflows/secret-scan.yml. This is the BROAD scanner; the narrow
+# known-value tripwire is scripts/check-no-committed-secrets.js.
+
+title = "tutorials-ims gitleaks config"
+
+# Inherit gitleaks' default rules; the [[rules]] / [allowlist] below are additive.
+[extend]
+useDefault = true
+
+# Add a rule for SAP MCP Personal Access Tokens (pat_<8hex>_<base64url>), so a
+# real PAT literal is caught even if it slips past the generic entropy rules.
+[[rules]]
+id = "sap-mcp-pat"
+description = "SAP MCP Personal Access Token"
+# pat_ + 8 hex chars + _ + a long base64url secret. Matches the real-token
+# shape; the ${MCP_SAP_PAT} env reference does NOT match (no hex block).
+regex = '''pat_[0-9a-f]{8}_[A-Za-z0-9_-]{20,}'''
+keywords = ["pat_"]
+
+[allowlist]
+description = "Project-specific false positives"
+# Env-var references are the CORRECT, secret-free pattern — never flag them.
+regexes = [
+  '''\$\{MCP_SAP_PAT[^}]*\}''',
+  # The #887 tripwire literal is an already-rotated, documented dead value that
+  # scripts/check-no-committed-secrets.js intentionally retains.
+  '''tutorials-content-publish-2024''',
+]
+paths = [
+  # The narrow tripwire script + its rotation runbook legitimately contain the
+  # dead #887 literal as a description of what NOT to commit.
+  '''scripts/check-no-committed-secrets\.js''',
+  '''docs/developers/operations/rotate-content-api-key\.md''',
+  # Test fixtures use obviously-fake tokens (pat_abcd1234_aaaa..., pat_write0001_...)
+  # to exercise auth paths; they are not real credentials.
+  '''test/.*\.(test|spec)\.[jt]s''',
+  '''srv/.*__tests__/.*''',
+  '''test/.*__fixtures__/.*''',
+  # hashes.json is a generated slug→SHA-256 content-hash map for delta publish.
+  # The 64-hex values trip the generic high-entropy rule but are not secrets.
+  '''hashes\.json''',
+  # Superpowers plan docs contain illustrative `curl -u user:pass` snippets and
+  # example hashes, not live credentials.
+  '''docs/superpowers/plans/.*\.md''',
+  # API-docs content contains illustrative auth examples, not real secrets.
+  '''hugo/content/api-docs/.*''',
+]
