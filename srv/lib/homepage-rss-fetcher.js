@@ -37,17 +37,51 @@ function apiQueryFromFeedUrl(url) {
 const TTL_MS     = 30 * 60 * 1000;  // 30 minutes
 const TIMEOUT_MS = 5000;             // 5 seconds
 
-// --- Module-singleton state (#639) -----------------------------------------
+// --- Shared caching service (#1181) ----------------------------------------
+//
+// Replaces the former hand-rolled globalThis-singleton Map (30-min TTL keyed
+// on url) with the shared `caching` service (cds-caching plugin), following
+// the #1177/#1180 migration pattern: async get/set, tag-based invalidation,
+// fail-open. In prod a shared store gives cross-instance coherence for free.
+//
+// Cache key: `rss:<url>` — the feed URL is the identity, namespaced with an
+// `rss:` prefix so this source's keys never collide with the other consumers
+// of the shared store (`slice:`, `pat:`, `yt:`, `khoros:`, kg-neighborhood).
+// Every entry is tagged RSS_TAG so all RSS entries can be busted together.
+//
+// TTL/failure policy preserved from the LRU version: successful responses are
+// cached 30 min; failures (network/timeout/SSRF-block/non-2xx) are NOT cached
+// so the next call retries immediately — RSS feeds recover faster than a TTL.
+const RSS_TAG = 'homepage-rss';
 
-const STATE_KEY = Symbol.for('com.sap.developers.ims:homepage-rss-fetcher');
-const _state = (globalThis[STATE_KEY] ??= {
-  // Map<url, { value: Array<item>, expiresAt: number }>
-  cache: new Map(),
-});
+function rssKey(url) {
+  return `rss:${url}`;
+}
 
-/** Test-only: clear all cached values. */
-export function _resetForTests() {
-  _state.cache.clear();
+// Memoized connection to the caching service (same pattern as
+// kg-neighborhood-cache.js / tutorial-step-slicer.js, #1177/#1180).
+let _cachePromise;
+function cache() {
+  if (!_cachePromise) _cachePromise = cds.connect.to('caching');
+  return _cachePromise;
+}
+
+/**
+ * Test-only: reset the memoized caching connection and clear the shared store
+ * so a test booting a fresh cds runtime doesn't reuse a stale service handle
+ * or see entries left by a previous test. (The former in-process Map is gone;
+ * the caching store owns entry lifetime now.) Fail-open — a store not yet
+ * connected just no-ops.
+ */
+export async function _resetForTests() {
+  try {
+    // Connect-and-clear unconditionally (cds caches the connection). Must NOT
+    // gate on `_cachePromise` — the store entries survive across tests even
+    // when this module hasn't re-connected yet, so gating would skip the clear
+    // and leak a prior test's cached feed under the same URL key.
+    await (await cds.connect.to('caching')).clear();
+  } catch { /* store not configured in this test — ignore */ }
+  _cachePromise = undefined;
 }
 
 // --- Internal helpers -------------------------------------------------------
@@ -67,10 +101,13 @@ export function _resetForTests() {
  * @returns {Promise<Array<{ title: string, link: string, publishedAt: string|null, description: string|null }>>}
  */
 export async function fetchRssItems(url, { limit = 5 } = {}) {
-  // Cache hit
-  const cached = _state.cache.get(url);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.value.slice(0, limit);
+  // Cache hit. Fail-open: any caching-service fault → treat as miss and fall
+  // through to the live fetch rather than erroring the page render.
+  try {
+    const hit = await (await cache()).get(rssKey(url));
+    if (hit) return hit.slice(0, limit);
+  } catch (err) {
+    log.warn(`homepage-rss-fetcher: cache get failed for ${url}, treating as miss: ${err.message}`);
   }
 
   let res;
@@ -126,8 +163,18 @@ export async function fetchRssItems(url, { limit = 5 } = {}) {
     (a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0),
   );
 
-  // Cache the full sorted array (not the slice) so different limit values share the cache
-  _state.cache.set(url, { value: items, expiresAt: Date.now() + TTL_MS });
+  // Cache the full sorted array (not the slice) so different limit values
+  // share the cache. Failures were already returned above without caching, so
+  // only successful responses reach here. Fail-open: a store fault just means
+  // the next call misses and re-fetches.
+  try {
+    await (await cache()).set(rssKey(url), items, {
+      ttl: TTL_MS,
+      tags: [{ value: RSS_TAG }],
+    });
+  } catch (err) {
+    log.warn(`homepage-rss-fetcher: cache set failed for ${url}, entry not cached: ${err.message}`);
+  }
 
   return items.slice(0, limit);
 }
