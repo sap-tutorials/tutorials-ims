@@ -29,6 +29,11 @@ const IGNORE_PATHS = [
   // The docs describe what the tripwire does; the value only appears as a
   // description of what NOT to write, not as a working credential.
   'docs/developers/operations/rotate-content-api-key.md',
+  // The gitleaks allowlist (#1181) intentionally lists the retired key as a
+  // detection-suppression pattern so gitleaks doesn't re-flag it; it is not a
+  // working credential. Ignore it here so the two secret-scanners don't
+  // contradict each other.
+  '.gitleaks.toml',
 ];
 
 const trackedFiles = execFileSync('git', ['ls-files'], { encoding: 'utf8' })
