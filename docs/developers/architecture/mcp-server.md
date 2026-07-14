@@ -77,7 +77,7 @@ If `resolveDbUser` returns null (user not in the DB, stale OAuth clientId, or un
 3. `srv/lib/code-check-step-loader.js` (Joule `checkStepCode`)
 4. `srv/lib/chat-context.js` server-side fallback
 
-The slicer is **disabled** when `KG_STEP_SLICER_ENABLED=false`. It returns `null` on any error (fail-open). Content is cached in an LRU (200 slugs × ~50KB ≈ 10MB ceiling) keyed by `slug::activeManifestVersion` and invalidated on `content.published` CDS events.
+The slicer is **disabled** when `KG_STEP_SLICER_ENABLED=false`. It returns `null` on any error (fail-open). Content is cached via the shared `caching` service (cds-caching plugin, #1180 — TTL 30 min, eviction owned by the store, cross-instance coherent in prod) keyed by `slice:<slug>::<activeManifestVersion>` and invalidated on `content.published` CDS events via a per-slug tag (`deleteByTag`). The cached value is a serializable step-entries array (the live `Map` is rebuilt on read, since a serializing store cannot round-trip a `Map`).
 
 The slicer uses raw `db.run()` for BLOB retrieval to avoid the CAP/HANA LOB locator expiry bug that occurs when BLOBs are mixed with non-BLOB columns in a CDS QL query. See the gotcha in CLAUDE.md (`Never SELECT a HANA BLOB alongside metadata`).
 
