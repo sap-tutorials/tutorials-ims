@@ -1,17 +1,29 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
+import cds from '@sap/cds';
 import { fetchRssItems, _resetForTests } from '../../srv/lib/homepage-rss-fetcher.js';
 import { _setLookupForTests } from '../../srv/lib/safe-fetch.js';
 import * as curlTransport from '../../srv/lib/curl-transport.js';
 
-beforeEach(() => {
-  _resetForTests();
+// The RSS cache is now backed by the shared `caching` service (cds-caching,
+// issue #1181) rather than an in-process Map. Boot an in-memory caching store
+// so the service resolves; each test clears it via the async _resetForTests.
+beforeAll(async () => {
+  cds.env.requires = cds.env.requires || {};
+  cds.env.requires.caching = { impl: 'cds-caching', namespace: 'rss-test', store: 'memory' };
+  await cds.connect.to('caching');
+});
+
+beforeEach(async () => {
+  await _resetForTests();
   vi.restoreAllMocks();
   // #895: safeFetch does a DNS lookup on every hop. In unit tests we stub
   // it to return a public IP so the private-IP block passes.
   _setLookupForTests(async () => [{ address: '8.8.8.8', family: 4 }]);
   // Production defaults to the curl transport (Cloudflare JA3 block — see
   // srv/lib/curl-transport.js). These tests stub global.fetch, so pin the
-  // native-fetch path; the curl transport has its own test file.
+  // native-fetch path (RSS_TRANSPORT=fetch forces a real live fetch, so
+  // caching can never mask a transport regression — issue #1181 acceptance);
+  // the curl transport has its own test file.
   process.env.RSS_TRANSPORT = 'fetch';
 });
 
@@ -88,7 +100,7 @@ describe('fetchRssItems', () => {
 });
 
 describe('fetchRssItems — khoros mode', () => {
-  beforeEach(() => { process.env.RSS_TRANSPORT = 'khoros'; _resetForTests(); });
+  beforeEach(async () => { process.env.RSS_TRANSPORT = 'khoros'; await _resetForTests(); });
   afterEach(() => { delete process.env.RSS_TRANSPORT; vi.unstubAllGlobals(); });
 
   it('derives board.id from the feed URL and hits the Khoros API', async () => {

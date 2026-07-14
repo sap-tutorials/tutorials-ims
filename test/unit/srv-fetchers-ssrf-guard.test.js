@@ -8,8 +8,8 @@ import { fetchRssItems, _resetForTests as resetRss } from '../../srv/lib/homepag
 import { fetchJourneyBody } from '../../srv/lib/learning-journey-body-fetcher.js';
 import { _setLookupForTests } from '../../srv/lib/safe-fetch.js';
 
-beforeEach(() => {
-  resetRss();
+beforeEach(async () => {
+  await resetRss();
   vi.restoreAllMocks();
 });
 

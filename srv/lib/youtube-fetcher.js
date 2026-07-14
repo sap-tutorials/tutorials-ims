@@ -30,20 +30,57 @@ const TTL_MS         = 15 * 60 * 1000;  // 15 minutes for successful results
 const FAILURE_TTL_MS = 60 * 1000;       // 1 minute for failed results (#740)
 const TIMEOUT_MS = 5000;
 
-// --- Module-singleton state (#639) -----------------------------------------
+// --- Shared caching service (#1181) ----------------------------------------
+//
+// Replaces the former hand-rolled globalThis-singleton Maps (result cache +
+// channel-ID cache) with the shared `caching` service (cds-caching plugin),
+// following the #1177/#1180 migration pattern: async get/set, tag-based
+// invalidation, fail-open. In prod a shared store gives cross-instance
+// coherence for free (all CF instances warm the same entries).
+//
+// Two key families, both namespaced with a `yt:` prefix so they never collide
+// with the other consumers of the shared store, and both tagged YT_TAG so a
+// single deleteByTag wipes everything YouTube-related:
+//   `yt:videos:<handle>|<playlistId>`  — the { featured, recent, error } result
+//   `yt:channel-id:<handle>`           — the resolved channel ID
+//
+// TTL policy preserved from the LRU version (#740):
+//   - result success → 15 min; result failure → 1 min (caps a transient
+//     4xx/5xx blip at 1 min instead of poisoning the rail for 15).
+//   - channel ID → CHANNEL_ID_TTL_MS (effectively "forever" for a render
+//     cycle; a handle→id mapping is stable). The old code cached it for the
+//     process lifetime; a long TTL is the serializing-store equivalent.
+const YT_TAG = 'homepage-youtube';
+const CHANNEL_ID_TTL_MS = 24 * 60 * 60 * 1000;  // 24h — handle→id is stable
 
-const STATE_KEY = Symbol.for('com.sap.developers.ims:youtube-fetcher');
-const _state = (globalThis[STATE_KEY] ??= {
-  // Map<cacheKey, { value: { featured, recent, error }, expiresAt: number }>
-  cache: new Map(),
-  // Map<channelHandle, channelId>  — never expires within process lifetime
-  channelIdFor: {},
-});
+function videosKey(channelHandle, playlistId) {
+  return `yt:videos:${channelHandle}|${playlistId || ''}`;
+}
+function channelIdKey(handle) {
+  return `yt:channel-id:${handle}`;
+}
 
-/** Test-only: clear all cached values and channel-ID mappings. */
-export function _resetForTests() {
-  _state.cache.clear();
-  _state.channelIdFor = {};
+// Memoized connection to the caching service (same pattern as
+// kg-neighborhood-cache.js / homepage-rss-fetcher.js, #1177/#1180/#1181).
+let _cachePromise;
+function cache() {
+  if (!_cachePromise) _cachePromise = cds.connect.to('caching');
+  return _cachePromise;
+}
+
+/**
+ * Test-only: reset the memoized caching connection and clear the shared store
+ * so a test booting a fresh cds runtime doesn't reuse a stale service handle
+ * or entries from a previous test. Fail-open — an unconnected store no-ops.
+ */
+export async function _resetForTests() {
+  try {
+    // Connect-and-clear unconditionally (cds caches the connection). Gating on
+    // `_cachePromise` would leak a prior test's entries when this module hasn't
+    // re-connected yet — see homepage-rss-fetcher.js for the failure mode.
+    await (await cds.connect.to('caching')).clear();
+  } catch { /* store not configured in this test — ignore */ }
+  _cachePromise = undefined;
 }
 
 // --- Internal helpers -------------------------------------------------------
@@ -64,14 +101,30 @@ async function fetchJson(url) {
 
 /**
  * Resolve a @handle to a YouTube channel ID.
- * Result is cached forever in `_state.channelIdFor` (1 quota unit per cold call).
+ * Result is cached in the shared store under `yt:channel-id:<handle>` (24h TTL;
+ * a handle→id mapping is stable, 1 quota unit per cold call). Fail-open on
+ * cache faults: fall through to a live resolve.
  */
 async function resolveChannelId(handle, apiKey) {
-  if (_state.channelIdFor[handle]) return _state.channelIdFor[handle];
+  try {
+    const hit = await (await cache()).get(channelIdKey(handle));
+    if (hit) return hit;
+  } catch (err) {
+    log.warn(`channel-id cache get failed for ${handle}, treating as miss: ${err.message}`);
+  }
   const url = `${API_BASE}/channels?part=id&forHandle=${encodeURIComponent(handle)}&key=${encodeURIComponent(apiKey)}`;
   const data = await fetchJson(url);
   const id = data.items?.[0]?.id;
-  if (id) _state.channelIdFor[handle] = id;
+  if (id) {
+    try {
+      await (await cache()).set(channelIdKey(handle), id, {
+        ttl: CHANNEL_ID_TTL_MS,
+        tags: [{ value: YT_TAG }],
+      });
+    } catch (err) {
+      log.warn(`channel-id cache set failed for ${handle}, not cached: ${err.message}`);
+    }
+  }
   return id;
 }
 
@@ -90,11 +143,14 @@ export async function fetchSapDevsVideos({ apiKey, playlistId, channelHandle }) 
   // Guard: no key → skip HTTP entirely
   if (!apiKey) return { featured: null, recent: [], error: 'no-api-key' };
 
-  const cacheKey = `${channelHandle}|${playlistId || ''}`;
-
-  // Cache hit
-  const cached = _state.cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  // Cache hit. Fail-open: any caching-service fault → treat as miss and fall
+  // through to the live YouTube calls rather than erroring the video band.
+  try {
+    const hit = await (await cache()).get(videosKey(channelHandle, playlistId));
+    if (hit) return hit;
+  } catch (err) {
+    log.warn(`youtube-fetcher: cache get failed for ${channelHandle}, treating as miss: ${err.message}`);
+  }
 
   let featured = null;
   let recent   = [];
@@ -156,8 +212,18 @@ export async function fetchSapDevsVideos({ apiKey, playlistId, channelHandle }) 
   //     from transient 403 / 5xx / network blips in one minute. Was 15 min
   //     for both, which poisoned the rail for 14 min on any one-shot
   //     YouTube hiccup — see commit message for the live diagnosis.
+  // Note (#1181): unlike the RSS fetcher, failures ARE cached (1 min) — this
+  // is deliberate quota protection, so the differential TTL is passed through
+  // to the caching service's `ttl` rather than skipping the write on error.
   const cacheTtlMs = error ? FAILURE_TTL_MS : TTL_MS;
   const value = { featured, recent, error };
-  _state.cache.set(cacheKey, { value, expiresAt: Date.now() + cacheTtlMs });
+  try {
+    await (await cache()).set(videosKey(channelHandle, playlistId), value, {
+      ttl: cacheTtlMs,
+      tags: [{ value: YT_TAG }],
+    });
+  } catch (err) {
+    log.warn(`youtube-fetcher: cache set failed for ${channelHandle}, entry not cached: ${err.message}`);
+  }
   return value;
 }

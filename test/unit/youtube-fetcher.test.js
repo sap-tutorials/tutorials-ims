@@ -1,7 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import cds from '@sap/cds';
 import { fetchSapDevsVideos, _resetForTests } from '../../srv/lib/youtube-fetcher.js';
 
-beforeEach(() => { _resetForTests(); vi.restoreAllMocks(); });
+// The video + channel-ID caches are now backed by the shared `caching` service
+// (cds-caching, issue #1181) rather than in-process Maps. Boot an in-memory
+// caching store so the service resolves; each test clears it via _resetForTests.
+beforeAll(async () => {
+  cds.env.requires = cds.env.requires || {};
+  cds.env.requires.caching = { impl: 'cds-caching', namespace: 'yt-test', store: 'memory' };
+  await cds.connect.to('caching');
+});
+
+beforeEach(async () => { await _resetForTests(); vi.restoreAllMocks(); });
 
 describe('youtube-fetcher', () => {
   it('returns featured + recent on success', async () => {
