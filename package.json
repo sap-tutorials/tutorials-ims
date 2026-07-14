@@ -219,6 +219,14 @@
           }
         }
       },
+      "change-tracking": {
+        "[hybrid]": {
+          "model": false
+        },
+        "[production]": {
+          "model": false
+        }
+      },
       "db": {
         "[hybrid]": {
           "kind": "hana"
