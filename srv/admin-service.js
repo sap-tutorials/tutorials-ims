@@ -44,6 +44,7 @@ import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.j
 import { VERB_DEFAULTS, SHELF_DEFAULTS } from './lib/homepage/verb-shelf-defaults.js';   // #1089
 import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js';
 import * as mcpAdmin from './lib/mcp-admin-tools.js';   // #1106 Phase 3 (WS2) admin MCP tools
+import { computeCoverage, resolveThreshold } from './lib/kg-community-coverage.js'; // #1172
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -2889,6 +2890,116 @@ export default class AdminService extends cds.ApplicationService {
         const slugs = (byId.get(row.communityId) || []).slice().sort();
         const joined = slugs.slice(0, 3).join(', ');
         row.topConceptSlugs = joined.length > 255 ? joined.slice(0, 255) : joined;
+      }
+    });
+
+    // ── KgCommunities coverage/orphan nudges — #1172 ──────────────────────
+    // For each community row, compute (over TUTORIAL members only, against
+    // PUBLISHED missions only): mission-coverage %, dominant covering mission,
+    // orphan-tutorial count, and a coverageHigh flag (>= threshold). Populates
+    // the virtual fields added in srv/admin-service.cds.
+    //
+    // Fail-quiet, in its OWN try/catch separate from topConceptSlugs above: any
+    // throw → warn-log, fields left unset, Fiori renders no badge (never a
+    // 500). Mirrors the #918 isolated-flag posture.
+    //
+    // Packet-safe: the covered-slug fetch chunks the .in() slug list at 500 to
+    // stay under HANA's bound-param cap (memory: cqn-where-in-hana-packet-cap).
+    // Spec: docs/superpowers/specs/2026-07-14-1172-kg-community-curator-nudges-design.md
+    const COVERAGE_SLUG_CHUNK = 500;
+    this.after('READ', 'KgCommunities', async (rows) => {
+      if (!rows) return;
+      const list = Array.isArray(rows) ? rows : [rows];
+      if (list.length === 0) return;
+      const ids = list.map((r) => r.communityId).filter((v) => v != null);
+      if (ids.length === 0) return;
+      try {
+        const { KgCommunity, CompletionPathItems, CompletionPaths, Missions } = cds.entities('com.sap.developers.ims');
+
+        // 1. Tutorial members per community (the denominator).
+        const memberRows = await SELECT.from(KgCommunity)
+          .columns('communityId', 'slug')
+          .where({ communityId: { in: ids }, vertexType: 'tutorial' });
+        const memberSlugsByCommunity = new Map();
+        const allSlugs = new Set();
+        for (const m of memberRows) {
+          if (m.slug == null) continue;
+          const s = String(m.slug).toLowerCase();
+          if (!memberSlugsByCommunity.has(m.communityId)) memberSlugsByCommunity.set(m.communityId, []);
+          memberSlugsByCommunity.get(m.communityId).push(s);
+          allSlugs.add(s);
+        }
+        // Communities with zero tutorial members still need a result entry so
+        // the helper can null their fields.
+        for (const id of ids) if (!memberSlugsByCommunity.has(id)) memberSlugsByCommunity.set(id, []);
+
+        // 2. Covered slug → published mission(s).
+        // Two-step approach (chosen over path navigation for CI-Node-22 safety):
+        //   (a) SELECT CompletionPathItems by tutorial slug → get tutorial.slug + path_ID
+        //   (b) Resolve path IDs → CompletionPaths → mission_IDs → Missions (published=true)
+        //       then join in Node to produce {slug, missionTitle, missionSlug} rows.
+        // This avoids the path.mission.title cross-association projection which can
+        // behave differently on Node 22 CI (see brief CQL path-navigation caveat).
+        const coveredRows = [];
+        const slugArr = [...allSlugs];
+        for (let i = 0; i < slugArr.length; i += COVERAGE_SLUG_CHUNK) {
+          const chunk = slugArr.slice(i, i + COVERAGE_SLUG_CHUNK);
+          if (chunk.length === 0) continue;
+
+          // Step (a): get slug + path_ID for this chunk of tutorial slugs.
+          const pathItemRows = await SELECT.from(CompletionPathItems)
+            .columns('tutorial.slug as tutSlug', 'path_ID')
+            .where({ 'tutorial.slug': { in: chunk } });
+
+          if (!pathItemRows.length) continue;
+          const pathIds = [...new Set(pathItemRows.map((r) => r.path_ID).filter(Boolean))];
+          if (!pathIds.length) continue;
+
+          // Step (b): resolve path_IDs → CompletionPaths → mission_ID.
+          const pathRows = await SELECT.from(CompletionPaths)
+            .columns('ID', 'mission_ID')
+            .where({ ID: { in: pathIds } });
+          const missionIds = [...new Set(pathRows.map((r) => r.mission_ID).filter(Boolean))];
+          if (!missionIds.length) continue;
+
+          // Step (c): fetch published missions only.
+          const missionRows = await SELECT.from(Missions)
+            .columns('ID', 'title', 'slug')
+            .where({ ID: { in: missionIds }, published: true });
+
+          // Step (d): join in Node.
+          const missionById = new Map(missionRows.map((m) => [m.ID, m]));
+          const pathToMission = new Map(
+            pathRows
+              .map((p) => {
+                const m = missionById.get(p.mission_ID);
+                return m ? [p.ID, { missionTitle: m.title, missionSlug: m.slug }] : null;
+              })
+              .filter(Boolean),
+          );
+          for (const item of pathItemRows) {
+            if (!item.tutSlug || !item.path_ID) continue;
+            const m = pathToMission.get(item.path_ID);
+            if (m) coveredRows.push({ slug: item.tutSlug, missionTitle: m.missionTitle, missionSlug: m.missionSlug });
+          }
+        }
+
+        // 3. Compute + assign.
+        const threshold = resolveThreshold(process.env);
+        const result = computeCoverage({ memberSlugsByCommunity, coveredRows, threshold });
+        for (const row of list) {
+          const r = result.get(row.communityId);
+          if (!r) continue;
+          row.missionCoveragePct = r.missionCoveragePct;
+          row.dominantMissionTitle = r.dominantMissionTitle;
+          row.dominantMissionSlug = r.dominantMissionSlug;
+          row.orphanTutorialCount = r.orphanTutorialCount;
+          row.coverageHigh = r.coverageHigh;
+        }
+      } catch (err) {
+        cds.log('kg-community-coverage').warn(
+          `admin-service: coverage nudge computation failed on KgCommunities; leaving fields unset (${err?.message ?? err})`,
+        );
       }
     });
 

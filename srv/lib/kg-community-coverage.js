@@ -7,8 +7,6 @@
 // Coverage is computed over TUTORIAL members only (only tutorials can be in a
 // mission) and against PUBLISHED missions only. See
 // docs/superpowers/specs/2026-07-14-1172-kg-community-curator-nudges-design.md.
-'use strict';
-
 const DEFAULT_THRESHOLD = 70;
 
 /**
@@ -106,4 +104,4 @@ function computeCoverage({ memberSlugsByCommunity, coveredRows, threshold }) {
   return out;
 }
 
-module.exports = { computeCoverage, resolveThreshold, DEFAULT_THRESHOLD };
+export { computeCoverage, resolveThreshold, DEFAULT_THRESHOLD };
