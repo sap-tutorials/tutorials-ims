@@ -19,4 +19,12 @@ describe('findCommunityPeers registry gating (#1126)', () => {
     const lines = buildSystemPromptLines({ settings: { communityPeersEnabled: false } });
     expect(lines.join('\n')).not.toMatch(/findCommunityPeers/);
   });
+  it('registers describeCommunity when communityPeersEnabled is true (#1173)', () => {
+    const names = buildToolRegistry({ settings: { communityPeersEnabled: true } }).map((t) => t.function.name);
+    expect(names).toContain('describeCommunity');
+  });
+  it('omits describeCommunity when communityPeersEnabled is false (#1173)', () => {
+    const names = buildToolRegistry({ settings: { communityPeersEnabled: false } }).map((t) => t.function.name);
+    expect(names).not.toContain('describeCommunity');
+  });
 });

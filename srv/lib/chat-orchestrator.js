@@ -6,6 +6,7 @@ import { getAnalyticsContext } from './analytics-llm-context.js';
 import { GET_BRANCH_RECOMMENDATION_TOOL, getBranchRecommendationHandler } from './branch/joule-tool.js';
 import { FIND_LEARNING_PATH_TOOL, findLearningPathHandler } from './kg/joule-tool-find-path.js';
 import { FIND_COMMUNITY_PEERS_TOOL, findCommunityPeersHandler } from './kg/joule-tool-community-peers.js';
+import { DESCRIBE_COMMUNITY_TOOL, describeCommunityHandler } from './kg/joule-tool-describe-community.js';
 import { EXPAND_SEARCH_CONCEPTS_TOOL, expandSearchConceptsHandler } from './kg/joule-tool-expand-concepts.js';
 import { embed as embedInputs } from './embedding-client.js';
 import { resolveEmbeddingSettings } from './chat-settings-resolver.js';
@@ -314,6 +315,7 @@ export function buildToolRegistry({ settings, pageContext, isAdmin = false } = {
   }
   if (settings?.communityPeersEnabled) {
     tools.push(FIND_COMMUNITY_PEERS_TOOL);
+    tools.push(DESCRIBE_COMMUNITY_TOOL);
   }
   return tools;
 }
@@ -342,6 +344,13 @@ export function buildSystemPromptLines({ settings, pageContext, isAdmin = false 
   if (settings?.communityPeersEnabled) {
     lines.push(
       "When the learner asks what to learn next or what else is in the same area AND they are anchored to a specific tutorial, call `findCommunityPeers` with that tutorial's slug. Present the returned peers as a coherent set, and if a cluster label is provided, introduce them with it (e.g. \"These are part of the SAP RAP & Fiori Elements area\")."
+    );
+    // NOTE: This line is retained for symmetry + the existing test pattern, but
+    // the LIVE describeCommunity guidance + cluster catalog ship via
+    // communityCatalogLayer in chat-context.js — buildSystemPromptLines is not
+    // consumed by the runtime prompt builder (buildSystemPrompt). See #1173 spec.
+    lines.push(
+      "When the learner asks about a whole topic area or cluster (\"what's the AI cluster\", \"everything around RAP\"), call `describeCommunity` with the best-matching cluster label."
     );
   }
   return lines;
@@ -697,6 +706,16 @@ export async function dispatchTool(name, args, user) {
     }
   }
 
+  if (name === 'describeCommunity') {
+    try {
+      const db = await cds.connect.to('db');
+      return await describeCommunityHandler({ db, args });
+    } catch (err) {
+      LOG.warn('describeCommunity dispatch failed:', err.message);
+      return { members: [], reason: 'dispatch_failed' };
+    }
+  }
+
   return { error: 'unknown_tool' };
 }
 
@@ -832,6 +851,8 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
           sse(res, { type: 'external-content-cards', items: result.externalContent });
         } else if (tc.name === 'findCommunityPeers' && result && Array.isArray(result.peers) && result.peers.length > 0) {
           sse(res, { type: 'community-peers-cards', label: result.label, items: result.peers });
+        } else if (tc.name === 'describeCommunity' && result && Array.isArray(result.members) && result.members.length > 0) {
+          sse(res, { type: 'community-peers-cards', label: result.label, items: result.members });
         }
       }
 
@@ -871,4 +892,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, EXPAND_SEARCH_CONCEPTS_TOOL, FIND_RELATED_CONTENT_TOOL, FIND_COMMUNITY_PEERS_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, EXPAND_SEARCH_CONCEPTS_TOOL, FIND_RELATED_CONTENT_TOOL, FIND_COMMUNITY_PEERS_TOOL, DESCRIBE_COMMUNITY_TOOL, toolsForContext };
