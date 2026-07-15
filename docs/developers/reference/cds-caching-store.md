@@ -255,3 +255,38 @@ an already-valid config instead of creating it from nothing.
 
 Unit tests always use the **memory** store (base profile); the CDS-DB store is
 exercised only under the `[hybrid]`/`[production]` profiles via the hybrid test project.
+
+## `@cache` annotation pilot — PublishedConceptsWithAliases (#1182)
+
+First declarative `@cache` on a read surface. Annotates
+`KnowledgeGraphService.PublishedConceptsWithAliases` (the anonymous ⌘K
+command-palette concept search): `@cache: { ttl: 300000, tags: [{ value:
+'kg-published-concepts' }] }`.
+
+- **Auth-safe:** service is `@requires:'any'`, rows are not user-scoped, and the
+  caching default key is `{hash}`-only (`isUserAware:false`) — the hash includes
+  the full `$search`/`$top`/`$select` query, so different searches get different
+  keys and no data crosses users.
+- **Invalidation:** `srv/lib/kg-published-concepts-cache.js`
+  (`bustPublishedConceptsCache()`, fail-open) is called from the existing KG
+  `after`-write handlers in `srv/server.js` — `Concepts` CRUD and the
+  `publishConcept`/`unpublishConcept` actions (which flip `publishedAt`, the
+  projection's filter). TTL (5 min) is the backstop. `invalidateOnWrite` is NOT
+  used — publish state changes via base-`Concepts` actions the plugin auto-hook
+  wouldn't catch.
+- **Scope:** only the service-layer (OData/HCQL/MCP) read is cached. The
+  rebuild-time full-list read in `srv/lib/published-concepts-query.js` uses raw
+  `db.run` and is intentionally not cached.
+- **Metrics:** isolate this surface via `KeyMetrics` (the shared `caching`
+  service also carries `kg-neighborhood` entries):
+
+  ```sql
+  SELECT "keyName","hits","misses","hitRatio","lastAccess"
+    FROM "PLUGIN_CDS_CACHING_KEYMETRICS" ORDER BY "hits" DESC;
+  ```
+
+### Decision record
+
+- **Status:** DEV-only pilot, deployed <!-- DATE -->.
+- **Measured hit rate after soak:** <!-- fill from KeyMetrics -->.
+- **Verdict (expand / hold / revert):** <!-- fill after soak -->.

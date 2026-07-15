@@ -95,6 +95,7 @@ service KnowledgeGraphService {
    *
    * Inherits @requires: 'any' from the service — anonymous-safe.
    */
+  @cache: { ttl: 300000, tags: [{ value: 'kg-published-concepts' }] }
   @readonly
   @cds.search: { name, description, aliasSearchBlob }
   entity PublishedConceptsWithAliases as projection on ims.Concepts {
