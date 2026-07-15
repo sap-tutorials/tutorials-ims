@@ -280,6 +280,30 @@ service AdminService {
   entity MissionTags as projection on ims.MissionTags;
   @readonly entity TimeZones as projection on ims.TimeZones;
 
+  // Feature Flag Viewer (#feature-flags). Unbacked read-only entity; rows are
+  // synthesized in srv/admin-service.js on('READ') from
+  // srv/lib/feature-flags/resolve.js. No DB table.
+  @readonly
+  @cds.persistence.skip
+  @Capabilities: { InsertRestrictions: { Insertable: false }, UpdateRestrictions: { Updatable: false }, DeleteRestrictions: { Deletable: false } }
+  entity FeatureFlags {
+    key ![key]      : String(120);
+    label           : String(120);
+    category        : String(60);
+    kind            : String(20);
+    valueType       : String(20);
+    issue           : String(20);
+    status          : String(20);
+    description     : String(500);
+    effectiveValue  : String(60);
+    enabled         : Boolean;
+    winningLayer    : String(20);
+    rawDbValue      : String(120);
+    rawEnvValue     : String(120);
+    defaultValue    : String(60);
+    howToChangeText : String(500);
+  }
+
   @odata.singleton
   @requires: 'Admin'
   entity ChatSettings as projection on ims.ChatSettings actions {

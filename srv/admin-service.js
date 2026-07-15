@@ -45,6 +45,7 @@ import { VERB_DEFAULTS, SHELF_DEFAULTS } from './lib/homepage/verb-shelf-default
 import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js';
 import * as mcpAdmin from './lib/mcp-admin-tools.js';   // #1106 Phase 3 (WS2) admin MCP tools
 import { computeCoverage, resolveThreshold } from './lib/kg-community-coverage.js'; // #1172
+import { resolveFeatureFlags } from './lib/feature-flags/resolve.js'; // #feature-flags
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -371,6 +372,11 @@ export default class AdminService extends cds.ApplicationService {
     // Returns all KNOWN_TAGS as { tag } rows for @Common.ValueList bindings on
     // HomepageShelves.personaTags / personaHidden.
     this.on('READ', 'PersonaTagChoices', () => KNOWN_TAGS.map((tag) => ({ tag })));
+
+    // Feature Flag Viewer (#feature-flags): synthesize rows from the registry.
+    this.on('READ', 'FeatureFlags', async () => {
+      return resolveFeatureFlags();
+    });
 
     // Virtual severityCrit element (drives @UI.LineItem Criticality coloring).
     // Information=3 (Neutral), Success=5 (Positive), Warning=2 (Critical), Error=1 (Negative)
