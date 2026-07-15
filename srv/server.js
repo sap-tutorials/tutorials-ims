@@ -1025,6 +1025,17 @@ cds.on('served', async () => {
       });
     }
 
+    // #1182: publishAllConcepts (#1080 bulk publish) flips publishedAt on many
+    // concepts via a db-layer UPDATE — bypassing both the Concepts CRUD hook and
+    // the KG_CATALOG_ACTIONS loop above. Bust the PublishedConceptsWithAliases
+    // @cache explicitly so the ⌘K palette reflects a bulk publish immediately.
+    // Standalone (not added to KG_CATALOG_ACTIONS) so it does NOT gain that
+    // loop's scheduleRebuild side effect — this action today only audits.
+    kg.after('publishAllConcepts', async (_data, req) => {
+      if (req.headers?.['x-migration-mode'] === 'true') return;
+      bustPublishedConceptsCache().catch(() => {});
+    });
+
     globalThis.__navigatorCacheInvalidatorRegistered = true;
   }
 
