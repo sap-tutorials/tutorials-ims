@@ -7,7 +7,7 @@
 // No DB, no I/O — unit-testable in isolation.
 
 const AMBIGUITY_MARGIN = 0.0; // top-2 tie (equal score) → ambiguous; widen if needed
-const STOPWORDS = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'for', 'to', 'in', 'on', 'with']);
+const STOPWORDS = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'for', 'to', 'in', 'on', 'sap', 'with']);
 
 function tokenize(s) {
   return String(s || '')

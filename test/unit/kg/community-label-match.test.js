@@ -28,13 +28,23 @@ describe('matchLabel', () => {
     expect(out.fingerprint).toBe('fp-ai');
   });
 
-  it('returns ambiguous when top-2 are within margin', () => {
-    // "sap" alone overlaps both AI and RAP labels equally (1 token each)
+  it('returns no-match for a bare stopword-only topic like "sap"', () => {
+    // 'sap' is a stopword (non-discriminating in an all-SAP catalog) → no tokens → no-match
     const out = matchLabel({ topic: 'sap', labels: LABELS });
+    expect(out.reason).toBe('no-match');
+  });
+
+  it('returns ambiguous when top-2 labels tie on a real shared token', () => {
+    // Two labels sharing the non-stopword token "services" tie at score 1.
+    const tieLabels = [
+      { communityFingerprint: 'fp-cap', label: 'CAP Services',         rationale: 'cap' },
+      { communityFingerprint: 'fp-btp', label: 'BTP Platform Services', rationale: 'btp' },
+    ];
+    const out = matchLabel({ topic: 'services', labels: tieLabels });
     expect(out.reason).toBe('ambiguous');
     expect(out.candidates).toHaveLength(2);
     expect(out.candidates.map((c) => c.label).sort()).toEqual(
-      ['SAP AI & Machine Learning', 'SAP RAP & Fiori Elements'].sort()
+      ['BTP Platform Services', 'CAP Services'].sort()
     );
   });
 
