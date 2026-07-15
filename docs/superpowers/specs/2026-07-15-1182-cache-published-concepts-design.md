@@ -99,6 +99,11 @@ exact events that change published-concept membership:
 - `kg.after('publishConcept', …)` and `kg.after('unpublishConcept', …)`
   (`srv/server.js:1009-1015`) — these flip `publishedAt`, which is the projection's
   `where publishedAt is not null` filter.
+- `kg.after('publishAllConcepts', …)` (added in final-review, `srv/server.js:~1028`) —
+  the #1080 bulk publish sets `publishedAt` on every ACTIVE unpublished concept via a
+  db-layer `UPDATE(Concepts)`, which bypasses both the CRUD after-hook and the
+  publish/unpublish action loop. Wired standalone (NOT in `KG_CATALOG_ACTIONS`) so it
+  busts the cache without gaining that loop's `scheduleRebuild` side effect.
 
 The bust logic lives in a small, unit-testable helper
 `srv/lib/kg-published-concepts-cache.js` exporting `bustPublishedConceptsCache()` —
