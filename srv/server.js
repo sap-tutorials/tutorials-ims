@@ -2,6 +2,7 @@ import cds from '@sap/cds';
 import express from 'express';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { stripPrecompiledPluginRoots } from './lib/strip-precompiled-plugin-roots.js';
+import { bustPublishedConceptsCache } from './lib/kg-published-concepts-cache.js';
 
 import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
 import { selfHealOnDeploy } from './lib/deploy-self-heal.js';
@@ -998,6 +999,10 @@ cds.on('served', async () => {
     const kg = await cds.connect.to('KnowledgeGraphService');
     kg.after(['CREATE', 'UPDATE', 'DELETE'], 'Concepts', async (_data, req) => {
       if (req.headers?.['x-migration-mode'] === 'true') return;
+      // #1182: bust the PublishedConceptsWithAliases @cache on any concept
+      // write (name/description edits change cached rows; publishedAt flips
+      // change membership). Fire-and-forget, fail-open — never blocks the write.
+      bustPublishedConceptsCache().catch(() => {});
       const entityName = req.target?.name?.split('.').pop();
       if (!entityName) return;
       const { mode, forceCapRefetch } = classifyRebuildMode(entityName, 'crud');
@@ -1010,6 +1015,9 @@ cds.on('served', async () => {
     for (const actionName of KG_CATALOG_ACTIONS) {
       kg.after(actionName, async (_data, req) => {
         if (req.headers?.['x-migration-mode'] === 'true') return;
+        // #1182: publishConcept/unpublishConcept flip publishedAt — the
+        // PublishedConceptsWithAliases `where` filter — so bust the pilot cache.
+        bustPublishedConceptsCache().catch(() => {});
         const { mode, forceCapRefetch } = classifyRebuildMode(actionName, 'action');
         scheduleRebuild(`kg-action:${actionName}`, { mode, forceCapRefetch }).catch(err => {
           console.error('[rebuild-trigger] scheduling failed', err);
