@@ -1,6 +1,8 @@
 import cds from '@sap/cds';
 import express from 'express';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { stripPrecompiledPluginRoots } from './lib/strip-precompiled-plugin-roots.js';
+
 import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
 import { selfHealOnDeploy } from './lib/deploy-self-heal.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
@@ -54,6 +56,27 @@ import multer from 'multer';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
 import './graphql-config.js';
+
+// #1182 — cds-caching resolve-guard fix. This module is evaluated by cds-serve
+// AFTER `await cds.plugins` (so the cds-caching plugin has already pushed its
+// `db/cache-store` + `db/statistics` roots into cds.env.roots under store:'cds'
+// + metrics) but BEFORE cds-serve resolves the model. When a precompiled
+// srv/csn.json is present (CF production), those plugin roots would tip CF's
+// resolve-guard past `files.length === 1`, forcing a re-merge of every
+// requires[].model onto the already-complete csn → "Duplicate definition"
+// crash-loop (#1179 revert / #1182). The cds_caching entities are baked into
+// srv/csn.json by the build task, so the runtime push is redundant there — we
+// strip it. No-op in hybrid `cds watch` (no precompiled csn → roots kept for
+// source compilation) and in dev/unit (store:'memory' → nothing pushed).
+{
+  const { stripped } = stripPrecompiledPluginRoots(cds);
+  if (stripped.length) {
+    cds.log('caching').info(
+      `#1182: stripped ${stripped.length} cds-caching-injected model root(s) — precompiled csn present, entities already baked in; guard preserved`,
+    );
+  }
+}
+
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
