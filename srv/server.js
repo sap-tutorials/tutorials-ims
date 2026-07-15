@@ -60,14 +60,25 @@ import './graphql-config.js';
 // #1182 — cds-caching resolve-guard fix. This module is evaluated by cds-serve
 // AFTER `await cds.plugins` (so the cds-caching plugin has already pushed its
 // `db/cache-store` + `db/statistics` roots into cds.env.roots under store:'cds'
-// + metrics) but BEFORE cds-serve resolves the model. When a precompiled
-// srv/csn.json is present (CF production), those plugin roots would tip CF's
-// resolve-guard past `files.length === 1`, forcing a re-merge of every
-// requires[].model onto the already-complete csn → "Duplicate definition"
-// crash-loop (#1179 revert / #1182). The cds_caching entities are baked into
-// srv/csn.json by the build task, so the runtime push is redundant there — we
-// strip it. No-op in hybrid `cds watch` (no precompiled csn → roots kept for
-// source compilation) and in dev/unit (store:'memory' → nothing pushed).
+// + metrics) but BEFORE cds-serve resolves the model (`await cds.load('*')` at
+// @sap/cds/server.js:51). When a precompiled srv/csn.json is present (CF
+// production), those plugin roots would tip CF's resolve-guard past
+// `files.length === 1`, forcing a re-merge of every requires[].model onto the
+// already-complete csn → "Duplicate definition" crash-loop (#1179 revert / #1182).
+// The cds_caching entities are baked into srv/csn.json by the build task, so the
+// runtime push is redundant there — we strip it. No-op in hybrid `cds watch` (no
+// precompiled csn → roots kept for source compilation) and in dev/unit
+// (store:'memory' → nothing pushed).
+//
+// WHY module-eval and NOT `cds.on('bootstrap')`: bootstrap does fire before
+// model resolution (server.js:41 emit → :51 load), so a handler there would also
+// work for the normal `cds serve` path. But the 'bootstrap' event is emitted ONLY
+// by @sap/cds/server.js — a bare `cds.serve(...)` / `cds.load('*')` that bypasses
+// cds.server never emits it (verified). Running at module-eval time ties the strip
+// to server.js being imported, which is the same trigger cds-serve uses, without
+// depending on the lifecycle event actually firing. Verified end-to-end: the
+// hybrid boot test (test/hybrid/caching-cds-store-boot.test.js) and the CF-boot
+// simulation both exercise this path.
 {
   const { stripped } = stripPrecompiledPluginRoots(cds);
   if (stripped.length) {
