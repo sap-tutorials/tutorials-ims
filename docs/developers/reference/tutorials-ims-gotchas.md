@@ -67,6 +67,7 @@ Cross-references:
 
 ## Observability & load
 
+- **Feature Flag Viewer** (`/admin-ui/#featureFlags`) — read-only tile listing every runtime feature flag's live resolved state (effective value, winning layer, raw db/env/default). Source of truth: `srv/lib/feature-flags/registry.js`; a drift test (`test/unit/feature-flags-registry.test.js`) fails the build when a new `*_ENABLED`/`*_WEIGHT` env var or settings boolean is added unregistered. Known gap: the drift regex misses `process.env[var]` bracket-notation reads.
 - **Observability metrics module** (`srv/lib/metrics.js`, #805) — In-memory counters/gauges/reservoirs drained every 5min by `srv/jobs/metrics-rollup-job.js` into `MetricSnapshots`. Env flags: `METRICS_ENABLED` (default `true`; kill-switch), `METRICS_DB_WRAP` (default `false`; installs passive `cds.db.run`/`cds.db.tx` wrapper). Rollup does NOT use `job-lock`; retention (30d/90d) does. Live snapshot: `/admin-ui/#metrics`, `GET /admin/getMetricsSnapshot()`, `GET /admin/metrics/live`. See [observability.md](../architecture/observability.md).
 - **Load tests (`test/load/`) are k6, not Vitest, and do NOT run on PRs** — Five scenarios drive deployed DEV. CI runs weekly (Mon 03:00 UTC) + manual. Never on push/PR (DEV quota isn't free). Thresholds in `test/load/config.js`; never hardcode ms in scenarios. Aborts if `/content/hashes` shows publish in flight. Runbook: [load-testing.md](../operations/load-testing.md).
 
