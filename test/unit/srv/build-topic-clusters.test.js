@@ -123,4 +123,16 @@ describe('build-topic-clusters read model (#1170)', () => {
     expect(res.data).toHaveProperty('buildAt');
     expect(res.headers['cache-control']).toContain('max-age=60');
   });
+
+  it('error branch returns a static token, never err.message (info-disclosure, #1189)', async () => {
+    const { buildTopicClustersPayload } = await import('../../../srv/lib/build-topic-clusters.js');
+    const secret = 'INTERNAL SQL: SELECT * FROM SECRET_TABLE at /var/secret/path';
+    // A db whose first query throws forces the catch branch.
+    const throwingDb = { run: async () => { throw new Error(secret); } };
+    const payload = await buildTopicClustersPayload(throwingDb);
+    expect(payload.clusters).toEqual([]);
+    expect(payload.error).toBe('topic_clusters_build_failed');
+    expect(payload.error).not.toContain(secret);
+    expect(payload).toHaveProperty('buildAt');
+  });
 });
