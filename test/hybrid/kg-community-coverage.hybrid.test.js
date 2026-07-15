@@ -207,24 +207,27 @@ describe('KgCommunities coverage nudges (hybrid, real HANA) #1172', () => {
   afterAll(async () => {
     if (!db) return;
     // FK-ordered cleanup mirrors test/hybrid/kg-communities.test.js.
-    // Column-name quoting must match what HANA actually stored:
-    //   KgCommunity (generated .hdbtable)    → "VERTEXKEY", "COMMUNITYID" (uppercase)
-    //   Missions / CompletionPaths / CPI
-    //   (.hdbmigrationtable, cds-compiler)   → "slug", "path_ID", "mission_ID" (as declared)
+    // Column-name quoting must match what HANA actually stored: verified via
+    // TABLE_COLUMNS, every column on these tables is stored UPPERCASE
+    // ("SLUG", "PATH_ID", "MISSION_ID", "VERTEXKEY", "ID") regardless of the
+    // declared case in the .cds/.hdbmigrationtable source. Raw SQL must quote
+    // them uppercase or HANA throws "invalid column name". (CQL INSERT.into()
+    // in beforeAll auto-uppercases, which is why seeding worked but the
+    // original lowercase teardown crashed and leaked fixture rows.)
     // LIKE on TEST_PREFIX catches rows from crashed prior runs.
     await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS"
-      WHERE "path_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS"
-      WHERE "mission_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
-      WHERE LOWER("slug") LIKE '__test__kg-comm-cov-%'))`);
+      WHERE "PATH_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS"
+      WHERE "MISSION_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
+      WHERE LOWER("SLUG") LIKE '__test__kg-comm-cov-%'))`);
     await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS"
-      WHERE "mission_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
-      WHERE LOWER("slug") LIKE '__test__kg-comm-cov-%')`);
+      WHERE "MISSION_ID" IN (SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
+      WHERE LOWER("SLUG") LIKE '__test__kg-comm-cov-%')`);
     await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS"
-      WHERE LOWER("slug") LIKE '__test__kg-comm-cov-%'`);
+      WHERE LOWER("SLUG") LIKE '__test__kg-comm-cov-%'`);
     await db.run(`DELETE FROM ${KGCOMMUNITY_TABLE}
       WHERE LOWER("VERTEXKEY") LIKE 'tutorial:__test__kg-comm-cov-%'`);
     await db.run(`DELETE FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
-      WHERE LOWER("slug") LIKE '__test__kg-comm-cov-%'`);
+      WHERE LOWER("SLUG") LIKE '__test__kg-comm-cov-%'`);
   }, 60_000);
 
   // ── Case 1: Coverage round-trip ──────────────────────────────────────────
