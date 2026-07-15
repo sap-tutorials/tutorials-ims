@@ -149,4 +149,85 @@ export const FEATURE_FLAGS = [
     description: 'findRelatedContent Joule tool. Default ON (cache-reused).',
     howToChange: adminTile('joule', '#joule'),
   },
+  // ---- Observability ----
+  {
+    key: 'METRICS_ENABLED', label: 'Metrics collection', category: 'Observability',
+    kind: 'env', envVar: 'METRICS_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '', status: 'ga',
+    description: 'Prometheus-style metrics snapshots and DB wrap instrumentation. Kill switch — set false to disable all metric writes.',
+    howToChange: cfEnv('METRICS_ENABLED', 'false'),
+  },
+  // ---- MCP (Phase 2 / Phase 3) ----
+  {
+    key: 'MCP_AUTH_ENABLED', label: 'MCP OAuth auth tier', category: 'MCP',
+    kind: 'env', envVar: 'MCP_AUTH_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '#1105', status: 'ga',
+    description: 'Phase 2 MCP /mcp-auth and /mcp-pat routes. Kill switch — set false to return 503 on both routes.',
+    howToChange: cfEnv('MCP_AUTH_ENABLED', 'false'),
+  },
+  {
+    key: 'MCP_PAT_MINT_ENABLED', label: 'MCP PAT minting', category: 'MCP',
+    kind: 'env', envVar: 'MCP_PAT_MINT_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '#1105', status: 'ga',
+    description: 'Allows PAT tokens to be minted via the MCP auth tier. Kill switch — set false to disable minting (existing PATs still valid).',
+    howToChange: cfEnv('MCP_PAT_MINT_ENABLED', 'false'),
+  },
+  {
+    key: 'MCP_PHASE3_ENABLED', label: 'MCP Phase-3 compose router', category: 'MCP',
+    kind: 'env', envVar: 'MCP_PHASE3_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
+    description: 'MCP Phase-3 compose router (resources + prompts + admin tools). Kill switch — set false to serve tools-only via plain @cap-js/mcp adapter.',
+    howToChange: cfEnv('MCP_PHASE3_ENABLED', 'false'),
+  },
+  {
+    key: 'MCP_RESOURCES_ENABLED', label: 'MCP resources', category: 'MCP',
+    kind: 'env', envVar: 'MCP_RESOURCES_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
+    description: 'MCP resource registration inside the Phase-3 compose router. Kill switch — set false to omit resources from the compose server.',
+    howToChange: cfEnv('MCP_RESOURCES_ENABLED', 'false'),
+  },
+  {
+    key: 'MCP_PROMPTS_ENABLED', label: 'MCP prompts', category: 'MCP',
+    kind: 'env', envVar: 'MCP_PROMPTS_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
+    description: 'MCP prompt registration inside the Phase-3 compose router. Kill switch — set false to omit prompts from the compose server.',
+    howToChange: cfEnv('MCP_PROMPTS_ENABLED', 'false'),
+  },
+  {
+    key: 'MCP_ADMIN_TOOLS_ENABLED', label: 'MCP admin tools', category: 'MCP',
+    kind: 'env', envVar: 'MCP_ADMIN_TOOLS_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
+    description: 'MCP admin tool registration inside the Phase-3 compose router. Kill switch — set false to omit admin tools from the compose server.',
+    howToChange: cfEnv('MCP_ADMIN_TOOLS_ENABLED', 'false'),
+  },
+  // ---- Knowledge Graph kill switches ----
+  {
+    key: 'KG_RETIRE_ORPHANS_ENABLED', label: 'KG orphan concept retirement', category: 'Knowledge Graph',
+    kind: 'env', envVar: 'KG_RETIRE_ORPHANS_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '#1115', status: 'ga',
+    description: 'Nightly job that retires zero-link orphaned concepts (ACTIVE→RETIRED). Kill switch — set false to skip retirement on each nightly run.',
+    howToChange: cfEnv('KG_RETIRE_ORPHANS_ENABLED', 'false'),
+  },
+  {
+    key: 'KG_STEP_SLICER_ENABLED', label: 'KG tutorial step slicer', category: 'Knowledge Graph',
+    kind: 'env', envVar: 'KG_STEP_SLICER_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '', status: 'ga',
+    description: 'Per-step concept extraction slice during tutorial ingestion. Kill switch — set false to skip step-level slicing (whole-tutorial extraction still runs).',
+    howToChange: cfEnv('KG_STEP_SLICER_ENABLED', 'false'),
+  },
+  // ---- Content ----
+  {
+    key: 'COMMUNITY_BLOGS_CLASSIFIER_ENABLED', label: 'Community blogs classifier', category: 'Content',
+    kind: 'env', envVar: 'COMMUNITY_BLOGS_CLASSIFIER_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '#1033', status: 'ga',
+    description: 'Scheduled AI classifier that drains PENDING CommunityBlogPosts rows via SAP Generative AI Hub. Kill switch — set false to skip all classification runs.',
+    howToChange: cfEnv('COMMUNITY_BLOGS_CLASSIFIER_ENABLED', 'false'),
+  },
+  {
+    key: 'HOMEPAGE_NEWS_RELEVANCE_ENABLED', label: 'Homepage news relevance scoring', category: 'Content',
+    kind: 'env', envVar: 'HOMEPAGE_NEWS_RELEVANCE_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '', status: 'ga',
+    description: 'AI-based relevance scoring for homepage news items. Kill switch — set false to fall back to chronological ordering.',
+    howToChange: cfEnv('HOMEPAGE_NEWS_RELEVANCE_ENABLED', 'false'),
+  },
 ];
