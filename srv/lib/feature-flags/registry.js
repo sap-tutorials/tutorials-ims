@@ -28,7 +28,8 @@ export const FEATURE_FLAGS = [
   {
     key: 'KNOWLEDGE_GRAPH_ENABLED', label: 'Knowledge Graph master switch',
     category: 'Knowledge Graph', kind: 'db-setting', entity: 'KnowledgeGraphSettings',
-    column: 'enabled', resolver: 'kg', valueType: 'boolean', default: false,
+    column: 'enabled', resolver: 'kg', envVar: 'KNOWLEDGE_GRAPH_ENABLED',
+    valueType: 'boolean', default: false,
     issue: '', status: 'ga',
     description: 'Master switch for the /graph/* service surface. Off → 503.',
     howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Or env KNOWLEDGE_GRAPH_ENABLED.'),
@@ -36,8 +37,8 @@ export const FEATURE_FLAGS = [
   {
     key: 'KG_ONDEMAND_ENABLED', label: 'KG on-demand extraction',
     category: 'Knowledge Graph', kind: 'db-setting', entity: 'KnowledgeGraphSettings',
-    column: 'onDemandExtractionEnabled', resolver: 'kg', valueType: 'boolean',
-    default: false, issue: '#948', status: 'ga',
+    column: 'onDemandExtractionEnabled', resolver: 'kg', envVar: 'KG_ONDEMAND_ENABLED',
+    valueType: 'boolean', default: false, issue: '#948', status: 'ga',
     description: 'On-demand concept extraction from zero-seed search queries.',
     howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Or env KG_ONDEMAND_ENABLED.'),
   },
@@ -72,7 +73,7 @@ export const FEATURE_FLAGS = [
   {
     key: 'UI_EVENTS_ENABLED', label: 'UI event telemetry', category: 'Telemetry',
     kind: 'db-setting', entity: 'UiEventsSettings', column: 'enabled', resolver: 'uiEvents',
-    valueType: 'boolean', default: false, issue: '#204', status: 'ga',
+    envVar: 'UI_EVENTS_ENABLED', valueType: 'boolean', default: false, issue: '#204', status: 'ga',
     description: 'UI event tracking. Off → /api/ui-event 503, tracker self-disables.',
     howToChange: adminTile('uiEvents', '#uiEvents', 'Or env UI_EVENTS_ENABLED.'),
   },

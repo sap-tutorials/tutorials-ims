@@ -43,7 +43,7 @@ describe('resolveFeatureFlags precedence + polarity', () => {
     vi.doMock('../../srv/lib/runtime-config/ui-events-settings.js', () => ({
       resolveUiEventsSettings: async () => ({ enabled: false }),
     }));
-    vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {} }) } }));
+    vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {}, info() {}, error() {}, debug() {} }) } }));
     const { resolveFeatureFlags } = await import('../../srv/lib/feature-flags/resolve.js');
 
     process.env.KG_PAGERANK_ENABLED = 'true';
@@ -68,7 +68,7 @@ describe('resolveFeatureFlags precedence + polarity', () => {
     vi.doMock('../../srv/lib/runtime-config/ui-events-settings.js', () => ({
       resolveUiEventsSettings: async () => ({ enabled: false }),
     }));
-    vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {} }) } }));
+    vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {}, info() {}, error() {}, debug() {} }) } }));
     const { resolveFeatureFlags } = await import('../../srv/lib/feature-flags/resolve.js');
 
     process.env.KG_COMMUNITY_WEIGHT = '1.5';
@@ -87,7 +87,7 @@ describe('resolveFeatureFlags precedence + polarity', () => {
     vi.doMock('../../srv/lib/runtime-config/ui-events-settings.js', () => ({
       resolveUiEventsSettings: async () => ({ enabled: false }),
     }));
-    vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {} }) } }));
+    vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {}, info() {}, error() {}, debug() {} }) } }));
     const { resolveFeatureFlags } = await import('../../srv/lib/feature-flags/resolve.js');
     const rows = await resolveFeatureFlags();
     const kw = rows.find((r) => r.key === 'KG_WEIGHT');
@@ -103,7 +103,7 @@ describe('resolveFeatureFlags precedence + polarity', () => {
     vi.doMock('../../srv/lib/runtime-config/ui-events-settings.js', () => ({
       resolveUiEventsSettings: async () => ({ enabled: false }),
     }));
-    vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {} }) } }));
+    vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {}, info() {}, error() {}, debug() {} }) } }));
     const { resolveFeatureFlags } = await import('../../srv/lib/feature-flags/resolve.js');
     const rows = await resolveFeatureFlags();
     const kg = rows.find((r) => r.key === 'KNOWLEDGE_GRAPH_ENABLED');

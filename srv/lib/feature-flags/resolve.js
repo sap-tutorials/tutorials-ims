@@ -54,7 +54,7 @@ export async function resolveFeatureFlags() {
     const base = {
       key: f.key, label: f.label, category: f.category, kind: f.kind,
       valueType: f.valueType, issue: f.issue || '', status: f.status,
-      description: f.description, defaultValue: asStr(f.default),
+      description: f.description, defaultValue: asStr(f.default) ?? '',
       rawDbValue: null, rawEnvValue: null,
     };
     try {
@@ -93,9 +93,9 @@ export async function resolveFeatureFlags() {
         if (resolved == null) throw new Error(`${f.resolver} resolver unavailable`);
         enabled = Boolean(resolved[f.column]);
         // Precedence: db if row column set, else env if env var set, else default.
-        const envHit = envRaw(deriveEnvVar(f)) !== null;
+        const envHit = f.envVar !== undefined && envRaw(f.envVar) !== null;
         winningLayer = rawDb !== null ? 'db' : envHit ? 'env' : 'default';
-        base.rawEnvValue = envRaw(deriveEnvVar(f));
+        base.rawEnvValue = f.envVar !== undefined ? envRaw(f.envVar) : null;
       }
       return {
         ...base, rawDbValue: rawDb, effectiveValue: String(enabled), enabled,
@@ -109,14 +109,6 @@ export async function resolveFeatureFlags() {
       };
     }
   });
-}
-
-/** The env var backing a kg/uiEvents db-setting, for winningLayer detection. */
-function deriveEnvVar(f) {
-  if (f.entity === 'UiEventsSettings') return 'UI_EVENTS_ENABLED';
-  if (f.column === 'enabled') return 'KNOWLEDGE_GRAPH_ENABLED';
-  if (f.column === 'onDemandExtractionEnabled') return 'KG_ONDEMAND_ENABLED';
-  return '';
 }
 
 function renderHowTo(f) {
