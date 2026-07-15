@@ -1297,7 +1297,7 @@ cds.on('served', () => {
       const system = await buildSystemPrompt(effectivePageContext, {
         firstName: user.attr?.given_name || user.attr?.givenName || '',
         lastName:  user.attr?.family_name || user.attr?.familyName || ''
-      });
+      }, settings);
 
       const abortController = new AbortController();
       req.on('close', () => abortController.abort());

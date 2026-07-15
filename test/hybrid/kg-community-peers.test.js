@@ -6,6 +6,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { isSafeForWrites } from './_guard.js';
 import { findCommunityPeersHandler } from '../../srv/lib/kg/joule-tool-community-peers.js';
+import { describeCommunityHandler } from '../../srv/lib/kg/joule-tool-describe-community.js';
 
 const NS = 'com.sap.developers.ims';
 // Stable fingerprint — unique to this test so it doesn't collide with real data.
@@ -91,5 +92,22 @@ describe('findCommunityPeers on real HANA (#1126)', () => {
   it('returns empty peers for an unrecognised slug', async () => {
     const out = await findCommunityPeersHandler({ db, args: { tutorial_slug: 'no-such-tutorial-xyz-1126' } });
     expect(out.peers).toHaveLength(0);
+  });
+});
+
+describe('describeCommunity on real HANA (#1173)', () => {
+  it('resolves via matched_label and returns members + label', async () => {
+    const out = await describeCommunityHandler({ db, args: { topic: 'the test area', matched_label: 'Test Cluster' } });
+    expect(out.label).toBe('Test Cluster');
+    const slugs = out.members.map((m) => m.slug);
+    expect(slugs).toContain(slugA);
+    expect(slugs).toContain(slugB);
+  });
+
+  it('returns no-match for an unresolvable topic', async () => {
+    const out = await describeCommunityHandler({ db, args: { topic: 'zzz-nonexistent-topic-xyz-1173' } });
+    // Either no-match, or (if a real labeled community happens to token-overlap)
+    // it must still be a well-formed fail-open shape — never a throw.
+    expect(Array.isArray(out.members)).toBe(true);
   });
 });

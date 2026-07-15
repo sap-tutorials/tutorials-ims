@@ -1,4 +1,5 @@
 import { sliceStep } from './tutorial-step-slicer.js';
+import cds from '@sap/cds';
 
 const PERSONA = `You are Joule, an AI assistant embedded in the SAP Tutorial Platform. You ONLY answer questions about SAP tutorials and directly related topics (SAP technologies, the tutorial content, how to complete a step). If asked about anything else, politely redirect: "I can only help with SAP tutorials. Want me to find one about <topic>?". Never invent tutorial slugs, step numbers, or URLs. If you don't know, call the searchTutorials tool or say so.`;
 
@@ -301,7 +302,50 @@ function userLayer(user) {
   return `The user's name is ${name}. Use it sparingly.`;
 }
 
-export async function buildSystemPrompt(pageContext, user) {
+const NS_IMS = 'com.sap.developers.ims';
+const MAX_CATALOG_LABELS = 40; // cap the injected list; ~18 today
+let _catalogCache = { at: 0, block: '' };
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Learner-prompt layer (#1173): inject the labeled Louvain-cluster catalog so
+ * the LLM can map "the AI cluster" → an exact label and call describeCommunity.
+ * Gated on communityPeersEnabled. Fail-open: any read error → '' (the tool
+ * still works via its topic-token fallback / clarify path).
+ * Cached in-process ~5 min so we don't read KgCommunityLabel every chat turn.
+ * @param {object|null} settings - ChatSettings row (or subset)
+ * @returns {Promise<string>}
+ */
+export async function communityCatalogLayer(settings) {
+  if (!settings?.communityPeersEnabled) return '';
+  const now = Date.now();
+  if (_catalogCache.block && now - _catalogCache.at < CATALOG_TTL_MS) return _catalogCache.block;
+  try {
+    const db = await cds.connect.to('db');
+    const { KgCommunityLabel } = cds.entities(NS_IMS);
+    const rows = await db.run(
+      SELECT.from(KgCommunityLabel).columns('label').orderBy('label asc').limit(MAX_CATALOG_LABELS)
+    );
+    const labels = rows.map((r) => r.label).filter(Boolean);
+    if (labels.length === 0) { _catalogCache = { at: now, block: '' }; return ''; }
+    const block = [
+      'Known topic clusters (use for "what\'s the X cluster / area as a whole" questions —',
+      'pass the EXACT label below to describeCommunity as matched_label):',
+      ...labels.map((l) => `- ${l}`),
+      '',
+      'When the learner asks about a topic area/cluster as a whole, call describeCommunity',
+      'with the best-matching label above. If none clearly matches, say there is no matching',
+      'cluster; if two are close, ask which they mean.',
+    ].join('\n');
+    _catalogCache = { at: now, block };
+    return block;
+  } catch (err) {
+    cds.log('chat-context').warn('communityCatalogLayer failed:', err.message);
+    return '';
+  }
+}
+
+export async function buildSystemPrompt(pageContext, user, settings = null) {
   const kind = pageContext?.kind;
   const isAdmin = kind === 'admin';
   const isDevtoberfest = kind === 'devtoberfest';
@@ -325,6 +369,10 @@ export async function buildSystemPrompt(pageContext, user) {
   const layers = [persona];
   if (!isDevtoberfest && !isAdvocates) layers.push(RAG_GUIDANCE);
   if (!isAdmin && !isDevtoberfest && !isAdvocates) layers.push(PROGRESS_GUIDANCE);
+  if (!isAdmin && !isDevtoberfest && !isAdvocates) {
+    const catalog = await communityCatalogLayer(settings);
+    if (catalog) layers.push(catalog);
+  }
   layers.push(await pageLayer(pageContext), userLayer(user));
   return layers.filter(Boolean).join('\n\n');
 }
