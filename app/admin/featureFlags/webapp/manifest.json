@@ -1,0 +1,71 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.featureFlags",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appSubtitle}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {}, "sap.m": {}, "sap.ui.core": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.featureFlags.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "pattern": ":?query:", "name": "FeatureFlagsList", "target": "FeatureFlagsList" },
+        { "pattern": "FeatureFlags({key}):?query:", "name": "FeatureFlagObjectPage", "target": "FeatureFlagObjectPage" }
+      ],
+      "targets": {
+        "FeatureFlagsList": {
+          "type": "Component",
+          "id": "FeatureFlagsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/FeatureFlags",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "FeatureFlags": { "detail": { "route": "FeatureFlagObjectPage" } }
+              }
+            }
+          }
+        },
+        "FeatureFlagObjectPage": {
+          "type": "Component",
+          "id": "FeatureFlagObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": { "contextPath": "/FeatureFlags", "editableHeaderContent": false }
+          }
+        }
+      }
+    }
+  }
+}

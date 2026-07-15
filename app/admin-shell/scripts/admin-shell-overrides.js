@@ -74,7 +74,8 @@ module.exports = {
     'featured-topics',
     'videos',
     'video-rotation',
-    'pats'
+    'pats',
+    'featureFlags'
   ],
 
   //
@@ -149,7 +150,8 @@ module.exports = {
     videos: 'vi',
     'video-rotation': 'vr',
     'content-moderation': 'cm',
-    pats: 'pt'
+    pats: 'pt',
+    featureFlags: 'ffl'
   },
 
   //

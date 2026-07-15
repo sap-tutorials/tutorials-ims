@@ -115,7 +115,8 @@
         { "key": "search", "title": "Search" },
         { "key": "navigator", "title": "Navigator" },
         { "key": "display", "title": "Display" },
-        { "key": "tenant", "title": "Tenant" }
+        { "key": "tenant", "title": "Tenant" },
+        { "key": "featureFlags", "title": "Feature Flags", "requiredScope": "Admin" }
       ]
     }
   ]

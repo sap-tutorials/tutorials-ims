@@ -87,7 +87,8 @@
       "sap.tutorials.admin.featuredTopics": "./components/featured-topics",
       "sap.tutorials.admin.videos": "./components/videos",
       "sap.tutorials.admin.videoRotation": "./components/video-rotation",
-      "sap.tutorials.admin.pats": "./components/pats"
+      "sap.tutorials.admin.pats": "./components/pats",
+      "sap.tutorials.admin.featureFlags": "./components/featureFlags"
     },
     "models": {
       "admin": {
@@ -334,6 +335,12 @@
       },
       "patsComponent": {
         "name": "sap.tutorials.admin.pats",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "featureFlagsComponent": {
+        "name": "sap.tutorials.admin.featureFlags",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -778,6 +785,16 @@
           ]
         },
         {
+          "name": "featureFlags",
+          "pattern": "featureFlags",
+          "target": [
+            {
+              "name": "featureFlagsTarget",
+              "prefix": "ffl"
+            }
+          ]
+        },
+        {
           "name": "feedbackDashboard",
           "pattern": "feedback/dashboard",
           "target": "feedbackDashboardTarget"
@@ -1077,6 +1094,13 @@
           "id": "patsTarget",
           "viewLevel": 1,
           "prefix": "pt"
+        },
+        "featureFlagsTarget": {
+          "type": "Component",
+          "usage": "featureFlagsComponent",
+          "id": "featureFlagsTarget",
+          "viewLevel": 1,
+          "prefix": "ffl"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",

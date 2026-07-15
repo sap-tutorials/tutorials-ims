@@ -3700,3 +3700,48 @@ annotate PatService.MyPATs with @(
 annotate PatService.MyPATs actions {
   revokePAT @( Core.OperationAvailable: revocable );
 };
+
+annotate AdminService.FeatureFlags with @UI: {
+  HeaderInfo: {
+    TypeName: 'Feature Flag', TypeNamePlural: 'Feature Flags',
+    Title: { Value: label },
+    Description: { Value: key }
+  },
+  SelectionFields: [ category, enabled, status, kind ],
+  LineItem: [
+    { Value: label },
+    { Value: category },
+    {
+      $Type: 'UI.DataField', Value: enabled, Label: 'State',
+      Criticality: { $edmJson: { $If: [ { $Path: 'enabled' }, 3, 1 ] } }
+    },
+    { Value: effectiveValue, Label: 'Effective' },
+    { Value: winningLayer, Label: 'Source' },
+    { Value: status },
+    { Value: issue }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', ID: 'General', Label: 'General', Target: '@UI.FieldGroup#General' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Resolution', Label: 'Resolution', Target: '@UI.FieldGroup#Resolution' },
+    { $Type: 'UI.ReferenceFacet', ID: 'HowTo', Label: 'How to change', Target: '@UI.FieldGroup#HowTo' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: key }, { Value: label }, { Value: category },
+    { Value: kind }, { Value: valueType }, { Value: status }, { Value: issue },
+    { Value: description }
+  ]},
+  FieldGroup#Resolution: { Data: [
+    {
+      $Type: 'UI.DataField', Value: enabled, Label: 'State',
+      Criticality: { $edmJson: { $If: [ { $Path: 'enabled' }, 3, 1 ] } }
+    },
+    { Value: effectiveValue, Label: 'Effective value' },
+    { Value: winningLayer, Label: 'Winning layer' },
+    { Value: rawDbValue, Label: 'Raw DB value' },
+    { Value: rawEnvValue, Label: 'Raw env value' },
+    { Value: defaultValue, Label: 'Default value' }
+  ]},
+  FieldGroup#HowTo: { Data: [
+    { Value: howToChangeText, Label: 'How to change' }
+  ]}
+};
