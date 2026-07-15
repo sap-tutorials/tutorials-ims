@@ -92,7 +92,7 @@ export async function buildTopicClustersPayload(db) {
     return { clusters, buildAt, error: null };
   } catch (err) {
     log.error('failed to build /build/topic-clusters payload', err);
-    return { clusters: [], buildAt, error: err.message };
+    return { clusters: [], buildAt, error: 'topic_clusters_build_failed' };
   }
 }
 
