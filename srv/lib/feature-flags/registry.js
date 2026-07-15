@@ -69,6 +69,15 @@ export const FEATURE_FLAGS = [
     issue: '#945', status: 'ga',
     description: 'Hardcoded concept-overlap rank multiplier. Not runtime-configurable.',
   },
+  // ---- Navigator ----
+  {
+    key: 'NAV_INCLUDE_NESTED_GROUPS', label: 'Navigator nested-group cards',
+    category: 'Navigator', kind: 'db-setting', entity: 'NavigatorSettings',
+    column: 'includeNestedGroups', resolver: 'navigator', envVar: 'NAV_INCLUDE_NESTED_GROUPS',
+    valueType: 'boolean', default: false, issue: '#364', status: 'ga',
+    description: 'When on, /build/navigator emits cards for nested groups (~65 extra cards on dev).',
+    howToChange: adminTile('navigator', '#navigator', 'Or env NAV_INCLUDE_NESTED_GROUPS.'),
+  },
   // ---- UI events ----
   {
     key: 'UI_EVENTS_ENABLED', label: 'UI event telemetry', category: 'Telemetry',

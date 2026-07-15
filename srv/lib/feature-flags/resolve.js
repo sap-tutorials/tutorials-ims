@@ -6,6 +6,7 @@ import cds from '@sap/cds';
 import { FEATURE_FLAGS } from './registry.js';
 import { resolveKnowledgeGraphSettings } from '../runtime-config/kg-settings.js';
 import { resolveUiEventsSettings } from '../runtime-config/ui-events-settings.js';
+import { resolveNavigatorSettings } from '../runtime-config/navigator-settings.js';
 
 const LOG = cds.log('feature-flags-resolver');
 const NS = 'com.sap.developers.ims';
@@ -39,16 +40,18 @@ function envBool(raw, rule) {
 export async function resolveFeatureFlags() {
   // Resolve the two env-layered settings groups once, and fetch the raw rows
   // once, tolerating individual failures.
-  const [kgResolved, uiResolved, kgRow, uiRow, chatRow] = await Promise.all([
+  const [kgResolved, uiResolved, navResolved, kgRow, uiRow, chatRow, navRow] = await Promise.all([
     resolveKnowledgeGraphSettings().catch((e) => { LOG.warn('kg resolve failed', e.message); return null; }),
     resolveUiEventsSettings().catch((e) => { LOG.warn('uiEvents resolve failed', e.message); return null; }),
+    resolveNavigatorSettings().catch((e) => { LOG.warn('navigator resolve failed', e.message); return null; }),
     readRow('KnowledgeGraphSettings'),
     readRow('UiEventsSettings'),
     readRow('ChatSettings'),
+    readRow('NavigatorSettings'),
   ]);
 
-  const resolvedByResolver = { kg: kgResolved, uiEvents: uiResolved };
-  const rowByEntity = { KnowledgeGraphSettings: kgRow, UiEventsSettings: uiRow, ChatSettings: chatRow };
+  const resolvedByResolver = { kg: kgResolved, uiEvents: uiResolved, navigator: navResolved };
+  const rowByEntity = { KnowledgeGraphSettings: kgRow, UiEventsSettings: uiRow, ChatSettings: chatRow, NavigatorSettings: navRow };
 
   return FEATURE_FLAGS.map((f) => {
     const base = {
