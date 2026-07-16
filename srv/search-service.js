@@ -131,11 +131,12 @@ function attachSearchRank(query, tokens, kgFragment = '', communityFragment = ''
   const primOr  = _columnAnyTokenSQL('primaryTag', tokens);
   const tagOr   = _columnAnyTokenSQL('tagBag', tokens);
 
-  // #945: kgFragment is the ` + 2.00 * (case slug when 'x' then 0.8100 ... end)`
+  // #945: kgFragment is the ` + 2.00 * (case when slug = 'x' then 0.8100 ... end)`
   // string produced by buildKgRankFragment(). Empty string when the KG signal
   // is disabled / empty / timed-out — in that case the rank SQL is byte-identical
   // to the pre-#945 formula. Slugs in the fragment are pre-validated against
-  // /^[a-z0-9-]+$/ so no quoting drama on the string-concat boundary.
+  // /^[a-z0-9-]+$/ so no quoting drama on the string-concat boundary. The
+  // searched-CASE form (not `case slug when 'x'`) is load-bearing on HANA (#1214).
   // #1171: communityFragment is additive, independent of kgFragment. weight 0 => ''.
   const rankSQL =
     `(case when (${titleOr}) then 3 else 0 end ` +

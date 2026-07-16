@@ -108,7 +108,7 @@ describe('search-kg-signal', () => {
     const frag = buildKgRankFragment(s)
     // Fragment references slugs + numeric scores only — never concept ids.
     expect(frag).not.toMatch(/\bc-async\b|\bc-rap\b|\bc-other\b/)
-    expect(frag).toMatch(/when 'abap-async-rap' then/)
+    expect(frag).toMatch(/when slug = 'abap-async-rap' then/)
   })
 
   // ---- Empty / disabled
@@ -204,7 +204,7 @@ describe('search-kg-signal', () => {
     expect(buildKgRankFragment(undefined)).toBe('')
   })
 
-  it('buildKgRankFragment emits weighted CASE with valid slugs only', () => {
+  it('buildKgRankFragment emits weighted searched-CASE with valid slugs only', () => {
     const signal = {
       slugScores: new Map([
         ['abap-async-rap', 0.81],
@@ -213,9 +213,13 @@ describe('search-kg-signal', () => {
     }
     const frag = buildKgRankFragment(signal)
     expect(frag).toContain(`${KG_WEIGHT.toFixed(2)} *`)
-    expect(frag).toContain("when 'abap-async-rap' then 0.8100")
-    expect(frag).toContain("when 'cap-outbox' then 0.6400")
+    expect(frag).toContain("when slug = 'abap-async-rap' then 0.8100")
+    expect(frag).toContain("when slug = 'cap-outbox' then 0.6400")
     expect(frag).toContain('else 0 end')
+    // #1214: MUST be a searched CASE (`case when slug = …`), never a simple
+    // CASE (`case slug when …`) — the latter compiles to invalid HANA SQL.
+    expect(frag).toContain('(case when slug =')
+    expect(frag).not.toMatch(/\(case slug when/)
   })
 
   it('buildKgRankFragment filters malformed slugs (defense in depth)', () => {
@@ -229,7 +233,7 @@ describe('search-kg-signal', () => {
       ]),
     }
     const frag = buildKgRankFragment(signal)
-    expect(frag).toContain("when 'abap-async-rap' then")
+    expect(frag).toContain("when slug = 'abap-async-rap' then")
     // Everything else must be rejected before hitting SQL.
     expect(frag).not.toMatch(/drop table/i)
     expect(frag).not.toContain("UPPER-CASE")
@@ -257,7 +261,7 @@ describe('search-kg-signal', () => {
       ]),
     }
     const frag = buildKgRankFragment(signal)
-    expect(frag).toContain("when 'abap-async-rap' then")
+    expect(frag).toContain("when slug = 'abap-async-rap' then")
     expect(frag).not.toContain('zero-slug')
     expect(frag).not.toContain('neg-slug')
     expect(frag).not.toContain('nan-slug')
