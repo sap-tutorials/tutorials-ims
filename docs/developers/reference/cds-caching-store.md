@@ -277,16 +277,52 @@ command-palette concept search): `@cache: { ttl: 300000, tags: [{ value:
 - **Scope:** only the service-layer (OData/HCQL/MCP) read is cached. The
   rebuild-time full-list read in `srv/lib/published-concepts-query.js` uses raw
   `db.run` and is intentionally not cached.
-- **Metrics:** isolate this surface via `KeyMetrics` (the shared `caching`
-  service also carries `kg-neighborhood` entries):
+- **Metrics:** the plugin's persisted metrics tables are **non-functional on
+  HANA in this deployment** — do NOT rely on them for hit-rate:
+  - `PLUGIN_CDS_CACHING_KEYMETRICS` is empty because per-key metrics are OFF
+    (`PLUGIN_CDS_CACHING_CACHES.KEYMETRICSENABLED = 0`; the config only sets
+    `metrics.enabled`, which is aggregate-only — there is no `keyMetrics` knob
+    wired in `.cdsrc.json`).
+  - `PLUGIN_CDS_CACHING_METRICS` rows exist (hourly snapshots) but every
+    counter reads `0` even when the store is demonstrably serving hits — the
+    known [`metrics.enabled` "Wrong input for INT type"](cds-caching-metrics-int-type-error-on-hana.md)
+    HANA bug means the hit/miss counters never persist. The snapshot rows are
+    written; the numbers inside them are not.
+  - **Measure directly instead:** hit-vs-miss latency by repeating a request,
+    and confirm a declarative entry lands in the store (opaque `kg:<hash>` key,
+    ~5-min TTL):
 
-  ```sql
-  SELECT "keyName","hits","misses","hitRatio","lastAccess"
-    FROM "PLUGIN_CDS_CACHING_KEYMETRICS" ORDER BY "hits" DESC;
-  ```
+    ```sql
+    SELECT "ID", LENGTH("VALUE") AS VAL_LEN, "EXPIRESAT"
+      FROM "PLUGIN_CDS_CACHING_CACHESTORE"
+      WHERE "ID" LIKE 'kg:%'
+        AND "ID" NOT LIKE 'kg:default%' AND "ID" NOT LIKE 'kg:full%'
+        AND "ID" NOT LIKE 'kg:pat:%'    AND "ID" NOT LIKE 'kg:rss:%'
+        AND "ID" NOT LIKE 'kg:yt:%';
+    ```
 
 ### Decision record
 
-- **Status:** DEV-only pilot, deployed <!-- DATE -->.
-- **Measured hit rate after soak:** <!-- fill from KeyMetrics -->.
-- **Verdict (expand / hold / revert):** <!-- fill after soak -->.
+- **Status:** DEV-only pilot, deployed 2026-07-15 (srv last uploaded 22:03 CEST
+  / 20:04 UTC, carrying PR #1213 merged 16:22 UTC).
+- **Measured behaviour (2026-07-16, direct probe against deployed srv):** the
+  persisted metrics tables were unusable (see Metrics above — KEYMETRICS empty,
+  METRICS counters stuck at 0 across all 22 hourly snapshots since deploy), so
+  the pilot was verified by driving the endpoint directly. Repeated
+  `GET /graph/PublishedConceptsWithAliases?$top=3&$select=slug,name` returned
+  **276 ms cold (miss) → ~110 ms warm (hit)**, a ~60% latency reduction, and a
+  new `kg:<hash>` row (537 B, EXPIRESAT ≈ now + 300 s) appeared in
+  `PLUGIN_CDS_CACHING_CACHESTORE` — confirming the `{hash}` cache key, the
+  `ttl: 300000` backstop, and CDS-DB store persistence all work end-to-end. No
+  organic DEV traffic hit this surface during the soak window (store held only
+  the #1177 `kg:neighborhood`/RSS/YT/PAT programmatic entries until the probe),
+  so a *natural* hit rate could not be observed.
+- **Verdict: HOLD.** The mechanism is proven correct (cache hits, correct TTL,
+  auth-safe key, working invalidation path), so there is no reason to revert.
+  But do **not expand** to more surfaces yet, for two reasons: (1) we cannot
+  measure hit rate until the HANA metrics-counter bug is fixed or per-key
+  metrics are enabled — expanding blind risks stale-content regressions with no
+  observability; (2) this surface saw zero organic DEV traffic, so its own value
+  is unproven. Re-evaluate expansion once (a) the metrics INT-type bug is
+  resolved (upstream cds-caching or a config workaround) and (b) PROD traffic
+  gives a real hit-rate baseline post-cutover.
