@@ -36,6 +36,7 @@ import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
 import { streamChat, toolsForContext } from './lib/chat-orchestrator.js';
+import { buildChatInvocation } from './lib/chat-invocation.js';
 import { computeEmbeddingStats } from './lib/embedding-stats.js';
 import { registerExportsBridge, wireExportsBridge } from './exports/express-bridge.js';
 import { exportSelectQueryHandler } from './lib/analytics-export-handler.js';
@@ -1307,16 +1308,9 @@ cds.on('served', () => {
       const { messages = [], pageContext = { kind: 'generic' } } = req.body || {};
 
       const isAdmin = !!(user?.is && user.is('Admin'));
-      const effectivePageContext = { ...pageContext };
-      if (effectivePageContext.kind === 'admin' && !isAdmin) {
-        effectivePageContext.kind = 'generic'; // forged context — degrade gracefully
-      }
-
-      const tools = await toolsForContext({ pageContext: effectivePageContext, isAdmin });
-      const system = await buildSystemPrompt(effectivePageContext, {
-        firstName: user.attr?.given_name || user.attr?.givenName || '',
-        lastName:  user.attr?.family_name || user.attr?.familyName || ''
-      }, settings);
+      const { system, tools, effectivePageContext } = await buildChatInvocation({
+        pageContext, user, settings, isAdmin
+      });
 
       const abortController = new AbortController();
       req.on('close', () => abortController.abort());
