@@ -254,6 +254,47 @@ curl -sX POST http://localhost:4004/content/publish/abort \
 
 ---
 
+## Hosted MCP Server
+
+The CAP backend serves a hosted [Model Context Protocol](https://modelcontextprotocol.io) surface via the `@cap-js/mcp` adapter (tools-only) plus a custom compose router (`srv/lib/mcp-compose-router.js`) that adds resources + prompts on the RP-bearing mounts. Each CDS service is mounted separately at `/mcp/<svc>` — there is **no** aggregate `/mcp` root. End-user connection guide: [docs/end-users/mcp-quickstart.md](../../end-users/mcp-quickstart.md); parameter reference: [docs/developers/reference/mcp-server.md](../reference/mcp-server.md).
+
+### Per-service mounts
+
+| Mount | Service | Curated tools | Auth (at mount) |
+|-------|---------|---------------|------|
+| `/mcp/search` | SearchService | `search_tutorials`, `list_missions`, `get_mission`, `get_tutorial` | None (anonymous) |
+| `/mcp/graph` | KnowledgeGraphService | `kg_shared_concepts`, `kg_neighborhood`, `kg_search_concepts`, `kg_community` (+ resources + prompts) | None (anonymous) |
+| `/mcp/homepage` | HomepageService | `get_my_recommended_tutorials`, `get_my_recommended_missions` | `authenticated-user` |
+| `/mcp/api` | DeveloperService | `get_my_tutorials`, `get_my_missions`, `get_my_events`, `get_my_completed_steps`, `get_tutorial_step`, `complete_step`, `reset_tutorial_progress` | `authenticated-user` |
+| `/mcp/admin` | AdminService | `merge_concepts`, `promote_community_to_mission`, `trigger_rebuild`, `publish_content` (+ resources + prompts) | `Admin` + per-action scope |
+
+`describe` and `query` are auto-generated on every mount by `@cap-js/mcp`. Each service also serves resources (`tutorial://<slug>`, `mission://<slug>`, `concept://<id>`) and prompts (`prompts/list`) where the compose router is mounted (`/mcp/graph`, `/mcp/admin`).
+
+### Auth-tier route prefixes (approuter → srv rewrite)
+
+The approuter (`approuter/xs-app.json`) fronts three additional prefixes that `srv/server.js` rewrites onto the real `/mcp/*` mounts:
+
+| Public prefix | Approuter auth | Rewrites to | Purpose |
+|---------------|----------------|-------------|---------|
+| `/mcp/*` | none (csrf off) | (direct) | Anonymous read tier — public services |
+| `/mcp-pat/*` | none (csrf off) | `/mcp/*` | PAT tier — requires `Bearer pat_...` (else JSON-RPC 401) |
+| `/mcp-auth/*` | xsuaa, scope `Tutorial.MCP` | `/mcp/*` | OAuth/JWT tier — forwards the user JWT |
+| `/mcp-admin/*` | xsuaa, scope `Tutorial.MCP` | `/mcp/admin/*` | Phase 3 admin-curation tools |
+
+Kill switches: `MCP_AUTH_ENABLED=false` → `/mcp-auth/*` + `/mcp-pat/*` return 503. `MCP_PHASE3_ENABLED=false` or `MCP_ADMIN_TOOLS_ENABLED=false` → `/mcp-admin/*` returns 503. Transport is Streamable HTTP (MCP protocol 2025-06); clients negotiate JSON vs SSE via `Accept`.
+
+### Personal Access Tokens (PAT)
+
+| URL | Method | Description | Auth |
+|-----|--------|-------------|------|
+| `/pats` | GET | `PatService` — list the caller's own PATs (`MyPATs`, row-scoped to `user.email = $user.id`) | XSUAA (`authenticated-user`) |
+| `/pats/mintPAT` | POST | Mint a PAT: `mintPAT(name, scopes, ttlDays)` → `{ ID, token, prefix, expiresAt }`. Plaintext token returned **once**; server stores only a SHA-256 hash. Scopes: `read` (read tools) / `write` (allows `complete_step`, `reset_tutorial_progress`). | XSUAA (`authenticated-user`) |
+| `/pats/MyPATs(<ID>)/PatService.revokePAT` | POST | Bound action — revoke one of the caller's PATs | XSUAA (`authenticated-user`) |
+
+PATs are recognized by `srv/lib/mcp-pat-middleware.js` (SHA-256 hash lookup, 60 s cache) on the `/mcp-pat/*` prefix. Minting is surfaced in the Admin UI at `/admin-ui/#pats` for users in the `Tutorials MCP Users` role collection. An expired or revoked PAT returns 401. Write tools reject PATs lacking the `write` scope with 403.
+
+---
+
 ## WebSocket / Real-time
 
 | URL | Protocol | Description | Auth |
@@ -345,14 +386,18 @@ Implementation: [srv/lib/kg/joule-tool-find-path.js](../../../srv/lib/kg/joule-t
 
 ## XSUAA Scopes Reference
 
-The application defines four roles in [xs-security.json](xs-security.json). Endpoints in this document indicate which scope is required where applicable.
+The application defines its roles in [xs-security.json](xs-security.json). Endpoints in this document indicate which scope is required where applicable.
 
 | Scope | Role Collection | Used by |
 |-------|-----------------|---------|
 | `$XSAPPNAME.Admin` | "Tutorials Admin" | `/admin-ui/`, `/analytics-ui/`, `/_dev`, `/admin/*` OData, `/admin/embeddings/stats` |
+| `$XSAPPNAME.SuperAdmin` | "Tutorials SuperAdmin" | `promote_community_to_mission`, `publish_content` (emergency), other SuperAdmin-gated admin actions |
 | `$XSAPPNAME.MobileApp` | "Tutorials Scanner" | `/scanner-ui/`, `/scanner-vue/` |
-| `$XSAPPNAME.Tutorial.Author` | "Tutorials Author" | `/tutorials-qa/*`, `/qa-search/*` |
-| _(authenticated-user)_ | _(any logged-in user)_ | `/api/*`, `/display/*`, `/chat/*` |
+| `$XSAPPNAME.Tutorial.Author` | "Tutorials Author" | `/tutorials-qa/*`, `/qa-search/*`, `/author/generateOsVariants`, `trigger_rebuild` |
+| `$XSAPPNAME.KnowledgeGraph.Admin` | "Tutorials Admin" | `/graph/publishConcept`, `/graph/unpublishConcept`, `merge_concepts` |
+| `$XSAPPNAME.Tutorial.API` | "Tutorials API Consumer" | `/graphql` (authenticated GraphQL over `DeveloperService`) |
+| `$XSAPPNAME.Tutorial.MCP` | "Tutorials MCP Users" | `/mcp-auth/*`, `/mcp-admin/*` (hosted MCP OAuth/JWT tiers); PAT minting at `/admin-ui/#pats` |
+| _(authenticated-user)_ | _(any logged-in user)_ | `/api/*`, `/display/*`, `/chat/*`, `/pats`, `/mcp-pat/*` |
 
 ---
 

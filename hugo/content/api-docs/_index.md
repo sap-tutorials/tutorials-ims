@@ -1,6 +1,6 @@
 ---
 title: API
-description: developers.sap.com is a developer site — so it's accessible via API too. HTTP services, the sap-devs CLI, an MCP server, and feeds you can script against.
+description: developers.sap.com is a developer site — so it's accessible via API too. HTTP services, a hosted MCP server, the sap-devs CLI, and feeds you can script against.
 weight: 35
 ---
 
@@ -61,7 +61,45 @@ The full command reference lives with the CLI itself: run `sap-devs help` or see
 
 ## MCP server
 
-`sap-devs mcp serve` starts a [Model Context Protocol](https://modelcontextprotocol.io) server on stdio that exposes SAP developer knowledge as tools to AI agents (Claude Code, Cursor, Windsurf, and anything else that speaks MCP).
+There are **two** MCP surfaces here, and they're different things:
+
+1. **The hosted MCP server** — served by this site over HTTP, so an AI client can search tutorials, read missions, query the knowledge graph, and (signed in) read *your* progress. No SDK, no scraping.
+2. **The `sap-devs` CLI MCP** — a local stdio server bundled with the `sap-devs` CLI that exposes SAP developer knowledge (tips, samples, error lookups) to your agent.
+
+### Hosted MCP (over HTTP)
+
+Each CDS service is mounted separately under `/mcp/*` over the [Model Context Protocol](https://modelcontextprotocol.io) **Streamable HTTP** transport. There is no aggregate `/mcp` root — point your client at the specific service you want.
+
+| Mount | Auth | Curated tools |
+|---|---|---|
+| `/mcp/search` | none | `search_tutorials`, `list_missions`, `get_mission`, `get_tutorial` |
+| `/mcp/graph` | none | `kg_shared_concepts`, `kg_neighborhood`, `kg_search_concepts`, `kg_community` |
+| `/mcp/homepage` | signed-in | `get_my_recommended_tutorials`, `get_my_recommended_missions` |
+| `/mcp/api` | signed-in | `get_my_tutorials`, `get_my_missions`, `get_my_events`, `get_my_completed_steps`, `get_tutorial_step`, `complete_step`, `reset_tutorial_progress` |
+
+`describe` and `query` are auto-generated on every mount. The `/mcp/graph` mount additionally exposes MCP **resources** (`tutorial://<slug>`, `mission://<slug>`, `concept://<id>`) and **prompt templates** (`prompts/list`).
+
+**Anonymous read** — just point a Streamable-HTTP client at the mount. Claude Code:
+
+```json
+{
+  "mcpServers": {
+    "sap-developers-search": { "type": "http", "url": "https://developers.sap.com/mcp/search" },
+    "sap-developers-graph":  { "type": "http", "url": "https://developers.sap.com/mcp/graph" }
+  }
+}
+```
+
+**Signed-in tools** (your progress, recommendations, marking steps done) live behind two authenticated tiers:
+
+- **`/mcp-auth/*`** — OAuth 2.1 + PKCE. Requires the `Tutorial.MCP` scope (**Tutorials MCP Users** role collection). XSUAA has no dynamic client registration, so bridge through [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) with the pre-registered public client.
+- **`/mcp-pat/*`** — a **Personal Access Token** for headless / CI clients that can't do a browser flow. Mint one at `/admin-ui/#pats`, then send `Authorization: Bearer pat_...`. Scopes: `read` (read tools) or `write` (also allows `complete_step` / `reset_tutorial_progress`). The plaintext token is shown once.
+
+Full connection walkthrough (Claude Desktop, Claude Code, `mcp-remote`, PATs, troubleshooting): [MCP Quickstart](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/end-users/mcp-quickstart.md). Tool + parameter reference: [mcp-server.md](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/developers/reference/mcp-server.md).
+
+### Local `sap-devs` CLI MCP (over stdio)
+
+`sap-devs mcp serve` starts a [Model Context Protocol](https://modelcontextprotocol.io) server on stdio that exposes SAP developer knowledge as tools to AI agents (Claude Code, Cursor, Windsurf, and anything else that speaks MCP). This is unrelated to the hosted server above — it ships with the CLI and runs on your machine.
 
 **Available tools** — `list_packs`, `get_context`, `get_tip`, `search_resources`, `get_known_errors`, `get_recent_news`, `get_news_detail`, `search_tutorials`, `search_learning_journeys`, `get_samples`, `check_tools`, `check_project`, `search_events`, `search_videos`, `search_discovery`, plus `cf_*` / `btp_*` inspection tools that surface your local Cloud Foundry and BTP state to the agent.
 

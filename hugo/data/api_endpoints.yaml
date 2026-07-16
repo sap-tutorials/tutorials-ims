@@ -72,6 +72,12 @@ sections:
         driftMarkers:
           - "/health"
           - "/health/db"
+      - path: "/mcp/*"
+        auth: "None"
+        purpose: 'Hosted <a href="https://modelcontextprotocol.io">MCP</a> server — anonymous read tier. Per-service mounts: <code>/mcp/search</code>, <code>/mcp/graph</code>, <code>/mcp/homepage</code>. Streamable HTTP; connect any MCP client (Claude Desktop, Claude Code). See the MCP section below.'
+        driftMarkers:
+          - "/mcp/search"
+          - "/mcp/graph"
 
   developer:
     columns: [path, purpose]
@@ -109,6 +115,23 @@ sections:
       - path: "/chat/stream"
         auth: "XSUAA"
         purpose: 'Joule chat streaming endpoint (Server-Sent Events).'
+      - path: "/mcp-auth/*"
+        auth: "XSUAA"
+        purpose: 'Hosted MCP — OAuth/JWT tier (scope <code>Tutorial.MCP</code>). Forwards your JWT to the user-scoped mounts (<code>/mcp/api</code> DeveloperService, <code>/mcp/homepage</code>): your progress, missions, events, recommendations. Bridge via <code>mcp-remote</code> with the pre-registered client.'
+        driftMarkers:
+          - "/mcp-auth/*"
+          - "/mcp/api"
+      - path: "/mcp-pat/*"
+        auth: "Bearer (PAT)"
+        purpose: 'Hosted MCP — Personal Access Token tier for headless / CI clients. Send <code>Authorization: Bearer pat_...</code>; no browser flow. Same user-scoped tools as <code>/mcp-auth/*</code>.'
+        driftMarkers:
+          - "/mcp-pat/*"
+      - path: "/pats"
+        auth: "XSUAA"
+        purpose: '<code>PatService</code> — mint / list / revoke your own Personal Access Tokens. <code>POST /pats/mintPAT</code> returns the plaintext token once. Minting UI: <code>/admin-ui/#pats</code> (<code>Tutorials MCP Users</code> role collection).'
+        driftMarkers:
+          - "/pats"
+          - "mintPAT"
 
   feeds:
     columns: [path, format, contents]
