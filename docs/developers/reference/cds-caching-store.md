@@ -32,8 +32,8 @@ observe hit rates / latencies and judge whether broader `@cache` adoption is wor
   "impl": "cds-caching",
   "namespace": "kg",
   "store": "memory",          // base: local `cds watch` + unit tests
-  "[hybrid]":     { "store": "cds", "metrics": { "enabled": true } },
-  "[production]": { "store": "cds", "metrics": { "enabled": true } }
+  "[hybrid]":     { "store": "cds" },
+  "[production]": { "store": "cds" }
 }
 ```
 
@@ -45,14 +45,34 @@ observe hit rates / latencies and judge whether broader `@cache` adoption is wor
   container as everything else). No new BTP entitlement, no service binding, and
   automatically tenant-isolated in MTX. This is the store cds-caching recommends for
   HANA/CAP.
-- **`metrics.enabled: true`** turns on read-through hit/miss + latency collection,
-  persisted hourly (default `persistenceInterval` 60 s) to the `Metrics` / `KeyMetrics`
-  tables. We deliberately did **not** register the OData management API
-  (`CachingApiService` at `/odata/v4/caching-api/`): it exposes write actions
-  (`clear`, `deleteEntry`, `setEntry`, `setMetricsEnabled`) that we don't need for a
-  read-only "is the pilot working" judgement. Metrics are read via SQL / the analytics
-  explorer instead. The API can be added later behind `@requires:'Admin'` if broader
-  adoption warrants a dashboard.
+- **`metrics.enabled` is OFF (#1215).** It was originally `true` in both profiles to
+  collect read-through hit/miss + latency counters, but on HANA the plugin's
+  stats-accumulation path throws `Wrong input for INT type` on every flush and the
+  counters never persist (they stuck at 0 across all hourly rows). Root cause: the
+  plugin reads the existing hourly row via a flattened table-name SELECT
+  (`SELECT.one.from("plugin_cds_caching_Metrics")`), which returns UPPERCASE column
+  keys on HANA (`HITS` not `hits`), so `existingHourly.hits + stats.hits` is
+  `undefined + n = NaN` → hdb's INT writer throws (it throws only on `isNaN`). See
+  [`metrics.enabled` "Wrong input for INT type"](cds-caching-metrics-int-type-error-on-hana.md).
+  Because the counters were already non-functional, disabling loses nothing and stops
+  the error-level log noise. The OData management API (`CachingApiService`) was never
+  registered. **Re-enable only after the upstream casing bug is fixed** (and update the
+  `test/unit/caching-metrics-disabled.test.js` guard in the same change).
+
+  > **Two-part disable (config + persisted flag).** Removing `metrics.enabled` from
+  > config is necessary but not sufficient on an environment where metrics were
+  > previously on: cds-caching persists the enabled state into
+  > `PLUGIN_CDS_CACHING_CACHES.METRICSENABLED`, and `getRuntimeConfiguration()` reads
+  > that column back on every boot. Nothing in the plugin ever writes it back to `0`.
+  > **After deploying the new config**, reset the persisted flag once per environment:
+  >
+  > ```sql
+  > UPDATE "PLUGIN_CDS_CACHING_CACHES" SET "METRICSENABLED" = 0 WHERE "NAME" = 'caching';
+  > ```
+  >
+  > Do this *after* the new srv is live — resetting while the old (`metrics.enabled:true`)
+  > code is still running would let its boot re-persist `1`.
+
 
 ## Multi-instance coherence
 
@@ -277,17 +297,17 @@ command-palette concept search): `@cache: { ttl: 300000, tags: [{ value:
 - **Scope:** only the service-layer (OData/HCQL/MCP) read is cached. The
   rebuild-time full-list read in `srv/lib/published-concepts-query.js` uses raw
   `db.run` and is intentionally not cached.
-- **Metrics:** the plugin's persisted metrics tables are **non-functional on
-  HANA in this deployment** — do NOT rely on them for hit-rate:
-  - `PLUGIN_CDS_CACHING_KEYMETRICS` is empty because per-key metrics are OFF
-    (`PLUGIN_CDS_CACHING_CACHES.KEYMETRICSENABLED = 0`; the config only sets
-    `metrics.enabled`, which is aggregate-only — there is no `keyMetrics` knob
-    wired in `.cdsrc.json`).
-  - `PLUGIN_CDS_CACHING_METRICS` rows exist (hourly snapshots) but every
-    counter reads `0` even when the store is demonstrably serving hits — the
-    known [`metrics.enabled` "Wrong input for INT type"](cds-caching-metrics-int-type-error-on-hana.md)
-    HANA bug means the hit/miss counters never persist. The snapshot rows are
-    written; the numbers inside them are not.
+- **Metrics:** persistence is **disabled** (`metrics.enabled` removed from both
+  profiles, #1215) — do NOT rely on the metrics tables for hit-rate:
+  - It was on originally, but the counters never worked on HANA: the plugin's
+    stats-accumulation reads the existing hourly row via a flattened table-name
+    SELECT that returns UPPERCASE column keys (`HITS` not `hits`), so
+    `existingHourly.hits + stats.hits` is `undefined + n = NaN` → the
+    [`metrics.enabled` "Wrong input for INT type"](cds-caching-metrics-int-type-error-on-hana.md)
+    hdb bind error fired every flush. `PLUGIN_CDS_CACHING_METRICS` accumulated
+    22 hourly rows with every counter stuck at `0`; `PLUGIN_CDS_CACHING_KEYMETRICS`
+    was empty (per-key metrics were never wired). Disabling stops the error-level
+    log noise and loses nothing that worked.
   - **Measure directly instead:** hit-vs-miss latency by repeating a request,
     and confirm a declarative entry lands in the store (opaque `kg:<hash>` key,
     ~5-min TTL):
@@ -300,6 +320,7 @@ command-palette concept search): `@cache: { ttl: 300000, tags: [{ value:
         AND "ID" NOT LIKE 'kg:pat:%'    AND "ID" NOT LIKE 'kg:rss:%'
         AND "ID" NOT LIKE 'kg:yt:%';
     ```
+
 
 ### Decision record
 
