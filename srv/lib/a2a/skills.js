@@ -2,10 +2,13 @@
 // A2A skill registry (#1220). The ONLY module that knows how A2A skills map to
 // internal capabilities. Chat skill → streamChat (full agentic loop). Tool
 // skills → dispatchTool (the same handlers the chat LLM calls).
+import cds from '@sap/cds';
 import { dispatchTool, streamChat } from '../chat-orchestrator.js';
 import { buildChatInvocation } from '../chat-invocation.js';
 import { a2aMessageToInternal, makeSseShim } from './message-adapter.js';
 import { putTask } from './task-store.js';
+
+const LOG = cds.log('a2a');
 
 export class A2aError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -47,7 +50,13 @@ export async function runChatSkillStream({ message, user, res, taskId, contextId
     });
     await putTask(taskId, { id: taskId, contextId, state: 'completed' });
   } catch (e) {
-    await putTask(taskId, { id: taskId, contextId, state: 'failed', error: e.message });
+    // Isolate the failed-state write so a task-store reject cannot mask the
+    // original streamChat error the caller needs to see.
+    try {
+      await putTask(taskId, { id: taskId, contextId, state: 'failed', error: e.message });
+    } catch (storeErr) {
+      LOG.warn(`putTask(failed) for ${taskId} threw — ${storeErr.message}`);
+    }
     throw e;
   }
 }
