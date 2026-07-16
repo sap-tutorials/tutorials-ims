@@ -25,7 +25,10 @@ async function readChatSettings() {
 
 export function makeA2aRouter() {
   const router = express.Router();
-  router.post('/', async (req, res) => {
+  // Dual path: matches both when the router is mounted via app.use('/a2a', …)
+  // (path presents as '/') and when invoked directly as a handler in server.js
+  // (req.url is still '/a2a', prefix NOT stripped). Verified both styles route. (#1220)
+  router.post(['/', '/a2a'], async (req, res) => {
     const { id, method, params } = req.body || {};
     try {
       if (!enabled()) return rpcError(res, 503, id, -32603, 'A2A endpoint disabled');

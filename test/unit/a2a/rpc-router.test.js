@@ -130,6 +130,30 @@ describe('a2a rpc-router', () => {
     expect(body.result.state).toBe('canceled');
   });
 
+  it('routes POST /a2a when the router is invoked directly as a handler (server.js pattern)', async () => {
+    const directApp = express();
+    directApp.use(express.json());
+    const r = makeA2aRouter();
+    directApp.post('/a2a', (req, res, next) => r(req, res, next)); // direct invoke, prefix NOT stripped
+    directApp.use((req, res) => res.status(404).json({ fell_through: true }));
+    const srv = http.createServer(directApp);
+    await new Promise((resolve) => srv.listen(0, '127.0.0.1', resolve));
+    const { port } = srv.address();
+    try {
+      const resp = await fetch(`http://127.0.0.1:${port}/a2a`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tasks/get', params: { id: 't9' } }),
+      });
+      // With the bug this would be 404 {fell_through:true}. With the fix it reaches
+      // the router (tasks/get on unknown id → JSON-RPC -32602, HTTP 200).
+      const body = await resp.json();
+      expect(body.fell_through).toBeUndefined();
+      expect(body.error?.code).toBe(-32602);
+    } finally {
+      await new Promise((resolve) => srv.close(resolve));
+    }
+  });
+
   it('message/send chat skill accumulates streamed text from A2A status-update frames', async () => {
     // Override runChatSkillStream for this test to emit realistic shim output:
     // two working status-update frames with text parts, then a final completed frame.
