@@ -10,10 +10,10 @@ import { extractText, terminalTaskEvent } from './message-adapter.js';
 import { getTask, cancelTask, newTaskId, putTask } from './task-store.js';
 // FIX 1: rate limiter — same imports as /chat/stream in server.js.
 import { createRateLimiter, RateLimitError } from '../chat-rate-limit.js';
+import { resolveA2aSettings } from '../runtime-config/a2a-settings.js';
 
 const LOG = cds.log('a2a');
 const SETTINGS_ID = '00000000-0000-0000-0000-00000000c8a7';
-const enabled = () => process.env.A2A_ENABLED !== 'false';
 
 // FIX 1: module-level singleton so window is shared across all requests, just
 // like the rateLimiter in the /chat/stream handler in server.js.
@@ -37,7 +37,8 @@ export function makeA2aRouter() {
   router.post(['/', '/a2a'], async (req, res) => {
     const { id, method, params } = req.body || {};
     try {
-      if (!enabled()) return rpcError(res, 503, id, -32603, 'A2A endpoint disabled');
+      const a2aCfg = await resolveA2aSettings();
+      if (!a2aCfg.enabled) return rpcError(res, 503, id, -32603, 'A2A endpoint disabled');
 
       const user = cds.context?.user;
       if (!user?.id || user.id === 'anonymous') {
