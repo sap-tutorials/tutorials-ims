@@ -35,7 +35,7 @@ import makeComposeRouter, { flags as mcpFlags } from './lib/mcp-compose-router.j
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
-import { streamChat, toolsForContext } from './lib/chat-orchestrator.js';
+import { streamChat } from './lib/chat-orchestrator.js';
 import { buildChatInvocation } from './lib/chat-invocation.js';
 import { computeEmbeddingStats } from './lib/embedding-stats.js';
 import { registerExportsBridge, wireExportsBridge } from './exports/express-bridge.js';
