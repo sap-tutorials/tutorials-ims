@@ -239,4 +239,12 @@ export const FEATURE_FLAGS = [
     description: 'AI-based relevance scoring for homepage news items. Kill switch — set false to fall back to chronological ordering.',
     howToChange: cfEnv('HOMEPAGE_NEWS_RELEVANCE_ENABLED', 'false'),
   },
+  // ---- A2A (Agent-to-Agent) ----
+  {
+    key: 'A2A_ENABLED', label: 'A2A agent endpoint', category: 'A2A',
+    kind: 'env', envVar: 'A2A_ENABLED', envRule: 'false-disables',
+    valueType: 'boolean', default: true, issue: '#1220', status: 'dev-only',
+    description: 'Exposes the A2A JSON-RPC endpoint (POST /a2a) and the agent card (GET /.well-known/agent-card.json). Kill switch — set false to signal the endpoint is disabled in the agent card.',
+    howToChange: cfEnv('A2A_ENABLED', 'false'),
+  },
 ];

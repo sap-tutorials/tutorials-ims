@@ -1,6 +1,8 @@
 import cds from '@sap/cds';
 import express from 'express';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { stripPrecompiledPluginRoots } from './lib/strip-precompiled-plugin-roots.js';
 import { bustPublishedConceptsCache } from './lib/kg-published-concepts-cache.js';
 
@@ -58,6 +60,8 @@ import multer from 'multer';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
 import './graphql-config.js';
+import { makeA2aRouter } from './lib/a2a/rpc-router.js';
+import { buildAgentCard } from './lib/a2a/agent-card.js';
 
 // #1182 — cds-caching resolve-guard fix. This module is evaluated by cds-serve
 // AFTER `await cds.plugins` (so the cds-caching plugin has already pushed its
@@ -95,6 +99,10 @@ import './graphql-config.js';
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
 // an OData resource path). Set in 'served' once cds.middlewares are ready.
 let chatStreamHandler = (req, res) => res.status(503).json({ error: 'service_starting' });
+
+// Late-bound POST /a2a handler. Same pattern as chatStreamHandler — registered
+// in 'bootstrap' before CAP mounts A2aService at /a2a, wired in 'served'. (#1220)
+let a2aHandler = (req, res) => res.status(503).json({ jsonrpc: '2.0', error: { code: -32603, message: 'A2A not ready' }, id: req.body?.id ?? null });
 
 // Same late-bound pattern for GET /admin/embeddings/stats. AdminService mounts
 // at /admin, so its OData router would otherwise parse 'embeddings/stats' as
@@ -474,6 +482,31 @@ cds.on('bootstrap', (app) => {
   // and return 404. Body parser runs here; auth + business logic are bound
   // lazily in 'served' via chatStreamHandler.
   app.post('/chat/stream', express.json({ limit: '64kb' }), (req, res, next) => chatStreamHandler(req, res, next));
+
+  // A2A Agent Card (public discovery) — served on the already-public
+  // /.well-known/* approuter route. No secrets; matches A2A discovery model. (#1220)
+  app.get('/.well-known/agent-card.json', (req, res) => {
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    res.json(buildAgentCard({ baseUrl: `${proto}://${host}`, tokenUrl: process.env.A2A_TOKEN_URL || '', enabled: process.env.A2A_ENABLED !== 'false' }));
+  });
+
+  // A2A consumption guide (public). Read from disk with fs (NOT res.sendFile —
+  // sendFile with a file:// URL path is unreliable on Windows). 404 if the doc
+  // is not present (it is authored in Task 10). (#1220)
+  app.get('/.well-known/a2a-instructions.md', (_req, res) => {
+    try {
+      const p = fileURLToPath(new URL('../docs/developers/reference/a2a-instructions.md', import.meta.url));
+      res.type('text/markdown').send(readFileSync(p, 'utf8'));
+    } catch {
+      res.status(404).type('text/plain').send('A2A instructions not found');
+    }
+  });
+
+  // A2A JSON-RPC endpoint. Body parser here; the CAP auth chain wraps it in
+  // 'served' (like /chat/stream) so cds.context.user is populated. Reserved in
+  // bootstrap before CAP mounts A2aService at /a2a. (#1220)
+  app.post('/a2a', express.json({ limit: '64kb' }), (req, res, next) => a2aHandler(req, res, next));
 
   // MCP_AUTH_ENABLED kill switch — when explicitly set to 'false', return 503
   // for all /mcp-auth and /mcp-pat routes. This must come BEFORE the PAT
@@ -1343,6 +1376,21 @@ cds.on('served', () => {
   };
 
   cds.log('chat').info('POST /chat/stream registered');
+
+  // Wire A2A router through the same context+auth chain. makeA2aRouter()
+  // returns a router with router.post('/') which matches POST /a2a because
+  // Express strips the base path when dispatching to the router. (#1220)
+  const a2aRouter = makeA2aRouter();
+  a2aHandler = (req, res, next) => {
+    contextMw(req, res, (err) => {
+      if (err) return next(err);
+      authMw(req, res, (err) => {
+        if (err) return next(err);
+        a2aRouter(req, res, next);
+      });
+    });
+  };
+  cds.log('a2a').info('POST /a2a registered');
 });
 
 // #805 PR 2 (#909) — Passive wrapper on cds.db.run / cds.db.tx to observe HANA
