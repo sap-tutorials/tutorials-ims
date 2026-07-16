@@ -92,7 +92,12 @@ export function makeA2aRouter() {
             if (m) {
               try {
                 const f = JSON.parse(m[1]);
-                if (f.type === 'delta') text += f.content || '';
+                if (f.kind === 'status-update' && f.final !== true && f.status?.state === 'working') {
+                  const parts = f.status?.message?.parts;
+                  if (Array.isArray(parts)) {
+                    for (const p of parts) { if (p?.kind === 'text') text += p.text ?? ''; }
+                  }
+                }
               } catch { /* ignore malformed frames */ }
             }
             return true;

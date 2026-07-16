@@ -45,6 +45,7 @@ globalThis.SELECT = {
 };
 
 import { makeA2aRouter } from '../../../srv/lib/a2a/rpc-router.js';
+import { runChatSkillStream } from '../../../srv/lib/a2a/skills.js';
 
 let server;
 let baseUrl;
@@ -127,5 +128,34 @@ describe('a2a rpc-router', () => {
     const res = await post({ jsonrpc: '2.0', id: 5, method: 'tasks/cancel', params: { id: 't8' } });
     const body = await res.json();
     expect(body.result.state).toBe('canceled');
+  });
+
+  it('message/send chat skill accumulates streamed text from A2A status-update frames', async () => {
+    // Override runChatSkillStream for this test to emit realistic shim output:
+    // two working status-update frames with text parts, then a final completed frame.
+    runChatSkillStream.mockImplementationOnce(async ({ res }) => {
+      res.write('data: ' + JSON.stringify({
+        kind: 'status-update', final: false,
+        status: { state: 'working', message: { role: 'agent', parts: [{ kind: 'text', text: 'Hello ' }] } },
+      }) + '\n\n');
+      res.write('data: ' + JSON.stringify({
+        kind: 'status-update', final: false,
+        status: { state: 'working', message: { role: 'agent', parts: [{ kind: 'text', text: 'world' }] } },
+      }) + '\n\n');
+      res.write('data: ' + JSON.stringify({
+        kind: 'status-update', final: true,
+        status: { state: 'completed' },
+      }) + '\n\n');
+    });
+
+    const res = await post({
+      jsonrpc: '2.0', id: 6, method: 'message/send',
+      // No skillId → resolves to 'tutorial-chat' (the buffered path).
+      params: { message: { role: 'user', parts: [{ kind: 'text', text: 'hi' }] } },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // terminalTaskEvent wraps accumulated text in status.message.parts[0].text.
+    expect(body.result.status.message.parts[0].text).toBe('Hello world');
   });
 });
