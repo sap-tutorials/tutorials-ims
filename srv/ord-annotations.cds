@@ -5,6 +5,7 @@ using from './consolidation-service';
 using from './search-service';
 using from './event-stream-service';
 using from './knowledge-graph-service';
+using from './a2a-service';
 
 annotate DeveloperService with @ORD.Extensions: {
     title: 'Developer Tutorial Progress API',
@@ -44,6 +45,12 @@ annotate EventStreamService with @ORD.Extensions: {
 
 annotate KnowledgeGraphService with @ORD.Extensions: {
     title: 'Tutorial Knowledge Graph API',
+    lineOfBusiness: ['Platform Engineering'],
+    extensible: { supported: 'no' }
+};
+
+annotate A2aService with @ORD.Extensions: {
+    title: 'Agent-to-Agent (A2A) Endpoint',
     lineOfBusiness: ['Platform Engineering'],
     extensible: { supported: 'no' }
 };

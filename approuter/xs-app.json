@@ -349,6 +349,14 @@
       "scope": "$XSAPPNAME.Tutorial.MCP"
     },
     {
+      "source": "^/a2a/?$",
+      "target": "/a2a",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false,
+      "scope": "$XSAPPNAME.Tutorial.MCP"
+    },
+    {
       "source": "^/tutorials-qa/_nav\\.json$",
       "target": "/content/nav",
       "destination": "srv-qa-api",

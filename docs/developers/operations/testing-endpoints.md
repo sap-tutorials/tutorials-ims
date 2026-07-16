@@ -180,6 +180,9 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/api/advocates/:slug/photo[?size=thumb]` | GET | Photo bytes (256-WebP default, 64-WebP with `?size=thumb`) served from HANA `AdvocatePhotos`. ETag is the sha256, `max-age=86400`. 404 when the advocate has no photo or slug is unknown. | None |
 | `/feedback/submit` | POST | Tutorial feedback form (rate-limited; submitter IP hashed via `SUBMISSION_SALT_SECRET`) | None |
 | `/chat/stream` | POST | Joule chat streaming endpoint (Server-Sent Events) | XSUAA |
+| `/a2a` | POST | A2A JSON-RPC 2.0 endpoint (`message/send`, `message/stream`, `tasks/get`, `tasks/cancel`) for central Joule consumption (#1220). Skill via `metadata.skillId`; defaults to conversational `tutorial-chat`. | XSUAA + `Tutorial.MCP` |
+| `/.well-known/agent-card.json` | GET | A2A Agent Card — public discovery document (5 skills, streaming, xsuaa security scheme) | None |
+| `/.well-known/a2a-instructions.md` | GET | A2A consumption guide (how to authenticate + call) | None |
 | `/api/codecheck` | POST | AI code-check spike (issue #171, gated on `ChatSettings.codeCheckEnabled`). Body: `{ tutorialSlug, stepNumber, submittedCode, language? }`. Returns `{ verdict: 'pass'\|'partial'\|'fail', summary, suggestions[], correctAspects[] }`. 503 when flag off; 429 with `Retry-After` on per-user 30/hr or per-(user,slug,step) 5/5min cap. | XSUAA |
 | `/author/generateOsVariants` | POST | AI-assisted OS variant generation for the VS Code authoring plugin (issue #173). Body: `{ sourceMarkdown, sourceOS, targetOSes[], context? }`. Returns `{ variants[], model, tokensUsed, requestId }`. 60/hr per author. See spec [#173](../../superpowers/specs/2026-06-09-173-os-conditional-content-design.md) §5. | XSUAA + `Tutorial.Author` |
 | `/admin/embeddings/stats` | GET | Tutorial embedding coverage / drift statistics | XSUAA + `Admin` |
