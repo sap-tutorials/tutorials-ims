@@ -41,7 +41,7 @@ sap.ui.define([
         communityLabelLlmBudgetPerDay: 50,
         // A2A (Agent-to-Agent) endpoint config (#1220). a2aEnabled defaults
         // true to mirror the schema default (db/schema.cds). When enabled, the
-        // Agent Card endpoint at /.well-known/agent.json is advertised and
+        // Agent Card endpoint at /.well-known/agent-card.json is advertised and
         // a2aPublicBaseUrl overrides the auto-detected platform host.
         a2aEnabled: true,
         a2aPublicBaseUrl: "",
