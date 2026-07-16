@@ -679,6 +679,13 @@ entity ChatSettings : cuid, managed {
   newsFetchCadenceMinutes        : Integer default 60;
   newsRelevanceLlmCallsToday     : Integer default 0;
   newsRelevanceLlmCallsCountedOn : Date;
+
+  // A2A (Agent-to-Agent) endpoint config (#1220 follow-up). Moved from env vars
+  // to DB so admins tune them via /admin-ui/#joule without a restart. Nullable
+  // URLs; a2aEnabled default true preserves the prior A2A_ENABLED!=='false' gate.
+  a2aEnabled        : Boolean default true;
+  a2aPublicBaseUrl  : String(500);
+  a2aTokenUrl       : String(500);
 }
 
 // Phase 2-A foundation (#463). Mirrors the ChatSettings singleton pattern.
