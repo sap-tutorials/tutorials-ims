@@ -42,8 +42,36 @@ describe('resolveA2aSettings', () => {
     const from = SELECT.one.from;
     let calls = 0;
     SELECT.one.from = () => { calls++; return Promise.resolve(row); };
-    await resolveA2aSettings();
-    expect(calls).toBe(0); // served from cache
-    SELECT.one.from = from;
+    try {
+      await resolveA2aSettings();
+      expect(calls).toBe(0); // served from cache
+    } finally {
+      SELECT.one.from = from; // restore even if the assertion throws
+    }
+  });
+
+  it('falls back to raw SQL (UPPERCASE keys) when the CAP path throws', async () => {
+    const from = SELECT.one.from;
+    SELECT.one.from = () => { throw new Error('model not loaded'); };
+    row = { A2AENABLED: false, A2APUBLICBASEURL: 'https://raw.example', A2ATOKENURL: 'https://raw/token' };
+    try {
+      const s = await resolveA2aSettings();
+      expect(fakeDb.run).toHaveBeenCalled();
+      expect(s).toEqual({ enabled: false, publicBaseUrl: 'https://raw.example', tokenUrl: 'https://raw/token' });
+    } finally {
+      SELECT.one.from = from;
+    }
+  });
+
+  it('returns defaults when both CAP and raw-SQL reads throw', async () => {
+    const from = SELECT.one.from;
+    SELECT.one.from = () => { throw new Error('model not loaded'); };
+    fakeDb.run.mockRejectedValueOnce(new Error('db down'));
+    try {
+      const s = await resolveA2aSettings();
+      expect(s).toEqual({ enabled: true, publicBaseUrl: '', tokenUrl: '' });
+    } finally {
+      SELECT.one.from = from;
+    }
   });
 });
