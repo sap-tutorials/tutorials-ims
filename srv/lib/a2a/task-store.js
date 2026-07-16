@@ -1,3 +1,4 @@
+// srv/lib/a2a/task-store.js
 // A2A Task snapshots persisted to the shared cds-caching service so tasks/get
 // is coherent across CF instances (#1220). TTL-bounded; no new schema. Base
 // profile uses store:memory (unit/dev); hybrid/prod use store:cds.
@@ -38,9 +39,11 @@ export async function getTask(taskId) {
   }
 }
 
+// FIX 4: terminal-state guard — a late cancel cannot destroy a completed/failed result.
 export async function cancelTask(taskId) {
   const cur = await getTask(taskId);
   if (!cur) return null;
+  if (cur.state === 'completed' || cur.state === 'failed' || cur.state === 'canceled') return cur;
   const next = { ...cur, state: 'canceled' };
   await putTask(taskId, next);
   return next;

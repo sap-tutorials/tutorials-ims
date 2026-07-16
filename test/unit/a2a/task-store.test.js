@@ -40,4 +40,30 @@ describe('a2a task-store', () => {
     expect(newTaskId()).not.toBe(newTaskId());
     expect(newTaskId()).toBeTruthy();
   });
+
+  // FIX 4: terminal-state guard — cancelTask on an already-completed task
+  // must return the completed snapshot unchanged (no state mutation).
+  it('cancelTask on completed task returns completed snapshot unchanged', async () => {
+    await putTask('t-done', { id: 't-done', state: 'completed', result: { ok: true } });
+    const out = await cancelTask('t-done');
+    expect(out.state).toBe('completed');
+    expect(out.result).toEqual({ ok: true });
+    // The snapshot in the store must also be unchanged.
+    expect((await getTask('t-done')).state).toBe('completed');
+  });
+
+  // FIX 4: terminal-state guard — cancelTask on an already-failed task is also idempotent.
+  it('cancelTask on failed task returns failed snapshot unchanged', async () => {
+    await putTask('t-fail', { id: 't-fail', state: 'failed', error: 'boom' });
+    const out = await cancelTask('t-fail');
+    expect(out.state).toBe('failed');
+    expect(out.error).toBe('boom');
+  });
+
+  // FIX 4: terminal-state guard — cancelTask on an already-canceled task is idempotent.
+  it('cancelTask on already-canceled task is idempotent', async () => {
+    await putTask('t-canceled', { id: 't-canceled', state: 'canceled' });
+    const out = await cancelTask('t-canceled');
+    expect(out.state).toBe('canceled');
+  });
 });

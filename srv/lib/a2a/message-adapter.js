@@ -78,9 +78,14 @@ export function makeSseShim(realRes, { taskId, contextId, onFrame } = {}) {
   };
 }
 
-export function terminalTaskEvent({ taskId, contextId, state, text }) {
-  return {
+// FIX 2: extended to accept optional artifacts array. When non-empty the
+// terminal task event carries the collected artifact objects so message/send
+// callers receive card/citation artifacts alongside the accumulated text.
+export function terminalTaskEvent({ taskId, contextId, state, text, artifacts }) {
+  const ev = {
     kind: 'task', id: taskId, contextId,
     status: { state, message: text ? { role: 'agent', parts: [{ kind: 'text', text }] } : undefined },
   };
+  if (Array.isArray(artifacts) && artifacts.length) ev.artifacts = artifacts;
+  return ev;
 }

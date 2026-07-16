@@ -349,7 +349,7 @@
       "scope": "$XSAPPNAME.Tutorial.MCP"
     },
     {
-      "source": "^/a2a$",
+      "source": "^/a2a/?$",
       "target": "/a2a",
       "destination": "srv-api",
       "authenticationType": "xsuaa",

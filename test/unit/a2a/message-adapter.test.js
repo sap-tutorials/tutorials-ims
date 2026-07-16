@@ -1,6 +1,6 @@
 // test/unit/a2a/message-adapter.test.js
 import { describe, it, expect } from 'vitest';
-import { a2aMessageToInternal, extractText, mapFrame, makeSseShim } from '../../../srv/lib/a2a/message-adapter.js';
+import { a2aMessageToInternal, extractText, mapFrame, makeSseShim, terminalTaskEvent } from '../../../srv/lib/a2a/message-adapter.js';
 
 describe('a2aMessageToInternal', () => {
   it('flattens text parts into a single user message', () => {
@@ -55,5 +55,38 @@ describe('makeSseShim', () => {
     expect(joined).toContain('status-update');
     expect(joined).toContain('Hi');
     expect(joined).toContain('completed');
+  });
+});
+
+// FIX 2: terminalTaskEvent includes artifacts when passed a non-empty array,
+// and omits the field when empty or absent.
+describe('terminalTaskEvent', () => {
+  it('includes artifacts in the event when a non-empty array is provided', () => {
+    const artifact = { name: 'tutorial-cards', parts: [{ kind: 'data', data: {} }] };
+    const ev = terminalTaskEvent({ taskId: 't1', contextId: 'c1', state: 'completed', text: 'done', artifacts: [artifact] });
+    expect(ev.kind).toBe('task');
+    expect(Array.isArray(ev.artifacts)).toBe(true);
+    expect(ev.artifacts.length).toBe(1);
+    expect(ev.artifacts[0].name).toBe('tutorial-cards');
+  });
+
+  it('omits artifacts field when empty array is provided', () => {
+    const ev = terminalTaskEvent({ taskId: 't1', contextId: 'c1', state: 'completed', text: 'done', artifacts: [] });
+    expect(ev.artifacts).toBeUndefined();
+  });
+
+  it('omits artifacts field when artifacts param is absent', () => {
+    const ev = terminalTaskEvent({ taskId: 't1', contextId: 'c1', state: 'completed', text: 'done' });
+    expect(ev.artifacts).toBeUndefined();
+  });
+
+  it('includes text in status.message when text is provided', () => {
+    const ev = terminalTaskEvent({ taskId: 't1', contextId: 'c1', state: 'completed', text: 'hello' });
+    expect(ev.status.message.parts[0].text).toBe('hello');
+  });
+
+  it('omits status.message when text is empty/absent', () => {
+    const ev = terminalTaskEvent({ taskId: 't1', contextId: 'c1', state: 'failed' });
+    expect(ev.status.message).toBeUndefined();
   });
 });

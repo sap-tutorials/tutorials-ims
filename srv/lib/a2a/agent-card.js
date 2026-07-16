@@ -1,7 +1,7 @@
 // Pure Agent Card builder (A2A protocol). Served at /.well-known/agent-card.json.
 // No I/O — baseUrl/tokenUrl/enabled are injected by the caller in server.js.
-export const SKILL_IDS = ['tutorial-chat', 'search-tutorials', 'user-progress', 'knowledge-graph', 'tutorial-steps'];
-
+// FIX 9: SKILLS declared first, SKILL_IDS derived from it to prevent drift.
+// Both arrays are frozen so callers holding card.skills cannot mutate the module constant.
 const SKILLS = [
   { id: 'tutorial-chat', name: 'Ask about SAP tutorials',
     description: 'Conversational Q&A over SAP developer tutorials, missions, and learning paths. Runs the full agentic loop (search, knowledge graph, progress).',
@@ -24,6 +24,10 @@ const SKILLS = [
     tags: ['content', 'steps'],
     examples: ['How do I define a CDS entity in the getting-started tutorial?'] },
 ];
+SKILLS.forEach(Object.freeze);
+Object.freeze(SKILLS);
+
+export const SKILL_IDS = SKILLS.map(s => s.id);
 
 export function buildAgentCard({ baseUrl, tokenUrl, enabled = true }) {
   return {

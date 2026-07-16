@@ -483,12 +483,29 @@ cds.on('bootstrap', (app) => {
   // lazily in 'served' via chatStreamHandler.
   app.post('/chat/stream', express.json({ limit: '64kb' }), (req, res, next) => chatStreamHandler(req, res, next));
 
+  // FIX 7: host-header injection guard. Prefer trusted config (env var or
+  // VCAP_APPLICATION) over raw request headers. When falling back to headers,
+  // mark the response non-cacheable and Vary on the spoofable headers.
+  function a2aBaseUrl(req) {
+    if (process.env.A2A_PUBLIC_BASE_URL) return process.env.A2A_PUBLIC_BASE_URL;
+    try {
+      const uris = JSON.parse(process.env.VCAP_APPLICATION || '{}').application_uris;
+      if (Array.isArray(uris) && uris[0]) return `https://${uris[0]}`;
+    } catch { /* fall through */ }
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    return `${proto}://${host}`;
+  }
+
   // A2A Agent Card (public discovery) — served on the already-public
   // /.well-known/* approuter route. No secrets; matches A2A discovery model. (#1220)
   app.get('/.well-known/agent-card.json', (req, res) => {
-    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-    const host = req.headers['x-forwarded-host'] || req.headers.host;
-    res.json(buildAgentCard({ baseUrl: `${proto}://${host}`, tokenUrl: process.env.A2A_TOKEN_URL || '', enabled: process.env.A2A_ENABLED !== 'false' }));
+    const baseUrl = a2aBaseUrl(req);
+    // Always mark private+no-store so a shared cache never serves a card
+    // built from one client's Host header to another client.
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Vary', 'X-Forwarded-Host, Host');
+    res.json(buildAgentCard({ baseUrl, tokenUrl: process.env.A2A_TOKEN_URL || '', enabled: process.env.A2A_ENABLED !== 'false' }));
   });
 
   // A2A consumption guide (public). Read from disk with fs (NOT res.sendFile —
