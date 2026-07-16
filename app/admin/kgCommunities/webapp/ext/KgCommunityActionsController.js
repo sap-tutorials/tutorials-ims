@@ -11,74 +11,58 @@
 // Architecture: the sibling .controller.js is a registered no-op CE so UI5
 // can resolve the `controllerExtensions` manifest registration at view
 // bootstrap. This file owns ALL dialog logic. The Fragment
-// (PromoteDialog.fragment.xml) is loaded with `controller: handlers` so its
-// button press bindings resolve to the handlers below.
+// (PromoteDialog.fragment.xml) is loaded WITHOUT a view host — see below.
 //
-// View resolution: FE V4 press handlers pass either a UI5 Event (OP header
-// button) or an array of selected contexts (LR toolbar). Both forms are handled
-// by _resolveView(); the LR singleton byId fallback is last-resort.
+// VIEW-AGNOSTIC (#1172, PR re-applying the gate-2 fix): these handlers do NOT
+// resolve a view. The earlier revision fell back to a hardcoded standalone FE
+// view id ("container-sap.tutorials.admin.kgCommunities---sap.fe.templates.
+// ListReport.view.ListReport") which is ABSENT when the app runs as a
+// componentUsage inside the admin-shell tnt ToolPage — the real ids are
+// sap.tutorials.admin.kgCommunities::KgCommunitiesList / ::KgCommunityObjectPage.
+// On both the LR toolbar (press-arg is a context array, no getSource) and the
+// OP header (button sits in an overflow popover, detached from the view parent
+// chain), view resolution failed → "Could not resolve the view". These
+// handlers only ever needed three things — an OData model, an i18n bundle, and
+// a dialog host — all obtainable without a view:
+//   - OData model : from the press-arg binding context (ctx.getModel()).
+//   - i18n bundle : from a locally-constructed ResourceModel.
+//   - dialog host : the Dialog is standalone; models are set on it directly and
+//                   it is NOT view.addDependent'ed. Mirrors the view-free
+//                   `concepts` sibling (ConceptActionsController.js).
 //
-// Context resolution: _resolveCtx() mirrors the same multi-shape logic to
-// read communityId / coverageHigh / missionCoveragePct / dominantMissionTitle
-// from the selected row (LR) or current page context (OP).
-//
-// Action invocation: bindContext("/promoteCommunityToMission(...)")
-// instead of editFlow.invokeAction — the plain module has no this.base.
+// Action invocation: bindContext("/promoteCommunityToMission(...)") on the
+// OData model taken from the row context — the plain module has no this.base.
 sap.ui.define([
   "sap/ui/core/Fragment",
   "sap/ui/model/json/JSONModel",
+  "sap/ui/model/resource/ResourceModel",
   "sap/m/MessageBox",
   "sap/m/MessageToast"
-], function (Fragment, JSONModel, MessageBox, MessageToast) {
+], function (Fragment, JSONModel, ResourceModel, MessageBox, MessageToast) {
   "use strict";
 
   // Module-level state.
-  // _dialog: tracked only to destroy the previous instance before recreating per
-  // open. NOT reused across views — see _openParamDialog for rationale.
+  // _dialog: destroyed + recreated on every open (lightweight, 2 inputs), so
+  //   its {viewState>/...} bindings always resolve against a fresh model.
+  // _odataModel: captured from the row context at open time; reused by
+  //   onPromoteConfirm to invoke the bound action and refresh afterwards.
+  // _i18nBundle: lazily-built ResourceModel bundle, shared across opens.
   let _dialog = null;
-  let _resolvedView = null;
+  let _odataModel = null;
+  let _i18nBundle = null;
 
   // ---------------------------------------------------------------------------
-  // View resolution
+  // i18n — local ResourceModel, no view required.
   // ---------------------------------------------------------------------------
 
-  // Resolve the active view from any press-arg shape FE V4 might supply.
-  // Shape 1 — UI5 Event (OP header action): walk getSource() up to View.
-  // Shape 2 — array of contexts (LR toolbar): no direct view ref; fall through.
-  // Shape 3 — byId fallback for the LR singleton (known FE V4 ID convention).
-  function _resolveView(arg) {
-    // Prefer a freshly-resolved candidate each call (OP and LR have different
-    // view IDs; the cached _resolvedView may be stale after navigation).
-    let candidate = null;
-
-    // Shape 1: UI5 Event with getSource().
-    if (arg && typeof arg.getSource === "function") {
-      candidate = arg.getSource();
-      while (candidate && !candidate.isA("sap.ui.core.mvc.View")) {
-        candidate = candidate.getParent ? candidate.getParent() : null;
-      }
-      if (candidate) {
-        _resolvedView = candidate;
-        return _resolvedView;
-      }
+  function _getBundle() {
+    if (!_i18nBundle) {
+      const rm = new ResourceModel({
+        bundleName: "sap.tutorials.admin.kgCommunities.i18n.i18n"
+      });
+      _i18nBundle = rm.getResourceBundle();
     }
-
-    // Shape 2: array of binding contexts — try to get the view via the model's
-    // owner (limited API; most likely falls through to byId).
-    if (!candidate && Array.isArray(arg) && arg.length > 0) {
-      // No reliable view-from-context API in UI5; skip to byId.
-    }
-
-    // Shape 3: byId fallback — LR singleton (FE V4 ID convention).
-    if (!candidate) {
-      const core = sap.ui.getCore();
-      candidate = core.byId(
-        "container-sap.tutorials.admin.kgCommunities---sap.fe.templates.ListReport.view.ListReport"
-      );
-    }
-
-    _resolvedView = candidate || null;
-    return _resolvedView;
+    return _i18nBundle;
   }
 
   // ---------------------------------------------------------------------------
@@ -103,36 +87,23 @@ sap.ui.define([
   }
 
   // ---------------------------------------------------------------------------
-  // Internal helpers
+  // Dialog
   // ---------------------------------------------------------------------------
 
-  function _getBundle(view) {
-    return view && view.getModel("i18n") && view.getModel("i18n").getResourceBundle();
-  }
+  function _openParamDialog(communityId) {
+    // Fresh viewState per open so the fragment's {viewState>/...} bindings never
+    // carry stale values across LR→OP→LR sequences.
+    const viewState = new JSONModel({
+      communityId: communityId,
+      missionSlug: "",
+      title: "",
+      busy: false
+    });
 
-  function _openParamDialog(view, communityId) {
-    // Set or reset the viewState model on the CURRENT view BEFORE loading the
-    // fragment so initial bindings resolve against this view's model.
-    let model = view.getModel("viewState");
-    if (!model) {
-      model = new JSONModel({ communityId: communityId, missionSlug: "", title: "", busy: false });
-      view.setModel(model, "viewState");
-    } else {
-      model.setData({ communityId: communityId, missionSlug: "", title: "", busy: false });
-    }
-
-    // Always recreate the dialog against the current view (approach a — destroy
-    // and rebuild on every open).
-    //
-    // Rationale: the dialog is addDependent on whichever view first opened it.
-    // Its {viewState>/...} bindings resolve against THAT view's model. If the
-    // user opens from LR, cancels, navigates to OP and opens again, the cached
-    // dialog still references the LR view's viewState — inputs read/write the
-    // wrong model and onPromoteConfirm reads an empty viewState despite visible
-    // input. Additionally, UI5 may destroy the original dependent view on
-    // navigation, leaving _dialog in a destroyed state that throws on .open().
-    //
-    // The dialog is lightweight (2 inputs), so per-open recreation is acceptable.
+    // Recreate the dialog on every open (approach a — destroy and rebuild).
+    // The standalone dialog owns its own models, so there is no view to keep it
+    // in sync with; recreating guarantees the {viewState>/...} and {i18n>...}
+    // bindings resolve against the models we set below.
     if (_dialog) {
       if (!_dialog.bIsDestroyed) {
         _dialog.destroy();
@@ -141,12 +112,20 @@ sap.ui.define([
     }
 
     Fragment.load({
-      id: view.getId(),
+      // No `id` — the fragment is not scoped to any view.
       name: "sap.tutorials.admin.kgCommunities.ext.PromoteDialog",
       controller: handlers
     }).then(function (dlg) {
       _dialog = dlg;
-      view.addDependent(dlg);
+      // Standalone host: set every model the fragment binds against directly on
+      // the dialog. It is NOT added as a dependent of any view.
+      dlg.setModel(viewState, "viewState");
+      dlg.setModel(new ResourceModel({
+        bundleName: "sap.tutorials.admin.kgCommunities.i18n.i18n"
+      }), "i18n");
+      if (_odataModel) {
+        dlg.setModel(_odataModel);   // default (OData) model for the bound action
+      }
       dlg.open();
     });
   }
@@ -158,17 +137,10 @@ sap.ui.define([
   const handlers = {
 
     onPromoteToMission: function (arg) {
-      const view = _resolveView(arg);
-      if (!view) {
-        // Bundle lookup requires a resolved view — chicken-and-egg here.
-        // Keep this error hardcoded; it should never surface in normal usage.
-        MessageBox.error("Could not resolve the view. Please reload and try again.");
-        return;
-      }
-
       const ctx = _resolveCtx(arg);
+      const bundle = _getBundle();
+
       if (!ctx || ctx.getProperty("communityId") == null) {
-        const bundle = _getBundle(view);
         const msg = bundle
           ? bundle.getText("noCommunitySelected")
           : "No community selected. Please select a community row first.";
@@ -176,9 +148,12 @@ sap.ui.define([
         return;
       }
 
+      // Capture the OData model from the row context — this is how the
+      // view-agnostic handler reaches the service without a view.
+      _odataModel = ctx.getModel();
+
       const communityId = ctx.getProperty("communityId");
       const coverageHigh = ctx.getProperty("coverageHigh");
-      const bundle = _getBundle(view);
 
       if (coverageHigh) {
         const pct = ctx.getProperty("missionCoveragePct") != null
@@ -204,24 +179,23 @@ sap.ui.define([
           emphasizedAction: MessageBox.Action.CANCEL,
           onClose: function (choice) {
             if (choice === promoteAnyway) {
-              _openParamDialog(view, communityId);
+              _openParamDialog(communityId);
             }
           }
         });
       } else {
-        _openParamDialog(view, communityId);
+        _openParamDialog(communityId);
       }
     },
 
     onPromoteConfirm: function () {
-      const view = _resolvedView;
-      if (!view) return;
+      if (!_dialog || _dialog.bIsDestroyed) return;
 
-      const model = view.getModel("viewState");
+      const model = _dialog.getModel("viewState");
+      const bundle = _getBundle();
       const communityId = model.getProperty("/communityId");
       const slug = (model.getProperty("/missionSlug") || "").trim();
       const title = (model.getProperty("/title") || "").trim();
-      const bundle = _getBundle(view);
 
       if (!slug || !title) {
         const msg = bundle ? bundle.getText("slugTitleRequired") : "Mission slug and title are required.";
@@ -229,23 +203,25 @@ sap.ui.define([
         return;
       }
 
+      if (!_odataModel) {
+        MessageBox.error("No service model available. Please reload and try again.");
+        return;
+      }
+
       model.setProperty("/busy", true);
 
-      const odataModel = view.getModel();
-      const op = odataModel.bindContext("/promoteCommunityToMission(...)");
+      const op = _odataModel.bindContext("/promoteCommunityToMission(...)");
       op.setParameter("communityId", communityId);
       op.setParameter("missionSlug", slug);
       op.setParameter("title", title);
 
       op.execute().then(function () {
         model.setProperty("/busy", false);
-        if (_dialog) _dialog.close();
+        if (_dialog && !_dialog.bIsDestroyed) _dialog.close();
 
         // Single toast: if the created Mission ID is available use the hint
-        // message (which already contains the success context); otherwise show
-        // the plain success message. Two back-to-back MessageToast.show() calls
-        // are singleton-replaced — the second overwrites the first, so the user
-        // would never see the primary success text.
+        // message; otherwise show the plain success message. Two back-to-back
+        // MessageToast.show() calls are singleton-replaced, so we build one.
         let toastMsg = bundle ? bundle.getText("promoteSuccess") : "Draft mission created.";
         try {
           const created = op.getBoundContext().getObject();
@@ -259,14 +235,13 @@ sap.ui.define([
         }
         MessageToast.show(toastMsg);
 
-        // Refresh the LR binding if reachable.
+        // Refresh the LR binding so the just-promoted community drops out of the
+        // "not yet promoted" filter. Without a view we refresh the OData model
+        // (best-effort — mirrors the view-free `concepts` sibling).
         try {
-          const lr = view.byId("fe::table::KgCommunities::LineItem-innerTable");
-          if (lr && lr.getBinding("items")) {
-            lr.getBinding("items").refresh();
-          }
+          if (_odataModel && _odataModel.refresh) _odataModel.refresh();
         } catch (e) {
-          // Non-fatal; LR refresh is best-effort.
+          // Non-fatal; refresh is best-effort.
         }
 
       }).catch(function (err) {
@@ -278,7 +253,7 @@ sap.ui.define([
     },
 
     onPromoteCancel: function () {
-      if (_dialog) _dialog.close();
+      if (_dialog && !_dialog.bIsDestroyed) _dialog.close();
     }
 
   };
