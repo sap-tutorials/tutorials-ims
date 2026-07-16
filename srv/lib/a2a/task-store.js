@@ -10,7 +10,10 @@ const KEY = (id) => `a2a:task:${id}`;
 
 let _cachePromise = null;
 async function cache() {
-  if (!_cachePromise) _cachePromise = cds.connect.to('caching');
+  if (!_cachePromise) {
+    _cachePromise = cds.connect.to('caching');
+    _cachePromise.catch(() => { _cachePromise = null; });
+  }
   return _cachePromise;
 }
 

@@ -18,6 +18,7 @@ describe('a2a task-store', () => {
   it('round-trips a task snapshot', async () => {
     await putTask('t1', { id: 't1', state: 'working' });
     expect(await getTask('t1')).toEqual({ id: 't1', state: 'working' });
+    expect(fakeCache.set).toHaveBeenCalledWith('a2a:task:t1', { id: 't1', state: 'working' }, { ttl: 900000 });
   });
 
   it('returns null for unknown task', async () => {
