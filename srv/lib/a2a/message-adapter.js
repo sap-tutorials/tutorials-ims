@@ -55,6 +55,10 @@ function writeEvent(res, event) {
 export function makeSseShim(realRes, { taskId, contextId, onFrame } = {}) {
   return {
     write(chunk) {
+      // Single-frame assumption: streamChat's only writer (sse() in
+      // chat-orchestrator.js) emits exactly one `data: {json}\n\n` per write.
+      // A chunk carrying two concatenated frames would fail JSON.parse and
+      // pass through untranslated — acceptable because that path never occurs.
       const s = typeof chunk === 'string' ? chunk : chunk?.toString?.() ?? '';
       const line = s.startsWith('data: ') ? s.slice(6).trim() : null;
       if (line == null) { realRes.write(s); return true; }

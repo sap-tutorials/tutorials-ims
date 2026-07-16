@@ -1,5 +1,5 @@
 // test/unit/a2a/message-adapter.test.js
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { a2aMessageToInternal, extractText, mapFrame, makeSseShim } from '../../../srv/lib/a2a/message-adapter.js';
 
 describe('a2aMessageToInternal', () => {
