@@ -38,7 +38,14 @@ sap.ui.define([
         // findCommunityPeers Joule tool; the budget caps the nightly
         // labeling job's per-day LLM calls (db/schema.cds:672).
         communityPeersEnabled: false,
-        communityLabelLlmBudgetPerDay: 50
+        communityLabelLlmBudgetPerDay: 50,
+        // A2A (Agent-to-Agent) endpoint config (#1220). a2aEnabled defaults
+        // true to mirror the schema default (db/schema.cds). When enabled, the
+        // Agent Card endpoint at /.well-known/agent-card.json is advertised and
+        // a2aPublicBaseUrl overrides the auto-detected platform host.
+        a2aEnabled: true,
+        a2aPublicBaseUrl: "",
+        a2aTokenUrl: ""
       });
       this.getView().setModel(oJSON, "settings");
       this._loadSettings();
@@ -83,7 +90,10 @@ sap.ui.define([
             codeCheckEnabled: !!data.codeCheckEnabled,
             branchingEnabled: !!data.branchingEnabled,
             communityPeersEnabled: !!data.communityPeersEnabled,
-            communityLabelLlmBudgetPerDay: data.communityLabelLlmBudgetPerDay != null ? data.communityLabelLlmBudgetPerDay : 50
+            communityLabelLlmBudgetPerDay: data.communityLabelLlmBudgetPerDay != null ? data.communityLabelLlmBudgetPerDay : 50,
+            a2aEnabled: data.a2aEnabled ?? true,
+            a2aPublicBaseUrl: data.a2aPublicBaseUrl || "",
+            a2aTokenUrl: data.a2aTokenUrl || ""
           });
         })
         .catch(function (err) {
@@ -116,7 +126,10 @@ sap.ui.define([
         codeCheckEnabled: !!data.codeCheckEnabled,
         branchingEnabled: !!data.branchingEnabled,
         communityPeersEnabled: !!data.communityPeersEnabled,
-        communityLabelLlmBudgetPerDay: parseInt(data.communityLabelLlmBudgetPerDay, 10) || 50
+        communityLabelLlmBudgetPerDay: parseInt(data.communityLabelLlmBudgetPerDay, 10) || 50,
+        a2aEnabled: !!data.a2aEnabled,
+        a2aPublicBaseUrl: data.a2aPublicBaseUrl || "",
+        a2aTokenUrl: data.a2aTokenUrl || ""
       };
 
       fetch("/admin/$metadata", {

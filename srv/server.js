@@ -62,6 +62,7 @@ import { installDbWrap } from './lib/metrics-db-wrap.js';
 import './graphql-config.js';
 import { makeA2aRouter } from './lib/a2a/rpc-router.js';
 import { buildAgentCard } from './lib/a2a/agent-card.js';
+import { resolveA2aSettings } from './lib/runtime-config/a2a-settings.js';
 
 // #1182 — cds-caching resolve-guard fix. This module is evaluated by cds-serve
 // AFTER `await cds.plugins` (so the cds-caching plugin has already pushed its
@@ -483,11 +484,10 @@ cds.on('bootstrap', (app) => {
   // lazily in 'served' via chatStreamHandler.
   app.post('/chat/stream', express.json({ limit: '64kb' }), (req, res, next) => chatStreamHandler(req, res, next));
 
-  // FIX 7: host-header injection guard. Prefer trusted config (env var or
+  // FIX 7: host-header injection guard. Prefer trusted config (DB resolver or
   // VCAP_APPLICATION) over raw request headers. When falling back to headers,
   // mark the response non-cacheable and Vary on the spoofable headers.
-  function a2aBaseUrl(req) {
-    if (process.env.A2A_PUBLIC_BASE_URL) return process.env.A2A_PUBLIC_BASE_URL;
+  function a2aBaseUrlFallback(req) {
     try {
       const uris = JSON.parse(process.env.VCAP_APPLICATION || '{}').application_uris;
       if (Array.isArray(uris) && uris[0]) return `https://${uris[0]}`;
@@ -499,13 +499,14 @@ cds.on('bootstrap', (app) => {
 
   // A2A Agent Card (public discovery) — served on the already-public
   // /.well-known/* approuter route. No secrets; matches A2A discovery model. (#1220)
-  app.get('/.well-known/agent-card.json', (req, res) => {
-    const baseUrl = a2aBaseUrl(req);
+  app.get('/.well-known/agent-card.json', async (req, res) => {
+    const cfg = await resolveA2aSettings();
+    const baseUrl = cfg.publicBaseUrl || a2aBaseUrlFallback(req);
     // Always mark private+no-store so a shared cache never serves a card
     // built from one client's Host header to another client.
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Vary', 'X-Forwarded-Host, Host');
-    res.json(buildAgentCard({ baseUrl, tokenUrl: process.env.A2A_TOKEN_URL || '', enabled: process.env.A2A_ENABLED !== 'false' }));
+    res.json(buildAgentCard({ baseUrl, tokenUrl: cfg.tokenUrl, enabled: cfg.enabled }));
   });
 
   // A2A consumption guide (public). Read from disk with fs (NOT res.sendFile —

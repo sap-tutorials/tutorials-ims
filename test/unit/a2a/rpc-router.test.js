@@ -53,6 +53,10 @@ vi.mock('../../../srv/lib/chat-rate-limit.js', () => {
   };
 });
 
+vi.mock('../../../srv/lib/runtime-config/a2a-settings.js', () => ({
+  resolveA2aSettings: vi.fn(async () => ({ enabled: true, publicBaseUrl: '', tokenUrl: '' })),
+}));
+
 // readChatSettings is internal; make SELECT resolve a valid enabled settings row.
 globalThis.SELECT = {
   one: { from: () => ({ where: async () => ({ enabled: true, deploymentId: 'd1', maxRequestsPerUser: 100 }) }) },
@@ -89,7 +93,6 @@ describe('a2a rpc-router', () => {
   beforeEach(() => {
     currentUser = { id: 'u1', attr: {}, is: () => false };
     store.clear();
-    delete process.env.A2A_ENABLED;
     // Reset rate-limit mock to pass by default.
     _getCheckMock().mockReset();
     _getCheckMock().mockImplementation(() => { /* pass */ });
@@ -103,10 +106,11 @@ describe('a2a rpc-router', () => {
     expect(body.error.code).toBe(-32001);
   });
 
-  it('503 when A2A_ENABLED=false', async () => {
-    process.env.A2A_ENABLED = 'false';
-    const res = await post({ jsonrpc: '2.0', id: 1, method: 'message/send', params: {} });
-    expect(res.status).toBe(503);
+  it('503 when A2A disabled in settings', async () => {
+    const { resolveA2aSettings } = await import('../../../srv/lib/runtime-config/a2a-settings.js');
+    resolveA2aSettings.mockResolvedValueOnce({ enabled: false, publicBaseUrl: '', tokenUrl: '' });
+    const r = await fetch(`${baseUrl}/a2a`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'message/send', params: {} }) });
+    expect(r.status).toBe(503);
   });
 
   it('unknown method → -32601', async () => {

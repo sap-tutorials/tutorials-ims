@@ -126,6 +126,17 @@
         </f:SimpleForm>
       </Panel>
 
+      <Panel headerText="{i18n>a2aSection}" expandable="true" expanded="false" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="{i18n>a2aEnabledLabel}" />
+          <Switch state="{settings>/a2aEnabled}" />
+          <Label text="{i18n>a2aPublicBaseUrlLabel}" />
+          <Input value="{settings>/a2aPublicBaseUrl}" placeholder="{i18n>a2aPublicBaseUrlPlaceholder}" />
+          <Label text="{i18n>a2aTokenUrlLabel}" />
+          <Input value="{settings>/a2aTokenUrl}" placeholder="{i18n>a2aTokenUrlPlaceholder}" />
+        </f:SimpleForm>
+      </Panel>
+
       <HBox class="sapUiSmallMarginTop">
         <Button text="{i18n>btnSave}" press=".onSave" type="Emphasized" class="sapUiTinyMarginEnd" />
         <Button text="{i18n>btnReload}" press=".onReload" />

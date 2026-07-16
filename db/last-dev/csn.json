@@ -2081,6 +2081,23 @@
         "newsRelevanceLlmCallsCountedOn": {
           "type": "cds.Date",
           "@cds.persistence.name": "NEWSRELEVANCELLMCALLSCOUNTEDON"
+        },
+        "a2aEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": true
+          },
+          "@cds.persistence.name": "A2AENABLED"
+        },
+        "a2aPublicBaseUrl": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "A2APUBLICBASEURL"
+        },
+        "a2aTokenUrl": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "A2ATOKENURL"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"

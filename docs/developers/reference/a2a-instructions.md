@@ -52,5 +52,19 @@ Task snapshots are retained ~15 minutes and are coherent across server instances
 ## Errors
 
 JSON-RPC 2.0 error objects: `-32001` auth required (HTTP 401), `-32601` unknown method,
-`-32602` bad params / unknown skill, `-32603` internal. When `A2A_ENABLED=false` the
+`-32602` bad params / unknown skill, `-32603` internal. When A2A is disabled the
 endpoint returns HTTP 503 and the Agent Card sets `metadata.available:false`.
+
+## Configuration
+
+A2A is configured by an Admin at `/admin-ui/#joule` (the "A2A (Agent-to-Agent) Endpoint"
+panel on the Joule settings page), stored on the `ChatSettings` singleton:
+
+- **A2A Enabled** — master switch; when off, `POST /a2a` returns 503 and the card signals
+  unavailability.
+- **Public Base URL** — the base advertised in the Agent Card `url`; leave blank to
+  auto-detect from the platform (`VCAP_APPLICATION.application_uris`).
+- **OAuth Token URL** — the XSUAA token endpoint advertised in the card's security scheme.
+
+Changes take effect within ~5 seconds (no restart). These are DB-backed settings, not
+environment variables.
