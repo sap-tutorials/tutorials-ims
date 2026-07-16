@@ -207,16 +207,10 @@
         "namespace": "kg",
         "store": "memory",
         "[hybrid]": {
-          "store": "cds",
-          "metrics": {
-            "enabled": true
-          }
+          "store": "cds"
         },
         "[production]": {
-          "store": "cds",
-          "metrics": {
-            "enabled": true
-          }
+          "store": "cds"
         }
       },
       "db": {
