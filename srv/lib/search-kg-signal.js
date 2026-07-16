@@ -443,12 +443,19 @@ function _finalizeTimeout({ key, t0 }) {
 const SAFE_SLUG_RE = /^[a-z0-9-]+$/;
 
 /**
- * Build the `+ KG_WEIGHT * (case slug when 'x' then 0.8100 ... else 0 end)`
+ * Build the `+ KG_WEIGHT * (case when slug = 'x' then 0.8100 ... else 0 end)`
  * SQL fragment for insertion into the _searchRank CASE expression.
  *
  * Returns an empty string when there's nothing to add (empty signal, all
  * slugs rejected by the sanitizer). Callers concatenate the return value
  * directly into their rank SQL string.
+ *
+ * SEARCHED CASE, not simple CASE (#1214): the fragment is parsed by
+ * `cds.parse.expr` and compiled to HANA SQL. A simple CASE (`case slug when
+ * 'x' then …`) compiles to `case "$S".slug when ? = true then …`, which HANA
+ * rejects (SqlError 257 — `= true` fused onto the operand-form WHEN). The
+ * HANA cqn2sql renderer only skips the `= TRUE` coercion when the WHEN body is
+ * already a comparator, so each WHEN must carry an explicit `slug = 'x'`.
  *
  * @param {KgSignal} signal
  * @returns {string} SQL fragment (or '' when no KG contribution)
@@ -461,17 +468,20 @@ export function buildKgRankFragment(signal) {
     // Score already Number.toFixed(4)'d at signal-build time; belt-and-braces here.
     const s = Number(score);
     if (!Number.isFinite(s) || s <= 0) continue;
-    parts.push(`when '${slug}' then ${s.toFixed(4)}`);
+    parts.push(`when slug = '${slug}' then ${s.toFixed(4)}`);
   }
   if (parts.length === 0) return '';
-  return `+ ${KG_WEIGHT.toFixed(2)} * (case slug ${parts.join(' ')} else 0 end)`;
+  return `+ ${KG_WEIGHT.toFixed(2)} * (case ${parts.join(' ')} else 0 end)`;
 }
 
 /**
- * Build the `+ KG_COMMUNITY_WEIGHT * (case slug when 'peer' then 1.0000 … else 0 end)`
+ * Build the `+ KG_COMMUNITY_WEIGHT * (case when slug = 'peer' then 1.0000 … else 0 end)`
  * SQL fragment for the community-overlap term (#1171). Reuses the KG signal's
  * already-computed slugScores as the anchor source — no new embed, no second
  * concept walk. Fully self-contained fail-open.
+ *
+ * SEARCHED CASE, not simple CASE (#1214) — same HANA constraint as
+ * buildKgRankFragment above.
  *
  * @param {object}   opts
  * @param {KgSignal} opts.signal   signal from computeKgSignal()
@@ -516,10 +526,10 @@ export async function buildCommunityRankFragment({ signal, db, weight, topK = CO
     const parts = [];
     for (const slug of peers) {
       if (!SAFE_SLUG_RE.test(slug)) continue;
-      parts.push(`when '${slug}' then 1.0000`);
+      parts.push(`when slug = '${slug}' then 1.0000`);
     }
     if (parts.length === 0) return '';
-    return `+ ${weight.toFixed(2)} * (case slug ${parts.join(' ')} else 0 end)`;
+    return `+ ${weight.toFixed(2)} * (case ${parts.join(' ')} else 0 end)`;
   } catch (err) {
     LOG.warn('buildCommunityRankFragment failed; community term collapses to 0', err.message);
     metrics.counter('search.kg.community.error');

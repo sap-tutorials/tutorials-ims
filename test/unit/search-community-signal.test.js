@@ -36,13 +36,16 @@ describe('buildCommunityRankFragment (#1171)', () => {
     spy.mockRestore()
   })
 
-  it('emits binary-boost CASE for community peers, excluding the anchor', async () => {
+  it('emits binary-boost searched-CASE for community peers, excluding the anchor', async () => {
     const frag = await buildCommunityRankFragment({ signal: sig([['a1', 0.9]]), db, weight: 1.5 })
     expect(frag).toContain('1.50 *')
-    expect(frag).toContain("when 'p1' then 1.0000")
-    expect(frag).toContain("when 'p2' then 1.0000")
-    expect(frag).not.toContain("when 'a1'")   // anchor excluded
+    expect(frag).toContain("when slug = 'p1' then 1.0000")
+    expect(frag).toContain("when slug = 'p2' then 1.0000")
+    expect(frag).not.toContain("slug = 'a1'")   // anchor excluded
     expect(frag.startsWith('+ ')).toBe(true)
+    // #1214: searched CASE, never simple CASE — the latter is invalid HANA SQL.
+    expect(frag).toContain('(case when slug =')
+    expect(frag).not.toMatch(/\(case slug when/)
   })
 
   it('returns "" when the top anchor has no community', async () => {
