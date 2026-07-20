@@ -1,7 +1,9 @@
 # AI authoring CI setup (#208 spike → #312 graduation)
 
-> **Status:** required setup for `rebuild-content.yml` and
-> `rebuild-content-qa.yml`. AI-quiz authoring is **always-on** as of
+> **Status:** required setup for `rebuild-content.yml`,
+> `rebuild-content-qa.yml`, and `mcp-ux-weekly.yml` (the weekly MCP LLM-UX
+> tool-pick regression check — #1105 Task 17b, which reaches AI Core the same
+> way rather than via a direct Anthropic key). AI-quiz authoring is **always-on** as of
 > [#312](https://github.com/sap-tutorials/tutorials-ims/issues/312) (2026-06-27 — soak window completed clean).
 > See [issue #208](https://github.com/sap-tutorials/tutorials-ims/issues/208) for the spike's vision,
 > [issue #275](https://github.com/sap-tutorials/tutorials-ims/issues/275) for graduation, and

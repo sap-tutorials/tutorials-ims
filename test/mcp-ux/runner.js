@@ -4,18 +4,35 @@
 //
 // Loads prompts.yaml (FAILSAFE_SCHEMA to prevent YAML type coercion),
 // fetches live tool schemas from a running local CAP instance,
-// asks Claude Haiku 4.5 to pick a tool for each prompt,
+// asks the configured SAP AI Core model to pick a tool for each prompt,
 // records pick-accuracy vs baseline.json, and fails (exit 1) when
 // accuracy drops more than 0.05 below the baseline.
 //
-// First run (no baseline.json): seeds the baseline file and exits 0.
+// Transport: SAP Generative AI Hub via @sap-ai-sdk/orchestration — the SAME
+// path the rest of the app uses (srv/lib/category-classifier-llm.js,
+// code-check-llm.js, ai-quiz-llm.js). This project reaches LLMs through AI
+// Core, NOT a direct Anthropic API key. The orchestration SDK authenticates
+// from the `aicore` binding in VCAP_SERVICES (constructed in CI from the
+// AI_AUTHOR_AICORE_SERVICE_KEY secret — see the mcp-ux-weekly.yml workflow and
+// docs/developers/operations/ai-author-ci-setup.md).
 //
-// Model: claude-haiku-4-5-20251001 — pinned. Change only with a corresponding
-// baseline re-seed, otherwise the regression gate is meaningless.
+// Model + deployment resolution (mirrors srv/lib/chat-settings-resolver.js
+// env-var path — CAP isn't booted here, so there is no ChatSettings row):
+//   modelName    <- process.env.CHAT_MODEL_NAME    || 'anthropic--claude-4.6-sonnet'
+//   deploymentId <- process.env.CHAT_DEPLOYMENT_ID  (required — no fallback)
+//
+// The model is recorded into baseline.json. When the recorded model differs
+// from the current model (e.g. the deployment or CHAT_MODEL_NAME changed), the
+// baseline is RE-SEEDED rather than compared — a regression gate across two
+// different models is meaningless. A seeded/zero-accuracy baseline is likewise
+// re-seeded (the committed seed ships accuracy=0).
+//
+// First run (no baseline.json, or model changed, or baseline accuracy==0):
+// seeds the baseline file and exits 0. Commit the updated baseline.json.
 //
 // Usage:
-//   npm run test:llm-ux           # expects ANTHROPIC_API_KEY in env
-//   ANTHROPIC_API_KEY=sk-... node test/mcp-ux/runner.js
+//   npm run test:llm-ux           # expects VCAP_SERVICES + CHAT_DEPLOYMENT_ID in env
+//   CHAT_DEPLOYMENT_ID=... VCAP_SERVICES='{"aicore":[...]}' node test/mcp-ux/runner.js
 //
 // Requires a local cds watch on :4004 (anonymous routes only for tool discovery;
 // authenticated-tool schemas are fetched by the runner with basic-auth for completeness,
@@ -27,12 +44,18 @@ import fs   from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { load as yamlLoad, FAILSAFE_SCHEMA } from 'js-yaml';
-import Anthropic from '@anthropic-ai/sdk';
+import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 
 const __dir = path.dirname(fileURLToPath(import.meta.url));
 
-// Model is pinned. Update only with a baseline re-seed.
-const MODEL = 'claude-haiku-4-5-20251001';
+// Default model name mirrors srv/lib/chat-settings-resolver.js. The actual
+// model in use is recorded into baseline.json and drives baseline re-seed.
+const DEFAULT_MODEL_NAME = 'anthropic--claude-4.6-sonnet';
+const MODEL = process.env.CHAT_MODEL_NAME || DEFAULT_MODEL_NAME;
+
+// Deterministic — tool routing is a classification task, not creative.
+const TEMPERATURE = 0;
+const MAX_TOKENS  = 1024;
 
 const LOCAL_BASE    = process.env.MCP_LLM_UX_BASE ?? 'http://localhost:4004';
 const PROMPTS_FILE  = path.join(__dir, 'prompts.yaml');
@@ -79,24 +102,89 @@ async function fetchTools() {
   return combined;
 }
 
-function toAnthropicTool(t) {
+/**
+ * Convert an MCP tool schema (tools/list shape) into the orchestration SDK's
+ * OpenAI-style `function` tool. The SDK's LlmModelParams accepts a `tools[]`
+ * array of these; leaving tool_choice unset lets the model pick freely (auto)
+ * — which is exactly the UX signal we want to measure.
+ */
+function toOrchestrationTool(t) {
   return {
-    name:         t.name,
-    description:  t.description ?? '',
-    input_schema: t.inputSchema ?? { type: 'object', properties: {} },
+    type: 'function',
+    function: {
+      name:        t.name,
+      description: t.description ?? '',
+      parameters:  t.inputSchema ?? { type: 'object', properties: {} },
+    },
   };
 }
 
+/**
+ * Ask the model to pick one tool for a single prompt. Returns the picked tool
+ * name, or null if the model called no tool (or the call failed upstream).
+ */
+async function pickTool({ client, prompt }) {
+  const response = await client.chatCompletion({
+    messagesHistory: [{ role: 'user', content: prompt }],
+  });
+  const toolCalls = response.getToolCalls?.();
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) return null;
+  return toolCalls[0]?.function?.name ?? null;
+}
+
+function seedBaseline(accuracy, results) {
+  const baseline = {
+    model:    MODEL,
+    accuracy,
+    seededAt: new Date().toISOString(),
+    results,
+  };
+  fs.writeFileSync(BASELINE_FILE, JSON.stringify(baseline, null, 2) + '\n');
+  console.log(`Baseline seeded at ${BASELINE_FILE} (model: ${MODEL}). Commit this file.`);
+}
+
 async function run() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY is not set. Export it before running test:llm-ux.');
+  const deploymentId = process.env.CHAT_DEPLOYMENT_ID;
+  if (!deploymentId) {
+    console.error(
+      'CHAT_DEPLOYMENT_ID is not set. This runner talks to SAP AI Core via ' +
+      '@sap-ai-sdk/orchestration — set CHAT_DEPLOYMENT_ID (and a VCAP_SERVICES ' +
+      'aicore binding) before running test:llm-ux. ' +
+      'See docs/developers/operations/ai-author-ci-setup.md.'
+    );
+    process.exit(1);
+  }
+  if (!process.env.VCAP_SERVICES) {
+    console.error(
+      'VCAP_SERVICES is not set. The orchestration SDK reads aicore credentials ' +
+      'from VCAP_SERVICES.aicore[0].credentials. In CI this is built from the ' +
+      'AI_AUTHOR_AICORE_SERVICE_KEY secret; locally use `cds bind --exec`. ' +
+      'See docs/developers/operations/ai-author-ci-setup.md.'
+    );
     process.exit(1);
   }
 
-  const client  = new Anthropic();
-  const prompts = await loadPrompts();
+  const prompts  = await loadPrompts();
   const rawTools = await fetchTools();
-  const tools    = rawTools.map(toAnthropicTool);
+  const tools    = rawTools.map(toOrchestrationTool);
+
+  // One client for the whole run. Auto tool_choice (unset) — the model picks
+  // freely among all tools, which is the routing behaviour we measure.
+  const client = new OrchestrationClient(
+    {
+      promptTemplating: {
+        model: {
+          name: MODEL,
+          params: {
+            max_tokens:  MAX_TOKENS,
+            temperature: TEMPERATURE,
+          },
+        },
+        prompt: { tools },
+      },
+    },
+    { deploymentId }
+  );
 
   console.log(`Loaded ${prompts.length} prompts, ${tools.length} tools (model: ${MODEL})`);
 
@@ -106,16 +194,9 @@ async function run() {
   for (const p of prompts) {
     let pickedTool = null;
     try {
-      const resp = await client.messages.create({
-        model:      MODEL,
-        max_tokens: 1024,
-        tools,
-        messages:   [{ role: 'user', content: p.prompt }],
-      });
-      const toolUse = resp.content.find(c => c.type === 'tool_use');
-      pickedTool = toolUse?.name ?? null;
+      pickedTool = await pickTool({ client, prompt: p.prompt });
     } catch (e) {
-      console.warn(`  [${p.id}] API call failed: ${e.message}`);
+      console.warn(`  [${p.id}] LLM call failed: ${e.message}`);
     }
     const isCorrect = pickedTool === p.expectedTool;
     if (isCorrect) correct++;
@@ -135,18 +216,29 @@ async function run() {
   // ─── Baseline handling ────────────────────────────────────────────────────
 
   if (!fs.existsSync(BASELINE_FILE)) {
-    const baseline = {
-      model:     MODEL,
-      accuracy,
-      seededAt:  new Date().toISOString(),
-      results,
-    };
-    fs.writeFileSync(BASELINE_FILE, JSON.stringify(baseline, null, 2) + '\n');
-    console.log(`Baseline seeded at ${BASELINE_FILE}. Commit this file.`);
+    seedBaseline(accuracy, results);
     process.exit(0);
   }
 
   const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf8'));
+
+  // Re-seed (never gate) when the baseline is not comparable to this run:
+  //   - model changed: a cross-model regression comparison is meaningless.
+  //   - accuracy==0:  the committed seed ships accuracy=0; the first real run
+  //                   must overwrite it before the gate can ever fire.
+  if (baseline.model !== MODEL) {
+    console.log(
+      `Baseline model (${baseline.model}) differs from current model (${MODEL}) — re-seeding.`
+    );
+    seedBaseline(accuracy, results);
+    process.exit(0);
+  }
+  if (!(baseline.accuracy > 0)) {
+    console.log('Baseline accuracy is 0 (seed) — re-seeding with the first real run.');
+    seedBaseline(accuracy, results);
+    process.exit(0);
+  }
+
   const threshold = baseline.accuracy - 0.05;
 
   if (accuracy < threshold) {
