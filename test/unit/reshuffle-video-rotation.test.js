@@ -66,6 +66,8 @@ describe('runReshuffleVideoRotation (#1031)', () => {
   });
 
   it('picks top-N by view velocity (views per day since publishedAt)', async () => {
+    // anchorCount:0 isolates pure velocity ranking (no anchor exclusion).
+    await seedConfig(db, { videoBandAnchorCount: 0 });
     await seedVideo(db, 'A', 10, 1000);  // 100/day
     await seedVideo(db, 'B', 10, 500);   // 50/day
     await seedVideo(db, 'C', 10, 5000);  // 500/day  ← top
@@ -87,6 +89,7 @@ describe('runReshuffleVideoRotation (#1031)', () => {
   });
 
   it('filters out excludeFromHomepage=true rows', async () => {
+    await seedConfig(db, { videoBandAnchorCount: 0 });
     await seedVideo(db, 'X', 10, 999999, { excluded: true });  // huge velocity but excluded
     await seedVideo(db, 'A', 10, 100);
     const result = await runReshuffleVideoRotation();
@@ -96,6 +99,7 @@ describe('runReshuffleVideoRotation (#1031)', () => {
   });
 
   it('filters out videos older than videoBandRotationWindowDays', async () => {
+    await seedConfig(db, { videoBandAnchorCount: 0 });
     await seedVideo(db, 'OLD', 200, 999999);  // 200 days ago — outside 90d window
     await seedVideo(db, 'NEW', 30, 100);
     const result = await runReshuffleVideoRotation();
@@ -110,7 +114,7 @@ describe('runReshuffleVideoRotation (#1031)', () => {
       excludeFromHomepage: false,
     });
     await seedVideo(db, 'A', 10, 1);  // 0.1/day — beats NULL's 0
-    await seedConfig(db, { videoBandRotationCount: 1 });
+    await seedConfig(db, { videoBandRotationCount: 1, videoBandAnchorCount: 0 });
     const result = await runReshuffleVideoRotation();
     expect(result.inserted).toBe(1);
     const rows = await SELECT.from(cds.entities(NS).HomepageVideoRotation);
@@ -122,5 +126,51 @@ describe('runReshuffleVideoRotation (#1031)', () => {
     const result = await runReshuffleVideoRotation();
     expect(result.inserted).toBe(0);
     expect(result.poolSize).toBe(0);
+  });
+
+  it('excludes the newest anchorCount videos from the rotation pool', async () => {
+    // Newest 3 (anchors) also have the highest velocity — without the anchor
+    // exclusion they would win every rotation slot and get deduped away at
+    // read time, shrinking the "popular" stack. They must NOT appear here.
+    await seedVideo(db, 'NEW1', 1, 9000);   // newest, huge velocity → anchor
+    await seedVideo(db, 'NEW2', 2, 8000);   // 2nd newest → anchor
+    await seedVideo(db, 'NEW3', 3, 7000);   // 3rd newest → anchor
+    await seedVideo(db, 'OLD1', 40, 6000);  // older, still high velocity → rotation
+    await seedVideo(db, 'OLD2', 50, 5000);
+    await seedVideo(db, 'OLD3', 60, 4000);
+
+    const result = await runReshuffleVideoRotation();
+    // poolSize is post-exclusion: 6 total − 3 anchors = 3.
+    expect(result.poolSize).toBe(3);
+    expect(result.inserted).toBe(3);
+
+    const rows = await SELECT.from(cds.entities(NS).HomepageVideoRotation)
+      .columns('video_ID', 'rank').orderBy({ rank: 'asc' });
+    const ids = await Promise.all(rows.map(async (r) => {
+      const v = await SELECT.one.from(cds.entities(NS_EXT).Videos)
+        .columns('youtubeVideoId').where({ ID: r.video_ID });
+      return v.youtubeVideoId;
+    }));
+    // Only the older videos survive — no anchor leaked into the rotation.
+    expect(ids).toEqual(['OLD1', 'OLD2', 'OLD3']);
+    expect(ids).not.toContain('NEW1');
+  });
+
+  it('respects videoBandAnchorCount when excluding anchors', async () => {
+    await seedConfig(db, { videoBandAnchorCount: 1, videoBandRotationCount: 2 });
+    await seedVideo(db, 'NEW1', 1, 9000);   // sole anchor
+    await seedVideo(db, 'OLD1', 40, 6000);
+    await seedVideo(db, 'OLD2', 50, 5000);
+
+    const result = await runReshuffleVideoRotation();
+    expect(result.poolSize).toBe(2);  // 3 − 1 anchor
+    const rows = await SELECT.from(cds.entities(NS).HomepageVideoRotation)
+      .columns('video_ID', 'rank').orderBy({ rank: 'asc' });
+    const ids = await Promise.all(rows.map(async (r) => {
+      const v = await SELECT.one.from(cds.entities(NS_EXT).Videos)
+        .columns('youtubeVideoId').where({ ID: r.video_ID });
+      return v.youtubeVideoId;
+    }));
+    expect(ids).toEqual(['OLD1', 'OLD2']);
   });
 });
