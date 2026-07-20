@@ -1,8 +1,15 @@
 import { ref } from 'vue'
 import type { NodeType, PredicateType } from '../types'
 
+// MUST list every NodeType variant in types.ts. Filters initialise to
+// `new Set(ALL_NODE_TYPES)`, so any type omitted here is filtered OUT of the
+// graph on first render AND has no checkbox in FilterDropdown — the user can
+// never enable it. This drifted to 7 of 15 once and silently hid
+// discovery-mission/video nodes present in live data (#1130 follow-up).
 export const ALL_NODE_TYPES: NodeType[] = [
   'tutorial', 'concept', 'mission', 'product', 'group', 'category', 'tag',
+  'learning-journey', 'blog-post', 'discovery-mission', 'video',
+  'api-doc', 'sample', 'help-doc', 'community-event',
 ]
 export const ALL_PREDICATES: PredicateType[] = [
   'teaches', 'requires', 'relatedTo', 'extends',

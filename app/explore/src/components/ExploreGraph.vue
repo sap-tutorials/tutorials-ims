@@ -36,7 +36,29 @@ let renderer: Sigma | null = null
 let graph: Graph | null = null
 
 onMounted(() => {
+  buildGraph()
+})
+
+// Rebuild the whole graph whenever the filtered node/edge sets change. Without
+// this, the graphology graph + Sigma renderer are frozen at their mount-time
+// contents and every filter toggle (enabledNodeTypes / enabledPredicates in
+// App.vue, which drive these props via computed filteredNodes/filteredEdges)
+// is silently ignored on the canvas. Tear the renderer down first so we never
+// double-mount Sigma on the same container. deep:false — the computed always
+// produces a NEW array reference on change, so a reference watch suffices and
+// avoids deep-diffing thousands of nodes on every tick.
+watch(
+  [() => props.nodes, () => props.edges],
+  () => { buildGraph() },
+)
+
+// Build (or rebuild) the graphology graph + Sigma renderer from the current
+// props. Safe to call repeatedly — it kills any existing renderer first.
+function buildGraph() {
   if (!container.value) return
+  renderer?.kill()
+  renderer = null
+  graph = null
   // MultiDirectedGraph allows multiple edges between the same pair of nodes
   // as long as each has a unique edge key. Two tutorials can be connected by
   // both `teaches` and `requires` predicates (for example), and graphology's
@@ -65,6 +87,16 @@ onMounted(() => {
   renderer = new Sigma(graph, container.value, {
     minCameraRatio: 0.1,
     maxCameraRatio: 5,
+    // See the node explanation below — edges have the SAME collision. Each edge
+    // stores a DOMAIN `type` = its predicate ("teaches", "requires", …) via
+    // addEdgeWithKey, and Sigma uses a node/edge `type` as its rendering-program
+    // key. Only "line"/"arrow" edge programs are registered by default, so a
+    // "teaches" edge throws:
+    //   Sigma: could not find a suitable program for edge type "teaches"!
+    // An edgeReducer forces the built-in "line" program at RENDER time; the
+    // stored predicate `type` is untouched so applyPathOverlay (attrs.type as
+    // PredicateType) still reads the real predicate.
+    edgeReducer: (_edge, data) => ({ ...data, type: 'line' }),
     // Our nodes carry a DOMAIN `type` attribute ("tutorial", "concept", …) via
     // the `...n` spread in addNode. Sigma treats a node's `type` as the key of
     // its rendering PROGRAM, and only "circle" is registered by default — so a
@@ -84,7 +116,7 @@ onMounted(() => {
   // Apply any initial path overlay (when path prop is already set on first
   // render — e.g. SSR/hydration).
   applyPathOverlay(props.path ?? null)
-})
+}
 
 onBeforeUnmount(() => {
   renderer?.kill()
@@ -219,22 +251,38 @@ function applyPathOverlay(path: string[] | null): void {
 }
 
 function colorForNodeType(t: NodeType): string {
-  return NODE_COLORS[t]
+  // Fallback to a neutral grey for any type missing from NODE_COLORS. The
+  // Record<NodeType,string> below is meant to force exhaustiveness, but
+  // `vite build` transpiles without a strict typecheck, so a NodeType added
+  // to types.ts without a color here would silently yield `color: undefined`
+  // on the node (live data carries discovery-mission/video/etc.). The `?? `
+  // guarantees every node gets a valid color even if the map drifts again.
+  return NODE_COLORS[t] ?? '#8c8c8c'
 }
 
 function edgeColorForType(p: PredicateType): string {
-  return EDGE_COLORS[p]
+  return EDGE_COLORS[p] ?? '#999999'
 }
 
-// Drift-resistant: Record<NodeType, string> makes TS catch missing variants.
+// Record<NodeType, string> is meant to make TS catch missing variants — but
+// only under a strict typecheck (not `vite build`), so keep this in sync with
+// the NodeType union in types.ts by hand AND rely on the `?? ` fallback above.
 const NODE_COLORS: Record<NodeType, string> = {
-  tutorial: '#0a6ed1',
-  concept:  '#107e3e',
-  mission:  '#df6e0c',
-  product:  '#a100c2',
-  group:    '#8c8c8c',
-  category: '#666666',
-  tag:      '#888888',
+  tutorial:           '#0a6ed1',
+  concept:            '#107e3e',
+  mission:            '#df6e0c',
+  product:            '#a100c2',
+  group:              '#8c8c8c',
+  category:           '#666666',
+  tag:                '#888888',
+  'learning-journey': '#c25e00',
+  'blog-post':        '#5b738b',
+  'discovery-mission':'#e9730c',
+  video:              '#bb0000',
+  'api-doc':          '#0070f2',
+  sample:             '#6a6d70',
+  'help-doc':         '#7858a8',
+  'community-event':  '#049f9a',
 }
 
 const EDGE_COLORS: Record<PredicateType, string> = {
