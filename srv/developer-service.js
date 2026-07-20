@@ -363,9 +363,14 @@ export default class DeveloperService extends cds.ApplicationService {
     });
 
     this.on('findTaskProgressByUserAndTasksIds', async (req) => {
-      const { userLegacyId, taskLegacyIds } = req.data;
+      const { taskLegacyIds } = req.data;
 
-      const dbUser = await SELECT.one.from(dbUsers).where({ legacyId: userLegacyId });
+      // #1231: resolve the user from the verified JWT, NOT the client-supplied
+      // `userLegacyId` (which is ignored for identity — see .cds note). Prevents
+      // any authenticated caller from reading another user's TaskRecords by
+      // enumerating the sequential legacyId. Mirrors getProgress / getMyCompletions.
+      const sapId = resolveUserSapId(req.user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
       if (!dbUser) return [];
 
       return SELECT.from(dbTaskRecords).where({
@@ -375,9 +380,9 @@ export default class DeveloperService extends cds.ApplicationService {
     });
 
     this.on('countCompletedMissionsTotal', async (req) => {
-      const { userLegacyId } = req.data;
-
-      const dbUser = await SELECT.one.from(dbUsers).where({ legacyId: userLegacyId });
+      // #1231: self-scoped by JWT; client `userLegacyId` ignored for identity.
+      const sapId = resolveUserSapId(req.user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
       if (!dbUser) return 0;
 
       const records = await SELECT.from(dbTaskRecords).where({
@@ -390,9 +395,9 @@ export default class DeveloperService extends cds.ApplicationService {
     });
 
     this.on('countCompletedMissionsPercent', async (req) => {
-      const { userLegacyId } = req.data;
-
-      const dbUser = await SELECT.one.from(dbUsers).where({ legacyId: userLegacyId });
+      // #1231: self-scoped by JWT; client `userLegacyId` ignored for identity.
+      const sapId = resolveUserSapId(req.user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
       if (!dbUser) return 0;
 
       const completedMissions = await SELECT.from(dbTaskRecords).where({
