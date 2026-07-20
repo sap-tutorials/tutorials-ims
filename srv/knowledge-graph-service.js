@@ -797,6 +797,31 @@ export default cds.service.impl(async function () {
     }
   });
 
+  // ─── Concepts / ConceptAliases write guard — restrict the writable surface ─
+  // #1230: the writable projections (Concepts, ConceptAliases) MUST require
+  // KnowledgeGraph.Admin regardless of protocol. The service is
+  // @requires:'any' (anonymous-readable) and is mounted on OData, GraphQL, AND
+  // MCP. What #1230 investigation established empirically:
+  //   - Concepts CREATE/DELETE were ALREADY blocked on every protocol by the
+  //     OData @Capabilities.Insert/DeleteRestrictions (CAP 405
+  //     ENTITY_IS_NOT_CRUD) — @cap-js/graphql honors them via
+  //     check_odata_constraints, contrary to the original report. The
+  //     CREATE/DELETE guard below is therefore defense-in-depth.
+  //   - ConceptAliases, however, had NO capability restriction and NO scope
+  //     check — only alias-normalization hooks. So anonymous callers could
+  //     create/update/delete aliases through /graphql/public. That was the real
+  //     hole; the ConceptAliases guard below closes it.
+  // Both guards live at the SERVICE layer, so they are protocol-independent
+  // (OData / GraphQL / MCP all dispatch through them). Legitimate writers
+  // (jobs, merge, backfill, the service's own after-hooks) write via the
+  // db-layer entity (cds.entities(...)) — service before-handlers do not fire
+  // for those, so they are unaffected (same as the pre-existing UPDATE guard).
+  const assertKgAdmin = (req, entity) => {
+    if (!req.user?.is?.('KnowledgeGraph.Admin')) {
+      return req.reject(403, `KnowledgeGraph.Admin scope required to write ${entity}.`);
+    }
+  };
+
   // ─── Concepts UPDATE guard — restrict the writable surface ─────────────
   // The Concepts projection is no longer @readonly so the Fiori Elements
   // admin app can PATCH `name` + `description`. Defense-in-depth: even with
@@ -811,17 +836,14 @@ export default cds.service.impl(async function () {
   // jobs) where no metadata filter applies. req.reject ensures a hard
   // failure rather than silent error-queuing.
   // See test/unit/kg-concepts-update-guard.test.js for the editable-surface
-  // smoke test (positive path only — negative-path testing is a TODO).
+  // smoke test and test/hybrid/kg-graphql-write-guard.test.js for the #1230
+  // anonymous-mutation regression coverage.
   const CONCEPTS_PATCH_ALLOWLIST = new Set(['name', 'description']);
   this.before('UPDATE', 'Concepts', (req) => {
-    // Defence-in-depth: the CDS service-level @requires was dropped to make
-    // the read surface public (Task 1 of the KG public-reader PR,
-    // 2026-06-28). The writable Concepts projection still needs the admin
-    // scope; assert it imperatively here so anonymous PATCH returns 403
+    // Assert the admin scope imperatively so anonymous PATCH returns 403
     // before the field allowlist runs.
-    if (!req.user?.is?.('KnowledgeGraph.Admin')) {
-      return req.reject(403, 'KnowledgeGraph.Admin scope required to write Concepts.');
-    }
+    const denied = assertKgAdmin(req, 'Concepts');
+    if (denied) return denied;
     const data = req.data || {};
     for (const key of Object.keys(data)) {
       // CAP includes the entity key + audit fields automatically; skip those.
@@ -832,6 +854,21 @@ export default cds.service.impl(async function () {
       return req.reject(403, `Field '${key}' is not editable on Concepts`);
     }
   });
+
+  // #1230: CREATE/DELETE on Concepts require the same admin scope. These are
+  // already blocked on all protocols by the OData @Capabilities restrictions
+  // (405); this guard is defense-in-depth so protection does not depend on
+  // those annotations staying in place (403 if the capability block is ever
+  // relaxed).
+  this.before(['CREATE', 'DELETE'], 'Concepts', (req) => assertKgAdmin(req, 'Concepts'));
+
+  // #1230: ConceptAliases writes require the admin scope. Registered BEFORE the
+  // normalization/blob hooks below so an anonymous CREATE/UPDATE/DELETE is
+  // rejected (403) before any data is touched. (CAP runs before-handlers for
+  // the same event in registration order; req.reject short-circuits the chain.)
+  this.before(['CREATE', 'UPDATE', 'DELETE'], 'ConceptAliases', (req) =>
+    assertKgAdmin(req, 'ConceptAliases'),
+  );
 
   // ─── #1046 ConceptAliases — normalize aliasLower on write ──────────────
   // Populates aliasLower so the palette $search matches case-insensitively
