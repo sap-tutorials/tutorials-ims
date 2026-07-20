@@ -22,7 +22,7 @@ describe.skipIf(!BASE)('Developer homepage smoke', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toMatch(/<article[^>]+class=["']?developer-homepage/);
-    expect(html).toMatch(/data-island=["']?events["']?/);
+    expect(html).toMatch(/data-app=["']?homepage-events-band["']?/);
     expect(html).toMatch(/data-island=["']?videos["']?/);
   });
 
