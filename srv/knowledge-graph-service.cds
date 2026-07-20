@@ -15,16 +15,24 @@
 // `@requires : 'authenticated-user'` but didn't replace it with `'any'`,
 // which is why the widget was requiring login (issue #853).
 //
-// What protects the writable `Concepts` projection now that the service is
-// anonymous-readable:
-//   1. CREATE/DELETE are blocked at the OData layer by
+// What protects the writable projections now that the service is
+// anonymous-readable (and mounted on OData, GraphQL, AND MCP):
+//   1. Concepts CREATE/DELETE are blocked by
 //      Capabilities.InsertRestrictions/DeleteRestrictions in
-//      app/admin-annotations.cds (search for `KnowledgeGraphService.Concepts`).
-//      CAP returns 405 on POST/DELETE attempts.
-//   2. UPDATE is policed imperatively by the before('UPDATE', 'Concepts')
-//      handler in srv/knowledge-graph-service.js, which asserts
-//      req.user.is('KnowledgeGraph.Admin') BEFORE the field allowlist check
-//      runs — so anonymous PATCH returns 403 without touching the DB.
+//      app/admin-annotations.cds. CAP returns 405 ENTITY_IS_NOT_CRUD — and,
+//      verified for #1230, @cap-js/graphql honors these via
+//      check_odata_constraints too (they are NOT OData-only). MCP inherits the
+//      same check.
+//   2. Concepts UPDATE and ALL ConceptAliases writes are policed
+//      imperatively by service-layer before-handlers in
+//      srv/knowledge-graph-service.js, which assert
+//      req.user.is('KnowledgeGraph.Admin') and req.reject(403) otherwise.
+//      Because these run at the SERVICE layer, they are protocol-independent
+//      (OData / GraphQL / MCP all dispatch through them). #1230 added the
+//      ConceptAliases guard and the Concepts CREATE/DELETE guard as
+//      defense-in-depth behind the capability block; see
+//      test/hybrid/kg-graphql-write-guard.test.js for the anonymous-mutation
+//      regression coverage.
 //
 // Phase 1 ships `neighborhood`; `pathBetween` and `conceptsForUser` declare
 // the Phase 2 contract so clients can compile against a stable surface, but
