@@ -7,6 +7,12 @@ process.env.KNOWLEDGE_GRAPH_ENABLED = 'true'
 
 const project = cds.test('serve', '--project', '.', '--in-memory')
 
+// #1230 hardened ConceptAliases writes behind a service-layer
+// before-handler asserting KnowledgeGraph.Admin (protocol-independent).
+// The mocked `admin` user in .cdsrc.json carries that scope; anonymous
+// POSTs now return 403. Authenticate every write below as admin.
+const adminAuth = { auth: { username: 'admin', password: 'admin' } }
+
 describe('#1046 KnowledgeGraphService.ConceptAliases', () => {
   let conceptId
   beforeAll(async () => {
@@ -27,7 +33,7 @@ describe('#1046 KnowledgeGraphService.ConceptAliases', () => {
       concept_ID: conceptId,
       alias: 'IDoc',
       source: 'ADMIN'
-    })
+    }, adminAuth)
     expect(data.alias).toBe('IDoc')
     expect(data.aliasLower).toBe('idoc')  // Task 4 will make this pass; expect a fail here.
   })
@@ -38,7 +44,7 @@ describe('#1046 KnowledgeGraphService.ConceptAliases', () => {
       concept_ID: conceptId,
       alias: 'idoc',
       source: 'ADMIN'
-    })).rejects.toThrow(/unique|assert/i)
+    }, adminAuth)).rejects.toThrow(/unique|assert/i)
   })
 
   it('allows the same alias on a different concept', async () => {
@@ -53,7 +59,7 @@ describe('#1046 KnowledgeGraphService.ConceptAliases', () => {
       concept_ID: otherId,
       alias: 'IDoc',
       source: 'ADMIN'
-    })
+    }, adminAuth)
     expect(data.aliasLower).toBe('idoc')
   })
 
@@ -74,7 +80,7 @@ describe('#1046 KnowledgeGraphService.ConceptAliases', () => {
       concept_ID: conceptId,
       alias: 'BlobTest',
       source: 'ADMIN'
-    })
+    }, adminAuth)
     expect(data.aliasLower).toBe('blobtest')
 
     // The after-write hook should have re-aggregated aliasSearchBlob on the parent.
