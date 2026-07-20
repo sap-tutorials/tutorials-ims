@@ -99,6 +99,15 @@ service DeveloperService {
     eventLegacyId : Integer
   ) returns TaskRecords;
 
+  // #1231: these three are user-scoped by the JWT (user_uuid) INSIDE the
+  // handler — the acting user is resolved via resolveUserSapId(req.user). The
+  // `userLegacyId` parameter is retained for wire-compatibility with the legacy
+  // IMS signature but is IGNORED for identity; a caller cannot read another
+  // user's progress by passing a different id. (Was an IDOR — see
+  // test/hybrid/developer-progress-idor.test.js.) This matches the 809
+  // auth-parity design: "authenticated-user; user-scoped by JWT user_uuid via
+  // handler." Any future cross-user/admin view must be a separate Admin-gated
+  // function, not a trusted param here.
   @(requires: 'authenticated-user')
   function findTaskProgressByUserAndTasksIds(
     userLegacyId  : Integer,
