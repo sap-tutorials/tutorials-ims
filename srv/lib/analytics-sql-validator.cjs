@@ -79,23 +79,12 @@ function validateSelect(sql, allowedTableNames) {
     throw new Error('Only SELECT statements are allowed')
   }
 
-  const referenced = new Set()
-  collectFromClause(ast, referenced)
-
-  // #1233: CTE names are LOCAL aliases, not real tables. Collect them so an
-  // outer `FROM <cte>` does not require allowlisting — while collectFromClause
-  // (extended below) still validates the CTE BODY's real tables. Without this,
-  // a legitimate `WITH t AS (SELECT ... FROM Tutorials) SELECT * FROM t` would
-  // be wrongly rejected because `t` is not in the allowlist.
-  const cteNames = new Set()
-  collectCteNames(ast, cteNames)
-
-  for (const t of referenced) {
-    if (cteNames.has(t) || cteNames.has(t.toUpperCase())) continue
-    if (!allowedTableNames.has(t) && !allowedTableNames.has(t.toUpperCase())) {
-      throw new Error(`Table '${t}' is not in the analytics allowlist`)
-    }
-  }
+  // #1233 (+ follow-up): validate every referenced table against the allowlist,
+  // scope-aware. A CTE name is a LOCAL alias only within the scope where it is
+  // in scope — NOT globally. Walking with a scope stack prevents a CTE named
+  // after a forbidden table (anywhere, incl. nested subqueries) from masking a
+  // real read of that table. See validateTableScopes.
+  validateTableScopes(ast, allowedTableNames, new Set())
 
   // Function-call allowlist: traverse the entire AST and reject any function
   // not in ALLOWED_FUNCTIONS. Catches os_command, dbms_pipe.*, custom UDFs, etc.
@@ -130,60 +119,114 @@ function validateSelect(sql, allowedTableNames) {
   return { sql: reEmitted, selectedColumns }
 }
 
-function collectFromClause(ast, out) {
-  if (ast.from && Array.isArray(ast.from)) {
-    for (const f of ast.from) {
-      if (f.table && typeof f.table === 'string') out.add(f.table)
-      if (f.expr && f.expr.type === 'select') collectFromClause(f.expr, out)
+// #1233 follow-up: scope-aware table-allowlist validation.
+//
+// Walks the statement recursively carrying `inScope` — the set of CTE alias
+// names visible AT THE CURRENT SCOPE (upper-cased). A referenced FROM table is
+// allowed iff it is in the allowlist OR is an in-scope CTE alias. Because CTE
+// visibility is tracked per scope (not globally), a CTE named after a forbidden
+// table cannot mask a real read of that table in a sibling/outer/nested scope.
+//
+// Scope rules (SQL standard, verified against node-sql-parser MySQL dialect):
+//   - The names declared in a scope's own `with` are visible to that scope's
+//     FROM (and its set-op `_next` arms, since a WITH before a UNION applies to
+//     the whole statement).
+//   - A CTE BODY sees prior siblings; it sees its OWN name only if the CTE is
+//     RECURSIVE (cte.recursive === true). For a non-recursive CTE, `FROM <own>`
+//     inside its body is the REAL table and must be allowlisted.
+//   - Subqueries / derived tables inherit the enclosing scope's visible names,
+//     plus any CTEs they themselves declare.
+// Fail-closed: anything not resolvable to an allowlisted table or an in-scope
+// CTE alias throws.
+function validateTableScopes(node, allowed, inScope) {
+  if (!node || typeof node !== 'object') return
+
+  // A `select` node introduces/extends CTE visibility for itself and its arms.
+  if (node.type === 'select') {
+    const siblings = cteEntries(node) // [{ name, recursive, body }]
+
+    // 1) Validate each CTE body with the correct frame: prior siblings visible,
+    //    own name visible only if recursive.
+    for (let i = 0; i < siblings.length; i++) {
+      const bodyScope = new Set(inScope)
+      for (let j = 0; j < i; j++) bodyScope.add(siblings[j].name)
+      if (siblings[i].recursive) bodyScope.add(siblings[i].name)
+      validateTableScopes(siblings[i].body, allowed, bodyScope)
     }
-  }
-  if (ast.where) collectSubqueries(ast.where, out)
-  if (ast.having) collectSubqueries(ast.having, out)
-  if (ast.columns && Array.isArray(ast.columns)) {
-    for (const col of ast.columns) collectSubqueries(col, out)
-  }
-  // #1233: follow the set-operation chain. node-sql-parser represents
-  // UNION / UNION ALL / INTERSECT / EXCEPT as a root select node with `_next`
-  // pointing at the next arm (itself a select), chaining via `_next._next` for
-  // 3+ arms. Without this, tables in any arm past the first were never checked
-  // against the allowlist yet were re-emitted verbatim by parser.sqlify.
-  if (ast._next && typeof ast._next === 'object') {
-    collectFromClause(ast._next, out)
-  }
-  // #1233: walk CTE bodies. `ast.with` is an array of { name, stmt, columns };
-  // the CTE body select lives at `stmt.ast`. A CTE body can read any table, so
-  // its FROM tables must be allowlisted too (the CTE NAME itself is excluded
-  // from the check in validateSelect via collectCteNames).
-  if (ast.with) {
-    const withArr = Array.isArray(ast.with) ? ast.with : [ast.with]
-    for (const cte of withArr) {
-      const body = cte?.stmt?.ast || cte?.stmt
-      if (body && typeof body === 'object') collectFromClause(body, out)
+
+    // 2) This scope (and its set-op arms) sees ALL its sibling CTE names.
+    const selfScope = new Set(inScope)
+    for (const s of siblings) selfScope.add(s.name)
+
+    // 2a) Check this select's own FROM tables.
+    if (Array.isArray(node.from)) {
+      for (const f of node.from) {
+        if (f.table && typeof f.table === 'string') {
+          assertTableAllowed(f.table, allowed, selfScope)
+        }
+        // Derived table (subquery in FROM): recurse with the current scope
+        // frame. node-sql-parser exposes the subquery select either directly on
+        // f.expr (type:'select') or wrapped as f.expr.ast (with tableList/
+        // columnList/ast/parentheses). Unwrap both shapes.
+        const sub = f.expr && (f.expr.type === 'select' ? f.expr : f.expr.ast)
+        if (sub && sub.type === 'select') {
+          validateTableScopes(sub, allowed, selfScope)
+        }
+      }
     }
+
+    // 2b) Subqueries in WHERE / HAVING / columns inherit this scope frame.
+    for (const key of ['where', 'having', 'columns']) {
+      descendSelects(node[key], allowed, selfScope)
+    }
+
+    // 2c) Set-operation arms (UNION/INTERSECT/EXCEPT) share this scope's CTEs.
+    if (node._next && typeof node._next === 'object') {
+      validateTableScopes(node._next, allowed, selfScope)
+    }
+    return
   }
+
+  // Non-select node: descend looking for nested selects, preserving inScope.
+  descendSelects(node, allowed, inScope)
 }
 
-// #1233: collect every CTE alias name defined anywhere in the statement
-// (including CTEs nested in set-op arms or in other CTE bodies), so the
-// allowlist check can treat them as local aliases rather than physical tables.
-function collectCteNames(node, out) {
+// Find nested `select` nodes anywhere under `node` and validate them with the
+// given scope frame. Does not itself resolve tables — that happens when a
+// `select` node is reached by validateTableScopes.
+function descendSelects(node, allowed, inScope) {
   if (!node || typeof node !== 'object') return
-  if (Array.isArray(node)) { node.forEach(n => collectCteNames(n, out)); return }
-  if (node.with) {
-    const withArr = Array.isArray(node.with) ? node.with : [node.with]
-    for (const cte of withArr) {
-      const name = typeof cte?.name === 'string' ? cte.name : cte?.name?.value
-      if (name && typeof name === 'string') out.add(name)
-    }
+  if (Array.isArray(node)) {
+    for (const n of node) descendSelects(n, allowed, inScope)
+    return
   }
-  for (const v of Object.values(node)) collectCteNames(v, out)
+  if (node.type === 'select') {
+    validateTableScopes(node, allowed, inScope)
+    return
+  }
+  for (const v of Object.values(node)) descendSelects(v, allowed, inScope)
 }
 
-function collectSubqueries(node, out) {
-  if (!node || typeof node !== 'object') return
-  if (Array.isArray(node)) { node.forEach(n => collectSubqueries(n, out)); return }
-  if (node.type === 'select') { collectFromClause(node, out); return }
-  for (const v of Object.values(node)) collectSubqueries(v, out)
+// Extract CTE entries from a select node's WITH clause.
+// Returns [{ name (upper-cased), recursive (bool), body (select node) }].
+function cteEntries(node) {
+  if (!node.with) return []
+  const withArr = Array.isArray(node.with) ? node.with : [node.with]
+  const out = []
+  for (const cte of withArr) {
+    const rawName = typeof cte?.name === 'string' ? cte.name : cte?.name?.value
+    if (!rawName || typeof rawName !== 'string') continue
+    const body = cte?.stmt?.ast || cte?.stmt
+    out.push({ name: rawName.toUpperCase(), recursive: cte?.recursive === true, body })
+  }
+  return out
+}
+
+function assertTableAllowed(table, allowed, inScope) {
+  const upper = table.toUpperCase()
+  if (inScope.has(upper)) return // in-scope CTE alias — not a physical table
+  if (allowed.has(table) || allowed.has(upper)) return
+  throw new Error(`Table '${table}' is not in the analytics allowlist`)
 }
 
 function collectFunctions(node, out) {
