@@ -182,6 +182,53 @@ describe('analytics-sql-validator: injection fuzz (#797)', () => {
     });
   });
 
+  describe('rejects set-operation / CTE table-allowlist bypass (#1233)', () => {
+    // The table allowlist is the ONLY control gating which tables an Admin
+    // analytics user may read (PII/history tables like Users are deliberately
+    // excluded). Before #1233, collectFromClause only walked the ROOT select
+    // scope, so tables in a second UNION/INTERSECT/EXCEPT arm or inside a CTE
+    // body were never checked — yet parser.sqlify re-emits the full statement
+    // for execution. Every fixture here exfiltrates a NON-allowlisted table
+    // (Users / SYS.*) via a set-op or CTE and MUST throw.
+    //
+    // Uses a RESTRICTED allowlist ({Tutorials}) — the file-level ALLOWED
+    // includes Users, which would mask the bypass (the exfil target must be a
+    // table NOT in the allowlist).
+    const RESTRICTED = new Set(['Tutorials', 'TUTORIALS']);
+
+    const bypasses = [
+      ['UNION ALL', 'SELECT slug FROM Tutorials WHERE 1=0 UNION ALL SELECT email FROM Users'],
+      ['UNION', 'SELECT slug FROM Tutorials UNION SELECT email FROM Users'],
+      ['UNION into SYS view', 'SELECT slug FROM Tutorials UNION ALL SELECT column_name FROM SYS.M_DATABASE'],
+      ['INTERSECT', 'SELECT slug FROM Tutorials INTERSECT SELECT email FROM Users'],
+      ['EXCEPT', 'SELECT slug FROM Tutorials EXCEPT SELECT email FROM Users'],
+      ['3-arm chain (disallowed in last arm)', 'SELECT slug FROM Tutorials UNION SELECT slug FROM Tutorials UNION SELECT email FROM Users'],
+      ['CTE named after an allowlisted table', 'WITH Tutorials AS (SELECT email FROM Users) SELECT * FROM Tutorials'],
+      ['CTE body reads disallowed table', 'WITH t AS (SELECT email FROM Users) SELECT * FROM t'],
+      ['nested-subquery UNION', 'SELECT slug FROM Tutorials WHERE slug IN (SELECT slug FROM Tutorials UNION SELECT email FROM Users)'],
+    ];
+    it.each(bypasses)('rejects %s', (_label, sql) => {
+      expect(() => validator.validateSelect(sql, RESTRICTED)).toThrow(
+        /not in the analytics allowlist/i,
+      );
+    });
+
+    // No-false-positive controls: legitimate set-op / CTE where EVERY arm and
+    // CTE body reference only allowlisted tables must still pass. The CTE-alias
+    // case specifically pins that a CTE NAME is a local alias, not a table that
+    // must itself be allowlisted.
+    it('accepts UNION where both arms are allowlisted', () => {
+      expect(() =>
+        validator.validateSelect('SELECT slug FROM Tutorials UNION ALL SELECT slug FROM Tutorials', RESTRICTED),
+      ).not.toThrow();
+    });
+    it('accepts a legitimate CTE (alias not required in allowlist, body allowlisted)', () => {
+      expect(() =>
+        validator.validateSelect('WITH t AS (SELECT slug FROM Tutorials) SELECT slug FROM t', RESTRICTED),
+      ).not.toThrow();
+    });
+  });
+
   describe('accepts legitimate SELECTs', () => {
     it('accepts a plain SELECT', () => {
       const { sql, selectedColumns } = validator.validateSelect(
