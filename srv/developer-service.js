@@ -741,6 +741,31 @@ export default class DeveloperService extends cds.ApplicationService {
       return { submissionId: id };
     });
 
+    // #1232 — Self-service row filter: scope every authenticated READ on
+    // TaskRecords to the caller's own rows. The projection is
+    // @restrict grant:'*' to:'Tutorial.API' with no where-clause, so without
+    // this handler any Tutorial.API holder (an EXTERNAL partner principal per
+    // xs-security.json, distinct from the data owner) could page every user's
+    // progress rows — progressNote free text, submissionIds, completionDate.
+    // Mirrors the LearningPreferences handler below. Service-layer before('READ')
+    // so it covers BOTH the OData /api mount and the GraphQL mount uniformly.
+    // Admins use AdminService.TaskRecords (separately gated) for cross-user reads.
+    // CB2 note (see LearningPreferences): req.query.where(...) AND-conjoins with
+    // any caller-supplied $filter, so a partner can filter WITHIN their own rows
+    // but cannot widen past them.
+    this.before('READ', 'TaskRecords', async (req) => {
+      const sapId = resolveUserSapId(req.user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).columns('ID').where({ sapId }) : null;
+      // Always constrain at the QUERY level. Assigning req.results = [] in a
+      // before('READ') is NOT a reliable short-circuit in CAP 10 (the READ still
+      // runs), so scope via req.query.where in BOTH branches: the caller's own
+      // user_ID, or an impossible predicate (user_ID IS NULL — the FK is
+      // @mandatory) when no Users row resolves, which guarantees an empty result
+      // set at the DB rather than trusting runtime short-circuit semantics.
+      // Fail-closed.
+      req.query.where(dbUser?.ID ? { user_ID: dbUser.ID } : { user_ID: null });
+    });
+
     // PR 6 — Self-service row filter: scope every authenticated READ on
     // LearningPreferences to the caller's own row only. The XSUAA gate
     // (`@requires: 'authenticated-user'` on the projection) already guarantees
@@ -752,13 +777,13 @@ export default class DeveloperService extends cds.ApplicationService {
     this.before('READ', 'LearningPreferences', async (req) => {
       const sapId = resolveUserSapId(req.user);
       const dbUser = sapId ? await SELECT.one.from(dbUsers).columns('ID').where({ sapId }) : null;
-      if (!dbUser?.ID) {
-        // No DB user record yet — short-circuit with empty result set
-        // (cleaner CQN-builder convention than splicing a `1 = 0` predicate).
-        req.results = [];
-        return;
-      }
-      req.query.where({ user_ID: dbUser.ID });
+      // #1232: constrain at the QUERY level in BOTH branches. The prior
+      // `if (!dbUser) { req.results = []; return; }` did NOT reliably
+      // short-circuit in CAP 10 — the READ still ran and returned EVERY user's
+      // preferences to a caller with no Users row (e.g. a freshly authenticated
+      // user before lazy auto-provisioning). An impossible predicate (user_ID IS
+      // NULL — the FK is @mandatory) guarantees an empty result set. Fail-closed.
+      req.query.where(dbUser?.ID ? { user_ID: dbUser.ID } : { user_ID: null });
     });
 
     // PR 6 — Self-service write surface. PUT-style: all three fields are
