@@ -30,7 +30,7 @@ import { regionFromLocation } from '../lib/events/region-from-location.js';
 import { extractConceptsFromCommunityEvent } from '../lib/community-event-extract.js';
 import { defaultCallModel } from '../lib/code-check-llm.js';
 import { embed as defaultEmbed } from '../lib/embedding-client.js';
-import { loadConceptRegistry, resolveConceptCandidates } from '../lib/kg-merge-on-write.js';
+import { loadConceptRegistry, resolveConceptCandidates, insertMintedConcept } from '../lib/kg-merge-on-write.js';
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
 import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
 
@@ -236,15 +236,19 @@ export async function runFetchCommunityEvents(logId, opts = {}) {
         summary.skippedNoEmbed += resolution.counters.skippedNoEmbed ?? 0;
 
         for (const pc of resolution.pendingMints) {
-          await INSERT.into(Concepts).entries({
-            ID: pc.ID,
-            slug: pc.slug,
-            name: pc.name,
-            description: '',
-            embedding: pc.embeddingBuf,
-            status: 'ACTIVE',
-            extractionCount: 0,
-            lastSeenAt: now,
+          await insertMintedConcept({
+            db,
+            entry: {
+              ID: pc.ID,
+              slug: pc.slug,
+              name: pc.name,
+              description: '',
+              embeddingBuf: pc.embeddingBuf,
+              embeddingVec: pc.embeddingVec,
+              status: 'ACTIVE',
+              extractionCount: 0,
+              lastSeenAt: now,
+            },
           });
           registry.bySlug.set(pc.slug, { ID: pc.ID, slug: pc.slug, name: pc.name });
           if (registry.embeddings) registry.embeddings.set(pc.ID, pc.embeddingVec);

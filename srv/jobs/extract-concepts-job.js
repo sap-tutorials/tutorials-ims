@@ -25,6 +25,7 @@ import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings
 import {
   loadConceptRegistry,
   resolveConceptCandidates,
+  insertMintedConcept,
 } from '../lib/kg-merge-on-write.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
@@ -266,18 +267,21 @@ export async function runExtractConcepts(deps = {}) {
           // Mint deferred Concepts first — same tx as the FK-bearing rows
           // that reference them, so a rollback erases everything together.
           for (const pc of pendingNewConcepts) {
-            await tx.run(
-              INSERT.into(Concepts).entries({
+            await insertMintedConcept({
+              db,
+              tx,
+              entry: {
                 ID: pc.ID,
                 slug: pc.slug,
                 name: pc.name,
                 description: '',
-                embedding: pc.embeddingBuf,
+                embeddingBuf: pc.embeddingBuf,
+                embeddingVec: pc.embeddingVec,
                 status: 'ACTIVE',
                 extractionCount: 0,
                 lastSeenAt: nowIso,
-              }),
-            );
+              },
+            });
           }
 
           // #1115: reactivate any RETIRED concept whose slug was re-proposed.

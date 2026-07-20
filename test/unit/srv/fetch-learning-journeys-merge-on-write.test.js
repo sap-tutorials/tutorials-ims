@@ -145,6 +145,15 @@ describe('fetch-learning-journeys-job — merge-on-write (#707)', () => {
     // 'cap-event-handlers' merged INTO cap-handlers (no fresh row).
     expect(conceptSlugs).toEqual(['cap-handlers', 'odata-v4']);
 
+    // #1123: the newly-minted concept carries embeddingVec at mint time
+    // (not just the legacy BLOB, and not deferred to the async backfill cron).
+    const [minted] = await cds.db.run(
+      `SELECT embedding, embeddingVec FROM com_sap_developers_ims_Concepts WHERE slug = ?`,
+      ['odata-v4'],
+    );
+    expect(minted.embedding ?? minted.EMBEDDING, 'BLOB still written').toBeTruthy();
+    expect(minted.embeddingVec ?? minted.EMBEDDINGVEC, 'embeddingVec populated at mint').toBeTruthy();
+
     const links = await SELECT.from(LearningJourneyConceptLinks).columns('concept_ID', 'predicate');
     expect(links).toHaveLength(2);
     // Both link rows point at the predicate 'covers'.

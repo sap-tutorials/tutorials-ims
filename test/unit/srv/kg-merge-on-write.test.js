@@ -11,6 +11,8 @@ import {
   loadConceptRegistry,
   findBestMatch,
   resolveConceptCandidates,
+  insertMintedConcept,
+  vectorToJsonLiteral,
 } from '../../../srv/lib/kg-merge-on-write.js';
 
 // 4-element vectors for compact fixtures.
@@ -301,5 +303,92 @@ describe('resolveConceptCandidates reactivation (#1115)', () => {
     expect(result.resolved[0].action).toBe('reactivated');
     expect(result.resolved[0].conceptId).toBe('r0000000-0000-0000-0000-000000000009');
     expect(result.counters.reactivated).toBe(1);
+  });
+});
+
+describe('vectorToJsonLiteral (#1123)', () => {
+  it('serializes a Float32Array to a JSON array literal at full precision', () => {
+    const v = vec(0.1, 0.2, 0.3, 0.4);
+    const s = vectorToJsonLiteral(v);
+    // Parseable back to an array; not lossy-rounded to 6 decimals.
+    const parsed = JSON.parse(s);
+    expect(parsed).toHaveLength(4);
+    // Float32(0.1) is 0.10000000149011612 — full precision is preserved
+    // (the old backfill used toFixed(6) which would have dropped these digits).
+    expect(parsed[0]).toBeCloseTo(0.1, 6);
+    expect(String(parsed[0]).length).toBeGreaterThan('0.100000'.length);
+  });
+});
+
+describe('insertMintedConcept (#1123, sqlite path)', () => {
+  beforeAll(async () => {
+    const schemaRoots = [
+      path.join(process.cwd(), 'db'),
+      path.join(process.cwd(), 'srv'),
+    ];
+    await cds.deploy(schemaRoots).to('sqlite::memory:');
+  });
+
+  afterAll(async () => {
+    await cds.disconnect();
+  });
+
+  it('populates BOTH embedding (BLOB) and embeddingVec at mint time', async () => {
+    const id = cds.utils.uuid();
+    const embeddingVec = vec(0.5, 0.5, 0.5, 0.5);
+    await insertMintedConcept({
+      db: cds.db,
+      entry: {
+        ID: id,
+        slug: 'mint-1123',
+        name: 'Mint 1123',
+        embeddingBuf: buf(0.5, 0.5, 0.5, 0.5),
+        embeddingVec,
+        lastSeenAt: new Date().toISOString(),
+      },
+    });
+
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    const [row] = await cds.db.run(
+      `SELECT ID, embedding, embeddingVec, status, extractionCount, firstSeenAt, createdAt
+       FROM com_sap_developers_ims_Concepts WHERE ID = ?`,
+      [id],
+    );
+    expect(row.embedding, 'BLOB column filled').toBeTruthy();
+    expect(row.embeddingVec ?? row.EMBEDDINGVEC, 'vector column filled at mint time').toBeTruthy();
+    // Managed/default fields survived the INSERT (helper uses CQL, not raw SQL).
+    expect(row.status ?? row.STATUS).toBe('ACTIVE');
+    expect(row.extractionCount ?? row.EXTRACTIONCOUNT).toBe(0);
+    expect(row.firstSeenAt ?? row.FIRSTSEENAT, '@cds.on.insert firstSeenAt set').toBeTruthy();
+    expect(row.createdAt ?? row.CREATEDAT, 'managed createdAt set').toBeTruthy();
+
+    // The stored vector string round-trips to the original values.
+    const stored = JSON.parse(row.embeddingVec ?? row.EMBEDDINGVEC);
+    expect(stored).toHaveLength(4);
+    expect(stored[0]).toBeCloseTo(0.5, 5);
+  });
+
+  it('honors an explicit status/description/extractionCount override', async () => {
+    const id = cds.utils.uuid();
+    await insertMintedConcept({
+      db: cds.db,
+      entry: {
+        ID: id,
+        slug: 'mint-1123-override',
+        name: 'Override',
+        description: 'custom',
+        embeddingBuf: buf(1, 0, 0, 0),
+        embeddingVec: vec(1, 0, 0, 0),
+        status: 'ACTIVE',
+        extractionCount: 3,
+        lastSeenAt: new Date().toISOString(),
+      },
+    });
+    const [row] = await cds.db.run(
+      `SELECT description, extractionCount FROM com_sap_developers_ims_Concepts WHERE ID = ?`,
+      [id],
+    );
+    expect(row.description ?? row.DESCRIPTION).toBe('custom');
+    expect(row.extractionCount ?? row.EXTRACTIONCOUNT).toBe(3);
   });
 });

@@ -54,6 +54,7 @@ import { embed as defaultEmbed } from '../lib/embedding-client.js';
 import {
   loadConceptRegistry,
   resolveConceptCandidates,
+  insertMintedConcept,
 } from '../lib/kg-merge-on-write.js';
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
 import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
@@ -325,15 +326,19 @@ export async function runFetchLearningJourneys(deps = {}) {
       // valid FK target. Warm the in-memory registry so subsequent journeys
       // in this cycle see the freshly-minted concepts.
       for (const pc of resolution.pendingMints) {
-        await INSERT.into(Concepts).entries({
-          ID: pc.ID,
-          slug: pc.slug,
-          name: pc.name,
-          description: '',
-          embedding: pc.embeddingBuf,
-          status: 'ACTIVE',
-          extractionCount: 0,
-          lastSeenAt: now,
+        await insertMintedConcept({
+          db,
+          entry: {
+            ID: pc.ID,
+            slug: pc.slug,
+            name: pc.name,
+            description: '',
+            embeddingBuf: pc.embeddingBuf,
+            embeddingVec: pc.embeddingVec,
+            status: 'ACTIVE',
+            extractionCount: 0,
+            lastSeenAt: now,
+          },
         });
         registry.bySlug.set(pc.slug, { ID: pc.ID, slug: pc.slug, name: pc.name });
         registry.embeddings.set(pc.ID, pc.embeddingVec);
