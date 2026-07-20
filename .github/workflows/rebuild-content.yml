@@ -426,17 +426,20 @@ jobs:
       - name: Build admin SPAs
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         # Issue #350: the rebuild-content tarball must include admin-shell,
-        # analytics-explorer, and scanner. The approuter's /admin/rebuild
-        # handler atomically swaps STATIC_DIR with the tarball contents, so
-        # any directory NOT in the tarball gets wiped from the deployed pod.
-        # Without this step, every successful workflow run breaks
-        # /admin-ui/, /scanner-ui/, and /analytics-ui/ until the next mta
-        # deploy. The recipe mirrors .deploy/mta.yaml:115-123.
+        # analytics-explorer, scanner, explore, and data-inspector. The
+        # approuter's /admin/rebuild handler atomically swaps STATIC_DIR with
+        # the tarball contents, so any directory NOT in the tarball gets wiped
+        # from the deployed pod. Without this step, every successful workflow
+        # run breaks /admin-ui/, /scanner-ui/, /analytics-ui/, /explore-ui/,
+        # and /data-inspector-ui/ until the next mta deploy. The recipe mirrors
+        # .deploy/mta.yaml (approuter module build commands).
         run: |
           npm --prefix app/admin-shell install
           npm --prefix app/admin-shell run build
           npm --prefix app/analytics-explorer install
           npm --prefix app/analytics-explorer run build
+          npm --prefix app/explore install --no-audit --no-fund
+          npm --prefix app/explore run build
 
       - name: Assemble static content
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
@@ -450,6 +453,16 @@ jobs:
           mkdir -p approuter/static/analytics-ui
           cp -r app/analytics-explorer/dist/. approuter/static/analytics-ui/
           cp -r app/scanner/webapp approuter/static/scanner-ui
+          mkdir -p approuter/static/explore-ui
+          cp -r app/explore/dist/. approuter/static/explore-ui/
+          # Data Inspector UI (#999) — bundled inside @cap-js/data-inspector's
+          # node_modules (a production dep, present after `npm ci`). Rewrite the
+          # UI5 bootstrap CDN from sapui5.hana.ondemand.com (plugin default) to
+          # ui5.sap.com — the approuter's CSP script-src only allowlists
+          # ui5.sap.com. Mirrors .deploy/mta.yaml.
+          mkdir -p approuter/static/data-inspector-ui
+          cp -r node_modules/@cap-js/data-inspector/app/data-inspector-ui/webapp/. approuter/static/data-inspector-ui/
+          sed -i 's|https://sapui5.hana.ondemand.com/|https://ui5.sap.com/|g' approuter/static/data-inspector-ui/index.html
 
       - name: Create content tarball
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
