@@ -45,33 +45,37 @@ observe hit rates / latencies and judge whether broader `@cache` adoption is wor
   container as everything else). No new BTP entitlement, no service binding, and
   automatically tenant-isolated in MTX. This is the store cds-caching recommends for
   HANA/CAP.
-- **`metrics.enabled` is OFF (#1215).** It was originally `true` in both profiles to
-  collect read-through hit/miss + latency counters, but on HANA the plugin's
-  stats-accumulation path throws `Wrong input for INT type` on every flush and the
-  counters never persist (they stuck at 0 across all hourly rows). Root cause: the
-  plugin reads the existing hourly row via a flattened table-name SELECT
-  (`SELECT.one.from("plugin_cds_caching_Metrics")`), which returns UPPERCASE column
-  keys on HANA (`HITS` not `hits`), so `existingHourly.hits + stats.hits` is
-  `undefined + n = NaN` → hdb's INT writer throws (it throws only on `isNaN`). See
-  [`metrics.enabled` "Wrong input for INT type"](cds-caching-metrics-int-type-error-on-hana.md).
-  Because the counters were already non-functional, disabling loses nothing and stops
-  the error-level log noise. The OData management API (`CachingApiService`) was never
-  registered. **Re-enable only after the upstream casing bug is fixed** (and update the
-  `test/unit/caching-metrics-disabled.test.js` guard in the same change).
+- **`metrics.enabled` is ON again (#1222, cds-caching 2.0.2).** It was originally
+  `true`, disabled in #1215 because on HANA the plugin's stats-accumulation path threw
+  `Wrong input for INT type` on every flush and the counters never persisted (they
+  stuck at 0 across all hourly rows). Root cause: the plugin read the existing hourly
+  row via a flattened table-name SELECT (`SELECT.one.from("plugin_cds_caching_Metrics")`),
+  which returns UPPERCASE column keys on HANA (`HITS` not `hits`), so
+  `existingHourly.hits + stats.hits` was `undefined + n = NaN` → hdb's INT writer threw
+  (it throws only on `isNaN`). **cds-caching 2.0.2 fixes it**
+  ([mikezaschka/cds-caching#27](https://github.com/mikezaschka/cds-caching/issues/27)):
+  the readback now uses the resolved CSN entity (`SELECT.one.from(Metrics)`) so CAP
+  normalizes column keys across databases, and `_calculateUpdatedStats` additionally
+  coerces every counter with `Number(existingHourly.<col>) || 0`
+  (`node_modules/cds-caching/lib/support/StatisticsPersistenceManager.js:41` and
+  `:174-186`). Either half alone stops the NaN. The OData management API
+  (`CachingApiService`) is still not registered.
 
-  > **Two-part disable (config + persisted flag).** Removing `metrics.enabled` from
-  > config is necessary but not sufficient on an environment where metrics were
-  > previously on: cds-caching persists the enabled state into
-  > `PLUGIN_CDS_CACHING_CACHES.METRICSENABLED`, and `getRuntimeConfiguration()` reads
-  > that column back on every boot. Nothing in the plugin ever writes it back to `0`.
-  > **After deploying the new config**, reset the persisted flag once per environment:
+  > **Re-enable is one-way (config only).** cds-caching auto-persists the enabled state
+  > into `PLUGIN_CDS_CACHING_CACHES.METRICSENABLED` on connect whenever config says
+  > `metrics.enabled: true` (`CachingService.js:133-135`), so simply shipping the config
+  > flip re-persists the flag to `1` — no manual SQL needed to turn metrics back on
+  > (unlike the #1215 *disable*, which required a one-time
+  > `UPDATE ... SET METRICSENABLED = 0` because nothing writes it back to `0`).
+  >
+  > **Reset the stale zeroed rows once per environment.** The broken #1215-era hourly
+  > rows accumulated at `0` and will dilute any hit-rate baseline. Clear them after the
+  > new srv is live so metrics start clean:
   >
   > ```sql
-  > UPDATE "PLUGIN_CDS_CACHING_CACHES" SET "METRICSENABLED" = 0 WHERE "NAME" = 'caching';
+  > DELETE FROM "PLUGIN_CDS_CACHING_METRICS"    WHERE "cache" = 'caching';
+  > DELETE FROM "PLUGIN_CDS_CACHING_KEYMETRICS" WHERE "cache" = 'caching';
   > ```
-  >
-  > Do this *after* the new srv is live — resetting while the old (`metrics.enabled:true`)
-  > code is still running would let its boot re-persist `1`.
 
 
 ## Multi-instance coherence
@@ -297,20 +301,23 @@ command-palette concept search): `@cache: { ttl: 300000, tags: [{ value:
 - **Scope:** only the service-layer (OData/HCQL/MCP) read is cached. The
   rebuild-time full-list read in `srv/lib/published-concepts-query.js` uses raw
   `db.run` and is intentionally not cached.
-- **Metrics:** persistence is **disabled** (`metrics.enabled` removed from both
-  profiles, #1215) — do NOT rely on the metrics tables for hit-rate:
-  - It was on originally, but the counters never worked on HANA: the plugin's
-    stats-accumulation reads the existing hourly row via a flattened table-name
-    SELECT that returns UPPERCASE column keys (`HITS` not `hits`), so
-    `existingHourly.hits + stats.hits` is `undefined + n = NaN` → the
-    [`metrics.enabled` "Wrong input for INT type"](cds-caching-metrics-int-type-error-on-hana.md)
-    hdb bind error fired every flush. `PLUGIN_CDS_CACHING_METRICS` accumulated
-    22 hourly rows with every counter stuck at `0`; `PLUGIN_CDS_CACHING_KEYMETRICS`
-    was empty (per-key metrics were never wired). Disabling stops the error-level
-    log noise and loses nothing that worked.
-  - **Measure directly instead:** hit-vs-miss latency by repeating a request,
-    and confirm a declarative entry lands in the store (opaque `kg:<hash>` key,
-    ~5-min TTL):
+- **Metrics:** persistence is **re-enabled** (`metrics.enabled: true` in both
+  profiles, #1222 on cds-caching 2.0.2) — the `PLUGIN_CDS_CACHING_METRICS` /
+  `KEYMETRICS` tables now accumulate hit/miss + latency counters again:
+  - It was disabled #1215→re-enabled #1222. The counters never worked on HANA
+    under 2.0.1: the plugin's stats-accumulation read the existing hourly row via
+    a flattened table-name SELECT that returned UPPERCASE column keys (`HITS` not
+    `hits`), so `existingHourly.hits + stats.hits` was `undefined + n = NaN` → an
+    hdb "Wrong input for INT type" bind error fired every flush.
+    `PLUGIN_CDS_CACHING_METRICS` accumulated 22 hourly rows with every counter
+    stuck at `0`; `PLUGIN_CDS_CACHING_KEYMETRICS` was empty. **2.0.2 fixes the
+    readback** ([mikezaschka/cds-caching#27](https://github.com/mikezaschka/cds-caching/issues/27))
+    — CSN-entity SELECT + `Number(...) || 0` coercion — so metrics are trustworthy
+    again. Clear the stale zeroed rows once after deploy (see the Configuration
+    section's reset SQL) so the hit-rate baseline starts clean.
+  - **Direct measurement still works** as a cross-check: hit-vs-miss latency by
+    repeating a request, and confirm a declarative entry lands in the store
+    (opaque `kg:<hash>` key, ~5-min TTL):
 
     ```sql
     SELECT "ID", LENGTH("VALUE") AS VAL_LEN, "EXPIRESAT"
@@ -338,12 +345,14 @@ command-palette concept search): `@cache: { ttl: 300000, tags: [{ value:
   organic DEV traffic hit this surface during the soak window (store held only
   the #1177 `kg:neighborhood`/RSS/YT/PAT programmatic entries until the probe),
   so a *natural* hit rate could not be observed.
-- **Verdict: HOLD.** The mechanism is proven correct (cache hits, correct TTL,
-  auth-safe key, working invalidation path), so there is no reason to revert.
-  But do **not expand** to more surfaces yet, for two reasons: (1) we cannot
-  measure hit rate until the HANA metrics-counter bug is fixed or per-key
-  metrics are enabled — expanding blind risks stale-content regressions with no
-  observability; (2) this surface saw zero organic DEV traffic, so its own value
-  is unproven. Re-evaluate expansion once (a) the metrics INT-type bug is
-  resolved (upstream cds-caching or a config workaround) and (b) PROD traffic
-  gives a real hit-rate baseline post-cutover.
+- **Verdict: HOLD → observability unblocked (#1222).** The mechanism is proven
+  correct (cache hits, correct TTL, auth-safe key, working invalidation path), so
+  there is no reason to revert. Reason (1) for the original HOLD — "cannot measure
+  hit rate until the HANA metrics-counter bug is fixed" — is **resolved**:
+  cds-caching 2.0.2 fixes the INT-bind bug and #1222 re-enables `metrics.enabled`,
+  so `PLUGIN_CDS_CACHING_METRICS` now accumulates real counters. Reason (2) still
+  stands: this surface saw zero organic DEV traffic, so its own value is unproven.
+  **Re-evaluate expansion once a real hit-rate baseline exists** — verify the
+  re-enabled metrics actually accumulate against the deployed DEV container (clear
+  the stale zeroed rows first), then let PROD traffic post-cutover give the
+  baseline before annotating more surfaces.

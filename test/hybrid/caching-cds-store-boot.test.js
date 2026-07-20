@@ -10,15 +10,15 @@
  *   2. KeyvCDS resolves plugin.cds_caching.CacheStore from the served model and
  *      the CDS-backed store actually persists to HANA.
  *
- * #1215 — metrics.enabled is intentionally OFF in [hybrid]/[production].
- * cds-caching's stats-accumulation path reads back the persisted hourly row via
- * a flattened table-name SELECT, which returns UPPERCASE column keys on HANA
- * (`HITS` not `hits`). The plugin then computes `existingHourly.hits + stats.hits`
- * → `undefined + n = NaN` → hdb throws "Wrong input for INT type" on every flush.
- * Counters never accumulated (22 hourly rows stuck at 0), so metrics were already
- * non-functional; disabling stops the error-level log noise. Re-enable only once
- * the upstream casing bug is fixed. The store stays 'cds' for multi-instance
- * cache coherence.
+ * #1222 — metrics.enabled is RE-ENABLED in [hybrid]/[production] on
+ * cds-caching 2.0.2. The #1215 disable worked around the HANA INT-bind error:
+ * the stats-accumulation path read back the hourly row via a flattened
+ * table-name SELECT, returning UPPERCASE column keys (`HITS` not `hits`), so
+ * `existingHourly.hits + stats.hits` was `undefined + n = NaN` → hdb threw
+ * "Wrong input for INT type" on every flush and counters stuck at 0. 2.0.2
+ * fixes it (mikezaschka/cds-caching#27): readback via the resolved CSN entity +
+ * `Number(existingHourly.<col>) || 0` coercion. The store stays 'cds' for
+ * multi-instance cache coherence.
  *
  * Run with: cf login + cds bind --exec -- npx vitest run --project hybrid \
  *   test/hybrid/caching-cds-store-boot.test.js
@@ -35,11 +35,11 @@ describe('#1182 — cds-caching CDS-DB store hybrid boot', () => {
     expect(cfg.store).toBe('cds');
   });
 
-  it('#1215 — metrics persistence is disabled to avoid the HANA INT-bind error', () => {
+  it('#1222 — metrics persistence is enabled (fixed upstream in cds-caching 2.0.2)', () => {
     const cfg = cds.env.requires.caching;
-    // metrics.enabled must stay falsy under hybrid/production until the
-    // upstream cds-caching UPPERCASE-column accumulation bug is fixed.
-    expect(cfg.metrics?.enabled).toBeFalsy();
+    // metrics.enabled is re-enabled under hybrid/production now that the
+    // UPPERCASE-column accumulation bug is fixed in cds-caching 2.0.2.
+    expect(cfg.metrics?.enabled).toBe(true);
   });
 
   it('CacheStore entity is present in the served model', () => {

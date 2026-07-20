@@ -169,7 +169,7 @@
     "@sap/xssec": "^4.13.1",
     "ajv": "8.20.0",
     "archiver": "8.0.0",
-    "cds-caching": "2.0.1",
+    "cds-caching": "2.0.2",
     "cds-swagger-ui-express": "^0.11.0",
     "cheerio": "^1.2.0",
     "cron-parser": "5.6.1",
@@ -206,10 +206,16 @@
         "namespace": "kg",
         "store": "memory",
         "[hybrid]": {
-          "store": "cds"
+          "store": "cds",
+          "metrics": {
+            "enabled": true
+          }
         },
         "[production]": {
-          "store": "cds"
+          "store": "cds",
+          "metrics": {
+            "enabled": true
+          }
         }
       },
       "db": {
