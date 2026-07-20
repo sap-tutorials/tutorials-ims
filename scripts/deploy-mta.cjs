@@ -175,6 +175,22 @@ function newestMtarMtime() {
   return newest;
 }
 
+// Resolve the newest .mtar to an explicit DEPLOY_DIR-relative path.
+// WHY (issue #1226): on Windows (git-bash driving cf.exe) the `mta_archives/*.mtar`
+// glob is NOT expanded, so multiapps-cli-plugin receives the literal path and
+// panics with a nil-pointer dereference in getMtaArchive — killing the script
+// before the Step 5 smoke gate can run. Resolving the filename in Node is
+// portable (Linux CI still deploys the same newest mtar) and lets smoke run.
+function newestMtarPath() {
+  if (!fs.existsSync(MTAR_GLOB_DIR)) return null;
+  const mtars = fs.readdirSync(MTAR_GLOB_DIR)
+    .filter(f => f.endsWith('.mtar'))
+    .map(f => ({ f, m: fs.statSync(path.join(MTAR_GLOB_DIR, f)).mtimeMs }))
+    .sort((a, b) => b.m - a.m);
+  // Relative to DEPLOY_DIR (the cf deploy cwd), matching the previous glob base.
+  return mtars.length ? path.join('mta_archives', mtars[0].f) : null;
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -248,11 +264,16 @@ function main() {
   const mtaext = `../deploy/${envName}.mtaext`;
   step(4, `cf deploy (-e ${mtaext})`);
   if (args.dryRun) {
-    warn(`dry-run: would run \`cf deploy mta_archives/*.mtar -e ${mtaext} -f\` in .deploy/`);
+    const preview = newestMtarPath() || 'mta_archives/<newest>.mtar';
+    warn(`dry-run: would run \`cf deploy ${preview} -e ${mtaext} -f\` in .deploy/`);
   } else {
-    const code = sh('cf', ['deploy', 'mta_archives/*.mtar', '-e', mtaext, '-f'], { cwd: DEPLOY_DIR });
+    // Pass the explicit newest mtar, NOT the `mta_archives/*.mtar` glob:
+    // Windows git-bash does not expand it and cf.exe panics (issue #1226).
+    const mtar = newestMtarPath();
+    if (!mtar) die(1, `no .mtar found in ${path.relative(ROOT, MTAR_GLOB_DIR)} to deploy. Run without --skip-build, or build the mtar first.`);
+    const code = sh('cf', ['deploy', mtar, '-e', mtaext, '-f'], { cwd: DEPLOY_DIR });
     if (code !== 0) die(1, '`cf deploy` failed. Check `cf logs` and the deployer output above.');
-    ok('cf deploy complete');
+    ok(`cf deploy complete (${mtar})`);
   }
 
   // ---- Step 5: smoke gate ----------------------------------------------
