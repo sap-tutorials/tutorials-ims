@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import cds from '@sap/cds'
 import { isSafeForWrites } from './_guard.js'
 import { topConceptsByCosine } from '../../srv/lib/kg/concept-embedding-query.js'
+import { insertMintedConcept } from '../../srv/lib/kg-merge-on-write.js'
 
 cds.test('serve', '--project', '.', '--profile', 'hybrid')
 
@@ -101,6 +102,59 @@ describe.runIf(isSafeForWrites())('#1113 HANA cosine (hybrid)', () => {
         Math.abs(hanaRow.score - jsScore),
         `cosine delta for "${hanaRow.slug}": HANA=${hanaRow.score.toFixed(6)} JS=${jsScore.toFixed(6)}`
       ).toBeLessThan(1e-4)
+    }
+  })
+
+  it('#1123: insertMintedConcept populates a queryable EMBEDDINGVEC at mint time', async () => {
+    // Mint a throwaway concept via the shared helper and prove the vector column
+    // is populated on HANA (not just the BLOB), then that COSINE_SIMILARITY can
+    // score it. Cleaned up at the end regardless of outcome.
+    const id = cds.utils.uuid()
+    const slug = `zzz-1123-mint-probe-${id.slice(0, 8)}`
+    // Deterministic unit-ish vector.
+    const vec = new Float32Array(1536)
+    for (let i = 0; i < 1536; i++) vec[i] = Math.sin(i / 11.7) * 0.3
+    const embeddingBuf = Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength)
+
+    try {
+      await insertMintedConcept({
+        db,
+        entry: {
+          ID: id,
+          slug,
+          name: 'Mint Probe 1123',
+          description: '',
+          embeddingBuf,
+          embeddingVec: vec,
+          status: 'ACTIVE',
+          extractionCount: 0,
+          lastSeenAt: new Date().toISOString(),
+        },
+      })
+
+      // Both columns populated.
+      const [row] = await db.run(
+        `SELECT "EMBEDDING", "EMBEDDINGVEC", "FIRSTSEENAT", "CREATEDAT"
+         FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS WHERE "ID" = ?`,
+        [id]
+      )
+      expect(row?.EMBEDDING, 'BLOB written').toBeTruthy()
+      expect(row?.EMBEDDINGVEC, 'vector column written at mint time').toBeTruthy()
+      // Managed / @cds.on.insert fields survived the CQL INSERT (helper isn't raw SQL).
+      expect(row?.FIRSTSEENAT, '@cds.on.insert firstSeenAt set').toBeTruthy()
+      expect(row?.CREATEDAT, 'managed createdAt set').toBeTruthy()
+
+      // The vector column is queryable via the native scalar and self-scores ~1.0.
+      const vecStr = '[' + Array.from(vec, (x) => x.toFixed(6)).join(',') + ']'
+      const [scoreRow] = await db.run(
+        `SELECT COSINE_SIMILARITY("EMBEDDINGVEC", TO_REAL_VECTOR(?)) AS "SELFSCORE"
+         FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS WHERE "ID" = ?`,
+        [vecStr, id]
+      )
+      const self = scoreRow?.SELFSCORE ?? scoreRow?.selfScore
+      expect(self, 'self-cosine ~1.0').toBeGreaterThan(0.999)
+    } finally {
+      await db.run(`DELETE FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS WHERE "ID" = ?`, [id])
     }
   })
 })
