@@ -60,4 +60,11 @@ paths = [
   '''docs/superpowers/plans/.*\.md''',
   # API-docs content contains illustrative auth examples, not real secrets.
   '''hugo/content/api-docs/.*''',
+  # Feature-flag registry: each entry has a `key:` property whose value is a
+  # flag IDENTIFIER (env-var name or DB column), never a secret value. The
+  # `key:` keyword + a name like 'MCP_PHASE3_ENABLED' (the digit nudges entropy
+  # over the generic-api-key threshold) is a false positive. The file holds
+  # only flag metadata by design; the narrow tripwire in
+  # scripts/check-no-committed-secrets.js remains the real secret backstop.
+  '''srv/lib/feature-flags/registry\.js''',
 ]
