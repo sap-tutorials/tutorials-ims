@@ -229,6 +229,62 @@ describe('analytics-sql-validator: injection fuzz (#797)', () => {
     });
   });
 
+  describe('rejects scope-blind CTE-name bypass (#1233 follow-up)', () => {
+    // The first #1233 fix excluded CTE names GLOBALLY: any referenced table
+    // whose name matched a CTE alias ANYWHERE was skipped. That is scope-blind
+    // and re-opens the bypass — a CTE named after a forbidden table masks REAL
+    // reads of that table. Fixed by scope-aware CTE tracking. Every fixture
+    // here reads the real (non-allowlisted) Users table and MUST throw.
+    const RESTRICTED = new Set(['Tutorials', 'TUTORIALS']);
+
+    const bypasses = [
+      // CTE alias == the disallowed table its own (non-recursive) body reads.
+      // Inside a non-recursive CTE body, `FROM Users` is the REAL table.
+      ['alias equals body real-table', 'WITH Users AS (SELECT email FROM Users) SELECT * FROM Users'],
+      // CTE named after a forbidden table declared in a NESTED subquery, while
+      // the OUTER FROM reads the real table.
+      ['nested CTE name masks outer real table',
+        'SELECT email FROM Users WHERE slug IN (WITH Users AS (SELECT slug FROM Tutorials) SELECT slug FROM Users)'],
+      // Derived-table variant: inner CTE named Users, body reads real Users.
+      ['derived-table inner CTE masks real table',
+        'SELECT x FROM (WITH Users AS (SELECT email AS x FROM Users) SELECT x FROM Users) d'],
+    ];
+    it.each(bypasses)('rejects %s', (_label, sql) => {
+      expect(() => validator.validateSelect(sql, RESTRICTED)).toThrow(
+        /not in the analytics allowlist/i,
+      );
+    });
+
+    // No-false-positive controls — legitimate CTE scoping that MUST pass.
+    it('accepts sibling CTE reference (b reads a)', () => {
+      expect(() =>
+        validator.validateSelect(
+          'WITH a AS (SELECT slug FROM Tutorials), b AS (SELECT slug FROM a) SELECT * FROM b',
+          RESTRICTED,
+        ),
+      ).not.toThrow();
+    });
+    it('accepts WITH RECURSIVE self-reference', () => {
+      expect(() =>
+        validator.validateSelect(
+          'WITH RECURSIVE t AS (SELECT slug FROM Tutorials UNION SELECT slug FROM t) SELECT * FROM t',
+          RESTRICTED,
+        ),
+      ).not.toThrow();
+    });
+    it('accepts WITH applied across both UNION arms (CTE visible to _next)', () => {
+      // A WITH before a UNION applies to the whole statement; both arms see the
+      // CTE. Here both `FROM Users` resolve to the CTE (body reads Tutorials),
+      // so this must NOT be flagged.
+      expect(() =>
+        validator.validateSelect(
+          'WITH Users AS (SELECT slug FROM Tutorials) SELECT slug FROM Users UNION ALL SELECT slug FROM Users',
+          RESTRICTED,
+        ),
+      ).not.toThrow();
+    });
+  });
+
   describe('accepts legitimate SELECTs', () => {
     it('accepts a plain SELECT', () => {
       const { sql, selectedColumns } = validator.validateSelect(
