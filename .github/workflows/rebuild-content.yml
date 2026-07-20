@@ -360,6 +360,24 @@ jobs:
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm --prefix hugo-apps run build
 
+      # Build the /explore Vue/Sigma bundle AND emit hugo/data/explore_bundle.json
+      # BEFORE the Hugo build below. Hugo reads site.Data.explore_bundle at
+      # render time (hugo/layouts/explore/single.html); if the manifest is
+      # absent, /explore falls through to the visible "Explore bundle missing"
+      # fallback. This workflow invokes /tmp/hugo directly (not `npm run
+      # build:all`), so — unlike the mta before-all — nothing else emits the
+      # manifest. Mirrors mta.yaml's pre-Hugo explore steps. The dist is copied
+      # into the tarball's static/explore-ui/ in "Assemble static content".
+      # /explore (#726/#744) landed after #350 and was never added here, so
+      # every non-slug-targeted rebuild wiped /explore-ui/ and re-baked the
+      # fallback until the next mta deploy.
+      - name: Build explore bundle + manifest
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        run: |
+          npm --prefix app/explore install --no-audit --no-fund
+          npm --prefix app/explore run build
+          npx tsx scripts/build-explore-manifest.ts app/explore/dist hugo/data/explore_bundle.json
+
       - name: Copy Joule vendor bundles
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm run copy-joule-vendor
@@ -433,13 +451,14 @@ jobs:
         # run breaks /admin-ui/, /scanner-ui/, /analytics-ui/, /explore-ui/,
         # and /data-inspector-ui/ until the next mta deploy. The recipe mirrors
         # .deploy/mta.yaml (approuter module build commands).
+        # (app/explore is built earlier in the "Build explore bundle + manifest"
+        # step — its dist must exist before the Hugo build too — so it is NOT
+        # rebuilt here.)
         run: |
           npm --prefix app/admin-shell install
           npm --prefix app/admin-shell run build
           npm --prefix app/analytics-explorer install
           npm --prefix app/analytics-explorer run build
-          npm --prefix app/explore install --no-audit --no-fund
-          npm --prefix app/explore run build
 
       - name: Assemble static content
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
