@@ -81,7 +81,17 @@ function validateSelect(sql, allowedTableNames) {
 
   const referenced = new Set()
   collectFromClause(ast, referenced)
+
+  // #1233: CTE names are LOCAL aliases, not real tables. Collect them so an
+  // outer `FROM <cte>` does not require allowlisting — while collectFromClause
+  // (extended below) still validates the CTE BODY's real tables. Without this,
+  // a legitimate `WITH t AS (SELECT ... FROM Tutorials) SELECT * FROM t` would
+  // be wrongly rejected because `t` is not in the allowlist.
+  const cteNames = new Set()
+  collectCteNames(ast, cteNames)
+
   for (const t of referenced) {
+    if (cteNames.has(t) || cteNames.has(t.toUpperCase())) continue
     if (!allowedTableNames.has(t) && !allowedTableNames.has(t.toUpperCase())) {
       throw new Error(`Table '${t}' is not in the analytics allowlist`)
     }
@@ -132,6 +142,41 @@ function collectFromClause(ast, out) {
   if (ast.columns && Array.isArray(ast.columns)) {
     for (const col of ast.columns) collectSubqueries(col, out)
   }
+  // #1233: follow the set-operation chain. node-sql-parser represents
+  // UNION / UNION ALL / INTERSECT / EXCEPT as a root select node with `_next`
+  // pointing at the next arm (itself a select), chaining via `_next._next` for
+  // 3+ arms. Without this, tables in any arm past the first were never checked
+  // against the allowlist yet were re-emitted verbatim by parser.sqlify.
+  if (ast._next && typeof ast._next === 'object') {
+    collectFromClause(ast._next, out)
+  }
+  // #1233: walk CTE bodies. `ast.with` is an array of { name, stmt, columns };
+  // the CTE body select lives at `stmt.ast`. A CTE body can read any table, so
+  // its FROM tables must be allowlisted too (the CTE NAME itself is excluded
+  // from the check in validateSelect via collectCteNames).
+  if (ast.with) {
+    const withArr = Array.isArray(ast.with) ? ast.with : [ast.with]
+    for (const cte of withArr) {
+      const body = cte?.stmt?.ast || cte?.stmt
+      if (body && typeof body === 'object') collectFromClause(body, out)
+    }
+  }
+}
+
+// #1233: collect every CTE alias name defined anywhere in the statement
+// (including CTEs nested in set-op arms or in other CTE bodies), so the
+// allowlist check can treat them as local aliases rather than physical tables.
+function collectCteNames(node, out) {
+  if (!node || typeof node !== 'object') return
+  if (Array.isArray(node)) { node.forEach(n => collectCteNames(n, out)); return }
+  if (node.with) {
+    const withArr = Array.isArray(node.with) ? node.with : [node.with]
+    for (const cte of withArr) {
+      const name = typeof cte?.name === 'string' ? cte.name : cte?.name?.value
+      if (name && typeof name === 'string') out.add(name)
+    }
+  }
+  for (const v of Object.values(node)) collectCteNames(v, out)
 }
 
 function collectSubqueries(node, out) {
