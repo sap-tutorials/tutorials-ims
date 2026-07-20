@@ -32,7 +32,10 @@ const MISSION_2 = 61002;
 const TASK_TUT = 62001;
 
 // Caller principal: user.id → resolveUserSapId fallback → sapId 'idor-caller'.
-const callerUser = { id: USER_A.sapId, roles: { 'authenticated-user': 1 } };
+// Carries Tutorial.API so the #1232 TaskRecords READ passes the @restrict gate
+// (that scope is the actual external-partner threat actor for #1232); also has
+// authenticated-user for the #1231 function calls.
+const callerUser = { id: USER_A.sapId, roles: { 'authenticated-user': 1, 'Tutorial.API': 1 } };
 
 let dev;
 
@@ -107,5 +110,63 @@ describe('#1231 — DeveloperService progress functions are self-scoped (IDOR cl
     // proving userLegacyId does not steer identity. userA completed 1 of 2 → 0.5.
     expect(viaVictimId).toBe(viaOwnId);
     expect(viaOwnId).toBe(0.5);
+  });
+});
+
+describe('#1232 — TaskRecords READ is row-scoped to the caller', () => {
+  // The TaskRecords projection is @restrict grant:'*' to:'Tutorial.API' with NO
+  // where-clause and (before this fix) no before('READ') handler — so any
+  // Tutorial.API holder could page every user's progress rows. The fix scopes
+  // reads to the caller's own user_ID via a before('READ') handler (mirrors
+  // LearningPreferences). callerUser resolves to userA (sapId 'idor-caller').
+
+  it('returns only the caller (userA) rows — never userB rows or PII', async () => {
+    const rows = await dev.tx({ user: callerUser }, (tx) => tx.read('TaskRecords'));
+    expect(rows.length).toBeGreaterThan(0); // userA has records
+    expect(rows.every((r) => r.user_ID === USER_A.ID)).toBe(true);
+    expect(rows.some((r) => r.user_ID === USER_B.ID)).toBe(false);
+    expect(rows.some((r) => r.progressNote === 'USER_B_SECRET_NOTE')).toBe(false);
+    // Positive proof the caller sees their own data.
+    expect(rows.some((r) => r.progressNote === 'USER_A_NOTE')).toBe(true);
+  });
+
+  it('a caller-supplied filter cannot widen past the caller rows', async () => {
+    // Explicitly filter for userB's rows — the before-READ where must AND-conjoin
+    // so this still yields only userA's rows (empty intersection here). Read the
+    // SERVICE entity by name (not the db-layer handle) so the handler fires.
+    const rows = await dev.tx({ user: callerUser }, (tx) =>
+      tx.read('TaskRecords').where({ user_ID: USER_B.ID }),
+    );
+    expect(rows.some((r) => r.user_ID === USER_B.ID)).toBe(false);
+    expect(rows.every((r) => r.user_ID === USER_A.ID)).toBe(true);
+  });
+
+  it('a caller with no Users row gets an empty result set', async () => {
+    const strangerUser = { id: 'no-such-sapid-1232', roles: { 'authenticated-user': 1, 'Tutorial.API': 1 } };
+    const rows = await dev.tx({ user: strangerUser }, (tx) => tx.read('TaskRecords'));
+    expect(rows).toEqual([]);
+  });
+});
+
+describe('#1232 (adjacent) — LearningPreferences READ does not leak on the no-Users-row path', () => {
+  // Same fix pattern surfaced a latent bug in the sibling LearningPreferences
+  // handler: assigning req.results = [] in a before('READ') does NOT reliably
+  // short-circuit in CAP 10, so a caller with no Users row (e.g. a freshly
+  // authenticated user before lazy auto-provisioning) would read EVERY user's
+  // preferences. LearningPreferences is readable by any authenticated-user, so
+  // the window is broad. Hardened to a query-level impossible predicate.
+  beforeAll(async () => {
+    const { UserLearningPreferences } = cds.entities(NS);
+    await DELETE.from(UserLearningPreferences).where({ user_ID: USER_B.ID });
+    await INSERT.into(UserLearningPreferences).entries({
+      user_ID: USER_B.ID, deployment: 'cloud', role: 'developer', cloud: 'btp',
+    });
+  });
+
+  it('a caller with no Users row sees no other users preferences', async () => {
+    const strangerUser = { id: 'no-such-sapid-1232b', roles: { 'authenticated-user': 1 } };
+    const rows = await dev.tx({ user: strangerUser }, (tx) => tx.read('LearningPreferences'));
+    expect(rows.some((r) => r.user_ID === USER_B.ID)).toBe(false);
+    expect(rows).toEqual([]);
   });
 });
