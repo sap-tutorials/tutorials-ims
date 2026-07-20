@@ -1,5 +1,6 @@
 [
     "src/gen/**/*.hdbtrigger",
+    "src/gen/data/com.sap.developers.ims-ChatSettings.hdbtabledata",
     "src/gen/AdminService.DashboardMonitoredRecords.hdbview",
     "src/gen/AdminService.TutorialMeta_drafts.hdbtable",
     "src/gen/AnalyticsService.TutorialRepositories.hdbview",
