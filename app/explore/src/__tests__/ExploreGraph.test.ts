@@ -296,4 +296,37 @@ describe('ExploreGraph', () => {
     expect(graph.nodes.get('t:b').color).toBe('#0a6ed1')
     unmount()
   })
+
+  // Regression: filter toggles in App.vue change the `filteredNodes` /
+  // `filteredEdges` computed props passed to ExploreGraph. The graph was built
+  // only in onMounted with no watch on props.nodes/edges, so every toggle was
+  // silently ignored on the canvas. A watch must rebuild the graph (new Sigma +
+  // graphology instance) when the node/edge set changes.
+  it('rebuilds the graph when the nodes prop changes (filter toggle)', async () => {
+    const initial = {
+      nodes: [
+        { id: 't:a', type: 'tutorial' as const, label: 'A', slug: 'a' },
+        { id: 'c:x', type: 'concept' as const, label: 'X', slug: 'x' },
+      ],
+      edges: [] as { s: string; p: 'teaches'; o: string }[],
+    }
+    const { app, unmount } = mountExploreGraph(initial)
+    await nextTick()
+    expect(mockSigmaInstances.length).toBe(1)
+    expect(mockGraphInstances.length).toBe(1)
+    expect(mockGraphInstances[0].nodes.size).toBe(2)
+
+    // Simulate a filter toggle that drops the concept node from filteredNodes.
+    app._instance!.props.nodes = [
+      { id: 't:a', type: 'tutorial', label: 'A', slug: 'a' },
+    ]
+    await nextTick()
+
+    // A fresh Sigma + graphology instance must have been built from the new set.
+    expect(mockSigmaInstances.length).toBe(2)
+    expect(mockGraphInstances.length).toBe(2)
+    expect(mockGraphInstances[1].nodes.size).toBe(1)
+    expect(mockGraphInstances[1].nodes.has('c:x')).toBe(false)
+    unmount()
+  })
 })

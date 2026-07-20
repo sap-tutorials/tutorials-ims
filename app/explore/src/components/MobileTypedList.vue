@@ -4,7 +4,15 @@ import type { ExploreNode, NodeType } from '../types'
 
 const props = defineProps<{ nodes: ExploreNode[] }>()
 
-const SECTION_ORDER: NodeType[] = ['tutorial', 'concept', 'mission', 'product', 'group', 'category', 'tag']
+// MUST cover every NodeType in types.ts. `groups` buckets ALL nodes by type,
+// but the template only renders sections in SECTION_ORDER — a type omitted
+// here is silently invisible on mobile even though its nodes exist. Kept in
+// sync with useFilters.ALL_NODE_TYPES / ExploreGraph.NODE_COLORS.
+const SECTION_ORDER: NodeType[] = [
+  'tutorial', 'concept', 'mission', 'product', 'group', 'category', 'tag',
+  'learning-journey', 'blog-post', 'discovery-mission', 'video',
+  'api-doc', 'sample', 'help-doc', 'community-event',
+]
 const SECTION_LABELS: Record<NodeType, string> = {
   tutorial: 'Tutorials',
   concept: 'Concepts',
@@ -13,6 +21,14 @@ const SECTION_LABELS: Record<NodeType, string> = {
   group: 'Groups',
   category: 'Categories',
   tag: 'Tags',
+  'learning-journey': 'Learning Journeys',
+  'blog-post': 'Blog Posts',
+  'discovery-mission': 'Discovery Missions',
+  video: 'Videos',
+  'api-doc': 'API Docs',
+  sample: 'Samples',
+  'help-doc': 'Help Docs',
+  'community-event': 'Community Events',
 }
 
 const groups = computed(() => {
@@ -53,6 +69,14 @@ const expanded = ref<Record<NodeType, boolean>>({
   group: false,
   category: false,
   tag: false,
+  'learning-journey': false,
+  'blog-post': false,
+  'discovery-mission': false,
+  video: false,
+  'api-doc': false,
+  sample: false,
+  'help-doc': false,
+  'community-event': false,
 })
 
 function toggleSection(t: NodeType) {
