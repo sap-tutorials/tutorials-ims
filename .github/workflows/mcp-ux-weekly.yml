@@ -1,13 +1,17 @@
 name: MCP LLM UX (weekly)
-# Weekly quality check: measures how accurately Claude Haiku 4.5 picks the
-# correct MCP tool for 15 natural-language prompts. Regression fails when
-# pick-accuracy drops more than 0.05 below the seeded baseline.json.
+# Weekly quality check: measures how accurately the configured SAP AI Core
+# model picks the correct MCP tool for 15 natural-language prompts. Regression
+# fails when pick-accuracy drops more than 0.05 below the seeded baseline.json.
 #
 # NOT part of per-PR CI — runs Monday 09:00 UTC only (or via workflow_dispatch).
-# Requires ANTHROPIC_API_KEY secret and a local CAP instance started in the job.
+# Reaches LLMs through SAP AI Core (like the rest of the app), NOT a direct
+# Anthropic API key. Requires the AI_AUTHOR_AICORE_SERVICE_KEY + CHAT_DEPLOYMENT_ID
+# secrets (same as rebuild-content.yml) and a local CAP instance started in the job.
+# See docs/developers/operations/ai-author-ci-setup.md.
 #
-# First real run: overwrites baseline.json with actual accuracy (accuracy=0 seed).
-# Commit the updated baseline.json after the first successful run.
+# First real run (also whenever the model changes): overwrites baseline.json
+# with actual accuracy (committed seed is accuracy=0). Commit the updated
+# baseline.json after the first successful run.
 #
 # (#1105 Task 17b)
 
@@ -54,9 +58,32 @@ jobs:
             sleep 3
           done
 
+      # Construct VCAP_SERVICES so @sap-ai-sdk/orchestration can authenticate
+      # against SAP AI Core. Mirrors the step in rebuild-content.yml. The secret
+      # holds ONLY the inner `credentials` JSON (rotated via
+      # `cf delete-service-key tutorials-aicore <key> &&
+      #  cf create-service-key tutorials-aicore <key>`).
+      # See docs/developers/operations/ai-author-ci-setup.md.
+      - name: Set up VCAP_SERVICES for AI Core
+        env:
+          AICORE_CREDENTIALS_JSON: ${{ secrets.AI_AUTHOR_AICORE_SERVICE_KEY }}
+        run: |
+          if [ -z "${AICORE_CREDENTIALS_JSON}" ]; then
+            echo "::error::AI_AUTHOR_AICORE_SERVICE_KEY secret is unset or empty — see docs/developers/operations/ai-author-ci-setup.md."
+            exit 1
+          fi
+          # jq empty fails loudly on malformed JSON here, not mid-run.
+          echo "${AICORE_CREDENTIALS_JSON}" | jq empty || { echo "::error::AI_AUTHOR_AICORE_SERVICE_KEY is not valid JSON"; exit 1; }
+          VCAP=$(jq -nc --argjson creds "${AICORE_CREDENTIALS_JSON}" '{aicore: [{label: "aicore", name: "tutorials-aicore", instance_name: "tutorials-aicore", credentials: $creds, plan: "extended"}]}')
+          # Mask the constructed VCAP so it doesn't leak in subsequent logs.
+          echo "::add-mask::${VCAP}"
+          echo "VCAP_SERVICES=${VCAP}" >> "$GITHUB_ENV"
+
       - name: Run LLM UX accuracy check
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # VCAP_SERVICES is exported into GITHUB_ENV by the prior step.
+          CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
+          CHAT_MODEL_NAME: ${{ secrets.CHAT_MODEL_NAME }}
           MCP_LLM_UX_BASE: http://localhost:4004
         run: npm run test:llm-ux
 

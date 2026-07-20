@@ -1,8 +1,8 @@
 {
-  "model": "claude-haiku-4-5-20251001",
+  "model": "anthropic--claude-4.6-sonnet",
   "accuracy": 0,
-  "seededAt": "2026-07-10T00:00:00.000Z",
-  "_note": "Seed accuracy=0 — first real CI run will overwrite this with actual accuracy. The regression gate fires only when accuracy drops more than 0.05 below this file's accuracy value. With accuracy=0 the gate never fires until a real run seeds a non-zero baseline.",
+  "seededAt": "2026-07-20T00:00:00.000Z",
+  "_note": "Seed accuracy=0 — the first real CI run overwrites this with actual accuracy (the runner re-seeds when baseline.accuracy is 0 OR when the recorded model differs from the run's model). The regression gate fires only when accuracy drops more than 0.05 below a non-zero baseline. Model is the SAP AI Core model (env CHAT_MODEL_NAME, default anthropic--claude-4.6-sonnet); the runner reaches it via @sap-ai-sdk/orchestration, not a direct Anthropic key.",
   "results": {
     "p01": { "prompt": "Find me a tutorial about CAP draft handling", "expectedTool": "search_tutorials", "pickedTool": null, "correct": false },
     "p02": { "prompt": "What missions are about SAP HANA Cloud?", "expectedTool": "list_missions", "pickedTool": null, "correct": false },
