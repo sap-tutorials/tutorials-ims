@@ -21,7 +21,11 @@ interface BlogPost {
 
 interface NewsItem {
   title: string;
-  url: string;
+  // The /homepage/news API returns the RSS `link` field (see
+  // srv/lib/homepage-rss-fetcher.js — shape is { title, link, ... }).
+  // Community blogs use `url`, but news does not; reading `url` here left
+  // every news anchor with href=undefined (styled like a link, not clickable).
+  link: string;
   publishedAt?: string;
   categories?: string[];
 }
@@ -208,7 +212,7 @@ onMounted(() => {
       <ul v-else class="hb-community-lane__news-list">
         <li v-for="(item, idx) in news" :key="idx" class="hb-community-lane__news-item">
           <a
-            :href="item.url"
+            :href="item.link"
             target="_blank"
             rel="noopener noreferrer"
             class="hb-community-lane__news-link"

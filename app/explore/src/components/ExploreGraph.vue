@@ -65,6 +65,17 @@ onMounted(() => {
   renderer = new Sigma(graph, container.value, {
     minCameraRatio: 0.1,
     maxCameraRatio: 5,
+    // Our nodes carry a DOMAIN `type` attribute ("tutorial", "concept", …) via
+    // the `...n` spread in addNode. Sigma treats a node's `type` as the key of
+    // its rendering PROGRAM, and only "circle" is registered by default — so a
+    // node with type "tutorial" throws:
+    //   Sigma: could not find a suitable program for node type "tutorial"!
+    // A nodeReducer maps every node to the built-in "circle" program at RENDER
+    // time only; the stored domain `type` is untouched, so the click handler
+    // (getNodeAttributes → ExploreNode.type) and applyPathOverlay (attrs.type)
+    // still read the real domain type. This is why we reduce rather than
+    // overwrite the stored attribute.
+    nodeReducer: (_node, data) => ({ ...data, type: 'circle' }),
   })
   renderer.on('clickNode', ({ node }) => {
     if (!graph) return
