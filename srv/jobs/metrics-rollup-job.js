@@ -68,7 +68,20 @@ export async function runMetricsRollup(opts = {}) {
       LOG.info(`rollup already written for ${windowStart} on ${instanceId} — skipping`);
       return { wrote: 0, skipped: true };
     }
-    LOG.warn(`rollup write failed: ${err.message}`);
-    return { wrote: 0, error: err.message };
+    // Non-collision failure (e.g. a single poison row): salvage the good rows
+    // by inserting one at a time so one bad row can't sink the whole tick (#1257).
+    LOG.warn(`rollup batch insert failed (${err.message}) — falling back to per-row`);
+    let wrote = 0;
+    const dropped = [];
+    for (const row of rows) {
+      try {
+        await INSERT.into(MetricSnapshots).entries([row]);
+        wrote++;
+      } catch (e) {
+        dropped.push({ metric: row.metric, reason: e.message });
+      }
+    }
+    if (dropped.length) LOG.warn(`rollup dropped ${dropped.length} row(s): ${JSON.stringify(dropped)}`);
+    return { wrote, degraded: true, dropped: dropped.length };
   }
 }
