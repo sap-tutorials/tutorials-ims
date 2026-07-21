@@ -6,7 +6,7 @@
 // Mocks: kg-sparql-client.js, kg/concepts-for-user.js, db.run
 // No network / HANA access.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../srv/lib/kg-sparql-client.js', () => ({
   kgQuery: vi.fn(),
@@ -34,9 +34,14 @@ vi.mock('../../srv/lib/kg/concepts-for-user.js', () => ({
   getConceptsForUser: vi.fn(async () => ({ learned: [], partial: [], truncatedAt500: false })),
 }))
 
+vi.mock('../../srv/lib/kg-path-v2-client.js', () => ({
+  kgPathV2: vi.fn(),
+}))
+
 const { kgQuery, SparqlTimeoutError, SparqlSyntaxError } =
   await import('../../srv/lib/kg-sparql-client.js')
 const { getConceptsForUser } = await import('../../srv/lib/kg/concepts-for-user.js')
+const { kgPathV2 } = await import('../../srv/lib/kg-path-v2-client.js')
 const { findLearningPathHandler, FIND_LEARNING_PATH_TOOL } =
   await import('../../srv/lib/kg/joule-tool-find-path.js')
 
@@ -367,7 +372,7 @@ describe('findLearningPathHandler — result parsing and rendering', () => {
 
     const db = makeDb({
       tutorialRows: [
-        { SLUG: 'timed-tutorial', TITLE: 'Timed Tutorial', ESTIMATEDTIMEMINUTES: 25 },
+        { SLUG: 'timed-tutorial', TITLE: 'Timed Tutorial', AVERAGETIMETOCOMPLETE: 1500 },
       ],
     })
 
@@ -500,5 +505,121 @@ describe('findLearningPathHandler — telemetry', () => {
     const returned = tel.emitted.find(e => e.event === 'kg.joule.path_returned')
     expect(returned).toBeDefined()
     expect(returned.payload.error).toBe('timeout')
+  })
+})
+
+describe('findLearningPathHandler — KG_PATH_V2 engine (issue #1253)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getConceptsForUser.mockResolvedValue({ learned: [], partial: [], truncatedAt500: false })
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  // db.run dispatcher for the v2 branch: TUTORIALS hydration + CONCEPTS names.
+  function makeV2Db({ tutorialRows = [], conceptRows = [] } = {}) {
+    return {
+      run: vi.fn(async (sqlOrCqn) => {
+        const sql = typeof sqlOrCqn === 'string' ? sqlOrCqn : String(sqlOrCqn)
+        if (sql.includes('COM_SAP_DEVELOPERS_IMS_CONCEPTS') && sql.includes('NAME')) return conceptRows
+        if (sql.includes('COM_SAP_DEVELOPERS_IMS_TUTORIALS')) return tutorialRows
+        return []
+      }),
+    }
+  }
+
+  it('collapsed [A,B] path: 2 steps, B last, bridge lists concept names', async () => {
+    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    kgPathV2.mockResolvedValue([
+      { pathRank: 1, hopCount: 2, vertices: ['tutorial:abap-create-basic-app', 'concept:abap-cloud', 'concept:rap-bo', 'tutorial:abap-create-project'] },
+    ])
+    const db = makeV2Db({
+      tutorialRows: [
+        { SLUG: 'abap-create-basic-app', TITLE: 'Basic App', AVERAGETIMETOCOMPLETE: 900 },
+        { SLUG: 'abap-create-project', TITLE: 'Create Project', AVERAGETIMETOCOMPLETE: 600 },
+      ],
+      conceptRows: [
+        { SLUG: 'abap-cloud', NAME: 'ABAP Cloud' },
+        { SLUG: 'rap-bo', NAME: 'RAP Business Object' },
+      ],
+    })
+    const out = await findLearningPathHandler({ db, args: { fromSlug: 'abap-create-basic-app', toSlug: 'abap-create-project' }, user: null, telemetry: makeTelemetry() })
+    // Destination present — the exact regression from #1253.
+    expect(out).toContain('abap-create-project')
+    // Two numbered steps, B is #2.
+    expect(out).toMatch(/1\.\s+\*\*Basic App\*\*/)
+    expect(out).toMatch(/2\.\s+\*\*Create Project\*\*/)
+    // Bridge line surfaces concept NAMES.
+    expect(out).toMatch(/Connected via:.*ABAP Cloud/)
+    expect(out).toMatch(/RAP Business Object/)
+    // First step reason.
+    expect(out).toMatch(/Starting point/)
+  })
+
+  it('intermediate tutorial on path renders as an ordered middle step', async () => {
+    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    kgPathV2.mockResolvedValue([
+      { pathRank: 1, hopCount: 3, vertices: ['tutorial:a', 'concept:x', 'tutorial:m', 'concept:y', 'tutorial:b'] },
+    ])
+    const db = makeV2Db({
+      tutorialRows: [
+        { SLUG: 'a', TITLE: 'Tut A', AVERAGETIMETOCOMPLETE: 600 },
+        { SLUG: 'm', TITLE: 'Tut M', AVERAGETIMETOCOMPLETE: 600 },
+        { SLUG: 'b', TITLE: 'Tut B', AVERAGETIMETOCOMPLETE: 600 },
+      ],
+      conceptRows: [{ SLUG: 'x', NAME: 'X' }, { SLUG: 'y', NAME: 'Y' }],
+    })
+    const out = await findLearningPathHandler({ db, args: { fromSlug: 'a', toSlug: 'b' }, user: null, telemetry: makeTelemetry() })
+    expect(out).toMatch(/1\.\s+\*\*Tut A\*\*/)
+    expect(out).toMatch(/2\.\s+\*\*Tut M\*\*/)
+    expect(out).toMatch(/3\.\s+\*\*Tut B\*\*/)
+    expect(out).toMatch(/On the shortest path/)
+  })
+
+  it('direct tutorial↔tutorial path (no interior concepts) → Directly connected', async () => {
+    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    kgPathV2.mockResolvedValue([
+      { pathRank: 1, hopCount: 1, vertices: ['tutorial:a', 'tutorial:b'] },
+    ])
+    const db = makeV2Db({
+      tutorialRows: [
+        { SLUG: 'a', TITLE: 'Tut A', AVERAGETIMETOCOMPLETE: 600 },
+        { SLUG: 'b', TITLE: 'Tut B', AVERAGETIMETOCOMPLETE: 600 },
+      ],
+      conceptRows: [],
+    })
+    const out = await findLearningPathHandler({ db, args: { fromSlug: 'a', toSlug: 'b' }, user: null, telemetry: makeTelemetry() })
+    expect(out).toContain('Directly connected')
+    expect(out).toMatch(/2\.\s+\*\*Tut B\*\*/)
+  })
+
+  it('emits engine:v2 in path_returned telemetry', async () => {
+    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    kgPathV2.mockResolvedValue([
+      { pathRank: 1, hopCount: 1, vertices: ['tutorial:a', 'tutorial:b'] },
+    ])
+    const db = makeV2Db({
+      tutorialRows: [
+        { SLUG: 'a', TITLE: 'A', AVERAGETIMETOCOMPLETE: 60 },
+        { SLUG: 'b', TITLE: 'B', AVERAGETIMETOCOMPLETE: 60 },
+      ],
+    })
+    const tel = makeTelemetry()
+    await findLearningPathHandler({ db, args: { fromSlug: 'a', toSlug: 'b' }, user: null, telemetry: tel })
+    const returned = tel.emitted.find(e => e.event === 'kg.joule.path_returned')
+    expect(returned.payload.engine).toBe('v2')
+  })
+
+  it('v2 empty → falls through to v1 neighbor render (engine:v1)', async () => {
+    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    kgPathV2.mockResolvedValue([])
+    kgQuery.mockResolvedValue({ response: buildJsonResponse([{ slug: 'cap-getting-started', pathType: 'SHARED_CONCEPT', rank: 3 }]) })
+    // v1 branch uses makeDb() dispatcher (TASKRECORDS/TUTORIALCONCEPTLINKS/TUTORIALS).
+    const db = makeDb({ tutorialRows: [{ SLUG: 'cap-getting-started', TITLE: 'CAP GS', AVERAGETIMETOCOMPLETE: 600 }] })
+    const tel = makeTelemetry()
+    const out = await findLearningPathHandler({ db, args: { fromSlug: 'a', toSlug: 'cap-getting-started' }, user: null, telemetry: tel })
+    expect(out).toContain('cap-getting-started')
+    expect(tel.emitted.find(e => e.event === 'kg.joule.path_returned').payload.engine).toBe('v1')
   })
 })
