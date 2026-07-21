@@ -12,20 +12,14 @@ import * as metrics from './metrics.js';
 
 const LOG = cds.log('mcp-homepage');
 const NS  = 'com.sap.developers.ims';
-const SVC = 'HomepageService';
 
-function tokenSource(req) {
-  return req.user?.tokenSource ?? 'anon';
-}
-
-async function withToolMetrics(tool, req, fn) {
-  const ts = tokenSource(req);
+async function withToolMetrics(req, fn) {
   try {
     const result = await fn();
-    metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${ts},outcome=ok]`);
+    metrics.counter('mcp.tool.ok');
     return result;
   } catch (err) {
-    metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${ts},outcome=error]`);
+    metrics.counter('mcp.tool.error');
     throw err;
   }
 }
@@ -97,7 +91,7 @@ async function fetchRankedCandidates(profile, kind, limit) {
  * Authenticated (HomepageService @requires:'authenticated-user').
  */
 export async function handleGetMyRecommendedTutorials(req) {
-  return withToolMetrics('get_my_recommended_tutorials', req, async () => {
+  return withToolMetrics(req, async () => {
     const limit = clampLimit(req.data.limit, 10, 20);
     const profile = await resolvePersona(req);
     LOG.debug('[get_my_recommended_tutorials] limit=%d profile=%o', limit, profile);
@@ -110,7 +104,7 @@ export async function handleGetMyRecommendedTutorials(req) {
  * Authenticated (HomepageService @requires:'authenticated-user').
  */
 export async function handleGetMyRecommendedMissions(req) {
-  return withToolMetrics('get_my_recommended_missions', req, async () => {
+  return withToolMetrics(req, async () => {
     const limit = clampLimit(req.data.limit, 5, 10);
     const profile = await resolvePersona(req);
     LOG.debug('[get_my_recommended_missions] limit=%d profile=%o', limit, profile);

@@ -167,10 +167,10 @@ export async function patMiddleware(req, res, next) {
 
   if (!isValid(entry)) {
     const outcome = !entry ? 'miss' : entry.revokedAt ? 'revoked' : 'expired';
-    metrics.counter(`mcp.pat.auth[outcome=${outcome}]`);
+    metrics.counter(`mcp.pat.auth.${outcome}`);
     return respond401(res);
   }
-  metrics.counter('mcp.pat.auth[outcome=hit]');
+  metrics.counter('mcp.pat.auth.hit');
   installSyntheticUser(req, entry);
   // Strip the Bearer pat_ header so CAP's downstream xsuaa/ias auth strategy
   // does NOT try to JWT-parse the PAT. jwt-auth / xssec do

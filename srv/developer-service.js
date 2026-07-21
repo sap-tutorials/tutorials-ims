@@ -882,7 +882,7 @@ export default class DeveloperService extends cds.ApplicationService {
           preferredEventRegion: value,
         });
       }
-      metrics.counter(`homepage.events.pref_set[region=${value ?? 'null'}]`);
+      metrics.counter('homepage.events.pref_set');
       return true;
     });
 

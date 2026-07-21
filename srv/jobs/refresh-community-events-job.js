@@ -65,7 +65,7 @@ export async function runRefreshCommunityEvents(_logId, opts = {}) {
         const region = regionFromLocation(location);
         if (region === 'UNKNOWN' && virtualOrInPerson !== 'virtual') {
           summary.unknownRegion++;
-          metrics.counter(`homepage.events.region_unknown[location=${encodeURIComponent(location)}]`);
+          metrics.counter('homepage.events.region_unknown');
         }
 
         const upsertRow = {
@@ -100,7 +100,7 @@ export async function runRefreshCommunityEvents(_logId, opts = {}) {
     }
 
     const result = summary.errors === 0 ? 'ok' : 'partial';
-    metrics.counter(`homepage.events.refresh[result=${result}]`);
+    metrics.counter(`homepage.events.refresh.${result}`);
     LOG.info(JSON.stringify({ ...summary, perSource }));
     return summary;
   } catch (err) {
