@@ -374,8 +374,56 @@ export default class AdminService extends cds.ApplicationService {
     this.on('READ', 'PersonaTagChoices', () => KNOWN_TAGS.map((tag) => ({ tag })));
 
     // Feature Flag Viewer (#feature-flags): synthesize rows from the registry.
-    this.on('READ', 'FeatureFlags', async () => {
-      return resolveFeatureFlags();
+    // FeatureFlags is a @cds.persistence.skip entity, so there is no generic
+    // DB handler behind us — this on('READ') must itself honor the OData query
+    // options FE emits, or (a) the ObjectPage key-read `FeatureFlags(key='X')`
+    // returns the whole array and FE renders row 0 every time, and (b) the
+    // ListReport's $skip/$top paging is ignored so later rows never appear.
+    this.on('READ', 'FeatureFlags', async (req) => {
+      const all = await resolveFeatureFlags();
+      const select = req.query?.SELECT ?? {};
+
+      // 1) Key predicate → single-row read for the ObjectPage. CAP surfaces the
+      //    key either as req.params[...] (keyed navigation) or as a `key = val`
+      //    term in SELECT.where. Prefer params; fall back to parsing where.
+      let keyVal;
+      const params = req.params;
+      if (Array.isArray(params) && params.length) {
+        const last = params[params.length - 1];
+        if (last && typeof last === 'object' && 'key' in last) keyVal = last.key;
+        else if (typeof last === 'string') keyVal = last;
+      }
+      if (keyVal === undefined && Array.isArray(select.where)) {
+        const w = select.where;
+        for (let i = 0; i < w.length - 2; i++) {
+          if (w[i]?.ref?.[0] === 'key' && w[i + 1] === '=' && w[i + 2] && 'val' in w[i + 2]) {
+            keyVal = w[i + 2].val;
+            break;
+          }
+        }
+      }
+
+      let rows = keyVal === undefined ? all : all.filter((r) => r.key === keyVal);
+
+      // 2) $count=true → attach total (before paging) so FE's growing list and
+      //    count header are correct.
+      const wantsCount = select.count === true;
+      const total = rows.length;
+
+      // 3) $skip / $top → apply paging window from SELECT.limit. CQN wraps the
+      //    numbers as { val: N } (and CAP injects a default limit of 1000 on
+      //    every collection read), so unwrap before arithmetic — treating the
+      //    wrapper object as a number yields NaN → slice(0,NaN) → [].
+      const unwrap = (v) => (v && typeof v === 'object' && 'val' in v ? v.val : v);
+      const offset = Number(unwrap(select.limit?.offset)) || 0;
+      const rowsLimit = unwrap(select.limit?.rows);
+      const rowsLimitNum = rowsLimit == null ? null : Number(rowsLimit);
+      if (offset || rowsLimitNum != null) {
+        rows = rows.slice(offset, rowsLimitNum != null ? offset + rowsLimitNum : undefined);
+      }
+
+      if (wantsCount) rows.$count = total;
+      return rows;
     });
 
     // Virtual severityCrit element (drives @UI.LineItem Criticality coloring).
