@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import cds from '@sap/cds';
 import { fetchOneSource, isEnglish } from '../../srv/lib/community-blogs-fetcher.js';
+import * as metrics from '../../srv/lib/metrics.js';
 
 cds.test('serve', '--project', '.', '--in-memory');
 
@@ -182,5 +183,45 @@ describe('fetchOneSource', () => {
         .where({ sourceUrl: { in: ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>'] } })
     );
     expect(rows.length).toBe(0);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// #1257 metric name overflow — names must be bounded + no source= or value labels
+// -----------------------------------------------------------------------------
+
+describe('#1257 fetcher metric names', () => {
+  let db, source;
+
+  beforeAll(async () => {
+    db = await cds.connect.to('db');
+    source = await db.run(
+      SELECT.one.from(cds.entities('com.sap.developers.ims').CommunityBlogSources)
+        .where({ topicSlug: 'community-technology' })
+    );
+    expect(source).toBeTruthy();
+  });
+
+  beforeEach(() => { process.env.RSS_TRANSPORT = 'fetch'; });
+  afterEach(() => { delete process.env.RSS_TRANSPORT; });
+
+  it('every emitted fetch metric name is ≤ 64 chars with no source= or value labels', async () => {
+    const spy = vi.spyOn(metrics, 'counter');
+    // Reuse the same happy-path stub as the existing "inserts an English post" test above.
+    global.fetch = vi.fn(async () => fakeFetchResponse(xmlBody([{
+      title: 'A really solid CAP tutorial', link: 'https://community.sap.com/t/metric-test-1',
+      publishedAt: '2026-07-06T10:00:00Z',
+      author: 'Jane Dev',
+      description: '<p>Long description...</p>',
+    }])));
+    await fetchOneSource(source, { db });
+    const names = spy.mock.calls.map((c) => c[0]);
+    expect(names.length).toBeGreaterThan(0);
+    for (const n of names) {
+      expect(n.length).toBeLessThanOrEqual(64);
+      expect(n).not.toMatch(/source=/);
+      expect(n).not.toMatch(/=\d/);
+    }
+    spy.mockRestore();
   });
 });

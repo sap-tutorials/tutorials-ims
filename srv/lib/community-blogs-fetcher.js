@@ -173,13 +173,13 @@ export async function fetchOneSource(source, { db } = {}) {
     });
   } catch (err) {
     log.warn(`fetchOneSource: ${source.label}: fetch failed:`, err.code || '', err.message);
-    metrics.counter(`homepage.community_blogs.fetch[source=${source.topicSlug || source.ID},result=fetch_error]`);
+    metrics.counter('homepage.community_blogs.fetch[result=fetch_error]');
     stats.errored = 1;
     return stats;
   }
   if (!res.ok) {
     log.warn(`fetchOneSource: ${source.label}: HTTP ${res.status}`);
-    metrics.counter(`homepage.community_blogs.fetch[source=${source.topicSlug || source.ID},result=fetch_error]`);
+    metrics.counter('homepage.community_blogs.fetch[result=fetch_error]');
     stats.errored = 1;
     return stats;
   }
@@ -189,7 +189,7 @@ export async function fetchOneSource(source, { db } = {}) {
     xml = await res.text();
   } catch (err) {
     log.warn(`fetchOneSource: ${source.label}: body read failed:`, err.message);
-    metrics.counter(`homepage.community_blogs.fetch[source=${source.topicSlug || source.ID},result=parse_error]`);
+    metrics.counter('homepage.community_blogs.fetch[result=parse_error]');
     stats.errored = 1;
     return stats;
   }
@@ -199,7 +199,7 @@ export async function fetchOneSource(source, { db } = {}) {
     items = parseRss(xml, { log });
   } catch (err) {
     log.warn(`fetchOneSource: ${source.label}: parse threw:`, err.message);
-    metrics.counter(`homepage.community_blogs.fetch[source=${source.topicSlug || source.ID},result=parse_error]`);
+    metrics.counter('homepage.community_blogs.fetch[result=parse_error]');
     stats.errored = 1;
     return stats;
   }
@@ -222,9 +222,9 @@ export async function fetchOneSource(source, { db } = {}) {
     }
   }
 
-  metrics.counter(
-    `homepage.community_blogs.fetch[source=${source.topicSlug || source.ID},result=hit,inserted=${stats.inserted},updated=${stats.updated}]`
-  );
+  metrics.counter('homepage.community_blogs.fetch[result=hit]');
+  metrics.counter('homepage.community_blogs.fetch.inserted', stats.inserted);
+  metrics.counter('homepage.community_blogs.fetch.updated', stats.updated);
   return stats;
 }
 
