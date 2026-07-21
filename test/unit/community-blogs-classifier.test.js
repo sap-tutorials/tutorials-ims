@@ -5,7 +5,8 @@
 // chatCompletion returns canned responses — matching the pattern in
 // test/unit/category-classifier-llm.test.js.
 
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import * as metrics from '../../srv/lib/metrics.js';
 import cds from '@sap/cds';
 import {
   classifyOne,
@@ -207,6 +208,37 @@ describe('classifyPendingBatch', () => {
     } finally {
       if (orig === undefined) delete process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED;
       else process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED = orig;
+    }
+  });
+
+  // #1257: drained-path counters must be bounded dotted names, not a 91-char blob
+  it('#1257 emits only bounded dotted counters on drain — every name ≤ 64 chars, no numeric value labels', async () => {
+    await db.run(INSERT.into(CommunityBlogPosts).entries([
+      { ID: '00000000-0000-0000-0000-0000000001d1', sourceUrl: 'https://x/metric-1', sourceId_ID: sourceId, title: 'M1', aiVerdict: 'PENDING' },
+    ]));
+    const client = makeFakeClient(() => ({
+      toolCalls: toolCall({ verdict: 'DEVELOPER_RELEVANT', confidence: 0.9, reason: 'good' }),
+    }));
+    const spy = vi.spyOn(metrics, 'counter');
+    try {
+      await classifyPendingBatch({ clientOverride: client, limit: 10 });
+    } finally {
+      // capture before restore (mockRestore clears mock.calls)
+      const names = spy.mock.calls.map((c) => c[0]);
+      spy.mockRestore();
+      // Must have emitted at least the four drained-path counters
+      expect(names).toContain('homepage.community_blogs.classifier.drained');
+      expect(names).toContain('homepage.community_blogs.classifier.ok');
+      expect(names).toContain('homepage.community_blogs.classifier.parse_error');
+      expect(names).toContain('homepage.community_blogs.classifier.aicore_error');
+      // Every emitted name must be ≤ 64 chars
+      for (const n of names) {
+        expect(n.length, `metric name too long: ${n}`).toBeLessThanOrEqual(64);
+      }
+      // No numeric value labels baked into the name (the old bug pattern)
+      for (const n of names) {
+        expect(n, `metric name contains numeric value label: ${n}`).not.toMatch(/=\d/);
+      }
     }
   });
 });
