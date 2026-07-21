@@ -2,6 +2,29 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 import vue from '@vitejs/plugin-vue';
 
+// Node 24+ (Tom's local runtime is 26.5.0) ships experimental Web Storage
+// globals ON by default. Node's native `localStorage` needs
+// `--localstorage-file` or it resolves to `undefined`, and — because it's a
+// real global — it SHADOWS the one happy-dom installs for
+// `@vitest-environment happy-dom` files. Result: every hugo-apps DOM test that
+// calls `localStorage.clear()` throws "Cannot read properties of undefined
+// (reading 'clear')". `sessionStorage` is in-memory so it survives, which is
+// why a test can pass `sessionStorage.clear()` one line above the crash.
+// `--no-experimental-webstorage` strips both native globals so happy-dom owns
+// them again.
+//
+// This config module is evaluated in vitest's MAIN process before it forks
+// test workers, and forks inherit `process.env`, so appending the flag to
+// NODE_OPTIONS here reaches every worker regardless of pool type. We mutate
+// process.env programmatically (NOT a shell `NODE_OPTIONS=` export — that
+// breaks on Windows cmd, and `poolOptions.forks.execArgv` is silently dropped
+// in this multi-project config). Harmless no-op on CI's Node 22, where
+// webstorage is off by default and the flag is simply ignored.
+const WEBSTORAGE_FLAG = '--no-experimental-webstorage';
+if (!(process.env.NODE_OPTIONS ?? '').includes(WEBSTORAGE_FLAG)) {
+  process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ''} ${WEBSTORAGE_FLAG}`.trim();
+}
+
 export default defineConfig({
   test: {
     globals: true,
@@ -46,7 +69,7 @@ export default defineConfig({
             cds_requires_caching_impl: 'cds-caching',
             cds_requires_caching_namespace: 'unit-default',
             cds_requires_caching_store: 'memory',
-          }
+          },
         },
         resolve: {
           alias: {
