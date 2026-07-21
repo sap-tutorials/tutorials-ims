@@ -18,6 +18,9 @@
           <Label text="{i18n>fieldEnabled}" />
           <Switch state="{settings>/enabled}" />
 
+          <Label text="{i18n>fieldOnDemandEnabled}" />
+          <Switch state="{settings>/onDemandExtractionEnabled}" />
+
           <Label text="{i18n>fieldExtractBuildCap}" />
           <Input value="{settings>/extractBuildCap}" type="Number"
                  placeholder="{i18n>placeholderExtractBuildCap}" />
