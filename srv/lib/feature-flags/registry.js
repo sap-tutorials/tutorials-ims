@@ -134,8 +134,7 @@ export const FEATURE_FLAGS = [
     kind: 'db-setting', entity: 'ChatSettings', column: 'communityPeersEnabled', resolver: 'chat',
     valueType: 'boolean', default: false, issue: '#1126', status: 'dev-only',
     description: 'findCommunityPeers Joule tool. Ships dark until PROD Louvain data verified.',
-    howToChange: adminTile('joule', '#joule',
-      'Not yet on the Joule Settings form — PATCH /admin/ChatSettings(<ID>) directly until added.'),
+    howToChange: adminTile('joule', '#joule'),
   },
   {
     key: 'ChatSettings.kgSearchExpansionEnabled', label: 'KG search expansion', category: 'Chat / AI',

@@ -39,6 +39,15 @@ sap.ui.define([
         // labeling job's per-day LLM calls (db/schema.cds:672).
         communityPeersEnabled: false,
         communityLabelLlmBudgetPerDay: 50,
+        // Knowledge Graph Joule tool flags. These gate LLM-facing tool
+        // registration in the chat orchestrator. Defaults mirror the schema
+        // (db/schema.cds): kgPathBetweenEnabled OFF (#445), the other three ON
+        // (cheap, cache-reused). kgPathBetweenEnabled had no UI toggle before —
+        // it could only be flipped via a direct PATCH to /admin/ChatSettings.
+        kgPathBetweenEnabled: false,
+        kgSearchExpansionEnabled: true,
+        searchKgRerankEnabled: true,
+        kgRelatedContentEnabled: true,
         // A2A (Agent-to-Agent) endpoint config (#1220). a2aEnabled defaults
         // true to mirror the schema default (db/schema.cds). When enabled, the
         // Agent Card endpoint at /.well-known/agent-card.json is advertised and
@@ -91,6 +100,12 @@ sap.ui.define([
             branchingEnabled: !!data.branchingEnabled,
             communityPeersEnabled: !!data.communityPeersEnabled,
             communityLabelLlmBudgetPerDay: data.communityLabelLlmBudgetPerDay != null ? data.communityLabelLlmBudgetPerDay : 50,
+            // KG tool flags. Defaults-when-null mirror the schema: kgPathBetween
+            // OFF, the other three ON (use ?? so an absent field renders ON, not OFF).
+            kgPathBetweenEnabled: !!data.kgPathBetweenEnabled,
+            kgSearchExpansionEnabled: data.kgSearchExpansionEnabled ?? true,
+            searchKgRerankEnabled: data.searchKgRerankEnabled ?? true,
+            kgRelatedContentEnabled: data.kgRelatedContentEnabled ?? true,
             a2aEnabled: data.a2aEnabled ?? true,
             a2aPublicBaseUrl: data.a2aPublicBaseUrl || "",
             a2aTokenUrl: data.a2aTokenUrl || ""
@@ -127,6 +142,10 @@ sap.ui.define([
         branchingEnabled: !!data.branchingEnabled,
         communityPeersEnabled: !!data.communityPeersEnabled,
         communityLabelLlmBudgetPerDay: parseInt(data.communityLabelLlmBudgetPerDay, 10) || 50,
+        kgPathBetweenEnabled: !!data.kgPathBetweenEnabled,
+        kgSearchExpansionEnabled: !!data.kgSearchExpansionEnabled,
+        searchKgRerankEnabled: !!data.searchKgRerankEnabled,
+        kgRelatedContentEnabled: !!data.kgRelatedContentEnabled,
         a2aEnabled: !!data.a2aEnabled,
         a2aPublicBaseUrl: data.a2aPublicBaseUrl || "",
         a2aTokenUrl: data.a2aTokenUrl || ""

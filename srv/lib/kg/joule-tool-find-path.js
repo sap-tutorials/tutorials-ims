@@ -283,8 +283,13 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
   }
 
   const hydrateSlugPlaceholders = filtered.map(() => '?').join(',')
+  // AVERAGETIMETOCOMPLETE is the real column (Integer, SECONDS) — the schema
+  // field is Tutorials.averageTimeToComplete. There is no ESTIMATEDTIMEMINUTES
+  // column; querying it throws `invalid column name` on HANA, which the
+  // orchestrator catches and surfaces as "couldn't compute a route". Convert
+  // seconds → minutes at render time (build-catalog.js does the same /60).
   const tutorialRows = await db.run(
-    `SELECT SLUG, TITLE, ESTIMATEDTIMEMINUTES
+    `SELECT SLUG, TITLE, AVERAGETIMETOCOMPLETE
      FROM COM_SAP_DEVELOPERS_IMS_TUTORIALS
      WHERE SLUG IN (${hydrateSlugPlaceholders})`,
     filtered.map(c => c.slug)
@@ -292,7 +297,10 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
 
   const tutorialMeta = new Map()
   for (const row of tutorialRows || []) {
-    tutorialMeta.set(row.SLUG, { title: row.TITLE, minutes: row.ESTIMATEDTIMEMINUTES })
+    // Column comes back as seconds; store minutes (rounded), null-safe.
+    const secs = row.AVERAGETIMETOCOMPLETE
+    const minutes = secs != null ? Math.round(secs / 60) : null
+    tutorialMeta.set(row.SLUG, { title: row.TITLE, minutes })
   }
 
   // Drop candidates not found in Tutorials (orphan slugs from stale graph)
