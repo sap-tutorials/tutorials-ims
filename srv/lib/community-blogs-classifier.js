@@ -268,8 +268,9 @@ export async function classifyPendingBatch(opts = {}) {
     }
   }
 
-  metrics.counter(
-    `homepage.community_blogs.classifier[result=drained,drained=${summary.drained},ok=${summary.ok},parse_error=${summary.parseError},aicore_error=${summary.aicoreError}]`
-  );
+  metrics.counter('homepage.community_blogs.classifier.drained', summary.drained);
+  metrics.counter('homepage.community_blogs.classifier.ok', summary.ok);
+  metrics.counter('homepage.community_blogs.classifier.parse_error', summary.parseError);
+  metrics.counter('homepage.community_blogs.classifier.aicore_error', summary.aicoreError);
   return summary;
 }

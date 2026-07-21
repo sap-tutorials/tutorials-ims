@@ -310,8 +310,7 @@ export default class HomepageService extends cds.ApplicationService {
       const now = Date.now();
       const hit = _state.events.get(cacheKey);
       if (hit && (now - hit.at) < EVENTS_TTL_MS) {
-        metrics.counter(`homepage.events.requests[region=${region},virtual=${includeVirtual ? 1 : 0},result=200]`);
-        return hit.value;
+        metrics.counter('homepage.events.requests.served');
       }
 
       // Feature-flag check — fallback to legacy Events entity when off.
@@ -343,9 +342,9 @@ export default class HomepageService extends cds.ApplicationService {
       _state.events.set(cacheKey, { at: now, value });
 
       if (value.length === 0) {
-        metrics.counter(`homepage.events.requests[region=${region},virtual=${includeVirtual ? 1 : 0},result=empty]`);
+        metrics.counter('homepage.events.requests.empty');
       } else {
-        metrics.counter(`homepage.events.requests[region=${region},virtual=${includeVirtual ? 1 : 0},result=200]`);
+        metrics.counter('homepage.events.requests.served');
       }
       return value;
     });
@@ -532,7 +531,7 @@ export default class HomepageService extends cds.ApplicationService {
             metrics.counter('homepage.community_blogs[result=degraded]');
           }
         } else {
-          metrics.counter(`homepage.community_blogs[result=served,count=${value.length}]`);
+          metrics.counter('homepage.community_blogs[result=served]');
         }
 
         // Strip the internal linkStatus/adminOverride fields before returning.
@@ -818,7 +817,7 @@ export default class HomepageService extends cds.ApplicationService {
         // Unknown surface — ignore silently (don't leak the allowlist).
         return {};
       }
-      metrics.counter(`homepage.personalized.applied[surface=${surface}]`);
+      metrics.counter('homepage.personalized.applied');
       return {};
     });
 

@@ -28,28 +28,28 @@ describe('Phase 2 MCP metrics — PAT', () => {
     expect(snap.counters['mcp.pat.revoke']).toBe(2);
   });
 
-  it('mcp.pat.auth[outcome=hit] increments on a valid PAT', () => {
-    metrics.counter('mcp.pat.auth[outcome=hit]');
+  it('mcp.pat.auth.hit increments on a valid PAT', () => {
+    metrics.counter('mcp.pat.auth.hit');
     const snap = metrics.snapshot();
-    expect(snap.counters['mcp.pat.auth[outcome=hit]']).toBe(1);
+    expect(snap.counters['mcp.pat.auth.hit']).toBe(1);
   });
 
-  it('mcp.pat.auth[outcome=miss] increments on an unknown token', () => {
-    metrics.counter('mcp.pat.auth[outcome=miss]');
+  it('mcp.pat.auth.miss increments on an unknown token', () => {
+    metrics.counter('mcp.pat.auth.miss');
     const snap = metrics.snapshot();
-    expect(snap.counters['mcp.pat.auth[outcome=miss]']).toBe(1);
+    expect(snap.counters['mcp.pat.auth.miss']).toBe(1);
   });
 
-  it('mcp.pat.auth[outcome=revoked] increments for revoked tokens', () => {
-    metrics.counter('mcp.pat.auth[outcome=revoked]');
+  it('mcp.pat.auth.revoked increments for revoked tokens', () => {
+    metrics.counter('mcp.pat.auth.revoked');
     const snap = metrics.snapshot();
-    expect(snap.counters['mcp.pat.auth[outcome=revoked]']).toBe(1);
+    expect(snap.counters['mcp.pat.auth.revoked']).toBe(1);
   });
 
-  it('mcp.pat.auth[outcome=expired] increments for expired tokens', () => {
-    metrics.counter('mcp.pat.auth[outcome=expired]');
+  it('mcp.pat.auth.expired increments for expired tokens', () => {
+    metrics.counter('mcp.pat.auth.expired');
     const snap = metrics.snapshot();
-    expect(snap.counters['mcp.pat.auth[outcome=expired]']).toBe(1);
+    expect(snap.counters['mcp.pat.auth.expired']).toBe(1);
   });
 });
 
@@ -80,21 +80,13 @@ describe('Phase 2 MCP metrics — slicer', () => {
 });
 
 describe('Phase 2 MCP metrics — tool invocation', () => {
-  it('mcp.tool counter includes service, tool, tokenSource, outcome labels', () => {
-    metrics.counter('mcp.tool[service=DeveloperService,tool=get_my_tutorials,tokenSource=pat,outcome=ok]');
-    const snap = metrics.snapshot();
-    expect(snap.counters['mcp.tool[service=DeveloperService,tool=get_my_tutorials,tokenSource=pat,outcome=ok]']).toBe(1);
+  it('mcp.tool.ok increments on a successful tool invocation', () => {
+    metrics.counter('mcp.tool.ok');
+    expect(metrics.snapshot().counters['mcp.tool.ok']).toBe(1);
   });
 
-  it('mcp.tool uses tokenSource=anon for unauthenticated callers', () => {
-    metrics.counter('mcp.tool[service=SearchService,tool=get_tutorial_step,tokenSource=anon,outcome=ok]');
-    const snap = metrics.snapshot();
-    expect(snap.counters['mcp.tool[service=SearchService,tool=get_tutorial_step,tokenSource=anon,outcome=ok]']).toBe(1);
-  });
-
-  it('mcp.tool records outcome=error on handler failure', () => {
-    metrics.counter('mcp.tool[service=HomepageService,tool=get_my_recommended_tutorials,tokenSource=xsuaa,outcome=error]');
-    const snap = metrics.snapshot();
-    expect(snap.counters['mcp.tool[service=HomepageService,tool=get_my_recommended_tutorials,tokenSource=xsuaa,outcome=error]']).toBe(1);
+  it('mcp.tool.error increments on handler failure', () => {
+    metrics.counter('mcp.tool.error');
+    expect(metrics.snapshot().counters['mcp.tool.error']).toBe(1);
   });
 });

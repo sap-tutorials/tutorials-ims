@@ -24,6 +24,12 @@ in-memory state into HANA rows (`MetricSnapshots`) and structured log lines.
 | `db.tx.ms` | histogram | same | Every `db.tx(fn)` end-to-end wall-clock |
 | `db.tx.run.ms` | histogram | same | Every `tx.run(...)` inside a tx callback |
 | `db.pool.timeout` | counter | same | Rejected error matches `/timeout|acquire/i` |
+| `homepage.community_blogs[result=served\|degraded\|degraded_empty\|error]` | counter | `srv/homepage-service.js` communityBlogs | Shelf serve outcome |
+| `homepage.community_blogs.classifier.{drained,ok,parse_error,aicore_error}` | counter | `srv/lib/community-blogs-classifier.js` | Per-drain classifier counts |
+| `homepage.community_blogs.fetch[result=hit\|fetch_error\|parse_error]` | counter | `srv/lib/community-blogs-fetcher.js` | Per-source fetch outcome |
+| `homepage.community_blogs.fetch.{inserted,updated}` | counter | `srv/lib/community-blogs-fetcher.js` | Rows inserted/updated per fetch |
+| `homepage.events.refresh.{ok,partial,failed}` | counter | `srv/jobs/refresh-community-events-job.js` | Events refresh outcome |
+| `homepage.events.refresh_rows.{inserted,updated}` | counter | `srv/jobs/refresh-community-events-job.js` | Rows inserted/updated per refresh |
 
 The DB-wrapper metrics (`db.*`) only emit when `METRICS_DB_WRAP=true`. Metrics module is otherwise unconditionally active.
 
@@ -33,6 +39,11 @@ The DB-wrapper metrics (`db.*`) only emit when `METRICS_DB_WRAP=true`. Metrics m
 2. Call `metrics.counter(name)`, `metrics.gauge(name, value)`, or `metrics.observe(name, value)`.
 3. The rollup job picks it up automatically — no schema change needed.
 4. Add a row to the catalog table above.
+5. **Names are capped at 64 chars** (`MAX_NAME_LEN` in `metrics.js`, mirroring
+   the `MetricSnapshots.metric` `String(64)` primary key). Never interpolate
+   counts or unbounded ids into a name — put counts in their own dotted counter
+   (`counter(name, n)`) and keep only bounded dimensions in `[key=value]` tags.
+   Over-length names are dropped at ingestion with a warning, never persisted.
 
 Naming: use dotted namespaces (`subsystem.what.kind`). Keep total distinct
 names ≤ 20 in v1 to stay well within the `MetricSnapshots` cardinality budget.

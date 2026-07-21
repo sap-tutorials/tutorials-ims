@@ -11,21 +11,15 @@ import * as store from './mcp-progress-store.js';
 import * as metrics from './metrics.js';
 
 const LOG = cds.log('mcp-dev');
-const SVC = 'DeveloperService';
-
-function tokenSource(req) {
-  return req.user?.tokenSource ?? 'anon';
-}
 
 /** Fire-and-forget tool invocation counter. Emitted at handler exit. */
-async function withToolMetrics(tool, req, fn) {
-  const ts = tokenSource(req);
+async function withToolMetrics(req, fn) {
   try {
     const result = await fn();
-    metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${ts},outcome=ok]`);
+    metrics.counter('mcp.tool.ok');
     return result;
   } catch (err) {
-    metrics.counter(`mcp.tool[service=${SVC},tool=${tool},tokenSource=${ts},outcome=error]`);
+    metrics.counter('mcp.tool.error');
     throw err;
   }
 }
@@ -47,7 +41,7 @@ async function requireDbUser(req) {
 }
 
 export async function handleGetMyTutorials(req) {
-  return withToolMetrics('get_my_tutorials', req, async () => {
+  return withToolMetrics(req, async () => {
     const status = req.data.status ?? 'all';
     try { assertEnum({ name: 'status', value: status, allowed: STATUS_TUT }); }
     catch (e) { return req.reject(400, e.message); }
@@ -59,7 +53,7 @@ export async function handleGetMyTutorials(req) {
 }
 
 export async function handleGetMyMissions(req) {
-  return withToolMetrics('get_my_missions', req, async () => {
+  return withToolMetrics(req, async () => {
     const status = req.data.status ?? 'all';
     try { assertEnum({ name: 'status', value: status, allowed: STATUS_MIS }); }
     catch (e) { return req.reject(400, e.message); }
@@ -71,7 +65,7 @@ export async function handleGetMyMissions(req) {
 }
 
 export async function handleGetMyEvents(req) {
-  return withToolMetrics('get_my_events', req, async () => {
+  return withToolMetrics(req, async () => {
     const when = req.data.when ?? 'upcoming';
     try { assertEnum({ name: 'when', value: when, allowed: WHEN_EVT }); }
     catch (e) { return req.reject(400, e.message); }
@@ -83,7 +77,7 @@ export async function handleGetMyEvents(req) {
 }
 
 export async function handleGetMyCompletedSteps(req) {
-  return withToolMetrics('get_my_completed_steps', req, async () => {
+  return withToolMetrics(req, async () => {
     const { slug } = req.data;
     if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
     const dbUser = await requireDbUser(req);
@@ -96,7 +90,7 @@ export async function handleGetMyCompletedSteps(req) {
 
 /** Also re-used by SearchService (anonymous mount) via the same handler symbol. */
 export async function handleGetTutorialStep(req) {
-  return withToolMetrics('get_tutorial_step', req, async () => {
+  return withToolMetrics(req, async () => {
     const { slug, stepNumber } = req.data;
     if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
     if (!Number.isInteger(stepNumber) || stepNumber < 1)
@@ -122,7 +116,7 @@ export async function handleGetTutorialStep(req) {
  * progress. JWT/OAuth callers (browser) have no tokenSource and are always allowed.
  */
 export async function handleCompleteStep(req) {
-  return withToolMetrics('complete_step', req, async () => {
+  return withToolMetrics(req, async () => {
     // Scope gate: PAT callers must carry the 'pat-write' pseudo-role.
     // JWT/OAuth callers (tokenSource !== 'pat') are unaffected.
     if (req.user?.tokenSource === 'pat' && !req.user.is('pat-write')) {
@@ -150,7 +144,7 @@ export async function handleCompleteStep(req) {
  * PAT scope gate: read-only PATs are rejected with 403.
  */
 export async function handleResetTutorialProgress(req) {
-  return withToolMetrics('reset_tutorial_progress', req, async () => {
+  return withToolMetrics(req, async () => {
     // Scope gate: PAT callers must carry the 'pat-write' pseudo-role.
     // JWT/OAuth callers (tokenSource !== 'pat') are unaffected.
     if (req.user?.tokenSource === 'pat' && !req.user.is('pat-write')) {
