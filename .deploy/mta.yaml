@@ -84,6 +84,10 @@ modules:
       MCP_AUTH_ENABLED: 'true'
       MCP_PAT_MINT_ENABLED: 'true'
       KG_STEP_SLICER_ENABLED: 'true'
+      # KG_PATH_V2 (issue #913): property-graph shortest-path engine backing
+      # the Joule findLearningPath tool + CDS pathBetween + GET /graph/path
+      # (#1253). Default OFF; DEV override 'true' in deploy/dev.mtaext.
+      KG_PATH_V2_ENABLED: 'false'
       # NOTE: CONTENT_API_KEY, GITHUB_DISPATCH_TOKEN, SMTP_HOST/PORT/USER/FROM
       # and REBUILD_TARGET_ENV used to live here. All resolved from the BTP
       # Credential Store now (via srv/lib/secret-resolver.js) or TenantSettings

@@ -11,7 +11,7 @@
 // Spec: docs/superpowers/specs/2026-06-22-issue-445-joule-pathbetween-design.md
 
 import { SparqlTimeoutError } from '../kg-sparql-client.js'
-import { findPath } from '../kg-path.js'
+import { findPathV2OrV1 } from '../kg-path.js'
 import { getConceptsForUser } from './concepts-for-user.js'
 
 // ---------------------------------------------------------------------------
@@ -28,6 +28,93 @@ const PATH_TYPE_REASONS = {
   PREREQ: 'Prerequisite chain',
   CO_COMPLETED: 'Often completed together',
   SHARED_CONCEPT: 'Shares concepts',
+}
+
+// Max bridging-concept names to list on the destination's "Connected via" line.
+const MAX_BRIDGE_CONCEPTS = 4
+
+// ---------------------------------------------------------------------------
+// V2 render helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Render a KG_PATH_V2 shortest path (#1253). `vertices` is the ordered
+ * sequence [tutorial:A, concept:…, …, tutorial:B]. Tutorial vertices become
+ * numbered steps; interior concept vertices become the "Connected via" bridge
+ * line on the destination. Guarantees the destination (toSlug) appears.
+ */
+async function renderV2Path({ db, vertices, effectiveFromSlug, toSlug, telemetry, t0, fromSlugInferred, unanchored }) {
+  const tutorialSlugs = []
+  const conceptSlugs = []
+  for (const v of vertices) {
+    if (typeof v !== 'string') continue
+    if (v.startsWith('tutorial:')) tutorialSlugs.push(v.slice('tutorial:'.length))
+    else if (v.startsWith('concept:')) conceptSlugs.push(v.slice('concept:'.length))
+  }
+
+  // Hydrate tutorial title + minutes (reuse the #1254 column). Convert
+  // seconds → minutes at render time (build-catalog.js does the same /60).
+  const tutMeta = new Map()
+  if (tutorialSlugs.length > 0) {
+    const ph = tutorialSlugs.map(() => '?').join(',')
+    const rows = await db.run(
+      `SELECT SLUG, TITLE, AVERAGETIMETOCOMPLETE
+       FROM COM_SAP_DEVELOPERS_IMS_TUTORIALS
+       WHERE SLUG IN (${ph})`,
+      tutorialSlugs
+    )
+    for (const r of rows || []) {
+      const secs = r.AVERAGETIMETOCOMPLETE
+      tutMeta.set(r.SLUG, { title: r.TITLE, minutes: secs != null ? Math.round(secs / 60) : null })
+    }
+  }
+
+  // Hydrate concept names for the bridge line.
+  const conceptNames = []
+  if (conceptSlugs.length > 0) {
+    const ph = conceptSlugs.map(() => '?').join(',')
+    const rows = await db.run(
+      `SELECT SLUG, NAME
+       FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS
+       WHERE SLUG IN (${ph})`,
+      conceptSlugs
+    )
+    const nameBySlug = new Map((rows || []).map(r => [r.SLUG, r.NAME]))
+    for (const s of conceptSlugs) conceptNames.push(nameBySlug.get(s) || s)
+  }
+
+  telemetry?.emit?.('kg.joule.path_returned', {
+    fromSlug: effectiveFromSlug,
+    toSlug,
+    resultCount: tutorialSlugs.length,
+    latencyMs: Date.now() - t0,
+    fromSlugInferred,
+    exactTargetReached: true,
+    unanchored,
+    engine: 'v2',
+  })
+
+  // 'Directly connected' is defensive-only: the kgPathV2 client drops any path
+  // with < 3 vertices and requires all interior vertices be concept: (see
+  // kg-path-v2-client.js), so a concept-less [A, B] path never reaches here in
+  // production. The unit test exercises this branch by mocking kgPathV2 directly.
+  const bridge = conceptNames.length > 0
+    ? `Connected via: ${conceptNames.slice(0, MAX_BRIDGE_CONCEPTS).join(', ')}${conceptNames.length > MAX_BRIDGE_CONCEPTS ? ', …' : ''}`
+    : 'Directly connected'
+
+  const lines = [`Here's a path from \`${effectiveFromSlug}\` to \`${toSlug}\`:\n`]
+  for (let i = 0; i < tutorialSlugs.length; i++) {
+    const slug = tutorialSlugs[i]
+    const meta = tutMeta.get(slug) || { title: slug, minutes: null }
+    const url = `https://developers.sap.com/tutorials/${slug}.html`
+    let reason
+    if (i === 0) reason = 'Starting point'
+    else if (i === tutorialSlugs.length - 1) reason = bridge
+    else reason = 'On the shortest path'
+    lines.push(`${i + 1}. **${meta.title}** — [${slug}](${url})`)
+    lines.push(`   ~${meta.minutes ?? '?'} min · ${reason}`)
+  }
+  return lines.join('\n')
 }
 
 // ---------------------------------------------------------------------------
@@ -148,33 +235,35 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
   // Step 5: Record t0
   const t0 = Date.now()
 
-  // Step 6: Call findPath (extracted to srv/lib/kg-path.js — same module
-  // used by GET /graph/path. The shared helper handles slug→IRI conversion,
-  // kgQuery dispatch, and JSON parse; we keep telemetry + dedup + hydration
-  // + markdown rendering here.)
-  let rawCandidates
+  // Step 6: Fetch a path via the shared helper — prefers KG_PATH_V2 (true
+  // shortest A→B path, #1253) and fails open to v1 SPARQL PATH_BETWEEN.
+  let pathResult
   try {
-    rawCandidates = await findPath({ db, fromSlug: effectiveFromSlug, toSlug })
+    pathResult = await findPathV2OrV1({ db, fromSlug: effectiveFromSlug, toSlug })
   } catch (err) {
     if (err instanceof SparqlTimeoutError || err?.name === 'SparqlTimeoutError') {
       telemetry?.emit?.('kg.joule.path_returned', {
-        fromSlug: effectiveFromSlug,
-        toSlug,
-        error: 'timeout',
-        latencyMs: Date.now() - t0,
+        fromSlug: effectiveFromSlug, toSlug, error: 'timeout', latencyMs: Date.now() - t0,
       })
       return "I couldn't find a learning path right now — the query timed out. Please try a more specific target."
     }
-    // SparqlSyntaxError or generic Error
     const errKind = err?.name === 'SparqlSyntaxError' ? 'syntax' : 'error'
     telemetry?.emit?.('kg.joule.path_returned', {
-      fromSlug: effectiveFromSlug,
-      toSlug,
-      error: errKind,
-      latencyMs: Date.now() - t0,
+      fromSlug: effectiveFromSlug, toSlug, error: errKind, latencyMs: Date.now() - t0,
     })
     return 'Internal error finding a learning path — please try a more specific question.'
   }
+
+  // ── V2 branch: render the true shortest path (tutorial steps + concept bridge)
+  if (pathResult.engine === 'v2') {
+    return await renderV2Path({
+      db, vertices: pathResult.vertices, effectiveFromSlug, toSlug,
+      telemetry, t0, fromSlugInferred, unanchored,
+    })
+  }
+
+  // ── V1 branch: today's neighbor-based behavior (unchanged below).
+  const rawCandidates = pathResult.candidates
 
   // Step 7: Count per-arm breakdown for telemetry (findPath returns the
   // already-parsed rows; we tally PathType for the path_returned event).
@@ -195,6 +284,7 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
       fromSlugInferred,
       exactTargetReached: false,
       unanchored,
+      engine: 'v1',
     })
     return `I couldn't find a path from \`${effectiveFromSlug}\` to \`${toSlug}\`. Try a broader target or browse the catalog at https://developers.sap.com/tutorial-navigator.html.`
   }
@@ -278,6 +368,7 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
       fromSlugInferred,
       exactTargetReached,
       unanchored,
+      engine: 'v1',
     })
     return `I couldn't find a path from \`${effectiveFromSlug}\` to \`${toSlug}\`. Try a broader target or browse the catalog at https://developers.sap.com/tutorial-navigator.html.`
   }
@@ -322,6 +413,7 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
       fromSlugInferred,
       exactTargetReached,
       unanchored,
+      engine: 'v1',
     })
     return `I couldn't find a path from \`${effectiveFromSlug}\` to \`${toSlug}\`. Try a broader target or browse the catalog at https://developers.sap.com/tutorial-navigator.html.`
   }
@@ -336,6 +428,7 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
     fromSlugInferred,
     exactTargetReached,
     unanchored,
+    engine: 'v1',
   })
 
   // Step 14: Render markdown
