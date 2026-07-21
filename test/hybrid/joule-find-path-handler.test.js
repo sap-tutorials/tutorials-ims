@@ -67,4 +67,24 @@ describe('findLearningPathHandler — end-to-end against HANA (issue #445)', () 
     // Column resolves (value may be null, but the SELECT must not throw).
     expect('AVERAGETIMETOCOMPLETE' in rows[0]).toBe(true)
   }, 15_000)
+
+  // #1253: with KG_PATH_V2 enabled, the true shortest path MUST end at (or
+  // include) the named destination — the exact regression the issue names.
+  // Gated on the flag so a flag-off hybrid run no-ops cleanly (mirrors the
+  // KG_PATH_V2_BODY_IMPLEMENTED gate in kg-path-v2.test.js).
+  it.skipIf(process.env.KG_PATH_V2_ENABLED !== 'true')(
+    'names the destination in the rendered path (issue #1253)',
+    async () => {
+      const out = await findLearningPathHandler({
+        db,
+        args: { fromSlug: FROM_SLUG, toSlug: TO_SLUG },
+        user: null,
+        telemetry: null,
+      })
+      expect(out).not.toMatch(/couldn't find a path/i)
+      // The destination slug must appear in the rendered output.
+      expect(out).toContain(TO_SLUG)
+    },
+    30_000
+  )
 })
