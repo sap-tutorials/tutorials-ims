@@ -532,7 +532,7 @@ export default class HomepageService extends cds.ApplicationService {
             metrics.counter('homepage.community_blogs[result=degraded]');
           }
         } else {
-          metrics.counter(`homepage.community_blogs[result=served,count=${value.length}]`);
+          metrics.counter('homepage.community_blogs[result=served]');
         }
 
         // Strip the internal linkStatus/adminOverride fields before returning.
