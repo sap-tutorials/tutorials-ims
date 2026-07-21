@@ -4,13 +4,20 @@ extends: tutorials-ims
 
 modules:
   - name: tutorials-srv
+    # No prod-specific `properties:` overrides. CONTENT_API_KEY +
+    # GITHUB_DISPATCH_TOKEN are credstore-only (finish-credstore-migration PR;
+    # see deploy/dev.mtaext for the rationale), and the KG flags intentionally
+    # inherit mta.yaml's 'false' defaults in prod. An empty `properties:` mapping
+    # parses as null and the multiapps controller rejects it
+    # ("Null value for key modules#0#properties") — so it is omitted, not left blank.
     parameters:
       instances: 2
-    properties:
-      # CONTENT_API_KEY + GITHUB_DISPATCH_TOKEN moved to credstore-only in the
-      # finish-credstore-migration PR. See deploy/dev.mtaext for the rationale.
 
   - name: tutorials-approuter
+    # No prod-specific `properties:` overrides. REBUILD_API_KEY is credstore-only
+    # (PR #903 rollout step 3 / #871 follow-up); APPROUTER_URL was removed (no
+    # runtime readers). An empty `properties:` mapping parses as null and is
+    # rejected by the deployer, so it is omitted rather than left blank.
     parameters:
       app-name: tutorials-prod-approuter
       instances: 2
@@ -21,10 +28,6 @@ modules:
       # dynamically from the bound xsuaa VCAP credentials + request host, so no
       # per-env config is needed — the prod tenant/region resolve automatically
       # from the xsuaa-imsprod binding, resolving the old "verify prod tenant" TODO.
-    properties:
-      # REBUILD_API_KEY was formerly injected here — removed in PR #903
-      # rollout step 3 (#871 follow-up). APPROUTER_URL followed the same
-      # pattern in the finish-credstore-migration PR (no runtime readers).
 
 resources:
   - name: tutorials-xsuaa

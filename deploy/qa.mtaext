@@ -10,12 +10,12 @@ modules:
       # finish-credstore-migration PR. See deploy/dev.mtaext for the rationale.
 
   - name: tutorials-approuter
+    # No qa-specific `properties:` overrides. REBUILD_API_KEY is credstore-only
+    # (PR #903 rollout step 3 / #871 follow-up); APPROUTER_URL was removed (no
+    # runtime readers). An empty `properties:` mapping parses as null and is
+    # rejected by the deployer, so it is omitted rather than left blank.
     parameters:
       app-name: tutorials-qa-approuter
-    properties:
-      # REBUILD_API_KEY was formerly injected here — removed in PR #903
-      # rollout step 3 (#871 follow-up). APPROUTER_URL followed the same
-      # pattern in the finish-credstore-migration PR (no runtime readers).
 
 resources:
   - name: tutorials-xsuaa
