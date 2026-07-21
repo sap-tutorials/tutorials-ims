@@ -41,7 +41,7 @@ export async function runRefreshCommunityEvents(_logId, opts = {}) {
     } catch (err) {
       LOG.error(`fetcher failed: ${err.message}`);
       summary.errors++;
-      metrics.counter(`homepage.events.refresh[result=failed]`);
+      metrics.counter('homepage.events.refresh.failed');
       return summary;
     }
     const { rows: corpus, perSource } = orchResult;
@@ -49,7 +49,7 @@ export async function runRefreshCommunityEvents(_logId, opts = {}) {
 
     if (corpus.length === 0) {
       LOG.warn('refresh-community-events: fetchers returned no rows');
-      metrics.counter(`homepage.events.refresh[result=partial]`);
+      metrics.counter('homepage.events.refresh.partial');
       return summary;
     }
 
@@ -87,10 +87,10 @@ export async function runRefreshCommunityEvents(_logId, opts = {}) {
         const existing = await SELECT.one.from(CommunityEvents).columns('ID').where({ slug });
         if (!existing) {
           await INSERT.into(CommunityEvents).entries({ ...upsertRow, firstSeenAt: now });
-          metrics.counter(`homepage.events.refresh_rows[action=inserted]`);
+          metrics.counter('homepage.events.refresh_rows.inserted');
         } else {
           await UPDATE(CommunityEvents).set(upsertRow).where({ ID: existing.ID });
-          metrics.counter(`homepage.events.refresh_rows[action=updated]`);
+          metrics.counter('homepage.events.refresh_rows.updated');
         }
         summary.upserted++;
       } catch (err) {
@@ -106,7 +106,7 @@ export async function runRefreshCommunityEvents(_logId, opts = {}) {
   } catch (err) {
     LOG.error(`refresh cycle failed: ${err.message}`);
     summary.errors++;
-    metrics.counter(`homepage.events.refresh[result=failed]`);
+    metrics.counter('homepage.events.refresh.failed');
     return summary;
   }
 }

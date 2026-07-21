@@ -28,7 +28,8 @@ in-memory state into HANA rows (`MetricSnapshots`) and structured log lines.
 | `homepage.community_blogs.classifier.{drained,ok,parse_error,aicore_error}` | counter | `srv/lib/community-blogs-classifier.js` | Per-drain classifier counts |
 | `homepage.community_blogs.fetch[result=hit\|fetch_error\|parse_error]` | counter | `srv/lib/community-blogs-fetcher.js` | Per-source fetch outcome |
 | `homepage.community_blogs.fetch.{inserted,updated}` | counter | `srv/lib/community-blogs-fetcher.js` | Rows inserted/updated per fetch |
-| `homepage.events.refresh[result=ok\|partial]` | counter | `srv/jobs/refresh-community-events-job.js` | Events refresh outcome |
+| `homepage.events.refresh.{ok,partial,failed}` | counter | `srv/jobs/refresh-community-events-job.js` | Events refresh outcome |
+| `homepage.events.refresh_rows.{inserted,updated}` | counter | `srv/jobs/refresh-community-events-job.js` | Rows inserted/updated per refresh |
 
 The DB-wrapper metrics (`db.*`) only emit when `METRICS_DB_WRAP=true`. Metrics module is otherwise unconditionally active.
 
