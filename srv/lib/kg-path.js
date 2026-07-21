@@ -12,7 +12,9 @@
 // Issue #446, Phase 3 Track 3-B PR 5/6.
 // #1129: parse fixed from XML → SPARQL-results+JSON (proc emits JSON).
 
+import cds from '@sap/cds'
 import { kgQuery } from './kg-sparql-client.js'
+import { kgPathV2 } from './kg-path-v2-client.js'
 
 // Single-source-of-truth tutorial IRI prefix. The PATH_BETWEEN procedure
 // validates p1/p2 as full tutorial IRIs (see srv/lib/kg-queries.js).
@@ -45,6 +47,53 @@ export async function findPath({ db, fromSlug, toSlug }) {
     params: { fromSlug: fromIri, toSlug: toIri },
   })
   return parsePathSparql(result?.response ?? '')
+}
+
+/**
+ * Compute an A→B path, preferring the KG_PATH_V2 property-graph shortest-path
+ * engine (issue #913) and failing open to the v1 SPARQL PATH_BETWEEN
+ * (findPath) when the flag is off, v2 returns empty, or v2 errors.
+ *
+ * Unlike the CDS `pathBetween` action (knowledge-graph-service.js), which maps
+ * the v2 result to bare tutorial slugs and discards the concept vertices, this
+ * helper returns the RAW vertex sequence so the Joule tool can surface the
+ * bridging concepts ("Connected via: …"). Issue #1253.
+ *
+ * @param {object} opts
+ * @param {object} opts.db        - CDS db service handle (v1 fallback)
+ * @param {string} opts.fromSlug  - source tutorial slug (canonical lowercase)
+ * @param {string} opts.toSlug    - target tutorial slug (canonical lowercase)
+ * @returns {Promise<
+ *   | { engine: 'v2', vertices: string[] }
+ *   | { engine: 'v1', candidates: Array<{slug:string,pathType:string,pathTypeRank:number,hopCount:number}> }
+ * >}
+ */
+export async function findPathV2OrV1({ db, fromSlug, toSlug }) {
+  const fromIri = `${TUTORIAL_IRI_PREFIX}${fromSlug}`
+  const toIri = `${TUTORIAL_IRI_PREFIX}${toSlug}`
+
+  if (process.env.KG_PATH_V2_ENABLED === 'true') {
+    try {
+      const paths = await kgPathV2({ fromIri, toIri })
+      if (paths.length > 0) {
+        return { engine: 'v2', vertices: paths[0].vertices }
+      }
+      // v2 returned empty → fall through to v1 SPARQL below.
+    } catch (err) {
+      // Fail-open: log and fall through to v1 (mirrors the pathBetween action
+      // in srv/knowledge-graph-service.js). ETIMEDOUT on disconnected pairs
+      // lands here too.
+      cds.log('kg').warn('findPathV2OrV1: v2 failed, falling back to v1', {
+        code: err?.code,
+        message: err?.message,
+        fromSlug,
+        toSlug,
+      })
+    }
+  }
+
+  const candidates = await findPath({ db, fromSlug, toSlug })
+  return { engine: 'v1', candidates }
 }
 
 /**
