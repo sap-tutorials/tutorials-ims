@@ -510,13 +510,16 @@ cds.on('bootstrap', (app) => {
   });
 
   // A2A consumption guide (public). Read from disk with fs (NOT res.sendFile —
-  // sendFile with a file:// URL path is unreliable on Windows). 404 if the doc
-  // is not present (it is authored in Task 10). (#1220)
+  // sendFile with a file:// URL path is unreliable on Windows). Served from
+  // srv/mcp/ (NOT docs/) because docs/ is not packaged into the deployed srv
+  // module — cds build copies the whole srv/ tree to gen/srv, so the guide must
+  // live under srv/ to reach CF. Mirrors the deployed srv/mcp/prompts/*.md. (#1220)
   app.get('/.well-known/a2a-instructions.md', (_req, res) => {
     try {
-      const p = fileURLToPath(new URL('../docs/developers/reference/a2a-instructions.md', import.meta.url));
+      const p = fileURLToPath(new URL('./mcp/a2a-instructions.md', import.meta.url));
       res.type('text/markdown').send(readFileSync(p, 'utf8'));
-    } catch {
+    } catch (e) {
+      cds.log('a2a').warn(`a2a-instructions.md unreadable — ${e.message}`);
       res.status(404).type('text/plain').send('A2A instructions not found');
     }
   });
