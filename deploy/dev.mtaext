@@ -20,6 +20,12 @@ modules:
       # MTA. prod.mtaext / qa.mtaext intentionally inherit 'false' until
       # Phase 1 is signed off.
       KNOWLEDGE_GRAPH_ENABLED: 'true'
+      # KG_PATH_V2 on for DEV (#1253): routes findLearningPath through the
+      # true-shortest-path engine. Also activates it for the CDS pathBetween
+      # action + GET /graph/path (both fail open to v1). Pinned here so MTA
+      # redeploys preserve the flip — cf set-env does NOT survive cf deploy.
+      # prod.mtaext / qa.mtaext intentionally inherit 'false'.
+      KG_PATH_V2_ENABLED: 'true'
 
   - name: tutorials-approuter
     parameters:
