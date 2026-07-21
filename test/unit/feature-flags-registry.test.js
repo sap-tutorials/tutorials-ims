@@ -60,7 +60,7 @@ describe('resolveFeatureFlags precedence + polarity', () => {
     expect(pr2.winningLayer).toBe('default');
   });
 
-  it('numeric env flag enables when > 0', async () => {
+  it('numeric chat db-setting falls back to env when the column is unset (#1171)', async () => {
     vi.resetModules();
     vi.doMock('../../srv/lib/runtime-config/kg-settings.js', () => ({
       resolveKnowledgeGraphSettings: async () => ({ enabled: false, onDemandExtractionEnabled: false }),
@@ -68,14 +68,16 @@ describe('resolveFeatureFlags precedence + polarity', () => {
     vi.doMock('../../srv/lib/runtime-config/ui-events-settings.js', () => ({
       resolveUiEventsSettings: async () => ({ enabled: false }),
     }));
+    // Empty entities → ChatSettings row is null, so the env var is the fallback layer.
     vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {}, info() {}, error() {}, debug() {} }) } }));
     const { resolveFeatureFlags } = await import('../../srv/lib/feature-flags/resolve.js');
 
     process.env.KG_COMMUNITY_WEIGHT = '1.5';
     const rows = await resolveFeatureFlags();
-    const cw = rows.find((r) => r.key === 'KG_COMMUNITY_WEIGHT');
+    const cw = rows.find((r) => r.key === 'communityRankWeight');
     expect(cw.enabled).toBe(true);
     expect(cw.effectiveValue).toBe('1.5');
+    expect(cw.winningLayer).toBe('env');
     delete process.env.KG_COMMUNITY_WEIGHT;
   });
 

@@ -36,6 +36,23 @@ export function _resetForTest() {
   _chatSettingsExpiresAt = 0;
 }
 
+// #1171: Resolve the community-overlap rank weight. Admin-editable
+// ChatSettings.communityRankWeight is the source of truth; when it is unset
+// (null/undefined — e.g. an env whose row predates the column, or a fresh
+// deploy before the admin touches it) we fall back to the legacy
+// KG_COMMUNITY_WEIGHT env const so existing cf set-env deployments keep working.
+// Any non-finite or negative value collapses to 0 (OFF). The caller only invokes
+// this after confirming searchKgRerankEnabled, so a 0 here means "KG rerank on,
+// community term off" — exactly the pre-#1171 behaviour.
+function resolveCommunityWeight(settings) {
+  const fromSettings = settings?.communityRankWeight;
+  if (fromSettings != null) {
+    const n = Number(fromSettings);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  return KG_COMMUNITY_WEIGHT;   // env fallback (already parsed + clamped >= 0)
+}
+
 // Word-boundary normalizer used by both the search predicate AND the rank
 // CASE-WHEN. Returns an SQL fragment string that pads separator characters
 // with spaces so " % term % " word-boundary LIKE works on hyphenated tags
@@ -234,10 +251,15 @@ export default class SearchService extends cds.ApplicationService {
           });
           kgFragment = buildKgRankFragment(signal);
           // #1171 — additive, independent community-overlap term. weight 0 => ''.
+          // Source of truth is the admin-editable ChatSettings.communityRankWeight;
+          // the KG_COMMUNITY_WEIGHT env var remains a fallback for envs that
+          // haven't set the column (null/undefined → resolveCommunityWeight
+          // reads process.env, else 0). This keeps the weight operator-controllable
+          // from /admin-ui/#joule without a redeploy.
           communityFragment = await buildCommunityRankFragment({
             signal,
             db: cds.db,
-            weight: KG_COMMUNITY_WEIGHT,
+            weight: resolveCommunityWeight(settings),
           });
         }
       } catch (err) {

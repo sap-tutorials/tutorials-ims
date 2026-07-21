@@ -154,6 +154,12 @@
           <Label text="" />
           <Text text="{i18n>searchKgRerankEnabledHelp}" wrapping="true" class="sapUiTinyMarginBottom" />
 
+          <Label text="{i18n>communityRankWeight}" />
+          <StepInput value="{settings>/communityRankWeight}" min="0" max="5" step="0.5" displayValuePrecision="2" enabled="{settings>/searchKgRerankEnabled}" />
+
+          <Label text="" />
+          <Text text="{i18n>communityRankWeightHelp}" wrapping="true" class="sapUiTinyMarginBottom" />
+
           <Label text="{i18n>kgRelatedContentEnabled}" />
           <Switch state="{settings>/kgRelatedContentEnabled}" />
 

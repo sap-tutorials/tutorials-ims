@@ -2029,6 +2029,15 @@
           },
           "@cds.persistence.name": "COMMUNITYPEERSENABLED"
         },
+        "communityRankWeight": {
+          "type": "cds.Decimal",
+          "precision": 4,
+          "scale": 2,
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "COMMUNITYRANKWEIGHT"
+        },
         "communityLabelLlmBudgetPerDay": {
           "type": "cds.Integer",
           "default": {
