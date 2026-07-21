@@ -666,6 +666,19 @@ entity ChatSettings : cuid, managed {
   // flipped on after PROD KgCommunity/KgCommunityLabel data is verified.
   communityPeersEnabled           : Boolean default false;
 
+  // Community-overlap SEARCH-RANK weight (#1171). The additive rank term
+  // `+ W * (case when slug = '<peer>' then 1 else 0 end)` that boosts tutorials
+  // sharing a Louvain community with the query's top concept-overlap hits.
+  // Default 0 (OFF) → buildCommunityRankFragment short-circuits before any DB
+  // work and the rank SQL stays byte-identical to the #945 KG_WEIGHT formula.
+  // Only takes effect when searchKgRerankEnabled is also true (the community
+  // term is computed inside the same before('READ') gate). Supersedes the
+  // KG_COMMUNITY_WEIGHT env var, which is now only a fallback when this is null.
+  // Enable deliberately after reviewing test/harness/community-rank-churn-report.md
+  // — a value of 1.0–1.5 is defensible on the DEV corpus; broad queries whose
+  // anchors land in the large Louvain cluster see heavy reordering.
+  communityRankWeight             : Decimal(4, 2) default 0;
+
   // Daily LLM budget for kg-community-label-job (#1126). Mirrors the
   // newsRelevance… counter pattern so a first-run backlog of new community
   // fingerprints ramps over a few nights rather than spiking AI Core spend.

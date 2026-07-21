@@ -57,11 +57,12 @@ export const FEATURE_FLAGS = [
     howToChange: cfEnv('KG_PATH_V2_ENABLED', 'true'),
   },
   {
-    key: 'KG_COMMUNITY_WEIGHT', label: 'KG community search weight',
-    category: 'Knowledge Graph', kind: 'env', envVar: 'KG_COMMUNITY_WEIGHT',
-    envRule: 'numeric', valueType: 'number', default: 0, issue: '#1171', status: 'dev-only',
-    description: 'Additive Louvain-community rank term in search (>0 enables). Requires searchKgRerankEnabled=true.',
-    howToChange: cfEnv('KG_COMMUNITY_WEIGHT', '1.5'),
+    key: 'communityRankWeight', label: 'KG community search weight',
+    category: 'Knowledge Graph', kind: 'db-setting', entity: 'ChatSettings',
+    column: 'communityRankWeight', resolver: 'chat', envVar: 'KG_COMMUNITY_WEIGHT',
+    valueType: 'number', default: 0, issue: '#1171', status: 'dev-only',
+    description: 'Additive Louvain-community rank term in search (>0 enables). Requires searchKgRerankEnabled=true. Admin-editable; KG_COMMUNITY_WEIGHT env var is a fallback only.',
+    howToChange: adminTile('joule', '#joule', 'Or env KG_COMMUNITY_WEIGHT (fallback only, used when the column is unset).'),
   },
   {
     key: 'KG_WEIGHT', label: 'KG concept-overlap search weight',

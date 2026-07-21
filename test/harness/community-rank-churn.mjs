@@ -47,16 +47,33 @@ function kendallTau(a, b) {
 }
 
 async function rankSlugs(srv, SearchableItems, phrase, n) {
+  // Must include the key `ID`: on HANA the fuzzy-search rank machinery
+  // references the entity key, so a `.columns('slug')`-only projection throws
+  // "invalid column name: ID". We only read `slug` below; ID is along for the
+  // ride to keep the generated SQL valid.
   const rows = await srv.run(
-    SELECT.from(SearchableItems).columns('slug').search(phrase).limit(n),
+    SELECT.from(SearchableItems).columns('slug', 'ID').search(phrase).limit(n),
   );
   return rows.map((r) => (r.slug || '').toLowerCase());
 }
 
 // capture: emit raw ranked slug lists for the whole query set at the server's
 // current KG_COMMUNITY_WEIGHT. TSV line = `query<TAB>slug1,slug2,...`.
+//
+// SearchService is a PROVIDED service (srv/search-service.js), not a required
+// one, so `cds.connect.to('SearchService')` fails with "Didn't find a
+// configuration for 'cds.requires.SearchService'" unless the model is served
+// in-process first. We serve ONLY that service by name: `cds.serve('all')`
+// also instantiates the ORD service (@cap-js/ord), whose init reads the Express
+// `app` that a headless script has no listener for → "Cannot read properties of
+// undefined (reading 'get')". Serving SearchService alone skips every other
+// provided service. `cds.test('serve')` is also unusable here — it defers its
+// boot to a node:test `before` hook that never fires outside a test runner.
+// Bindings (HANA, AI Core) arrive via `cds bind --exec`, which sets
+// CDS_ENV=hybrid; connecting to db explicitly ensures the handler's cds.db is live.
 async function capture() {
-  const srv = await cds.connect.to('SearchService');
+  await cds.connect.to('db');
+  const srv = await cds.serve('SearchService').from('*');
   const { SearchableItems } = srv.entities;
   for (const q of queries) {
     const slugs = await rankSlugs(srv, SearchableItems, q, topN);

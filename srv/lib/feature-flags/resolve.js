@@ -87,8 +87,24 @@ export async function resolveFeatureFlags() {
       let enabled;
       let winningLayer;
       if (f.resolver === 'chat') {
-        // Chat booleans have no env layer: DB row wins, else CDS default.
         const dbVal = row ? row[f.column] : undefined;
+        if (f.valueType === 'number') {
+          // Numeric chat setting (e.g. communityRankWeight #1171): DB column
+          // wins; when unset fall back to its env var, else the CDS default.
+          // enabled = effective value > 0; effectiveValue is the number itself.
+          const envVal = f.envVar !== undefined ? envRaw(f.envVar) : null;
+          base.rawEnvValue = envVal;
+          let effNum;
+          if (dbVal !== undefined && dbVal !== null) { effNum = Number(dbVal); winningLayer = 'db'; }
+          else if (envVal !== null) { effNum = Number(envVal); winningLayer = 'env'; }
+          else { effNum = Number(f.default); winningLayer = 'default'; }
+          if (!Number.isFinite(effNum) || effNum < 0) effNum = 0;
+          return {
+            ...base, rawDbValue: rawDb, effectiveValue: asStr(effNum), enabled: effNum > 0,
+            winningLayer, howToChangeText: renderHowTo(f),
+          };
+        }
+        // Chat booleans have no env layer: DB row wins, else CDS default.
         enabled = dbVal === undefined || dbVal === null ? Boolean(f.default) : Boolean(dbVal);
         winningLayer = dbVal === undefined || dbVal === null ? 'default' : 'db';
       } else {

@@ -105,6 +105,8 @@ sap.ui.define([
             kgPathBetweenEnabled: !!data.kgPathBetweenEnabled,
             kgSearchExpansionEnabled: data.kgSearchExpansionEnabled ?? true,
             searchKgRerankEnabled: data.searchKgRerankEnabled ?? true,
+            // #1171 community-overlap search-rank weight. Null/undefined → 0 (OFF).
+            communityRankWeight: data.communityRankWeight != null ? Number(data.communityRankWeight) : 0,
             kgRelatedContentEnabled: data.kgRelatedContentEnabled ?? true,
             a2aEnabled: data.a2aEnabled ?? true,
             a2aPublicBaseUrl: data.a2aPublicBaseUrl || "",
@@ -145,6 +147,12 @@ sap.ui.define([
         kgPathBetweenEnabled: !!data.kgPathBetweenEnabled,
         kgSearchExpansionEnabled: !!data.kgSearchExpansionEnabled,
         searchKgRerankEnabled: !!data.searchKgRerankEnabled,
+        // #1171: clamp to [0,5]; blank/NaN → 0 (OFF).
+        communityRankWeight: (function () {
+          var w = Number(data.communityRankWeight);
+          if (!isFinite(w) || w < 0) { return 0; }
+          return w > 5 ? 5 : w;
+        })(),
         kgRelatedContentEnabled: !!data.kgRelatedContentEnabled,
         a2aEnabled: !!data.a2aEnabled,
         a2aPublicBaseUrl: data.a2aPublicBaseUrl || "",
