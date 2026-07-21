@@ -42,6 +42,54 @@ describe('metrics module (counters + gauges)', () => {
     expect(() => metrics.observe(null, 1)).not.toThrow();
     warnSpy.mockRestore();
   });
+
+  it('counter(name, n) increments by n', () => {
+    metrics.counter('bulk', 5);
+    metrics.counter('bulk', 3);
+    expect(metrics.snapshot().counters.bulk).toBe(8);
+  });
+
+  it('counter(name) still defaults to +1', () => {
+    metrics.counter('one');
+    metrics.counter('one');
+    expect(metrics.snapshot().counters.one).toBe(2);
+  });
+
+  it('counter(name, 0) records the series at 0', () => {
+    metrics.counter('zeroed', 0);
+    expect(metrics.snapshot().counters.zeroed).toBe(0);
+  });
+
+  it('counter with invalid n does not throw and leaves counter unset', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => metrics.counter('bad', Number.NaN)).not.toThrow();
+    expect(() => metrics.counter('bad2', -3)).not.toThrow();
+    expect(() => metrics.counter('bad3', 'x')).not.toThrow();
+    const snap = metrics.snapshot();
+    expect(snap.counters.bad).toBeUndefined();
+    expect(snap.counters.bad2).toBeUndefined();
+    expect(snap.counters.bad3).toBeUndefined();
+    warnSpy.mockRestore();
+  });
+
+  it('rejects a metric name longer than 64 chars (counter/gauge/observe) — no throw, absent from snapshot', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const tooLong = 'x'.repeat(65);
+    expect(() => metrics.counter(tooLong)).not.toThrow();
+    expect(() => metrics.gauge(tooLong, 1)).not.toThrow();
+    expect(() => metrics.observe(tooLong, 1)).not.toThrow();
+    const snap = metrics.snapshot();
+    expect(snap.counters[tooLong]).toBeUndefined();
+    expect(snap.gauges[tooLong]).toBeUndefined();
+    expect(snap.histograms[tooLong]).toBeUndefined();
+    warnSpy.mockRestore();
+  });
+
+  it('accepts a metric name of exactly 64 chars', () => {
+    const exactly64 = 'y'.repeat(64);
+    metrics.counter(exactly64);
+    expect(metrics.snapshot().counters[exactly64]).toBe(1);
+  });
 });
 
 describe('metrics module (histograms)', () => {

@@ -25,6 +25,11 @@ const RESERVOIR_SIZE = 2000;
 const histograms = new Map();
 // Each histogram: { count: number, samples: number[] (length ≤ RESERVOIR_SIZE) }
 
+// Mirrors MetricSnapshots.metric — key String(64) in db/schema.cds. Names longer
+// than this overflow the HANA primary-key column and (pre-#1257) failed the whole
+// rollup batch. Guard at ingestion so one bad name drops only itself.
+const MAX_NAME_LEN = 64;
+
 let lastWarnAt = 0;
 function warn(msg) {
   const now = Date.now();
@@ -38,11 +43,13 @@ function isDisabled() {
   return process.env.METRICS_ENABLED === 'false';
 }
 
-export function counter(name) {
+export function counter(name, n = 1) {
   try {
     if (isDisabled()) return;
     if (typeof name !== 'string' || !name) throw new Error(`invalid counter name: ${name}`);
-    counters.set(name, (counters.get(name) || 0) + 1);
+    if (name.length > MAX_NAME_LEN) throw new Error(`metric name too long (${name.length} > ${MAX_NAME_LEN}): ${name}`);
+    if (typeof n !== 'number' || !isFinite(n) || n < 0) throw new Error(`invalid counter increment: ${n}`);
+    counters.set(name, (counters.get(name) || 0) + n);
   } catch (err) { warn(err.message); }
 }
 
@@ -50,6 +57,7 @@ export function gauge(name, value) {
   try {
     if (isDisabled()) return;
     if (typeof name !== 'string' || !name) throw new Error(`invalid gauge name: ${name}`);
+    if (name.length > MAX_NAME_LEN) throw new Error(`metric name too long (${name.length} > ${MAX_NAME_LEN}): ${name}`);
     if (typeof value !== 'number' || !isFinite(value)) throw new Error(`invalid gauge value: ${value}`);
     gauges.set(name, value);
   } catch (err) { warn(err.message); }
@@ -74,6 +82,7 @@ export function observe(name, value) {
   try {
     if (isDisabled()) return;
     if (typeof name !== 'string' || !name) throw new Error(`invalid histogram name: ${name}`);
+    if (name.length > MAX_NAME_LEN) throw new Error(`metric name too long (${name.length} > ${MAX_NAME_LEN}): ${name}`);
     if (typeof value !== 'number' || !isFinite(value)) throw new Error(`invalid observe value: ${value}`);
     let h = histograms.get(name);
     if (!h) { h = { count: 0, samples: [] }; histograms.set(name, h); }
