@@ -94,6 +94,10 @@ async function renderV2Path({ db, vertices, effectiveFromSlug, toSlug, telemetry
     engine: 'v2',
   })
 
+  // 'Directly connected' is defensive-only: the kgPathV2 client drops any path
+  // with < 3 vertices and requires all interior vertices be concept: (see
+  // kg-path-v2-client.js), so a concept-less [A, B] path never reaches here in
+  // production. The unit test exercises this branch by mocking kgPathV2 directly.
   const bridge = conceptNames.length > 0
     ? `Connected via: ${conceptNames.slice(0, MAX_BRIDGE_CONCEPTS).join(', ')}${conceptNames.length > MAX_BRIDGE_CONCEPTS ? ', …' : ''}`
     : 'Directly connected'
