@@ -16,6 +16,7 @@ import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
 import { checkSecretPresence, invalidatePresence } from './lib/secret-presence.js';
+import { invalidateInstallationToken } from './lib/github-app-token.js';
 import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
@@ -2312,6 +2313,13 @@ export default class AdminService extends cds.ApplicationService {
       // 5-min TTL window. The rebuild-trigger.js `invalidateDispatchTokenCache`
       // export is a thin shim over this same call kept for direct callers.
       invalidateSecret(row.key);
+      // #1154: App-credential rotations must also bust the cached GitHub App
+      // installation token (github-app-token.js caches it ~55 min), else a UI
+      // rotation of the private key / installation ID keeps minting with the
+      // stale token until it self-expires.
+      if (row.key === 'TUTORIALS_APP_ID' || row.key === 'TUTORIALS_APP_INSTALLATION_ID' || row.key === 'TUTORIALS_APP_PRIVATE_KEY') {
+        invalidateInstallationToken();
+      }
       // #1018: also flush the presence cache so the LR badge + popover
       // reflect the save on the next refresh (≤5 min TTL) instead of
       // waiting up to the resolver's separate window.
@@ -2363,6 +2371,13 @@ export default class AdminService extends cds.ApplicationService {
       // See setSecretValue above — same universal hot-flush for any rotated
       // secret, not just GITHUB_DISPATCH_TOKEN.
       invalidateSecret(row.key);
+      // #1154: App-credential rotations must also bust the cached GitHub App
+      // installation token (github-app-token.js caches it ~55 min), else a UI
+      // rotation of the private key / installation ID keeps minting with the
+      // stale token until it self-expires.
+      if (row.key === 'TUTORIALS_APP_ID' || row.key === 'TUTORIALS_APP_INSTALLATION_ID' || row.key === 'TUTORIALS_APP_PRIVATE_KEY') {
+        invalidateInstallationToken();
+      }
       invalidatePresence(row.key);
       // IMPORTANT 2 (quality-review): see setSecretValue for the same race.
       // Emit the write event BEFORE stampRotated in case HANA UPDATE fails.
@@ -2400,6 +2415,13 @@ export default class AdminService extends cds.ApplicationService {
       // becomes null on the next resolveSecret() call instead of returning
       // the stale TTL'd value.
       invalidateSecret(row.key);
+      // #1154: App-credential rotations must also bust the cached GitHub App
+      // installation token (github-app-token.js caches it ~55 min), else a UI
+      // rotation of the private key / installation ID keeps minting with the
+      // stale token until it self-expires.
+      if (row.key === 'TUTORIALS_APP_ID' || row.key === 'TUTORIALS_APP_INSTALLATION_ID' || row.key === 'TUTORIALS_APP_PRIVATE_KEY') {
+        invalidateInstallationToken();
+      }
       // #1018: also drop the presence cache so the LR flips to "missing"
       // on the next refresh instead of showing stale "present".
       invalidatePresence(row.key);

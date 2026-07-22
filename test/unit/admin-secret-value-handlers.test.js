@@ -275,6 +275,53 @@ describe('revealSecretValue (#465)', () => {
   });
 });
 
+// #1154: GitHub App installation-token cache flush on App-credential rotation.
+// vi.mock cannot intercept CDS-runtime-loaded modules (same constraint as the
+// rest of this file). Instead we inspect the globalThis singleton that
+// github-app-token.js uses for its cache: if a fake token is primed and the
+// handler clears it, invalidateInstallationToken() was called. If the handler
+// skips it for a non-App key the token must remain.
+describe('installation-token cache flush on App-credential rotation (#1154)', () => {
+  const APP_TOKEN_KEY = Symbol.for('com.sap.developers.ims:github-app-token');
+
+  function primeTokenCache(token = 'fake-tok', expiresAtMs = Date.now() + 3_600_000) {
+    // Ensure the singleton exists (github-app-token.js creates it lazily on
+    // first import; since admin-service.js imports it, it exists after boot).
+    const state = (globalThis[APP_TOKEN_KEY] ??= { token: null, expiresAt: 0, warnedWindowAt: 0 });
+    state.token = token;
+    state.expiresAt = expiresAtMs;
+  }
+
+  function readTokenCache() {
+    return globalThis[APP_TOKEN_KEY]?.token ?? null;
+  }
+
+  it('setSecretValue on TUTORIALS_APP_PRIVATE_KEY flushes installation-token cache', async () => {
+    _fetchHandler = async (url, init) => {
+      if ((init?.method ?? 'GET') === 'POST') return fakeRes({ status: 201 });
+      const jwe = await makeJwe(JSON.stringify({ value: 'new-pem' }));
+      return fakeRes({ status: 200, body: jwe });
+    };
+    const { ID } = await seedSecret({ key: 'TUTORIALS_APP_PRIVATE_KEY', kind: 'github-app-pem' });
+    primeTokenCache('should-be-flushed');
+    expect(readTokenCache()).toBe('should-be-flushed');
+    await callAction('setSecretValue', ID, { value: 'new-pem' });
+    expect(readTokenCache()).toBeNull();
+  });
+
+  it('setSecretValue on a non-App key (SMTP_PASS) does NOT flush installation-token cache', async () => {
+    _fetchHandler = async (url, init) => {
+      if ((init?.method ?? 'GET') === 'POST') return fakeRes({ status: 201 });
+      const jwe = await makeJwe(JSON.stringify({ value: 'smtp-val' }));
+      return fakeRes({ status: 200, body: jwe });
+    };
+    const { ID } = await seedSecret({ key: 'SMTP_PASS', kind: 'salt' });
+    primeTokenCache('keep-me');
+    await callAction('setSecretValue', ID, { value: 'smtp-val' });
+    expect(readTokenCache()).toBe('keep-me');
+  });
+});
+
 // Regression test for the 2026-06-22 DEV bootstrap crash. When the Secrets
 // metadata row was added via "Add Tracked Secret" in /admin-ui/#secrets-display,
 // POST /admin/Secrets returned 502 because @cap-js/audit-logging crashed in

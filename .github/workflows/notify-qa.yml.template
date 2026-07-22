@@ -27,6 +27,9 @@ jobs:
       # back to the classic TUTORIALS_POC_DISPATCH_TOKEN PAT while unset.
       # Requires the App to hold Contents:write on sap-tutorials/tutorials-ims
       # (repository_dispatch permission). See docs/developers/operations/github-app-setup.md.
+      # NOTE: the || fallback below only engages if App-token GENERATION fails —
+      # NOT if dispatch is unauthorized. Grant the App Contents:write on
+      # tutorials-ims BEFORE setting USE_GITHUB_APP=true here (see runbook).
       - name: Generate GitHub App token
         id: app-token
         if: ${{ vars.USE_GITHUB_APP == 'true' }}
