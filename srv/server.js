@@ -8,6 +8,7 @@ import { bustPublishedConceptsCache } from './lib/kg-published-concepts-cache.js
 
 import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
 import { selfHealOnDeploy } from './lib/deploy-self-heal.js';
+import { resolveDeployEnvironment } from './lib/deploy-environment.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
@@ -1151,9 +1152,13 @@ cds.on('served', async () => {
   }
 
   app.get('/auth/user', contextMw, authMw, async (req, res) => {
+    // #1268: coarse deploy environment (DEV/PROD/QA/LOCAL) for the admin
+    // header. Derived from the CF space name — safe to expose to anonymous
+    // callers (no PII; the space name is already visible in every app URL).
+    const environment = resolveDeployEnvironment();
     const user = cds.context?.user;
     if (!user?.id || user.id === 'anonymous') {
-      return res.status(401).json({ authenticated: false });
+      return res.status(401).json({ authenticated: false, environment });
     }
     // Issue #339: opportunistically backfill firstName/lastName/email on the
     // migrated Users row from JWT claims. The migrator copies SAP_ID and
@@ -1189,6 +1194,7 @@ cds.on('served', async () => {
       familyName: user.attr?.family_name || user.attr?.familyName || '',
       isAdmin: user.is?.('Admin') === true,
       isAuthor: user.is?.('Tutorial.Author') === true,
+      environment,
       khorosId,
       khorosLogin,
       khorosAvatarUrl,

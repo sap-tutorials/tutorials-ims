@@ -259,8 +259,12 @@ sap.ui.define([
       var oViewModel = this.getView().getModel("viewModel");
       var that = this;
       fetch("/auth/user", { credentials: "include" })
-        .then(function (res) { return res.ok ? res.json() : null; })
+        // #1268: the environment badge must render even for anonymous callers
+        // (NoAccess page), so parse the JSON body on BOTH the 200 and 401
+        // paths — /auth/user returns `environment` in either case.
+        .then(function (res) { return res.json().catch(function () { return null; }); })
         .then(function (user) {
+          that._applyEnvironment(user && user.environment);
           if (!user || !user.authenticated) {
             oViewModel.setProperty("/userRole", "anonymous");
             that._applyRole("anonymous");
@@ -280,6 +284,27 @@ sap.ui.define([
           that._applyRole(role);
         })
         .catch(function () { that._applyRole("anonymous"); });
+    },
+
+    // #1268 — map the coarse deploy environment reported by /auth/user onto a
+    // badge label + semantic ObjectStatus state. PROD is red (Error) so it is
+    // impossible to mistake for DEV during a destructive admin action; DEV is
+    // green (Success), QA/other amber (Warning), LOCAL neutral (Information).
+    _applyEnvironment: function (env) {
+      var oViewModel = this.getView().getModel("viewModel");
+      if (!env || !env.label) {
+        oViewModel.setProperty("/envLabel", "");
+        oViewModel.setProperty("/envState", "None");
+        return;
+      }
+      var mState = {
+        prod: "Error",
+        dev: "Success",
+        qa: "Warning",
+        local: "Information"
+      };
+      oViewModel.setProperty("/envLabel", env.label);
+      oViewModel.setProperty("/envState", mState[env.id] || "Warning");
     },
 
     _applyRole: function (role) {

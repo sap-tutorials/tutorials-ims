@@ -41,4 +41,22 @@ describe('/auth/user', () => {
     const body = await res.json();
     expect(body.isAuthor).toBe(true);
   });
+
+  it('includes an environment object (LOCAL when not on CF) for authenticated callers', async () => {
+    const credentials = Buffer.from('author:').toString('base64');
+    const res = await fetch(`${baseUrl}/auth/user`, {
+      headers: { Authorization: `Basic ${credentials}` }
+    });
+    const body = await res.json();
+    expect(body.environment).toBeTruthy();
+    expect(body.environment).toMatchObject({ id: 'local', label: 'LOCAL' });
+  });
+
+  it('includes the environment object even on the anonymous 401 path', async () => {
+    const res = await fetch(`${baseUrl}/auth/user`);
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.authenticated).toBe(false);
+    expect(body.environment).toMatchObject({ id: 'local', label: 'LOCAL' });
+  });
 });
