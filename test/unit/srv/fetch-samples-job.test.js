@@ -266,19 +266,22 @@ describe('fetch-samples-job', () => {
 
   it('uses the App token from resolveGithubToken when no apiKeyOverride is given', async () => {
     process.env.USE_GITHUB_APP = 'true';
-    resolveGithubToken.mockResolvedValue('ghs_appsamples');
-    // Mock the corpus fetcher to return one repo so we can verify the token flows through.
-    // The existing _setMockFetcher seam intercepts the HTTP layer but the apiKey
-    // is already resolved before fetchSapSamplesCorpus is called, so asserting
-    // resolveGithubToken was called with the correct alias is the clean assertion.
-    _setMockFetcher(async () => []);
-    await runFetchSamples(null, {
-      // no apiKeyOverride → falls through to resolveGithubToken
-      sinceIsoOverride: '2020-01-01T00:00:00Z',
-      embed: async () => new Float32Array(384),
-      extractFn: async () => ({ concepts: [], promptTokens: 0, completionTokens: 0 }),
-    }).catch(() => ({}));
-    expect(resolveGithubToken).toHaveBeenCalledWith('TUTORIALS_GITHUB_TOKEN', expect.any(Object));
-    delete process.env.USE_GITHUB_APP;
+    try {
+      resolveGithubToken.mockResolvedValue('ghs_appsamples');
+      // Mock the corpus fetcher to return one repo so we can verify the token flows through.
+      // The existing _setMockFetcher seam intercepts the HTTP layer but the apiKey
+      // is already resolved before fetchSapSamplesCorpus is called, so asserting
+      // resolveGithubToken was called with the correct alias is the clean assertion.
+      _setMockFetcher(async () => []);
+      await runFetchSamples(null, {
+        // no apiKeyOverride → falls through to resolveGithubToken
+        sinceIsoOverride: '2020-01-01T00:00:00Z',
+        embed: async () => new Float32Array(384),
+        extractFn: async () => ({ concepts: [], promptTokens: 0, completionTokens: 0 }),
+      }).catch(() => ({}));
+      expect(resolveGithubToken).toHaveBeenCalledWith('TUTORIALS_GITHUB_TOKEN', expect.any(Object));
+    } finally {
+      delete process.env.USE_GITHUB_APP;
+    }
   });
 });

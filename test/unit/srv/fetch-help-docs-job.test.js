@@ -265,11 +265,14 @@ describe('fetch-help-docs-job', () => {
 
   it('resolves the GitHub token via resolveGithubToken (flag-aware)', async () => {
     process.env.USE_GITHUB_APP = 'true';
-    resolveGithubToken.mockResolvedValue('ghs_apphelp');
-    // Stub orchestrator so the test doesn't attempt real HTTP.
-    _setMockOrchestrator(async () => ({ rows: [], perSource: {} }));
-    await runFetchHelpDocs(null, { manualTrigger: true }).catch(() => ({}));
-    expect(resolveGithubToken).toHaveBeenCalledWith('TUTORIALS_GITHUB_TOKEN', expect.any(Object));
-    delete process.env.USE_GITHUB_APP;
+    try {
+      resolveGithubToken.mockResolvedValue('ghs_apphelp');
+      // Stub orchestrator so the test doesn't attempt real HTTP.
+      _setMockOrchestrator(async () => ({ rows: [], perSource: {} }));
+      await runFetchHelpDocs(null, { manualTrigger: true }).catch(() => ({}));
+      expect(resolveGithubToken).toHaveBeenCalledWith('TUTORIALS_GITHUB_TOKEN', expect.any(Object));
+    } finally {
+      delete process.env.USE_GITHUB_APP;
+    }
   });
 });
