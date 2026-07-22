@@ -45,7 +45,16 @@ const REST_API_BASE = 'https://api.github.com'
 
 // Mirror scripts/parsers/github.ts EXCLUDED_REPOS: tutorials-ims is the
 // platform itself; sandbox / sandbox-Contribution are Sage/BAS test fixtures.
-export const EXCLUDED_REPOS = new Set(['tutorials-ims', 'sandbox', 'sandbox-Contribution'])
+// Plus non-content org repos that pass the name heuristic but hold NO
+// tutorials/ tree (verified 2026-07-22): `.github` is the org profile repo and
+// `tutorial-actions` is shared GitHub Actions — a push to either must NOT fire
+// a prod content rebuild. (The build's own discovery filters by presence of a
+// tutorials/ tree; this installer classifies by name, so these two need
+// explicit exclusion until the installer gains the same tree check.)
+export const EXCLUDED_REPOS = new Set([
+  'tutorials-ims', 'sandbox', 'sandbox-Contribution',
+  '.github', 'tutorial-actions',
+])
 
 // Mirror scripts/parsers/github.ts INCLUDED_PRIVATE_REPOS: private repos are
 // skipped by default (org-private repos aren't tutorial sources), EXCEPT these

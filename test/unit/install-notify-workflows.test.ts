@@ -29,6 +29,17 @@ describe('classifyRepos', () => {
     expect(contributionRepos).toEqual(['abap-core-Contribution'])
   })
 
+  it('excludes non-content org repos that pass the name heuristic (.github, tutorial-actions)', () => {
+    const { sourceRepos } = classifyRepos([
+      { name: '.github', isArchived: false, isFork: false, isDisabled: false },
+      { name: 'tutorial-actions', isArchived: false, isFork: false, isDisabled: false },
+      { name: 'abap-core-development', isArchived: false, isFork: false, isDisabled: false },
+    ])
+    expect(sourceRepos).toEqual(['abap-core-development'])   // the two non-content repos dropped
+    expect(EXCLUDED_REPOS.has('.github')).toBe(true)
+    expect(EXCLUDED_REPOS.has('tutorial-actions')).toBe(true)
+  })
+
   it('excludes sandbox-Contribution (test fixture, not real)', () => {
     const { contributionRepos } = classifyRepos([
       { name: 'sandbox-Contribution', isArchived: false, isFork: false, isDisabled: false },
