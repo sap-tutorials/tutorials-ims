@@ -16,11 +16,12 @@
 # the dispatch itself is unauthorized. Grant the App Contents:write on
 # tutorials-ims BEFORE setting USE_GITHUB_APP=true here.
 #
-# ⚠️ Rollout targeting (#1154): rebuild-content.yml currently routes EVERY
-# repository_dispatch to the `dev` environment (its "Determine environment"
-# step hardcodes target=dev). Do NOT roll this template out to production
-# source repos until that workflow is taught to route source-push dispatches
-# to the intended environment — otherwise every tutorial push rebuilds DEV.
+# Target env (#1154): this template sends client_payload.environment (default
+# 'prod', override per-repo via the REBUILD_ENVIRONMENT repo variable).
+# rebuild-content.yml honors that field (allowlist dev|qa|prod) as of PR #1273.
+# BOTH must be merged before rolling this out to production source repos — on
+# a rebuild-content.yml that predates #1273, repository_dispatch still routes
+# to DEV regardless of payload, so every tutorial push would rebuild DEV.
 
 name: Notify Tutorials Platform
 
@@ -52,9 +53,14 @@ jobs:
       - name: Trigger content rebuild
         env:
           DISPATCH_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_DISPATCH_TOKEN }}
+          # rebuild-content.yml routes on client_payload.environment (allowlist
+          # dev|qa|prod, defaults dev when absent). This is the PRODUCTION
+          # source-repo template, so it targets prod; override per-repo with a
+          # REBUILD_ENVIRONMENT repo variable (e.g. a staging source repo → qa).
+          TARGET_ENV: ${{ vars.REBUILD_ENVIRONMENT || 'prod' }}
         run: |
           curl -X POST \
             -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            -d '{"event_type":"tutorial-updated","client_payload":{"repository":"${{ github.repository }}","ref":"${{ github.ref }}","sha":"${{ github.sha }}"}}' \
+            -d "{\"event_type\":\"tutorial-updated\",\"client_payload\":{\"repository\":\"${{ github.repository }}\",\"ref\":\"${{ github.ref }}\",\"sha\":\"${{ github.sha }}\",\"environment\":\"${TARGET_ENV}\"}}" \
             "https://api.github.com/repos/sap-tutorials/tutorials-ims/dispatches"
