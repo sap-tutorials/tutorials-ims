@@ -88,6 +88,42 @@ it('mints from a PKCS#1 (BEGIN RSA PRIVATE KEY) key as GitHub delivers it', asyn
   expect(payload.iss).toBe('123456');
 });
 
+// #1154 field bug #2: the admin Secrets UI collapsed the pasted PEM's
+// newlines to spaces, so the stored value is a single line
+// "-----BEGIN RSA PRIVATE KEY----- MIIEp... -----END RSA PRIVATE KEY-----".
+// OpenSSL's createPrivateKey then throws DECODER routines::unsupported.
+// The module must reconstruct a valid multi-line PEM from the mangled form.
+it('mints from a whitespace-mangled single-line PEM (admin-UI newline stripping)', async () => {
+  const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+  });
+  // Reproduce exactly what was stored: all newlines → single spaces.
+  const mangled = privateKey.replace(/\r?\n/g, ' ').trim();
+  expect(mangled.includes('\n')).toBe(false);
+  resolveSecret.mockImplementation(async (alias) => {
+    if (alias === 'TUTORIALS_APP_ID') return '123456';
+    if (alias === 'TUTORIALS_APP_INSTALLATION_ID') return '789';
+    if (alias === 'TUTORIALS_APP_PRIVATE_KEY') return mangled;
+    return null;
+  });
+  let sentAuthHeader;
+  global.fetch = vi.fn(async (url, init) => {
+    sentAuthHeader = init.headers.Authorization;
+    return { ok: true, status: 201, json: async () => ({
+      token: 'ghs_mangled', expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    }) };
+  });
+
+  const tok = await getInstallationToken();
+  expect(tok).toBe('ghs_mangled');   // null before the fix — createPrivateKey threw
+  const jwt = sentAuthHeader.replace('Bearer ', '');
+  const pub = await importSPKI(publicKey, 'RS256');
+  const { payload } = await jwtVerify(jwt, pub);
+  expect(payload.iss).toBe('123456');
+});
+
 it('caches the token — second call within TTL does not re-POST', async () => {
   primeAppCreds();
   const fetchMock = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({
