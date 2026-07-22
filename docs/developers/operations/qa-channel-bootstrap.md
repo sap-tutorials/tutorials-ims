@@ -35,13 +35,12 @@ Save the token value securely; it must be set as a per-repo secret in EACH `*-Co
 
 ## Step 3: Distribute the dispatch token to every `-Contribution` repo
 
+List the target `-Contribution` repos via the installer's dry-run (it prints
+one line per repo it would touch):
+
 ```bash
-REPOS=$(npx tsx -e "
-  import('./scripts/install-qa-workflows.ts').then(async m => {
-    const repos = await m.listContributionRepos(/* real fetcher */);
-    console.log(repos.join('\n'));
-  });
-")
+REPOS=$(npm run install-notify-workflows -- --only qa 2>/dev/null \
+  | awk '/notify-qa.yml: would-/ {print $1}')
 
 for r in $REPOS; do
   echo "Setting TUTORIALS_POC_DISPATCH_TOKEN in sap-tutorials/$r..."
@@ -80,13 +79,17 @@ cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e ../deploy/dev.mtaext
 
 Both `tutorials-srv` and `tutorials-srv-qa` apps should be healthy; HDI containers `tutorials-hana` and `tutorials-hana-qa` deployed.
 
-## Step 5: Run `install-qa-workflows.ts` (opens PRs)
+## Step 5: Install the QA notify workflow into `-Contribution` repos
 
 ```bash
-npm run install-qa-workflows
+npm run install-notify-workflows -- --only qa            # dry-run: preview
+npm run install-notify-workflows -- --only qa --execute  # commit to each repo
 ```
 
-One PR per `-Contribution` repo. Merge each one once Step 3 has confirmed the token is in place for that repo.
+Idempotent — commits `notify-qa.yml` directly to each `-Contribution` repo's
+default branch, skipping repos already up to date. Re-run any time (including
+when new `-Contribution` repos are added). Full reference:
+[notify-workflow-install.md](notify-workflow-install.md).
 
 ## Step 6: Manually trigger first QA rebuild
 
