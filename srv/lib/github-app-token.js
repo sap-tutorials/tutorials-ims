@@ -11,7 +11,8 @@
 //
 // Spec: docs/superpowers/specs/2026-07-22-1154-github-app-migration-design.md
 
-import { SignJWT, importPKCS8 } from 'jose';
+import { SignJWT } from 'jose';
+import { createPrivateKey } from 'node:crypto';
 import { resolveSecret } from './secret-resolver.js';
 
 const GITHUB_API = 'https://api.github.com';
@@ -54,7 +55,12 @@ export async function getInstallationToken() {
       return null;
     }
 
-    const key = await importPKCS8(privateKeyPem, 'RS256');
+    // GitHub App private keys download in PKCS#1 ("-----BEGIN RSA PRIVATE
+    // KEY-----"); jose's importPKCS8 only accepts PKCS#8 and threw on the real
+    // key (#1154 field fix). Node's createPrivateKey auto-detects PKCS#1 AND
+    // PKCS#8 (and the resulting KeyObject is accepted by jose's signer), so it
+    // works regardless of which format GitHub or a future rotation delivers.
+    const key = createPrivateKey(privateKeyPem);
     const nowSec = Math.floor(Date.now() / 1000);
     const appJwt = await new SignJWT({})
       .setProtectedHeader({ alg: 'RS256' })
