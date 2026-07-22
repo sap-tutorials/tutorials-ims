@@ -39,6 +39,12 @@ build-parameters:
         - bash -c "cd .. && npm --prefix app/explore run build"
         - bash -c "cd .. && npx tsx scripts/build-explore-manifest.ts app/explore/dist hugo/data/explore_bundle.json"
         - cp ../xs-security.json .
+        # Prod-only XSUAA descriptor: distinct xsappname (tutorials-prod) +
+        # ' (Prod)'-suffixed role-collection names so the prod xsuaa can coexist
+        # with dev's 'tutorials' xsuaa in the SHARED subaccount/UAA tenant.
+        # deploy/prod.mtaext overrides tutorials-xsuaa's config-path to this file.
+        # See docs/developers/operations/mta-deployment.md (shared-tenant xsuaa).
+        - cp ../xs-security-prod.json .
 
 modules:
   - name: tutorials-db-deployer
