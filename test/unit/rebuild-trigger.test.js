@@ -12,6 +12,13 @@ vi.mock('../../srv/lib/credstore.js', () => ({
   readSecret: vi.fn().mockResolvedValue(null),  // default: credstore has no value
 }));
 
+// Flag-on path: rebuild-trigger should dispatch using the App installation token.
+vi.mock('../../srv/lib/github-app-token.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, getInstallationToken: vi.fn() };
+});
+import { getInstallationToken, _resetForTests as _resetGithubAppToken } from '../../srv/lib/github-app-token.js';
+
 import { scheduleRebuild, _resetForTests, invalidateDispatchTokenCache } from '../../srv/lib/rebuild-trigger.js';
 
 describe('scheduleRebuild — opts-based signature (#429)', () => {
@@ -222,5 +229,26 @@ describe('invalidateDispatchTokenCache (#429)', () => {
     await new Promise(r => setTimeout(r, 30));
     // After invalidation, the second dispatch re-reads credstore.
     expect(credstore.readSecret).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('scheduleRebuild — GitHub App token (#1154)', () => {
+  it('dispatches with the App installation token when USE_GITHUB_APP=true', async () => {
+    _resetGithubAppToken();   // reset the github-app-token cache
+    process.env.USE_GITHUB_APP = 'true';
+    getInstallationToken.mockResolvedValue('ghs_appdispatch');
+    const dispatch = vi.fn(async (inputs, token) => { return { status: 204 }; });
+    // Prime the github-app-token cache with an expiry far in the future
+    const { _primeForTests: _primeGithubAppToken } = await import('../../srv/lib/github-app-token.js');
+    _primeGithubAppToken('ghs_appdispatch', Date.now() + 3600_000);
+    _resetForTests({ dispatchFn: dispatch, debounceMs: 10, token: null });
+    await scheduleRebuild('admin-write', { mode: 'catalog-only' });
+    await new Promise(r => setTimeout(r, 30));
+    expect(dispatch).toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'catalog-only' }),
+      'ghs_appdispatch'
+    );
+    delete process.env.USE_GITHUB_APP;
   });
 });

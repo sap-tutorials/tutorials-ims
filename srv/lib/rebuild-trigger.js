@@ -25,6 +25,7 @@ import {
   _resetForTests as _resetResolver,
   _primeForTests as _primeResolver,
 } from './secret-resolver.js';
+import { resolveGithubToken, invalidateInstallationToken } from './github-app-token.js';
 
 const REPO_OWNER = 'sap-tutorials';
 const REPO_NAME = 'tutorials-ims';
@@ -60,12 +61,12 @@ const _state = (globalThis[STATE_KEY] ??= {
 });
 
 /**
- * Resolve the GITHUB_DISPATCH_TOKEN via the shared secret-resolver
- * (credstore-first, env fallback, 5-min TTL cache). Returns null if neither
+ * Resolve the GITHUB_DISPATCH_TOKEN via resolveGithubToken (App-first when
+ * USE_GITHUB_APP=true, fallback to credstore/env). Returns null if neither
  * source has a value.
  */
 async function getDispatchToken() {
-  return resolveSecret('GITHUB_DISPATCH_TOKEN', { logTag: '[rebuild-trigger]' });
+  return resolveGithubToken('GITHUB_DISPATCH_TOKEN', { logTag: '[rebuild-trigger]' });
 }
 
 /**
@@ -222,14 +223,13 @@ export function _resetForTests({ dispatchFn, debounceMs, token } = {}) {
 }
 
 /**
- * Force-flush the cached GITHUB_DISPATCH_TOKEN. Called by the Secrets admin
- * write handlers (setSecretValue / rotateSecretValue / clearSecretValue) so
- * a rotation via the UI takes effect on the next dispatch instead of waiting
- * up to 5 minutes for the TTL to expire.
- *
- * Thin shim over secret-resolver.invalidateSecret — kept as a separate
- * export so admin-service.js callers stay stable.
+ * Force-flush both the cached GITHUB_DISPATCH_TOKEN and the cached GitHub App
+ * installation token. Called by the Secrets admin write handlers
+ * (setSecretValue / rotateSecretValue / clearSecretValue) so a rotation via
+ * the UI takes effect on the next dispatch instead of waiting up to 5 minutes
+ * for the TTL to expire.
  */
 export function invalidateDispatchTokenCache() {
   invalidateSecret('GITHUB_DISPATCH_TOKEN');
+  invalidateInstallationToken();
 }
