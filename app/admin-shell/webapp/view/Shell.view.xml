@@ -26,6 +26,17 @@
             <OverflowToolbarLayoutData priority="NeverOverflow" />
           </layoutData>
         </Title>
+        <ObjectStatus
+          id="envBadge"
+          text="{viewModel>/envLabel}"
+          state="{viewModel>/envState}"
+          inverted="true"
+          visible="{= !!${viewModel>/envLabel} }"
+          class="sapUiTinyMarginBegin">
+          <layoutData>
+            <OverflowToolbarLayoutData priority="NeverOverflow" />
+          </layoutData>
+        </ObjectStatus>
         <ToolbarSpacer />
         <SegmentedButton
           id="themeSwitch"
