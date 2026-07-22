@@ -40,9 +40,26 @@ Single-tenant deployment — the plugin uses one resource group (`default`). Mul
 
 ## MTA / deployment shape
 
-The plugin is a root-level runtime dependency. `mbt build` copies it into `gen/srv/node_modules` via `npm install` in the srv module. No changes to `.deploy/mta.yaml` are required. The `srv-qa` module is a separate standalone package (its `package.json` is hand-authored, not derived from root) — it does not load `@cap-js/ai` and does not need the `aicore` binding.
+The plugin is a root-level runtime dependency. `mbt build` copies it into `gen/srv/node_modules` via `npm install` in the srv module. The `srv-qa` module is a separate standalone package (its `package.json` is hand-authored, not derived from root) — it does not load `@cap-js/ai` and does not need the `aicore` binding.
 
 The `aicore` managed service instance (`tutorials-aicore`, plan `extended`) is declared in `.deploy/mta.yaml` and bound to `tutorials-srv` on DEV. QA / PROD spaces must have the same binding before this plugin can serve recommendations in those environments.
+
+### The `AICoreService` model MUST be in the srv build-task model list (#1276)
+
+Since #1182 the deployed CF app loads a **precompiled, pinned `srv/csn.json`** (`srv/lib/strip-precompiled-plugin-roots.js` keeps model resolution at `files.length === 1`). The runtime model is therefore **exactly** the model list in the `.cdsrc.json` nodejs srv build task — anything not in that list is absent from the deployed model, even though the plugin still registers its handlers.
+
+`AICore` is a **connect-time** model (the plugin does `cds.connect.to('AICore')` in its recommendations read-after-write handler); it is NOT a design-time `using` dependency of any srv `.cds`, so `cds build` never pulls it into the csn on its own. It must be listed explicitly:
+
+```jsonc
+// .cdsrc.json → build.tasks
+{ "for": "nodejs", "src": "srv", "dest": "srv",
+  "options": { "model": [ "srv", "db", "app",
+    "@cap-js/data-inspector",
+    "@cap-js/ai/srv/AICoreService",   // ← #1276: else admin draft Create 500s on CF
+    "cds-caching/db/cache-store", "cds-caching/db/statistics" ] } }
+```
+
+Symptom if dropped: **every** admin draft Create on a `@Common.ValueList`-bearing entity 500s with `No service definition found for 'AICore'` — but **only on CF**. Every local test passes because `cds.test('serve', …)` compiles the model from source roots (plugin's `AICore` always present). Regression guard: `test/unit/built-csn-plugin-services.test.js`.
 
 ## Disabling recommendations on a specific field
 
