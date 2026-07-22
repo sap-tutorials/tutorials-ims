@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { generateKeyPair, exportPKCS8, jwtVerify, importSPKI, exportSPKI } from 'jose';
+import { generateKeyPairSync } from 'node:crypto';
 
 // secret-resolver is the only dependency — mock it so no credstore/env needed.
 vi.mock('../../srv/lib/secret-resolver.js', () => ({
@@ -50,6 +51,41 @@ it('mints an installation token with a correctly-signed RS256 App JWT', async ()
   expect(protectedHeader.alg).toBe('RS256');
   expect(payload.iss).toBe('123456');
   expect(payload.exp - payload.iat).toBeLessThanOrEqual(600);
+});
+
+// #1154 field bug: GitHub App private keys download in PKCS#1 format
+// ("-----BEGIN RSA PRIVATE KEY-----"). jose's importPKCS8 only accepts
+// PKCS#8, so the runtime mint failed-open to the PAT on the real key.
+// The module must accept BOTH formats. This test uses a real PKCS#1 key
+// (as GitHub delivers) and asserts a valid JWT is still minted + verifiable.
+it('mints from a PKCS#1 (BEGIN RSA PRIVATE KEY) key as GitHub delivers it', async () => {
+  const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' },   // GitHub's format
+  });
+  expect(privateKey.startsWith('-----BEGIN RSA PRIVATE KEY-----')).toBe(true);
+  resolveSecret.mockImplementation(async (alias) => {
+    if (alias === 'TUTORIALS_APP_ID') return '123456';
+    if (alias === 'TUTORIALS_APP_INSTALLATION_ID') return '789';
+    if (alias === 'TUTORIALS_APP_PRIVATE_KEY') return privateKey;
+    return null;
+  });
+  let sentAuthHeader;
+  global.fetch = vi.fn(async (url, init) => {
+    sentAuthHeader = init.headers.Authorization;
+    return { ok: true, status: 201, json: async () => ({
+      token: 'ghs_pkcs1', expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    }) };
+  });
+
+  const tok = await getInstallationToken();
+  expect(tok).toBe('ghs_pkcs1');   // fails (null) before the fix — mint threw + fell open
+  const jwt = sentAuthHeader.replace('Bearer ', '');
+  const pub = await importSPKI(publicKey, 'RS256');
+  const { payload, protectedHeader } = await jwtVerify(jwt, pub);
+  expect(protectedHeader.alg).toBe('RS256');
+  expect(payload.iss).toBe('123456');
 });
 
 it('caches the token — second call within TTL does not re-POST', async () => {
