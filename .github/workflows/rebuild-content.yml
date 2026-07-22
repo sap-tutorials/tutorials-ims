@@ -109,12 +109,27 @@ jobs:
 
       - name: Determine environment
         id: env
+        # repository_dispatch (source-repo push → tutorial-updated) carries the
+        # intended target in client_payload.environment. Validate against the
+        # allowlist and default to 'dev' when absent or unrecognized — so a
+        # legacy template that sends no environment keeps today's behavior, and
+        # a malformed payload can't route to an unexpected env. workflow_dispatch
+        # uses the typed choice input directly. (#1154 env-routing fix.)
+        env:
+          PAYLOAD_ENV: ${{ github.event.client_payload.environment }}
+          EVENT: ${{ github.event_name }}
+          INPUT_ENV: ${{ inputs.environment }}
         run: |
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            echo "target=dev" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = "repository_dispatch" ]; then
+            case "$PAYLOAD_ENV" in
+              dev|qa|prod) TARGET="$PAYLOAD_ENV" ;;
+              *)           TARGET="dev" ;;
+            esac
           else
-            echo "target=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+            TARGET="$INPUT_ENV"
           fi
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Target environment::$TARGET (event=$EVENT, payload_env=${PAYLOAD_ENV:-<none>})"
 
       # #609: auto-infer the rebuild scope so manual hotfix dispatches don't
       # silently fall through to `mode=full` and run for 10 minutes when the
