@@ -9,7 +9,9 @@ import {
   decideAction,
   encodeContent,
   installOne,
+  listOrgRepos,
   EXCLUDED_REPOS,
+  INCLUDED_PRIVATE_REPOS,
 } from '../../scripts/install-notify-workflows.ts'
 
 describe('classifyRepos', () => {
@@ -34,6 +36,39 @@ describe('classifyRepos', () => {
     ])
     expect(contributionRepos).toEqual(['real-Contribution'])
     expect(EXCLUDED_REPOS.has('sandbox-Contribution')).toBe(true)
+  })
+
+  it('skips private non-Contribution repos unless allowlisted (mirrors build discovery)', () => {
+    const { sourceRepos, contributionRepos } = classifyRepos([
+      { name: 'secret-internal', isArchived: false, isFork: false, isDisabled: false, isPrivate: true },   // dropped
+      { name: 'meta-tutorials', isArchived: false, isFork: false, isDisabled: false, isPrivate: true },     // allowlisted → source
+      { name: 'private-Contribution', isArchived: false, isFork: false, isDisabled: false, isPrivate: true },// -Contribution re-admitted
+      { name: 'public-source', isArchived: false, isFork: false, isDisabled: false, isPrivate: false },
+    ])
+    expect(sourceRepos.sort()).toEqual(['meta-tutorials', 'public-source'])
+    expect(contributionRepos).toEqual(['private-Contribution'])
+    expect(INCLUDED_PRIVATE_REPOS.has('meta-tutorials')).toBe(true)
+  })
+})
+
+describe('listOrgRepos pagination', () => {
+  it('follows hasNextPage/endCursor across pages and concatenates nodes', async () => {
+    const pages = [
+      { nodes: [{ name: 'a', isArchived: false, isFork: false, isDisabled: false, isPrivate: false }], pageInfo: { hasNextPage: true, endCursor: 'CUR1' } },
+      { nodes: [{ name: 'b', isArchived: false, isFork: false, isDisabled: false, isPrivate: false }], pageInfo: { hasNextPage: false, endCursor: null } },
+    ]
+    let call = 0
+    const seenCursors: (string | null)[] = []
+    global.fetch = vi.fn(async (_url: string, init: any) => {
+      const body = JSON.parse(init.body)
+      seenCursors.push(/after: "([^"]+)"/.exec(body.query)?.[1] ?? null)
+      const page = pages[call++]
+      return { ok: true, status: 200, json: async () => ({ data: { organization: { repositories: page } } }) } as any
+    }) as any
+    const repos = await listOrgRepos('t0k')
+    expect(repos.map((r) => r.name)).toEqual(['a', 'b'])
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(seenCursors).toEqual([null, 'CUR1'])   // page 2 used page 1's endCursor
   })
 })
 

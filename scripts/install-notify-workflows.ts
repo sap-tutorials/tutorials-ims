@@ -47,6 +47,13 @@ const REST_API_BASE = 'https://api.github.com'
 // platform itself; sandbox / sandbox-Contribution are Sage/BAS test fixtures.
 export const EXCLUDED_REPOS = new Set(['tutorials-ims', 'sandbox', 'sandbox-Contribution'])
 
+// Mirror scripts/parsers/github.ts INCLUDED_PRIVATE_REPOS: private repos are
+// skipped by default (org-private repos aren't tutorial sources), EXCEPT these
+// explicit allowlist entries and any *-Contribution repo (handled by suffix).
+// Keeping this in sync with the build's discovery is why classifyRepos claims
+// "same classification the build uses".
+export const INCLUDED_PRIVATE_REPOS = new Set(['meta-tutorials'])
+
 const PROD_WORKFLOW_PATH = '.github/workflows/notify-tutorials-ims.yml'
 const QA_WORKFLOW_PATH = '.github/workflows/notify-qa.yml'
 
@@ -55,12 +62,15 @@ export type RepoNode = {
   isArchived: boolean
   isFork: boolean
   isDisabled: boolean
+  isPrivate?: boolean
 }
 
 /**
  * Split a raw org repo list into source repos (get the PROD template) and
  * `*-Contribution` repos (get the QA template), dropping excluded / archived
- * / disabled / fork repos. Same classification the build's discovery uses.
+ * / disabled / fork repos. Private non-Contribution repos are skipped unless
+ * allowlisted in INCLUDED_PRIVATE_REPOS — matching the build's discovery
+ * (scripts/parsers/github.ts) exactly.
  */
 export function classifyRepos(repos: RepoNode[]): {
   sourceRepos: string[]
@@ -70,6 +80,10 @@ export function classifyRepos(repos: RepoNode[]): {
   const contributionRepos: string[] = []
   for (const r of repos) {
     if (r.isArchived || r.isDisabled || r.isFork) continue
+    if (EXCLUDED_REPOS.has(r.name)) continue
+    // Private repos: include only if allowlisted OR a -Contribution repo
+    // (the suffix branch below re-admits those). Mirrors github.ts:563.
+    if (r.isPrivate && !INCLUDED_PRIVATE_REPOS.has(r.name) && !r.name.endsWith('-Contribution')) continue
     if (EXCLUDED_REPOS.has(r.name)) continue
     if (r.name.endsWith('-Contribution')) contributionRepos.push(r.name)
     else sourceRepos.push(r.name)
@@ -161,13 +175,13 @@ function renderQaTemplate(): string {
 }
 
 /** Live org-repo discovery via GraphQL, paginated. */
-async function listOrgRepos(token: string): Promise<RepoNode[]> {
+export async function listOrgRepos(token: string): Promise<RepoNode[]> {
   const out: RepoNode[] = []
   let cursor: string | null = null
   while (true) {
     const after = cursor ? `, after: "${cursor}"` : ''
     const query = `{ organization(login: "${ORG}") { repositories(first: 100${after}, orderBy: {field: NAME, direction: ASC}) {
-      nodes { name isArchived isDisabled isFork } pageInfo { endCursor hasNextPage } } } }`
+      nodes { name isArchived isDisabled isFork isPrivate } pageInfo { endCursor hasNextPage } } } }`
     const res = await fetch(GRAPHQL_URL, {
       method: 'POST',
       headers: authHeaders(token, { 'Content-Type': 'application/json' }),
@@ -201,6 +215,9 @@ if (isMainModule) {
     const execute = process.argv.includes('--execute')
     const onlyIdx = process.argv.indexOf('--only')
     const only = onlyIdx >= 0 ? process.argv[onlyIdx + 1] : 'both'   // 'qa' | 'prod' | 'both'
+    if (only !== 'qa' && only !== 'prod' && only !== 'both') {
+      throw new Error(`--only must be one of qa|prod|both (got '${only ?? ''}')`)
+    }
     const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
     if (!token) throw new Error('GITHUB_TOKEN or TUTORIALS_GITHUB_TOKEN required (Contents:write on target repos)')
 
