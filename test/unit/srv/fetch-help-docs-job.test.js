@@ -5,9 +5,14 @@
 // orchestrator seam (_setMockOrchestrator) that bypasses the raw HTTP
 // layer entirely and returns synthetic { rows, perSource } directly.
 
-import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest';
+import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
+
+vi.mock('../../../srv/lib/github-app-token.js', () => ({
+  resolveGithubToken: vi.fn(),
+}));
+import { resolveGithubToken } from '../../../srv/lib/github-app-token.js';
 
 let runFetchHelpDocs;
 let _setMockOrchestrator;
@@ -35,6 +40,11 @@ describe('fetch-help-docs-job', () => {
     await DELETE.from(HelpDocs);
     await DELETE.from(Concepts);
     _resetForTests();
+    // Provide a default resolved value so tests that don't pass apiKeyOverride
+    // get a valid token without hitting the real credstore, and .catch() never
+    // errors on undefined. Individual tests that need a specific value override this.
+    resolveGithubToken.mockClear();
+    resolveGithubToken.mockResolvedValue('fake-token-default');
   });
 
   it('MAX-or-abort gate fires when HelpDocs is empty', async () => {
@@ -251,5 +261,15 @@ describe('fetch-help-docs-job', () => {
     expect(zLink.snippet.length).toBeLessThanOrEqual(200);
     // First 120 chars of 300 As is 120 As
     expect(zLink.snippet.startsWith('AAAA')).toBe(true);
+  });
+
+  it('resolves the GitHub token via resolveGithubToken (flag-aware)', async () => {
+    process.env.USE_GITHUB_APP = 'true';
+    resolveGithubToken.mockResolvedValue('ghs_apphelp');
+    // Stub orchestrator so the test doesn't attempt real HTTP.
+    _setMockOrchestrator(async () => ({ rows: [], perSource: {} }));
+    await runFetchHelpDocs(null, { manualTrigger: true }).catch(() => ({}));
+    expect(resolveGithubToken).toHaveBeenCalledWith('TUTORIALS_GITHUB_TOKEN', expect.any(Object));
+    delete process.env.USE_GITHUB_APP;
   });
 });

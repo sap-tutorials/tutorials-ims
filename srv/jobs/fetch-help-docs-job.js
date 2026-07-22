@@ -35,7 +35,7 @@ import {
   insertMintedConcept,
 } from '../lib/kg-merge-on-write.js';
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
-import { resolveSecret } from '../lib/secret-resolver.js';
+import { resolveGithubToken } from '../lib/github-app-token.js';
 import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
 
 const NAMESPACE_EXT = 'com.sap.developers.ims.external';
@@ -144,7 +144,7 @@ export async function runFetchHelpDocs(logId, opts = {}) {
     // fetcher rejections; the other two sources still yield a partial catalog.
     let apiKey = opts.apiKeyOverride;
     if (apiKey === undefined) {
-      apiKey = await resolveSecret('TUTORIALS_GITHUB_TOKEN', { logTag: 'fetch-help-docs' })
+      apiKey = await resolveGithubToken('TUTORIALS_GITHUB_TOKEN', { logTag: 'fetch-help-docs' })
         .catch(() => null)
         || process.env.GITHUB_TOKEN
         || process.env.TUTORIALS_GITHUB_TOKEN

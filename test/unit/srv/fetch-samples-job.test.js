@@ -8,6 +8,11 @@ import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vites
 import path from 'node:path';
 import cds from '@sap/cds';
 
+vi.mock('../../../srv/lib/github-app-token.js', () => ({
+  resolveGithubToken: vi.fn(),
+}));
+import { resolveGithubToken } from '../../../srv/lib/github-app-token.js';
+
 let runFetchSamples;
 let _setMockFetcher;
 let _resetForTests;
@@ -41,6 +46,11 @@ describe('fetch-samples-job', () => {
     await DELETE.from(Concepts);
     _resetForTests();
     _setMockFetcher(null);
+    // Provide a default so tests reaching the resolver (no apiKeyOverride) get
+    // a Promise back and .catch() doesn't throw on undefined.
+    // 'GITHUB_TOKEN missing' test deletes env vars so null → triggers error path.
+    resolveGithubToken.mockClear();
+    resolveGithubToken.mockResolvedValue(null);
   });
 
   it('MAX-or-abort gate fires when Samples is empty', async () => {
@@ -252,5 +262,23 @@ describe('fetch-samples-job', () => {
       if (savedGh !== undefined) process.env.GITHUB_TOKEN = savedGh;
       if (savedTuts !== undefined) process.env.TUTORIALS_GITHUB_TOKEN = savedTuts;
     }
+  });
+
+  it('uses the App token from resolveGithubToken when no apiKeyOverride is given', async () => {
+    process.env.USE_GITHUB_APP = 'true';
+    resolveGithubToken.mockResolvedValue('ghs_appsamples');
+    // Mock the corpus fetcher to return one repo so we can verify the token flows through.
+    // The existing _setMockFetcher seam intercepts the HTTP layer but the apiKey
+    // is already resolved before fetchSapSamplesCorpus is called, so asserting
+    // resolveGithubToken was called with the correct alias is the clean assertion.
+    _setMockFetcher(async () => []);
+    await runFetchSamples(null, {
+      // no apiKeyOverride → falls through to resolveGithubToken
+      sinceIsoOverride: '2020-01-01T00:00:00Z',
+      embed: async () => new Float32Array(384),
+      extractFn: async () => ({ concepts: [], promptTokens: 0, completionTokens: 0 }),
+    }).catch(() => ({}));
+    expect(resolveGithubToken).toHaveBeenCalledWith('TUTORIALS_GITHUB_TOKEN', expect.any(Object));
+    delete process.env.USE_GITHUB_APP;
   });
 });
