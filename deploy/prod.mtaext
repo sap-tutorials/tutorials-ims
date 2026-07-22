@@ -33,3 +33,14 @@ resources:
   - name: tutorials-xsuaa
     parameters:
       service-name: xsuaa-imsprod
+      # Prod uses a distinct XSUAA descriptor (xsappname: tutorials-prod +
+      # ' (Prod)'-suffixed role-collection names). DEV and PROD share ONE
+      # subaccount + UAA tenant, and appid = xsappname + tenant while
+      # role-collection names are subaccount-global — so prod cannot reuse
+      # dev's 'tutorials' xsappname or its bare collection names. Without this
+      # override the deploy configures xsuaa-imsprod from the root
+      # xs-security.json (xsappname 'tutorials') and collides:
+      # "Application with xsappname tutorials!t<n> already exists".
+      # xs-security-prod.json is cp'd into .deploy/ by mta.yaml's before-all.
+      config-path: xs-security-prod.json
+

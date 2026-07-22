@@ -22,6 +22,12 @@ import { describe, it, expect } from 'vitest';
 const FILES = [
   'xs-security.json',
   '.deploy/xs-security.json',
+  // Prod-only XSUAA descriptor (xsappname: tutorials-prod, ' (Prod)' role
+  // names). Same authorities/scopes contract as the base files — guarding it
+  // here also catches root↔.deploy prod-copy drift, the same failure mode the
+  // base files guard against (discovered 2026-07-03 cutover).
+  'xs-security-prod.json',
+  '.deploy/xs-security-prod.json',
 ];
 
 describe.each(FILES)('%s — top-level authorities auto-grant', (relPath) => {
