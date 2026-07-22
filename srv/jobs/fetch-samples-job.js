@@ -33,7 +33,7 @@ import {
   insertMintedConcept,
 } from '../lib/kg-merge-on-write.js';
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
-import { resolveSecret } from '../lib/secret-resolver.js';
+import { resolveGithubToken } from '../lib/github-app-token.js';
 import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
 
 const NAMESPACE_EXT = 'com.sap.developers.ims.external';
@@ -96,11 +96,12 @@ export async function runFetchSamples(logId, opts = {}) {
       }
     }
 
-    // 2. API key.
+    // 2. API key. opts.apiKeyOverride wins (test seam / explicit override).
+    //    Otherwise resolveGithubToken honors USE_GITHUB_APP (App token first,
+    //    TUTORIALS_GITHUB_TOKEN PAT fallback), then env GITHUB_TOKEN as last resort.
     let apiKey = opts.apiKeyOverride;
     if (apiKey === undefined) {
-      // Default path: resolve from credstore.
-      apiKey = await resolveSecret('TUTORIALS_GITHUB_TOKEN', { logTag: 'fetch-samples' })
+      apiKey = await resolveGithubToken('TUTORIALS_GITHUB_TOKEN', { logTag: 'fetch-samples' })
         .catch(() => null)
         || process.env.GITHUB_TOKEN
         || process.env.TUTORIALS_GITHUB_TOKEN;

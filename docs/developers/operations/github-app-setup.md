@@ -37,8 +37,9 @@ These run once. Estimated time: 15 minutes.
    - **Homepage URL:** `https://github.com/sap-tutorials/tutorials-ims` (or wherever the repo lives)
    - **Webhook → Active:** **uncheck** (we don't consume events)
    - **Repository permissions:**
-     - `Contents`: **Read-only**
+     - `Contents`: **Read-only** (Phase 3 note: bump to **Read and write** only if you migrate `TUTORIALS_POC_DISPATCH_TOKEN` — needed for `repository_dispatch`)
      - `Metadata`: **Read-only** (auto-selected)
+     - `Actions`: **Read and write** (runtime `workflow_dispatch` from the CAP app — Phase 2)
      - everything else: **No access**
    - **Organization permissions:** all No access
    - **Account permissions:** all No access
@@ -118,6 +119,52 @@ Once you've confirmed at least one scheduled or dispatch-triggered run works wit
 2. Revoke the underlying classic PAT in the source account's developer settings (so it can't be used elsewhere by accident).
 
 > Keep the `TUTORIALS_GITHUB_TOKEN` secret for at least one full successful run cycle before deleting. It's the rollback path if the App turns out to have a permission gap.
+
+---
+
+## Part 3 — Runtime activation (Phase 2)
+
+The CAP app (`tutorials-srv`) mints its own installation token via
+`srv/lib/github-app-token.js` for the rebuild dispatcher and the two fetch
+crons. This needs the App secrets in the **BTP Credential Store** (not just
+GitHub Actions) plus a runtime flag.
+
+### 3.1 Load the App secrets into the Credential Store
+
+At `/admin-ui/#secrets-display` on the target env's approuter, set values for
+the three registry rows (seeded by `scripts/seed-secrets.cjs`):
+
+| Alias | Value |
+|---|---|
+| `TUTORIALS_APP_ID` | App ID from 1.3 |
+| `TUTORIALS_APP_INSTALLATION_ID` | Installation ID from 1.4 |
+| `TUTORIALS_APP_PRIVATE_KEY` | Full `.pem` contents from 1.2 (multi-line, incl. BEGIN/END) |
+
+### 3.2 Flip the runtime flag
+
+```bash
+cf set-env tutorials-srv USE_GITHUB_APP true && cf restart tutorials-srv
+```
+
+Verify: trigger an admin save (fires a debounced `workflow_dispatch`) and
+confirm `rebuild-content` ran; check srv logs for `[github-app-token]` warnings
+(none expected on success). Roll back with `cf set-env tutorials-srv USE_GITHUB_APP false && cf restart tutorials-srv` — the PAT path resumes.
+
+## Part 4 — Contribution-repo migration (Phase 3)
+
+Each `*-Contribution` repo fires `repository_dispatch` at `tutorials-ims` via
+`notify-qa.yml`. To migrate off `TUTORIALS_POC_DISPATCH_TOKEN`:
+
+1. Ensure the App is **installed on the Contribution repo** and holds
+   **Contents: write** on `tutorials-ims` (dispatch permission).
+2. Add `TUTORIALS_APP_ID` + `TUTORIALS_APP_PRIVATE_KEY` Actions secrets to the
+   Contribution repo.
+3. Set repo variable `USE_GITHUB_APP=true` on the Contribution repo.
+4. Push a tutorial change; confirm a `tutorial-qa-updated` dispatch reaches
+   `tutorials-ims`.
+5. After a clean run, delete `TUTORIALS_POC_DISPATCH_TOKEN` from that repo.
+
+Roll out per-repo; each is independent.
 
 ---
 

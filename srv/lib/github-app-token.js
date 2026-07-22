@@ -1,0 +1,127 @@
+// srv/lib/github-app-token.js
+//
+// GitHub App installation-token minting for #1154. Signs an RS256 App JWT
+// with the App private key (resolved via secret-resolver, credstore-first),
+// exchanges it for a 1-hour installation token, and caches that token on a
+// globalThis Symbol singleton until ~5 min before its real expiry.
+//
+// resolveGithubToken() is the single flag-gated entry point every runtime
+// GitHub consumer calls: App token when USE_GITHUB_APP==='true' and
+// available, classic PAT fallback otherwise. Fail-open on every fault.
+//
+// Spec: docs/superpowers/specs/2026-07-22-1154-github-app-migration-design.md
+
+import { SignJWT, importPKCS8 } from 'jose';
+import { resolveSecret } from './secret-resolver.js';
+
+const GITHUB_API = 'https://api.github.com';
+const EARLY_EXPIRY_MS = 5 * 60 * 1000;   // refresh 5 min before real expiry
+const WARN_WINDOW_MS = 5 * 60 * 1000;
+
+const STATE_KEY = Symbol.for('com.sap.developers.ims:github-app-token');
+const _state = (globalThis[STATE_KEY] ??= {
+  token: null,
+  expiresAt: 0,        // ms epoch, already minus EARLY_EXPIRY_MS
+  warnedWindowAt: 0,
+});
+
+function warnOnce(msg) {
+  const now = Date.now();
+  if (now - _state.warnedWindowAt > WARN_WINDOW_MS) {
+    console.warn(`[github-app-token] ${msg}`);
+    _state.warnedWindowAt = now;
+  }
+}
+
+/**
+ * Get a cached GitHub App installation token, minting a fresh one if the
+ * cache is empty or within EARLY_EXPIRY_MS of expiry. Fail-open: returns
+ * null on any fault (missing App creds, sign failure, non-2xx, network).
+ * @returns {Promise<string|null>}
+ */
+export async function getInstallationToken() {
+  if (_state.token && Date.now() < _state.expiresAt) {
+    return _state.token;
+  }
+  try {
+    const [appId, installationId, privateKeyPem] = await Promise.all([
+      resolveSecret('TUTORIALS_APP_ID', { logTag: '[github-app-token]' }),
+      resolveSecret('TUTORIALS_APP_INSTALLATION_ID', { logTag: '[github-app-token]' }),
+      resolveSecret('TUTORIALS_APP_PRIVATE_KEY', { logTag: '[github-app-token]' }),
+    ]);
+    if (!appId || !installationId || !privateKeyPem) {
+      warnOnce('App credentials incomplete (need TUTORIALS_APP_ID + _INSTALLATION_ID + _PRIVATE_KEY) — falling back.');
+      return null;
+    }
+
+    const key = await importPKCS8(privateKeyPem, 'RS256');
+    const nowSec = Math.floor(Date.now() / 1000);
+    const appJwt = await new SignJWT({})
+      .setProtectedHeader({ alg: 'RS256' })
+      .setIssuer(String(appId))
+      .setIssuedAt(nowSec - 60)          // clock-skew guard
+      .setExpirationTime(nowSec + 540)   // 9 min (GitHub caps at 10)
+      .sign(key);
+
+    const url = `${GITHUB_API}/app/installations/${installationId}/access_tokens`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${appJwt}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      warnOnce(`installation-token exchange ${res.status}: ${body.slice(0, 200)}`);
+      return null;
+    }
+    const json = await res.json();
+    if (!json?.token) {
+      warnOnce('installation-token response missing token field');
+      return null;
+    }
+    const realExpiryMs = json.expires_at ? Date.parse(json.expires_at) : (Date.now() + 3600_000);
+    _state.token = json.token;
+    _state.expiresAt = realExpiryMs - EARLY_EXPIRY_MS;
+    return _state.token;
+  } catch (err) {
+    warnOnce(`mint failed (falling back): ${err.message ?? err}`);
+    return null;
+  }
+}
+
+/**
+ * Single flag-gated GitHub-token entry point for runtime consumers.
+ * @param {string} fallbackAlias — PAT alias when App is off/unavailable.
+ * @param {object} [opts] — { logTag } forwarded to resolveSecret fallback.
+ * @returns {Promise<string|null>}
+ */
+export async function resolveGithubToken(fallbackAlias, opts = {}) {
+  if (process.env.USE_GITHUB_APP === 'true') {
+    const appTok = await getInstallationToken();
+    if (appTok) return appTok;
+    // fail-open: fall through to PAT
+  }
+  return resolveSecret(fallbackAlias, opts);
+}
+
+/** Force-flush the cached installation token (admin rotation hook). */
+export function invalidateInstallationToken() {
+  _state.token = null;
+  _state.expiresAt = 0;
+}
+
+/** Test-only: clear cache + warn window. */
+export function _resetForTests() {
+  _state.token = null;
+  _state.expiresAt = 0;
+  _state.warnedWindowAt = 0;
+}
+
+/** Test-only: prime the cache without minting. */
+export function _primeForTests(token, expiresAtMs) {
+  _state.token = token;
+  _state.expiresAt = expiresAtMs;
+}
