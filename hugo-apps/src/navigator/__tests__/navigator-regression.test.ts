@@ -205,6 +205,34 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// ─── QA channel data-* attr wiring ───────────────────────────────────────
+describe('navigator QA channel — data-* attribute wiring', () => {
+  it('fetches _nav.json from the QA nav base when data-nav-base is set', async () => {
+    const el = document.createElement('div')
+    el.id = 'tutorial-navigator'
+    el.dataset.searchBase = '/qa-search'
+    el.dataset.navBase = '/tutorials-qa'
+    el.dataset.hrefBase = '/tutorials-qa'
+    document.body.appendChild(el)
+
+    const fetched: string[] = []
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      fetched.push(url)
+      return Promise.resolve({ ok: true, json: async () => ({ tutorials: [] }) })
+    }))
+
+    const wrapper = mount(TutorialNavigator, { attachTo: el })
+    activeWrappers.push(wrapper)
+    await flushPromises()
+    await nextTick()
+
+    document.body.removeChild(el)
+
+    expect(fetched.some(u => u.startsWith('/tutorials-qa/_nav.json'))).toBe(true)
+    expect(fetched.some(u => u === '/tutorials/_nav.json')).toBe(false)
+  })
+})
+
 // ─── The ten regression cases ────────────────────────────────────────────
 describe('navigator regression — filter combinations', () => {
   it('no filters → all N cards', async () => {

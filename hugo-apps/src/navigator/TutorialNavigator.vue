@@ -15,6 +15,13 @@ import MissionCard from '@shared/cards/MissionCard.vue'
 import GroupCard from '@shared/cards/GroupCard.vue'
 import TutorialCard from '@shared/cards/TutorialCard.vue'
 
+// QA channel repoints these via data-* on the #tutorial-navigator mount.
+// Defaults reproduce prod behavior exactly (see spec: prod byte-identical invariant).
+const navEl = typeof document !== 'undefined' ? document.getElementById('tutorial-navigator') : null
+const searchBase = navEl?.dataset.searchBase || '/search'
+const navBase = navEl?.dataset.navBase || '/tutorials'
+const hrefBase = navEl?.dataset.hrefBase || '/tutorials'
+
 // `/`-specific data shapes — fetched in onMounted below.
 const tutorials = ref<TutorialEntry[]>([])
 const missionsMeta = ref<MissionRef[]>([])
@@ -186,6 +193,9 @@ const {
   allCards,
   tutorials,
   enableSort: true,
+  searchBase,
+  hrefBase,
+  navBase,
 })
 
 // Sort UI (#199): reuse /browse/'s ?sort= URL contract via browseUrl.ts —
@@ -232,7 +242,7 @@ function handleJouleClick() {
 
 onMounted(async () => {
   const [navRes, catalogRes, progRes] = await Promise.all([
-    fetch('/tutorials/_nav.json'),
+    fetch(`${navBase}/_nav.json`),
     fetch('/build/navigator'),
     fetch('/build/my-progress', { credentials: 'include' }).catch(() => null),
   ])
