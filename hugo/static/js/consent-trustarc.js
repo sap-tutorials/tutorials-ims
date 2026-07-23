@@ -14,8 +14,11 @@
   'use strict';
 
   var GROUP = { required: 0, functional: 1, advertising: 2 };
-  var pending = [];
+  // pending: boolean flag — at most one queued show() before truste loads.
+  var pendingShow = false;
   var subscribers = [];
+  // Track whether we have already wired the ready path so we never double-wire.
+  var trusteReady = false;
 
   function taDomain() {
     var s = document.currentScript || document.querySelector('script[data-ta-domain]');
@@ -23,31 +26,55 @@
   }
 
   // Parse "permit 1,2,3" style cmapi cookie → set of permitted group numbers.
+  // Splits on /;\s*/ and requires EXACT cookie name match to avoid matching
+  // evil_cmapi_cookie_privacy= or similar prefixes.
   function permittedFromCookie() {
     try {
-      var m = document.cookie.match(/cmapi_cookie_privacy=permit ([0-9,]+)/);
-      if (!m) return null;
-      var set = {};
-      m[1].split(',').forEach(function (n) { set[parseInt(n, 10)] = true; });
-      return set;
+      var cookies = document.cookie.split(/;\s*/);
+      for (var i = 0; i < cookies.length; i++) {
+        var eq = cookies[i].indexOf('=');
+        if (eq === -1) continue;
+        var name = cookies[i].slice(0, eq).trim();
+        if (name !== 'cmapi_cookie_privacy') continue;
+        var value = cookies[i].slice(eq + 1).trim();
+        var m = value.match(/^permit ([0-9,]+)$/);
+        if (!m) return null;
+        var set = {};
+        m[1].split(',').forEach(function (n) { set[parseInt(n, 10)] = true; });
+        return set;
+      }
+      return null;
     } catch (e) { return null; }
   }
 
   function hasCategory(category) {
     var group = GROUP[category];
-    if (group === 0 || group === undefined) return true; // required always on
-    // Preferred: PrivacyManagerAPI structured decision.
+    // required (group 0) is always on.
+    if (category === 'required' || group === 0) return true;
+    // Unknown category — not in GROUP map → not consented.
+    if (group === undefined) return false;
+
+    // PRIMARY signal: deterministic cmapi cookie.
+    // Live sapshared.com observed shape: cmapi_cookie_privacy="permit 1,2,3"
+    // (1-indexed, 1=required, 2=functional, 3=advertising).
+    var permitted = permittedFromCookie();
+    if (permitted !== null) return !!permitted[group + 1]; // cmapi is 1-indexed
+
+    // FALLBACK: PrivacyManagerAPI when cookie is absent.
+    // Observed live shape: { consentDecision: 3, source: 'asserted' } — a NUMBER.
+    // Also handle array shape defensively.
     try {
       if (window.PrivacyManagerAPI && typeof window.PrivacyManagerAPI.callApi === 'function') {
         var d = window.PrivacyManagerAPI.callApi('getConsentDecision', taDomain());
-        if (d && Array.isArray(d.consentDecision)) return d.consentDecision.indexOf(group) !== -1;
-        // Some builds return a max-permitted integer; treat >=group as consented.
-        if (d && typeof d.consentDecision === 'number') return d.consentDecision >= group + 1;
+        if (d && Array.isArray(d.consentDecision)) {
+          // Array branch: match 1-indexed convention (group+1) to align with cookie.
+          return d.consentDecision.indexOf(group + 1) !== -1;
+        }
+        // Numeric or other unrecognized shape → safe default: not consented.
+        return false;
       }
-    } catch (e) { /* fall through to cookie */ }
-    var permitted = permittedFromCookie();
-    if (permitted) return !!permitted[group + 1]; // cmapi is 1-indexed (1,2,3)
-    return false; // unknown → not consented (safe default for non-required)
+    } catch (e) { /* fall through */ }
+    return false; // unknown → not consented
   }
 
   function show() {
@@ -57,24 +84,46 @@
         return;
       }
     } catch (e) { /* not ready */ }
-    pending.push(show); // queue until truste is ready
+    pendingShow = true; // deduplicated — at most one flush call
   }
 
   function flushPending() {
-    var q = pending.slice(); pending.length = 0;
-    q.forEach(function (fn) { try { fn(); } catch (e) {} });
+    // Wire any subscribers registered before truste was ready.
+    subscribers.forEach(function (fn) {
+      try {
+        if (window.truste && window.truste.eu && typeof window.truste.eu.addEventListener === 'function') {
+          window.truste.eu.addEventListener('consent', function () {
+            try { fn(readCategories()); } catch (e) {}
+          });
+        }
+      } catch (e) {}
+    });
+    // Flush exactly one pending show() if queued.
+    if (pendingShow) {
+      pendingShow = false;
+      try {
+        if (window.truste && window.truste.eu && typeof window.truste.eu.reopenBanner === 'function') {
+          window.truste.eu.reopenBanner();
+        }
+      } catch (e) {}
+    }
   }
 
   function onChange(fn) {
     if (typeof fn !== 'function') return;
+    if (trusteReady) {
+      // truste already available — wire immediately, do not add to subscribers.
+      try {
+        if (window.truste && window.truste.eu && typeof window.truste.eu.addEventListener === 'function') {
+          window.truste.eu.addEventListener('consent', function () {
+            try { fn(readCategories()); } catch (e) {}
+          });
+        }
+      } catch (e) { /* addEventListener absent → no live updates, has() still works */ }
+      return;
+    }
+    // Pre-load registration — will be wired in flushPending() on the ready path.
     subscribers.push(fn);
-    try {
-      if (window.truste && window.truste.eu && typeof window.truste.eu.addEventListener === 'function') {
-        window.truste.eu.addEventListener('consent', function () {
-          try { fn(readCategories()); } catch (e) {}
-        });
-      }
-    } catch (e) { /* addEventListener absent → no live updates, has() still works */ }
   }
 
   function readCategories() {
@@ -91,12 +140,16 @@
     onChange: onChange,
   };
 
-  // When TrustArc finishes loading, flush any queued show() calls.
+  // When TrustArc finishes loading, flush any queued show() calls and wire
+  // any pre-registered onChange subscribers.
   // truste.eu.runOnReady exists on the live property; guard for absence.
   function wireReady() {
     try {
       if (window.truste && window.truste.eu && typeof window.truste.eu.runOnReady === 'function') {
-        window.truste.eu.runOnReady(flushPending);
+        window.truste.eu.runOnReady(function () {
+          trusteReady = true;
+          flushPending();
+        });
         return true;
       }
     } catch (e) {}
@@ -105,7 +158,11 @@
   if (!wireReady()) {
     var tries = 0;
     var iv = setInterval(function () {
-      if (wireReady() || ++tries > 40) { clearInterval(iv); flushPending(); }
+      if (wireReady() || ++tries > 40) {
+        clearInterval(iv);
+        trusteReady = true;
+        flushPending();
+      }
     }, 250); // up to ~10s, then give up and flush best-effort
   }
 })();
