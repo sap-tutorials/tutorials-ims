@@ -520,33 +520,51 @@ node scripts/backfill-tutorial-meta-from-ims.cjs                       # commit
 218 placeholder emails skipped; 0 errors.** Live verify:
 `TutorialMeta.owner` non-null went 0 → 920.
 
-### Step 5 — `resync-tutorial-meta-from-ims.cjs` (full-mirror; **precondition-gated**)
+### Step 5 — `resync-tutorial-meta-from-ims.cjs` (full-mirror; **DONE 2026-07-23**)
 
-Full-mirror overwrite of `owner`/`ownerEmail` incl.
-`<login>@users.noreply.github.com` → `Users.githubLogin` → `Users.email`
-resolution. Needed for accurate `/author/MyOwnedTutorials`.
+Full-mirror overwrite of `owner`/`ownerEmail`. Writes `OWNER` from IMS
+`IMS_TUTORIAL_AUTHOR.NAME` (the **display name**, e.g. "Daniel Wroblewski"
+— what the dashboard shows and what DEV renders) and `OWNEREMAIL` from the
+IMS email. Real corporate emails pass straight through;
+`<login>@users.noreply.github.com` placeholders are resolved via
+`Users.githubLogin` → `Users.email` **when that map has an entry**. Needed
+for accurate `/author/MyOwnedTutorials`.
 
-> 🚧 **Do NOT run Step 5 on a freshly-migrated PROD.** Its noreply resolution
-> depends on `Users.githubLogin` being populated, which in turn depends on
-> `Users.email` (corporate emails are JIT-populated on first SAP-IDP login).
-> On a fresh PROD deploy almost nobody has logged in yet:
+> ✅ **Safe to run even with `Users.githubLogin` empty — verified against the
+> code and a dry-run, NOT assumed.** An earlier draft of this runbook warned
+> Step 5 would "degrade" Step 4 by nulling owners; that was **wrong**.
+> `buildResyncDecision` sets `OWNER` from `A.NAME` *independently* of any
+> email/login resolution, and only the ~200 `@users.noreply.github.com`
+> placeholder **emails** depend on the githubLogin map. Real emails and all
+> display names are unaffected.
 >
-> **2026-07-23 PROD probe:** `users_with_githubLogin: 0`,
-> `users_with_email: 2` (of 797,673). Running Step 5 now would null out
-> `ownerEmail` for essentially every author and **degrade** the Step 4
-> result.
->
-> `seed-users-github-login.cjs` cannot help yet either — it seeds logins
-> only for Users that *already* have a corporate email (~2 in PROD today
-> vs ~18 on DEV when we seeded there).
+> **Always dry-run first and read the CSV deltas** (`--dry-run --verbose`
+> writes `.migration-data/resync-tutorial-meta-from-ims.dryrun.csv`). Parse
+> it for: owner-clobber (Step-4 `OWNER` → empty), email-null (had email →
+> null). Both must be **0**. On the 2026-07-23 PROD run they were:
+> 0 owner-clobber, 0 email-null, **+511 names, +920 emails**.
 
-**Precondition before Step 5:** re-run the probe periodically; once
-`users_with_email` has climbed into the dozens (real login traffic
-post-cutover), then: run `seed-users-github-login.cjs --commit`, re-probe
-`users_with_githubLogin`, and only then run the resync (`--dry-run` →
-review the `will-overwrite` CSV → `--commit --initiator …`). This is the
-same sequence that got DEV's contacts dialed in — DEV simply had the login
-history PROD hasn't accumulated yet.
+**2026-07-23 PROD result:** dry-run `Will overwrite: 1431`, githubLogin map
+`0 entries` (no logins yet). Committed `1431 overwrites; errors: 0`. Live
+verify: `owner` 920 → **1431**, `ownerEmail` 0 → **920** (DEV reference:
+1508 / 1010). The 920 Step-4 owners flipped from email-shaped to proper
+display names (matches DEV). PROD owners-on-active-tutorials (1431) now
+matches/beats DEV (1423) — the reported dashboard gap is closed.
+
+**Remaining sliver:** ~200 `@users.noreply.github.com` authors still have
+NULL `ownerEmail` (their login isn't in the empty githubLogin map). **The
+fill engine is the publish path, NOT logins** — verified 2026-07-23: DEV
+has 1010 resolved `ownerEmail`s but only **5** users with `githubLogin`, so
+DEV's surplus came from `linkTutorialAuthorship` writing `ownerEmail` from
+frontmatter `author_profile` as tutorials were re-published over months, not
+from login-driven githubLogin backfill. Therefore this sliver closes as PROD
+content is **re-published** (per-tutorial author edits, or a full
+`rebuild-content.yml` run) — waiting on user logins will NOT close it. A
+one-time DEV→PROD copy would fill only ~105 emails / ~17 owners (0 conflicts)
+— marginal on a 2891-row table, and it imports DEV-sourced values rather than
+letting PROD derive its own from frontmatter, so we chose to let the publish
+path fill it instead. The dashboard `owner` column is already complete
+regardless.
 
 ### Cleanup
 
