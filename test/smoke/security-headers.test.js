@@ -40,5 +40,23 @@ describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
       // Approuter serves ui5 assets from ui5.sap.com; loosening this would be a regression.
       expect(csp).toMatch(/script-src[^;]*ui5\.sap\.com/);
     });
+
+    it('CSP allows TrustArc consent domain (#trustarc-cmp)', async () => {
+      const res = await fetchWithRetry(`${BASE_URL}/`);
+      const csp = res.headers.get('content-security-policy');
+      expect(csp).toMatch(/script-src[^;]*consent\.trustarc\.com/);
+      expect(csp).toMatch(/connect-src[^;]*user-consent-center\.trustarc\.com/);
+    });
+
+    it('serves the TrustArc notice script in the homepage HTML (#trustarc-cmp)', async () => {
+      const res = await fetchWithRetry(`${BASE_URL}/`);
+      const html = await res.text();
+      // Only asserts when the deployed build is in trustarc mode (default).
+      // If a deploy is rolled back to cmp=inhouse this will be skipped by content.
+      if (html.includes('/js/consent-trustarc.js')) {
+        expect(html).toMatch(/consent\.trustarc\.com\/notice\?domain=sapshared\.com/);
+        expect(html).toContain('id="teconsent"');
+      }
+    });
   },
 );
