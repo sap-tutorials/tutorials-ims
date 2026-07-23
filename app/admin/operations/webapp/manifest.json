@@ -62,7 +62,19 @@
           "options": {
             "settings": {
               "contextPath": "/FeaturedTasks",
-              "initialLoad": "Enabled"
+              "initialLoad": "Enabled",
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "testNotificationEmail": {
+                      "press": "sap.tutorials.admin.operations.ext.OperationsActionsController.onTestNotificationEmail",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Send test notification email"
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -172,6 +184,15 @@
               "contextPath": "/JobExecutionLog",
               "editableHeaderContent": false
             }
+          }
+        }
+      }
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "sap.tutorials.admin.operations.ext.OperationsActionsController"
           }
         }
       }

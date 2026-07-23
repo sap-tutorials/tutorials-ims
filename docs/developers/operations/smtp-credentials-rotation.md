@@ -3,7 +3,7 @@
 The author-nudge cron in `tutorials-srv` sends mail via SMTP. All five
 transport fields — `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_FROM`,
 `SMTP_PASS` — live in BTP Credential Store and are managed through the
-admin Secrets UI at `/admin-ui/#secrets-display`. No values are sourced
+admin Secrets UI at `/admin-ui/#secrets`. No values are sourced
 from `cf set-env`, mtaext, or GitHub Actions secrets in normal operation;
 those paths exist only as emergency overrides (see "Disaster recovery"
 below).
@@ -33,7 +33,7 @@ For `smtpauth.mail.net.sap`: open a ticket with SAP IT. Capture the new password
 
 ### 2. Write the new password to credstore
 
-Open `/admin-ui/#secrets-display` in the deployed environment.
+Open `/admin-ui/#secrets` in the deployed environment.
 
 - If `SMTP_PASS` is in the list: select the row → "Update Value" → paste the new
   password → Save.
@@ -47,8 +47,17 @@ automatic — no app restart needed.
 
 ### 3. Verify SMTP
 
-Open `/admin-ui/#operations-display`. Click the **Test Notification Email**
-button (or call the action directly):
+Open `/admin-ui/#operations` (nav: **Content → Featured Tasks**). In the
+List Report toolbar click **Send test notification email**, enter the
+recipient and a template level (0=first, 1=second, 2=third, 3=final), and
+Send. A success toast confirms the send; a warning surfaces the server-side
+error (e.g. `No mail transport configured`, which means the message was
+queued to `FailedEmails` because the SMTP_* secrets are unset for this env).
+
+The button lives on the (frequently empty) Featured Tasks table — it is a
+global toolbar action, so it works even when no featured tasks exist.
+
+Equivalently, call the unbound action directly:
 
 ```bash
 curl -X POST "$BASE_URL/admin/testNotificationEmail" \
@@ -67,23 +76,23 @@ Common causes:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `535 Authentication failed` | Wrong password in credstore | Re-paste `SMTP_PASS` in /admin-ui/#secrets-display |
-| `535` with the right password | Wrong username | Update `SMTP_USER` row in /admin-ui/#secrets-display |
-| `ECONNREFUSED` | Wrong relay host or port | Update `SMTP_HOST` / `SMTP_PORT` rows in /admin-ui/#secrets-display |
-| `550 sender rejected` | Wrong `SMTP_FROM`, not authorized to send as that address | Update `SMTP_FROM` row in /admin-ui/#secrets-display |
-| `No mail transport configured` log | All 5 fields null | Confirm /admin-ui/#secrets-display has values for SMTP_HOST + SMTP_PASS at minimum |
+| `535 Authentication failed` | Wrong password in credstore | Re-paste `SMTP_PASS` in /admin-ui/#secrets |
+| `535` with the right password | Wrong username | Update `SMTP_USER` row in /admin-ui/#secrets |
+| `ECONNREFUSED` | Wrong relay host or port | Update `SMTP_HOST` / `SMTP_PORT` rows in /admin-ui/#secrets |
+| `550 sender rejected` | Wrong `SMTP_FROM`, not authorized to send as that address | Update `SMTP_FROM` row in /admin-ui/#secrets |
+| `No mail transport configured` log | All 5 fields null | Confirm /admin-ui/#secrets has values for SMTP_HOST + SMTP_PASS at minimum |
 
 Roll back by writing the OLD value(s) to the same admin-UI row(s).
 
 ### 5. Once verified, ensure the cron is enabled
 
-Open `/admin-ui/#operations-display`. Confirm `isNotificationSendingAllowed=true`
+Open `/admin-ui/#operations`. Confirm `isNotificationSendingAllowed=true`
 in the displayed ImsConfig values. If false, click the **Toggle Notifications**
 control to enable. The next Monday-09:00-UTC cron will fire with real recipients.
 
 ### 6. Record the rotation
 
-In `/admin-ui/#secrets-display`, edit the `SMTP_PASS` row's `lastRotatedAt` to
+In `/admin-ui/#secrets`, edit the `SMTP_PASS` row's `lastRotatedAt` to
 today's date.
 
 ## First-time cutover (when SMTP fields do not yet exist on a fresh environment)
@@ -91,7 +100,7 @@ today's date.
 This is a one-time sequence for enabling author-nudge emails on a fresh deploy:
 
 1. Confirm the seed-secrets script has populated the 5 metadata rows in the
-   Secrets table for this environment. Open `/admin-ui/#secrets-display` and
+   Secrets table for this environment. Open `/admin-ui/#secrets` and
    look for `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_FROM`, `SMTP_PASS`. If
    any are missing, run
    `npx cds bind --exec -- node scripts/seed-secrets.cjs --commit` —
@@ -100,7 +109,7 @@ This is a one-time sequence for enabling author-nudge emails on a fresh deploy:
    value → Save. The admin handler hot-flushes the resolver cache on save; the
    mail-client's transporter cache rebuilds within 5 minutes (its own TTL).
 3. Verify with the "Test Notification Email" action (Step 3 above).
-4. Flip the `isNotificationSendingAllowed` flag in `/admin-ui/#operations-display`.
+4. Flip the `isNotificationSendingAllowed` flag in `/admin-ui/#operations`.
 
 ## Disaster recovery — credstore is down
 
@@ -135,7 +144,7 @@ the first admin-UI save after credstore returns).
 ## Per-author "Last Chance" emails (#622)
 
 In addition to `testNotificationEmail` (single-recipient SMTP check),
-`/admin-ui/#operations-display` exposes two admin-triggered actions for
+`/admin-ui/#operations` exposes two admin-triggered actions for
 authors whose tutorials have not responded to the weekly cron's
 escalating reminders:
 
