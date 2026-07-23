@@ -189,13 +189,18 @@ jobs:
           # repository_dispatch with a single valid slug → slug-targeted (fast
           # ~2min) instead of the default full (~10min). The slug is attacker-
           # influenced (dispatch payload), so accept ONLY a strict lowercase
-          # slug charset [a-z0-9-]; anything else (empty, multi-slug, junk)
-          # falls through to full — safe default, never errors.
-          if [ "$EVENT" = "repository_dispatch" ] \
-             && printf '%s' "$PAYLOAD_SLUG" | grep -qE '^[a-z0-9][a-z0-9-]*$'; then
-            EFFECTIVE='slug-targeted'
-            REASON="auto-inferred (repository_dispatch slug=$PAYLOAD_SLUG)"
-            echo "dispatch_slug=$PAYLOAD_SLUG" >> "$GITHUB_OUTPUT"
+          # slug charset [a-z0-9-] matched across the WHOLE value (POSIX case,
+          # not line-anchored grep which a newline could bypass), and reject any
+          # value containing a newline outright so it can never corrupt the
+          # GITHUB_OUTPUT key=value format. Anything else (empty, multi-slug,
+          # junk, embedded newline) falls through to full — safe default.
+          if [ "$EVENT" = "repository_dispatch" ]; then
+            case "$PAYLOAD_SLUG" in
+              *[!a-z0-9-]* | -* | '' ) : ;;                     # invalid → no-op, stays full
+              *) EFFECTIVE='slug-targeted'
+                 REASON="auto-inferred (repository_dispatch slug=$PAYLOAD_SLUG)"
+                 echo "dispatch_slug=$PAYLOAD_SLUG" >> "$GITHUB_OUTPUT" ;;
+            esac
           fi
 
           # Issue #orphan-purge — reject purge-orphans=true with anything
