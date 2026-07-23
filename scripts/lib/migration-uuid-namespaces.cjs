@@ -43,6 +43,8 @@ const NAMESPACES = Object.freeze({
   secondaryaccount:     '390e513e-b5c8-457c-83a9-3e5c1f1620dc',  // added 2026-06-22 for Account Merges port (IMS_UUID_MERGED_ACCOUNT)
   privacyprotectionaction: '002408e5-b6b0-4837-a3b4-64096c9970e7',  // added 2026-06-22 for Privacy Audit port (IMS_PRIVACY_PROTECTION_AUDIT)
   tutorialmonitor:      '98dbe445-e27a-44dd-b9e8-601d263f7655',  // added 2026-07-02 for #923 TutorialMonitors port (IMS_DASHBOARD_MONITOR_RECORD)
+  grouptag:             'c1f5e3a2-7b90-4d68-9e14-2a5c8f0b3d71',  // added 2026-07-23 for GroupTags port (IMS_TAG_TO_TASK where TASK_TYPE='GROUP')
+  missiontag:           'd4a7b6c9-2e51-4f38-8c07-6b9d1e4a2f83',  // added 2026-07-23 for MissionTags port (IMS_TAG_TO_TASK where TASK_TYPE='MISSION')
 });
 
 module.exports = { NAMESPACES };
