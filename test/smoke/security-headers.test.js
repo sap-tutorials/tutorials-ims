@@ -48,15 +48,17 @@ describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
       expect(csp).toMatch(/connect-src[^;]*user-consent-center\.trustarc\.com/);
     });
 
-    it('serves the TrustArc notice script in the homepage HTML (#trustarc-cmp)', async () => {
+    it('serves the TrustArc notice script in the homepage HTML (#trustarc-cmp)', async (ctx) => {
       const res = await fetchWithRetry(`${BASE_URL}/`);
       const html = await res.text();
-      // Only asserts when the deployed build is in trustarc mode (default).
-      // If a deploy is rolled back to cmp=inhouse this will be skipped by content.
-      if (html.includes('/js/consent-trustarc.js')) {
-        expect(html).toMatch(/consent\.trustarc\.com\/notice\?domain=sapshared\.com/);
-        expect(html).toContain('id="teconsent"');
+      // Absent shim → inhouse-mode deploy (SKIPPED, not passed).
+      // Present shim but missing markers → broken deploy (FAILED).
+      if (!html.includes('/js/consent-trustarc.js')) {
+        ctx.skip(); // inhouse-mode deploy — TrustArc not expected
+        return;
       }
+      expect(html).toMatch(/consent\.trustarc\.com\/notice\?domain=sapshared\.com/);
+      expect(html).toContain('id="teconsent"');
     });
   },
 );
