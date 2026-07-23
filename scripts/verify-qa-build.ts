@@ -69,6 +69,39 @@ export function findForbiddenMarkers(html: string): string[] {
   return FORBIDDEN.filter(m => markerAppearsAsAttribute(visible, m));
 }
 
+// Inspect the QA index.html string for required QA-specific signals.
+// Returns an array of human-readable problem strings; empty means OK.
+// Checks:
+//   1. #tutorial-navigator carries data-search-base="/qa-search"
+//   2. <script id="browse-data"> exists and its JSON has a non-empty `all` array
+export function checkQaIndex(html: string): string[] {
+  const problems: string[] = [];
+
+  // 1. data-search-base="/qa-search" on the navigator mount
+  if (!/id=["']?tutorial-navigator["']?[^>]*data-search-base=["']?\/qa-search/.test(html)) {
+    problems.push('#tutorial-navigator is missing data-search-base="/qa-search"');
+  }
+
+  // 2. #browse-data grid populated
+  const browseMatch = html.match(/<script\b[^>]*id=["']?browse-data["']?[^>]*>([\s\S]*?)<\/script>/i);
+  if (!browseMatch) {
+    problems.push('#browse-data script tag is absent — data-qa/browse.json was not emitted');
+  } else {
+    let browseJson: unknown;
+    try {
+      browseJson = JSON.parse(browseMatch[1]);
+    } catch {
+      browseJson = {};
+    }
+    const all = (browseJson as Record<string, unknown>).all;
+    if (!Array.isArray(all) || all.length === 0) {
+      problems.push('#browse-data grid is empty — data-qa/browse.json was not emitted');
+    }
+  }
+
+  return problems;
+}
+
 function walk(dir: string): string[] {
   const out: string[] = [];
   for (const e of readdirSync(dir)) {
@@ -96,6 +129,17 @@ function main() {
   if (bad === 0) {
     console.log(`[verify-qa-build] clean — no forbidden markers in ${root}`);
   }
+
+  // Check QA-specific signals in index.html (data-search-base + browse-data grid)
+  const indexPath = join(root, 'index.html');
+  if (existsSync(indexPath)) {
+    const indexHtml = readFileSync(indexPath, 'utf-8');
+    for (const problem of checkQaIndex(indexHtml)) {
+      console.error(`[verify-qa-build] index.html: ${problem}`);
+      bad++;
+    }
+  }
+
   process.exit(bad ? 1 : 0);
 }
 
