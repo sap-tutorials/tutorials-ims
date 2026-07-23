@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { useNavigatorFilters } from './useNavigatorFilters'
+import * as useSearchModule from '../../navigator/useSearch'
 import type { CardItem } from '@shared/types'
 
 const cards: CardItem[] = [
@@ -175,5 +176,58 @@ describe('endpoint base forwarding', () => {
   it('exposes a supplied navBase', () => {
     const r = useNavigatorFilters({ allCards: ref([]), navBase: '/tutorials-qa' })
     expect(r.navBase).toBe('/tutorials-qa')
+  })
+
+  it('forwards searchBase and hrefBase to useSearch with defaults', () => {
+    const useSearchSpy = vi.spyOn(useSearchModule, 'useSearch').mockReturnValue({
+      searchMode: ref(false),
+      isSubThreshold: ref(false),
+      searchResults: ref([]),
+      searchFacets: ref(null),
+      searchTotalCount: ref(0),
+      isSearching: ref(false),
+      searchError: ref(null),
+    })
+
+    useNavigatorFilters({ allCards: ref([]), syncURL: false })
+
+    // Verify useSearch was called with default values
+    expect(useSearchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        searchBase: '/search',
+        hrefBase: '/tutorials',
+      })
+    )
+
+    useSearchSpy.mockRestore()
+  })
+
+  it('forwards custom searchBase and hrefBase to useSearch', () => {
+    const useSearchSpy = vi.spyOn(useSearchModule, 'useSearch').mockReturnValue({
+      searchMode: ref(false),
+      isSubThreshold: ref(false),
+      searchResults: ref([]),
+      searchFacets: ref(null),
+      searchTotalCount: ref(0),
+      isSearching: ref(false),
+      searchError: ref(null),
+    })
+
+    useNavigatorFilters({
+      allCards: ref([]),
+      searchBase: '/qa-search',
+      hrefBase: '/tutorials-qa',
+      syncURL: false,
+    })
+
+    // Verify useSearch was called with custom values
+    expect(useSearchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        searchBase: '/qa-search',
+        hrefBase: '/tutorials-qa',
+      })
+    )
+
+    useSearchSpy.mockRestore()
   })
 })
