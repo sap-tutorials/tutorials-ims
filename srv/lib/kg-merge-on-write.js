@@ -328,12 +328,67 @@ export function vectorToJsonLiteral(vec) {
  * @param {import('@sap/cds/apis/services').Service} args.db  db service (HANA detection)
  * @param {object} [args.tx]  optional active transaction (extract-concepts-job wraps mints in db.tx); defaults to db
  * @param {object} args.entry  the Concepts row: { ID, slug, name, description?, embeddingBuf, embeddingVec, status?, extractionCount?, lastSeenAt }
+ *
+ * ACTIVE-slug uniqueness guard (KG vertex-dup bug, Layer B): before INSERTing
+ * a fresh row this helper re-checks the LIVE Concepts table for the slug and
+ * reuses/reactivates any existing row instead of minting a duplicate. It is
+ * the enforcement point for the "at most one ACTIVE row per slug" invariant
+ * that @assert.unique cannot guarantee here (raw db.tx writers bypass the
+ * service layer; a partial UNIQUE(slug) WHERE status='ACTIVE' is inexpressible
+ * in HDI). Returns the ID that actually persists for the slug so the caller
+ * can point its FK links + in-cycle registry at it rather than a phantom UUID.
+ *
+ * @returns {Promise<{ ID: string, action: 'minted'|'reused'|'reactivated' }>}
  */
 export async function insertMintedConcept({ db, tx, entry }) {
   const runner = tx ?? db;
   const { Concepts } = cds.entities(NAMESPACE);
   const vecLiteral =
     entry.embeddingVec != null ? vectorToJsonLiteral(entry.embeddingVec) : null;
+
+  // Guard: re-check the LIVE table for an existing row with this slug before
+  // minting. No LOB column selected → safe to run against HANA inside the tx.
+  // Closes the mint race in resolveConceptCandidates: the registry snapshot is
+  // cached for a whole cron cycle, so a slug retired (or minted by a sibling
+  // job) AFTER the snapshot lands in neither bySlug nor retiredBySlug and would
+  // otherwise fall through to a fresh mint — a SECOND ACTIVE row for a slug that
+  // already exists. Two ACTIVE rows make KG_PG_VERTICES_V emit the concept
+  // vertex key twice, which crashes all three KG jobs (kg-pagerank,
+  // kg-communities/Louvain, kg-wcc). @assert.unique on Concepts.slug is a CAP
+  // RUNTIME check only and never fires here — every KG writer reaches this
+  // helper via raw db/db.tx, not the service layer — and a partial
+  // UNIQUE(slug) WHERE status='ACTIVE' cannot be expressed in HDI artifacts,
+  // so the invariant MUST be enforced in app code at this write point.
+  const existing = await runner.run(
+    SELECT.from(Concepts).columns('ID', 'status').where({ slug: entry.slug }),
+  );
+  if (existing.length > 0) {
+    // Deterministic pick if the table already carries duplicates: prefer an
+    // ACTIVE row, else a RETIRED one; break ties on ID so re-runs converge on
+    // the same survivor (matches KG_PG_VERTICES_V's ROW_NUMBER tiebreaker).
+    const statusOf = (r) => r.status ?? r.STATUS;
+    const idOf = (r) => r.ID ?? r.id;
+    const byId = (a, b) => (idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0);
+    const active = existing.filter((r) => statusOf(r) === 'ACTIVE').sort(byId);
+    if (active.length > 0) {
+      // Already ACTIVE — reuse it, never insert a second ACTIVE row.
+      return { ID: idOf(active[0]), action: 'reused' };
+    }
+    const retired = existing.filter((r) => statusOf(r) === 'RETIRED').sort(byId);
+    if (retired.length > 0) {
+      // Dormant row for this slug — reactivate rather than mint (#1115),
+      // closing the mid-cycle retire race the cached registry missed.
+      const reuseId = idOf(retired[0]);
+      await runner.run(
+        UPDATE(Concepts)
+          .set({ status: 'ACTIVE', lastSeenAt: entry.lastSeenAt })
+          .where({ ID: reuseId }),
+      );
+      return { ID: reuseId, action: 'reactivated' };
+    }
+    // Only MERGED/VETOED rows exist for this slug: those are intentional
+    // terminal states, not dedup targets — fall through and mint fresh.
+  }
 
   const row = {
     ID: entry.ID,
@@ -361,4 +416,5 @@ export async function insertMintedConcept({ db, tx, entry }) {
     // directly alongside the CQL INSERT.
     await runner.run(INSERT.into(Concepts).entries({ ...row, embeddingVec: vecLiteral }));
   }
+  return { ID: entry.ID, action: 'minted' };
 }

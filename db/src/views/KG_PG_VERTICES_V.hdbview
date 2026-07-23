@@ -1,5 +1,5 @@
 VIEW "KG_PG_VERTICES_V" AS
-  -- Concept vertices — one row per active concept.
+  -- Concept vertices — exactly ONE row per active concept slug.
   --
   -- NVARCHAR(280) sizing: Tutorials.slug is String(255) per db/schema.cds;
   -- Concepts.slug is String(80). 'tutorial:' + 255 = 264; 280 gives modest
@@ -7,14 +7,46 @@ VIEW "KG_PG_VERTICES_V" AS
   -- raise a data-exception at query time. Keeping this sizing in sync with
   -- the equivalent CAST in KG_PG_EDGES_V.hdbview is what prevents workspace
   -- load-time key-mismatch errors.
+  --
+  -- ROW_NUMBER dedupe (KG vertex-dup bug): Concepts.slug carries
+  -- @assert.unique in db/knowledge-graph.cds, but that is a CAP RUNTIME
+  -- check only — the deployed HANA table has ONLY a PRIMARY KEY on ID
+  -- (UUID), NO unique index on SLUG (a partial UNIQUE(slug) WHERE
+  -- status='ACTIVE' can't be expressed in HDI artifacts). Every KG writer
+  -- goes through raw db.run() and bypasses the service layer, so a mint
+  -- race (see srv/lib/kg-merge-on-write.js) can leave TWO ACTIVE rows with
+  -- the same slug. Without dedupe this arm then emits 'concept:<slug>'
+  -- twice, and the graph engine rejects the whole workspace at
+  -- KG_LOUVAIN_GRAPH runtime with [4907] range 1 — crashing all three KG
+  -- jobs (kg-pagerank, kg-communities/Louvain, kg-wcc). A bare DISTINCT is
+  -- NOT enough: the arm selects NAME as LABEL, so two rows differing only in
+  -- NAME would still both survive DISTINCT and re-introduce the dup key.
+  -- ROW_NUMBER() OVER (PARTITION BY SLUG ...) keeps exactly one row per
+  -- slug, deterministically (most-recently-modified wins; ID breaks ties).
+  -- HANA has no QUALIFY clause, so the window filter lives in a derived
+  -- table. Layer B (srv/lib/kg-merge-on-write.js) stops the dup at the
+  -- source; this arm is the defense-in-depth that keeps the jobs alive even
+  -- if bad data drifts back in.
   SELECT
-    CAST('concept:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
-    'concept'                                 AS "VERTEX_TYPE",
-    SLUG                                      AS "SLUG",
-    NAME                                      AS "LABEL",
-    STATUS                                    AS "STATUS"
-  FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTS"
-  WHERE STATUS = 'ACTIVE'
+    "VERTEX_KEY",
+    "VERTEX_TYPE",
+    "SLUG",
+    "LABEL",
+    "STATUS"
+  FROM (
+    SELECT
+      CAST('concept:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+      'concept'                                 AS "VERTEX_TYPE",
+      SLUG                                      AS "SLUG",
+      NAME                                      AS "LABEL",
+      STATUS                                    AS "STATUS",
+      ROW_NUMBER() OVER (
+        PARTITION BY SLUG ORDER BY MODIFIEDAT DESC, ID
+      )                                         AS "RN"
+    FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTS"
+    WHERE STATUS = 'ACTIVE'
+  )
+  WHERE "RN" = 1
   UNION ALL
   -- Tutorial vertices — one row per Tutorials row.
   --

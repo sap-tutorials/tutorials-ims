@@ -326,7 +326,7 @@ export async function runFetchLearningJourneys(deps = {}) {
       // valid FK target. Warm the in-memory registry so subsequent journeys
       // in this cycle see the freshly-minted concepts.
       for (const pc of resolution.pendingMints) {
-        await insertMintedConcept({
+        const { ID: persistedId } = await insertMintedConcept({
           db,
           entry: {
             ID: pc.ID,
@@ -340,8 +340,17 @@ export async function runFetchLearningJourneys(deps = {}) {
             lastSeenAt: now,
           },
         });
-        registry.bySlug.set(pc.slug, { ID: pc.ID, slug: pc.slug, name: pc.name });
-        registry.embeddings.set(pc.ID, pc.embeddingVec);
+        // Mint-race guard (KG vertex-dup): insertMintedConcept may have reused or
+        // reactivated an existing row for this slug instead of inserting pc.ID.
+        // Repoint this slug's resolved links at the row that actually persists so
+        // we never FK to a phantom, never-inserted UUID.
+        if (persistedId !== pc.ID) {
+          for (const r of resolution.resolved) {
+            if (r.slug === pc.slug) r.conceptId = persistedId;
+          }
+        }
+        registry.bySlug.set(pc.slug, { ID: persistedId, slug: pc.slug, name: pc.name });
+        registry.embeddings.set(persistedId, pc.embeddingVec);
       }
 
       // #1115: flip any RETIRED concept whose slug was re-proposed back to ACTIVE.
