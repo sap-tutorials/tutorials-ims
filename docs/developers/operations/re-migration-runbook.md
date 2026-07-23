@@ -552,10 +552,19 @@ display names (matches DEV). PROD owners-on-active-tutorials (1431) now
 matches/beats DEV (1423) — the reported dashboard gap is closed.
 
 **Remaining sliver:** ~200 `@users.noreply.github.com` authors still have
-NULL `ownerEmail` (their login isn't in the empty githubLogin map). This
-self-heals as authors log into PROD (JIT-populates `Users.email`); to close
-fully later, run `seed-users-github-login.cjs --commit` then re-run this
-resync. The dashboard `owner` column is already complete regardless.
+NULL `ownerEmail` (their login isn't in the empty githubLogin map). **The
+fill engine is the publish path, NOT logins** — verified 2026-07-23: DEV
+has 1010 resolved `ownerEmail`s but only **5** users with `githubLogin`, so
+DEV's surplus came from `linkTutorialAuthorship` writing `ownerEmail` from
+frontmatter `author_profile` as tutorials were re-published over months, not
+from login-driven githubLogin backfill. Therefore this sliver closes as PROD
+content is **re-published** (per-tutorial author edits, or a full
+`rebuild-content.yml` run) — waiting on user logins will NOT close it. A
+one-time DEV→PROD copy would fill only ~105 emails / ~17 owners (0 conflicts)
+— marginal on a 2891-row table, and it imports DEV-sourced values rather than
+letting PROD derive its own from frontmatter, so we chose to let the publish
+path fill it instead. The dashboard `owner` column is already complete
+regardless.
 
 ### Cleanup
 
