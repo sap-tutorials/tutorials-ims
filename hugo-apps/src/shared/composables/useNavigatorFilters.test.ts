@@ -165,3 +165,15 @@ describe('useNavigatorFilters', () => {
     expect(f.sort).toBeUndefined()
   })
 })
+
+describe('endpoint base forwarding', () => {
+  it('defaults navBase to /tutorials when not supplied', () => {
+    const r = useNavigatorFilters({ allCards: ref([]) })
+    expect(r.navBase).toBe('/tutorials')
+  })
+
+  it('exposes a supplied navBase', () => {
+    const r = useNavigatorFilters({ allCards: ref([]), navBase: '/tutorials-qa' })
+    expect(r.navBase).toBe('/tutorials-qa')
+  })
+})

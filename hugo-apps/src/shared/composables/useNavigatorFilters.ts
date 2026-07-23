@@ -30,6 +30,9 @@ export interface UseNavigatorFiltersOptions {
   enableSort?: boolean
   syncURL?: boolean
   pageSize?: number
+  searchBase?: string
+  hrefBase?: string
+  navBase?: string
 }
 
 const SORT_COMPARATORS: Record<Sort, (a: CardItem, b: CardItem) => number> = {
@@ -248,6 +251,9 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     enableSort = false,
     syncURL = true,
     pageSize = 48,
+    searchBase = '/search',
+    hrefBase = '/tutorials',
+    navBase = '/tutorials',
   } = opts
 
   // ─── Reactive filter state ───
@@ -319,6 +325,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     filterIsNew: computed(() => filters.isNew),
     filterNoLicense: computed(() => filters.noLicense),
     tutorials,
+    searchBase,
+    hrefBase,
   })
 
   // ─── URL state read on mount (gated by syncURL) ───
@@ -634,5 +642,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     searchResults,
     isSearching,
     searchError,
+    // Base forwarding
+    navBase,
   }
 }
