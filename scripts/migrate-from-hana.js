@@ -213,6 +213,25 @@ export function derivePublished(rawStatus) {
   return normalizeStatus(rawStatus) !== 'DELETED';
 }
 
+// Map an IMS experience-tag NAME (resolved via tagMap from EXPERIENCE_TAG_ID)
+// onto the CAP `ExperienceLevel` enum { beginner; intermediate; advanced }.
+// db/schema.cds:15 declares experienceTag with @assert.range, so any value the
+// migrator writes must be one of those three literals — the OData layer would
+// otherwise reject the row on the next admin edit. The migrated Tutorials rows
+// stored the raw tag name verbatim (mixed case: 'Beginner'/'beginner'/…, half
+// of which violate the lowercase enum), so we do NOT replicate that; we
+// canonicalize instead. Unknown/blank/multi-word tags return null (leaving the
+// column unset is valid — the field is nullable — and safer than writing a
+// value that fails @assert.range). Pure helper — exported for unit tests.
+export function normalizeExperienceTag(tagName) {
+  if (tagName == null) return null;
+  const v = String(tagName).trim().toLowerCase();
+  if (v === 'beginner') return 'beginner';
+  if (v === 'intermediate') return 'intermediate';
+  if (v === 'advanced') return 'advanced';
+  return null;
+}
+
 // Derive a slug for a CompletionPath from its title (Java IMS doesn't store
 // one — slug is a CAP-side concept). Returns kebab-cased title with a
 // `path-${legacyId}` fallback for missing/empty input. Collision avoidance
@@ -1044,16 +1063,30 @@ async function main() {
   }));
 
   // 3. Groups
+  // Groups/Missions live in the same IMS_TASK table as Tutorials and carry the
+  // same descriptive columns (DESCRIPTION, PRIMARY_TAG_ID, EXPERIENCE_TAG_ID,
+  // AVERAGE_TTC). The original migrator selected them only for Tutorials, so
+  // migrated Groups/Missions landed with those TaskBase fields NULL (0/359
+  // groups, 0/888 missions had any of them in the 2026-07-23 PROD audit). The
+  // source is fully populated (359/359 groups, 888/888 missions have desc +
+  // primary tag + experience), so pull and map them here — mirroring the
+  // Tutorials mapRow below. Tutorials get DESCRIPTION from markdown at publish
+  // time; Groups/Missions have no markdown, so IMS_TASK.DESCRIPTION is their
+  // only source.
   results.push(await migrateEntity(source, target, T, {
     name: 'groups',
-    sourceQuery: `SELECT "ID", "TITLE", "TASK_STATUS", "CREATED_AT", "UPDATED_AT", "CREATED_BY", "UPDATED_BY" FROM ${S}."IMS_TASK" WHERE "TASK_TYPE" = 'GROUP'`,
+    sourceQuery: `SELECT "ID", "TITLE", "DESCRIPTION", "TASK_STATUS", "PRIMARY_TAG_ID", "EXPERIENCE_TAG_ID", "AVERAGE_TTC", "CREATED_AT", "UPDATED_AT", "CREATED_BY", "UPDATED_BY" FROM ${S}."IMS_TASK" WHERE "TASK_TYPE" = 'GROUP'`,
     targetTable: 'COM_SAP_DEVELOPERS_IMS_GROUPS',
     mapRow: (row) => ({
       ID: uuidMap.groups.get(row.ID),
       LEGACYID: row.ID,
       TITLE: truncStr(row.TITLE, 255),
+      DESCRIPTION: row.DESCRIPTION || null,
       STATUS: normalizeStatus(row.TASK_STATUS),
       PUBLISHED: derivePublished(row.TASK_STATUS),
+      PRIMARYTAG: truncStr(tagMap.get(row.PRIMARY_TAG_ID), 255) || null,
+      EXPERIENCETAG: normalizeExperienceTag(tagMap.get(row.EXPERIENCE_TAG_ID)),
+      AVERAGETIMETOCOMPLETE: row.AVERAGE_TTC,
       CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
       MODIFIEDAT: toISOTimestamp(row.UPDATED_AT) || new Date().toISOString(),
       CREATEDBY: truncStr(row.CREATED_BY, 255) || 'migration',
@@ -1070,7 +1103,7 @@ async function main() {
   // 4. Missions
   results.push(await migrateEntity(source, target, T, {
     name: 'missions',
-    sourceQuery: `SELECT "ID", "TITLE", "TASK_STATUS", "CREATED_AT", "UPDATED_AT", "CREATED_BY", "UPDATED_BY" FROM ${S}."IMS_TASK" WHERE "TASK_TYPE" = 'MISSION'`,
+    sourceQuery: `SELECT "ID", "TITLE", "DESCRIPTION", "TASK_STATUS", "PRIMARY_TAG_ID", "EXPERIENCE_TAG_ID", "AVERAGE_TTC", "COMMUNITY_MISSION_ID", "CREATED_AT", "UPDATED_AT", "CREATED_BY", "UPDATED_BY" FROM ${S}."IMS_TASK" WHERE "TASK_TYPE" = 'MISSION'`,
     targetTable: 'COM_SAP_DEVELOPERS_IMS_MISSIONS',
     mapRow: (row) => {
       const groupLegacyId = missionGroupMap.get(row.ID);
@@ -1078,8 +1111,16 @@ async function main() {
         ID: uuidMap.missions.get(row.ID),
         LEGACYID: row.ID,
         TITLE: truncStr(row.TITLE, 255),
+        DESCRIPTION: row.DESCRIPTION || null,
         STATUS: normalizeStatus(row.TASK_STATUS),
         PUBLISHED: derivePublished(row.TASK_STATUS),
+        PRIMARYTAG: truncStr(tagMap.get(row.PRIMARY_TAG_ID), 255) || null,
+        EXPERIENCETAG: normalizeExperienceTag(tagMap.get(row.EXPERIENCE_TAG_ID)),
+        AVERAGETIMETOCOMPLETE: row.AVERAGE_TTC,
+        // COMMUNITY_MISSION_ID is the IMS-legacy community CMS id (872/888 rows
+        // carry one). Distinct from sourceKgCommunityId (Louvain, set only by
+        // promoteCommunityToMission #917). schema.cds:53 communityMissionId.
+        COMMUNITYMISSIONID: truncStr(row.COMMUNITY_MISSION_ID, 255) || null,
         GROUP_ID: groupLegacyId ? uuidMap.groups.get(groupLegacyId) : null,
         CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
         MODIFIEDAT: toISOTimestamp(row.UPDATED_AT) || new Date().toISOString(),
@@ -1538,6 +1579,55 @@ async function main() {
     }));
   } catch (e) {
     console.log(`  ⊘ TutorialTags: ${e.message.split('\n')[0]}`);
+  }
+
+  // 12b. GroupTags / MissionTags (many-to-many)
+  // Same source table as TutorialTags — IMS_TAG_TO_TASK stores tag links for
+  // every TASK_TYPE. The tutorialtags step above reads the whole table but
+  // maps only rows whose TASK_ID resolves via uuidMap.tutorials, silently
+  // dropping the 654 GROUP + 696 MISSION links (mapRow → null). That's why
+  // GroupTags/MissionTags each held ~1 stray row post-migration. These two
+  // steps recover them. Unlike TutorialTags (composite key, no ID), GroupTags/
+  // MissionTags are `cuid` — derive a stable ID from the composite
+  // (TASK_ID, TAG_ID) so re-runs stay idempotent.
+  try {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'grouptags',
+      sourceQuery: `SELECT "TASK_ID", "TAG_ID" FROM ${S}."IMS_TAG_TO_TASK"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_GROUPTAGS',
+      mapRow: (row) => {
+        const groupUuid = uuidMap.groups.get(row.TASK_ID);
+        const tagUuid = uuidMap.tags.get(row.TAG_ID);
+        if (!groupUuid || !tagUuid) return null;
+        return {
+          ID: uuidv5(`gt:${row.TASK_ID}:${row.TAG_ID}`, NAMESPACES.grouptag),
+          GROUP_ID: groupUuid,
+          TAG_ID: tagUuid,
+        };
+      },
+    }));
+  } catch (e) {
+    console.log(`  ⊘ GroupTags: ${e.message.split('\n')[0]}`);
+  }
+
+  try {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'missiontags',
+      sourceQuery: `SELECT "TASK_ID", "TAG_ID" FROM ${S}."IMS_TAG_TO_TASK"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_MISSIONTAGS',
+      mapRow: (row) => {
+        const missionUuid = uuidMap.missions.get(row.TASK_ID);
+        const tagUuid = uuidMap.tags.get(row.TAG_ID);
+        if (!missionUuid || !tagUuid) return null;
+        return {
+          ID: uuidv5(`mt:${row.TASK_ID}:${row.TAG_ID}`, NAMESPACES.missiontag),
+          MISSION_ID: missionUuid,
+          TAG_ID: tagUuid,
+        };
+      },
+    }));
+  } catch (e) {
+    console.log(`  ⊘ MissionTags: ${e.message.split('\n')[0]}`);
   }
 
   // 13. FeaturedTasks (cross-ref for the "featured" rail at /build/catalog

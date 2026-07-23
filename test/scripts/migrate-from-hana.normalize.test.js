@@ -15,6 +15,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeStatus,
   derivePublished,
+  normalizeExperienceTag,
 } from '../../scripts/migrate-from-hana.js';
 
 describe('normalizeStatus()', () => {
@@ -66,5 +67,46 @@ describe('derivePublished()', () => {
 
   it('ACTIVE source → published=true', () => {
     expect(derivePublished('ACTIVE')).toBe(true);
+  });
+});
+
+// Issue: PROD Groups (0/359) and Missions (0/888) were migrated without
+// experienceTag because the migrator only selected EXPERIENCE_TAG_ID for
+// Tutorials. Groups/Missions now map it via normalizeExperienceTag, which
+// canonicalizes the IMS tag NAME onto the CAP ExperienceLevel enum
+// (schema.cds:15, @assert.range). The migrated Tutorials stored raw mixed-case
+// names ('Beginner'/'beginner'), half violating the lowercase enum — this
+// helper deliberately does NOT replicate that.
+describe('normalizeExperienceTag()', () => {
+  it('lowercases canonical values', () => {
+    expect(normalizeExperienceTag('beginner')).toBe('beginner');
+    expect(normalizeExperienceTag('intermediate')).toBe('intermediate');
+    expect(normalizeExperienceTag('advanced')).toBe('advanced');
+  });
+
+  it('canonicalizes mixed / upper case to the lowercase enum', () => {
+    expect(normalizeExperienceTag('Beginner')).toBe('beginner');
+    expect(normalizeExperienceTag('INTERMEDIATE')).toBe('intermediate');
+    expect(normalizeExperienceTag('Advanced')).toBe('advanced');
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(normalizeExperienceTag('  beginner ')).toBe('beginner');
+  });
+
+  it('returns null for null/undefined (field is nullable)', () => {
+    expect(normalizeExperienceTag(null)).toBeNull();
+    expect(normalizeExperienceTag(undefined)).toBeNull();
+  });
+
+  it('returns null for blank string', () => {
+    expect(normalizeExperienceTag('')).toBeNull();
+    expect(normalizeExperienceTag('   ')).toBeNull();
+  });
+
+  it('returns null for unknown tag names rather than an @assert.range violator', () => {
+    expect(normalizeExperienceTag('Expert')).toBeNull();
+    expect(normalizeExperienceTag('SAP HANA Cloud')).toBeNull();
+    expect(normalizeExperienceTag('beginner-friendly')).toBeNull();
   });
 });
