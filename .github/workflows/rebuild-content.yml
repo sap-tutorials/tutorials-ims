@@ -171,6 +171,10 @@ jobs:
           INPUT_SLUGS: ${{ inputs.slugs }}
           INPUT_PURGE_ORPHANS: ${{ inputs.purge-orphans }}
           EVENT: ${{ github.event_name }}
+          # repository_dispatch (source-repo push) may carry the single changed
+          # tutorial slug (#1154 follow-up). Untrusted payload — validated below
+          # against a strict slug charset before use.
+          PAYLOAD_SLUG: ${{ github.event.client_payload.slug }}
         run: |
           EFFECTIVE="$INPUT_MODE"
           REASON="explicit (inputs.mode=$INPUT_MODE)"
@@ -180,6 +184,18 @@ jobs:
              && { [ -n "$INPUT_SLUG" ] || [ -n "$INPUT_SLUGS" ]; }; then
             EFFECTIVE='slug-targeted'
             REASON='auto-inferred (slug/slugs set, mode left at default)'
+          fi
+
+          # repository_dispatch with a single valid slug → slug-targeted (fast
+          # ~2min) instead of the default full (~10min). The slug is attacker-
+          # influenced (dispatch payload), so accept ONLY a strict lowercase
+          # slug charset [a-z0-9-]; anything else (empty, multi-slug, junk)
+          # falls through to full — safe default, never errors.
+          if [ "$EVENT" = "repository_dispatch" ] \
+             && printf '%s' "$PAYLOAD_SLUG" | grep -qE '^[a-z0-9][a-z0-9-]*$'; then
+            EFFECTIVE='slug-targeted'
+            REASON="auto-inferred (repository_dispatch slug=$PAYLOAD_SLUG)"
+            echo "dispatch_slug=$PAYLOAD_SLUG" >> "$GITHUB_OUTPUT"
           fi
 
           # Issue #orphan-purge — reject purge-orphans=true with anything
@@ -280,7 +296,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
-          TUTORIAL_SLUG: ${{ inputs.slug }}
+          TUTORIAL_SLUG: ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
           TUTORIAL_SLUGS: ${{ inputs.slugs }}
           # [#208/#275/#312] AI-quiz authoring. Always-on post-#312
           # (2026-06-27 — soak window completed clean). fetch-tutorials.ts
