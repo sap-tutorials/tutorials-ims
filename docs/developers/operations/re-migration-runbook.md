@@ -447,6 +447,112 @@ data loss is acceptable in DEV but **not** in prod.
    - Joule chat smoke (if `ChatSettings.enabled = true`): one round
      trip on `/chat/stream` returns a non-empty response.
 
+## Post-migration: TutorialMeta owner / ownerEmail backfill (Tutorial Health)
+
+The main migrator (`scripts/migrate-from-hana.js`) does **not** touch
+`TutorialMeta` — it's a CAP-era entity, so a fresh PROD deploy leaves
+`TutorialMeta.owner` / `ownerEmail` entirely NULL. Symptom: the **Tutorial
+Health dashboard** (`/admin-ui/#tutorial-dashboard`, Owner column binds
+`{admin>owner}`) shows blank owners. This is a separate, required
+post-migration step, mirroring `migration-from-ims.md` Steps 4 & 5.
+
+**Confirmed run against PROD 2026-07-23** (values below are the real result).
+
+### Credential setup (both halves)
+
+- **Source (IMS, us30):** the legacy IMS is in a *different* CF landscape
+  than the eu10 target. Point CF at us30, capture creds, then **switch CF
+  back to eu10 before running** (scripts write to the currently-targeted
+  target-cred env var, but the CF context also gates the target
+  service-key lookup):
+
+  ```bash
+  cf api https://api.cf.us30.hana.ondemand.com
+  cf login --sso   # passcode from https://login.cf.us30.hana.ondemand.com/passcode → Developer Destination_IMS / PROD
+  cf env imsprod   # capture DB_URL / DB_USERNAME (IMSDBUSER) / DB_PASSWORD
+  # write .migration-data/ims-creds.json = {host,port:"443",user:"IMSDBUSER",password,schema:"IMSDBUSER"}
+  cf api https://api.cf.eu10-005.hana.ondemand.com
+  cf login --sso   # → tutorial-system / prod
+  ```
+
+  Switching landscapes needs a fresh interactive SSO each way — there is no
+  non-interactive `cf target` shortcut between us30 and eu10.
+
+- **Target (CAP, eu10):** resolved in-process from the service key — no file
+  needed. **Gotcha:** `cf service-key` output is wrapped in
+  `{ "credentials": {…} }`, but the scripts do a bare
+  `JSON.parse(CAP_HANA_CREDENTIALS)` and read `.host` directly. You **must
+  unwrap** the `credentials` object or the target host resolves `undefined`:
+
+  ```bash
+  export IMS_HANA_CREDENTIALS="$(cat .migration-data/ims-creds.json)"
+  export CAP_HANA_CREDENTIALS="$(cf service-key tutorials-hana tutorials-hana-key \
+    | sed -n '/{/,$p' \
+    | node -e 'let r="";process.stdin.on("data",d=>r+=d);process.stdin.on("end",()=>{const o=JSON.parse(r);process.stdout.write(JSON.stringify(o.credentials||o));})')"
+  ```
+
+- **IP allowlist:** both the us30 IMS HANA and the eu10 `tutorials-hana`
+  instances must allowlist the workstation IP (BTP cockpit → HANA Cloud →
+  Security). Same as the main migration.
+
+### Step 4 — `backfill-tutorial-meta-from-ims.cjs` (COALESCE, safe, run always)
+
+Fills `owner` + `reviewedDate` + notification stats + repository FK from
+`IMS_TUTORIAL_META JOIN IMS_TUTORIAL_AUTHOR`. **COALESCE-only** — never
+overwrites a non-NULL value; idempotent; skips `@users.noreply.github.com`
+and `@sap-tutorials.local` placeholder emails. This is the step that fixes
+the dashboard.
+
+```bash
+node scripts/backfill-tutorial-meta-from-ims.cjs --dry-run --verbose   # review
+node scripts/backfill-tutorial-meta-from-ims.cjs                       # commit
+```
+
+> ⚠ **Runtime gotcha:** the commit issues ~1400 individual UPDATEs over the
+> WAN and takes **> 2 minutes** — longer than the default foreground Bash
+> timeout. A SIGTERM (exit 143) mid-run is **not** a failure: the script is
+> idempotent (COALESCE + `WHERE … IS NULL`), so re-run it (in the background
+> if driving via an agent) and it finishes the remainder. Verify with a
+> `SELECT COUNT(*) … WHERE "OWNER" IS NOT NULL`.
+
+**2026-07-23 PROD result:** 1431 source rows read → **920 owner emails,
+428 reviewedDates, 896 notification stats, 1431 repository FKs updated;
+218 placeholder emails skipped; 0 errors.** Live verify:
+`TutorialMeta.owner` non-null went 0 → 920.
+
+### Step 5 — `resync-tutorial-meta-from-ims.cjs` (full-mirror; **precondition-gated**)
+
+Full-mirror overwrite of `owner`/`ownerEmail` incl.
+`<login>@users.noreply.github.com` → `Users.githubLogin` → `Users.email`
+resolution. Needed for accurate `/author/MyOwnedTutorials`.
+
+> 🚧 **Do NOT run Step 5 on a freshly-migrated PROD.** Its noreply resolution
+> depends on `Users.githubLogin` being populated, which in turn depends on
+> `Users.email` (corporate emails are JIT-populated on first SAP-IDP login).
+> On a fresh PROD deploy almost nobody has logged in yet:
+>
+> **2026-07-23 PROD probe:** `users_with_githubLogin: 0`,
+> `users_with_email: 2` (of 797,673). Running Step 5 now would null out
+> `ownerEmail` for essentially every author and **degrade** the Step 4
+> result.
+>
+> `seed-users-github-login.cjs` cannot help yet either — it seeds logins
+> only for Users that *already* have a corporate email (~2 in PROD today
+> vs ~18 on DEV when we seeded there).
+
+**Precondition before Step 5:** re-run the probe periodically; once
+`users_with_email` has climbed into the dozens (real login traffic
+post-cutover), then: run `seed-users-github-login.cjs --commit`, re-probe
+`users_with_githubLogin`, and only then run the resync (`--dry-run` →
+review the `will-overwrite` CSV → `--commit --initiator …`). This is the
+same sequence that got DEV's contacts dialed in — DEV simply had the login
+history PROD hasn't accumulated yet.
+
+### Cleanup
+
+Delete `.migration-data/ims-creds.json` after the run (contains the live
+IMSDBUSER password). Target creds were never written to disk.
+
 ## See also
 
 - [Migration from IMS](migration-from-ims.md) — the canonical reference-data + user-progress flow.
