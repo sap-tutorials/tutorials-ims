@@ -267,7 +267,8 @@ export async function runExtractConcepts(deps = {}) {
           // Mint deferred Concepts first — same tx as the FK-bearing rows
           // that reference them, so a rollback erases everything together.
           for (const pc of pendingNewConcepts) {
-            await insertMintedConcept({
+            const mintedId = pc.ID;
+            const { ID: persistedId } = await insertMintedConcept({
               db,
               tx,
               entry: {
@@ -282,6 +283,21 @@ export async function runExtractConcepts(deps = {}) {
                 lastSeenAt: nowIso,
               },
             });
+            // Mint-race guard (KG vertex-dup): insertMintedConcept may have
+            // reused or reactivated an existing row for this slug rather than
+            // inserting mintedId. Repoint the link resolutions, the touched-ID
+            // list (extractionCount bump below), and the pending-mint record
+            // (post-commit registry warm) at the row that actually persists so
+            // nothing FKs to a phantom, never-inserted UUID.
+            if (persistedId !== mintedId) {
+              pc.ID = persistedId;
+              for (const t of teachesResolved) {
+                if (t.conceptId === mintedId) t.conceptId = persistedId;
+              }
+              for (let i = 0; i < touchedConceptIds.length; i++) {
+                if (touchedConceptIds[i] === mintedId) touchedConceptIds[i] = persistedId;
+              }
+            }
           }
 
           // #1115: reactivate any RETIRED concept whose slug was re-proposed.

@@ -392,3 +392,104 @@ describe('insertMintedConcept (#1123, sqlite path)', () => {
     expect(row.extractionCount ?? row.EXTRACTIONCOUNT).toBe(3);
   });
 });
+
+describe('insertMintedConcept ACTIVE-slug uniqueness guard (KG vertex-dup)', () => {
+  beforeAll(async () => {
+    const schemaRoots = [
+      path.join(process.cwd(), 'db'),
+      path.join(process.cwd(), 'srv'),
+    ];
+    await cds.deploy(schemaRoots).to('sqlite::memory:');
+  });
+
+  afterAll(async () => {
+    await cds.disconnect();
+  });
+
+  it('reuses an existing ACTIVE row instead of inserting a second one', async () => {
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(Concepts);
+    const existingId = 'c0000000-0000-0000-0000-00000000aaaa';
+    await INSERT.into(Concepts).entries([
+      { ID: existingId, slug: 'dup-guard', name: 'Existing', status: 'ACTIVE' },
+    ]);
+
+    // A sibling job (stale registry) tries to mint a fresh UUID for the same slug.
+    const phantomId = cds.utils.uuid();
+    const res = await insertMintedConcept({
+      db: cds.db,
+      entry: {
+        ID: phantomId,
+        slug: 'dup-guard',
+        name: 'Would-be duplicate',
+        embeddingBuf: buf(0, 1, 0, 0),
+        embeddingVec: vec(0, 1, 0, 0),
+        lastSeenAt: new Date().toISOString(),
+      },
+    });
+
+    // Returns the persisted (existing) ID + 'reused' — never the phantom.
+    expect(res.action).toBe('reused');
+    expect(res.ID).toBe(existingId);
+
+    // Still exactly ONE row for the slug; the phantom UUID was never inserted.
+    const rows = await cds.db.run(
+      `SELECT ID FROM com_sap_developers_ims_Concepts WHERE slug = ?`,
+      ['dup-guard'],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ID ?? rows[0].id).toBe(existingId);
+  });
+
+  it('reactivates a RETIRED row rather than minting when only a retired row exists', async () => {
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(Concepts);
+    const retiredId = 'c0000000-0000-0000-0000-00000000bbbb';
+    await INSERT.into(Concepts).entries([
+      { ID: retiredId, slug: 'retired-guard', name: 'Dormant', status: 'RETIRED' },
+    ]);
+
+    const phantomId = cds.utils.uuid();
+    const res = await insertMintedConcept({
+      db: cds.db,
+      entry: {
+        ID: phantomId,
+        slug: 'retired-guard',
+        name: 'Re-proposed',
+        embeddingBuf: buf(0, 0, 1, 0),
+        embeddingVec: vec(0, 0, 1, 0),
+        lastSeenAt: new Date().toISOString(),
+      },
+    });
+
+    expect(res.action).toBe('reactivated');
+    expect(res.ID).toBe(retiredId);
+
+    const rows = await cds.db.run(
+      `SELECT ID, status FROM com_sap_developers_ims_Concepts WHERE slug = ?`,
+      ['retired-guard'],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ID ?? rows[0].id).toBe(retiredId);
+    expect(rows[0].status ?? rows[0].STATUS).toBe('ACTIVE');
+  });
+
+  it('mints a fresh row (action=minted) when no row exists for the slug', async () => {
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(Concepts);
+    const id = cds.utils.uuid();
+    const res = await insertMintedConcept({
+      db: cds.db,
+      entry: {
+        ID: id,
+        slug: 'novel-guard',
+        name: 'Novel',
+        embeddingBuf: buf(1, 0, 0, 0),
+        embeddingVec: vec(1, 0, 0, 0),
+        lastSeenAt: new Date().toISOString(),
+      },
+    });
+    expect(res.action).toBe('minted');
+    expect(res.ID).toBe(id);
+  });
+});
