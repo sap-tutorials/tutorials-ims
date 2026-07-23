@@ -11,9 +11,11 @@ interface UseSearchOptions {
   filterIsNew?: Ref<boolean>
   filterNoLicense?: Ref<boolean>
   tutorials?: Ref<TutorialEntry[]>
+  searchBase?: string
+  hrefBase?: string
 }
 
-export function mapToCardItem(item: SearchableItem, tutorialsBySlug?: Map<string, TutorialEntry>): CardItem {
+export function mapToCardItem(item: SearchableItem, tutorialsBySlug?: Map<string, TutorialEntry>, hrefBase = '/tutorials'): CardItem {
   const enriched = item.slug && tutorialsBySlug ? tutorialsBySlug.get(item.slug) : undefined
   return {
     type: item.taskType.toLowerCase() as 'mission' | 'group' | 'tutorial',
@@ -30,7 +32,7 @@ export function mapToCardItem(item: SearchableItem, tutorialsBySlug?: Map<string
     displayTagSlugs: enriched?.displayTagSlugs?.length
       ? enriched.displayTagSlugs
       : ([item.primaryTag].filter(Boolean) as string[]),
-    href: item.slug ? `/tutorials/${item.slug}` : '',
+    href: item.slug ? `${hrefBase}/${item.slug}` : '',
     stepCount: 0,
   }
 }
@@ -68,7 +70,7 @@ const encodeODataValue = (v: string) => encodeURIComponent(v)
 //
 // See issues #869 (initial fix) and #943 (regression + this fix), plus
 // the note above encodeODataValue for the space-encoding gotcha.
-export function buildFacetsUrl(term: string, taskTypes: string[], experience: string[]): string {
+export function buildFacetsUrl(term: string, taskTypes: string[], experience: string[], searchBase = '/search'): string {
   const parts: string[] = ['search=@s']
   const query: string[] = [`@s=${encodeODataValue(`'${escOData(term)}'`)}`]
   if (taskTypes.length) {
@@ -79,7 +81,7 @@ export function buildFacetsUrl(term: string, taskTypes: string[], experience: st
     parts.push('experience=@e')
     query.push(`@e=${encodeODataValue(JSON.stringify(experience))}`)
   }
-  return `/search/getFacets(${parts.join(',')})?${query.join('&')}`
+  return `${searchBase}/getFacets(${parts.join(',')})?${query.join('&')}`
 }
 
 export interface BuildFilterFlags {
@@ -126,7 +128,8 @@ export function postFilterNoLicense(items: CardItem[], noLicense: boolean): Card
 }
 
 export function useSearch(options: UseSearchOptions) {
-  const { searchTerm, filterTypes, filterLevels, filterProducts, filterIsNew, filterNoLicense, tutorials } = options
+  const { searchTerm, filterTypes, filterLevels, filterProducts, filterIsNew, filterNoLicense, tutorials,
+          searchBase = '/search', hrefBase = '/tutorials' } = options
 
   const searchResults = ref<CardItem[]>([])
   const searchFacets = ref<SearchFacets | null>(null)
@@ -178,8 +181,8 @@ export function useSearch(options: UseSearchOptions) {
       if (filter) qs.push(`$filter=${encodeODataValue(filter)}`)
 
       const [itemsRes, facetsRes] = await Promise.all([
-        fetch(`/search/SearchableItems?${qs.join('&')}`),
-        fetch(buildFacetsUrl(term, filterTypes.value, filterLevels.value)),
+        fetch(`${searchBase}/SearchableItems?${qs.join('&')}`),
+        fetch(buildFacetsUrl(term, filterTypes.value, filterLevels.value, searchBase)),
       ])
 
       if (!itemsRes.ok || !facetsRes.ok) {
@@ -191,7 +194,7 @@ export function useSearch(options: UseSearchOptions) {
       const facetsData = await facetsRes.json()
 
       const cards = (itemsData.value ?? []).map((it: SearchableItem) =>
-        mapToCardItem(it, tutorialsBySlug.value)
+        mapToCardItem(it, tutorialsBySlug.value, hrefBase)
       )
       // Client-side post-filter for the No license toggle. Cheap on a
       // page of $top=48 — at most 48 rows pruned. Avoids a HANA fuzzy-search
