@@ -218,14 +218,22 @@ sap.ui.define([
       this.byId("snoozeBtn").setEnabled(bHasSelection);
     },
 
-    // Collect the tutorial_ID of every currently-selected row. Skips any
+    // Collect the tutorial id of every currently-selected row. Skips any
     // rows without a resolvable context (e.g. selection index beyond the
-    // loaded page) or missing tutorial_ID.
+    // loaded page) or missing id.
     //
     // Selection is owned by the MultiSelectionPlugin (see the view) because
     // the table binds an OData V4 model — the table-level getSelectedIndices()
     // returns [] in that setup. We read indices off the plugin and resolve
     // each to a binding context via the table's getContextByIndex().
+    //
+    // Read the id via the expanded 'tutorial/ID' association path, NOT the
+    // flat 'tutorial_ID' FK: the rows binding uses $expand=tutorial(...) and
+    // OData v4 does NOT project the flat FK column into the response when the
+    // association is expanded (verified at runtime — the selected row object
+    // exposes 'tutorial' but no 'tutorial_ID'). tutorial_ID === tutorial.ID
+    // in this model (meta.tutorial.ID = ID), so the value is identical and is
+    // exactly what /reviewTutorial + /snoozeTutorial expect as tutorialId.
     _getSelectedTutorialIds: function () {
       var oTable = this.byId("tutorialMetaTable");
       var oPlugin = this._getSelectionPlugin();
@@ -233,7 +241,7 @@ sap.ui.define([
       var aIds = [];
       aIndices.forEach(function (iIndex) {
         var oContext = oTable.getContextByIndex(iIndex);
-        var sId = oContext && oContext.getProperty("tutorial_ID");
+        var sId = oContext && oContext.getProperty("tutorial/ID");
         if (sId) { aIds.push(sId); }
       });
       return aIds;
