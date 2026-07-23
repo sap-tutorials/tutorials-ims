@@ -40,6 +40,25 @@ Two defects make the built QA home non-functional:
    `SearchableItems` fetch). On the approuter, `/search/*` routes to the **public prod** srv-api,
    not srv-qa. Result cards also hardcode `href: /tutorials/<slug>` (`useSearch.ts:33`,
    `mapToCardItem`), which for QA must be `/tutorials-qa/<slug>`.
+   In addition, `TutorialNavigator.vue`'s `onMounted` (`:234-238`) fetches three more hardcoded
+   **prod** endpoints: `/tutorials/_nav.json`, `/build/navigator`, `/build/my-progress`.
+
+### Endpoint-repoint decision (post-approval discovery)
+
+Reading the live island revealed more hardcoded prod fetches than the initial spec captured.
+Decision (Tom, 2026-07-23): **repoint search + `/tutorials/_nav.json` + card href only.**
+
+| Island fetch | Feeds | QA action |
+|---|---|---|
+| `/search/SearchableItems` + `getFacets` | live search | repoint via `searchBase` → `/qa-search` |
+| `/tutorials/_nav.json` | tutorials list (search-result enrichment: isNew badges, slug→createdAt) | repoint via `navBase` → `/tutorials-qa` (route `^/tutorials-qa/_nav\.json$` already exists) |
+| card `href` | grid + result links | repoint via `hrefBase` → `/tutorials-qa` |
+| `/build/navigator` | missions/groups rails | **leave on prod** — rails are out of QA scope; unused on the flat-grid QA page |
+| `/build/my-progress` | progress badges | **leave on prod** — user-global; prod and QA return the same rows |
+
+Rationale: the two left-on-prod endpoints feed either out-of-scope UI (rails) or user-global data
+(progress), so they carry no QA-vs-prod correctness risk. Repointing them would add srv-qa surface
+for no functional gain and contradict the "no missions/groups rails" scope.
 
 ## Goal
 
@@ -67,11 +86,12 @@ QA passes two endpoint bases via mount `data-*` attributes. Defaults preserve ex
 
 | # | Unit | File | Change |
 |---|------|------|--------|
-| 1 | Search endpoints | `hugo-apps/src/navigator/useSearch.ts` | `buildFacetsUrl(term, taskTypes, experience, searchBase='/search')`, the `SearchableItems` fetch, and `mapToCardItem(item, tutorialsBySlug, hrefBase='/tutorials')` take base parameters. Defaults reproduce current prod strings exactly. |
-| 2 | Mount config | `hugo-apps/src/navigator/TutorialNavigator.vue` | On setup, read `el.dataset.searchBase` / `el.dataset.hrefBase` from the `#tutorial-navigator` mount and thread them into `useSearch`. Absent attributes → `undefined` → defaults. |
-| 3 | QA browse.json | `scripts/fetch-tutorials.ts` | Make `BROWSE_DATA_FILE` channel-aware (`hugo/data/browse.json` → `hugo/data-qa/browse.json` for the qa channel), and invoke `writeBrowseData` on the QA run. `hugo.qa.toml` already sets `dataDir = "data-qa"`. |
-| 4 | Root route | `approuter/xs-app.json` | Add `^/tutorials-qa/?$` → `localDir: static`, `target: /qa/index.html`, `authenticationType: xsuaa`, `scope: $XSAPPNAME.Tutorial.Author`. **Must be ordered before** the catch-all `^/tutorials-qa/(.*)$`. |
-| 5 | QA template attrs | shared home partial (rendered into `public-qa/index.html`) | On the `#tutorial-navigator` mount, emit `{{ if .Site.Params.qa }}data-search-base="/qa-search" data-href-base="/tutorials-qa"{{ end }}`. The conditional keeps the prod home untouched. |
+| 1 | Search + nav endpoints | `hugo-apps/src/navigator/useSearch.ts` | `buildFacetsUrl(term, taskTypes, experience, searchBase='/search')`, the `SearchableItems` fetch, and `mapToCardItem(item, tutorialsBySlug, hrefBase='/tutorials')` take base parameters. Defaults reproduce current prod strings exactly. |
+| 2 | Endpoint config plumbing | `hugo-apps/src/shared/composables/useNavigatorFilters.ts` | Accept optional `searchBase`/`hrefBase`/`navBase` on `UseNavigatorFiltersOptions`; forward `searchBase`/`hrefBase` into the `useSearch({...})` call (`:314`); expose `navBase` for the `.vue` to use on its `_nav.json` fetch. |
+| 3 | Mount config + nav fetch | `hugo-apps/src/navigator/TutorialNavigator.vue` | On setup, read `el.dataset.searchBase` / `navBase` / `hrefBase` from the `#tutorial-navigator` mount; pass into `useNavigatorFilters`; change the `onMounted` `fetch('/tutorials/_nav.json')` (`:235`) to `fetch(\`${navBase}/_nav.json\`)`. Absent attributes → defaults (`/search`, `/tutorials`). |
+| 4 | QA browse.json | `scripts/fetch-tutorials.ts` | Make `BROWSE_DATA_FILE` channel-aware (`hugo/data/browse.json` → `hugo/data-qa/browse.json` for the qa channel), and invoke `writeBrowseData` on the QA run. `hugo.qa.toml` already sets `dataDir = "data-qa"`. |
+| 5 | Root route | `approuter/xs-app.json` | Add `^/tutorials-qa/?$` → `localDir: static`, `target: /qa/index.html`, `authenticationType: xsuaa`, `scope: $XSAPPNAME.Tutorial.Author`. **Must be ordered before** the catch-all `^/tutorials-qa/(.*)$`. |
+| 6 | QA template attrs | `hugo/layouts/tutorial-navigator/list.html` | On the `#tutorial-navigator` mount div (`:33`), emit `{{ if site.Params.qa }}data-search-base="/qa-search" data-nav-base="/tutorials-qa" data-href-base="/tutorials-qa"{{ end }}`. This layout already carries `site.Params.qa` conditionals, so the prod home stays untouched. |
 
 Interfaces are entirely data-attribute / default-parameter based. No new modules, no shared mutable
 state. Prod calls the same functions with defaults; QA passes two strings.
