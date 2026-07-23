@@ -11,6 +11,14 @@ enableRobotsTXT = false  # we ship our own via the robots output format
   heroDescription = 'Step-by-step tutorials, multi-tutorial missions, and reference content for every SAP developer technology. Tested, maintained, and free to use.'
   twitterHandle = '@sapdevs'
   defaultOgImage = '/img/og-default.png'
+  # Consent Management Platform selector — see docs/superpowers/specs/2026-07-23-trustarc-cmp-integration-design.md
+  # 'trustarc' = corporate TrustArc CMP (default, parity with legacy AEM)
+  # 'inhouse'  = break-glass fallback to the self-contained banner (hugo/static/js/consent.js)
+  # 'off'      = emit no consent UI (QA/preview builds)
+  cmp = 'trustarc'
+  trustArcDomain = 'sapshared.com'
+  trustArcPrivacyLink = 'https://www.sap.com/about/legal/privacy.html'
+  trustArcNoticeAssetVersion = 'v1.7-484'
 
 [frontmatter]
   date = ['date', 'createdAt', 'publishDate', ':git', ':fileModTime']

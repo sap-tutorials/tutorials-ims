@@ -1,0 +1,45 @@
+{{- /*
+  Consent Management Platform switch. See:
+  docs/superpowers/specs/2026-07-23-trustarc-cmp-integration-design.md
+  QA and preview builds never show a live consent banner.
+*/ -}}
+{{- $cmp := site.Params.cmp | default "trustarc" -}}
+{{- if or site.Params.qa site.Params.previewMode -}}
+  {{- $cmp = "off" -}}
+{{- end -}}
+{{- if eq $cmp "trustarc" -}}
+  {{- $domain := site.Params.trustArcDomain | default "sapshared.com" -}}
+  {{- $privacy := site.Params.trustArcPrivacyLink | default "https://www.sap.com/about/legal/privacy.html" -}}
+  {{- $assetVer := site.Params.trustArcNoticeAssetVersion | default "v1.7-484" -}}
+  <script>
+    (function () {
+      window.SAP = window.SAP || {};
+      window.SAP.global = {
+        trustArc: {
+          domain: {{ $domain }},
+          privacyPolicyLink: {{ $privacy }}
+        },
+        isProd: /(www|developers)(\.sap\.(com|cn)|-preprod|-prod)/.test(location.host)
+      };
+    })();
+  </script>
+  <div id="consent_blackbar"></div>
+  <div id="teconsent"></div>
+  <script async src="https://consent.trustarc.com/notice?domain={{ $domain }}&c=teconsent&gtm=1&js=nj&noticeType=bb&pn=1-0&country=US&text=true&privacypolicylink=https%3A%2F%2Fwww.sap.com%2Fabout%2Flegal%2Fprivacy.html"></script>
+  <script async src="https://consent.trustarc.com/asset/notice.js/v/{{ $assetVer }}"></script>
+  <script>
+    document.body.addEventListener('click', function (event) {
+      if (event && event.target && event.target.id === 'truste-consent-button') {
+        try {
+          sessionStorage.setItem('referrerBeforeTrustArcReload', document.referrer);
+          sessionStorage.setItem('referrerBeforeTrustArcReloadUpdateTime', new Date().getTime());
+        } catch (e) {}
+        setTimeout(function () { window.location.reload(); }, 1000);
+      }
+    });
+  </script>
+  <script defer src="/js/consent-trustarc.js" data-ta-domain="{{ $domain }}"></script>
+{{- else if eq $cmp "inhouse" -}}
+  <script defer src="/js/consent.js"></script>
+{{- end -}}
+{{- /* cmp=off emits nothing */ -}}

@@ -65,7 +65,17 @@ The Hugo layouts include links to third-party services but **do not load them ea
 
 **Compliance posture for §2.4:** Because the third-party requests only fire on explicit user action (click), there is no third-party storage *before* consent. EU regulators generally accept this "click-to-load" pattern as compliant without prior consent — but only for the static link case. Any move to embedded share widgets, tracking pixels, or auto-loaded YouTube iframes will trigger the consent requirement.
 
-### 2.5 Cookies the application does **not** set
+### 2.5 Third-party CMP cookies (TrustArc)
+
+As of 2026-07-23, the site loads the TrustArc CMP (`cmp = 'trustarc'` in `hugo/hugo.toml`, property `sapshared.com`). TrustArc sets the following cookies on the origin on first visit:
+
+| Cookie | Set by | Purpose | Consent category |
+|--------|--------|---------|------------------|
+| `notice_gdpr_prefs`, `notice_behavior`, `cmapi_cookie_privacy`, `notice_preferences` | TrustArc CMP (`consent.trustarc.com`) | Consent state per category (groups 0/1/2) — records the visitor's cookie-consent decision | **Strictly necessary** — consent record itself |
+
+**Note:** These cookies are set by TrustArc's CDN script and are not controlled by application code. Their presence is required for the CMP to function.
+
+### 2.6 Cookies the application does **not** set
 
 The following common categories are **absent** from this codebase:
 
@@ -143,20 +153,19 @@ The Joule cache writes `{ firstName, familyName, email, id }` to `sessionStorage
 2. Use [youtube-nocookie.com](https://www.youtube-nocookie.com) embeds (no cookie until play) and update CSP `frame-src` accordingly
 3. Document an authoring style guide that prohibits direct iframe embeds
 
-### 4.3 No consent banner exists today
+### 4.3 ~~No consent banner exists today~~ — Resolved 2026-07-23
 
-The site sets the `theme` cookie/storage on first visit without prompting, and authenticated routes set session cookies on login. EU regulators generally accept these as **strictly necessary** (theme is user-functional; auth session is essential). However:
+**Update 2026-07-23:** The TrustArc CMP is now live as the default (`cmp = 'trustarc'`). The site serves the corporate TrustArc banner (`sapshared.com` property) on first visit. The in-house banner (`cmp = 'inhouse'`) remains available as a break-glass fallback. See `docs/developers/operations/consent-cmp-rollback.md`.
 
-- There is **no public cookie policy page** linked from the footer ([`hugo/layouts/partials/footer.html`](../../../hugo/layouts/partials/footer.html))
-- There is **no privacy policy** page (the GDPR transparency obligation, Art. 13, requires informing users about all storage even when consent isn't required)
-- There is **no consent UI** — meaning the moment a non-essential cookie is added (analytics, marketing), the site becomes non-compliant
+~~The site sets the `theme` cookie/storage on first visit without prompting, and authenticated routes set session cookies on login. EU regulators generally accept these as **strictly necessary** (theme is user-functional; auth session is essential). However:~~
 
-**Recommendation:** Even before adding analytics, publish:
-1. A **cookie policy** page enumerating the inventory in §2 and §3 of this document, with purposes, lifetimes, and the legal basis for each
-2. A **privacy policy** page covering personal data flows (auth, progress tracking, audit logs from [`@cap-js/audit-logging`](../../../db/audit-logging.cds))
-3. Footer links to both, on every page
+- ~~There is **no public cookie policy page** linked from the footer~~
+- ~~There is **no privacy policy** page~~
+- ~~There is **no consent UI**~~
 
-This unblocks the future decision about analytics/marketing without rushing the consent banner build.
+The cookie policy page (`/cookies`) and privacy policy page (`/privacy`) were published as part of the consent banner work in 2026-05-21. Footer links to both are included on every page.
+
+**Remaining gap:** The §4.2 author-injected content risk (Hugo `unsafe = true`) is unchanged — a tutorial author could still embed non-consented third-party content via raw HTML in markdown.
 
 ### 4.4 Future-proofing for analytics
 
@@ -174,7 +183,7 @@ When analytics is added (Adobe Analytics tag, Matomo, or similar):
 | Does it use any non-essential `localStorage` / `sessionStorage`? | **Probably no** — `theme` is functional, Joule storage is part of an explicitly-invoked feature. A privacy lawyer should confirm classification. |
 | Does it have a cookie policy? | **No** — gap |
 | Does it have a privacy policy? | **No** — gap |
-| Does it have a consent banner? | **No** — not currently required (no non-essential storage), but required before analytics/marketing |
+| Does it have a consent banner? | **Yes — TrustArc (`sapshared.com`)** — live as of 2026-07-23 (`cmp = 'trustarc'`); in-house banner retained as fallback (`cmp = 'inhouse'`) |
 | Are there latent risks from author-injected content? | **Yes** — Hugo `unsafe = true` allows raw iframes/scripts in tutorials |
 | Does logout clear all client state? | **Partially** — XSUAA logout clears auth cookies but `joule.user.v1` (PII) remains in `sessionStorage` until tab close |
 
