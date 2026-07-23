@@ -32,8 +32,20 @@ description = "Project-specific false positives"
 # since been deleted from the tree. gitleaks scans full history (fetch-depth
 # 0), so without this the finding fails every PR. Confirmed a placeholder,
 # not a real key (2026-07-14).
+#
+# Suppress srv/lib/github-app-token.js (line 40, RuleID private-key) in commit
+# 5a6dedf4: the `normalizePem` JSDoc contains an ILLUSTRATIVE single-line PEM
+# ("-----BEGIN RSA PRIVATE KEY----- MIIE... -----END RSA PRIVATE KEY-----")
+# documenting the malformed shape the admin Secrets UI produces. The "MIIE..."
+# is a literal ellipsis, not a key body — no real secret. gitleaks' private-key
+# rule matches the header/footer literal in the comment. Because history is
+# scanned (fetch-depth 0), this failed every PR after #1277 merged to main.
+# NOTE: the finding is anchored to the commit that introduced line 40; if that
+# comment is ever reworded, re-add the new introducing commit here (or drop the
+# literal PEM markers from the doc). Confirmed a placeholder (2026-07-23).
 commits = [
   "5153670f57cb30d9322af3603642fdaf980add74",
+  "5a6dedf4345733040e9148dd503b6a62ed5a2b4c",
 ]
 # Env-var references are the CORRECT, secret-free pattern — never flag them.
 regexes = [
