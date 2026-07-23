@@ -80,8 +80,15 @@ function getCredentials(serviceInstance, serviceKey) {
   return parsed.credentials || parsed;
 }
 
+// A `cf service-key` JSON (or the same JSON piped through CAP_HANA_CREDENTIALS)
+// nests the real connection fields under `.credentials`. A hand-written flat
+// creds object (e.g. the IMS_DB_URL-derived one) does not. Unwrap either shape.
+function unwrapCreds(obj) {
+  return obj && obj.credentials ? obj.credentials : obj;
+}
+
 function resolveImsCreds() {
-  if (process.env.IMS_HANA_CREDENTIALS) return JSON.parse(process.env.IMS_HANA_CREDENTIALS);
+  if (process.env.IMS_HANA_CREDENTIALS) return unwrapCreds(JSON.parse(process.env.IMS_HANA_CREDENTIALS));
   if (process.env.IMS_DB_URL) {
     const url = new URL(process.env.IMS_DB_URL.replace('jdbc:sap://', 'https://'));
     return {
@@ -96,7 +103,9 @@ function resolveImsCreds() {
 }
 
 function resolveCapCreds() {
-  return JSON.parse(process.env.CAP_HANA_CREDENTIALS || 'null') || getCredentials(TARGET_INSTANCE, TARGET_KEY);
+  const env = process.env.CAP_HANA_CREDENTIALS;
+  if (env) return unwrapCreds(JSON.parse(env));
+  return getCredentials(TARGET_INSTANCE, TARGET_KEY);
 }
 
 function connect(creds, label) {
@@ -121,6 +130,19 @@ const run = (client, sql, params = []) =>
     if (params.length) client.prepare(sql, (e, stmt) => (e ? reject(e) : stmt.exec(params, (e2, r) => (e2 ? reject(e2) : resolve(r)))));
     else client.exec(sql, (e, r) => (e ? reject(e) : resolve(r)));
   });
+
+// Prepare once, exec many — for batched writes so we don't re-prepare per row.
+const prepareStmt = (client, sql) =>
+  new Promise((resolve, reject) => client.prepare(sql, (e, stmt) => (e ? reject(e) : resolve(stmt))));
+const execPrepared = (stmt, params) =>
+  new Promise((resolve, reject) => stmt.exec(params, (e, r) => (e ? reject(e) : resolve(r))));
+const dropStmt = (stmt) => {
+  try {
+    stmt.drop(() => {});
+  } catch (_) {
+    /* fire-and-forget */
+  }
+};
 
 // ─── pure helper (kept in sync with migrate-from-hana.js normalizeExperienceTag) ─
 function normalizeExperienceTag(tagName) {
@@ -167,6 +189,11 @@ async function main() {
     missions: { scanned: 0, updated: 0, skipped_missing_target: 0, tag_links: 0 },
   };
 
+  // ─── Field backfill (Groups + Missions) ─────────────────────────────────────
+  // Set-based, not per-row: HANA Cloud round-trips are ~100-300ms each, so a
+  // per-row SELECT over 1247 rows (+ per-link lookups) stalls for minutes. We
+  // fetch each target table ONCE into a legacyId→row map, diff in Node, and
+  // batch the writes.
   for (const kind of ['GROUP', 'MISSION']) {
     const isMission = kind === 'MISSION';
     const targetTable = isMission ? 'COM_SAP_DEVELOPERS_IMS_MISSIONS' : 'COM_SAP_DEVELOPERS_IMS_GROUPS';
@@ -177,21 +204,21 @@ async function main() {
       `SELECT "ID", "DESCRIPTION", "PRIMARY_TAG_ID", "EXPERIENCE_TAG_ID", "AVERAGE_TTC"${isMission ? ', "COMMUNITY_MISSION_ID"' : ''} FROM ${S}."IMS_TASK" WHERE "TASK_TYPE" = '${kind}'`
     );
 
+    // One bulk read of the whole target table → legacyId→current-row map.
+    const curMap = new Map();
+    for (const r of await run(target, `SELECT "LEGACYID", "DESCRIPTION", "PRIMARYTAG", "EXPERIENCETAG", "AVERAGETIMETOCOMPLETE"${isMission ? ', "COMMUNITYMISSIONID"' : ''} FROM ${targetTable}`)) {
+      curMap.set(String(r.LEGACYID), r);
+    }
+    console.log(`  ${kind}: ${src.length} source rows, ${curMap.size} target rows`);
+
+    const pending = []; // { sets:[col], vals:[v], legacyId }
     for (const row of src) {
       bucket.scanned++;
-      const legacyId = row.ID;
-      // Locate the already-migrated target row by legacyId.
-      const hit = await run(target, `SELECT "ID", "DESCRIPTION", "PRIMARYTAG", "EXPERIENCETAG", "AVERAGETIMETOCOMPLETE"${isMission ? ', "COMMUNITYMISSIONID"' : ''} FROM ${targetTable} WHERE "LEGACYID" = ?`, [legacyId]);
-      if (!hit.length) {
+      const cur = curMap.get(String(row.ID));
+      if (!cur) {
         bucket.skipped_missing_target++;
         continue;
       }
-      const cur = hit[0];
-
-      const desc = row.DESCRIPTION || null;
-      const primaryTag = truncStr(tagMap.get(String(row.PRIMARY_TAG_ID)), 255) || null;
-      const experienceTag = normalizeExperienceTag(tagMap.get(String(row.EXPERIENCE_TAG_ID)));
-      const ttc = row.AVERAGE_TTC ?? null;
 
       const sets = [];
       const vals = [];
@@ -203,50 +230,84 @@ async function main() {
         sets.push(`"${targetCol}" = ?`);
         vals.push(srcVal);
       };
-      wants('DESCRIPTION', desc, cur.DESCRIPTION);
-      wants('PRIMARYTAG', primaryTag, cur.PRIMARYTAG);
-      wants('EXPERIENCETAG', experienceTag, cur.EXPERIENCETAG);
-      wants('AVERAGETIMETOCOMPLETE', ttc, cur.AVERAGETIMETOCOMPLETE);
+      wants('DESCRIPTION', row.DESCRIPTION || null, cur.DESCRIPTION);
+      wants('PRIMARYTAG', truncStr(tagMap.get(String(row.PRIMARY_TAG_ID)), 255) || null, cur.PRIMARYTAG);
+      wants('EXPERIENCETAG', normalizeExperienceTag(tagMap.get(String(row.EXPERIENCE_TAG_ID))), cur.EXPERIENCETAG);
+      wants('AVERAGETIMETOCOMPLETE', row.AVERAGE_TTC ?? null, cur.AVERAGETIMETOCOMPLETE);
       if (isMission) wants('COMMUNITYMISSIONID', truncStr(row.COMMUNITY_MISSION_ID, 255) || null, cur.COMMUNITYMISSIONID);
 
       if (sets.length) {
-        report.push({ kind, legacyId, cols: sets.map((s) => s.split(' ')[0].replace(/"/g, '')).join('|') });
-        if (COMMIT) {
-          await run(target, `UPDATE ${targetTable} SET ${sets.join(', ')} WHERE "LEGACYID" = ?`, [...vals, legacyId]);
-        }
+        report.push({ kind, legacyId: row.ID, cols: sets.map((s) => s.split(' ')[0].replace(/"/g, '')).join('|') });
+        pending.push({ sets, vals, legacyId: row.ID });
         bucket.updated++;
+      }
+    }
+
+    if (COMMIT && pending.length) {
+      // Distinct SET-shapes are few (which columns are empty), but a per-row
+      // prepared UPDATE is still fine here since the write set is small
+      // (≤ src.length) and only fires under --commit. Group by set-shape so
+      // each prepared statement is reused across its rows.
+      const byShape = new Map();
+      for (const p of pending) {
+        const key = p.sets.join(',');
+        if (!byShape.has(key)) byShape.set(key, { sets: p.sets, rows: [] });
+        byShape.get(key).rows.push(p);
+      }
+      for (const { sets, rows } of byShape.values()) {
+        const sql = `UPDATE ${targetTable} SET ${sets.join(', ')} WHERE "LEGACYID" = ?`;
+        const stmt = await prepareStmt(target, sql);
+        for (const p of rows) await execPrepared(stmt, [...p.vals, p.legacyId]);
+        dropStmt(stmt);
       }
     }
   }
 
   // ─── Tag links (GroupTags / MissionTags) ───────────────────────────────────
-  // Idempotent: derive the cuid ID from the composite (TASK_ID, TAG_ID) and
-  // skip if a row with that ID already exists.
+  // Idempotent: derive the cuid ID from the composite (TASK_ID, TAG_ID); skip
+  // if that ID already exists. Set-based — bulk-load the parent/tag legacyId→ID
+  // maps and the existing-link-ID sets once, diff in Node, batch-insert.
+  const groupIdByLegacy = new Map();
+  for (const r of await run(target, `SELECT "LEGACYID", "ID" FROM COM_SAP_DEVELOPERS_IMS_GROUPS`)) groupIdByLegacy.set(String(r.LEGACYID), r.ID);
+  const missionIdByLegacy = new Map();
+  for (const r of await run(target, `SELECT "LEGACYID", "ID" FROM COM_SAP_DEVELOPERS_IMS_MISSIONS`)) missionIdByLegacy.set(String(r.LEGACYID), r.ID);
+  const tagIdByLegacy = new Map();
+  for (const r of await run(target, `SELECT "LEGACYID", "ID" FROM COM_SAP_DEVELOPERS_IMS_TAGS`)) tagIdByLegacy.set(String(r.LEGACYID), r.ID);
+  const existingGroupTagIds = new Set((await run(target, `SELECT "ID" FROM COM_SAP_DEVELOPERS_IMS_GROUPTAGS`)).map((r) => r.ID));
+  const existingMissionTagIds = new Set((await run(target, `SELECT "ID" FROM COM_SAP_DEVELOPERS_IMS_MISSIONTAGS`)).map((r) => r.ID));
+
   const links = await run(source, `SELECT tt."TASK_ID", tt."TAG_ID", k."TASK_TYPE" FROM ${S}."IMS_TAG_TO_TASK" tt JOIN ${S}."IMS_TASK" k ON k."ID" = tt."TASK_ID" WHERE k."TASK_TYPE" IN ('GROUP','MISSION')`);
+  const groupTagInserts = [];
+  const missionTagInserts = [];
   for (const l of links) {
     const isMission = l.TASK_TYPE === 'MISSION';
     const bucket = isMission ? stats.missions : stats.groups;
-    const table = isMission ? 'COM_SAP_DEVELOPERS_IMS_MISSIONTAGS' : 'COM_SAP_DEVELOPERS_IMS_GROUPTAGS';
-    const parentCol = isMission ? 'MISSION_ID' : 'GROUP_ID';
+    const parentId = (isMission ? missionIdByLegacy : groupIdByLegacy).get(String(l.TASK_ID));
+    const tagId = tagIdByLegacy.get(String(l.TAG_ID));
+    if (!parentId || !tagId) continue;
+
     const nsKey = isMission ? NAMESPACES.missiontag : NAMESPACES.grouptag;
     const prefix = isMission ? 'mt' : 'gt';
-
-    // Resolve parent + tag target UUIDs by legacyId (migrator uses uuidv5 too,
-    // but here we look them up so we don't depend on the migrator's namespaces
-    // for the parent/tag — only for the link's own ID).
-    const parentHit = await run(target, `SELECT "ID" FROM ${isMission ? 'COM_SAP_DEVELOPERS_IMS_MISSIONS' : 'COM_SAP_DEVELOPERS_IMS_GROUPS'} WHERE "LEGACYID" = ?`, [l.TASK_ID]);
-    const tagHit = await run(target, `SELECT "ID" FROM COM_SAP_DEVELOPERS_IMS_TAGS WHERE "LEGACYID" = ?`, [l.TAG_ID]);
-    if (!parentHit.length || !tagHit.length) continue;
-
     const id = uuidv5(`${prefix}:${l.TASK_ID}:${l.TAG_ID}`, nsKey);
-    const exists = await run(target, `SELECT "ID" FROM ${table} WHERE "ID" = ?`, [id]);
-    if (exists.length) continue;
+    const existing = isMission ? existingMissionTagIds : existingGroupTagIds;
+    if (existing.has(id)) continue;
+    existing.add(id); // dedupe within this run too
 
     report.push({ kind: `${l.TASK_TYPE}_TAG`, legacyId: l.TASK_ID, cols: `tag=${l.TAG_ID}` });
-    if (COMMIT) {
-      await run(target, `INSERT INTO ${table} ("ID", "${parentCol}", "TAG_ID") VALUES (?, ?, ?)`, [id, parentHit[0].ID, tagHit[0].ID]);
-    }
+    (isMission ? missionTagInserts : groupTagInserts).push([id, parentId, tagId]);
     bucket.tag_links++;
+  }
+
+  if (COMMIT) {
+    for (const [table, parentCol, inserts] of [
+      ['COM_SAP_DEVELOPERS_IMS_GROUPTAGS', 'GROUP_ID', groupTagInserts],
+      ['COM_SAP_DEVELOPERS_IMS_MISSIONTAGS', 'MISSION_ID', missionTagInserts],
+    ]) {
+      if (!inserts.length) continue;
+      const stmt = await prepareStmt(target, `INSERT INTO ${table} ("ID", "${parentCol}", "TAG_ID") VALUES (?, ?, ?)`);
+      for (const vals of inserts) await execPrepared(stmt, vals);
+      dropStmt(stmt);
+    }
   }
 
   // ─── report ─────────────────────────────────────────────────────────────
