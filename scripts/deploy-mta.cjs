@@ -84,12 +84,16 @@ const ENVS = {
 // ---------------------------------------------------------------------------
 // tiny arg parser + logging
 // ---------------------------------------------------------------------------
+const STRATEGIES = ['default', 'blue-green', 'incremental-blue-green'];
+
 function parseArgs(argv) {
-  const out = { env: null, dryRun: false, skipBuild: false, skipSmoke: false };
+  const out = { env: null, dryRun: false, skipBuild: false, skipSmoke: false, strategy: 'default' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--env') out.env = argv[++i];
     else if (a.startsWith('--env=')) out.env = a.slice('--env='.length);
+    else if (a === '--strategy') out.strategy = argv[++i];
+    else if (a.startsWith('--strategy=')) out.strategy = a.slice('--strategy='.length);
     else if (a === '--dry-run') out.dryRun = true;
     else if (a === '--skip-build') out.skipBuild = true;
     else if (a === '--skip-smoke') out.skipSmoke = true;
@@ -194,22 +198,54 @@ function newestMtarPath() {
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Blue-green abort helper. A failed blue-green deploy leaves orphaned idle
+// (green) apps consuming quota until the operation is aborted. Mirror the CI
+// safety net (deploy.yml "Abort blue-green on failure"): find the errored op
+// via `cf mta-ops` and abort it. Best-effort — if we can't auto-detect the op,
+// print the manual command so the operator can finish the cleanup.
+// ---------------------------------------------------------------------------
+function abortFailedBlueGreen() {
+  const ops = shCapture('cf', ['mta-ops', '--last', '5']);
+  const line = ops.stdout.split(/\r?\n/)
+    .find(l => /tutorials-ims/.test(l) && /(error|abort)/i.test(l));
+  const opId = line ? line.trim().split(/\s+/)[0] : null;
+  if (opId && /^\d+$/.test(opId)) {
+    warn(`aborting failed blue-green operation ${opId} to free idle (green) apps…`);
+    sh('cf', ['deploy', '-i', opId, '-a', 'abort']);
+  } else {
+    warn('could not auto-detect the failed blue-green op id. Abort it manually:');
+    warn('             cf mta-ops            # find the ERROR/ABORTED op id');
+    warn('             cf deploy -i <OP_ID> -a abort');
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.help) {
-    console.log(`Usage: npm run deploy -- --env <dev|qa|prod> [--dry-run] [--skip-build] [--skip-smoke]`);
+    console.log(`Usage: npm run deploy -- --env <dev|qa|prod> [--strategy <default|blue-green|incremental-blue-green>] [--dry-run] [--skip-build] [--skip-smoke]
+
+  --strategy   Deployment strategy passed to \`cf deploy\`. Default is "default"
+               (plain in-place deploy). "blue-green" brings up new (green) apps
+               alongside the live (blue) set, then PAUSES for verification — resume
+               the swap with \`cf deploy -i <OP_ID> -a resume\` (or abort with -a abort).
+               Zero-downtime; the flag omits --skip-testing-phase deliberately so the
+               swap is operator-gated. CI uses blue-green for prod automatically.`);
     process.exit(0);
   }
   if (args.unknown) die(1, `unknown argument: ${args.unknown}`);
   if (!args.env || !ENVS[args.env]) {
     die(1, `--env must be one of: ${Object.keys(ENVS).join(', ')}. Got: ${args.env ?? '(none)'}`);
   }
+  if (!STRATEGIES.includes(args.strategy)) {
+    die(1, `--strategy must be one of: ${STRATEGIES.join(', ')}. Got: ${args.strategy}`);
+  }
   const envName = args.env;
   const cfg = ENVS[envName];
 
   console.log(C.cyn('\n══════════════════════════════════════════════════════'));
-  console.log(C.cyn(`  Deploy → ${envName.toUpperCase()}`) + (args.dryRun ? C.ylw('  (DRY RUN)') : ''));
+  console.log(C.cyn(`  Deploy → ${envName.toUpperCase()}`) + (args.dryRun ? C.ylw('  (DRY RUN)') : '') + (args.strategy !== 'default' ? C.ylw(`  [${args.strategy}]`) : ''));
   console.log(C.cyn('══════════════════════════════════════════════════════'));
   console.log(C.dim(`  approuter: ${cfg.approuter}`));
   console.log(C.dim(`  srv:       ${cfg.srvUrl}`));
@@ -262,28 +298,55 @@ function main() {
 
   // ---- Step 4: cf deploy ------------------------------------------------
   const mtaext = `../deploy/${envName}.mtaext`;
-  step(4, `cf deploy (-e ${mtaext})`);
+  const bg = args.strategy !== 'default';
+  // Strategy flags mirror CI (deploy.yml). NOTE: we intentionally do NOT pass
+  // --skip-testing-phase — blue-green brings up the green apps then PAUSES so
+  // the operator can verify before swapping traffic and retiring blue. Resume
+  // with `cf deploy -i <OP_ID> -a resume`; abort with `-a abort`.
+  const strategyFlags = bg ? ['--strategy', args.strategy] : [];
+  step(4, `cf deploy (-e ${mtaext})` + (bg ? ` --strategy ${args.strategy} [pauses before swap]` : ''));
   if (args.dryRun) {
     const preview = newestMtarPath() || 'mta_archives/<newest>.mtar';
-    warn(`dry-run: would run \`cf deploy ${preview} -e ${mtaext} -f\` in .deploy/`);
+    warn(`dry-run: would run \`cf deploy ${preview} -e ${mtaext} ${strategyFlags.join(' ')} -f\` in .deploy/`);
+    if (bg) warn('dry-run: blue-green would then PAUSE for verification before the traffic swap.');
   } else {
     // Pass the explicit newest mtar, NOT the `mta_archives/*.mtar` glob:
     // Windows git-bash does not expand it and cf.exe panics (issue #1226).
     const mtar = newestMtarPath();
     if (!mtar) die(1, `no .mtar found in ${path.relative(ROOT, MTAR_GLOB_DIR)} to deploy. Run without --skip-build, or build the mtar first.`);
-    const code = sh('cf', ['deploy', mtar, '-e', mtaext, '-f'], { cwd: DEPLOY_DIR });
-    if (code !== 0) die(1, '`cf deploy` failed. Check `cf logs` and the deployer output above.');
-    ok(`cf deploy complete (${mtar})`);
+    const code = sh('cf', ['deploy', mtar, '-e', mtaext, ...strategyFlags, '-f'], { cwd: DEPLOY_DIR });
+    if (code !== 0) {
+      if (bg) abortFailedBlueGreen();
+      die(1, '`cf deploy` failed. Check `cf logs` and the deployer output above.');
+    }
+    if (bg) {
+      ok(`blue-green green apps up (${mtar}) — PAUSED before swap.`);
+      warn('Verify the idle (green) apps, then swap traffic:');
+      warn('             cf mta-ops                    # find the RUNNING op id');
+      warn('             cf deploy -i <OP_ID> -a resume   # swap to green + retire blue');
+      warn('             cf deploy -i <OP_ID> -a abort    # discard green, keep blue');
+    } else {
+      ok(`cf deploy complete (${mtar})`);
+    }
   }
 
   // ---- Step 5: smoke gate ----------------------------------------------
   step(5, 'Smoke gate (post-deploy verification)');
-  if (args.skipSmoke) {
+  if (bg && !args.dryRun) {
+    // Blue-green is PAUSED before the traffic swap: the public routes still
+    // point at the old (blue) apps, so smoke here would test the OLD code and
+    // tell us nothing about green. Verify green on its idle route by hand, then
+    // resume the swap. Re-run smoke against the live routes AFTER the swap.
+    warn('blue-green paused before swap — skipping the automatic smoke gate.');
+    warn('             Public routes still serve the OLD (blue) apps; smoke now would test old code.');
+    warn('             1) verify the idle (green) apps, 2) resume the swap, 3) then run:');
+    warn(`             SMOKE_BASE_URL=${cfg.approuter} SMOKE_SRV_URL=${cfg.srvUrl} npm run test:smoke`);
+  } else if (args.skipSmoke) {
     warn('--skip-smoke: SKIPPING post-deploy verification. This is how /explore shipped broken.');
     warn('             Run manually before trusting this deploy:');
     warn(`             SMOKE_BASE_URL=${cfg.approuter} SMOKE_SRV_URL=${cfg.srvUrl} npm run test:smoke`);
   } else if (args.dryRun) {
-    warn(`dry-run: would run \`npm run test:smoke\` against ${cfg.approuter}`);
+    warn(`dry-run: would run \`npm run test:smoke\` against ${cfg.approuter}` + (bg ? ' (AFTER the blue-green swap, not before)' : ''));
   } else {
     const smokeEnv = { ...process.env, SMOKE_BASE_URL: cfg.approuter, SMOKE_SRV_URL: cfg.srvUrl };
     const code = sh('npm', ['run', 'test:smoke'], { env: smokeEnv });
@@ -296,7 +359,10 @@ function main() {
   }
 
   console.log('\n' + C.grn('══════════════════════════════════════════════════════'));
-  console.log(C.grn(`  ${envName.toUpperCase()} deploy ${args.dryRun ? 'DRY RUN complete (nothing changed)' : 'complete and smoke-verified'}`));
+  const doneMsg = args.dryRun
+    ? 'DRY RUN complete (nothing changed)'
+    : (bg ? 'green apps deployed — PAUSED, awaiting your resume/abort of the swap' : 'complete and smoke-verified');
+  console.log(C.grn(`  ${envName.toUpperCase()} deploy ${doneMsg}`));
   console.log(C.grn('══════════════════════════════════════════════════════') + '\n');
 }
 
