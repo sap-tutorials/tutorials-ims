@@ -16,8 +16,8 @@
       window.SAP = window.SAP || {};
       window.SAP.global = {
         trustArc: {
-          domain: {{ $domain | jsonify }},
-          privacyPolicyLink: {{ $privacy | jsonify }}
+          domain: {{ $domain }},
+          privacyPolicyLink: {{ $privacy }}
         },
         isProd: /(www|developers)(\.sap\.(com|cn)|-preprod|-prod)/.test(location.host)
       };
