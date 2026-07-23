@@ -236,9 +236,22 @@ jobs:
           esac
 
       - name: Install dependencies
+        env:
+          MODE: ${{ steps.mode.outputs.effective_mode }}
         run: |
-          npm ci
-          npm --prefix hugo-apps install
+          # --prefer-offline uses the warm setup-node npm cache; --no-audit/
+          # --no-fund trim network + noise. (#1278)
+          npm ci --prefer-offline --no-audit --no-fund
+          # hugo-apps deps are ONLY consumed by the Build Vue apps / explore /
+          # display / admin-SPA steps, all of which are skipped in slug-targeted
+          # mode — so don't install them there (#1278). Catalog-only also skips
+          # those builds, but it's a fast admin path already; keep it simple and
+          # only special-case slug-targeted.
+          if [ "$MODE" != "slug-targeted" ]; then
+            npm --prefix hugo-apps install
+          else
+            echo "::notice::slug-targeted — skipping hugo-apps install (no Vue/SPA builds run)"
+          fi
 
       - name: Restore tutorial cache
         uses: actions/cache@v4
@@ -474,6 +487,14 @@ jobs:
             --verbose
         env:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
+          # #1278 — single-tutorial fast path. In slug-targeted mode, scope the
+          # publish to just the changed slug (publish-content.ts reads
+          # PUBLISH_SLUG as the --slug fallback) so it hashes+publishes 1 file
+          # instead of the whole catalog. Passed via env (not the command line)
+          # so the slug value never lands in the shell string. Empty in every
+          # other mode → whole-catalog delta, unchanged. TUTORIAL_SLUG is the
+          # already-resolved slug (inputs.slug || dispatch_slug).
+          PUBLISH_SLUG: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' && (inputs.slug || steps.mode.outputs.dispatch_slug) || '' }}
 
       - name: Purge orphan tutorials
         id: purge

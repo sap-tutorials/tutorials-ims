@@ -539,6 +539,7 @@ interface PublishOptions {
   batchSize: number;
   purgeOrphans: boolean;
   purgeCapAbs: number;
+  slug: string;
 }
 
 function parseArgs(argv: string[]): PublishOptions {
@@ -568,6 +569,12 @@ function parseArgs(argv: string[]): PublishOptions {
     batchSize:   parseInt(get('--batch-size', '50'), 10),
     purgeOrphans: has('--purge-orphans'),
     purgeCapAbs:  parseInt(get('--purge-cap-abs', process.env.PURGE_CAP_ABS ?? '50'), 10),
+    // #1278 — single-tutorial fast path. When set, only this slug is hashed +
+    // published; the server carries forward all other slugs from the prior
+    // ACTIVE version (normal delta behavior), so the catalog stays complete.
+    // Empty string = whole-catalog delta (default). Also accepts env fallback
+    // so the workflow can pass TUTORIAL_SLUG through without an extra flag.
+    slug: get('--slug', process.env.PUBLISH_SLUG ?? ''),
   };
 }
 
@@ -575,6 +582,31 @@ function pickEntries<T>(src: Record<string, T>, keys: string[]): Record<string, 
   const out: Record<string, T> = {};
   for (const k of keys) if (k in src) out[k] = src[k];
   return out;
+}
+
+/**
+ * #1278 — single-tutorial fast path. Reduce the discovered tutorials map to
+ * the one requested slug (in place), so downstream hashing/payload only
+ * touches that slug. Throws (caller exits non-zero) if the slug isn't present
+ * in the Hugo output — a typo'd/deleted slug must fail loudly, not silently
+ * publish nothing. No-op when `slug` is empty (whole-catalog delta, default).
+ * Returns true if a filter was applied.
+ *
+ * Pure over the Map + a throwing contract, so it's unit-testable without the
+ * filesystem/network.
+ */
+export function filterToSlug(tutorials: Map<string, string>, slug: string): boolean {
+  if (!slug) return false;
+  if (!tutorials.has(slug)) {
+    throw new Error(
+      `--slug "${slug}" not found (available count=${tutorials.size}). ` +
+      `Check the slug is lowercase-canonical and its page exists.`
+    );
+  }
+  const only = tutorials.get(slug)!;
+  tutorials.clear();
+  tutorials.set(slug, only);
+  return true;
 }
 
 async function collectSidecars(hugoDir: string, payload: Record<string, string>, log: (s: string) => void, channel: Channel = "prod"): Promise<string[]> {
@@ -931,6 +963,21 @@ async function main() {
   if (concepts.size > 0) {
     for (const [slug, path] of concepts) tutorials.set(slug, path);
     log(`Found ${concepts.size} concept landing page(s) (concept-*) in ${opts.hugoDir}/concepts`);
+  }
+
+  // #1278 — single-tutorial fast path. Filter the discovered map down to the
+  // one requested slug BEFORE hashing (computeLocalHashes reads 1 file instead
+  // of ~1372). filterToSlug throws on an unknown slug; exit 2 (loud, distinct
+  // from the generic exit 1) so a typo doesn't silently publish nothing. The
+  // server carries forward all other slugs at commit (same as any delta).
+  if (opts.slug) {
+    try {
+      filterToSlug(tutorials, opts.slug);
+      log(`[--slug] scoped publish to single tutorial: ${opts.slug}`);
+    } catch (err) {
+      console.error(`Error: ${err instanceof Error ? err.message : err} (hugoDir=${opts.hugoDir})`);
+      process.exit(2);
+    }
   }
 
   if (tutorials.size === 0) {
