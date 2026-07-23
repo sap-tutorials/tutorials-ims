@@ -30,7 +30,7 @@
 
   <section aria-labelledby="search-tutorials" id="navigator-section" class="home-navigator">
     <h1 id="search-tutorials" class="visually-hidden">Search and filter SAP developer tutorials</h1>
-    <div id="tutorial-navigator">
+    <div id="tutorial-navigator"{{ if site.Params.qa }} data-search-base="/qa-search" data-nav-base="/tutorials-qa" data-href-base="/tutorials-qa"{{ end }}>
       {{- /* SSR initial card grid. TutorialNavigator.vue mounts on
              #tutorial-navigator (the outer container) and re-renders its full
              template tree on mount, replacing this preview. The static markup
