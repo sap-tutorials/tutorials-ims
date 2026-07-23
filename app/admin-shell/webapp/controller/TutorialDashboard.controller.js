@@ -210,6 +210,120 @@ sap.ui.define([
       });
     },
 
+    // Enable/disable the review action buttons based on whether any rows
+    // are selected. Wired to the table's rowSelectionChange event.
+    onRowSelectionChange: function () {
+      var bHasSelection = this._getSelectedTutorialIds().length > 0;
+      this.byId("markReviewedBtn").setEnabled(bHasSelection);
+      this.byId("snoozeBtn").setEnabled(bHasSelection);
+    },
+
+    // Collect the tutorial_ID of every currently-selected row. Skips any
+    // rows without a resolvable context (e.g. selection index beyond the
+    // loaded page) or missing tutorial_ID.
+    _getSelectedTutorialIds: function () {
+      var oTable = this.byId("tutorialMetaTable");
+      var aIndices = oTable.getSelectedIndices();
+      var aIds = [];
+      aIndices.forEach(function (iIndex) {
+        var oContext = oTable.getContextByIndex(iIndex);
+        var sId = oContext && oContext.getProperty("tutorial_ID");
+        if (sId) { aIds.push(sId); }
+      });
+      return aIds;
+    },
+
+    // Invoke an unbound AdminService action once per tutorial id. Returns a
+    // Promise resolving to { ok, failed } counts. Actions run sequentially to
+    // keep the OData v4 change-set simple and the error handling per-row.
+    _runReviewAction: function (aTutorialIds, fnBindAction) {
+      var oModel = this.getOwnerComponent().getModel("admin");
+      var iOk = 0;
+      var iFailed = 0;
+      var chain = Promise.resolve();
+      aTutorialIds.forEach(function (sTutorialId) {
+        chain = chain.then(function () {
+          var oAction = fnBindAction(oModel, sTutorialId);
+          return oAction.execute().then(function () {
+            iOk++;
+          }).catch(function () {
+            iFailed++;
+          });
+        });
+      });
+      return chain.then(function () { return { ok: iOk, failed: iFailed }; });
+    },
+
+    onMarkReviewed: function () {
+      var aIds = this._getSelectedTutorialIds();
+      if (aIds.length === 0) { return; }
+      var oButton = this.byId("markReviewedBtn");
+      oButton.setEnabled(false);
+      oButton.setBusy(true);
+      this._runReviewAction(aIds, function (oModel, sTutorialId) {
+        var oAction = oModel.bindContext("/reviewTutorial(...)");
+        oAction.setParameter("tutorialId", sTutorialId);
+        return oAction;
+      }).then(function (oResult) {
+        this._reportReviewResult("reviewed", oResult);
+      }.bind(this)).finally(function () {
+        oButton.setBusy(false);
+        this._refreshAfterReview();
+      }.bind(this));
+    },
+
+    onSnooze: function () {
+      var aIds = this._getSelectedTutorialIds();
+      if (aIds.length === 0) { return; }
+      var that = this;
+      MessageBox.confirm(
+        "Snooze notifications for " + aIds.length + " tutorial" + (aIds.length === 1 ? "" : "s") + " by 30 days?",
+        {
+          title: "Snooze",
+          onClose: function (sAction) {
+            if (sAction !== MessageBox.Action.OK) { return; }
+            var oButton = that.byId("snoozeBtn");
+            oButton.setEnabled(false);
+            oButton.setBusy(true);
+            that._runReviewAction(aIds, function (oModel, sTutorialId) {
+              var oAction = oModel.bindContext("/snoozeTutorial(...)");
+              oAction.setParameter("tutorialId", sTutorialId);
+              oAction.setParameter("days", 30);
+              return oAction;
+            }).then(function (oResult) {
+              that._reportReviewResult("snoozed", oResult);
+            }).finally(function () {
+              oButton.setBusy(false);
+              that._refreshAfterReview();
+            });
+          }
+        }
+      );
+    },
+
+    // Summarise the outcome of a bulk review/snooze run.
+    _reportReviewResult: function (sVerb, oResult) {
+      if (oResult.failed === 0) {
+        MessageToast.show(oResult.ok + " tutorial" + (oResult.ok === 1 ? "" : "s") + " " + sVerb + ".");
+      } else {
+        MessageBox.warning(
+          oResult.ok + " " + sVerb + ", " + oResult.failed + " failed.",
+          { title: "Partial success" }
+        );
+      }
+    },
+
+    // Refresh the table and clear the selection after a review/snooze run so
+    // the new reviewedDate / highlight state is reflected and buttons reset.
+    _refreshAfterReview: function () {
+      var oTable = this.byId("tutorialMetaTable");
+      oTable.clearSelection();
+      var oBinding = oTable.getBinding("rows");
+      if (oBinding) { oBinding.refresh(); }
+      this.byId("markReviewedBtn").setEnabled(false);
+      this.byId("snoozeBtn").setEnabled(false);
+    },
+
     formatRowHighlight: function (vReviewedDate) {
       // The binding part comes through as either a JS Date (when the binding's
       // type is sap.ui.model.odata.type.DateTimeOffset) or a string (basic

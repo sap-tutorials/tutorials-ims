@@ -7,6 +7,8 @@
   xmlns:f="sap.ui.layout.form">
   <Page title="Tutorial Health" enableScrolling="false">
     <headerContent>
+      <Button id="markReviewedBtn" text="Mark Reviewed" icon="sap-icon://accept" press=".onMarkReviewed" enabled="false"/>
+      <Button id="snoozeBtn" text="Snooze" icon="sap-icon://bell" press=".onSnooze" enabled="false"/>
       <Button id="syncMetadataBtn" text="Sync Metadata" icon="sap-icon://synchronize" press=".onSyncMetadata" type="Emphasized"/>
       <Button id="sendNotificationsBtn" text="Send Notifications" icon="sap-icon://email" press=".onSendNotifications"/>
     </headerContent>
@@ -20,7 +22,8 @@
 
       <t:Table id="tutorialMetaTable"
         rows="{path: 'admin>/TutorialMeta', parameters: {$expand: 'tutorial($select=title,slug,primaryTag,status)'}}"
-        selectionMode="None"
+        selectionMode="MultiToggle"
+        rowSelectionChange=".onRowSelectionChange"
         visibleRowCount="20"
         enableBusyIndicator="true"
         enableColumnFreeze="true"
