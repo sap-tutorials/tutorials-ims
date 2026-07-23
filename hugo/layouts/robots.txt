@@ -1,40 +1,45 @@
-# SAP Developers Tutorials — robots policy
-# Content licensed for human and AI-assistant *citation*; not for model training.
+# robots.txt for {{ .Site.BaseURL | default "https://developers.sap.com/" }}
+#
+# Policy: default-deny. Every crawler is blocked from the entire site by
+# default (User-agent: * -> Disallow: /). Access is granted ONLY to the
+# explicitly allow-listed search engines and AI/chat agents below, and even
+# then the platform's non-content surfaces (APIs, admin, operational UIs) stay
+# excluded. Mirrors SAP's canonical crawler policy for developers.sap.com.
+#
+# robots.txt groups do NOT cascade: a crawler obeys only its single
+# most-specific matching group, so the exclusions are repeated per agent.
 # See https://developers.sap.com/AGENTS.md for agent guidance.
 
+{{- /* Operational surfaces never intended for crawling/indexing. */ -}}
+{{- $disallow := slice "/api/" "/admin/" "/admin-ui/" "/analytics-ui/" "/scanner-ui/" "/event-display/" "/display/" "/ws/" }}
+
+{{- /*
+  Authorized agents = allowed search engines + AI/chat agents.
+  Keep in sync with SAP's canonical developers.sap.com allow-list.
+*/ -}}
+{{- $allowed := slice
+  "Googlebot" "Googlebot-Image" "Googlebot-News" "Googlebot-Video"
+  "Google-InspectionTool" "GoogleOther" "Google-Safety" "Google Web Preview"
+  "AdsBot-Google" "AdsBot-Google-Mobile" "FeedFetcher-Google"
+  "Mediapartners-Google" "Storebot-Google" "Chrome-Lighthouse"
+  "Bingbot" "BingPreview" "DuckDuckBot" "Baiduspider" "coccocbot" "Daum"
+  "Ecosia_bot" "archive.org_bot" "MojeekBot" "Yeti" "SeznamBot"
+  "Sogou web spider" "Twitterbot" "Yahoo! Slurp"
+  "Yandex" "YandexAccessibilityBot" "YandexMobileBot"
+  "Amazonbot" "anthropic-ai" "ClaudeBot" "Claude-Web" "CCBot"
+  "Google-Extended" "FacebookBot" "ChatGPT-User" "GPTBot" "OAI-SearchBot"
+  "PerplexityBot" "Perplexity-User" "Applebot-Extended"
+}}
+
+# Default: block every crawler from the entire site.
 User-agent: *
-Allow: /
-Disallow: /api/
-Disallow: /admin/
-Disallow: /admin-ui/
-Disallow: /scanner-ui/
-Disallow: /event-display/
-Disallow: /display/
+Disallow: /
 
-User-agent: Googlebot
+{{ range $agent := $allowed }}
+User-agent: {{ $agent }}
 Allow: /
-User-agent: Bingbot
-Allow: /
-User-agent: DuckDuckBot
-Allow: /
-
-User-agent: GPTBot
-Allow: /
-User-agent: ChatGPT-User
-Allow: /
-User-agent: OAI-SearchBot
-Allow: /
-User-agent: ClaudeBot
-Allow: /
-User-agent: Claude-Web
-Allow: /
-User-agent: anthropic-ai
-Allow: /
-User-agent: PerplexityBot
-Allow: /
-User-agent: Applebot-Extended
-Allow: /
-User-agent: Google-Extended
-Allow: /
-
-Sitemap: https://developers.sap.com/sitemap.xml
+{{- range $path := $disallow }}
+Disallow: {{ $path }}
+{{- end }}
+{{ end }}
+Sitemap: {{ "sitemap.xml" | absURL }}
