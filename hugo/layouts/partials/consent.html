@@ -24,7 +24,10 @@
     })();
   </script>
   <div id="consent_blackbar"></div>
-  <div id="teconsent"></div>
+  {{- /* The footer "Cookie Preferences" button (footer.html) reopens the
+     TrustArc manager via window.consent.show() → truste.eu.reopenBanner(),
+     so we intentionally omit the standalone <div id="teconsent"> link that
+     TrustArc would otherwise render below the footer as a duplicate. */ -}}
   <script async src="https://consent.trustarc.com/notice?domain={{ $domain }}&c=teconsent&gtm=1&js=nj&noticeType=bb&pn=1-0&country=US&text=true&privacypolicylink=https%3A%2F%2Fwww.sap.com%2Fabout%2Flegal%2Fprivacy.html"></script>
   <script async src="https://consent.trustarc.com/asset/notice.js/v/{{ $assetVer }}"></script>
   <script>

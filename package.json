@@ -200,7 +200,13 @@
     },
     "requires": {
       "AICore": {
-        "resourceGroup": "default"
+        "resourceGroup": "default",
+        "[hybrid]": {
+          "kind": "AICore-btp"
+        },
+        "[production]": {
+          "kind": "AICore-btp"
+        }
       },
       "caching": {
         "impl": "cds-caching",

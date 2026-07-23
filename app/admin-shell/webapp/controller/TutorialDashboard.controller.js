@@ -221,9 +221,15 @@ sap.ui.define([
     // Collect the tutorial_ID of every currently-selected row. Skips any
     // rows without a resolvable context (e.g. selection index beyond the
     // loaded page) or missing tutorial_ID.
+    //
+    // Selection is owned by the MultiSelectionPlugin (see the view) because
+    // the table binds an OData V4 model — the table-level getSelectedIndices()
+    // returns [] in that setup. We read indices off the plugin and resolve
+    // each to a binding context via the table's getContextByIndex().
     _getSelectedTutorialIds: function () {
       var oTable = this.byId("tutorialMetaTable");
-      var aIndices = oTable.getSelectedIndices();
+      var oPlugin = this._getSelectionPlugin();
+      var aIndices = oPlugin ? oPlugin.getSelectedIndices() : oTable.getSelectedIndices();
       var aIds = [];
       aIndices.forEach(function (iIndex) {
         var oContext = oTable.getContextByIndex(iIndex);
@@ -231,6 +237,19 @@ sap.ui.define([
         if (sId) { aIds.push(sId); }
       });
       return aIds;
+    },
+
+    // Locate the table's MultiSelectionPlugin instance. Cached after first
+    // lookup. Returns undefined if the plugin is absent (defensive — the
+    // caller falls back to the table-level selection API).
+    _getSelectionPlugin: function () {
+      if (this._oSelectionPlugin) { return this._oSelectionPlugin; }
+      var oTable = this.byId("tutorialMetaTable");
+      if (!oTable || typeof oTable.getDependents !== "function") { return undefined; }
+      this._oSelectionPlugin = oTable.getDependents().find(function (oDep) {
+        return oDep && oDep.isA && oDep.isA("sap.ui.table.plugins.MultiSelectionPlugin");
+      });
+      return this._oSelectionPlugin;
     },
 
     // Invoke an unbound AdminService action once per tutorial id. Returns a
@@ -317,7 +336,9 @@ sap.ui.define([
     // the new reviewedDate / highlight state is reflected and buttons reset.
     _refreshAfterReview: function () {
       var oTable = this.byId("tutorialMetaTable");
-      oTable.clearSelection();
+      var oPlugin = this._getSelectionPlugin();
+      // Selection is plugin-owned under the V4 binding — clear it there.
+      if (oPlugin) { oPlugin.clearSelection(); } else { oTable.clearSelection(); }
       var oBinding = oTable.getBinding("rows");
       if (oBinding) { oBinding.refresh(); }
       this.byId("markReviewedBtn").setEnabled(false);
