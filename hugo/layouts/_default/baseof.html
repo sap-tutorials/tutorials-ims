@@ -47,7 +47,7 @@
   {{ if not site.Params.previewMode }}<ui5-toast id="step-toast" placement="BottomCenter"></ui5-toast>{{ end }}
 
   {{ partial "lightbox-dialog.html" . }}
-  <script defer src="/js/consent.js"></script>
+  {{ partial "consent.html" . }}
   <script defer src="/js/vendor/markdown-it.min.js"></script>
   <script defer src="/js/vendor/purify.min.js"></script>
   {{ if not site.Params.qa }}
