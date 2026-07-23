@@ -3,6 +3,7 @@
   xmlns:mvc="sap.ui.core.mvc"
   xmlns="sap.m"
   xmlns:t="sap.ui.table"
+  xmlns:tplugins="sap.ui.table.plugins"
   xmlns:core="sap.ui.core"
   xmlns:f="sap.ui.layout.form">
   <Page title="Tutorial Health" enableScrolling="false">
@@ -21,13 +22,24 @@
       </Toolbar>
 
       <t:Table id="tutorialMetaTable"
-        rows="{path: 'admin>/TutorialMeta', parameters: {$expand: 'tutorial($select=title,slug,primaryTag,status)'}}"
-        selectionMode="MultiToggle"
+        rows="{path: 'admin>/TutorialMeta', parameters: {$expand: 'tutorial($select=title,slug,primaryTag,status)', $count: true}}"
         rowSelectionChange=".onRowSelectionChange"
         visibleRowCount="20"
         enableBusyIndicator="true"
         enableColumnFreeze="true"
         filter=".onColumnFilter">
+        <t:dependents>
+          <!-- OData V4 + sap.ui.table requires a SelectionPlugin; the legacy
+               selectionMode="MultiToggle" + getSelectedIndices() API does not
+               register selections against a V4 binding, which left the Mark
+               Reviewed / Snooze buttons permanently disabled (#1286 regression).
+               MultiSelectionPlugin is the intended server-side-model plugin;
+               it fires its own selectionChange and materializes the selected
+               row contexts. -->
+          <tplugins:MultiSelectionPlugin
+            selectionMode="MultiToggle"
+            selectionChange=".onRowSelectionChange"/>
+        </t:dependents>
         <t:rowSettingsTemplate>
           <t:RowSettings highlight="{parts: ['admin>reviewedDate'], formatter: '.formatRowHighlight'}"/>
         </t:rowSettingsTemplate>
