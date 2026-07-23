@@ -1202,7 +1202,7 @@ async function main() {
   // ship an empty rail file from a deliberately-degraded build.
   if (missions.length > 0) {
     try {
-      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups, categories, tutorialMetas, featured)
+      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups, categories, tutorialMetas, featured, channel)
     } catch (err) {
       // Non-fatal — don't block the existing build pipeline on this.
       console.warn(`  [browse] writeBrowseData failed: ${err instanceof Error ? err.message : err}`)
@@ -1337,8 +1337,12 @@ async function main() {
 //  both contexts (verified by the card-template-parity test in Task 2.5).
 // ──────────────────────────────────────────────────────────────────────────
 
-const HUGO_DATA_DIR = join(__dirname, '..', 'hugo', 'data')
-const BROWSE_DATA_FILE = join(HUGO_DATA_DIR, 'browse.json')
+// Channel-aware browse.json target. Prod → hugo/data/browse.json (Hugo default
+// dataDir); QA → hugo/data-qa/browse.json (hugo.qa.toml sets dataDir="data-qa").
+export function browseDataFile(channel: Channel): string {
+  const dir = join(__dirname, '..', 'hugo', channel === 'qa' ? 'data-qa' : 'data')
+  return join(dir, 'browse.json')
+}
 
 export const FEATURED_MAX = 10
 const RECENT_MAX = 10
@@ -1584,6 +1588,7 @@ function writeBrowseData(
   categories: CategoryMeta[],
   tutorialMetas: CatalogTutorialMeta[],
   catalogFeatured: BrowseFeaturedEntry[],
+  channel: Channel,
 ): void {
   const tutorialMetaMap = new Map<string, CatalogTutorialMeta>(
     tutorialMetas.map(m => [m.slug, m]),
@@ -1611,9 +1616,10 @@ function writeBrowseData(
     buildAt: new Date().toISOString(),
   }
 
-  mkdirSync(HUGO_DATA_DIR, { recursive: true })
-  writeFileSync(BROWSE_DATA_FILE, JSON.stringify(data, null, 2), 'utf-8')
-  console.log(`  [browse] wrote ${all.length} cards (${featured.length} featured, ${recent.length} recent) → hugo/data/browse.json`)
+  const outFile = browseDataFile(channel)
+  mkdirSync(dirname(outFile), { recursive: true })
+  writeFileSync(outFile, JSON.stringify(data, null, 2), 'utf-8')
+  console.log(`  [browse] wrote ${all.length} cards (${featured.length} featured, ${recent.length} recent) → ${outFile}`)
 }
 
 // Only run main() when this file is executed directly (not when imported)
