@@ -257,6 +257,8 @@ Costs avoided: a long-lived GitHub PAT (rotation, expiry, secret hygiene), a new
 
 **Note for future work:** When SAP Legal hands over the corporate CMP property, swap the self-contained banner for the corporate snippet and retire `window.consent.*`. Footer placeholder hrefs (Terms of Use, Legal Disclosure, Trademark, Newsletter, Text View) still need canonical URLs from the legal team.
 
+**Update 2026-07-23 — TrustArc wired (parity).** The corporate TrustArc CMP is now the default (`cmp: trustarc`), using the shared SAP property `domain=sapshared.com` — the same property the legacy AEM site served. The in-house banner (`hugo/static/js/consent.js`) is retained as a break-glass fallback (`cmp: inhouse`). `window.consent.*` is preserved via `hugo/static/js/consent-trustarc.js`. See `docs/superpowers/specs/2026-07-23-trustarc-cmp-integration-design.md` and the rollback runbook `docs/developers/operations/consent-cmp-rollback.md`.
+
 ---
 
 ### 14. Error Pages (404 / 500) — ✅ Closed 2026-05-20
