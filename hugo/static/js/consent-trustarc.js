@@ -88,8 +88,12 @@
   }
 
   function flushPending() {
+    // Drain and clear subscribers before wiring to prevent double-wire on
+    // the async ready path (wireReady callback + interval both call flushPending).
+    var s = subscribers.slice();
+    subscribers.length = 0;
     // Wire any subscribers registered before truste was ready.
-    subscribers.forEach(function (fn) {
+    s.forEach(function (fn) {
       try {
         if (window.truste && window.truste.eu && typeof window.truste.eu.addEventListener === 'function') {
           window.truste.eu.addEventListener('consent', function () {

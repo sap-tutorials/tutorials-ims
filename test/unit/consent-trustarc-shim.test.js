@@ -84,4 +84,46 @@ describe('consent-trustarc shim', () => {
     expect(() => consent.show()).not.toThrow();
     expect(() => consent.onChange(() => {})).not.toThrow();
   });
+
+  it('pre-load subscriber is wired exactly once even when flushPending runs twice', () => {
+    // Simulate the async path: register onChange BEFORE truste loads, then trigger
+    // the ready path such that flushPending runs twice (wireReady callback + interval).
+    // Assert addEventListener('consent', ...) was registered exactly once.
+    let listenerCount = 0;
+    let readyCallback = null;
+
+    const truste = {
+      eu: {
+        // Stub addEventListener to count registrations.
+        addEventListener: (event, fn) => {
+          if (event === 'consent') listenerCount++;
+        },
+        // Stub runOnReady to store the callback for manual invocation.
+        runOnReady: (fn) => {
+          readyCallback = fn;
+        },
+      },
+    };
+
+    const consent = loadShim({ truste });
+
+    // Register a subscriber BEFORE truste.eu.runOnReady has fired.
+    let changeCount = 0;
+    consent.onChange(() => {
+      changeCount++;
+    });
+
+    // Verify no listener registered yet (truste not ready).
+    expect(listenerCount).toBe(0);
+
+    // Simulate the double-flush: invoke the stored readyCallback AND manually
+    // call flushPending a second time to replicate the interval + runOnReady race.
+    // With the fix, subscribers.length=0 after the first flush, so the second
+    // is a no-op.
+    if (readyCallback) readyCallback();
+    if (readyCallback) readyCallback(); // second flush (simulating interval firing too)
+
+    // With the fix in place, listener should be registered exactly once.
+    expect(listenerCount).toBe(1);
+  });
 });
