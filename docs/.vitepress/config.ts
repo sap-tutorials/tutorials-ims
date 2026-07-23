@@ -172,6 +172,7 @@ export default defineConfig({
           { text: 'Load testing',              link: '/developers/operations/load-testing' },
           { text: 'MCP server',                link: '/developers/operations/mcp-server' },
           { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
+          { text: 'Notify workflow install',   link: '/developers/operations/notify-workflow-install' },
           { text: 'Phase 4 code-check eval',   link: '/developers/operations/phase-4-codecheck-eval' },
           { text: 'Postmortems', collapsed: true, items: [
             { text: 'Overview',                  link: '/postmortems/' },
