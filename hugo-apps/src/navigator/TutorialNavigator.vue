@@ -132,7 +132,7 @@ const allCards = computed<CardItem[]>(() => {
       primaryTag: mTuts[0].primaryTag,
       displayTags: allTags,
       displayTagSlugs: allTagSlugs,
-      href: mMeta ? `/tutorials/mission-${mMeta.slug}` : `/tutorials/${mTuts[0].slug}`,
+      href: mMeta ? `${hrefBase}/mission-${mMeta.slug}` : `${hrefBase}/${mTuts[0].slug}`,
       stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
     })
   }
@@ -152,7 +152,7 @@ const allCards = computed<CardItem[]>(() => {
       primaryTag: gTuts[0].primaryTag,
       displayTags: allTags,
       displayTagSlugs: allTagSlugs,
-      href: gMeta ? `/tutorials/group-${gMeta.slug}` : `/tutorials/${gTuts[0].slug}`,
+      href: gMeta ? `${hrefBase}/group-${gMeta.slug}` : `${hrefBase}/${gTuts[0].slug}`,
       stepCount: gTuts.reduce((sum, t) => sum + t.stepCount, 0),
     })
   }
@@ -169,7 +169,7 @@ const allCards = computed<CardItem[]>(() => {
       primaryTag: t.primaryTag,
       displayTags: t.displayTags,
       displayTagSlugs: t.displayTagSlugs,
-      href: `/tutorials/${t.slug}`,
+      href: `${hrefBase}/${t.slug}`,
       stepCount: t.stepCount,
       isNew: isWithinNewWindow(t.createdAt),
     })

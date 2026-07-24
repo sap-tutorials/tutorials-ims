@@ -1460,12 +1460,13 @@ function browseMissionGroupCount(missionId: number, tuts: TutorialNavEntry[]): n
  * in sync with that computed — the card-template-parity test in Task 2.5
  * verifies byte-equivalence of the rendered output.
  */
-function buildAllCards(
+export function buildAllCards(
   tuts: TutorialNavEntry[],
   missions: Mission[],
   hierarchies: MissionHierarchy[],
   standaloneGroups: StandaloneGroup[],
   tutorialMetaMap: Map<string, CatalogTutorialMeta>,
+  hrefBase = '/tutorials',
 ): BrowseCardItem[] {
   if (!tuts.length) return []
 
@@ -1528,7 +1529,7 @@ function buildAllCards(
       primaryTag: mTuts[0].primaryTag,
       displayTags: allTags,
       displayTagSlugs: allTagSlugs,
-      href: mMeta ? `/tutorials/mission-${mMeta.slug}` : `/tutorials/${mTuts[0].slug}`,
+      href: mMeta ? `${hrefBase}/mission-${mMeta.slug}` : `${hrefBase}/${mTuts[0].slug}`,
       stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
       categorySlugs: mMeta?.categorySlugs ?? [],
     })
@@ -1550,7 +1551,7 @@ function buildAllCards(
       primaryTag: gTuts[0].primaryTag,
       displayTags: allTags,
       displayTagSlugs: allTagSlugs,
-      href: gMeta ? `/tutorials/group-${gMeta.slug}` : `/tutorials/${gTuts[0].slug}`,
+      href: gMeta ? `${hrefBase}/group-${gMeta.slug}` : `${hrefBase}/${gTuts[0].slug}`,
       stepCount: gTuts.reduce((sum, t) => sum + t.stepCount, 0),
       categorySlugs: gMeta?.categorySlugs ?? [],
     })
@@ -1569,9 +1570,7 @@ function buildAllCards(
       primaryTag: t.primaryTag,
       displayTags: t.displayTags,
       displayTagSlugs: t.displayTagSlugs,
-      href: `/tutorials/${t.slug}`,
-      stepCount: t.stepCount,
-      categorySlugs: tutorialMetaMap.get(t.slug)?.categorySlugs ?? [],
+      href: `${hrefBase}/${t.slug}`,
       isNew: browseIsWithinNewWindow(t.createdAt),
       createdAt: t.createdAt,
     })
@@ -1593,7 +1592,7 @@ function writeBrowseData(
   const tutorialMetaMap = new Map<string, CatalogTutorialMeta>(
     tutorialMetas.map(m => [m.slug, m]),
   )
-  const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap)
+  const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap, channel === 'qa' ? '/tutorials-qa' : '/tutorials')
 
   // Featured: prefer admin-curated FeaturedTasks (top 10 missions ordered by
   // featuredOrder); fall back to the regex-sieved catalog-order picker
