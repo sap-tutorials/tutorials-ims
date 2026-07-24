@@ -1,5 +1,5 @@
 BeforeAll {
-    Import-Module "$PSScriptRoot/../scripts/AuthorsToTeams.psm1" -Force
+    Import-Module "$PSScriptRoot/../AuthorsToTeams.psm1" -Force
     Import-Module Microsoft.Graph.Teams -ErrorAction SilentlyContinue
     $script:fixture = Get-Content "$PSScriptRoot/fixtures/role-collection.json" -Raw
 }
