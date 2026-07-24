@@ -9,7 +9,10 @@ describe('Joule step-help FAB smoke', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     const slugs = Object.keys(body);
-    if (slugs.length > 0) slug = slugs[0];
+    // Skip concept-* pages: they render a different template with no step FAB
+    // and no window.opGetCurrentStep getter. Pick a real step-based tutorial.
+    const stepSlugs = slugs.filter(s => !s.startsWith('concept-'));
+    if (stepSlugs.length > 0) slug = stepSlugs[0];
   });
 
   it('tutorial page renders the step-help FAB element', async () => {

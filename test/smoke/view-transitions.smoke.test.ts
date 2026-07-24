@@ -21,14 +21,14 @@ async function fetchText(path: string): Promise<string> {
 
 describe('view-transitions smoke', () => {
   it('navigator page has nav-cards with data-vt-card marker', async () => {
-    const html = await fetchText('/build/navigator')
+    const html = await fetchText('/tutorial-navigator/')
     expect(html).toMatch(/data-vt-card=["']?navigator["']?/)
-    expect(html).toMatch(/class=["'][^"']*\bnav-card\b/)
+    expect(html).toMatch(/class=["']?[^"'>]*nav-card/)
   })
 
   it('a tutorial Object Page has tutorial-hero-title on the hero H1', async () => {
     const catalogJson = await fetchText('/build/catalog')
-    const slugMatch = catalogJson.match(/"slug"\s*:\s*"([a-z0-9-]+)"/)
+    const slugMatch = catalogJson.match(/"tutorials"\s*:\s*\[\s*\{[^}]*?"slug"\s*:\s*"([a-z0-9-]+)"/)
     expect(slugMatch, 'no tutorial slug in catalog').toBeTruthy()
     const slug = slugMatch![1]
 
@@ -42,7 +42,7 @@ describe('view-transitions smoke', () => {
     expect(missionMatch, 'no mission slug in catalog').toBeTruthy()
     const slug = missionMatch![1]
 
-    const missionHtml = await fetchText(`/missions/${slug}/`)
+    const missionHtml = await fetchText(`/tutorials/mission-${slug}`)
     expect(missionHtml).toMatch(/class=["'][^"']*\bmission-hero\b/)
     expect(missionHtml).toMatch(/class=["'][^"']*\bmission-hero-title\b/)
   })

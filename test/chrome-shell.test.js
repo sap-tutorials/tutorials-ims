@@ -65,4 +65,34 @@ describe('chrome-shell.composeShell', () => {
     expect(html.indexOf('<header>chrome</header>')).toBeLessThan(html.indexOf('<main>X</main>'));
     expect(html.indexOf('<main>X</main>')).toBeLessThan(html.indexOf('<footer>chrome-foot</footer>'));
   });
+
+  // #1291: the published _shell BLOB is Hugo-minified — quotes are stripped
+  // from single-token attribute values and empty values collapse to a bare
+  // attribute name. The substitution must still land, otherwise group/mission
+  // pages ship the placeholder data-page-kind=generic / data-page-title=_shell.
+  it('substitutes into a minified (unquoted-attr) shell', () => {
+    const MINIFIED_SHELL =
+      '<!DOCTYPE html><html lang=en data-theme=light data-page-kind=generic ' +
+      'data-page-slug data-page-title=_shell data-page-tags>' +
+      '<head><title></title><meta name=description content=""></head>' +
+      '<body><header>chrome</header><!-- MAIN --><footer>foot</footer></body></html>';
+    const parsedMin = parseShell(MINIFIED_SHELL);
+    const html = composeShell(parsedMin, '<main>BODY</main>', {
+      kind: 'group',
+      slug: 'group-foo',
+      title: 'Foo Group',
+      description: 'Desc',
+    });
+    expect(html).toContain('data-page-kind="group"');
+    expect(html).toContain('data-page-slug="group-foo"');
+    expect(html).toContain('data-page-title="Foo Group"');
+    expect(html).toContain('<title>Foo Group</title>');
+    expect(html).toContain('<meta name="description" content="Desc">');
+    // The placeholder must be gone, not merely supplemented.
+    expect(html).not.toContain('data-page-kind=generic');
+    expect(html).not.toContain('data-page-title=_shell');
+    // Adjacent attributes must survive the substitution intact.
+    expect(html).toContain('data-theme=light');
+    expect(html).toContain('data-page-tags');
+  });
 });

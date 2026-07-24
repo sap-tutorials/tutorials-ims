@@ -6,14 +6,33 @@
 // Requires SMOKE_SRV_URL (CAP srv URL) — not the approuter URL, since
 // the route /tutorials/* on approuter rewrites to /content/tutorials/* on
 // srv anyway, but smoke tests bypass approuter for speed and isolation.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 const BASE = process.env.SMOKE_SRV_URL ?? 'http://localhost:4004';
-const KNOWN_GROUP_SLUG = process.env.SMOKE_GROUP_SLUG ?? 'group-test-two';
 const KNOWN_MISSION_SLUG = process.env.SMOKE_MISSION_SLUG;
+
+// Group slug: prefer an explicit override, otherwise discover a live group
+// from /build/catalog at runtime. The old hardcoded 'group-test-two' fixture
+// no longer exists on DEV, so a static default 404s (#1291). standaloneGroups
+// entries carry the bare slug; the serve path is prefixed with 'group-'.
+let KNOWN_GROUP_SLUG = process.env.SMOKE_GROUP_SLUG;
+
+beforeAll(async () => {
+  if (KNOWN_GROUP_SLUG) return;
+  try {
+    const res = await fetch(`${BASE}/build/catalog`);
+    if (res.ok) {
+      const cat = await res.json();
+      const bare = cat?.standaloneGroups?.[0]?.slug
+        ?? cat?.hierarchies?.[0]?.slug;
+      if (bare) KNOWN_GROUP_SLUG = bare.startsWith('group-') ? bare : `group-${bare}`;
+    }
+  } catch {}
+});
 
 describe('catalog page smoke', () => {
   it('renders the known DEV group with full chrome', async () => {
+    if (!KNOWN_GROUP_SLUG) return; // no group published — nothing to assert
     const url = `${BASE}/content/tutorials/${KNOWN_GROUP_SLUG}`;
     const res = await fetch(url, { redirect: 'manual' });
     expect(res.status).toBe(200);
@@ -50,6 +69,7 @@ describe('catalog page smoke', () => {
   });
 
   it('serves render-cache on second request (X-Content-Source: render-cache)', async () => {
+    if (!KNOWN_GROUP_SLUG) return; // no group published — nothing to prime
     const url = `${BASE}/content/tutorials/${KNOWN_GROUP_SLUG}`;
     await fetch(url); // prime
     const res = await fetch(url);

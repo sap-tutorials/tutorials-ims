@@ -86,10 +86,13 @@ describe('Custom error pages', () => {
 
   it('proxied 404 from CAP is not hijacked by errorPage (guardrail)', async () => {
     // /build/* routes are unauthenticated and proxy to CAP. A bogus path under
-    // /build returns a real 404 from express. We don't care what the body
-    // looks like — only that our custom 404 marker is absent, which proves
-    // the approuter's errorPage map didn't replace the upstream body.
-    const res = await fetchWithRetry(`${BASE_URL}/build/does-not-exist-endpoint`);
+    // a whitelisted /build prefix returns a real 404 from express. We don't
+    // care what the body looks like — only that our custom 404 marker is
+    // absent, which proves the approuter's errorPage map didn't replace the
+    // upstream body. (The xs-app.json /build proxy is a prefix whitelist, so
+    // the path must sit under a known prefix like /build/concepts to reach CAP;
+    // a bare /build/<bogus> now falls through to the static catch-all.)
+    const res = await fetchWithRetry(`${BASE_URL}/build/concepts/does-not-exist-endpoint`);
     expect(res.status).toBe(404);
     const body = await res.text();
     expect(body).not.toMatch(errorPageMarker(404));

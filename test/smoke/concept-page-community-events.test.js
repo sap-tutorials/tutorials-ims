@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 
 const BASE = process.env.SMOKE_BASE_URL;
-const CONCEPT = process.env.SMOKE_CONCEPT_SLUG ?? 'cap-cds-modeling';
+const CONCEPT = process.env.SMOKE_CONCEPT_SLUG ?? 'cap-cds-domain-modeling';
 
 describe.skipIf(!BASE)('concept-page community-events section', () => {
   it(`renders section #10 wrapper for concept ${CONCEPT}`, async () => {

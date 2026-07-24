@@ -13,7 +13,7 @@ const SRV_URL = process.env.SMOKE_SRV_URL
 
 describe.skipIf(!SRV_URL)('explore JSON — help-doc nodes (Phase 4.7)', () => {
   it('returns at least one node with type=help-doc after seeding', async () => {
-    const url = `${SRV_URL.replace(/\/$/, '')}/build/explore-data`
+    const url = `${SRV_URL.replace(/\/$/, '')}/graph/explore-data`
     const res = await fetch(url)
     expect(res.status).toBe(200)
     const body = await res.json()
