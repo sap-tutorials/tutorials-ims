@@ -1,0 +1,12 @@
+{
+  "name": "SWAPI_Author",
+  "roleReferences": [
+    { "roleTemplateName": "Author", "name": "Author" }
+  ],
+  "userReferences": [
+    { "userName": "alice@contoso.com", "email": "alice@contoso.com", "origin": "sap.ids" },
+    { "userName": "bob@contoso.com",   "email": "Bob@contoso.com",   "origin": "sap.ids" },
+    { "userName": "carol@partner.io",  "email": "carol@partner.io",  "origin": "sap.ids" },
+    { "userName": "alice@contoso.com", "email": "alice@contoso.com", "origin": "sap.ids" }
+  ]
+}
