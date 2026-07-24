@@ -19,7 +19,7 @@ describe('Static content', () => {
     const html = await res.text();
     // Whitespace-tolerant: survives any future JS minifier pass over inline <script>.
     expect(html).toMatch(/logo:\s*\{\s*role:\s*['"]link['"]/);
-    expect(html).toContain('SAP Tutorial Platform — home');
+    expect(html).toContain('SAP Developer Center — home');
   });
 
   it('response includes security headers', async () => {

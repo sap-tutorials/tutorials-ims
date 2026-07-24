@@ -26,7 +26,7 @@ describe('Meta tags — homepage', () => {
   });
 
   it('has correct title (no duplication)', () => {
-    expect(html).toMatch(/<title>SAP Developers Tutorials<\/title>/);
+    expect(html).toMatch(/<title>SAP Developer Center<\/title>/);
   });
 
   it('has canonical, description, robots, content-signal', () => {
@@ -37,7 +37,7 @@ describe('Meta tags — homepage', () => {
   });
 
   it('has Open Graph + Twitter Card', () => {
-    expect(html).toMatch(/<meta property=["']?og:site_name["']? content="SAP Developers Tutorials"/);
+    expect(html).toMatch(/<meta property=["']?og:site_name["']? content="SAP Developer Center"/);
     expect(html).toMatch(/<meta property=["']?og:url["']? content="https:\/\/developers\.sap\.com\/"/);
     expect(html).toMatch(/<meta name=["']?twitter:card["']? content="summary_large_image"/);
     expect(html).toMatch(/<meta name=["']?twitter:site["']? content="@sapdevs"/);
@@ -52,8 +52,8 @@ describe('Meta tags — tutorial page', () => {
     html = await res.text();
   });
 
-  it('has " | SAP Developers Tutorials" suffix in title', () => {
-    expect(html).toMatch(/<title>[^<]+ \| SAP Developers Tutorials<\/title>/);
+  it('has " | SAP Developer Center" suffix in title', () => {
+    expect(html).toMatch(/<title>[^<]+ \| SAP Developer Center<\/title>/);
   });
 
   it('has og:type=article and article metadata', () => {

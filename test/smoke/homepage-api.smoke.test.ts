@@ -35,7 +35,9 @@ describe.skipIf(!SRV)('Homepage API smoke', () => {
     const res = await fetch(SRV + path);
     expect(res.ok).toBe(true);
     const data = await res.json();
-    if (kind === 'array') expect(Array.isArray(data)).toBe(true);
+    // CDS OData functions wrap collection results in { '@odata.context', value: [...] }.
+    // Unwrap before the array check; object-kind endpoints (videos) stay as-is.
+    if (kind === 'array') expect(Array.isArray(Array.isArray(data) ? data : data.value)).toBe(true);
     else expect(typeof data).toBe('object');
   });
 

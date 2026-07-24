@@ -13,7 +13,11 @@ describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
 
     it('sets X-Frame-Options SAMEORIGIN', async () => {
       const res = await fetchWithRetry(`${BASE_URL}/`);
-      expect(res.headers.get('x-frame-options')).toBe('SAMEORIGIN');
+      // The header is emitted twice (xs-app.json + CF framework injection);
+      // Headers.get() joins duplicates with ", ". Assert every token is SAMEORIGIN.
+      const xfo = res.headers.get('x-frame-options');
+      expect(xfo).toBeTruthy();
+      expect(xfo.split(',').every((v) => v.trim() === 'SAMEORIGIN')).toBe(true);
     });
 
     it('sets X-Content-Type-Options nosniff', async () => {
@@ -58,7 +62,12 @@ describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
         return;
       }
       expect(html).toMatch(/consent\.trustarc\.com\/notice\?domain=sapshared\.com/);
-      expect(html).toContain('id="teconsent"');
+      // The standalone <div id="teconsent"> link is intentionally omitted
+      // (the footer "Cookie Preferences" button reopens the manager instead —
+      // see hugo/layouts/partials/consent.html). Assert the blackbar container
+      // that the notice script hydrates. Hugo's minifier strips quotes around
+      // simple id values, so match both quoted and unquoted forms.
+      expect(html).toMatch(/id=(?:["']?)consent_blackbar(?:["']?)/);
     });
   },
 );

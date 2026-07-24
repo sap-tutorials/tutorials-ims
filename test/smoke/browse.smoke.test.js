@@ -24,9 +24,9 @@ describeIf('/browse/ smoke', () => {
     const html = await res.text();
     // Banner, filter rail, results main — the controllable landmarks
     // BrowsePage.vue + controller.ts wire onto.
-    expect(html).toMatch(/<header[^>]+class="browse-banner"/);
-    expect(html).toMatch(/<aside[^>]+id="browse-filter-rail"/);
-    expect(html).toMatch(/<main[^>]+id="browse-results"/);
+    expect(html).toMatch(/<header[^>]+class=["']?browse-banner["']?/);
+    expect(html).toMatch(/<aside[^>]+id=["']?browse-filter-rail["']?/);
+    expect(html).toMatch(/<main[^>]+id=["']?browse-results["']?/);
     // Skip-link (a11y)
     expect(html).toMatch(/skip-link/);
     // The grid mount point used by the Vue island.
@@ -39,7 +39,7 @@ describeIf('/browse/ smoke', () => {
     const html = await res.text();
     // Whitespace-tolerant: the Hugo minifier may strip the space between
     // the type attribute and the closing >.
-    expect(html).toMatch(/<script\s+id="browse-data"\s+type="application\/json"\s*>[^<]*"all"\s*:\s*\[/);
+    expect(html).toMatch(/<script\s+id=["']?browse-data["']?\s+type=["']?application\/json["']?\s*>[^<]*"all"\s*:\s*\[/);
   });
 
   it('renders the type=mission filter checkbox in the SSR filter rail', async () => {
@@ -49,6 +49,6 @@ describeIf('/browse/ smoke', () => {
     // The SSR'd filter rail does NOT pre-check the checkbox (controller
     // does that on mount), but the input MUST exist so the controller
     // has something to wire onto.
-    expect(html).toMatch(/<input[^>]+name="type"[^>]+value="mission"/);
+    expect(html).toMatch(/<input[^>]+name=["']?type["']?[^>]+value=["']?mission["']?/);
   });
 });

@@ -31,7 +31,7 @@ describe('Public endpoints', () => {
 
     const body = await res.json();
     expect(body.authenticated).toBe(false);
-    expect(body.tutorials).toEqual({ completedSlugs: [], inProgress: [] });
+    expect(body.tutorials).toEqual({ completedSlugs: [], inProgress: [], lastCompletedSlug: null });
     expect(body.missionSlugs).toEqual([]);
     expect(body.groupSlugs).toEqual([]);
   });

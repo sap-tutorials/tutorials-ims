@@ -24,10 +24,11 @@ describeIf('/me page shape', () => {
 
     // The four mount points for Vue islands (Task 8, commit 403fd72d).
     // These are the divs that the me.js script hydrates.
-    expect(html).toContain('id="me-recent-activity"');
-    expect(html).toContain('id="me-all-completions"');
-    expect(html).toContain('id="me-learning-preferences"');
-    expect(html).toContain('id="me-community-profile"');
+    // Hugo's HTML minifier strips quotes around simple id values, so match both forms.
+    expect(html).toMatch(/id=["']?me-recent-activity["']?/);
+    expect(html).toMatch(/id=["']?me-all-completions["']?/);
+    expect(html).toMatch(/id=["']?me-learning-preferences["']?/);
+    expect(html).toMatch(/id=["']?me-community-profile["']?/);
   });
 
   it('references the me.js bundle', async () => {

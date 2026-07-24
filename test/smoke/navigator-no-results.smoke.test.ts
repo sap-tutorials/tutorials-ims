@@ -22,8 +22,8 @@ async function fetchText(path: string): Promise<string> {
 }
 
 describe('navigator no-results stability smoke (#159)', () => {
-  it('homepage loads and references the navigator JS chunk', async () => {
-    const html = await fetchText('/')
+  it('navigator page loads and references the navigator JS chunk', async () => {
+    const html = await fetchText('/tutorial-navigator/')
     // The Vue mount point is <div id="tutorial-navigator">.
     // Hugo's production minifier strips quotes from safe attribute values,
     // so accept both quoted and unquoted forms.
@@ -34,7 +34,7 @@ describe('navigator no-results stability smoke (#159)', () => {
 
   it('navigator JS chunk contains the new result-region contract', async () => {
     // Find the navigator chunk URL from the HTML, then fetch and inspect it.
-    const html = await fetchText('/')
+    const html = await fetchText('/tutorial-navigator/')
     const chunkMatch = html.match(/(\/js\/navigator(?:\.[a-z0-9]+)?\.js(?:\?[^"'\s]*)?)/)
     expect(chunkMatch, 'navigator JS chunk URL not found in HTML').toBeTruthy()
     const chunkUrl = chunkMatch![1]

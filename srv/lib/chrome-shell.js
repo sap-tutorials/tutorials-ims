@@ -53,19 +53,33 @@ const escapeAttr = (s) => String(s ?? '')
 // Pure: compose full HTML from parsed shell halves + body + page meta.
 // Substitutes <html data-page-* attributes, <title>, and <meta description>
 // for the placeholders the _shell layout emits.
+//
+// The published _shell BLOB is produced by Hugo's production minifier, which
+// strips quotes around single-token attribute values (data-page-kind="generic"
+// becomes data-page-kind=generic) and empty values (data-page-slug="" becomes
+// data-page-slug). The substitution patterns below therefore tolerate quoted,
+// single-quoted, and unquoted/empty forms — matching on quoted-only silently
+// no-ops on the minified shell, leaving group/mission pages stamped with the
+// placeholder kind 'generic' and title '_shell' (#1291).
 export function composeShell({ before, after }, bodyHtml, meta) {
   const kind  = escapeAttr(meta.kind);
   const slug  = escapeAttr(meta.slug);
   const title = escapeAttr(meta.title);
   const desc  = escapeAttr(meta.description ?? '');
 
+  // Matches `name="v"`, `name='v'`, `name=v`, or bare `name` (empty minified
+  // value). The value alternation is ordered longest-first so the unquoted
+  // branch doesn't shadow the quoted ones.
+  const attr = (name) =>
+    new RegExp(`${name}(?:="[^"]*"|='[^']*'|=[^\\s>]*)?`);
+
   const patchedBefore = before
-    .replace(/data-page-kind="[^"]*"/, `data-page-kind="${kind}"`)
-    .replace(/data-page-slug="[^"]*"/, `data-page-slug="${slug}"`)
-    .replace(/data-page-title="[^"]*"/, `data-page-title="${title}"`)
+    .replace(attr('data-page-kind'), `data-page-kind="${kind}"`)
+    .replace(attr('data-page-slug'), `data-page-slug="${slug}"`)
+    .replace(attr('data-page-title'), `data-page-title="${title}"`)
     .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
     .replace(
-      /<meta name="description" content="[^"]*">/,
+      /<meta name=(?:"description"|'description'|description) content="[^"]*">/,
       `<meta name="description" content="${desc}">`,
     );
 

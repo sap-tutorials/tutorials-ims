@@ -10,11 +10,16 @@ describeMaybe('smoke /homepage/events', () => {
   it('region=EMEA returns EMEA-or-virtual rows only', async () => {
     const resp = await fetch(`${BASE}/homepage/events?region=EMEA`);
     expect(resp.status).toBe(200);
-    const rows = await resp.json();
+    const body = await resp.json();
+    const rows = Array.isArray(body) ? body : body.value;
     expect(Array.isArray(rows)).toBe(true);
     expect(rows.length).toBeLessThanOrEqual(6);
     for (const r of rows) {
-      expect(r.region === 'EMEA' || r.isVirtual === true).toBe(true);
+      // #1030: only codejams honor the region filter; manual Events + Devtoberfest
+      // are always included region-agnostically (region 'UNKNOWN').
+      if (String(r.eventType).toLowerCase() === 'codejam') {
+        expect(r.region === 'EMEA' || r.isVirtual === true).toBe(true);
+      }
     }
   });
 
@@ -25,7 +30,8 @@ describeMaybe('smoke /homepage/events', () => {
 
   it('response includes eventType, region, isVirtual fields', async () => {
     const resp = await fetch(`${BASE}/homepage/events?region=ALL`);
-    const rows = await resp.json();
+    const body = await resp.json();
+    const rows = Array.isArray(body) ? body : body.value;
     if (rows.length > 0) {
       expect(rows[0]).toHaveProperty('eventType');
       expect(rows[0]).toHaveProperty('region');
