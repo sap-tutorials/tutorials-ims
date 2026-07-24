@@ -25,10 +25,10 @@ Describe 'Split-MembersByTenant' {
 
 Describe 'Add-MembersToChannel' {
     It 'adds new members and classifies existing/failed' {
-        Mock -ModuleName AuthorsToTeams New-MgTeamChannelMember {
-            param($TeamId, $ChannelId, $BodyParameter)
-            $bind = $BodyParameter['user@odata.bind']
-            if ($bind -match 'bob') { throw 'One or more added object references already exist for the following modified properties: members.' }
+        Mock -ModuleName AuthorsToTeams Invoke-ChannelMemberAdd {
+            param($TeamId, $ChannelId, $Body)
+            $bind = $Body['user@odata.bind']
+            if ($bind -match 'bob')   { throw 'One or more added object references already exist for the following modified properties: members.' }
             if ($bind -match 'carol') { throw 'Request_ResourceNotFound: user not found' }
         }
         $r = Add-MembersToChannel -Emails @('alice@contoso.com','bob@contoso.com','carol@contoso.com') -TeamId 't' -ChannelId 'c'
@@ -37,9 +37,9 @@ Describe 'Add-MembersToChannel' {
         $r.Failed        | Should -Be @('carol@contoso.com')
     }
     It 'makes no calls under WhatIf' {
-        Mock -ModuleName AuthorsToTeams New-MgTeamChannelMember { throw 'should not be called' }
+        Mock -ModuleName AuthorsToTeams Invoke-ChannelMemberAdd { throw 'should not be called' }
         $r = Add-MembersToChannel -Emails @('alice@contoso.com') -TeamId 't' -ChannelId 'c' -WhatIf
         $r.Added | Should -Be @('alice@contoso.com')
-        Should -Invoke -ModuleName AuthorsToTeams New-MgTeamChannelMember -Times 0
+        Should -Invoke -ModuleName AuthorsToTeams Invoke-ChannelMemberAdd -Times 0
     }
 }

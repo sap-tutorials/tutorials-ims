@@ -51,7 +51,7 @@ function Add-MembersToChannel {
             'user@odata.bind'  = "https://graph.microsoft.com/v1.0/users('$e')"
         }
         try {
-            New-MgTeamChannelMember -TeamId $TeamId -ChannelId $ChannelId -BodyParameter $body -ErrorAction Stop | Out-Null
+            Invoke-ChannelMemberAdd -TeamId $TeamId -ChannelId $ChannelId -Body $body | Out-Null
             $added += $e
         } catch {
             if ($_.Exception.Message -match 'already exist|conflict|duplicate') { $already += $e }
@@ -61,4 +61,14 @@ function Add-MembersToChannel {
     [pscustomobject]@{ Added=[string[]]$added; AlreadyMember=[string[]]$already; Failed=[string[]]$failed }
 }
 
-Export-ModuleMember -Function ConvertFrom-RoleCollectionJson, Split-MembersByTenant, Add-MembersToChannel
+function Invoke-ChannelMemberAdd {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TeamId,
+        [Parameter(Mandatory)][string]$ChannelId,
+        [Parameter(Mandatory)][hashtable]$Body
+    )
+    New-MgTeamChannelMember -TeamId $TeamId -ChannelId $ChannelId -BodyParameter $Body -ErrorAction Stop
+}
+
+Export-ModuleMember -Function ConvertFrom-RoleCollectionJson, Split-MembersByTenant, Add-MembersToChannel, Invoke-ChannelMemberAdd
