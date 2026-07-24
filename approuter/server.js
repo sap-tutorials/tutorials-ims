@@ -21,6 +21,7 @@ const serveStatic = require('serve-static')
 const { isAuthorizedBearer } = require('./lib/bearer-auth')
 const { resolveSecret } = require('./lib/credstore-secret')
 const { getIndex, startAutoRefresh } = require('./lib/legacy-redirects-loader')
+const { normalizeLegacyCatalogUrl } = require('./lib/catalog-legacy-redirects')
 const { bump, startAutoFlush } = require('./lib/hit-counter')
 const { safeFetch } = require('./lib/safe-fetch')
 const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
@@ -77,6 +78,21 @@ function legacyRedirectsHandler(req, res, next) {
       res.end()
       return
     }
+  }
+  // Legacy AEM catalog item pages: /group.<slug>.html and /mission.<slug>.html
+  // (dot-delimited, site-root) → canonical /tutorials/(group|mission)-<slug>,
+  // which content-store.js serveHandler resolves (incl. slug rename-redirects
+  // and the published 404). These have no Hugo static folder, so the generic
+  // *.html catch-all below would miss them. Admin-configured redirects above
+  // still win. See catalog-legacy-redirects.js.
+  const catalogTarget = normalizeLegacyCatalogUrl(url)
+  if (catalogTarget) {
+    res.writeHead(301, {
+      Location: catalogTarget,
+      'Cache-Control': 'public, max-age=86400'
+    })
+    res.end()
+    return
   }
   // Catch-all *.html → */ if the slug-folder exists in Hugo output
   const m = url.match(/^(\/[^?#]*?)\.html(\?.*)?$/i)
