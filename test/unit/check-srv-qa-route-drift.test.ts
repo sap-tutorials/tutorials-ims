@@ -184,4 +184,28 @@ describe('scripts/check-srv-qa-route-drift.ts', () => {
     const r = run(root);
     expect(r.status).toBe(0);
   });
+
+  it('parses a route whose literal contains "/*" (e.g. *slug) without swallowing the file', () => {
+    // Regression for the string-unaware comment stripper: '/content/tutorials/*slug'
+    // contains a `/*` sequence inside the string literal. The old stripper mistook
+    // it for a block-comment opener and blanked everything up to the next `*/`,
+    // truncating the route to `/content/tutorials` and reporting a false drift.
+    writeServer(root, 'srv', `
+      app.get('/content/nav', navHandler);
+      app.get('/content/tutorials/*slug', serveHandler);
+      /* a real block comment with a route inside:
+         app.get('/content/should-be-ignored', h); */
+      app.post('/content/publish', contentAuthMiddleware, publishHandler);
+    `);
+    writeServer(root, 'srv-qa', `
+      app.get('/content/nav', requireAuthorScope, navHandler);
+      app.get('/content/tutorials/*slug', requireAuthorScope, serveHandler);
+      app.post('/content/publish', contentAuthMiddleware, publishHandler);
+    `);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('OK');
+    // The commented-out route must NOT be counted as srv-only drift.
+    expect(r.stderr).not.toContain('should-be-ignored');
+  });
 });
