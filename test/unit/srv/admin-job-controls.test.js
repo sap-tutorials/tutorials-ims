@@ -439,4 +439,67 @@ describe('AdminService.JobControls', () => {
       });
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────
+  // #1293 — forceClose operator recovery action (orphaned PipelineLog
+  // RUNNING row from a process death). Sibling to forceUnwedge, but a
+  // DIFFERENT table. Uses the same globalThis-seam strategy for the same
+  // Windows ESM module-identity reason documented above.
+  // ─────────────────────────────────────────────────────────────────
+  async function callForceClose(jobName) {
+    return admin.tx({ user: ADMIN_USER }, (tx) =>
+      tx.send({ event: 'forceClose', entity: 'AdminService.JobControls', data: { jobName } })
+    );
+  }
+
+  describe('JobControls.forceClose', () => {
+    afterEach(() => {
+      delete globalThis.__TEST_forceCloseRunningPipelineLog;
+      delete globalThis.__TEST_emitJobAudit;
+    });
+
+    it('rejects with 400 for missing jobName', async () => {
+      await expect(callForceClose(undefined)).rejects.toMatchObject({ code: 400 });
+    });
+
+    it('rejects with 400 for jobName longer than MAX_JOB_NAME_LEN', async () => {
+      const huge = 'x'.repeat(200);
+      await expect(callForceClose(huge)).rejects.toMatchObject({ code: 400 });
+    });
+
+    it('rejects with 400 for unknown jobName', async () => {
+      await expect(callForceClose('never-registered')).rejects.toMatchObject({ code: 400 });
+    });
+
+    it('returns closed > 0 when a RUNNING row was closed', async () => {
+      registerWithSchedule('test-close-ok', '*/1 * * * *');
+      globalThis.__TEST_forceCloseRunningPipelineLog = async () => ({ closed: 1 });
+      const result = await callForceClose('test-close-ok');
+      expect(result.closed).toBe(1);
+      expect(result.reason).toBeFalsy();
+      expect(result.jobName).toBe('test-close-ok');
+    });
+
+    it('returns closed: 0 with reason when nothing to close', async () => {
+      registerWithSchedule('test-close-none', '*/1 * * * *');
+      globalThis.__TEST_forceCloseRunningPipelineLog = async () => ({ closed: 0 });
+      const result = await callForceClose('test-close-none');
+      expect(result.closed).toBe(0);
+      expect(result.reason).toMatch(/No orphaned RUNNING PipelineLog row/i);
+    });
+
+    it('emits audit with outcome=force-closed before the close (globalThis seam)', async () => {
+      registerWithSchedule('test-close-audit', '*/1 * * * *');
+      const auditCalls = [];
+      globalThis.__TEST_emitJobAudit = async (opts) => { auditCalls.push(opts); };
+      globalThis.__TEST_forceCloseRunningPipelineLog = async () => ({ closed: 1 });
+      await callForceClose('test-close-audit');
+      await new Promise(resolve => setImmediate(resolve));
+      expect(auditCalls.length).toBe(1);
+      expect(auditCalls[0]).toMatchObject({
+        jobName: 'test-close-audit',
+        outcome: 'force-closed',
+      });
+    });
+  });
 });

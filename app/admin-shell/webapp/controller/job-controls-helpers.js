@@ -44,11 +44,41 @@ sap.ui.define([], function () {
         isRunning: !!runHit,
         runningSince: runHit && runHit.startedAt != null ? runHit.startedAt : null,
       });
+      // #1293: a job that has been RUNNING longer than the reconcile floor
+      // (60 min — mirrors STALE_FLOOR_MS in srv/lib/scheduler-wedge.js) is
+      // almost certainly an orphaned PipelineLog row left by a process death
+      // (deploy/crash), NOT a genuinely long run. Surfaces the Force-close
+      // button. The boot reconciler closes these automatically on the next
+      // restart; this button is the operator's manual path in between.
+      joined.runningStale = isRunningStale(joined.runningSince, now);
       var status = classifyJobStatus(joined, now);
       joined.statusLabel = status.statusLabel;
       joined.statusState = status.statusState;
       return joined;
     });
+  }
+
+  // #1293: reconcile floor (ms) — must mirror RECONCILE_FLOOR_MS in
+  // srv/lib/pipeline-log-reconciler.js and STALE_FLOOR_MS in
+  // srv/lib/scheduler-wedge.js.
+  var RUNNING_STALE_FLOOR_MS = 60 * 60 * 1000;
+
+  /**
+   * #1293: true iff a RUNNING job's start timestamp is older than the
+   * 60-min reconcile floor. Drives the Force-close button visibility.
+   * Returns false for null/invalid so a healthy or not-running job never
+   * shows the button.
+   *
+   * @param {string|null|undefined} runningSinceIso
+   * @param {number} [now=Date.now()]
+   * @returns {boolean}
+   */
+  function isRunningStale(runningSinceIso, now) {
+    if (!runningSinceIso) return false;
+    if (now == null) now = Date.now();
+    var started = new Date(runningSinceIso).getTime();
+    if (Number.isNaN(started)) return false;
+    return (now - started) >= RUNNING_STALE_FLOOR_MS;
   }
 
   /**
@@ -171,6 +201,7 @@ sap.ui.define([], function () {
   return {
     joinJobsWithLastRuns: joinJobsWithLastRuns,
     classifyJobStatus: classifyJobStatus,
+    isRunningStale: isRunningStale,
     formatNextRun: formatNextRun,
     formatRelativeTime: formatRelativeTime,
     formatElapsedSince: formatElapsedSince,
