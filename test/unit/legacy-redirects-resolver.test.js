@@ -97,3 +97,30 @@ describe('#891 — same-origin toPath validation', () => {
   });
 });
 
+describe('#752 — allowlisted external targets', () => {
+  it('buildIndex keeps an allowlisted external row and drops a non-allowlisted one', () => {
+    const idx = buildIndex([
+      { id: 'ext-ok',  fromPath: '/leonardo-iot', toPath: 'https://community.sap.com/topics/leonardo', statusCode: 301, isPattern: false, isActive: true },
+      { id: 'ext-bad', fromPath: '/evil',         toPath: 'https://attacker.example/x',                statusCode: 301, isPattern: false, isActive: true },
+    ]);
+    expect(resolveRedirect(idx, '/leonardo-iot')).toEqual({
+      id: 'ext-ok', toPath: 'https://community.sap.com/topics/leonardo', statusCode: 301,
+    });
+    expect(resolveRedirect(idx, '/evil')).toBeNull();
+  });
+
+  it('pattern substitution cannot smuggle a non-allowlisted external host', () => {
+    // toPath is allowlisted at build time, but $1 could push it off-allowlist.
+    const idx = buildIndex([
+      { id: 'p', fromPath: '^/x/(.*)$', toPath: 'https://community.sap.com/$1', statusCode: 301, isPattern: true, isActive: true },
+    ]);
+    // benign capture stays on-allowlist
+    expect(resolveRedirect(idx, '/x/topics/leonardo')?.toPath).toBe('https://community.sap.com/topics/leonardo');
+    // a capture that would form a different host is re-validated and rejected
+    const idx2 = buildIndex([
+      { id: 'p2', fromPath: '^/y/(.*)$', toPath: 'https://community.sap.com.$1', statusCode: 301, isPattern: true, isActive: true },
+    ]);
+    expect(resolveRedirect(idx2, '/y/attacker.example/x')).toBeNull();
+  });
+});
+
