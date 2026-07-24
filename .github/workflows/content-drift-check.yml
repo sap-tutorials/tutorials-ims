@@ -45,18 +45,23 @@ jobs:
     strategy:
       fail-fast: false
       # On a manual dispatch with a specific env, the matrix collapses
-      # to that one. On schedule we only verify dev — QA is excluded
-      # because the QA srv (by design) doesn't expose `/build/catalog`
-      # (fetch-tutorials would fail) and requires `Tutorial.Author`
-      # auth on `/content/hashes` (verify-only would 401). Adding QA
-      # to the daily schedule would need a redesign of the verify path
-      # for the QA channel; until then, manual dispatch only.
-      # Whether we include prod here is a judgement call — verify-only
-      # is read-only on the server so it's safe; but a 5-minute window
-      # of API load three times a day matters, so we keep prod off
-      # the schedule by default and only run it via dispatch.
+      # to that one. On schedule we only verify PROD — that's the only
+      # environment where drift actually matters. DEV is deliberately
+      # excluded from the schedule: it is not live-updated on content
+      # changes, so its HANA content goes stale relative to `main` by
+      # design and would fail the check every day with expected drift,
+      # training everyone to ignore the signal. Run DEV manually via
+      # dispatch when you actually want to verify it.
+      # QA is also excluded because the QA srv (by design) doesn't
+      # expose `/build/catalog` (fetch-tutorials would fail) and
+      # requires `Tutorial.Author` auth on `/content/hashes`
+      # (verify-only would 401). Adding QA to the daily schedule would
+      # need a redesign of the verify path for the QA channel; until
+      # then, manual dispatch only.
+      # verify-only is read-only on the server, so the daily PROD run
+      # imposes only a brief window of read load once a day.
       matrix:
-        environment: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.environment != 'all') && format('["{0}"]', inputs.environment) || (github.event_name == 'workflow_dispatch' && inputs.environment == 'all') && '["dev", "qa", "prod"]' || '["dev"]') }}
+        environment: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.environment != 'all') && format('["{0}"]', inputs.environment) || (github.event_name == 'workflow_dispatch' && inputs.environment == 'all') && '["dev", "qa", "prod"]' || '["prod"]') }}
 
     steps:
       - name: Checkout
