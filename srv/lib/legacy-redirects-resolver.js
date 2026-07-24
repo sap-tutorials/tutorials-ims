@@ -11,6 +11,7 @@
  *
  * @module legacy-redirects-resolver
  */
+import { isAllowedTarget } from './redirect-allowlist.js';
 
 /**
  * Build an opaque index from a list of redirect rows.
@@ -30,7 +31,7 @@ export function buildIndex(rows) {
   const patterns = [];
   for (const row of rows || []) {
     if (!row?.isActive) continue;
-    if (!isSameOriginPath(row.toPath)) {
+    if (!isAllowedTarget(row.toPath)) {
       // Drop external redirects rather than serving them. This preserves the
       // rest of the redirect index if a single row is malformed.
       // (approuter/server.js emits a warning above; keep the resolver silent.)
@@ -131,7 +132,7 @@ export function resolveRedirect(index, url) {
       // #891: capture-group substitution could turn a benign toPath like
       // '/new-$1' into '/new-http://attacker.example' if the URL provided
       // '$1' evilly. Re-validate the substituted result.
-      if (!isSameOriginPath(resolved)) continue;
+      if (!isAllowedTarget(resolved)) continue;
       return {
         id: redirect.id,
         toPath: appendQuery(resolved, query),

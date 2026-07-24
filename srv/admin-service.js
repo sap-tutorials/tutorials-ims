@@ -28,6 +28,7 @@ import { runSeedApiDocs } from './lib/seed-api-docs.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
+import { isAllowedTarget } from './lib/redirect-allowlist.js';
 import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
 import { validateApiQuery } from './lib/khoros-transport.js';
 import { COMMUNITY_BLOG_SOURCE_DEFAULTS, backfillManagedApiQuery } from './lib/community-blog-source-defaults.js';
@@ -535,25 +536,19 @@ export default class AdminService extends cds.ApplicationService {
       await ensureDevtoberfestActiveFlagInvariant(req);
     });
 
-    // #891: LegacyRedirects.toPath must be a same-origin absolute path,
-    // never an external URL. The resolver rejects external targets at
-    // index-build time as a backstop, but this hook stops bad rows from
-    // being written at all so the admin gets immediate feedback rather
-    // than silently-dropped redirects.
+    // #752: LegacyRedirects.toPath must be a same-origin absolute path or an
+    // https URL on an allowlisted SAP host. The resolver rejects disallowed
+    // external targets at index-build time as a backstop, but this hook stops
+    // bad rows from being written at all so the admin gets immediate feedback
+    // rather than silently-dropped redirects.
     this.before(['CREATE', 'UPDATE', 'NEW', 'PATCH'], 'LegacyRedirects', async (req) => {
       const toPath = req.data?.toPath;
       if (toPath === undefined) return; // PATCH that doesn't touch toPath — fine
       if (typeof toPath !== 'string' || toPath.length === 0) {
         return req.reject(400, 'toPath is required and must be a non-empty string');
       }
-      if (toPath.startsWith('//')) {
-        return req.reject(400, 'toPath must not be protocol-relative (starts with //)');
-      }
-      if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(toPath)) {
-        return req.reject(400, 'toPath must not contain a scheme (http:, javascript:, etc.) — must be same-origin');
-      }
-      if (!toPath.startsWith('/')) {
-        return req.reject(400, 'toPath must start with / (absolute same-origin path)');
+      if (!isAllowedTarget(toPath)) {
+        return req.reject(400, 'toPath must be a same-origin path (/…) or an https URL on an allowlisted SAP host (community.sap.com, pages.community.sap.com, opensource.sap.com, www.sap.com, help.sap.com)');
       }
     });
 

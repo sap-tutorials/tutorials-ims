@@ -20,7 +20,7 @@ describe('AdminService projections for Homepage entities', () => {
     const list = await admin.tx({ user: ADMIN_USER }, (tx) =>
       tx.read('LegacyRedirects')
     );
-    expect(list.length).toBe(3);  // exactly the 3 named seed rows
+    expect(list.length).toBe(33);  // 3 named seed rows + 30 migrated from AEM (#752)
   });
 
   it('auto-initialises HomepageConfig as a singleton on first READ', async () => {

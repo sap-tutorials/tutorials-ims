@@ -27,10 +27,13 @@ describe('Homepage seed data', () => {
     expect(rows.length).toBe(1);
   });
 
-  it('loads 3 LegacyRedirects (tutorial-navigator.html, index.html, groups.html)', async () => {
+  it('loads the 3 named seed LegacyRedirects plus the 30 migrated AEM rows (#752)', async () => {
     const { LegacyRedirects } = cds.entities('com.sap.developers.ims');
     const rows = await db.run(SELECT.from(LegacyRedirects));
-    const froms = rows.map(r => r.fromPath).sort();
-    expect(froms).toEqual(['/groups.html', '/index.html', '/tutorial-navigator.html']);
+    expect(rows.length).toBe(33);
+    const froms = new Set(rows.map(r => r.fromPath));
+    for (const seed of ['/tutorial-navigator.html', '/index.html', '/groups.html']) {
+      expect(froms).toContain(seed);
+    }
   });
 });

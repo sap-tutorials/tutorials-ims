@@ -105,6 +105,7 @@ build-parameters:
         # (#639 / #679 follow-up.)
         - mkdir -p approuter/lib
         - cp srv/lib/legacy-redirects-resolver.js approuter/lib/legacy-redirects-resolver.js
+        - cp srv/lib/redirect-allowlist.js approuter/lib/redirect-allowlist.js
 
 modules:
   - name: tutorials-srv

@@ -22,3 +22,17 @@ describe('Legacy redirects (AEM cutover continuity)', () => {
     expect(res.headers.get('location')).toBe(TRIALS_TARGET);
   });
 });
+
+describe('Migrated AEM redirects (#752)', () => {
+  it('GET /leonardo-iot 301s to SAP Community', async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/leonardo-iot`);
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://community.sap.com/topics/leonardo');
+  });
+
+  it('GET /abap 301s to the same-origin topic page', async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/abap`);
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('/topics/abap-platform.html');
+  });
+});
