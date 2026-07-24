@@ -63,8 +63,18 @@ export async function navigatorCatalogHandler(req, res) {
     // Build groups and tutorial mappings
     for (const [, pathData] of pathsMap) {
       const mission = missionsMap.get(pathData.missionId);
-      const isFlat = [...pathsMap.values()].filter(p => p.missionId === pathData.missionId).length === 1
-        && pathData.pathName === mission.title;
+      // A single-path mission is "flat": its lone CompletionPath is a structural
+      // container, not a user-facing group, so we suppress the synthetic
+      // `path-<legacyId>` group card and lift its tutorials straight under the
+      // mission. Previously this also required `pathData.pathName === mission.title`,
+      // but prod paths routinely have an empty/differing name — that made isFlat
+      // false and emitted a bogus, empty-titled group card linking to
+      // /tutorials/group-path-<id>, which 404s (catalog-data.js only serves real
+      // Groups). Mirrors srv/lib/build-catalog.js's isFlat (single path + no nested
+      // groups → flat). Note: pathsMap is built solely from NavigatorCatalog's
+      // TUTORIAL rows, so nested Groups (taskType='GROUP') don't inflate this count
+      // and are surfaced separately in the nested-group loop below.
+      const isFlat = [...pathsMap.values()].filter(p => p.missionId === pathData.missionId).length === 1;
 
       if (!isFlat) {
         groupRefs.push({ id: pathData.pathId, title: pathData.pathName, slug: pathData.pathSlug, missionId: pathData.missionId });

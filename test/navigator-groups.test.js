@@ -249,6 +249,76 @@ describe('/build/navigator: nested Group default-off (Issue #364)', () => {
   });
 });
 
+// Regression (group-path-842): a single-path published Mission whose CompletionPath
+// name does NOT equal the Mission title (in prod, the path name is typically empty)
+// must NOT surface a synthetic "path-<legacyId>" group card. Such a card links to
+// /tutorials/group-path-<legacyId>, which 404s (catalog-data.js only serves real
+// Groups), so the navigator was showing a card for a page that doesn't exist.
+// The synthetic single-path card must be suppressed (isFlat) regardless of whether
+// the path name matches the mission title — matching srv/lib/build-catalog.js's
+// isFlat semantics (single path + no nested groups → flat).
+describe('/build/navigator: single-path mission with empty/differing path name (group-path-842 regression)', () => {
+  const SP_TAG_ID     = 'aaaaaaaa-9005-0000-0000-000000000001';
+  const SP_MISSION_ID = '11111111-9005-0000-0000-000000000001';
+  const SP_PATH_ID    = '22222222-9005-0000-0000-000000000001';
+  const SP_TUT_ID     = 'cccccccc-9005-0000-0000-000000000011';
+  const SP_CPI_ID     = 'cccccccc-9005-0000-0000-000000000031';
+  const SP_PATH_LEGACY = 99005; // synthetic group would be slug 'path-99005', id 99005
+
+  beforeAll(async () => {
+    const { Tags, Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tags).entries({ ID: SP_TAG_ID, legacyId: 99005, name: '__TEST__ SinglePath Tag' });
+    await INSERT.into(Tutorials).entries({
+      ID: SP_TUT_ID, legacyId: 99070, title: '__TEST__ SinglePath Tut',
+      slug: 'test-singlepath-tut', status: 'ACTIVE',
+    });
+    await INSERT.into(Missions).entries({
+      ID: SP_MISSION_ID, legacyId: 99005, title: '__TEST__ SinglePath Mission',
+      slug: 'test-singlepath-mission', description: 'desc', experienceTag: 'beginner',
+      primaryTagRef_ID: SP_TAG_ID, published: true, status: 'ACTIVE',
+    });
+    // Path name is empty string — mirrors the prod data for path-842 and
+    // deliberately does NOT equal the Mission title.
+    await INSERT.into(CompletionPaths).entries({
+      ID: SP_PATH_ID, legacyId: SP_PATH_LEGACY,
+      mission_ID: SP_MISSION_ID, name: '', slug: `path-${SP_PATH_LEGACY}`,
+    });
+    await INSERT.into(CompletionPathItems).entries({
+      ID: SP_CPI_ID, legacyId: 99053,
+      path_ID: SP_PATH_ID, taskType: 'TUTORIAL',
+      tutorial_ID: SP_TUT_ID, taskLegacyId: 99070, itemOrder: 0,
+    });
+  });
+
+  afterAll(async () => {
+    const { Tags, Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+    await DELETE.from(CompletionPathItems).where({ ID: SP_CPI_ID });
+    await DELETE.from(CompletionPaths).where({ ID: SP_PATH_ID });
+    await DELETE.from(Missions).where({ ID: SP_MISSION_ID });
+    await DELETE.from(Tutorials).where({ ID: SP_TUT_ID });
+    await DELETE.from(Tags).where({ ID: SP_TAG_ID });
+  });
+
+  it('does NOT emit a synthetic path-group card for the single-path mission', async () => {
+    const { status, data } = await project.get('/build/navigator?nocache=1');
+    expect(status).toBe(200);
+    const stray = data.groups.find(g => g.id === SP_PATH_LEGACY || g.slug === `path-${SP_PATH_LEGACY}`);
+    expect(stray).toBeUndefined();
+  });
+
+  it('still emits a routable tutorialMapping for the tutorial, tagged to the mission but with NO group', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const tut = data.tutorialMappings.find(t => t.slug === 'test-singlepath-tut');
+    expect(tut).toBeDefined();
+    expect(tut.missionId).toBe(99005);
+    expect(tut.groupId).toBeUndefined();
+    expect(tut.groupSlug).toBeUndefined();
+    expect(tut.groupTitle).toBeUndefined();
+  });
+});
+
 describe('/build/navigator: Checkpoint markers', () => {
   const CP_TAG_ID     = 'aaaaaaaa-9003-0000-0000-000000000001';
   const CP_MISSION_ID = '11111111-9003-0000-0000-000000000001';
