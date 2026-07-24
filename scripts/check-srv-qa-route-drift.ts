@@ -75,6 +75,13 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'AI code-check (#171) — gated behind ChatSettings.codeCheckEnabled feature flag; ' +
     'not yet wired for QA author-preview. Re-evaluate when credstore-backed ChatSettings ' +
     'reach QA.',
+  'GET /content/concepts/:slug':
+    'KG concept landing pages (#446, Phase 3 Track 3-A) — a public prod content surface, ' +
+    'not tutorial-draft author preview. The QA channel serves in-flight tutorials from ' +
+    '-Contribution repos; concept pages are out of its scope.',
+  'POST /content/orphan-purge':
+    'CI-only batched soft-delete for prod content maintenance (#823). Not an author-preview ' +
+    'endpoint — the QA channel has no orphan-purge maintenance flow.',
 };
 
 /**
@@ -102,11 +109,14 @@ export interface Route {
  * line-shift table).
  */
 export function extractContentRoutes(source: string): Route[] {
-  // To preserve line numbers we replace comments with same-length whitespace
-  // rather than deleting them. That way regex line offsets stay accurate.
-  const stripped = source
-    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+  // Blank out comments (replacing with same-length whitespace so regex line
+  // offsets stay accurate) — but STRING-AWARE. A naive /\/\*...\*\// strip
+  // misfires on route literals like '/content/tutorials/*slug', where the
+  // `/*` inside the string is mistaken for a block-comment opener and eats
+  // everything up to the next `*/` far below (this produced a false
+  // `GET /content/tutorials` drift). Walk the source tracking quote state so
+  // `/*` and `//` inside '…', "…", or `…` are left intact.
+  const stripped = stripCommentsPreservingStrings(source);
 
   const out: Route[] = [];
   // app.get / .post / .put / .delete / .patch
@@ -121,6 +131,64 @@ export function extractContentRoutes(source: string): Route[] {
     });
   }
   return out;
+}
+
+/**
+ * Replace `//` line comments and `/* *\/` block comments with same-length
+ * whitespace (newlines preserved), WITHOUT touching comment-like sequences
+ * that occur inside string literals ('…', "…", `…`). This is a minimal
+ * single-pass scanner, not a full JS parser — it does not attempt to handle
+ * regex literals or template-expression nesting, which don't occur on the
+ * `app.method('/content/…')` lines this guard inspects.
+ */
+export function stripCommentsPreservingStrings(source: string): string {
+  const chars = [...source];
+  const out: string[] = new Array(chars.length);
+  let i = 0;
+  let quote: string | null = null; // current string delimiter, or null
+
+  const blank = (ch: string) => (ch === '\n' ? '\n' : ' ');
+
+  while (i < chars.length) {
+    const ch = chars[i];
+    const next = chars[i + 1];
+
+    if (quote) {
+      out[i] = ch;
+      if (ch === '\\') {
+        // preserve the escaped char verbatim
+        if (i + 1 < chars.length) out[i + 1] = chars[i + 1];
+        i += 2;
+        continue;
+      }
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+
+    // not in a string
+    if (ch === "'" || ch === '"' || ch === '`') {
+      quote = ch;
+      out[i] = ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      while (i < chars.length && chars[i] !== '\n') { out[i] = ' '; i += 1; }
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      while (i < chars.length && !(chars[i] === '*' && chars[i + 1] === '/')) {
+        out[i] = blank(chars[i]); i += 1;
+      }
+      // blank the closing */
+      if (i < chars.length) { out[i] = ' '; out[i + 1] = ' '; i += 2; }
+      continue;
+    }
+    out[i] = ch;
+    i += 1;
+  }
+  return out.join('');
 }
 
 export interface DriftResult {
