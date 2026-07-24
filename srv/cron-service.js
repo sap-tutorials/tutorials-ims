@@ -15,6 +15,7 @@ import {
   registerJobs,
   runJobByName,
 } from './jobs/scheduler.js';
+import { reconcileOrphanedRunningJobs } from './lib/pipeline-log-reconciler.js';
 
 const LOG = cds.log('cron-service');
 
@@ -40,6 +41,22 @@ export default class CronService extends cds.ApplicationService {
         .as(job.jobName);
     }
     LOG.info(`CronService wired ${_getJobRegistry().size} scheduled jobs via CAP scheduling API`);
+
+    // #1293: boot-time reconciler. A scheduled job that was executing when
+    // the srv process last died (deploy restart, crash, `cf stop`) leaves
+    // its PipelineLog row stuck at RUNNING — runWithLock's finally never
+    // ran. Distinct from the #1021 outbox wedge (that cleans
+    // cds.outbox.Messages; this cleans the PipelineLog health-tile row).
+    // Fail-open: never throws, so a DB hiccup here can't crash boot.
+    // Deferred to the next tick so it never blocks super.init() /
+    // schedule registration; a slow reconcile SELECT can't delay serving.
+    setImmediate(() => {
+      reconcileOrphanedRunningJobs()
+        .then(({ closed }) => {
+          if (closed > 0) LOG.info(`boot reconcile closed ${closed} orphaned RUNNING scheduled-job row(s) (#1293)`);
+        })
+        .catch(err => LOG.warn(`boot reconcile failed: ${err.message ?? err}`));
+    });
 
     await super.init();
   }

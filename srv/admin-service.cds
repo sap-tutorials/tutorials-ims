@@ -415,6 +415,18 @@ service AdminService {
       cleared   : Boolean;
       reason    : String;
     };
+
+    // #1293: close an orphaned PipelineLog row stuck at RUNNING for
+    // jobName (srv died mid-run before runWithLock's finally could flip
+    // it). Sibling to forceUnwedge, but a DIFFERENT table — this flips the
+    // PipelineLog health-tile row to FAILED, whereas forceUnwedge deletes
+    // the cds.outbox.Messages row. No age gate (operator-initiated).
+    // Emits SecurityEvent audit with outcome='force-closed'.
+    action forceClose(jobName: String) returns {
+      jobName   : String;
+      closed    : Integer;
+      reason    : String;
+    };
   };
 
   @odata.draft.enabled

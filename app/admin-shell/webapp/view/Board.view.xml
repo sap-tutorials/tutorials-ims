@@ -147,6 +147,15 @@
                           visible="{jobControls>wedged}"
                           busy="{jobControls>isUnwedging}" busyIndicatorDelay="0"
                           class="sapUiTinyMarginBegin" />
+                  <!-- #1293: Force-close — visible only when the job has been
+                       RUNNING past the 60-min reconcile floor (orphaned
+                       PipelineLog row from a process death). Flips the row to
+                       FAILED. Sibling to Force unwedge but a different table. -->
+                  <Button text="Force close" type="Reject" icon="sap-icon://sys-cancel"
+                          press=".onForceClose"
+                          visible="{jobControls>runningStale}"
+                          busy="{jobControls>isClosing}" busyIndicatorDelay="0"
+                          class="sapUiTinyMarginBegin" />
                 </HBox>
               </cells>
             </ColumnListItem>

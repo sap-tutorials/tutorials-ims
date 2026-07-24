@@ -40,6 +40,7 @@ import {
 } from './lib/alert-enums.js';
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
 import { deleteStuckOutboxRow, loadStuckOutboxTargets, isRowStale } from './lib/scheduler-wedge.js';
+import { forceCloseRunningPipelineLog } from './lib/pipeline-log-reconciler.js';
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
 import { validateTags, KNOWN_TAGS } from './lib/homepage/persona-tag-validator.js';
 import { VERB_DEFAULTS, SHELF_DEFAULTS } from './lib/homepage/verb-shelf-defaults.js';   // #1089
@@ -80,7 +81,7 @@ const MAX_JOB_NAME_LEN = 100;
  *
  * Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.8
  *
- * @param {{jobName: string, user?: string, outcome: 'started'|'success'|'error'|'unwedged', durationMs?: number, startedAt?: Date}} opts
+ * @param {{jobName: string, user?: string, outcome: 'started'|'success'|'error'|'unwedged'|'force-closed', durationMs?: number, startedAt?: Date}} opts
  * @returns {Promise<void>}
  */
 export async function emitJobAudit({ jobName, user, outcome, durationMs = null, startedAt = null }) {
@@ -2806,6 +2807,46 @@ export default class AdminService extends cds.ApplicationService {
         reason: cleared
           ? null
           : 'No stuck outbox row found (already clear, or CAP outbox not present)',
+      };
+    });
+
+    // #1293: forceClose — flip an orphaned PipelineLog row stuck at
+    // RUNNING for jobName to FAILED. Sibling to forceUnwedge, but a
+    // DIFFERENT table: forceUnwedge deletes the cds.outbox.Messages row;
+    // this closes the PipelineLog health-tile row that a process death
+    // (deploy/crash) left orphaned when runWithLock's finally never ran.
+    // No age gate — operator-initiated. Emits SecurityEvent audit BEFORE
+    // the close so an audit row always exists even if the close fails.
+    this.on('forceClose', 'JobControls', async (req) => {
+      const { jobName } = req.data;
+      if (typeof jobName !== 'string' || jobName.length === 0 || jobName.length > MAX_JOB_NAME_LEN) {
+        return req.reject(400, `Invalid jobName (must be non-empty string <=${MAX_JOB_NAME_LEN} chars)`);
+      }
+      const registry = _getJobRegistry();
+      if (!registry.has(jobName)) {
+        return req.reject(400, `Unknown jobName: ${jobName}`);
+      }
+      const user = req.user?.id ?? 'unknown';
+      const startedAt = new Date();
+
+      // TEST-INJECTION HOOK: globalThis.__TEST_emitJobAudit mirrors the
+      // forceUnwedge pattern for ESM-mock-free unit assertions.
+      const _emitAudit = globalThis.__TEST_emitJobAudit ?? emitJobAudit;
+      setImmediate(() => {
+        _emitAudit({ jobName, user, outcome: 'force-closed', startedAt })
+          .catch(err => LOG.warn(`forceClose audit failed: ${err.message}`));
+      });
+
+      // TEST-INJECTION HOOK: globalThis.__TEST_forceCloseRunningPipelineLog
+      // lets unit tests control the close result without real DB operations.
+      const _forceClose = globalThis.__TEST_forceCloseRunningPipelineLog ?? forceCloseRunningPipelineLog;
+      const { closed } = await _forceClose(jobName);
+      return {
+        jobName,
+        closed,
+        reason: closed > 0
+          ? null
+          : 'No orphaned RUNNING PipelineLog row found (already closed, or job not currently logged as running)',
       };
     });
     // Bound action on Tutorials. Resolves slug, audit-logs intent, dispatches
