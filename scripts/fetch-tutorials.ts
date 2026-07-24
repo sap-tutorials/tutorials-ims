@@ -1202,7 +1202,7 @@ async function main() {
   // ship an empty rail file from a deliberately-degraded build.
   if (missions.length > 0) {
     try {
-      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups, categories, tutorialMetas, featured)
+      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups, categories, tutorialMetas, featured, channel)
     } catch (err) {
       // Non-fatal — don't block the existing build pipeline on this.
       console.warn(`  [browse] writeBrowseData failed: ${err instanceof Error ? err.message : err}`)
@@ -1337,8 +1337,12 @@ async function main() {
 //  both contexts (verified by the card-template-parity test in Task 2.5).
 // ──────────────────────────────────────────────────────────────────────────
 
-const HUGO_DATA_DIR = join(__dirname, '..', 'hugo', 'data')
-const BROWSE_DATA_FILE = join(HUGO_DATA_DIR, 'browse.json')
+// Channel-aware browse.json target. Prod → hugo/data/browse.json (Hugo default
+// dataDir); QA → hugo/data-qa/browse.json (hugo.qa.toml sets dataDir="data-qa").
+export function browseDataFile(channel: Channel): string {
+  const dir = join(__dirname, '..', 'hugo', channel === 'qa' ? 'data-qa' : 'data')
+  return join(dir, 'browse.json')
+}
 
 export const FEATURED_MAX = 10
 const RECENT_MAX = 10
@@ -1456,12 +1460,13 @@ function browseMissionGroupCount(missionId: number, tuts: TutorialNavEntry[]): n
  * in sync with that computed — the card-template-parity test in Task 2.5
  * verifies byte-equivalence of the rendered output.
  */
-function buildAllCards(
+export function buildAllCards(
   tuts: TutorialNavEntry[],
   missions: Mission[],
   hierarchies: MissionHierarchy[],
   standaloneGroups: StandaloneGroup[],
   tutorialMetaMap: Map<string, CatalogTutorialMeta>,
+  hrefBase = '/tutorials',
 ): BrowseCardItem[] {
   if (!tuts.length) return []
 
@@ -1524,7 +1529,7 @@ function buildAllCards(
       primaryTag: mTuts[0].primaryTag,
       displayTags: allTags,
       displayTagSlugs: allTagSlugs,
-      href: mMeta ? `/tutorials/mission-${mMeta.slug}` : `/tutorials/${mTuts[0].slug}`,
+      href: mMeta ? `${hrefBase}/mission-${mMeta.slug}` : `${hrefBase}/${mTuts[0].slug}`,
       stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
       categorySlugs: mMeta?.categorySlugs ?? [],
     })
@@ -1546,7 +1551,7 @@ function buildAllCards(
       primaryTag: gTuts[0].primaryTag,
       displayTags: allTags,
       displayTagSlugs: allTagSlugs,
-      href: gMeta ? `/tutorials/group-${gMeta.slug}` : `/tutorials/${gTuts[0].slug}`,
+      href: gMeta ? `${hrefBase}/group-${gMeta.slug}` : `${hrefBase}/${gTuts[0].slug}`,
       stepCount: gTuts.reduce((sum, t) => sum + t.stepCount, 0),
       categorySlugs: gMeta?.categorySlugs ?? [],
     })
@@ -1565,9 +1570,7 @@ function buildAllCards(
       primaryTag: t.primaryTag,
       displayTags: t.displayTags,
       displayTagSlugs: t.displayTagSlugs,
-      href: `/tutorials/${t.slug}`,
-      stepCount: t.stepCount,
-      categorySlugs: tutorialMetaMap.get(t.slug)?.categorySlugs ?? [],
+      href: `${hrefBase}/${t.slug}`,
       isNew: browseIsWithinNewWindow(t.createdAt),
       createdAt: t.createdAt,
     })
@@ -1584,11 +1587,12 @@ function writeBrowseData(
   categories: CategoryMeta[],
   tutorialMetas: CatalogTutorialMeta[],
   catalogFeatured: BrowseFeaturedEntry[],
+  channel: Channel,
 ): void {
   const tutorialMetaMap = new Map<string, CatalogTutorialMeta>(
     tutorialMetas.map(m => [m.slug, m]),
   )
-  const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap)
+  const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap, channel === 'qa' ? '/tutorials-qa' : '/tutorials')
 
   // Featured: prefer admin-curated FeaturedTasks (top 10 missions ordered by
   // featuredOrder); fall back to the regex-sieved catalog-order picker
@@ -1611,9 +1615,10 @@ function writeBrowseData(
     buildAt: new Date().toISOString(),
   }
 
-  mkdirSync(HUGO_DATA_DIR, { recursive: true })
-  writeFileSync(BROWSE_DATA_FILE, JSON.stringify(data, null, 2), 'utf-8')
-  console.log(`  [browse] wrote ${all.length} cards (${featured.length} featured, ${recent.length} recent) → hugo/data/browse.json`)
+  const outFile = browseDataFile(channel)
+  mkdirSync(dirname(outFile), { recursive: true })
+  writeFileSync(outFile, JSON.stringify(data, null, 2), 'utf-8')
+  console.log(`  [browse] wrote ${all.length} cards (${featured.length} featured, ${recent.length} recent) → ${outFile}`)
 }
 
 // Only run main() when this file is executed directly (not when imported)

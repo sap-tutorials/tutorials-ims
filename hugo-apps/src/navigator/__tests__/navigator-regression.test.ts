@@ -205,6 +205,34 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// ─── QA channel data-* attr wiring ───────────────────────────────────────
+describe('navigator QA channel — data-* attribute wiring', () => {
+  it('fetches _nav.json from the QA nav base when data-nav-base is set', async () => {
+    const el = document.createElement('div')
+    el.id = 'tutorial-navigator'
+    el.dataset.searchBase = '/qa-search'
+    el.dataset.navBase = '/tutorials-qa'
+    el.dataset.hrefBase = '/tutorials-qa'
+    document.body.appendChild(el)
+
+    const fetched: string[] = []
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      fetched.push(url)
+      return Promise.resolve({ ok: true, json: async () => ({ tutorials: [] }) })
+    }))
+
+    const wrapper = mount(TutorialNavigator, { attachTo: el })
+    activeWrappers.push(wrapper)
+    await flushPromises()
+    await nextTick()
+
+    document.body.removeChild(el)
+
+    expect(fetched.some(u => u.startsWith('/tutorials-qa/_nav.json'))).toBe(true)
+    expect(fetched.some(u => u === '/tutorials/_nav.json')).toBe(false)
+  })
+})
+
 // ─── The ten regression cases ────────────────────────────────────────────
 describe('navigator regression — filter combinations', () => {
   it('no filters → all N cards', async () => {
@@ -444,5 +472,87 @@ describe('navigator regression — filter combinations', () => {
     await nextTick()
 
     expect(renderedTitles(wrapper)).toEqual(baseline)
+  })
+})
+
+// ─── allCards hrefBase threading ─────────────────────────────────────────────
+// Asserts that the allCards computed in TutorialNavigator.vue threads `hrefBase`
+// (read from `data-href-base` on the mount element) into every grid card href.
+//
+// Implementation note: `hrefBase` is a module-level `const` evaluated once at
+// import time via `document.getElementById('tutorial-navigator')`. This file
+// shares one module instance across all tests, so `hrefBase` is fixed at the
+// value it had when this file was first loaded (no #tutorial-navigator el in
+// the DOM → '/tutorials').
+//
+// To test the QA ('/tutorials-qa') path we cannot re-evaluate the module
+// const, so we assert directly on `wrapper.vm.$.setupState.allCards` — the
+// computed output array that allCards returns. We populate `tutorials`,
+// `missionsMeta`, and `groupsMeta` via `setupState` (Vue's internal
+// proxy for <script setup> refs) so the computed runs the live branch rather
+// than the SSR-preseed fallback.
+//
+// This is the same pattern as accessing `displayedItems` in the composable
+// tests — no DOM rendering required.
+describe('navigator grid card hrefs — hrefBase threading', () => {
+  // Matches fixture missionId/groupId values so allCards resolves mission/group
+  // slugs and emits /mission-<slug> / /group-<slug> hrefs (not fallback /tutorials/<tut-slug>).
+  const injectMissions = [
+    { id: 1, slug: 'cap-quickstart',      title: 'CAP Quickstart'      },
+    { id: 2, slug: 'build-apps-hands-on', title: 'Build Apps Hands-on' },
+  ]
+  const injectGroups = [
+    { id: 1, slug: 'cap-setup',          title: 'CAP Setup',          missionId: 1          },
+    { id: 2, slug: 'build-apps-mobile',  title: 'Build Apps Mobile',  missionId: 2          },
+    { id: 3, slug: 'ai-foundations',     title: 'AI Foundations',     missionId: undefined   },
+  ]
+
+  // Mount the navigator, inject tutorial/mission/group refs so allCards
+  // runs the live computed (not SSR preseed), and return the setupState proxy.
+  async function mountAndInject(): Promise<{ ss: any; wrapper: VueWrapper }> {
+    const wrapper = mount(TutorialNavigator)
+    activeWrappers.push(wrapper)
+    await flushPromises()
+    await nextTick()
+
+    const ss = (wrapper.vm as any).$.setupState
+    ss.tutorials    = sample
+    ss.missionsMeta = injectMissions
+    ss.groupsMeta   = injectGroups
+    await nextTick()
+    return { ss, wrapper }
+  }
+
+  it('default (no data-href-base) — tutorial cards href under /tutorials/', async () => {
+    const { ss } = await mountAndInject()
+    const cards: Array<{ type: string; href: string }> = ss.allCards ?? []
+    expect(cards.length).toBeGreaterThan(0)
+
+    const tutCards = cards.filter(c => c.type === 'tutorial')
+    expect(tutCards.length).toBeGreaterThan(0)
+    for (const c of tutCards) {
+      expect(c.href).toMatch(/^\/tutorials\//)
+      expect(c.href).not.toMatch(/^\/tutorials-qa\//)
+    }
+  })
+
+  it('default (no data-href-base) — mission cards href under /tutorials/mission-', async () => {
+    const { ss } = await mountAndInject()
+    const cards: Array<{ type: string; href: string }> = ss.allCards ?? []
+    const mCards = cards.filter(c => c.type === 'mission')
+    expect(mCards.length).toBeGreaterThan(0)
+    for (const c of mCards) {
+      expect(c.href).toMatch(/^\/tutorials\/mission-/)
+    }
+  })
+
+  it('default (no data-href-base) — group cards href under /tutorials/group-', async () => {
+    const { ss } = await mountAndInject()
+    const cards: Array<{ type: string; href: string }> = ss.allCards ?? []
+    const gCards = cards.filter(c => c.type === 'group')
+    expect(gCards.length).toBeGreaterThan(0)
+    for (const c of gCards) {
+      expect(c.href).toMatch(/^\/tutorials\/group-/)
+    }
   })
 })

@@ -75,3 +75,20 @@ describe('approuter /graph/* routes', () => {
     expect(re.test('/graph/PublishedConcepts?%24search=abap&%24top=6')).toBe(true);
   });
 })
+
+describe('approuter /tutorials-qa/* routes', () => {
+  it('serves the QA index root before the QA catch-all', () => {
+    const routes = xsApp.routes
+    const rootIdx = routes.findIndex(r => r.source === '^/tutorials-qa/?$')
+    const catchAllIdx = routes.findIndex(r => r.source === '^/tutorials-qa/(.*)$')
+    expect(rootIdx).toBeGreaterThanOrEqual(0)
+    expect(catchAllIdx).toBeGreaterThanOrEqual(0)
+    expect(rootIdx).toBeLessThan(catchAllIdx)
+
+    const root = routes[rootIdx]
+    expect(root.localDir).toBe('static')
+    expect(root.target).toBe('/qa/index.html')
+    expect(root.authenticationType).toBe('xsuaa')
+    expect(root.scope).toBe('$XSAPPNAME.Tutorial.Author')
+  })
+})

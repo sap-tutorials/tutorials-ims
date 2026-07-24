@@ -192,3 +192,29 @@ describe('postFilterNoLicense', () => {
     expect(postFilterNoLicense([free], true)).toEqual([free])
   })
 })
+
+describe('endpoint base injection', () => {
+  const sampleItem = {
+    ID: 't1', title: 'CAP Basics', description: 'd',
+    taskType: 'TUTORIAL', slug: 'cap-basics',
+    primaryTag: 'cap', experienceTag: 'beginner', averageTimeToComplete: 10,
+  } as SearchableItem
+
+  it('buildFacetsUrl defaults to the prod /search base (byte-identical)', () => {
+    const url = buildFacetsUrl('abap', [], [])
+    expect(url.startsWith('/search/getFacets(')).toBe(true)
+  })
+
+  it('buildFacetsUrl honors a custom searchBase', () => {
+    const url = buildFacetsUrl('abap', [], [], '/qa-search')
+    expect(url.startsWith('/qa-search/getFacets(')).toBe(true)
+  })
+
+  it('mapToCardItem defaults to the prod /tutorials href', () => {
+    expect(mapToCardItem(sampleItem).href).toBe('/tutorials/cap-basics')
+  })
+
+  it('mapToCardItem honors a custom hrefBase', () => {
+    expect(mapToCardItem(sampleItem, undefined, '/tutorials-qa').href).toBe('/tutorials-qa/cap-basics')
+  })
+})

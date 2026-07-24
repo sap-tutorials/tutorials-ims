@@ -15,6 +15,13 @@ import MissionCard from '@shared/cards/MissionCard.vue'
 import GroupCard from '@shared/cards/GroupCard.vue'
 import TutorialCard from '@shared/cards/TutorialCard.vue'
 
+// QA channel repoints these via data-* on the #tutorial-navigator mount.
+// Defaults reproduce prod behavior exactly (see spec: prod byte-identical invariant).
+const navEl = typeof document !== 'undefined' ? document.getElementById('tutorial-navigator') : null
+const searchBase = navEl?.dataset.searchBase || '/search'
+const navBase = navEl?.dataset.navBase || '/tutorials'
+const hrefBase = navEl?.dataset.hrefBase || '/tutorials'
+
 // `/`-specific data shapes — fetched in onMounted below.
 const tutorials = ref<TutorialEntry[]>([])
 const missionsMeta = ref<MissionRef[]>([])
@@ -125,7 +132,7 @@ const allCards = computed<CardItem[]>(() => {
       primaryTag: mTuts[0].primaryTag,
       displayTags: allTags,
       displayTagSlugs: allTagSlugs,
-      href: mMeta ? `/tutorials/mission-${mMeta.slug}` : `/tutorials/${mTuts[0].slug}`,
+      href: mMeta ? `${hrefBase}/mission-${mMeta.slug}` : `${hrefBase}/${mTuts[0].slug}`,
       stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
     })
   }
@@ -145,7 +152,7 @@ const allCards = computed<CardItem[]>(() => {
       primaryTag: gTuts[0].primaryTag,
       displayTags: allTags,
       displayTagSlugs: allTagSlugs,
-      href: gMeta ? `/tutorials/group-${gMeta.slug}` : `/tutorials/${gTuts[0].slug}`,
+      href: gMeta ? `${hrefBase}/group-${gMeta.slug}` : `${hrefBase}/${gTuts[0].slug}`,
       stepCount: gTuts.reduce((sum, t) => sum + t.stepCount, 0),
     })
   }
@@ -162,7 +169,7 @@ const allCards = computed<CardItem[]>(() => {
       primaryTag: t.primaryTag,
       displayTags: t.displayTags,
       displayTagSlugs: t.displayTagSlugs,
-      href: `/tutorials/${t.slug}`,
+      href: `${hrefBase}/${t.slug}`,
       stepCount: t.stepCount,
       isNew: isWithinNewWindow(t.createdAt),
     })
@@ -186,6 +193,9 @@ const {
   allCards,
   tutorials,
   enableSort: true,
+  searchBase,
+  hrefBase,
+  navBase,
 })
 
 // Sort UI (#199): reuse /browse/'s ?sort= URL contract via browseUrl.ts —
@@ -232,7 +242,7 @@ function handleJouleClick() {
 
 onMounted(async () => {
   const [navRes, catalogRes, progRes] = await Promise.all([
-    fetch('/tutorials/_nav.json'),
+    fetch(`${navBase}/_nav.json`),
     fetch('/build/navigator'),
     fetch('/build/my-progress', { credentials: 'include' }).catch(() => null),
   ])
