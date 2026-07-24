@@ -6,7 +6,7 @@ import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
-import { resolveDbUser, resolveUserSapId } from './lib/resolve-db-user.js';
+import { resolveDbUser, resolveUserSapId, backfillUserProfile } from './lib/resolve-db-user.js';
 import { AUTHOR_EXPOSED_ENTITIES } from './lib/author-exposed-entities.js'; // #1089
 
 const OS_VALUES = ['Windows', 'macOS', 'Linux', 'BAS'];
@@ -131,6 +131,15 @@ export default cds.service.impl(async function () {
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }
+    // #339 followup — Sage path self-heal. backfillUserProfile only ran on
+    // the browser's GET /auth/user, so Sage-authenticated callers (who never
+    // hit that endpoint) left Users.firstName/lastName/email blank forever —
+    // which zeroed MyOwnedTutorials' priority-3 (ownerEmail) and priority-4
+    // (owner = firstName ‖ ' ' ‖ lastName) joins. Await it here so the freshly
+    // written name is visible to THIS request's view query, not just the next.
+    // Idempotent (fills blanks only); safe to await on every read.
+    await backfillUserProfile(req.user).catch((err) =>
+      cds.log('author-service').warn('[backfill-user-profile]', err.message));
     req.query.where({ userId: dbUser.uuid });
   });
 
@@ -149,6 +158,8 @@ export default cds.service.impl(async function () {
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }
+    await backfillUserProfile(req.user).catch((err) =>
+      cds.log('author-service').warn('[backfill-user-profile]', err.message));
     req.query.where({ userId: dbUser.uuid });
   });
 
@@ -169,6 +180,8 @@ export default cds.service.impl(async function () {
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }
+    await backfillUserProfile(req.user).catch((err) =>
+      cds.log('author-service').warn('[backfill-user-profile]', err.message));
     req.query.where({ userId: dbUser.uuid });
   });
 
