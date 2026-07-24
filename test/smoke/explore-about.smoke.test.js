@@ -17,6 +17,8 @@ describe('smoke: /explore/about/', () => {
     const res = await fetch(`${BASE_URL}/explore/about/`);
     const html = await res.text();
     expect(html).toContain('The SAP Developer Knowledge Graph');
-    expect(html).toContain('id="kg-stats-counter"');
+    // Hugo's production minifier strips quotes from safe attribute values,
+    // so the counter mount ships as id=kg-stats-counter (unquoted).
+    expect(html).toMatch(/id=["']?kg-stats-counter["']?/);
   });
 });

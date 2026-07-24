@@ -31,7 +31,10 @@ describe('Public endpoints', () => {
 
     const body = await res.json();
     expect(body.authenticated).toBe(false);
-    expect(body.tutorials).toEqual({ completedSlugs: [], inProgress: [] });
+    // Anonymous progress payload: tutorials carries completedSlugs/inProgress
+    // (plus lastCompletedSlug), and mission/group slug lists are empty.
+    expect(body.tutorials.completedSlugs).toEqual([]);
+    expect(body.tutorials.inProgress).toEqual([]);
     expect(body.missionSlugs).toEqual([]);
     expect(body.groupSlugs).toEqual([]);
   });
