@@ -40,11 +40,20 @@ describe('SearchService (HANA hybrid)', () => {
     expect(result.totalCount).toBeGreaterThan(0);
   });
 
-  it('GROUP results always have null slug', async () => {
+  it('GROUP results carry a routable slug (#1305)', async () => {
+    // Regression: the view previously selected `null as slug` for the GROUP
+    // branch, so group search results had href='' and clicking a group card
+    // reloaded the current search. Groups have a real slug (db/schema.cds) and
+    // resolve at /tutorials/group-<slug> (srv/lib/catalog-data.js), so the
+    // view must expose it.
     const { SearchableItems } = cds.entities('com.sap.developers.ims');
     const groups = await SELECT.from(SearchableItems).where({ taskType: 'GROUP' }).limit(10);
-    for (const g of groups) {
-      expect(g.slug).toBeNull();
+    // Some empty environments may lack published groups — only assert when present.
+    if (groups.length) {
+      for (const g of groups) {
+        expect(g.slug).toBeTruthy();
+        expect(typeof g.slug).toBe('string');
+      }
     }
   });
 
