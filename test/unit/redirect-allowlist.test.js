@@ -31,6 +31,13 @@ describe('isAllowedTarget — allowlisted external hosts', () => {
     expect(isAllowedTarget('javascript:alert(1)')).toBe(false);
     expect(isAllowedTarget('data:text/html,x')).toBe(false);
   });
+  it('rejects userinfo smuggling and host injection attempts', () => {
+    expect(isAllowedTarget('https://community.sap.com@evil.com/x')).toBe(false);
+    expect(isAllowedTarget('https://community.sap.com.evil.com/x')).toBe(false);
+  });
+  it('rejects mailto and other non-http(s) schemes', () => {
+    expect(isAllowedTarget('mailto:evil@attacker.example')).toBe(false);
+  });
   it('exposes the exact five allowlisted hosts', () => {
     expect([...ALLOWED_HOSTS].sort()).toEqual([
       'community.sap.com', 'help.sap.com', 'opensource.sap.com',
