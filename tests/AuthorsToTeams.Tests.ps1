@@ -1,5 +1,6 @@
 BeforeAll {
     Import-Module "$PSScriptRoot/../scripts/AuthorsToTeams.psm1" -Force
+    Import-Module Microsoft.Graph.Teams -ErrorAction SilentlyContinue
     $script:fixture = Get-Content "$PSScriptRoot/fixtures/role-collection.json" -Raw
 }
 
@@ -19,5 +20,26 @@ Describe 'Split-MembersByTenant' {
         $r = Split-MembersByTenant -Emails @('alice@contoso.com','carol@partner.io') -TenantDomain 'contoso.com'
         $r.Internal | Should -Be @('alice@contoso.com')
         $r.External | Should -Be @('carol@partner.io')
+    }
+}
+
+Describe 'Add-MembersToChannel' {
+    It 'adds new members and classifies existing/failed' {
+        Mock -ModuleName AuthorsToTeams New-MgTeamChannelMember {
+            param($TeamId, $ChannelId, $BodyParameter)
+            $bind = $BodyParameter['user@odata.bind']
+            if ($bind -match 'bob') { throw 'One or more added object references already exist for the following modified properties: members.' }
+            if ($bind -match 'carol') { throw 'Request_ResourceNotFound: user not found' }
+        }
+        $r = Add-MembersToChannel -Emails @('alice@contoso.com','bob@contoso.com','carol@contoso.com') -TeamId 't' -ChannelId 'c'
+        $r.Added         | Should -Be @('alice@contoso.com')
+        $r.AlreadyMember | Should -Be @('bob@contoso.com')
+        $r.Failed        | Should -Be @('carol@contoso.com')
+    }
+    It 'makes no calls under WhatIf' {
+        Mock -ModuleName AuthorsToTeams New-MgTeamChannelMember { throw 'should not be called' }
+        $r = Add-MembersToChannel -Emails @('alice@contoso.com') -TeamId 't' -ChannelId 'c' -WhatIf
+        $r.Added | Should -Be @('alice@contoso.com')
+        Should -Invoke -ModuleName AuthorsToTeams New-MgTeamChannelMember -Times 0
     }
 }

@@ -1,3 +1,6 @@
+# Import Microsoft.Graph.Teams so mock target can resolve
+Import-Module Microsoft.Graph.Teams -ErrorAction SilentlyContinue
+
 function ConvertFrom-RoleCollectionJson {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Json)
@@ -29,5 +32,33 @@ function Split-MembersByTenant {
     [pscustomobject]@{ Internal = [string[]]$internal; External = [string[]]$external }
 }
 
-Export-ModuleMember -Function ConvertFrom-RoleCollectionJson, Split-MembersByTenant
+function Add-MembersToChannel {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)][string[]]$Emails,
+        [Parameter(Mandatory)][string]$TeamId,
+        [Parameter(Mandatory)][string]$ChannelId
+    )
+    $added = @(); $already = @(); $failed = @()
+    foreach ($e in $Emails) {
+        if (-not $PSCmdlet.ShouldProcess($e, "Add to channel $ChannelId")) {
+            $added += $e   # WhatIf: planned add
+            continue
+        }
+        $body = @{
+            '@odata.type'      = '#microsoft.graph.aadUserConversationMember'
+            'roles'            = @()
+            'user@odata.bind'  = "https://graph.microsoft.com/v1.0/users('$e')"
+        }
+        try {
+            New-MgTeamChannelMember -TeamId $TeamId -ChannelId $ChannelId -BodyParameter $body -ErrorAction Stop | Out-Null
+            $added += $e
+        } catch {
+            if ($_.Exception.Message -match 'already exist|conflict|duplicate') { $already += $e }
+            else { $failed += $e; Write-Warning "Failed to add ${e}: $($_.Exception.Message)" }
+        }
+    }
+    [pscustomobject]@{ Added=[string[]]$added; AlreadyMember=[string[]]$already; Failed=[string[]]$failed }
+}
 
+Export-ModuleMember -Function ConvertFrom-RoleCollectionJson, Split-MembersByTenant, Add-MembersToChannel
