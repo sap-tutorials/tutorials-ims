@@ -34,7 +34,12 @@ describe.skipIf(!SRV)('Homepage API smoke', () => {
   ])('GET %s returns %s', async (path, kind) => {
     const res = await fetch(SRV + path);
     expect(res.ok).toBe(true);
-    const data = await res.json();
+    const body = await res.json();
+    // HomepageService functions return OData collections wrapped in an
+    // envelope: { "@odata.context": ..., "value": [...] }. Unwrap `value`
+    // before the shape check. (A bare array/object is still tolerated for
+    // any endpoint that returns raw JSON.)
+    const data = body && typeof body === 'object' && 'value' in body ? body.value : body;
     if (kind === 'array') expect(Array.isArray(data)).toBe(true);
     else expect(typeof data).toBe('object');
   });

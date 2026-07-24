@@ -75,14 +75,16 @@ describe.skipIf(!SRV_URL || SRV_URL.startsWith('http://localhost'))(
         expect(res.status).toBe(400);
       });
 
-      it('POST /feedback/submit with empty body → 400 or 422', async () => {
+      it('POST /feedback/submit with empty body → 400/422 (or 503 when salt secret unset)', async () => {
         const res = await fetchWithRetry(`${SRV_URL}/feedback/submit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: '{}',
         });
         // Rate-limiter may 429 or handler may 400/422 for missing fields.
-        expect([400, 422, 429]).toContain(res.status);
+        // When SUBMISSION_SALT_SECRET is unset on the env, the handler
+        // short-circuits with a by-design 503 before validation (srv/server.js).
+        expect([400, 422, 429, 503]).toContain(res.status);
       });
 
       it('POST /api/ui-event with 5MB payload rejected (413) or accepted (2xx) but bounded', async () => {

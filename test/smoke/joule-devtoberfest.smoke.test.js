@@ -15,8 +15,11 @@ describe('Joule on Devtoberfest — smoke', () => {
     const res = await fetchWithRetry(`${BASE_URL}/devtoberfest/`);
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain('id="joule-trigger"');
-    expect(body).toMatch(/data-page-kind="devtoberfest"/);
+    // Hugo's production minifier strips quotes from safe attribute values,
+    // so the shellbar Joule trigger ships as id=joule-trigger and the page
+    // kind marker as data-page-kind=devtoberfest (both unquoted).
+    expect(body).toMatch(/id=["']?joule-trigger["']?/);
+    expect(body).toMatch(/data-page-kind=["']?devtoberfest["']?/);
   });
 
   it('POST /chat/stream rejects anonymous with 401 (existing rule, on devtoberfest pageContext)', async () => {

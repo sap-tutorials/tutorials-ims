@@ -13,7 +13,15 @@ describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
 
     it('sets X-Frame-Options SAMEORIGIN', async () => {
       const res = await fetchWithRetry(`${BASE_URL}/`);
-      expect(res.headers.get('x-frame-options')).toBe('SAMEORIGIN');
+      // The approuter injects its own SAMEORIGIN default AND the xs-app.json
+      // custom header, so the deployed value can arrive as "SAMEORIGIN,
+      // SAMEORIGIN". Every token must be SAMEORIGIN — no weaker value slips in.
+      // (The duplication itself is benign but worth de-duping in xs-app.json;
+      // tracked as a follow-up in issue #1258.)
+      const xfo = res.headers.get('x-frame-options') || '';
+      const tokens = xfo.split(',').map((t) => t.trim()).filter(Boolean);
+      expect(tokens.length).toBeGreaterThan(0);
+      for (const t of tokens) expect(t).toBe('SAMEORIGIN');
     });
 
     it('sets X-Content-Type-Options nosniff', async () => {
@@ -58,7 +66,11 @@ describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
         return;
       }
       expect(html).toMatch(/consent\.trustarc\.com\/notice\?domain=sapshared\.com/);
-      expect(html).toContain('id="teconsent"');
+      // The visible #teconsent div is injected client-side by TrustArc's
+      // notice.js at runtime, so it is NOT in the server HTML. The server-side
+      // marker is the notice URL's c=teconsent config param, which names the
+      // consent placeholder TrustArc hydrates into.
+      expect(html).toMatch(/[?&]c=teconsent\b/);
     });
   },
 );
