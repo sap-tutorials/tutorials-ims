@@ -14,4 +14,20 @@ function ConvertFrom-RoleCollectionJson {
     return [string[]]@($emails | Where-Object { $_ } | Select-Object -Unique)
 }
 
-Export-ModuleMember -Function ConvertFrom-RoleCollectionJson
+function Split-MembersByTenant {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string[]]$Emails,
+        [Parameter(Mandatory)][string]$TenantDomain
+    )
+    $dom = $TenantDomain.Trim().ToLowerInvariant()
+    $internal = @(); $external = @()
+    foreach ($e in $Emails) {
+        $suffix = ($e -split '@')[-1].ToLowerInvariant()
+        if ($suffix -eq $dom) { $internal += $e } else { $external += $e }
+    }
+    [pscustomobject]@{ Internal = [string[]]$internal; External = [string[]]$external }
+}
+
+Export-ModuleMember -Function ConvertFrom-RoleCollectionJson, Split-MembersByTenant
+
