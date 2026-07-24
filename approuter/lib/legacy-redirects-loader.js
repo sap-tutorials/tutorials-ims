@@ -61,8 +61,14 @@ async function refresh(srvUrl, logger = console) {
       signal: AbortSignal.timeout(TIMEOUT_MS)
     })
     if (!res.ok) throw new Error(`status ${res.status}`)
-    const rows = await res.json()
-    if (!Array.isArray(rows)) throw new Error('not an array')
+    const body = await res.json()
+    // The srv endpoint is an OData v4 action, so it returns the rows wrapped in
+    // an envelope: { "@odata.context": "...", "value": [ ...rows ] }. Older/local
+    // shapes may return a bare array. Accept both. (Before this, the bare-array
+    // check rejected the OData envelope and silently fell back to BOOTSTRAP_MAP —
+    // so only the 3 bootstrap redirects worked and every seeded row 404'd. #1311.)
+    const rows = Array.isArray(body) ? body : body?.value
+    if (!Array.isArray(rows)) throw new Error('not an array (nor an OData {value:[]} envelope)')
     _index = buildIndex(rows.map(r => ({ ...r, isActive: true })))
     logger.log?.(`[redirects-loader] refreshed ${rows.length} entries`)
   } catch (err) {
