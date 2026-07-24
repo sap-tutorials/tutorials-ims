@@ -114,7 +114,7 @@ view SearchableItems as
   } where (m.status is null or m.status = 'ACTIVE') and m.published = true
   UNION ALL
   SELECT from ims.Groups as g {
-    g.ID, g.legacyId, g.title, g.description, null as slug : String(255),
+    g.ID, g.legacyId, g.title, g.description, g.slug,
     g.primaryTag, g.experienceTag, g.averageTimeToComplete, g.status,
     g.createdAt,
     'GROUP' as taskType : String(20),

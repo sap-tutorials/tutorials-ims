@@ -218,3 +218,50 @@ describe('endpoint base injection', () => {
     expect(mapToCardItem(sampleItem, undefined, '/tutorials-qa').href).toBe('/tutorials-qa/cap-basics')
   })
 })
+
+// #1305: In search mode, GROUP and MISSION cards must route to the catalog
+// pages at /tutorials/group-<slug> and /tutorials/mission-<slug> — the same
+// URL shape the client-side allCards path emits (TutorialNavigator.vue). The
+// pre-fix mapToCardItem built a bare /tutorials/<slug> (no type prefix) and,
+// worse, groups arrived with slug=null (the SearchableItems view nulled it),
+// producing href='' → clicking a group card reloaded the current search URL.
+describe('mapToCardItem — catalog type prefixes (#1305)', () => {
+  const groupItem = {
+    ID: 'g1', title: 'CAP Application in SAP BTP, Kyma Runtime', description: 'd',
+    taskType: 'GROUP', slug: 'cap-kyma-runtime',
+    primaryTag: 'cap', experienceTag: 'beginner', averageTimeToComplete: 90,
+  } as SearchableItem
+
+  const missionItem = {
+    ID: 'm1', title: 'Build with CAP', description: 'd',
+    taskType: 'MISSION', slug: 'build-with-cap',
+    primaryTag: 'cap', experienceTag: 'intermediate', averageTimeToComplete: 240,
+  } as SearchableItem
+
+  const tutorialItem = {
+    ID: 't1', title: 'CAP Basics', description: 'd',
+    taskType: 'TUTORIAL', slug: 'cap-basics',
+    primaryTag: 'cap', experienceTag: 'beginner', averageTimeToComplete: 10,
+  } as SearchableItem
+
+  it('group cards route to /tutorials/group-<slug>', () => {
+    expect(mapToCardItem(groupItem).href).toBe('/tutorials/group-cap-kyma-runtime')
+  })
+
+  it('mission cards route to /tutorials/mission-<slug>', () => {
+    expect(mapToCardItem(missionItem).href).toBe('/tutorials/mission-build-with-cap')
+  })
+
+  it('tutorial cards keep the bare /tutorials/<slug> shape', () => {
+    expect(mapToCardItem(tutorialItem).href).toBe('/tutorials/cap-basics')
+  })
+
+  it('group prefix honors a custom hrefBase', () => {
+    expect(mapToCardItem(groupItem, undefined, '/tutorials-qa').href)
+      .toBe('/tutorials-qa/group-cap-kyma-runtime')
+  })
+
+  it('never emits an empty href for a group with a slug', () => {
+    expect(mapToCardItem(groupItem).href).not.toBe('')
+  })
+})

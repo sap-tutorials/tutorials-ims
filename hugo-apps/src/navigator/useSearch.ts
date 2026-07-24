@@ -17,8 +17,16 @@ interface UseSearchOptions {
 
 export function mapToCardItem(item: SearchableItem, tutorialsBySlug?: Map<string, TutorialEntry>, hrefBase = '/tutorials'): CardItem {
   const enriched = item.slug && tutorialsBySlug ? tutorialsBySlug.get(item.slug) : undefined
+  const type = item.taskType.toLowerCase() as 'mission' | 'group' | 'tutorial'
+  // #1305: catalog pages for missions/groups are served at
+  // /tutorials/mission-<slug> and /tutorials/group-<slug> (see
+  // srv/lib/content-store.js + catalog-data.js). Match the client allCards
+  // path (TutorialNavigator.vue) which prefixes the slug by type. Tutorials
+  // keep the bare /tutorials/<slug> shape. A missing slug yields '' (as
+  // before) rather than a dangling prefix.
+  const prefix = type === 'mission' ? 'mission-' : type === 'group' ? 'group-' : ''
   return {
-    type: item.taskType.toLowerCase() as 'mission' | 'group' | 'tutorial',
+    type,
     id: item.ID,
     title: item.title,
     description: item.description ?? '',
@@ -32,7 +40,7 @@ export function mapToCardItem(item: SearchableItem, tutorialsBySlug?: Map<string
     displayTagSlugs: enriched?.displayTagSlugs?.length
       ? enriched.displayTagSlugs
       : ([item.primaryTag].filter(Boolean) as string[]),
-    href: item.slug ? `${hrefBase}/${item.slug}` : '',
+    href: item.slug ? `${hrefBase}/${prefix}${item.slug}` : '',
     stepCount: 0,
   }
 }
