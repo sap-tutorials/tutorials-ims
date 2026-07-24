@@ -780,3 +780,84 @@ describe('AuthorService — soft-deleted tutorials do not surface (#862 followup
     expect(rows.map((r) => r.slug)).not.toContain('tut-inactive');
   });
 });
+
+// #339 followup — Sage path self-heal. backfillUserProfile previously ran
+// ONLY on the browser's GET /auth/user, so Sage-authenticated callers (who
+// call /author/* directly, never /auth/user) left Users.firstName/lastName/
+// email NULL forever. That zeroed MyOwnedTutorials' priority-4 join
+// (TutorialMeta.owner = firstName ‖ ' ' ‖ lastName). These tests pin the fix:
+// the before('READ') hook now awaits backfillUserProfile from JWT claims so
+// the freshly-written name is visible to the SAME request's view query.
+describe('AuthorService before-READ backfills Users profile from JWT (Sage path)', () => {
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    const { Tutorials, TutorialMeta, Users } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialMeta);
+    await DELETE.from(Tutorials);
+    await DELETE.from(Users);
+
+    // Riley-shaped: migrated row keyed by sapId, blank name/email (nobody has
+    // backfilled it). uuid = sapId so resolveDbUser navigates id → sapId → row.
+    await INSERT.into(Users).entries([
+      { ID: 'u-R', uuid: 'uuid-R', sapId: 'uuid-R', email: null, firstName: null, lastName: null },
+    ]);
+    // Tutorial whose ONLY ownership signal is the free-text owner display name
+    // (priority 4). ownerEmail NULL — mirrors Riley's tutorial 15733.
+    await INSERT.into(Tutorials).entries([
+      { ID: 't-R', slug: 'tut-riley', title: 'Rileys Tutorial', status: 'ACTIVE' },
+    ]);
+    await INSERT.into(TutorialMeta).entries([
+      { ID: 'm-R', tutorial_ID: 't-R', owner: 'Riley Rainey', ownerEmail: null },
+    ]);
+  });
+
+  const rileyUser = {
+    id: 'uuid-R',
+    roles: { 'Tutorial.Author': true },
+    attr: { given_name: 'Riley', family_name: 'Rainey', email: 'riley.rainey@sap.com' },
+  };
+
+  it('backfills firstName/lastName/email onto the blank Users row', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    // Precondition: row starts blank.
+    const { Users } = cds.entities('com.sap.developers.ims');
+    const before = await SELECT.one.from(Users).where({ ID: 'u-R' }).columns('firstName', 'email');
+    expect(before.firstName).toBeFalsy();
+
+    await srv.tx({ user: rileyUser }, (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials)));
+
+    const after = await SELECT.one.from(Users).where({ ID: 'u-R' }).columns('firstName', 'lastName', 'email');
+    expect(after.firstName).toBe('Riley');
+    expect(after.lastName).toBe('Rainey');
+    expect(after.email).toBe('riley.rainey@sap.com');
+  });
+
+  it('MyOwnedTutorials returns the priority-4 row on the SAME request as the backfill', async () => {
+    const db = await cds.connect.to('db');
+    const { Users } = cds.entities('com.sap.developers.ims');
+    // Reset to blank to prove the same-request self-heal, not a leftover from
+    // the previous test.
+    await UPDATE(Users).where({ ID: 'u-R' }).set({ firstName: null, lastName: null, email: null });
+
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx({ user: rileyUser }, (tx) =>
+      tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+    );
+    expect(rows.map((r) => r.slug)).toContain('tut-riley');
+  });
+
+  it('is a no-op when the JWT carries no profile claims', async () => {
+    const db = await cds.connect.to('db');
+    const { Users } = cds.entities('com.sap.developers.ims');
+    await UPDATE(Users).where({ ID: 'u-R' }).set({ firstName: null, lastName: null, email: null });
+
+    const srv = await cds.connect.to('AuthorService');
+    await srv.tx(
+      { user: { id: 'uuid-R', roles: { 'Tutorial.Author': true } } }, // no attr
+      (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+    );
+    const after = await SELECT.one.from(Users).where({ ID: 'u-R' }).columns('firstName', 'email');
+    expect(after.firstName).toBeFalsy();
+    expect(after.email).toBeFalsy();
+  });
+});
