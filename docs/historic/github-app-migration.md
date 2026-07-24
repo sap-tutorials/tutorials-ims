@@ -1,6 +1,6 @@
 # Migrating `TUTORIALS_GITHUB_TOKEN` to a GitHub App
 
-**Status:** Active — runtime + CI code merged (#1154). Awaiting org-admin App registration to flip `USE_GITHUB_APP` on.
+**Status:** Live in DEV (#1154). `sap-tutorials-builder` App registered; `USE_GITHUB_APP=true` in DEV CI (repo variable) + runtime (`tutorials-srv` env). All three PATs (`TUTORIALS_GITHUB_TOKEN`, `GITHUB_DISPATCH_TOKEN`, `TUTORIALS_POC_DISPATCH_TOKEN`) are retained as intentional fail-open fallbacks — App-token mint failure degrades to PAT rather than breaking builds; they are not deleted. PROD activation follows the end-of-July cutover.
 **Driver:** SAP org PAT expiry policies are short, and PAT rotation is manual, error-prone, and tied to a single human account. A GitHub App resolves all three.
 
 > 👉 **For the org-admin and repo-maintainer setup steps**, see [`github-app-setup.md`](../developers/operations/github-app-setup.md). This doc covers the engineering rationale, current state, and migration design.
