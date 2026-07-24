@@ -19,6 +19,7 @@ describe('Static content', () => {
     const html = await res.text();
     // Whitespace-tolerant: survives any future JS minifier pass over inline <script>.
     expect(html).toMatch(/logo:\s*\{\s*role:\s*['"]link['"]/);
+    // Brand rename: header.html logo name is "SAP Developer Center — home".
     expect(html).toContain('SAP Developer Center — home');
   });
 

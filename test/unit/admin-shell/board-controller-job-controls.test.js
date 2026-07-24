@@ -31,6 +31,7 @@ let classifyJobStatus;
 let formatNextRun;
 let formatRelativeTime;
 let formatElapsedSince;
+let isRunningStale;
 
 beforeAll(() => {
   const src = readFileSync(HELPER_PATH, 'utf8');
@@ -60,6 +61,7 @@ beforeAll(() => {
   formatNextRun = captured.formatNextRun;
   formatRelativeTime = captured.formatRelativeTime;
   formatElapsedSince = captured.formatElapsedSince;
+  isRunningStale = captured.isRunningStale;
 });
 
 describe('joinJobsWithLastRuns', () => {
@@ -127,6 +129,58 @@ describe('joinJobsWithLastRuns', () => {
     expect(out[0].runningSince).toBeNull();
     expect(out[1].isRunning).toBe(true);
     expect(out[1].runningSince).toBe('2026-07-06T18:00:00Z');
+  });
+
+  // #1293: runningStale flag drives Force-close button visibility.
+  it('sets runningStale:true when a job has been RUNNING past the 60-min floor', () => {
+    const jobs = [{ jobName: 'fetch-learning-journeys', schedule: '13 3 * * 0' }];
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const runningNow = [{ jobName: 'fetch-learning-journeys', startedAt: twoHoursAgo }];
+    const out = joinJobsWithLastRuns(jobs, [], runningNow);
+    expect(out[0].isRunning).toBe(true);
+    expect(out[0].runningStale).toBe(true);
+  });
+
+  it('sets runningStale:false for a job RUNNING less than the floor', () => {
+    const jobs = [{ jobName: 'kg-communities', schedule: '57 3 * * *' }];
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const runningNow = [{ jobName: 'kg-communities', startedAt: fiveMinAgo }];
+    const out = joinJobsWithLastRuns(jobs, [], runningNow);
+    expect(out[0].isRunning).toBe(true);
+    expect(out[0].runningStale).toBe(false);
+  });
+
+  it('sets runningStale:false for a job that is not running', () => {
+    const jobs = [{ jobName: 'kg-pagerank', schedule: '53 3 * * *' }];
+    const out = joinJobsWithLastRuns(jobs, [], []);
+    expect(out[0].isRunning).toBe(false);
+    expect(out[0].runningStale).toBe(false);
+  });
+});
+
+// #1293: Force-close button visibility gate.
+describe('isRunningStale', () => {
+  const NOW = new Date('2026-07-06T20:00:00Z').getTime();
+
+  it('true when started more than 60 min ago', () => {
+    const started = new Date(NOW - 61 * 60 * 1000).toISOString();
+    expect(isRunningStale(started, NOW)).toBe(true);
+  });
+
+  it('true exactly at the 60-min floor', () => {
+    const started = new Date(NOW - 60 * 60 * 1000).toISOString();
+    expect(isRunningStale(started, NOW)).toBe(true);
+  });
+
+  it('false just under the floor', () => {
+    const started = new Date(NOW - 59 * 60 * 1000).toISOString();
+    expect(isRunningStale(started, NOW)).toBe(false);
+  });
+
+  it('false for null / empty / invalid', () => {
+    expect(isRunningStale(null, NOW)).toBe(false);
+    expect(isRunningStale('', NOW)).toBe(false);
+    expect(isRunningStale('not-a-date', NOW)).toBe(false);
   });
 });
 

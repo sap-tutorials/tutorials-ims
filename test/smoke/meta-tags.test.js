@@ -26,6 +26,8 @@ describe('Meta tags — homepage', () => {
   });
 
   it('has correct title (no duplication)', () => {
+    // Brand is "SAP Developer Center" (hugo.toml title/brand). head-meta.html
+    // emits the bare brand on the homepage (cond .IsHome $brand ...).
     expect(html).toMatch(/<title>SAP Developer Center<\/title>/);
   });
 
@@ -53,6 +55,8 @@ describe('Meta tags — tutorial page', () => {
   });
 
   it('has " | SAP Developer Center" suffix in title', () => {
+    // head-meta.html: content pages emit "<Title> | <brand>" where brand is
+    // "SAP Developer Center" (hugo.toml).
     expect(html).toMatch(/<title>[^<]+ \| SAP Developer Center<\/title>/);
   });
 

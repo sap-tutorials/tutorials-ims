@@ -36,14 +36,15 @@ describe.runIf(APPROUTER)('#1034 /homepage/news smoke', () => {
     for (const item of arr) {
       expect(item.title).toBeTruthy();
       expect(item.link).toBeTruthy();
-      // Public shape must carry these four fields. The legacy RSS pass-through
-      // path (newsRelevanceEnabled=false) also emits benign feed metadata
-      // (author/guid/language/categories); the relevance-enabled path trims to
-      // exactly these four. Require the public fields; forbid internal ones below.
-      for (const key of ['description', 'link', 'publishedAt', 'title']) {
-        expect(item).toHaveProperty(key);
+      // Public RSS shape carries syndication metadata (title/link/publishedAt/
+      // description plus optional author/language/guid/categories). We assert
+      // the required public fields are present rather than an exact key set,
+      // so the suite tolerates the RSS feed growing new public fields.
+      for (const required of ['title', 'link', 'publishedAt', 'description']) {
+        expect(item).toHaveProperty(required);
       }
-      // No internal moderator fields must leak into the public API.
+      // No internal moderator fields must leak into the public API — this is
+      // the load-bearing assertion and stays strict.
       expect(item).not.toHaveProperty('sourceId');
       expect(item).not.toHaveProperty('aiVerdict');
       expect(item).not.toHaveProperty('adminVerdict');

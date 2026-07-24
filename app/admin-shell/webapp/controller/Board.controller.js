@@ -246,6 +246,62 @@ sap.ui.define([
     },
 
     /**
+     * #1293: Force-close button press handler. Closes an orphaned
+     * PipelineLog row that a process death (deploy/crash) left stuck at
+     * RUNNING — runWithLock's finally never ran. Sibling to onForceUnwedge
+     * but a different table (PipelineLog, not cds.outbox.Messages). Confirms
+     * with the operator, invokes forceClose, refreshes the tile so the
+     * RUNNING status and the button clear.
+     */
+    onForceClose: function (oEvent) {
+      var oCtx = oEvent.getSource().getBindingContext("jobControls");
+      var sJobName = oCtx.getProperty("jobName");
+      var sPath = oCtx.getPath();
+      var iIdx = parseInt(sPath.split("/").pop(), 10);
+      var oModel = this.getView().getModel("jobControls");
+      var that = this;
+
+      MessageBox.confirm(
+        "Force-close '" + sJobName + "'? This marks the stuck RUNNING log row " +
+          "as FAILED. Use only if the job is not actually running (e.g. left over " +
+          "from a deploy or crash).",
+        {
+          title: "Force close",
+          onClose: function (sAction) {
+            if (sAction !== MessageBox.Action.OK) return;
+            oModel.setProperty("/jobs/" + iIdx + "/isClosing", true);
+            that._callForceClose(sJobName)
+              .then(function (oResult) {
+                MessageToast.show(oResult && oResult.closed > 0
+                  ? "Closed '" + sJobName + "'"
+                  : "Nothing to close: " + ((oResult && oResult.reason) || "unknown"));
+                return that._loadJobControls();
+              })
+              .catch(function (err) {
+                MessageBox.error("Force close failed: " + (err && err.message ? err.message : String(err)));
+              })
+              .finally(function () {
+                oModel.setProperty("/jobs/" + iIdx + "/isClosing", false);
+              });
+          }
+        }
+      );
+    },
+
+    /**
+     * #1293: invoke AdminService.JobControls.forceClose(jobName). Mirrors
+     * _callForceUnwedge — bound to the JobControls singleton.
+     */
+    _callForceClose: function (sJobName) {
+      var oAdminModel = this.getOwnerComponent().getModel("admin");
+      var oAction = oAdminModel.bindContext("/JobControls/AdminService.forceClose(...)");
+      oAction.setParameter("jobName", sJobName);
+      return oAction.execute().then(function () {
+        return oAction.getBoundContext().getObject();
+      });
+    },
+
+    /**
      * #756: poll JobLastRun every 30 s for the next 5 min after a manual
      * trigger. Stops automatically when 5 min elapses. Re-entrant — if a
      * second trigger lands while polling is in flight, the existing schedule

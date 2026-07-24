@@ -23,8 +23,9 @@ describeIf('/me page shape', () => {
     const html = await res.text();
 
     // The four mount points for Vue islands (Task 8, commit 403fd72d).
-    // These are the divs that the me.js script hydrates.
-    // Hugo's HTML minifier strips quotes around simple id values, so match both forms.
+    // These are the divs that the me.js script hydrates. Hugo's production
+    // minifier strips quotes from safe attribute values (id=me-... unquoted),
+    // so accept both quoted and unquoted forms.
     expect(html).toMatch(/id=["']?me-recent-activity["']?/);
     expect(html).toMatch(/id=["']?me-all-completions["']?/);
     expect(html).toMatch(/id=["']?me-learning-preferences["']?/);
