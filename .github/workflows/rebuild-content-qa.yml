@@ -163,3 +163,28 @@ jobs:
             echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "- **AI authoring:** enabled (cap=${{ inputs.ai-author-build-cap }})" >> "$GITHUB_STEP_SUMMARY"
+
+      # Observability (#observability): report CI failures (build gate,
+      # verify-qa-build, publish 503) to the QA srv's PipelineLog so they surface
+      # in the admin dashboard instead of only as a red CI run. Best-effort.
+      - name: Report failure to PipelineLog (QA)
+        if: ${{ failure() }}
+        continue-on-error: true
+        env:
+          CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
+          CONTENT_API_KEY_QA: ${{ secrets.CONTENT_API_KEY_QA }}
+        run: |
+          if [ -z "$CAP_QA_BASE_URL" ] || [ -z "$CONTENT_API_KEY_QA" ]; then
+            echo "::warning::Cannot report QA failure to PipelineLog (missing CAP_QA_BASE_URL or CONTENT_API_KEY_QA)"
+            exit 0
+          fi
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -sS -m 30 -o /dev/null -w "PipelineLog(QA) report HTTP %{http_code}\n" \
+            -X POST "$CAP_QA_BASE_URL/content/pipeline-log" \
+            -H "Authorization: Bearer $CONTENT_API_KEY_QA" \
+            -H "Content-Type: application/json" \
+            --data "$(jq -nc \
+              --arg trigger "${{ github.event_name }}" \
+              --arg run "$RUN_URL" \
+              '{pipelineType:"HUGO_BUILD", initiator:("ci/rebuild-content-qa@"+$trigger), summary:"QA content rebuild failed", errorDetails:("CI run failed before/at QA content publish. Logs: "+$run), metadata:{channel:"qa", trigger:$trigger, runUrl:$run}}')" \
+            || echo "::warning::QA PipelineLog failure-report POST did not complete"
