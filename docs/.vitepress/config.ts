@@ -87,6 +87,7 @@ export default defineConfig({
           { text: 'Overview',                 link: '/end-users/' },
           { text: 'Getting started',          link: '/end-users/getting-started' },
           { text: 'Using Joule chat',         link: '/end-users/using-joule-chat' },
+          { text: 'Talking to Joule',         link: '/end-users/joule-commands' },
           { text: 'MCP quickstart',           link: '/end-users/mcp-quickstart' },
           { text: 'Progress and completions', link: '/end-users/progress-and-completions' },
           { text: 'Privacy and cookies',      link: '/end-users/privacy-and-cookies' },
