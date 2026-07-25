@@ -409,9 +409,19 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          STRATEGY_FLAGS=""
+          # --version-rule ALL: the version comes from `git describe`, so any
+          # deploy from a commit AHEAD of the last release tag produces a
+          # semver *prerelease* (e.g. 1.0.0-4-g7fbca2aa). Semver ranks a
+          # prerelease BELOW its base release (1.0.0-4-… < 1.0.0), and the MTA
+          # deployer's default version-rule (HIGHER) then rejects it as a
+          # downgrade once a clean tagged version has ever been deployed. The
+          # safety in this scheme is the embedded git SHA (full traceability),
+          # not monotonic semver ordering, so we allow all versions. Applies to
+          # every environment — prod deploys from ahead-of-tag HEAD hit the
+          # identical block otherwise; prod keeps its blue-green safety below.
+          STRATEGY_FLAGS="--version-rule ALL"
           if [ "${{ steps.env.outputs.target }}" = "prod" ]; then
-            STRATEGY_FLAGS="--strategy blue-green --skip-testing-phase"
+            STRATEGY_FLAGS="$STRATEGY_FLAGS --strategy blue-green --skip-testing-phase"
           fi
 
           cf deploy "mta_archives/tutorials-ims_${VERSION}.mtar" \
