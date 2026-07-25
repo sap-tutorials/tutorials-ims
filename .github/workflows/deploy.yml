@@ -67,7 +67,12 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          RAW=$(git describe --tags --match 'v*' --always)
+          # Exclude env-suffixed tags created by the "Create GitHub Release" step
+          # (format: v<version>-dev, v<version>-qa, v<version>-prod). Without
+          # these excludes, a previous deploy tag on HEAD would be consumed by
+          # --match 'v*' and compound garbage like "v1.0.0-prod-1-gabcdef" into
+          # the next version string.
+          RAW=$(git describe --tags --match 'v*' --exclude '*-dev' --exclude '*-qa' --exclude '*-prod' --always)
           # Normalize to valid MTA semver: strip a leading 'v<digit>', else
           # fall back to 0.0.0-g<raw> (no v* tag reachable). See
           # docs/superpowers/specs/2026-07-25-mta-versioning-design.md §1.
@@ -444,7 +449,7 @@ jobs:
             echo "No DEPLOYED.md change to commit."
           else
             git commit -m "chore(deploy): $ENV now at $VER ($SHA) [skip ci]"
-            git push origin main
+            git push origin main || echo "::warning::Could not push DEPLOYED.md update to main (branch protection or concurrent push); deploy itself succeeded."
           fi
 
       - name: Abort blue-green on failure
