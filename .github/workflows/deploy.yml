@@ -414,6 +414,39 @@ jobs:
             $STRATEGY_FLAGS \
             -f
 
+      - name: Record deployed version in DEPLOYED.md
+        if: success()
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GITSHA: ${{ steps.version.outputs.gitSha }}
+        run: |
+          set -euo pipefail
+          ENV="${{ steps.env.outputs.target }}"
+          VER="$VERSION"
+          SHA="$GITSHA"
+          TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          RUN="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ROW="| $ENV | \`$VER\` | \`$SHA\` | $TS | [run]($RUN) |"
+          # Replace the single row whose first cell is this environment.
+          # Anchored on '| <env> |' at line start so we touch exactly one row.
+          sed -i -E "s%^\| ${ENV} \|.*\$%${ROW}%" DEPLOYED.md
+          echo "Updated DEPLOYED.md row for $ENV:"
+          grep -E "^\| ${ENV} \|" DEPLOYED.md
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git stash push -- DEPLOYED.md || true
+          git pull --ff-only origin main
+          git stash pop || true
+          git add DEPLOYED.md
+          if git diff --cached --quiet; then
+            echo "No DEPLOYED.md change to commit."
+          else
+            git commit -m "chore(deploy): $ENV now at $VER ($SHA) [skip ci]"
+            git push origin main
+          fi
+
       - name: Abort blue-green on failure
         if: failure() && steps.env.outputs.target == 'prod'
         run: |
