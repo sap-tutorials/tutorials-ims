@@ -87,6 +87,7 @@ export default defineConfig({
           { text: 'Overview',                 link: '/end-users/' },
           { text: 'Getting started',          link: '/end-users/getting-started' },
           { text: 'Using Joule chat',         link: '/end-users/using-joule-chat' },
+          { text: 'Talking to Joule',         link: '/end-users/joule-commands' },
           { text: 'MCP quickstart',           link: '/end-users/mcp-quickstart' },
           { text: 'Progress and completions', link: '/end-users/progress-and-completions' },
           { text: 'Privacy and cookies',      link: '/end-users/privacy-and-cookies' },
@@ -102,7 +103,8 @@ export default defineConfig({
           { text: 'Writing tutorials', link: '/authors/writing-tutorials' },
           { text: 'Repo / group owners', link: '/authors/repo-group-owners' },
           { text: 'Center admin',      link: '/authors/center-admin' },
-          { text: 'Analytics admin',   link: '/authors/analytics-admin' }
+          { text: 'Analytics admin',   link: '/authors/analytics-admin' },
+          { text: 'Joule commands',    link: '/authors/joule-commands' }
         ]},
         { text: 'Branching paths', items: [
           { text: 'Branched missions',  link: '/authors/branched-missions' },
