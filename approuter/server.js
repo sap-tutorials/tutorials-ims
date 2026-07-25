@@ -152,6 +152,20 @@ async function imgCdnHandler(req, res, next) {
   const wantWidth = Math.min(parseInt(parsed.searchParams.get('w') || '0', 10) || 0, IMG_CDN_MAX_WIDTH)
   const acceptsWebp = /image\/webp/.test(req.headers.accept || '')
 
+  // QA tutorials live in PRIVATE `-Contribution` repos, so their screenshot
+  // sources on raw.githubusercontent.com 404 to an anonymous fetch. Attach a
+  // GitHub token (credstore alias TUTORIALS_GITHUB_TOKEN, 5-min TTL cached) so
+  // private raw content resolves. Public-repo (prod) images are unaffected —
+  // the token is simply ignored for public paths. The token is only sent to
+  // raw.githubusercontent.com (the sole IMG_CDN_HOSTS entry); these image
+  // fetches return 200 inline (no redirect to objects.githubusercontent.com),
+  // so the credential is never forwarded off-host.
+  const imgFetchHeaders = { 'User-Agent': 'tutorials-imgcdn' }
+  if (target.hostname === 'raw.githubusercontent.com') {
+    const ghToken = await resolveSecret('TUTORIALS_GITHUB_TOKEN', { logTag: '[img-cdn]' })
+    if (ghToken) imgFetchHeaders['Authorization'] = `Bearer ${ghToken}`
+  }
+
   try {
     // #888: safeFetch validates hostname + private-IP + protocol on every hop.
     // Without redirect: 'manual' here, a controlled 302 from
@@ -161,6 +175,7 @@ async function imgCdnHandler(req, res, next) {
       allowedProtocols: ['https:', 'http:'],
       timeoutMs: IMG_CDN_TIMEOUT_MS,
       maxRedirects: 3,
+      fetchInit: { headers: imgFetchHeaders },
     })
     if (!upstream.ok) {
       res.writeHead(upstream.status, { 'Content-Type': 'text/plain' })
