@@ -385,6 +385,13 @@
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
+      "source": "^/tutorials-qa/((?:css|js|img|fonts|vendor)/.*)$",
+      "target": "/$1",
+      "localDir": "static",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.Author"
+    },
+    {
       "source": "^/tutorials-qa/(.*)$",
       "target": "/content/tutorials/$1",
       "destination": "srv-qa-api",
