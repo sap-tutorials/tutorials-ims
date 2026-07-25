@@ -183,10 +183,12 @@ export async function runFetchHelpDocs(logId, opts = {}) {
         const slug = canonicalizeHelpDocPath(row.source, row.sourceId);
         const contentHash = row.contentHash;
 
+        // slug-canonical: write-path-canonicalizes
         // 6. LOB-locator safety: pull only metadata, NOT description.
         //    (1st of 4 LOB-locator read sites per spec §10.1.)
         const existing = await SELECT.one.from(HelpDocs)
           .columns('ID', 'contentHash', 'lastExtractedHash')
+          // slug-canonical: write-path-canonicalizes
           .where({ slug });
 
         if (!existing) {
@@ -324,6 +326,7 @@ export async function runFetchHelpDocs(logId, opts = {}) {
         }
 
         // 13. Look up our helpDoc's ID.
+        // slug-canonical: write-path-canonicalizes
         const hdRow = await SELECT.one.from(HelpDocs).columns('ID').where({ slug });
         if (!hdRow) {
           LOG.warn(`[${slug}] missing after upsert; skipping link persist`);

@@ -37,6 +37,7 @@ export async function decideHandler(req, res) {
     const settings = await SELECT.one.from(ChatSettings).columns('branchingEnabled');
     if (!settings?.branchingEnabled) return res.status(404).json({ error: 'branching_disabled' });
 
+    // slug-canonical: pre-canonicalized
     const spec = await SELECT.one.from(BranchSpecs).where({ slug });
     if (!spec) return res.status(404).json({ error: 'tutorial_not_found' });
 

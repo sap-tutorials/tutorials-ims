@@ -80,6 +80,7 @@ export async function getBranchRecommendationHandler({ args, user }) {
 
 async function resolveTutorialScope({ tutorialSlug, branchPointId, user, userState, loaders }) {
   const { BranchSpecs } = cds.entities('com.sap.developers.ims');
+  // slug-canonical: caller-canonicalizes
   const spec = await SELECT.one.from(BranchSpecs).where({ slug: tutorialSlug });
   if (!spec) {
     return { branchPoints: [], skipPoints: [], note: 'tutorial_has_no_branches' };
@@ -156,6 +157,7 @@ async function resolveTutorialScope({ tutorialSlug, branchPointId, user, userSta
 async function resolveMissionScope({ missionSlug, user, userState, loaders }) {
   const { Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
 
+  // slug-canonical: caller-canonicalizes
   const mission = await SELECT.one.from(Missions).where({ slug: missionSlug });
   if (!mission) {
     return { altGroups: [], note: 'mission_not_found' };

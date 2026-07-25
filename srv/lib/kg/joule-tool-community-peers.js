@@ -51,8 +51,10 @@ export async function findCommunityPeersHandler({ db, args }) {
 
   try {
     // 1. Resolve the anchor's community fingerprint.
+    // slug-canonical: pre-canonicalized
     const anchor = await db.run(
       SELECT.one.from(KgCommunity).columns('communityFingerprint')
+        // slug-canonical: pre-canonicalized
         .where({ slug, vertexType: 'tutorial' })
     );
     const fp = anchor?.communityFingerprint;

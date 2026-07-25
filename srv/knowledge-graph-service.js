@@ -1017,9 +1017,11 @@ export default cds.service.impl(async function () {
     }
 
     // 2. Look up input tutorial title.
+    // slug-canonical: pre-canonicalized
     const inputTutorial = await SELECT.one
       .from(Tutorials)
       .columns('slug', 'title')
+      // slug-canonical: pre-canonicalized
       .where({ slug });
     const tutorialInfo = {
       slug,
@@ -1248,9 +1250,11 @@ export default cds.service.impl(async function () {
     }
 
     // 2. Look up input tutorial title.
+    // slug-canonical: pre-canonicalized
     const inputTutorial = await SELECT.one
       .from(Tutorials)
       .columns('slug', 'title')
+      // slug-canonical: pre-canonicalized
       .where({ slug });
     const tutorialInfo = {
       slug,

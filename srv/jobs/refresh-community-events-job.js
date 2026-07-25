@@ -84,6 +84,7 @@ export async function runRefreshCommunityEvents(_logId, opts = {}) {
           lastSeenAt: now,
         };
 
+        // slug-canonical: write-path-canonicalizes
         const existing = await SELECT.one.from(CommunityEvents).columns('ID').where({ slug });
         if (!existing) {
           await INSERT.into(CommunityEvents).entries({ ...upsertRow, firstSeenAt: now });

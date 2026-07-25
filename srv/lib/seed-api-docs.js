@@ -64,8 +64,10 @@ export async function runSeedApiDocs({ yamlContent, commit = false, slugFilter =
     // and including it here would risk LOB-locator expiry (§10.1). We don't
     // need description for the contentHash comparison; the hash is computed
     // from the incoming YAML row, not the persisted row.
+    // slug-canonical: write-path-canonicalizes
     const existing = await SELECT.one.from(ApiDocs)
       .columns('ID', 'contentHash')
+      // slug-canonical: write-path-canonicalizes
       .where({ slug });
 
     if (existing && existing.contentHash === contentHash) continue;

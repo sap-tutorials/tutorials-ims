@@ -61,7 +61,7 @@ export function makeBranchLoaders() {
     async loadCentroidBySlug(slug) {
       try {
         const { Tutorials } = cds.entities('com.sap.developers.ims');
-        const t = await SELECT.one.from(Tutorials).columns('ID').where({ slug });
+        const t = await SELECT.one.from(Tutorials).columns('ID').where({ slug: String(slug).toLowerCase() });
         if (!t?.ID) return null;
         return await getCentroid(t.ID, loadStepVectors);
       } catch (err) {

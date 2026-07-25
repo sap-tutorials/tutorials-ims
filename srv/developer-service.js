@@ -245,7 +245,7 @@ export default class DeveloperService extends cds.ApplicationService {
       }
 
       // 1. Resolve slug → tutorial
-      const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
+      const tutorial = await SELECT.one.from(dbTutorials).where({ slug: slug.toLowerCase() });
       if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
 
       // 2. Resolve user (sapId → dbUser)

@@ -359,7 +359,9 @@ export async function insertMintedConcept({ db, tx, entry }) {
   // helper via raw db/db.tx, not the service layer — and a partial
   // UNIQUE(slug) WHERE status='ACTIVE' cannot be expressed in HDI artifacts,
   // so the invariant MUST be enforced in app code at this write point.
+  // slug-canonical: pre-canonicalized
   const existing = await runner.run(
+    // slug-canonical: pre-canonicalized
     SELECT.from(Concepts).columns('ID', 'status').where({ slug: entry.slug }),
   );
   if (existing.length > 0) {

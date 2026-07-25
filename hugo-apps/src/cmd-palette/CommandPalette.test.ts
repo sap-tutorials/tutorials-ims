@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import CommandPalette from './CommandPalette.vue'
+import { _seedCsrfTokenForTests, _resetCsrfTokenCacheForTests } from '@shared/csrf-fetch'
 
 function makeFetchMock(routes: Record<string, unknown>) {
   return vi.fn(async (url: string) => {
@@ -142,7 +143,11 @@ describe('CommandPalette — CONCEPTS group', () => {
 })
 
 describe('CommandPalette — KNOWLEDGE GRAPH group', () => {
-  beforeEach(() => { vi.useFakeTimers() })
+  // The KG search POSTs /graph/searchKG via csrfFetch (#895). Seed the token
+  // cache so csrfFetch skips its GET /auth/user handshake and calls the mocked
+  // fetch directly for the POST; reset after so the cache doesn't leak.
+  beforeEach(() => { vi.useFakeTimers(); _seedCsrfTokenForTests('test-token') })
+  afterEach(() => { _resetCsrfTokenCacheForTests() })
 
   it('renders KG concept + tutorial rows, deduped against CONCEPTS/TUTORIALS', async () => {
     globalThis.fetch = makeFetchMock({

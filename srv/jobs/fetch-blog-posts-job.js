@@ -163,9 +163,11 @@ export async function runFetchBlogPosts(deps = {}) {
     try {
       const slug = `bp-${k.message_id}`;
       const newHash = sha256Hex(`${k.subject}|${k.body}|${k.post_time}`);
+      // slug-canonical: write-path-canonicalizes
       const existing = await SELECT.one
         .from(BlogPosts)
         .columns('ID', 'contentHash', 'lastExtractedHash')
+        // slug-canonical: write-path-canonicalizes
         .where({ slug });
 
       const authorName = `${k.author.first_name ?? ''} ${k.author.last_name ?? ''}`.trim() || k.author.login || '';
@@ -249,6 +251,7 @@ export async function runFetchBlogPosts(deps = {}) {
       summary.promptTokens += result.tokenUsage?.prompt ?? 0;
       summary.completionTokens += result.tokenUsage?.completion ?? 0;
 
+      // slug-canonical: write-path-canonicalizes
       const postRow = await SELECT.one.from(BlogPosts).columns('ID').where({ slug: e.slug });
       if (!postRow) {
         LOG.warn(`fetch-blog-posts: post ${e.slug} missing after upsert; skipping persist`);

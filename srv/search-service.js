@@ -388,8 +388,10 @@ export default class SearchService extends cds.ApplicationService {
 
       const { Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
 
+      // slug-canonical: pre-canonicalized
       const mission = await SELECT.one.from(Missions)
         .columns('ID', 'slug', 'title', 'description')
+        // slug-canonical: pre-canonicalized
         .where({ slug, published: true });
       if (!mission) return null;
 
@@ -463,8 +465,10 @@ export default class SearchService extends cds.ApplicationService {
 
       const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
 
+      // slug-canonical: pre-canonicalized
       const tutorial = await SELECT.one.from(Tutorials)
         .columns('ID', 'slug', 'title', 'description', 'primaryTag')
+        // slug-canonical: pre-canonicalized
         .where({ slug, status: 'ACTIVE' });
       if (!tutorial) return null;
 

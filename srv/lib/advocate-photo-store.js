@@ -148,7 +148,7 @@ export async function fetchPhoto(slug, size) {
     // is also fine on SQLite because SQLite has no LOB-locator concept.
     const { Advocates, AdvocatePhotos } = cds.entities('com.sap.developers.ims');
     const adv = await db.run(
-      SELECT.one.from(Advocates).columns('ID').where({ slug }),
+      SELECT.one.from(Advocates).columns('ID').where({ slug: String(slug).toLowerCase() }),
     );
     if (!adv) return null;
     const photo = await db.run(

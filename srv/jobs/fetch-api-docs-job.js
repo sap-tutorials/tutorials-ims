@@ -158,9 +158,11 @@ export async function runFetchApiDocs(deps = {}) {
         `${row.title}\n${row.description}\n${row.category}\n${row.apiType}`
       );
 
+      // slug-canonical: write-path-canonicalizes
       // 6. LOB-locator safety: SELECT only id/contentHash/lastExtractedHash.
       const existing = await SELECT.one.from(ApiDocs)
         .columns('ID', 'contentHash', 'lastExtractedHash')
+        // slug-canonical: write-path-canonicalizes
         .where({ slug });
 
       // Upsert (NOT budget-gated — catalog updates are cheap).
@@ -272,6 +274,7 @@ export async function runFetchApiDocs(deps = {}) {
       }
 
       // Look up our row's ID for the link writes.
+      // slug-canonical: write-path-canonicalizes
       const apiDocRow = await SELECT.one.from(ApiDocs).columns('ID').where({ slug });
       if (!apiDocRow) {
         LOG.warn(`fetch-api-docs: ${slug} missing after upsert; skipping link persist`);

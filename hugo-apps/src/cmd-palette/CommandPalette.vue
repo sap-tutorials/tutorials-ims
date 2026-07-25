@@ -141,6 +141,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { csrfFetch } from '@shared/csrf-fetch'
 import type { PaletteAction } from './actions'
 import { PALETTE_ACTIONS, buildStepActions } from './actions'
 
@@ -358,7 +359,7 @@ async function searchKG(term: string) {
   }
   const requestedQuery = term
   try {
-    const res = await fetch('/graph/searchKG', {
+    const res = await csrfFetch('/graph/searchKG', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ term, maxConcepts: 5, maxTutorials: 5 }),

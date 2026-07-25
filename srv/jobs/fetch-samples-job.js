@@ -165,9 +165,11 @@ export async function runFetchSamples(logId, opts = {}) {
           `${row.description}\n${row.language}\n${row.lastCommitAt}\n${row.stars}\n${(row.topics ?? []).slice().sort().join(',')}`
         );
 
+        // slug-canonical: write-path-canonicalizes
         // 7. LOB-locator safety: SELECT only id/contentHash/lastExtractedHash.
         const existing = await SELECT.one.from(Samples)
           .columns('ID', 'contentHash', 'lastExtractedHash')
+          // slug-canonical: write-path-canonicalizes
           .where({ slug });
 
         // Upsert (NOT budget-gated — catalog updates are cheap).
@@ -281,6 +283,7 @@ export async function runFetchSamples(logId, opts = {}) {
         }
 
         // Look up our row's ID for the link writes.
+        // slug-canonical: write-path-canonicalizes
         const sampleRow = await SELECT.one.from(Samples).columns('ID').where({ slug });
         if (!sampleRow) {
           LOG.warn(`fetch-samples: ${slug} missing after upsert; skipping link persist`);
