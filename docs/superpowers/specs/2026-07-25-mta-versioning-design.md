@@ -160,3 +160,17 @@ against the commit currently live in prod — `203c4161` at time of writing):
 
 After this, a deploy from that commit computes MTA version `1.0.0`; deploys
 from commits ahead of the tag compute `1.0.0-<N>-g<sha>`.
+
+## Post-implementation refinement: `--version-rule ALL`
+
+The first real DEV deploy after seeding `v1.0.0` surfaced a flaw in §1's
+version scheme. `git describe` on a commit ahead of the tag yields a semver
+*prerelease* (e.g. `1.0.0-4-g7fbca2aa`). Semver ranks a prerelease BELOW its
+base release (`1.0.0-4-… < 1.0.0`), and the MTA deployer's default
+`--version-rule HIGHER` rejects it as a downgrade once a clean `1.0.0` has been
+deployed — which is exactly the routine case (deploying from ahead-of-tag HEAD).
+
+Fix: `cf deploy` uses `--version-rule ALL` on every environment. The integrity
+guarantee in this scheme is the embedded git SHA (full traceability back to a
+commit), not monotonic semver ordering, so allowing any version is consistent
+with the design intent. Prod retains its `--strategy blue-green` safety.
