@@ -100,6 +100,7 @@ export default defineConfig({
         { text: 'Authors', items: [
           { text: 'Overview',          link: '/authors/' },
           { text: 'Writing tutorials', link: '/authors/writing-tutorials' },
+          { text: 'Meta tutorials (QA)', link: '/authors/meta-tutorials' },
           { text: 'Repo / group owners', link: '/authors/repo-group-owners' },
           { text: 'Center admin',      link: '/authors/center-admin' },
           { text: 'Analytics admin',   link: '/authors/analytics-admin' }
