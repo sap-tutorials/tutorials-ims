@@ -205,9 +205,11 @@ export async function runFetchVideos(deps = {}) {
       );
       const synthesisedUrl = `https://www.youtube.com/watch?v=${row.videoId}`;
 
+      // slug-canonical: write-path-canonicalizes
       const existing = await SELECT.one
         .from(Videos)
         .columns('ID', 'contentHash', 'lastExtractedHash')
+        // slug-canonical: write-path-canonicalizes
         .where({ slug });
 
       if (existing) {
@@ -289,6 +291,7 @@ export async function runFetchVideos(deps = {}) {
       summary.promptTokens += result.tokenUsage?.prompt ?? 0;
       summary.completionTokens += result.tokenUsage?.completion ?? 0;
 
+      // slug-canonical: write-path-canonicalizes
       const videoRow = await SELECT.one.from(Videos).columns('ID').where({ slug: e.slug });
       if (!videoRow) {
         LOG.warn(`fetch-videos: video ${e.slug} missing after upsert; skipping persist`);

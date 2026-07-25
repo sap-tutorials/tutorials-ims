@@ -163,8 +163,10 @@ export async function runFetchCommunityEvents(logId, opts = {}) {
           : synthesizeDescription({ ...row, title, location });
         const contentHash = computeContentHash({ ...row, title, description, location }, opts.hashOverride);
 
+        // slug-canonical: write-path-canonicalizes
         const existing = await SELECT.one.from(CommunityEvents)
           .columns('ID', 'contentHash', 'lastExtractedHash')
+          // slug-canonical: write-path-canonicalizes
           .where({ slug });
 
         const upsertRow = {
@@ -274,6 +276,7 @@ export async function runFetchCommunityEvents(logId, opts = {}) {
             .where({ ID: { in: reactivatedIds } });
         }
 
+        // slug-canonical: write-path-canonicalizes
         const evRow = await SELECT.one.from(CommunityEvents).columns('ID').where({ slug });
         if (!evRow) {
           LOG.warn(`[${slug}] missing after upsert; skipping link persist`);

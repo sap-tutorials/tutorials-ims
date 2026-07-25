@@ -62,6 +62,7 @@ export async function readTutorialResource(slug, { db = cds.db, slicer = default
   const s = (slug ?? '').toLowerCase();
   try {
     const row = await db.run(
+      // slug-canonical: pre-canonicalized
       SELECT.one.from(`${NS}.Tutorials`).where({ slug: s, status: { '!=': 'INACTIVE' } }),
     );
     // If the tutorial is absent (unpublished/soft-deleted), return empty envelope.
@@ -101,6 +102,7 @@ export async function readMissionResource(slug, { db = cds.db } = {}) {
   const s = (slug ?? '').toLowerCase();
   try {
     const row = await db.run(
+      // slug-canonical: pre-canonicalized
       SELECT.one.from(`${NS}.Missions`).where({ slug: s, published: true, status: 'ACTIVE' }),
     );
 
@@ -162,9 +164,10 @@ export async function readMissionResource(slug, { db = cds.db } = {}) {
 export async function readConceptResource(id, { db = cds.db } = {}) {
   try {
     // Try by UUID first; fall back to slug if the caller passes a slug string.
+    // UUID path intentionally not lowercased; only the slug fallback is lowercased.
     const row =
       (await db.run(SELECT.one.from(`${NS}.Concepts`).where({ ID: id, status: 'ACTIVE' })))
-      ?? (await db.run(SELECT.one.from(`${NS}.Concepts`).where({ slug: id, status: 'ACTIVE' })));
+      ?? (await db.run(SELECT.one.from(`${NS}.Concepts`).where({ slug: String(id).toLowerCase(), status: 'ACTIVE' })));
 
     const meta = row
       ? {

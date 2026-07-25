@@ -146,9 +146,11 @@ export async function runFetchDiscoveryMissions(deps = {}) {
       const newHash = sha256Hex(`${m.name}|${m.description}|${m.effort}|${m.category}`);
       const synthesisedUrl = m.url || `https://discovery-center.cloud.sap/missiondetail/${m.id}/`;
 
+      // slug-canonical: write-path-canonicalizes
       const existing = await SELECT.one
         .from(DiscoveryMissions)
         .columns('ID', 'contentHash', 'lastExtractedHash')
+        // slug-canonical: write-path-canonicalizes
         .where({ slug });
 
       if (existing) {
@@ -228,6 +230,7 @@ export async function runFetchDiscoveryMissions(deps = {}) {
       summary.promptTokens += result.tokenUsage?.prompt ?? 0;
       summary.completionTokens += result.tokenUsage?.completion ?? 0;
 
+      // slug-canonical: write-path-canonicalizes
       const missionRow = await SELECT.one.from(DiscoveryMissions).columns('ID').where({ slug: e.slug });
       if (!missionRow) {
         LOG.warn(`fetch-discovery-missions: mission ${e.slug} missing after upsert; skipping persist`);

@@ -43,5 +43,14 @@ jobs:
         run: npm run setup
       - name: Run unit tests
         run: npm test
-      - name: GraphQL schema breaking-change guard
-        run: npm run check:graphql-breaking
+      - name: Static build guards (postbuild:apps)
+        # Runs the same static guard suite deploy.yml runs (build collisions,
+        # icon/UI5 imports, srv-qa parity, slug-lookup canonicalization, CSRF,
+        # GraphQL breaking-changes, …). These previously ran ONLY in deploy.yml,
+        # so guard violations introduced by a PR (whose gate was npm test only)
+        # merged undetected and first surfaced at the next workflow_dispatch
+        # deploy — which is how 41 unmarked slug lookups accumulated before a
+        # deploy caught them all at once. Running them here fails such a PR
+        # before merge. (postbuild:apps ends with check:graphql-breaking, so it
+        # subsumes the standalone GraphQL step that used to live here.)
+        run: npm run postbuild:apps

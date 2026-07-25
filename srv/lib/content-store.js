@@ -706,6 +706,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
             // slug-canonical: write-path-canonicalizes
             const existing = await SELECT.one.from(BranchSpecs).where({ slug }).columns('slug');
             if (existing) {
+              // slug-canonical: write-path-canonicalizes
               await UPDATE(BranchSpecs).where({ slug }).set({
                 branchPoints: branchPointsJson,
                 skipPoints:   skipPointsJson,

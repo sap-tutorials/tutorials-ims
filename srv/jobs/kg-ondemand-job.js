@@ -65,8 +65,10 @@ async function embedOne(query, embedFn) {
  */
 async function defaultExtractOne({ tutorial, callModel, registryArray }) {
   const { TutorialBodyText } = cds.entities(NS);
+  // slug-canonical: pre-canonicalized
   const [bodyRow] = await SELECT.from(TutorialBodyText)
     .columns('bodyText')
+    // slug-canonical: pre-canonicalized
     .where({ slug: tutorial.slug });
   const tutorialBody = bodyRow?.bodyText ?? '';
   if (!tutorialBody) return null;

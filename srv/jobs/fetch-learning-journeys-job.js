@@ -174,9 +174,11 @@ export async function runFetchLearningJourneys(deps = {}) {
       // means an upstream listing with capitalised slugs can't drift the DB.
       const journeySlug = (j.slug || '').toLowerCase();
       const newHash = sha256Hex(`${j.title}|${j.level}|${j.duration}`);
+      // slug-canonical: pre-canonicalized
       const existing = await SELECT.one
         .from(LearningJourneys)
         .columns('ID', 'contentHash', 'lastExtractedHash')
+        // slug-canonical: pre-canonicalized
         .where({ slug: journeySlug });
 
       const levelNormalized = (j.level ?? '').toLowerCase();
@@ -287,9 +289,11 @@ export async function runFetchLearningJourneys(deps = {}) {
       summary.completionTokens += result.tokenUsage?.completion ?? 0;
 
       // 4. Persist links + prereqs.
+      // slug-canonical: pre-canonicalized
       const journeyRow = await SELECT.one
         .from(LearningJourneys)
         .columns('ID')
+        // slug-canonical: pre-canonicalized
         .where({ slug: j.slug });
       if (!journeyRow) {
         LOG.warn(`Journey ${j.slug} missing after upsert; skipping persist`);
@@ -391,9 +395,11 @@ export async function runFetchLearningJourneys(deps = {}) {
       await DELETE.from(LearningJourneyPrerequisites).where({ journey_ID: journeyRow.ID });
 
       for (const p of result.journeyPrerequisites) {
+        // slug-canonical: pre-canonicalized
         const prereqRow = await SELECT.one
           .from(LearningJourneys)
           .columns('ID')
+          // slug-canonical: pre-canonicalized
           .where({ slug: p.slug });
         if (!prereqRow) continue;
         await INSERT.into(LearningJourneyPrerequisites).entries({

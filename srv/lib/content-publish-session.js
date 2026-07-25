@@ -252,8 +252,8 @@ export function createSessionHelpers({ namespace }) {
   async function detectReverts(newVersion, freshSlugs) {
     if (!freshSlugs.length) return [];
     const { ContentFiles } = cds.entities(namespace);
-    // On full-repo publishes freshSlugs is ~7,315 entries. A `.where({slug:
-    // {in: freshSlugs}})` here would send one bound parameter per slug and
+    // On full-repo publishes freshSlugs is ~7,315 entries. A slug-IN filter
+    // here would send one bound parameter per slug and
     // blow HANA's packet cap (memory note: cqn-where-in-hana-packet-cap.md;
     // same class as #1063 and #1103). Fetch the two versioned windows
     // unbounded and filter into `freshSet` in Node. ContentFiles pruned
@@ -1053,6 +1053,7 @@ async function upsertBranchSpecs(namespace, branchSpecs) {
       // slug-canonical: write-path-canonicalizes
       const existing = await SELECT.one.from(BranchSpecs).where({ slug }).columns('slug');
       if (existing) {
+        // slug-canonical: write-path-canonicalizes
         await UPDATE(BranchSpecs).where({ slug }).set({
           branchPoints: branchPointsJson,
           skipPoints:   skipPointsJson,

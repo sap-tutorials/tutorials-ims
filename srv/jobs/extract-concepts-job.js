@@ -145,6 +145,7 @@ export async function runExtractConcepts(deps = {}) {
         // ---- Body + content hash ----------------------------------------
         const [bodyRow] = await SELECT.from(TutorialBodyText)
           .columns('bodyText')
+          // slug-canonical: pre-canonicalized
           .where({ slug: tutorial.slug });
         const tutorialBody = bodyRow?.bodyText ?? '';
         if (!tutorialBody) {
@@ -225,7 +226,7 @@ export async function runExtractConcepts(deps = {}) {
         if (extraction.extends) {
           const [target] = await SELECT.from(Tutorials)
             .columns('ID')
-            .where({ slug: extraction.extends })
+            .where({ slug: extraction.extends.toLowerCase() })
             .limit(1);
           if (target) {
             extendsTutorialId = target.ID;

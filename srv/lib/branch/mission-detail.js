@@ -33,6 +33,7 @@ export async function missionDetailHandler(req, res) {
     const settings = await SELECT.one.from(ChatSettings).columns('branchingEnabled');
     const flagOn = !!settings?.branchingEnabled;
 
+    // slug-canonical: pre-canonicalized
     const mission = await SELECT.one.from(Missions).where({ slug });
     if (!mission) return res.status(404).json({ error: 'mission_not_found' });
 
