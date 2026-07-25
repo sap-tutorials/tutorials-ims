@@ -9,6 +9,7 @@ import { bustPublishedConceptsCache } from './lib/kg-published-concepts-cache.js
 import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
 import { selfHealOnDeploy } from './lib/deploy-self-heal.js';
 import { resolveDeployEnvironment } from './lib/deploy-environment.js';
+import { versionHandler } from './lib/version-handler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
@@ -248,6 +249,11 @@ cds.on('bootstrap', (app) => {
   // self-disables on 503). 64 KB express limit matches sendBeacon's hard cap.
   // See srv/lib/ui-event-handler.js + docs/superpowers/specs/2026-06-04-ab-instrumentation-design.md.
   app.post('/api/ui-event', express.json({ limit: '64kb' }), handleUIEvent);
+
+  // GET /version — unauthenticated build-metadata endpoint. Registered BEFORE
+  // basicAuthMiddleware so monitors/humans can read it without a token. See
+  // docs/superpowers/specs/2026-07-25-mta-versioning-design.md.
+  app.get('/version', versionHandler);
 
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);

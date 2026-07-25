@@ -55,6 +55,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Determine environment
         id: env
@@ -63,8 +66,35 @@ jobs:
       - name: Set version
         id: version
         run: |
-          VERSION="1.0.${{ github.run_number }}"
+          set -euo pipefail
+          # Exclude env-suffixed tags created by the "Create GitHub Release" step
+          # (format: v<version>-dev, v<version>-qa, v<version>-prod). Without
+          # these excludes, a previous deploy tag on HEAD would be consumed by
+          # --match 'v*' and compound garbage like "v1.0.0-prod-1-gabcdef" into
+          # the next version string.
+          RAW=$(git describe --tags --match 'v*' --exclude '*-dev' --exclude '*-qa' --exclude '*-prod' --always)
+          # Normalize to valid MTA semver: strip a leading 'v<digit>', else
+          # fall back to 0.0.0-g<raw> (no v* tag reachable). See
+          # docs/superpowers/specs/2026-07-25-mta-versioning-design.md §1.
+          if [[ "$RAW" =~ ^v[0-9] ]]; then
+            VERSION="${RAW#v}"
+          else
+            VERSION="0.0.0-g${RAW}"
+          fi
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          # Strict allowlist gate — reject any value with shell metacharacters
+          # before it can reach GITHUB_OUTPUT or downstream interpolation.
+          if [[ ! "$VERSION" =~ ^[0-9A-Za-z._+-]+$ ]]; then
+            echo "::error::Computed VERSION contains disallowed characters: $VERSION"
+            exit 1
+          fi
+          if [[ ! "$SHORT_SHA" =~ ^[0-9A-Za-z._+-]+$ ]]; then
+            echo "::error::Computed SHORT_SHA contains disallowed characters: $SHORT_SHA"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "gitSha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "Computed MTA version: $VERSION (sha $SHORT_SHA)"
           sed -i "s/^version: .*/version: $VERSION/" mta.yaml
 
       - name: Setup Node.js
@@ -218,6 +248,16 @@ jobs:
           restore-keys: |
             hugo-binary-
 
+      - name: Write srv/version.json
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GITSHA: ${{ steps.version.outputs.gitSha }}
+        run: |
+          set -euo pipefail
+          jq -n --arg v "$VERSION" --arg s "$GITSHA" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version:$v, gitSha:$s, builtAt:$t}' > srv/version.json
+          echo "Wrote srv/version.json:"; cat srv/version.json
+
       - name: Build MTA archive
         run: mbt build -e deploy/${{ steps.env.outputs.target }}.mtaext
         env:
@@ -366,16 +406,51 @@ jobs:
           fi
 
       - name: Deploy MTA
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           STRATEGY_FLAGS=""
           if [ "${{ steps.env.outputs.target }}" = "prod" ]; then
             STRATEGY_FLAGS="--strategy blue-green --skip-testing-phase"
           fi
 
-          cf deploy mta_archives/tutorials-ims_${{ steps.version.outputs.version }}.mtar \
+          cf deploy "mta_archives/tutorials-ims_${VERSION}.mtar" \
             -e deploy/${{ steps.env.outputs.target }}.mtaext \
             $STRATEGY_FLAGS \
             -f
+
+      - name: Record deployed version in DEPLOYED.md
+        if: success()
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GITSHA: ${{ steps.version.outputs.gitSha }}
+        run: |
+          set -euo pipefail
+          ENV="${{ steps.env.outputs.target }}"
+          VER="$VERSION"
+          SHA="$GITSHA"
+          TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          RUN="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ROW="| $ENV | \`$VER\` | \`$SHA\` | $TS | [run]($RUN) |"
+          # Replace the single row whose first cell is this environment.
+          # Anchored on '| <env> |' at line start so we touch exactly one row.
+          sed -i -E "s%^\| ${ENV} \|.*\$%${ROW}%" DEPLOYED.md
+          echo "Updated DEPLOYED.md row for $ENV:"
+          grep -E "^\| ${ENV} \|" DEPLOYED.md
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git stash push -- DEPLOYED.md || true
+          git pull --ff-only origin main
+          git stash pop || true
+          git add DEPLOYED.md
+          if git diff --cached --quiet; then
+            echo "No DEPLOYED.md change to commit."
+          else
+            git commit -m "chore(deploy): $ENV now at $VER ($SHA) [skip ci]"
+            git push origin main || echo "::warning::Could not push DEPLOYED.md update to main (branch protection or concurrent push); deploy itself succeeded."
+          fi
 
       - name: Abort blue-green on failure
         if: failure() && steps.env.outputs.target == 'prod'
