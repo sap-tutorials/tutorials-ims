@@ -23,7 +23,7 @@ cds.on('bootstrap', (app) => {
     }
   });
 
-  const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware } =
+  const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware, pipelineLogFailureHandler } =
     createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA', skipMetadataUpsert: true });
 
   // GET handlers serve in-flight author content from -Contribution repos. The
@@ -79,6 +79,10 @@ cds.on('bootstrap', (app) => {
   app.post('/content/publish/append',  express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);
   app.post('/content/publish/commit',  express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
   app.post('/content/publish/abort',   express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
+  // CI QA rebuild-failure reporter (#observability) — mirrors the prod srv
+  // endpoint. Writes a FAILED PipelineLog row in the QA namespace so QA build/
+  // publish failures show up in the admin dashboard, not just a red CI run.
+  app.post('/content/pipeline-log',    express.json({ limit: '256kb' }),  contentAuthMiddleware, pipelineLogFailureHandler);
   app.post('/content/rollback', express.json(),                    contentAuthMiddleware, rollbackHandler);
   // Validate-answer specs publish (issue #209). REPLACE-per-slug semantics
   // — each call clears and re-inserts the slug's ValidateAnswerSpecs rows

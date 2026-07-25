@@ -607,3 +607,31 @@ jobs:
           if [ "${{ steps.mode.outputs.effective_mode }}" != "catalog-only" ]; then
             echo "- **AI authoring:** enabled (cap=${{ inputs.ai-author-build-cap }})" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Observability (#observability): if any step above failed, record a FAILED
+      # PipelineLog row on the srv so the failure surfaces in the admin
+      # PipelineLog dashboard operators watch — not just as a red run in an
+      # unwatched CI tab. Best-effort: never fail the job on the report itself.
+      - name: Report failure to PipelineLog
+        if: ${{ failure() }}
+        continue-on-error: true
+        env:
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
+          REBUILD_API_KEY: ${{ secrets.REBUILD_API_KEY }}
+        run: |
+          if [ -z "$APPROUTER_URL" ] || [ -z "$REBUILD_API_KEY" ]; then
+            echo "::warning::Cannot report failure to PipelineLog (missing APPROUTER_URL or REBUILD_API_KEY)"
+            exit 0
+          fi
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -sS -m 30 -o /dev/null -w "PipelineLog report HTTP %{http_code}\n" \
+            -X POST "$APPROUTER_URL/content/pipeline-log" \
+            -H "Authorization: Bearer $REBUILD_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data "$(jq -nc \
+              --arg env "${{ steps.env.outputs.target }}" \
+              --arg mode "${{ steps.mode.outputs.effective_mode }}" \
+              --arg trigger "${{ github.event_name }}" \
+              --arg run "$RUN_URL" \
+              '{pipelineType:"HUGO_BUILD", initiator:("ci/rebuild-content@"+$trigger), summary:("rebuild-content failed (env="+$env+", mode="+$mode+")"), errorDetails:("CI run failed before/at content publish. Logs: "+$run), metadata:{env:$env, mode:$mode, trigger:$trigger, runUrl:$run}}')" \
+            || echo "::warning::PipelineLog failure-report POST did not complete"

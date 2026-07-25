@@ -1629,6 +1629,44 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  /**
+   * Record a CI-side rebuild failure as a FAILED PipelineLog row.
+   *
+   * WHY: `rebuild-content(-qa).yml` failures that happen in GitHub Actions
+   * BEFORE content reaches this srv (Hugo build gate, verify-qa-build, or an
+   * auth 503 at the publish door) never start a CONTENT_PUBLISH pipeline, so
+   * they leave no trace in the admin PipelineLog surface operators watch — the
+   * runs just go red in a CI tab nobody monitors (the 2026-07 REBUILD_API_KEY /
+   * CONTENT_API_KEY_QA silent-failure incidents). This endpoint lets the
+   * workflow's `if: failure()` step post a FAILED row so those failures show up
+   * where operators already look. Same auth as /content/publish.
+   */
+  async function pipelineLogFailureHandler(req, res) {
+    try {
+      const { pipelineType, initiator, summary, errorDetails, metadata } = req.body || {};
+      const TYPES = ['CONTENT_PUBLISH', 'HUGO_BUILD', 'MTA_DEPLOY', 'SCHEDULED_JOB', 'GITHUB_DISPATCH'];
+      const type = TYPES.includes(pipelineType) ? pipelineType : 'HUGO_BUILD';
+      const logId = await logPipelineStart(
+        type,
+        (initiator || 'ci').slice(0, 255),
+        metadata && typeof metadata === 'object' ? metadata : undefined,
+        namespace
+      );
+      await logPipelineEnd(
+        logId,
+        'FAILED',
+        summary ? String(summary).slice(0, 2000) : 'CI rebuild failed before content reached the srv',
+        errorDetails ? String(errorDetails).slice(0, 20000) : null,
+        namespace
+      );
+      LOG.warn(`[content/pipeline-log] recorded FAILED ${type} row id=${logId} initiator=${initiator || 'ci'}`);
+      res.status(201).json({ id: logId, status: 'FAILED', pipelineType: type });
+    } catch (err) {
+      LOG.error(`[content/pipeline-log] ${err.message}`);
+      res.status(500).json({ error: err.message });
+    }
+  }
+
   return {
     contentAuthMiddleware,
     publishHandler,
@@ -1642,7 +1680,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     beginHandler,
     appendHandler,
     commitHandler,
-    abortHandler
+    abortHandler,
+    pipelineLogFailureHandler
   };
 }
 
@@ -1664,3 +1703,4 @@ export const beginHandler = _defaults.beginHandler;
 export const appendHandler = _defaults.appendHandler;
 export const commitHandler = _defaults.commitHandler;
 export const abortHandler = _defaults.abortHandler;
+export const pipelineLogFailureHandler = _defaults.pipelineLogFailureHandler;

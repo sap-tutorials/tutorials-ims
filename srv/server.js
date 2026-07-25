@@ -24,7 +24,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
@@ -422,6 +422,13 @@ cds.on('bootstrap', (app) => {
   app.post('/content/publish/append', express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);
   app.post('/content/publish/commit', express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
   app.post('/content/publish/abort',  express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
+
+  // CI rebuild-failure reporter (#observability): lets rebuild-content(-qa).yml
+  // `if: failure()` steps record a FAILED PipelineLog row for failures that
+  // happen in CI BEFORE content reaches the srv (Hugo build gate, verify-qa-
+  // build, auth 503) — so they surface in the admin PipelineLog instead of only
+  // going red in an unwatched CI tab. Same auth as /content/publish.
+  app.post('/content/pipeline-log', express.json({ limit: '256kb' }), contentAuthMiddleware, pipelineLogFailureHandler);
 
   // Analytics Builder Phase 1 — streaming CSV export. Mounted later in this
   // bootstrap block (after contextMw/authMw are defined) so req.user is
