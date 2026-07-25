@@ -322,19 +322,22 @@
       "source": "^/mcp/(.*)$",
       "target": "/mcp/$1",
       "destination": "srv-api",
-      "authenticationType": "none"
+      "authenticationType": "none",
+      "csrfProtection": false
     },
     {
       "source": "^/mcp-pat/(.*)$",
       "target": "/mcp-pat/$1",
       "destination": "srv-api",
-      "authenticationType": "none"
+      "authenticationType": "none",
+      "csrfProtection": false
     },
     {
       "source": "^/mcp-auth/(.*)$",
       "target": "/mcp-auth/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
+      "csrfProtection": false,
       "scope": "$XSAPPNAME.Tutorial.MCP"
     },
     {
@@ -342,6 +345,7 @@
       "target": "/mcp-admin/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
+      "csrfProtection": false,
       "scope": "$XSAPPNAME.Tutorial.MCP"
     },
     {
@@ -349,6 +353,7 @@
       "target": "/a2a",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
+      "csrfProtection": false,
       "scope": "$XSAPPNAME.Tutorial.MCP"
     },
     {

@@ -9,9 +9,10 @@
 // approuter/xs-app.json, so AppRouter starts enforcing CSRF on all
 // XSUAA routes with mutating methods.
 //
-// Also grep-asserts that xs-app.json contains ZERO occurrences of the
-// substring `"csrfProtection"` — belt-and-braces against a future PR
-// that reintroduces the flag (in either polarity).
+// Also asserts that xs-app.json only sets `csrfProtection` on the MCP/A2A
+// routes (see CSRF_EXEMPT_SOURCES) — those serve non-browser JSON-RPC clients
+// that cannot do the token handshake. Everywhere else the flag is banned (in
+// either polarity) — belt-and-braces against a future PR that reintroduces it.
 //
 // Exit codes:
 //   0  clean.
@@ -36,26 +37,69 @@ interface Violation {
 }
 
 // -----------------------------------------------------------------------------
-// xs-app.json invariant — zero occurrences of "csrfProtection"
+// xs-app.json invariant — csrfProtection is banned EXCEPT on the MCP/A2A routes
 // -----------------------------------------------------------------------------
+//
+// #895 removed `csrfProtection: false` from every route and this guard used to
+// assert ZERO occurrences. That rule went stale: the MCP/A2A endpoints added
+// afterwards (#912, #1105, #1106, #1220) serve non-browser JSON-RPC clients
+// that cannot perform the AppRouter `x-csrf-token` fetch/validate handshake, so
+// they legitimately carry `csrfProtection: false`. These sources are exempt;
+// the flag is still banned (in any polarity) on every other route, and only the
+// value `false` is permitted even on the exempt ones (a stray `true` there is a
+// mistake worth surfacing).
+const CSRF_EXEMPT_SOURCES = new Set([
+  '^/mcp/(.*)$',
+  '^/mcp-pat/(.*)$',
+  '^/mcp-auth/(.*)$',
+  '^/mcp-admin/(.*)$',
+  '^/a2a/?$',
+]);
 
 function checkXsAppJson(): Violation[] {
   const path = resolve(REPO_ROOT, 'approuter/xs-app.json');
   const content = readFileSync(path, 'utf8');
   const violations: Violation[] = [];
+
+  const xsapp = JSON.parse(content) as { routes?: Array<Record<string, unknown>> };
+  const routes = Array.isArray(xsapp.routes) ? xsapp.routes : [];
+
+  // Line lookup so violations still point at the offending line.
   const lines = content.split('\n');
-  lines.forEach((line, idx) => {
-    if (line.includes('csrfProtection')) {
+  const lineOf = (source: string): number => {
+    const idx = lines.findIndex((l) => l.includes(`"${source}"`));
+    return idx === -1 ? 1 : idx + 1;
+  };
+
+  for (const route of routes) {
+    if (!('csrfProtection' in route)) continue;
+    const source = typeof route.source === 'string' ? route.source : '<unknown>';
+    const value = route.csrfProtection;
+
+    if (!CSRF_EXEMPT_SOURCES.has(source)) {
       violations.push({
         file: 'approuter/xs-app.json',
-        line: idx + 1,
+        line: lineOf(source),
         method: 'N/A',
         url: null,
         reason:
-          '`csrfProtection` reappeared in xs-app.json. After #895 the file must contain zero occurrences — approuter\'s default (true) is what we want. If you have a route that legitimately needs csrf disabled, discuss it on the issue tracker first.',
+          `\`csrfProtection\` on route \`${source}\` is not allowed. After #895 the AppRouter default (true) is required on browser-facing routes. Only the MCP/A2A routes (${[...CSRF_EXEMPT_SOURCES].join(', ')}) may set it — they serve non-browser JSON-RPC clients. If a new route legitimately needs csrf disabled, add its source to CSRF_EXEMPT_SOURCES with a reason and discuss on the issue tracker first.`,
+      });
+      continue;
+    }
+
+    // Exempt route: only `false` is meaningful here.
+    if (value !== false) {
+      violations.push({
+        file: 'approuter/xs-app.json',
+        line: lineOf(source),
+        method: 'N/A',
+        url: null,
+        reason:
+          `Route \`${source}\` sets \`csrfProtection: ${JSON.stringify(value)}\`. The MCP/A2A exemption only permits the value \`false\`; anything else is a mistake.`,
       });
     }
-  });
+  }
   return violations;
 }
 
