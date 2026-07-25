@@ -102,7 +102,8 @@ export default defineConfig({
           { text: 'Writing tutorials', link: '/authors/writing-tutorials' },
           { text: 'Repo / group owners', link: '/authors/repo-group-owners' },
           { text: 'Center admin',      link: '/authors/center-admin' },
-          { text: 'Analytics admin',   link: '/authors/analytics-admin' }
+          { text: 'Analytics admin',   link: '/authors/analytics-admin' },
+          { text: 'Joule commands',    link: '/authors/joule-commands' }
         ]},
         { text: 'Branching paths', items: [
           { text: 'Branched missions',  link: '/authors/branched-missions' },
