@@ -55,6 +55,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Determine environment
         id: env
@@ -63,8 +66,20 @@ jobs:
       - name: Set version
         id: version
         run: |
-          VERSION="1.0.${{ github.run_number }}"
+          set -euo pipefail
+          RAW=$(git describe --tags --match 'v*' --always)
+          # Normalize to valid MTA semver: strip a leading 'v<digit>', else
+          # fall back to 0.0.0-g<raw> (no v* tag reachable). See
+          # docs/superpowers/specs/2026-07-25-mta-versioning-design.md §1.
+          if [[ "$RAW" =~ ^v[0-9] ]]; then
+            VERSION="${RAW#v}"
+          else
+            VERSION="0.0.0-g${RAW}"
+          fi
+          SHORT_SHA=$(git rev-parse --short HEAD)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "gitSha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "Computed MTA version: $VERSION (sha $SHORT_SHA)"
           sed -i "s/^version: .*/version: $VERSION/" mta.yaml
 
       - name: Setup Node.js
@@ -217,6 +232,19 @@ jobs:
           key: hugo-binary-${{ hashFiles('mta.yaml') }}-linux-amd64
           restore-keys: |
             hugo-binary-
+
+      - name: Write srv/version.json
+        run: |
+          set -euo pipefail
+          cat > srv/version.json <<EOF
+          {
+            "version": "${{ steps.version.outputs.version }}",
+            "gitSha": "${{ steps.version.outputs.gitSha }}",
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          echo "Wrote srv/version.json:"
+          cat srv/version.json
 
       - name: Build MTA archive
         run: mbt build -e deploy/${{ steps.env.outputs.target }}.mtaext
