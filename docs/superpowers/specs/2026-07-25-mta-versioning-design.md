@@ -149,3 +149,14 @@ triggered (`workflow_dispatch` with an environment choice).
   code).
 - `DEPLOYED.md` — new tracking file at repo root.
 - Initial `v1.0.0` git tag on current prod commit (one-time, out-of-band).
+
+## Cutover
+
+One-time seed of the initial release tag (run by a human with push access,
+against the commit currently live in prod — `203c4161` at time of writing):
+
+    git tag -a v1.0.0 203c4161 -m "Initial versioned release (tutorials-ims)"
+    git push origin v1.0.0
+
+After this, a deploy from that commit computes MTA version `1.0.0`; deploys
+from commits ahead of the tag compute `1.0.0-<N>-g<sha>`.
