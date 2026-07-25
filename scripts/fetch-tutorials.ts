@@ -66,6 +66,37 @@ export function getHugoContentDir(channel: Channel): string {
 }
 
 /**
+ * Front matter for the QA site's root `_index.md`.
+ *
+ * The QA site has NO rich homepage — the tutorial navigator IS the QA root.
+ * Prod renders its navigator from the committed
+ * `content/tutorial-navigator/_index.md` (a separate `/tutorial-navigator/`
+ * section) while `content/_index.md` renders the homepage. But `content-qa/`
+ * is fully gitignored + generated, and the QA fetch only writes `tutorials/**`
+ * — so without an explicit root `_index.md`, the QA home falls through to a
+ * default layout that emits neither `#browse-data` nor `#tutorial-navigator`,
+ * and `verify-qa-build` fails with "#browse-data script tag is absent".
+ *
+ * `type: tutorial-navigator` + `layout: list` resolves the navigator layout
+ * (`layouts/tutorial-navigator/list.html`) at the QA root. That template keys
+ * its QA affordances (`data-search-base="/qa-search"`, `data-nav-base`) off
+ * `site.Params.qa`, which `hugo.qa.toml` sets — so the same layout produces
+ * the QA-correct markers the verify gate requires.
+ */
+export function qaHomeIndexMarkdown(): string {
+  return [
+    '---',
+    'title: "[QA] Tutorial navigator"',
+    'description: "QA preview — browse tutorials built from -Contribution branches."',
+    'type: "tutorial-navigator"',
+    'layout: "list"',
+    '---',
+    '',
+  ].join('\n')
+}
+
+
+/**
  * Prune stale `<slug>.md` files from `cacheDir` — any whose slug is NOT in
  * `discoveredSlugs` gets unlinked. Used at the end of a fetch run to
  * reconcile `actions/cache@v4` restorations against the current discovery
@@ -588,6 +619,18 @@ async function main() {
   writeFileSync(join(CACHE_DIR, '.channel'), channel, 'utf-8')
 
   console.log(`[channel] ${channel} (cache: ${CACHE_DIR}, content: ${OUTPUT_DIR})\n`)
+
+  // QA channel: the QA site has NO rich homepage — the tutorial navigator IS
+  // the QA root. Without an explicit `content-qa/_index.md`, the QA home falls
+  // through to a default layout that emits neither `#browse-data` nor
+  // `#tutorial-navigator`, and `verify-qa-build` fails. Emit the navigator-as-
+  // root index (see qaHomeIndexMarkdown for the full rationale).
+  if (target === 'hugo' && channel === 'qa') {
+    const qaRoot = getHugoContentDir(channel)
+    mkdirSync(qaRoot, { recursive: true })
+    writeFileSync(join(qaRoot, '_index.md'), qaHomeIndexMarkdown(), 'utf-8')
+    console.log('  [channel] wrote content-qa/_index.md (navigator layout as QA root)\n')
+  }
 
   let allTutorials: DiscoveredTutorial[]
   let discoveryMs = 0

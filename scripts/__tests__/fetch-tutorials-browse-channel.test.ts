@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { browseDataFile, buildAllCards } from '../fetch-tutorials'
+import { browseDataFile, buildAllCards, qaHomeIndexMarkdown } from '../fetch-tutorials'
 import type {
   TutorialNavEntry,
   Mission,
@@ -14,6 +14,25 @@ describe('browseDataFile channel awareness', () => {
   })
   it('writes qa browse.json under hugo/data-qa', () => {
     expect(browseDataFile('qa').replace(/\\/g, '/')).toMatch(/hugo\/data-qa\/browse\.json$/)
+  })
+})
+
+describe('qaHomeIndexMarkdown — QA root renders the navigator layout', () => {
+  const md = qaHomeIndexMarkdown()
+  // These two front-matter keys are what make the QA site root resolve to
+  // layouts/tutorial-navigator/list.html, which emits #browse-data and
+  // #tutorial-navigator[data-search-base="/qa-search"] — the exact markers
+  // scripts/verify-qa-build.ts requires on index.html. If either regresses,
+  // the QA build gate fails and the whole QA channel is blocked.
+  it('declares type: tutorial-navigator', () => {
+    expect(md).toMatch(/^type:\s*"tutorial-navigator"/m)
+  })
+  it('declares layout: list', () => {
+    expect(md).toMatch(/^layout:\s*"list"/m)
+  })
+  it('is valid front matter (opens and closes with ---)', () => {
+    expect(md.startsWith('---\n')).toBe(true)
+    expect(md).toMatch(/\n---\n/)
   })
 })
 
