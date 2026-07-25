@@ -303,7 +303,11 @@ resources:
     optional: true
     parameters:
       service: auditlog
-      service-plan: premium
+      # 'standard' is the only plan the auditlog broker offers in this landscape
+      # (cf marketplace -e auditlog) and matches the live instance. The prior
+      # value 'premium' does not exist as a plan — it slipped in with #503 and
+      # only surfaced once a deploy re-reconciled this resource block.
+      service-plan: standard
 
   - name: tutorials-cloud-logging
     type: org.cloudfoundry.managed-service
@@ -341,7 +345,12 @@ resources:
     type: org.cloudfoundry.managed-service
     parameters:
       service: credstore
-      service-plan: default
+      # 'standard' is the credstore broker's real plan in this landscape
+      # (cf marketplace -e credstore: standard|proxy) and matches the live
+      # instance. The prior value 'default' does not exist — #503 assumed a
+      # standard->default rename that never happened (its own risk note flagged
+      # "verify the plan name"); latent until a deploy re-reconciled this block.
+      service-plan: standard
       service-name: tutorials-credstore
       config:
         authentication: basic
