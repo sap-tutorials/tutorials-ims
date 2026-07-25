@@ -81,6 +81,9 @@ npm run build:deploy
 
 ### ☐ Step 3 — Package (mbt build)
 
+- [ ] **Bump `version:` in `.deploy/mta.yaml`** if this deploy is a new release.
+      This is the version `cf mtas` reports and the `tutorials-ims_<version>.mtar`
+      filename. It is hand-maintained (not generated) — semver, your call when to bump.
 - [ ] `cd .deploy && mbt build`.
 - [ ] **Verify a fresh mtar was produced** — check `mta_archives/*.mtar` mtime advanced.
       *(mbt can silently no-op with exit 0 if its Go binary was never unpacked.
