@@ -77,6 +77,16 @@ jobs:
             VERSION="0.0.0-g${RAW}"
           fi
           SHORT_SHA=$(git rev-parse --short HEAD)
+          # Strict allowlist gate — reject any value with shell metacharacters
+          # before it can reach GITHUB_OUTPUT or downstream interpolation.
+          if [[ ! "$VERSION" =~ ^[0-9A-Za-z._+-]+$ ]]; then
+            echo "::error::Computed VERSION contains disallowed characters: $VERSION"
+            exit 1
+          fi
+          if [[ ! "$SHORT_SHA" =~ ^[0-9A-Za-z._+-]+$ ]]; then
+            echo "::error::Computed SHORT_SHA contains disallowed characters: $SHORT_SHA"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "gitSha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
           echo "Computed MTA version: $VERSION (sha $SHORT_SHA)"
@@ -234,17 +244,14 @@ jobs:
             hugo-binary-
 
       - name: Write srv/version.json
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GITSHA: ${{ steps.version.outputs.gitSha }}
         run: |
           set -euo pipefail
-          cat > srv/version.json <<EOF
-          {
-            "version": "${{ steps.version.outputs.version }}",
-            "gitSha": "${{ steps.version.outputs.gitSha }}",
-            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
-          EOF
-          echo "Wrote srv/version.json:"
-          cat srv/version.json
+          jq -n --arg v "$VERSION" --arg s "$GITSHA" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version:$v, gitSha:$s, builtAt:$t}' > srv/version.json
+          echo "Wrote srv/version.json:"; cat srv/version.json
 
       - name: Build MTA archive
         run: mbt build -e deploy/${{ steps.env.outputs.target }}.mtaext
@@ -394,13 +401,15 @@ jobs:
           fi
 
       - name: Deploy MTA
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           STRATEGY_FLAGS=""
           if [ "${{ steps.env.outputs.target }}" = "prod" ]; then
             STRATEGY_FLAGS="--strategy blue-green --skip-testing-phase"
           fi
 
-          cf deploy mta_archives/tutorials-ims_${{ steps.version.outputs.version }}.mtar \
+          cf deploy "mta_archives/tutorials-ims_${VERSION}.mtar" \
             -e deploy/${{ steps.env.outputs.target }}.mtaext \
             $STRATEGY_FLAGS \
             -f
