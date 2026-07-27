@@ -4,22 +4,34 @@
   core:require="{ handler: 'sap/tutorials/admin/missions/ext/TaskColumnHandler' }">
   <!--
     Issue #426 — value-help icon was suppressed in the Path Items LineItem
-    table because the original bindings used `%{...}` syntax. Per memory
-    feedback_ui5_dollar_vs_percent_binding, `%{IsActiveEntity}` is for FE V4
-    Object Page TOP-LEVEL state; row-level cell bindings inside a LineItem
-    must use `${...}`. With the wrong syntax UI5's expression engine resolves
-    `%{taskType}` to nothing → `showValueHelp` collapses to false → no F4 icon
-    rendered. The `value` and `placeholder` bindings already used the correct
-    `path:` form, which is why the display text worked even though the icon
-    didn't. Switched both expression bindings to `${...}`.
+    table. History: originally the bindings used `%{...}` syntax; that was
+    switched to `${...}` (row-context expression binding). But `${...}` alone
+    still left the F4 icon missing.
 
-    Lint guard: test/scripts/check-fragment-binding-mode.test.ts will fail
-    if any fragment under app/admin/ reintroduces `%{...}` with a row-context
+    Real root cause (verified live in the UI5 1.136 runtime): `showValueHelp`
+    is a BOOLEAN control property. In a single-reference expression binding,
+    UI5 applies the *target property's type* as the referenced part's
+    targetType — so it tries to coerce the OData String `taskType` ("TUTORIAL")
+    into a boolean BEFORE the expression runs. That throws
+      FormatException: "TUTORIAL is not a valid boolean value"
+    the binding falls back to `false`, and the icon never renders.
+
+    Fix: opt the string part out of type coercion with `targetType: 'any'`,
+    so the expression receives the raw string and evaluates
+    `"TUTORIAL" !== 'CHECKPOINT'` → true. A/B tested live: bare `${taskType}`
+    → FormatException + showValueHelp:false; `targetType:'any'` →
+    showValueHelp:true, no error.
+
+    `editable` below references `IsActiveEntity`, which is genuinely boolean in
+    the OData model, so boolean coercion there is a no-op and needs no change.
+
+    Lint guard: test/scripts/check-fragment-binding-mode.test.ts fails if any
+    fragment under app/admin/ reintroduces `%{...}` with a row-context
     identifier.
   -->
   <Input
     value="{parts: [{path: 'taskType'}, {path: 'tutorial/title'}, {path: 'group/title'}, {path: 'checkpointTitle'}], formatter: 'handler.formatTaskDisplay'}"
-    showValueHelp="{= ${taskType} !== 'CHECKPOINT' }"
+    showValueHelp="{= ${path:'taskType', targetType:'any'} !== 'CHECKPOINT' }"
     valueHelpRequest="handler.onTaskValueHelp"
     editable="{= !${IsActiveEntity} }"
     change="handler.onCheckpointChange"
