@@ -1,39 +1,51 @@
 <core:FragmentDefinition
   xmlns:core="sap.ui.core"
-  xmlns="sap.m"
-  core:require="{ handler: 'sap/tutorials/admin/missions/ext/TaskColumnHandler' }">
+  xmlns:macros="sap.fe.macros">
   <!--
-    Issue #426 — value-help icon was suppressed in the Path Items LineItem
-    table. History: originally the bindings used `%{...}` syntax; that was
-    switched to `${...}` (row-context expression binding). But `${...}` alone
-    still left the F4 icon missing.
+    Issue #426 — the "Task" cell in the Path Items LineItem table needs a
+    value help that differs by row type: TUTORIAL → Tutorials picker,
+    GROUP → Groups picker, CHECKPOINT → free-text checkpoint title.
 
-    Real root cause (verified live in the UI5 1.136 runtime): `showValueHelp`
-    is a BOOLEAN control property. In a single-reference expression binding,
-    UI5 applies the *target property's type* as the referenced part's
-    targetType — so it tries to coerce the OData String `taskType` ("TUTORIAL")
-    into a boolean BEFORE the expression runs. That throws
-      FormatException: "TUTORIAL is not a valid boolean value"
-    the binding falls back to `false`, and the icon never renders.
+    History of failed fixes (do NOT reintroduce a hand-rolled Input):
+      #1331 eager-loaded the core:require handler in Component.js;
+      #1345 added targetType:'any' to a showValueHelp expression binding.
+    Both were correct in isolation yet the F4 icon stayed missing on the
+    DEPLOYED approuter. Root cause (verified 2026-07-27 via Playwright on DEV +
+    a faithful local hybrid repro): admin child components ship WITHOUT a
+    Component-preload.js. On the deployed shell (which HAS a root preload,
+    optimized async mode) the runtime requests components/missions/
+    Component-preload.js, gets a non-executable HTML fallback, and the
+    core:require handler resolves LATER than Fiori Elements' synchronous
+    column-template clone. With `handler` unresolved at clone time the
+    showValueHelp expression binding silently degrades to a bare path binding
+    on the String `taskType`, which UI5 coerces to Boolean → FormatException
+    ("TUTORIAL is not a valid boolean value") → showValueHelp:false → no icon.
+    This only reproduces under deployed load-timing, which is why the earlier
+    fixes passed local/standalone checks but failed on DEV.
 
-    Fix: opt the string part out of type coercion with `targetType: 'any'`,
-    so the expression receives the raw string and evaluates
-    `"TUTORIAL" !== 'CHECKPOINT'` → true. A/B tested live: bare `${taskType}`
-    → FormatException + showValueHelp:false; `targetType:'any'` →
-    showValueHelp:true, no error.
+    Fix: drop the core:require handler + expression binding entirely and use
+    native sap.fe.macros:Field building blocks — the SAME pattern the sibling
+    TypeColumn.fragment.xml already uses successfully on DEV. Each Field binds
+    its own metaPath and FE renders that field's value help natively from the
+    existing @Common.ValueList annotations on AdminService.CompletionPathItems
+    (tutorial_ID → Tutorials, group_ID → Groups; see app/admin-annotations.cds).
+    There is no lazily-loaded module to lose a race against and no expression
+    binding over a Boolean property to coerce, so the failure mode is removed
+    by construction.
 
-    `editable` below references `IsActiveEntity`, which is genuinely boolean in
-    the OData model, so boolean coercion there is a no-op and needs no change.
-
-    Lint guard: test/scripts/check-fragment-binding-mode.test.ts fails if any
-    fragment under app/admin/ reintroduces `%{...}` with a row-context
-    identifier.
+    Per-type visibility uses the server-computed Boolean fields
+    show{Tutorial,Group,Checkpoint} (srv/admin-service.cds — `case when
+    taskType = '…'`). These are genuine Booleans in the model, so binding them
+    to macros:Field `visible` needs no expression and no coercion. Exactly one
+    is true per row, so exactly one Field renders in the cell.
   -->
-  <Input
-    value="{parts: [{path: 'taskType'}, {path: 'tutorial/title'}, {path: 'group/title'}, {path: 'checkpointTitle'}], formatter: 'handler.formatTaskDisplay'}"
-    showValueHelp="{= ${path:'taskType', targetType:'any'} !== 'CHECKPOINT' }"
-    valueHelpRequest="handler.onTaskValueHelp"
-    editable="{= !${IsActiveEntity} }"
-    change="handler.onCheckpointChange"
-    placeholder="{path: 'taskType', formatter: 'handler.formatPlaceholder'}"/>
+  <macros:Field
+    metaPath="tutorial_ID"
+    visible="{showTutorial}"/>
+  <macros:Field
+    metaPath="group_ID"
+    visible="{showGroup}"/>
+  <macros:Field
+    metaPath="checkpointTitle"
+    visible="{showCheckpoint}"/>
 </core:FragmentDefinition>
