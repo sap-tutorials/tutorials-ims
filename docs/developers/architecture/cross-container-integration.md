@@ -11,9 +11,12 @@ Read this when a second BTP app in the subaccount needs to read our tables/views
 Two independently-deployed CAP apps share one HANA instance, each with its own HDI container. Neither container can see the other's objects by default. To share data:
 
 1. **Provider** publishes a **versioned view** (`<DOMAIN>_<PURPOSE>_V<n>`) — its stable API surface. Never expose base tables.
-2. **Consumer** binds the provider's HDI container and uses **its technical user as grantor**. A `.hdbgrants` file grants `SELECT` on that one view to the consumer's own roles.
-3. **Consumer** declares a `.hdbsynonym` pointing at the provider view, then wraps it in a `@cds.persistence.exists` **CDS facade** (a proxy view) so the CAP layer sees a normal read-only entity.
-4. First-time bring-up is **base-then-enable**: publish views first (no cross-deps), then add grants + synonyms (targets now exist).
+2. **Provider** defines a least-privilege **`.hdbrole`** granting `SELECT` on that view — the role *is* the versioned API contract.
+3. **Consumer** binds the provider's HDI container and uses **its technical user as grantor**. A `.hdbgrants` file requests the provider's role (`container_roles`) for the consumer's own roles.
+4. **Consumer** declares a `.hdbsynonym` pointing at the provider view, then wraps it in a `@cds.persistence.exists` **CDS facade** (a proxy view) so the CAP layer sees a normal read-only entity.
+5. First-time bring-up is **base-then-enable**: publish views + roles first (no cross-deps), then add grants + synonyms (targets now exist).
+
+> **No `.hdbsynonymconfig` needed for HDI-to-HDI.** Grants + synonyms are sufficient; the synonym resolves through the granted role on the bound container. (`.hdbsynonymconfig` is only for externalizing/parameterizing synonym targets — an optional convenience, not a requirement here. Confirmed against the [XSA cross-container tutorial](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/xsa-cross-container-access), which works identically on CF + HANA Cloud.)
 
 The link is directional. Bi-directional access = two independent legs, each following steps 1–4.
 
@@ -41,9 +44,11 @@ The published view name carries a version suffix (`TUTORIAL_VALUE_HELP_V1`). The
 
 Track live versions in the [registry](#cross-container-link-registry) below.
 
-### D3 — Direct cross-bind grantor, NOT a grantor user-provided-service.
+### D3 — Direct cross-bind grantor + a provider-defined role. NOT a grantor user-provided-service.
 
 The consumer's db-deployer `requires:` the **provider's HDI container instance directly** (as an `existing-service` in mta.yaml). HDI uses that bound container's own technical (object-owner) user as the grantor for the `.hdbgrants`.
+
+**Grant via a named role, not direct object privileges.** The provider defines a least-privilege **`.hdbrole`** that grants `SELECT` on its published `_Vn` view(s); the consumer's `.hdbgrants` requests that role by name (`container_roles`). This keeps the API surface in one provider-owned place — adding a view to the shared contract means the provider edits its role, not every consumer's grants file. (The [XSA tutorial](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/xsa-cross-container-access) uses a broad `admin` role for illustration; **use a narrow, purpose-named reader role in real integrations** — the tutorial says as much.)
 
 We do **not** wrap the grant credentials in a separate `user-provided-service` (the pattern used by `tutorials-kg-grantor` for SPARQL/`SYS` grants — see `hana-kge-access.md`). That indirection exists only because `SYS` isn't a bindable container. **Container-to-container is a first-class HDI case**: both sides are real HDI containers, so binding one from the other is cleaner, has no extra secret to rotate, and no extra UPS resource to keep in sync.
 
@@ -77,25 +82,41 @@ VIEW "TUTORIAL_VALUE_HELP_V1" AS
   WHERE "status" = 'ACTIVE' OR "status" IS NULL
 ```
 
-That's the entire provider obligation. No grants, no knowledge of who consumes it. (If you prefer a CDS-authored view, define it in the db model and let `cds build` emit the `.hdbview` — but keep the physical name version-suffixed.)
+That's the entire provider view obligation. No grants, no knowledge of who consumes it. (If you prefer a CDS-authored view, define it in the db model and let `cds build` emit the `.hdbview` — but keep the physical name version-suffixed.)
+
+**P2 — Define a least-privilege reader role.** In `db/src/<PURPOSE>_reader.hdbrole`, grant `SELECT` on the published view(s). This role is the versioned API contract consumers request:
+
+```json
+// db/src/tutorial_value_help_reader.hdbrole
+{
+  "role": {
+    "name": "tutorial_value_help_reader",
+    "object_privileges": [
+      { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] }
+    ]
+  }
+}
+```
+
+Add views to the shared surface by editing this role — consumers need no change.
 
 ### Consumer side
 
-**C1 — Bind the provider container + grant SELECT.** The consumer's db-deployer gains a `requires:` on the provider's HDI container (an `existing-service`), and a `.hdbgrants` keyed by that bound service name grants `SELECT` on the view to the consumer's own roles:
+**C1 — Bind the provider container + request its role.** The consumer's db-deployer gains a `requires:` on the provider's HDI container (an `existing-service`), and a `.hdbgrants` keyed by that bound service name requests the provider's reader role for the consumer's own roles:
 
 ```jsonc
 // db/src/<provider>-grants.hdbgrants   (top-level key = the bound provider service name)
 {
   "tutorials-hana": {
-    "object_owner":     { "object_privileges": [ { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] } ] },
-    "application_user": { "object_privileges": [ { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] } ] }
+    "object_owner":     { "container_roles": [ "tutorial_value_help_reader" ] },
+    "application_user": { "container_roles": [ "tutorial_value_help_reader" ] }
   }
 }
 ```
 
 - `object_owner` — lets the consumer's own views/procedures build on the synonym at deploy time.
 - `application_user` — lets the CAP runtime read it.
-- **Grant on the specific view only** — never schema-wide, never the base table.
+- The role is **least-privilege** (SELECT on specific views only) — defined once, provider-side (P2).
 
 > ⚠️ **Every top-level key in a `.hdbgrants` must be a genuinely bound service**, or the whole deploy fails with "service not found". Comment keys and unbound keys break it. This is why C1's grant and the mta `requires:` are a single unit — see `db/_grants.hdbgrants.md` for the same rule applied to the SPARQL grantor.
 
@@ -110,7 +131,7 @@ That's the entire provider obligation. No grants, no knowledge of who consumes i
 }
 ```
 
-The synonym resolves through the granted privilege on the bound container — no explicit schema needed when the grant is in place. (If HDI needs the grantor pinned explicitly, add a `.hdbsynonymconfig` naming the bound service; start without it and add only if deploy complains.)
+The synonym resolves through the role granted on the bound container — no explicit schema and **no `.hdbsynonymconfig` needed** for HDI-to-HDI. (`.hdbsynonymconfig` only externalizes the target for parameterization; skip it unless you have a reason.)
 
 **C3 — Generate the `@cds.persistence.exists` facade.** Once the synonym resolves, introspect the live view to emit the CDS proxy rather than hand-typing it:
 
@@ -148,10 +169,10 @@ Phase 0  Both container instances exist, service-names PINNED on both sides.
          (A CF-autogenerated container name can't be referenced by the other project —
           pin `service-name:` on the hdi-container resource in mta.yaml.)
 
-Phase 1  BASE — publish views only. No grants, no synonyms. Zero cross-container deps,
-         so each side deploys cleanly and independently.
-         ├─ provider A  → publish A's view
-         └─ provider B  → publish B's view   (if bi-directional)
+Phase 1  BASE — publish views + reader roles only. No grants, no synonyms. Zero cross-container
+         deps, so each side deploys cleanly and independently.
+         ├─ provider A  → publish A's view + reader role
+         └─ provider B  → publish B's view + reader role   (if bi-directional)
 
 Phase 2  ENABLE — add grants + synonyms + facades. Targets now exist, so they resolve.
          ├─ consumer of A → hdbgrants + synonym + facade → A's view
@@ -172,6 +193,8 @@ Phase 3  VERIFY — probe each synonym with a real SQL read (hana-cli) BEFORE tr
 - **Unpinned `service-name` breaks referenceability** — a container whose instance name CF auto-generated can't be named by the other project's `requires:`. Pin `service-name:` on both `com.sap.xs.hdi-container` resources.
 - **Synonym target missing → loud deploy failure** — deploy the provider view first (D5). The error names the unresolved synonym; the fix is ordering, not a code change.
 - **`.hdbgrants` unbound-key failure** — every top-level key must map to a bound service (see C1 warning).
+- **Broaden/narrow the API surface via the role, not the grant** — add or remove a view from a consumer's reach by editing the provider's `.hdbrole`; consumers keep requesting the same role name and pick up the change on next deploy. Never enumerate individual object privileges in a consumer's `.hdbgrants`.
+- **Use a narrow reader role, never `admin`** — the linked tutorial grants `admin` for brevity; real integrations define a purpose-named least-privilege role (SELECT on the specific `_Vn` views only).
 - **No cross-container FK** — the facade is read-only and enforces nothing; a stored foreign key can dangle when the provider retires the row (D6 — store a label snapshot).
 - **Dropping a `_Vn` view breaks live synonyms** — follow the versioning policy (D2): add `_V2`, migrate, retire `_V1`.
 - **QA/other channels** — grant only the containers actually in scope. Extra channels (e.g. `tutorials-hana-qa`) don't automatically participate; wire them explicitly if needed.
@@ -195,5 +218,7 @@ Every active cross-container link. Update on add/version-bump/retire.
 - Feature spec (worked example): `docs/superpowers/specs/2026-07-27-devtoberfest-cross-container-design.md`
 - CAP: [Add existing SAP HANA objects from other HDI containers](https://cap.cloud.sap/docs/guides/databases/hana-native#add-existing-sap-hana-objects-from-other-hdi-containers)
 - HDI grants/synonyms mechanics: [`@sap/hdi-deploy`](https://www.npmjs.com/package/@sap/hdi-deploy)
+- Worked cross-container walkthrough (role-based grants, no synonymconfig; XSA but identical on CF + HANA Cloud): [XSA cross-container access tutorial](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/xsa-cross-container-access)
+- Real cross-container sample project (mine for exact `.hdbgrants`/`.hdbrole`/`.hdbsynonym` syntax): [SAP-samples/hana-opensap-cloud-2020](https://github.com/SAP-samples/hana-opensap-cloud-2020)
 - Existing grantor-UPS pattern (contrast, D3): `docs/developers/architecture/hana-kge-access.md`, `docs/developers/operations/kg-grantor-setup.md`, `db/_grants.hdbgrants.md`
 - Deploy runbook: `docs/developers/operations/mta-deployment.md`
