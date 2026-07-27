@@ -76,6 +76,27 @@ export async function commitSession(i: CommitInput): Promise<CommitResult> {
   return postJson(`${i.baseUrl}/content/publish/commit`, i.apiKey, { sessionId: i.sessionId });
 }
 
+export interface RenderConceptsInput { baseUrl: string; apiKey: string; sessionId: string }
+export interface RenderConceptsResult {
+  conceptsSeen: number;
+  conceptsChanged: number;
+  conceptsSkipped: number;
+  conceptsErrored: number;
+  durationMs: number;
+}
+
+/**
+ * #1327 Thread B — trigger the server-side render-concepts phase within an open
+ * publish session. CAP reads PublishedConcepts + phase-4 tables, renders each
+ * concept detail page, and appends `concept-<slug>` BLOBs to the session (delta
+ * skips unchanged). Replaces the legacy "walk hugo/public/concepts" source.
+ * Must run AFTER all tutorial batches (so the __shell__ sidecar is present) and
+ * BEFORE commit.
+ */
+export async function renderConceptsPhase(i: RenderConceptsInput): Promise<RenderConceptsResult> {
+  return postJson(`${i.baseUrl}/content/publish/render-concepts`, i.apiKey, { sessionId: i.sessionId });
+}
+
 export async function abortSession({ baseUrl, apiKey, sessionId, reason }: {
   baseUrl: string; apiKey: string; sessionId: string; reason?: string;
 }): Promise<{ aborted: boolean }> {

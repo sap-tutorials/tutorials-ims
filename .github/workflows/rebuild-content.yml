@@ -83,6 +83,11 @@ on:
         required: false
         type: boolean
         default: false
+      legacy-concept-render:
+        description: '#1327 escape hatch. Default (false): CAP renders /concepts/ list + detail pages server-side; the Hugo concept fetcher is skipped and publish-content calls the render-concepts phase. Set true to restore the legacy Hugo concept pipeline (fetch-concepts emits .md, publish-content walks hugo/public/concepts).'
+        required: false
+        type: boolean
+        default: false
 
 env:
   NODE_VERSION: '22'
@@ -354,6 +359,10 @@ jobs:
         run: npm run fetch-concepts
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+          # #1327 — fetch-concepts.ts self-guards: it early-exits unless
+          # LEGACY_CONCEPT_RENDER=true (default new pipeline renders concepts
+          # in CAP). Passing the input keeps the escape hatch one flag away.
+          LEGACY_CONCEPT_RENDER: ${{ inputs.legacy-concept-render == true && 'true' || 'false' }}
 
       # [#759] Homepage data feeds — homepage-shelves (60 link cards),
       # verb-definitions (6 verb tile back-faces), shelf-definitions
@@ -495,6 +504,11 @@ jobs:
           # other mode → whole-catalog delta, unchanged. TUTORIAL_SLUG is the
           # already-resolved slug (inputs.slug || dispatch_slug).
           PUBLISH_SLUG: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' && (inputs.slug || steps.mode.outputs.dispatch_slug) || '' }}
+          # #1327 — drives publish-content's concept handling. Default (false):
+          # skip the hugo/public/concepts walk and call the render-concepts
+          # phase (CAP renders concept detail BLOBs). true: legacy Hugo walk,
+          # no render-concepts call.
+          LEGACY_CONCEPT_RENDER: ${{ inputs.legacy-concept-render == true && 'true' || 'false' }}
 
       - name: Purge orphan tutorials
         id: purge

@@ -406,8 +406,8 @@
     },
     {
       "source": "^/concepts/?$",
-      "target": "/concepts/index.html",
-      "localDir": "static",
+      "target": "/content/concepts-index",
+      "destination": "srv-api",
       "authenticationType": "none"
     },
     {
