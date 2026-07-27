@@ -13,12 +13,13 @@
 // so every regex tolerates both quoted and unquoted attribute forms.
 
 import { describe, expect, it } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const BASE = process.env.SMOKE_BASE_URL;
 
 describe.skipIf(!BASE)('Developer homepage smoke', () => {
   it('GET / returns the new homepage', async () => {
-    const res = await fetch(BASE + '/');
+    const res = await fetchWithRetry(BASE + '/', { redirect: 'follow' });
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toMatch(/<article[^>]+class=["']?developer-homepage/);
@@ -28,39 +29,39 @@ describe.skipIf(!BASE)('Developer homepage smoke', () => {
 
   it.each(['learn', 'build', 'integrate', 'model', 'operate', 'ai', 'connect'])('GET /%s/ returns the verb sub-page', async (verb) => {
     // (#1029) MODEL added as 7th verb — data-platform lane.
-    const res = await fetch(`${BASE}/${verb}/`);
+    const res = await fetchWithRetry(`${BASE}/${verb}/`, { redirect: 'follow' });
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toMatch(/<article[^>]+class=["']?verb-page/);
   });
 
   it('GET /tutorial-navigator/ renders the relocated navigator', async () => {
-    const res = await fetch(BASE + '/tutorial-navigator/');
+    const res = await fetchWithRetry(BASE + '/tutorial-navigator/', { redirect: 'follow' });
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toMatch(/tutorial-navigator|navigator-grid/);
   });
 
   it('GET /tutorial-navigator.html 301-redirects to /tutorial-navigator/', async () => {
-    const res = await fetch(BASE + '/tutorial-navigator.html', { redirect: 'manual' });
+    const res = await fetchWithRetry(BASE + '/tutorial-navigator.html', { redirect: 'manual' });
     expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe('/tutorial-navigator/');
   });
 
   it('GET /index.html 301-redirects to /', async () => {
-    const res = await fetch(BASE + '/index.html', { redirect: 'manual' });
+    const res = await fetchWithRetry(BASE + '/index.html', { redirect: 'manual' });
     expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe('/');
   });
 
   it('GET /tutorials/abap-dev-get-started/ still resolves (regression guard)', async () => {
-    const res = await fetch(BASE + '/tutorials/abap-dev-get-started/');
+    const res = await fetchWithRetry(BASE + '/tutorials/abap-dev-get-started/', { redirect: 'follow' });
     // Tutorial may 404 in a fresh deploy if content not yet published; accept 200 or 404 but never 301-to-wrong-place.
     expect([200, 404]).toContain(res.status);
   });
 
   it('GET /nonexistent.html returns 404 (conservative catch-all)', async () => {
-    const res = await fetch(BASE + '/nonexistent.html', { redirect: 'manual' });
+    const res = await fetchWithRetry(BASE + '/nonexistent.html', { redirect: 'manual' });
     expect([404, 200]).toContain(res.status);  // 200 if it accidentally exists; never 301
     expect(res.status).not.toBe(301);
   });
@@ -68,7 +69,7 @@ describe.skipIf(!BASE)('Developer homepage smoke', () => {
 
 describe.skipIf(!BASE)('Video band #1031 kind field', () => {
   it('GET /homepage/videos returns items tagged kind: anchor|popular', async () => {
-    const res = await fetch(BASE + '/homepage/videos');
+    const res = await fetchWithRetry(BASE + '/homepage/videos');
     expect(res.status).toBe(200);
     const body: { recent: Array<{ kind?: string }> } = await res.json();
     expect(Array.isArray(body.recent)).toBe(true);

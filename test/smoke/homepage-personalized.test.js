@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const BASE = process.env.SMOKE_BASE_URL;
 const USER = process.env.SMOKE_USER;
@@ -10,7 +11,7 @@ const maybe = canRun ? describe : describe.skip;
 maybe('deployed personalization endpoint', () => {
   it('returns X-Personalization: 1 on 200', async () => {
     const auth = 'Basic ' + Buffer.from(`${USER}:${PASS}`).toString('base64');
-    const r = await fetch(`${BASE}/homepage/personalized`, {
+    const r = await fetchWithRetry(`${BASE}/homepage/personalized`, {
       headers: { Authorization: auth },
     });
     expect([200, 204]).toContain(r.status);
@@ -23,14 +24,14 @@ maybe('deployed personalization endpoint', () => {
   it.skipIf(!process.env.SMOKE_HYBRID)('reflects prefs on / after preference change', async () => {
     const auth = 'Basic ' + Buffer.from(`${USER}:${PASS}`).toString('base64');
     // 1. Set role=developer so the endpoint has a non-empty profile to work with.
-    const setPrefs = await fetch(`${BASE}/api/setLearningPreferences`, {
+    const setPrefs = await fetchWithRetry(`${BASE}/api/setLearningPreferences`, {
       method: 'POST',
       headers: { Authorization: auth, 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: 'developer' }),
     });
     expect(setPrefs.ok).toBe(true);
     // 2. Fetch the personalized envelope.
-    const r = await fetch(`${BASE}/homepage/personalized`, {
+    const r = await fetchWithRetry(`${BASE}/homepage/personalized`, {
       headers: { Authorization: auth },
     });
     // Kill switch may be off on this environment — either outcome is acceptable.

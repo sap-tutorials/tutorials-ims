@@ -18,6 +18,7 @@
 // regular authenticated-user JWT for the public-endpoint test.
 
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const SRV = process.env.SMOKE_SRV_URL;
 const ADMIN_TOKEN = process.env.SMOKE_ADMIN_TOKEN;
@@ -25,7 +26,7 @@ const USER_TOKEN  = process.env.SMOKE_USER_TOKEN;
 
 describe.runIf(SRV && ADMIN_TOKEN)('tutorial authorship — admin smoke', () => {
   it('GET /admin/Tutorials surfaces authorEmail + at least one non-null author', async () => {
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${SRV}/admin/Tutorials?$top=5&$filter=author_ID%20ne%20null&$select=ID,slug,authorEmail,authorSapId,authorDisplayName`,
       { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }
     );
@@ -45,7 +46,7 @@ describe.runIf(SRV && ADMIN_TOKEN)('tutorial authorship — admin smoke', () => 
     // We don't assume any particular name is in the DB — just that
     // the search endpoint accepts $search without erroring. The
     // value-help dialog's actual UX is driven by this.
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${SRV}/admin/Users?$top=1&$search=a&$select=ID,displayName,email`,
       { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }
     );
@@ -59,7 +60,7 @@ describe.runIf(SRV && ADMIN_TOKEN)('tutorial authorship — admin smoke', () => 
 
 describe.runIf(SRV && USER_TOKEN)('tutorial authorship — public smoke (PII gate)', () => {
   it('GET /api/Tutorials exposes authorEmail + authorDisplayName but NOT authorSapId', async () => {
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${SRV}/api/Tutorials?$top=1&$filter=author_ID%20ne%20null&$select=ID,slug,authorEmail,authorDisplayName,authorFirstName,authorLastName`,
       { headers: { Authorization: `Bearer ${USER_TOKEN}` } }
     );
@@ -80,7 +81,7 @@ describe.runIf(SRV && USER_TOKEN)('tutorial authorship — public smoke (PII gat
   it('GET /api/Tutorials with $select=authorSapId returns 4xx — column is NOT exposed', async () => {
     // CRITICAL: this is the PII boundary. If a future projection
     // change leaks authorSapId to /api/, this test fails.
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${SRV}/api/Tutorials?$top=1&$select=authorSapId`,
       { headers: { Authorization: `Bearer ${USER_TOKEN}` } }
     );

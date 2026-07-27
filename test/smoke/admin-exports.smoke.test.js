@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const APPROUTER = process.env.SMOKE_BASE_URL;
 const SRV       = process.env.SMOKE_SRV_URL;
 
 describe.runIf(APPROUTER && SRV)('admin exports smoke', () => {
   it('rejects anonymous request to approuter (401, 302, or JS-redirect to XSUAA)', async () => {
-    const res = await fetch(`${APPROUTER}/admin/exports/exportLegacyData?format=csv`, { redirect: 'manual' });
+    const res = await fetchWithRetry(`${APPROUTER}/admin/exports/exportLegacyData?format=csv`, { redirect: 'manual' });
     // Approuter may respond with:
     //   - 401 (HEAD-style direct rejection)
     //   - 302 (server-side redirect to /oauth/authorize)
@@ -26,7 +27,7 @@ describe.runIf(APPROUTER && SRV)('admin exports smoke', () => {
   const ADMIN_TOKEN = process.env.SMOKE_ADMIN_TOKEN;
   describe.runIf(ADMIN_TOKEN)('with admin token', () => {
     it('GET csv: 200, content-type application/zip, ZIP magic', async () => {
-      const res = await fetch(`${SRV}/admin/exports/exportLegacyData?format=csv`, {
+      const res = await fetchWithRetry(`${SRV}/admin/exports/exportLegacyData?format=csv`, {
         headers: { Authorization: `Bearer ${ADMIN_TOKEN}` }
       });
       expect(res.status).toBe(200);
@@ -38,7 +39,7 @@ describe.runIf(APPROUTER && SRV)('admin exports smoke', () => {
     });
 
     it('GET xlsx: 200, correct content-type, ZIP magic (xlsx is a zip container)', async () => {
-      const res = await fetch(`${SRV}/admin/exports/exportLegacyData?format=xlsx`, {
+      const res = await fetchWithRetry(`${SRV}/admin/exports/exportLegacyData?format=xlsx`, {
         headers: { Authorization: `Bearer ${ADMIN_TOKEN}` }
       });
       expect(res.status).toBe(200);

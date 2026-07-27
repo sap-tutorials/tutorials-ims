@@ -8,6 +8,7 @@
 // Gates on SMOKE_BASE_URL so the suite skips cleanly in local runs.
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const APPROUTER = process.env.SMOKE_BASE_URL;
 
@@ -16,7 +17,7 @@ let REACHABLE = false;
 describe.runIf(APPROUTER)('#1034 /homepage/news smoke', () => {
   beforeAll(async () => {
     try {
-      const probe = await fetch(`${APPROUTER}/homepage/news`, { redirect: 'manual' });
+      const probe = await fetchWithRetry(`${APPROUTER}/homepage/news`, { redirect: 'manual' });
       REACHABLE = probe.status >= 200 && probe.status < 500;
       if (!REACHABLE) console.warn(`[smoke] ${APPROUTER}/homepage/news responded ${probe.status}; skipping`);
     } catch (e) {
@@ -27,7 +28,7 @@ describe.runIf(APPROUTER)('#1034 /homepage/news smoke', () => {
 
   it('returns an array of ≤2 items with the public shape', async () => {
     if (!REACHABLE) return;
-    const res = await fetch(`${APPROUTER}/homepage/news`);
+    const res = await fetchWithRetry(`${APPROUTER}/homepage/news`);
     expect(res.status).toBe(200);
     const body = await res.json();
     const arr = Array.isArray(body) ? body : body.value;
@@ -53,7 +54,7 @@ describe.runIf(APPROUTER)('#1034 /homepage/news smoke', () => {
 
   it('items are within the 14-day window (when relevance filter is on)', async () => {
     if (!REACHABLE) return;
-    const res = await fetch(`${APPROUTER}/homepage/news`);
+    const res = await fetchWithRetry(`${APPROUTER}/homepage/news`);
     if (!res.ok) return;                            // env may have kill switch off — pass-through is fine
     const body = await res.json();
     const arr = Array.isArray(body) ? body : body.value;

@@ -15,6 +15,7 @@
 // directly and assert the four-field shape.
 
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const APPROUTER = process.env.SMOKE_BASE_URL;
 const SRV       = process.env.SMOKE_SRV_URL;
@@ -22,7 +23,7 @@ const HOMEPAGE_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8ae';
 
 describe.runIf(APPROUTER && SRV)('admin homepage config smoke (#734)', () => {
   it('rejects anonymous request to approuter /admin-ui/ (401, 302, or JS-redirect to XSUAA)', async () => {
-    const res = await fetch(`${APPROUTER}/admin-ui/`, { redirect: 'manual' });
+    const res = await fetchWithRetry(`${APPROUTER}/admin-ui/`, { redirect: 'manual' });
     if (res.status === 200) {
       const body = await res.text();
       expect(body).toMatch(/\/oauth\/authorize/);
@@ -35,7 +36,7 @@ describe.runIf(APPROUTER && SRV)('admin homepage config smoke (#734)', () => {
     // Hit srv directly. The OData v4 collection URL must not return 200 with
     // data for an anonymous client. We confirm the route is gated, not what
     // it returns when authenticated.
-    const res = await fetch(`${SRV}/admin/HomepageConfig`, { redirect: 'manual' });
+    const res = await fetchWithRetry(`${SRV}/admin/HomepageConfig`, { redirect: 'manual' });
     if (res.status === 200) {
       const body = await res.text();
       expect(body).toMatch(/\/oauth\/authorize/);
@@ -51,7 +52,7 @@ describe.runIf(APPROUTER && SRV)('admin homepage config smoke (#734)', () => {
   const ADMIN_TOKEN = process.env.SMOKE_ADMIN_TOKEN;
   describe.runIf(ADMIN_TOKEN)('with admin token', () => {
     it(`GET /admin/HomepageConfig(${HOMEPAGE_CONFIG_SINGLETON_ID}): 200 with all four fields`, async () => {
-      const res = await fetch(`${SRV}/admin/HomepageConfig(${HOMEPAGE_CONFIG_SINGLETON_ID})`, {
+      const res = await fetchWithRetry(`${SRV}/admin/HomepageConfig(${HOMEPAGE_CONFIG_SINGLETON_ID})`, {
         headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
       });
       expect(res.status).toBe(200);
@@ -73,7 +74,7 @@ describe.runIf(APPROUTER && SRV)('admin homepage config smoke (#734)', () => {
       // The demote to keyed collection preserves the "exactly one row"
       // invariant via the auto-init handler + Insert=false lockdown. If a
       // future contributor removes either guard, this fires immediately.
-      const res = await fetch(`${SRV}/admin/HomepageConfig`, {
+      const res = await fetchWithRetry(`${SRV}/admin/HomepageConfig`, {
         headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
       });
       expect(res.status).toBe(200);

@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const baseUrl = process.env.SMOKE_APPROUTER_URL;
 
 describe.skipIf(!baseUrl)('graphql smoke (#996)', () => {
   it('public concepts query returns 200', async () => {
-    const r = await fetch(`${baseUrl}/graphql/public`, {
+    const r = await fetchWithRetry(`${baseUrl}/graphql/public`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -15,7 +16,7 @@ describe.skipIf(!baseUrl)('graphql smoke (#996)', () => {
   });
 
   it('search query returns results', async () => {
-    const r = await fetch(`${baseUrl}/graphql/public`, {
+    const r = await fetchWithRetry(`${baseUrl}/graphql/public`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -28,7 +29,7 @@ describe.skipIf(!baseUrl)('graphql smoke (#996)', () => {
   });
 
   it('production stack traces are not leaked', async () => {
-    const r = await fetch(`${baseUrl}/graphql/public`, {
+    const r = await fetchWithRetry(`${baseUrl}/graphql/public`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: '{ NonExistent { foo } }' })

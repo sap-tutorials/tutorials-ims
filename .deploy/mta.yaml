@@ -74,7 +74,13 @@ modules:
     type: nodejs
     path: ../gen/srv
     parameters:
-      memory: 1024M
+      # Bumped 1024M→2048M: the 1GB container OOM-crashed (V8 heap-limit
+      # SIGABRT, exit 134) under concurrent load, crash-looping the single
+      # instance and failing every in-flight request. Node auto-sizes its heap
+      # from container memory, so 2GB gives real headroom. Memory-only (NOT
+      # instances) — the line below forbids raising instances without first
+      # addressing the in-process rate limiters.
+      memory: 2048M
       disk-quota: 1024M
       buildpack: nodejs_buildpack
       # DO NOT raise instances without addressing in-process rate limiters in

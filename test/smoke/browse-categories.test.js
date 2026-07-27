@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -23,7 +24,7 @@ const CATEGORY_ROW_COUNT = (() => {
 
 (RUN ? describe : describe.skip)('smoke: /browse/ Categories facet', () => {
   it('GET /build/catalog includes categorySlugs[] and top-level categories[]', async () => {
-    const r = await fetch(`${SRV}/build/catalog`);
+    const r = await fetchWithRetry(`${SRV}/build/catalog`);
     expect(r.ok).toBe(true);
     const j = await r.json();
     expect(Array.isArray(j.categories)).toBe(true);
@@ -38,9 +39,9 @@ const CATEGORY_ROW_COUNT = (() => {
   });
 
   it('GET /browse/?category=artificial-intelligence renders the rail group', async () => {
-    const r = await fetch(`${APP}/browse/?category=artificial-intelligence`);
+    const r = await fetchWithRetry(`${APP}/browse/?category=artificial-intelligence`, { redirect: 'follow' });
     expect(r.ok).toBe(true);
     const html = await r.text();
-    expect(html).toMatch(/data-group="categories"/);
+    expect(html).toMatch(/data-group=["']?categories["']?/);
   });
 });

@@ -120,7 +120,46 @@ export default defineConfig({
         test: {
           name: 'smoke',
           include: ['test/smoke/**/*.test.{js,ts}'],
-          testTimeout: 30000
+          testTimeout: 30000,
+          // Several smoke files fetch (and sometimes parse a ~1.5MB page) inside
+          // a beforeAll/beforeEach hook. Vitest's DEFAULT hookTimeout is 10s —
+          // which the smoke tier previously inherited — and under load, or once
+          // fetchWithRetry's backoff adds a few seconds, those hooks breach 10s
+          // and fail as "Hook timed out in 10000ms", cascading bogus content-
+          // assertion failures. The unit + hybrid tiers already raise this for
+          // the same reason; match them at 60s so a slow setup fetch isn't a
+          // false red.
+          hookTimeout: 60000,
+          // Post-deploy readiness gate: poll SRV_URL/health until 200 before any
+          // test file runs, so smoke doesn't race the cold start right after
+          // `cf deploy`. No-op when SMOKE_SRV_URL is unset (local/unit runs).
+          globalSetup: ['test/smoke/_warmup.globalSetup.js'],
+          // Smoke hits a LIVE, shared, single-instance (web:1/1) srv/approuter
+          // over the network — unlike the unit tier, its subjects are external.
+          // Vitest's default fan-out (a worker per CPU, all 80+ files at once)
+          // turned the suite into its own load test: the box briefly saturated,
+          // 502/503'd, and the failure COUNT swung 9→47→144 run-to-run. Cap the
+          // fork pool to 2 concurrent files (low-capped parallel — some speed,
+          // well under saturation) and hold each file to 4 concurrent requests.
+          // Pairs with fetchWithRetry's 5xx retry (test/smoke/smoke.config.js)
+          // and the vitest-level retry below.
+          pool: 'forks',
+          // Vitest 4: pool sizing is top-level (poolOptions was removed).
+          // maxWorkers:2 → at most 2 forked files run concurrently; with
+          // maxConcurrency:4 that's ≤8 in-flight requests vs the old unbounded
+          // fan-out that OOM-crashed the srv.
+          maxWorkers: 2,
+          minWorkers: 1,
+          maxConcurrency: 4,
+          // Safety net over the helper's per-request retry: re-run a failed
+          // test ONCE more. Deliberately just 1 (not 2+): the deployed srv can
+          // OOM-crash under the suite's own request burst (confirmed heap-limit
+          // SIGABRT on the 1-instance box), and each whole-test retry re-issues
+          // the requests — too many retries amplify load exactly when the server
+          // is already dying (a retry storm). One retry absorbs a lone transient
+          // blip without piling on. The real durability comes from the srv-side
+          // memory/scale bump, not from retrying harder here.
+          retry: 1
         }
       },
       {

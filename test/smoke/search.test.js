@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const BASE_URL = process.env.SMOKE_BASE_URL || 'http://localhost:4004';
 
 describe('Search Service (smoke)', () => {
 
   it('GET /search/SearchableItems returns 200', async () => {
-    const res = await fetch(`${BASE_URL}/search/SearchableItems?$top=5`);
+    const res = await fetchWithRetry(`${BASE_URL}/search/SearchableItems?$top=5`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.value).toBeDefined();
@@ -13,14 +14,14 @@ describe('Search Service (smoke)', () => {
   });
 
   it('GET /search/SearchableItems?$search=cap returns results', async () => {
-    const res = await fetch(`${BASE_URL}/search/SearchableItems?$search=cap&$top=10`);
+    const res = await fetchWithRetry(`${BASE_URL}/search/SearchableItems?$search=cap&$top=10`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.value.length).toBeGreaterThan(0);
   });
 
   it('GET /search/Tags returns 200 with tag list', async () => {
-    const res = await fetch(`${BASE_URL}/search/Tags?$top=10`);
+    const res = await fetchWithRetry(`${BASE_URL}/search/Tags?$top=10`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.value.length).toBeGreaterThan(0);
@@ -28,7 +29,7 @@ describe('Search Service (smoke)', () => {
   });
 
   it('GET /search/getFacets returns facets', async () => {
-    const res = await fetch(`${BASE_URL}/search/getFacets(search='cap')`);
+    const res = await fetchWithRetry(`${BASE_URL}/search/getFacets(search='cap')`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data).toHaveProperty('totalCount');
@@ -36,7 +37,7 @@ describe('Search Service (smoke)', () => {
   });
 
   it('search endpoint does not require authentication', async () => {
-    const res = await fetch(`${BASE_URL}/search/SearchableItems?$top=1`, {
+    const res = await fetchWithRetry(`${BASE_URL}/search/SearchableItems?$top=1`, {
       headers: {}
     });
     expect(res.status).toBe(200);
@@ -44,13 +45,13 @@ describe('Search Service (smoke)', () => {
 
   it('response time under 500ms for typical search', async () => {
     const start = Date.now();
-    await fetch(`${BASE_URL}/search/SearchableItems?$search=hana&$top=20`);
+    await fetchWithRetry(`${BASE_URL}/search/SearchableItems?$search=hana&$top=20`);
     const elapsed = Date.now() - start;
     expect(elapsed).toBeLessThan(500);
   });
 
   it('does not leak _searchRank field on deployed srv (#154)', async () => {
-    const res = await fetch(`${BASE_URL}/search/SearchableItems?$search=BTP&$top=10`);
+    const res = await fetchWithRetry(`${BASE_URL}/search/SearchableItems?$search=BTP&$top=10`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data.value)).toBe(true);
@@ -62,7 +63,7 @@ describe('Search Service (smoke)', () => {
   });
 
   it('SearchableItems projects createdAt', async () => {
-    const res = await fetch(`${BASE_URL}/search/SearchableItems?$top=10`);
+    const res = await fetchWithRetry(`${BASE_URL}/search/SearchableItems?$top=10`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data.value)).toBe(true);
@@ -77,7 +78,7 @@ describe('Search Service (smoke)', () => {
   it('OData $filter on createdAt is honored', async () => {
     const farFuture = '2999-01-01T00:00:00.000Z';
     const url = `${BASE_URL}/search/SearchableItems?$filter=${encodeURIComponent(`createdAt gt ${farFuture}`)}&$top=5&$count=true`;
-    const res = await fetch(url);
+    const res = await fetchWithRetry(url);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.value).toEqual([]);
@@ -89,7 +90,7 @@ describe('Search Service (smoke)', () => {
   // (fuzzy + KG blend) is copied into searchScore and rows are ordered by
   // it DESC. When there's no $search, searchScore stays null.
   it('$search=… + $select=searchScore returns monotone-DESC scores', async () => {
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${BASE_URL}/search/SearchableItems?$search=cap&$select=slug,title,searchScore&$top=10`,
     );
     expect(res.status).toBe(200);
@@ -107,7 +108,7 @@ describe('Search Service (smoke)', () => {
   });
 
   it('non-search read leaves searchScore null (no leaked rank)', async () => {
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${BASE_URL}/search/SearchableItems?$select=slug,searchScore&$top=3`,
     );
     expect(res.status).toBe(200);
