@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { userInfo, hostname } from 'node:os';
 import { parse as parseYaml } from 'yaml';
 import { parseChannel, type Channel } from './fetch-tutorials.js';
-import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes } from './lib/publish-client.js';
+import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, renderConceptsPhase } from './lib/publish-client.js';
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
@@ -959,10 +959,20 @@ async function main() {
   // #446 Track 3-A — concept landing pages. Merged into the same map so
   // hash/payload/session orchestration treats them uniformly; the `concept-`
   // prefix on each key is what lets the serve handler route correctly.
-  const concepts = discoverConcepts(opts.hugoDir);
-  if (concepts.size > 0) {
-    for (const [slug, path] of concepts) tutorials.set(slug, path);
-    log(`Found ${concepts.size} concept landing page(s) (concept-*) in ${opts.hugoDir}/concepts`);
+  //
+  // #1327 Thread B — under the new pipeline (default) CAP renders concept
+  // detail pages server-side via the render-concepts phase (below), so we do
+  // NOT walk hugo/public/concepts here — that would double-publish. The legacy
+  // Hugo-walk stays available behind LEGACY_CONCEPT_RENDER=true as the escape
+  // hatch (paired with fetch-concepts.ts, which only emits concept .md under
+  // the same flag).
+  const legacyConceptRender = process.env.LEGACY_CONCEPT_RENDER === 'true';
+  if (legacyConceptRender) {
+    const concepts = discoverConcepts(opts.hugoDir);
+    if (concepts.size > 0) {
+      for (const [slug, path] of concepts) tutorials.set(slug, path);
+      log(`Found ${concepts.size} concept landing page(s) (concept-*) in ${opts.hugoDir}/concepts [LEGACY_CONCEPT_RENDER]`);
+    }
   }
 
   // #1278 — single-tutorial fast path. Filter the discovered map down to the
@@ -1141,6 +1151,31 @@ async function main() {
     console.error(`[publish-content] append failed permanently: ${formatErrorChain(err)}`);
     await abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'append failed' });
     process.exit(1);
+  }
+
+  // #1327 Thread B — render concept detail pages server-side into the open
+  // session, AFTER all tutorial batches (so __shell__ is present) and BEFORE
+  // commit. Skipped under the legacy flag (Hugo-walk already supplied concept
+  // BLOBs above) and on a single-tutorial slug hotfix (concepts aren't part of
+  // that scope; the server carries them forward unchanged at commit). A phase
+  // failure aborts the session — same posture as an append failure.
+  if (!legacyConceptRender && !opts.slug) {
+    try {
+      const rc = await withRetry(
+        () => renderConceptsPhase({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId }),
+        {
+          attempts: 3, backoffMs: [1000, 3000, 9000],
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] render-concepts failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
+      log(`render-concepts: ${rc.conceptsChanged} changed, ${rc.conceptsSkipped} skipped, ${rc.conceptsErrored} errored of ${rc.conceptsSeen} (${rc.durationMs} ms)`);
+    } catch (err) {
+      console.error(`[publish-content] render-concepts failed permanently: ${formatErrorChain(err)}`);
+      await abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'render-concepts failed' });
+      process.exit(1);
+    }
   }
 
   let commit;

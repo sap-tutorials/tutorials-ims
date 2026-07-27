@@ -410,6 +410,14 @@ export function frontmatter(c: ConceptPayload): string {
 }
 
 async function main() {
+  // #1327 Thread B — under the new pipeline (default) CAP renders concept
+  // detail pages + the list page server-side, so this Hugo fetcher must NOT
+  // emit concept .md (they'd become stale droplet copies + double-publish via
+  // publish-content's concept walk). Only run under the legacy escape hatch.
+  if (process.env.LEGACY_CONCEPT_RENDER !== 'true') {
+    console.log('[fetch-concepts] skipped — CAP renders concepts server-side (#1327). Set LEGACY_CONCEPT_RENDER=true to restore the Hugo path.')
+    return
+  }
   console.log(`[fetch-concepts] GET ${CAP_BASE_URL}/build/concepts`)
   const r = await fetch(`${CAP_BASE_URL}/build/concepts`)
   if (!r.ok) {
