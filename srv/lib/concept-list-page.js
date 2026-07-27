@@ -100,12 +100,43 @@ async function defaultFetchRankRows(db) {
  * __shell__ chrome via composeShell (mirrors renderCatalogPage).
  *
  * Mirrors hugo/layouts/concepts/list.html markup + island hook IDs so the
- * existing CSS + concepts-filter island keep working unchanged.
+ * existing concepts-filter island keeps working unchanged. The card/grid CSS
+ * that used to live in that Hugo layout's inline <style> is ported below
+ * (CONCEPTS_STYLE) — it never shipped in a global stylesheet, so the CAP list
+ * page MUST carry it or the top-100 SSR cards render as bare links (#1327
+ * regression). Theme-aware: colors read from the SAP Horizon CSS variables
+ * (hugo/assets/css/sap-theme-vars.css), light-mode hex as the var() fallback.
  */
+const CONCEPTS_STYLE = `<style>
+.concepts-index { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+.concepts-index__breadcrumb { font-size: 0.875rem; color: var(--sapContent_LabelColor, #515559); margin-bottom: 1rem; }
+.concepts-index__breadcrumb a { color: var(--sapLinkColor, #0070f2); text-decoration: none; }
+.concepts-index__breadcrumb a:hover { text-decoration: underline; }
+.concepts-index__title { font-size: 2rem; margin: 0 0 0.75rem; color: var(--sapTextColor, #1d2d3e); }
+.concepts-index__intro { color: var(--sapTextColor, #515559); margin: 0 0 1.5rem; max-width: 60ch; }
+.concepts-index__count { color: var(--sapContent_LabelColor, #515559); font-size: 0.875rem; margin: 0 0 1rem; }
+.concepts-index__list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; }
+.concepts-index__item { border: 1px solid var(--sapList_BorderColor, #d5dadc); border-radius: 6px; background: var(--sapTile_Background, #fff); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.concepts-index__item[hidden] { display: none; }
+.concepts-index__item:hover { border-color: var(--sapLinkColor, #0070f2); box-shadow: var(--sapContent_Shadow0, 0 2px 8px rgba(0, 0, 0, 0.06)); }
+.concepts-index__link { display: flex; flex-direction: column; gap: 0.35rem; padding: 1rem; text-decoration: none; color: inherit; }
+.concepts-index__name { font-weight: 600; color: var(--sapLinkColor, #0070f2); }
+.concepts-index__description { font-size: 0.875rem; color: var(--sapTextColor, #515559); }
+.concepts-index__meta { font-size: 0.75rem; color: var(--sapContent_LabelColor, #7a8085); margin-top: 0.15rem; }
+.concepts-index__empty { color: var(--sapContent_LabelColor, #515559); padding: 2rem; text-align: center; background: var(--sapNeutralBackground, #f5f6f7); border-radius: 6px; }
+.concepts-index__clear-inline { background: transparent; border: none; padding: 0; color: var(--sapLinkColor, #0070f2); text-decoration: underline; cursor: pointer; font: inherit; }
+/* Virtual-scroller grid (#1327 island): the RecycleScroller in grid mode
+   renders its own wrapper; these keep the recycled cards on the same visual
+   grid as the SSR list above. The scroller sets item width via
+   itemSecondarySize; the item just fills it. */
+.concepts-index__list .vue-recycle-scroller__item-view > .concepts-index__item { height: 100%; box-sizing: border-box; }
+</style>`;
+
 export function renderConceptListBody(model) {
   const { cards, top, count } = model;
 
-  const header = `<article class="concepts-index" id="concepts-filter-root">
+  const header = `${CONCEPTS_STYLE}
+<article class="concepts-index" id="concepts-filter-root">
   <header class="concepts-index__header">
     <nav class="concepts-index__breadcrumb" aria-label="breadcrumb">
       <a href="/">Home</a> &rsaquo; <span>Concepts</span>
