@@ -7,7 +7,7 @@ description: Vitest projects, hybrid write safety, layout, and how to run a sing
 
 > Source: extracted from project README, 2026-05-25.
 
-Five Vitest projects defined in [vitest.config.ts](../../../vitest.config.ts) — each with its own include pattern, environment, and prerequisites:
+Six Vitest projects defined in [vitest.config.ts](../../../vitest.config.ts) — each with its own include pattern, environment, and prerequisites:
 
 | Project | Command | Backing store / target | Use |
 | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ Five Vitest projects defined in [vitest.config.ts](../../../vitest.config.ts) �
 | `hybrid-qa` | `cds bind --exec -- npx vitest run --project hybrid-qa` | Real QA HDI (`hana-tutorials-db-qa`) | Author-channel parity tests; uses `pool: 'forks'` + `_guard.js` write protection |
 | `smoke` | `npm run test:smoke` | Deployed approuter + srv over HTTP | Health, public endpoints, auth enforcement, OData metadata, content serve, search, WebSocket handshake, redirects, SEO/JSON-LD, QA routes. Set `SMOKE_BASE_URL` + `SMOKE_SRV_URL` |
 | `a11y` | `npm run test:a11y` | Deployed approuter (Lighthouse CI) | WCAG smoke; full Lighthouse via `npm run test:a11y:lighthouse`, summary via `npm run test:a11y:summary` |
+| `e2e` | `npm run test:e2e` | Deployed approuter (Playwright, headless Chromium) | Admin-UI browser smoke — one happy path per UI surface (tutorial serve, admin-shell, scanner, analytics-explorer, display-app). Post-deploy non-gating. Set `SMOKE_BASE_URL` (or `PLAYWRIGHT_BASE_URL`) + `SMOKE_TECH_USER`/`SMOKE_TECH_PASSWORD`. Self-skips when env absent. See [`test/e2e/README.md`](../../../test/e2e/README.md) |
 
 `npm run test:all` runs the full matrix under `cds bind --exec` (so hybrid + hybrid-qa get real bindings).
 
@@ -30,6 +31,7 @@ Five Vitest projects defined in [vitest.config.ts](../../../vitest.config.ts) �
 - `test/hybrid-qa/` — QA-channel parity
 - `test/smoke/` — 26 smoke suites; CI runs them automatically after deploy via [.github/workflows/deploy.yml](../../../.github/workflows/deploy.yml)
 - `test/a11y/` — Lighthouse CI config + summary script
+- `test/e2e/` — Playwright admin-UI smoke specs (sixth project, #1338); see [`test/e2e/README.md`](../../../test/e2e/README.md)
 - `test/fixtures/` — Shared fixture data (no test files)
 
 #### Running a single file

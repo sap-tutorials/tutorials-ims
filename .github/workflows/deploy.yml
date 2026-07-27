@@ -843,6 +843,79 @@ jobs:
           echo "- **Target:** ${{ needs.deploy.outputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **URL:** ${{ steps.urls.outputs.base_url }}" >> "$GITHUB_STEP_SUMMARY"
 
+  e2e:
+    # Playwright admin-UI smoke tier (#1338). Non-gating: a failure is visible
+    # in the workflow summary but does NOT roll back the deploy or block a11y.
+    # Runs after smoke-test so the environment has stabilised.
+    needs: [deploy, smoke-test]
+    if: always() && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for playwright-core
+        # playwright-core ships without browsers; install the same headless shell
+        # the a11y-scan job uses. `--with-deps` installs OS-level libs (libnss etc.)
+        # needed by the headless shell on ubuntu-latest.
+        run: npx playwright install --with-deps chromium
+
+      - name: Resolve environment URLs
+        id: urls
+        run: |
+          case "${{ needs.deploy.outputs.environment }}" in
+            dev)  echo "base_url=${{ vars.APPROUTER_URL_DEV }}" >> "$GITHUB_OUTPUT"
+                  echo "srv_url=${{ vars.SRV_URL_DEV }}" >> "$GITHUB_OUTPUT" ;;
+            qa)   echo "base_url=${{ vars.APPROUTER_URL_QA }}" >> "$GITHUB_OUTPUT"
+                  echo "srv_url=${{ vars.SRV_URL_QA }}" >> "$GITHUB_OUTPUT" ;;
+            prod) echo "base_url=${{ vars.APPROUTER_URL_PROD }}" >> "$GITHUB_OUTPUT"
+                  echo "srv_url=${{ vars.SRV_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Run e2e tests
+        continue-on-error: true
+        run: npm run test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.urls.outputs.base_url }}
+          SMOKE_BASE_URL: ${{ steps.urls.outputs.base_url }}
+          SMOKE_SRV_URL: ${{ steps.urls.outputs.srv_url }}
+          SMOKE_TECH_USER: ${{ secrets.SMOKE_TECH_USER }}
+          SMOKE_TECH_PASSWORD: ${{ secrets.SMOKE_TECH_PASSWORD }}
+          CI: 'true'
+
+      - name: Upload Playwright artefacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artefacts-${{ needs.deploy.outputs.environment }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: e2e summary
+        if: always()
+        run: |
+          {
+            echo "### e2e Results"
+            echo ""
+            echo "- **Target:** ${{ needs.deploy.outputs.environment }}"
+            echo "- **URL:** ${{ steps.urls.outputs.base_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   a11y-scan:
     needs: [deploy, smoke-test]
     if: always() && needs.deploy.result == 'success'
