@@ -1085,6 +1085,13 @@ async function main() {
       STATUS: normalizeStatus(row.TASK_STATUS),
       PUBLISHED: derivePublished(row.TASK_STATUS),
       PRIMARYTAG: truncStr(tagMap.get(row.PRIMARY_TAG_ID), 255) || null,
+      // primaryTagRef is the @mandatory Association to Tags that the admin
+      // Groups/Missions object pages + LineItems actually display (via
+      // primaryTagRef.name / primaryTagRef_ID). The text PRIMARYTAG column
+      // above is a separate field the Tutorials admin page uses. Resolve the
+      // FK from the SAME source PRIMARY_TAG_ID via the tag UUID map so the
+      // association is populated too — deterministic, no text→name matching.
+      PRIMARYTAGREF_ID: uuidMap.tags.get(row.PRIMARY_TAG_ID) || null,
       EXPERIENCETAG: normalizeExperienceTag(tagMap.get(row.EXPERIENCE_TAG_ID)),
       AVERAGETIMETOCOMPLETE: row.AVERAGE_TTC,
       CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
@@ -1115,6 +1122,9 @@ async function main() {
         STATUS: normalizeStatus(row.TASK_STATUS),
         PUBLISHED: derivePublished(row.TASK_STATUS),
         PRIMARYTAG: truncStr(tagMap.get(row.PRIMARY_TAG_ID), 255) || null,
+        // See groups mapRow: populate the @mandatory Association FK the admin
+        // Missions object page/LineItem displays, from the same PRIMARY_TAG_ID.
+        PRIMARYTAGREF_ID: uuidMap.tags.get(row.PRIMARY_TAG_ID) || null,
         EXPERIENCETAG: normalizeExperienceTag(tagMap.get(row.EXPERIENCE_TAG_ID)),
         AVERAGETIMETOCOMPLETE: row.AVERAGE_TTC,
         // COMMUNITY_MISSION_ID is the IMS-legacy community CMS id (872/888 rows
@@ -1173,6 +1183,10 @@ async function main() {
       ),
       MDFILEURL: truncStr(row.URL, 1000),
       PRIMARYTAG: truncStr(tagMap.get(row.PRIMARY_TAG_ID), 255) || null,
+      // See groups mapRow: populate the @mandatory Association FK from the
+      // same PRIMARY_TAG_ID. The Tutorials admin page displays the text
+      // column above, but primaryTagRef is @mandatory so keep it consistent.
+      PRIMARYTAGREF_ID: uuidMap.tags.get(row.PRIMARY_TAG_ID) || null,
       EXPERIENCETAG: truncStr(tagMap.get(row.EXPERIENCE_TAG_ID), 255) || null,
       AVERAGETIMETOCOMPLETE: row.AVERAGE_TTC,
       FEATUREDORDER: row.FEATURED_ORDER,
