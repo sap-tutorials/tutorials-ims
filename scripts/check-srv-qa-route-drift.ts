@@ -79,6 +79,15 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'KG concept landing pages (#446, Phase 3 Track 3-A) — a public prod content surface, ' +
     'not tutorial-draft author preview. The QA channel serves in-flight tutorials from ' +
     '-Contribution repos; concept pages are out of its scope.',
+  'GET /content/concepts-index':
+    'CAP-served /concepts/ LIST page (#1327 Task 2) — same public prod content surface as ' +
+    'GET /content/concepts/:slug above (it is the index for those concept pages), not ' +
+    'tutorial-draft author preview. The QA channel serves in-flight tutorials; concept ' +
+    'pages are out of its scope.',
+  'POST /content/publish/render-concepts':
+    'Concept-detail publish rendering (#1327 Task 3) — renders concept pages into a publish ' +
+    'session for the same public prod concept surface as GET /content/concepts/:slug. Not ' +
+    'a tutorial-draft author-preview endpoint; the QA channel has no concept publish flow.',
   'POST /content/orphan-purge':
     'CI-only batched soft-delete for prod content maintenance (#823). Not an author-preview ' +
     'endpoint — the QA channel has no orphan-purge maintenance flow.',
