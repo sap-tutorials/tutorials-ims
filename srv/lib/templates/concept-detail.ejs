@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title><%= name %> - SAP Developers</title>
+  <meta name="description" content="<%= description %>">
+  <link rel="canonical" href="/concepts/<%= slug %>/">
+  <meta property="og:title" content="<%= name %>">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="/concepts/<%= slug %>/">
+  <%- shellHead %>
+</head>
+<body>
+  <%- shellHeader %>
+  <main class="concept-detail" data-concept-slug="<%= slug %>">
+  <article class="concept-page">
+    <header class="concept-page__header">
+      <nav class="concept-page__breadcrumb" aria-label="breadcrumb">
+        <a href="/">Home</a> / <a href="/concepts/">Concepts</a> / <%= name %>
+      </nav>
+      <h1 class="concept-page__title"><%= name %></h1>
+      <% if (description) { %><p class="concept-page__description"><%= description %></p><% } %>
+    </header>
+
+    <%
+      // External-link card helper — mirrors the safe-URL link/no-link
+      // variants in hugo/layouts/concepts/single.html. `meta` is trusted
+      // pre-escaped HTML (built by the caller from already-escaped parts).
+      function externalCard(item, typeLabel, slugAttr, metaHtml) {
+        const safe = typeof item.url === 'string'
+          && (item.url.indexOf('https://') === 0 || item.url.indexOf('http://') === 0);
+        const t = escapeHtml(item.title || '');
+        if (safe) {
+          return '<li><a class="concept-card" href="' + escapeHtml(item.url)
+            + '" target="_blank" rel="noopener" ' + slugAttr + '="' + escapeHtml(item.slug || '') + '">'
+            + '<span class="concept-card__type concept-card__type--external">' + typeLabel
+            + ' <span class="kg-link-out" aria-hidden="true">↗</span></span>'
+            + '<span class="concept-card__title">' + t + '</span>'
+            + (metaHtml ? '<span class="concept-card__meta">' + metaHtml + '</span>' : '')
+            + '</a></li>';
+        }
+        return '<li><span class="concept-card" ' + slugAttr + '="' + escapeHtml(item.slug || '') + '">'
+          + '<span class="concept-card__type concept-card__type--external">' + typeLabel + '</span>'
+          + '<span class="concept-card__title">' + t + '</span></span></li>';
+      }
+    %>
+
+    <% if (teaches.length) { %>
+    <section class="concept-page__section">
+      <h2>Tutorials that teach this</h2>
+      <ul class="concept-card-grid">
+        <% teaches.forEach(t => { %>
+        <li>
+          <a class="concept-card" href="/tutorials/<%= t.slug %>/">
+            <span class="concept-card__type concept-card__type--tutorial">Tutorial</span>
+            <span class="concept-card__title"><%= t.title %></span>
+            <% if (t.experienceTag || t.stepCount) { %>
+            <span class="concept-card__meta"><% if (t.experienceTag) { %><span class="kg-difficulty"><%= t.experienceTag %></span><% } %><% if (t.experienceTag && t.stepCount) { %> · <% } %><% if (t.stepCount) { %><%= t.stepCount %> step<%= t.stepCount === 1 ? '' : 's' %><% } %></span>
+            <% } %>
+          </a>
+        </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (learningJourneys.length) { %>
+    <section class="concept-page__section" data-kg-section="learning-journeys" data-concept-slug="<%= slug %>">
+      <h2>Learning journeys covering this</h2>
+      <ul class="concept-card-grid">
+        <% learningJourneys.forEach(lj => { %>
+        <%- externalCard(lj, 'Learning Journey', 'data-journey-slug',
+              [ lj.level ? '<span class="kg-difficulty">' + escapeHtml(lj.level) + '</span>' : '',
+                (lj.level && lj.durationHours) ? ' · ' : '',
+                lj.durationHours ? escapeHtml(String(lj.durationHours)) + 'h' : '' ].join('')) %>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (helpDocs.length) { %>
+    <section class="concept-page__section" data-kg-section="help-docs" data-concept-slug="<%= slug %>">
+      <h2>Docs explaining this concept</h2>
+      <ul class="concept-card-grid kg-help-doc-list">
+        <% helpDocs.forEach(hd => { %>
+        <%- externalCard(hd, 'Doc', 'data-help-doc-slug',
+              hd.sourceLabel ? '<span class="kg-help-source">' + escapeHtml(hd.sourceLabel) + '</span>' : '') %>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (blogPosts.length) { %>
+    <section class="concept-page__section" data-kg-section="blog-posts" data-concept-slug="<%= slug %>">
+      <h2>Blog posts discussing this</h2>
+      <ul class="concept-card-grid">
+        <% blogPosts.forEach(bp => { %>
+        <%- externalCard(bp, 'Blog', 'data-blog-slug',
+              bp.authorName ? 'by ' + escapeHtml(bp.authorName) : '') %>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (discoveryMissions.length) { %>
+    <section class="concept-page__section" data-kg-section="discovery-missions" data-concept-slug="<%= slug %>">
+      <h2>Discovery missions teaching this</h2>
+      <ul class="concept-card-grid">
+        <% discoveryMissions.forEach(dm => { %>
+        <%- externalCard(dm, 'Mission', 'data-mission-slug',
+              [ dm.effortLevel ? 'effort ' + escapeHtml(String(dm.effortLevel)) : '',
+                (dm.effortLevel && dm.categoryLabel) ? ' · ' : '',
+                dm.categoryLabel ? escapeHtml(dm.categoryLabel) : '' ].join('')) %>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (videos.length) { %>
+    <section class="concept-page__section" data-kg-section="videos" data-concept-slug="<%= slug %>">
+      <h2>Videos teaching this</h2>
+      <ul class="concept-card-grid">
+        <% videos.forEach(v => { %>
+        <%- externalCard(v, 'Video', 'data-video-slug',
+              v.channelTitle ? 'by ' + escapeHtml(v.channelTitle) : '') %>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (apiDocs.length) { %>
+    <section class="concept-page__section" data-kg-section="api-docs" data-concept-slug="<%= slug %>">
+      <h2>Official reference documentation</h2>
+      <ul class="concept-card-grid">
+        <% apiDocs.forEach(a => { %>
+        <%- externalCard(a, 'API Doc', 'data-api-doc-slug',
+              [ a.category ? escapeHtml(a.category) : '',
+                (a.category && a.apiType) ? ' · ' : '',
+                a.apiType ? '<span class="kg-api-type">' + escapeHtml(a.apiType) + '</span>' : '' ].join('')) %>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (samples.length) { %>
+    <section class="concept-page__section" data-kg-section="samples" data-concept-slug="<%= slug %>">
+      <h2>Code samples embodying this</h2>
+      <ul class="concept-card-grid">
+        <% samples.forEach(s => { %>
+        <%- externalCard(s, 'Sample', 'data-sample-slug',
+              s.language ? '<span class="kg-language">' + escapeHtml(s.language) + '</span>' : '') %>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (communityEvents.length) { %>
+    <section class="concept-page__section" data-kg-section="community-events" data-concept-slug="<%= slug %>">
+      <h2>Upcoming hands-on events</h2>
+      <ul class="concept-card-grid">
+        <% communityEvents.forEach(e => { %>
+        <%- externalCard(e, 'Event', 'data-community-event-slug',
+              e.location ? '<span class="kg-event-location">' + escapeHtml(e.location) + '</span>' : '') %>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (requires.length) { %>
+    <section class="concept-page__section">
+      <h2>Prerequisites</h2>
+      <ul class="concept-card-grid">
+        <% requires.forEach(r => { %>
+        <li>
+          <a class="concept-card" href="/concepts/<%= r.slug %>/">
+            <span class="concept-card__type concept-card__type--concept">Concept</span>
+            <span class="concept-card__title"><%= r.title %></span>
+            <% if (r.description) { %><span class="concept-card__body"><%= r.description %></span><% } %>
+          </a>
+        </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (requiredBy.length) { %>
+    <section class="concept-page__section">
+      <h2>Concepts that build on this</h2>
+      <ul class="concept-card-grid">
+        <% requiredBy.forEach(r => { %>
+        <li>
+          <a class="concept-card" href="/concepts/<%= r.slug %>/">
+            <span class="concept-card__type concept-card__type--concept">Concept</span>
+            <span class="concept-card__title"><%= r.title %></span>
+          </a>
+        </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (relatedTo.length) { %>
+    <section class="concept-page__section">
+      <h2>Related concepts</h2>
+      <ul class="concept-card-grid">
+        <% relatedTo.forEach(r => { %>
+        <li>
+          <a class="concept-card" href="/concepts/<%= r.slug %>/">
+            <span class="concept-card__type concept-card__type--concept">Concept</span>
+            <span class="concept-card__title"><%= r.title %></span>
+          </a>
+        </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <div class="kg-telemetry" data-render-source="cap" hidden></div>
+  </article>
+  </main>
+  <%- shellFooter %>
+</body>
+</html>
