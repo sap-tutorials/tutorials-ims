@@ -26,9 +26,12 @@
  * SAFETY
  * ------
  * - Dry-run by DEFAULT. Pass --commit to actually write.
- * - Only touches: description, primaryTag, experienceTag, averageTimeToComplete,
- *   communityMissionId (missions only), and Group/MissionTags rows. Never
- *   touches title/slug/status/published/timestamps.
+ * - Only touches: description, primaryTag, primaryTagRef (the @mandatory
+ *   Association to Tags the admin Groups/Missions pages display),
+ *   experienceTag, averageTimeToComplete, communityMissionId (missions only),
+ *   and Group/MissionTags rows. For Tutorials it touches ONLY primaryTagRef_ID
+ *   (their description/primaryTag/experience come from markdown at publish
+ *   time). Never touches title/slug/status/published/timestamps.
  * - Only fills a column when the source has a value AND (default) the target
  *   column is currently NULL/empty. Pass --overwrite to replace non-null target
  *   values too (use when correcting a prior partial backfill).
@@ -183,10 +186,21 @@ async function main() {
   for (const t of await run(source, `SELECT "ID", "NAME" FROM ${S}."IMS_TAG"`)) tagMap.set(String(t.ID), t.NAME);
   console.log(`  tag lookup: ${tagMap.size} entries`);
 
+  // Target Tags legacyId → target Tags.ID (UUID). The migrator sets
+  // Tags.LEGACYID = source IMS_TAG.ID, so this resolves a source PRIMARY_TAG_ID
+  // straight to the target association FK (primaryTagRef_ID). Built up-front
+  // (not just for the tag-link step below) because the field-backfill loop
+  // now also fills the @mandatory primaryTagRef association the admin
+  // Groups/Missions pages display. See the primaryTagRef note in the loop.
+  const tagIdByLegacy = new Map();
+  for (const r of await run(target, `SELECT "LEGACYID", "ID" FROM COM_SAP_DEVELOPERS_IMS_TAGS`)) tagIdByLegacy.set(String(r.LEGACYID), r.ID);
+  console.log(`  target tag id map: ${tagIdByLegacy.size} entries`);
+
   const report = [];
   const stats = {
     groups: { scanned: 0, updated: 0, skipped_missing_target: 0, tag_links: 0 },
     missions: { scanned: 0, updated: 0, skipped_missing_target: 0, tag_links: 0 },
+    tutorials: { scanned: 0, updated: 0, skipped_missing_target: 0 },
   };
 
   // ─── Field backfill (Groups + Missions) ─────────────────────────────────────
@@ -206,7 +220,7 @@ async function main() {
 
     // One bulk read of the whole target table → legacyId→current-row map.
     const curMap = new Map();
-    for (const r of await run(target, `SELECT "LEGACYID", "DESCRIPTION", "PRIMARYTAG", "EXPERIENCETAG", "AVERAGETIMETOCOMPLETE"${isMission ? ', "COMMUNITYMISSIONID"' : ''} FROM ${targetTable}`)) {
+    for (const r of await run(target, `SELECT "LEGACYID", "DESCRIPTION", "PRIMARYTAG", "PRIMARYTAGREF_ID", "EXPERIENCETAG", "AVERAGETIMETOCOMPLETE"${isMission ? ', "COMMUNITYMISSIONID"' : ''} FROM ${targetTable}`)) {
       curMap.set(String(r.LEGACYID), r);
     }
     console.log(`  ${kind}: ${src.length} source rows, ${curMap.size} target rows`);
@@ -232,6 +246,14 @@ async function main() {
       };
       wants('DESCRIPTION', row.DESCRIPTION || null, cur.DESCRIPTION);
       wants('PRIMARYTAG', truncStr(tagMap.get(String(row.PRIMARY_TAG_ID)), 255) || null, cur.PRIMARYTAG);
+      // primaryTagRef_ID is the @mandatory Association to Tags the admin
+      // Groups/Missions object pages + LineItems display (via
+      // primaryTagRef.name / primaryTagRef_ID). Distinct from the PRIMARYTAG
+      // text column above — the migrator never set the FK, so it was NULL
+      // for effectively all rows (0/370 missions, 2/203 groups pre-fix) and
+      // the admin "Primary Tag" column rendered blank. Resolve the FK from
+      // the SAME source PRIMARY_TAG_ID via the target tag-id map.
+      wants('PRIMARYTAGREF_ID', tagIdByLegacy.get(String(row.PRIMARY_TAG_ID)) || null, cur.PRIMARYTAGREF_ID);
       wants('EXPERIENCETAG', normalizeExperienceTag(tagMap.get(String(row.EXPERIENCE_TAG_ID))), cur.EXPERIENCETAG);
       wants('AVERAGETIMETOCOMPLETE', row.AVERAGE_TTC ?? null, cur.AVERAGETIMETOCOMPLETE);
       if (isMission) wants('COMMUNITYMISSIONID', truncStr(row.COMMUNITY_MISSION_ID, 255) || null, cur.COMMUNITYMISSIONID);
@@ -263,16 +285,56 @@ async function main() {
     }
   }
 
+  // ─── Tutorials: primaryTagRef_ID only ───────────────────────────────────────
+  // Tutorials get DESCRIPTION / PRIMARYTAG / EXPERIENCETAG from markdown at
+  // publish time, so we must NOT touch those here. But primaryTagRef is the
+  // same @mandatory Association to Tags that was never set by the migrator
+  // (0/2893 pre-fix). It's invisible on the Tutorials admin LineItem (which
+  // binds the text primaryTag), but other code / a future column may read the
+  // association, and it's @mandatory. Fill the FK ONLY, from source
+  // PRIMARY_TAG_ID → target Tags.ID, same as Groups/Missions above.
+  {
+    const targetTable = 'COM_SAP_DEVELOPERS_IMS_TUTORIALS';
+    const bucket = stats.tutorials;
+    const src = await run(source, `SELECT "ID", "PRIMARY_TAG_ID" FROM ${S}."IMS_TASK" WHERE "TASK_TYPE" = 'TUTORIAL'`);
+    const curMap = new Map();
+    for (const r of await run(target, `SELECT "LEGACYID", "PRIMARYTAGREF_ID" FROM ${targetTable}`)) curMap.set(String(r.LEGACYID), r);
+    console.log(`  TUTORIAL: ${src.length} source rows, ${curMap.size} target rows`);
+
+    const pending = [];
+    for (const row of src) {
+      bucket.scanned++;
+      const cur = curMap.get(String(row.ID));
+      if (!cur) {
+        bucket.skipped_missing_target++;
+        continue;
+      }
+      const refId = tagIdByLegacy.get(String(row.PRIMARY_TAG_ID)) || null;
+      if (refId == null) continue; // no resolvable source tag → nothing to write
+      const empty = cur.PRIMARYTAGREF_ID == null || String(cur.PRIMARYTAGREF_ID).length === 0;
+      if (!OVERWRITE && !empty) continue;
+      if (String(cur.PRIMARYTAGREF_ID ?? '') === String(refId)) continue;
+      report.push({ kind: 'TUTORIAL', legacyId: row.ID, cols: 'PRIMARYTAGREF_ID' });
+      pending.push({ legacyId: row.ID, refId });
+      bucket.updated++;
+    }
+
+    if (COMMIT && pending.length) {
+      const stmt = await prepareStmt(target, `UPDATE ${targetTable} SET "PRIMARYTAGREF_ID" = ? WHERE "LEGACYID" = ?`);
+      for (const p of pending) await execPrepared(stmt, [p.refId, p.legacyId]);
+      dropStmt(stmt);
+    }
+  }
+
   // ─── Tag links (GroupTags / MissionTags) ───────────────────────────────────
   // Idempotent: derive the cuid ID from the composite (TASK_ID, TAG_ID); skip
   // if that ID already exists. Set-based — bulk-load the parent/tag legacyId→ID
   // maps and the existing-link-ID sets once, diff in Node, batch-insert.
+  // (tagIdByLegacy is built up-front — see above.)
   const groupIdByLegacy = new Map();
   for (const r of await run(target, `SELECT "LEGACYID", "ID" FROM COM_SAP_DEVELOPERS_IMS_GROUPS`)) groupIdByLegacy.set(String(r.LEGACYID), r.ID);
   const missionIdByLegacy = new Map();
   for (const r of await run(target, `SELECT "LEGACYID", "ID" FROM COM_SAP_DEVELOPERS_IMS_MISSIONS`)) missionIdByLegacy.set(String(r.LEGACYID), r.ID);
-  const tagIdByLegacy = new Map();
-  for (const r of await run(target, `SELECT "LEGACYID", "ID" FROM COM_SAP_DEVELOPERS_IMS_TAGS`)) tagIdByLegacy.set(String(r.LEGACYID), r.ID);
   const existingGroupTagIds = new Set((await run(target, `SELECT "ID" FROM COM_SAP_DEVELOPERS_IMS_GROUPTAGS`)).map((r) => r.ID));
   const existingMissionTagIds = new Set((await run(target, `SELECT "ID" FROM COM_SAP_DEVELOPERS_IMS_MISSIONTAGS`)).map((r) => r.ID));
 
