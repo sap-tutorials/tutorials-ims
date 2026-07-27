@@ -19,8 +19,10 @@
 //       identical        → skip (no write)
 //       differs          → update (PUT with prior sha)
 //     Re-running when everything is current opens/commits NOTHING.
-//   - Applies by committing DIRECTLY to the repo's default branch (no PR),
-//     per the #1154 rollout decision.
+//   - Applies by committing DIRECTLY to the repo's default branch. When the
+//     repo requires a PR (branch protection → 409 rule violation), it FALLS
+//     BACK to opening/updating a PR from a shared feature branch and reports
+//     that as pr-opened / pr-updated instead of erroring (#1333).
 //   - Safe by default: --dry-run (the DEFAULT) only reports the decision per
 //     repo; pass --execute to actually commit.
 //
@@ -65,6 +67,12 @@ export const INCLUDED_PRIVATE_REPOS = new Set(['meta-tutorials'])
 
 const PROD_WORKFLOW_PATH = '.github/workflows/notify-tutorials-ims.yml'
 const QA_WORKFLOW_PATH = '.github/workflows/notify-qa.yml'
+
+// Feature branch used by the PR-on-409 fallback (branch-protected repos that
+// reject a direct commit to the default branch — see #1333). Reused across
+// runs so re-running against a still-stale protected repo updates the same PR
+// rather than opening a new one each time.
+const FEATURE_BRANCH = 'chore/1154-notify-workflow-refresh'
 
 export type RepoNode = {
   name: string
@@ -123,11 +131,13 @@ function authHeaders(token: string, extra: Record<string, string> = {}) {
   }
 }
 
-/** GET the current workflow file. Returns { content, sha } or null on 404. */
+/** GET the current workflow file (optionally on a specific branch `ref`).
+ *  Returns { content, sha } or null on 404. */
 async function getExistingFile(
-  repo: string, path: string, token: string,
+  repo: string, path: string, token: string, ref?: string,
 ): Promise<{ content: string; sha: string } | null> {
-  const url = `${REST_API_BASE}/repos/${ORG}/${repo}/contents/${path}`
+  const q = ref ? `?ref=${encodeURIComponent(ref)}` : ''
+  const url = `${REST_API_BASE}/repos/${ORG}/${repo}/contents/${path}${q}`
   const res = await fetch(url, { headers: authHeaders(token) })
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`GET ${repo}/${path}: ${res.status}`)
@@ -135,10 +145,130 @@ async function getExistingFile(
   return { content: Buffer.from(json.content ?? '', 'base64').toString('utf8'), sha: json.sha }
 }
 
+export type Action = 'install' | 'skip' | 'update' | 'pr-opened' | 'pr-updated'
+
+/**
+ * True when a Contents-API PUT was rejected because the repo's branch
+ * protection / rulesets require changes to land through a pull request. GitHub
+ * returns 409 with a message like "Repository rule violations found — Changes
+ * must be made through a pull request." (#1333). Detected on status + message
+ * so we don't misclassify an unrelated 409 (e.g. a stale-sha conflict).
+ */
+export function isPullRequestRequired(status: number, detail: string): boolean {
+  if (status !== 409) return false
+  return /must be made through a pull request/i.test(detail)
+}
+
+/** SHA of a branch head, or null if the branch does not exist (404). */
+async function getRefSha(repo: string, branch: string, token: string): Promise<string | null> {
+  const url = `${REST_API_BASE}/repos/${ORG}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`
+  const res = await fetch(url, { headers: authHeaders(token) })
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`GET ref ${repo}/${branch}: ${res.status}`)
+  const json: any = await res.json()
+  return json.object?.sha ?? null
+}
+
+/** Create the feature branch at `fromSha`, treating 422 (already exists) as reuse. */
+async function ensureBranch(repo: string, branch: string, fromSha: string, token: string): Promise<void> {
+  const res = await fetch(`${REST_API_BASE}/repos/${ORG}/${repo}/git/refs`, {
+    method: 'POST',
+    headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: fromSha }),
+  })
+  if (res.ok) return
+  const detail = await res.text().catch(() => '')
+  // 422 "Reference already exists" → the branch is already there; reuse it.
+  // Any other 422 (bad sha / invalid ref name) is a real failure — surface it.
+  if (res.status === 422 && /already exists/i.test(detail)) return
+  throw new Error(`create branch ${repo}/${branch}: ${res.status} ${detail.slice(0, 200)}`)
+}
+
+/**
+ * Open a PR from `head` into `base`. Returns { url, created }. When the PR is
+ * already open GitHub returns 422; we treat that as success and look up the
+ * existing PR's URL so the caller can surface it (created=false → pr-updated).
+ */
+async function openPullRequest(opts: {
+  repo: string; head: string; base: string; title: string; body: string; token: string
+}): Promise<{ url: string; created: boolean }> {
+  const { repo, head, base, title, body, token } = opts
+  const res = await fetch(`${REST_API_BASE}/repos/${ORG}/${repo}/pulls`, {
+    method: 'POST',
+    headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ title, head, base, body }),
+  })
+  if (res.ok) {
+    const json: any = await res.json()
+    return { url: json.html_url ?? '', created: true }
+  }
+  const detail = await res.text().catch(() => '')
+  // 422 "A pull request already exists for ..." → look up the open PR's URL.
+  // Any other 422 is a real failure (e.g. no commits between head and base).
+  if (res.status === 422 && /already exists/i.test(detail)) {
+    const q = `head=${encodeURIComponent(`${ORG}:${head}`)}&base=${encodeURIComponent(base)}&state=open`
+    const list = await fetch(`${REST_API_BASE}/repos/${ORG}/${repo}/pulls?${q}`, { headers: authHeaders(token) })
+    const arr: any = list.ok ? await list.json() : []
+    return { url: Array.isArray(arr) && arr[0]?.html_url ? arr[0].html_url : '', created: false }
+  }
+  throw new Error(`open PR ${repo} ${head}->${base}: ${res.status} ${detail.slice(0, 200)}`)
+}
+
+/**
+ * PR-mode apply for branch-protected repos (#1333). Renders steps 1–5:
+ * resolve default-branch head → ensure feature branch → compare branch content
+ * (skip PUT if already current) → PUT to the branch → open/reuse the PR.
+ * Returns pr-opened (new PR) or pr-updated (PR already open) with its URL.
+ */
+export async function installViaPr(opts: {
+  repo: string; path: string; content: string; token: string; defaultBranch: string
+}): Promise<{ repo: string; action: 'pr-opened' | 'pr-updated'; wouldWrite: boolean; prUrl: string }> {
+  const { repo, path, content, token, defaultBranch } = opts
+
+  // 1. default-branch head sha (base for the feature branch).
+  const baseSha = await getRefSha(repo, defaultBranch, token)
+  if (!baseSha) throw new Error(`PR fallback ${repo}: default branch ${defaultBranch} has no head sha`)
+
+  // 2. create/reuse the feature branch.
+  await ensureBranch(repo, FEATURE_BRANCH, baseSha, token)
+
+  // 3. current file on the branch — skip the PUT when already current.
+  const onBranch = await getExistingFile(repo, path, token, FEATURE_BRANCH)
+  if (decideAction(onBranch?.content ?? null, content) !== 'skip') {
+    // 4. PUT the rendered template to the feature branch.
+    const body: Record<string, unknown> = {
+      message: `chore(#1154): refresh notify workflow (${path})`,
+      content: encodeContent(content),
+      branch: FEATURE_BRANCH,
+    }
+    if (onBranch) body.sha = onBranch.sha
+    const put = await fetch(`${REST_API_BASE}/repos/${ORG}/${repo}/contents/${path}`, {
+      method: 'PUT',
+      headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
+    })
+    if (!put.ok) {
+      const detail = await put.text().catch(() => '')
+      throw new Error(`PUT (PR branch) ${repo}/${path}: ${put.status} ${detail.slice(0, 200)}`)
+    }
+  }
+
+  // 5. open (or reuse) the PR against the default branch.
+  const { url, created } = await openPullRequest({
+    repo, head: FEATURE_BRANCH, base: defaultBranch, token,
+    title: `chore(#1154): refresh notify workflow (${path.split('/').pop()})`,
+    body: `Automated by \`install-notify-workflows.ts\` — this repo requires changes via PR, so the notify workflow (\`${path}\`) is delivered here instead of a direct commit. See sap-tutorials/tutorials-ims#1333.`,
+  })
+  return { repo, action: created ? 'pr-opened' : 'pr-updated', wouldWrite: true, prUrl: url }
+}
+
 /**
  * Idempotently install/update one workflow file in one repo. GETs first,
  * decides, and (only when execute=true and action != skip) commits directly
- * to the default branch via the Contents API.
+ * to the default branch via the Contents API. When that direct commit is
+ * rejected because the repo requires a pull request (409 rule violation,
+ * #1333), it falls back to PR mode (installViaPr) and reports pr-opened /
+ * pr-updated instead of erroring.
  */
 export async function installOne(opts: {
   repo: string
@@ -147,7 +277,7 @@ export async function installOne(opts: {
   token: string
   defaultBranch: string
   execute: boolean
-}): Promise<{ repo: string; action: 'install' | 'skip' | 'update'; wouldWrite: boolean }> {
+}): Promise<{ repo: string; action: Action; wouldWrite: boolean; prUrl?: string }> {
   const { repo, path, content, token, defaultBranch, execute } = opts
   const existing = await getExistingFile(repo, path, token)
   const action = decideAction(existing?.content ?? null, content)
@@ -169,6 +299,11 @@ export async function installOne(opts: {
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
+    // Branch-protected repo: the direct commit is disallowed. Deliver via PR
+    // instead of failing (#1333).
+    if (isPullRequestRequired(res.status, detail)) {
+      return installViaPr({ repo, path, content, token, defaultBranch })
+    }
     throw new Error(`PUT ${repo}/${path}: ${res.status} ${detail.slice(0, 200)}`)
   }
   return { repo, action, wouldWrite: true }
@@ -245,20 +380,24 @@ if (isMainModule) {
       for (const r of contributionRepos) jobs.push({ repo: r, path: QA_WORKFLOW_PATH, content: qa })
     }
 
-    const tally = { install: 0, update: 0, skip: 0, error: 0 }
+    const tally = { install: 0, update: 0, skip: 0, 'pr-opened': 0, 'pr-updated': 0, error: 0 }
     for (const j of jobs) {
       try {
         const defaultBranch = execute ? await getDefaultBranch(j.repo, token) : 'main'
         const res = await installOne({ ...j, token, defaultBranch, execute })
         tally[res.action]++
         const verb = execute ? res.action.toUpperCase() : `would-${res.action}`
-        console.log(`  ${j.repo} ${j.path.split('/').pop()}: ${verb}`)
+        const suffix = res.prUrl ? ` (${res.prUrl})` : ''
+        console.log(`  ${j.repo} ${j.path.split('/').pop()}: ${verb}${suffix}`)
       } catch (err) {
         tally.error++
         console.error(`  ${j.repo}: ERROR ${err instanceof Error ? err.message : err}`)
       }
     }
-    console.log(`\nSummary: install=${tally.install} update=${tally.update} skip=${tally.skip} error=${tally.error}`)
+    console.log(
+      `\nSummary: install=${tally.install} update=${tally.update} skip=${tally.skip} ` +
+      `pr-opened=${tally['pr-opened']} pr-updated=${tally['pr-updated']} error=${tally.error}`,
+    )
     if (!execute) console.log('(dry-run — re-run with --execute to commit)')
     if (tally.error > 0) process.exit(1)
   })().catch((e) => { console.error(e); process.exit(1) })
