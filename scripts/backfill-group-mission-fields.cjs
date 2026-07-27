@@ -19,6 +19,15 @@
  * rows in place, keyed on legacyId (stable across everything), and inserts the
  * missing tag links. It is IDEMPOTENT — safe to run repeatedly.
  *
+ * It also completes the Tags table: PROD's Tags only ever held the tags LINKED
+ * to content at migration time, so some Groups/Missions carry a PRIMARY_TAG_ID
+ * (and some links reference a TAG_ID) whose Tag row was never migrated — which
+ * is why the @mandatory primaryTagRef FK couldn't resolve for ~78 published
+ * rows. A tag-completion pass inserts exactly the missing content-referenced
+ * tags (union of every task's PRIMARY_TAG_ID + every IMS_TAG_TO_TASK TAG_ID),
+ * NOT the full ~10k IMS_TAG table, using the same deterministic UUID as the
+ * migrator so existing FKs are untouched.
+ *
  * The source data is fully populated (verified 2026-07-23: 359/359 groups &
  * 888/888 missions have description + primary tag + experience at source, plus
  * 654 GROUP + 696 MISSION tag links in IMS_TAG_TO_TASK).
@@ -26,12 +35,14 @@
  * SAFETY
  * ------
  * - Dry-run by DEFAULT. Pass --commit to actually write.
- * - Only touches: description, primaryTag, primaryTagRef (the @mandatory
- *   Association to Tags the admin Groups/Missions pages display),
- *   experienceTag, averageTimeToComplete, communityMissionId (missions only),
- *   and Group/MissionTags rows. For Tutorials it touches ONLY primaryTagRef_ID
+ * - Only touches: (INSERT) missing content-referenced Tags rows; (UPDATE)
+ *   description, primaryTag, primaryTagRef (the @mandatory Association to Tags
+ *   the admin Groups/Missions pages display), experienceTag,
+ *   averageTimeToComplete, communityMissionId (missions only), and
+ *   Group/MissionTags rows. For Tutorials it touches ONLY primaryTagRef_ID
  *   (their description/primaryTag/experience come from markdown at publish
- *   time). Never touches title/slug/status/published/timestamps.
+ *   time). Never touches title/slug/status/published/timestamps, and never
+ *   deletes or updates an EXISTING Tag (completion is INSERT-only).
  * - Only fills a column when the source has a value AND (default) the target
  *   column is currently NULL/empty. Pass --overwrite to replace non-null target
  *   values too (use when correcting a prior partial backfill).
@@ -202,6 +213,76 @@ async function main() {
     missions: { scanned: 0, updated: 0, skipped_missing_target: 0, tag_links: 0 },
     tutorials: { scanned: 0, updated: 0, skipped_missing_target: 0 },
   };
+
+  // ─── Tag completion ─────────────────────────────────────────────────────────
+  // PROD's Tags table holds only the tags that were LINKED to content at
+  // migration time (verified: 0 orphan link rows). But a chunk of Groups/
+  // Missions carry a PRIMARY_TAG_ID whose Tag was never migrated — and the
+  // original migrator also dropped GROUP/MISSION tag links entirely, so some
+  // link-referenced tags are absent too. Net effect: the @mandatory
+  // primaryTagRef FK can't resolve for ~78 published rows, and some
+  // Group/MissionTags links can't be attached, purely because the Tag row
+  // isn't there.
+  //
+  // Fix: insert exactly the tags that are content-referenced but missing —
+  // the union of (every task's PRIMARY_TAG_ID) ∪ (every IMS_TAG_TO_TASK
+  // TAG_ID), minus what's already present. This is a surgical ~67-row add,
+  // NOT a full 10k IMS_TAG re-migration (that would flood the admin Tags
+  // list + value-helps with unused interest-items). Deterministic UUID
+  // (uuidv5(legacyId, tag-ns)) — identical to the migrator — so any existing
+  // FK that already points at a present tag is unaffected, and re-runs are
+  // idempotent (missing set shrinks to ∅). `label` is intentionally left
+  // null: it's populated separately by seed-tag-labels from AEM, and these
+  // rows never had one. Mirrors mapTagRow in migrate-from-hana.js.
+  const neededTagIds = new Set();
+  for (const r of await run(source, `SELECT DISTINCT "PRIMARY_TAG_ID" AS T FROM ${S}."IMS_TASK" WHERE "PRIMARY_TAG_ID" IS NOT NULL`)) neededTagIds.add(String(r.T));
+  for (const r of await run(source, `SELECT DISTINCT "TAG_ID" AS T FROM ${S}."IMS_TAG_TO_TASK"`)) neededTagIds.add(String(r.T));
+  const missingTagIds = [...neededTagIds].filter((id) => !tagIdByLegacy.has(id));
+  console.log(`  tag completion: ${neededTagIds.size} content-referenced, ${missingTagIds.length} missing from target`);
+
+  if (missingTagIds.length) {
+    // Fetch full source rows for the missing tags. Chunk the IN() to stay
+    // under the HANA statement packet cap ([[cqn-where-in-hana-packet-cap]]).
+    const missingRows = [];
+    for (let i = 0; i < missingTagIds.length; i += 500) {
+      const chunk = missingTagIds.slice(i, i + 500);
+      const inList = chunk.map((x) => Number(x)).filter((n) => Number.isFinite(n)).join(',');
+      if (!inList) continue;
+      for (const r of await run(source, `SELECT "ID", "NAME", "SEMAPHORE_ID", "TITLE_PATH", "IS_ACTUAL_TAG", "IS_INTEREST_ITEM" FROM ${S}."IMS_TAG" WHERE "ID" IN (${inList})`)) {
+        missingRows.push(r);
+      }
+    }
+    for (const r of missingRows) {
+      report.push({ kind: 'TAG', legacyId: r.ID, cols: `name=${r.NAME}` });
+    }
+    stats.tags = { needed: neededTagIds.size, missing: missingTagIds.length, inserted: 0 };
+
+    if (COMMIT && missingRows.length) {
+      const stmt = await prepareStmt(
+        target,
+        `INSERT INTO COM_SAP_DEVELOPERS_IMS_TAGS ("ID", "LEGACYID", "NAME", "SEMAPHOREID", "TITLEPATH", "ISACTUALTAG", "ISINTERESTITEM") VALUES (?, ?, ?, ?, ?, ?, ?)`
+      );
+      for (const r of missingRows) {
+        const id = uuidv5(String(r.ID), NAMESPACES.tag);
+        await execPrepared(stmt, [
+          id,
+          r.ID,
+          truncStr(r.NAME, 255),
+          truncStr(r.SEMAPHORE_ID, 255),
+          truncStr(r.TITLE_PATH, 255),
+          r.IS_ACTUAL_TAG === 1 || r.IS_ACTUAL_TAG === true,
+          r.IS_INTEREST_ITEM === 1 || r.IS_INTEREST_ITEM === true,
+        ]);
+        tagIdByLegacy.set(String(r.ID), id); // so downstream FK/link passes resolve it
+        stats.tags.inserted++;
+      }
+      dropStmt(stmt);
+    } else if (!COMMIT) {
+      // DRY-RUN: still make the FK/link passes reflect what WOULD resolve, so
+      // their "would update" counts are accurate post-completion.
+      for (const r of missingRows) tagIdByLegacy.set(String(r.ID), uuidv5(String(r.ID), NAMESPACES.tag));
+    }
+  }
 
   // ─── Field backfill (Groups + Missions) ─────────────────────────────────────
   // Set-based, not per-row: HANA Cloud round-trips are ~100-300ms each, so a
