@@ -14,7 +14,10 @@ export const options = {
       executor: 'constant-vus',
       vus: 50,
       duration: '3m',
-      tags: { scenario: 'tutorial-serve', mode: MODE },
+      // `mode` is a real threshold dimension; the `scenario` dimension comes
+      // from the scenario key (`tutorialServe`) via k6's system tag — a custom
+      // `scenario` tag would NOT override it, so we don't set one.
+      tags: { mode: MODE },
     },
   },
   thresholds: THRESHOLDS,

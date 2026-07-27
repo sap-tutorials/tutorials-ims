@@ -8,7 +8,7 @@
 
 import ws from 'k6/ws';
 import { check } from 'k6';
-import { BASE_URL, SUMMARY_PATH, THRESHOLDS } from '../config.js';
+import { BASE_URL, SUMMARY_PATH, THRESHOLDS, wsSessionErrors } from '../config.js';
 
 export const options = {
   scenarios: {
@@ -17,7 +17,8 @@ export const options = {
       vus: 20,
       iterations: 30,          // ~30s of churn per VU at ~1s per iteration
       maxDuration: '2m',
-      tags: { scenario: 'ws' },
+      // No custom `scenario` tag: k6's system `scenario` tag is the key
+      // (`wsHandshake`), which is what config.js thresholds filter on.
     },
   },
   thresholds: THRESHOLDS,
@@ -34,13 +35,18 @@ export default function () {
       socket.setTimeout(() => socket.close(), 500);
     });
     socket.on('error', (e) => {
-      // Count as ws_session_errors — k6 auto-tracks.
+      // A genuine socket error (not a normal close) counts against the
+      // ws_session_errors rate. The metric is registered in config.js —
+      // k6 does NOT auto-create it.
       if (e && e.error && !String(e.error).match(/closed/i)) {
+        wsSessionErrors.add(true);
         console.warn(`ws error: ${e.error}`);
       }
     });
   });
-  check(res, { 'ws handshake status 101': (r) => r && r.status === 101 });
+  const ok = check(res, { 'ws handshake status 101': (r) => r && r.status === 101 });
+  // Record one sample per iteration: a non-101 handshake is a session error.
+  wsSessionErrors.add(!ok);
 }
 
 export function handleSummary(data) {

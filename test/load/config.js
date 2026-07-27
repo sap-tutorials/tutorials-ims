@@ -2,6 +2,15 @@
 // Central config for all k6 scenarios. Threshold values live here only —
 // never hardcode ms values in scenario files.
 
+import { Rate } from 'k6/metrics';
+
+// Custom metric shared across scenarios. Registered here at module-init so
+// the `ws_session_errors` threshold below always resolves — even in
+// non-ws scenarios, where it simply records no samples and passes. The
+// ws scenario imports this and adds a sample per handshake. Do NOT rely on
+// k6 to auto-create this: there is no built-in `ws_session_errors` metric.
+const wsSessionErrors = new Rate('ws_session_errors');
+
 const DEFAULT_BASE_URL =
   'https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com';
 
@@ -53,12 +62,14 @@ const THRESHOLDS = {
   'http_req_duration{scenario:ramp,endpoint:build-catalog}': ['p(95)<1000'],
 
   // Tutorial-serve scenario (cache modes).
-  'http_req_duration{scenario:tutorial-serve,mode:hot}': ['p(95)<150'],
-  'http_req_duration{scenario:tutorial-serve,mode:cold}': ['p(95)<500'],
+  // NB: k6's `scenario` system tag is the scenario KEY (`tutorialServe`),
+  // not the custom `tags.scenario` value. Filter on the key.
+  'http_req_duration{scenario:tutorialServe,mode:hot}': ['p(95)<150'],
+  'http_req_duration{scenario:tutorialServe,mode:cold}': ['p(95)<500'],
 
-  // WebSocket handshake.
-  'ws_connecting{scenario:ws}': ['p(95)<1000'],
-  'ws_session_errors{scenario:ws}': ['rate<0.02'],
+  // WebSocket handshake. Same key-vs-tag rule: scenario key is `wsHandshake`.
+  'ws_connecting{scenario:wsHandshake}': ['p(95)<1000'],
+  'ws_session_errors{scenario:wsHandshake}': ['rate<0.02'],
 };
 
 function tagsFor(endpoint) {
@@ -71,6 +82,7 @@ export {
   SUMMARY_PATH,
   MODE,
   THRESHOLDS,
+  wsSessionErrors,
   envInt,
   tagsFor,
 };
