@@ -26,6 +26,7 @@ import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
+import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
@@ -423,6 +424,11 @@ cds.on('bootstrap', (app) => {
     req.params.slug = `concept-${lower}`;
     return serveHandler(req, res);
   });
+  // #1327 Task 2 — CAP-served /concepts/ LIST page (SSR top-100 + embedded JSON
+  // for the concepts-filter island). Dark launch: no AppRouter route points
+  // here yet (the /concepts/?$ flip lands in Task 5). Public, no auth — like
+  // serveHandler.
+  app.get('/content/concepts-index', conceptsIndexHandler);
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/publish/begin',  express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
   app.post('/content/publish/append', express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);
