@@ -1,0 +1,199 @@
+# Cross-Container Integration (HDI ↔ HDI)
+
+**Reusable playbook** for federating this system's HANA data with another CAP app that lives in the **same subaccount and same HANA instance but a different HDI container**. First worked example: the Devtoberfest Planner integration (`docs/superpowers/specs/2026-07-27-devtoberfest-cross-container-design.md`).
+
+Read this when a second BTP app in the subaccount needs to read our tables/views, or we need to read theirs. It captures the pattern and the *why* so each new link is a fill-in-the-blanks exercise, not a re-derivation.
+
+---
+
+## TL;DR
+
+Two independently-deployed CAP apps share one HANA instance, each with its own HDI container. Neither container can see the other's objects by default. To share data:
+
+1. **Provider** publishes a **versioned view** (`<DOMAIN>_<PURPOSE>_V<n>`) — its stable API surface. Never expose base tables.
+2. **Consumer** binds the provider's HDI container and uses **its technical user as grantor**. A `.hdbgrants` file grants `SELECT` on that one view to the consumer's own roles.
+3. **Consumer** declares a `.hdbsynonym` pointing at the provider view, then wraps it in a `@cds.persistence.exists` **CDS facade** (a proxy view) so the CAP layer sees a normal read-only entity.
+4. First-time bring-up is **base-then-enable**: publish views first (no cross-deps), then add grants + synonyms (targets now exist).
+
+The link is directional. Bi-directional access = two independent legs, each following steps 1–4.
+
+---
+
+## Architectural decisions (the "why")
+
+These are deliberate. Change them only with a good reason and an update here.
+
+### D1 — Views/procedures are the ONLY cross-container API surface. Never base tables.
+
+A consumer's synonym points at a **published view** (or stored procedure), never at a base table like `com_sap_developers_ims_Tutorials`.
+
+- **Decoupling** — the provider can refactor, rename, or re-partition base tables without breaking any consumer, as long as the view's projection holds.
+- **Least privilege** — the view exposes exactly the columns a consumer needs and filters rows server-side (e.g. only `status='ACTIVE'` tutorials). The consumer never sees the rest of the table.
+- **Server-owned business rules** — the "what counts as published" predicate lives in the provider's view, not scattered across every consumer.
+
+### D2 — Views are versioned: `<DOMAIN>_<PURPOSE>_V<n>`.
+
+The published view name carries a version suffix (`TUTORIAL_VALUE_HELP_V1`). The API surface can evolve without breaking live consumers:
+
+- **Non-breaking change** (add a nullable column): edit `_V1` in place.
+- **Breaking change** (drop/rename/retype a column, tighten a filter): publish `_V2` **alongside** `_V1`, migrate the consumer's synonym + facade to `_V2`, then retire `_V1` once no consumer references it.
+- A consumer adopts a new version by changing only its synonym + facade — two small files.
+
+Track live versions in the [registry](#cross-container-link-registry) below.
+
+### D3 — Direct cross-bind grantor, NOT a grantor user-provided-service.
+
+The consumer's db-deployer `requires:` the **provider's HDI container instance directly** (as an `existing-service` in mta.yaml). HDI uses that bound container's own technical (object-owner) user as the grantor for the `.hdbgrants`.
+
+We do **not** wrap the grant credentials in a separate `user-provided-service` (the pattern used by `tutorials-kg-grantor` for SPARQL/`SYS` grants — see `hana-kge-access.md`). That indirection exists only because `SYS` isn't a bindable container. **Container-to-container is a first-class HDI case**: both sides are real HDI containers, so binding one from the other is cleaner, has no extra secret to rotate, and no extra UPS resource to keep in sync.
+
+### D4 — `@cds.persistence.exists` facade entities expose synonyms to CAP.
+
+A raw synonym is invisible to the CAP model. On top of each synonym we define a CDS entity annotated `@cds.persistence.exists` — CAP treats it as an existing DB object (no CREATE emitted) and can project/serve it read-only. This is the "proxy view" layer. Generate it from the live view with `hana-cli` rather than hand-typing column types (see [Recipe step C3](#consumer-side)).
+
+### D5 — Provider-first, base-then-enable deploy sequencing.
+
+A synonym fails to deploy if its target view doesn't exist yet. So first-time bring-up publishes **views only** (Phase 1, zero cross-deps), then adds **grants + synonyms** (Phase 2, targets now exist). See [Bootstrap](#first-time-bootstrap-the-hard-part). Steady-state redeploys are order-independent because both views persist.
+
+### D6 — Store the foreign key AND a denormalized label snapshot.
+
+When a consumer stores a provider's row key (e.g. a Tutorial `ID` on a planner Session), it has **no cross-container FK enforcement** — the provider can retire that row anytime. Store the GUID **plus** a denormalized snapshot of the human label (slug/title) captured at pick-time, so the consumer UI still renders something meaningful if the source row later disappears. The live value help resolves current rows; the snapshot is the fallback.
+
+---
+
+## The repeatable recipe
+
+Generic steps. Substitute your provider/consumer names. `PROVIDER` = the app publishing data; `CONSUMER` = the app reading it.
+
+### Provider side
+
+**P1 — Publish a versioned view.** In `db/src/<DOMAIN>_<PURPOSE>_V1.hdbview` (or a `.cds` view that compiles to HANA), select exactly the columns to expose, filtered to the rows allowed out:
+
+```sql
+-- db/src/TUTORIAL_VALUE_HELP_V1.hdbview
+VIEW "TUTORIAL_VALUE_HELP_V1" AS
+  SELECT "ID", "slug", "title", "primaryTag"
+  FROM "com_sap_developers_ims_Tutorials"
+  WHERE "status" = 'ACTIVE' OR "status" IS NULL
+```
+
+That's the entire provider obligation. No grants, no knowledge of who consumes it. (If you prefer a CDS-authored view, define it in the db model and let `cds build` emit the `.hdbview` — but keep the physical name version-suffixed.)
+
+### Consumer side
+
+**C1 — Bind the provider container + grant SELECT.** The consumer's db-deployer gains a `requires:` on the provider's HDI container (an `existing-service`), and a `.hdbgrants` keyed by that bound service name grants `SELECT` on the view to the consumer's own roles:
+
+```jsonc
+// db/src/<provider>-grants.hdbgrants   (top-level key = the bound provider service name)
+{
+  "tutorials-hana": {
+    "object_owner":     { "object_privileges": [ { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] } ] },
+    "application_user": { "object_privileges": [ { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] } ] }
+  }
+}
+```
+
+- `object_owner` — lets the consumer's own views/procedures build on the synonym at deploy time.
+- `application_user` — lets the CAP runtime read it.
+- **Grant on the specific view only** — never schema-wide, never the base table.
+
+> ⚠️ **Every top-level key in a `.hdbgrants` must be a genuinely bound service**, or the whole deploy fails with "service not found". Comment keys and unbound keys break it. This is why C1's grant and the mta `requires:` are a single unit — see `db/_grants.hdbgrants.md` for the same rule applied to the SPARQL grantor.
+
+**C2 — Declare the synonym.** Point a plain local name at the external view:
+
+```jsonc
+// db/src/TUTORIAL_VALUE_HELP_V1.hdbsynonym
+{
+  "TUTORIAL_VALUE_HELP_V1": {
+    "target": { "object": "TUTORIAL_VALUE_HELP_V1" }
+  }
+}
+```
+
+The synonym resolves through the granted privilege on the bound container — no explicit schema needed when the grant is in place. (If HDI needs the grantor pinned explicitly, add a `.hdbsynonymconfig` naming the bound service; start without it and add only if deploy complains.)
+
+**C3 — Generate the `@cds.persistence.exists` facade.** Once the synonym resolves, introspect the live view to emit the CDS proxy rather than hand-typing it:
+
+```bash
+# via hana-cli (bound to the consumer container): emit a CDS proxy for the synonym/view
+hana-cli inspectView --view TUTORIAL_VALUE_HELP_V1 --output cds
+# or the MCP tool hana_inspect_table / hana_inspectView with output: "cds"
+```
+
+Land the result in `db/external/<provider>.cds`:
+
+```cds
+// db/external/tutorials.cds
+namespace external.tutorials;
+
+@cds.persistence.exists
+entity TutorialValueHelpV1 {
+  key ID        : String(36);
+      slug      : String(255);
+      title     : String(255);
+      primaryTag: String(255);
+}
+```
+
+**C4 — Project it read-only in a service** and wire whatever consumes it (a value help, a JOIN, a report). Keep the projection `@readonly` — the facade is a proxy over another container's data.
+
+---
+
+## First-time bootstrap (the hard part)
+
+Bi-directional links create a **mutual `requires`**: each db-deployer binds the other's container, and each synonym needs the other's view to already exist. You cannot bring both up in one cold atomic deploy. Split into phases:
+
+```
+Phase 0  Both container instances exist, service-names PINNED on both sides.
+         (A CF-autogenerated container name can't be referenced by the other project —
+          pin `service-name:` on the hdi-container resource in mta.yaml.)
+
+Phase 1  BASE — publish views only. No grants, no synonyms. Zero cross-container deps,
+         so each side deploys cleanly and independently.
+         ├─ provider A  → publish A's view
+         └─ provider B  → publish B's view   (if bi-directional)
+
+Phase 2  ENABLE — add grants + synonyms + facades. Targets now exist, so they resolve.
+         ├─ consumer of A → hdbgrants + synonym + facade → A's view
+         └─ consumer of B → hdbgrants + synonym + facade → B's view
+
+Phase 3  VERIFY — probe each synonym with a real SQL read (hana-cli) BEFORE trusting
+         the CAP facades. A resolvable synonym returning rows is the gate.
+```
+
+**Steady state:** after bootstrap, both views persist, so ordinary redeploys are order-independent. The base-then-enable split is only needed for the first link and whenever you add a *new* leg.
+
+**Practical tip:** keep the Phase-2 artifacts (grants + synonym + facade) as a self-contained, revertable set. If a synonym wedges a deploy, removing those files returns the container to a clean Phase-1 state.
+
+---
+
+## Gotchas
+
+- **Unpinned `service-name` breaks referenceability** — a container whose instance name CF auto-generated can't be named by the other project's `requires:`. Pin `service-name:` on both `com.sap.xs.hdi-container` resources.
+- **Synonym target missing → loud deploy failure** — deploy the provider view first (D5). The error names the unresolved synonym; the fix is ordering, not a code change.
+- **`.hdbgrants` unbound-key failure** — every top-level key must map to a bound service (see C1 warning).
+- **No cross-container FK** — the facade is read-only and enforces nothing; a stored foreign key can dangle when the provider retires the row (D6 — store a label snapshot).
+- **Dropping a `_Vn` view breaks live synonyms** — follow the versioning policy (D2): add `_V2`, migrate, retire `_V1`.
+- **QA/other channels** — grant only the containers actually in scope. Extra channels (e.g. `tutorials-hana-qa`) don't automatically participate; wire them explicitly if needed.
+- **This repo's dual mta.yaml** — changes to `mta.yaml` must mirror into `.deploy/mta.yaml` (see `mta-deployment.md`).
+
+---
+
+## Cross-container link registry
+
+Every active cross-container link. Update on add/version-bump/retire.
+
+| Provider container | Published view | Consumer container | Consumer facade | Version | Status | Feature |
+|---|---|---|---|---|---|---|
+| `tutorials-hana` | `TUTORIAL_VALUE_HELP_V1` | `devtoberfest-planner-db` | `external.tutorials.TutorialValueHelpV1` | V1 | planned | Session tutorial value help |
+| `devtoberfest-planner-db` | `ACTIVITY_SESSION_V1` | `tutorials-hana` | `external.devtoberfest.ActivitySessionV1` | V1 | planned (no consumer yet) | reciprocal leg, reserved |
+
+---
+
+## References
+
+- Feature spec (worked example): `docs/superpowers/specs/2026-07-27-devtoberfest-cross-container-design.md`
+- CAP: [Add existing SAP HANA objects from other HDI containers](https://cap.cloud.sap/docs/guides/databases/hana-native#add-existing-sap-hana-objects-from-other-hdi-containers)
+- HDI grants/synonyms mechanics: [`@sap/hdi-deploy`](https://www.npmjs.com/package/@sap/hdi-deploy)
+- Existing grantor-UPS pattern (contrast, D3): `docs/developers/architecture/hana-kge-access.md`, `docs/developers/operations/kg-grantor-setup.md`, `db/_grants.hdbgrants.md`
+- Deploy runbook: `docs/developers/operations/mta-deployment.md`
