@@ -1,46 +1,50 @@
 <!-- hugo-apps/src/concepts-filter/App.vue -->
 <!--
-  Concepts filter island (#859).
+  Concepts filter island (#859, virtualized in #1327 Task 4).
 
-  The Hugo grid at /concepts/ is fully static — every card is a
-  server-rendered <li> with data-* attributes carrying slug, name,
-  description, first-letter, tutorial-count. This island reads those
-  attributes into an in-memory index once on mount, then filters the
-  DOM (via the `hidden` attribute on each <li>) as the user types /
-  clicks A-Z / changes sort.
+  The CAP-served /concepts/ list page (srv/lib/concept-list-page.js) emits
+  the top-100 concepts as SSR <li> (SEO / no-JS) plus the FULL slim array in
+  a `<script type="application/json" id="concepts-data">` block. This island
+  reads that JSON and renders only the visible slice via vue-virtual-scroller's
+  RecycleScroller — so a 5k-10k concept corpus stays a few dozen live DOM nodes
+  instead of thousands, and each keystroke filters an in-memory array (<5ms)
+  instead of walking the DOM.
 
-  Progressive enhancement: without this island the static grid is fully
-  usable (just no search). The island's controls slot into the existing
-  #concepts-filter-controls container which Hugo hides by default.
+  Progressive enhancement: without JS the SSR top-100 + <noscript> A-Z remain
+  usable. Backward-compatible: if there is no #concepts-data (e.g. the legacy
+  Hugo-static page before the Task 5 route flip), the island falls back to
+  reading the SSR <li> data-* attributes, the pre-#1327 behavior.
 
-  URL sync is bidirectional: the URL is updated with `history.replaceState`
-  as the user types, and reflected back into filter state on page load
-  or browser Back/Forward. Matches the navigator's urlSync pattern.
+  URL sync is bidirectional (history.replaceState on change, read on popstate).
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { RecycleScroller } from 'vue-virtual-scroller';
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
+import ConceptCard from './ConceptCard.vue';
 import {
   applyFilters,
   availableLetters,
   fromQueryString,
   toQueryString,
   DEFAULT_STATE,
-  type ConceptCard,
+  type ConceptCard as ConceptCardT,
   type FilterState,
   type SortKey,
 } from './filter-logic';
 
-const cards = ref<ConceptCard[]>([]);
+// Fixed row height (px) for the virtual scroller. Pinned (not measured) — a
+// constant item size is the single biggest perf win on RecycleScroller. Must
+// visually accommodate name + truncated description + meta line.
+const ITEM_SIZE = 140;
+
+const cards = ref<ConceptCardT[]>([]);
 const state = ref<FilterState>({ ...DEFAULT_STATE });
-// The `_index.md` count element ("N concepts") so we can update it after
-// filtering. Left null when the island isn't mounted (grid empty).
+const listEl = ref<HTMLElement | null>(null);
 let countEl: HTMLElement | null = null;
-let listEl: HTMLElement | null = null;
 let emptyEl: HTMLElement | null = null;
 
-// Debounce for query input so typing "cloud" doesn't do five filter
-// passes in a row. 100ms feels responsive but avoids layout thrash on
-// large grids.
+// Debounce query input so typing "cloud" doesn't refilter five times.
 let queryDebounce: ReturnType<typeof setTimeout> | null = null;
 const queryInput = ref('');
 function onQueryInput(evt: Event) {
@@ -51,75 +55,78 @@ function onQueryInput(evt: Event) {
   }, 100);
 }
 
-function setLetter(letter: string | null) {
-  state.value = { ...state.value, letter };
-}
-
-function setSort(sort: SortKey) {
-  state.value = { ...state.value, sort };
-}
-
+function setLetter(letter: string | null) { state.value = { ...state.value, letter }; }
+function setSort(sort: SortKey) { state.value = { ...state.value, sort }; }
 function clearAll() {
   state.value = { ...DEFAULT_STATE };
   queryInput.value = '';
 }
 
-// Compute the visible slugs and hide/show cards + reorder them.
-const visibleSlugs = computed(() => new Set(applyFilters(cards.value, state.value).map((c) => c.slug)));
+// The filtered + sorted array the scroller renders.
+const visible = computed(() => applyFilters(cards.value, state.value));
 const availLetters = computed(() => availableLetters(cards.value, state.value));
 
-// The alphabet strip. '#' is a bucket for non-alpha starts (numbers,
-// symbols). Always rendered so its width doesn't jump as letters come
-// and go, but disabled buttons look muted.
 const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').concat('#');
 
-function applyToDom() {
-  if (!listEl) return;
+function normaliseLetter(raw: string): string {
+  const c = (raw || '').charAt(0).toUpperCase();
+  return /[A-Z]/.test(c) ? c : '#';
+}
 
-  // The pure-function order is our target render order — reorder DOM
-  // to match. This keeps the visual list in sync with the sort control.
-  const ordered = applyFilters(cards.value, state.value);
-  const bySlug = new Map<string, HTMLElement>();
-  for (const li of listEl.children) {
-    const slug = (li as HTMLElement).dataset.slug;
-    if (slug) bySlug.set(slug, li as HTMLElement);
-  }
-  // Reorder: appendChild moves the node without cloning.
-  for (const c of ordered) {
-    const li = bySlug.get(c.slug);
-    if (li) listEl.appendChild(li);
-  }
-  // Hide the ones that filtered out.
-  const visible = new Set(ordered.map((c) => c.slug));
-  for (const [slug, li] of bySlug) {
-    if (visible.has(slug)) {
-      li.removeAttribute('hidden');
-    } else {
-      li.setAttribute('hidden', '');
+// Read the embedded JSON array, or fall back to the SSR <li> data-* attrs.
+function loadCards(): ConceptCardT[] {
+  const dataEl = document.getElementById('concepts-data');
+  if (dataEl?.textContent) {
+    try {
+      const parsed = JSON.parse(dataEl.textContent) as ConceptCardT[];
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((c) => c && typeof c.slug === 'string' && c.slug)
+          .map((c) => ({
+            slug: c.slug,
+            name: c.name ?? '',
+            description: c.description ?? '',
+            firstLetter: normaliseLetter(c.firstLetter ?? c.name ?? ''),
+            tutorialCount: Number(c.tutorialCount) || 0,
+          }));
+      }
+    } catch {
+      // fall through to DOM index
     }
   }
-  // Update the count line + empty-state banner.
+  // Fallback: legacy Hugo-static page — read the SSR <li> attributes.
+  const items = listEl.value
+    ? Array.from(listEl.value.querySelectorAll<HTMLElement>('.concepts-index__item'))
+    : [];
+  return items
+    .map((li) => ({
+      slug: li.dataset.slug ?? '',
+      name: li.dataset.name ?? '',
+      description: li.dataset.description ?? '',
+      firstLetter: normaliseLetter(li.dataset.firstLetter ?? ''),
+      tutorialCount: Number.parseInt(li.dataset.tutorialCount ?? '0', 10) || 0,
+    }))
+    .filter((c) => c.slug);
+}
+
+// Keep the count line + empty-state banner in sync (elements Hugo/CAP emit).
+function syncChrome() {
   if (countEl) {
-    const n = ordered.length;
+    const n = visible.value.length;
     const total = cards.value.length;
-    if (n === total) {
-      countEl.textContent = `${total} concept${total === 1 ? '' : 's'}`;
-    } else {
-      countEl.textContent = `${n} of ${total} concept${total === 1 ? '' : 's'}`;
-    }
+    countEl.textContent = n === total
+      ? `${total} concept${total === 1 ? '' : 's'}`
+      : `${n} of ${total} concept${total === 1 ? '' : 's'}`;
   }
   if (emptyEl) {
-    if (ordered.length === 0) emptyEl.removeAttribute('hidden');
+    if (visible.value.length === 0) emptyEl.removeAttribute('hidden');
     else emptyEl.setAttribute('hidden', '');
   }
 }
 
-// URL sync — write on state change, no reload; read on popstate.
 function writeUrl() {
   const qs = toQueryString(state.value);
-  // Preserve any hash fragment (concept anchors, etc.).
-  const url = `${window.location.pathname}${qs}${window.location.hash}`;
-  window.history.replaceState({}, '', url);
+  window.history.replaceState({}, '', `${window.location.pathname}${qs}${window.location.hash}`);
 }
 function readUrl() {
   const parsed = fromQueryString(window.location.search.replace(/^\?/, ''));
@@ -130,43 +137,32 @@ function onPopState() { readUrl(); }
 
 onMounted(() => {
   countEl = document.getElementById('concepts-filter-count');
-  listEl = document.getElementById('concepts-filter-list');
+  listEl.value = document.getElementById('concepts-filter-list');
   emptyEl = document.getElementById('concepts-filter-empty');
   const clearBtn = document.getElementById('concepts-filter-clear');
   if (clearBtn) clearBtn.addEventListener('click', clearAll);
 
-  if (!listEl) return; // Grid is empty — bail; the static empty-state is fine.
+  cards.value = loadCards();
 
-  // Build the in-memory index from data-* attributes on each <li>.
-  const items = Array.from(listEl.querySelectorAll<HTMLElement>('.concepts-index__item'));
-  const parsed: ConceptCard[] = items.map((li) => ({
-    slug: li.dataset.slug ?? '',
-    name: li.dataset.name ?? '',
-    description: li.dataset.description ?? '',
-    firstLetter: normaliseLetter(li.dataset.firstLetter ?? ''),
-    tutorialCount: Number.parseInt(li.dataset.tutorialCount ?? '0', 10) || 0,
-  })).filter((c) => c.slug);
-  cards.value = parsed;
+  // Clear the SSR top-100 <li> — the scroller owns the list DOM now. (No-op
+  // when the list came from JSON with an empty <ul>.)
+  if (listEl.value) {
+    for (const li of Array.from(listEl.value.querySelectorAll('.concepts-index__item'))) {
+      li.remove();
+    }
+  }
 
   readUrl();
   window.addEventListener('popstate', onPopState);
+  syncChrome();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', onPopState);
 });
 
-watch(state, () => {
-  applyToDom();
-  writeUrl();
-});
-
-function normaliseLetter(raw: string): string {
-  // 'CAP' → 'C', ' ' → '#', '3' → '#'. Data attribute is uppercased by
-  // Hugo but be defensive.
-  const c = (raw || '').charAt(0).toUpperCase();
-  return /[A-Z]/.test(c) ? c : '#';
-}
+watch([visible, cards], syncChrome);
+watch(state, writeUrl);
 </script>
 
 <template>
@@ -222,16 +218,26 @@ function normaliseLetter(raw: string): string {
       >{{ ch }}</button>
     </nav>
   </div>
+
+  <!-- Render the virtualized list into the existing #concepts-filter-list
+       container the page already lays out (keeps its grid CSS + position). -->
+  <Teleport v-if="listEl" :to="listEl">
+    <RecycleScroller
+      class="concepts-index__scroller"
+      :items="visible"
+      :item-size="ITEM_SIZE"
+      key-field="slug"
+      v-slot="{ item }"
+    >
+      <ConceptCard :card="item" />
+    </RecycleScroller>
+  </Teleport>
 </template>
 
 <style scoped>
-/* Theme-aware — every color / background reads from the SAP Horizon CSS
-   variables declared in hugo/assets/css/sap-theme-vars.css, with the
-   light-mode hex preserved as the var() fallback. Fixes dark-on-dark
-   invisibility of typed search text (#1169): the input previously forced
-   background:#fff with no color, so dark-mode's inherited light text was
-   white-on-white. Mirrors the same fix already applied to the surrounding
-   grid in layouts/concepts/list.html. */
+/* Theme-aware — colors read from the SAP Horizon CSS variables declared in
+   hugo/assets/css/sap-theme-vars.css, with light-mode hex as var() fallback
+   (dark-on-dark fix #1169). */
 .concepts-filter {
   display: flex;
   flex-direction: column;
@@ -318,5 +324,17 @@ function normaliseLetter(raw: string): string {
   color: var(--sapContent_DisabledTextColor, #a4a7ab);
   background: var(--sapNeutralBackground, #f8f9fa);
   cursor: not-allowed;
+}
+</style>
+
+<style>
+/* Unscoped: the virtual scroller needs an explicit height to window against,
+   and its recycled <li> should sit in the existing grid. The scroller is
+   teleported into #concepts-filter-list (outside this component's scope), so
+   these rules are global. */
+.concepts-index__scroller {
+  height: 70vh;
+  min-height: 320px;
+  overflow-y: auto;
 }
 </style>
