@@ -98,6 +98,7 @@
     "test:llm-ux": "node test/mcp-ux/runner.js",
     "test:smoke:personalization": "vitest run test/smoke/homepage-personalized.test.js",
     "test:a11y": "vitest run --project a11y",
+    "test:e2e": "vitest run --project e2e",
     "test:a11y:lighthouse": "lhci autorun --config=test/a11y/lighthouserc.json",
     "test:a11y:summary": "node test/a11y/summary.js",
     "test:all": "cds bind --exec -- npx vitest run",
