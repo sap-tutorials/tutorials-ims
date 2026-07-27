@@ -1,51 +1,40 @@
 <core:FragmentDefinition
   xmlns:core="sap.ui.core"
-  xmlns:macros="sap.fe.macros">
+  xmlns="sap.m">
   <!--
-    Issue #426 — the "Task" cell in the Path Items LineItem table needs a
-    value help that differs by row type: TUTORIAL → Tutorials picker,
-    GROUP → Groups picker, CHECKPOINT → free-text checkpoint title.
+    Issue #426 — the Path Items "Task" cell needs a value help that differs by
+    row type: TUTORIAL -> Tutorials picker, GROUP -> Groups picker,
+    CHECKPOINT -> free-text checkpoint title.
 
-    History of failed fixes (do NOT reintroduce a hand-rolled Input):
-      #1331 eager-loaded the core:require handler in Component.js;
-      #1345 added targetType:'any' to a showValueHelp expression binding.
-    Both were correct in isolation yet the F4 icon stayed missing on the
-    DEPLOYED approuter. Root cause (verified 2026-07-27 via Playwright on DEV +
-    a faithful local hybrid repro): admin child components ship WITHOUT a
-    Component-preload.js. On the deployed shell (which HAS a root preload,
-    optimized async mode) the runtime requests components/missions/
-    Component-preload.js, gets a non-executable HTML fallback, and the
-    core:require handler resolves LATER than Fiori Elements' synchronous
-    column-template clone. With `handler` unresolved at clone time the
-    showValueHelp expression binding silently degrades to a bare path binding
-    on the String `taskType`, which UI5 coerces to Boolean → FormatException
-    ("TUTORIAL is not a valid boolean value") → showValueHelp:false → no icon.
-    This only reproduces under deployed load-timing, which is why the earlier
-    fixes passed local/standalone checks but failed on DEV.
+    Failed approaches (do NOT reintroduce — all verified broken 2026-07-27):
+      * core:require handler (#1331/#1345): the module loads lazily and loses
+        the race against FE's synchronous column-template clone on the DEPLOYED
+        shell (admin child components ship without a Component-preload.js), so
+        `handler` was unresolved at clone time -> showValueHelp expression
+        degraded to a bare taskType path -> String coerced to Boolean ->
+        FormatException -> no icon.
+      * Native macros:Field with `visible` / VBox wrappers / multiple stacked
+        Fields: FE allows exactly ONE building block per custom column cell;
+        anything else throws "c?.isA is not a function" and blanks the object
+        page. (macros:Field has no `visible` property.)
 
-    Fix: drop the core:require handler + expression binding entirely and use
-    native sap.fe.macros:Field building blocks — the SAME pattern the sibling
-    TypeColumn.fragment.xml already uses successfully on DEV. Each Field binds
-    its own metaPath and FE renders that field's value help natively from the
-    existing @Common.ValueList annotations on AdminService.CompletionPathItems
-    (tutorial_ID → Tutorials, group_ID → Groups; see app/admin-annotations.cds).
-    There is no lazily-loaded module to lose a race against and no expression
-    binding over a Boolean property to coerce, so the failure mode is removed
-    by construction.
+    Working approach (this file): a SINGLE sap.m.Input whose handlers resolve to
+    methods on the BranchAnalyticsHandler controllerExtension (registered in
+    manifest.json for sap.fe.templates.ObjectPage.ObjectPageController). FE
+    instantiates controllerExtensions during OP component init — BEFORE it clones
+    the LineItem column templates — so bare handler names (onTaskValueHelp,
+    onTaskCheckpointChange) and the formatter (.formatTaskShowValueHelp) resolve
+    deterministically, with no lazily-loaded module to race.
 
-    Per-type visibility uses the server-computed Boolean fields
-    show{Tutorial,Group,Checkpoint} (srv/admin-service.cds — `case when
-    taskType = '…'`). These are genuine Booleans in the model, so binding them
-    to macros:Field `visible` needs no expression and no coercion. Exactly one
-    is true per row, so exactly one Field renders in the cell.
+    showValueHelp uses a FORMATTER (raw String taskType -> Boolean return), NOT an
+    expression binding over the Boolean property — so taskType is never coerced.
+    editable uses IsActiveEntity, a genuine Boolean, so its coercion is a no-op.
   -->
-  <macros:Field
-    metaPath="tutorial_ID"
-    visible="{showTutorial}"/>
-  <macros:Field
-    metaPath="group_ID"
-    visible="{showGroup}"/>
-  <macros:Field
-    metaPath="checkpointTitle"
-    visible="{showCheckpoint}"/>
+  <Input
+    value="{parts: [{path: 'taskType'}, {path: 'tutorial/title'}, {path: 'group/title'}, {path: 'checkpointTitle'}], formatter: '.extension.sap.tutorials.admin.missions.ext.BranchAnalyticsHandler.formatTaskDisplay'}"
+    showValueHelp="{path: 'taskType', targetType: 'any', formatter: '.extension.sap.tutorials.admin.missions.ext.BranchAnalyticsHandler.formatTaskShowValueHelp'}"
+    valueHelpRequest=".extension.sap.tutorials.admin.missions.ext.BranchAnalyticsHandler.onTaskValueHelp"
+    editable="{= !${IsActiveEntity} }"
+    change=".extension.sap.tutorials.admin.missions.ext.BranchAnalyticsHandler.onTaskCheckpointChange"
+    placeholder="{path: 'taskType', formatter: '.extension.sap.tutorials.admin.missions.ext.BranchAnalyticsHandler.formatTaskPlaceholder'}"/>
 </core:FragmentDefinition>
