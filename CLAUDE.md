@@ -69,6 +69,7 @@ Deep dives (do not duplicate here — read the doc when relevant):
 - [docs/developers/architecture/homepage.md](docs/developers/architecture/homepage.md) — developer-portal homepage
 - [docs/developers/architecture/advocates.md](docs/developers/architecture/advocates.md) — Developer Advocates page
 - [docs/developers/architecture/observability.md](docs/developers/architecture/observability.md) — metrics module, snapshots
+- [docs/developers/architecture/cross-container-integration.md](docs/developers/architecture/cross-container-integration.md) — reusable HDI↔HDI cross-container playbook (versioned views, grants/synonyms, `@cds.persistence.exists` facades, bootstrap sequencing)
 - [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md) — **canonical UI + API endpoint reference** (services, custom endpoints, auth scopes)
 - [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) — deploy runbook
 - [docs/developers/operations/rebuild-content-workflow.md](docs/developers/operations/rebuild-content-workflow.md) — three rebuild modes, auto-classify
