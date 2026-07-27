@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes
+  beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, renderConceptsPhase
 } from '../lib/publish-client.js';
 
 const baseUrl = 'http://localhost:4004';
@@ -79,5 +79,33 @@ describe('publish-client', () => {
     }));
     const out = await fetchRemoteHashes({ baseUrl });
     expect(out).toEqual({ slug1: 'h1', slug2: 'h2' });
+  });
+
+  it('renderConceptsPhase POSTs sessionId to /render-concepts and returns counts (#1327)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: () => Promise.resolve({
+        conceptsSeen: 5000, conceptsChanged: 12, conceptsSkipped: 4988,
+        conceptsErrored: 0, durationMs: 42000,
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const out = await renderConceptsPhase({ baseUrl, apiKey, sessionId: 'sess-1' });
+    expect(out.conceptsChanged).toBe(12);
+    expect(out.conceptsSkipped).toBe(4988);
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${baseUrl}/content/publish/render-concepts`);
+    expect(opts.method).toBe('POST');
+    expect(opts.headers).toEqual(expect.objectContaining({ Authorization: 'Bearer test-key' }));
+    expect(JSON.parse(opts.body)).toEqual({ sessionId: 'sess-1' });
+  });
+
+  it('renderConceptsPhase throws with status attached on non-2xx (#1327)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 500, text: () => Promise.resolve('shell unavailable'),
+    }));
+    await expect(
+      renderConceptsPhase({ baseUrl, apiKey, sessionId: 'sess-1' })
+    ).rejects.toMatchObject({ status: 500 });
   });
 });
