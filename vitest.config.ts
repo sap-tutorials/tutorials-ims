@@ -41,7 +41,11 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts', 'scripts/**/__tests__/**/*.test.ts', 'srv/**/__tests__/**/*.test.{js,ts}', 'app/analytics-explorer/src/**/__tests__/**/*.test.ts', 'app/explore/src/**/__tests__/**/*.test.ts', 'hugo-apps/src/**/*.{test,spec}.{js,ts}'],
-          exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**'],
+          // test/e2e/** is the Playwright-driven `e2e` project (below). Its
+          // specs launch a real browser against a DEPLOYED approuter and would
+          // hang the unit tier (which has no BASE_URL); the broad
+          // `test/**/*.test.{js,ts}` include above would otherwise swallow them.
+          exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**', 'test/e2e/**'],
           // testTimeout raised to 30s because the `test/unit/check-*.test.ts`
           // cluster spawns `npx tsx <script>` per-`it` — cold TSX + child process
           // startup on Windows can breach the vitest default (5s). Project
@@ -124,6 +128,23 @@ export default defineConfig({
           name: 'a11y',
           include: ['test/a11y/**/*.test.{js,ts}'],
           testTimeout: 60000
+        }
+      },
+      {
+        // Playwright-driven admin-UI smoke tier (#1338, salvaged from #806).
+        // Runs post-deploy against a DEPLOYED approuter — every spec self-skips
+        // when SMOKE_BASE_URL/PLAYWRIGHT_BASE_URL is absent, so `npm test`
+        // (unit tier) and a credential-less local run stay green. Driven by
+        // `playwright-core` + `chromium.launch()` inside plain vitest, exactly
+        // like the a11y tier above — deliberately NOT `@playwright/test`, to
+        // avoid a second test-runner dependency.
+        test: {
+          name: 'e2e',
+          include: ['test/e2e/**/*.test.{js,ts}'],
+          pool: 'forks',
+          testTimeout: 120000,
+          hookTimeout: 60000,
+          retry: process.env.CI ? 2 : 0
         }
       }
     ]

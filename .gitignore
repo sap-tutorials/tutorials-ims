@@ -123,3 +123,8 @@ approuter/static/.well-known/oauth-protected-resource
 
 # Local MCP client config — may hold personal PATs / server URLs; keep out of git.
 .mcp.json
+
+# Playwright e2e (#1338) — never commit browser artefacts or auth state.
+test-results/
+playwright-report/
+.playwright-auth-state.json
