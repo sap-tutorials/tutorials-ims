@@ -58,6 +58,29 @@ mechanism is a **direct commit to the default branch** (no PR), per the #1154
 rollout decision — merge-to-main on the *source* content is the review gate;
 these notify workflows are infrastructure.
 
+### Branch-protected repos: automatic PR fallback (#1333)
+
+Some source repos have branch protection / rulesets that reject a direct commit
+to the default branch (`409 Repository rule violations found — Changes must be
+made through a pull request`). For those, `--execute` **falls back to PR mode
+automatically** instead of erroring:
+
+1. resolve the default-branch head sha,
+2. create/reuse the feature branch `chore/1154-notify-workflow-refresh`
+   (`422 already exists` → reuse),
+3. compare the file already on that branch — skip the commit if it's current,
+4. PUT the rendered template to the branch,
+5. open a PR against the default branch (`422 already open` → reuse and surface
+   the existing PR URL).
+
+These land as a distinct outcome in the per-repo log and the summary tally —
+`pr-opened` (new PR) / `pr-updated` (PR already open) — so a protected repo
+delivered via PR is **not** counted as an `error`. Re-running when the PR branch
+is already current opens/commits nothing (idempotent). Unprotected repos still
+get the direct commit — unchanged. The maintainer merges the resulting PRs
+(e.g. abap-core-development#2722, btp-dev-guidance#953, btp-foundation#2417 in
+the manual 2026-07-27 catch-up that motivated this).
+
 ## Adding the workflow to a NEW repo
 
 Nothing special — discovery is live. When a new tutorial source repo or
