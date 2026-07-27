@@ -105,6 +105,8 @@ Subsystem one-liners:
 
 - **`srv-qa` cp list audit** — When changing anything under `srv/lib/`, re-walk transitive `./` imports from `srv/lib/content-store.js` and confirm every dep is in `.deploy/mta.yaml`'s `srv-qa` `cp` list. Missing transitive deps crash QA boot at MTA deploy time.
 
+- **Admin-UI changes need a FULL deploy + are bundle-gated** — the admin apps (`app/admin/*` + `app/admin-shell/`) are raw-copied into the approuter's `static/admin-ui/` by the MTA's approuter builder during `mbt build`. A `--skip-build` deploy (reuses a stale mtar), a module-scoped `cf deploy -m tutorials-srv`, or an mtar packaged before the change landed will silently ship a **stale admin UI** even though the fix is on `main` (this is why PR #1331/#1345's value-help fix looked "not deployed" on DEV). `npm run deploy` now runs **Step 3.5** (`scripts/check-shipped-admin-bundle.cjs`) which cracks the mtar and diffs the shipped admin component files against source, failing the deploy on drift. Rule: deploy admin-UI changes with a full `npm run deploy -- --env <env>` (NO `--skip-build`, NO `-m` scoping), and never bypass Step 3.5.
+
 ## Top Gotchas (rest in [tutorials-ims-gotchas.md](docs/developers/reference/tutorials-ims-gotchas.md))
 
 - **Fresh worktree setup needs `npm run setup` after `npm install`** — global npmrc has `ignore-scripts=true`. Without it, `hugo-apps/node_modules` won't be populated and `better-sqlite3`'s native binding won't build. Symptoms: hugo-apps tests fail resolving `@mediapipe/tasks-vision`, `npm test` hangs.

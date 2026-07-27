@@ -8,6 +8,7 @@
 //   1. Target guard       — cf target region + space match the chosen env
 //   2. Build              — CAP_BASE_URL set per env, then `npm run build:deploy`
 //   3. Package            — `mbt build`, then VERIFY a fresh mtar was produced
+//   3.5 Bundle parity     — diff the mtar's admin-UI bundle against source
 //   4. Deploy             — `cf deploy … -e ../deploy/<env>.mtaext -f`
 //   5. Smoke gate         — `npm run test:smoke` against the just-deployed URLs
 //
@@ -294,6 +295,33 @@ function main() {
              '             Fix: (cd node_modules/mbt && node install cloud-mta-build-tool), then retry.');
     }
     ok(`fresh mtar in ${path.relative(ROOT, MTAR_GLOB_DIR)} (mtime advanced)`);
+  }
+
+  // ---- Step 3.5: verify the shipped admin-UI bundle matches source ------
+  // WHY (2026-07-27, PR #1331/#1345): the admin apps are raw-copied into the
+  // approuter's static/admin-ui/ by the MTA's approuter builder during `mbt
+  // build`. A deploy that reuses a stale mtar (--skip-build), is module-scoped
+  // to the srv, or was packaged before a source change landed will ship an
+  // admin UI that silently lags source — exactly how the Path Items value-help
+  // fix appeared "not deployed" on DEV. This guard cracks the mtar and diffs the
+  // shipped admin component files against app/admin/<name>/webapp/ BEFORE the
+  // traffic-bearing deploy. It runs even on --skip-build (that is the riskiest
+  // path — the whole point is to catch a stale reused mtar).
+  step('3.5', 'Verify shipped admin bundle matches source');
+  if (args.dryRun) {
+    warn('dry-run: would diff the mtar admin-ui bundle against app/admin/ source');
+  } else {
+    const mtarToCheck = newestMtarPath();
+    if (!mtarToCheck) {
+      die(1, `no .mtar found in ${path.relative(ROOT, MTAR_GLOB_DIR)} to verify. Run without --skip-build.`);
+    }
+    const code = sh('node', ['scripts/check-shipped-admin-bundle.cjs', path.join(MTAR_GLOB_DIR, path.basename(mtarToCheck))]);
+    if (code !== 0) {
+      die(1, 'the mtar\'s admin-UI bundle does not match source (see drift above).\n' +
+             '             This mtar would ship a stale admin UI. Rebuild WITHOUT --skip-build\n' +
+             '             and do not use a module-scoped (-m) build for admin-UI changes.');
+    }
+    ok('shipped admin bundle matches source');
   }
 
   // ---- Step 4: cf deploy ------------------------------------------------
