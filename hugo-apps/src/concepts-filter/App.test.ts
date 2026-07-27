@@ -18,7 +18,7 @@ import App from './App.vue';
 // `items` prop through the default slot so ConceptCard wiring is still covered.
 const RecycleScrollerStub = defineComponent({
   name: 'RecycleScroller',
-  props: { items: { type: Array, default: () => [] }, itemSize: Number, keyField: String },
+  props: { items: { type: Array, default: () => [] }, itemSize: Number, keyField: String, gridItems: Number, itemSecondarySize: Number },
   setup(props, { slots }) {
     return () => h('div', { class: 'rs-stub' },
       (props.items as any[]).map((item) => slots.default?.({ item })));

@@ -131,6 +131,18 @@ describe('renderConceptListBody', () => {
     version: 7,
   };
 
+  it('carries the card/grid CSS so SSR cards are not bare links (#1327 regression)', () => {
+    const body = renderConceptListBody(model);
+    // The inline <style> block Hugo's list.html had — it never shipped in a
+    // global stylesheet, so the CAP list page must carry it or the top-100
+    // SSR <li> render as unstyled links (the bug this guards).
+    expect(body).toContain('<style>');
+    expect(body).toContain('.concepts-index__list');
+    expect(body).toContain('grid-template-columns');
+    expect(body).toContain('.concepts-index__item');
+    expect(body).toContain('.concepts-index__link');
+  });
+
   it('emits the concepts-index article shell with island hook IDs', () => {
     const body = renderConceptListBody(model);
     expect(body).toContain('id="concepts-filter-root"');

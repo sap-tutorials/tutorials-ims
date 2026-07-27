@@ -33,16 +33,37 @@ import {
   type SortKey,
 } from './filter-logic';
 
-// Fixed row height (px) for the virtual scroller. Pinned (not measured) — a
-// constant item size is the single biggest perf win on RecycleScroller. Must
-// visually accommodate name + truncated description + meta line.
+// Fixed card height (px) for the virtual scroller. Pinned (not measured) — a
+// constant primary item size is the single biggest perf win on RecycleScroller.
+// Must accommodate name + truncated description + meta line.
 const ITEM_SIZE = 140;
+// Minimum card width — mirrors the SSR grid's `minmax(280px, 1fr)` so the
+// windowed grid reflows to the same column count as the no-JS card grid.
+const MIN_COL_WIDTH = 280;
+const GRID_GAP = 12; // px, matches the SSR `.concepts-index__list` 0.75rem gap
 
 const cards = ref<ConceptCardT[]>([]);
 const state = ref<FilterState>({ ...DEFAULT_STATE });
 const listEl = ref<HTMLElement | null>(null);
 let countEl: HTMLElement | null = null;
 let emptyEl: HTMLElement | null = null;
+
+// Responsive grid geometry — recomputed on mount + container resize so the
+// RecycleScroller renders the SAME multi-column card grid as PROD (issue
+// #1327: virtualization AND the responsive grid, not one or the other).
+const gridItems = ref(1);       // columns per row
+const colWidth = ref(MIN_COL_WIDTH); // px, drives RecycleScroller itemSecondarySize
+let resizeObserver: ResizeObserver | null = null;
+
+function recomputeGrid() {
+  const w = listEl.value?.clientWidth ?? 0;
+  if (w <= 0) { gridItems.value = 1; colWidth.value = MIN_COL_WIDTH; return; }
+  // How many min-width columns (+gap) fit; at least 1.
+  const cols = Math.max(1, Math.floor((w + GRID_GAP) / (MIN_COL_WIDTH + GRID_GAP)));
+  gridItems.value = cols;
+  // Distribute full width across the columns (like `1fr`), accounting for gaps.
+  colWidth.value = Math.floor((w - GRID_GAP * (cols - 1)) / cols);
+}
 
 // Debounce query input so typing "cloud" doesn't refilter five times.
 let queryDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -155,10 +176,19 @@ onMounted(() => {
   readUrl();
   window.addEventListener('popstate', onPopState);
   syncChrome();
+
+  // Responsive grid: size columns to the container now + on every resize so
+  // the virtual grid reflows exactly like the SSR minmax(280px,1fr) grid.
+  recomputeGrid();
+  if (listEl.value && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => recomputeGrid());
+    resizeObserver.observe(listEl.value);
+  }
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', onPopState);
+  if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
 });
 
 watch([visible, cards], syncChrome);
@@ -220,12 +250,17 @@ watch(state, writeUrl);
   </div>
 
   <!-- Render the virtualized list into the existing #concepts-filter-list
-       container the page already lays out (keeps its grid CSS + position). -->
+       container the page already lays out. RecycleScroller GRID mode
+       (gridItems columns × itemSecondarySize width) reproduces PROD's
+       responsive multi-column card grid while keeping only the visible
+       window live in the DOM — #1327: virtualization AND the grid. -->
   <Teleport v-if="listEl" :to="listEl">
     <RecycleScroller
       class="concepts-index__scroller"
       :items="visible"
       :item-size="ITEM_SIZE"
+      :grid-items="gridItems"
+      :item-secondary-size="colWidth"
       key-field="slug"
       v-slot="{ item }"
     >
@@ -328,13 +363,26 @@ watch(state, writeUrl);
 </style>
 
 <style>
-/* Unscoped: the virtual scroller needs an explicit height to window against,
-   and its recycled <li> should sit in the existing grid. The scroller is
-   teleported into #concepts-filter-list (outside this component's scope), so
-   these rules are global. */
+/* Unscoped: the virtual scroller is teleported into #concepts-filter-list
+   (outside this component's scope), so these rules are global. */
+
+/* Once the island mounts and teleports the scroller in, the <ul> no longer
+   lays out cards itself — RecycleScroller grid mode owns columns. Drop the
+   SSR `display:grid` on the container so it doesn't fight the scroller's
+   internal absolute positioning. `:has()` scopes this to the JS-hydrated
+   state only; the no-JS SSR grid (no scroller child) is untouched. */
+.concepts-index__list:has(.concepts-index__scroller) {
+  display: block;
+}
 .concepts-index__scroller {
   height: 70vh;
   min-height: 320px;
   overflow-y: auto;
+}
+/* Recycled cards fill their grid cell (RecycleScroller sizes the cell via
+   itemSecondarySize; the item stretches to it). */
+.concepts-index__scroller .vue-recycle-scroller__item-view > .concepts-index__item {
+  height: 100%;
+  box-sizing: border-box;
 }
 </style>
