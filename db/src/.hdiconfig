@@ -20,6 +20,9 @@
     },
     "hdbview": {
       "plugin_name": "com.sap.hana.di.view"
+    },
+    "hdbrole": {
+      "plugin_name": "com.sap.hana.di.role"
     }
   }
 }
