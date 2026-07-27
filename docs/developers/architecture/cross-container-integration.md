@@ -67,12 +67,14 @@ Consequences for this pattern:
    ```sql
    VIEW "TUTORIAL_VALUE_HELP_V1" AS
      SELECT "ID"          AS "ID",
-            "slug"        AS "slug",
-            "title"       AS "title",
-            "primaryTag"  AS "primaryTag"
-     FROM "com_sap_developers_ims_Tutorials"
-     WHERE "status" = 'ACTIVE' OR "status" IS NULL
+            "SLUG"        AS "slug",
+            "TITLE"       AS "title",
+            "PRIMARYTAG"  AS "primaryTag"
+     FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
+     WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
    ```
+   > **Source-side identifiers use the deployed catalog case (UPPERCASE for unquoted-DDL tables); output aliases are the proxy contract.**
+
    The view is the compatibility shim between messy physical names and the proxy contract — another reason all cross-container access goes through a view (D1), not a base table.
 3. **The synonym target and the facade entity/element names must all agree** with the view's exposed names, character-for-character and case-for-case.
 
@@ -99,9 +101,9 @@ Generic steps. Substitute your provider/consumer names. `PROVIDER` = the app pub
 ```sql
 -- db/src/TUTORIAL_VALUE_HELP_V1.hdbview
 VIEW "TUTORIAL_VALUE_HELP_V1" AS
-  SELECT "ID", "slug", "title", "primaryTag"
-  FROM "com_sap_developers_ims_Tutorials"
-  WHERE "status" = 'ACTIVE' OR "status" IS NULL
+  SELECT "ID", "SLUG" AS "slug", "TITLE" AS "title", "PRIMARYTAG" AS "primaryTag"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
+  WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
 ```
 
 That's the entire provider view obligation. No grants, no knowledge of who consumes it. (If you prefer a CDS-authored view, define it in the db model and let `cds build` emit the `.hdbview` — but keep the physical name version-suffixed.)

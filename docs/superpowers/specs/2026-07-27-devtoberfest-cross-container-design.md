@@ -74,11 +74,11 @@ LEG B (reciprocal, reserved): tutorials reads planner
    ```sql
    VIEW "TUTORIAL_VALUE_HELP_V1" AS
      SELECT "ID"         AS "ID",
-            "slug"       AS "slug",
-            "title"      AS "title",
-            "primaryTag" AS "primaryTag"
-     FROM "com_sap_developers_ims_Tutorials"
-     WHERE "status" = 'ACTIVE' OR "status" IS NULL
+            "SLUG"       AS "slug",
+            "TITLE"      AS "title",
+            "PRIMARYTAG" AS "primaryTag"
+     FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
+     WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
    ```
    (Author as `.hdbview`, or as a CDS view compiled to this physical name — keep the `_V1` suffix. Explicit column aliases make the exposed names/case the stable proxy contract — workbook D4a; confirm the base column case against the deployed table first.)
 1a. **`db/src/tutorial_value_help_reader.hdbrole`** — least-privilege reader role granting `SELECT` on `TUTORIAL_VALUE_HELP_V1`. This role is the versioned API contract the planner requests; we broaden/narrow the planner's reach by editing this role, not the planner's grants file (workbook D3).

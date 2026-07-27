@@ -136,11 +136,11 @@ describe('TUTORIAL_VALUE_HELP_V1 filter semantics', () => {
 -- db/src/TUTORIAL_VALUE_HELP_V1.hdbview
 VIEW "TUTORIAL_VALUE_HELP_V1" AS
   SELECT "ID"         AS "ID",
-         "slug"       AS "slug",
-         "title"      AS "title",
-         "primaryTag" AS "primaryTag"
-  FROM "com_sap_developers_ims_Tutorials"
-  WHERE "status" = 'ACTIVE' OR "status" IS NULL
+         "SLUG"       AS "slug",
+         "TITLE"      AS "title",
+         "PRIMARYTAG" AS "primaryTag"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
+  WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
 ```
 
 - [ ] **Step 5: Author the reader role**
