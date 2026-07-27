@@ -10,6 +10,7 @@
 // the assertions take effect on the next smoke run.
 
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const BASE = process.env.SMOKE_BASE_URL;
 const skipIfNoUrl = BASE ? describe : describe.skip;
@@ -18,7 +19,7 @@ skipIfNoUrl('/api/advocates smoke — user-link', () => {
   let body;
 
   it('returns 200 and a JSON object with an advocates array', async () => {
-    const res = await fetch(`${BASE}/api/advocates`);
+    const res = await fetchWithRetry(`${BASE}/api/advocates`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
     body = await res.json();
@@ -80,7 +81,7 @@ skipIfNoUrl('/api/advocates smoke — user-link', () => {
   it('AdminService.Advocates exposes emailEdit virtual element on $metadata', async () => {
     const SRV = process.env.SMOKE_SRV_URL;
     if (!SRV) return;
-    const res = await fetch(`${SRV}/admin/$metadata`);
+    const res = await fetchWithRetry(`${SRV}/admin/$metadata`);
     // The admin srv requires auth; the smoke env may or may not have it.
     // Skip gracefully on 401/403 — the metadata assertion is for deployed
     // verification, not security.

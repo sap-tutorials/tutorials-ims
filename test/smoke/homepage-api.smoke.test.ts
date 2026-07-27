@@ -20,6 +20,7 @@
 // the env var is absent (CI sets it after deploy).
 
 import { describe, expect, it } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const SRV = process.env.SMOKE_SRV_URL;
 
@@ -32,7 +33,7 @@ describe.skipIf(!SRV)('Homepage API smoke', () => {
     ['/homepage/shelves?verb=LEARN', 'array'],
     ['/homepage/redirectsActive', 'array']
   ])('GET %s returns %s', async (path, kind) => {
-    const res = await fetch(SRV + path);
+    const res = await fetchWithRetry(SRV + path);
     expect(res.ok).toBe(true);
     const body = await res.json();
     // HomepageService functions return OData collections wrapped in an
@@ -45,7 +46,7 @@ describe.skipIf(!SRV)('Homepage API smoke', () => {
   });
 
   it('GET /build/homepage-shelves returns shelves + buildAt', async () => {
-    const res = await fetch(SRV + '/build/homepage-shelves');
+    const res = await fetchWithRetry(SRV + '/build/homepage-shelves');
     expect(res.ok).toBe(true);
     const data = await res.json();
     expect(Array.isArray(data.shelves)).toBe(true);

@@ -1,5 +1,6 @@
 // test/smoke/kg-stats.smoke.test.js
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const SRV_URL = process.env.SMOKE_SRV_URL;
 if (!SRV_URL) {
@@ -8,7 +9,7 @@ if (!SRV_URL) {
 
 describe('smoke: GET /build/kg-stats', () => {
   it('returns 200 with the expected shape', async () => {
-    const res = await fetch(`${SRV_URL}/build/kg-stats`);
+    const res = await fetchWithRetry(`${SRV_URL}/build/kg-stats`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
     const body = await res.json();

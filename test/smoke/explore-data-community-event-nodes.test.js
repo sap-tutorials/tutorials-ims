@@ -5,12 +5,13 @@
 // Runs against SMOKE_SRV_URL (srv directly); skipped when env var is absent.
 
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const BASE = process.env.SMOKE_SRV_URL;
 
 describe.skipIf(!BASE)('explore-data community-event nodes', () => {
   it('returns 200 for type=community-event query (post-seed)', async () => {
-    const res = await fetch(`${BASE}/graph/explore-data?type=community-event`);
+    const res = await fetchWithRetry(`${BASE}/graph/explore-data?type=community-event`);
     expect(res.ok).toBe(true);
     const body = await res.json();
     // Shape: { nodes: [...], edges: [...] }. The endpoint returns the full

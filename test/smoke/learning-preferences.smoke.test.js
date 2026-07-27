@@ -1,17 +1,18 @@
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const SRV = process.env.SMOKE_SRV_URL;
 
 describe.skipIf(!SRV)('LearningPreferences smoke (deployed)', () => {
   it('1. GET /api/LearningPreferences without auth returns 401', async () => {
-    const resp = await fetch(`${SRV}/api/LearningPreferences`, {
+    const resp = await fetchWithRetry(`${SRV}/api/LearningPreferences`, {
       headers: { Accept: 'application/json' },
     });
     expect(resp.status).toBe(401);
   });
 
   it('2. GET /api/ChatConfig returns 200 and includes branchingEnabled at top level', async () => {
-    const resp = await fetch(`${SRV}/api/ChatConfig`, {
+    const resp = await fetchWithRetry(`${SRV}/api/ChatConfig`, {
       headers: { Accept: 'application/json' },
     });
     expect(resp.status).toBe(200);

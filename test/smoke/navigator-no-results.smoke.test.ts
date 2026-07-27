@@ -11,12 +11,13 @@
 // finish before mbt").
 
 import { describe, it, expect } from 'vitest'
+import { fetchWithRetry } from './smoke.config.js'
 
 const BASE = process.env.SMOKE_BASE_URL
 if (!BASE) throw new Error('SMOKE_BASE_URL must be set')
 
 async function fetchText(path: string): Promise<string> {
-  const res = await fetch(new URL(path, BASE))
+  const res = await fetchWithRetry(new URL(path, BASE), { redirect: 'follow' })
   expect(res.ok, `${path} returned ${res.status}`).toBe(true)
   return res.text()
 }

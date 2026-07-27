@@ -12,6 +12,7 @@
 // when help-docs is present) and skips otherwise.
 
 import { describe, it, expect } from 'vitest'
+import { fetchWithRetry } from './smoke.config.js'
 
 const BASE = process.env.SMOKE_BASE_URL
 
@@ -20,8 +21,8 @@ describe.skipIf(!BASE)('concept page — Docs explaining this concept section (P
     // Any published concept with a non-empty helpDocs[] works. The seed
     // fixture from Task 2 guarantees `cap-service-handlers` has at least
     // one help-doc link (see the seedHelpDocs admin action / cron).
-    const url = `${BASE!.replace(/\/$/, '')}/concepts/cap-service-handlers/`
-    const res = await fetch(url)
+    const url = `${BASE.replace(/\/$/, '')}/concepts/cap-service-handlers/`
+    const res = await fetchWithRetry(url, { redirect: 'follow' })
     // Concept may not be published yet on this env — 404 is acceptable
     // during the bootstrap window. Skip the ordering assertions if so.
     if (res.status === 404) return

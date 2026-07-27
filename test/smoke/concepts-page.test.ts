@@ -91,18 +91,20 @@ describe.skipIf(!ENABLED)('/concepts/ list page [smoke] (#1327)', () => {
     expect(p50).toBeLessThan(200);
   });
 
-  it('warm (second hit) response time < 30 ms via X-Content-Source: memcache', async () => {
+  it('warm (second hit) served from memcache via X-Content-Source', async () => {
     // Hit directly against srv (bypasses AppRouter caching) to observe the
     // in-process version-keyed cache in concept-list-page.js.
     if (!SRV_URL) return;
     // Warm the cache.
     await fetchWithRetry(`${SRV_URL}/content/concepts-index`);
-    // Second hit — should be memcache.
-    const start = Date.now();
+    // Second hit — should be served from the in-process cache.
     const res = await fetchWithRetry(`${SRV_URL}/content/concepts-index`);
-    const elapsed = Date.now() - start;
+    // The real signal that the cache engaged is the header, not wall-clock
+    // latency: a prior `expect(elapsed).toBeLessThan(30)` asserted a sub-30ms
+    // round-trip, which is unattainable over a public-internet HTTPS call to
+    // eu10 (observed 160-170ms) and made this test flaky-by-design regardless
+    // of cache health. Assert the header the cache actually sets instead.
     expect(res.headers.get('x-content-source')).toBe('memcache');
-    expect(elapsed).toBeLessThan(30);
   });
 });
 

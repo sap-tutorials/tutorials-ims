@@ -5,13 +5,14 @@
 // Runs against SMOKE_BASE_URL (approuter); skipped when env var is absent.
 
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const BASE = process.env.SMOKE_BASE_URL;
 const CONCEPT = process.env.SMOKE_CONCEPT_SLUG ?? 'cap-cds-domain-modeling';
 
 describe.skipIf(!BASE)('concept-page community-events section', () => {
   it(`renders section #10 wrapper for concept ${CONCEPT}`, async () => {
-    const res = await fetch(`${BASE}/concepts/${CONCEPT}/`);
+    const res = await fetchWithRetry(`${BASE}/concepts/${CONCEPT}/`, { redirect: 'follow' });
     expect(res.ok).toBe(true);
     const html = await res.text();
     // The section wrapper must be present in the HTML — it is always emitted

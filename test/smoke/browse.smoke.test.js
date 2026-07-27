@@ -30,7 +30,7 @@ describeIf('/browse/ smoke', () => {
     // Skip-link (a11y)
     expect(html).toMatch(/skip-link/);
     // The grid mount point used by the Vue island.
-    expect(html).toMatch(/id="browse-root"/);
+    expect(html).toMatch(/id=["']?browse-root["']?/);
   });
 
   it('inlines the catalog as <script id="browse-data">', async () => {

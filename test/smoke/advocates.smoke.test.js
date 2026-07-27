@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const BASE = process.env.SMOKE_BASE_URL;
 const SRV  = process.env.SMOKE_SRV_URL;
 
 describe.skipIf(!BASE)('GET /developer-advocates/', () => {
   it('returns 200 and contains the mount point + script tag', async () => {
-    const res = await fetch(BASE + '/developer-advocates/');
+    const res = await fetchWithRetry(BASE + '/developer-advocates/', { redirect: 'follow' });
     expect(res.status).toBe(200);
     const html = await res.text();
     // Tolerant of Hugo minifier's quote-stripping
@@ -30,7 +31,7 @@ describe.skipIf(!BASE)('GET /js/advocates.js bundle', () => {
     // Regression guard: if a future refactor of App.vue drops the
     // window.__JOULE_ADVOCATES publish, /developer-advocates/ still
     // renders fine but Joule loses its grounding. Smoke catches it.
-    const res = await fetch(BASE + '/js/advocates.js');
+    const res = await fetchWithRetry(BASE + '/js/advocates.js');
     expect(res.status).toBe(200);
     const js = await res.text();
     expect(js).toContain('__JOULE_ADVOCATES');
@@ -39,7 +40,7 @@ describe.skipIf(!BASE)('GET /js/advocates.js bundle', () => {
 
 describe.skipIf(!SRV)('GET /api/advocates', () => {
   it('returns 200 JSON with at least one advocate', async () => {
-    const res = await fetch(SRV + '/api/advocates');
+    const res = await fetchWithRetry(SRV + '/api/advocates');
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/json/);
     const body = await res.json();
@@ -52,17 +53,17 @@ describe.skipIf(!SRV)('GET /api/advocates', () => {
   });
 
   it('responds with ETag and Cache-Control', async () => {
-    const res = await fetch(SRV + '/api/advocates');
+    const res = await fetchWithRetry(SRV + '/api/advocates');
     expect(res.headers.get('etag')).toBeTruthy();
     expect(res.headers.get('cache-control')).toMatch(/max-age=60/);
     expect(res.headers.get('cache-control')).toMatch(/stale-while-revalidate=600/);
   });
 
   it('returns 304 on If-None-Match round-trip', async () => {
-    const first = await fetch(SRV + '/api/advocates');
+    const first = await fetchWithRetry(SRV + '/api/advocates');
     const etag = first.headers.get('etag');
     expect(etag).toBeTruthy();
-    const res2 = await fetch(SRV + '/api/advocates', {
+    const res2 = await fetchWithRetry(SRV + '/api/advocates', {
       headers: { 'If-None-Match': etag },
     });
     expect(res2.status).toBe(304);
@@ -71,7 +72,7 @@ describe.skipIf(!SRV)('GET /api/advocates', () => {
 
 describe.skipIf(!SRV)('GET /api/advocates/:slug/photo', () => {
   it('returns 404 for an unknown slug', async () => {
-    const res = await fetch(SRV + '/api/advocates/no-such-advocate/photo');
+    const res = await fetchWithRetry(SRV + '/api/advocates/no-such-advocate/photo');
     expect(res.status).toBe(404);
   });
 });
@@ -80,14 +81,14 @@ describe.skipIf(!SRV)('GET /api/advocates/:slug/photo', () => {
 describe.skipIf(!BASE || !SRV)('GET /developer-advocates/:slug/ profile page', () => {
   it('returns 200 + og:type=profile + og:title (og:image only when an advocate has a photo)', async () => {
     // Discover a live slug from the JSON API.
-    const listRes = await fetch(SRV + '/api/advocates');
+    const listRes = await fetchWithRetry(SRV + '/api/advocates');
     expect(listRes.status).toBe(200);
     const list = await listRes.json();
     const photoAdvocate = (list.advocates || []).find((a) => a.hasPhoto);
     const subject = photoAdvocate || list.advocates?.[0];
     if (!subject) return; // empty roster — nothing to assert against
 
-    const res = await fetch(BASE + '/developer-advocates/' + subject.slug + '/');
+    const res = await fetchWithRetry(BASE + '/developer-advocates/' + subject.slug + '/', { redirect: 'follow' });
     expect(res.status).toBe(200);
     const html = await res.text();
     // og:type=profile (tolerant of minifier quote-stripping)
@@ -105,12 +106,12 @@ describe.skipIf(!BASE || !SRV)('GET /developer-advocates/:slug/ profile page', (
 
 describe.skipIf(!SRV)('GET /api/advocates/:slug single-advocate endpoint', () => {
   it('returns 200 + correct single-object shape for a known slug', async () => {
-    const listRes = await fetch(SRV + '/api/advocates');
+    const listRes = await fetchWithRetry(SRV + '/api/advocates');
     const list = await listRes.json();
     const first = list.advocates?.[0];
     if (!first) return; // empty roster
 
-    const res = await fetch(SRV + '/api/advocates/' + first.slug);
+    const res = await fetchWithRetry(SRV + '/api/advocates/' + first.slug);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.slug).toBe(first.slug);
@@ -120,21 +121,21 @@ describe.skipIf(!SRV)('GET /api/advocates/:slug single-advocate endpoint', () =>
   });
 
   it('returns 404 for an unknown slug', async () => {
-    const res = await fetch(SRV + '/api/advocates/__does-not-exist__601');
+    const res = await fetchWithRetry(SRV + '/api/advocates/__does-not-exist__601');
     expect(res.status).toBe(404);
   });
 
   it('responds with ETag + Cache-Control and honors If-None-Match with 304', async () => {
-    const listRes = await fetch(SRV + '/api/advocates');
+    const listRes = await fetchWithRetry(SRV + '/api/advocates');
     const first = (await listRes.json()).advocates?.[0];
     if (!first) return;
-    const a = await fetch(SRV + '/api/advocates/' + first.slug);
+    const a = await fetchWithRetry(SRV + '/api/advocates/' + first.slug);
     expect(a.status).toBe(200);  // surface the deploy-state failure cleanly
     expect(a.headers.get('cache-control')).toMatch(/max-age=60/);
     expect(a.headers.get('cache-control')).toMatch(/stale-while-revalidate=600/);
     const etag = a.headers.get('etag');
     expect(etag).toBeTruthy();
-    const b = await fetch(SRV + '/api/advocates/' + first.slug, {
+    const b = await fetchWithRetry(SRV + '/api/advocates/' + first.slug, {
       headers: { 'If-None-Match': etag },
     });
     expect(b.status).toBe(304);

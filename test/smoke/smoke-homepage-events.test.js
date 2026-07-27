@@ -2,13 +2,14 @@
 // #1030 — smoke against a deployed CAP srv.
 
 import { describe, it, expect } from 'vitest';
+import { fetchWithRetry } from './smoke.config.js';
 
 const BASE = process.env.SMOKE_SRV_URL;
 const describeMaybe = BASE ? describe : describe.skip;
 
 describeMaybe('smoke /homepage/events', () => {
   it('region=EMEA returns EMEA-or-virtual rows only', async () => {
-    const resp = await fetch(`${BASE}/homepage/events?region=EMEA`);
+    const resp = await fetchWithRetry(`${BASE}/homepage/events?region=EMEA`);
     expect(resp.status).toBe(200);
     const body = await resp.json();
     const rows = Array.isArray(body) ? body : body.value;
@@ -24,12 +25,12 @@ describeMaybe('smoke /homepage/events', () => {
   });
 
   it('region=BOGUS coerces to ALL (does not 400)', async () => {
-    const resp = await fetch(`${BASE}/homepage/events?region=BOGUS`);
+    const resp = await fetchWithRetry(`${BASE}/homepage/events?region=BOGUS`);
     expect(resp.status).toBe(200);
   });
 
   it('response includes eventType, region, isVirtual fields', async () => {
-    const resp = await fetch(`${BASE}/homepage/events?region=ALL`);
+    const resp = await fetchWithRetry(`${BASE}/homepage/events?region=ALL`);
     const body = await resp.json();
     const rows = Array.isArray(body) ? body : body.value;
     if (rows.length > 0) {
