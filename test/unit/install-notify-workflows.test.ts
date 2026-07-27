@@ -8,10 +8,13 @@ import {
   classifyRepos,
   decideAction,
   encodeContent,
+  formatRepoLine,
+  formatSummary,
   installOne,
   installViaPr,
   isPullRequestRequired,
   listOrgRepos,
+  newTally,
   EXCLUDED_REPOS,
   INCLUDED_PRIVATE_REPOS,
 } from '../../scripts/install-notify-workflows.ts'
@@ -317,6 +320,45 @@ describe('installViaPr (direct, fetch-mocked)', () => {
     expect(res.action).toBe('pr-opened')
     expect(branchPut.sha).toBe('bsha')   // overwrite on branch requires prior sha
     expect(branchPut.branch).toBe('chore/1154-notify-workflow-refresh')
+  })
+})
+
+describe('reporting (tally + log line + summary, #1333 follow-up)', () => {
+  it('newTally() starts every counter at zero, including the two PR outcomes', () => {
+    expect(newTally()).toEqual({ install: 0, update: 0, skip: 0, 'pr-opened': 0, 'pr-updated': 0, error: 0 })
+  })
+
+  it('formatRepoLine uses UPPERCASE verbs under --execute', () => {
+    expect(formatRepoLine('cap-x', '.github/workflows/notify-tutorials-ims.yml', 'install', true))
+      .toBe('  cap-x notify-tutorials-ims.yml: INSTALL')
+  })
+
+  it('formatRepoLine uses would-* verbs in dry-run', () => {
+    expect(formatRepoLine('cap-x', '.github/workflows/notify-qa.yml', 'update', false))
+      .toBe('  cap-x notify-qa.yml: would-update')
+  })
+
+  it('formatRepoLine appends the PR URL for pr-opened / pr-updated', () => {
+    expect(formatRepoLine('abap-core-development', '.github/workflows/notify-tutorials-ims.yml', 'pr-opened', true, 'https://x/pull/2722'))
+      .toBe('  abap-core-development notify-tutorials-ims.yml: PR-OPENED (https://x/pull/2722)')
+    expect(formatRepoLine('abap-core-development', '.github/workflows/notify-tutorials-ims.yml', 'pr-updated', true, 'https://x/pull/9'))
+      .toBe('  abap-core-development notify-tutorials-ims.yml: PR-UPDATED (https://x/pull/9)')
+  })
+
+  it('formatRepoLine omits the suffix when there is no PR URL', () => {
+    expect(formatRepoLine('r', 'a/b/c.yml', 'skip', true)).toBe('  r c.yml: SKIP')
+  })
+
+  it('formatSummary renders all six counters, PR outcomes included', () => {
+    const t = { install: 2, update: 1, skip: 5, 'pr-opened': 3, 'pr-updated': 1, error: 0 }
+    expect(formatSummary(t)).toBe('Summary: install=2 update=1 skip=5 pr-opened=3 pr-updated=1 error=0')
+  })
+
+  it('a mixed run accumulates each action into its own counter', () => {
+    const t = newTally()
+    for (const a of ['install', 'install', 'skip', 'pr-opened', 'pr-updated', 'pr-updated'] as const) t[a]++
+    expect(t).toEqual({ install: 2, update: 0, skip: 1, 'pr-opened': 1, 'pr-updated': 2, error: 0 })
+    expect(formatSummary(t)).toBe('Summary: install=2 update=0 skip=1 pr-opened=1 pr-updated=2 error=0')
   })
 })
 

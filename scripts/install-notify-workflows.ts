@@ -147,6 +147,31 @@ async function getExistingFile(
 
 export type Action = 'install' | 'skip' | 'update' | 'pr-opened' | 'pr-updated'
 
+/** Per-run outcome counters, one key per Action plus `error`. */
+export type Tally = Record<Action | 'error', number>
+
+export function newTally(): Tally {
+  return { install: 0, update: 0, skip: 0, 'pr-opened': 0, 'pr-updated': 0, error: 0 }
+}
+
+/** One per-repo log line. `execute` toggles UPPERCASE verbs vs `would-*` (dry-run);
+ *  `prUrl` (present on pr-opened/pr-updated) is appended in parentheses. */
+export function formatRepoLine(
+  repo: string, path: string, action: Action, execute: boolean, prUrl?: string,
+): string {
+  const verb = execute ? action.toUpperCase() : `would-${action}`
+  const suffix = prUrl ? ` (${prUrl})` : ''
+  return `  ${repo} ${path.split('/').pop()}: ${verb}${suffix}`
+}
+
+/** The final one-line Summary tally string. */
+export function formatSummary(t: Tally): string {
+  return (
+    `Summary: install=${t.install} update=${t.update} skip=${t.skip} ` +
+    `pr-opened=${t['pr-opened']} pr-updated=${t['pr-updated']} error=${t.error}`
+  )
+}
+
 /**
  * True when a Contents-API PUT was rejected because the repo's branch
  * protection / rulesets require changes to land through a pull request. GitHub
@@ -380,24 +405,19 @@ if (isMainModule) {
       for (const r of contributionRepos) jobs.push({ repo: r, path: QA_WORKFLOW_PATH, content: qa })
     }
 
-    const tally = { install: 0, update: 0, skip: 0, 'pr-opened': 0, 'pr-updated': 0, error: 0 }
+    const tally = newTally()
     for (const j of jobs) {
       try {
         const defaultBranch = execute ? await getDefaultBranch(j.repo, token) : 'main'
         const res = await installOne({ ...j, token, defaultBranch, execute })
         tally[res.action]++
-        const verb = execute ? res.action.toUpperCase() : `would-${res.action}`
-        const suffix = res.prUrl ? ` (${res.prUrl})` : ''
-        console.log(`  ${j.repo} ${j.path.split('/').pop()}: ${verb}${suffix}`)
+        console.log(formatRepoLine(j.repo, j.path, res.action, execute, res.prUrl))
       } catch (err) {
         tally.error++
         console.error(`  ${j.repo}: ERROR ${err instanceof Error ? err.message : err}`)
       }
     }
-    console.log(
-      `\nSummary: install=${tally.install} update=${tally.update} skip=${tally.skip} ` +
-      `pr-opened=${tally['pr-opened']} pr-updated=${tally['pr-updated']} error=${tally.error}`,
-    )
+    console.log('\n' + formatSummary(tally))
     if (!execute) console.log('(dry-run — re-run with --execute to commit)')
     if (tally.error > 0) process.exit(1)
   })().catch((e) => { console.error(e); process.exit(1) })
