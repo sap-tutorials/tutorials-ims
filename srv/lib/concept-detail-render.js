@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = join(__dirname, 'templates', 'concept-detail.ejs');
@@ -25,28 +24,33 @@ function escapeHtml(value) {
 }
 
 /**
- * Renders one concept detail page.
+ * Renders one concept detail page BODY — the `<article class="concept-page">`
+ * fragment that goes inside `<main>`. The full document is produced by the
+ * publish path (srv/lib/publish-concepts.js) via composeShell(shell, body,
+ * meta), the same way the group/mission catalog pages compose their bodies
+ * (srv/lib/content-store.js:renderCatalogPage). This keeps concept pages
+ * byte-identical in chrome to the rest of the site with zero CSS to port and
+ * no duplicated <head>/<header>/<footer> scaffold.
  *
  * Pure function of its inputs — the only I/O is the template read at module
- * load. Markup mirrors hugo/layouts/concepts/single.html so the CAP-served
- * concept-<slug> BLOB is visually identical to the legacy Hugo output.
+ * load. Markup mirrors hugo/layouts/concepts/single.html.
  *
  * @param {object} concept  {slug,name,description,teaches[],requires[],requiredBy[],relatedTo[]}
- *   Relationship arrays hold {slug,title[,experienceTag,stepCount,description]}.
+ *   Relationship arrays hold {slug,title[,experienceTag,stepCount,description]}
+ *   (teaches) or {slug,name[,description]} — but note buildConceptsPayload
+ *   emits concept refs with `name`; the template reads `.title` on relationship
+ *   cards, so callers map name→title (see publish-concepts.js).
  * @param {object} phase4   {learningJourneys[],blogPosts[],discoveryMissions[],
  *   videos[],apiDocs[],samples[],helpDocs[],communityEvents[]} — each an array
  *   of {slug,title,url,...type-specific meta}.
- * @param {object} shell    {shellHead,shellHeader,shellFooter} — trusted HTML
- *   fragments from the __shell__ sidecar in ContentFiles.
- * @returns {{html: string, gzipped: Buffer, contentHash: string}}
- *   contentHash is the hex SHA-256 of the un-gzipped HTML bytes.
+ * @returns {{body: string, contentHash: string}}
+ *   body is the article fragment; contentHash is the hex SHA-256 of the body
+ *   bytes (a stable render signal — the publish path computes the delta hash
+ *   over the composed full document, which also folds in the shell version).
  */
-export function renderConceptDetail(concept, phase4, shell) {
+export function renderConceptDetail(concept, phase4) {
   if (!concept || typeof concept.slug !== 'string' || typeof concept.name !== 'string') {
     throw new Error('renderConceptDetail: concept.slug and concept.name are required');
-  }
-  if (!shell || typeof shell.shellHead !== 'string') {
-    throw new Error('renderConceptDetail: shell fragments missing — __shell__ sidecar not yet published');
   }
   const p4 = phase4 || {};
   const ctx = {
@@ -65,13 +69,9 @@ export function renderConceptDetail(concept, phase4, shell) {
     samples: p4.samples || [],
     helpDocs: p4.helpDocs || [],
     communityEvents: p4.communityEvents || [],
-    shellHead: shell.shellHead,
-    shellHeader: shell.shellHeader || '',
-    shellFooter: shell.shellFooter || '',
     escapeHtml,
   };
-  const html = TEMPLATE(ctx);
-  const gzipped = gzipSync(Buffer.from(html, 'utf-8'));
-  const contentHash = createHash('sha256').update(html, 'utf-8').digest('hex');
-  return { html, gzipped, contentHash };
+  const body = TEMPLATE(ctx);
+  const contentHash = createHash('sha256').update(body, 'utf-8').digest('hex');
+  return { body, contentHash };
 }

@@ -27,6 +27,7 @@ import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
+import { renderConceptsHandler } from './lib/publish-concepts.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
@@ -432,6 +433,10 @@ cds.on('bootstrap', (app) => {
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/publish/begin',  express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
   app.post('/content/publish/append', express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);
+  // #1327 Task 3 — render concept detail pages into an open publish session
+  // (Thread B). Dark launch: no publish-content.ts caller yet (Task 5 wires
+  // it). Auth like the other publish routes.
+  app.post('/content/publish/render-concepts', express.json({ limit: '1mb' }), contentAuthMiddleware, renderConceptsHandler);
   app.post('/content/publish/commit', express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
   app.post('/content/publish/abort',  express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
 
