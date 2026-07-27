@@ -73,11 +73,14 @@ LEG B (reciprocal, reserved): tutorials reads planner
 1. **`db/src/TUTORIAL_VALUE_HELP_V1.hdbview`** — versioned published view:
    ```sql
    VIEW "TUTORIAL_VALUE_HELP_V1" AS
-     SELECT "ID", "slug", "title", "primaryTag"
+     SELECT "ID"         AS "ID",
+            "slug"       AS "slug",
+            "title"      AS "title",
+            "primaryTag" AS "primaryTag"
      FROM "com_sap_developers_ims_Tutorials"
      WHERE "status" = 'ACTIVE' OR "status" IS NULL
    ```
-   (Author as `.hdbview`, or as a CDS view compiled to this physical name — keep the `_V1` suffix.)
+   (Author as `.hdbview`, or as a CDS view compiled to this physical name — keep the `_V1` suffix. Explicit column aliases make the exposed names/case the stable proxy contract — workbook D4a; confirm the base column case against the deployed table first.)
 1a. **`db/src/tutorial_value_help_reader.hdbrole`** — least-privilege reader role granting `SELECT` on `TUTORIAL_VALUE_HELP_V1`. This role is the versioned API contract the planner requests; we broaden/narrow the planner's reach by editing this role, not the planner's grants file (workbook D3).
 
 ### Leg A — devtoberfest-planner (consumer)
@@ -149,7 +152,7 @@ Steady-state redeploys are order-independent (both views persist).
 
 ## Open items for implementation
 
-- **`ACTIVITY_SESSION_V1` exact columns** — confirm with planner owner (no PII).
+- **`ACTIVITY_SESSION_V1` exact columns + deployed physical names** — confirm with planner owner (no PII). Before authoring the view, **introspect the deployed `devtoberfest-planner-db` container in DEV with `hana-cli`** to read the true physical table/column names and their case — CDS source names (`devtoberfest.Session`, camelCase fields) will NOT match the deployed identifiers. Alias columns in the view (quoted identifiers) so they match exactly what the `@cds.persistence.exists` proxy expects, including case (workbook D4a). Same rule applies to the Leg A facade over `TUTORIAL_VALUE_HELP_V1`.
 - **Snapshot copy mechanism** — `after`-save handler vs. FE-side; decide during Leg A build.
 
 *Resolved during design:* `.hdbsynonymconfig` is **not** needed for HDI-to-HDI — grants + synonyms suffice (confirmed against the [XSA cross-container tutorial](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/xsa-cross-container-access), identical on CF + HANA Cloud). Grants request a provider-defined reader **role** (`container_roles`), not direct object privileges, so the API surface is adjustable provider-side without touching consumer grants.

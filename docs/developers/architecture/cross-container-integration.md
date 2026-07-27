@@ -56,6 +56,28 @@ We do **not** wrap the grant credentials in a separate `user-provided-service` (
 
 A raw synonym is invisible to the CAP model. On top of each synonym we define a CDS entity annotated `@cds.persistence.exists` — CAP treats it as an existing DB object (no CREATE emitted) and can project/serve it read-only. This is the "proxy view" layer. Generate it from the live view with `hana-cli` rather than hand-typing column types (see [Recipe step C3](#consumer-side)).
 
+### D4a — Names must match the DEPLOYED HANA object EXACTLY, including case. Alias in the view to make them match.
+
+**CDS names do not equal deployed HANA names.** The CDS compiler mangles case and formatting — `namespace.Entity` becomes `namespace_Entity`, and a plain CDS element name may deploy as an upper-cased or quoted identifier depending on how it was authored. A `@cds.persistence.exists` proxy binds **by exact string match** to the physical object and column names — **case-sensitive**. A one-character or case mismatch means the proxy silently fails to resolve (or resolves to nothing), with no compile error.
+
+Consequences for this pattern:
+
+1. **Never assume the CDS source name is the deployed name.** Always introspect the *deployed* container (`hana-cli`) to read the true physical object + column names and their case, then model the synonym and facade against those.
+2. **The published view is where you fix mismatches.** When the provider's physical names don't line up with what a clean CDS proxy wants (e.g. mixed-case base columns, awkward generated names), **alias objects and columns in the view** using quoted identifiers so the view exposes exactly the names the proxy expects:
+   ```sql
+   VIEW "TUTORIAL_VALUE_HELP_V1" AS
+     SELECT "ID"          AS "ID",
+            "slug"        AS "slug",
+            "title"       AS "title",
+            "primaryTag"  AS "primaryTag"
+     FROM "com_sap_developers_ims_Tutorials"
+     WHERE "status" = 'ACTIVE' OR "status" IS NULL
+   ```
+   The view is the compatibility shim between messy physical names and the proxy contract — another reason all cross-container access goes through a view (D1), not a base table.
+3. **The synonym target and the facade entity/element names must all agree** with the view's exposed names, character-for-character and case-for-case.
+
+Verify before wiring the facade: run a `hana-cli` inspect against the deployed view and copy the names verbatim; do not retype from memory or from the CDS source.
+
 ### D5 — Provider-first, base-then-enable deploy sequencing.
 
 A synonym fails to deploy if its target view doesn't exist yet. So first-time bring-up publishes **views only** (Phase 1, zero cross-deps), then adds **grants + synonyms** (Phase 2, targets now exist). See [Bootstrap](#first-time-bootstrap-the-hard-part). Steady-state redeploys are order-independent because both views persist.
@@ -133,7 +155,7 @@ Add views to the shared surface by editing this role — consumers need no chang
 
 The synonym resolves through the role granted on the bound container — no explicit schema and **no `.hdbsynonymconfig` needed** for HDI-to-HDI. (`.hdbsynonymconfig` only externalizes the target for parameterization; skip it unless you have a reason.)
 
-**C3 — Generate the `@cds.persistence.exists` facade.** Once the synonym resolves, introspect the live view to emit the CDS proxy rather than hand-typing it:
+**C3 — Generate the `@cds.persistence.exists` facade.** Once the synonym resolves, introspect the **deployed** view (never the CDS source — see D4a) to emit the CDS proxy with the exact physical names/case rather than hand-typing it:
 
 ```bash
 # via hana-cli (bound to the consumer container): emit a CDS proxy for the synonym/view
@@ -192,6 +214,7 @@ Phase 3  VERIFY — probe each synonym with a real SQL read (hana-cli) BEFORE tr
 
 - **Unpinned `service-name` breaks referenceability** — a container whose instance name CF auto-generated can't be named by the other project's `requires:`. Pin `service-name:` on both `com.sap.xs.hdi-container` resources.
 - **Synonym target missing → loud deploy failure** — deploy the provider view first (D5). The error names the unresolved synonym; the fix is ordering, not a code change.
+- **Name/case mismatch → SILENT proxy failure** — unlike a missing synonym, a `@cds.persistence.exists` proxy whose names don't match the deployed object exactly (including case) fails quietly, not with a compile error (D4a). Introspect the deployed container with `hana-cli` and copy names verbatim; alias in the view to force a match.
 - **`.hdbgrants` unbound-key failure** — every top-level key must map to a bound service (see C1 warning).
 - **Broaden/narrow the API surface via the role, not the grant** — add or remove a view from a consumer's reach by editing the provider's `.hdbrole`; consumers keep requesting the same role name and pick up the change on next deploy. Never enumerate individual object privileges in a consumer's `.hdbgrants`.
 - **Use a narrow reader role, never `admin`** — the linked tutorial grants `admin` for brevity; real integrations define a purpose-named least-privilege role (SELECT on the specific `_Vn` views only).
