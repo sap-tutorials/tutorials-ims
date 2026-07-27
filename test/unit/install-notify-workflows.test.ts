@@ -262,6 +262,36 @@ describe('installOne PR fallback on 409 (branch-protected repo, #1333)', () => {
     await expect(installOne({ repo, path, content, token, defaultBranch: 'main', execute: true }))
       .rejects.toThrow(/403/)
   })
+
+  it('throws on a 422 branch-create that is NOT "already exists" (not swallowed as reuse)', async () => {
+    const fetchMock = routeFetch({
+      getContents: () => ({ ok: false, status: 404, json: async () => ({}) }),
+      putDefault: () => ({ ok: false, status: 409, text: async () => PR_REQUIRED }),
+      getRef: () => ({ ok: true, status: 200, json: async () => ({ object: { sha: 'basesha' } }) }),
+      postRef: () => ({ ok: false, status: 422, text: async () => 'Invalid request: sha not found' }),
+    })
+    global.fetch = fetchMock as any
+    await expect(installOne({ repo, path, content, token, defaultBranch: 'main', execute: true }))
+      .rejects.toThrow(/create branch.*422/)
+  })
+
+  it('takes the PR path for the QA (-Contribution) template too', async () => {
+    const qaPath = '.github/workflows/notify-qa.yml'
+    let branchPut: any = null
+    const fetchMock = routeFetch({
+      getContents: () => ({ ok: false, status: 404, json: async () => ({}) }),
+      putDefault: () => ({ ok: false, status: 409, text: async () => PR_REQUIRED }),
+      getRef: () => ({ ok: true, status: 200, json: async () => ({ object: { sha: 'basesha' } }) }),
+      postRef: () => ({ ok: true, status: 201, json: async () => ({}) }),
+      getBranchContents: () => ({ ok: false, status: 404, json: async () => ({}) }),
+      putBranch: (b) => { branchPut = b; return { ok: true, status: 201, json: async () => ({}) } },
+      postPull: () => ({ ok: true, status: 201, json: async () => ({ html_url: 'https://x/pull/7' }) }),
+    })
+    global.fetch = fetchMock as any
+    const res = await installOne({ repo: 'foo-Contribution', path: qaPath, content, token, defaultBranch: 'main', execute: true })
+    expect(res.action).toBe('pr-opened')
+    expect(branchPut.branch).toBe('chore/1154-notify-workflow-refresh')
+  })
 })
 
 describe('installViaPr (direct, fetch-mocked)', () => {

@@ -176,11 +176,12 @@ async function ensureBranch(repo: string, branch: string, fromSha: string, token
     headers: authHeaders(token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: fromSha }),
   })
-  if (res.status === 422) return   // branch already exists → reuse
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '')
-    throw new Error(`create branch ${repo}/${branch}: ${res.status} ${detail.slice(0, 200)}`)
-  }
+  if (res.ok) return
+  const detail = await res.text().catch(() => '')
+  // 422 "Reference already exists" → the branch is already there; reuse it.
+  // Any other 422 (bad sha / invalid ref name) is a real failure — surface it.
+  if (res.status === 422 && /already exists/i.test(detail)) return
+  throw new Error(`create branch ${repo}/${branch}: ${res.status} ${detail.slice(0, 200)}`)
 }
 
 /**
@@ -201,14 +202,15 @@ async function openPullRequest(opts: {
     const json: any = await res.json()
     return { url: json.html_url ?? '', created: true }
   }
-  if (res.status === 422) {
-    // A PR from this branch is already open — surface its URL.
+  const detail = await res.text().catch(() => '')
+  // 422 "A pull request already exists for ..." → look up the open PR's URL.
+  // Any other 422 is a real failure (e.g. no commits between head and base).
+  if (res.status === 422 && /already exists/i.test(detail)) {
     const q = `head=${encodeURIComponent(`${ORG}:${head}`)}&base=${encodeURIComponent(base)}&state=open`
     const list = await fetch(`${REST_API_BASE}/repos/${ORG}/${repo}/pulls?${q}`, { headers: authHeaders(token) })
     const arr: any = list.ok ? await list.json() : []
     return { url: Array.isArray(arr) && arr[0]?.html_url ? arr[0].html_url : '', created: false }
   }
-  const detail = await res.text().catch(() => '')
   throw new Error(`open PR ${repo} ${head}->${base}: ${res.status} ${detail.slice(0, 200)}`)
 }
 

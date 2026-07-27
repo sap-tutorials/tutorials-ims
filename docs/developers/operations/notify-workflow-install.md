@@ -81,6 +81,11 @@ get the direct commit — unchanged. The maintainer merges the resulting PRs
 (e.g. abap-core-development#2722, btp-dev-guidance#953, btp-foundation#2417 in
 the manual 2026-07-27 catch-up that motivated this).
 
+> **Dry-run doesn't reveal the PR path.** The 409 only surfaces on a real PUT,
+> which dry-run never issues — so a branch-protected repo shows as
+> `would-install` / `would-update` in dry-run and only flips to `PR-OPENED` /
+> `PR-UPDATED` under `--execute`. This is expected.
+
 ## Adding the workflow to a NEW repo
 
 Nothing special — discovery is live. When a new tutorial source repo or
