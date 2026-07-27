@@ -1,0 +1,15 @@
+{
+  "__comment": "10 concept slugs for parity testing (#1327 Task 6). Hand-picked for shape variety: high-coverage (cap, abap, hana-cloud), phase-4-heavy (sap-btp), concept-graph (cloud-foundry requires cap), fewer-tutorials (fiori-elements), SAP service concepts (xsuaa), community (codejam), recently-added (joule), non-latin-adjacent (sap-build).",
+  "slugs": [
+    "cap",
+    "abap",
+    "hana-cloud",
+    "sap-btp",
+    "cloud-foundry",
+    "fiori-elements",
+    "xsuaa",
+    "codejam",
+    "joule",
+    "sap-build"
+  ]
+}
