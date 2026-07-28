@@ -98,6 +98,22 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    # DEV rebuilds are disabled: the DEV approuter's REBUILD_API_KEY /
+    # CONTENT_API_KEY are not configured, so the "Push content to AppRouter"
+    # step 401s and the run goes red for no operational benefit — DEV content
+    # is refreshed by mta deploys. Only PROD (and QA) need scheduled/dispatch
+    # rebuilds. This job-level gate makes any dev-targeted run resolve to a
+    # clean SKIPPED (never a red failure). Re-enable by deleting this `if:`
+    # once the DEV keys are seeded in the DEV approuter Credential Store.
+    #
+    # Target is knowable at job level without a runtime step: workflow_dispatch
+    # exposes inputs.environment, repository_dispatch exposes
+    # client_payload.environment. An absent/unknown repository_dispatch env
+    # (`'' != 'dev'`) passes the gate and is routed to prod by the fallback in
+    # the "Determine environment" step below — matching that fallback flip.
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.environment != 'dev')
+          || (github.event_name != 'workflow_dispatch' && github.event.client_payload.environment != 'dev') }}
 
     steps:
       - name: Checkout
@@ -116,10 +132,11 @@ jobs:
         id: env
         # repository_dispatch (source-repo push → tutorial-updated) carries the
         # intended target in client_payload.environment. Validate against the
-        # allowlist and default to 'dev' when absent or unrecognized — so a
-        # legacy template that sends no environment keeps today's behavior, and
-        # a malformed payload can't route to an unexpected env. workflow_dispatch
-        # uses the typed choice input directly. (#1154 env-routing fix.)
+        # allowlist and default to 'prod' when absent or unrecognized — DEV
+        # rebuilds are disabled (missing DEV approuter keys → 401), so an
+        # env-less legacy dispatch routes to prod, the only env with scheduled/
+        # dispatch rebuild configured. workflow_dispatch uses the typed choice
+        # input directly. (#1154 env-routing; dev-disable fallback flip.)
         #
         # Trust model (deliberate — no additional approval gate): the source
         # template fires only `on: push: branches: [main]`, so a dispatch
@@ -139,7 +156,7 @@ jobs:
           if [ "$EVENT" = "repository_dispatch" ]; then
             case "$PAYLOAD_ENV" in
               dev|qa|prod) TARGET="$PAYLOAD_ENV" ;;
-              *)           TARGET="dev" ;;
+              *)           TARGET="prod" ;;
             esac
           else
             TARGET="$INPUT_ENV"
