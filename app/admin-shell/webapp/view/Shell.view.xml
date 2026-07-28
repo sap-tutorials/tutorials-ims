@@ -30,6 +30,7 @@
           id="envBadge"
           text="{viewModel>/envLabel}"
           state="{viewModel>/envState}"
+          tooltip="{viewModel>/versionTooltip}"
           inverted="true"
           visible="{= !!${viewModel>/envLabel} }"
           class="sapUiTinyMarginBegin">
