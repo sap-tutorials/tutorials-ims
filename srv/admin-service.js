@@ -25,6 +25,7 @@ import { cleanupChangeLog, cleanupUnusedTags } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
 import { buildTutorialLinks } from './lib/tutorial-links.js';
+import { buildPreviewLinks } from './lib/preview-links.js';
 import { runSeedApiDocs } from './lib/seed-api-docs.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
@@ -532,6 +533,31 @@ export default class AdminService extends cds.ApplicationService {
             branch: cat.branch,
           }),
         );
+      }
+    });
+
+    // ─── after(READ, Missions/Groups) — published-only preview links ────
+    //
+    // Populate the 4 virtual preview-link fields for published rows only.
+    // Missions/Groups are served on /tutorials/{mission|group}-{slug}
+    // (content-store.js catalog branch), so the links carry that prefix.
+    // Pure computation over fields already on the row — no DB lookup, no
+    // throw source; the defensive `if (!r) continue` guards a malformed row.
+    //
+    // Spec: docs/superpowers/specs/2026-07-28-mission-group-preview-links-design.md
+    this.after('READ', 'Missions', (rows) => {
+      const arr = Array.isArray(rows) ? rows : [rows];
+      for (const r of arr) {
+        if (!r) continue;
+        Object.assign(r, buildPreviewLinks({ published: r.published, slug: r.slug, kind: 'mission' }));
+      }
+    });
+
+    this.after('READ', 'Groups', (rows) => {
+      const arr = Array.isArray(rows) ? rows : [rows];
+      for (const r of arr) {
+        if (!r) continue;
+        Object.assign(r, buildPreviewLinks({ published: r.published, slug: r.slug, kind: 'group' }));
       }
     });
 
