@@ -24,6 +24,7 @@ import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
 import { cleanupChangeLog, cleanupUnusedTags } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
+import { buildTutorialLinks } from './lib/tutorial-links.js';
 import { runSeedApiDocs } from './lib/seed-api-docs.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
@@ -478,6 +479,58 @@ export default class AdminService extends cds.ApplicationService {
       } catch (err) {
         cds.log('kg-wcc').warn(
           `admin-service: isolated flag lookup failed on Tutorials; leaving field unset (${err?.message ?? err})`,
+        );
+      }
+    });
+
+    // ─── after(READ, Tutorials) — lifecycle source & preview links ──────
+    //
+    // Populate the 8 virtual link fields for ACTIVE tutorials only. QA + main
+    // preview links are relative (env-correct) and depend only on the slug, so
+    // they're set unconditionally for ACTIVE rows. GitHub source/Contributions
+    // links need the live repo mapping, read from RepoCatalog in one batched
+    // IN-clause query (same shape as the isolated handler above).
+    //
+    // Fail-quiet: on any RepoCatalog SELECT error, leave the GitHub fields
+    // unset (QA/main already set) — never throw to the client. Mirrors the
+    // #918 isolated-flag posture.
+    //
+    // Spec: docs/superpowers/specs/2026-07-28-tutorial-lifecycle-source-preview-links-design.md
+    this.after('READ', 'Tutorials', async (rows, req) => {
+      const arr = Array.isArray(rows) ? rows : [rows];
+      const active = arr.filter((r) => r && r.status === 'ACTIVE' && r.slug);
+      if (active.length === 0) return;
+
+      // Best-effort RepoCatalog lookup keyed by slug → {owner, repo, branch}.
+      const catalog = new Map();
+      try {
+        const slugs = active.map((r) => r.slug);
+        const placeholders = slugs.map(() => '?').join(',');
+        const catRows = await cds.tx(req).run(
+          `SELECT SLUG, OWNER, REPO, BRANCH FROM "COM_SAP_DEVELOPERS_IMS_REPOCATALOG" ` +
+            `WHERE SLUG IN (${placeholders})`,
+          slugs,
+        );
+        for (const c of catRows) {
+          catalog.set(c.SLUG, { owner: c.OWNER, repo: c.REPO, branch: c.BRANCH });
+        }
+      } catch (err) {
+        cds.log('admin').warn(
+          `tutorial links: RepoCatalog lookup failed; GitHub links left unset (${err?.message ?? err})`,
+        );
+      }
+
+      for (const r of active) {
+        const cat = catalog.get(r.slug) || {};
+        Object.assign(
+          r,
+          buildTutorialLinks({
+            status: r.status,
+            slug: r.slug,
+            owner: cat.owner,
+            repo: cat.repo,
+            branch: cat.branch,
+          }),
         );
       }
     });
