@@ -1,7 +1,7 @@
 VIEW "TUTORIAL_VALUE_HELP_V1" AS
   SELECT "ID"         AS "ID",
-         "SLUG"       AS "slug",
-         "TITLE"      AS "title",
-         "PRIMARYTAG" AS "primaryTag"
+         "SLUG"       AS "SLUG",
+         "TITLE"      AS "TITLE",
+         "PRIMARYTAG" AS "PRIMARYTAG"
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
   WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
