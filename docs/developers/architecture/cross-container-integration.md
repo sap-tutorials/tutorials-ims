@@ -212,11 +212,51 @@ Phase 3  VERIFY — probe each synonym with a real SQL read (hana-cli) BEFORE tr
 
 ---
 
+## Consumer deploy — the six things the `.hdbsynonym` + config must get exactly right
+
+The facade compiles and `cds build` is green long before any of this is validated — **every requirement below only surfaces at HDI deploy time**, in the consumer db-deployer's make log. This is the exact chain hit bringing up the Devtoberfest link (each was a separate failed deploy; read the make log, fix, redeploy):
+
+1. **Set `TARGET_CONTAINER` when the deployer binds two HDI services.** Once the db-deployer `requires:` both its own container *and* the grantor container, the HDI deployer can't auto-detect the target and fails with `More than one HDI service found`. Set it explicitly on the deployer module:
+   ```yaml
+   - name: <consumer>-db-deployer
+     type: hdb
+     properties:
+       TARGET_CONTAINER: <consumer-container-service-name>
+     requires:
+       - name: <consumer-container>
+       - name: <provider-container>   # grantor
+   ```
+
+2. **The synonym's logical name must equal the facade's slugified physical name.** A facade `@cds.persistence.exists entity external.tutorials.TUTORIAL_VALUE_HELP_V1` slugifies (dots→underscores) to physical `external_tutorials_TUTORIAL_VALUE_HELP_V1`. The generated consuming view depends on that name, so the synonym must *provide* it — not the bare remote object name. Error if wrong: `requires db://… which is not provided by any file`.
+
+3. **A cross-container synonym REQUIRES a `.hdbsynonymconfig`.** A plain `.hdbsynonym` with a `target.object` resolves the target **locally** and fails (`requires db://<object> not provided`). The config is what tells HDI to resolve via the grantor. (This corrects a natural assumption that HDI-to-HDI needs no synonymconfig — it does.) Split them:
+   ```jsonc
+   // db/src/<NAME>.hdbsynonym  — logical name only, target supplied by the config
+   { "EXTERNAL_TUTORIALS_TUTORIAL_VALUE_HELP_V1": {} }
+   ```
+   ```jsonc
+   // db/src/<NAME>.hdbsynonymconfig
+   { "EXTERNAL_TUTORIALS_TUTORIAL_VALUE_HELP_V1": {
+       "target": {
+         "schema.configure": "<grantor-service>/schema",   // NOT "grantor": … (invalid xpath in current HDI)
+         "object": "TUTORIAL_VALUE_HELP_V1"                  // the real remote object name
+   } } }
+   ```
+
+4. **Config binds the grantor via `schema.configure: "<service>/schema"`.** The older `"grantor": "<service>"` shorthand (seen in pre-CF samples) throws `invalid xpath` on current HDI. `<service>` is the bound provider container's service name — the same key used in `.hdbgrants`.
+
+5. **The synonym logical name must be UPPERCASE.** CAP generates the consuming view with the facade referenced **unquoted** (`FROM external_tutorials_…`), which HANA folds to uppercase for make-graph resolution. So the synonym + config must be named `EXTERNAL_TUTORIALS_TUTORIAL_VALUE_HELP_V1` (uppercase), or you get `requires db://EXTERNAL_… not provided` even though a lowercase synonym of "the same" name exists.
+
+6. **The provider view must expose UPPERCASE column names.** Same unquoted-fold reason: the consuming view selects `…slug` unquoted → HANA looks for `SLUG`. If the provider view aliased columns quoted-lowercase (`AS "slug"`), the column is stored case-sensitively as `slug` and the deploy fails `invalid column name: SLUG`. Provider views feeding cross-container consumers must alias columns uppercase (`AS "SLUG"`). This is a **provider-side** fix — coordinate a provider redeploy.
+
+**When the synonym line finally logs `Deploying "…hdbsynonym"... ok`, the grant resolved** — proof the provider's reader role exists and is grantable. That success line is the definitive test that the runtime-user `SYS.ROLES` query cannot give you (HDI roles created by the object owner are invisible to the runtime user).
+
 ## Gotchas
 
 - **Unpinned `service-name` breaks referenceability** — a container whose instance name CF auto-generated can't be named by the other project's `requires:`. Pin `service-name:` on both `com.sap.xs.hdi-container` resources.
 - **Synonym target missing → loud deploy failure** — deploy the provider view first (D5). The error names the unresolved synonym; the fix is ordering, not a code change.
 - **Name/case mismatch → SILENT proxy failure** — unlike a missing synonym, a `@cds.persistence.exists` proxy whose names don't match the deployed object exactly (including case) fails quietly, not with a compile error (D4a). Introspect the deployed container with `hana-cli` and copy names verbatim; alias in the view to force a match.
+- **HDI roles are invisible to the runtime DB user** — `SELECT … FROM SYS.ROLES WHERE ROLE_SCHEMA_NAME = CURRENT_SCHEMA` returns 0 even for roles that exist (the runtime user isn't granted them; it can't even see its own `default_access_role`). Never conclude "the role didn't deploy" from a runtime-user query — use the deploy make log (Consumer-deploy note above) or object-owner credentials.
 - **`.hdbgrants` unbound-key failure** — every top-level key must map to a bound service (see C1 warning).
 - **Broaden/narrow the API surface via the role, not the grant** — add or remove a view from a consumer's reach by editing the provider's `.hdbrole`; consumers keep requesting the same role name and pick up the change on next deploy. Never enumerate individual object privileges in a consumer's `.hdbgrants`.
 - **Use a narrow reader role, never `admin`** — the linked tutorial grants `admin` for brevity; real integrations define a purpose-named least-privilege role (SELECT on the specific `_Vn` views only).
@@ -231,10 +271,10 @@ Phase 3  VERIFY — probe each synonym with a real SQL read (hana-cli) BEFORE tr
 
 Every active cross-container link. Update on add/version-bump/retire.
 
-| Provider container | Published view | Consumer container | Consumer facade | Version | Status | Feature |
-|---|---|---|---|---|---|---|
-| `tutorials-hana` | `TUTORIAL_VALUE_HELP_V1` | `devtoberfest-planner-db` | `external.tutorials.TutorialValueHelpV1` | V1 | planned | Session tutorial value help |
-| `devtoberfest-planner-db` | `ACTIVITY_SESSION_V1` | `tutorials-hana` | `external.devtoberfest.ActivitySessionV1` | V1 | planned (no consumer yet) | reciprocal leg, reserved |
+| Provider container | Published view | Reader role | Consumer container | Consumer synonym (uppercase) | Version | Status | Feature |
+|---|---|---|---|---|---|---|---|
+| `tutorials-hana` | `TUTORIAL_VALUE_HELP_V1` | `tutorial_reader` | `devtoberfest-planner-db` | `EXTERNAL_TUTORIALS_TUTORIAL_VALUE_HELP_V1` | V1 | deploying (provider view live; uppercase-column fix + consumer link pending deploy) | Session tutorial value help |
+| `devtoberfest-planner-db` | `ACTIVITY_SESSION_V1` | `devtoberfest_reader` | `tutorials-hana` | (facade reserved, unused) | V1 | planned (no consumer yet) | reciprocal leg, reserved |
 
 ---
 
