@@ -49,6 +49,18 @@ describe('UI Annotations in $metadata', () => {
     it('has Tutorials LineItem annotation', () => {
       expect(metadata).toContain('Tutorial');
     });
+
+    it('Tutorials projection exposes the 8 lifecycle-link virtual fields', () => {
+      for (const col of [
+        'sourceRepoUrl', 'sourceRepoLabel',
+        'contribRepoUrl', 'contribRepoLabel',
+        'qaPreviewUrl', 'qaPreviewLabel',
+        'mainPreviewUrl', 'mainPreviewLabel',
+      ]) {
+        expect(metadata, `${col} not found on AdminService.Tutorials`)
+          .toContain(`Name="${col}"`);
+      }
+    });
   });
 
   // Regression suite for PR #604 — pins down the exact $metadata shape
