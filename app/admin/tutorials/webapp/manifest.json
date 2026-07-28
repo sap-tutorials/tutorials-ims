@@ -6,7 +6,7 @@
     "i18n": "i18n/i18n.properties",
     "title": "Tutorials",
     "description": "View Tutorials",
-    "applicationVersion": { "version": "0.0.1" },
+    "applicationVersion": { "version": "0.0.2" },
     "dataSources": {
       "mainService": {
         "uri": "/admin/",
