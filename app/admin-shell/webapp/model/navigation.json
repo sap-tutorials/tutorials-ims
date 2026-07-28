@@ -103,7 +103,14 @@
       "title": "Devtoberfest",
       "icon": "sap-icon://flag",
       "items": [
-        { "key": "devtoberfest", "title": "Devtoberfest Event Edit" }
+        { "key": "devtoberfest", "title": "Devtoberfest Event Edit" },
+        {
+          "key": "devtoberfestPlanner",
+          "title": "Devtoberfest Planner",
+          "target": "_blank",
+          "hrefDev": "https://devtoberfest-planner-approuter-dev.cfapps.eu10-005.hana.ondemand.com/",
+          "hrefProd": "https://devtoberfest-planner-approuter-prod.cfapps.eu10-005.hana.ondemand.com/"
+        }
       ]
     },
     {

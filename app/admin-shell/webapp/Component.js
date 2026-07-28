@@ -287,6 +287,21 @@ sap.ui.define([
       // for leaf items that have no expand chevron.
       oNavModel.attachRequestCompleted(function () {
         var groups = oNavModel.getProperty("/groups") || [];
+        // Resolve env-specific external links (hrefDev/hrefProd -> href). The
+        // admin-shell bundle is built once and deployed to both DEV and PROD,
+        // so URLs that differ per environment can't be hardcoded in the JSON —
+        // pick the right one from the approuter hostname at runtime. PROD hosts
+        // carry "-prod" in the CF app name; everything else falls back to DEV.
+        var bIsProd = /-prod\b/.test(window.location.hostname);
+        var resolveHref = function (oItem) {
+          if (oItem.hrefDev || oItem.hrefProd) {
+            oItem.href = (bIsProd ? oItem.hrefProd : oItem.hrefDev) || oItem.href;
+          }
+        };
+        groups.forEach(function (g) {
+          resolveHref(g);
+          (g.items || []).forEach(resolveHref);
+        });
         groups.forEach(function (g) {
           if (!g.items || !g.items.length) return;
           var sStored = localStorage.getItem("sap-tutorials-admin-nav-group-" + g.key);
