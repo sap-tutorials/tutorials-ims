@@ -122,6 +122,7 @@ sap.ui.define([
       oComponent.getRouter().attachRouteMatched(this._onRouteMatched, this);
       this._attachHashChangeDetection();
       this._loadUserProfile();
+      this._loadVersion();
     },
 
     onNavBack: function () {
@@ -284,6 +285,27 @@ sap.ui.define([
           that._applyRole(role);
         })
         .catch(function () { that._applyRole("anonymous"); });
+    },
+
+    // Surface the deployed MTA version next to the environment badge. The
+    // unauthenticated GET /version endpoint (srv/lib/version-handler.js) returns
+    // the same `version` string CI sed's into mta.yaml — both derive from one
+    // `git describe` (see docs/superpowers/specs/2026-07-25-mta-versioning-design.md).
+    // We render it as the env-badge tooltip so the header stays uncluttered;
+    // local `cds watch` returns {version:"dev", gitSha:"local"} and we skip the
+    // tooltip rather than show a meaningless "dev" build.
+    _loadVersion: function () {
+      var oViewModel = this.getView().getModel("viewModel");
+      fetch("/version", { credentials: "include", headers: { "Accept": "application/json" } })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (info) {
+          if (!info || !info.version || info.version === "dev") { return; }
+          var aParts = ["Version " + info.version];
+          if (info.gitSha) { aParts.push("commit " + info.gitSha); }
+          if (info.builtAt) { aParts.push("built " + info.builtAt); }
+          oViewModel.setProperty("/versionTooltip", aParts.join(" · "));
+        })
+        .catch(function () { /* build metadata is best-effort; no tooltip on failure */ });
     },
 
     // #1268 — map the coarse deploy environment reported by /auth/user onto a
