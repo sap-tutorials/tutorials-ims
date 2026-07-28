@@ -61,6 +61,18 @@ describe('UI Annotations in $metadata', () => {
           .toContain(`Name="${col}"`);
       }
     });
+
+    it('Lifecycle FieldGroup carries the 4 DataFieldWithUrl link rows', () => {
+      const region = metadata.match(
+        /<Annotation Term="UI.FieldGroup" Qualifier="Lifecycle">[\s\S]*?<\/Annotation>/,
+      );
+      expect(region, 'Lifecycle FieldGroup annotation not found').toBeTruthy();
+      const block = region[0];
+      expect(block).toContain('UI.DataFieldWithUrl');
+      for (const url of ['sourceRepoUrl', 'contribRepoUrl', 'qaPreviewUrl', 'mainPreviewUrl']) {
+        expect(block, `${url} missing from Lifecycle FieldGroup`).toContain(url);
+      }
+    });
   });
 
   // Regression suite for PR #604 — pins down the exact $metadata shape
