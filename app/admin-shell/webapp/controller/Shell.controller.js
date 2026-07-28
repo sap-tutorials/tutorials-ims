@@ -289,17 +289,25 @@ sap.ui.define([
 
     // Surface the deployed MTA version next to the environment badge. The
     // unauthenticated GET /version endpoint (srv/lib/version-handler.js) returns
-    // the same `version` string CI sed's into mta.yaml — both derive from one
-    // `git describe` (see docs/superpowers/specs/2026-07-25-mta-versioning-design.md).
-    // We render it as the env-badge tooltip so the header stays uncluttered;
-    // local `cds watch` returns {version:"dev", gitSha:"local"} and we skip the
-    // tooltip rather than show a meaningless "dev" build.
+    // the `version` from srv/version.json, written per-deploy from the same
+    // .deploy/mta.yaml version cf deploys (see scripts/deploy-mta.cjs Step 1.5 and
+    // docs/superpowers/specs/2026-07-25-mta-versioning-design.md). Rendered as the
+    // env-badge tooltip so the header stays uncluttered and DEV vs PROD versions
+    // are comparable at a glance.
+    //
+    // Skip ONLY on true local `cds watch` — keyed off `environment`, not the
+    // version string. `environment:"local"` means no CF binding (nothing is
+    // deployed). Every deployed target (dev/qa/prod/other) always shows a tooltip,
+    // even if version is somehow "dev" — a visibly wrong "Version dev" on a
+    // deployed badge signals a broken deploy, which is more useful than a silently
+    // hidden badge. (An empty version string returned "dev" here before, so
+    // deployed-but-missing-version.json used to be indistinguishable from local.)
     _loadVersion: function () {
       var oViewModel = this.getView().getModel("viewModel");
       fetch("/version", { credentials: "include", headers: { "Accept": "application/json" } })
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (info) {
-          if (!info || !info.version || info.version === "dev") { return; }
+          if (!info || info.environment === "local" || !info.version) { return; }
           var aParts = ["Version " + info.version];
           if (info.gitSha) { aParts.push("commit " + info.gitSha); }
           if (info.builtAt) { aParts.push("built " + info.builtAt); }

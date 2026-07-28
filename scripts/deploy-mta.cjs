@@ -197,6 +197,40 @@ function newestMtarPath() {
 }
 
 // ---------------------------------------------------------------------------
+// Step 1.5 helper: write srv/version.json so the deployed srv can report its
+// build facts at GET /version (srv/lib/version-handler.js), which the Admin
+// Console header reads to show the deployed MTA version as the env-badge
+// tooltip (feat b337cb72). CI's deploy.yml already writes this file from
+// `git describe`; local deploys (this script — the canonical DEV path, since CI
+// is bypassed for ad-hoc deploys) never did, so /version fell back to
+// {version:"dev"} and the tooltip was suppressed on every locally-deployed env.
+//
+// Source of truth for the version is the SAME `.deploy/mta.yaml` `version:`
+// field cf actually deploys — so the tooltip matches `cf mtas` exactly. The
+// file lands at repo-root srv/version.json; `cds build --production` copies it
+// into gen/srv/srv/version.json (verified), where the handler reads it via
+// `../version.json` from srv/lib. It is gitignored — a pure build artifact,
+// rewritten every deploy (CI treats it as ephemeral too).
+const VERSION_FILE = path.join(ROOT, 'srv', 'version.json');
+const MTA_YAML = path.join(DEPLOY_DIR, 'mta.yaml');
+
+function readMtaVersion() {
+  const txt = fs.readFileSync(MTA_YAML, 'utf8');
+  // Top-level `version:` line (not indented) — the MTA descriptor's own field.
+  const m = txt.match(/^version:\s*(\S+)/m);
+  return m ? m[1] : null;
+}
+
+function writeVersionFile() {
+  const version = readMtaVersion();
+  if (!version) die(1, `could not read \`version:\` from ${path.relative(ROOT, MTA_YAML)}.`);
+  const sha = shCapture('git', ['rev-parse', '--short', 'HEAD']).stdout.trim() || 'unknown';
+  const builtAt = new Date().toISOString();
+  fs.writeFileSync(VERSION_FILE, JSON.stringify({ version, gitSha: sha, builtAt }, null, 2) + '\n');
+  return { version, sha, builtAt };
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -259,6 +293,21 @@ function main() {
   step(1, `cf target must be region "${cfg.region}", space "${cfg.space}"`);
   if (args.dryRun) warn('dry-run: still checking cf target (read-only)');
   guardCfTarget(cfg, envName);
+
+  // ---- Step 1.5: write srv/version.json --------------------------------
+  // Must run BEFORE the build so `cds build` packages it into gen/srv. This is
+  // what makes the deployed srv report its real MTA version at GET /version
+  // (and thus the Admin header env-badge tooltip). --skip-build reuses an mtar
+  // whose srv already carries a version.json, so skip then too.
+  step(1.5, 'Write srv/version.json (build metadata for GET /version)');
+  if (args.skipBuild) {
+    warn('--skip-build: leaving the existing srv/version.json (baked into the reused mtar).');
+  } else if (args.dryRun) {
+    warn(`dry-run: would write ${path.relative(ROOT, VERSION_FILE)} from .deploy/mta.yaml version + git sha`);
+  } else {
+    const v = writeVersionFile();
+    ok(`wrote srv/version.json — version ${v.version} · commit ${v.sha} · built ${v.builtAt}`);
+  }
 
   // ---- Step 2: build ----------------------------------------------------
   step(2, `Build (CAP_BASE_URL=${cfg.capBaseUrl})`);

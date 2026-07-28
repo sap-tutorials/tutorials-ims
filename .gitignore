@@ -78,6 +78,9 @@ app/admin-shell/deploy/
 approuter/static/admin-ui/
 mta-op-*
 srv/data/admin-docs-index.json
+# Build metadata for GET /version — written by scripts/deploy-mta.cjs (and CI's
+# deploy.yml) before each build; a pure artifact, rewritten every deploy.
+srv/version.json
 
 # a11y / Lighthouse scan output (regenerated each run)
 .lighthouseci/
