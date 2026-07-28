@@ -6,7 +6,7 @@
     "title": "Groups",
     "description": "Manage Groups",
     "applicationVersion": {
-      "version": "0.0.1"
+      "version": "0.0.2"
     },
     "dataSources": {
       "mainService": {

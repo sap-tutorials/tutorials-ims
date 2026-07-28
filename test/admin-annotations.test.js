@@ -37,6 +37,13 @@ describe('UI Annotations in $metadata', () => {
       expect(metadata).toContain('Common.ValueList');
       expect(metadata).toContain('Tags');
     });
+
+    it('Missions + Groups projections expose the 4 preview-link virtual fields', () => {
+      // $metadata declares each Property once per entity type; assert presence.
+      for (const col of ['qaPreviewUrl', 'qaPreviewLabel', 'mainPreviewUrl', 'mainPreviewLabel']) {
+        expect(metadata, `${col} not found in $metadata`).toContain(`Name="${col}"`);
+      }
+    });
   });
 
   describe('Groups annotations', () => {
@@ -73,6 +80,20 @@ describe('UI Annotations in $metadata', () => {
         expect(block, `${url} missing from Lifecycle FieldGroup`).toContain(url);
       }
     });
+  });
+
+  it('Missions + Groups General FieldGroups carry the 2 DataFieldWithUrl link rows', () => {
+    for (const target of ['AdminService.Missions', 'AdminService.Groups']) {
+      // Each entity's General FieldGroup is emitted as a UI.FieldGroup with
+      // Qualifier="General" under the entity's Annotations target.
+      const region = metadata.match(
+        new RegExp(`<Annotations Target="${target.replace('.', '\\.')}">[\\s\\S]*?</Annotations>`),
+      );
+      expect(region, `${target} annotations region not found`).toBeTruthy();
+      expect(region[0], `${target} missing DataFieldWithUrl`).toContain('UI.DataFieldWithUrl');
+      expect(region[0], `${target} missing qaPreviewUrl`).toContain('qaPreviewUrl');
+      expect(region[0], `${target} missing mainPreviewUrl`).toContain('mainPreviewUrl');
+    }
   });
 
   // Regression suite for PR #604 — pins down the exact $metadata shape

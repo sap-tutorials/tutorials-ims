@@ -89,8 +89,10 @@ service AdminService {
   @cds.redirection.target: false
   entity TutorialOwnerPickList as
     select distinct key owner from ims.TutorialMeta where owner is not null;
-  entity Missions as projection on ims.Missions { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
-  entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
+  entity Missions as projection on ims.Missions { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String,
+    virtual qaPreviewUrl : String, virtual qaPreviewLabel : String, virtual mainPreviewUrl : String, virtual mainPreviewLabel : String };
+  entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String,
+    virtual qaPreviewUrl : String, virtual qaPreviewLabel : String, virtual mainPreviewUrl : String, virtual mainPreviewLabel : String };
   entity Steps as projection on ims.Steps;
   // Issue #644 — Puzzles is a TaskBase peer of Tutorials/Missions/Groups,
   // exposed for admin CRUD so puzzles can be authored and curated.
