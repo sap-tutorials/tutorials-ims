@@ -1,0 +1,8 @@
+{
+  "EXTERNAL_DEVTOBERFEST_SPEAKERCONSENT": {
+    "target": {
+      "schema.configure": "devtoberfest-planner-db/schema",
+      "object": "DTF_SPEAKERCONSENT_V1"
+    }
+  }
+}

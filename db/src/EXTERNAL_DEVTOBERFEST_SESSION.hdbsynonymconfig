@@ -1,0 +1,8 @@
+{
+  "EXTERNAL_DEVTOBERFEST_SESSION": {
+    "target": {
+      "schema.configure": "devtoberfest-planner-db/schema",
+      "object": "DTF_SESSION_V1"
+    }
+  }
+}

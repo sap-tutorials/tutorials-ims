@@ -55,10 +55,15 @@ modules:
     path: ../gen/db
     parameters:
       buildpack: nodejs_buildpack
+    properties:
+      # Two HDI services bound (own container + devtoberfest-planner-db grantor),
+      # so the HDI deployer cannot auto-detect the target — name it explicitly.
+      TARGET_CONTAINER: tutorials-hana
     requires:
       - name: tutorials-hana
       - name: tutorials-cloud-logging   # forwards deployer stdout to Cloud Logging (~30 days), not just cf logs ring buffer (~30 min). Closes the forensic gap from #257.
       - name: tutorials-kg-grantor      # supplies SPARQL QUERY/UPDATE grants to default_access_role via db/src/_grants.hdbgrants. See docs/developers/operations/kg-grantor-setup.md.
+      - name: devtoberfest-planner-db   # cross-container grantor for the DTF_*_V1 synonyms (reciprocal consumption)
 
   - name: tutorials-db-qa-deployer
     type: hdb
@@ -262,6 +267,12 @@ resources:
       service: hana
       service-plan: hdi-shared
       service-name: tutorials-hana
+
+  # Cross-container grantor: Devtoberfest Planner HDI container (reciprocal consumption).
+  - name: devtoberfest-planner-db
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: devtoberfest-planner-db
 
   - name: tutorials-hana-qa
     type: com.sap.xs.hdi-container

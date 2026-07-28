@@ -1,0 +1,8 @@
+{
+  "EXTERNAL_DEVTOBERFEST_VHEMAILTEMPLATEMODE": {
+    "target": {
+      "schema.configure": "devtoberfest-planner-db/schema",
+      "object": "DTF_VH_EMAILTEMPLATEMODE_V1"
+    }
+  }
+}

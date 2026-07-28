@@ -1,0 +1,14 @@
+{
+  "devtoberfest-planner-db": {
+    "object_owner": {
+      "container_roles": [
+        "devtoberfest_reader#"
+      ]
+    },
+    "application_user": {
+      "container_roles": [
+        "devtoberfest_reader"
+      ]
+    }
+  }
+}

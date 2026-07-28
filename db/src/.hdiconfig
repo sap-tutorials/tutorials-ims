@@ -18,6 +18,9 @@
     "hdbsynonym": {
       "plugin_name": "com.sap.hana.di.synonym"
     },
+    "hdbsynonymconfig": {
+      "plugin_name": "com.sap.hana.di.synonym.config"
+    },
     "hdbview": {
       "plugin_name": "com.sap.hana.di.view"
     },
