@@ -114,6 +114,12 @@
       "destination": "srv-api"
     },
     {
+      "source": "^/version$",
+      "authenticationType": "none",
+      "target": "/version",
+      "destination": "srv-api"
+    },
+    {
       "source": "^/api/devtoberfest/(status|terms)$",
       "target": "/api/devtoberfest/$1",
       "destination": "srv-api",
