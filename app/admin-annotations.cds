@@ -97,6 +97,10 @@ annotate AdminService.Missions with {
   published          @Common.Label: 'Published';
   status             @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
+  qaPreviewUrl     @Common.Label: 'QA Preview'    @Common.FieldControl: #ReadOnly;
+  qaPreviewLabel   @Common.Label: 'QA Preview'    @Common.FieldControl: #ReadOnly;
+  mainPreviewUrl   @Common.Label: 'Live Mission'  @Common.FieldControl: #ReadOnly;
+  mainPreviewLabel @Common.Label: 'Live Mission'  @Common.FieldControl: #ReadOnly;
 };
 
 annotate AdminService.Missions with @UI: {
@@ -130,7 +134,9 @@ annotate AdminService.Missions with @UI: {
     { Value: experienceTag },
     { Value: missionType },
     { Value: published, @UI.FieldControl: publishedFieldControl },
-    { Value: status }
+    { Value: status },
+    { $Type: 'UI.DataFieldWithUrl', Value: qaPreviewLabel,   Url: qaPreviewUrl,   Label: 'QA Preview' },
+    { $Type: 'UI.DataFieldWithUrl', Value: mainPreviewLabel, Url: mainPreviewUrl, Label: 'Live Mission' }
   ]}
 };
 
@@ -302,6 +308,10 @@ annotate AdminService.Groups with {
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
   published             @Common.Label: 'Published';
   status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
+  qaPreviewUrl     @Common.Label: 'QA Preview'  @Common.FieldControl: #ReadOnly;
+  qaPreviewLabel   @Common.Label: 'QA Preview'  @Common.FieldControl: #ReadOnly;
+  mainPreviewUrl   @Common.Label: 'Live Group'  @Common.FieldControl: #ReadOnly;
+  mainPreviewLabel @Common.Label: 'Live Group'  @Common.FieldControl: #ReadOnly;
 };
 
 annotate AdminService.Groups with @UI: {
@@ -332,7 +342,9 @@ annotate AdminService.Groups with @UI: {
     { Value: primaryTagRef_ID, Label: 'Primary Tag' },
     { Value: experienceTag },
     { Value: published, @UI.FieldControl: publishedFieldControl },
-    { Value: status }
+    { Value: status },
+    { $Type: 'UI.DataFieldWithUrl', Value: qaPreviewLabel,   Url: qaPreviewUrl,   Label: 'QA Preview' },
+    { $Type: 'UI.DataFieldWithUrl', Value: mainPreviewLabel, Url: mainPreviewUrl, Label: 'Live Group' }
   ]}
 };
 
