@@ -108,13 +108,13 @@ VIEW "TUTORIAL_VALUE_HELP_V1" AS
 
 That's the entire provider view obligation. No grants, no knowledge of who consumes it. (If you prefer a CDS-authored view, define it in the db model and let `cds build` emit the `.hdbview` — but keep the physical name version-suffixed.)
 
-**P2 — Define a least-privilege reader role.** In `db/src/<PURPOSE>_reader.hdbrole`, grant `SELECT` on the published view(s). This role is the versioned API contract consumers request:
+**P2 — Define ONE least-privilege reader role per provider (not per view).** In `db/src/<provider>_reader.hdbrole`, grant `SELECT` on the published view(s). Name it for the **provider domain** — `tutorial_reader`, `devtoberfest_reader` — NOT for a single view (`tutorial_value_help_reader` is an anti-pattern). This role is the durable API contract consumers request; as you publish more `_Vn` views, add them to this same role's `object_privileges` — every existing consumer picks up the new view without touching its own grants file. One role, many views, grown over time:
 
 ```json
-// db/src/tutorial_value_help_reader.hdbrole
+// db/src/tutorial_reader.hdbrole
 {
   "role": {
-    "name": "tutorial_value_help_reader",
+    "name": "tutorial_reader",
     "object_privileges": [
       { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] }
     ]
@@ -132,8 +132,8 @@ Add views to the shared surface by editing this role — consumers need no chang
 // db/src/<provider>-grants.hdbgrants   (top-level key = the bound provider service name)
 {
   "tutorials-hana": {
-    "object_owner":     { "container_roles": [ "tutorial_value_help_reader" ] },
-    "application_user": { "container_roles": [ "tutorial_value_help_reader" ] }
+    "object_owner":     { "container_roles": [ "tutorial_reader" ] },
+    "application_user": { "container_roles": [ "tutorial_reader" ] }
   }
 }
 ```

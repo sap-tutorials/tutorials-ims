@@ -48,8 +48,8 @@ LEG A (feature): planner reads tutorials
    ▼
   VIEW TUTORIAL_VALUE_HELP_V1  ◄────────  .hdbsynonym  ◄─ requires: tutorials-hana (existing-service)
    (ID,slug,title,primaryTag;             .hdbgrants (grantor = tutorials-hana tech user;
-    status ACTIVE/null)                     request container_role tutorial_value_help_reader)
-   │ + tutorial_value_help_reader           ▼
+    status ACTIVE/null)                     request container_role tutorial_reader)
+   │ + tutorial_reader           ▼
    │   .hdbrole (SELECT on view)          @cds.persistence.exists facade  external.tutorials.TutorialValueHelpV1
                                              ▼
                                            SessionsService: read-only Tutorials projection
@@ -59,7 +59,7 @@ LEG A (feature): planner reads tutorials
 LEG B (reciprocal, reserved): tutorials reads planner
   devtoberfest-planner-db                 tutorials-hana
   publish VIEW ACTIVITY_SESSION_V1  ◄───  .hdbsynonym + .hdbgrants (grantor = planner tech user;
-   + activity_session_reader .hdbrole       request container_role activity_session_reader)
+   + devtoberfest_reader .hdbrole       request container_role devtoberfest_reader)
                                              ▼
                                            @cds.persistence.exists facade external.devtoberfest.ActivitySessionV1  (UNUSED)
 ```
@@ -81,12 +81,12 @@ LEG B (reciprocal, reserved): tutorials reads planner
      WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
    ```
    (Author as `.hdbview`, or as a CDS view compiled to this physical name — keep the `_V1` suffix. Explicit column aliases make the exposed names/case the stable proxy contract — workbook D4a; confirm the base column case against the deployed table first.)
-1a. **`db/src/tutorial_value_help_reader.hdbrole`** — least-privilege reader role granting `SELECT` on `TUTORIAL_VALUE_HELP_V1`. This role is the versioned API contract the planner requests; we broaden/narrow the planner's reach by editing this role, not the planner's grants file (workbook D3).
+1a. **`db/src/tutorial_reader.hdbrole`** — least-privilege reader role granting `SELECT` on `TUTORIAL_VALUE_HELP_V1`. This role is the versioned API contract the planner requests; we broaden/narrow the planner's reach by editing this role, not the planner's grants file (workbook D3).
 
 ### Leg A — devtoberfest-planner (consumer)
 
 2. **`mta.yaml`** — pin `service-name: devtoberfest-planner-db` on the hdi-container resource; add `tutorials-hana` as an `existing-service` resource; `devtoberfest-planner-db-deployer` gains `requires: - name: tutorials-hana`.
-3. **`db/src/tutorials-grants.hdbgrants`** — keyed by `tutorials-hana`, request the provider's `tutorial_value_help_reader` role (`container_roles`) for `object_owner` + `application_user` (see workbook C1).
+3. **`db/src/tutorials-grants.hdbgrants`** — keyed by `tutorials-hana`, request the provider's `tutorial_reader` role (`container_roles`) for `object_owner` + `application_user` (see workbook C1).
 4. **`db/src/TUTORIAL_VALUE_HELP_V1.hdbsynonym`** — target the provider view. **No `.hdbsynonymconfig`** — not needed for HDI-to-HDI.
 5. **`db/external/tutorials.cds`** — `@cds.persistence.exists` facade `external.tutorials.TutorialValueHelpV1` (generate via `hana-cli inspectView --output cds`).
 6. **`db/schema.cds`** — extend `Session`:
@@ -101,12 +101,12 @@ LEG B (reciprocal, reserved): tutorials reads planner
 ### Leg B — devtoberfest-planner (provider)
 
 9. **`db/src/ACTIVITY_SESSION_V1.hdbview`** — slim view over `devtoberfest_Session` (+ `devtoberfest_Track` for `isActivityTrack`). Proposed columns: `ID, sessionCode, title, trackTitle, isActivityTrack, tutorial_ID, scheduledDate`. **Exact column list confirmed at implementation** with the planner owner; no PII.
-9a. **`db/src/activity_session_reader.hdbrole`** — least-privilege reader role granting `SELECT` on `ACTIVITY_SESSION_V1`.
+9a. **`db/src/devtoberfest_reader.hdbrole`** — least-privilege reader role granting `SELECT` on `ACTIVITY_SESSION_V1`.
 
 ### Leg B — tutorials-ims (consumer)
 
 10. **`mta.yaml` + `.deploy/mta.yaml`** — add `devtoberfest-planner-db` as `existing-service`; `tutorials-db-deployer` gains `requires: - name: devtoberfest-planner-db`. (**QA deployer untouched.**)
-11. **`db/src/planner-grants.hdbgrants`** — keyed by `devtoberfest-planner-db`, request the planner's `activity_session_reader` role (`container_roles`). *(Note: this is a **new** file/key; the existing `db/src/_grants.hdbgrants` keyed by `tutorials-kg-grantor` stays untouched — keep grantor channels in separate files per the `_grants.hdbgrants.md` rule.)*
+11. **`db/src/planner-grants.hdbgrants`** — keyed by `devtoberfest-planner-db`, request the planner's `devtoberfest_reader` role (`container_roles`). *(Note: this is a **new** file/key; the existing `db/src/_grants.hdbgrants` keyed by `tutorials-kg-grantor` stays untouched — keep grantor channels in separate files per the `_grants.hdbgrants.md` rule.)*
 12. **`db/src/ACTIVITY_SESSION_V1.hdbsynonym`** — target the planner view.
 13. **`db/external/devtoberfest-planner.cds`** — `@cds.persistence.exists` facade `external.devtoberfest.ActivitySessionV1`. **Not projected in any service** (reserved). Documented as intentionally-unused in the registry.
 
@@ -133,8 +133,8 @@ Per workbook D5 — base-then-enable, provider-first. Confirm scope with maintai
 ```
 Phase 0  Pin service-name on devtoberfest-planner-db (tutorials-hana already pinned).
 Phase 1  BASE — publish views + reader roles only, no grants/synonyms:
-         ├─ tutorials-ims db-deployer  → TUTORIAL_VALUE_HELP_V1 + tutorial_value_help_reader role
-         └─ planner     db-deployer    → ACTIVITY_SESSION_V1 + activity_session_reader role
+         ├─ tutorials-ims db-deployer  → TUTORIAL_VALUE_HELP_V1 + tutorial_reader role
+         └─ planner     db-deployer    → ACTIVITY_SESSION_V1 + devtoberfest_reader role
 Phase 2  ENABLE — add grants + synonyms + facades (targets now exist):
          ├─ planner     db-deployer    → tutorials-grants (request reader role) + synonym + facade  (Leg A) + value help
          └─ tutorials-ims db-deployer  → planner-grants  (request reader role) + synonym + facade   (Leg B, unused)

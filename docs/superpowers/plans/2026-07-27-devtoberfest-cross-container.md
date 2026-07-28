@@ -29,7 +29,7 @@
 
 **Repo A (`tutorials-ims`):**
 - `db/src/TUTORIAL_VALUE_HELP_V1.hdbview` — provider view (Leg A). *Create.*
-- `db/src/tutorial_value_help_reader.hdbrole` — provider reader role (Leg A). *Create.*
+- `db/src/tutorial_reader.hdbrole` — provider reader role (Leg A). *Create.*
 - `db/src/ACTIVITY_SESSION_V1.hdbsynonym` — consumer synonym → planner view (Leg B). *Create.*
 - `db/src/planner-grants.hdbgrants` — consumer grant requesting planner role (Leg B). *Create.*
 - `db/external/devtoberfest-planner.cds` — `@cds.persistence.exists` facade (Leg B, unused). *Create.*
@@ -37,7 +37,7 @@
 - `test/unit/tutorial-value-help-view.test.js` — view filter semantics. *Create.*
 
 **Repo B (`devtoberfest-planner`):**
-- `db/src/ACTIVITY_SESSION_V1.hdbview` + `db/src/activity_session_reader.hdbrole` — provider (Leg B). *Create.*
+- `db/src/ACTIVITY_SESSION_V1.hdbview` + `db/src/devtoberfest_reader.hdbrole` — provider (Leg B). *Create.*
 - `db/src/TUTORIAL_VALUE_HELP_V1.hdbsynonym` + `db/src/tutorials-grants.hdbgrants` — consumer (Leg A). *Create.*
 - `db/external/tutorials.cds` — `@cds.persistence.exists` facade (Leg A). *Create.*
 - `db/schema.cds` — add `tutorial` assoc + `tutorialSlug`/`tutorialTitle` to `Session`. *Modify.*
@@ -94,11 +94,11 @@ git commit -m "docs(cross-container): record deployed planner names + confirmed 
 
 **Files:**
 - Create: `db/src/TUTORIAL_VALUE_HELP_V1.hdbview`
-- Create: `db/src/tutorial_value_help_reader.hdbrole`
+- Create: `db/src/tutorial_reader.hdbrole`
 - Test: `test/unit/tutorial-value-help-view.test.js`
 
 **Interfaces:**
-- Produces: physical view `TUTORIAL_VALUE_HELP_V1` exposing columns `ID, slug, title, primaryTag` (aliased, quoted) filtered to active/null status; role `tutorial_value_help_reader` granting `SELECT` on it. Consumed by Repo B Task B3 (synonym) + B4 (facade) + B2 (grant).
+- Produces: physical view `TUTORIAL_VALUE_HELP_V1` exposing columns `ID, slug, title, primaryTag` (aliased, quoted) filtered to active/null status; role `tutorial_reader` granting `SELECT` on it. Consumed by Repo B Task B3 (synonym) + B4 (facade) + B2 (grant).
 
 - [ ] **Step 1: Confirm base column case** — `hana-cli inspectTable --table com_sap_developers_ims_Tutorials --output json` against the deployed `tutorials-hana`; note exact case of `ID, slug, title, primaryTag, status`.
 
@@ -146,10 +146,10 @@ VIEW "TUTORIAL_VALUE_HELP_V1" AS
 - [ ] **Step 5: Author the reader role**
 
 ```json
-// db/src/tutorial_value_help_reader.hdbrole
+// db/src/tutorial_reader.hdbrole
 {
   "role": {
-    "name": "tutorial_value_help_reader",
+    "name": "tutorial_reader",
     "object_privileges": [
       { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] }
     ]
@@ -164,7 +164,7 @@ VIEW "TUTORIAL_VALUE_HELP_V1" AS
 - [ ] **Step 8: Commit**
 
 ```bash
-git add db/src/TUTORIAL_VALUE_HELP_V1.hdbview db/src/tutorial_value_help_reader.hdbrole test/unit/tutorial-value-help-view.test.js
+git add db/src/TUTORIAL_VALUE_HELP_V1.hdbview db/src/tutorial_reader.hdbrole test/unit/tutorial-value-help-view.test.js
 git commit -m "feat(cross-container): publish TUTORIAL_VALUE_HELP_V1 view + reader role (Leg A provider)"
 ```
 
@@ -172,11 +172,11 @@ git commit -m "feat(cross-container): publish TUTORIAL_VALUE_HELP_V1 view + read
 
 **Files (Repo B):**
 - Create: `db/src/ACTIVITY_SESSION_V1.hdbview`
-- Create: `db/src/activity_session_reader.hdbrole`
+- Create: `db/src/devtoberfest_reader.hdbrole`
 
 **Interfaces:**
 - Consumes: deployed planner names + confirmed columns from Task 0.
-- Produces: physical view `ACTIVITY_SESSION_V1` + role `activity_session_reader`. Consumed by Repo A Tasks A3 (synonym), A4 (grant), A5 (facade).
+- Produces: physical view `ACTIVITY_SESSION_V1` + role `devtoberfest_reader`. Consumed by Repo A Tasks A3 (synonym), A4 (grant), A5 (facade).
 
 - [ ] **Step 1: Author the view** using the exact deployed physical table/column names from Task 0, aliasing every output column with quoted identifiers to a stable proxy contract:
 
@@ -197,10 +197,10 @@ VIEW "ACTIVITY_SESSION_V1" AS
 - [ ] **Step 2: Author the reader role**
 
 ```json
-// db/src/activity_session_reader.hdbrole
+// db/src/devtoberfest_reader.hdbrole
 {
   "role": {
-    "name": "activity_session_reader",
+    "name": "devtoberfest_reader",
     "object_privileges": [
       { "name": "ACTIVITY_SESSION_V1", "type": "VIEW", "privileges": [ "SELECT" ] }
     ]
@@ -213,7 +213,7 @@ VIEW "ACTIVITY_SESSION_V1" AS
 - [ ] **Step 4: Commit (Repo B branch)**
 
 ```bash
-git add db/src/ACTIVITY_SESSION_V1.hdbview db/src/activity_session_reader.hdbrole
+git add db/src/ACTIVITY_SESSION_V1.hdbview db/src/devtoberfest_reader.hdbrole
 git commit -m "feat(cross-container): publish ACTIVITY_SESSION_V1 view + reader role (Leg B provider)"
 ```
 
@@ -294,7 +294,7 @@ git commit -m "chore(mta): bind devtoberfest-planner-db to tutorials-db-deployer
 - Create: `db/external/devtoberfest-planner.cds`
 
 **Interfaces:**
-- Consumes: `ACTIVITY_SESSION_V1` + `activity_session_reader` (Repo B Task B1); bound `devtoberfest-planner-db` (Task A2).
+- Consumes: `ACTIVITY_SESSION_V1` + `devtoberfest_reader` (Repo B Task B1); bound `devtoberfest-planner-db` (Task A2).
 - Produces: facade `external.devtoberfest.ActivitySessionV1` — **not projected in any service** (reserved).
 
 - [ ] **Step 1: Author the grant** (requests the planner's role; separate file from `_grants.hdbgrants`)
@@ -303,8 +303,8 @@ git commit -m "chore(mta): bind devtoberfest-planner-db to tutorials-db-deployer
 // db/src/planner-grants.hdbgrants
 {
   "devtoberfest-planner-db": {
-    "object_owner":     { "container_roles": [ "activity_session_reader" ] },
-    "application_user": { "container_roles": [ "activity_session_reader" ] }
+    "object_owner":     { "container_roles": [ "devtoberfest_reader" ] },
+    "application_user": { "container_roles": [ "devtoberfest_reader" ] }
   }
 }
 ```
@@ -363,7 +363,7 @@ git commit -m "feat(cross-container): Leg B consumer — synonym + grant + facad
 - Modify: `mta.yaml` (add `tutorials-hana` existing-service + deployer `requires`)
 
 **Interfaces:**
-- Consumes: `TUTORIAL_VALUE_HELP_V1` + `tutorial_value_help_reader` (Repo A Task A1).
+- Consumes: `TUTORIAL_VALUE_HELP_V1` + `tutorial_reader` (Repo A Task A1).
 - Produces: facade `external.tutorials.TutorialValueHelpV1` — consumed by Task B5 (service projection).
 
 - [ ] **Step 1: mta — add `tutorials-hana` existing-service + `requires` on `devtoberfest-planner-db-deployer`**
@@ -389,8 +389,8 @@ git commit -m "feat(cross-container): Leg B consumer — synonym + grant + facad
 ```jsonc
 // db/src/tutorials-grants.hdbgrants
 { "tutorials-hana": {
-    "object_owner":     { "container_roles": [ "tutorial_value_help_reader" ] },
-    "application_user": { "container_roles": [ "tutorial_value_help_reader" ] } } }
+    "object_owner":     { "container_roles": [ "tutorial_reader" ] },
+    "application_user": { "container_roles": [ "tutorial_reader" ] } } }
 ```
 ```jsonc
 // db/src/TUTORIAL_VALUE_HELP_V1.hdbsynonym
@@ -550,7 +550,7 @@ git commit -m "docs(cross-container): mark Devtoberfest links live in registry"
 
 **Placeholder scan:** Physical-name placeholders `<... phys>` in Task B1/A5 are intentional and gated on Task 0 (which produces them) — flagged, not vague. Facade column types in A5/B4 are copied from `hana-cli` output at build time (D4a), not guessed. Snapshot mechanism (B7) is a recorded decision point, not a TODO.
 
-**Type consistency:** View name `TUTORIAL_VALUE_HELP_V1` / role `tutorial_value_help_reader` / facade `external.tutorials.TutorialValueHelpV1` used consistently across A1↔B2-B4-B5-B6-B7. `ACTIVITY_SESSION_V1` / `activity_session_reader` / `external.devtoberfest.ActivitySessionV1` consistent across B1↔A3-A5. Grant key = bound service name (`tutorials-hana` / `devtoberfest-planner-db`) matches the existing-service resource names.
+**Type consistency:** View name `TUTORIAL_VALUE_HELP_V1` / role `tutorial_reader` / facade `external.tutorials.TutorialValueHelpV1` used consistently across A1↔B2-B4-B5-B6-B7. `ACTIVITY_SESSION_V1` / `devtoberfest_reader` / `external.devtoberfest.ActivitySessionV1` consistent across B1↔A3-A5. Grant key = bound service name (`tutorials-hana` / `devtoberfest-planner-db`) matches the existing-service resource names.
 
 ## Notes for the executor
 
