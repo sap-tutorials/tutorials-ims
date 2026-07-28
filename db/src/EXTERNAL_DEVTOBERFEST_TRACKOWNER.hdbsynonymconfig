@@ -1,0 +1,8 @@
+{
+  "EXTERNAL_DEVTOBERFEST_TRACKOWNER": {
+    "target": {
+      "schema.configure": "devtoberfest-planner-db/schema",
+      "object": "DTF_TRACKOWNER_V1"
+    }
+  }
+}

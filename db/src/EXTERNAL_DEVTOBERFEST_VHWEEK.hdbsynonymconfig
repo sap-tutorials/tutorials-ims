@@ -1,0 +1,8 @@
+{
+  "EXTERNAL_DEVTOBERFEST_VHWEEK": {
+    "target": {
+      "schema.configure": "devtoberfest-planner-db/schema",
+      "object": "DTF_VH_WEEK_V1"
+    }
+  }
+}

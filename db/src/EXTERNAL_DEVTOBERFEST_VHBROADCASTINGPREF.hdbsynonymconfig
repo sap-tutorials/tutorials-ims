@@ -1,0 +1,8 @@
+{
+  "EXTERNAL_DEVTOBERFEST_VHBROADCASTINGPREF": {
+    "target": {
+      "schema.configure": "devtoberfest-planner-db/schema",
+      "object": "DTF_VH_BROADCASTINGPREF_V1"
+    }
+  }
+}

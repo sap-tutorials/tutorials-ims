@@ -1,0 +1,8 @@
+{
+  "EXTERNAL_DEVTOBERFEST_VHSTATUS": {
+    "target": {
+      "schema.configure": "devtoberfest-planner-db/schema",
+      "object": "DTF_VH_STATUS_V1"
+    }
+  }
+}

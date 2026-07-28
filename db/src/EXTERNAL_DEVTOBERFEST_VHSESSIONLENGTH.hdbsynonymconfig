@@ -1,0 +1,8 @@
+{
+  "EXTERNAL_DEVTOBERFEST_VHSESSIONLENGTH": {
+    "target": {
+      "schema.configure": "devtoberfest-planner-db/schema",
+      "object": "DTF_VH_SESSIONLENGTH_V1"
+    }
+  }
+}
