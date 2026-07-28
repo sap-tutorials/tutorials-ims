@@ -235,12 +235,22 @@ annotate AdminService.CompletionPathItems with {
 };
 
 annotate AdminService.CompletionPathItems with {
+  // Path-item tutorial picker. Exposes slug / primaryTag / legacyIdStr as
+  // DisplayOnly params so each becomes a VH-dialog column AND an individual
+  // filter field — mirrors the redirectTo TutorialPickList picker
+  // (srv/admin-service.cds:84). Free-text search across title/slug/
+  // primaryTag/description is enabled by @cds.search on AdminService.Tutorials
+  // (see srv/admin-service.cds). Without these, ~2000 tutorials paged behind a
+  // title-only match hid valid rows like cp-aibus-dox-ui-sub.
   tutorial @Common.Text: tutorial.title @Common.TextArrangement: #TextOnly
            @Common.ValueList: {
              CollectionPath: 'Tutorials',
              Parameters: [
                { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: tutorial_ID, ValueListProperty: 'ID' },
-               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'title' }
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'title' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'primaryTag' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' }
              ]
            };
   group @Common.Text: group.title @Common.TextArrangement: #TextOnly
