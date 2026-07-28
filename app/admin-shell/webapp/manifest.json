@@ -10,7 +10,7 @@
     "title": "Admin Console",
     "description": "Unified admin shell for tutorial platform management",
     "applicationVersion": {
-      "version": "0.0.2"
+      "version": "0.0.3"
     },
     "dataSources": {
       "adminService": {
