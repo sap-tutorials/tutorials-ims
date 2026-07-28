@@ -562,6 +562,15 @@ annotate AdminService.Tutorials with {
   // #918 — populated by after('READ', 'Tutorials') decorator in
   // admin-service.js from the KgIsolation sidecar.
   isolated              @Common.Label: 'Isolated'    @Common.FieldControl: #ReadOnly;
+  // Lifecycle-link virtual fields (Task 4 — tutorial-lifecycle-links)
+  sourceRepoUrl    @Common.Label: 'Source Repo (GitHub)'        @Common.FieldControl: #ReadOnly;
+  sourceRepoLabel  @Common.Label: 'Source Repo'                 @Common.FieldControl: #ReadOnly;
+  contribRepoUrl   @Common.Label: 'Contributions Repo (GitHub)' @Common.FieldControl: #ReadOnly;
+  contribRepoLabel @Common.Label: 'Contributions Repo'          @Common.FieldControl: #ReadOnly;
+  qaPreviewUrl     @Common.Label: 'QA Preview'                  @Common.FieldControl: #ReadOnly;
+  qaPreviewLabel   @Common.Label: 'QA Preview'                  @Common.FieldControl: #ReadOnly;
+  mainPreviewUrl   @Common.Label: 'Live Tutorial'               @Common.FieldControl: #ReadOnly;
+  mainPreviewLabel @Common.Label: 'Live Tutorial'               @Common.FieldControl: #ReadOnly;
 };
 
 annotate AdminService.TutorialMeta with {
@@ -725,7 +734,11 @@ annotate AdminService.Tutorials with @UI: {
     { Value: meta.monitoredStatus, Label: 'Monitored Status' },
     { Value: meta.notificationNumber, Label: 'Notifications Sent' },
     { Value: meta.lastNotificationDate, Label: 'Last Notification' },
-    { Value: meta.repository.name, Label: 'Source Repository' }
+    { Value: meta.repository.name, Label: 'Source Repository' },
+    { $Type: 'UI.DataFieldWithUrl', Value: sourceRepoLabel,  Url: sourceRepoUrl,  Label: 'Source Repo (GitHub)' },
+    { $Type: 'UI.DataFieldWithUrl', Value: contribRepoLabel, Url: contribRepoUrl, Label: 'Contributions Repo (GitHub)' },
+    { $Type: 'UI.DataFieldWithUrl', Value: qaPreviewLabel,   Url: qaPreviewUrl,   Label: 'QA Preview' },
+    { $Type: 'UI.DataFieldWithUrl', Value: mainPreviewLabel, Url: mainPreviewUrl, Label: 'Live Tutorial' }
   ]}
 };
 

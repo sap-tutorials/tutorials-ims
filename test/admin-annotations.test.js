@@ -49,6 +49,30 @@ describe('UI Annotations in $metadata', () => {
     it('has Tutorials LineItem annotation', () => {
       expect(metadata).toContain('Tutorial');
     });
+
+    it('Tutorials projection exposes the 8 lifecycle-link virtual fields', () => {
+      for (const col of [
+        'sourceRepoUrl', 'sourceRepoLabel',
+        'contribRepoUrl', 'contribRepoLabel',
+        'qaPreviewUrl', 'qaPreviewLabel',
+        'mainPreviewUrl', 'mainPreviewLabel',
+      ]) {
+        expect(metadata, `${col} not found on AdminService.Tutorials`)
+          .toContain(`Name="${col}"`);
+      }
+    });
+
+    it('Lifecycle FieldGroup carries the 4 DataFieldWithUrl link rows', () => {
+      const region = metadata.match(
+        /<Annotation Term="UI.FieldGroup" Qualifier="Lifecycle">[\s\S]*?<\/Annotation>/,
+      );
+      expect(region, 'Lifecycle FieldGroup annotation not found').toBeTruthy();
+      const block = region[0];
+      expect(block).toContain('UI.DataFieldWithUrl');
+      for (const url of ['sourceRepoUrl', 'contribRepoUrl', 'qaPreviewUrl', 'mainPreviewUrl']) {
+        expect(block, `${url} missing from Lifecycle FieldGroup`).toContain(url);
+      }
+    });
   });
 
   // Regression suite for PR #604 — pins down the exact $metadata shape

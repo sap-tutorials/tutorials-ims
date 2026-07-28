@@ -64,7 +64,19 @@ service AdminService {
     // #918 — populated by after('READ') decorator in admin-service.js.
     // True iff a KgIsolation row exists for this tutorial slug. Fail-quiet:
     // if the SELECT throws or the sidecar is missing, stays null.
-    virtual isolated : Boolean
+    virtual isolated : Boolean,
+    // ACTIVE-only source & preview links, populated by the after('READ')
+    // decorator in admin-service.js from RepoCatalog + slug. Unset for
+    // non-ACTIVE rows so FE renders empty cells. Spec:
+    // docs/superpowers/specs/2026-07-28-tutorial-lifecycle-source-preview-links-design.md
+    virtual sourceRepoUrl    : String,
+    virtual sourceRepoLabel  : String,
+    virtual contribRepoUrl   : String,
+    virtual contribRepoLabel : String,
+    virtual qaPreviewUrl     : String,
+    virtual qaPreviewLabel   : String,
+    virtual mainPreviewUrl   : String,
+    virtual mainPreviewLabel : String
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
