@@ -1,0 +1,8 @@
+{
+  "role": {
+    "name": "tutorial_reader_grantable",
+    "object_privileges": [
+      { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges_with_grant_option": [ "SELECT" ] }
+    ]
+  }
+}
