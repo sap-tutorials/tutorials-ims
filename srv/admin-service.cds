@@ -31,6 +31,13 @@ service AdminService {
   };
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
+  // @cds.search widens OData $search (→ HANA CONTAINS) beyond the default so
+  // the tutorial value-help search box (CompletionPathItems.tutorial picker in
+  // app/admin-annotations.cds) matches slug, primaryTag, and description text —
+  // not just title. description is a LargeString, search-only here (not a VH
+  // column). Fixes valid rows (e.g. cp-aibus-dox-ui-sub) being unfindable
+  // behind a title-only match across ~2000 paged tutorials.
+  @cds.search: { title, slug, primaryTag, description }
   entity Tutorials as projection on ims.Tutorials {
     *,
     cast(legacyId as String) as legacyIdStr : String,
