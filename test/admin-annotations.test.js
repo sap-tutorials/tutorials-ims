@@ -37,6 +37,13 @@ describe('UI Annotations in $metadata', () => {
       expect(metadata).toContain('Common.ValueList');
       expect(metadata).toContain('Tags');
     });
+
+    it('Missions + Groups projections expose the 4 preview-link virtual fields', () => {
+      // $metadata declares each Property once per entity type; assert presence.
+      for (const col of ['qaPreviewUrl', 'qaPreviewLabel', 'mainPreviewUrl', 'mainPreviewLabel']) {
+        expect(metadata, `${col} not found in $metadata`).toContain(`Name="${col}"`);
+      }
+    });
   });
 
   describe('Groups annotations', () => {
