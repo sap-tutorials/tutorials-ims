@@ -49,4 +49,52 @@ describe('Missions/Groups read: preview links (published-gated)', () => {
     expect(row.mainPreviewUrl).toBe('/tutorials/group-pub-group');
     expect(row.mainPreviewLabel).toBe('View Live Group');
   });
+
+  // FE-realistic: Fiori Elements builds $select from OP annotations only;
+  // slug is NOT annotated on either OP so FE never requests it. These cases
+  // reproduce that omission and FAIL today (links come back null) because
+  // the after('READ') decorator sees r.slug === undefined.
+  it('published mission: FE-like $select (no slug) still returns links', async () => {
+    const { status, data } = await project.get(
+      "/admin/Missions?$filter=slug eq 'pub-mission'" +
+      '&$select=published,qaPreviewUrl,mainPreviewUrl,mainPreviewLabel',
+      adminAuth);
+    expect(status).toBe(200);
+    const row = data.value[0];
+    expect(row.qaPreviewUrl).toBe('/tutorials-qa/mission-pub-mission');
+    expect(row.mainPreviewUrl).toBe('/tutorials/mission-pub-mission');
+    expect(row.mainPreviewLabel).toBe('View Live Mission');
+  });
+
+  it('published group: FE-like $select (no slug) still returns links', async () => {
+    const { status, data } = await project.get(
+      "/admin/Groups?$filter=slug eq 'pub-group'" +
+      '&$select=published,qaPreviewUrl,mainPreviewUrl,mainPreviewLabel',
+      adminAuth);
+    expect(status).toBe(200);
+    const row = data.value[0];
+    expect(row.qaPreviewUrl).toBe('/tutorials-qa/group-pub-group');
+    expect(row.mainPreviewUrl).toBe('/tutorials/group-pub-group');
+    expect(row.mainPreviewLabel).toBe('View Live Group');
+  });
+
+  // Deferred-minor gap: assert qaPreviewLabel is correct in a published case.
+  it('published mission: qaPreviewLabel is "View QA Preview"', async () => {
+    const { data } = await project.get(
+      "/admin/Missions?$filter=slug eq 'pub-mission'" +
+      '&$select=slug,published,qaPreviewLabel',
+      adminAuth);
+    const row = data.value[0];
+    expect(row.qaPreviewLabel).toBe('View QA Preview');
+  });
+
+  // Deferred-minor gap: unpublished group mirrors the existing unpublished-mission case.
+  it('unpublished group exposes no links', async () => {
+    const { data } = await project.get(
+      "/admin/Groups?$filter=slug eq 'unpub-group'&$select=slug,qaPreviewUrl,mainPreviewUrl",
+      adminAuth);
+    const row = data.value[0];
+    expect(row.qaPreviewUrl ?? null).toBeNull();
+    expect(row.mainPreviewUrl ?? null).toBeNull();
+  });
 });

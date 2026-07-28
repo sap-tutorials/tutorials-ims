@@ -545,6 +545,24 @@ export default class AdminService extends cds.ApplicationService {
     // throw source; the defensive `if (!r) continue` guards a malformed row.
     //
     // Spec: docs/superpowers/specs/2026-07-28-mission-group-preview-links-design.md
+    //
+    // FE column-injection guard: Fiori Elements V4 builds a column-limited
+    // $select from OP annotations only. Neither Missions nor Groups OP
+    // references `slug`, so FE never requests it, and the after('READ')
+    // decorator would see r.slug === undefined → helper hits its !slug guard →
+    // all links render as empty cells for every published row.
+    //
+    // Fix: when an explicit SELECT column list exists, ensure both `slug` and
+    // `published` are in it before the query hits the DB. If columns is
+    // undefined (SELECT *) we do nothing — all columns are already coming back.
+    this.before('READ', ['Missions', 'Groups'], (req) => {
+      const cols = req.query?.SELECT?.columns;
+      if (!Array.isArray(cols)) return; // SELECT * — nothing to do
+      const has = (name) => cols.some((c) => c.ref && c.ref[c.ref.length - 1] === name);
+      if (!has('slug'))      cols.push({ ref: ['slug'] });
+      if (!has('published')) cols.push({ ref: ['published'] });
+    });
+
     this.after('READ', 'Missions', (rows) => {
       const arr = Array.isArray(rows) ? rows : [rows];
       for (const r of arr) {
