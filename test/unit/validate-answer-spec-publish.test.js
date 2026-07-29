@@ -345,3 +345,87 @@ describe('publishValidateAnswerSpecs direct export (#242)', () => {
     expect(res.jsonBody).toEqual({ error: 'tutorial_not_found' });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 9: Duplicate composite-key guard (#1375)
+// ─────────────────────────────────────────────────────────────────────────────
+// The DB primary key is (tutorial_ID, stepNumber, questionId). Two specs in
+// one payload sharing (stepNumber, questionId) would collide on INSERT and
+// blow up the whole tx as an opaque 500. The handler rejects up front with a
+// precise 400 instead.
+
+describe('duplicate composite-key guard (#1375)', () => {
+  it('two specs with same (stepNumber, questionId) → 400 duplicate_spec_key', async () => {
+    const res = mockRes();
+    await publishValidateAnswerSpecs(mockReq({
+      slug: 'tutorial-alpha',
+      specs: [
+        { stepNumber: 3, questionId: 'validate-3', questionText: 'A?', correctAnswer: 'x', ruleType: 'regex' },
+        { stepNumber: 3, questionId: 'validate-3', questionText: 'B?', correctAnswer: 'y', ruleType: 'regex' },
+      ],
+    }), res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toEqual({ error: 'duplicate_spec_key', stepNumber: 3, questionId: 'validate-3' });
+  });
+
+  it('same questionId across DIFFERENT steps is allowed → 200', async () => {
+    const res = mockRes();
+    await publishValidateAnswerSpecs(mockReq({
+      slug: 'tutorial-alpha',
+      specs: [
+        { stepNumber: 1, questionId: 'validate-1', questionText: 'A?', correctAnswer: 'x', ruleType: 'regex' },
+        { stepNumber: 2, questionId: 'validate-2', questionText: 'B?', correctAnswer: 'y', ruleType: 'regex' },
+      ],
+    }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.jsonBody).toEqual({ ok: true, count: 2 });
+  });
+
+  it('duplicate guard fires BEFORE any DB write (no partial rows)', async () => {
+    const res = mockRes();
+    await publishValidateAnswerSpecs(mockReq({
+      slug: 'tutorial-alpha',
+      specs: [
+        { stepNumber: 7, questionId: 'dup', questionText: 'A?', correctAnswer: 'x', ruleType: 'regex' },
+        { stepNumber: 7, questionId: 'dup', questionText: 'B?', correctAnswer: 'y', ruleType: 'regex' },
+      ],
+    }), res);
+    expect(res.statusCode).toBe(400);
+
+    const { ValidateAnswerSpecs } = cds.entities('com.sap.developers.ims');
+    const rows = await SELECT.from(ValidateAnswerSpecs);
+    expect(rows).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 10: Coarse 500 reason on unexpected error (#1375)
+// ─────────────────────────────────────────────────────────────────────────────
+// The catch-all now returns a coarse `reason` derived from the error's own
+// code/name (never the raw stack), so the publish CLI's non-fatal warning is
+// diagnosable without cf-logs access.
+
+describe('coarse 500 reason (#1375)', () => {
+  it('500 body carries a { error:internal, reason } shape', async () => {
+    const res = mockRes();
+    // Force a throw inside the tx by passing a spec whose stepNumber is a
+    // BigInt — JSON/DB coercion path throws with a named/coded error, which
+    // the catch-all surfaces as `reason`. We only assert the shape.
+    const originalTx = cds.tx;
+    cds.tx = async () => { const e = new Error('boom'); e.code = 'FORCED_TEST_ERROR'; throw e; };
+    try {
+      await publishValidateAnswerSpecs(mockReq({
+        slug: 'tutorial-alpha',
+        specs: [
+          { stepNumber: 1, questionId: 'q1', questionText: 'Q?', correctAnswer: 'A', ruleType: 'regex' },
+        ],
+      }), res);
+    } finally {
+      cds.tx = originalTx;
+    }
+    expect(res.statusCode).toBe(500);
+    expect(res.jsonBody).toEqual({ error: 'internal', reason: 'FORCED_TEST_ERROR' });
+  });
+});

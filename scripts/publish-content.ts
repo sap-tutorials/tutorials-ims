@@ -1237,22 +1237,30 @@ async function main() {
   }
 
   // --- validate-answer spec publish (non-fatal auxiliary step, issue #209 Task 9) ---
-  try {
-    const cacheDir = channel === 'qa'
-      ? join(process.cwd(), '.tutorial-cache-qa')
-      : join(process.cwd(), '.tutorial-cache');
-    const veResult = await publishValidateAnswerSpecs({
-      cacheDir,
-      baseUrl: opts.baseUrl,
-      apiKey: opts.apiKey,
-    });
-    log(`[validate-answer] published ${veResult.published} specs, ${veResult.failures.length} failures`);
-    for (const f of veResult.failures) {
-      console.warn(`[validate-answer]   - ${f.slug}: ${f.status} ${f.body.slice(0, 200)}`);
+  // QA channel skips this entirely (#1375): srv-qa has NO runtime reader of
+  // ValidateAnswerSpecs — the author-preview renderer re-parses rules.vr live
+  // from the POSTed markdown, and there is no /api/validate-answer route on
+  // srv-qa. The QA CDS model (com.sap.developers.ims.qa) doesn't even define
+  // the entity, so every POST 500'd. Persisting these specs on QA was
+  // write-only dead weight; publishing them only makes sense on prod.
+  if (channel === 'qa') {
+    log('[validate-answer] skipped (channel=qa — no runtime reader on srv-qa, #1375)');
+  } else {
+    try {
+      const cacheDir = join(process.cwd(), '.tutorial-cache');
+      const veResult = await publishValidateAnswerSpecs({
+        cacheDir,
+        baseUrl: opts.baseUrl,
+        apiKey: opts.apiKey,
+      });
+      log(`[validate-answer] published ${veResult.published} specs, ${veResult.failures.length} failures`);
+      for (const f of veResult.failures) {
+        console.warn(`[validate-answer]   - ${f.slug}: ${f.status} ${f.body.slice(0, 200)}`);
+      }
+      // Don't process.exit(1) on failures — non-fatal per spec.
+    } catch (err) {
+      console.error('[publish-content] validate-answer spec publish failed (non-fatal):', formatErrorChain(err));
     }
-    // Don't process.exit(1) on failures — non-fatal per spec.
-  } catch (err) {
-    console.error('[publish-content] validate-answer spec publish failed (non-fatal):', formatErrorChain(err));
   }
 
   // --- auto-verify ---

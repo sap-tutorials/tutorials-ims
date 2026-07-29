@@ -4,7 +4,6 @@ import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 
 import { createContentHandlers } from '../srv/lib/content-store.js';
-import { publishValidateAnswerSpecs } from '../srv/lib/validate-answer-spec-publish.js';
 import { requireXsuaaScope } from './xsuaa-scope-middleware.js';
 import { createSemaphore } from './preview-semaphore.js';
 import { renderPreview, errorHtml } from './preview-renderer.js';
@@ -84,15 +83,16 @@ cds.on('bootstrap', (app) => {
   // publish failures show up in the admin dashboard, not just a red CI run.
   app.post('/content/pipeline-log',    express.json({ limit: '256kb' }),  contentAuthMiddleware, pipelineLogFailureHandler);
   app.post('/content/rollback', express.json(),                    contentAuthMiddleware, rollbackHandler);
-  // Validate-answer specs publish (issue #209). REPLACE-per-slug semantics
-  // — each call clears and re-inserts the slug's ValidateAnswerSpecs rows
-  // in one transaction. Mirrors srv/server.js registration. Drift between
-  // srv and srv-qa caught by scripts/check-srv-qa-route-drift.ts.
-  app.post('/content/validate-answer-specs',
-    express.json({ limit: '5mb' }),
-    contentAuthMiddleware,
-    publishValidateAnswerSpecs
-  );
+  // NOTE (#1375): /content/validate-answer-specs is intentionally NOT
+  // registered on srv-qa. The handler resolves entities from the prod
+  // namespace `com.sap.developers.ims`, which the QA CDS model
+  // (com.sap.developers.ims.qa) does not load — every POST 500'd during the
+  // QA full rebuild. srv-qa also has no runtime reader of ValidateAnswerSpecs
+  // (author preview re-parses rules.vr live; there's no /api/validate-answer
+  // route here), so persisting these specs on QA was write-only dead weight.
+  // The publish CLI skips this step for channel=qa (scripts/publish-content.ts),
+  // and the route-drift guard allowlists it (check-srv-qa-route-drift.ts,
+  // ALLOWLIST_ONLY_ON_SRV).
 
   const previewSemaphore = createSemaphore(Number(process.env.PREVIEW_MAX_CONCURRENT ?? 4));
   const PREVIEW_QUEUE_TIMEOUT_MS = Number(process.env.PREVIEW_QUEUE_TIMEOUT_MS ?? 10_000);
