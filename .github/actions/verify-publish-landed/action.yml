@@ -1,0 +1,80 @@
+name: Verify publish landed rows (watchdog)
+description: >-
+  Synthetic post-publish check (#1373): probe GET /content/hashes and assert the
+  active content version actually has rows. Detects the "publish-reported-success-
+  but-landed-nothing" class — e.g. an empty active version, a wiped snapshot, or a
+  silently no-op publish — that a green publish step alone does not catch. Fails
+  the step (exit 1) when the served slug count is below `min-slugs`, so the
+  workflow's failure() notifier fires and emails the owner.
+
+inputs:
+  base-url:
+    description: 'CAP srv base URL to probe (e.g. https://…-tutorials-srv-qa.….hana.ondemand.com).'
+    required: true
+  bearer:
+    description: >-
+      Optional bearer token. srv-qa gates /content/hashes behind CONTENT_API_KEY_QA
+      (dual-auth); prod serves it public-read. Pass the QA key on QA, omit on prod.
+    required: false
+    default: ''
+  min-slugs:
+    description: 'Minimum number of published slugs the active version must contain. Below this fails.'
+    required: false
+    default: '1'
+  channel:
+    description: 'Channel label for log/error messages (qa/prod/dev).'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Probe /content/hashes and assert non-empty
+      shell: bash
+      env:
+        BASE_URL: ${{ inputs.base-url }}
+        BEARER: ${{ inputs.bearer }}
+        MIN_SLUGS: ${{ inputs.min-slugs }}
+        CHANNEL: ${{ inputs.channel }}
+      run: |
+        set -uo pipefail
+
+        if [ -z "$BASE_URL" ]; then
+          echo "::error::Publish watchdog: base-url is empty (missing secret?) — cannot verify ${CHANNEL} publish landed."
+          exit 1
+        fi
+
+        # Trim any trailing slash so the concatenation is clean.
+        BASE_URL="${BASE_URL%/}"
+
+        AUTH_ARGS=()
+        [ -n "$BEARER" ] && AUTH_ARGS=(-H "Authorization: Bearer ${BEARER}")
+
+        # Fetch the active-version slug→hash map. -m caps the probe; the handler
+        # already filters the __nav__/__404__/__shell__ sentinels, so the object
+        # key count is the real published-tutorial count.
+        HTTP_CODE="$(curl -sS -m 30 -o hashes.json -w '%{http_code}' \
+          "${AUTH_ARGS[@]}" \
+          "${BASE_URL}/content/hashes" || echo "000")"
+
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "::error::Publish watchdog (${CHANNEL}): GET /content/hashes returned HTTP ${HTTP_CODE} — cannot confirm rows landed."
+          head -c 500 hashes.json 2>/dev/null || true
+          exit 1
+        fi
+
+        # jq -e 'length' fails (non-zero) if the body is not a JSON object.
+        COUNT="$(jq -e 'if type=="object" then length else error("not an object") end' hashes.json 2>/dev/null)" || {
+          echo "::error::Publish watchdog (${CHANNEL}): /content/hashes body was not a JSON object."
+          head -c 500 hashes.json 2>/dev/null || true
+          exit 1
+        }
+
+        echo "Publish watchdog (${CHANNEL}): active version serves ${COUNT} slug(s); floor is ${MIN_SLUGS}."
+
+        if [ "$COUNT" -lt "$MIN_SLUGS" ]; then
+          echo "::error title=Publish landed nothing::${CHANNEL} publish reported success but /content/hashes serves only ${COUNT} slug(s) (< ${MIN_SLUGS}). This is the publish-succeeded-but-empty class (#1373)."
+          exit 1
+        fi
+
+        echo "✅ Publish watchdog (${CHANNEL}) passed."

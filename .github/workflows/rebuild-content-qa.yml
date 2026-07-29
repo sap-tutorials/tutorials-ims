@@ -25,6 +25,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      # #1373 — the failure/recovery notifier opens, comments on, and closes a
+      # deduplicated GitHub issue; assignment triggers GitHub's native email.
+      issues: write
 
     steps:
       - name: Checkout
@@ -149,6 +152,20 @@ jobs:
           CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
           CONTENT_API_KEY_QA: ${{ secrets.CONTENT_API_KEY_QA }}
 
+      # #1373 — synthetic watchdog. The publish step reporting success is not
+      # proof rows landed: the render-concepts 404 that hid for days (#1372)
+      # aborted the session AFTER a green-looking earlier phase. Probe
+      # GET /content/hashes on srv-qa and fail if the active version serves no
+      # slugs — turning the silent publish-succeeded-but-empty class into a red
+      # run that the failure notifier below emails on.
+      - name: Verify QA publish landed rows
+        uses: ./.github/actions/verify-publish-landed
+        with:
+          base-url: ${{ secrets.CAP_SRV_URL_QA }}
+          bearer: ${{ secrets.CONTENT_API_KEY_QA }}
+          channel: qa
+          min-slugs: '1'
+
       - name: Summary
         run: |
           echo "### QA Content Rebuild Complete" >> "$GITHUB_STEP_SUMMARY"
@@ -167,6 +184,10 @@ jobs:
       # Observability (#observability): report CI failures (build gate,
       # verify-qa-build, publish 503) to the QA srv's PipelineLog so they surface
       # in the admin dashboard instead of only as a red CI run. Best-effort.
+      # NOTE (#1373): PipelineLog alone is an unwatched surface — the
+      # "Notify on rebuild failure" step below is the real alert (auto-filed,
+      # assignee-emailed GitHub issue). This PipelineLog write is kept as a
+      # secondary in-admin breadcrumb.
       - name: Report failure to PipelineLog (QA)
         if: ${{ failure() }}
         continue-on-error: true
@@ -188,3 +209,33 @@ jobs:
               --arg run "$RUN_URL" \
               '{pipelineType:"HUGO_BUILD", initiator:("ci/rebuild-content-qa@"+$trigger), summary:"QA content rebuild failed", errorDetails:("CI run failed before/at QA content publish. Logs: "+$run), metadata:{channel:"qa", trigger:$trigger, runUrl:$run}}')" \
             || echo "::warning::QA PipelineLog failure-report POST did not complete"
+
+      # #1373 — the real alert. On failure, open (or append to) a deduplicated
+      # GitHub issue assigned to the on-call owner; GitHub emails the assignee
+      # natively (no SMTP/Slack secret). Consecutive dispatch-triggered failures
+      # — the exact signature that hid the QA breakage for days — accumulate as
+      # comments on the same issue and escalate past the threshold.
+      - name: Notify on QA rebuild failure
+        if: ${{ failure() }}
+        uses: ./.github/actions/report-rebuild-failure
+        with:
+          outcome: failure
+          channel: qa
+          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          trigger: ${{ github.event_name }}
+          details: 'QA full rebuild (merge-to-main / dispatch) failed at or before publish.'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # #1373 — on success, close any open QA rebuild-failure issue and reset the
+      # consecutive-failure streak. Skipped for slug-only workflow_dispatch runs
+      # is unnecessary here: QA has no slug-skip branches, every run reaches this.
+      - name: Resolve QA rebuild-failure issue on success
+        if: ${{ success() }}
+        continue-on-error: true
+        uses: ./.github/actions/report-rebuild-failure
+        with:
+          outcome: success
+          channel: qa
+          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          trigger: ${{ github.event_name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
