@@ -248,5 +248,13 @@ describe('UI Annotations in $metadata', () => {
     it('exposes the DevtoberfestEditionPickList entity set', () => {
       expect(metadata).toContain('DevtoberfestEditionPickList');
     });
+
+    it('has a ValueList on edition_ID pointing at DevtoberfestEditionPickList', () => {
+      // CollectionPath propagates to the FK; verify both the target and the FK property exist.
+      expect(metadata).toContain('DevtoberfestEditionPickList');
+      expect(metadata).toContain('Name="edition_ID"');
+      // Text arrangement / Common.Text propagation to the FK.
+      expect(metadata).toContain('Common.ValueList');
+    });
   });
 });
