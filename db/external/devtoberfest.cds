@@ -7,150 +7,150 @@ namespace external.devtoberfest;
 @cds.persistence.exists
 entity Edition {
   key ID                    : String(36);
-      createdAt             : Timestamp;
-      createdBy             : String(255);
-      modifiedAt            : Timestamp;
-      modifiedBy            : String(255);
-      year                  : String(4);
-      name                  : String(100);
-      startDate             : Date;
-      endDate               : Date;
-      isCurrent             : Boolean;
+      CREATEDAT             : Timestamp;
+      CREATEDBY             : String(255);
+      MODIFIEDAT            : Timestamp;
+      MODIFIEDBY            : String(255);
+      YEAR                  : String(4);
+      NAME                  : String(100);
+      STARTDATE             : Date;
+      ENDDATE               : Date;
+      ISCURRENT             : Boolean;
 }
 
 @cds.persistence.exists
 entity Track {
   key ID                    : String(36);
-      createdAt             : Timestamp;
-      createdBy             : String(255);
-      modifiedAt            : Timestamp;
-      modifiedBy            : String(255);
-      edition_ID            : String(36);
-      name                  : String(100);
-      description           : String(500);
-      dayOfWeek             : String(5000);
-      isActivityTrack       : Boolean;
-      acronym               : String(10);
+      CREATEDAT             : Timestamp;
+      CREATEDBY             : String(255);
+      MODIFIEDAT            : Timestamp;
+      MODIFIEDBY            : String(255);
+      EDITION_ID            : String(36);
+      NAME                  : String(100);
+      DESCRIPTION           : String(500);
+      DAYOFWEEK             : String(5000);
+      ISACTIVITYTRACK       : Boolean;
+      ACRONYM               : String(10);
 }
 
 @cds.persistence.exists
 entity Trackowner {
   key ID                    : String(36);
-      track_ID              : String(36);
-      email                 : String(255);
-      name                  : String(100);
+      TRACK_ID              : String(36);
+      EMAIL                 : String(255);
+      NAME                  : String(100);
 }
 
 @cds.persistence.exists
 entity Session {
   key ID                    : String(36);
-      createdAt             : Timestamp;
-      createdBy             : String(255);
-      modifiedAt            : Timestamp;
-      modifiedBy            : String(255);
-      sessionCode           : String(20);
-      track_ID              : String(36);
-      title                 : String(200);
-      abstract              : LargeString;
-      status                : String(5000);
-      broadcastingPreference: String(5000);
-      sessionLength         : String(5000);
-      week                  : String(5000);
-      scheduledDate         : Date;
-      scheduledTime         : Time;
-      recordingDate         : Date;
-      meetingTitle          : String(200);
-      zoomURL               : String(500);
-      zoomInviteDetails     : LargeString;
-      youtubeURL            : String(500);
-      linkedinURL           : String(500);
-      communityEventURL     : String(500);
-      calendarInvite        : LargeString;
-      tutorialSlug          : String(255);
-      tutorialTitle         : String(255);
-      tutorial_ID           : String(36);
+      CREATEDAT             : Timestamp;
+      CREATEDBY             : String(255);
+      MODIFIEDAT            : Timestamp;
+      MODIFIEDBY            : String(255);
+      SESSIONCODE           : String(20);
+      TRACK_ID              : String(36);
+      TITLE                 : String(200);
+      ABSTRACT              : LargeString;
+      STATUS                : String(5000);
+      BROADCASTINGPREFERENCE: String(5000);
+      SESSIONLENGTH         : String(5000);
+      WEEK                  : String(5000);
+      SCHEDULEDDATE         : Date;
+      SCHEDULEDTIME         : Time;
+      RECORDINGDATE         : Date;
+      MEETINGTITLE          : String(200);
+      ZOOMURL               : String(500);
+      ZOOMINVITEDETAILS     : LargeString;
+      YOUTUBEURL            : String(500);
+      LINKEDINURL           : String(500);
+      COMMUNITYEVENTURL     : String(500);
+      CALENDARINVITE        : LargeString;
+      TUTORIALSLUG          : String(255);
+      TUTORIALTITLE         : String(255);
+      TUTORIAL_ID           : String(36);
 }
 
 @cds.persistence.exists
 entity Speaker {
   key ID                    : String(36);
-      createdAt             : Timestamp;
-      createdBy             : String(255);
-      modifiedAt            : Timestamp;
-      modifiedBy            : String(255);
-      firstName             : String(100);
-      lastName              : String(100);
-      email                 : String(255);
-      company               : String(200);
-      role                  : String(200);
-      photo                 : LargeBinary;
-      bio                   : LargeString;
-      photoType             : String(5000);
+      CREATEDAT             : Timestamp;
+      CREATEDBY             : String(255);
+      MODIFIEDAT            : Timestamp;
+      MODIFIEDBY            : String(255);
+      FIRSTNAME             : String(100);
+      LASTNAME              : String(100);
+      EMAIL                 : String(255);
+      COMPANY               : String(200);
+      ROLE                  : String(200);
+      PHOTO                 : LargeBinary;
+      BIO                   : LargeString;
+      PHOTOTYPE             : String(5000);
 }
 
 @cds.persistence.exists
 entity Sessionspeaker {
   key ID                    : String(36);
-      session_ID            : String(36);
-      speaker_ID            : String(36);
-      speakerOrder          : Integer;
+      SESSION_ID            : String(36);
+      SPEAKER_ID            : String(36);
+      SPEAKERORDER          : Integer;
 }
 
 @cds.persistence.exists
 entity Speakerconsent {
   key ID                    : String(36);
-      createdAt             : Timestamp;
-      createdBy             : String(255);
-      modifiedAt            : Timestamp;
-      modifiedBy            : String(255);
-      speaker_ID            : String(36);
-      edition_ID            : String(36);
-      consentSentDate       : Date;
-      consentReceived       : Boolean;
-      consentReceivedDate   : Date;
+      CREATEDAT             : Timestamp;
+      CREATEDBY             : String(255);
+      MODIFIEDAT            : Timestamp;
+      MODIFIEDBY            : String(255);
+      SPEAKER_ID            : String(36);
+      EDITION_ID            : String(36);
+      CONSENTSENTDATE       : Date;
+      CONSENTRECEIVED       : Boolean;
+      CONSENTRECEIVEDDATE   : Date;
 }
 
 @cds.persistence.exists
 entity Emailtemplate {
   key ID                    : String(36);
-      createdAt             : Timestamp;
-      createdBy             : String(255);
-      modifiedAt            : Timestamp;
-      modifiedBy            : String(255);
-      name                  : String(100);
-      type                  : String(5000);
-      mode                  : String(5000);
-      subject               : String(500);
-      bodyTemplate          : LargeString;
-      track_ID              : String(36);
+      CREATEDAT             : Timestamp;
+      CREATEDBY             : String(255);
+      MODIFIEDAT            : Timestamp;
+      MODIFIEDBY            : String(255);
+      NAME                  : String(100);
+      TYPE                  : String(5000);
+      MODE                  : String(5000);
+      SUBJECT               : String(500);
+      BODYTEMPLATE          : LargeString;
+      TRACK_ID              : String(36);
 }
 
 @cds.persistence.exists
 entity VhStatus {
-  key code                  : String(20);
+  key CODE                  : String(20);
 }
 
 @cds.persistence.exists
 entity VhBroadcastingpref {
-  key code                  : String(20);
+  key CODE                  : String(20);
 }
 
 @cds.persistence.exists
 entity VhSessionlength {
-  key code                  : String(5);
+  key CODE                  : String(5);
 }
 
 @cds.persistence.exists
 entity VhWeek {
-  key code                  : String(2);
+  key CODE                  : String(2);
 }
 
 @cds.persistence.exists
 entity VhEmailtemplatetype {
-  key code                  : String(20);
+  key CODE                  : String(20);
 }
 
 @cds.persistence.exists
 entity VhEmailtemplatemode {
-  key code                  : String(20);
+  key CODE                  : String(20);
 }
