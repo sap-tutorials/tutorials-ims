@@ -679,6 +679,11 @@ entity ChatSettings : cuid, managed {
   // flipped on after PROD KgCommunity/KgCommunityLabel data is verified.
   communityPeersEnabled           : Boolean default false;
 
+  // Puzzle hint Joule tool (this feature). Default OFF — the tool returns only
+  // safe hint material (clue, length, correct crossing letters, wordplay type);
+  // the answer never enters Joule's context. Flipped on by an Admin after review.
+  puzzleHintEnabled               : Boolean default false;
+
   // Community-overlap SEARCH-RANK weight (#1171). The additive rank term
   // `+ W * (case when slug = '<peer>' then 1 else 0 end)` that boosts tutorials
   // sharing a Louvain community with the query's top concept-overlap hits.
