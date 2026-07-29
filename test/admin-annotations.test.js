@@ -243,4 +243,10 @@ describe('UI Annotations in $metadata', () => {
       expect(Array.isArray(data.value)).toBe(true);
     });
   });
+
+  describe('DevtoberfestConfig edition value help', () => {
+    it('exposes the DevtoberfestEditionPickList entity set', () => {
+      expect(metadata).toContain('DevtoberfestEditionPickList');
+    });
+  });
 });
