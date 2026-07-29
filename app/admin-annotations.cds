@@ -2747,6 +2747,21 @@ annotate AdminService.DevtoberfestConfig with {
                       ]
                     }
                     @Common.Text: currentEvent.name @Common.TextArrangement: #TextOnly;
+  edition           @title: 'Devtoberfest Edition'
+                    @Common.Label: 'Devtoberfest Edition'
+                    @Common.Text: edition.NAME @Common.TextArrangement: #TextOnly
+                    @Common.ValueList: {
+                      Label: 'Edition',
+                      CollectionPath: 'DevtoberfestEditionPickList',
+                      Parameters: [
+                        { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: edition_ID, ValueListProperty: 'ID' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'NAME' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'YEAR' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'STARTDATE' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'ENDDATE' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'ISCURRENT' }
+                      ]
+                    };
   termsText         @title: 'Content Rules (markdown)'
                     @Common.Label: 'Content Rules (markdown)'
                     @UI.MultiLineText;
@@ -2771,9 +2786,10 @@ annotate AdminService.DevtoberfestConfig with @UI: {
     Title: 'Active',
     Criticality: isActive
   },
-  SelectionFields: [ isActive, currentEvent_ID ],
+  SelectionFields: [ isActive, currentEvent_ID, edition_ID ],
   LineItem: [
     { Value: currentEvent.name,      Label: 'Event' },
+    { Value: edition.NAME,           Label: 'Edition' },
     { Value: currentEvent.startDate, Label: 'Start' },
     { Value: currentEvent.endDate,   Label: 'End' },
     { Value: termsVersion,           Label: 'Terms Ver' },
@@ -2789,6 +2805,7 @@ annotate AdminService.DevtoberfestConfig with @UI: {
   ],
   FieldGroup#General: { Data: [
     { Value: currentEvent_ID, Label: 'Event' },
+    { Value: edition_ID, Label: 'Devtoberfest Edition' },
     { Value: isActive },
     { Value: termsVersion }
   ]},
@@ -2802,6 +2819,30 @@ annotate AdminService.DevtoberfestConfig with @UI: {
     { Value: activitiesUrl }
   ]}
 };
+
+// Value-help dialog columns for the Edition picker.
+annotate AdminService.DevtoberfestEditionPickList with {
+  ID        @Common.Label: 'Edition ID';
+  NAME      @Common.Label: 'Name';
+  YEAR      @Common.Label: 'Year';
+  STARTDATE @Common.Label: 'Start';
+  ENDDATE   @Common.Label: 'End';
+  ISCURRENT @Common.Label: 'Is Current';
+};
+
+annotate AdminService.DevtoberfestEditionPickList with @(
+  UI: {
+    HeaderInfo: { TypeName: 'Edition', TypeNamePlural: 'Editions', Title: { Value: NAME } },
+    SelectionFields: [ NAME, YEAR, ISCURRENT ],
+    LineItem: [
+      { Value: NAME },
+      { Value: YEAR },
+      { Value: STARTDATE },
+      { Value: ENDDATE },
+      { Value: ISCURRENT }
+    ]
+  }
+);
 
 // EventRegistrations — read-only audit table.
 // Annotated for FE inclusion as a list-style entity. The Devtoberfest

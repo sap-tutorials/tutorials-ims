@@ -7,6 +7,7 @@ using from '../db/homepage-featured';
 using from '../db/views';
 using from '../db/mcp-pats';
 using from '../app/admin-annotations';
+using { external.devtoberfest as external_dtf } from '../db/external/devtoberfest';
 
 @path: '/admin'
 @requires: 'Admin'
@@ -453,6 +454,17 @@ service AdminService {
   @odata.draft.enabled
   @requires: 'Admin'
   entity DevtoberfestConfig as projection on ims.DevtoberfestConfig;
+
+  // Value-help picklist for DevtoberfestConfig.edition — Devtoberfest Planner
+  // Editions via the cross-container facade (external.devtoberfest.Edition →
+  // DTF_EDITION_V1). Read-only; mirrors TutorialPickList. Returns no rows in
+  // environments where the devtoberfest-planner-db synonym/grant is not
+  // deployed (e.g. PROD today) — no error, empty picker.
+  @readonly
+  @cds.redirection.target: false
+  entity DevtoberfestEditionPickList as projection on external_dtf.Edition {
+    ID, YEAR, NAME, STARTDATE, ENDDATE, ISCURRENT
+  };
 
   @readonly
   entity EventRegistrations as projection on ims.EventRegistrations;

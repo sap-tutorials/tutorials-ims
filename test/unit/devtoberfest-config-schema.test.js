@@ -78,6 +78,14 @@ describe('DevtoberfestConfig schema (multi-row + isActive)', () => {
     expect(activeRows.length).toBe(1);
   });
 
+  it('DevtoberfestConfig has an edition association FK', () => {
+    const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
+    // Managed association mints a foreign-key element edition_ID.
+    expect(DevtoberfestConfig.elements.edition).toBeDefined();
+    expect(DevtoberfestConfig.elements.edition_ID).toBeDefined();
+    expect(DevtoberfestConfig.elements.edition_ID.type).toBe('cds.String');
+  });
+
   it('UPDATE that sets isActive=false on the active row leaves zero rows active', async () => {
     const id = cds.utils.uuid();
     await INSERT.into(DevtoberfestConfig).entries({

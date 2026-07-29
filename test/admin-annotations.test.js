@@ -243,4 +243,30 @@ describe('UI Annotations in $metadata', () => {
       expect(Array.isArray(data.value)).toBe(true);
     });
   });
+
+  describe('DevtoberfestConfig edition value help', () => {
+    it('exposes the DevtoberfestEditionPickList entity set', () => {
+      expect(metadata).toContain('DevtoberfestEditionPickList');
+    });
+
+    it('has a ValueList on edition_ID pointing at DevtoberfestEditionPickList', () => {
+      // This CollectionPath string is ONLY present when the @Common.ValueList on the
+      // edition association is compiled and propagated to the edition_ID FK.
+      // Task 2 added DevtoberfestEditionPickList as an EntitySet/EntityType name —
+      // but it does NOT add CollectionPath references. Only the Task 3 @Common.ValueList
+      // annotation produces this specific string in the EDMX.
+      expect(metadata).toContain('CollectionPath" String="DevtoberfestEditionPickList"');
+
+      // The cds-compiler propagates association-level annotations onto the generated FK;
+      // verify the edition_ID annotations region exists with both the ValueList and
+      // Common.Text/TextOnly arrangement (proves FK propagation worked).
+      const fkRegion = metadata.match(
+        /<Annotations Target="AdminService\.DevtoberfestConfig\/edition_ID"[\s\S]*?<\/Annotations>/
+      );
+      expect(fkRegion, 'edition_ID FK annotations not found — compiler did not propagate the association-level annotations').toBeTruthy();
+      expect(fkRegion[0]).toContain('Term="Common.ValueList"');
+      expect(fkRegion[0]).toContain('CollectionPath" String="DevtoberfestEditionPickList"');
+      expect(fkRegion[0]).toContain('TextArrangementType/TextOnly');
+    });
+  });
 });
