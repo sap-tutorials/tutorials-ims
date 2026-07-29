@@ -1,13 +1,14 @@
 sap.ui.define([
   "sap/ui/core/mvc/ControllerExtension",
   "sap/ui/model/json/JSONModel",
-  "sap/m/SelectDialog",
-  "sap/m/StandardListItem",
-  "sap/ui/model/Filter",
-  "sap/ui/model/FilterOperator",
+  "sap/m/TableSelectDialog",
+  "sap/m/ColumnListItem",
+  "sap/m/Column",
+  "sap/m/Label",
+  "sap/m/Text",
   // AMD shim from Task 7 — isomorphic ESM merge helper exposed as a UI5 module.
   "sap/tutorials/admin/missions/ext/merge-branch-perf-amd"
-], function (ControllerExtension, JSONModel, SelectDialog, StandardListItem, Filter, FilterOperator, mergeBranchPerfMod) {
+], function (ControllerExtension, JSONModel, TableSelectDialog, ColumnListItem, Column, Label, Text, mergeBranchPerfMod) {
   "use strict";
 
   var mergeBranchPerf = mergeBranchPerfMod.mergeBranchPerf;
@@ -28,21 +29,54 @@ sap.ui.define([
   // showValueHelp uses a FORMATTER (raw String -> Boolean return), NOT an
   // expression binding over a Boolean property — so the String taskType is never
   // coerced to Boolean (which threw "TUTORIAL is not a valid boolean value").
-  function _openPicker(oInput, sEntitySet, sTitleField, sIdField) {
+  // Per-entity picker column config. Each `field` is both a $select column and a
+  // TableSelectDialog table column. Free-text search uses OData $search (→ HANA
+  // CONTAINS via @cds.search on AdminService.Tutorials: title/slug/primaryTag/
+  // description) so a valid row like cp-aibus-dox-ui-sub is findable by slug/tag,
+  // not just a title-prefix match. Groups has slug but no primaryTag and no
+  // @cds.search, so it searches title/slug only via a per-field OR filter.
+  var PICKER_CONFIG = {
+    Tutorials: {
+      titleField: "title",
+      columns: [
+        { field: "title", label: "Title" },
+        { field: "slug", label: "Slug" },
+        { field: "primaryTag", label: "Tag" },
+        { field: "legacyIdStr", label: "Legacy ID" }
+      ],
+      useSearch: true // AdminService.Tutorials has @cds.search
+    },
+    Groups: {
+      titleField: "title",
+      columns: [
+        { field: "title", label: "Title" },
+        { field: "slug", label: "Slug" },
+        { field: "legacyIdStr", label: "Legacy ID" }
+      ],
+      useSearch: true // Groups projection also serves title/slug $search
+    }
+  };
+
+  function _openPicker(oInput, sEntitySet) {
     var oContext = oInput.getBindingContext();
     if (!oContext) return;
     var oODataModel = oContext.getModel();
+    var oCfg = PICKER_CONFIG[sEntitySet];
+    var sIdField = "ID";
 
-    var oDialog = new SelectDialog({
+    var oDialog = new TableSelectDialog({
       title: "Select " + (sEntitySet === "Tutorials" ? "Tutorial" : "Group"),
       noDataText: "No matches",
       growing: true,
       growingThreshold: 50,
+      // Server-side search: re-bind the list with $search so ALL rows are
+      // searched at the DB (not just the client-loaded page). This is why the
+      // old 200-row title-only client filter hid valid rows.
       search: function (oEvent) {
         var sQuery = oEvent.getParameter("value") || "";
         var oBinding = oEvent.getSource().getBinding("items");
         if (!oBinding) return;
-        oBinding.filter(sQuery ? [new Filter(sTitleField, FilterOperator.Contains, sQuery)] : []);
+        oBinding.changeParameters({ $search: sQuery ? JSON.stringify(sQuery) : undefined });
       },
       confirm: function (oEvent) {
         var oItem = oEvent.getParameter("selectedItem");
@@ -56,21 +90,21 @@ sap.ui.define([
       cancel: function () { oDialog.destroy(); }
     });
 
-    var oLocal = new JSONModel({ items: [] });
-    oDialog.setModel(oLocal);
-
-    var oList = oODataModel.bindList("/" + sEntitySet, undefined, undefined, undefined, {
-      $select: "ID," + sTitleField,
-      $$ownRequest: true
+    // Table columns from config.
+    oCfg.columns.forEach(function (col) {
+      oDialog.addColumn(new Column({ header: new Label({ text: col.label }) }));
     });
-    oList.requestContexts(0, 200).then(function (aContexts) {
-      oLocal.setProperty("/items", aContexts.map(function (c) { return c.getObject(); }));
-      oDialog.bindAggregation("items", {
-        path: "/items",
-        template: new StandardListItem({ title: "{" + sTitleField + "}", description: "{ID}" })
-      });
-    }).catch(function (e) {
-      oLocal.setProperty("/items", [{ ID: "", title: "Error loading: " + (e && e.message || e) }]);
+
+    var sSelect = [sIdField].concat(oCfg.columns.map(function (c) { return c.field; })).join(",");
+    var oTemplate = new ColumnListItem({
+      cells: oCfg.columns.map(function (col) { return new Text({ text: "{" + col.field + "}" }); })
+    });
+
+    oDialog.setModel(oODataModel);
+    oDialog.bindAggregation("items", {
+      path: "/" + sEntitySet,
+      parameters: { $select: sSelect, $count: true },
+      template: oTemplate
     });
 
     oDialog.open();
@@ -127,9 +161,9 @@ sap.ui.define([
       if (!oContext) return;
       var sType = oContext.getProperty("taskType");
       if (sType === "TUTORIAL") {
-        _openPicker(oInput, "Tutorials", "title", "ID");
+        _openPicker(oInput, "Tutorials");
       } else if (sType === "GROUP") {
-        _openPicker(oInput, "Groups", "title", "ID");
+        _openPicker(oInput, "Groups");
       }
     },
 

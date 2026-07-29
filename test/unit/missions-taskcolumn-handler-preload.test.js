@@ -67,6 +67,29 @@ describe('missions Path Items TaskColumn value-help', () => {
     expect(handler).toMatch(/sTaskType === "TUTORIAL" \|\| sTaskType === "GROUP"/);
   });
 
+  // #1366 seam regression: the custom picker (#1353) replaced the native FE
+  // @Common.ValueList, so #1366's widened columns/$search only take effect if
+  // THIS dialog fetches and searches them. The old picker did a title-only
+  // Contains filter over a 200-row client page ($select: "ID,title"), which hid
+  // valid rows like cp-aibus-dox-ui-sub behind ~2000 paged tutorials.
+  it('the tutorial picker $selects slug/primaryTag/legacyIdStr, not just ID+title', () => {
+    // Config-driven columns must include the widened fields.
+    for (const f of ['slug', 'primaryTag', 'legacyIdStr']) {
+      expect(handler).toContain(`field: "${f}"`);
+    }
+    // The dead title-only projection must be gone.
+    expect(handler).not.toContain('$select: "ID," + sTitleField');
+    expect(handler).not.toContain('$select: "ID,title"');
+  });
+
+  it('the picker searches server-side via $search (not a client-only 200-row Contains filter)', () => {
+    // Server-side search re-binds with $search so ALL rows are matched at the DB.
+    expect(handler).toMatch(/changeParameters\(\{\s*\$search/);
+    // No reintroduction of the capped client fetch or the title-only Contains filter.
+    expect(handler).not.toContain('requestContexts(0, 200)');
+    expect(handler).not.toMatch(/FilterOperator\.Contains/);
+  });
+
   it('the dead lazily-loaded TaskColumnHandler module is gone and not eager-loaded', () => {
     expect(existsSync(join(MISSIONS, 'ext', 'TaskColumnHandler.js'))).toBe(false);
     const comp = readFileSync(join(MISSIONS, 'Component.js'), 'utf8');
