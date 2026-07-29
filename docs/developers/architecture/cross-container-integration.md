@@ -63,17 +63,17 @@ A raw synonym is invisible to the CAP model. On top of each synonym we define a 
 Consequences for this pattern:
 
 1. **Never assume the CDS source name is the deployed name.** Always introspect the *deployed* container (`hana-cli`) to read the true physical object + column names and their case, then model the synonym and facade against those.
-2. **The published view is where you fix mismatches.** When the provider's physical names don't line up with what a clean CDS proxy wants (e.g. mixed-case base columns, awkward generated names), **alias objects and columns in the view** using quoted identifiers so the view exposes exactly the names the proxy expects:
+2. **The published view is where you fix mismatches — and every output column MUST be aliased UPPERCASE.** This is the rule that gets missed most. A CAP consumer projecting the facade generates a view that references the columns **UNQUOTED** (`SELECT createdAt FROM …`), which HANA folds to **UPPERCASE** (`CREATEDAT`) at resolution time. So the provider view must expose columns as their UPPERCASE deployed names — `"CREATEDAT" AS "CREATEDAT"`, NOT `AS "createdAt"`. A camelCase alias deploys fine on the provider but makes the *consumer's* generated view fail with `invalid column name: CREATEDAT`. Alias objects and every column to their UPPERCASE physical names:
    ```sql
    VIEW "TUTORIAL_VALUE_HELP_V1" AS
      SELECT "ID"          AS "ID",
-            "SLUG"        AS "slug",
-            "TITLE"       AS "title",
-            "PRIMARYTAG"  AS "primaryTag"
+            "SLUG"        AS "SLUG",
+            "TITLE"       AS "TITLE",
+            "PRIMARYTAG"  AS "PRIMARYTAG"
      FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
      WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
    ```
-   > **Source-side identifiers use the deployed catalog case (UPPERCASE for unquoted-DDL tables); output aliases are the proxy contract.**
+   > **BOTH source AND output identifiers use the deployed UPPERCASE catalog case. Do NOT lower/camelCase the output aliases — the consumer references them unquoted (folded uppercase). Yes, the resulting OData property names are uppercase; that is the correct, working tradeoff (accepted for the reciprocal DTF_*_V1 views). The facade entity elements must be UPPERCASE to match.**
 
    The view is the compatibility shim between messy physical names and the proxy contract — another reason all cross-container access goes through a view (D1), not a base table.
 3. **The synonym target and the facade entity/element names must all agree** with the view's exposed names, character-for-character and case-for-case.
@@ -101,7 +101,7 @@ Generic steps. Substitute your provider/consumer names. `PROVIDER` = the app pub
 ```sql
 -- db/src/TUTORIAL_VALUE_HELP_V1.hdbview
 VIEW "TUTORIAL_VALUE_HELP_V1" AS
-  SELECT "ID", "SLUG" AS "slug", "TITLE" AS "title", "PRIMARYTAG" AS "primaryTag"
+  SELECT "ID", "SLUG" AS "SLUG", "TITLE" AS "TITLE", "PRIMARYTAG" AS "PRIMARYTAG"  -- UPPERCASE aliases (see D4a)
   FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
   WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
 ```
@@ -211,6 +211,18 @@ Phase 3  VERIFY — probe each synonym with a real SQL read (hana-cli) BEFORE tr
 **Practical tip:** keep the Phase-2 artifacts (grants + synonym + facade) as a self-contained, revertable set. If a synonym wedges a deploy, removing those files returns the container to a clean Phase-1 state.
 
 ---
+
+## Pre-flight checklist (run BEFORE generating any views/facades)
+
+Don't work from memory or the CDS source — check these against this doc every time, including when scripting a generator:
+
+- [ ] **Every provider-view output column aliased UPPERCASE** (`AS "CREATEDAT"`, not `AS "createdAt"`). D4a rule #2. A generator that lowercases/camelCases aliases will pass the provider build and fail the *consumer* deploy with `invalid column name`. This was hit twice (#1347) — the second time in a generator that pattern-matched CDS-source casing. Check the generator's alias function outputs uppercase.
+- [ ] **Facade entity elements UPPERCASE**, matching the view aliases exactly.
+- [ ] **Synonym + config names are the UPPERCASE slugified facade physical name** (`EXTERNAL_<NS>_<ENTITY>`).
+- [ ] **`.hdbsynonymconfig` present** with `schema.configure: "<grantor-service>/schema"` (not `grantor:`).
+- [ ] **Provider role uses a `#`-suffixed name** for `privileges_with_grant_option`; consumer `object_owner` requests that `#` role.
+- [ ] **`TARGET_CONTAINER` set** on the consumer db-deployer (two HDI services bound).
+- [ ] **Both containers on the same HANA Cloud instance** (verify hosts via `cf` service keys, never `cds bind`).
 
 ## Gotchas
 
