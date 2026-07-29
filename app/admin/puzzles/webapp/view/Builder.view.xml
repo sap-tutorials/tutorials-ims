@@ -1,0 +1,9 @@
+<mvc:View controllerName="sap.tutorials.admin.puzzles.controller.Builder"
+  xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m" xmlns:l="sap.ui.layout">
+  <Page title="Puzzles" class="sapUiContentPadding">
+    <content>
+      <MessageStrip text="Puzzle builder loads here." showIcon="true" class="sapUiSmallMargin"/>
+      <VBox id="gridHost"/>
+    </content>
+  </Page>
+</mvc:View>
