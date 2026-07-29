@@ -1,6 +1,7 @@
 namespace com.sap.developers.ims;
 
 using { com.sap.developers.ims as ims, cuid, managed } from './schema';
+using { external.devtoberfest as planner } from './external/devtoberfest';
 
 /**
  * Per-Devtoberfest-event configuration row. Multi-row by design: one
@@ -26,6 +27,7 @@ using { com.sap.developers.ims as ims, cuid, managed } from './schema';
 entity DevtoberfestConfig : cuid, managed {
   isActive          : Boolean default false;
   currentEvent      : Association to ims.Events;
+  edition           : Association to planner.Edition;   // planner GUID stored in edition_ID
   termsText         : LargeString;          // markdown body
   termsVersion      : Integer default 1;
   contentRulesUrl   : String(500);
