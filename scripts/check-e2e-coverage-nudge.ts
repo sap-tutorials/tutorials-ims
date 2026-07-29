@@ -10,6 +10,8 @@
 // gate would just breed no-op specs. Real coverage is proven by the existing
 // post-DEV-deploy e2e CI job actually running the specs, not by this nudge.
 
+import { execFileSync } from 'node:child_process';
+
 // Minimatch is available transitively; but to avoid a new dep we implement a
 // tiny glob matcher for the two patterns we use ('**' = any depth, '*' =
 // within a path segment). Only these two operators are needed for UI_GLOBS.
@@ -65,31 +67,42 @@ function readChangedFiles(): string[] {
   }
   const base = process.env.E2E_NUDGE_BASE || 'origin/main';
   const head = process.env.E2E_NUDGE_HEAD || 'HEAD';
-  const { execFileSync } = require('node:child_process');
-  const out: string = execFileSync('git', ['diff', '--name-only', `${base}...${head}`], {
-    encoding: 'utf8',
-  });
-  return out.split('\n').map((s) => s.trim()).filter(Boolean);
+  try {
+    const out: string = execFileSync('git', ['diff', '--name-only', `${base}...${head}`], {
+      encoding: 'utf8',
+    });
+    return out.split('\n').map((s) => s.trim()).filter(Boolean);
+  } catch {
+    // Git failed (not a repo, no origin/main, etc.); treat as "cannot determine"
+    // and return empty list (no nudge will be issued).
+    return [];
+  }
 }
 
 function main(): void {
-  const files = readChangedFiles();
-  const { uiChanged, shouldNudge } = classifyChangedFiles(files);
-  if (shouldNudge) {
-    console.log(
-      '::warning title=Consider an e2e spec::This PR changes user-facing UI but no ' +
-        'test/e2e/ spec changed. If a user can observe this change, add or update an ' +
-        'e2e spec (see docs/developers/reference/e2e-coverage-pattern.md). Advisory only.',
-    );
-    console.log('[e2e-coverage-nudge] UI paths changed without a test/e2e change:');
-    for (const f of uiChanged) console.log(`  ${f}`);
-  } else {
-    console.log('::notice title=e2e coverage nudge::No nudge — either no UI change, or an e2e spec accompanies it.');
+  try {
+    const files = readChangedFiles();
+    const { uiChanged, shouldNudge } = classifyChangedFiles(files);
+    if (shouldNudge) {
+      console.log(
+        '::warning title=Consider an e2e spec::This PR changes user-facing UI but no ' +
+          'test/e2e/ spec changed. If a user can observe this change, add or update an ' +
+          'e2e spec (see docs/developers/reference/e2e-coverage-pattern.md). Advisory only.',
+      );
+      console.log('[e2e-coverage-nudge] UI paths changed without a test/e2e change:');
+      for (const f of uiChanged) console.log(`  ${f}`);
+    } else {
+      console.log('::notice title=e2e coverage nudge::No nudge — either no UI change, or an e2e spec accompanies it.');
+    }
+  } catch {
+    // Any error (including from readChangedFiles if git fails unexpectedly):
+    // exit 0 with a notice (advisory only, never blocks).
+    console.log('::notice title=e2e coverage nudge::Could not determine changed files; no nudge issued.');
   }
   process.exit(0);
 }
 
 // Run main() only as a CLI, not when imported by the unit test.
-if (process.argv[1] && process.argv[1].endsWith('check-e2e-coverage-nudge.ts')) {
+if (process.argv[1] && /check-e2e-coverage-nudge\.(ts|js)$/.test(process.argv[1])) {
   main();
 }
