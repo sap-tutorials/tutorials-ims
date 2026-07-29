@@ -49,6 +49,46 @@
   z-index: 0;
 }
 
+/* Image-banner variant: drop the gradient/padding, let the img fill. */
+.dtf-header[data-has-banner="true"] {
+  padding: 0;
+  background: none;
+  display: block;
+}
+.dtf-header[data-has-banner="true"]::before { display: none; }
+
+.dtf-banner-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
+}
+
+/* CTA overlaid lower-right on the banner, with a legibility scrim. */
+.dtf-cta-overlay {
+  position: absolute;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 2;
+  align-items: flex-end;
+  padding: 0.4rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(2px);
+}
+
+/* Below the body breakpoint, reflow the CTA to a static bar under the banner. */
+@media (max-width: 720px) {
+  .dtf-cta-overlay {
+    position: static;
+    background: none;
+    backdrop-filter: none;
+    align-items: center;
+    padding: 0;
+    margin-top: 0.75rem;
+  }
+}
+
 .dtf-brand,
 .dtf-cta-wrap {
   position: relative;

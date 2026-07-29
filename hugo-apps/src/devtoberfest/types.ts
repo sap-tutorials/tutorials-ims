@@ -13,6 +13,7 @@ export interface StatusResponse {
   faqUrl: string
   gameboardUrl: string
   activitiesUrl: string
+  bannerUrl: string
 }
 
 export interface TermsResponse {
