@@ -7,6 +7,7 @@ import { GET_BRANCH_RECOMMENDATION_TOOL, getBranchRecommendationHandler } from '
 import { FIND_LEARNING_PATH_TOOL, findLearningPathHandler } from './kg/joule-tool-find-path.js';
 import { FIND_COMMUNITY_PEERS_TOOL, findCommunityPeersHandler } from './kg/joule-tool-community-peers.js';
 import { DESCRIBE_COMMUNITY_TOOL, describeCommunityHandler } from './kg/joule-tool-describe-community.js';
+import { PUZZLE_HINT_TOOL, puzzleHintHandler } from './kg/joule-tool-puzzle-hint.js';
 import { EXPAND_SEARCH_CONCEPTS_TOOL, expandSearchConceptsHandler } from './kg/joule-tool-expand-concepts.js';
 import { embed as embedInputs } from './embedding-client.js';
 import { resolveEmbeddingSettings } from './chat-settings-resolver.js';
@@ -316,6 +317,9 @@ export function buildToolRegistry({ settings, pageContext, isAdmin = false } = {
   if (settings?.communityPeersEnabled) {
     tools.push(FIND_COMMUNITY_PEERS_TOOL);
     tools.push(DESCRIBE_COMMUNITY_TOOL);
+  }
+  if (settings?.puzzleHintEnabled) {
+    tools.push(PUZZLE_HINT_TOOL);
   }
   return tools;
 }
@@ -713,6 +717,16 @@ export async function dispatchTool(name, args, user) {
     } catch (err) {
       LOG.warn('describeCommunity dispatch failed:', err.message);
       return { members: [], reason: 'dispatch_failed' };
+    }
+  }
+
+  if (name === 'puzzleHint') {
+    try {
+      const db = await cds.connect.to('db');
+      return await puzzleHintHandler({ db, args });
+    } catch (err) {
+      LOG.warn('puzzleHint dispatch failed:', err.message);
+      return { reason: 'dispatch_failed' };
     }
   }
 
