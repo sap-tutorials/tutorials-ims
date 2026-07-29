@@ -2412,6 +2412,18 @@ annotate AdminService.AdvocatePhotos with @(
   }
 );
 
+// DevtoberfestBanner — FE renders an UploadSet for the @Core.MediaType
+// `image` column when it's a LineItem in the composition's FieldGroup.
+annotate AdminService.DevtoberfestBanner with {
+  image  @Common.Label: 'Banner Image'  @Core.ContentDisposition: { Filename: 'devtoberfest-banner.webp' };
+};
+
+annotate AdminService.DevtoberfestBanner with @(
+  UI.LineItem: [
+    { $Type: 'UI.DataField', Value: image, Label: 'Banner Image' }
+  ]
+);
+
 // #777 followup (2026-06-30) — minimal LineItem for the Advocate Object Page
 // ownedTutorials facet. Read-only display; shown inside the OwnedTutorials
 // reference facet (Target: 'ownedTutorials/@UI.LineItem').
@@ -2801,7 +2813,8 @@ annotate AdminService.DevtoberfestConfig with @UI: {
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General',  Label: 'Event & Status' },
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Terms',    Label: 'Content Rules / Terms' },
-    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#SubPages', Label: 'Sub-pages (leave blank to hide)' }
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#SubPages', Label: 'Sub-pages (leave blank to hide)' },
+    { $Type: 'UI.ReferenceFacet', Target: 'banner/@UI.LineItem',     Label: 'Event Banner' }
   ],
   FieldGroup#General: { Data: [
     { Value: currentEvent_ID, Label: 'Event' },

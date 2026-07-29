@@ -2189,6 +2189,17 @@
           "type": "cds.String",
           "length": 500,
           "@cds.persistence.name": "ACTIVITIESURL"
+        },
+        "hasBanner": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "HASBANNER"
+        },
+        "bannerUpdatedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "BANNERUPDATEDAT"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_DEVTOBERFESTCONFIG"

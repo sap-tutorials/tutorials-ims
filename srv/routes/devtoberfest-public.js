@@ -15,6 +15,7 @@
 import cds from '@sap/cds';
 import { resolveUser } from '../lib/resolve-user.js';
 import { resolveUserSapId } from '../lib/resolve-db-user.js';
+import { fetchBanner } from '../lib/devtoberfest-banner-store.js';
 
 const LOG = cds.log('devtoberfest');
 
@@ -56,6 +57,7 @@ async function statusHandler(req, res) {
       faqUrl: config.faqUrl || '',
       gameboardUrl: config.gameboardUrl || '',
       activitiesUrl: config.activitiesUrl || '',
+      bannerUrl: config.hasBanner ? '/api/devtoberfest/banner' : '',
     });
   } catch (err) {
     LOG.error('GET /api/devtoberfest/status failed:', err);
@@ -81,6 +83,27 @@ async function termsHandler(_req, res) {
   }
 }
 
+async function bannerHandler(req, res) {
+  try {
+    await cds.connect.to('db');
+    const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
+    const config = await SELECT.one.from(DevtoberfestConfig).columns('ID', 'hasBanner').where({ isActive: true });
+    if (!config?.hasBanner) return res.status(404).end();
+
+    const out = await fetchBanner(config.ID);
+    if (!out) return res.status(404).end();
+
+    res.setHeader('ETag', out.etag);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (req.headers['if-none-match'] === out.etag) return res.status(304).end();
+    res.setHeader('Content-Type', out.mimeType);
+    return res.send(out.buffer);
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/banner failed:', err);
+    return res.status(500).end();
+  }
+}
+
 export function register(app) {
   // context+auth middlewares populate cds.context.user / req.user when
   // a Bearer (XSUAA) or Basic credential is presented. The route stays
@@ -91,6 +114,7 @@ export function register(app) {
   const _authMw    = cds.middlewares?.auth?.()    || ((req, _res, next) => next());
   app.get('/api/devtoberfest/status', _contextMw, _authMw, statusHandler);
   app.get('/api/devtoberfest/terms',  _contextMw, _authMw, termsHandler);
+  app.get('/api/devtoberfest/banner', bannerHandler);
 }
 
-export { statusHandler, termsHandler };
+export { statusHandler, termsHandler, bannerHandler };
