@@ -1,0 +1,160 @@
+name: Report rebuild failure (email via GitHub issue)
+description: >-
+  On a failed content rebuild, open (or comment on) a deduplicated GitHub issue
+  assigned to the on-call owner so GitHub emails them natively — no SMTP/Slack
+  secret required (#1373). On success, close the open failure issue for the same
+  channel, which resets the consecutive-failure streak. Because each consecutive
+  failure adds one comment to the same open issue, the comment count IS the
+  consecutive-failure count; crossing `consecutive-threshold` escalates.
+
+inputs:
+  outcome:
+    description: '"failure" to file/append, "success" to resolve (close) the open issue.'
+    required: true
+  channel:
+    description: 'Rebuild channel/env used to dedup issues (e.g. "qa", "prod", "dev").'
+    required: true
+  run-url:
+    description: 'Link to the failing (or succeeding) Actions run.'
+    required: true
+  trigger:
+    description: 'github.event_name of the run (repository_dispatch, workflow_dispatch, ...).'
+    required: false
+    default: ''
+  details:
+    description: 'Extra one-line failure context (failure signature, mode, etc.).'
+    required: false
+    default: ''
+  assignees:
+    description: 'Comma-separated GitHub logins to assign (they receive the email).'
+    required: false
+    default: 'jung-thomas'
+  label:
+    description: 'Label used to find/dedup the failure issue.'
+    required: false
+    default: 'rebuild-failure'
+  consecutive-threshold:
+    description: 'Escalate (add rebuild-failure-escalated label + @mention) once the open issue reaches this many consecutive failures.'
+    required: false
+    default: '3'
+  github-token:
+    description: 'Token with issues:write on this repo. Defaults to the job GITHUB_TOKEN.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Report / resolve rebuild failure issue
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        OUTCOME: ${{ inputs.outcome }}
+        CHANNEL: ${{ inputs.channel }}
+        RUN_URL: ${{ inputs.run-url }}
+        TRIGGER: ${{ inputs.trigger }}
+        DETAILS: ${{ inputs.details }}
+        ASSIGNEES: ${{ inputs.assignees }}
+        LABEL: ${{ inputs.label }}
+        THRESHOLD: ${{ inputs.consecutive-threshold }}
+      run: |
+        set -uo pipefail
+
+        # Stable per-channel marker so we find the same issue across runs
+        # without depending on the exact title text.
+        MARKER="<!-- rebuild-failure-marker channel=${CHANNEL} -->"
+        ESCALATED_LABEL="rebuild-failure-escalated"
+
+        # Locate an existing OPEN failure issue for this channel. Search by the
+        # dedup label, then match the hidden marker in the body so per-channel
+        # issues never collide (qa vs prod). --search keeps the marker literal.
+        find_open_issue() {
+          gh issue list --repo "$REPO" --state open --label "$LABEL" \
+            --json number,body --limit 50 \
+            --jq "[.[] | select(.body | contains(\"$MARKER\"))][0].number // empty" \
+            2>/dev/null || true
+        }
+
+        ISSUE_NUM="$(find_open_issue)"
+
+        if [ "$OUTCOME" = "success" ]; then
+          # Success path — resolve any open failure issue for this channel and
+          # reset the streak. No-op (exit 0) when there is nothing open.
+          if [ -z "$ISSUE_NUM" ]; then
+            echo "No open ${CHANNEL} rebuild-failure issue to resolve."
+            exit 0
+          fi
+          gh issue comment "$ISSUE_NUM" --repo "$REPO" \
+            --body "✅ Recovered — a subsequent **${CHANNEL}** content rebuild succeeded. Auto-closing; the consecutive-failure streak is reset. Run: ${RUN_URL}" \
+            || echo "::warning::Could not comment recovery on #${ISSUE_NUM}"
+          gh issue close "$ISSUE_NUM" --repo "$REPO" --reason completed \
+            || echo "::warning::Could not auto-close #${ISSUE_NUM}"
+          echo "Resolved #${ISSUE_NUM} (${CHANNEL} rebuild recovered)."
+          exit 0
+        fi
+
+        # ---- failure path ----------------------------------------------------
+
+        # Ensure the dedup label exists (idempotent; ignore "already exists").
+        gh label create "$LABEL" --repo "$REPO" --color "B60205" \
+          --description "Content-rebuild workflow failed (#1373 auto-filed)" 2>/dev/null || true
+
+        ASSIGNEE_FLAGS=()
+        IFS=',' read -ra _A <<< "$ASSIGNEES"
+        for a in "${_A[@]}"; do
+          a="$(echo "$a" | tr -d '[:space:]')"
+          [ -n "$a" ] && ASSIGNEE_FLAGS+=(--assignee "$a")
+        done
+
+        DETAIL_LINE=""
+        [ -n "$DETAILS" ] && DETAIL_LINE="- **Detail:** ${DETAILS}"
+
+        if [ -z "$ISSUE_NUM" ]; then
+          # First failure of a new streak — create the issue. Assignment is what
+          # triggers GitHub's native email to the on-call owner. Build the body
+          # with a single printf (no heredoc — an unindented heredoc breaks the
+          # YAML block scalar; and per-line $(printf) would have its trailing
+          # newlines stripped by command substitution, collapsing the layout).
+          DETAIL_BLOCK=""
+          [ -n "$DETAIL_LINE" ] && DETAIL_BLOCK="${DETAIL_LINE}"$'\n'
+          BODY="$(printf '%s\n\n**Automated alert (#1373).** A **%s** content rebuild failed.\n\n- **Channel:** %s\n- **Trigger:** %s\n- **First failing run:** %s\n%s\nThis issue is deduplicated per channel: each additional consecutive failure adds a comment below (so the comment count is the consecutive-failure count). A subsequent successful rebuild auto-closes this issue and resets the streak.\n\nConsecutive failures: **1**\n' \
+            "$MARKER" "$CHANNEL" "$CHANNEL" "$TRIGGER" "$RUN_URL" "$DETAIL_BLOCK")"
+          NEW_URL="$(gh issue create --repo "$REPO" \
+            --title "🚨 ${CHANNEL} content rebuild failing" \
+            --label "$LABEL" \
+            "${ASSIGNEE_FLAGS[@]}" \
+            --body "$BODY")" \
+            && echo "Filed new ${CHANNEL} rebuild-failure issue: ${NEW_URL}" \
+            || echo "::warning::Failed to create ${CHANNEL} rebuild-failure issue"
+          exit 0
+        fi
+
+        # Repeat failure — append a comment and recompute the streak. The streak
+        # count = number of failure comments + the original body's count of 1.
+        FAIL_COMMENTS="$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json comments \
+          --jq '[.comments[] | select(.body | contains("Consecutive failure #"))] | length' 2>/dev/null || echo 0)"
+        COUNT=$(( FAIL_COMMENTS + 2 ))   # +1 original body, +1 this new comment
+
+        FAIL_BODY="❌ Consecutive failure #${COUNT} (**${CHANNEL}**, trigger \`${TRIGGER}\`). Run: ${RUN_URL}"
+        [ -n "$DETAILS" ] && FAIL_BODY="${FAIL_BODY}"$'\n'"${DETAIL_LINE}"
+        gh issue comment "$ISSUE_NUM" --repo "$REPO" --body "$FAIL_BODY" \
+          || echo "::warning::Could not comment failure on #${ISSUE_NUM}"
+
+        # Re-assert assignees in case the issue was un-assigned since creation.
+        [ "${#ASSIGNEE_FLAGS[@]}" -gt 0 ] && gh issue edit "$ISSUE_NUM" --repo "$REPO" "${ASSIGNEE_FLAGS[@]}" >/dev/null 2>&1 || true
+
+        if [ "$COUNT" -ge "$THRESHOLD" ]; then
+          gh label create "$ESCALATED_LABEL" --repo "$REPO" --color "5319E7" \
+            --description "N+ consecutive rebuild failures (#1373)" 2>/dev/null || true
+          gh issue edit "$ISSUE_NUM" --repo "$REPO" --add-label "$ESCALATED_LABEL" >/dev/null 2>&1 || true
+          MENTIONS=""
+          for a in "${_A[@]}"; do
+            a="$(echo "$a" | tr -d '[:space:]')"
+            [ -n "$a" ] && MENTIONS="${MENTIONS} @${a}"
+          done
+          gh issue comment "$ISSUE_NUM" --repo "$REPO" \
+            --body "⚠️ **${COUNT} consecutive ${CHANNEL} rebuild failures** (threshold ${THRESHOLD}).${MENTIONS} This is the exact silent-failure signature from #1373 — please investigate the run above." \
+            || echo "::warning::Could not post escalation on #${ISSUE_NUM}"
+        fi
+
+        echo "Appended failure #${COUNT} to #${ISSUE_NUM} (${CHANNEL})."

@@ -98,6 +98,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      # #1373 — the failure/recovery notifier opens, comments on, and closes a
+      # deduplicated GitHub issue; assignment triggers GitHub's native email.
+      issues: write
     # DEV rebuilds are disabled: the DEV approuter's REBUILD_API_KEY /
     # CONTENT_API_KEY are not configured, so the "Push content to AppRouter"
     # step 401s and the run goes red for no operational benefit — DEV content
@@ -643,6 +646,10 @@ jobs:
       # PipelineLog row on the srv so the failure surfaces in the admin
       # PipelineLog dashboard operators watch — not just as a red run in an
       # unwatched CI tab. Best-effort: never fail the job on the report itself.
+      # NOTE (#1373): PipelineLog alone is an unwatched surface — the "Notify on
+      # rebuild failure" step below is the real alert (auto-filed,
+      # assignee-emailed GitHub issue). This PipelineLog write is a secondary
+      # in-admin breadcrumb.
       - name: Report failure to PipelineLog
         if: ${{ failure() }}
         continue-on-error: true
@@ -666,3 +673,31 @@ jobs:
               --arg run "$RUN_URL" \
               '{pipelineType:"HUGO_BUILD", initiator:("ci/rebuild-content@"+$trigger), summary:("rebuild-content failed (env="+$env+", mode="+$mode+")"), errorDetails:("CI run failed before/at content publish. Logs: "+$run), metadata:{env:$env, mode:$mode, trigger:$trigger, runUrl:$run}}')" \
             || echo "::warning::PipelineLog failure-report POST did not complete"
+
+      # #1373 — the real alert. On failure, open (or append to) a deduplicated,
+      # per-env GitHub issue assigned to the on-call owner; GitHub emails the
+      # assignee natively (no SMTP/Slack secret). repository_dispatch runs have
+      # no human owner, so this is the only path that reaches a person.
+      - name: Notify on rebuild failure
+        if: ${{ failure() }}
+        uses: ./.github/actions/report-rebuild-failure
+        with:
+          outcome: failure
+          channel: ${{ steps.env.outputs.target }}
+          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          trigger: ${{ github.event_name }}
+          details: 'env=${{ steps.env.outputs.target }}, mode=${{ steps.mode.outputs.effective_mode }}'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # #1373 — on success, close any open rebuild-failure issue for this env and
+      # reset the consecutive-failure streak.
+      - name: Resolve rebuild-failure issue on success
+        if: ${{ success() }}
+        continue-on-error: true
+        uses: ./.github/actions/report-rebuild-failure
+        with:
+          outcome: success
+          channel: ${{ steps.env.outputs.target }}
+          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          trigger: ${{ github.event_name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
