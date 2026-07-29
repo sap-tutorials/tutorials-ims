@@ -1,0 +1,40 @@
+name: e2e coverage nudge
+
+# Advisory (non-blocking) reminder: when a PR changes user-facing UI paths
+# without touching test/e2e/, warn the author to consider a committed e2e
+# spec. Motivation: the #1353×#1366 seam (#1371) shipped a dead value-help
+# feature with every gate green because no gate exercised the deployed UI.
+# This check NEVER blocks merge — scripts/check-e2e-coverage-nudge.ts always
+# exits 0. Real coverage is proven by the existing post-DEV-deploy e2e job.
+on:
+  pull_request:
+    # Only spend a runner when a UI path OR the check itself changes. The
+    # script still self-classifies; this filter just keeps the queue clean.
+    paths:
+      - 'app/admin/**'
+      - 'app/**/webapp/**'
+      - 'hugo/layouts/**'
+      - 'hugo-apps/**'
+      - 'scripts/check-e2e-coverage-nudge.ts'
+      - '.github/workflows/e2e-coverage-nudge.yml'
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need base + head to diff. Fetch enough history for the merge base.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Run e2e coverage nudge (advisory)
+        env:
+          E2E_NUDGE_BASE: origin/${{ github.base_ref }}
+          E2E_NUDGE_HEAD: HEAD
+        run: npx tsx scripts/check-e2e-coverage-nudge.ts
