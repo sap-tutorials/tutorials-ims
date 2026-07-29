@@ -530,6 +530,22 @@ jobs:
           # no render-concepts call.
           LEGACY_CONCEPT_RENDER: ${{ inputs.legacy-concept-render == true && 'true' || 'false' }}
 
+      # #1373 — synthetic watchdog. A green publish step is not proof rows
+      # landed (the #1372 render-concepts 404 aborted AFTER an earlier
+      # green-looking phase). Probe GET /content/hashes on the target srv and
+      # fail if the active version serves no slugs, turning the silent
+      # publish-succeeded-but-empty class into a red run the notifier emails on.
+      # /content/hashes is public-read on prod srv; srv-qa gates it behind
+      # CONTENT_API_KEY_QA, so pass the QA key only for a qa-target dispatch.
+      - name: Verify publish landed rows
+        if: ${{ steps.publish.outcome == 'success' }}
+        uses: ./.github/actions/verify-publish-landed
+        with:
+          base-url: ${{ steps.srv.outputs.srv_url }}
+          bearer: ${{ steps.env.outputs.target == 'qa' && secrets.CONTENT_API_KEY_QA || '' }}
+          channel: ${{ steps.env.outputs.target }}
+          min-slugs: '1'
+
       - name: Purge orphan tutorials
         id: purge
         if: |

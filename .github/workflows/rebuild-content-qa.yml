@@ -152,6 +152,20 @@ jobs:
           CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
           CONTENT_API_KEY_QA: ${{ secrets.CONTENT_API_KEY_QA }}
 
+      # #1373 — synthetic watchdog. The publish step reporting success is not
+      # proof rows landed: the render-concepts 404 that hid for days (#1372)
+      # aborted the session AFTER a green-looking earlier phase. Probe
+      # GET /content/hashes on srv-qa and fail if the active version serves no
+      # slugs — turning the silent publish-succeeded-but-empty class into a red
+      # run that the failure notifier below emails on.
+      - name: Verify QA publish landed rows
+        uses: ./.github/actions/verify-publish-landed
+        with:
+          base-url: ${{ secrets.CAP_SRV_URL_QA }}
+          bearer: ${{ secrets.CONTENT_API_KEY_QA }}
+          channel: qa
+          min-slugs: '1'
+
       - name: Summary
         run: |
           echo "### QA Content Rebuild Complete" >> "$GITHUB_STEP_SUMMARY"
