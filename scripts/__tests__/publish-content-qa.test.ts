@@ -1,5 +1,13 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { resolvePublishConfig } from '../publish-content';
+
+const SRC = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'publish-content.ts'),
+  'utf8',
+);
 
 describe('publish-content qa channel', () => {
   afterEach(() => {
@@ -33,5 +41,23 @@ describe('publish-content qa channel', () => {
     } finally {
       process.argv = originalArgv;
     }
+  });
+
+  // Regression guard: the render-concepts phase (#1327) hits
+  // POST /content/publish/render-concepts, which is intentionally NOT
+  // registered on srv-qa (allowlisted prod-only in
+  // check-srv-qa-route-drift.ts). A full QA rebuild that reaches this phase
+  // 404s → abortSession → exit 1, which silently broke every QA
+  // merge-to-main publish. The caller MUST gate the phase to channel==='prod'.
+  it('gates the render-concepts phase to the prod channel only', () => {
+    const gate = SRC.match(
+      /if \(!legacyConceptRender && !opts\.slug && channel === 'prod'\) \{/,
+    );
+    expect(
+      gate,
+      "render-concepts phase must be gated with `channel === 'prod'` — " +
+        'srv-qa has no render-concepts route, so a QA full rebuild would 404 and abort. ' +
+        'See scripts/check-srv-qa-route-drift.ts ALLOWLIST_ONLY_ON_SRV.',
+    ).not.toBeNull();
   });
 });

@@ -1159,7 +1159,16 @@ async function main() {
   // BLOBs above) and on a single-tutorial slug hotfix (concepts aren't part of
   // that scope; the server carries them forward unchanged at commit). A phase
   // failure aborts the session — same posture as an append failure.
-  if (!legacyConceptRender && !opts.slug) {
+  //
+  // QA channel skip: concept detail pages are a prod-only public content
+  // surface — POST /content/publish/render-concepts is intentionally NOT
+  // registered on srv-qa (see ALLOWLIST_ONLY_ON_SRV in
+  // scripts/check-srv-qa-route-drift.ts: "the QA channel has no concept
+  // publish flow"). Without this guard a full QA rebuild (no slug) hits the
+  // absent route → 404 → abortSession → exit 1, which is exactly what silently
+  // broke every QA merge-to-main publish. Gating here keeps the caller
+  // consistent with the server's route surface.
+  if (!legacyConceptRender && !opts.slug && channel === 'prod') {
     try {
       const rc = await withRetry(
         () => renderConceptsPhase({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId }),
