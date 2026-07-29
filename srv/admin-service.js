@@ -31,6 +31,7 @@ import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
 import { isAllowedTarget } from './lib/redirect-allowlist.js';
+import { validatePuzzle } from './lib/puzzle-grading.js';
 import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
 import { validateApiQuery } from './lib/khoros-transport.js';
 import { COMMUNITY_BLOG_SOURCE_DEFAULTS, backfillManagedApiQuery } from './lib/community-blog-source-defaults.js';
@@ -845,6 +846,17 @@ export default class AdminService extends cds.ApplicationService {
       if (q != null && q !== '' && !validateApiQuery(q)) {
         return req.reject(400, `Invalid apiQuery — allowed: field comparisons joined by AND/OR only`);
       }
+    });
+
+    // (#644 Task 9) Validate layout/solution JSON on Puzzle writes.
+    // Metadata-only patches (neither field present) are allowed through.
+    // Also lowercases slug for canonical consistency.
+    this.before(['CREATE', 'UPDATE'], 'Puzzles', (req) => {
+      const { layout, solution } = req.data;
+      if (layout == null && solution == null) return; // metadata-only patch
+      const v = validatePuzzle({ layout: layout || '{}', solution: solution || '{}' });
+      if (!v.ok) req.reject(400, `Invalid puzzle: ${v.error}`);
+      if (typeof req.data.slug === 'string') req.data.slug = req.data.slug.toLowerCase();
     });
 
     // (#1033) Reclassify — resets a CommunityBlogPosts row so the

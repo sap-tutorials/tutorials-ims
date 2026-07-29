@@ -8,6 +8,14 @@ annotate AdminService.Events with @odata.draft.enabled;
 annotate AdminService.Accomplishments with @odata.draft.enabled;
 annotate AdminService.Prizes with @odata.draft.enabled;
 annotate AdminService.Tutorials with @odata.draft.enabled;
+// (#644 Task 9) Puzzles draft-enablement for admin authoring UI.
+annotate AdminService.Puzzles with @odata.draft.enabled;
+annotate AdminService.Puzzles with {
+  slug     @Common.Label: 'Slug' @mandatory;
+  title    @Common.Label: 'Title' @mandatory;
+  layout   @Common.Label: 'Layout JSON';
+  solution @Common.Label: 'Solution JSON';
+};
 
 // --- Events ---
 annotate AdminService.Events with {
