@@ -65,7 +65,7 @@
 }
 
 /* CTA overlaid lower-right on the banner, with a legibility scrim. */
-.dtf-cta-overlay {
+.dtf-cta-wrap.dtf-cta-overlay {
   position: absolute;
   right: 1.25rem;
   bottom: 1.25rem;
@@ -79,7 +79,7 @@
 
 /* Below the body breakpoint, reflow the CTA to a static bar under the banner. */
 @media (max-width: 720px) {
-  .dtf-cta-overlay {
+  .dtf-cta-wrap.dtf-cta-overlay {
     position: static;
     background: none;
     backdrop-filter: none;
