@@ -15,6 +15,7 @@
         { "key": "events", "title": "Events" },
         { "key": "missions", "title": "Missions" },
         { "key": "groups", "title": "Groups" },
+        { "key": "puzzles", "title": "Puzzles" },
         { "key": "tutorials", "title": "Tutorials", "requiredScope": "Tutorial.Author", "adminPath": "/admin/", "authorPath": "/author/" },
         { "key": "tags", "title": "Tags", "requiredScope": "Tutorial.Author", "adminPath": "/admin/", "authorPath": "/author/" },
         { "key": "categories", "title": "Categories" },

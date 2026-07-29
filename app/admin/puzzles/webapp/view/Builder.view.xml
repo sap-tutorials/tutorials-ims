@@ -1,9 +1,144 @@
 <mvc:View controllerName="sap.tutorials.admin.puzzles.controller.Builder"
-  xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m" xmlns:l="sap.ui.layout">
-  <Page title="Puzzles" class="sapUiContentPadding">
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:l="sap.ui.layout"
+  xmlns:core="sap.ui.core">
+
+  <Page id="builderPage" title="{b>/pageTitle}" showNavButton="{= ${b>/mode} === 'edit' }"
+        navButtonPress=".onNavBack">
+    <headerContent>
+      <Button text="Create New" type="Emphasized" press=".onCreateNew"
+              visible="{= ${b>/mode} === 'list' }"/>
+      <Button text="Save" type="Emphasized" press=".onSave"
+              visible="{= ${b>/mode} === 'edit' }"/>
+      <Button text="Cancel" press=".onNavBack"
+              visible="{= ${b>/mode} === 'edit' }"/>
+    </headerContent>
+
     <content>
-      <MessageStrip text="Puzzle builder loads here." showIcon="true" class="sapUiSmallMargin"/>
-      <VBox id="gridHost"/>
+
+      <!-- ── LIST MODE ── -->
+      <VBox visible="{= ${b>/mode} === 'list' }" class="sapUiSmallMargin">
+        <Table id="puzzlesTable" items="{/Puzzles}"
+               noDataText="No puzzles yet. Click 'Create New' to start.">
+          <columns>
+            <Column><Text text="Title"/></Column>
+            <Column><Text text="Slug"/></Column>
+            <Column><Text text="Status"/></Column>
+            <Column><Text text="Size"/></Column>
+          </columns>
+          <items>
+            <ColumnListItem type="Navigation" press=".onPuzzlePress">
+              <cells>
+                <Text text="{title}"/>
+                <Text text="{slug}"/>
+                <ObjectStatus text="{status}"
+                  state="{= ${status} === 'ACTIVE' ? 'Success' : ${status} === 'DRAFT' ? 'Warning' : 'None' }"/>
+                <Text text="{= ${rows} + 'x' + ${cols} }"/>
+              </cells>
+            </ColumnListItem>
+          </items>
+        </Table>
+      </VBox>
+
+      <!-- ── EDIT MODE ── -->
+      <VBox visible="{= ${b>/mode} === 'edit' }" class="sapUiSmallMargin">
+
+        <!-- Title + Slug + Size + Sub-mode -->
+        <FlexBox wrap="Wrap" class="sapUiSmallMarginBottom" alignItems="End">
+          <VBox width="16rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
+            <Label text="Title" required="true"/>
+            <Input id="titleInput" value="{b>/title}" placeholder="e.g. SAP BTP Basics"/>
+          </VBox>
+          <VBox width="16rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
+            <Label text="Slug" required="true"/>
+            <Input id="slugInput" value="{b>/slug}" placeholder="e.g. btp-basics"/>
+          </VBox>
+          <VBox width="6rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
+            <Label text="Rows"/>
+            <Input id="rowsInput" value="{b>/rows}" type="Number"/>
+          </VBox>
+          <VBox width="6rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
+            <Label text="Cols"/>
+            <Input id="colsInput" value="{b>/cols}" type="Number"/>
+          </VBox>
+          <VBox width="10rem" class="sapUiSmallMarginBottom">
+            <Label text="Sub-mode"/>
+            <SegmentedButton id="subModeBtn" selectedKey="{b>/subMode}" selectionChange=".onSubModeChange">
+              <items>
+                <SegmentedButtonItem key="design" text="Design"/>
+                <SegmentedButtonItem key="fill" text="Fill"/>
+              </items>
+            </SegmentedButton>
+          </VBox>
+        </FlexBox>
+
+        <!-- Grid + Slots panel -->
+        <FlexBox alignItems="Start">
+
+          <!-- Grid: rendered via sap.ui.core.HTML; controller rewrites content -->
+          <core:HTML id="gridHost" content="&lt;div style='display:inline-block'&gt;&lt;/div&gt;"
+                     class="sapUiSmallMarginEnd"/>
+
+          <!-- Slots side panel -->
+          <ScrollContainer height="70vh" width="30rem" vertical="true" horizontal="false">
+            <VBox>
+              <Title text="Across" titleStyle="H5" class="sapUiTinyMarginBottom"/>
+              <List id="acrossList" items="{b>/slotsAcross}" noDataText="No across slots" showSeparators="Inner">
+                <CustomListItem>
+                  <FlexBox alignItems="Center" class="sapUiTinyMarginBegin sapUiTinyMarginTop sapUiTinyMarginBottom">
+                    <Text text="{b>label}" width="2.5rem" class="sapUiSmallMarginEnd"/>
+                    <Input placeholder="Answer" value="{b>answer}" maxLength="32"
+                           liveChange=".onAnswerChange" width="7rem" class="sapUiSmallMarginEnd"/>
+                    <Input placeholder="Clue" value="{b>clue}" liveChange=".onClueChange" width="10rem"
+                           class="sapUiSmallMarginEnd"/>
+                    <Select selectedKey="{b>hint}" change=".onHintChange" width="7rem">
+                      <core:Item key="" text="(none)"/>
+                      <core:Item key="anagram" text="Anagram"/>
+                      <core:Item key="hidden" text="Hidden"/>
+                      <core:Item key="homophone" text="Homophone"/>
+                      <core:Item key="double" text="Double def"/>
+                      <core:Item key="cryptic" text="Cryptic"/>
+                    </Select>
+                  </FlexBox>
+                </CustomListItem>
+              </List>
+
+              <Title text="Down" titleStyle="H5" class="sapUiSmallMarginTop sapUiTinyMarginBottom"/>
+              <List id="downList" items="{b>/slotsDown}" noDataText="No down slots" showSeparators="Inner">
+                <CustomListItem>
+                  <FlexBox alignItems="Center" class="sapUiTinyMarginBegin sapUiTinyMarginTop sapUiTinyMarginBottom">
+                    <Text text="{b>label}" width="2.5rem" class="sapUiSmallMarginEnd"/>
+                    <Input placeholder="Answer" value="{b>answer}" maxLength="32"
+                           liveChange=".onAnswerChange" width="7rem" class="sapUiSmallMarginEnd"/>
+                    <Input placeholder="Clue" value="{b>clue}" liveChange=".onClueChange" width="10rem"
+                           class="sapUiSmallMarginEnd"/>
+                    <Select selectedKey="{b>hint}" change=".onHintChange" width="7rem">
+                      <core:Item key="" text="(none)"/>
+                      <core:Item key="anagram" text="Anagram"/>
+                      <core:Item key="hidden" text="Hidden"/>
+                      <core:Item key="homophone" text="Homophone"/>
+                      <core:Item key="double" text="Double def"/>
+                      <core:Item key="cryptic" text="Cryptic"/>
+                    </Select>
+                  </FlexBox>
+                </CustomListItem>
+              </List>
+            </VBox>
+          </ScrollContainer>
+
+        </FlexBox>
+
+        <!-- Public URL strip (shown after save) -->
+        <FlexBox visible="{= !!${b>/savedSlug} }" class="sapUiSmallMarginTop" alignItems="Center">
+          <Label text="Public URL:" class="sapUiSmallMarginEnd"/>
+          <Link text="{= '/puzzles/' + ${b>/savedSlug} }"
+                href="{= '/puzzles/' + ${b>/savedSlug} }" target="_blank"/>
+          <Button icon="sap-icon://copy" tooltip="Copy URL" press=".onCopyUrl"
+                  class="sapUiTinyMarginBegin" type="Transparent"/>
+        </FlexBox>
+
+      </VBox>
     </content>
   </Page>
 </mvc:View>
