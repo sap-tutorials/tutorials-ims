@@ -91,6 +91,12 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
   'POST /content/orphan-purge':
     'CI-only batched soft-delete for prod content maintenance (#823). Not an author-preview ' +
     'endpoint — the QA channel has no orphan-purge maintenance flow.',
+  'POST /content/validate-answer-specs':
+    'AI-grader reference-answer specs (#209). Removed from srv-qa (#1375): the handler resolves ' +
+    'entities from the prod namespace com.sap.developers.ims, which the QA model ' +
+    '(com.sap.developers.ims.qa) does not load, and srv-qa has no runtime reader of ' +
+    'ValidateAnswerSpecs (author preview re-parses rules.vr live). The publish CLI skips this ' +
+    'step for channel=qa. Re-evaluate only if QA gains a runtime /api/validate-answer surface.',
 };
 
 /**

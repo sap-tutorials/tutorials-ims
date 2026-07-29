@@ -43,8 +43,47 @@ export async function publishValidateAnswerSpecs(req, res) {
     }
   }
 
+  // Duplicate-key guard: the DB primary key is (tutorial_ID, stepNumber,
+  // questionId). Two specs in one payload sharing the same
+  // (stepNumber, questionId) would collide on INSERT and blow up the whole
+  // tx as an opaque 500. Reject up front with a precise 400 instead. This
+  // is a real footgun: hand-authored questions all get questionId
+  // `validate-${stepNumber}` (scripts/parsers/rules.ts), so two hand-authored
+  // questions in one step collide; AI-authored ones use the disambiguated
+  // `validate-${stepNumber}-ai-${idx}` shape and don't.
+  const seenKeys = new Set();
+  for (const s of specs) {
+    const dupKey = `${s.stepNumber} ${s.questionId}`;
+    if (seenKeys.has(dupKey)) {
+      return res.status(400).json({
+        error: 'duplicate_spec_key',
+        stepNumber: s.stepNumber,
+        questionId: s.questionId,
+      });
+    }
+    seenKeys.add(dupKey);
+  }
+
   const lcSlug = slug.toLowerCase();
   const { Tutorials, ValidateAnswerSpecs } = cds.entities('com.sap.developers.ims');
+
+  // Entity-resolution guard (#1375): this handler hardcodes the prod
+  // namespace `com.sap.developers.ims`. If it is ever mounted in an app whose
+  // CDS model does NOT load that namespace (e.g. srv-qa, which loads only
+  // `com.sap.developers.ims.qa` and has no ValidateAnswerSpecs entity), these
+  // resolve to `undefined` and the first SELECT/INSERT throws deep inside
+  // cds.tx() — surfacing as an opaque 500 {error:internal}. Fail fast with a
+  // precise, log-visible reason instead. srv-qa no longer registers this
+  // route (see srv-qa/server.js), so in practice this only fires if a future
+  // caller reintroduces the mismatch.
+  if (!Tutorials || !ValidateAnswerSpecs) {
+    LOG.error('validate-answer-spec-publish: entities unresolved', {
+      namespace: 'com.sap.developers.ims',
+      hasTutorials: Boolean(Tutorials),
+      hasValidateAnswerSpecs: Boolean(ValidateAnswerSpecs),
+    });
+    return res.status(500).json({ error: 'entity_not_in_model' });
+  }
 
   try {
     await cds.tx(async () => {
@@ -77,8 +116,15 @@ export async function publishValidateAnswerSpecs(req, res) {
     if (err && err.status === 404) {
       return res.status(404).json({ error: 'tutorial_not_found' });
     }
+    // Coarse-but-useful reason (#1375): the full stack still goes to the app
+    // log via LOG.error, but the response body now carries a short reason so
+    // the publish CLI's non-fatal warning line is diagnosable without
+    // cf-logs access. `reason` is derived from the error's own code/message —
+    // never the raw stack (no PII / no SQL text leak).
+    const reason =
+      (err && (err.code || err.name)) ? String(err.code || err.name) : 'unknown';
     LOG.error('validate-answer-spec-publish failed', err);
-    return res.status(500).json({ error: 'internal' });
+    return res.status(500).json({ error: 'internal', reason });
   }
 }
 
