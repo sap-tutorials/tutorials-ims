@@ -1,9 +1,11 @@
 // srv/puzzle-service.js
 // PuzzleService handler — Task 5: check action (slot-level grading, 404 on unknown slug).
-// Task 6 handlers (saveProgress / getProgress / complete) are stubbed below.
+// Task 6: saveProgress / getProgress / complete (progress persistence + server-graded completion).
 
 import cds from '@sap/cds';
 import { gradeEntries } from './lib/puzzle-grading.js';
+import { getNextLegacyId } from './lib/legacy-id.js';
+import { resolveUserSapId } from './lib/resolve-db-user.js';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -50,11 +52,149 @@ export default class PuzzleService extends cds.ApplicationService {
   }
 
   /**
-   * Stub filled in Task 6.
    * Wires saveProgress / getProgress / complete handlers.
+   * Mirrors the user auto-provision pattern from developer-service.js completeStep.
    */
-  // eslint-disable-next-line no-unused-vars
-  async _initProgressAndComplete(_ctx) {
-    // filled in Task 6
+  async _initProgressAndComplete({ db, Puzzles, canon, loadPuzzle }) {
+    const { PuzzleProgress, Users, TaskRecords } = cds.entities('com.sap.developers.ims');
+
+    // Resolve or auto-provision the DB user row (mirrors developer-service.js:168-185).
+    const resolveOrCreateUser = async (user) => {
+      const sapId = resolveUserSapId(user);
+      if (!sapId) return null;
+      let dbUser = await SELECT.one.from(Users).where({ sapId });
+      if (!dbUser) {
+        await INSERT.into(Users).entries({
+          uuid: user.id,
+          sapId,
+          legacyId: await getNextLegacyId('Users', db),
+          email: user.attr?.email || '',
+          firstName: user.attr?.given_name || '',
+          lastName: user.attr?.family_name || '',
+        });
+        dbUser = await SELECT.one.from(Users).where({ sapId });
+      }
+      return dbUser;
+    };
+
+    // ── saveProgress ─────────────────────────────────────────────────────────
+    // Upsert the caller's in-progress grid. Creates the PuzzleProgress row on
+    // first save; updates filledGrid on subsequent saves.
+    this.on('saveProgress', async (req) => {
+      const { slug, filledGrid } = req.data;
+      const puzzle = await loadPuzzle(slug);
+      if (!puzzle) return req.reject(404, 'Puzzle not found');
+      const dbUser = await resolveOrCreateUser(req.user);
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
+      const existing = await SELECT.one.from(PuzzleProgress)
+        .where({ user_ID: dbUser.ID, puzzle_ID: puzzle.ID });
+      if (existing) {
+        await UPDATE(PuzzleProgress, existing.ID).set({ filledGrid });
+      } else {
+        await INSERT.into(PuzzleProgress).entries({
+          ID: cds.utils.uuid(),
+          user_ID: dbUser.ID,
+          puzzle_ID: puzzle.ID,
+          filledGrid,
+          attemptNumber: 1,
+        });
+      }
+      return true;
+    });
+
+    // ── getProgress ───────────────────────────────────────────────────────────
+    // Return the caller's saved grid (or an empty grid if none stored yet).
+    this.on('getProgress', async (req) => {
+      const { slug } = req.data;
+      const puzzle = await loadPuzzle(slug);
+      if (!puzzle) return req.reject(404, 'Puzzle not found');
+      const dbUser = await resolveOrCreateUser(req.user);
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
+      const row = await SELECT.one.from(PuzzleProgress)
+        .where({ user_ID: dbUser.ID, puzzle_ID: puzzle.ID });
+      return { filledGrid: row?.filledGrid || '{}', attemptNumber: row?.attemptNumber ?? 1 };
+    });
+
+    // ── complete ──────────────────────────────────────────────────────────────
+    // Re-grade the stored grid server-side. Writes an idempotent PUZZLE
+    // TaskRecord only on a fully correct solve. Returns:
+    //   { recorded: true,  alreadyComplete: false } — first completion
+    //   { recorded: false, alreadyComplete: true  } — already recorded
+    //   { recorded: false, alreadyComplete: false } — not fully solved yet
+    this.on('complete', async (req) => {
+      const { slug } = req.data;
+      const puzzle = await loadPuzzle(slug);
+      if (!puzzle) return req.reject(404, 'Puzzle not found');
+      const dbUser = await resolveOrCreateUser(req.user);
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
+
+      // Re-grade the stored grid against the server-side solution.
+      const prog = await SELECT.one.from(PuzzleProgress)
+        .where({ user_ID: dbUser.ID, puzzle_ID: puzzle.ID });
+      const filled = (() => {
+        try { return JSON.parse(prog?.filledGrid || '{}'); } catch { return {}; }
+      })();
+
+      // Build slot entries from the filled grid using the solution key space.
+      // gradeEntries handles slot discovery internally — we just need to pass
+      // all cells as a single across-entry per solution row-start, but the
+      // cleanest approach is to pass the full cell-by-cell filled map as a
+      // synthetic entry set that gradeEntries can evaluate via its slot logic.
+      // gradeEntries already knows how to discover slots from the solution and
+      // accepts an `entries` array of { slotId, word }. We derive the slot ids
+      // by walking the solution the same way gradeEntries does internally.
+      const sol = (() => {
+        try { return JSON.parse(puzzle.solution || '{}'); } catch { return {}; }
+      })();
+
+      const allSlotIds = new Set();
+      for (const key of Object.keys(sol)) {
+        const [r, c] = key.split(',').map(Number);
+        if (sol[`${r},${c - 1}`] === undefined && sol[`${r},${c + 1}`] !== undefined) {
+          allSlotIds.add(`${r}-${c}-across`);
+        }
+        if (sol[`${r - 1},${c}`] === undefined && sol[`${r + 1},${c}`] !== undefined) {
+          allSlotIds.add(`${r}-${c}-down`);
+        }
+      }
+
+      const wordAt = (slotId) => {
+        const m = /^(\d+)-(\d+)-(across|down)$/.exec(slotId);
+        let r = +m[1], c = +m[2];
+        const dir = m[3];
+        const out = [];
+        while (sol[`${r},${c}`] !== undefined) {
+          out.push(filled[`${r},${c}`] || '');
+          if (dir === 'across') c++; else r++;
+        }
+        return out.join('');
+      };
+
+      const entries = [...allSlotIds].map(id => ({ slotId: id, word: wordAt(id) }));
+      const graded = gradeEntries({ solution: puzzle.solution, entries });
+      if (!graded.complete) return { recorded: false, alreadyComplete: false };
+
+      // Idempotency check: skip if a non-SUPERSEDED PUZZLE record already exists.
+      const existing = await SELECT.one.from(TaskRecords).where({
+        user_ID: dbUser.ID,
+        taskLegacyId: puzzle.legacyId,
+        taskType: 'PUZZLE',
+        status: { '!=': 'SUPERSEDED' },
+      });
+      if (existing) return { recorded: false, alreadyComplete: true };
+
+      await INSERT.into(TaskRecords).entries({
+        user_ID: dbUser.ID,
+        taskLegacyId: puzzle.legacyId,
+        taskType: 'PUZZLE',
+        status: 'COMPLETED',
+        progress: 100,
+        completionDate: new Date().toISOString(),
+        titleSnapshot: puzzle.title,
+        legacyId: await getNextLegacyId('TaskRecords', db),
+        attemptNumber: 1,
+      });
+      return { recorded: true, alreadyComplete: false };
+    });
   }
 }
