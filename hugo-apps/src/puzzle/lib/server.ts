@@ -2,8 +2,8 @@
 // Pure helpers and thin fetch wrappers for the Vue solver's server interactions.
 // All fetch calls are isolated here so App.vue stays readable and tests cover the pure logic.
 // CAP URL conventions used here:
-//   actions  → POST   /api/puzzles/<ActionName>
-//   functions→ GET    /api/puzzles/<FunctionName>(param='value')
+//   actions  → POST   /puzzle-api/<ActionName>
+//   functions→ GET    /puzzle-api/<FunctionName>(param='value')
 
 import { csrfFetch } from '@shared/csrf-fetch';
 
@@ -84,7 +84,7 @@ export interface CompleteResult {
 }
 
 /**
- * POST /api/puzzles/check
+ * POST /puzzle-api/check
  */
 export async function postCheck(
   apiUrl: string,
@@ -102,7 +102,7 @@ export async function postCheck(
 }
 
 /**
- * GET /api/puzzles/getProgress(slug='<slug>')
+ * GET /puzzle-api/getProgress(slug='<slug>')
  * CAP unbound functions use the form: GET /path/FunctionName(param='value')
  */
 export async function fetchProgress(
@@ -116,7 +116,7 @@ export async function fetchProgress(
 }
 
 /**
- * POST /api/puzzles/saveProgress
+ * POST /puzzle-api/saveProgress
  */
 export async function postSaveProgress(
   apiUrl: string,
@@ -133,7 +133,7 @@ export async function postSaveProgress(
 }
 
 /**
- * POST /api/puzzles/complete
+ * POST /puzzle-api/complete
  */
 export async function postComplete(
   apiUrl: string,

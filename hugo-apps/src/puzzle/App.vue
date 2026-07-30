@@ -105,7 +105,7 @@ async function loadPuzzle() {
   loading.value = true;
   error.value   = null;
   try {
-    // OData filter: /api/puzzles/Puzzles?$filter=slug eq '<slug>'&$select=layout,title
+    // OData filter: /puzzle-api/Puzzles?$filter=slug eq '<slug>'&$select=layout,title
     const url = `${props.apiUrl}/Puzzles?$filter=slug eq '${encodeURIComponent(props.slug)}'&$select=layout,title`;
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

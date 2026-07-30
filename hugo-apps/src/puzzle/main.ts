@@ -13,6 +13,6 @@ if (mount) {
   const slug = dataSlug || pathSlug;
   createApp(App, {
     slug,
-    apiUrl: mount.dataset.api || '/api/puzzles',
+    apiUrl: mount.dataset.api || '/puzzle-api',
   }).mount(mount);
 }

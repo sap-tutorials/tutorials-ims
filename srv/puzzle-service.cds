@@ -3,7 +3,7 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 // Public puzzle API. Default anonymous (@requires: 'any') like DeveloperService;
 // progress/complete override to authenticated-user. The projection deliberately
 // omits `solution` so no OData request can select the answer key.
-@path: '/api/puzzles'
+@path: '/puzzle-api'
 @requires: 'any'
 service PuzzleService {
 

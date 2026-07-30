@@ -247,16 +247,22 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/api/puzzles/Puzzles(.*)$",
-      "target": "/api/puzzles/Puzzles$1",
+      "source": "^/puzzle-api/Puzzles(.*)$",
+      "target": "/puzzle-api/Puzzles$1",
       "destination": "srv-api",
       "authenticationType": "none"
     },
     {
-      "source": "^/api/puzzles/check$",
-      "target": "/api/puzzles/check",
+      "source": "^/puzzle-api/check$",
+      "target": "/puzzle-api/check",
       "destination": "srv-api",
       "authenticationType": "none"
+    },
+    {
+      "source": "^/puzzle-api/(.*)$",
+      "target": "/puzzle-api/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
     },
     {
       "source": "^/api/(.*)$",
