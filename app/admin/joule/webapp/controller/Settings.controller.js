@@ -39,6 +39,11 @@ sap.ui.define([
         // labeling job's per-day LLM calls (db/schema.cds:672).
         communityPeersEnabled: false,
         communityLabelLlmBudgetPerDay: 50,
+        // Puzzle hint Joule tool. Default false to mirror the schema default
+        // (db/schema.cds). When on, the puzzleHint tool is registered on
+        // crossword puzzle pages so Joule can coach on cryptic clues without
+        // revealing answers.
+        puzzleHintEnabled: false,
         // Knowledge Graph Joule tool flags. These gate LLM-facing tool
         // registration in the chat orchestrator. Defaults mirror the schema
         // (db/schema.cds): kgPathBetweenEnabled OFF (#445), the other three ON
@@ -100,6 +105,7 @@ sap.ui.define([
             branchingEnabled: !!data.branchingEnabled,
             communityPeersEnabled: !!data.communityPeersEnabled,
             communityLabelLlmBudgetPerDay: data.communityLabelLlmBudgetPerDay != null ? data.communityLabelLlmBudgetPerDay : 50,
+            puzzleHintEnabled: !!data.puzzleHintEnabled,
             // KG tool flags. Defaults-when-null mirror the schema: kgPathBetween
             // OFF, the other three ON (use ?? so an absent field renders ON, not OFF).
             kgPathBetweenEnabled: !!data.kgPathBetweenEnabled,
@@ -144,6 +150,7 @@ sap.ui.define([
         branchingEnabled: !!data.branchingEnabled,
         communityPeersEnabled: !!data.communityPeersEnabled,
         communityLabelLlmBudgetPerDay: parseInt(data.communityLabelLlmBudgetPerDay, 10) || 50,
+        puzzleHintEnabled: !!data.puzzleHintEnabled,
         kgPathBetweenEnabled: !!data.kgPathBetweenEnabled,
         kgSearchExpansionEnabled: !!data.kgSearchExpansionEnabled,
         searchKgRerankEnabled: !!data.searchKgRerankEnabled,
