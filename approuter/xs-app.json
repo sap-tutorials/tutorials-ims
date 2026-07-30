@@ -70,6 +70,13 @@
       "scope": "$XSAPPNAME.MobileApp"
     },
     {
+      "source": "^/display-app/(.*)$",
+      "target": "/display-app/$1",
+      "localDir": "static",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.DisplayApp"
+    },
+    {
       "source": "^/analytics-ui/(.*)$",
       "target": "/analytics-ui/$1",
       "localDir": "static",
