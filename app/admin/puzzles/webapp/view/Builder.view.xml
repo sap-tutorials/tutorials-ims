@@ -25,7 +25,6 @@
             <Column><Text text="Title"/></Column>
             <Column><Text text="Slug"/></Column>
             <Column><Text text="Status"/></Column>
-            <Column><Text text="Size"/></Column>
           </columns>
           <items>
             <ColumnListItem type="Navigation" press=".onPuzzlePress">
@@ -34,7 +33,6 @@
                 <Text text="{slug}"/>
                 <ObjectStatus text="{status}"
                   state="{= ${status} === 'ACTIVE' ? 'Success' : ${status} === 'DRAFT' ? 'Warning' : 'None' }"/>
-                <Text text="{= ${rows} + 'x' + ${cols} }"/>
               </cells>
             </ColumnListItem>
           </items>

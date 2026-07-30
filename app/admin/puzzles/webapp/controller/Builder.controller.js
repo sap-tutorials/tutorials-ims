@@ -246,6 +246,28 @@ sap.ui.define([
     },
 
     // ── Save ─────────────────────────────────────────────────────────────────
+    //
+    // AdminService.Puzzles IS @odata.draft.enabled (app/admin-annotations.cds:12).
+    // A plain POST creates a draft row (IsActiveEntity=false) — not an active row.
+    // The correct two-phase OData V4 draft flow is:
+    //
+    //   CREATE:
+    //     1. POST /admin/Puzzles { ...fields }
+    //        → 201  { ID, IsActiveEntity: false, ... }
+    //     2. POST /admin/Puzzles(ID=<guid>,IsActiveEntity=false)/AdminService.draftActivate {}
+    //        → 201  { ID, IsActiveEntity: true, ... }
+    //
+    //   UPDATE (existing active row):
+    //     1. POST /admin/Puzzles(ID=<guid>,IsActiveEntity=true)/AdminService.draftEdit {}
+    //        → 200  { ID, IsActiveEntity: false, ... }  (creates edit draft)
+    //     2. PATCH /admin/Puzzles(ID=<guid>,IsActiveEntity=false) { ...fields }
+    //        → 200
+    //     3. POST /admin/Puzzles(ID=<guid>,IsActiveEntity=false)/AdminService.draftActivate {}
+    //        → 200  { ID, IsActiveEntity: true, ... }
+    //
+    // Pattern confirmed in: test/admin-drafts.test.js:103-108,
+    //   test/admin-slug-derivation.test.js:47-53,
+    //   test/published-flag.test.js:99-113.
 
     onSave: function () {
       var self = this;
@@ -287,64 +309,79 @@ sap.ui.define([
       });
       var solution = JSON.stringify(answers);
 
+      var fields = {
+        title: title,
+        slug: slug,
+        status: "ACTIVE",
+        layout: layout,
+        solution: solution
+      };
+
       var editId = b.getProperty("/editId");
 
       this._withCsrf(function (token) {
+        var headers = {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "x-csrf-token": token
+        };
+
         if (editId) {
-          // Update existing
-          return fetch("/admin/Puzzles(" + editId + ")", {
-            method: "PATCH",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-              "x-csrf-token": token
-            },
-            body: JSON.stringify({
-              title: title,
-              slug: slug,
-              rows: rows,
-              cols: cols,
-              layout: layout,
-              solution: solution
-            })
+          // ── UPDATE: draftEdit → PATCH draft → draftActivate ──────────────
+          return fetch(
+            "/admin/Puzzles(ID=" + editId + ",IsActiveEntity=true)/AdminService.draftEdit",
+            { method: "POST", credentials: "include", headers: headers, body: "{}" }
+          ).then(function (r) {
+            if (!r.ok) { return r.text().then(function (t) { throw new Error("draftEdit HTTP " + r.status + ": " + t); }); }
+            return r.json();
+          }).then(function (draft) {
+            var draftId = draft.ID || editId;
+            return fetch(
+              "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)",
+              { method: "PATCH", credentials: "include", headers: headers, body: JSON.stringify(fields) }
+            ).then(function (r2) {
+              if (!r2.ok) { return r2.text().then(function (t) { throw new Error("PATCH draft HTTP " + r2.status + ": " + t); }); }
+              return draftId;
+            });
+          }).then(function (draftId) {
+            return fetch(
+              "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)/AdminService.draftActivate",
+              { method: "POST", credentials: "include", headers: headers, body: "{}" }
+            ).then(function (r3) {
+              if (!r3.ok) { return r3.text().then(function (t) { throw new Error("draftActivate HTTP " + r3.status + ": " + t); }); }
+              return r3.json();
+            });
           });
         }
-        // Create new (non-draft for simplicity — AdminService.Puzzles
-        // @odata.draft.enabled requires two-phase; use plain POST to bypass)
+
+        // ── CREATE: POST draft → draftActivate ───────────────────────────
         return fetch("/admin/Puzzles", {
           method: "POST",
           credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "x-csrf-token": token
-          },
-          body: JSON.stringify({
-            title: title,
-            slug: slug,
-            status: "DRAFT",
-            rows: rows,
-            cols: cols,
-            layout: layout,
-            solution: solution
-          })
-        });
-      }).then(function (res) {
-        if (!res.ok) {
-          return res.text().then(function (t) {
-            throw new Error("HTTP " + res.status + ": " + t);
+          headers: headers,
+          body: JSON.stringify(fields)
+        }).then(function (r) {
+          if (!r.ok) { return r.text().then(function (t) { throw new Error("POST draft HTTP " + r.status + ": " + t); }); }
+          return r.json();
+        }).then(function (draft) {
+          return fetch(
+            "/admin/Puzzles(ID=" + draft.ID + ",IsActiveEntity=false)/AdminService.draftActivate",
+            { method: "POST", credentials: "include", headers: headers, body: "{}" }
+          ).then(function (r2) {
+            if (!r2.ok) { return r2.text().then(function (t) { throw new Error("draftActivate HTTP " + r2.status + ": " + t); }); }
+            return r2.json();
           });
-        }
-        return res.json();
-      }).then(function (saved) {
-        var savedSlug = saved.slug || slug;
+        });
+
+      }).then(function (active) {
+        var savedSlug = (active && active.slug) || slug;
+        var savedId = (active && active.ID) || editId;
         b.setProperty("/savedSlug", savedSlug);
-        b.setProperty("/editId", saved.ID || editId);
+        b.setProperty("/editId", savedId);
         MessageToast.show("Puzzle saved. Slug: " + savedSlug);
-        // Refresh the OData list model
-        var oListBinding = self.getView().getModel().bindList("/Puzzles");
-        if (oListBinding && oListBinding.refresh) { oListBinding.refresh(); }
+        // Refresh the OData list binding
+        var oModel = self.getView().getModel();
+        if (oModel && oModel.refresh) { oModel.refresh(); }
       }).catch(function (err) {
         MessageBox.error("Save failed: " + (err.message || String(err)));
       });
