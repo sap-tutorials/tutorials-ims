@@ -40,6 +40,7 @@
     "publish-content:qa": "tsx scripts/publish-content.ts --channel qa",
     "qa:full": "npm run fetch-tutorials:qa && npm run build:qa && npm run publish-content:qa",
     "setup-dev-data": "cds bind --exec -- node scripts/setup-dev-data.cjs",
+    "seed-poc-puzzle": "cds bind --exec -- node srv/lib/seed-poc-puzzle.js",
     "export:advocates": "cds bind --exec -- node scripts/export-advocates.cjs",
     "import:advocates": "cds bind --exec -- node scripts/import-advocates.cjs",
     "backfill-categories": "node scripts/backfill-categories.cjs",
