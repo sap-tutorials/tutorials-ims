@@ -2,7 +2,8 @@
   xmlns:mvc="sap.ui.core.mvc"
   xmlns="sap.m"
   xmlns:l="sap.ui.layout"
-  xmlns:core="sap.ui.core">
+  xmlns:core="sap.ui.core"
+  height="100%">
 
   <Page id="builderPage" title="{b>/pageTitle}" showNavButton="{= ${b>/mode} === 'edit' }"
         navButtonPress=".onNavBack">
@@ -82,7 +83,7 @@
           <ScrollContainer height="70vh" width="30rem" vertical="true" horizontal="false">
             <VBox>
               <Title text="Across" titleStyle="H5" class="sapUiTinyMarginBottom"/>
-              <List id="acrossList" items="{b>/slotsAcross}" noDataText="No across slots" showSeparators="Inner">
+              <List id="acrossList" items="{ path: 'b>/slotsAcross', templateShareable: false }" noDataText="No across slots" showSeparators="Inner">
                 <CustomListItem>
                   <FlexBox alignItems="Center" class="sapUiTinyMarginBegin sapUiTinyMarginTop sapUiTinyMarginBottom">
                     <Text text="{b>label}" width="2.5rem" class="sapUiSmallMarginEnd"/>
@@ -103,7 +104,7 @@
               </List>
 
               <Title text="Down" titleStyle="H5" class="sapUiSmallMarginTop sapUiTinyMarginBottom"/>
-              <List id="downList" items="{b>/slotsDown}" noDataText="No down slots" showSeparators="Inner">
+              <List id="downList" items="{ path: 'b>/slotsDown', templateShareable: false }" noDataText="No down slots" showSeparators="Inner">
                 <CustomListItem>
                   <FlexBox alignItems="Center" class="sapUiTinyMarginBegin sapUiTinyMarginTop sapUiTinyMarginBottom">
                     <Text text="{b>label}" width="2.5rem" class="sapUiSmallMarginEnd"/>
