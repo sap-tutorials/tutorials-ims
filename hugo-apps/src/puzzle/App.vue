@@ -350,152 +350,23 @@ function activateSlotFromClue(slot: Slot) {
         {{ title }}
       </h2>
 
-      <!-- Solved banner -->
-      <div
-        v-if="solved"
-        style="
-          padding: 0.75rem 1rem;
-          margin-bottom: 1rem;
-          background: var(--sapSuccessBackground, #f1faf5);
-          border: 1px solid var(--sapPositiveColor, #107e3e);
-          border-radius: 6px;
-          color: var(--sapPositiveColor, #107e3e);
-          font-weight: 600;
-        "
-      >
+      <!-- Solved banner (above the 3-column row) -->
+      <div v-if="solved" class="solved-banner">
         Puzzle complete! 🎉
       </div>
 
-      <!-- Grid -->
-      <div
-        class="puzzle-grid"
-        :style="{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${COLS}, var(--puzzle-cell-size, 2rem))`,
-          gridTemplateRows: `repeat(${ROWS}, var(--puzzle-cell-size, 2rem))`,
-          gap: '2px',
-          outline: 'none',
-          userSelect: 'none',
-        }"
-        tabindex="0"
-        @keydown="handleKeyDown"
-      >
-        <template v-for="(row, r) in grid" :key="r">
-          <div
-            v-for="(cell, c) in row"
-            :key="`${r}-${c}`"
-            :style="{
-              width: 'var(--puzzle-cell-size, 2rem)',
-              height: 'var(--puzzle-cell-size, 2rem)',
-              background: cell.black
-                ? 'var(--sapTextColor, #000)'
-                : isCursor(r, c)
-                  ? 'var(--sapInformativeColor, #0070f2)'
-                  : cellStatus[`${r},${c}`] === 'correct'
-                    ? 'var(--sapPositiveBackground, #f1faf5)'
-                    : cellStatus[`${r},${c}`] === 'wrong'
-                      ? 'var(--sapNegativeBackground, #fff1f1)'
-                      : isInActiveSlot(r, c)
-                        ? 'var(--sapHighlightColor, #d1e8ff)'
-                        : 'var(--sapBackgroundColor, #fff)',
-              border: cell.black
-                ? 'none'
-                : cellStatus[`${r},${c}`] === 'correct'
-                  ? '1px solid var(--sapPositiveColor, #107e3e)'
-                  : cellStatus[`${r},${c}`] === 'wrong'
-                    ? '1px solid var(--sapNegativeColor, #bb0000)'
-                    : '1px solid var(--sapContent_ForegroundColor, #666)',
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: cell.black ? 'default' : 'pointer',
-              fontSize: '1rem',
-              fontWeight: '600',
-              color: isCursor(r, c)
-                ? 'var(--sapContent_ContrastTextColor, #fff)'
-                : cellStatus[`${r},${c}`] === 'correct'
-                  ? 'var(--sapPositiveColor, #107e3e)'
-                  : cellStatus[`${r},${c}`] === 'wrong'
-                    ? 'var(--sapNegativeColor, #bb0000)'
-                    : 'var(--sapTextColor, #000)',
-              boxSizing: 'border-box',
-            }"
-            @click="handleCellClick(r, c)"
-          >
-            <!-- Cell number (top-left) -->
-            <span
-              v-if="!cell.black && cell.number"
-              :style="{
-                position: 'absolute',
-                top: '1px',
-                left: '2px',
-                fontSize: '0.5rem',
-                lineHeight: 1,
-                color: isCursor(r, c)
-                  ? 'var(--sapContent_ContrastTextColor, #fff)'
-                  : 'var(--sapContent_LabelColor, #666)',
-                pointerEvents: 'none',
-              }"
-            >
-              {{ cell.number }}
-            </span>
-            <!-- Letter -->
-            <span v-if="!cell.black">{{ answers[`${r},${c}`] || '' }}</span>
-          </div>
-        </template>
-      </div>
+      <!-- 3-column layout: [Across clues] [Grid + Actions] [Down clues] -->
+      <div class="puzzle-layout">
 
-      <!-- Actions bar -->
-      <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 1rem; flex-wrap: wrap;">
-        <button
-          :disabled="!hasFilledSlot || solved"
-          style="
-            padding: 0.4rem 1rem;
-            border-radius: 4px;
-            border: 1px solid var(--sapButton_BorderColor, #0070f2);
-            background: var(--sapButton_Background, #0070f2);
-            color: var(--sapButton_TextColor, #fff);
-            font-size: 0.875rem;
-            font-family: inherit;
-            cursor: pointer;
-          "
-          :style="{ opacity: (!hasFilledSlot || solved) ? '0.45' : '1' }"
-          @click="checkPuzzle"
-        >
-          Check
-        </button>
-        <!-- Subtle status message (errors, etc.) -->
-        <span
-          v-if="statusMsg"
-          style="font-size: 0.8rem; color: var(--sapNegativeColor, #bb0000);"
-        >
-          {{ statusMsg }}
-        </span>
-      </div>
-
-      <!-- Clue lists -->
-      <div
-        class="puzzle-clues"
-        style="display: flex; gap: 2rem; margin-top: 1.5rem; flex-wrap: wrap;"
-      >
-        <!-- Across -->
-        <div style="flex: 1; min-width: 12rem;">
-          <h3 style="margin: 0 0 0.5rem; font-size: 1rem; font-weight: 600;">Across</h3>
-          <ol style="list-style: none; padding: 0; margin: 0;">
+        <!-- Left column: Across clues -->
+        <div class="puzzle-clues-col">
+          <h3 class="clues-heading">Across</h3>
+          <ol class="clues-list">
             <li
               v-for="slot in acrossSlots"
               :key="slot.id"
-              :style="{
-                padding: '0.25rem 0.5rem',
-                cursor: 'pointer',
-                background: activeSlot?.id === slot.id
-                  ? 'var(--sapHighlightColor, #d1e8ff)'
-                  : 'transparent',
-                borderRadius: '4px',
-                fontSize: '0.875rem',
-                lineHeight: '1.4',
-              }"
+              class="clue-item"
+              :class="{ 'clue-active': activeSlot?.id === slot.id }"
               @click="activateSlotFromClue(slot)"
             >
               <strong>{{ slot.number }}.</strong> {{ clueForSlot(slot, clues) }}
@@ -503,30 +374,297 @@ function activateSlotFromClue(slot: Slot) {
           </ol>
         </div>
 
-        <!-- Down -->
-        <div style="flex: 1; min-width: 12rem;">
-          <h3 style="margin: 0 0 0.5rem; font-size: 1rem; font-weight: 600;">Down</h3>
-          <ol style="list-style: none; padding: 0; margin: 0;">
+        <!-- Center column: Grid + Actions bar -->
+        <div class="puzzle-center-col">
+          <!-- Grid — only gridTemplateColumns/Rows are dynamic; all else via class -->
+          <div
+            class="puzzle-grid"
+            :style="{
+              gridTemplateColumns: `repeat(${COLS}, var(--puzzle-cell-size, 2rem))`,
+              gridTemplateRows:    `repeat(${ROWS}, var(--puzzle-cell-size, 2rem))`,
+            }"
+            tabindex="0"
+            @keydown="handleKeyDown"
+          >
+            <template v-for="(row, r) in grid" :key="r">
+              <div
+                v-for="(cell, c) in row"
+                :key="`${r}-${c}`"
+                class="puzzle-cell"
+                :class="{
+                  'cell-black':    cell.black,
+                  'cell-clickable': !cell.black,
+                  'cell-cursor':   !cell.black && isCursor(r, c),
+                  'cell-correct':  !cell.black && !isCursor(r, c) && cellStatus[`${r},${c}`] === 'correct',
+                  'cell-wrong':    !cell.black && !isCursor(r, c) && cellStatus[`${r},${c}`] === 'wrong',
+                  'cell-active':   !cell.black && !isCursor(r, c)
+                                    && cellStatus[`${r},${c}`] !== 'correct'
+                                    && cellStatus[`${r},${c}`] !== 'wrong'
+                                    && isInActiveSlot(r, c),
+                }"
+                @click="handleCellClick(r, c)"
+              >
+                <!-- Cell number (top-left) -->
+                <span
+                  v-if="!cell.black && cell.number"
+                  class="cell-number"
+                  :class="{ 'cell-number-cursor': isCursor(r, c) }"
+                >
+                  {{ cell.number }}
+                </span>
+                <!-- Letter -->
+                <span v-if="!cell.black">{{ answers[`${r},${c}`] || '' }}</span>
+              </div>
+            </template>
+          </div>
+
+          <!-- Actions bar -->
+          <div class="puzzle-actions">
+            <button
+              :disabled="!hasFilledSlot || solved"
+              class="puzzle-btn"
+              :class="{ 'puzzle-btn-disabled': !hasFilledSlot || solved }"
+              @click="checkPuzzle"
+            >
+              Check
+            </button>
+            <!-- Submit: enabled only when puzzle is solved.
+                 TODO (follow-up): wire final-submission backend call. -->
+            <button
+              :disabled="!solved"
+              class="puzzle-btn"
+              :class="{ 'puzzle-btn-disabled': !solved }"
+            >
+              Submit
+            </button>
+            <!-- Subtle status message (errors, etc.) -->
+            <span v-if="statusMsg" class="status-msg">
+              {{ statusMsg }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Right column: Down clues -->
+        <div class="puzzle-clues-col">
+          <h3 class="clues-heading">Down</h3>
+          <ol class="clues-list">
             <li
               v-for="slot in downSlots"
               :key="slot.id"
-              :style="{
-                padding: '0.25rem 0.5rem',
-                cursor: 'pointer',
-                background: activeSlot?.id === slot.id
-                  ? 'var(--sapHighlightColor, #d1e8ff)'
-                  : 'transparent',
-                borderRadius: '4px',
-                fontSize: '0.875rem',
-                lineHeight: '1.4',
-              }"
+              class="clue-item"
+              :class="{ 'clue-active': activeSlot?.id === slot.id }"
               @click="activateSlotFromClue(slot)"
             >
               <strong>{{ slot.number }}.</strong> {{ clueForSlot(slot, clues) }}
             </li>
           </ol>
         </div>
-      </div>
+
+      </div><!-- /.puzzle-layout -->
     </template>
   </div>
 </template>
+
+<style scoped>
+/* ── Outer island ─────────────────────────────────────────────────────────── */
+.puzzle-island {
+  /* inherits font/color from inline style on the root div */
+}
+
+/* ── 3-column layout row ──────────────────────────────────────────────────── */
+.puzzle-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+/* Narrow screens: stack vertically */
+@media (max-width: 900px) {
+  .puzzle-layout {
+    flex-direction: column;
+  }
+  .puzzle-clues-col {
+    max-width: 100%;
+    max-height: none;
+    width: 100%;
+  }
+}
+
+/* Clue side-columns: scrollable when clue list is long */
+.puzzle-clues-col {
+  flex: 1 1 11rem;
+  min-width: 10rem;
+  max-width: 16rem;
+  max-height: 32rem;
+  overflow-y: auto;
+}
+
+/* Center column: size to the grid + actions */
+.puzzle-center-col {
+  flex: 0 0 auto;
+}
+
+/* ── Clue lists ───────────────────────────────────────────────────────────── */
+.clues-heading {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.clues-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.clue-item {
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  background: transparent;
+}
+
+/* Active clue highlight — uses theme var for the surrounding UI (fine here) */
+.clue-active {
+  background: #d0e8ff;
+}
+
+/* ── Grid container ───────────────────────────────────────────────────────── */
+.puzzle-grid {
+  display: grid;
+  gap: 1px;
+  outline: none;
+  user-select: none;
+  /* Dark grid backing: the 1px gaps between cells render as black grid lines,
+     and the outer border + padding frame the whole grid so it stands out
+     against ANY page background (light-gray Horizon light mode included,
+     where a plain white grid was blending in). Theme-independent by design. */
+  background: #1a1a1a;
+  border: 2px solid #1a1a1a;
+  padding: 1px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Cells — THEME-INDEPENDENT (always black-on-white, ignores dark mode) ── */
+/*
+ * Fixed hex values are intentional: a crossword grid is always rendered
+ * black-on-white regardless of the surrounding app's light/dark theme.
+ * Do NOT replace these with var(--sap…) tokens.
+ */
+.puzzle-cell {
+  width: var(--puzzle-cell-size, 2rem);
+  height: var(--puzzle-cell-size, 2rem);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 600;
+  box-sizing: border-box;
+  cursor: default;
+  /* Default white cell. No border: the dark .puzzle-grid backing shows through
+     the 1px gaps AS the grid lines, so a per-cell border would double up. */
+  background: #ffffff;
+  color: #1a1a1a;
+  border: none;
+}
+
+/* Non-black cells are clickable */
+.cell-clickable {
+  cursor: pointer;
+}
+
+/* Black (blocked) cell */
+.cell-black {
+  background: #1a1a1a;
+  border: none;
+  cursor: default;
+}
+
+/* Cursor position: clear blue highlight */
+.cell-cursor {
+  background: #3b82f6;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+/* Active word slot (non-cursor cells): soft blue tint */
+.cell-active {
+  background: #d0e8ff;
+  color: #1a1a1a;
+}
+
+/* Check result — correct: green */
+.cell-correct {
+  background: #e6f4ea;
+  color: #107e3e;
+  border-color: #107e3e;
+}
+
+/* Check result — wrong: red */
+.cell-wrong {
+  background: #fce8e8;
+  color: #bb0000;
+  border-color: #bb0000;
+}
+
+/* ── Cell number label (top-left corner) ──────────────────────────────────── */
+.cell-number {
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  font-size: 0.5rem;
+  line-height: 1;
+  color: #444;
+  pointer-events: none;
+}
+
+/* On cursor cell the number must stay readable against the blue bg */
+.cell-number-cursor {
+  color: #ffffff;
+}
+
+/* ── Actions bar (Check + Submit + status message) ────────────────────────── */
+.puzzle-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.puzzle-btn {
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  border: 1px solid var(--sapButton_BorderColor, #0070f2);
+  background: var(--sapButton_Background, #0070f2);
+  color: var(--sapButton_TextColor, #fff);
+  font-size: 0.875rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.puzzle-btn-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.status-msg {
+  font-size: 0.8rem;
+  color: var(--sapNegativeColor, #bb0000);
+}
+
+/* ── Solved banner ────────────────────────────────────────────────────────── */
+.solved-banner {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--sapSuccessBackground, #f1faf5);
+  border: 1px solid var(--sapPositiveColor, #107e3e);
+  border-radius: 6px;
+  color: var(--sapPositiveColor, #107e3e);
+  font-weight: 600;
+}
+</style>
