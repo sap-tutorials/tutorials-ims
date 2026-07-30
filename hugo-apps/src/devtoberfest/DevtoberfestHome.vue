@@ -74,6 +74,8 @@ async function fetchStatus(): Promise<void> {
 }
 
 const eventName = computed<string>(() => status.value?.event?.name || 'Devtoberfest')
+const hasBanner = computed<boolean>(() => !!status.value?.bannerUrl)
+const bannerUrl = computed<string>(() => status.value?.bannerUrl || '')
 
 function fmtDate(iso: string | undefined): string {
   if (!iso) return ''
@@ -162,8 +164,14 @@ defineExpose({ fetchStatus })
 
 <template>
   <article class="dtf-home" :data-state="state">
-    <header class="dtf-header">
-      <div class="dtf-brand">
+    <header class="dtf-header" :data-has-banner="hasBanner ? 'true' : 'false'">
+      <img
+        v-if="hasBanner"
+        :src="bannerUrl"
+        :alt="eventName"
+        class="dtf-banner-img"
+      />
+      <div v-if="!hasBanner" class="dtf-brand">
         <img
           v-if="config.imgDevtoberfest"
           :src="config.imgDevtoberfest"
@@ -183,7 +191,7 @@ defineExpose({ fetchStatus })
           aria-hidden="true"
         />
       </div>
-      <div class="dtf-cta-wrap">
+      <div class="dtf-cta-wrap" :class="{ 'dtf-cta-overlay': hasBanner }">
         <button
           type="button"
           class="dtf-cta"

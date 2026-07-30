@@ -34,6 +34,28 @@ entity DevtoberfestConfig : cuid, managed {
   faqUrl            : String(500);
   gameboardUrl      : String(500);
   activitiesUrl     : String(500);
+  hasBanner         : Boolean default false;
+  bannerUpdatedAt   : Timestamp;
+  banner            : Composition of one DevtoberfestBanner on banner.config = $self;
+}
+
+/**
+ * Per-config hero banner image (the SAP TechEd key visual for that
+ * Devtoberfest edition). 1:1 composition: the association IS the key,
+ * so exactly one banner row exists per config. Mirrors AdvocatePhotos
+ * (db/advocates.cds). Bytes are a single wide WebP rendition produced by
+ * the sharp pipeline in srv/lib/devtoberfest-banner-store.js. Served
+ * publicly (anonymous) via GET /api/devtoberfest/banner for the active row.
+ */
+entity DevtoberfestBanner {
+  key config    : Association to DevtoberfestConfig not null;
+  image         : LargeBinary @Core.MediaType: mimeType;
+  mimeType      : String(40)  @Core.IsMediaType default 'image/webp';
+  sizeBytes     : Integer;
+  sha256        : String(64);
+  width         : Integer;
+  height        : Integer;
+  uploadedAt    : Timestamp;
 }
 
 /**

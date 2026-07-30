@@ -12,6 +12,7 @@ import { slugify, ensureUniqueSlug } from './lib/slug-utils.js';
 import { classifyAndPersist } from './lib/category-classifier.js';
 import { makeAltGroupHandler } from './handlers/completion-path-items-altgroup.js';
 import * as advocateHandlers from './handlers/advocate-handlers.js';
+import * as devtoberfestBannerHandlers from './handlers/devtoberfest-banner-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
@@ -932,6 +933,7 @@ export default class AdminService extends cds.ApplicationService {
 
     // Advocates: auto-derive slug from firstName + lastName on CREATE.
     advocateHandlers.register(this);
+    devtoberfestBannerHandlers.register(this);
 
     // Validate Start Date < End Date on Events
     this.before(['CREATE', 'PATCH'], 'Events', (req) => {

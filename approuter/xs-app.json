@@ -120,7 +120,7 @@
       "destination": "srv-api"
     },
     {
-      "source": "^/api/devtoberfest/(status|terms)$",
+      "source": "^/api/devtoberfest/(status|terms|banner)$",
       "target": "/api/devtoberfest/$1",
       "destination": "srv-api",
       "authenticationType": "none"

@@ -10,7 +10,7 @@ ID: tutorials-ims
 # Bump this on each release you deploy — it's the version shown by `cf mtas`
 # and in the mtar filename (tutorials-ims_<version>.mtar). Deploy is manual:
 # `cd .deploy && mbt build && cf deploy mta_archives/tutorials-ims_<version>.mtar -e ../deploy/<env>.mtaext -f`.
-version: 1.4.1
+version: 1.5.0
 
 # Full MTA for deploying: db-deployer + CAP srv + approuter (with admin UI).
 #
