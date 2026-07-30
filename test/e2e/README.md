@@ -12,7 +12,7 @@ One happy-path smoke assertion per surface. Intentionally narrow — load-proves
 | `admin-shell.test.js` | `/admin-ui/#missions` (XSUAA) → sap.tnt.ToolPage shell → CAP `/admin` OData | Basic |
 | `scanner.test.js` | `/scanner-ui/` (XSUAA scope `MobileApp`) | Basic |
 | `analytics-explorer.test.js` | `/analytics-ui/` (XSUAA) → Vue 3 SPA → CAP `/admin/analytics` | Basic |
-| `display-app.test.js` | `/display/` (XSUAA scope `DisplayApp`) → Socket.IO `/ws/display` | Basic |
+| `display-app.test.js` | `/display-app/` (XSUAA scope `DisplayApp`) → Socket.IO `/ws/display` | Basic |
 
 All specs self-skip with no output when `SMOKE_BASE_URL`/`PLAYWRIGHT_BASE_URL` is absent — `npm test` (unit tier) is unaffected.
 
