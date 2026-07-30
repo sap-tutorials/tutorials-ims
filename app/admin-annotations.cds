@@ -2412,17 +2412,16 @@ annotate AdminService.AdvocatePhotos with @(
   }
 );
 
-// DevtoberfestBanner — FE renders an UploadSet for the @Core.MediaType
-// `image` column when it's a LineItem in the composition's FieldGroup.
+// DevtoberfestBanner — the image bytes are written via the `uploadBanner`
+// bound action (sharp → WebP → BLOB), invoked from the Object Page header
+// action in the devtoberfest admin app. It is intentionally NOT surfaced as a
+// Fiori UploadSet / LineItem facet: FE would render a table whose "Create"
+// POSTs a new row to a composition-of-one whose key IS the parent association,
+// which OData rejects with "Method POST is not allowed for singletons and
+// individual entities" (confirmed live on DEV 2026-07-29).
 annotate AdminService.DevtoberfestBanner with {
   image  @Common.Label: 'Banner Image'  @Core.ContentDisposition: { Filename: 'devtoberfest-banner.webp' };
 };
-
-annotate AdminService.DevtoberfestBanner with @(
-  UI.LineItem: [
-    { $Type: 'UI.DataField', Value: image, Label: 'Banner Image' }
-  ]
-);
 
 // #777 followup (2026-06-30) — minimal LineItem for the Advocate Object Page
 // ownedTutorials facet. Read-only display; shown inside the OwnedTutorials
@@ -2782,6 +2781,8 @@ annotate AdminService.DevtoberfestConfig with {
   faqUrl            @title: 'FAQ URL' @Common.Label: 'FAQ URL';
   gameboardUrl      @title: 'Gameboard URL' @Common.Label: 'Gameboard URL';
   activitiesUrl     @title: 'Activities URL' @Common.Label: 'Activities URL';
+  hasBanner         @title: 'Banner uploaded' @Common.Label: 'Banner uploaded';
+  bannerUpdatedAt   @title: 'Banner last updated' @Common.Label: 'Banner last updated';
 };
 
 annotate AdminService.DevtoberfestConfig with @UI: {
@@ -2814,7 +2815,7 @@ annotate AdminService.DevtoberfestConfig with @UI: {
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General',  Label: 'Event & Status' },
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Terms',    Label: 'Content Rules / Terms' },
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#SubPages', Label: 'Sub-pages (leave blank to hide)' },
-    { $Type: 'UI.ReferenceFacet', Target: 'banner/@UI.LineItem',     Label: 'Event Banner' }
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Banner',   Label: 'Event Banner' }
   ],
   FieldGroup#General: { Data: [
     { Value: currentEvent_ID, Label: 'Event' },
@@ -2830,6 +2831,16 @@ annotate AdminService.DevtoberfestConfig with @UI: {
     { Value: faqUrl },
     { Value: gameboardUrl },
     { Value: activitiesUrl }
+  ]},
+  // Banner status (read-only). The image itself is uploaded via the header
+  // actions `uploadBanner`/`clearBanner` (wired in the devtoberfest admin app
+  // manifest to a controller that POSTs the file to the bound action) — NOT a
+  // Fiori UploadSet, which cannot create a row on a 1:1 composition whose key
+  // IS the parent association ("POST is not allowed for singletons and
+  // individual entities", confirmed live on DEV 2026-07-29).
+  FieldGroup#Banner: { Data: [
+    { Value: hasBanner,       Label: 'Banner uploaded' },
+    { Value: bannerUpdatedAt, Label: 'Banner last updated' }
   ]}
 };
 
