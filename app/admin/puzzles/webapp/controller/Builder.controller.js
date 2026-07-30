@@ -2,26 +2,23 @@ sap.ui.define([
   "sap/ui/core/mvc/Controller",
   "sap/ui/model/json/JSONModel",
   "sap/m/MessageToast",
-  "sap/m/MessageBox"
-], function (Controller, JSONModel, MessageToast, MessageBox) {
+  "sap/m/MessageBox",
+  "sap/tutorials/admin/puzzles/lib/crossword-geometry"
+], function (Controller, JSONModel, MessageToast, MessageBox, geom) {
   "use strict";
 
   // ──────────────────────────────────────────────────────────────────────────
   // Builder.controller.js
   //
-  // ESM geometry consumption:
-  //   crossword-geometry.js is a plain-ESM module (export function …).
-  //   The UI5 AMD loader cannot sap.ui.define-require it.
-  //   Strategy: load it once in onInit via native dynamic import() using the
-  //   URL resolved by sap.ui.require.toUrl() — this works in UI5 1.120+ where
-  //   the UI5 bootstrap does NOT intercept native import() for non-AMD modules.
-  //   The module URL is under the registered resource root for the component,
-  //   so it resolves to the correct dist/components/puzzles/lib/… path.
-  //   Fallback: if import() rejects, the controller posts a MessageBox and
-  //   disables editing. The plain-ESM original is kept for vitest consumption.
+  // Geometry consumption:
+  //   crossword-geometry.js is a UI5 AMD module (sap.ui.define) loaded via this
+  //   controller's dependency array (the `geom` argument above). It is NOT
+  //   loaded via native dynamic import() — the approuter CSP forbids
+  //   'unsafe-eval', and import(toUrl(...)) evaluates module source as a string,
+  //   which CSP blocks (the failure that made the builder fail to load on DEV).
+  //   Being an AMD dependency, `geom` is guaranteed present before any handler
+  //   runs, so no async-ready guard is needed.
   // ──────────────────────────────────────────────────────────────────────────
-
-  var GEOM_MODULE_NAME = "sap/tutorials/admin/puzzles/lib/crossword-geometry.js";
 
   // Cell size in pixels for the rendered grid
   var CELL_PX = 32;
@@ -60,28 +57,15 @@ sap.ui.define([
         editId: null         // OData ID when editing existing puzzle (null = new)
       });
       this.getView().setModel(oState, "b");
-      this._geom = null;     // loaded async below
-
-      var sUrl = sap.ui.require.toUrl(GEOM_MODULE_NAME);
-      var self = this;
-      import(sUrl).then(function (mod) {
-        self._geom = mod;
-      }).catch(function (err) {
-        MessageBox.error(
-          "Could not load grid geometry module.\nEditing is disabled until reload.\n\n" + err,
-          { title: "Module load error" }
-        );
-      });
     },
 
     // ── List mode ────────────────────────────────────────────────────────────
 
     onCreateNew: function () {
-      if (!this._geom) { MessageToast.show("Geometry module not ready. Please wait."); return; }
       var b = this.getView().getModel("b");
       var rows = parseInt(b.getProperty("/rows"), 10) || 15;
       var cols = parseInt(b.getProperty("/cols"), 10) || 15;
-      var grid = this._geom.numberGrid(this._geom.makeEmptyGrid(rows, cols));
+      var grid = geom.numberGrid(geom.makeEmptyGrid(rows, cols));
       b.setProperty("/grid", grid);
       b.setProperty("/rows", rows);
       b.setProperty("/cols", cols);
@@ -100,7 +84,6 @@ sap.ui.define([
     },
 
     onPuzzlePress: function (oEvent) {
-      if (!this._geom) { MessageToast.show("Geometry module not ready. Please wait."); return; }
       var oCtx = oEvent.getSource().getBindingContext();
       if (!oCtx) { return; }
       var row = oCtx.getObject({
@@ -137,7 +120,7 @@ sap.ui.define([
           if (grid[r] && grid[r][c]) { grid[r][c].letter = solution[key] || ""; }
         });
       } else {
-        grid = this._geom.numberGrid(this._geom.makeEmptyGrid(rows, cols));
+        grid = geom.numberGrid(geom.makeEmptyGrid(rows, cols));
       }
 
       b.setProperty("/editId", row.ID || null);
@@ -173,10 +156,9 @@ sap.ui.define([
     // ── Grid interactions ─────────────────────────────────────────────────────
 
     onToggleBlack: function (r, c) {
-      if (!this._geom) { return; }
       var b = this.getView().getModel("b");
-      var grid = this._geom.setBlack(b.getProperty("/grid"), r, c);
-      grid = this._geom.numberGrid(grid);
+      var grid = geom.setBlack(b.getProperty("/grid"), r, c);
+      grid = geom.numberGrid(grid);
       b.setProperty("/grid", grid);
       this._recomputeSlots();
       this._renderGrid();
@@ -409,14 +391,13 @@ sap.ui.define([
     },
 
     _recomputeSlots: function () {
-      if (!this._geom) { return; }
       var b = this.getView().getModel("b");
       var grid = b.getProperty("/grid");
       var clues = b.getProperty("/clues") || {};
       var hints = b.getProperty("/hints") || {};
       var answers = b.getProperty("/answers") || {};
 
-      var allSlots = this._geom.findSlots(grid, 2);
+      var allSlots = geom.findSlots(grid, 2);
 
       // Helper: derive label (number of starting cell)
       var across = [];
