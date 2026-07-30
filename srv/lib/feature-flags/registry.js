@@ -138,6 +138,13 @@ export const FEATURE_FLAGS = [
     howToChange: adminTile('joule', '#joule'),
   },
   {
+    key: 'ChatSettings.puzzleHintEnabled', label: 'Puzzle hint Joule tool', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'puzzleHintEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'puzzleHint Joule tool registration. Returns safe hint material without revealing the answer.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
     key: 'ChatSettings.kgSearchExpansionEnabled', label: 'KG search expansion', category: 'Chat / AI',
     kind: 'db-setting', entity: 'ChatSettings', column: 'kgSearchExpansionEnabled', resolver: 'chat',
     valueType: 'boolean', default: true, issue: '#943', status: 'ga',

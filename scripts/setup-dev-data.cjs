@@ -233,6 +233,27 @@ const dryRun = args.includes('--dry-run');
     }
   }
 
+  // --- Step 5: Seed the POC "Devtoberfest Cryptic Crossword" puzzle ---
+  //
+  // Idempotent INSERT — skips silently if the row already exists.
+  // Uses dynamic import() because seed-poc-puzzle.js is ESM (same pattern
+  // as the slug-utils.js import above at line 44).
+  if (!skipCleanup) {
+    console.log('\n=== Step 5: Seeding POC Devtoberfest Cryptic Crossword ===');
+    try {
+      const { seedPocPuzzle } = await import('../srv/lib/seed-poc-puzzle.js');
+      const result = await seedPocPuzzle(db);
+      if (result.seeded) {
+        console.log('  Puzzle seeded: devtoberfest-cryptic-crossword');
+      } else {
+        console.log('  Puzzle already exists: devtoberfest-cryptic-crossword — skipping');
+      }
+    } catch (e) {
+      // Graceful degradation: Puzzles table may not exist in older envs.
+      console.log(`  Could not seed puzzle (table may not exist yet): ${e.message}`);
+    }
+  }
+
   console.log('\nDone.');
   process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -1459,6 +1459,11 @@
     },
     "com.sap.developers.ims.Puzzles": {
       "kind": "entity",
+      "@assert.unique.slug": [
+        {
+          "=": "slug"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -1527,6 +1532,34 @@
           "length": 36,
           "@odata.foreignKey4": "primaryTagRef",
           "@cds.persistence.name": "PRIMARYTAGREF_ID"
+        },
+        "slug": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "SLUG"
+        },
+        "layout": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "LAYOUT"
+        },
+        "solution": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "SOLUTION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "slug": {
+            "paths": [
+              {
+                "ref": [
+                  "slug"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Puzzles"
+          }
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_PUZZLES"
@@ -2028,6 +2061,13 @@
             "val": false
           },
           "@cds.persistence.name": "COMMUNITYPEERSENABLED"
+        },
+        "puzzleHintEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "PUZZLEHINTENABLED"
         },
         "communityRankWeight": {
           "type": "cds.Decimal",

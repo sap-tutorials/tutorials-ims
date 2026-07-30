@@ -54,6 +54,7 @@
       "sap.tutorials.admin.events": "./components/events",
       "sap.tutorials.admin.missions": "./components/missions",
       "sap.tutorials.admin.groups": "./components/groups",
+      "sap.tutorials.admin.puzzles": "./components/puzzles",
       "sap.tutorials.admin.tutorials": "./components/tutorials",
       "sap.tutorials.admin.tags": "./components/tags",
       "sap.tutorials.admin.categories": "./components/categories",
@@ -131,6 +132,12 @@
       },
       "groupsComponent": {
         "name": "sap.tutorials.admin.groups",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "puzzlesComponent": {
+        "name": "sap.tutorials.admin.puzzles",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -401,6 +408,16 @@
             {
               "name": "groupsTarget",
               "prefix": "gr"
+            }
+          ]
+        },
+        {
+          "name": "puzzles",
+          "pattern": "puzzles",
+          "target": [
+            {
+              "name": "puzzlesTarget",
+              "prefix": "pu"
             }
           ]
         },
@@ -856,6 +873,13 @@
           "id": "groupsTarget",
           "viewLevel": 1,
           "prefix": "gr"
+        },
+        "puzzlesTarget": {
+          "type": "Component",
+          "usage": "puzzlesComponent",
+          "id": "puzzlesTarget",
+          "viewLevel": 1,
+          "prefix": "pu"
         },
         "tutorialsTarget": {
           "type": "Component",

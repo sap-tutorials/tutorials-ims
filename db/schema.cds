@@ -15,7 +15,7 @@ aspect LegacyKeyed {
 type ExperienceLevel : String(255) enum { beginner; intermediate; advanced; }
 type TaskStatus      : String(50)  enum { ACTIVE; INACTIVE; }
 type MissionType     : String(20)  enum { SEQUENTIAL; SET; }
-type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; }
+type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; }
 type EventType       : String(20)  enum { DEVTOBERFEST; TECHED; CODEJAM; CHALLENGE; OTHER; }
 
 aspect TaskBase : cuid, managed, LegacyKeyed {
@@ -126,11 +126,14 @@ entity Steps : TaskBase {
 
 entity Checkpoints : TaskBase { }
 
-// Issue #644 — Puzzle tasks. First-class entity (peer of Tutorials/Missions/
-// Groups/Steps/Checkpoints) so a puzzle catalog can be administered, and so
-// TaskRecords with taskType='PUZZLE' can join back to a real content row via
-// legacyId (Tasks UNION view + TaskRecordsAnalytics association).
-entity Puzzles : TaskBase { }
+// Issue #644 — Puzzle tasks. layout = public grid+clues JSON; solution = answer
+// key JSON, NEVER exposed on a public projection (see PuzzleService).
+@assert.unique.slug: [slug]
+entity Puzzles : TaskBase {
+  slug     : String(255);
+  layout   : LargeString;   // JSON {rows,cols,grid,clues,wordLengths,enumeration,hints}
+  solution : LargeString;   // JSON {"r,c":"LETTER"} — SERVER ONLY
+}
 
 @assert.unique.sapId       : [sapId]
 @assert.unique.khorosId    : [khorosId]
@@ -185,6 +188,16 @@ entity TaskRecords : cuid, managed, LegacyKeyed {
   progressNote              : String(1000);
   event                     : Association to Events;
   attemptNumber             : Integer default 1;        // NEW (issue #600)
+}
+
+// Per-user in-progress puzzle grid for cross-device resume (the user's own
+// guesses, not answers). One live row per (user, puzzle).
+@assert.unique.userPuzzle: [user, puzzle]
+entity PuzzleProgress : cuid, managed {
+  user          : Association to Users   @mandatory;
+  puzzle        : Association to Puzzles @mandatory;
+  filledGrid    : LargeString;   // JSON {"r,c":"LETTER"}
+  attemptNumber : Integer default 1;
 }
 
 entity UserMetaData : cuid, LegacyKeyed {
@@ -665,6 +678,11 @@ entity ChatSettings : cuid, managed {
   // Louvain rollout + nightly labeling being live, so it ships dark and is
   // flipped on after PROD KgCommunity/KgCommunityLabel data is verified.
   communityPeersEnabled           : Boolean default false;
+
+  // Puzzle hint Joule tool (this feature). Default OFF — the tool returns only
+  // safe hint material (clue, length, correct crossing letters, wordplay type);
+  // the answer never enters Joule's context. Flipped on by an Admin after review.
+  puzzleHintEnabled               : Boolean default false;
 
   // Community-overlap SEARCH-RANK weight (#1171). The additive rank term
   // `+ W * (case when slug = '<peer>' then 1 else 0 end)` that boosts tutorials

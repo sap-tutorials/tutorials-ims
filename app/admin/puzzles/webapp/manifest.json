@@ -1,0 +1,61 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.puzzles",
+    "type": "application",
+    "title": "Puzzles",
+    "description": "Build and edit puzzles",
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Puzzle-manage": {
+          "semanticObject": "Puzzle",
+          "action": "manage",
+          "title": "Puzzles",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "rootView": {
+      "viewName": "sap.tutorials.admin.puzzles.view.Builder",
+      "type": "XML",
+      "id": "builder"
+    },
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.ui.layout": {}
+      }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    }
+  }
+}
