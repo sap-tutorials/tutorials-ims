@@ -5,6 +5,8 @@
 //   actions  → POST   /api/puzzles/<ActionName>
 //   functions→ GET    /api/puzzles/<FunctionName>(param='value')
 
+import { csrfFetch } from '@shared/csrf-fetch';
+
 // ── Pure helpers (exported for unit tests) ───────────────────────────────────
 
 /**
@@ -89,7 +91,7 @@ export async function postCheck(
   slug: string,
   entries: Array<{ slotId: string; word: string }>
 ): Promise<CheckResult> {
-  const r = await fetch(`${apiUrl}/check`, {
+  const r = await csrfFetch(`${apiUrl}/check`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     credentials: 'include',
@@ -121,7 +123,7 @@ export async function postSaveProgress(
   slug: string,
   filledGrid: string
 ): Promise<void> {
-  const r = await fetch(`${apiUrl}/saveProgress`, {
+  const r = await csrfFetch(`${apiUrl}/saveProgress`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     credentials: 'include',
@@ -137,7 +139,7 @@ export async function postComplete(
   apiUrl: string,
   slug: string
 ): Promise<CompleteResult> {
-  const r = await fetch(`${apiUrl}/complete`, {
+  const r = await csrfFetch(`${apiUrl}/complete`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     credentials: 'include',
