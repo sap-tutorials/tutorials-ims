@@ -11,7 +11,8 @@
 ## Global Constraints
 
 - **Design spec:** `docs/superpowers/specs/2026-07-30-puzzle-designer-feature-parity-design.md` (authoritative).
-- **Never `import()` ESM in the browser** — approuter CSP forbids `'unsafe-eval'`; `import(toUrl(...))` is blocked. Load helpers as `sap.ui.define` AMD via dependency arrays; load the worker as a same-origin **classic** `new Worker(url)`.
+- **Never `import()` ESM in the browser** — approuter CSP forbids `'unsafe-eval'`; `import(toUrl(...))` is blocked. Load helpers as `sap.ui.define` AMD via dependency arrays; load the worker as a same-origin **classic** `new Worker(url)`, and have the worker pull shared logic via `importScripts` (allowed under `script-src 'self'`).
+- **Single-source the solver (no duplication).** `solver-core.js` is authored as a **UMD module**: when `sap.ui.define` exists (controller + vm unit tests) it self-registers as an anonymous AMD module; when loaded via `importScripts` inside the worker (`sap` undefined) it assigns `self.SolverCore`. The worker contains NO copy of the solve body — it `importScripts` the same file and calls `self.SolverCore.solve`. One source of truth, unit-tested once.
 - **All new frontend files live under `app/admin/puzzles/webapp/`** — `copy-components.js` recursively copies each admin child app's whole `webapp/` into `dist/components/<name>/`, which ships to `static/admin-ui/components/puzzles/`. No separate `.deploy/mta.yaml` static entry is needed for assets kept under `webapp/`.
 - **Unification invariant:** every letter-producing path writes `b>/answers` keyed `"r,c"` → then calls `_recomputeSlots()` + `_renderGrid()`. `onSave` serialization is NOT modified.
 - **`Puzzles` layout/solution model unchanged.** Only new backend artifact is `GridTemplates`.
@@ -58,9 +59,10 @@ function loadSolver() {
   const src = readFileSync(
     path.resolve(__dirname, '../../app/admin/puzzles/webapp/lib/solver-core.js'), 'utf8')
   let mod
-  const sandbox = { sap: { ui: { define: (deps, fn) => { mod = fn() } } } }
+  // UMD module: prefer the AMD path by providing sap.ui.define; capture the export.
+  const sandbox = { sap: { ui: { define: (deps, fn) => { mod = fn() } } }, self: {} }
   vm.runInNewContext(src, sandbox)
-  return mod
+  return mod || sandbox.self.SolverCore
 }
 
 // A 3x1 across slot + a 3x1 down slot crossing at (0,0).
@@ -104,10 +106,18 @@ Expected: FAIL — `Cannot find module .../solver-core.js` or `solver.solve is n
 ```js
 // app/admin/puzzles/webapp/lib/solver-core.js
 // Pure backtracking crossword filler with MRV slot ordering.
-// No DOM, no `self`, no Date.now/Math.random — deterministic and unit-testable.
-// Loaded as an AMD module so the Builder controller (and the worker) can require it
-// without native import() (CSP forbids 'unsafe-eval').
-sap.ui.define([], function () {
+// No DOM — deterministic and unit-testable. UMD: registers as an anonymous AMD
+// module when sap.ui.define exists (Builder controller + vm unit tests), and as
+// self.SolverCore when loaded via importScripts inside the classic Web Worker.
+// This is the SINGLE source of the solve logic — the worker does NOT copy it.
+(function (root, factory) {
+  "use strict";
+  if (typeof sap !== "undefined" && sap.ui && sap.ui.define) {
+    sap.ui.define([], factory);            // AMD (controller + tests)
+  } else {
+    root.SolverCore = factory();           // worker global (importScripts)
+  }
+})(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
   // Read the current letters at a slot's cells from a "r,c"→LETTER map.
@@ -144,14 +154,18 @@ sap.ui.define([], function () {
     return n;
   }
 
+  // opts.nowFn: monotonic clock. When omitted, a per-attempt counter is used and
+  // timeLimitMs is an attempt budget (deterministic for unit tests). The worker
+  // passes { nowFn: () => Date.now(), timeLimitMs: <wall-clock ms> } for real time.
   function solve(opts) {
     var slots = opts.slots;
     var words = (opts.words || []).map(function (w) { return String(w).toUpperCase(); });
-    var timeLimitMs = opts.timeLimitMs || 12000;
+    var timeLimitMs = opts.timeLimitMs != null ? opts.timeLimitMs : 12000;
     var onProgress = opts.onProgress;
-    var nowFn = opts.nowFn || (function () { var t = 0; return function () { return (t += 1); }; })();
-    // When nowFn is the default counter, treat timeLimitMs as an attempt budget.
-    var deadline = timeLimitMs;
+    var counter = 0;
+    var nowFn = opts.nowFn || function () { return (counter += 1); };
+    var start = nowFn();
+    var deadline = start + timeLimitMs;
 
     // Seed letters from any pre-filled grid cells.
     var letters = {};
@@ -882,15 +896,14 @@ git commit -m "feat(puzzles): clear/import/export/print/help toolbar"
 ### Task 7: Fill worker + Fill Grid / Just Fill / Stop + bundled dictionary
 
 **Files:**
-- Create: `app/admin/puzzles/webapp/lib/fill-worker.js` (classic worker; `importScripts` the solver in worker-compatible form)
-- Create: `app/admin/puzzles/webapp/lib/solver-worker-entry.js` (plain, non-AMD copy path — see step 2 note)
+- Create: `app/admin/puzzles/webapp/lib/fill-worker.js` (classic worker; `importScripts` the single-source `solver-core.js` — NO copy of the solve logic)
 - Create: `app/admin/puzzles/webapp/assets/common-english.txt` (bundled dictionary)
 - Modify: `controller/Builder.controller.js` (start/stop/apply + CSP fallback)
 - Modify: `view/Builder.view.xml` (Fill Grid / Just Fill / Stop buttons + status strip)
 - Test: `test/unit/puzzle-fill-controller.test.js` (fallback solver path, pure)
 
 **Interfaces:**
-- Consumes: `solver-core.solve` (Task 1).
+- Consumes: `solver-core.solve` (Task 1) — via AMD dep in the controller, via `importScripts` in the worker (same file, UMD).
 - Produces on controller: `onFillGrid`, `onJustFill`, `onStopFill`, internal `_runFill(mode)`, `_applyFillResult(placed)`, `_fallbackSolveMainThread(opts)`.
 - Worker message protocol: post `{ type:'start', slots, words, grid, rows, cols, timeLimitMs }`; receive `{ type:'progress', placed }`, `{ type:'result', status, placed }`, `{ type:'error', message }`.
 
@@ -898,33 +911,46 @@ git commit -m "feat(puzzles): clear/import/export/print/help toolbar"
 
 Copy the POC's downloaded list (`google-10000-english-no-swears.txt`) into `app/admin/puzzles/webapp/assets/common-english.txt`, uppercased, one word per line, A–Z only. If the POC repo has it cached, reuse it; otherwise fetch once at build time and commit the file (it ships via `copy-components.js`).
 
-- [ ] **Step 2: Author the worker**
+- [ ] **Step 2: Author the worker (imports the single-source solver — no duplication)**
 
-The worker cannot use `sap.ui.define`. Create `solver-core` logic in a worker-loadable form. Simplest robust approach: author `fill-worker.js` to `importScripts` a UMD-wrapped copy is fragile — instead **inline the solver's pure functions** into the worker file (duplication is acceptable here and unit-tested separately via `solver-core`). Keep the two in sync via a comment cross-reference.
+The worker `importScripts` the SAME `solver-core.js` authored in Task 1. Because that
+file is UMD, running it in the worker (where `sap` is undefined) assigns
+`self.SolverCore`. The worker adds only wall-clock time + throttled progress — it
+contains NO copy of `solve()`.
 
 ```js
 // app/admin/puzzles/webapp/lib/fill-worker.js
 // Classic Web Worker — loaded via new Worker(sap.ui.require.toUrl(...)).
-// Mirrors lib/solver-core.js solve() (kept in sync; solver-core is the unit-tested source).
+// It importScripts the single-source solver-core.js (UMD → self.SolverCore).
+// There is NO copy of the solve logic here; solver-core is the one source, unit-tested.
 "use strict";
-/* eslint-disable */
-function fits(slot, word, letters){ if(word.length!==slot.len) return false;
-  for(var i=0;i<slot.len;i++){var c=slot.cells[i];var e=letters[c.r+","+c.c];if(e&&e!==word[i])return false;} return true; }
-// ... (paste the solve() body from solver-core, using Date.now() for the real time limit,
-//      and postMessage({type:'progress', placed}) throttled every ~200ms) ...
+importScripts("./solver-core.js");   // relative to this worker file; same webapp/lib dir
+
 self.onmessage = function (ev) {
   var msg = ev.data;
-  if (msg.type !== 'start') { return; }
+  if (!msg || msg.type !== "start") { return; }
   try {
-    var res = doSolve(msg); // local solve() adaptation with real Date.now time budget
-    self.postMessage({ type: 'result', status: res.status, placed: res.placed });
+    var last = 0;
+    var res = self.SolverCore.solve({
+      slots: msg.slots, words: msg.words, grid: msg.grid,
+      rows: msg.rows, cols: msg.cols,
+      timeLimitMs: msg.timeLimitMs,
+      nowFn: function () { return Date.now(); },     // real wall-clock budget
+      onProgress: function (placed) {
+        var now = Date.now();
+        if (now - last >= 200) { last = now; self.postMessage({ type: "progress", placed: placed }); }
+      }
+    });
+    self.postMessage({ type: "result", status: res.status, placed: res.placed });
   } catch (e) {
-    self.postMessage({ type: 'error', message: String(e && e.message || e) });
+    self.postMessage({ type: "error", message: String(e && e.message || e) });
   }
 };
 ```
 
-(During implementation, copy the exact `solve()` internals from `solver-core.js`, swapping the injected `nowFn` for `Date.now()` and `timeLimitMs` as wall-clock, and adding throttled progress posts.)
+Note: `importScripts("./solver-core.js")` resolves relative to the worker script URL,
+so both files must sit in `webapp/lib/` (they do). Verify at Task 10 that the built
+bundle keeps them siblings under `components/puzzles/lib/`.
 
 - [ ] **Step 3: Write the failing fallback test (main-thread solve path used when CSP blocks workers)**
 
@@ -1005,11 +1031,9 @@ Expected: PASS.
     },
 
     _fallbackSolveMainThread: function (opts) {
-      // solver-core is a loaded AMD dep; run synchronously (chunking omitted — acceptable
-      // for the fallback path since workers are the primary route).
-      var res = window.__solverCore ? window.__solverCore.solve(opts) : null;
-      // solver-core is added to the dependency array below as `solver`; use it directly:
-      res = solver.solve(opts);
+      // Worker unavailable/CSP-blocked → solve on the main thread using the same
+      // solver-core AMD dep (`solver`). Synchronous; acceptable for the fallback path.
+      var res = solver.solve(opts);
       this._finishFill(res.status, res.placed);
     },
 
@@ -1399,5 +1423,5 @@ gh pr create --draft --title "feat(puzzles): admin puzzle-designer feature parit
 
 - **Spec coverage:** word list (T5), upload (T5), import/export (T2+T6), print (T6), clear (T6), instructions/help (T6), grid config incl. templates (T3+T8), auto-fill (T1+T7), live suggestions (T8), published-manager parity (T9), keep hint types + draft/publish (untouched — verified `onSave` not modified). All spec sections mapped.
 - **Type consistency:** `b>/answers` keyed `"r,c"`; slot ids `"<r>-<c>-<dir>"`; `solve()` / `fits()` / `parseWordList()` / `exportPuzzle()` / `importPuzzle()` signatures consistent across T1/T2/T5/T7/T8.
-- **Known duplication (intentional):** `fill-worker.js` inlines the solver body that `solver-core.js` unit-tests, because a classic worker cannot load an AMD module and `import()` is CSP-blocked. Cross-referenced in comments; the solver logic is the same and unit-tested once via `solver-core`.
+- **Single-source solver (no duplication):** `solver-core.js` is a UMD module — AMD for the controller + vm unit tests, `self.SolverCore` for the worker via `importScripts`. `fill-worker.js` holds NO copy of the solve logic; it only adds wall-clock timing + throttled progress. Unit-tested once via `solver-core`.
 - **Open confirmations for the implementer:** (a) exact "unpublish" status value vs `PuzzleService` read filter (T9); (b) whether `db/data` CSV seeding for `GridTemplates` trips the `.hdbtabledata` editable-column-wipe gotcha — templates aren't field-edited in admin, so a stable seed CSV is expected safe (confirm at T3).
