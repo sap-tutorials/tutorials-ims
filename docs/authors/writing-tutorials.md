@@ -97,6 +97,11 @@ Immediately after the frontmatter:
 - **`## You will learn`** and **`## Prerequisites`** — H2 sections, conventional and recommended.
 - The standalone `---` after Prerequisites separates the introduction from the steps.
 
+> [!TIP]
+> Only include a single contiguous set of bullet points in the Prerequisites
+> section, and don't include any normal paragraphs. Otherwise the rendered
+> version may be unpredictable and not what you intend.
+
 ### 3.3 Steps (V2 parser)
 
 Each step is a `### H3 heading` followed by content:
