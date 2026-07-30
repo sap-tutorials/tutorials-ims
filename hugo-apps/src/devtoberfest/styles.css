@@ -26,7 +26,7 @@
   padding: 1.5rem 1.75rem;
   border-radius: 12px;
   color: #fff;
-  background: linear-gradient(135deg, #0070f2 0%, #7858ff 100%);
+  background: linear-gradient(165deg, #5D36FF 0%, #7B42F0 45%, #A100C2 100%);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   overflow: hidden;
   isolation: isolate;
@@ -49,6 +49,27 @@
   z-index: 0;
 }
 
+/* Drifting Joule aurora glow — behind content (z-index 1), above base gradient. */
+.dtf-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 15% 120%, rgba(128, 0, 220, 0.55), transparent 55%),
+    radial-gradient(ellipse at 85% -10%, rgba(241, 172, 255, 0.35), transparent 55%),
+    radial-gradient(ellipse at 55% 60%,  rgba(175, 216, 255, 0.25), transparent 60%);
+  filter: blur(30px);
+  opacity: 0.9;
+  animation: dtfHeroAurora 14s ease-in-out infinite alternate;
+}
+
+@keyframes dtfHeroAurora {
+  from { transform: translate3d(-3%, 0, 0) scale(1.05); }
+  to   { transform: translate3d(3%, -2%, 0) scale(1.15); }
+}
+
 /* Image-banner variant: drop the gradient/padding, let the img fill. */
 .dtf-header[data-has-banner="true"] {
   padding: 0;
@@ -56,6 +77,7 @@
   display: block;
 }
 .dtf-header[data-has-banner="true"]::before { display: none; }
+.dtf-header[data-has-banner="true"]::after { display: none; }
 
 .dtf-banner-img {
   width: 100%;
@@ -210,7 +232,29 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dtf-cta { animation: none; }
+  .dtf-cta,
+  .dtf-arcade-chunk:last-child,
+  .dtf-header::after,
+  .dtf-kasimir {
+    animation: none;
+  }
+}
+
+/* ------------------- Body CTA (light background) -------------------- */
+
+.dtf-cta-body-wrap {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 0.25rem;
+}
+
+/* Drop the white inset ring (invisible on light bg); fix focus color. */
+.dtf-cta-body {
+  box-shadow: 0 6px 18px rgba(var(--dtf-joule-glow), 0.45);
+}
+.dtf-cta-body:focus-visible {
+  outline: 2px solid var(--dtf-joule-1);
+  outline-offset: 2px;
 }
 
 .dtf-cta-hint {
@@ -237,13 +281,22 @@
   font-size: 0.85rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--sapNeutralColor, #6a6d70);
-  border-top: 1px dashed var(--sapPageHeader_BorderColor, #d5dadc);
-  border-bottom: 1px dashed var(--sapPageHeader_BorderColor, #d5dadc);
+  color: #A100C2;
+  text-shadow: 0 0 6px rgba(161, 0, 194, 0.7), 0 0 12px rgba(123, 66, 240, 0.5);
+  border-top: 1px dashed rgba(123, 66, 240, 0.5);
+  border-bottom: 1px dashed rgba(123, 66, 240, 0.5);
 }
 
 .dtf-arcade-chunk {
   display: inline-block;
+}
+
+@keyframes dtfArcadeBlink {
+  0%, 80%, 100% { opacity: 0.3; }
+  40%           { opacity: 1; }
+}
+.dtf-arcade-chunk:last-child {
+  animation: dtfArcadeBlink 1.2s infinite ease-in-out;
 }
 
 /* ------------------------------- Body ------------------------------- */
@@ -290,6 +343,14 @@
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
 }
 
+@keyframes dtfBob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+.dtf-kasimir {
+  animation: dtfBob 3s ease-in-out infinite;
+}
+
 /* -------------------------------- Rail ------------------------------- */
 
 .dtf-rail {
@@ -311,7 +372,7 @@
   color: var(--sapLinkColor, #0a6ed1);
   text-decoration: none;
   font-size: 0.95rem;
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
 }
 
 .dtf-rail-item:nth-child(1) { --rail-color: #0070f2; }
@@ -321,7 +382,7 @@
 
 .dtf-rail-item:hover {
   transform: translateX(2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 0 0 1px rgba(123, 66, 240, 0.5), 0 6px 16px rgba(123, 66, 240, 0.35);
 }
 
 .dtf-rail-item:focus-visible {

@@ -223,6 +223,16 @@ defineExpose({ fetchStatus })
         <p v-else-if="state === 'unregistered'" class="dtf-msg">
           Click <strong>Join the Fest</strong> to accept the terms and start playing.
         </p>
+        <div v-if="state === 'unregistered'" class="dtf-cta-body-wrap">
+          <button
+            type="button"
+            class="dtf-cta dtf-cta-body"
+            :disabled="ctaDisabled"
+            @click="onCtaClick"
+          >
+            {{ ctaLabel }}
+          </button>
+        </div>
         <p v-else-if="state === 'registered'" class="dtf-msg">
           You're registered — head to the Gameboard to start scoring!
         </p>
