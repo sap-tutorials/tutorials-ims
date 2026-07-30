@@ -87,13 +87,18 @@ sap.ui.define([
       var oCtx = oEvent.getSource().getBindingContext();
       if (!oCtx) { return; }
       var self = this;
-      // OData V4: Context.getObject() takes an optional STRING path, not a
-      // {select} options object (that's the V2 API) — passing an object made it
-      // return undefined and _loadPuzzleForEdit crashed. Use requestObject() so
-      // layout/solution are fetched even if the list binding's autoExpandSelect
-      // only loaded the visible columns (title/slug/status).
-      oCtx.requestObject().then(function (row) {
-        self._loadPuzzleForEdit(row);
+      // OData V4: the list binding uses autoExpandSelect, so only the visible
+      // columns (ID/slug/status/title) are $select'd and cached. requestObject()
+      // returns ONLY cached data — it does NOT trigger a back-end request — so
+      // layout/solution came back undefined and the builder loaded empty.
+      // requestProperty() DOES fetch un-cached properties from the back end;
+      // merge them onto the cached row before rebuilding the grid.
+      var row = oCtx.getObject() || {};
+      oCtx.requestProperty(["layout", "solution"]).then(function (values) {
+        self._loadPuzzleForEdit(Object.assign({}, row, {
+          layout: values[0],
+          solution: values[1]
+        }));
       }).catch(function (err) {
         MessageBox.error("Could not open puzzle: " + (err && err.message || err));
       });
