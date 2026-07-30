@@ -147,23 +147,38 @@
 }
 
 .dtf-cta {
+  /* Self-contained Joule tokens (do not rely on global joule.css). */
+  --dtf-joule-1: #5D36FF;
+  --dtf-joule-2: #7B42F0;
+  --dtf-joule-3: #A100C2;
+  --dtf-joule-glow: 123, 66, 240; /* rgb of #7B42F0 */
+
   appearance: none;
+  position: relative;
   border: 0;
-  background: #fff;
-  color: #0a4ea8;
-  font-weight: 600;
-  font-size: 1rem;
+  color: #fff;
+  background:
+    radial-gradient(ellipse at 0% 130%,  #8000dc, transparent 50%),
+    radial-gradient(ellipse at 100% 130%, #afd8ff, transparent 50%),
+    radial-gradient(ellipse at 50% 0%,    #f1acff, transparent 60%),
+    linear-gradient(165deg, var(--dtf-joule-1) 0%, var(--dtf-joule-2) 45%, var(--dtf-joule-3) 100%);
+  background-blend-mode: screen, screen, screen, normal;
+  font-weight: 700;
+  font-size: 1.05rem;
   line-height: 1.2;
-  padding: 0.7rem 1.4rem;
+  padding: 0.85rem 1.8rem;
   border-radius: 999px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 18px rgba(var(--dtf-joule-glow), 0.45),
+              0 0 0 1px rgba(255, 255, 255, 0.12);
+  animation: ctaPulseJoule 1.6s ease-out infinite;
   transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .dtf-cta:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 10px 24px rgba(var(--dtf-joule-glow), 0.6),
+              0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 
 .dtf-cta:focus-visible {
@@ -174,11 +189,28 @@
 .dtf-cta:disabled {
   cursor: default;
   opacity: 0.7;
+  animation: none;
 }
 
 .dtf-home[data-state="registered"] .dtf-cta {
   background: #1ea672;
   color: #fff;
+  box-shadow: 0 6px 18px rgba(30, 166, 114, 0.45),
+              0 0 0 1px rgba(255, 255, 255, 0.12);
+  animation: none;
+}
+
+@keyframes ctaPulseJoule {
+  0%   { box-shadow: 0 6px 18px rgba(var(--dtf-joule-glow), 0.45),
+                     0 0 0 0    rgba(var(--dtf-joule-glow), 0.55); }
+  70%  { box-shadow: 0 6px 18px rgba(var(--dtf-joule-glow), 0.45),
+                     0 0 0 18px rgba(var(--dtf-joule-glow), 0); }
+  100% { box-shadow: 0 6px 18px rgba(var(--dtf-joule-glow), 0.45),
+                     0 0 0 0    rgba(var(--dtf-joule-glow), 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dtf-cta { animation: none; }
 }
 
 .dtf-cta-hint {
