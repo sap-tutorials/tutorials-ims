@@ -1,6 +1,6 @@
 // hugo-apps/src/puzzle/__tests__/geometry.test.ts
 import { describe, it, expect } from 'vitest';
-import { buildSlots, advanceCursor, retreatCursor } from '../lib/geometry';
+import { buildSlots, advanceCursor, retreatCursor, clueForSlot } from '../lib/geometry';
 
 describe('island geometry', () => {
   it('builds row-col-dir slot ids', () => {
@@ -78,8 +78,7 @@ describe('island geometry', () => {
     });
   });
 
-  describe('retreatCursor', () => {
-    it('moves left for across direction', () => {
+  describe('retreatCursor', () => {    it('moves left for across direction', () => {
       const slots = buildSlots([[{ black: false }, { black: false }, { black: false }]]);
       const result = retreatCursor({ r: 0, c: 2 }, 'across', slots);
       expect(result).toEqual({ r: 0, c: 1 });
@@ -99,6 +98,43 @@ describe('island geometry', () => {
       ];
       const result = retreatCursor({ r: 1, c: 0 }, 'down', buildSlots(grid));
       expect(result).toEqual({ r: 0, c: 0 });
+    });
+  });
+
+  describe('clueForSlot — flat slot-id keyed lookup', () => {
+    it('resolves a clue by flat slot.id (not by number+direction)', () => {
+      const grid = [[{ black: false }, { black: false }, { black: false }]];
+      const slots = buildSlots(grid);
+      const slot = slots.find(s => s.id === '0-0-across')!;
+      const cluesFlat = { '0-0-across': 'Feline' };
+      expect(clueForSlot(slot, cluesFlat)).toBe('Feline');
+    });
+
+    it('returns empty string when slot.id not in flat map', () => {
+      const grid = [[{ black: false }, { black: false }]];
+      const slots = buildSlots(grid);
+      expect(clueForSlot(slots[0], {})).toBe('');
+    });
+
+    it('resolves down clues by slot.id', () => {
+      const grid = [
+        [{ black: false }],
+        [{ black: false }],
+      ];
+      const slots = buildSlots(grid);
+      const downSlot = slots.find(s => s.dir === 'down')!;
+      const cluesFlat = { [downSlot.id]: 'Canine' };
+      expect(clueForSlot(downSlot, cluesFlat)).toBe('Canine');
+    });
+
+    it('does NOT resolve clues keyed by number (old schema)', () => {
+      // Guard: if someone passes nested {across:{1:'Feline'}} it returns ''
+      const grid = [[{ black: false, number: 1 }, { black: false }]];
+      const slots = buildSlots(grid);
+      const slot = slots.find(s => s.dir === 'across')!;
+      // Simulate the OLD (wrong) schema — should return empty
+      const wrongSchema = { '1': 'Feline' } as Record<string, string>;
+      expect(clueForSlot(slot, wrongSchema)).toBe('');
     });
   });
 });

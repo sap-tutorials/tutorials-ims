@@ -12,6 +12,7 @@ import {
   retreatCursor,
   findActiveSlot,
   cellKey,
+  clueForSlot,
   type Cell,
   type Slot,
   type Cursor,
@@ -24,7 +25,7 @@ const loading = ref(true);
 const error   = ref<string | null>(null);
 const title   = ref('');
 const grid    = ref<Cell[][]>([]);
-const clues   = ref<Record<string, Record<string, string>>>({ across: {}, down: {} });
+const clues   = ref<Record<string, string>>({});
 
 /** answers map: "r,c" → uppercase letter typed by the user */
 const answers = ref<Record<string, string>>({});
@@ -79,7 +80,7 @@ async function loadPuzzle() {
     title.value = row.title ?? '';
     const layout = typeof row.layout === 'string' ? JSON.parse(row.layout) : row.layout;
     grid.value  = layout.grid ?? [];
-    clues.value = layout.clues ?? { across: {}, down: {} };
+    clues.value = layout.clues ?? {};
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -166,13 +167,6 @@ function handleKeyDown(e: KeyboardEvent) {
     answers.value = { ...answers.value, [cellKey(r, c)]: letter };
     cursor.value  = advanceCursor(cursor.value, dir.value, slots.value);
   }
-}
-
-function clueForSlot(slot: Slot): string {
-  const num = String(slot.number ?? '');
-  return (slot.dir === 'across'
-    ? (clues.value.across ?? {})[num]
-    : (clues.value.down   ?? {})[num]) ?? '';
 }
 
 function activateSlotFromClue(slot: Slot) {
@@ -294,7 +288,7 @@ function activateSlotFromClue(slot: Slot) {
               }"
               @click="activateSlotFromClue(slot)"
             >
-              <strong>{{ slot.number }}.</strong> {{ clueForSlot(slot) }}
+              <strong>{{ slot.number }}.</strong> {{ clueForSlot(slot, clues) }}
             </li>
           </ol>
         </div>
@@ -318,7 +312,7 @@ function activateSlotFromClue(slot: Slot) {
               }"
               @click="activateSlotFromClue(slot)"
             >
-              <strong>{{ slot.number }}.</strong> {{ clueForSlot(slot) }}
+              <strong>{{ slot.number }}.</strong> {{ clueForSlot(slot, clues) }}
             </li>
           </ol>
         </div>

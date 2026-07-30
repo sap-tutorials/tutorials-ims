@@ -126,3 +126,17 @@ export function retreatCursor(pos: Cursor, dir: 'across' | 'down', slots: Slot[]
 export function cellKey(r: number, c: number): string {
   return `${r},${c}`;
 }
+
+/**
+ * Look up a clue text from a FLAT slot-id-keyed clues map.
+ * The layout `clues` object uses `${row}-${col}-${dir}` keys — identical to
+ * the slot.id format produced by buildSlots. This matches the POC seed data,
+ * srv/lib/puzzle-grading.js validatePuzzle, the admin editor (Task 11), and
+ * the Joule hint tool — all of which key by slot.id, never by number+direction.
+ *
+ * @param slot     - a slot from buildSlots
+ * @param cluesFlat - `layout.clues` as loaded from the puzzle record
+ */
+export function clueForSlot(slot: Slot, cluesFlat: Record<string, string>): string {
+  return cluesFlat[slot.id] ?? '';
+}
