@@ -28,10 +28,11 @@ const csvVerbUrls = new Set(csvLines.slice(1).map((l) => {
 describe('homepage-thirdparty staging data', () => {
   it('parses to a non-empty array of content rows', () => {
     expect(Array.isArray(raw)).toBe(true);
-    expect(rows.length).toBe(20);
+    expect(rows.length).toBe(23);
   });
 
   it('every row has required fields with correct fixed values', () => {
+    const ALLOWED_BADGES = new Set([null, 'NEW', 'UPDATED', 'HIDDEN_GEM', 'THIRD_PARTY']);
     for (const r of rows) {
       expect(typeof r.ID).toBe('string');
       expect(VERBS.has(r.verb)).toBe(true);
@@ -42,7 +43,10 @@ describe('homepage-thirdparty staging data', () => {
       expect(r.description.length).toBeLessThanOrEqual(280);
       expect(r.tagline.length).toBeLessThanOrEqual(140);
       expect(r.whyItMatters.length).toBeLessThanOrEqual(800);
-      expect(r.badge).toBe('THIRD_PARTY');
+      // THIRD_PARTY badge intentionally retired — it lost meaning at scale.
+      // Badge is now null for the ecosystem links; RPT-1 rows carry NEW.
+      expect(ALLOWED_BADGES.has(r.badge)).toBe(true);
+      expect(r.badge).not.toBe('THIRD_PARTY');
       expect(r.isExternal).toBe(true);
       expect(r.isActive).toBe(true);
       expect(r.authoringStatus).toBe('REVIEWED');
