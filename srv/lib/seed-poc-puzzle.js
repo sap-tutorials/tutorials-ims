@@ -32,7 +32,19 @@ const SLUG = 'devtoberfest-cryptic-crossword';
  */
 export async function seedPocPuzzle(dbOverride) {
   const db = dbOverride ?? await cds.connect.to('db');
-  const { Puzzles } = cds.entities('com.sap.developers.ims');
+  // Resolve the Puzzles entity robustly across contexts:
+  //  - booted CAP server / cds.test → cds.entities() is installed.
+  //  - standalone `cds bind --exec` (npm run seed-poc-puzzle) → the model is
+  //    NOT linked into cds.entities globals and cds.model is unset, so fall
+  //    back to explicitly loading + linking the model. (Same class of gotcha
+  //    as cap-unit-test-bootstrap-cds-model-undefined.)
+  let Puzzles;
+  if (typeof cds.entities === 'function' && cds.model) {
+    ({ Puzzles } = cds.entities('com.sap.developers.ims'));
+  } else {
+    const linked = cds.linked(await cds.load('*'));
+    ({ Puzzles } = linked.entities('com.sap.developers.ims'));
+  }
 
   const exists = await SELECT.one.from(Puzzles).where({ slug: SLUG });
   if (exists) {
