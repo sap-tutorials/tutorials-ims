@@ -86,10 +86,17 @@ sap.ui.define([
     onPuzzlePress: function (oEvent) {
       var oCtx = oEvent.getSource().getBindingContext();
       if (!oCtx) { return; }
-      var row = oCtx.getObject({
-        select: "ID,title,slug,status,rows,cols,layout,solution"
+      var self = this;
+      // OData V4: Context.getObject() takes an optional STRING path, not a
+      // {select} options object (that's the V2 API) — passing an object made it
+      // return undefined and _loadPuzzleForEdit crashed. Use requestObject() so
+      // layout/solution are fetched even if the list binding's autoExpandSelect
+      // only loaded the visible columns (title/slug/status).
+      oCtx.requestObject().then(function (row) {
+        self._loadPuzzleForEdit(row);
+      }).catch(function (err) {
+        MessageBox.error("Could not open puzzle: " + (err && err.message || err));
       });
-      this._loadPuzzleForEdit(row);
     },
 
     _loadPuzzleForEdit: function (row) {

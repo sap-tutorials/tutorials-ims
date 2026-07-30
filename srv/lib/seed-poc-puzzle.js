@@ -14,7 +14,7 @@
 
 import cds from '@sap/cds';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -46,13 +46,19 @@ export async function seedPocPuzzle(dbOverride) {
     ({ Puzzles } = linked.entities('com.sap.developers.ims'));
   }
 
-  const exists = await SELECT.one.from(Puzzles).where({ slug: SLUG });
+  // Explicit columns: a bare SELECT.one.from(entity) emits `SELECT *`, which
+  // HANA cannot infer when the entity comes from a separately-linked model
+  // (standalone `cds bind --exec` path) → "Query was not inferred and includes
+  // '*'". Naming columns avoids the inference step. Verified live against DEV.
+  const exists = await SELECT.one.from(Puzzles).columns('ID', 'slug').where({ slug: SLUG });
   if (exists) {
     return { seeded: false };
   }
 
-  // Lazy-load the transform so this module has no hard dep on file paths at import time.
-  const transformUrl = resolve(__dirname, '../../scripts/seed/transform-poc-puzzle.mjs');
+  // Lazy-load the transform. Wrap in pathToFileURL: on Windows a raw absolute
+  // path ("D:\...") is not a valid ESM specifier — dynamic import() needs a
+  // file:// URL (ERR_UNSUPPORTED_ESM_URL_SCHEME otherwise).
+  const transformUrl = pathToFileURL(resolve(__dirname, '../../scripts/seed/transform-poc-puzzle.mjs')).href;
   const { buildSeedRow } = await import(transformUrl);
   const row = buildSeedRow();
 
