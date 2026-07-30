@@ -638,13 +638,24 @@ jobs:
 
       - name: Push content to AppRouter
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        # Pass the secret + URL via env, NOT inline ${{ }} interpolation. Inlining
+        # ${{ secrets.REBUILD_API_KEY }} into the script pastes the raw value into
+        # the source before bash runs; because the key contains a '$' followed by
+        # valid variable-name chars (e.g. ...X$ZLg...), bash then expands that as
+        # an undefined shell variable and silently TRUNCATES the token → the
+        # approuter receives a partial bearer → HTTP 401. Routing through env keeps
+        # the value as opaque bytes ("$REBUILD_API_KEY" is not re-parsed). Mirrors
+        # the "Report failure to PipelineLog" step below, which already does this.
+        env:
+          REBUILD_API_KEY: ${{ secrets.REBUILD_API_KEY }}
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
         run: |
           HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
             -X POST \
-            -H "Authorization: Bearer ${{ secrets.REBUILD_API_KEY }}" \
+            -H "Authorization: Bearer $REBUILD_API_KEY" \
             -H "Content-Type: application/gzip" \
             --data-binary @content.tar.gz \
-            "${{ steps.url.outputs.approuter_url }}/admin/rebuild")
+            "$APPROUTER_URL/admin/rebuild")
 
           echo "HTTP Status: $HTTP_STATUS"
           cat response.json
