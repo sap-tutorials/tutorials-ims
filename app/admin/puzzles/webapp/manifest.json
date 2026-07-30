@@ -6,7 +6,7 @@
     "title": "Puzzles",
     "description": "Build and edit puzzles",
     "applicationVersion": {
-      "version": "0.0.1"
+      "version": "0.0.2"
     },
     "dataSources": {
       "mainService": {
@@ -35,6 +35,7 @@
     "rootView": {
       "viewName": "sap.tutorials.admin.puzzles.view.Builder",
       "type": "XML",
+      "async": true,
       "id": "builder"
     },
     "dependencies": {
