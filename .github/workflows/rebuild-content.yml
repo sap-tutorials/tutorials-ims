@@ -92,6 +92,25 @@ on:
 env:
   NODE_VERSION: '22'
 
+# Serialize rebuilds per target env. The single srv-side `content-publish`
+# JobLock (srv/lib/content-publish-session.js) admits ONE publish session at a
+# time; two rebuilds racing it means the loser gets a hard 409 "Another publish
+# in progress" and the run fails (#1384 — bursts of `tutorial-updated`
+# dispatches to prod collided this way). Keying the group on the resolved
+# target env (same expression as the job-level `if` and the "Determine
+# environment" step) lets prod/qa/dev rebuilds run in parallel with EACH OTHER
+# but queues same-env runs. cancel-in-progress:false because a rebuild that has
+# already acquired the lock and is mid-publish must finish — cancelling it would
+# strand the lock until its 30-min TTL and orphan the PUBLISHING manifest row.
+concurrency:
+  group: >-
+    rebuild-content-${{
+      github.event_name == 'workflow_dispatch'
+        && (inputs.environment || 'dev')
+        || (github.event.client_payload.environment || 'prod')
+    }}
+  cancel-in-progress: false
+
 jobs:
   rebuild:
     runs-on: ubuntu-latest

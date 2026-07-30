@@ -4,6 +4,7 @@ import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 
 import { createContentHandlers } from '../srv/lib/content-store.js';
+import { resolveSecret } from '../srv/lib/secret-resolver.js';
 import { requireXsuaaScope } from './xsuaa-scope-middleware.js';
 import { createSemaphore } from './preview-semaphore.js';
 import { renderPreview, errorHtml } from './preview-renderer.js';
@@ -46,19 +47,33 @@ cds.on('bootstrap', (app) => {
   // XSUAA-only — the bearer key is a server-secret for CLI publish flows
   // only, not a substitute for user-scope authentication on read paths that
   // can be reached from a browser.
-  function hashesAuth(req, res, next) {
-    const auth = req.headers.authorization;
-    const apiKey = process.env.CONTENT_API_KEY_QA;
-    if (auth && auth.startsWith('Bearer ') && apiKey) {
-      const provided = Buffer.from(auth.slice(7));
-      const expected = Buffer.from(apiKey);
-      // timingSafeEqual requires equal-length buffers — length check first,
-      // then constant-time compare. Mirrors contentAuthMiddleware in
-      // srv/lib/content-store.js so the two paths leak the same (zero)
-      // information about the key on a wrong-key probe.
-      if (provided.length === expected.length && timingSafeEqual(provided, expected)) {
-        return next();
+  //
+  // The bearer key is sourced via resolveSecret (credstore-first, env
+  // fallback, 5-min TTL cache) — SYMMETRIC with contentAuthMiddleware in
+  // srv/lib/content-store.js. This is load-bearing: CONTENT_API_KEY_QA lives
+  // only in the BTP Credential Store (not as a srv-qa env var), so reading
+  // process.env directly here made the bearer branch dead and 401'd the
+  // CI publish watchdog + CLI auto-verify while POST publish (which already
+  // used resolveSecret) succeeded (#1383).
+  async function hashesAuth(req, res, next) {
+    try {
+      const auth = req.headers.authorization;
+      const apiKey = await resolveSecret('CONTENT_API_KEY_QA', { logTag: '[content-auth:CONTENT_API_KEY_QA]' });
+      if (auth && auth.startsWith('Bearer ') && apiKey) {
+        const provided = Buffer.from(auth.slice(7));
+        const expected = Buffer.from(apiKey);
+        // timingSafeEqual requires equal-length buffers — length check first,
+        // then constant-time compare. Mirrors contentAuthMiddleware in
+        // srv/lib/content-store.js so the two paths leak the same (zero)
+        // information about the key on a wrong-key probe.
+        if (provided.length === expected.length && timingSafeEqual(provided, expected)) {
+          return next();
+        }
       }
+    } catch (err) {
+      // Never leak the connection on a resolver throw — fall through to the
+      // XSUAA scope check, which is the correct default for browser callers.
+      console.warn(`[hashesAuth][qa] secret resolve failed, falling back to XSUAA: ${err.message ?? err}`);
     }
     return requireAuthorScope(req, res, next);
   }
