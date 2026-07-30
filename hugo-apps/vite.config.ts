@@ -9,6 +9,7 @@ const MAX_CODE_CHECK_GZIP = 8 * 1024;
 const MAX_VALIDATION_GZIP = 8 * 1024;
 const MAX_TUTORIAL_BRANCHES_GZIP = 12 * 1024;
 const MAX_ADVOCATES_GZIP = 30 * 1024;
+const MAX_PUZZLE_GZIP = 30 * 1024;
 const MAX_ADVOCATE_PROFILE_GZIP = 25 * 1024;
 const MAX_RELATED_GRAPH_GZIP = 12 * 1024;
 const MAX_ALERTS_GZIP = 12 * 1024;
@@ -82,6 +83,24 @@ function advocatesBudget() {
       } else {
         // @ts-ignore
         this.warn(`advocates.js: ${gz} bytes gzipped (budget ${MAX_ADVOCATES_GZIP}).`);
+      }
+    }
+  };
+}
+
+function puzzleBudget() {
+  return {
+    name: 'puzzle-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['puzzle.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_PUZZLE_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`puzzle.js is ${gz} bytes gzipped (> ${MAX_PUZZLE_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`puzzle.js: ${gz} bytes gzipped (budget ${MAX_PUZZLE_GZIP}).`);
       }
     }
   };
@@ -196,7 +215,7 @@ function relatedGraphBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), puzzleBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -251,6 +270,7 @@ export default defineConfig({
         'homepage-personalizer': resolve(__dirname, 'src/homepage-personalizer/index.ts'),
         'featured-topics-carousel': resolve(__dirname, 'src/featured-topics-carousel/main.ts'),
         'homepage-events-band': resolve(__dirname, 'src/homepage-events-band/main.ts'),
+        puzzle: resolve(__dirname, 'src/puzzle/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
