@@ -53,4 +53,25 @@ describe('PuzzleService.check', () => {
       )
     ).rejects.toMatchObject({ code: 404 });
   });
+
+  it('rejects 400 when entries exceed puzzle slot count', async () => {
+    // The 'chk' puzzle has exactly 1 slot (0-0-across). Sending 2 entries must be rejected.
+    const tooMany = [
+      { slotId: '0-0-across', word: 'CAT' },
+      { slotId: '0-0-across', word: 'DOG' },
+    ];
+    await expect(
+      svc.tx({ user: ANON }, tx =>
+        tx.send('check', { slug: 'chk', entries: tooMany })
+      )
+    ).rejects.toMatchObject({ code: 400 });
+  });
+
+  it('accepts entries exactly at the slot count (regression)', async () => {
+    // Exactly 1 entry for the 1-slot puzzle — must not be rejected.
+    const r = await svc.tx({ user: ANON }, tx =>
+      tx.send('check', { slug: 'chk', entries: [{ slotId: '0-0-across', word: 'CAT' }] })
+    );
+    expect(r.complete).toBe(true);
+  });
 });

@@ -35,6 +35,23 @@ export default class PuzzleService extends cds.ApplicationService {
       const { slug, entries } = req.data;
       const puzzle = await loadPuzzle(slug);
       if (!puzzle) return req.reject(404, 'Puzzle not found');
+
+      // Bound entries to the real slot count — a legitimate submission can never
+      // exceed that, so an oversized array is a brute-force/DoS attempt.
+      const maxSlots = (() => {
+        try {
+          const sol = typeof puzzle.solution === 'string'
+            ? JSON.parse(puzzle.solution)
+            : puzzle.solution;
+          return deriveSlotIds(sol).size;
+        } catch {
+          return 1000; // malformed row: fall back to a sane ceiling
+        }
+      })();
+      if (Array.isArray(entries) && entries.length > maxSlots) {
+        return req.reject(400, 'Too many entries');
+      }
+
       try {
         return gradeEntries({ solution: puzzle.solution, entries: entries || [] });
       } catch (e) {
