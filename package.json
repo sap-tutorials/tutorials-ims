@@ -13,6 +13,7 @@
     "dev:hybrid": "npm run watch:hybrid & npm run start:approuter",
     "start:approuter": "cd approuter && NODE_ENV=development npm start",
     "bind:setup": "node scripts/setup-hybrid-env.js",
+    "seed:thirdparty": "cds bind --exec -- node scripts/seed-thirdparty.js",
     "setup": "npm --prefix hugo-apps install --no-audit --no-fund && npm --prefix app/explore install --no-audit --no-fund && sh scripts/install-git-hooks.sh",
     "build:cds": "cds build --production",
     "fetch-tutorials": "tsx scripts/fetch-tutorials.ts --target hugo",
