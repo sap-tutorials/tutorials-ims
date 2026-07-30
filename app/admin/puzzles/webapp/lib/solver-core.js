@@ -4,6 +4,12 @@
 // module when sap.ui.define exists (Builder controller + vm unit tests), and as
 // self.SolverCore when loaded via importScripts inside the classic Web Worker.
 // This is the SINGLE source of the solve logic — the worker does NOT copy it.
+//
+// solve(opts) → { status, grid, placed }
+//   status: 'solved' | 'timeout' | 'nosolution'
+//   grid:   new 2-D grid with all letters present (pre-filled + solver-added)
+//   placed: map "r,c" → LETTER containing ONLY the letters the solver added
+//           (pre-seeded cells from opts.grid are excluded)
 (function (root, factory) {
   "use strict";
   if (typeof sap !== "undefined" && sap.ui && sap.ui.define) {
@@ -71,6 +77,9 @@
         }
       }
     }
+    // Capture the set of pre-seeded keys so `placed` can exclude them.
+    var seeded = {};
+    Object.keys(letters).forEach(function (k) { seeded[k] = true; });
 
     var used = {};
     var timedOut = false;
@@ -121,7 +130,10 @@
     });
 
     var status = ok ? "solved" : (timedOut ? "timeout" : "nosolution");
-    return { status: status, grid: outGrid, placed: letters };
+    // placed = only the letters the solver added; pre-seeded cells are excluded.
+    var placed = {};
+    Object.keys(letters).forEach(function (k) { if (!seeded[k]) { placed[k] = letters[k]; } });
+    return { status: status, grid: outGrid, placed: placed };
   }
 
   return { solve: solve, fits: fits, slotPattern: slotPattern };

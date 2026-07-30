@@ -3,10 +3,14 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import path from 'node:path'
 
+function solverSrc() {
+  return readFileSync(
+    path.resolve(__dirname, '../../app/admin/puzzles/webapp/lib/solver-core.js'), 'utf8')
+}
+
 // solver-core is a sap.ui.define AMD module; load it in a vm with a stubbed define.
 function loadSolver() {
-  const src = readFileSync(
-    path.resolve(__dirname, '../../app/admin/puzzles/webapp/lib/solver-core.js'), 'utf8')
+  const src = solverSrc()
   let mod
   // UMD module: prefer the AMD path by providing sap.ui.define; capture the export.
   const sandbox = { sap: { ui: { define: (deps, fn) => { mod = fn() } } }, self: {} }
@@ -21,6 +25,13 @@ function makeGrid(rows, cols) {
 }
 
 describe('solver-core', () => {
+  it('loads via the worker/importScripts UMD branch (no sap global)', () => {
+    const src = solverSrc()
+    const sandbox = { self: {} }
+    vm.runInNewContext(src, sandbox)
+    expect(typeof sandbox.self.SolverCore.solve).toBe('function')
+  })
+
   it('fills two crossing slots from a word list', () => {
     const solver = loadSolver()
     const grid = makeGrid(3, 3)
@@ -35,7 +46,10 @@ describe('solver-core', () => {
       slots, words: ['CAT', 'COW', 'DOG'], grid, rows: 3, cols: 3, timeLimitMs: 5000
     })
     expect(res.status).toBe('solved')
-    // Both slots share (0,0); the only consistent pair is CAT across + COW down (both start C)
+    // Result is deterministic: solver tries words in list order; 'across' slot is
+    // processed first, 'CAT' fits → placed across; only 'COW' then satisfies the
+    // crossing constraint at (0,0). DOG is never tried for the across slot because
+    // CAT is accepted first.
     expect(res.placed['0,0']).toBe('C')
     expect(res.placed['0,1']).toBe('A')
     expect(res.placed['0,2']).toBe('T')
@@ -50,7 +64,8 @@ describe('solver-core', () => {
     const slots = [{ id:'0-0-across', dir:'across', len:3, cells:[{r:0,c:0},{r:0,c:1},{r:0,c:2}] }]
     const res = solver.solve({ slots, words:['CAT','DOG'], grid, rows:1, cols:3, timeLimitMs:5000 })
     expect(res.status).toBe('nosolution')
-    expect(res.grid[0][0].letter).toBe('X') // pre-filled letter preserved
+    expect(res.grid[0][0].letter).toBe('X') // pre-filled letter preserved in grid
+    expect(res.placed['0,0']).toBeUndefined() // pre-filled key excluded from placed
   })
 
   it('reports timeout when the attempt budget is exhausted', () => {
