@@ -37,22 +37,30 @@ function validate(rows) {
   }
 }
 
+const NAMESPACE = 'com.sap.developers.ims';
+
 export async function seedThirdParty(dbOverride) {
   const db = dbOverride ?? await cds.connect.to('db');
-  const { HomepageShelves } = cds.entities('com.sap.developers.ims');
+  // Reflect the entity via cds.linked so CQL is type-aware and serializes the
+  // `personaTags` array to JSON for the HANA NCLOB column. `cds.entities` is a
+  // getter that is undefined in a standalone script (only set after cds.serve),
+  // and a fully-qualified string name is NOT type-aware (fails on HANA with
+  // "Wrong input for LOB type"). cds.linked(csn) works in every context.
+  const linked = cds.linked(cds.model ?? await cds.load('*'));
+  const { HomepageShelves } = linked.entities(NAMESPACE);
   const rows = loadRows();
   validate(rows);
 
   let inserted = 0;
   let updated = 0;
   for (const r of rows) {
-    const existing = await SELECT.one.from(HomepageShelves).where({ verb: r.verb, url: r.url });
+    const existing = await db.run(SELECT.one.from(HomepageShelves).columns('ID').where({ verb: r.verb, url: r.url }));
     if (existing) {
       const { ID, ...patch } = r;   // keep existing ID on update
-      await UPDATE(HomepageShelves).set(patch).where({ ID: existing.ID });
+      await db.run(UPDATE(HomepageShelves).set(patch).where({ ID: existing.ID }));
       updated++;
     } else {
-      await INSERT.into(HomepageShelves).entries(r);
+      await db.run(INSERT.into(HomepageShelves).entries(r));
       inserted++;
     }
   }
@@ -61,8 +69,7 @@ export async function seedThirdParty(dbOverride) {
 
 // CLI entry
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
-  cds.load('*')
-    .then(() => seedThirdParty())
+  seedThirdParty()
     .then(({ inserted, updated }) => {
       console.log(`seed-thirdparty: ${inserted} inserted, ${updated} updated`);
       process.exit(0);
