@@ -36,11 +36,22 @@ async function loadResolver() {
 // that resolveRedirect() safely handles (returns null on empty/no-match).
 let _index = { exactMap: new Map(), patterns: [] }
 
+// True once a refresh() has successfully loaded rows from the srv endpoint.
+// The bootstrap IIFE below and refresh() both resolve a dynamic import()
+// before writing _index, so they race on module load: if the bootstrap
+// import settles AFTER the first refresh() has already populated _index with
+// live rows, a naive assignment would clobber the good index back to the
+// 3-row BOOTSTRAP_MAP. This flag makes the bootstrap a no-op once real data
+// has landed. (Manifested as an intermittent CI failure + a boot-time window
+// where production briefly served only the 3 bootstrap redirects. #1311.)
+let _loadedFromSrv = false
+
 // Bootstrap synchronously from BOOTSTRAP_MAP on module load.
 ;(async () => {
   try {
     const { buildIndex } = await loadResolver()
-    _index = buildIndex(BOOTSTRAP_MAP)
+    // Don't overwrite an index a concurrent refresh() already populated.
+    if (!_loadedFromSrv) _index = buildIndex(BOOTSTRAP_MAP)
   } catch (err) {
     // If even dynamic import fails (e.g. missing file), keep the empty index.
     console.warn('[redirects-loader] bootstrap failed:', err.message)
@@ -70,6 +81,7 @@ async function refresh(srvUrl, logger = console) {
     const rows = Array.isArray(body) ? body : body?.value
     if (!Array.isArray(rows)) throw new Error('not an array (nor an OData {value:[]} envelope)')
     _index = buildIndex(rows.map(r => ({ ...r, isActive: true })))
+    _loadedFromSrv = true  // block the bootstrap IIFE from clobbering live rows
     logger.log?.(`[redirects-loader] refreshed ${rows.length} entries`)
   } catch (err) {
     logger.warn?.(`[redirects-loader] refresh failed: ${err.message}; keeping last good index`)
