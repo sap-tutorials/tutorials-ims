@@ -453,7 +453,17 @@ service AdminService {
 
   @odata.draft.enabled
   @requires: 'Admin'
-  entity DevtoberfestConfig as projection on ims.DevtoberfestConfig actions {
+  entity DevtoberfestConfig as projection on ims.DevtoberfestConfig {
+    *,
+    // Expose the planner Edition association as a navigable target so
+    // `edition.NAME` resolves in the FE Object Page text arrangement and the
+    // List Report column. Without this explicit redirect CAP emits only the
+    // `edition_ID` scalar (the picklist carries @cds.redirection.target:false),
+    // so `@Common.Text: edition.NAME #TextOnly` had no nav path to resolve and
+    // the field rendered label-only (confirmed live on DEV 2026-07-29). The
+    // picklist projects ID, so the foreign-key rewrite succeeds.
+    edition : redirected to DevtoberfestEditionPickList,
+  } actions {
     // Base64-over-OData upload (FE UploadSet drops bytes on draft compositions —
     // same reason as Advocates.uploadPhoto). sharp → single wide WebP → upsert
     // DevtoberfestBanner → flip hasBanner. See srv/handlers/devtoberfest-banner-handlers.js.

@@ -5,7 +5,7 @@
     "type": "application",
     "title": "Devtoberfest",
     "description": "Manage Devtoberfest configurations (multi-row + draft-enabled)",
-    "applicationVersion": { "version": "0.0.4" },
+    "applicationVersion": { "version": "0.0.5" },
     "dataSources": {
       "mainService": {
         "uri": "/admin/",
@@ -81,7 +81,25 @@
           "options": {
             "settings": {
               "contextPath": "/DevtoberfestConfig",
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "content": {
+                "header": {
+                  "actions": {
+                    "uploadBanner": {
+                      "press": "sap.tutorials.admin.devtoberfest.ext.BannerController.onUploadBannerPress",
+                      "visible": true,
+                      "enabled": "{= ${IsActiveEntity} === true }",
+                      "text": "Upload Banner"
+                    },
+                    "clearBanner": {
+                      "press": "sap.tutorials.admin.devtoberfest.ext.BannerController.onClearBannerPress",
+                      "visible": "{= !!${hasBanner} }",
+                      "enabled": "{= ${IsActiveEntity} === true }",
+                      "text": "Clear Banner"
+                    }
+                  }
+                }
+              }
             }
           }
         }
