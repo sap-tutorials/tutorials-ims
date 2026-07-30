@@ -25,6 +25,7 @@ export default class PuzzleService extends cds.ApplicationService {
       if (!SLUG_RE.test(s)) return null;
       return SELECT.one.from(Puzzles)
         .columns('ID', 'legacyId', 'title', 'solution')
+        // slug-canonical: pre-canonicalized
         .where({ slug: s });
     };
 
