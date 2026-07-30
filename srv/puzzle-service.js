@@ -3,7 +3,7 @@
 // Task 6: saveProgress / getProgress / complete (progress persistence + server-graded completion).
 
 import cds from '@sap/cds';
-import { gradeEntries } from './lib/puzzle-grading.js';
+import { gradeEntries, deriveSlotIds } from './lib/puzzle-grading.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
 
@@ -136,27 +136,13 @@ export default class PuzzleService extends cds.ApplicationService {
       })();
 
       // Build slot entries from the filled grid using the solution key space.
-      // gradeEntries handles slot discovery internally — we just need to pass
-      // all cells as a single across-entry per solution row-start, but the
-      // cleanest approach is to pass the full cell-by-cell filled map as a
-      // synthetic entry set that gradeEntries can evaluate via its slot logic.
-      // gradeEntries already knows how to discover slots from the solution and
-      // accepts an `entries` array of { slotId, word }. We derive the slot ids
-      // by walking the solution the same way gradeEntries does internally.
+      // deriveSlotIds (shared with gradeEntries) discovers all slot start-ids
+      // from the solution map; wordAt walks each slot and returns the filled word.
       const sol = (() => {
         try { return JSON.parse(puzzle.solution || '{}'); } catch { return {}; }
       })();
 
-      const allSlotIds = new Set();
-      for (const key of Object.keys(sol)) {
-        const [r, c] = key.split(',').map(Number);
-        if (sol[`${r},${c - 1}`] === undefined && sol[`${r},${c + 1}`] !== undefined) {
-          allSlotIds.add(`${r}-${c}-across`);
-        }
-        if (sol[`${r - 1},${c}`] === undefined && sol[`${r + 1},${c}`] !== undefined) {
-          allSlotIds.add(`${r}-${c}-down`);
-        }
-      }
+      const allSlotIds = deriveSlotIds(sol);
 
       const wordAt = (slotId) => {
         const m = /^(\d+)-(\d+)-(across|down)$/.exec(slotId);

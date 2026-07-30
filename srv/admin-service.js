@@ -855,7 +855,7 @@ export default class AdminService extends cds.ApplicationService {
       const { layout, solution } = req.data;
       if (layout == null && solution == null) return; // metadata-only patch
       const v = validatePuzzle({ layout: layout || '{}', solution: solution || '{}' });
-      if (!v.ok) req.reject(400, `Invalid puzzle: ${v.error}`);
+      if (!v.ok) return req.reject(400, `Invalid puzzle: ${v.error}`);
       if (typeof req.data.slug === 'string') req.data.slug = req.data.slug.toLowerCase();
     });
 

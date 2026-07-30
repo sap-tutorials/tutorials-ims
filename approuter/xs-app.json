@@ -247,8 +247,14 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/api/puzzles(/.*)?$",
-      "target": "/api/puzzles$1",
+      "source": "^/api/puzzles/Puzzles(.*)$",
+      "target": "/api/puzzles/Puzzles$1",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/api/puzzles/check$",
+      "target": "/api/puzzles/check",
       "destination": "srv-api",
       "authenticationType": "none"
     },

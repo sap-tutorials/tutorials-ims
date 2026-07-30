@@ -1,6 +1,6 @@
 // test/unit/puzzle-grading.test.js
 import { expect, test } from 'vitest';
-import { buildSlots, gradeEntries, validatePuzzle } from '../../srv/lib/puzzle-grading.js';
+import { buildSlots, gradeEntries, validatePuzzle, deriveSlotIds } from '../../srv/lib/puzzle-grading.js';
 
 const grid = [
   [{black:false,number:1},{black:false,number:null},{black:false,number:2}],
@@ -34,4 +34,22 @@ test('validatePuzzle rejects a white cell with no answer', () => {
   const layout = JSON.stringify({ rows:1, cols:2, grid:[[{black:false},{black:false}]], clues:{'0-0-across':'x'} });
   const bad = validatePuzzle({ layout, solution: JSON.stringify({ '0,0':'A' }) });
   expect(bad.ok).toBe(false);
+});
+
+test('deriveSlotIds returns correct across and down slot starts', () => {
+  // 3-cell across run → one across slot at 0-0-across
+  const solAcross = { '0,0':'C','0,1':'A','0,2':'T' };
+  const ids = deriveSlotIds(solAcross);
+  expect([...ids]).toEqual(['0-0-across']);
+
+  // L-shape: across (0,0)-(0,1) + down (0,0)-(1,0)
+  const solL = { '0,0':'A','0,1':'B','1,0':'C' };
+  const idsL = deriveSlotIds(solL);
+  expect(idsL.has('0-0-across')).toBe(true);
+  expect(idsL.has('0-0-down')).toBe(true);
+  expect(idsL.size).toBe(2);
+
+  // Single-letter cell (no run of ≥2) → no slots
+  const solSingle = { '0,0':'X' };
+  expect(deriveSlotIds(solSingle).size).toBe(0);
 });

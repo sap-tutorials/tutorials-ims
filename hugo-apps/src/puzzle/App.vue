@@ -132,7 +132,7 @@ async function resumeProgress() {
       if (prog.filledGrid) {
         const parsed = JSON.parse(prog.filledGrid) as Record<string, string>;
         answers.value = parsed;
-        return; // loaded from server; also mirror to localStorage
+        return; // loaded from server; watcher will mirror to localStorage on next tick
       }
     } catch {
       // 401 or network error — fall through to localStorage
@@ -168,7 +168,29 @@ function scheduleSave() {
   }, 500);
 }
 
-// Watch answers and trigger autosave
+/**
+ * Flush any pending debounced save immediately. Cancels the timer and
+ * performs a synchronous-to-the-caller save so that the persisted grid
+ * is current before we hand off to complete(). No-op for anonymous users
+ * (complete() will 401 for them anyway).
+ */
+async function flushSave() {
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  // Always mirror to localStorage
+  saveToLocalStorage();
+  if (authed.value) {
+    try {
+      await postSaveProgress(props.apiUrl, props.slug, JSON.stringify(answers.value));
+    } catch {
+      // server save failed — local copy still valid; complete() will re-grade what's stored
+    }
+  }
+}
+
+// Watch answers and trigger autosave; the watcher mirrors to localStorage on each change
 watch(answers, scheduleSave, { deep: true });
 
 // ── Check ─────────────────────────────────────────────────────────────────────
@@ -190,6 +212,9 @@ async function checkPuzzle() {
 // ── Completion + confetti ─────────────────────────────────────────────────────
 async function onSolved() {
   solved.value = true;
+  // Flush any pending debounced autosave so the server re-grades the CURRENT grid,
+  // not a stale snapshot that may be missing the final letter (I1 race fix).
+  await flushSave();
   // Record completion server-side (silently ignore 401 for anon users)
   try {
     await postComplete(props.apiUrl, props.slug);

@@ -9,7 +9,7 @@ import { parseLayout, buildSlots } from '../puzzle-grading.js';
 
 const LOG = cds.log('puzzle-hint');
 const NS = 'com.sap.developers.ims';
-const SLUG_RE = /^[a-z0-9-]{1,120}$/;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 export const PUZZLE_HINT_TOOL = {
   type: 'function',

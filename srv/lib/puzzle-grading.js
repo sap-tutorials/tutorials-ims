@@ -55,6 +55,25 @@ export function wordForSlot(slot, cellLetters) {
 
 // Grade whole-word submissions. Returns per-slot booleans + a `complete` flag.
 // Never leaks letters. slotId format `${row}-${col}-${dir}`.
+
+/**
+ * Derive all slot start-ids from a solution object.
+ * A slot starts at a cell with no predecessor in that direction that has a
+ * successor, i.e. the leftmost/topmost cell of a run of ≥2 white cells.
+ *
+ * @param {Record<string,string>} sol - parsed solution map "r,c"→letter
+ * @returns {Set<string>} set of slotIds in `${r}-${c}-${dir}` format
+ */
+export function deriveSlotIds(sol) {
+  const allSlotIds = new Set();
+  for (const key of Object.keys(sol)) {
+    const [r, c] = key.split(',').map(Number);
+    if (sol[`${r},${c - 1}`] === undefined && sol[`${r},${c + 1}`] !== undefined) allSlotIds.add(`${r}-${c}-across`);
+    if (sol[`${r - 1},${c}`] === undefined && sol[`${r + 1},${c}`] !== undefined) allSlotIds.add(`${r}-${c}-down`);
+  }
+  return allSlotIds;
+}
+
 export function gradeEntries({ solution, entries }) {
   const sol = parseSolution(solution);
   const expectedWord = (slotId) => {
@@ -73,12 +92,7 @@ export function gradeEntries({ solution, entries }) {
     const got = String(word || '').toUpperCase();
     return { slotId, correct: expected != null && expected.length > 0 && got === expected };
   });
-  const allSlotIds = new Set();
-  for (const key of Object.keys(sol)) {
-    const [r, c] = key.split(',').map(Number);
-    if (sol[`${r},${c - 1}`] === undefined && sol[`${r},${c + 1}`] !== undefined) allSlotIds.add(`${r}-${c}-across`);
-    if (sol[`${r - 1},${c}`] === undefined && sol[`${r + 1},${c}`] !== undefined) allSlotIds.add(`${r}-${c}-down`);
-  }
+  const allSlotIds = deriveSlotIds(sol);
   const correctSet = new Set(results.filter(x => x.correct).map(x => x.slotId));
   const complete = allSlotIds.size > 0 && [...allSlotIds].every(id => correctSet.has(id));
   return { results, complete };
