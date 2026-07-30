@@ -569,9 +569,13 @@ function handleMobileInput(e: Event) {
   background: transparent;
 }
 
-/* Active clue highlight — uses theme var for the surrounding UI (fine here) */
+/* Active clue highlight. Pin BOTH background and text color to fixed hex so the
+   selected clue stays readable in dark mode — the light-blue tint inherits the
+   theme's white --sapTextColor otherwise, making white-on-light-blue unreadable
+   (matches .cell-active, which is likewise theme-independent). */
 .clue-active {
   background: #d0e8ff;
+  color: #1a1a1a;
 }
 
 /* ── Grid container ───────────────────────────────────────────────────────── */
