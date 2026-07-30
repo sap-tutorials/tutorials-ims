@@ -52,6 +52,9 @@ const solved     = ref(false);
 
 /** whether current user is authenticated */
 const authed     = ref(false);
+/** Hidden input that summons the mobile on-screen keyboard. Focused on cell tap;
+    typed characters are routed into the grid via handleMobileInput. */
+const hiddenInput = ref<HTMLInputElement | null>(null);
 
 // ── Derived ──────────────────────────────────────────────────────────────────
 const slots = computed<Slot[]>(() =>
@@ -260,6 +263,9 @@ function handleCellClick(r: number, c: number) {
     }
   }
   void key;
+  // Focus the hidden input so mobile browsers raise the on-screen keyboard.
+  // (Desktop is unaffected — physical keydown still routes via the input too.)
+  hiddenInput.value?.focus();
 }
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -326,6 +332,25 @@ function activateSlotFromClue(slot: Slot) {
   cursor.value = { r: slot.cells[0].r, c: slot.cells[0].c };
   dir.value    = slot.dir;
 }
+
+/**
+ * Mobile on-screen keyboard input. The hidden <input> fires `input` events with
+ * the typed character(s); we take the last letter, place it, advance, and clear
+ * the input so the next keystroke starts fresh. Backspace on an empty input
+ * fires a `keydown` (handled by handleKeyDown, which the input also listens to),
+ * so deletion + arrows keep working on both mobile and desktop.
+ */
+function handleMobileInput(e: Event) {
+  const el = e.target as HTMLInputElement;
+  const raw = el.value || '';
+  el.value = ''; // reset so we only ever process the newest char
+  if (!cursor.value) return;
+  const ch = raw.slice(-1);
+  if (!/[a-zA-Z]/.test(ch)) return;
+  const { r, c } = cursor.value;
+  answers.value = { ...answers.value, [cellKey(r, c)]: ch.toUpperCase() };
+  cursor.value  = advanceCursor(cursor.value, dir.value, slots.value);
+}
 </script>
 
 <template>
@@ -376,6 +401,23 @@ function activateSlotFromClue(slot: Slot) {
 
         <!-- Center column: Grid + Actions bar -->
         <div class="puzzle-center-col">
+          <!-- Hidden input: focused on cell tap to raise the mobile on-screen
+               keyboard. @input handles printable letters (mobile + desktop);
+               @keydown handles backspace/arrows/escape. Visually hidden but NOT
+               display:none (that would block focus + the keyboard). -->
+          <input
+            ref="hiddenInput"
+            class="puzzle-hidden-input"
+            type="text"
+            inputmode="text"
+            autocapitalize="characters"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+            aria-label="Type a letter for the selected crossword cell"
+            @input="handleMobileInput"
+            @keydown="handleKeyDown"
+          />
           <!-- Grid — only gridTemplateColumns/Rows are dynamic; all else via class -->
           <div
             class="puzzle-grid"
@@ -546,6 +588,20 @@ function activateSlotFromClue(slot: Slot) {
   border: 2px solid #1a1a1a;
   padding: 1px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+/* Visually-hidden input that raises the mobile on-screen keyboard on cell tap.
+   Off-screen rather than display:none — display:none / visibility:hidden are
+   not focusable, so the keyboard would never appear. */
+.puzzle-hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  left: -9999px;
 }
 
 /* ── Cells — THEME-INDEPENDENT (always black-on-white, ignores dark mode) ── */
