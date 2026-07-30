@@ -232,12 +232,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dtf-cta,
-  .dtf-arcade-chunk:last-child,
-  .dtf-header::after,
-  .dtf-kasimir {
-    animation: none;
-  }
+  .dtf-cta { animation: none; }
 }
 
 /* ------------------- Body CTA (light background) -------------------- */
@@ -668,4 +663,19 @@ html[data-theme="sap_horizon_dark"] .dtf-dialog-footer {
 html[data-theme="sap_horizon_dark"] .dtf-dialog-cancel {
   color: #eaecee;
   border-color: #3a4149;
+}
+
+/* ---------------------------------------------------------------------
+   Reduced-motion guard for all Joule/arcade animations.
+   Placed last so it overrides the animation rules defined earlier
+   (equal specificity → later source order wins).
+   --------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .dtf-cta,
+  .dtf-cta-body,
+  .dtf-arcade-chunk:last-child,
+  .dtf-header::after,
+  .dtf-kasimir {
+    animation: none;
+  }
 }
