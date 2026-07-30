@@ -1,11 +1,11 @@
 <script setup lang="ts">
 // hugo-apps/src/puzzle/App.vue
 // Public crossword solver island. Ported from the POC React Puzzle.jsx.
-// Handles: layout fetch, grid render, clue lists, click/type/arrows/backspace fill.
-// No server check / resume / completion — those come in the next task.
+// Handles: layout fetch, grid render, clue lists, click/type/arrows/backspace fill,
+//          slot-level check, cross-device resume, completion + confetti.
 // NO UI5 imports — theme CSS vars only (light/dark safe).
 
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import {
   buildSlots,
   advanceCursor,
@@ -17,6 +17,15 @@ import {
   type Slot,
   type Cursor,
 } from './lib/geometry';
+import {
+  probeAuth,
+  buildCheckEntries,
+  buildCellStatus,
+  postCheck,
+  fetchProgress,
+  postSaveProgress,
+  postComplete,
+} from './lib/server';
 
 const props = defineProps<{ slug: string; apiUrl: string }>();
 
@@ -28,9 +37,21 @@ const grid    = ref<Cell[][]>([]);
 const clues   = ref<Record<string, string>>({});
 
 /** answers map: "r,c" → uppercase letter typed by the user */
-const answers = ref<Record<string, string>>({});
-const cursor  = ref<Cursor | null>(null);
-const dir     = ref<'across' | 'down'>('across');
+const answers    = ref<Record<string, string>>({});
+const cursor     = ref<Cursor | null>(null);
+const dir        = ref<'across' | 'down'>('across');
+
+/** per-cell check status: "r,c" → 'correct' | 'wrong' | undefined */
+const cellStatus = ref<Record<string, 'correct' | 'wrong'>>({});
+
+/** server/ui messages shown below the Check button */
+const statusMsg  = ref<string | null>(null);
+
+/** whether the puzzle has been completed (confetti + success banner) */
+const solved     = ref(false);
+
+/** whether current user is authenticated */
+const authed     = ref(false);
 
 // ── Derived ──────────────────────────────────────────────────────────────────
 const slots = computed<Slot[]>(() =>
@@ -51,6 +72,11 @@ const activeSlot = computed<Slot | null>(() =>
 const ROWS = computed(() => grid.value.length);
 const COLS = computed(() => grid.value[0]?.length ?? 0);
 
+/** true when at least one slot is fully filled (enables Check button) */
+const hasFilledSlot = computed(() =>
+  slots.value.some(s => s.cells.every(c => answers.value[`${c.r},${c.c}`]))
+);
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function isInActiveSlot(r: number, c: number): boolean {
   return activeSlot.value?.cells.some(cell => cell.r === r && cell.c === c) ?? false;
@@ -63,6 +89,15 @@ function isCursor(r: number, c: number): boolean {
 /** Find a slot that contains (r,c) in the given direction */
 function slotAt(r: number, c: number, d: 'across' | 'down'): Slot | null {
   return slots.value.find(s => s.dir === d && s.cells.some(cell => cell.r === r && cell.c === c)) ?? null;
+}
+
+/** Persist answers to localStorage (always) */
+function saveToLocalStorage() {
+  try {
+    localStorage.setItem(`puzzle-answers-${props.slug}`, JSON.stringify(answers.value));
+  } catch {
+    // storage full or private mode — ignore
+  }
 }
 
 // ── Fetch layout ─────────────────────────────────────────────────────────────
@@ -88,7 +123,99 @@ async function loadPuzzle() {
   }
 }
 
-onMounted(loadPuzzle);
+// ── Resume ────────────────────────────────────────────────────────────────────
+async function resumeProgress() {
+  authed.value = await probeAuth();
+  if (authed.value) {
+    try {
+      const prog = await fetchProgress(props.apiUrl, props.slug);
+      if (prog.filledGrid) {
+        const parsed = JSON.parse(prog.filledGrid) as Record<string, string>;
+        answers.value = parsed;
+        return; // loaded from server; also mirror to localStorage
+      }
+    } catch {
+      // 401 or network error — fall through to localStorage
+    }
+  }
+  // Anonymous or server unavailable: try localStorage
+  try {
+    const stored = localStorage.getItem(`puzzle-answers-${props.slug}`);
+    if (stored) answers.value = JSON.parse(stored) as Record<string, string>;
+  } catch {
+    // ignore corrupt storage
+  }
+}
+
+// ── Autosave (debounced) ──────────────────────────────────────────────────────
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleSave() {
+  if (saveTimer !== null) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    saveTimer = null;
+    const gridJson = JSON.stringify(answers.value);
+    // Always mirror to localStorage
+    saveToLocalStorage();
+    // If authed, also persist to server (silently ignore errors)
+    if (authed.value) {
+      try {
+        await postSaveProgress(props.apiUrl, props.slug, gridJson);
+      } catch {
+        // server save failed — local copy still valid
+      }
+    }
+  }, 500);
+}
+
+// Watch answers and trigger autosave
+watch(answers, scheduleSave, { deep: true });
+
+// ── Check ─────────────────────────────────────────────────────────────────────
+async function checkPuzzle() {
+  const entries = buildCheckEntries(slots.value, answers.value);
+  if (!entries.length) return;
+  statusMsg.value = null;
+  try {
+    const data = await postCheck(props.apiUrl, props.slug, entries);
+    cellStatus.value = buildCellStatus(data.results, slots.value);
+    if (data.complete) {
+      await onSolved();
+    }
+  } catch (e) {
+    statusMsg.value = `Check failed: ${(e as Error).message}`;
+  }
+}
+
+// ── Completion + confetti ─────────────────────────────────────────────────────
+async function onSolved() {
+  solved.value = true;
+  // Record completion server-side (silently ignore 401 for anon users)
+  try {
+    await postComplete(props.apiUrl, props.slug);
+  } catch {
+    // anon user or network error — confetti still fires
+  }
+  // Dynamic import keeps canvas-confetti out of the main chunk (budget guard)
+  try {
+    const confetti = (await import('canvas-confetti')).default;
+    const end = Date.now() + 4000;
+    const colors = ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#8b5cf6'];
+    (function frame() {
+      confetti({ particleCount: 6, angle: 60, spread: 55, origin: { x: 0 }, colors });
+      confetti({ particleCount: 6, angle: 120, spread: 55, origin: { x: 1 }, colors });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+  } catch {
+    // confetti is cosmetic — never crash on it
+  }
+}
+
+// ── Mount ─────────────────────────────────────────────────────────────────────
+onMounted(async () => {
+  await loadPuzzle();
+  await resumeProgress();
+});
 
 // ── Interaction ───────────────────────────────────────────────────────────────
 function handleCellClick(r: number, c: number) {
@@ -198,6 +325,22 @@ function activateSlotFromClue(slot: Slot) {
         {{ title }}
       </h2>
 
+      <!-- Solved banner -->
+      <div
+        v-if="solved"
+        style="
+          padding: 0.75rem 1rem;
+          margin-bottom: 1rem;
+          background: var(--sapSuccessBackground, #f1faf5);
+          border: 1px solid var(--sapPositiveColor, #107e3e);
+          border-radius: 6px;
+          color: var(--sapPositiveColor, #107e3e);
+          font-weight: 600;
+        "
+      >
+        Puzzle complete! 🎉
+      </div>
+
       <!-- Grid -->
       <div
         class="puzzle-grid"
@@ -223,10 +366,20 @@ function activateSlotFromClue(slot: Slot) {
                 ? 'var(--sapTextColor, #000)'
                 : isCursor(r, c)
                   ? 'var(--sapInformativeColor, #0070f2)'
-                  : isInActiveSlot(r, c)
-                    ? 'var(--sapHighlightColor, #d1e8ff)'
-                    : 'var(--sapBackgroundColor, #fff)',
-              border: cell.black ? 'none' : '1px solid var(--sapContent_ForegroundColor, #666)',
+                  : cellStatus[`${r},${c}`] === 'correct'
+                    ? 'var(--sapPositiveBackground, #f1faf5)'
+                    : cellStatus[`${r},${c}`] === 'wrong'
+                      ? 'var(--sapNegativeBackground, #fff1f1)'
+                      : isInActiveSlot(r, c)
+                        ? 'var(--sapHighlightColor, #d1e8ff)'
+                        : 'var(--sapBackgroundColor, #fff)',
+              border: cell.black
+                ? 'none'
+                : cellStatus[`${r},${c}`] === 'correct'
+                  ? '1px solid var(--sapPositiveColor, #107e3e)'
+                  : cellStatus[`${r},${c}`] === 'wrong'
+                    ? '1px solid var(--sapNegativeColor, #bb0000)'
+                    : '1px solid var(--sapContent_ForegroundColor, #666)',
               position: 'relative',
               display: 'flex',
               alignItems: 'center',
@@ -236,7 +389,11 @@ function activateSlotFromClue(slot: Slot) {
               fontWeight: '600',
               color: isCursor(r, c)
                 ? 'var(--sapContent_ContrastTextColor, #fff)'
-                : 'var(--sapTextColor, #000)',
+                : cellStatus[`${r},${c}`] === 'correct'
+                  ? 'var(--sapPositiveColor, #107e3e)'
+                  : cellStatus[`${r},${c}`] === 'wrong'
+                    ? 'var(--sapNegativeColor, #bb0000)'
+                    : 'var(--sapTextColor, #000)',
               boxSizing: 'border-box',
             }"
             @click="handleCellClick(r, c)"
@@ -262,6 +419,34 @@ function activateSlotFromClue(slot: Slot) {
             <span v-if="!cell.black">{{ answers[`${r},${c}`] || '' }}</span>
           </div>
         </template>
+      </div>
+
+      <!-- Actions bar -->
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 1rem; flex-wrap: wrap;">
+        <button
+          :disabled="!hasFilledSlot || solved"
+          style="
+            padding: 0.4rem 1rem;
+            border-radius: 4px;
+            border: 1px solid var(--sapButton_BorderColor, #0070f2);
+            background: var(--sapButton_Background, #0070f2);
+            color: var(--sapButton_TextColor, #fff);
+            font-size: 0.875rem;
+            font-family: inherit;
+            cursor: pointer;
+          "
+          :style="{ opacity: (!hasFilledSlot || solved) ? '0.45' : '1' }"
+          @click="checkPuzzle"
+        >
+          Check
+        </button>
+        <!-- Subtle status message (errors, etc.) -->
+        <span
+          v-if="statusMsg"
+          style="font-size: 0.8rem; color: var(--sapNegativeColor, #bb0000);"
+        >
+          {{ statusMsg }}
+        </span>
       </div>
 
       <!-- Clue lists -->
