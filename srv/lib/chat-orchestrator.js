@@ -279,6 +279,17 @@ export function buildToolRegistry({ settings, pageContext, isAdmin = false } = {
 
   const tools = [SEARCH_TUTORIALS_TOOL];
 
+  // Puzzle page: crossword-coaching palette. searchTutorials (for "is there a
+  // tutorial on X" bridges) + the flag-gated puzzleHint tool. The full learner
+  // palette (RAG, progress, branching, KG tools) is off-scope on a puzzle page,
+  // so we early-return a trimmed set — mirroring the advocates branch below.
+  if (pageContext?.kind === 'puzzle') {
+    if (settings?.puzzleHintEnabled) {
+      tools.push(PUZZLE_HINT_TOOL);
+    }
+    return tools;
+  }
+
   // Advocates page: trimmed palette. searchTutorials + getUserProgress.
   // ChatSettings-gated tools (getRelevantSteps, checkCode,
   // getBranchRecommendation, findLearningPath, expandSearchConcepts) are

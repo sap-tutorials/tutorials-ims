@@ -211,6 +211,62 @@ function devtoberfestLayer(ctx) {
   ].join('\n');
 }
 
+const PUZZLE_PERSONA = `You are Joule on a crossword-puzzle page in the SAP Tutorial Platform.
+
+CONTEXT
+- The user is solving a cryptic crossword hosted on this platform. Your job is
+  to COACH them on cryptic-crossword technique — never to hand them answers.
+
+SCOPE
+You HELP with:
+  1. Explaining how a specific clue works — call \`puzzleHint\` with the puzzle
+     slug and the clue's slotId (format \`\${row}-\${col}-\${dir}\`, e.g.
+     "0-0-across"). It returns the clue text, the answer length/enumeration,
+     the authored wordplay type, and any crossing letters the solver has
+     already filled correctly. Coach from THAT — spotting anagrams, hidden
+     words, homophones, containers, charades, etc.
+  2. General cryptic-crossword technique and terminology (what an anagram
+     indicator is, how "hidden word" clues work, reading enumerations like
+     (4,3), how checked/crossing letters constrain an answer).
+  3. Where they're stuck: nudge toward the wordplay device and the definition
+     half of the clue without stating the solution word.
+
+HARD RULE — NEVER REVEAL THE ANSWER
+- Never state, spell, or strongly imply the solution word for a clue, even if
+  the user asks directly or claims they've given up. The \`puzzleHint\` tool is
+  designed so the answer never reaches you — do not guess it from your own
+  knowledge either. If pressed, give a progressively stronger hint (device →
+  definition → first letter from their own correct crossings) but stop short of
+  the full word.
+
+WHEN ANSWERING
+- For "help with N across / this clue", call \`puzzleHint\` first, then coach.
+- If the tool returns a \`reason\` (bad-slug, not-found, no-clue, error), tell
+  the user you couldn't load that clue and ask them to re-select it, rather
+  than inventing clue details.
+- Keep coaching tight and encouraging. This is a game — be playful, not preachy.
+
+For questions unrelated to the puzzle or cryptic crosswords, redirect briefly:
+  "I'm here to help you crack this crossword — ask me about a clue or cryptic
+   technique. For tutorials, open Joule on a tutorial page."`;
+
+function puzzleLayer(ctx) {
+  const rawSlug = typeof ctx?.slug === 'string' ? ctx.slug.trim() : '';
+  const slug = rawSlug || null;
+  const lines = [
+    slug ? `PAGE: Crossword puzzle — ${slug}` : 'PAGE: Crossword puzzle.',
+  ];
+  if (slug) {
+    lines.push(`When calling puzzleHint, use slug="${slug}".`);
+  } else {
+    lines.push('The puzzle slug is not available yet; ask the user which clue they mean if needed.');
+  }
+  if (typeof ctx?.title === 'string' && ctx.title.trim()) {
+    lines.push(`Puzzle title: "${ctx.title.trim()}".`);
+  }
+  return lines.join('\n');
+}
+
 function adminLayer(ctx) {
   const lines = [];
   if (ctx.tool) {
@@ -292,6 +348,7 @@ async function pageLayer(pageContext) {
     case 'admin':        return adminLayer(pageContext);
     case 'advocates':    return advocatesLayer(pageContext);
     case 'devtoberfest': return devtoberfestLayer(pageContext);
+    case 'puzzle':       return puzzleLayer(pageContext);
     default:             return 'Use searchTutorials liberally to ground answers.';
   }
 }
@@ -350,26 +407,29 @@ export async function buildSystemPrompt(pageContext, user, settings = null) {
   const isAdmin = kind === 'admin';
   const isDevtoberfest = kind === 'devtoberfest';
   const isAdvocates = kind === 'advocates';
+  const isPuzzle = kind === 'puzzle';
 
   let persona;
   if (isAdmin)             persona = ADMIN_PERSONA;
   else if (isDevtoberfest) persona = DEVTOBERFEST_PERSONA;
   else if (isAdvocates)    persona = ADVOCATES_PERSONA;
+  else if (isPuzzle)       persona = PUZZLE_PERSONA;
   else                     persona = PERSONA;
 
   // Layer ordering:
   //   admin        -> [ADMIN_PERSONA,        RAG_GUIDANCE,                 adminLayer,        userLayer]
   //   devtoberfest -> [DEVTOBERFEST_PERSONA,                               devtoberfestLayer, userLayer]
   //   advocates    -> [ADVOCATES_PERSONA,                                  advocatesLayer,    userLayer]
+  //   puzzle       -> [PUZZLE_PERSONA,                                     puzzleLayer,       userLayer]
   //   learner      -> [PERSONA,              RAG_GUIDANCE, PROGRESS_GUIDANCE, pageLayer,      userLayer]
-  // RAG_GUIDANCE is skipped on devtoberfest + advocates because their tool
-  // sets don't include getRelevantSteps. PROGRESS_GUIDANCE is skipped on
-  // admin + devtoberfest + advocates — none of those kinds register the
-  // getUserProgress tool, so the guidance would dangle.
+  // RAG_GUIDANCE is skipped on devtoberfest + advocates + puzzle because their
+  // tool sets don't include getRelevantSteps. PROGRESS_GUIDANCE is skipped on
+  // admin + devtoberfest + advocates + puzzle — none of those kinds register
+  // the getUserProgress tool, so the guidance would dangle.
   const layers = [persona];
-  if (!isDevtoberfest && !isAdvocates) layers.push(RAG_GUIDANCE);
-  if (!isAdmin && !isDevtoberfest && !isAdvocates) layers.push(PROGRESS_GUIDANCE);
-  if (!isAdmin && !isDevtoberfest && !isAdvocates) {
+  if (!isDevtoberfest && !isAdvocates && !isPuzzle) layers.push(RAG_GUIDANCE);
+  if (!isAdmin && !isDevtoberfest && !isAdvocates && !isPuzzle) layers.push(PROGRESS_GUIDANCE);
+  if (!isAdmin && !isDevtoberfest && !isAdvocates && !isPuzzle) {
     const catalog = await communityCatalogLayer(settings);
     if (catalog) layers.push(catalog);
   }
