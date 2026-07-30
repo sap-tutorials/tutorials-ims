@@ -52,6 +52,7 @@ export async function puzzleHintHandler({ db, args }) {
 
   try {
     const p = await dbHandle.run(
+      // slug-canonical: pre-canonicalized
       SELECT.one.from(Puzzles).columns('layout').where({ slug })
     );
     if (!p?.layout) return { reason: 'not-found' };
