@@ -13,7 +13,20 @@ import { resolveTutorialAuthor } from './resolve-tutorial-author.js';
 const LOG = cds.log('content-publish');
 const LOCK_NAME = 'content-publish';
 const LOCK_DURATION_MS = 30 * 60 * 1000;
-const INSTANCE_ID = process.env.CF_INSTANCE_GUID || `local-${process.pid}`;
+
+// #1387 — The chunked publish protocol splits begin / append / commit into
+// SEPARATE HTTP requests, and PROD tutorials-srv runs `instances: 2`
+// (deploy/prod.mtaext). If we owned the JobLock by CF instance id, `begin`
+// could acquire it on instance A while `commit` runs on instance B, whose
+// `releaseLock(..., <B's id>)` DELETE (WHERE lockedBy = B) matches nothing —
+// the lock then lingers until its 30-min TTL and every rebuild in that window
+// 409s ("Another publish in progress"). Root cause of issue #1387: a PROD
+// rebuild kept failing even AFTER a clean success left a stale lock behind.
+// Fix: own the lock by the *session id* (threaded across all three requests),
+// not by the instance. DEV (`instances: 1`) never reproduced this because a
+// single instance always matched its own id. The legacy single-shot publish
+// path in content-store.js acquires+releases inside ONE request, so its
+// instance-scoped ownership is still correct and is left unchanged.
 
 // #672 — used when merging rejectedReverts into PipelineLog.metadata after
 // logPipelineEnd. The PipelineLog row's begin-time fields (trigger,
@@ -32,7 +45,11 @@ export function createSessionHelpers({ namespace }) {
   }
 
   async function beginPublishSession({ trigger, hugoVersion, expectedSlugCount, initiator }) {
-    const locked = await acquireLock(LOCK_NAME, INSTANCE_ID, LOCK_DURATION_MS, namespace);
+    // #1387 — own the lock by sessionId (stable across begin/append/commit
+    // requests, even across CF instances), not by instance id. Generate it
+    // BEFORE acquiring so the lock row records the session as its owner.
+    const sessionId = cds.utils.uuid();
+    const locked = await acquireLock(LOCK_NAME, sessionId, LOCK_DURATION_MS, namespace);
     if (!locked) {
       const err = new Error('Another publish in progress');
       err.statusCode = 409;
@@ -41,7 +58,6 @@ export function createSessionHelpers({ namespace }) {
 
     try {
       const version = await getNextVersion();
-      const sessionId = cds.utils.uuid();
       const { ContentManifest } = cds.entities(namespace);
 
       await INSERT.into(ContentManifest).entries({
@@ -78,7 +94,7 @@ export function createSessionHelpers({ namespace }) {
 
       return { sessionId, version, expectedSlugCount: expectedSlugCount || 0 };
     } catch (err) {
-      await releaseLock(LOCK_NAME, INSTANCE_ID, namespace).catch(() => {});
+      await releaseLock(LOCK_NAME, sessionId, namespace).catch(() => {});
       throw err;
     } finally {
       metrics.counter('publish.attempt');  // #805
@@ -418,7 +434,7 @@ export function createSessionHelpers({ namespace }) {
         publishDurationMs: durationMs
       });
 
-    await releaseLock(LOCK_NAME, INSTANCE_ID, namespace).catch(() => {});
+    await releaseLock(LOCK_NAME, sessionId, namespace).catch(() => {});
 
     // Trigger post-publish embeddings for fresh slugs (parity with the legacy
     // publishHandler at srv/lib/content-store.js:578-588). Scheduled via
@@ -529,7 +545,7 @@ export function createSessionHelpers({ namespace }) {
       await UPDATE(ContentManifest)
         .where({ sessionId })
         .set({ status: 'FAILED', trigger: ((existing.trigger || '') + ` [aborted: ${reason || 'unknown'}]`).slice(0, 500) });
-      await releaseLock(LOCK_NAME, INSTANCE_ID, namespace).catch(() => {});
+      await releaseLock(LOCK_NAME, sessionId, namespace).catch(() => {});
 
       // Close the PipelineLog row started in beginPublishSession (FAILED).
       try {

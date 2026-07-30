@@ -159,9 +159,17 @@ export async function cleanupStuckPublishing(olderThanMinutes = 30, legacyOlderT
 
   // Best-effort lock release — chunked sessions hold the content-publish lock
   // and we want a fresh begin to be able to acquire it without waiting for TTL.
+  // #1387 — the chunked path now owns the lock by sessionId (not CF instance
+  // id), so release by each reaped session's id. The previous release-by-
+  // instance-guid was a silent no-op: the reaper's own guid never matched the
+  // lock's owner, so a stale lock only ever cleared via its 30-min TTL.
   try {
     const { releaseLock } = await import('./job-lock.js');
-    await releaseLock('content-publish', process.env.CF_INSTANCE_GUID || `local-${process.pid}`, 'com.sap.developers.ims').catch(() => {});
+    for (const row of stuck) {
+      if (row.sessionId) {
+        await releaseLock('content-publish', row.sessionId, 'com.sap.developers.ims').catch(() => {});
+      }
+    }
   } catch { /* job-lock unavailable in test contexts is fine */ }
 
   const chunked = stuck.filter(r => r.sessionId).length;
