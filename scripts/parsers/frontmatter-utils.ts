@@ -48,9 +48,11 @@ export function humanizeTag(raw: string, registry?: TagLabelRegistry): string {
  *   the prereq box (issue #163).
  * - Trim whitespace around the whole block.
  *
- * HTML is NOT escaped here: markdownify (unsafe=true) renders the result, the
- * same trust posture as step bodies. Content originates from the trusted
- * sap-tutorials org.
+ * This helper does NOT sanitize HTML — it only cleans structure. The two emit
+ * sites wrap the result in the SAME step-body sanitizer they apply to step
+ * content (render-frontmatter.ts → stripDangerousHtml; fetch-tutorials.ts →
+ * sanitizeStepContent), so the tag/attribute + iframe-host allowlists that the
+ * rest of the tutorial pipeline enforces also apply here (issue #1388 review).
  */
 export function cleanPrerequisites(prereqText: string): string {
   if (!prereqText) return ''

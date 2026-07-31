@@ -104,7 +104,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     displayTags: dedupedRawSlugs.map(s => humanizeTag(s, registry)).filter(t => t.length > 0),
     displayTagSlugs: dedupedRawSlugs,
     youWillLearn,
-    prerequisites: cleanPrerequisites(prerequisites),
+    prerequisites: stripDangerousHtml(cleanPrerequisites(prerequisites), { allowDataUrls }),
     lastUpdated: lastUpdated || null,
     createdAt: createdAt || null,
     contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, email: c.email, avatarUrl: c.avatarUrl })),
