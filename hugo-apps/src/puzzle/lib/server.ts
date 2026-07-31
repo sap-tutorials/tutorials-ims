@@ -143,3 +143,17 @@ export async function postComplete(
   if (!r.ok) throw new Error(`complete HTTP ${r.status}`);
   return r.json();
 }
+
+/**
+ * POST /puzzle-api/resetPuzzleProgress
+ * Authenticated action — clears server-side progress for the given slug.
+ */
+export async function postResetProgress(apiUrl: string, slug: string): Promise<void> {
+  const r = await csrfFetch(`${apiUrl}/resetPuzzleProgress`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ slug }),
+  });
+  if (!r.ok) throw new Error(`reset HTTP ${r.status}`);
+}

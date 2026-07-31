@@ -96,3 +96,16 @@ describe('buildCellStatus (per-cell)', () => {
     expect(buildCellStatus([])).toEqual({});
   });
 });
+
+describe('postResetProgress (export shape)', () => {
+  it('is exported as a function', async () => {
+    const mod = await import('../lib/server');
+    expect(typeof mod.postResetProgress).toBe('function');
+  });
+
+  it('accepts (apiUrl, slug) signature', async () => {
+    const { postResetProgress } = await import('../lib/server');
+    // Two required parameters: apiUrl (string), slug (string)
+    expect(postResetProgress.length).toBe(2);
+  });
+});
