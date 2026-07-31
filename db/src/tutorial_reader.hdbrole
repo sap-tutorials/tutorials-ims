@@ -2,7 +2,8 @@
   "role": {
     "name": "tutorial_reader",
     "object_privileges": [
-      { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] }
+      { "name": "TUTORIAL_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] },
+      { "name": "TASK_VALUE_HELP_V1", "type": "VIEW", "privileges": [ "SELECT" ] }
     ]
   }
 }
