@@ -57,7 +57,7 @@ export default class PuzzleService extends cds.ApplicationService {
         return gradeEntries({ solution: puzzle.solution, entries: entries || [] });
       } catch (e) {
         cds.log('puzzle').warn('check grade failed:', e.message);
-        return { results: [], complete: false };
+        return { results: [], cells: [], complete: false };
       }
     });
 

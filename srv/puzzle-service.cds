@@ -18,6 +18,7 @@ service PuzzleService {
     word   : String;
   }) returns {
     results  : many { slotId : String; correct : Boolean; };
+    cells    : many { r : Integer; c : Integer; correct : Boolean; };
     complete : Boolean;
   };
 
