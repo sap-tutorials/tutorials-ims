@@ -466,7 +466,8 @@ sap.ui.define([
     },
 
     onImportPress: function () {
-      var input = this.byId("importFileInput").getDomRef();
+      var dom = this.byId("importFileInput").getDomRef();
+      var input = dom && dom.querySelector("input");
       if (input) { input.value = ""; input.click(); }
     },
 
