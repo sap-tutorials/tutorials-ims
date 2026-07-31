@@ -2589,6 +2589,17 @@
   line-height: 1.5;
   margin-bottom: 0.25rem;
   color: var(--sapTextColor, #32363a);
+}/* #1388: prerequisites now renders markdown structure (prose paragraphs and/or
+   lists), not just a bullet list. Style paragraphs to match the list items and
+   collapse the outer margins so the info box hugs its content. */.tutorial-prerequisites p {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0 0 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}.tutorial-prerequisites__body > :first-child {
+  margin-top: 0;
+}.tutorial-prerequisites__body > :last-child {
+  margin-bottom: 0;
 }.tutorial-prerequisites a {
   color: var(--sapLinkColor, #0064d9);
   text-decoration: none;

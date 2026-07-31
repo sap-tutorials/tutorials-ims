@@ -59,6 +59,35 @@ describe('extractFrontmatter', () => {
     expect(result.prerequisites).toContain('SAP HANA Cloud')
   })
 
+  describe('youWillLearn wrapped-line folding (issue #1388)', () => {
+    const make = (section: string) =>
+      `---\ntime: 5\nauthor_name: x\nauthor_profile: x\ntags: []\nprimary_tag: x\n---\n\n# T\n\n## You will learn\n\n${section}\n\n## Prerequisites\n\n- something\n`
+
+    it('folds a wrapped continuation line into its bullet instead of dropping it', () => {
+      const md = make(
+        '- How to build a CAP service\n  and deploy it to BTP Cloud Foundry\n- How to bind HANA',
+      )
+      const result = extractFrontmatter(md)
+      expect(result.youWillLearn).toHaveLength(2)
+      expect(result.youWillLearn[0]).toBe(
+        'How to build a CAP service and deploy it to BTP Cloud Foundry',
+      )
+      expect(result.youWillLearn[1]).toBe('How to bind HANA')
+    })
+
+    it('ignores stray prose before the first bullet', () => {
+      const md = make('Intro prose line\n- First real bullet')
+      const result = extractFrontmatter(md)
+      expect(result.youWillLearn).toEqual(['First real bullet'])
+    })
+
+    it('does not glue a trailing thematic break onto the last bullet', () => {
+      const md = make('- Only bullet\n\n---')
+      const result = extractFrontmatter(md)
+      expect(result.youWillLearn).toEqual(['Only bullet'])
+    })
+  })
+
   it('normalizes level from tags', () => {
     const result = extractFrontmatter(SAMPLE_MD)
     expect(result.level).toBe('beginner')

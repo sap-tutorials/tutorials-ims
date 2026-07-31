@@ -13,7 +13,7 @@ import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
 import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { computeRecommendations } from './parsers/recommendations.js'
-import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
+import { humanizeTag, cleanPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
 import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
 import { extractGithubLoginFromProfile } from './parsers/github-login-from-profile.js'
@@ -329,7 +329,7 @@ function writeVitePressPage(
     displayTags: dedupedRawSlugs.map(s => humanizeTag(s, registry)).filter(t => t.length > 0),
     displayTagSlugs: dedupedRawSlugs,
     youWillLearn,
-    prerequisites: splitPrerequisites(prerequisites),
+    prerequisites: cleanPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
     createdAt: createdAt || null,
     contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, email: c.email, avatarUrl: c.avatarUrl })),

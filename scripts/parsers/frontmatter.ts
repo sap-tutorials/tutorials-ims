@@ -72,10 +72,25 @@ function extractBulletList(content: string, heading: string): string[] {
   const pattern = new RegExp(`## ${heading}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n### |$)`)
   const match = content.match(pattern)
   if (!match) return []
-  return match[1]
-    .split('\n')
-    .filter(line => line.match(/^\s*-\s+/))
-    .map(line => line.replace(/^\s*-\s+/, '').trim())
+  // Group each `- ` bullet with any wrapped continuation lines that follow it.
+  // Previously non-bullet lines were filtered out entirely, so a wrapped
+  // multi-line bullet lost every line after the first (issue #1388). We now
+  // fold continuation text into the preceding bullet. Lines before the first
+  // bullet (stray prose) are still dropped — youWillLearn is a bullet list by
+  // contract and its render path (check-icon <li> per entry) assumes so.
+  const items: string[] = []
+  for (const rawLine of match[1].split('\n')) {
+    const bulletMatch = rawLine.match(/^\s*-\s+(.*)$/)
+    if (bulletMatch) {
+      items.push(bulletMatch[1].trim())
+    } else if (items.length > 0 && rawLine.trim().length > 0 && !/^\s*-{3,}\s*$/.test(rawLine)) {
+      // Continuation of the current bullet's wrapped text. Skip thematic-break
+      // (`---`) lines so a trailing horizontal rule isn't glued onto the last
+      // bullet (same hazard as the prereq section, issue #163).
+      items[items.length - 1] = `${items[items.length - 1]} ${rawLine.trim()}`.trim()
+    }
+  }
+  return items
 }
 
 function extractSection(content: string, heading: string): string {
