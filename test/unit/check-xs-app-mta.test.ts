@@ -39,13 +39,23 @@ function writeFile(root: string, rel: string, body: string): void {
  * so the rest of the descriptor can be empty.
  */
 function buildMta(opts: {
-  approuterRequires?: { name: string; group?: string; url?: string }[];
+  approuterRequires?: { name: string; group?: string; url?: string; destName?: string }[];
+  approuterProvides?: string[];
   providers?: { module: string; provides: string[] }[];
   staticDestinations?: { name: string; url: string }[];
 } = {}) {
   const approuterRequires = (opts.approuterRequires ?? [])
-    .map(r => `      - name: ${r.name}${r.group ? `\n        group: ${r.group}` : ''}${r.url ? `\n        properties:\n          url: ${r.url}` : ''}`)
+    .map(r => {
+      const props: string[] = [];
+      if (r.destName) props.push(`          name: ${r.destName}`);
+      if (r.url) props.push(`          url: ${r.url}`);
+      const propsYaml = props.length ? `\n        properties:\n${props.join('\n')}` : '';
+      return `      - name: ${r.name}${r.group ? `\n        group: ${r.group}` : ''}${propsYaml}`;
+    })
     .join('\n');
+  const approuterProvidesBlock = opts.approuterProvides
+    ? `    provides:\n${opts.approuterProvides.map(n => `      - name: ${n}\n        properties:\n          ${n}: \${some-param}`).join('\n')}`
+    : '';
   const providerModules = (opts.providers ?? [])
     .map(p => `  - name: ${p.module}\n    type: nodejs\n    path: gen\n    provides:\n${p.provides.map(n => `      - name: ${n}`).join('\n')}`)
     .join('\n');
@@ -61,6 +71,7 @@ function buildMta(opts: {
     '    type: approuter.nodejs',
     '    path: approuter',
     propsBlock,
+    approuterProvidesBlock,
     `    requires:${approuterRequires ? '\n' + approuterRequires : ' []'}`,
     providerModules,
     '',
@@ -223,6 +234,29 @@ describe('scripts/check-xs-app-mta.ts', () => {
     const mta = buildMta({
       approuterRequires: [{ name: 'tutorials-xsuaa' }],
       staticDestinations: [{ name: 'gameboard-api', url: '${gameboard-url}' }],
+      providers: [],
+    });
+    writeFile(root, 'mta.yaml', mta);
+    writeFile(root, '.deploy/mta.yaml', mta);
+    const r = run(root);
+    expect(r.status).toBe(0);
+  });
+
+  it('resolves a self-provided external destination (require destName ≠ require name, ~{...} url, matching approuter provides)', () => {
+    writeFile(root, 'approuter/xs-app.json', JSON.stringify({
+      routes: [{ source: '^/gameboard/(.*)$', destination: 'gameboard-api' }],
+    }));
+    writeFile(root, 'xs-security.json', JSON.stringify({ scopes: [] }));
+    // The mbt-valid external-destination idiom: a require named `gameboard-dest`
+    // (matching a self-provides `gameboard-dest`) whose properties.name is the
+    // actual destination `gameboard-api` and url pulls ~{gameboard-url} from the
+    // self-provides. The route references `gameboard-api` (= properties.name).
+    const mta = buildMta({
+      approuterProvides: ['gameboard-dest'],
+      approuterRequires: [
+        { name: 'tutorials-xsuaa' },
+        { name: 'gameboard-dest', group: 'destinations', destName: 'gameboard-api', url: '~{gameboard-url}' },
+      ],
       providers: [],
     });
     writeFile(root, 'mta.yaml', mta);

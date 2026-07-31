@@ -234,19 +234,16 @@ modules:
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
       XS_APP_LOG_LEVEL: info
-      # gameboard-api — the Devtoberfest gameboard is a SEPARATELY-deployed MTA
-      # (sap-community-gameboard) fronted by this approuter. Declared as a STATIC
-      # destination in this `destinations` env array (parsed by
-      # approuter/server.js) rather than a `requires: {group: destinations}`
-      # entry: it is NOT backed by an intra-MTA `~{provides}`, and mbt strict
-      # validation rejects a destinations-group require with no defined property
-      # set ("property set ... is not defined"). URL is ${gameboard-url} (invalid
-      # placeholder by default; real value per-env in mtaext — dev only today).
-      # NO forwardAuthToken: /gameboard/* is public GET-only (getLeaderboard,
-      # @requires 'any'), so no JWT reaches this out-of-MTA backend
-      # (csrf-with-token-forwarding guard). Plan B's authenticated arm adds its
-      # own route + token-forwarding destination.
-      destinations: '[{"name":"gameboard-api","url":"${gameboard-url}"}]'
+    provides:
+      # Self-provided property set so the gameboard-api destination require
+      # below resolves under mbt strict validation. gameboard-api fronts a
+      # SEPARATELY-deployed MTA (sap-community-gameboard) with no provider in
+      # THIS mta; a self-provides is the mbt-valid idiom for a static/external
+      # destination. url = ${gameboard-url} (invalid placeholder default; real
+      # value per-env in mtaext — dev only today).
+      - name: gameboard-dest
+        properties:
+          gameboard-url: ${gameboard-url}
     requires:
       - name: tutorials-xsuaa
       # #867 — approuter reads REBUILD_API_KEY from credstore via
@@ -264,6 +261,18 @@ modules:
           name: srv-qa-api
           url: ~{srv-url}
           forwardAuthToken: true
+      # gameboard-api destination → separately-deployed sap-community-gameboard.
+      # References the self-provided gameboard-dest property set above (mbt-valid
+      # for a static/external destination with no in-MTA provider). This require
+      # is what makes the framework inject gameboard-api into the runtime
+      # `destinations` env var, which the @sap/approuter route validator checks
+      # (a properties.destinations array is OVERWRITTEN by the framework and does
+      # NOT work). NO forwardAuthToken — /gameboard/* is public GET-only.
+      - name: gameboard-dest
+        group: destinations
+        properties:
+          name: gameboard-api
+          url: ~{gameboard-url}
       # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
       # SAP BTP convention — putting it on the resource block via path: is
       # silently ignored. Range 1..4, CPU 70% / 30% thresholds. Memory metric
