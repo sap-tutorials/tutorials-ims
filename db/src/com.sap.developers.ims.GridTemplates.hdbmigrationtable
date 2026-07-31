@@ -1,0 +1,14 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_GridTemplates (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  name NVARCHAR(255),
+  rows INTEGER,
+  cols INTEGER,
+  blacks NCLOB,
+  isBuiltin BOOLEAN DEFAULT FALSE,
+  PRIMARY KEY(ID)
+)

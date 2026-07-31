@@ -105,6 +105,8 @@ service AdminService {
   // Issue #644 — Puzzles is a TaskBase peer of Tutorials/Missions/Groups,
   // exposed for admin CRUD so puzzles can be authored and curated.
   entity Puzzles as projection on ims.Puzzles { *, cast(legacyId as String) as legacyIdStr : String };
+  // Puzzle-designer grid templates (built-in + author-saved).
+  entity GridTemplates as projection on ims.GridTemplates;
   entity Events as projection on ims.Events { *, cast(legacyId as String) as legacyIdStr : String };
   entity Prizes as projection on ims.Prizes { *, cast(legacyId as String) as legacyIdStr : String };
   entity PrizeRecords as projection on ims.PrizeRecords;
