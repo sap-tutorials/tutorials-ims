@@ -1,5 +1,5 @@
 import { stringify as yamlStringify } from 'yaml'
-import { humanizeTag, splitPrerequisites } from './frontmatter-utils.js'
+import { humanizeTag, cleanPrerequisites } from './frontmatter-utils.js'
 import type { TagLabelRegistry } from './frontmatter-utils.js'
 import { escapeHugoDelimiters } from './hugo-delimiters.js'
 import { stripDangerousHtml } from './sanitize-html.js'
@@ -104,7 +104,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     displayTags: dedupedRawSlugs.map(s => humanizeTag(s, registry)).filter(t => t.length > 0),
     displayTagSlugs: dedupedRawSlugs,
     youWillLearn,
-    prerequisites: splitPrerequisites(prerequisites),
+    prerequisites: stripDangerousHtml(cleanPrerequisites(prerequisites), { allowDataUrls }),
     lastUpdated: lastUpdated || null,
     createdAt: createdAt || null,
     contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, email: c.email, avatarUrl: c.avatarUrl })),

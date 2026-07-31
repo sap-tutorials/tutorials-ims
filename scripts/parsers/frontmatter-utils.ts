@@ -29,23 +29,36 @@ export function humanizeTag(raw: string, registry?: TagLabelRegistry): string {
     .join(' ')
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
-export function splitPrerequisites(prereqText: string): string[] {
-  if (!prereqText) return []
+/**
+ * Clean the raw `## Prerequisites` section into a markdown string, preserving
+ * its structure (paragraphs stay paragraphs, lists stay lists) so Hugo can
+ * `markdownify` it exactly like a step body.
+ *
+ * The previous `splitPrerequisites` returned `string[]` (one entry per source
+ * line, leading `- ` stripped), which forced the render paths to wrap every
+ * line in `<li>`. That flat model could not represent prose, wrapped
+ * multi-line paragraphs, or mixed prose+bullets — each rendered as malformed
+ * bullets (one `<li>` per physical line). See issue #1388.
+ *
+ * Cleaning is deliberately minimal so markdown is preserved verbatim:
+ * - Drop standalone thematic-break tokens (`---` horizontal rule). Source
+ *   tutorials commonly close the Prerequisites section with a `---` before the
+ *   first step, and `extractSection`'s lookahead (next `## ` / `### ` / EOF)
+ *   captures it. Without this filter the `---` renders as a stray <hr> inside
+ *   the prereq box (issue #163).
+ * - Trim whitespace around the whole block.
+ *
+ * This helper does NOT sanitize HTML — it only cleans structure. The two emit
+ * sites wrap the result in the SAME step-body sanitizer they apply to step
+ * content (render-frontmatter.ts → stripDangerousHtml; fetch-tutorials.ts →
+ * sanitizeStepContent), so the tag/attribute + iframe-host allowlists that the
+ * rest of the tutorial pipeline enforces also apply here (issue #1388 review).
+ */
+export function cleanPrerequisites(prereqText: string): string {
+  if (!prereqText) return ''
   return prereqText
     .split('\n')
-    .map(line => line.replace(/^\s*-\s+/, '').trim())
-    .map(line => escapeHtml(line))
-    // Drop empty lines AND markdown thematic-break tokens. Source tutorials
-    // commonly close the Prerequisites section with a `---` horizontal rule
-    // before the first step, and `extractSection`'s lookahead (next `## ` /
-    // `### ` / EOF) captures it. Without this filter the `---` survives as a
-    // bullet and renders as a stray <hr> inside the prereq list (issue #163).
-    .filter(line => line.length > 0 && !/^-{3,}$/.test(line))
+    .filter(line => !/^\s*-{3,}\s*$/.test(line))
+    .join('\n')
+    .trim()
 }

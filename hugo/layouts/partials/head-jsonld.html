@@ -50,7 +50,10 @@
 {{- if and .Params.youWillLearn .Params.prerequisites -}}
 {{- $faqs := slice -}}
 {{- $faqs = $faqs | append (dict "q" "What will I learn?" "a" (delimit .Params.youWillLearn " ")) -}}
-{{- $faqs = $faqs | append (dict "q" "What do I need before I start?" "a" (delimit .Params.prerequisites " ")) -}}
+{{/* #1388: prerequisites is now a markdown string, not a string[] — markdownify
+     it so the trailing `| plainify` (line below) flattens it to answer text.
+     `delimit` (the old array join) would silently stringify the value wrong. */}}
+{{- $faqs = $faqs | append (dict "q" "What do I need before I start?" "a" (.Params.prerequisites | markdownify)) -}}
 {{- with .Params.time }}{{- $faqs = $faqs | append (dict "q" "How long does this take?" "a" (printf "%v minutes" .)) -}}{{- end -}}
 {{- with .Params.level }}{{- $faqs = $faqs | append (dict "q" "What level is this?" "a" .) -}}{{- end -}}
 <script type="application/ld+json">

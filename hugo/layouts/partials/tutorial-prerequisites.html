@@ -1,10 +1,10 @@
 {{ with .Params.prerequisites }}
 <div class="tutorial-prerequisites">
   <h3>Prerequisites</h3>
-  <ul>
-    {{ range . }}
-    <li>{{ . | markdownify }}</li>
-    {{ end }}
-  </ul>
+  {{/* #1388: prerequisites is a markdown string (not string[]). markdownify
+       preserves its structure — prose stays paragraphs, bullet lists stay
+       <ul><li>, mixed content renders correctly — instead of the old model
+       that force-wrapped every physical source line in its own <li>. */}}
+  <div class="tutorial-prerequisites__body">{{ . | markdownify }}</div>
 </div>
 {{ end }}

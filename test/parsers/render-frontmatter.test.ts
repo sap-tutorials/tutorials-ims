@@ -51,6 +51,23 @@ describe('renderHugoFrontmatter', () => {
     expect(out.endsWith('\n')).toBe(true);
   });
 
+  it('sanitizes dangerous HTML in prerequisites while preserving markdown structure (#1388)', () => {
+    const out = renderHugoFrontmatter({
+      slug: 's', title: 't', description: 'd', time: 5, level: 'beginner',
+      tags: [], primaryTag: '', author: '', authorProfile: '',
+      youWillLearn: [],
+      prerequisites: 'A prose paragraph.\n\n- A safe <strong>bullet</strong>\n- <script>alert(1)</script> and <a href="javascript:evil()">bad link</a>',
+      steps: [stubStep(1)], nav: stubNav,
+      lastUpdated: '', createdAt: '', contributors: [],
+    });
+    // Dangerous content stripped by the step-body sanitizer.
+    expect(out).not.toContain('<script>');
+    expect(out).not.toContain('javascript:');
+    // Safe markdown structure preserved (leading "- " + allowlisted tag).
+    expect(out).toContain('- A safe <strong>bullet</strong>');
+    expect(out).toContain('A prose paragraph.');
+  });
+
   it('escapes double quotes in step titles', () => {
     const step: TutorialStep = { number: 1, title: 'A "fancy" step', content: 'body' } as TutorialStep;
     const out = renderHugoFrontmatter({
