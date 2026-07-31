@@ -4,7 +4,13 @@
   {{/* #1388: prerequisites is a markdown string (not string[]). markdownify
        preserves its structure — prose stays paragraphs, bullet lists stay
        <ul><li>, mixed content renders correctly — instead of the old model
-       that force-wrapped every physical source line in its own <li>. */}}
-  <div class="tutorial-prerequisites__body">{{ . | markdownify }}</div>
+       that force-wrapped every physical source line in its own <li>.
+       Defensive: `markdownify` hard-FAILS the whole `hugo` build if handed a
+       non-string (e.g. a stale pre-#1388 page whose frontmatter still carries
+       an array). Join a slice back to a string first so one malformed page
+       can't break every page's build. */}}
+  {{- $prereq := . -}}
+  {{- if reflect.IsSlice $prereq }}{{ $prereq = delimit $prereq " " }}{{ end -}}
+  <div class="tutorial-prerequisites__body">{{ printf "%v" $prereq | markdownify }}</div>
 </div>
 {{ end }}
