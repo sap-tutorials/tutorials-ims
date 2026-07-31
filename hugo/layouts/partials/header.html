@@ -159,6 +159,8 @@
 
   shellbar.addEventListener('profile-click', (e) => {
     if (!isAuthenticated) {
+      try { localStorage.removeItem('autologin.optout'); } catch {}
+      try { sessionStorage.setItem('autologin.tried', '1'); } catch {}
       window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search);
       return;
     }
@@ -225,6 +227,8 @@
   });
 
   logoutBtn.addEventListener('click', () => {
+    // Suppress auto-login across tabs until the next deliberate login.
+    try { localStorage.setItem('autologin.optout', '1'); } catch {}
     try {
       for (let i = sessionStorage.length - 1; i >= 0; i--) {
         const k = sessionStorage.key(i);
@@ -322,6 +326,10 @@
 
   function applyAuthenticatedUser(u) {
     if (!u) return;
+    // A successful login supersedes any prior intentional logout — re-enable
+    // auto-login for future sessions. Safe post-logout because the logout
+    // handler wipes the 'joule.user.v1' cache, so this runs only on genuine auth.
+    try { localStorage.removeItem('autologin.optout'); } catch {}
     const given = u.givenName || u.firstName || '';
     const family = u.familyName || '';
     const id = u.id || '';
@@ -352,22 +360,44 @@
     document.dispatchEvent(new CustomEvent('auth-resolved', { detail: { authenticated: true } }));
   }
 
+  // Issue: automatic login attempt on first connect. On a definitive anonymous
+  // answer from /auth/user (see checkAuth), attempt login once per browser
+  // session — EXCEPT on the site root, which stays anonymous for drive-by
+  // readers. If an SSO session exists at the IDP, /login resolves transparently
+  // and returns the user authenticated; if not, the IDP bounces straight back
+  // and the 'tried' flag (set before the redirect) prevents a loop.
+  function maybeAutoLogin() {
+    // Homepage (/) is exempt — never auto-redirect there.
+    if (window.location.pathname === '/') return;
+    // Cross-tab logout opt-out: the user intentionally logged out; respect it.
+    try { if (localStorage.getItem('autologin.optout') === '1') return; } catch {}
+    // Once per browser session.
+    try { if (sessionStorage.getItem('autologin.tried') === '1') return; } catch {}
+    try { sessionStorage.setItem('autologin.tried', '1'); } catch {}
+    const returnTo = window.location.pathname + window.location.search;
+    window.location.replace('/login?returnTo=' + encodeURIComponent(returnTo));
+  }
+
   async function checkAuth() {
+    let definitiveAnonymous = false;
     try {
       const res = await fetch('/auth/user', { credentials: 'include', redirect: 'follow' });
       if (res.redirected || !res.ok) {
+        definitiveAnonymous = true;
         const cached = readCachedUser();
         if (cached) applyAuthenticatedUser(cached);
         return;
       }
       const ct = res.headers.get('content-type') || '';
       if (!ct.includes('application/json')) {
+        definitiveAnonymous = true;
         const cached = readCachedUser();
         if (cached) applyAuthenticatedUser(cached);
         return;
       }
       const user = await res.json();
       if (!user || !user.authenticated) {
+        definitiveAnonymous = true;
         const cached = readCachedUser();
         if (cached) applyAuthenticatedUser(cached);
         return;
@@ -381,12 +411,12 @@
       if (cached) applyAuthenticatedUser(cached);
     } finally {
       // Issue #548: ensure exactly one auth-resolved event fires per page load.
-      // applyAuthenticatedUser dispatches on the authenticated path; this
-      // guard fires the anonymous-fallback event only when no authenticated
-      // user was applied (i.e. data-authenticated is not 'true' yet).
       if (document.documentElement.dataset.authenticated !== 'true') {
         document.documentElement.dataset.authenticated = 'false';
         document.dispatchEvent(new CustomEvent('auth-resolved', { detail: { authenticated: false } }));
+        // Auto-login attempt: only on a definitive anonymous answer, never on a
+        // network/exception fallthrough (definitiveAnonymous stays false there).
+        if (definitiveAnonymous) maybeAutoLogin();
       }
     }
   }
