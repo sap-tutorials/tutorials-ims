@@ -3,8 +3,9 @@ sap.ui.define([
   "sap/ui/model/json/JSONModel",
   "sap/m/MessageToast",
   "sap/m/MessageBox",
-  "sap/tutorials/admin/puzzles/lib/crossword-geometry"
-], function (Controller, JSONModel, MessageToast, MessageBox, geom) {
+  "sap/tutorials/admin/puzzles/lib/crossword-geometry",
+  "sap/tutorials/admin/puzzles/lib/puzzle-io"
+], function (Controller, JSONModel, MessageToast, MessageBox, geom, io) {
   "use strict";
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -54,7 +55,9 @@ sap.ui.define([
         title: "",
         slug: "",
         savedSlug: "",
-        editId: null         // OData ID when editing existing puzzle (null = new)
+        editId: null,        // OData ID when editing existing puzzle (null = new)
+        wordText: "",
+        wordCount: 0
       });
       this.getView().setModel(oState, "b");
     },
@@ -157,6 +160,34 @@ sap.ui.define([
       var b = this.getView().getModel("b");
       b.setProperty("/mode", "list");
       b.setProperty("/pageTitle", "Puzzles");
+    },
+
+    // ── Word list ─────────────────────────────────────────────────────────────
+
+    onWordTextChange: function () {
+      var b = this.getView().getModel("b");
+      b.setProperty("/wordCount", io.countWords(b.getProperty("/wordText")));
+    },
+
+    onUploadWordList: function (oEvent) {
+      var file = oEvent.getParameter("files") && oEvent.getParameter("files")[0];
+      if (!file) { return; }
+      if (file.size > 2 * 1024 * 1024) { MessageToast.show("File too large (max 2 MB)"); return; }
+      var b = this.getView().getModel("b");
+      var self = this;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        b.setProperty("/wordText", String(e.target.result || ""));
+        self.onWordTextChange();
+      };
+      reader.onerror = function () { MessageToast.show("Could not read file"); };
+      reader.readAsText(file);
+    },
+
+    onClearWordList: function () {
+      var b = this.getView().getModel("b");
+      b.setProperty("/wordText", "");
+      b.setProperty("/wordCount", 0);
     },
 
     // ── Sub-mode toggle ───────────────────────────────────────────────────────

@@ -72,6 +72,24 @@
           </VBox>
         </FlexBox>
 
+        <!-- Word list panel -->
+        <Panel headerText="Word list" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+          <VBox>
+            <TextArea id="wordListArea" value="{b>/wordText}" liveChange=".onWordTextChange"
+                      rows="6" width="100%" growing="false"
+                      placeholder="Paste words here, one per line (or comma/semicolon separated)…"/>
+            <FlexBox alignItems="Center" class="sapUiTinyMarginTop">
+              <u:FileUploader id="wordUploader" name="wordlist" fileType="txt,csv"
+                              buttonText="Upload a file" placeholder="" width="auto"
+                              change=".onUploadWordList" style="Transparent"
+                              xmlns:u="sap.ui.unified"/>
+              <Button text="Clear" press=".onClearWordList" type="Transparent"
+                      visible="{= ${b>/wordText}.length > 0 }" class="sapUiTinyMarginBegin"/>
+              <Text text="{= ${b>/wordCount} + ' words' }" class="sapUiTinyMarginBegin"/>
+            </FlexBox>
+          </VBox>
+        </Panel>
+
         <!-- Grid + Slots panel -->
         <FlexBox alignItems="Start">
 
