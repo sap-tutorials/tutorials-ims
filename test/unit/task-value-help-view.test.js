@@ -18,6 +18,8 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import cds from '@sap/cds';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -180,5 +182,24 @@ describe('TASK_VALUE_HELP_V1 union contract (SQLite equivalent)', () => {
       expect(r).not.toHaveProperty('solution');
       expect(r).not.toHaveProperty('SOLUTION');
     }
+  });
+});
+
+// ─── Artifact-level guard: the deployed view SOURCE must never expose SOLUTION ─
+
+describe('TASK_VALUE_HELP_V1.hdbview source artifact', () => {
+  it('contains no occurrence of "solution" (case-insensitive) — the answer key must never be in the deployed view', () => {
+    const viewPath = join(process.cwd(), 'db/src/TASK_VALUE_HELP_V1.hdbview');
+    const source   = readFileSync(viewPath, 'utf-8');
+
+    // Non-empty guard: a wrong path would return empty and make the next assert vacuous.
+    expect(source.length, `View file at ${viewPath} is empty — check the path`).toBeGreaterThan(0);
+
+    // Security guard: the answer key must never appear in the cross-container surface.
+    const matches = source.match(/solution/gi) ?? [];
+    expect(
+      matches,
+      `TASK_VALUE_HELP_V1.hdbview must NOT contain "solution" but found ${matches.length} occurrence(s): ${JSON.stringify(matches)}`
+    ).toHaveLength(0);
   });
 });
