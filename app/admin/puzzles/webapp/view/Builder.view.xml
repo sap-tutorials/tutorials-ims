@@ -38,7 +38,7 @@
                 <HBox>
                   <Button text="Edit" press=".onPuzzlePress" type="Transparent"/>
                   <Button text="Unpublish" press=".onUnpublish" type="Transparent"
-                          visible="{= ${status} === 'ACTIVE' }"/>
+                          visible="{= ${path:'status', targetType:'any'} === 'ACTIVE' }"/>
                 </HBox>
               </cells>
             </ColumnListItem>
