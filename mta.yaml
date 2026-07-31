@@ -8,6 +8,12 @@ _schema-version: 3.3.0
 ID: tutorials-ims
 version: 1.0.0
 
+parameters:
+  # URL of the separately-deployed sap-community-gameboard gameboard-srv
+  # (default DEV; per-env override via mtaext). Consumed by the approuter
+  # gameboard-api destination. .deploy/mta.yaml is the live deploy source.
+  gameboard-url: https://tutorial-system-dev-gameboard-srv.cfapps.eu10-005.hana.ondemand.com
+
 build-parameters:
   before-all:
     - builder: custom
@@ -251,6 +257,16 @@ modules:
         properties:
           name: srv-qa-api
           url: ~{srv-url}
+          forwardAuthToken: true
+      # gameboard-api — separately-deployed sap-community-gameboard MTA fronted
+      # by this approuter. URL from ${gameboard-url} param (default DEV; per-env
+      # override via mtaext). NOTE: .deploy/mta.yaml is the live deploy source;
+      # this root copy is mirrored for consistency (legacy).
+      - name: gameboard-api
+        group: destinations
+        properties:
+          name: gameboard-api
+          url: ${gameboard-url}
           forwardAuthToken: true
       # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
       # SAP BTP convention — putting it on the resource block via path: is

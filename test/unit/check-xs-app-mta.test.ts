@@ -39,11 +39,11 @@ function writeFile(root: string, rel: string, body: string): void {
  * so the rest of the descriptor can be empty.
  */
 function buildMta(opts: {
-  approuterRequires?: { name: string; group?: string }[];
+  approuterRequires?: { name: string; group?: string; url?: string }[];
   providers?: { module: string; provides: string[] }[];
 } = {}) {
   const approuterRequires = (opts.approuterRequires ?? [])
-    .map(r => `      - name: ${r.name}${r.group ? `\n        group: ${r.group}` : ''}`)
+    .map(r => `      - name: ${r.name}${r.group ? `\n        group: ${r.group}` : ''}${r.url ? `\n        properties:\n          url: ${r.url}` : ''}`)
     .join('\n');
   const providerModules = (opts.providers ?? [])
     .map(p => `  - name: ${p.module}\n    type: nodejs\n    path: gen\n    provides:\n${p.provides.map(n => `      - name: ${n}`).join('\n')}`)
@@ -167,6 +167,43 @@ describe('scripts/check-xs-app-mta.ts', () => {
     const r = run(root);
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/no module provides it/);
+  });
+
+  it('does NOT flag an external-URL destination that has no local provider (cross-MTA)', () => {
+    writeFile(root, 'approuter/xs-app.json', JSON.stringify({
+      routes: [{ source: '^/gameboard/(.*)$', destination: 'gameboard-api' }],
+    }));
+    writeFile(root, 'xs-security.json', JSON.stringify({ scopes: [] }));
+    // gameboard-api fronts a SEPARATELY-deployed MTA — its URL is a ${param},
+    // not a ~{provides}, so there is intentionally no local provider. The
+    // check must accept this rather than demanding a provides: entry.
+    const mta = buildMta({
+      approuterRequires: [
+        { name: 'gameboard-api', group: 'destinations', url: '${gameboard-url}' },
+      ],
+      providers: [], // no local provider, on purpose
+    });
+    writeFile(root, 'mta.yaml', mta);
+    writeFile(root, '.deploy/mta.yaml', mta);
+    const r = run(root);
+    expect(r.status).toBe(0);
+  });
+
+  it('also accepts a literal https:// external-URL destination without a provider', () => {
+    writeFile(root, 'approuter/xs-app.json', JSON.stringify({
+      routes: [{ source: '^/gameboard/(.*)$', destination: 'gameboard-api' }],
+    }));
+    writeFile(root, 'xs-security.json', JSON.stringify({ scopes: [] }));
+    const mta = buildMta({
+      approuterRequires: [
+        { name: 'gameboard-api', group: 'destinations', url: 'https://example.cfapps.eu10-005.hana.ondemand.com' },
+      ],
+      providers: [],
+    });
+    writeFile(root, 'mta.yaml', mta);
+    writeFile(root, '.deploy/mta.yaml', mta);
+    const r = run(root);
+    expect(r.status).toBe(0);
   });
 
   it('does NOT flag a require that is missing the destinations group (just a service binding)', () => {

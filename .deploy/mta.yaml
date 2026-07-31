@@ -12,6 +12,13 @@ ID: tutorials-ims
 # `cd .deploy && mbt build && cf deploy mta_archives/tutorials-ims_<version>.mtar -e ../deploy/<env>.mtaext -f`.
 version: 1.7.1
 
+# Top-level parameters (overridable per-env via deploy/<env>.mtaext).
+parameters:
+  # URL of the separately-deployed sap-community-gameboard MTA's gameboard-srv.
+  # Default = DEV; qa/prod.mtaext override. Consumed by the approuter's
+  # gameboard-api destination (see tutorials-approuter requires).
+  gameboard-url: https://tutorial-system-dev-gameboard-srv.cfapps.eu10-005.hana.ondemand.com
+
 # Full MTA for deploying: db-deployer + CAP srv + approuter (with admin UI).
 #
 # Usage:
@@ -236,6 +243,17 @@ modules:
         properties:
           name: srv-qa-api
           url: ~{srv-url}
+          forwardAuthToken: true
+      # gameboard-api — the Devtoberfest gameboard is a SEPARATELY-deployed MTA
+      # (sap-community-gameboard) fronted by this approuter. Its URL is not an
+      # intra-MTA ~{provides}, so it comes from the ${gameboard-url} parameter
+      # (default = DEV; override per-env via mtaext). forwardAuthToken so the
+      # shared-XSUAA JWT reaches gameboard-srv for its authenticated arms.
+      - name: gameboard-api
+        group: destinations
+        properties:
+          name: gameboard-api
+          url: ${gameboard-url}
           forwardAuthToken: true
       # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
       # SAP BTP convention — putting it on the resource block via path: is

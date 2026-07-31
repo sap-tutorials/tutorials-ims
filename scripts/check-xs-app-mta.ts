@@ -88,7 +88,7 @@ interface XsSecurity {
 
 interface MtaModule {
   name: string;
-  requires?: { name: string; group?: string }[];
+  requires?: { name: string; group?: string; properties?: { url?: string } }[];
   provides?: { name: string }[];
 }
 interface Mta {
@@ -154,6 +154,26 @@ export function providedDestinations(mta: Mta): Set<string> {
   const out = new Set<string>();
   for (const m of mta.modules ?? []) {
     for (const p of m.provides ?? []) out.add(p.name);
+  }
+  return out;
+}
+
+/**
+ * Names of destinations whose URL points OUTSIDE this MTA — i.e. a
+ * `${parameter}` (per-env mtaext value) or a literal `http(s)://` URL, as
+ * opposed to an intra-MTA `~{provides}` reference. Such destinations front a
+ * separately-deployed MTA (e.g. gameboard-api → the sap-community-gameboard
+ * app) and legitimately have NO local `provides:` — they must be exempt from
+ * the provider-drift check below.
+ */
+export function externalDestinations(mta: Mta): Set<string> {
+  const ar = approuter(mta);
+  const out = new Set<string>();
+  if (!ar) return out;
+  for (const r of ar.requires ?? []) {
+    if (r.group !== 'destinations') continue;
+    const url = r.properties?.url ?? '';
+    if (url.startsWith('${') || /^https?:\/\//.test(url)) out.add(r.name);
   }
   return out;
 }
@@ -269,7 +289,9 @@ export function checkXsAppMta(): CheckResult {
   ] as const) {
     const required = destinationsRequiredBy(mta);
     const provided = providedDestinations(mta);
+    const external = externalDestinations(mta);
     for (const dest of required) {
+      if (external.has(dest)) continue; // external-URL destination → no local provider expected
       if (!provided.has(dest)) {
         findings.push({
           kind: 'provider',

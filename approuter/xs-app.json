@@ -145,6 +145,13 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/gameboard/(.*)$",
+      "target": "/gameboard/$1",
+      "destination": "gameboard-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/admin/exports/(.*)$",
       "target": "/admin/exports/$1",
       "destination": "srv-api",
