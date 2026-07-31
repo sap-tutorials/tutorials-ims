@@ -1,0 +1,28 @@
+VIEW "TASK_VALUE_HELP_V1" AS
+  SELECT "ID"                    AS "ID",
+         "SLUG"                  AS "SLUG",
+         "TITLE"                 AS "TITLE",
+         "PRIMARYTAG"            AS "PRIMARYTAG",
+         "EXPERIENCETAG"         AS "EXPERIENCETAG",
+         "AVERAGETIMETOCOMPLETE" AS "AVERAGETIMETOCOMPLETE",
+         "DESCRIPTION"           AS "DESCRIPTION",
+         'TUTORIAL'              AS "TASKTYPE",
+         "MDFILEURL"             AS "MDFILEURL",
+         "STEPCOUNT"             AS "STEPCOUNT",
+         CAST(NULL AS NCLOB)     AS "LAYOUT"
+  FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
+  WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
+  UNION ALL
+  SELECT "ID"                    AS "ID",
+         "SLUG"                  AS "SLUG",
+         "TITLE"                 AS "TITLE",
+         "PRIMARYTAG"            AS "PRIMARYTAG",
+         "EXPERIENCETAG"         AS "EXPERIENCETAG",
+         "AVERAGETIMETOCOMPLETE" AS "AVERAGETIMETOCOMPLETE",
+         "DESCRIPTION"           AS "DESCRIPTION",
+         'PUZZLE'                AS "TASKTYPE",
+         CAST(NULL AS NVARCHAR(1000)) AS "MDFILEURL",
+         CAST(NULL AS INTEGER)   AS "STEPCOUNT",
+         "LAYOUT"                AS "LAYOUT"
+  FROM "COM_SAP_DEVELOPERS_IMS_PUZZLES"
+  WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
