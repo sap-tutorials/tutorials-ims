@@ -26,7 +26,7 @@ import {
   postSaveProgress,
   postComplete,
 } from './lib/server';
-import { emptyWhiteCells } from './lib/progress';
+import { emptyWhiteCells, shouldMigrate } from './lib/progress';
 
 const props = defineProps<{ slug: string; apiUrl: string }>();
 
@@ -127,28 +127,48 @@ async function loadPuzzle() {
   }
 }
 
+// ── Login href (for the anonymous warning banner) ────────────────────────────
+const loginHref = computed(() =>
+  '/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search)
+);
+
 // ── Resume ────────────────────────────────────────────────────────────────────
 async function resumeProgress() {
   authed.value = await probeAuth();
-  if (authed.value) {
-    try {
-      const prog = await fetchProgress(props.apiUrl, props.slug);
-      if (prog.filledGrid) {
-        const parsed = JSON.parse(prog.filledGrid) as Record<string, string>;
-        answers.value = parsed;
-        return; // loaded from server; watcher will mirror to localStorage on next tick
-      }
-    } catch {
-      // 401 or network error — fall through to localStorage
-    }
-  }
-  // Anonymous or server unavailable: try localStorage
+
+  // Read localStorage first (works for both anon and authed paths).
+  let local: Record<string, string> = {};
   try {
     const stored = localStorage.getItem(`puzzle-answers-${props.slug}`);
-    if (stored) answers.value = JSON.parse(stored) as Record<string, string>;
-  } catch {
-    // ignore corrupt storage
+    if (stored) local = JSON.parse(stored) as Record<string, string>;
+  } catch { /* ignore corrupt storage */ }
+
+  if (authed.value) {
+    let serverGrid: string | null = null;
+    try {
+      const prog = await fetchProgress(props.apiUrl, props.slug);
+      serverGrid = prog.filledGrid ?? null;
+    } catch { /* 401/network — treat as empty */ }
+
+    // Server grid non-empty → server wins
+    if (serverGrid) {
+      let parsed: Record<string, string> = {};
+      try { parsed = JSON.parse(serverGrid) as Record<string, string>; } catch { /* ignore */ }
+      if (Object.values(parsed).some((v: any) => v)) {
+        answers.value = parsed;
+        return;
+      }
+    }
+    // Server empty but local has data → migrate local to server
+    if (shouldMigrate(true, serverGrid, local)) {
+      answers.value = local;
+      try { await postSaveProgress(props.apiUrl, props.slug, JSON.stringify(local)); }
+      catch { /* migration best-effort; local copy remains */ }
+      return;
+    }
   }
+  // Anonymous, or authed with nothing anywhere: use local.
+  answers.value = local;
 }
 
 // ── Autosave (debounced) ──────────────────────────────────────────────────────
@@ -396,6 +416,12 @@ function handleMobileInput(e: Event) {
       <!-- Solved banner (above the 3-column row) -->
       <div v-if="solved" class="solved-banner">
         Puzzle complete! 🎉
+      </div>
+
+      <!-- Not-logged-in warning banner -->
+      <div v-if="!authed" class="anon-warning">
+        You're not logged in — your progress won't be saved to your account.
+        <a :href="loginHref">Log in</a> to save your progress.
       </div>
 
       <!-- 3-column layout: [Across clues] [Grid + Actions] [Down clues] -->
@@ -744,5 +770,22 @@ function handleMobileInput(e: Event) {
   border-radius: 6px;
   color: var(--sapPositiveColor, #107e3e);
   font-weight: 600;
+}
+
+/* ── Anonymous warning banner ─────────────────────────────────────────────── */
+.anon-warning {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--sapWarningBackground, #fef7e0);
+  border: 1px solid var(--sapWarningBorderColor, #e9730c);
+  border-radius: 6px;
+  color: var(--sapWarningColor, #5c3d00);
+  font-size: 0.875rem;
+}
+
+.anon-warning a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
 }
 </style>
