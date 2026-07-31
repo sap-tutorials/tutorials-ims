@@ -1,0 +1,9 @@
+{
+  "role": {
+    "name": "gameboard_reader",
+    "object_privileges": [
+      { "name": "GAMEBOARD_PARTICIPANT_V1", "type": "VIEW", "privileges": [ "SELECT" ] },
+      { "name": "GAMEBOARD_COMPLETION_V1",  "type": "VIEW", "privileges": [ "SELECT" ] }
+    ]
+  }
+}
