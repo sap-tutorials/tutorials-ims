@@ -24,7 +24,7 @@ describe.skipIf(!hasBaseUrl())('e2e: auto-login on first connect', () => {
   it('homepage (/) does NOT auto-redirect an anonymous visitor', async () => {
     const { context, page } = await newPage(browser, { authenticated: false });
     let loginHit = false;
-    await page.route('**/login?**', route => { loginHit = true; return route.abort(); });
+    await page.route(/\/login(\?|$)/, route => { loginHit = true; return route.abort(); });
     try {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       // Give the async checkAuth()/maybeAutoLogin() a beat to run.
@@ -43,11 +43,11 @@ describe.skipIf(!hasBaseUrl())('e2e: auto-login on first connect', () => {
     const { context, page } = await newPage(browser, { authenticated: false });
     let loginHit = false;
     // Intercept the /login navigation so we never reach the external IDP.
-    await page.route('**/login?**', route => { loginHit = true; return route.abort(); });
+    await page.route(/\/login(\?|$)/, route => { loginHit = true; return route.abort(); });
     try {
       await page.goto(`/tutorials/${SLUG}`, { waitUntil: 'domcontentloaded' });
       // maybeAutoLogin fires from checkAuth's finally after /auth/user resolves 401.
-      await page.waitForTimeout(3000);
+      await page.waitForRequest(/\/login/, { timeout: 10_000 }).catch(() => {});
       expect(loginHit, 'anonymous deep link must trigger a /login redirect').toBe(true);
       const tried = await page.evaluate(() => {
         try { return sessionStorage.getItem('autologin.tried'); } catch { return 'ERR'; }
@@ -62,7 +62,7 @@ describe.skipIf(!hasBaseUrl())('e2e: auto-login on first connect', () => {
     'an authenticated deep link does NOT navigate to /login', async () => {
       const { context, page } = await newPage(browser, { authenticated: true });
       let loginHit = false;
-      await page.route('**/login?**', route => { loginHit = true; return route.abort(); });
+      await page.route(/\/login(\?|$)/, route => { loginHit = true; return route.abort(); });
       try {
         const response = await page.goto(`/tutorials/${SLUG}`, { waitUntil: 'domcontentloaded' });
         expect(response?.status(), 'deep link should load').toBe(200);
