@@ -267,6 +267,11 @@ and forum signatures).
 
 ## 9. Rollout / bootstrap ordering
 
+**Deploy target (mandatory):** the same BTP subaccount and the same CF org/space as
+`tutorials-ims` and `devtoberfest-planner` — the designated future home of all the team's
+tools. This is required (not optional) so that cross-container HDI access to both
+`tutorials-hana` and `devtoberfest-planner-db` and the shared-XSUAA token flow work.
+
 Base-then-enable, because of the new cross-container leg:
 
 1. `tutorials-srv` deploys `GAMEBOARD_*_V1` views + `gameboard_reader` role **first**.
@@ -290,13 +295,14 @@ Base-then-enable, because of the new cross-container leg:
   opted in by linking their profile). Confirm during implementation where the
   profile-link/community-id lives on the tutorial system's `Users` record (or whether a new
   opt-in field is needed).
-- **New-repo bootstrap** — RESOLVED (location). Home is a new dedicated repo on internal SAP
-  GitHub `github.tools.sap/developer-relations`, alongside `devtoberfest-planner`. Still
-  needs bootstrap work scoped into the plan: XSUAA existing-service naming, CI pipeline
-  (internal GitHub, not the public sap-tutorials Actions setup), and deploy wiring. Note the
-  two provider containers (`tutorials-hana`, `devtoberfest-planner-db`) must both be reachable
-  as CF existing-services from whatever CF org/space this deploys into — confirm the gameboard
-  deploys into the same CF landscape (eu10) where those HDI containers live, since
-  cross-container HDI access requires the same HANA Cloud instance.
+- **New-repo bootstrap** — RESOLVED (location + deploy target). Home is a new dedicated repo
+  on internal SAP GitHub `github.tools.sap/developer-relations`, alongside
+  `devtoberfest-planner`. **Deploy target is fixed and mandatory:** the same BTP subaccount
+  and the same CF org/space as both `tutorials-ims` and `devtoberfest-planner` — this is the
+  designated future home of all the team's tools. This guarantees the same HANA Cloud instance
+  (so cross-container HDI access to both `tutorials-hana` and `devtoberfest-planner-db` works)
+  and the same XSUAA/landscape (so the shared-instance token flow works). Still needs bootstrap
+  work scoped into the plan: XSUAA existing-service naming, CI pipeline (internal GitHub, not
+  the public sap-tutorials Actions setup), and deploy wiring.
 - **QA channel** — decide whether the gameboard participates in the tutorial system's QA
   channel or is DEV/PROD only.
