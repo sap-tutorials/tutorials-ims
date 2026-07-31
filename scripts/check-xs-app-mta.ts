@@ -90,6 +90,7 @@ interface MtaModule {
   name: string;
   requires?: { name: string; group?: string; properties?: { url?: string } }[];
   provides?: { name: string }[];
+  properties?: { destinations?: string };
 }
 interface Mta {
   modules?: MtaModule[];
@@ -138,11 +139,31 @@ function approuter(mta: Mta): MtaModule | null {
 export function destinationsRequiredBy(mta: Mta): Set<string> {
   const ar = approuter(mta);
   if (!ar) return new Set();
-  return new Set(
-    (ar.requires ?? [])
-      .filter(r => r.group === 'destinations')
-      .map(r => r.name)
-  );
+  const names = (ar.requires ?? [])
+    .filter(r => r.group === 'destinations')
+    .map(r => r.name);
+  // Also accept STATIC destinations declared in the approuter's
+  // `properties.destinations` JSON array (used for external URLs that have no
+  // intra-MTA provider and would otherwise trip mbt strict validation).
+  for (const d of staticDestinations(mta)) names.push(d.name);
+  return new Set(names);
+}
+
+/**
+ * Parse the approuter module's `properties.destinations` — a JSON-string array
+ * of `{ name, url }` static destinations (the @sap/approuter env-var form).
+ * Returns [] if absent or unparseable. These front separately-deployed MTAs.
+ */
+export function staticDestinations(mta: Mta): { name: string; url?: string }[] {
+  const ar = approuter(mta);
+  const raw = ar?.properties?.destinations;
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(d => d && typeof d.name === 'string') : [];
+  } catch {
+    return []; // a ${param} inside the JSON string can make it non-parseable pre-substitution; tolerate
+  }
 }
 
 /**
@@ -175,6 +196,9 @@ export function externalDestinations(mta: Mta): Set<string> {
     const url = r.properties?.url ?? '';
     if (url.startsWith('${') || /^https?:\/\//.test(url)) out.add(r.name);
   }
+  // Every STATIC destination (properties.destinations array) is external by
+  // definition — it names an out-of-MTA URL with no local provider.
+  for (const d of staticDestinations(mta)) out.add(d.name);
   return out;
 }
 

@@ -234,6 +234,19 @@ modules:
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
       XS_APP_LOG_LEVEL: info
+      # gameboard-api — the Devtoberfest gameboard is a SEPARATELY-deployed MTA
+      # (sap-community-gameboard) fronted by this approuter. Declared as a STATIC
+      # destination in this `destinations` env array (parsed by
+      # approuter/server.js) rather than a `requires: {group: destinations}`
+      # entry: it is NOT backed by an intra-MTA `~{provides}`, and mbt strict
+      # validation rejects a destinations-group require with no defined property
+      # set ("property set ... is not defined"). URL is ${gameboard-url} (invalid
+      # placeholder by default; real value per-env in mtaext — dev only today).
+      # NO forwardAuthToken: /gameboard/* is public GET-only (getLeaderboard,
+      # @requires 'any'), so no JWT reaches this out-of-MTA backend
+      # (csrf-with-token-forwarding guard). Plan B's authenticated arm adds its
+      # own route + token-forwarding destination.
+      destinations: '[{"name":"gameboard-api","url":"${gameboard-url}"}]'
     requires:
       - name: tutorials-xsuaa
       # #867 — approuter reads REBUILD_API_KEY from credstore via
@@ -251,20 +264,6 @@ modules:
           name: srv-qa-api
           url: ~{srv-url}
           forwardAuthToken: true
-      # gameboard-api — the Devtoberfest gameboard is a SEPARATELY-deployed MTA
-      # (sap-community-gameboard) fronted by this approuter. Its URL is not an
-      # intra-MTA ~{provides}, so it comes from the ${gameboard-url} parameter
-      # (invalid placeholder by default; per-env value in mtaext). NO
-      # forwardAuthToken: the /gameboard/* route is public GET-only
-      # (getLeaderboard, @requires 'any') so no JWT is forwarded to this
-      # out-of-MTA backend (csrf-with-token-forwarding guard). Plan B's
-      # authenticated arm (getMyGameboard) will add its OWN route + a separate
-      # token-forwarding destination.
-      - name: gameboard-api
-        group: destinations
-        properties:
-          name: gameboard-api
-          url: ${gameboard-url}
       # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
       # SAP BTP convention — putting it on the resource block via path: is
       # silently ignored. Range 1..4, CPU 70% / 30% thresholds. Memory metric
