@@ -246,6 +246,7 @@ Every active cross-container link. Update on add/version-bump/retire.
 | Provider container | Published view | Consumer container | Consumer facade | Version | Status | Feature |
 |---|---|---|---|---|---|---|
 | `tutorials-hana` | `TUTORIAL_VALUE_HELP_V1` | `devtoberfest-planner-db` | `external.tutorials.TutorialValueHelpV1` | V1 | planned | Session tutorial value help |
+| `tutorials-hana` | `TASK_VALUE_HELP_V1` | `devtoberfest-planner-db` | `external.tutorials.TASK_VALUE_HELP_V1` | V1 | planned | Activity task (tutorial/puzzle) value help |
 | `devtoberfest-planner-db` | `ACTIVITY_SESSION_V1` | `tutorials-hana` | `external.devtoberfest.ActivitySessionV1` | V1 | planned (no consumer yet) | reciprocal leg, reserved |
 
 ---
