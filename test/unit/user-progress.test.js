@@ -9,11 +9,12 @@ const USER_UUID = 'test-user-uuid-001';
 const USER_ID = '00000000-0000-0000-0000-000000000001';
 
 async function seed() {
-  const { Users, Tutorials, Missions, CompletionPaths, TaskRecords } = cds.entities('com.sap.developers.ims');
+  const { Users, Tutorials, Missions, CompletionPaths, TaskRecords, Puzzles } = cds.entities('com.sap.developers.ims');
   await DELETE.from(TaskRecords);
   await DELETE.from(Tutorials);
   await DELETE.from(Missions);
   await DELETE.from(CompletionPaths);
+  await DELETE.from(Puzzles);
   await DELETE.from(Users);
 
   await INSERT.into(Users).entries({
@@ -46,6 +47,12 @@ async function seed() {
 
   await INSERT.into(CompletionPaths).entries([
     { ID: '33333333-0000-0000-0000-000000000001', legacyId: 300, slug: 'beginner-group', name: 'Beginner Group' }
+  ]);
+
+  // Puzzle completions must also surface in /me (issue #644). Puzzles share the
+  // TaskBase tag/title/time fields with Tutorials but live at /puzzles/<slug>.
+  await INSERT.into(Puzzles).entries([
+    { ID: '44444444-0000-0000-0000-000000000001', legacyId: 400, slug: 'cryptic-crossword', title: 'Cryptic Crossword', primaryTag: 'Fun', experienceTag: 'beginner', averageTimeToComplete: 10 }
   ]);
 
   await INSERT.into(TaskRecords).entries([
@@ -125,6 +132,19 @@ async function seed() {
       status: 'COMPLETED',
       progress: 100,
       modifiedAt: '2026-05-19T10:00:00Z'
+    },
+    // Completed puzzle — must appear in getMyCompletedTutorials with kind:'puzzle'.
+    // Dated most-recent so it sorts to the top.
+    {
+      ID: 'aaaaaaaa-0000-0000-0000-000000000008',
+      user_ID: USER_ID,
+      taskLegacyId: 400,
+      taskType: 'PUZZLE',
+      status: 'COMPLETED',
+      progress: 100,
+      modifiedAt: '2026-06-01T09:00:00Z',
+      completionDate: '2026-06-01T09:00:00Z',
+      titleSnapshot: 'Cryptic Crossword'
     }
   ]);
 }
@@ -247,9 +267,10 @@ describe('user-progress', () => {
 
     it('returns one row per completed TUTORIAL with full metadata', async () => {
       const result = await getMyCompletedTutorials({ id: USER_UUID });
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3);
       const cap = result.find(r => r.slug === 'cap-getting-started');
       expect(cap).toMatchObject({
+        kind: 'tutorial',
         slug: 'cap-getting-started',
         title: 'CAP Getting Started',
         primaryTag: 'CAP',
@@ -259,9 +280,24 @@ describe('user-progress', () => {
       expect(cap.completionDate).toBeTruthy();
     });
 
-    it('orders rows by completionDate descending (most recent first)', async () => {
+    it('includes completed PUZZLE rows with kind:"puzzle" and full metadata', async () => {
       const result = await getMyCompletedTutorials({ id: USER_UUID });
-      expect(result.map(r => r.slug)).toEqual(['btp-trial', 'cap-getting-started']);
+      const puzzle = result.find(r => r.slug === 'cryptic-crossword');
+      expect(puzzle).toMatchObject({
+        kind: 'puzzle',
+        slug: 'cryptic-crossword',
+        title: 'Cryptic Crossword',
+        primaryTag: 'Fun',
+        experienceTag: 'beginner',
+        averageTimeToComplete: 10
+      });
+      expect(puzzle.completionDate).toBeTruthy();
+    });
+
+    it('orders rows by completionDate descending (most recent first), mixing tutorials and puzzles', async () => {
+      const result = await getMyCompletedTutorials({ id: USER_UUID });
+      // puzzle 2026-06-01 > btp-trial 2026-05-10 > cap-getting-started 2026-04-01
+      expect(result.map(r => r.slug)).toEqual(['cryptic-crossword', 'btp-trial', 'cap-getting-started']);
     });
 
     it('does NOT include in-progress tutorials, missions, groups, or steps', async () => {

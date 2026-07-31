@@ -132,9 +132,12 @@ service DeveloperService {
     keyed   : many { compositeKey : String; slug : String; title : String };
   };
 
-  // Past completions for /me page (signed-in user only)
+  // Past completions for /me page (signed-in user only). Includes both
+  // tutorials and puzzles; `kind` discriminates the source so the UI builds
+  // the correct URL (/tutorials/<slug> vs /puzzles/<slug>).
   @(requires: 'authenticated-user')
   function getMyCompletions() returns many {
+    kind                  : String;
     slug                  : String;
     title                 : String;
     primaryTag            : String;

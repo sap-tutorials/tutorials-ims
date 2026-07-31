@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 
 interface Completion {
+  kind?: string | null
   slug: string
   title: string
   primaryTag: string | null
@@ -52,9 +53,19 @@ function formatLevel(level: string | null) {
   return level.charAt(0) + level.slice(1).toLowerCase()
 }
 
-function onTimelineNameClick(slug: string) {
-  if (!slug) return
-  window.location.href = `/tutorials/${slug}/`
+function itemUrl(item: Completion): string {
+  const base = item.kind === 'puzzle' ? '/puzzles/' : '/tutorials/'
+  return `${base}${item.slug}/`
+}
+
+function itemKindLabel(item: Completion): string {
+  if (item.kind === 'puzzle') return 'Puzzle'
+  return item.primaryTag || 'Tutorial'
+}
+
+function onTimelineNameClick(item: Completion) {
+  if (!item.slug) return
+  window.location.href = itemUrl(item)
 }
 
 onMounted(async () => {
@@ -90,14 +101,14 @@ onMounted(async () => {
   </div>
   <ui5-timeline v-else layout="Vertical" growing="None" class="me-timeline">
     <ui5-timeline-item
-      v-for="item in recentRows"
-      :key="item.slug"
+      v-for="(item, idx) in recentRows"
+      :key="`${item.kind || 'tutorial'}:${item.slug}:${item.completionDate || idx}`"
       :name="item.title"
-      :subtitle-text="`${item.primaryTag || 'Tutorial'} · ${formatRelative(item.completionDate)}`"
+      :subtitle-text="`${itemKindLabel(item)} · ${formatRelative(item.completionDate)}`"
       icon="accept"
       state="Positive"
       name-clickable
-      @name-click="() => onTimelineNameClick(item.slug)"
+      @name-click="() => onTimelineNameClick(item)"
     >
       <span class="me-recent__level">{{ formatLevel(item.experienceTag) }}</span>
     </ui5-timeline-item>
