@@ -52,8 +52,14 @@
 {{- $faqs = $faqs | append (dict "q" "What will I learn?" "a" (delimit .Params.youWillLearn " ")) -}}
 {{/* #1388: prerequisites is now a markdown string, not a string[] — markdownify
      it so the trailing `| plainify` (line below) flattens it to answer text.
-     `delimit` (the old array join) would silently stringify the value wrong. */}}
-{{- $faqs = $faqs | append (dict "q" "What do I need before I start?" "a" (.Params.prerequisites | markdownify)) -}}
+     Defensive: `markdownify` hard-FAILS the entire `hugo` build if handed a
+     non-string (e.g. a stale pre-#1388 page whose frontmatter still carries an
+     array). A single such page would break every page's build, not just its
+     own. Normalize first — join a slice into a string, pass a string through —
+     so one malformed page degrades to a slightly-worse FAQ answer instead. */}}
+{{- $prereq := .Params.prerequisites -}}
+{{- if reflect.IsSlice $prereq }}{{ $prereq = delimit $prereq " " }}{{ end -}}
+{{- $faqs = $faqs | append (dict "q" "What do I need before I start?" "a" (printf "%v" $prereq | markdownify)) -}}
 {{- with .Params.time }}{{- $faqs = $faqs | append (dict "q" "How long does this take?" "a" (printf "%v minutes" .)) -}}{{- end -}}
 {{- with .Params.level }}{{- $faqs = $faqs | append (dict "q" "What level is this?" "a" .) -}}{{- end -}}
 <script type="application/ld+json">
