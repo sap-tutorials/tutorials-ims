@@ -60,7 +60,8 @@ sap.ui.define([
         wordText: "",
         wordCount: 0,
         fillRunning: false,
-        fillStatus: ""
+        fillStatus: "",
+        suggestions: []
       });
       this.getView().setModel(oState, "b");
     },
@@ -211,9 +212,115 @@ sap.ui.define([
     },
 
     onFocusCell: function (r, c) {
-      // Focus tracking for fill mode — highlight active cell
+      // Focus tracking for fill mode — highlight active cell + compute suggestions
       this._activeCell = { r: r, c: c };
+      this._computeSuggestions(r, c);
       this._renderGrid();
+    },
+
+    _computeSuggestions: function (r, c) {
+      var b = this.getView().getModel("b");
+      var grid = b.getProperty("/grid");
+      var slots = geom.findSlots(grid, 2);
+      var answers = b.getProperty("/answers") || {};
+      // Prefer the across slot containing (r,c); fall back to down.
+      var slot = slots.find(function (s) {
+        return s.dir === "across" && s.cells.some(function (x) { return x.r === r && x.c === c; });
+      }) || slots.find(function (s) {
+        return s.cells.some(function (x) { return x.r === r && x.c === c; });
+      });
+      if (!slot) { b.setProperty("/suggestions", []); return; }
+      var words = io.parseWordList(b.getProperty("/wordText"));
+      var matches = words.filter(function (w) { return solver.fits(slot, w, answers); }).slice(0, 30);
+      this._suggestSlot = slot;
+      b.setProperty("/suggestions", matches.map(function (w) { return { word: w }; }));
+    },
+
+    onPickSuggestion: function (oEvent) {
+      var word = oEvent.getSource().getBindingContext("b").getProperty("word");
+      var b = this.getView().getModel("b");
+      var answers = Object.assign({}, b.getProperty("/answers"));
+      this._suggestSlot.cells.forEach(function (cell, i) { answers[cell.r + "," + cell.c] = word[i]; });
+      b.setProperty("/answers", answers);
+      this._recomputeSlots();
+      this._renderGrid();
+    },
+
+    // ── Grid template handlers ────────────────────────────────────────────────
+
+    onSelectGrid: function () {
+      var self = this;
+      var oModel = this.getView().getModel(); // OData V4 AdminService
+      var oList = oModel.bindList("/GridTemplates");
+      oList.requestContexts(0, 100).then(function (ctxs) {
+        var templates = ctxs.map(function (ctx) { return ctx.getObject(); });
+        var gt = new JSONModel({ templates: templates });
+        self.getView().setModel(gt, "gt");
+        if (!self._gridPicker) {
+          self._gridPicker = sap.ui.xmlfragment(
+            "sap.tutorials.admin.puzzles.view.GridPicker", self);
+          self.getView().addDependent(self._gridPicker);
+        }
+        self._gridPicker.open();
+      }).catch(function (err) {
+        MessageBox.error("Could not load grid templates: " + (err && err.message || err));
+      });
+    },
+
+    onApplyTemplate: function (oEvent) {
+      var t = oEvent.getSource().getBindingContext("gt").getObject();
+      var b = this.getView().getModel("b");
+      var rows = t.rows || b.getProperty("/rows");
+      var cols = t.cols || b.getProperty("/cols");
+      var grid = geom.makeEmptyGrid(rows, cols);
+      (JSON.parse(t.blacks || "[]")).forEach(function (rc) {
+        if (grid[rc[0]] && grid[rc[0]][rc[1]]) { grid[rc[0]][rc[1]].black = true; }
+      });
+      b.setProperty("/rows", rows);
+      b.setProperty("/cols", cols);
+      b.setProperty("/grid", geom.numberGrid(grid));
+      this._recomputeSlots();
+      this._renderGrid();
+      if (this._gridPicker) { this._gridPicker.close(); }
+    },
+
+    onCloseGridPicker: function () { if (this._gridPicker) { this._gridPicker.close(); } },
+
+    onSaveGrid: function () {
+      var self = this;
+      var b = this.getView().getModel("b");
+      var grid = b.getProperty("/grid");
+      var blacks = [];
+      grid.forEach(function (row, r) { row.forEach(function (cell, c) { if (cell.black) { blacks.push([r, c]); } }); });
+      MessageBox.show("Save current grid as a template?", {
+        icon: MessageBox.Icon.QUESTION, title: "Save Grid",
+        actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+        onClose: function (action) {
+          if (action !== MessageBox.Action.OK) { return; }
+          var fields = {
+            name: (b.getProperty("/title") || "Grid") + " layout",
+            rows: b.getProperty("/rows"),
+            cols: b.getProperty("/cols"),
+            blacks: JSON.stringify(blacks),
+            isBuiltin: false
+          };
+          self._withCsrf(function (token) {
+            var headers = { "Content-Type": "application/json", "Accept": "application/json", "x-csrf-token": token };
+            return fetch("/admin/GridTemplates", {
+              method: "POST", credentials: "include", headers: headers, body: JSON.stringify(fields)
+            }).then(function (r) {
+              if (!r.ok) { return r.text().then(function (t) { throw new Error("POST " + r.status + ": " + t); }); }
+              return r.json();
+            }).then(function (draft) {
+              return fetch(
+                "/admin/GridTemplates(ID=" + draft.ID + ",IsActiveEntity=false)/AdminService.draftActivate",
+                { method: "POST", credentials: "include", headers: headers, body: "{}" }
+              );
+            });
+          }).then(function () { MessageToast.show("Grid template saved"); })
+            .catch(function (err) { MessageBox.error("Save template failed: " + (err.message || err)); });
+        }
+      });
     },
 
     // ── Slot panel event handlers ─────────────────────────────────────────────

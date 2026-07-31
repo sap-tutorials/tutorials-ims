@@ -79,6 +79,9 @@
           <Button text="Fill Grid" press=".onFillGrid" enabled="{= !${b>/fillRunning} }"/>
           <Button text="Just Fill" press=".onJustFill" enabled="{= !${b>/fillRunning} }"/>
           <Button text="Stop" press=".onStopFill" visible="{b>/fillRunning}"/>
+          <ToolbarSeparator/>
+          <Button text="Select Grid" icon="sap-icon://grid" press=".onSelectGrid"/>
+          <Button text="Save Grid" press=".onSaveGrid"/>
           <ToolbarSpacer/>
           <Button text="Import" icon="sap-icon://upload" press=".onImportPress"/>
           <Button text="Export" icon="sap-icon://download" press=".onExport"/>
@@ -114,6 +117,12 @@
           <!-- Slots side panel -->
           <ScrollContainer height="70vh" width="30rem" vertical="true" horizontal="false">
             <VBox>
+              <Panel headerText="Suggestions" visible="{= ${b>/suggestions}.length > 0 }"
+                     class="sapUiTinyMarginBottom">
+                <List items="{ path: 'b>/suggestions', templateShareable: false }">
+                  <StandardListItem title="{b>word}" type="Active" press=".onPickSuggestion"/>
+                </List>
+              </Panel>
               <Title text="Across" titleStyle="H5" class="sapUiTinyMarginBottom"/>
               <List id="acrossList" items="{ path: 'b>/slotsAcross', templateShareable: false }" noDataText="No across slots" showSeparators="Inner">
                 <CustomListItem>
