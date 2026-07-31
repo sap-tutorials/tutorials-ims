@@ -4,8 +4,9 @@ sap.ui.define([
   "sap/m/MessageToast",
   "sap/m/MessageBox",
   "sap/tutorials/admin/puzzles/lib/crossword-geometry",
-  "sap/tutorials/admin/puzzles/lib/puzzle-io"
-], function (Controller, JSONModel, MessageToast, MessageBox, geom, io) {
+  "sap/tutorials/admin/puzzles/lib/puzzle-io",
+  "sap/tutorials/admin/puzzles/lib/solver-core"
+], function (Controller, JSONModel, MessageToast, MessageBox, geom, io, solver) {
   "use strict";
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -57,7 +58,9 @@ sap.ui.define([
         savedSlug: "",
         editId: null,        // OData ID when editing existing puzzle (null = new)
         wordText: "",
-        wordCount: 0
+        wordCount: 0,
+        fillRunning: false,
+        fillStatus: ""
       });
       this.getView().setModel(oState, "b");
     },
@@ -713,6 +716,95 @@ sap.ui.define([
           oTable.focus();
         }
       }
+    },
+
+    // ── Auto-fill ─────────────────────────────────────────────────────────────
+
+    onFillGrid: function () { this._runFill("wordlist"); },
+    onJustFill: function () { this._runFill("dictionary"); },
+    onStopFill: function () {
+      if (this._fillWorker) { this._fillWorker.terminate(); this._fillWorker = null; }
+      var b = this.getView().getModel("b");
+      b.setProperty("/fillRunning", false);
+      b.setProperty("/fillStatus", "Stopped");
+    },
+
+    _runFill: function (mode) {
+      var self = this;
+      var b = this.getView().getModel("b");
+      var allSlots = geom.findSlots(b.getProperty("/grid"), 2);
+      var slots = allSlots.map(function (s) {
+        return { id: s.id, dir: s.dir, len: s.len, cells: s.cells };
+      });
+      var timeLimitMs = mode === "dictionary" ? 30000 : 12000;
+      var gridSnapshot = b.getProperty("/grid");
+
+      var proceed = function (words) {
+        b.setProperty("/fillRunning", true);
+        b.setProperty("/fillStatus", "Solving…");
+        var opts = {
+          slots: slots, words: words, grid: gridSnapshot,
+          rows: b.getProperty("/rows"), cols: b.getProperty("/cols"),
+          timeLimitMs: timeLimitMs
+        };
+        try {
+          var url = sap.ui.require.toUrl("sap/tutorials/admin/puzzles/lib/fill-worker.js");
+          var worker = new Worker(url);              // classic same-origin worker
+          self._fillWorker = worker;
+          worker.onmessage = function (ev) {
+            var m = ev.data;
+            if (m.type === "progress") { self._applyFillResult(m.placed, true); }
+            else if (m.type === "result") { self._finishFill(m.status, m.placed); worker.terminate(); }
+            else if (m.type === "error") { self._finishFill("error", null); worker.terminate(); }
+          };
+          worker.onerror = function () {             // CSP or load failure → fallback
+            worker.terminate(); self._fillWorker = null; self._fallbackSolveMainThread(opts);
+          };
+          worker.postMessage(Object.assign({ type: "start" }, opts));
+        } catch (e) {
+          self._fallbackSolveMainThread(opts);       // Worker ctor blocked → fallback
+        }
+      };
+
+      if (mode === "dictionary") {
+        fetch(sap.ui.require.toUrl("sap/tutorials/admin/puzzles/assets/common-english.txt"))
+          .then(function (r) { return r.text(); })
+          .then(function (t) { proceed(io.parseWordList(t)); })
+          .catch(function () { MessageToast.show("Could not load dictionary"); });
+      } else {
+        proceed(io.parseWordList(b.getProperty("/wordText")));
+      }
+    },
+
+    _fallbackSolveMainThread: function (opts) {
+      // Worker unavailable/CSP-blocked → solve on the main thread using the same
+      // solver-core AMD dep (`solver`). Synchronous; acceptable for the fallback path.
+      var res = solver.solve(opts);
+      this._finishFill(res.status, res.placed);
+    },
+
+    _applyFillResult: function (placed, isProgress) {
+      var b = this.getView().getModel("b");
+      var answers = Object.assign({}, b.getProperty("/answers"), placed);
+      b.setProperty("/answers", answers);
+      this._renderGrid();
+      if (!isProgress) { this._recomputeSlots(); }
+    },
+
+    _finishFill: function (status, placed) {
+      var b = this.getView().getModel("b");
+      b.setProperty("/fillRunning", false);
+      if (status === "solved" || status === "partial") {
+        if (placed) { this._applyFillResult(placed, false); }
+        b.setProperty("/fillStatus", status === "solved" ? "Solved" : "Partially filled");
+      } else if (status === "timeout") {
+        b.setProperty("/fillStatus", "Timed out — no complete fill");
+      } else if (status === "nosolution") {
+        b.setProperty("/fillStatus", "No solution from this word list");
+      } else {
+        b.setProperty("/fillStatus", "Fill error");
+      }
+      this._fillWorker = null;
     },
 
     _withCsrf: function (fnAfterToken) {
