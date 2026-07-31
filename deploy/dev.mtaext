@@ -2,6 +2,14 @@ _schema-version: 3.3.0
 ID: tutorials-ims-dev
 extends: tutorials-ims
 
+# Live DEV gameboard-srv host (sap-community-gameboard MTA, DEV-only today).
+# Overrides the invalid base placeholder so the approuter's gameboard-api
+# destination resolves. QA/PROD deliberately have NO override yet — their
+# /gameboard/* fails loudly until those backends exist (config-cross-env-leak
+# guard; see .deploy/mta.yaml parameters).
+parameters:
+  gameboard-url: https://tutorial-system-dev-gameboard-srv.cfapps.eu10-005.hana.ondemand.com
+
 modules:
   - name: tutorials-srv
     properties:

@@ -149,7 +149,7 @@
       "target": "/gameboard/$1",
       "destination": "gameboard-api",
       "authenticationType": "none",
-      "csrfProtection": false
+      "httpMethods": ["GET", "HEAD", "OPTIONS"]
     },
     {
       "source": "^/admin/exports/(.*)$",
