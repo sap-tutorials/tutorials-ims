@@ -111,6 +111,59 @@ sap.ui.define([
       });
     },
 
+    onUnpublish: function (oEvent) {
+      var oCtx = oEvent.getSource().getBindingContext();
+      if (!oCtx) { return; }
+      var row = oCtx.getObject() || {};
+      var id = row.ID;
+      if (!id) { return; }
+      var self = this;
+      MessageBox.confirm("Unpublish this puzzle?", {
+        title: "Confirm Unpublish",
+        onClose: function (action) {
+          if (action !== MessageBox.Action.OK) { return; }
+          self._withCsrf(function (token) {
+            var headers = {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "x-csrf-token": token
+            };
+            // draftEdit → PATCH(status:'INACTIVE') → draftActivate
+            return fetch(
+              "/admin/Puzzles(ID=" + id + ",IsActiveEntity=true)/AdminService.draftEdit",
+              { method: "POST", credentials: "include", headers: headers, body: "{}" }
+            ).then(function (r) {
+              if (!r.ok) { return r.text().then(function (t) { throw new Error("draftEdit HTTP " + r.status + ": " + t); }); }
+              return r.json();
+            }).then(function (draft) {
+              var draftId = draft.ID || id;
+              return fetch(
+                "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)",
+                { method: "PATCH", credentials: "include", headers: headers, body: JSON.stringify({ status: "INACTIVE" }) }
+              ).then(function (r2) {
+                if (!r2.ok) { return r2.text().then(function (t) { throw new Error("PATCH draft HTTP " + r2.status + ": " + t); }); }
+                return draftId;
+              });
+            }).then(function (draftId) {
+              return fetch(
+                "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)/AdminService.draftActivate",
+                { method: "POST", credentials: "include", headers: headers, body: "{}" }
+              ).then(function (r3) {
+                if (!r3.ok) { return r3.text().then(function (t) { throw new Error("draftActivate HTTP " + r3.status + ": " + t); }); }
+                return r3.json();
+              });
+            });
+          }).then(function () {
+            MessageToast.show("Puzzle unpublished");
+            var oModel = self.getView().getModel();
+            if (oModel && oModel.refresh) { oModel.refresh(); }
+          }).catch(function (err) {
+            MessageBox.error("Unpublish failed: " + (err.message || String(err)));
+          });
+        }
+      });
+    },
+
     _loadPuzzleForEdit: function (row) {
       var b = this.getView().getModel("b");
       // Parse existing layout/solution if present

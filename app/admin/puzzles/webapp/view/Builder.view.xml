@@ -26,14 +26,20 @@
             <Column><Text text="Title"/></Column>
             <Column><Text text="Slug"/></Column>
             <Column><Text text="Status"/></Column>
+            <Column width="12rem"><Text text="Actions"/></Column>
           </columns>
           <items>
-            <ColumnListItem type="Navigation" press=".onPuzzlePress">
+            <ColumnListItem type="Inactive">
               <cells>
                 <Text text="{title}"/>
                 <Text text="{slug}"/>
                 <ObjectStatus text="{status}"
                   state="{= ${status} === 'ACTIVE' ? 'Success' : ${status} === 'DRAFT' ? 'Warning' : 'None' }"/>
+                <HBox>
+                  <Button text="Edit" press=".onPuzzlePress" type="Transparent"/>
+                  <Button text="Unpublish" press=".onUnpublish" type="Transparent"
+                          visible="{= ${status} === 'ACTIVE' }"/>
+                </HBox>
               </cells>
             </ColumnListItem>
           </items>
