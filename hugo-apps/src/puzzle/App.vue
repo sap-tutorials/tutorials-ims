@@ -25,7 +25,9 @@ import {
   fetchProgress,
   postSaveProgress,
   postComplete,
+  postResetProgress,
 } from './lib/server';
+import { emptyWhiteCells, shouldMigrate } from './lib/progress';
 
 const props = defineProps<{ slug: string; apiUrl: string }>();
 
@@ -126,28 +128,48 @@ async function loadPuzzle() {
   }
 }
 
+// ── Login href (for the anonymous warning banner) ────────────────────────────
+const loginHref = computed(() =>
+  '/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search)
+);
+
 // ── Resume ────────────────────────────────────────────────────────────────────
 async function resumeProgress() {
   authed.value = await probeAuth();
-  if (authed.value) {
-    try {
-      const prog = await fetchProgress(props.apiUrl, props.slug);
-      if (prog.filledGrid) {
-        const parsed = JSON.parse(prog.filledGrid) as Record<string, string>;
-        answers.value = parsed;
-        return; // loaded from server; watcher will mirror to localStorage on next tick
-      }
-    } catch {
-      // 401 or network error — fall through to localStorage
-    }
-  }
-  // Anonymous or server unavailable: try localStorage
+
+  // Read localStorage first (works for both anon and authed paths).
+  let local: Record<string, string> = {};
   try {
     const stored = localStorage.getItem(`puzzle-answers-${props.slug}`);
-    if (stored) answers.value = JSON.parse(stored) as Record<string, string>;
-  } catch {
-    // ignore corrupt storage
+    if (stored) local = JSON.parse(stored) as Record<string, string>;
+  } catch { /* ignore corrupt storage */ }
+
+  if (authed.value) {
+    let serverGrid: string | null = null;
+    try {
+      const prog = await fetchProgress(props.apiUrl, props.slug);
+      serverGrid = prog.filledGrid ?? null;
+    } catch { /* 401/network — treat as empty */ }
+
+    // Server grid non-empty → server wins
+    if (serverGrid) {
+      let parsed: Record<string, string> = {};
+      try { parsed = JSON.parse(serverGrid) as Record<string, string>; } catch { /* ignore */ }
+      if (Object.values(parsed).some((v: any) => v)) {
+        answers.value = parsed;
+        return;
+      }
+    }
+    // Server empty but local has data → migrate local to server
+    if (shouldMigrate(true, serverGrid, local)) {
+      answers.value = local;
+      try { await postSaveProgress(props.apiUrl, props.slug, JSON.stringify(local)); }
+      catch { /* migration best-effort; local copy remains */ }
+      return;
+    }
   }
+  // Anonymous, or authed with nothing anywhere: use local.
+  answers.value = local;
 }
 
 // ── Autosave (debounced) ──────────────────────────────────────────────────────
@@ -203,12 +225,25 @@ async function checkPuzzle() {
   statusMsg.value = null;
   try {
     const data = await postCheck(props.apiUrl, props.slug, entries);
-    cellStatus.value = buildCellStatus(data.results, slots.value);
-    if (data.complete) {
-      await onSolved();
+    const status = buildCellStatus(data.cells);           // per-cell green/red
+    // Mark every empty white cell red too (item 4: blank white cells → red).
+    for (const { r, c } of emptyWhiteCells(grid.value, answers.value)) {
+      status[`${r},${c}`] = 'wrong';
     }
+    cellStatus.value = status;
+    if (data.complete) await onSolved();
   } catch (e) {
     statusMsg.value = `Check failed: ${(e as Error).message}`;
+  }
+}
+
+/** Clear a cell's stale check status after the user types into or clears it. */
+function clearCellStatus(r: number, c: number) {
+  const key = cellKey(r, c);
+  if (cellStatus.value[key]) {
+    const cs = { ...cellStatus.value };
+    delete cs[key];
+    cellStatus.value = cs;
   }
 }
 
@@ -310,10 +345,12 @@ function handleKeyDown(e: KeyboardEvent) {
     const k = cellKey(r, c);
     if (answers.value[k]) {
       answers.value = { ...answers.value, [k]: '' };
+      clearCellStatus(r, c);
     } else {
       cursor.value = retreatCursor(cursor.value, dir.value, slots.value);
       const pk = cellKey(cursor.value.r, cursor.value.c);
       answers.value = { ...answers.value, [pk]: '' };
+      clearCellStatus(cursor.value.r, cursor.value.c);
     }
     return;
   }
@@ -323,6 +360,7 @@ function handleKeyDown(e: KeyboardEvent) {
     e.preventDefault();
     const letter = key.toUpperCase();
     answers.value = { ...answers.value, [cellKey(r, c)]: letter };
+    clearCellStatus(r, c);
     cursor.value  = advanceCursor(cursor.value, dir.value, slots.value);
   }
 }
@@ -349,7 +387,33 @@ function handleMobileInput(e: Event) {
   if (!/[a-zA-Z]/.test(ch)) return;
   const { r, c } = cursor.value;
   answers.value = { ...answers.value, [cellKey(r, c)]: ch.toUpperCase() };
+  clearCellStatus(r, c);
   cursor.value  = advanceCursor(cursor.value, dir.value, slots.value);
+}
+
+// ── Clue scroll-into-view ─────────────────────────────────────────────────────
+const clueEls = ref<Record<string, HTMLElement>>({});
+function setClueRef(id: string, el: any) { if (el) clueEls.value[id] = el as HTMLElement; }
+watch(activeSlot, (s) => {
+  if (!s) return;
+  const el = clueEls.value[s.id];
+  if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+});
+
+// ── Reset progress ────────────────────────────────────────────────────────────
+async function resetProgress() {
+  if (!confirm('Reset your progress for this puzzle? Your completion will be cleared.')) return;
+  try {
+    await postResetProgress(props.apiUrl, props.slug);
+  } catch (e) {
+    statusMsg.value = `Reset failed: ${(e as Error).message}`;
+    return;
+  }
+  answers.value = {};
+  cellStatus.value = {};
+  solved.value = false;
+  statusMsg.value = 'Progress reset.';
+  try { localStorage.removeItem(`puzzle-answers-${props.slug}`); } catch {}
 }
 </script>
 
@@ -380,6 +444,12 @@ function handleMobileInput(e: Event) {
         Puzzle complete! 🎉
       </div>
 
+      <!-- Not-logged-in warning banner -->
+      <div v-if="!authed" class="anon-warning">
+        You're not logged in — your progress won't be saved to your account.
+        <a :href="loginHref">Log in</a> to save your progress.
+      </div>
+
       <!-- 3-column layout: [Across clues] [Grid + Actions] [Down clues] -->
       <div class="puzzle-layout">
 
@@ -390,6 +460,7 @@ function handleMobileInput(e: Event) {
             <li
               v-for="slot in acrossSlots"
               :key="slot.id"
+              :ref="(el) => setClueRef(slot.id, el)"
               class="clue-item"
               :class="{ 'clue-active': activeSlot?.id === slot.id }"
               @click="activateSlotFromClue(slot)"
@@ -479,6 +550,10 @@ function handleMobileInput(e: Event) {
             >
               Submit
             </button>
+            <!-- Reset: only visible after solving so progress is intentionally cleared -->
+            <button v-if="solved && authed" class="puzzle-btn" @click="resetProgress">
+              Reset
+            </button>
             <!-- Subtle status message (errors, etc.) -->
             <span v-if="statusMsg" class="status-msg">
               {{ statusMsg }}
@@ -493,6 +568,7 @@ function handleMobileInput(e: Event) {
             <li
               v-for="slot in downSlots"
               :key="slot.id"
+              :ref="(el) => setClueRef(slot.id, el)"
               class="clue-item"
               :class="{ 'clue-active': activeSlot?.id === slot.id }"
               @click="activateSlotFromClue(slot)"
@@ -511,6 +587,8 @@ function handleMobileInput(e: Event) {
 /* ── Outer island ─────────────────────────────────────────────────────────── */
 .puzzle-island {
   /* inherits font/color from inline style on the root div */
+  max-width: 70rem;
+  margin-inline: auto;
 }
 
 /* ── 3-column layout row ──────────────────────────────────────────────────── */
@@ -519,6 +597,7 @@ function handleMobileInput(e: Event) {
   flex-direction: row;
   gap: 1.5rem;
   align-items: flex-start;
+  justify-content: center;
 }
 
 /* Narrow screens: stack vertically */
@@ -535,9 +614,9 @@ function handleMobileInput(e: Event) {
 
 /* Clue side-columns: scrollable when clue list is long */
 .puzzle-clues-col {
-  flex: 1 1 11rem;
+  flex: 1 1 16rem;
   min-width: 10rem;
-  max-width: 16rem;
+  max-width: 22rem;
   max-height: 32rem;
   overflow-y: auto;
 }
@@ -726,5 +805,22 @@ function handleMobileInput(e: Event) {
   border-radius: 6px;
   color: var(--sapPositiveColor, #107e3e);
   font-weight: 600;
+}
+
+/* ── Anonymous warning banner ─────────────────────────────────────────────── */
+.anon-warning {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--sapWarningBackground, #fef7e0);
+  border: 1px solid var(--sapWarningBorderColor, #e9730c);
+  border-radius: 6px;
+  color: var(--sapWarningColor, #5c3d00);
+  font-size: 0.875rem;
+}
+
+.anon-warning a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
 }
 </style>

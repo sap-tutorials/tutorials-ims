@@ -74,4 +74,15 @@ describe('PuzzleService.check', () => {
     );
     expect(r.complete).toBe(true);
   });
+
+  it('returns per-cell correctness array with correct:false for a wrong word', async () => {
+    const r = await svc.tx({ user: ANON }, tx =>
+      tx.send('check', { slug: 'chk', entries: [{ slotId: '0-0-across', word: 'DOG' }] })
+    );
+    expect(Array.isArray(r.cells)).toBe(true);
+    expect(r.cells.length).toBeGreaterThan(0);
+    expect(r.cells.some(c => c.correct === false)).toBe(true);
+    // Verify cell shape: each has r, c, correct
+    expect(r.cells[0]).toMatchObject({ r: expect.any(Number), c: expect.any(Number), correct: expect.any(Boolean) });
+  });
 });

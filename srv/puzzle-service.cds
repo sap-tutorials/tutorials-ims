@@ -18,6 +18,7 @@ service PuzzleService {
     word   : String;
   }) returns {
     results  : many { slotId : String; correct : Boolean; };
+    cells    : many { r : Integer; c : Integer; correct : Boolean; };
     complete : Boolean;
   };
 
@@ -29,4 +30,10 @@ service PuzzleService {
 
   @(requires: 'authenticated-user')
   action complete(slug : String) returns { recorded : Boolean; alreadyComplete : Boolean; };
+
+  @(requires: 'authenticated-user')
+  action resetPuzzleProgress(slug : String) returns {
+    newAttemptNumber      : Integer;
+    supersededRecordCount : Integer;
+  };
 }

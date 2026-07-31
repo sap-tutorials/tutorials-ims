@@ -92,10 +92,33 @@ export function gradeEntries({ solution, entries }) {
     const got = String(word || '').toUpperCase();
     return { slotId, correct: expected != null && expected.length > 0 && got === expected };
   });
+
+  // Per-cell: walk each entry's cells against the solution. Merge shared cells
+  // with AND (a cell wrong in ANY submitted direction is wrong).
+  const cellMap = new Map(); // "r,c" → boolean correct
+  for (const { slotId, word } of (entries || [])) {
+    const m = /^(\d+)-(\d+)-(across|down)$/.exec(slotId);
+    if (!m) continue;
+    let r = +m[1], c = +m[2]; const dir = m[3];
+    const w = String(word || '').toUpperCase();
+    let i = 0;
+    while (sol[`${r},${c}`] !== undefined) {
+      const key = `${r},${c}`;
+      const cellCorrect = w[i] !== undefined && w[i] === sol[key];
+      cellMap.set(key, (cellMap.has(key) ? cellMap.get(key) : true) && cellCorrect);
+      i++;
+      if (dir === 'across') c++; else r++;
+    }
+  }
+  const cells = [...cellMap.entries()].map(([key, correct]) => {
+    const [r, c] = key.split(',').map(Number);
+    return { r, c, correct };
+  });
+
   const allSlotIds = deriveSlotIds(sol);
   const correctSet = new Set(results.filter(x => x.correct).map(x => x.slotId));
   const complete = allSlotIds.size > 0 && [...allSlotIds].every(id => correctSet.has(id));
-  return { results, complete };
+  return { results, cells, complete };
 }
 
 export function validatePuzzle({ layout, solution }) {
