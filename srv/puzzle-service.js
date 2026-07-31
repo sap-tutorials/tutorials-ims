@@ -200,5 +200,44 @@ export default class PuzzleService extends cds.ApplicationService {
       });
       return { recorded: true, alreadyComplete: false };
     });
+
+    // ── resetPuzzleProgress ───────────────────────────────────────────────────
+    // Mirror resetTutorialProgress: supersede the live PUZZLE TaskRecord and
+    // restart PuzzleProgress (clear grid, bump attempt). Never deletes history.
+    this.on('resetPuzzleProgress', async (req) => {
+      const { slug } = req.data;
+      const puzzle = await loadPuzzle(slug);
+      if (!puzzle) return req.reject(404, 'Puzzle not found');
+      const dbUser = await resolveOrCreateUser(req.user);
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
+
+      // Supersede live PUZZLE TaskRecords for this user + puzzle.
+      const live = await SELECT.from(TaskRecords).where({
+        user_ID: dbUser.ID,
+        taskLegacyId: puzzle.legacyId,
+        taskType: 'PUZZLE',
+        status: { '!=': 'SUPERSEDED' },
+      });
+      if (live.length) {
+        await UPDATE(TaskRecords)
+          .set({ status: 'SUPERSEDED' })
+          .where({
+            user_ID: dbUser.ID,
+            taskLegacyId: puzzle.legacyId,
+            taskType: 'PUZZLE',
+            status: { '!=': 'SUPERSEDED' },
+          });
+      }
+
+      // Reset progress row: clear grid, bump attempt.
+      const prog = await SELECT.one.from(PuzzleProgress)
+        .where({ user_ID: dbUser.ID, puzzle_ID: puzzle.ID });
+      let newAttempt = 1;
+      if (prog) {
+        newAttempt = (prog.attemptNumber || 1) + 1;
+        await UPDATE(PuzzleProgress, prog.ID).set({ filledGrid: '{}', attemptNumber: newAttempt });
+      }
+      return { newAttemptNumber: newAttempt, supersededRecordCount: live.length };
+    });
   }
 }

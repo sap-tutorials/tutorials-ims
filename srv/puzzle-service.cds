@@ -30,4 +30,10 @@ service PuzzleService {
 
   @(requires: 'authenticated-user')
   action complete(slug : String) returns { recorded : Boolean; alreadyComplete : Boolean; };
+
+  @(requires: 'authenticated-user')
+  action resetPuzzleProgress(slug : String) returns {
+    newAttemptNumber      : Integer;
+    supersededRecordCount : Integer;
+  };
 }
