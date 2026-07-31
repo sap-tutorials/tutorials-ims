@@ -47,6 +47,7 @@
         "sap.ui.unified": {}
       }
     },
+    "resources": { "css": [ { "uri": "css/print.css" } ] },
     "models": {
       "": {
         "dataSource": "mainService",

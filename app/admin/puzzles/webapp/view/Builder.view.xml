@@ -72,6 +72,16 @@
           </VBox>
         </FlexBox>
 
+        <OverflowToolbar class="sapUiSmallMarginBottom">
+          <Button text="Clear Grid" icon="sap-icon://clear-all" press=".onClearGrid"/>
+          <Button text="Clear Words" icon="sap-icon://eraser" press=".onClearWords"/>
+          <ToolbarSpacer/>
+          <Button text="Import" icon="sap-icon://upload" press=".onImportPress"/>
+          <Button text="Export" icon="sap-icon://download" press=".onExport"/>
+          <Button text="Print" icon="sap-icon://print" press=".onPrint"/>
+          <Button icon="sap-icon://sys-help" tooltip="Help" press=".onHelp"/>
+        </OverflowToolbar>
+
         <!-- Word list panel -->
         <Panel headerText="Word list" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
           <VBox>
@@ -145,6 +155,10 @@
           </ScrollContainer>
 
         </FlexBox>
+
+        <!-- Hidden native file input for Import -->
+        <core:HTML id="importFileInput"
+                   content="&lt;input type='file' accept='.json,application/json' style='display:none'/&gt;"/>
 
         <!-- Public URL strip (shown after save) -->
         <FlexBox visible="{= !!${b>/savedSlug} }" class="sapUiSmallMarginTop" alignItems="Center">

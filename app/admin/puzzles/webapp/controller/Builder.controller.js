@@ -426,6 +426,101 @@ sap.ui.define([
       }
     },
 
+    // ── Toolbar handlers ─────────────────────────────────────────────────────
+
+    onClearGrid: function () {
+      var b = this.getView().getModel("b");
+      var rows = parseInt(b.getProperty("/rows"), 10) || 15;
+      var cols = parseInt(b.getProperty("/cols"), 10) || 15;
+      b.setProperty("/grid", geom.numberGrid(geom.makeEmptyGrid(rows, cols)));
+      b.setProperty("/answers", {});
+      this._recomputeSlots();
+      this._renderGrid();
+    },
+
+    onClearWords: function () {
+      var b = this.getView().getModel("b");
+      b.setProperty("/answers", {});
+      this._recomputeSlots();
+      this._renderGrid();
+    },
+
+    onExport: function () {
+      var b = this.getView().getModel("b");
+      var wordLengths = {};
+      this._getAllSlots().forEach(function (s) { wordLengths[s.id] = s.len; });
+      var obj = io.exportPuzzle({
+        rows: b.getProperty("/rows"), cols: b.getProperty("/cols"),
+        grid: b.getProperty("/grid"), wordText: b.getProperty("/wordText"),
+        clues: b.getProperty("/clues"), hints: b.getProperty("/hints"),
+        wordLengths: wordLengths, answers: b.getProperty("/answers"),
+        title: b.getProperty("/title"), slug: b.getProperty("/slug")
+      });
+      var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = (b.getProperty("/slug") || "puzzle") + ".json";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+
+    onImportPress: function () {
+      var input = this.byId("importFileInput").getDomRef();
+      if (input) { input.value = ""; input.click(); }
+    },
+
+    onImportFile: function (oEvent) {
+      var file = oEvent.target.files && oEvent.target.files[0];
+      if (!file) { return; }
+      var self = this;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var parsed;
+        try { parsed = JSON.parse(e.target.result); }
+        catch (err) { MessageBox.error("Not valid JSON: " + err.message); return; }
+        var res = io.importPuzzle(parsed);
+        if (!res.ok) { MessageBox.error("Import failed: " + res.error); return; }
+        var b = self.getView().getModel("b");
+        var s = res.state;
+        b.setProperty("/rows", s.rows); b.setProperty("/cols", s.cols);
+        b.setProperty("/grid", geom.numberGrid(s.grid));
+        b.setProperty("/wordText", s.wordText);
+        b.setProperty("/wordCount", io.countWords(s.wordText));
+        b.setProperty("/clues", s.clues); b.setProperty("/hints", s.hints);
+        b.setProperty("/answers", s.answers);
+        b.setProperty("/title", s.title); b.setProperty("/slug", s.slug);
+        self._recomputeSlots(); self._renderGrid();
+        MessageToast.show("Puzzle imported");
+      };
+      reader.readAsText(file);
+    },
+
+    onPrint: function () { window.print(); },
+
+    onHelp: function () {
+      MessageBox.information(
+        "Design mode: click a cell to toggle black (mirrored 180°).\n" +
+        "Fill mode: click a cell, then type letters; arrows navigate, Backspace clears.\n" +
+        "Word list: paste or upload candidate words. Fill Grid auto-solves from your list; " +
+        "Just Fill uses a common-English dictionary.\n" +
+        "Suggestions appear beside the focused slot — click one to place it.\n" +
+        "Select Grid loads a saved black-square template; Save Grid stores the current one.\n" +
+        "Import/Export move puzzles as JSON; Print produces a printable grid + clues.",
+        { title: "Puzzle Builder Help" });
+    },
+
+    onAfterRendering: function () {
+      var self = this;
+      var host = this.byId("importFileInput");
+      var dom = host && host.getDomRef();
+      var input = dom && dom.querySelector("input");
+      if (input && !input._wired) {
+        input._wired = true;
+        input.addEventListener("change", function (e) { self.onImportFile(e); });
+      }
+    },
+
     // ── Internal helpers ──────────────────────────────────────────────────────
 
     _getAllSlots: function () {
