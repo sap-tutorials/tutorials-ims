@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 
 interface Completion {
+  kind?: string | null
   slug: string
   title: string
   primaryTag: string | null
@@ -81,6 +82,11 @@ function formatLevel(level: string | null) {
   return level.charAt(0) + level.slice(1).toLowerCase()
 }
 
+function itemUrl(r: Completion): string {
+  const base = r.kind === 'puzzle' ? '/puzzles/' : '/tutorials/'
+  return `${base}${r.slug}/`
+}
+
 function clearFilters() { filterText.value = ''; filterTopic.value = ''; filterLevel.value = '' }
 
 onMounted(async () => {
@@ -138,8 +144,8 @@ onMounted(async () => {
           <th @click="setSort('completionDate')"><button>Completed{{ sortIcon('completionDate') }}</button></th>
         </tr></thead>
         <tbody>
-          <tr v-for="r in sorted" :key="r.slug">
-            <td><a :href="`/tutorials/${r.slug}/`">{{ r.title }}</a></td>
+          <tr v-for="(r, idx) in sorted" :key="`${r.kind || 'tutorial'}:${r.slug}:${r.completionDate || idx}`">
+            <td><a :href="itemUrl(r)">{{ r.title }}</a></td>
             <td>{{ r.primaryTag || '—' }}</td>
             <td>{{ formatLevel(r.experienceTag) }}</td>
             <td class="num">{{ r.averageTimeToComplete != null ? `${r.averageTimeToComplete} min` : '—' }}</td>

@@ -145,48 +145,75 @@ export async function getUserProgress(user, opts = {}) {
   };
 }
 
-// Returns the user's completed-tutorial history for the public /me page.
-// Each row is one TUTORIAL TaskRecord with status in (COMPLETED, SUPERSEDED),
-// joined with Tutorials by legacyId so we can render slug + title +
+// Returns the user's completed-task history for the public /me page (both the
+// Recent Activity timeline and the All Completions table). Each row is one
+// TaskRecord with status in (COMPLETED, SUPERSEDED), joined with its source
+// entity (Tutorials or Puzzles) by legacyId so we can render slug + title +
 // tag/experience/time. Anonymous users return an empty array. Skips records
-// whose legacyId no longer maps to a current Tutorial slug (legacy/orphaned
-// data).
+// whose legacyId no longer maps to a current slug (legacy/orphaned data).
+//
+// A `kind` discriminator ('tutorial' | 'puzzle') is included so the /me UI can
+// build the correct URL — puzzles live at /puzzles/<slug>, tutorials at
+// /tutorials/<slug>. Puzzle completions are written by PuzzleService.complete
+// as taskType 'PUZZLE' (issue #644); before this they were silently excluded
+// from /me because only TUTORIAL rows were queried.
 //
 // Task 7 (#600): SUPERSEDED rows count as historical completions. A user who
 // completed a tutorial, hit "Reset progress", and completed it again sees BOTH
 // completions in /me/ (sorted completionDate DESC). No dedupe — N completions
-// of the same tutorial show as N rows. attemptNumber is passed through.
+// of the same task show as N rows. attemptNumber is passed through.
 export async function getMyCompletedTutorials(user) {
   const dbUserId = await resolveDbUserId(user);
   if (!dbUserId) return [];
 
-  const { TaskRecords, Tutorials } = cds.entities('com.sap.developers.ims');
+  const { TaskRecords, Tutorials, Puzzles } = cds.entities('com.sap.developers.ims');
 
   const records = await SELECT.from(TaskRecords)
-    .columns('taskLegacyId', 'completionDate', 'modifiedAt', 'titleSnapshot', 'attemptNumber')
+    .columns('taskLegacyId', 'taskType', 'completionDate', 'modifiedAt', 'titleSnapshot', 'attemptNumber')
     .where({
       user_ID: dbUserId,
-      taskType: 'TUTORIAL',
+      taskType: { in: ['TUTORIAL', 'PUZZLE'] },
       status: { in: ['COMPLETED', 'SUPERSEDED'] }
     });
   if (records.length === 0) return [];
 
-  const tutorialIds = records.map(r => r.taskLegacyId);
-  const tutorials = await SELECT.from(Tutorials)
-    .columns('legacyId', 'slug', 'title', 'primaryTag', 'experienceTag', 'averageTimeToComplete')
-    .where({ legacyId: { in: tutorialIds } });
-  const meta = new Map(tutorials.map(t => [t.legacyId, t]));
+  const tutorialIds = [];
+  const puzzleIds = [];
+  for (const r of records) {
+    if (r.taskType === 'TUTORIAL') tutorialIds.push(r.taskLegacyId);
+    else if (r.taskType === 'PUZZLE') puzzleIds.push(r.taskLegacyId);
+  }
+
+  const [tutorials, puzzles] = await Promise.all([
+    tutorialIds.length
+      ? SELECT.from(Tutorials)
+          .columns('legacyId', 'slug', 'title', 'primaryTag', 'experienceTag', 'averageTimeToComplete')
+          .where({ legacyId: { in: tutorialIds } })
+      : [],
+    puzzleIds.length
+      ? SELECT.from(Puzzles)
+          .columns('legacyId', 'slug', 'title', 'primaryTag', 'experienceTag', 'averageTimeToComplete')
+          .where({ legacyId: { in: puzzleIds } })
+      : []
+  ]);
+
+  const tutorialMeta = new Map(tutorials.map(t => [t.legacyId, t]));
+  const puzzleMeta = new Map(puzzles.map(p => [p.legacyId, p]));
 
   const rows = [];
   for (const r of records) {
-    const t = meta.get(r.taskLegacyId);
-    if (!t?.slug) continue;
+    const kind = r.taskType === 'PUZZLE' ? 'puzzle' : 'tutorial';
+    const meta = kind === 'puzzle'
+      ? puzzleMeta.get(r.taskLegacyId)
+      : tutorialMeta.get(r.taskLegacyId);
+    if (!meta?.slug) continue;
     rows.push({
-      slug: t.slug,
-      title: t.title || r.titleSnapshot || t.slug,
-      primaryTag: t.primaryTag || null,
-      experienceTag: t.experienceTag || null,
-      averageTimeToComplete: typeof t.averageTimeToComplete === 'number' ? t.averageTimeToComplete : null,
+      kind,
+      slug: meta.slug,
+      title: meta.title || r.titleSnapshot || meta.slug,
+      primaryTag: meta.primaryTag || null,
+      experienceTag: meta.experienceTag || null,
+      averageTimeToComplete: typeof meta.averageTimeToComplete === 'number' ? meta.averageTimeToComplete : null,
       completionDate: r.completionDate || r.modifiedAt || null,
       attemptNumber: typeof r.attemptNumber === 'number' ? r.attemptNumber : 1
     });
