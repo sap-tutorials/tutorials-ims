@@ -1,66 +1,111 @@
+/* Region gradients mirror the roster cards (advocates.css) so the profile hero
+   carries the same vibrant, saturated palette. Saturated gradients + white text
+   read well in BOTH light and dark themes, which fixes the dark-mode
+   light-text-on-light-hero regression (was: pale #f1f4f9 gradient + dark text). */
 .adv-profile {
+  --adv-bg-generic: linear-gradient(135deg,#0a3d91 0%,#0070f2 60%,#5aa7ff 100%);
+  --adv-bg-amer:    linear-gradient(135deg,#0070f2 0%,#6c3dff 60%,#ff6db5 100%);
+  --adv-bg-emea:    linear-gradient(135deg,#0a6ed1 0%,#1c63dc 60%,#2b9fd8 100%);
+  --adv-bg-apj:     linear-gradient(135deg,#7858d8 0%,#b056d1 60%,#f96fb0 100%);
   max-width: 960px;
   margin: 0 auto;
   padding: 24px;
-  font-family: var(--ds-font-family, system-ui, sans-serif);
+  font-family: var(--sapFontFamily, var(--ds-font-family, system-ui, sans-serif));
+  color: var(--sapTextColor, #32363a);
 }
 .adv-profile-back {
   display: inline-block;
   margin-bottom: 16px;
-  color: var(--ds-link, #0a6ed1);
+  color: var(--sapLinkColor, var(--ds-link, #0a6ed1));
   text-decoration: none;
 }
 .adv-profile-back:hover { text-decoration: underline; }
+
+/* Saturated gradient hero. Text anchored to white regardless of site theme —
+   mirrors the .adv-back treatment on the roster cards. */
 .adv-profile-hero {
   display: grid;
   grid-template-columns: 200px 1fr;
   gap: 24px;
-  padding: 24px;
+  padding: 28px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #f1f4f9, #e6effa);
+  background: var(--adv-bg-generic);
+  box-shadow: 0 10px 30px rgba(8,32,80,.18);
   margin-bottom: 24px;
+  color: #fff;
 }
-.adv-profile-hero[data-region="AMERICAS"] { background: linear-gradient(135deg, #fef3e7, #fde4c6); }
-.adv-profile-hero[data-region="EMEA"]     { background: linear-gradient(135deg, #e8f3ff, #c8e0ff); }
-.adv-profile-hero[data-region="APJ"]      { background: linear-gradient(135deg, #e9f7ee, #c7eed4); }
+.adv-profile-hero[data-region="AMERICAS"] { background: var(--adv-bg-amer); }
+.adv-profile-hero[data-region="EMEA"]     { background: var(--adv-bg-emea); }
+.adv-profile-hero[data-region="APJ"]      { background: var(--adv-bg-apj); }
+/* Soft top-left highlight, same as the roster hero, for depth. */
+.adv-profile-hero { position: relative; overflow: hidden; }
+.adv-profile-hero::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(900px circle at 20% 0%, rgba(255,255,255,.28), transparent 55%);
+}
+.adv-profile-hero > * { position: relative; z-index: 1; }
+
 .adv-profile-photo,
 .adv-profile-photo-fallback {
   width: 200px; height: 200px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  background: #cfd8e3; color: white; font-size: 56px; font-weight: 700;
+  background: rgba(255,255,255,.16); color: #fff; font-size: 56px; font-weight: 700;
   object-fit: cover;
+  border: 3px solid rgba(255,255,255,.35);
+  box-shadow: 0 8px 20px rgba(0,20,60,.25);
 }
-.adv-profile-id h1 { margin: 0 0 8px; font-size: 28px; }
-.adv-profile-id .adv-pron { font-size: 16px; color: var(--ds-muted, #556070); font-weight: 400; }
-.adv-profile-id .adv-role { font-size: 18px; margin-bottom: 4px; }
-.adv-profile-id .adv-loc { color: var(--ds-muted, #556070); margin-bottom: 12px; }
+.adv-profile-id h1 { margin: 0 0 8px; font-size: 28px; color: #fff; }
+.adv-profile-id .adv-pron { font-size: 16px; color: rgba(255,255,255,.82); font-weight: 400; }
+.adv-profile-id .adv-role { font-size: 18px; margin-bottom: 4px; color: rgba(255,255,255,.95); }
+.adv-profile-id .adv-loc { color: rgba(255,255,255,.8); margin-bottom: 12px; }
 .adv-profile-links { list-style: none; padding: 0; margin: 0; display: flex; gap: 12px; flex-wrap: wrap; }
 .adv-profile-links a {
   display: inline-block; padding: 6px 12px; border-radius: 999px;
-  background: rgba(255,255,255,0.6); color: #1d2229; text-decoration: none;
-  font-size: 14px;
+  background: rgba(255,255,255,.16); color: #fff; text-decoration: none;
+  font-size: 14px; font-weight: 600;
+  border: 1px solid rgba(255,255,255,.22);
+  transition: background .2s ease;
 }
+.adv-profile-links a:hover { background: rgba(255,255,255,.3); }
+
+/* Body sections follow the site theme via the shared Horizon vars. */
 .adv-profile-bio { margin-bottom: 24px; }
 .adv-profile-bio h2,
 .adv-profile-topics h2,
-.adv-profile-tutorials h2 { font-size: 20px; margin: 16px 0 8px; }
+.adv-profile-tutorials h2 {
+  font-size: 20px; margin: 16px 0 8px;
+  color: var(--sapTextColor, #32363a);
+}
+.adv-bio-md { color: var(--sapTextColor, #32363a); }
 .adv-bio-md p { line-height: 1.6; margin: 0 0 10px; }
+.adv-bio-md a { color: var(--sapLinkColor, var(--ds-link, #0a6ed1)); }
 .adv-profile-topics ul,
 .adv-profile-tutorials ul { list-style: none; padding: 0; margin: 0; }
 .adv-profile-topics li { display: inline-block; margin: 0 8px 8px 0; }
 .adv-chip {
   display: inline-block; padding: 4px 10px; border-radius: 999px;
-  background: #eef2f7; color: #1d2229; text-decoration: none; font-size: 13px;
+  background: var(--sapButton_Background, #eef2f7);
+  color: var(--sapButton_Lite_TextColor, #0a3d91);
+  border: 1px solid var(--sapButton_BorderColor, #cfe3ff);
+  text-decoration: none; font-size: 13px;
+  transition: background .2s ease;
 }
-.adv-chip:hover { background: #dfe6ef; }
-.adv-profile-tutorials li { padding: 6px 0; border-bottom: 1px solid #eef2f7; }
-.adv-profile-tutorials a { color: var(--ds-link, #0a6ed1); text-decoration: none; }
+.adv-chip:hover { background: var(--sapButton_Lite_Hover_Background, #dfe6ef); }
+.adv-profile-tutorials li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--sapList_BorderColor, #eef2f7);
+}
+.adv-profile-tutorials a { color: var(--sapLinkColor, var(--ds-link, #0a6ed1)); text-decoration: none; }
 .adv-profile-tutorials a:hover { text-decoration: underline; }
 .adv-profile-island-banner {
   padding: 12px 16px; border-radius: 8px;
-  background: #fff5e6; color: #6c4a0f; margin: 16px 0;
+  background: var(--sapInformationBackground, #fff5e6);
+  color: var(--sapTextColor, #6c4a0f);
+  border: 1px solid var(--sapInformationBorderColor, #e0b877);
+  margin: 16px 0;
 }
 @media (max-width: 720px) {
   .adv-profile-hero { grid-template-columns: 1fr; text-align: center; }
   .adv-profile-photo, .adv-profile-photo-fallback { margin: 0 auto; }
+  .adv-profile-links { justify-content: center; }
 }
