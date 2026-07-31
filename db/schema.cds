@@ -135,6 +135,17 @@ entity Puzzles : TaskBase {
   solution : LargeString;   // JSON {"r,c":"LETTER"} — SERVER ONLY
 }
 
+// Issue: puzzle-designer parity — reusable grid black-square templates.
+// blacks = JSON array of [row,col] black-cell coordinates. Built-ins are seeded
+// and read-only in the admin UI; author-saved templates are deletable.
+entity GridTemplates : cuid, managed {
+  name      : String(255) @mandatory;
+  rows      : Integer;
+  cols      : Integer;
+  blacks    : LargeString;   // JSON [[r,c], ...]
+  isBuiltin : Boolean default false;
+}
+
 @assert.unique.sapId       : [sapId]
 @assert.unique.khorosId    : [khorosId]
 @assert.unique.githubLogin : [githubLogin]

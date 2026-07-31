@@ -6,7 +6,7 @@
     "title": "Puzzles",
     "description": "Build and edit puzzles",
     "applicationVersion": {
-      "version": "0.0.4"
+      "version": "0.1.0"
     },
     "dataSources": {
       "mainService": {
@@ -43,9 +43,11 @@
       "libs": {
         "sap.m": {},
         "sap.ui.core": {},
-        "sap.ui.layout": {}
+        "sap.ui.layout": {},
+        "sap.ui.unified": {}
       }
     },
+    "resources": { "css": [ { "uri": "css/print.css" } ] },
     "models": {
       "": {
         "dataSource": "mainService",

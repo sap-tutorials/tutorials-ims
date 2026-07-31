@@ -26,14 +26,20 @@
             <Column><Text text="Title"/></Column>
             <Column><Text text="Slug"/></Column>
             <Column><Text text="Status"/></Column>
+            <Column width="12rem"><Text text="Actions"/></Column>
           </columns>
           <items>
-            <ColumnListItem type="Navigation" press=".onPuzzlePress">
+            <ColumnListItem type="Inactive">
               <cells>
                 <Text text="{title}"/>
                 <Text text="{slug}"/>
                 <ObjectStatus text="{status}"
                   state="{= ${status} === 'ACTIVE' ? 'Success' : ${status} === 'DRAFT' ? 'Warning' : 'None' }"/>
+                <HBox>
+                  <Button text="Edit" press=".onPuzzlePress" type="Transparent"/>
+                  <Button text="Unpublish" press=".onUnpublish" type="Transparent"
+                          visible="{= ${status} === 'ACTIVE' }"/>
+                </HBox>
               </cells>
             </ColumnListItem>
           </items>
@@ -72,6 +78,41 @@
           </VBox>
         </FlexBox>
 
+        <OverflowToolbar class="sapUiSmallMarginBottom">
+          <Button text="Clear Grid" icon="sap-icon://clear-all" press=".onClearGrid"/>
+          <Button text="Clear Words" icon="sap-icon://eraser" press=".onClearWords"/>
+          <ToolbarSeparator/>
+          <Button text="Fill Grid" press=".onFillGrid" enabled="{= !${b>/fillRunning} }"/>
+          <Button text="Just Fill" press=".onJustFill" enabled="{= !${b>/fillRunning} }"/>
+          <Button text="Stop" press=".onStopFill" visible="{b>/fillRunning}"/>
+          <ToolbarSeparator/>
+          <Button text="Select Grid" icon="sap-icon://grid" press=".onSelectGrid"/>
+          <Button text="Save Grid" press=".onSaveGrid"/>
+          <ToolbarSpacer/>
+          <Button text="Import" icon="sap-icon://upload" press=".onImportPress"/>
+          <Button text="Export" icon="sap-icon://download" press=".onExport"/>
+          <Button text="Print" icon="sap-icon://print" press=".onPrint"/>
+          <Button icon="sap-icon://sys-help" tooltip="Help" press=".onHelp"/>
+        </OverflowToolbar>
+
+        <!-- Word list panel -->
+        <Panel headerText="Word list" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+          <VBox>
+            <TextArea id="wordListArea" value="{b>/wordText}" liveChange=".onWordTextChange"
+                      rows="6" width="100%" growing="false"
+                      placeholder="Paste words here, one per line (or comma/semicolon separated)…"/>
+            <FlexBox alignItems="Center" class="sapUiTinyMarginTop">
+              <u:FileUploader id="wordUploader" name="wordlist" fileType="txt,csv"
+                              buttonText="Upload a file" placeholder="" width="auto"
+                              change=".onUploadWordList" style="Transparent"
+                              xmlns:u="sap.ui.unified"/>
+              <Button text="Clear" press=".onClearWordList" type="Transparent"
+                      visible="{= ${b>/wordText}.length > 0 }" class="sapUiTinyMarginBegin"/>
+              <Text text="{= ${b>/wordCount} + ' words' }" class="sapUiTinyMarginBegin"/>
+            </FlexBox>
+          </VBox>
+        </Panel>
+
         <!-- Grid + Slots panel -->
         <FlexBox alignItems="Start">
 
@@ -82,6 +123,12 @@
           <!-- Slots side panel -->
           <ScrollContainer height="70vh" width="30rem" vertical="true" horizontal="false">
             <VBox>
+              <Panel headerText="Suggestions" visible="{= ${b>/suggestions}.length > 0 }"
+                     class="sapUiTinyMarginBottom">
+                <List items="{ path: 'b>/suggestions', templateShareable: false }">
+                  <StandardListItem title="{b>word}" type="Active" press=".onPickSuggestion"/>
+                </List>
+              </Panel>
               <Title text="Across" titleStyle="H5" class="sapUiTinyMarginBottom"/>
               <List id="acrossList" items="{ path: 'b>/slotsAcross', templateShareable: false }" noDataText="No across slots" showSeparators="Inner">
                 <CustomListItem>
@@ -127,6 +174,13 @@
           </ScrollContainer>
 
         </FlexBox>
+
+        <!-- Fill status strip -->
+        <Text text="{b>/fillStatus}" class="sapUiTinyMarginTop" visible="{= ${b>/fillStatus}.length > 0 }"/>
+
+        <!-- Hidden native file input for Import -->
+        <core:HTML id="importFileInput"
+                   content="&lt;input type='file' accept='.json,application/json' style='display:none'/&gt;"/>
 
         <!-- Public URL strip (shown after save) -->
         <FlexBox visible="{= !!${b>/savedSlug} }" class="sapUiSmallMarginTop" alignItems="Center">

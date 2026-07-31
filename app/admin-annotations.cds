@@ -17,6 +17,16 @@ annotate AdminService.Puzzles with {
   solution @Common.Label: 'Solution JSON';
 };
 
+// Puzzle-designer grid template library.
+annotate AdminService.GridTemplates with @odata.draft.enabled;
+annotate AdminService.GridTemplates with {
+  name      @Common.Label: 'Template Name' @mandatory;
+  rows      @Common.Label: 'Rows';
+  cols      @Common.Label: 'Cols';
+  blacks    @Common.Label: 'Black Cells JSON';
+  isBuiltin @Common.Label: 'Built-in';
+};
+
 // --- Events ---
 annotate AdminService.Events with {
   legacyIdStr  @Common.Label: 'Event ID' @Common.IsDigitSequence: true;

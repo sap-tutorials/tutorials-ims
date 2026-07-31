@@ -3,8 +3,11 @@ sap.ui.define([
   "sap/ui/model/json/JSONModel",
   "sap/m/MessageToast",
   "sap/m/MessageBox",
-  "sap/tutorials/admin/puzzles/lib/crossword-geometry"
-], function (Controller, JSONModel, MessageToast, MessageBox, geom) {
+  "sap/ui/core/Fragment",
+  "sap/tutorials/admin/puzzles/lib/crossword-geometry",
+  "sap/tutorials/admin/puzzles/lib/puzzle-io",
+  "sap/tutorials/admin/puzzles/lib/solver-core"
+], function (Controller, JSONModel, MessageToast, MessageBox, Fragment, geom, io, solver) {
   "use strict";
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -54,7 +57,12 @@ sap.ui.define([
         title: "",
         slug: "",
         savedSlug: "",
-        editId: null         // OData ID when editing existing puzzle (null = new)
+        editId: null,        // OData ID when editing existing puzzle (null = new)
+        wordText: "",
+        wordCount: 0,
+        fillRunning: false,
+        fillStatus: "",
+        suggestions: []
       });
       this.getView().setModel(oState, "b");
     },
@@ -101,6 +109,59 @@ sap.ui.define([
         }));
       }).catch(function (err) {
         MessageBox.error("Could not open puzzle: " + (err && err.message || err));
+      });
+    },
+
+    onUnpublish: function (oEvent) {
+      var oCtx = oEvent.getSource().getBindingContext();
+      if (!oCtx) { return; }
+      var row = oCtx.getObject() || {};
+      var id = row.ID;
+      if (!id) { return; }
+      var self = this;
+      MessageBox.confirm("Unpublish this puzzle?", {
+        title: "Confirm Unpublish",
+        onClose: function (action) {
+          if (action !== MessageBox.Action.OK) { return; }
+          self._withCsrf(function (token) {
+            var headers = {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "x-csrf-token": token
+            };
+            // draftEdit → PATCH(status:'INACTIVE') → draftActivate
+            return fetch(
+              "/admin/Puzzles(ID=" + id + ",IsActiveEntity=true)/AdminService.draftEdit",
+              { method: "POST", credentials: "include", headers: headers, body: "{}" }
+            ).then(function (r) {
+              if (!r.ok) { return r.text().then(function (t) { throw new Error("draftEdit HTTP " + r.status + ": " + t); }); }
+              return r.json();
+            }).then(function (draft) {
+              var draftId = draft.ID || id;
+              return fetch(
+                "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)",
+                { method: "PATCH", credentials: "include", headers: headers, body: JSON.stringify({ status: "INACTIVE" }) }
+              ).then(function (r2) {
+                if (!r2.ok) { return r2.text().then(function (t) { throw new Error("PATCH draft HTTP " + r2.status + ": " + t); }); }
+                return draftId;
+              });
+            }).then(function (draftId) {
+              return fetch(
+                "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)/AdminService.draftActivate",
+                { method: "POST", credentials: "include", headers: headers, body: "{}" }
+              ).then(function (r3) {
+                if (!r3.ok) { return r3.text().then(function (t) { throw new Error("draftActivate HTTP " + r3.status + ": " + t); }); }
+                return r3.json();
+              });
+            });
+          }).then(function () {
+            MessageToast.show("Puzzle unpublished");
+            var oModel = self.getView().getModel();
+            if (oModel && oModel.refresh) { oModel.refresh(); }
+          }).catch(function (err) {
+            MessageBox.error("Unpublish failed: " + (err.message || String(err)));
+          });
+        }
       });
     },
 
@@ -159,6 +220,34 @@ sap.ui.define([
       b.setProperty("/pageTitle", "Puzzles");
     },
 
+    // ── Word list ─────────────────────────────────────────────────────────────
+
+    onWordTextChange: function () {
+      var b = this.getView().getModel("b");
+      b.setProperty("/wordCount", io.countWords(b.getProperty("/wordText")));
+    },
+
+    onUploadWordList: function (oEvent) {
+      var file = oEvent.getParameter("files") && oEvent.getParameter("files")[0];
+      if (!file) { return; }
+      if (file.size > 2 * 1024 * 1024) { MessageToast.show("File too large (max 2 MB)"); return; }
+      var b = this.getView().getModel("b");
+      var self = this;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        b.setProperty("/wordText", String(e.target.result || ""));
+        self.onWordTextChange();
+      };
+      reader.onerror = function () { MessageToast.show("Could not read file"); };
+      reader.readAsText(file);
+    },
+
+    onClearWordList: function () {
+      var b = this.getView().getModel("b");
+      b.setProperty("/wordText", "");
+      b.setProperty("/wordCount", 0);
+    },
+
     // ── Sub-mode toggle ───────────────────────────────────────────────────────
 
     onSubModeChange: function () {
@@ -177,9 +266,123 @@ sap.ui.define([
     },
 
     onFocusCell: function (r, c) {
-      // Focus tracking for fill mode — highlight active cell
+      // Focus tracking for fill mode — highlight active cell + compute suggestions
       this._activeCell = { r: r, c: c };
+      this._computeSuggestions(r, c);
       this._renderGrid();
+    },
+
+    _computeSuggestions: function (r, c) {
+      var b = this.getView().getModel("b");
+      var grid = b.getProperty("/grid");
+      var slots = geom.findSlots(grid, 2);
+      var answers = b.getProperty("/answers") || {};
+      // Prefer the across slot containing (r,c); fall back to down.
+      var slot = slots.find(function (s) {
+        return s.dir === "across" && s.cells.some(function (x) { return x.r === r && x.c === c; });
+      }) || slots.find(function (s) {
+        return s.cells.some(function (x) { return x.r === r && x.c === c; });
+      });
+      if (!slot) { b.setProperty("/suggestions", []); return; }
+      var words = io.parseWordList(b.getProperty("/wordText"));
+      var matches = words.filter(function (w) { return solver.fits(slot, w, answers); }).slice(0, 30);
+      this._suggestSlot = slot;
+      b.setProperty("/suggestions", matches.map(function (w) { return { word: w }; }));
+    },
+
+    onPickSuggestion: function (oEvent) {
+      var word = oEvent.getSource().getBindingContext("b").getProperty("word");
+      var b = this.getView().getModel("b");
+      var answers = Object.assign({}, b.getProperty("/answers"));
+      this._suggestSlot.cells.forEach(function (cell, i) { answers[cell.r + "," + cell.c] = word[i]; });
+      b.setProperty("/answers", answers);
+      this._recomputeSlots();
+      this._renderGrid();
+    },
+
+    // ── Grid template handlers ────────────────────────────────────────────────
+
+    onSelectGrid: function () {
+      var self = this;
+      var oModel = this.getView().getModel(); // OData V4 AdminService
+      var oList = oModel.bindList("/GridTemplates");
+      oList.requestContexts(0, 100).then(function (ctxs) {
+        var templates = ctxs.map(function (ctx) { return ctx.getObject(); });
+        var gt = new JSONModel({ templates: templates });
+        self.getView().setModel(gt, "gt");
+        if (!self._gridPickerPromise) {
+          self._gridPickerPromise = Fragment.load({
+            name: "sap.tutorials.admin.puzzles.view.GridPicker",
+            controller: self
+          }).then(function (oDialog) {
+            self._gridPicker = oDialog;
+            self.getView().addDependent(oDialog);
+            return oDialog;
+          });
+        }
+        self._gridPickerPromise.then(function (oDialog) {
+          oDialog.open();
+        });
+      }).catch(function (err) {
+        MessageBox.error("Could not load grid templates: " + (err && err.message || err));
+      });
+    },
+
+    onApplyTemplate: function (oEvent) {
+      var t = oEvent.getSource().getBindingContext("gt").getObject();
+      var b = this.getView().getModel("b");
+      var rows = t.rows || b.getProperty("/rows");
+      var cols = t.cols || b.getProperty("/cols");
+      var grid = geom.makeEmptyGrid(rows, cols);
+      (JSON.parse(t.blacks || "[]")).forEach(function (rc) {
+        if (grid[rc[0]] && grid[rc[0]][rc[1]]) { grid[rc[0]][rc[1]].black = true; }
+      });
+      b.setProperty("/rows", rows);
+      b.setProperty("/cols", cols);
+      b.setProperty("/grid", geom.numberGrid(grid));
+      b.setProperty("/answers", {});
+      this._recomputeSlots();
+      this._renderGrid();
+      if (this._gridPicker) { this._gridPicker.close(); }
+    },
+
+    onCloseGridPicker: function () { if (this._gridPicker) { this._gridPicker.close(); } },
+
+    onSaveGrid: function () {
+      var self = this;
+      var b = this.getView().getModel("b");
+      var grid = b.getProperty("/grid");
+      var blacks = [];
+      grid.forEach(function (row, r) { row.forEach(function (cell, c) { if (cell.black) { blacks.push([r, c]); } }); });
+      MessageBox.show("Save current grid as a template?", {
+        icon: MessageBox.Icon.QUESTION, title: "Save Grid",
+        actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+        onClose: function (action) {
+          if (action !== MessageBox.Action.OK) { return; }
+          var fields = {
+            name: (b.getProperty("/title") || "Grid") + " layout",
+            rows: b.getProperty("/rows"),
+            cols: b.getProperty("/cols"),
+            blacks: JSON.stringify(blacks),
+            isBuiltin: false
+          };
+          self._withCsrf(function (token) {
+            var headers = { "Content-Type": "application/json", "Accept": "application/json", "x-csrf-token": token };
+            return fetch("/admin/GridTemplates", {
+              method: "POST", credentials: "include", headers: headers, body: JSON.stringify(fields)
+            }).then(function (r) {
+              if (!r.ok) { return r.text().then(function (t) { throw new Error("POST " + r.status + ": " + t); }); }
+              return r.json();
+            }).then(function (draft) {
+              return fetch(
+                "/admin/GridTemplates(ID=" + draft.ID + ",IsActiveEntity=false)/AdminService.draftActivate",
+                { method: "POST", credentials: "include", headers: headers, body: "{}" }
+              );
+            });
+          }).then(function () { MessageToast.show("Grid template saved"); })
+            .catch(function (err) { MessageBox.error("Save template failed: " + (err.message || err)); });
+        }
+      });
     },
 
     // ── Slot panel event handlers ─────────────────────────────────────────────
@@ -196,8 +399,9 @@ sap.ui.define([
       var b = this.getView().getModel("b");
       var answers = b.getProperty("/answers") || {};
       // Place letters into solution map keyed "r,c"
-      var slots = this._getAllSlots();
-      var slot = slots.find(function (s) { return s.id === sId; });
+      // _getAllSlots() returns display items (no .cells); resolve the real geometry
+      // slot from the grid so we can iterate its cells.
+      var slot = geom.findSlots(b.getProperty("/grid"), 2).find(function (s) { return s.id === sId; });
       if (slot) {
         slot.cells.forEach(function (cell, i) {
           var key = cell.r + "," + cell.c;
@@ -395,6 +599,102 @@ sap.ui.define([
       }
     },
 
+    // ── Toolbar handlers ─────────────────────────────────────────────────────
+
+    onClearGrid: function () {
+      var b = this.getView().getModel("b");
+      var rows = parseInt(b.getProperty("/rows"), 10) || 15;
+      var cols = parseInt(b.getProperty("/cols"), 10) || 15;
+      b.setProperty("/grid", geom.numberGrid(geom.makeEmptyGrid(rows, cols)));
+      b.setProperty("/answers", {});
+      this._recomputeSlots();
+      this._renderGrid();
+    },
+
+    onClearWords: function () {
+      var b = this.getView().getModel("b");
+      b.setProperty("/answers", {});
+      this._recomputeSlots();
+      this._renderGrid();
+    },
+
+    onExport: function () {
+      var b = this.getView().getModel("b");
+      var wordLengths = {};
+      this._getAllSlots().forEach(function (s) { wordLengths[s.id] = s.len; });
+      var obj = io.exportPuzzle({
+        rows: b.getProperty("/rows"), cols: b.getProperty("/cols"),
+        grid: b.getProperty("/grid"), wordText: b.getProperty("/wordText"),
+        clues: b.getProperty("/clues"), hints: b.getProperty("/hints"),
+        wordLengths: wordLengths, answers: b.getProperty("/answers"),
+        title: b.getProperty("/title"), slug: b.getProperty("/slug")
+      });
+      var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = (b.getProperty("/slug") || "puzzle") + ".json";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+
+    onImportPress: function () {
+      var dom = this.byId("importFileInput").getDomRef();
+      var input = dom && dom.querySelector("input");
+      if (input) { input.value = ""; input.click(); }
+    },
+
+    onImportFile: function (oEvent) {
+      var file = oEvent.target.files && oEvent.target.files[0];
+      if (!file) { return; }
+      var self = this;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var parsed;
+        try { parsed = JSON.parse(e.target.result); }
+        catch (err) { MessageBox.error("Not valid JSON: " + err.message); return; }
+        var res = io.importPuzzle(parsed);
+        if (!res.ok) { MessageBox.error("Import failed: " + res.error); return; }
+        var b = self.getView().getModel("b");
+        var s = res.state;
+        b.setProperty("/rows", s.rows); b.setProperty("/cols", s.cols);
+        b.setProperty("/grid", geom.numberGrid(s.grid));
+        b.setProperty("/wordText", s.wordText);
+        b.setProperty("/wordCount", io.countWords(s.wordText));
+        b.setProperty("/clues", s.clues); b.setProperty("/hints", s.hints);
+        b.setProperty("/answers", s.answers);
+        b.setProperty("/title", s.title); b.setProperty("/slug", s.slug);
+        self._recomputeSlots(); self._renderGrid();
+        MessageToast.show("Puzzle imported");
+      };
+      reader.readAsText(file);
+    },
+
+    onPrint: function () { window.print(); },
+
+    onHelp: function () {
+      MessageBox.information(
+        "Design mode: click a cell to toggle black (mirrored 180°).\n" +
+        "Fill mode: click a cell, then type letters; arrows navigate, Backspace clears.\n" +
+        "Word list: paste or upload candidate words. Fill Grid auto-solves from your list; " +
+        "Just Fill uses a common-English dictionary.\n" +
+        "Suggestions appear beside the focused slot — click one to place it.\n" +
+        "Select Grid loads a saved black-square template; Save Grid stores the current one.\n" +
+        "Import/Export move puzzles as JSON; Print produces a printable grid + clues.",
+        { title: "Puzzle Builder Help" });
+    },
+
+    onAfterRendering: function () {
+      var self = this;
+      var host = this.byId("importFileInput");
+      var dom = host && host.getDomRef();
+      var input = dom && dom.querySelector("input");
+      if (input && !input._wired) {
+        input._wired = true;
+        input.addEventListener("change", function (e) { self.onImportFile(e); });
+      }
+    },
+
     // ── Internal helpers ──────────────────────────────────────────────────────
 
     _getAllSlots: function () {
@@ -586,6 +886,95 @@ sap.ui.define([
           oTable.focus();
         }
       }
+    },
+
+    // ── Auto-fill ─────────────────────────────────────────────────────────────
+
+    onFillGrid: function () { this._runFill("wordlist"); },
+    onJustFill: function () { this._runFill("dictionary"); },
+    onStopFill: function () {
+      if (this._fillWorker) { this._fillWorker.terminate(); this._fillWorker = null; }
+      var b = this.getView().getModel("b");
+      b.setProperty("/fillRunning", false);
+      b.setProperty("/fillStatus", "Stopped");
+    },
+
+    _runFill: function (mode) {
+      var self = this;
+      var b = this.getView().getModel("b");
+      var allSlots = geom.findSlots(b.getProperty("/grid"), 2);
+      var slots = allSlots.map(function (s) {
+        return { id: s.id, dir: s.dir, len: s.len, cells: s.cells };
+      });
+      var timeLimitMs = mode === "dictionary" ? 30000 : 12000;
+      var gridSnapshot = b.getProperty("/grid");
+
+      var proceed = function (words) {
+        b.setProperty("/fillRunning", true);
+        b.setProperty("/fillStatus", "Solving…");
+        var opts = {
+          slots: slots, words: words, grid: gridSnapshot,
+          rows: b.getProperty("/rows"), cols: b.getProperty("/cols"),
+          timeLimitMs: timeLimitMs
+        };
+        try {
+          var url = sap.ui.require.toUrl("sap/tutorials/admin/puzzles/lib/fill-worker.js");
+          var worker = new Worker(url);              // classic same-origin worker
+          self._fillWorker = worker;
+          worker.onmessage = function (ev) {
+            var m = ev.data;
+            if (m.type === "progress") { self._applyFillResult(m.placed, true); }
+            else if (m.type === "result") { self._finishFill(m.status, m.placed); worker.terminate(); }
+            else if (m.type === "error") { self._finishFill("error", null); worker.terminate(); }
+          };
+          worker.onerror = function () {             // CSP or load failure → fallback
+            worker.terminate(); self._fillWorker = null; self._fallbackSolveMainThread(opts);
+          };
+          worker.postMessage(Object.assign({ type: "start" }, opts));
+        } catch (e) {
+          self._fallbackSolveMainThread(opts);       // Worker ctor blocked → fallback
+        }
+      };
+
+      if (mode === "dictionary") {
+        fetch(sap.ui.require.toUrl("sap/tutorials/admin/puzzles/assets/common-english.txt"))
+          .then(function (r) { return r.text(); })
+          .then(function (t) { proceed(io.parseWordList(t)); })
+          .catch(function () { MessageToast.show("Could not load dictionary"); });
+      } else {
+        proceed(io.parseWordList(b.getProperty("/wordText")));
+      }
+    },
+
+    _fallbackSolveMainThread: function (opts) {
+      // Worker unavailable/CSP-blocked → solve on the main thread using the same
+      // solver-core AMD dep (`solver`). Synchronous; acceptable for the fallback path.
+      var res = solver.solve(opts);
+      this._finishFill(res.status, res.placed);
+    },
+
+    _applyFillResult: function (placed, isProgress) {
+      var b = this.getView().getModel("b");
+      var answers = Object.assign({}, b.getProperty("/answers"), placed);
+      b.setProperty("/answers", answers);
+      this._renderGrid();
+      if (!isProgress) { this._recomputeSlots(); }
+    },
+
+    _finishFill: function (status, placed) {
+      var b = this.getView().getModel("b");
+      b.setProperty("/fillRunning", false);
+      if (status === "solved" || status === "partial") {
+        if (placed) { this._applyFillResult(placed, false); }
+        b.setProperty("/fillStatus", status === "solved" ? "Solved" : "Partially filled");
+      } else if (status === "timeout") {
+        b.setProperty("/fillStatus", "Timed out — no complete fill");
+      } else if (status === "nosolution") {
+        b.setProperty("/fillStatus", "No solution from this word list");
+      } else {
+        b.setProperty("/fillStatus", "Fill error");
+      }
+      this._fillWorker = null;
     },
 
     _withCsrf: function (fnAfterToken) {

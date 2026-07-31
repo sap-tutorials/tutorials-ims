@@ -1,0 +1,9 @@
+@media print {
+  /* Hide the admin shell chrome and builder controls; show only grid + clues. */
+  .sapTntToolPage .sapTntSideNavigation,
+  .sapMPageHeader,
+  #builderPage .sapMOTB,           /* OverflowToolbar */
+  #builderPage .sapMPanel,          /* word-list panel */
+  #builderPage .sapMSegBtn { display: none !important; }
+  #builderPage .sapMPageEnableScrolling { overflow: visible !important; }
+}

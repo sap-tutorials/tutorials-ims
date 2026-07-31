@@ -1564,6 +1564,61 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_PUZZLES"
     },
+    "com.sap.developers.ims.GridTemplates": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "name": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "NAME"
+        },
+        "rows": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "ROWS"
+        },
+        "cols": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "COLS"
+        },
+        "blacks": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "BLACKS"
+        },
+        "isBuiltin": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "ISBUILTIN"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_GRIDTEMPLATES"
+    },
     "com.sap.developers.ims.ImsConfig": {
       "kind": "entity",
       "@cds.persistence.journal": true,
