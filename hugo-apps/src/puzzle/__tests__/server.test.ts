@@ -12,7 +12,7 @@ const slot1 = {
   cells: [{ r: 0, c: 0 }, { r: 1, c: 0 }, { r: 2, c: 0 }],
 };
 
-describe('buildCheckEntries', () => {
+describe('buildCheckEntries (>=1 filled)', () => {
   it('includes fully-filled slots with uppercased word', () => {
     const answers = { '0,0': 'c', '0,1': 'a', '0,2': 't' };
     const entries = buildCheckEntries([slot0], answers);
@@ -20,28 +20,28 @@ describe('buildCheckEntries', () => {
     expect(entries[0]).toEqual({ slotId: '0-0-across', word: 'CAT' });
   });
 
-  it('excludes partially filled slots', () => {
-    // only 2 of 3 cells filled
-    const answers = { '0,0': 'c', '0,1': 'a' };
+  it('includes a partially-filled slot', () => {
+    const slots = [{ id: '0-0-across', cells: [{ r: 0, c: 0 }, { r: 0, c: 1 }, { r: 0, c: 2 }] }];
+    const answers = { '0,0': 'C', '0,1': 'A' }; // 0,2 blank
+    const entries = buildCheckEntries(slots, answers);
+    expect(entries).toEqual([{ slotId: '0-0-across', word: 'CA ' }]);
+  });
+
+  it('excludes a fully-empty slot', () => {
+    const slots = [{ id: '0-0-across', cells: [{ r: 0, c: 0 }, { r: 0, c: 1 }] }];
+    expect(buildCheckEntries(slots, {})).toEqual([]);
+  });
+
+  it('excludes slots with an empty-string answer cell (all blanks)', () => {
+    const answers = { '0,0': '', '0,1': '', '0,2': '' };
     const entries = buildCheckEntries([slot0], answers);
     expect(entries).toHaveLength(0);
   });
 
-  it('excludes slots with an empty-string answer cell', () => {
-    const answers = { '0,0': 'c', '0,1': '', '0,2': 't' };
-    const entries = buildCheckEntries([slot0], answers);
-    expect(entries).toHaveLength(0);
-  });
-
-  it('includes multiple filled slots', () => {
-    const answers = {
-      '0,0': 'a', '0,1': 'b', '0,2': 'c', // slot0 across
-      '1,0': 'd', '2,0': 'e',               // slot1 down needs 3 cells
-    };
-    // slot1 has 3 cells (r0-r2, c0); '0,0' is 'a', '1,0' is 'd', '2,0' is 'e'
+  it('includes multiple slots with >=1 filled cell each', () => {
     const answers2 = { '0,0': 'a', '0,1': 'b', '0,2': 'c', '1,0': 'd', '2,0': 'e' };
     const entries = buildCheckEntries([slot0, slot1], answers2);
-    // slot0 fully filled: CAT... slot1: cells [0,0],[1,0],[2,0] → 'a','d','e'
+    // slot0 fully filled: ABC; slot1: cells [0,0],[1,0],[2,0] → 'a','d','e' → ADE
     expect(entries).toHaveLength(2);
     const e0 = entries.find(e => e.slotId === '0-0-across')!;
     const e1 = entries.find(e => e.slotId === '0-0-down')!;
@@ -61,46 +61,38 @@ describe('buildCheckEntries', () => {
   });
 });
 
-describe('buildCellStatus', () => {
-  it('marks cells of correct slot as correct', () => {
-    const results = [{ slotId: '0-0-across', correct: true }];
-    const status = buildCellStatus(results, [slot0]);
+describe('buildCellStatus (per-cell)', () => {
+  it('maps per-cell correctness to r,c → status', () => {
+    const cells = [{ r: 0, c: 0, correct: true }, { r: 0, c: 1, correct: false }];
+    expect(buildCellStatus(cells)).toEqual({ '0,0': 'correct', '0,1': 'wrong' });
+  });
+
+  it('marks correct cells as correct', () => {
+    const cells = [{ r: 0, c: 0, correct: true }, { r: 0, c: 1, correct: true }, { r: 0, c: 2, correct: true }];
+    const status = buildCellStatus(cells);
     expect(status['0,0']).toBe('correct');
     expect(status['0,1']).toBe('correct');
     expect(status['0,2']).toBe('correct');
   });
 
-  it('marks cells of wrong slot as wrong', () => {
-    const results = [{ slotId: '0-0-across', correct: false }];
-    const status = buildCellStatus(results, [slot0]);
+  it('marks wrong cells as wrong', () => {
+    const cells = [{ r: 0, c: 0, correct: false }, { r: 0, c: 1, correct: false }];
+    const status = buildCellStatus(cells);
     expect(status['0,0']).toBe('wrong');
     expect(status['0,1']).toBe('wrong');
-    expect(status['0,2']).toBe('wrong');
   });
 
-  it('handles mixed correct/wrong across different slots', () => {
-    const results = [
-      { slotId: '0-0-across', correct: true },
-      { slotId: '0-0-down',   correct: false },
+  it('handles mixed correct/wrong cells', () => {
+    const cells = [
+      { r: 0, c: 0, correct: true },
+      { r: 1, c: 0, correct: false },
     ];
-    const status = buildCellStatus(results, [slot0, slot1]);
-    // slot0 cells → correct
-    expect(status['0,1']).toBe('correct');
-    expect(status['0,2']).toBe('correct');
-    // slot1 cells → wrong (r1c0, r2c0); r0c0 is shared — last write wins (wrong from slot1)
+    const status = buildCellStatus(cells);
+    expect(status['0,0']).toBe('correct');
     expect(status['1,0']).toBe('wrong');
-    expect(status['2,0']).toBe('wrong');
-    // Note: shared cell [0,0] will be overwritten by the last slot processed
-    // This is intentional — the caller sees the last result applied.
   });
 
-  it('ignores unknown slotIds', () => {
-    const results = [{ slotId: 'ghost-slot', correct: true }];
-    const status = buildCellStatus(results, [slot0]);
-    expect(Object.keys(status)).toHaveLength(0);
-  });
-
-  it('returns empty map for empty results', () => {
-    expect(buildCellStatus([], [slot0])).toEqual({});
+  it('returns empty map for empty cells array', () => {
+    expect(buildCellStatus([])).toEqual({});
   });
 });

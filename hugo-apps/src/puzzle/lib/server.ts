@@ -11,11 +11,13 @@ import { csrfFetch } from '@shared/csrf-fetch';
 
 /**
  * Build the `entries` payload for POST /check from the current answers map.
- * Only includes FULLY-filled slots (all cells have a non-empty letter).
+ * Includes any slot with at least one filled cell. Blank cells are represented
+ * as a space so the server's positional walk stays aligned — a space never
+ * matches a solution letter, so blank positions grade wrong.
  *
  * @param slots   - all slots from buildSlots()
  * @param answers - "r,c" → letter map
- * @returns array of { slotId, word } for each fully-filled slot
+ * @returns array of { slotId, word } for each slot with ≥1 filled cell
  */
 export function buildCheckEntries(
   slots: ReadonlyArray<{ id: string; cells: ReadonlyArray<{ r: number; c: number }> }>,
@@ -23,34 +25,26 @@ export function buildCheckEntries(
 ): Array<{ slotId: string; word: string }> {
   const entries: Array<{ slotId: string; word: string }> = [];
   for (const slot of slots) {
-    const letters = slot.cells.map(c => answers[`${c.r},${c.c}`] ?? '');
-    if (letters.every(l => l.length > 0)) {
-      entries.push({ slotId: slot.id, word: letters.join('').toUpperCase() });
+    const word = slot.cells.map(c => (answers[`${c.r},${c.c}`] || ' ')).join('').toUpperCase();
+    if (word.trim().length > 0) {
+      entries.push({ slotId: slot.id, word });
     }
   }
   return entries;
 }
 
 /**
- * Given check results, build a map from "r,c" cell key → 'correct'|'wrong'|undefined.
+ * Given per-cell check results, build a map from "r,c" cell key → 'correct'|'wrong'.
  *
- * @param results   - array of { slotId, correct } from the server
- * @param slots     - all slots (to resolve slotId → cells)
- * @returns         - cell-key → status map (only for cells in checked slots)
+ * @param cells - array of { r, c, correct } from the server's check response
+ * @returns     - cell-key → status map
  */
 export function buildCellStatus(
-  results: ReadonlyArray<{ slotId: string; correct: boolean }>,
-  slots: ReadonlyArray<{ id: string; cells: ReadonlyArray<{ r: number; c: number }> }>
+  cells: ReadonlyArray<{ r: number; c: number; correct: boolean }>
 ): Record<string, 'correct' | 'wrong'> {
-  const slotMap = new Map(slots.map(s => [s.id, s]));
   const out: Record<string, 'correct' | 'wrong'> = {};
-  for (const { slotId, correct } of results) {
-    const slot = slotMap.get(slotId);
-    if (!slot) continue;
-    const status = correct ? 'correct' : 'wrong';
-    for (const cell of slot.cells) {
-      out[`${cell.r},${cell.c}`] = status;
-    }
+  for (const { r, c, correct } of cells) {
+    out[`${r},${c}`] = correct ? 'correct' : 'wrong';
   }
   return out;
 }
@@ -70,6 +64,7 @@ export async function probeAuth(): Promise<boolean> {
 
 export interface CheckResult {
   results: Array<{ slotId: string; correct: boolean }>;
+  cells: Array<{ r: number; c: number; correct: boolean }>;
   complete: boolean;
 }
 
@@ -85,16 +80,16 @@ export interface CompleteResult {
 
 /**
  * POST /puzzle-api/check
+ * Anonymous endpoint — no CSRF token needed.
  */
 export async function postCheck(
   apiUrl: string,
   slug: string,
   entries: Array<{ slotId: string; word: string }>
 ): Promise<CheckResult> {
-  const r = await csrfFetch(`${apiUrl}/check`, {
+  const r = await fetch(`${apiUrl}/check`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    credentials: 'include',
     body: JSON.stringify({ slug, entries }),
   });
   if (!r.ok) throw new Error(`check HTTP ${r.status}`);

@@ -125,6 +125,7 @@ const ROOTS = [
 // site targets a public endpoint.
 const ANON_URL_ALLOWLIST = [
   '/feedback/',      // POST /feedback/submit — anon
+  '/puzzle-api/check', // POST /puzzle-api/check — anonymous solver grading (#1412)
   '/api/ui-event',   // POST /api/ui-event — anon
   '/api/advocates',  // GET/POST anon
   '/homepage/',      // anon
