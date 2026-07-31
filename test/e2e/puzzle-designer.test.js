@@ -76,9 +76,11 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
         // Fill the grid using the word list
         await page.locator('[role="button"]').filter({ hasText: 'Fill Grid' }).click();
 
-        // Wait for fill to finish — "Solved" or "Partially filled" status text appears
+        // Wait for fill to finish — any terminal status from _finishFill:
+        // "Solved", "Partially filled", "No solution from this word list",
+        // "Timed out — no complete fill", "Fill error"
         await expect(
-          page.locator('text=/Solved|Partially filled/')
+          page.locator('text=/Solved|Partially filled|No solution|Timed out|Fill error/')
         ).toBeVisible({ timeout: 30_000 });
 
         // Export: triggers a download

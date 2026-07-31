@@ -340,6 +340,7 @@ sap.ui.define([
       b.setProperty("/rows", rows);
       b.setProperty("/cols", cols);
       b.setProperty("/grid", geom.numberGrid(grid));
+      b.setProperty("/answers", {});
       this._recomputeSlots();
       this._renderGrid();
       if (this._gridPicker) { this._gridPicker.close(); }
@@ -398,8 +399,9 @@ sap.ui.define([
       var b = this.getView().getModel("b");
       var answers = b.getProperty("/answers") || {};
       // Place letters into solution map keyed "r,c"
-      var slots = this._getAllSlots();
-      var slot = slots.find(function (s) { return s.id === sId; });
+      // _getAllSlots() returns display items (no .cells); resolve the real geometry
+      // slot from the grid so we can iterate its cells.
+      var slot = geom.findSlots(b.getProperty("/grid"), 2).find(function (s) { return s.id === sId; });
       if (slot) {
         slot.cells.forEach(function (cell, i) {
           var key = cell.r + "," + cell.c;
