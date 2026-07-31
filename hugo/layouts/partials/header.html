@@ -326,10 +326,6 @@
 
   function applyAuthenticatedUser(u) {
     if (!u) return;
-    // A successful login supersedes any prior intentional logout — re-enable
-    // auto-login for future sessions. Safe post-logout because the logout
-    // handler wipes the 'joule.user.v1' cache, so this runs only on genuine auth.
-    try { localStorage.removeItem('autologin.optout'); } catch {}
     const given = u.givenName || u.firstName || '';
     const family = u.familyName || '';
     const id = u.id || '';
@@ -405,6 +401,10 @@
       const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id, isAdmin: user.isAdmin === true, khorosId: user.khorosId ?? null, khorosLogin: user.khorosLogin ?? null, khorosAvatarUrl: user.khorosAvatarUrl ?? null };
       try { sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: toCache })); } catch {}
       applyAuthenticatedUser(user);
+      // Live auth success: supersedes any prior intentional logout — re-enable
+      // auto-login for future sessions. Only on genuine /auth/user response,
+      // never on cached-user application (which would break cross-tab logout).
+      try { localStorage.removeItem('autologin.optout'); } catch {}
     } catch (e) {
       console.debug('[header/checkAuth] fetch failed, attempting cache fallback', e);
       const cached = readCachedUser();
