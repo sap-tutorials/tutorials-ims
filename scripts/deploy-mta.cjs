@@ -294,6 +294,21 @@ function main() {
   if (args.dryRun) warn('dry-run: still checking cf target (read-only)');
   guardCfTarget(cfg, envName);
 
+  // ---- Step 1.1: gameboard-url env-parity guard ------------------------
+  // The approuter's /gameboard/* route forwards to ${gameboard-url}. The base
+  // mta.yaml default is an invalid placeholder, so a missing per-env override
+  // would forward to a wrong host (config-cross-env-leak). This gate fails the
+  // deploy loudly if deploy/<env>.mtaext hasn't supplied a real https URL.
+  step(1.1, 'gameboard-url override present for this env');
+  {
+    const code = sh('npx', ['tsx', 'scripts/check-gameboard-url-mtaext.ts', envName]);
+    if (code !== 0) {
+      die(1, `gameboard-url is not overridden for env "${envName}". ` +
+             `Add a parameters.gameboard-url to deploy/${envName}.mtaext (only once that ` +
+             `env's gameboard backend exists), or remove the /gameboard route for this env.`);
+    }
+  }
+
   // ---- Step 1.5: write srv/version.json --------------------------------
   // Must run BEFORE the build so `cds build` packages it into gen/srv. This is
   // what makes the deployed srv report its real MTA version at GET /version

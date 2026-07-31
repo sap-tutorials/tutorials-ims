@@ -9,10 +9,12 @@ ID: tutorials-ims
 version: 1.0.0
 
 parameters:
-  # URL of the separately-deployed sap-community-gameboard gameboard-srv
-  # (default DEV; per-env override via mtaext). Consumed by the approuter
-  # gameboard-api destination. .deploy/mta.yaml is the live deploy source.
-  gameboard-url: https://tutorial-system-dev-gameboard-srv.cfapps.eu10-005.hana.ondemand.com
+  # URL of the separately-deployed sap-community-gameboard gameboard-srv,
+  # consumed by the approuter gameboard-api destination. Base default is an
+  # INVALID placeholder on purpose (config-cross-env-leak guard) — each env
+  # sets its own value in deploy/<env>.mtaext. .deploy/mta.yaml is the live
+  # deploy source; this root copy is mirrored for consistency (legacy).
+  gameboard-url: UNSET-see-env-mtaext
 
 build-parameters:
   before-all:
@@ -259,15 +261,16 @@ modules:
           url: ~{srv-url}
           forwardAuthToken: true
       # gameboard-api — separately-deployed sap-community-gameboard MTA fronted
-      # by this approuter. URL from ${gameboard-url} param (default DEV; per-env
-      # override via mtaext). NOTE: .deploy/mta.yaml is the live deploy source;
-      # this root copy is mirrored for consistency (legacy).
+      # by this approuter. URL from ${gameboard-url} param (invalid placeholder
+      # default; per-env override via mtaext). NO forwardAuthToken — /gameboard/*
+      # is public GET-only (getLeaderboard); no JWT forwarded out-of-MTA
+      # (csrf-with-token-forwarding guard). .deploy/mta.yaml is the live deploy
+      # source; this root copy is mirrored for consistency (legacy).
       - name: gameboard-api
         group: destinations
         properties:
           name: gameboard-api
           url: ${gameboard-url}
-          forwardAuthToken: true
       # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
       # SAP BTP convention — putting it on the resource block via path: is
       # silently ignored. Range 1..4, CPU 70% / 30% thresholds. Memory metric
