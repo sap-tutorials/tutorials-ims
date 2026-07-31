@@ -12,6 +12,7 @@
 //           (pre-seeded cells from opts.grid are excluded)
 (function (root, factory) {
   "use strict";
+  // ui5lint-disable-next-line no-globals -- UMD bridge: detects AMD loader at runtime; not a UI5 global access pattern
   if (typeof sap !== "undefined" && sap.ui && sap.ui.define) {
     sap.ui.define([], factory);            // AMD (controller + tests)
   } else {

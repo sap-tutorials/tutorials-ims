@@ -3,10 +3,11 @@ sap.ui.define([
   "sap/ui/model/json/JSONModel",
   "sap/m/MessageToast",
   "sap/m/MessageBox",
+  "sap/ui/core/Fragment",
   "sap/tutorials/admin/puzzles/lib/crossword-geometry",
   "sap/tutorials/admin/puzzles/lib/puzzle-io",
   "sap/tutorials/admin/puzzles/lib/solver-core"
-], function (Controller, JSONModel, MessageToast, MessageBox, geom, io, solver) {
+], function (Controller, JSONModel, MessageToast, MessageBox, Fragment, geom, io, solver) {
   "use strict";
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -309,12 +310,19 @@ sap.ui.define([
         var templates = ctxs.map(function (ctx) { return ctx.getObject(); });
         var gt = new JSONModel({ templates: templates });
         self.getView().setModel(gt, "gt");
-        if (!self._gridPicker) {
-          self._gridPicker = sap.ui.xmlfragment(
-            "sap.tutorials.admin.puzzles.view.GridPicker", self);
-          self.getView().addDependent(self._gridPicker);
+        if (!self._gridPickerPromise) {
+          self._gridPickerPromise = Fragment.load({
+            name: "sap.tutorials.admin.puzzles.view.GridPicker",
+            controller: self
+          }).then(function (oDialog) {
+            self._gridPicker = oDialog;
+            self.getView().addDependent(oDialog);
+            return oDialog;
+          });
         }
-        self._gridPicker.open();
+        self._gridPickerPromise.then(function (oDialog) {
+          oDialog.open();
+        });
       }).catch(function (err) {
         MessageBox.error("Could not load grid templates: " + (err && err.message || err));
       });
