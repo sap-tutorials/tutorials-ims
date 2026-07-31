@@ -41,6 +41,7 @@ function writeFile(root: string, rel: string, body: string): void {
 function buildMta(opts: {
   approuterRequires?: { name: string; group?: string; url?: string }[];
   providers?: { module: string; provides: string[] }[];
+  staticDestinations?: { name: string; url: string }[];
 } = {}) {
   const approuterRequires = (opts.approuterRequires ?? [])
     .map(r => `      - name: ${r.name}${r.group ? `\n        group: ${r.group}` : ''}${r.url ? `\n        properties:\n          url: ${r.url}` : ''}`)
@@ -48,6 +49,9 @@ function buildMta(opts: {
   const providerModules = (opts.providers ?? [])
     .map(p => `  - name: ${p.module}\n    type: nodejs\n    path: gen\n    provides:\n${p.provides.map(n => `      - name: ${n}`).join('\n')}`)
     .join('\n');
+  const propsBlock = opts.staticDestinations
+    ? `    properties:\n      destinations: '${JSON.stringify(opts.staticDestinations)}'`
+    : '';
   return [
     '_schema-version: 3.3.0',
     'ID: test',
@@ -56,10 +60,11 @@ function buildMta(opts: {
     '  - name: tutorials-approuter',
     '    type: approuter.nodejs',
     '    path: approuter',
+    propsBlock,
     `    requires:${approuterRequires ? '\n' + approuterRequires : ' []'}`,
     providerModules,
     '',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 function run(root: string): RunResult {
@@ -198,6 +203,26 @@ describe('scripts/check-xs-app-mta.ts', () => {
       approuterRequires: [
         { name: 'gameboard-api', group: 'destinations', url: 'https://example.cfapps.eu10-005.hana.ondemand.com' },
       ],
+      providers: [],
+    });
+    writeFile(root, 'mta.yaml', mta);
+    writeFile(root, '.deploy/mta.yaml', mta);
+    const r = run(root);
+    expect(r.status).toBe(0);
+  });
+
+  it('resolves a route whose destination is a STATIC properties.destinations entry (no requires, no provider)', () => {
+    writeFile(root, 'approuter/xs-app.json', JSON.stringify({
+      routes: [{ source: '^/gameboard/(.*)$', destination: 'gameboard-api' }],
+    }));
+    writeFile(root, 'xs-security.json', JSON.stringify({ scopes: [] }));
+    // gameboard-api is declared ONLY as a static destination in the approuter's
+    // properties.destinations array — the form used for external URLs that mbt
+    // strict validation rejects under requires:{group:destinations}. The check
+    // must resolve it AND not demand a local provider.
+    const mta = buildMta({
+      approuterRequires: [{ name: 'tutorials-xsuaa' }],
+      staticDestinations: [{ name: 'gameboard-api', url: '${gameboard-url}' }],
       providers: [],
     });
     writeFile(root, 'mta.yaml', mta);
