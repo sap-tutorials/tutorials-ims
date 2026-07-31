@@ -26,6 +26,7 @@ import {
   postSaveProgress,
   postComplete,
 } from './lib/server';
+import { emptyWhiteCells } from './lib/progress';
 
 const props = defineProps<{ slug: string; apiUrl: string }>();
 
@@ -203,12 +204,25 @@ async function checkPuzzle() {
   statusMsg.value = null;
   try {
     const data = await postCheck(props.apiUrl, props.slug, entries);
-    cellStatus.value = buildCellStatus(data.results, slots.value);
-    if (data.complete) {
-      await onSolved();
+    const status = buildCellStatus(data.cells);           // per-cell green/red
+    // Mark every empty white cell red too (item 4: blank white cells → red).
+    for (const { r, c } of emptyWhiteCells(grid.value, answers.value)) {
+      status[`${r},${c}`] = 'wrong';
     }
+    cellStatus.value = status;
+    if (data.complete) await onSolved();
   } catch (e) {
     statusMsg.value = `Check failed: ${(e as Error).message}`;
+  }
+}
+
+/** Clear a cell's stale check status after the user types into or clears it. */
+function clearCellStatus(r: number, c: number) {
+  const key = cellKey(r, c);
+  if (cellStatus.value[key]) {
+    const cs = { ...cellStatus.value };
+    delete cs[key];
+    cellStatus.value = cs;
   }
 }
 
@@ -310,10 +324,12 @@ function handleKeyDown(e: KeyboardEvent) {
     const k = cellKey(r, c);
     if (answers.value[k]) {
       answers.value = { ...answers.value, [k]: '' };
+      clearCellStatus(r, c);
     } else {
       cursor.value = retreatCursor(cursor.value, dir.value, slots.value);
       const pk = cellKey(cursor.value.r, cursor.value.c);
       answers.value = { ...answers.value, [pk]: '' };
+      clearCellStatus(cursor.value.r, cursor.value.c);
     }
     return;
   }
@@ -323,6 +339,7 @@ function handleKeyDown(e: KeyboardEvent) {
     e.preventDefault();
     const letter = key.toUpperCase();
     answers.value = { ...answers.value, [cellKey(r, c)]: letter };
+    clearCellStatus(r, c);
     cursor.value  = advanceCursor(cursor.value, dir.value, slots.value);
   }
 }
@@ -349,6 +366,7 @@ function handleMobileInput(e: Event) {
   if (!/[a-zA-Z]/.test(ch)) return;
   const { r, c } = cursor.value;
   answers.value = { ...answers.value, [cellKey(r, c)]: ch.toUpperCase() };
+  clearCellStatus(r, c);
   cursor.value  = advanceCursor(cursor.value, dir.value, slots.value);
 }
 </script>
