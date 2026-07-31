@@ -88,7 +88,7 @@ interface XsSecurity {
 
 interface MtaModule {
   name: string;
-  requires?: { name: string; group?: string; properties?: { url?: string } }[];
+  requires?: { name: string; group?: string; properties?: { name?: string; url?: string } }[];
   provides?: { name: string }[];
   properties?: { destinations?: string };
 }
@@ -139,12 +139,16 @@ function approuter(mta: Mta): MtaModule | null {
 export function destinationsRequiredBy(mta: Mta): Set<string> {
   const ar = approuter(mta);
   if (!ar) return new Set();
+  // The runtime destination NAME is `properties.name` when present (that's what
+  // @sap/approuter registers and what a route's `destination` must match),
+  // falling back to the require's own `name`. e.g. a require named
+  // `gameboard-dest` with `properties.name: gameboard-api` registers the
+  // destination `gameboard-api`.
   const names = (ar.requires ?? [])
     .filter(r => r.group === 'destinations')
-    .map(r => r.name);
+    .map(r => r.properties?.name ?? r.name);
   // Also accept STATIC destinations declared in the approuter's
-  // `properties.destinations` JSON array (used for external URLs that have no
-  // intra-MTA provider and would otherwise trip mbt strict validation).
+  // `properties.destinations` JSON array (rare; kept for robustness).
   for (const d of staticDestinations(mta)) names.push(d.name);
   return new Set(names);
 }
@@ -191,13 +195,19 @@ export function externalDestinations(mta: Mta): Set<string> {
   const ar = approuter(mta);
   const out = new Set<string>();
   if (!ar) return out;
+  const providedNames = providedDestinations(mta); // provides[].name across the MTA
   for (const r of ar.requires ?? []) {
     if (r.group !== 'destinations') continue;
     const url = r.properties?.url ?? '';
-    if (url.startsWith('${') || /^https?:\/\//.test(url)) out.add(r.name);
+    const destName = r.properties?.name ?? r.name;
+    // (a) ${param} or literal http(s):// URL = external, no provider expected.
+    if (url.startsWith('${') || /^https?:\/\//.test(url)) { out.add(destName); continue; }
+    // (b) self-provides-external: a `~{x}` url whose require `name` matches a
+    // local `provides` (e.g. gameboard-dest → provides gameboard-dest{gameboard-url})
+    // is the mbt-valid idiom for a static/external destination. The property set
+    // is satisfied, so the destination needs no separate provider named after it.
+    if (/^~\{/.test(url) && providedNames.has(r.name)) out.add(destName);
   }
-  // Every STATIC destination (properties.destinations array) is external by
-  // definition — it names an out-of-MTA URL with no local provider.
   for (const d of staticDestinations(mta)) out.add(d.name);
   return out;
 }
