@@ -54,8 +54,11 @@ through a single **community-data facade** module, giving one seam to swap or ca
 
 ## 4. Architecture
 
-New repo/MTA **`sap-community-gameboard`** (working name), deployed independently of the
-tutorial system, fronted by the tutorial system's existing approuter.
+New repo/MTA **`sap-community-gameboard`** (working name), hosted on the internal SAP GitHub
+at **`github.tools.sap/developer-relations`** — alongside `devtoberfest-planner`, its
+cross-container data provider — **not** under `sap-tutorials`/SAP-samples (the samples
+process adds too much overhead for an internal tool). Deployed independently of the tutorial
+system, fronted by the tutorial system's existing approuter.
 
 ```
                     ┌─────────────── tutorial approuter (single front door) ───────────────┐
@@ -127,7 +130,7 @@ The only new persisted artifacts are HANA *views* (contracts), not tables.
 | Source | Container | Carries |
 |---|---|---|
 | `DTF_ACTIVITY_V1` (exists, granted) | planner | `POINTS`, `TUTORIALSLUG`, `TUTORIAL_ID`, `WEEK`, `TRACK_ID`, `STATUS` |
-| `GAMEBOARD_PARTICIPANT_V1` (**new**) | tutorials-hana | one row per `EventRegistrations` entry for the active DEVTOBERFEST event: `USER_ID`, `DISPLAY_NAME`, `JOINED_AT`, `EVENT_ID` |
+| `GAMEBOARD_PARTICIPANT_V1` (**new**) | tutorials-hana | one row per `EventRegistrations` entry for the active DEVTOBERFEST event: `USER_ID`, `FIRST_NAME`, `LAST_INITIAL`, `COMMUNITY_ID` (nullable), `COMMUNITY_PROFILE_URL` (nullable), `JOINED_AT`, `EVENT_ID` |
 | `GAMEBOARD_COMPLETION_V1` (**new**) | tutorials-hana | one row per completed task: `USER_ID`, `TUTORIAL_SLUG` (resolved, lowercased), `COMPLETION_DATE`, `EVENT_ID` — filtered `status='COMPLETED'` |
 
 ### 5.2 New views published by `tutorials-srv`
@@ -273,13 +276,27 @@ Base-then-enable, because of the new cross-container leg:
 
 ## 10. Open questions / risks
 
-- **Slug resolution fidelity** — `GAMEBOARD_COMPLETION_V1` must resolve `taskLegacyId` →
-  slug correctly for all Devtoberfest task types (TUTORIAL, and whether MISSION/GROUP/STEP
-  activities exist in a given edition). Validate against real DEV data during implementation.
-- **Display name / privacy** — `GAMEBOARD_PARTICIPANT_V1.DISPLAY_NAME` must respect the
-  tutorial system's data-privacy rules for a public leaderboard (opt-in vs anonymized rank).
-  Confirm the privacy posture before exposing names publicly.
-- **New-repo bootstrap** — a brand-new MTA/repo needs XSUAA existing-service naming, CI, and
-  deploy wiring set up; scope this as part of the implementation plan.
+- **Slug resolution fidelity** — CONFIRMED resolvable on the tutorial side.
+  `GAMEBOARD_COMPLETION_V1` resolves `taskLegacyId` → slug within `tutorials-hana` (which
+  owns the mapping). Still validate coverage across Devtoberfest task types (TUTORIAL, and
+  whether MISSION/GROUP/STEP activities exist in a given edition) against real DEV data
+  during implementation.
+- **Display name / privacy** — RESOLVED. The public leaderboard shows **first name + last
+  initial** by default (e.g. "Tom J."). A participant's SAP Community identity is exposed
+  **only** if they have linked their community profile on their user record — in which case
+  the leaderboard additionally shows their community id and a link to their community
+  profile. `GAMEBOARD_PARTICIPANT_V1` therefore exposes `FIRST_NAME`, `LAST_INITIAL`, and
+  the nullable `COMMUNITY_ID` / `COMMUNITY_PROFILE_URL` (populated only when the user has
+  opted in by linking their profile). Confirm during implementation where the
+  profile-link/community-id lives on the tutorial system's `Users` record (or whether a new
+  opt-in field is needed).
+- **New-repo bootstrap** — RESOLVED (location). Home is a new dedicated repo on internal SAP
+  GitHub `github.tools.sap/developer-relations`, alongside `devtoberfest-planner`. Still
+  needs bootstrap work scoped into the plan: XSUAA existing-service naming, CI pipeline
+  (internal GitHub, not the public sap-tutorials Actions setup), and deploy wiring. Note the
+  two provider containers (`tutorials-hana`, `devtoberfest-planner-db`) must both be reachable
+  as CF existing-services from whatever CF org/space this deploys into — confirm the gameboard
+  deploys into the same CF landscape (eu10) where those HDI containers live, since
+  cross-container HDI access requires the same HANA Cloud instance.
 - **QA channel** — decide whether the gameboard participates in the tutorial system's QA
   channel or is DEV/PROD only.

@@ -28,6 +28,8 @@
     ]
   },
   "enabledMcpjsonServers": [
-    "sap-devs-server"
-  ]
+    "sap-devs-server",
+    "sap-developers-auth"
+  ],
+  "enableAllProjectMcpServers": true
 }
