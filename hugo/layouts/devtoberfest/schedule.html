@@ -1,0 +1,5 @@
+{{ define "main" }}
+<main id="devtoberfest-schedule-mount"></main>
+<noscript>The Devtoberfest schedule requires JavaScript.</noscript>
+<script type="module" src="{{ "/js/devtoberfest-schedule.js" | relURL }}?v={{ now.Unix }}"></script>
+{{ end }}

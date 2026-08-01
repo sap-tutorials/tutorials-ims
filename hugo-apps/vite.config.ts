@@ -274,6 +274,7 @@ export default defineConfig({
         'featured-topics-carousel': resolve(__dirname, 'src/featured-topics-carousel/main.ts'),
         'homepage-events-band': resolve(__dirname, 'src/homepage-events-band/main.ts'),
         puzzle: resolve(__dirname, 'src/puzzle/main.ts'),
+        'devtoberfest-schedule': resolve(__dirname, 'src/devtoberfest-schedule/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
