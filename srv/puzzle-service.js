@@ -6,6 +6,10 @@ import cds from '@sap/cds';
 import { gradeEntries, deriveSlotIds } from './lib/puzzle-grading.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
+import { checkRateLimit } from './lib/per-user-rate-limit.js';
+
+const RESET_LIMIT_PER_HOUR = 5;
+const RESET_WINDOW_MS = 60 * 60 * 1000;
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -206,6 +210,14 @@ export default class PuzzleService extends cds.ApplicationService {
     // restart PuzzleProgress (clear grid, bump attempt). Never deletes history.
     this.on('resetPuzzleProgress', async (req) => {
       const { slug } = req.data;
+
+      // Rate-limit BEFORE any DB work — independent quota from tutorial resets.
+      const sapId = resolveUserSapId(req.user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+      if (!checkRateLimit(`puzzle-reset:${sapId}`, RESET_LIMIT_PER_HOUR, RESET_WINDOW_MS)) {
+        return req.reject(429, 'You have reset too many puzzles recently — please wait a few minutes.');
+      }
+
       const puzzle = await loadPuzzle(slug);
       if (!puzzle) return req.reject(404, 'Puzzle not found');
       const dbUser = await resolveOrCreateUser(req.user);
