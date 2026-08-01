@@ -113,6 +113,16 @@
   padding: .9rem 1.4rem; border-radius: 10px; font-size: clamp(12px, 2.4cqw, 24px);
   box-shadow: 0 6px 24px rgba(0,0,0,.4); border: 2px solid #fff;
 }
+/* Non-actionable CTA copy (login / no-event / coming-soon). */
+.arcade-cta-msg {
+  pointer-events: auto;
+  max-width: 70%; text-align: center; margin: 0;
+  background: rgba(0,0,0,.72); color: #66ff66;
+  font-family: 'Joystix Monospace', 'Courier New', monospace;
+  padding: .9rem 1.4rem; border-radius: 10px; font-size: clamp(11px, 2.2cqw, 22px);
+  box-shadow: 0 6px 24px rgba(0,0,0,.4); border: 2px solid #66ff66;
+  text-shadow: 0 0 6px rgba(102,255,102,.7);
+}
 
 /* ---- Ported legacy keyframes (verbatim) ---- */
 @keyframes fadeInAnimation { from { opacity: 0 } to { opacity: 1 } }
