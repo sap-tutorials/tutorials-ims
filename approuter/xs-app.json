@@ -127,13 +127,13 @@
       "destination": "srv-api"
     },
     {
-      "source": "^/api/devtoberfest/(status|terms|banner)$",
+      "source": "^/api/devtoberfest/(status|terms|banner|schedule)$",
       "target": "/api/devtoberfest/$1",
       "destination": "srv-api",
       "authenticationType": "none"
     },
     {
-      "source": "^/api/devtoberfest/(join|me)$",
+      "source": "^/api/devtoberfest/(join|me|my-completions)$",
       "target": "/api/devtoberfest/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa"
