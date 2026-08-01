@@ -247,6 +247,11 @@ modules:
       - name: gameboard-dest
         properties:
           gameboard-url: ${gameboard-url}
+      # Second self-provides for the unique-named gameboard-auth-dest require
+      # (mbt matches require name → provides name). Mirrors .deploy/mta.yaml.
+      - name: gameboard-auth-dest
+        properties:
+          gameboard-url: ${gameboard-url}
     requires:
       - name: tutorials-xsuaa
       # #867 / #871 / #903 — approuter reads REBUILD_API_KEY from credstore
@@ -280,8 +285,9 @@ modules:
       # gameboard-auth-api — same gameboard-srv URL + forwardAuthToken:true, used
       # ONLY by the Tutorial.Author-gated /community/khoros/eventRegs* route so
       # the JWT reaches gameboard-srv's requireAuthorScope. Public /community/* +
-      # SPA use gameboard-api (no token). Mirrors .deploy/mta.yaml (live source).
-      - name: gameboard-dest
+      # SPA use gameboard-api (no token). Require name must be UNIQUE in the
+      # module, so this is gameboard-auth-dest. Mirrors .deploy/mta.yaml.
+      - name: gameboard-auth-dest
         group: destinations
         properties:
           name: gameboard-auth-api
