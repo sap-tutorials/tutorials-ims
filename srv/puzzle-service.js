@@ -254,6 +254,22 @@ export default class PuzzleService extends cds.ApplicationService {
         newAttempt = (prog.attemptNumber || 1) + 1;
         await UPDATE(PuzzleProgress, prog.ID).set({ filledGrid: '{}', attemptNumber: newAttempt });
       }
+      // Emit audit event — mirrors TutorialProgressReset in developer-service.js.
+      // Two buses: this.emit reaches PuzzleService.on(...) listeners (unit tests,
+      // in-process consumers); cds.emit reaches cds.on(...) listeners (admin-service
+      // audit handler, registered in the next task, which uses cds.on parity with
+      // the TutorialProgressReset listener).
+      const auditPayload = {
+        user: dbUser.ID,
+        puzzleSlug: slug,
+        attemptNumber: newAttempt,
+        supersededRecordCount: live.length,
+        previousAttemptCompletedAt,
+        tokenSource: req.user?.tokenSource ?? null,
+      };
+      await this.emit('PuzzleProgressReset', auditPayload);
+      await cds.emit('PuzzleProgressReset', auditPayload);
+
       return {
         newAttemptNumber: newAttempt,
         previousAttemptCompletedAt,
