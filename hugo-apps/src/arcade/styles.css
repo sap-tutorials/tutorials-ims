@@ -33,6 +33,9 @@
 .scene > .s-banner,
 .scene > .s-heart,
 .scene > .s-led,
+.scene > .s-header,
+.scene > .s-column,
+.scene > .s-menu,
 .scene > .s-avatar {
   position: absolute;
 }
@@ -57,13 +60,50 @@
 .s-logo    { left: 4%;  top: 3%;  width: 12%; z-index: 5; }
 .s-sap     { right: 4%; top: 4%;  width: 8%;  z-index: 5; }
 
-/* HUD. */
+/* HUD banner — top-center (legacy points banner, canvas y~7%). */
 .s-banner {
-  left: 50%; top: 90%; transform: translateX(-50%);
+  left: 50%; top: 10.5%; transform: translateX(-50%);
   color: #66ff66; font-size: clamp(10px, 2.4cqw, 28px);
   text-shadow: 0 0 6px rgba(102,255,102,.7); white-space: nowrap; z-index: 7;
   opacity: 0; animation: fadeInAnimation .8s ease-in-out forwards;
 }
+
+/* Greeting header — top-center, just under the title logo. */
+.s-header {
+  left: 50%; top: 1.5%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: .1em;
+  color: #66ff66; text-align: center; z-index: 7; max-width: 80%;
+  font-size: clamp(9px, 1.8cqw, 20px); text-shadow: 0 0 6px rgba(102,255,102,.7);
+}
+.s-header a { color: #a6e3ff; text-decoration: underline; }
+
+/* Legacy instructional columns — lower area, left ~4% / ~37% of the canvas
+ * (matching legacy column x=60 / columnStart=500 on the 1347-wide canvas). */
+.s-column {
+  top: 60%; width: 29%; z-index: 7; color: #d8ffd8;
+  font-size: clamp(7px, 1.3cqw, 14px); line-height: 1.35;
+  text-shadow: 0 0 4px rgba(0,0,0,.9);
+}
+.s-howto   { left: 4%; }
+.s-lawyers { left: 37%; }
+.s-column-head {
+  margin: 0 0 .4em; color: #66ff66; font-size: clamp(9px, 1.7cqw, 18px);
+  text-shadow: 0 0 6px rgba(102,255,102,.7); letter-spacing: .04em;
+}
+.s-column-body { margin: 0; }
+.s-column a { color: #a6e3ff; text-decoration: underline; }
+
+/* Menu — top-right, vertical stack of rules links + the sound toggle. */
+.s-menu {
+  right: 3%; top: 4%; z-index: 9;
+  display: flex; flex-direction: column; align-items: flex-end; gap: .35em;
+}
+.s-menu > a {
+  color: #66ff66; text-decoration: none; font-size: clamp(8px, 1.6cqw, 16px);
+  border: 1px solid #66ff66; border-radius: 6px; padding: .2rem .5rem;
+  background: rgba(0,0,0,.5); text-shadow: 0 0 6px rgba(102,255,102,.7);
+}
+.s-menu > a:hover { background: rgba(102,255,102,.15); }
 
 /* The user's avatar, placed on its level cloud. */
 .s-avatar {
@@ -91,12 +131,12 @@
   z-index: 7;
 }
 
-/* Sound toggle button. */
+/* Sound toggle button — flows within the top-right .s-menu stack. */
 .s-sound {
-  position: absolute; right: 4%; bottom: 4%; z-index: 9;
+  z-index: 9;
   display: inline-flex; align-items: center; gap: .4rem;
   background: rgba(0,0,0,.5); color: #66ff66; border: 1px solid #66ff66;
-  border-radius: 6px; padding: .3rem .6rem; cursor: pointer;
+  border-radius: 6px; padding: .2rem .5rem; cursor: pointer;
   font-family: inherit; font-size: clamp(8px, 1.6cqw, 16px);
 }
 .s-sound img { width: 1.2em; height: 1.2em; }
