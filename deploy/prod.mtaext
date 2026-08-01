@@ -2,6 +2,13 @@ _schema-version: 3.3.0
 ID: tutorials-ims-prod
 extends: tutorials-ims
 
+# The approuter's /gameboard/* routes forward to ${gameboard-url}. The base
+# mta.yaml sets an invalid placeholder guarded by a deploy-time check
+# (check-gameboard-url-mtaext.ts); each env MUST override it. PROD points at the
+# prod gameboard-srv (sap-community-gameboard MTA, deployed into this space).
+parameters:
+  gameboard-url: https://tutorial-system-prod-gameboard-srv.cfapps.eu10-005.hana.ondemand.com
+
 modules:
   - name: tutorials-srv
     # No prod-specific `properties:` overrides. CONTENT_API_KEY +
