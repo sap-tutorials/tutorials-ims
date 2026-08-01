@@ -66,9 +66,25 @@ entity Session {
       LINKEDINURL           : String(500);
       COMMUNITYEVENTURL     : String(500);
       CALENDARINVITE        : LargeString;
-      TUTORIALSLUG          : String(255);
-      TUTORIALTITLE         : String(255);
-      TUTORIAL_ID           : String(36);
+      ACTIVITY_ID           : String(36);
+}
+
+@cds.persistence.exists
+entity Activity {
+  key ID                    : String(36);
+      CREATEDAT             : Timestamp;
+      CREATEDBY             : String(255);
+      MODIFIEDAT            : Timestamp;
+      MODIFIEDBY            : String(255);
+      TITLE                 : String(200);
+      TRACK_ID              : String(36);
+      STATUS                : String(5000);
+      WEEK                  : String(5000);
+      POINTS                : Integer;
+      TASK_ID               : String(36);
+      TASKTYPE              : String(20);
+      TASKSLUG              : String(255);
+      TASKTITLE             : String(255);
 }
 
 @cds.persistence.exists
