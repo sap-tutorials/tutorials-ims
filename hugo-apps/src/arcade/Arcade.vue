@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { MountConfig, MyGameboard } from './types'
+import Scene from './Scene.vue'
 const props = defineProps<{ config: MountConfig }>()
 const state = ref<'player' | 'demo'>('demo')
 const board = ref<MyGameboard>({ userId: '', score: 0, level: 0, avatarIndex: props.config.demoAvatar, breakdown: [] })
@@ -16,7 +17,7 @@ onMounted(async () => {
 </script>
 <template>
   <div class="arcade-root">
-    <!-- Scene added in Task 3 -->
+    <Scene :board="board" :config="config" :demo="state === 'demo'" />
     <div v-if="state === 'demo'" class="arcade-cta">
       <a :href="config.joinUrl" class="arcade-cta-btn">Join Devtoberfest to play</a>
     </div>
