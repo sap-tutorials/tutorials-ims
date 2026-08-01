@@ -220,8 +220,14 @@ export default class PuzzleService extends cds.ApplicationService {
 
       const puzzle = await loadPuzzle(slug);
       if (!puzzle) return req.reject(404, 'Puzzle not found');
-      const dbUser = await resolveOrCreateUser(req.user);
-      if (!dbUser) return req.reject(401, 'Unauthenticated');
+
+      // Look up existing user WITHOUT creating one — parity with resetTutorialProgress
+      // (developer-service.js:252-255).  A caller who has never interacted with this
+      // puzzle has nothing to reset; we must not mint a Users row for them.
+      const dbUser = await SELECT.one.from(Users).where({ sapId });
+      if (!dbUser) {
+        return { newAttemptNumber: 1, previousAttemptCompletedAt: null, supersededRecordCount: 0 };
+      }
 
       // Supersede live PUZZLE TaskRecords for this user + puzzle.
       const live = await SELECT.from(TaskRecords).where({
@@ -254,11 +260,9 @@ export default class PuzzleService extends cds.ApplicationService {
         newAttempt = (prog.attemptNumber || 1) + 1;
         await UPDATE(PuzzleProgress, prog.ID).set({ filledGrid: '{}', attemptNumber: newAttempt });
       }
-      // Emit audit event — mirrors TutorialProgressReset in developer-service.js.
-      // Two buses: this.emit reaches PuzzleService.on(...) listeners (unit tests,
-      // in-process consumers); cds.emit reaches cds.on(...) listeners (admin-service
-      // audit handler, registered in the next task, which uses cds.on parity with
-      // the TutorialProgressReset listener).
+      // Emit audit event on the global CDS bus — mirrors TutorialProgressReset in
+      // developer-service.js (cds.emit only; no this.emit).  The admin-service.js
+      // listener uses cds.on parity with the TutorialProgressReset handler.
       const auditPayload = {
         user: dbUser.ID,
         puzzleSlug: slug,
@@ -267,7 +271,6 @@ export default class PuzzleService extends cds.ApplicationService {
         previousAttemptCompletedAt,
         tokenSource: req.user?.tokenSource ?? null,
       };
-      await this.emit('PuzzleProgressReset', auditPayload);
       await cds.emit('PuzzleProgressReset', auditPayload);
 
       return {

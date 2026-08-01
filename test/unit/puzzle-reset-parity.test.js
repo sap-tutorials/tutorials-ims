@@ -202,11 +202,10 @@ describe('Puzzle Reset → Re-completion Attempt Number', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Audit Event
 //
-// resetPuzzleProgress must emit a PuzzleProgressReset event on the PuzzleService
-// (parity with TutorialProgressReset in resetTutorialProgress).
-//
-// Pre-fix failure:
-//   "emits PuzzleProgressReset" — FAILS (handler never called; captured stays null)
+// resetPuzzleProgress must emit a PuzzleProgressReset event on the GLOBAL CDS
+// bus (cds.emit — parity with TutorialProgressReset in resetTutorialProgress).
+// The test listens via cds.once so it validates the same bus the admin-service.js
+// audit handler uses, and auto-removes itself after one fire (no cross-test leak).
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Puzzle Reset → Audit Event', () => {
   beforeEach(async () => {
@@ -217,26 +216,29 @@ describe('Puzzle Reset → Audit Event', () => {
     const { PuzzleService } = cds.services;
     const SAP_ID = 'sap-audit-ev';
 
-    let captured = null;
-    // Register a CAP service-level handler for the to-be-emitted event.
-    // CAP allows registering handlers for any event name regardless of whether
-    // it is declared in the CDS model; the handler will fire when the service
-    // calls this.emit('PuzzleProgressReset', payload).
-    const handler = (msg) => {
-      captured = msg?.data ?? msg;
-    };
-    PuzzleService.on('PuzzleProgressReset', handler);
+    // Ensure the user row exists before resetting (saveProgress uses resolveOrCreateUser).
+    // Without this, resetPuzzleProgress returns early (no-op for an unseen user) and
+    // cds.emit is never reached — the Promise below would hang until timeout.
+    await saveProgress(SAP_ID);
 
-    setUser(SAP_ID);
-    await PuzzleService.send({
-      event: 'resetPuzzleProgress',
-      data: { slug: PUZZLE_SLUG },
+    let captured = null;
+    // Register on the GLOBAL CDS bus — the same bus the admin-service.js audit
+    // listener uses.  cds.once gives clean single-capture semantics and
+    // auto-removes itself after firing, so there is no cross-test contamination.
+    await new Promise((resolve) => {
+      cds.once('PuzzleProgressReset', (msg) => {
+        captured = msg?.data ?? msg;
+        resolve();
+      });
+
+      setUser(SAP_ID);
+      PuzzleService.send({
+        event: 'resetPuzzleProgress',
+        data: { slug: PUZZLE_SLUG },
+      });
     });
 
-    // Allow any async event propagation to settle before asserting.
-    await new Promise(r => setImmediate(r));
-
-    // FAILS before fix: resetPuzzleProgress never calls this.emit('PuzzleProgressReset', ...)
+    // Promise resolves only after the event fires, so captured is always set here.
     expect(captured).toBeTruthy();
     expect(captured).toHaveProperty('puzzleSlug', PUZZLE_SLUG);
     expect(captured).toHaveProperty('attemptNumber');
