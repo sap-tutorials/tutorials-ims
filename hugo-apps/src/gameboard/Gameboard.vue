@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import type { MountConfig, LeaderboardRow, GameboardConfig, MyGameboard } from './types'
 import { useGameboardStream } from './useGameboardStream'
 import Leaderboard from './Leaderboard.vue'
+import CabinetFrame from './CabinetFrame.vue'
 
 const props = defineProps<{ config: MountConfig }>()
 
@@ -66,10 +67,8 @@ onUnmounted(disconnect)
   <div class="gb-root">
     <h1 class="gb-title">Devtoberfest Gameboard</h1>
 
-    <!-- Cabinet region (arcade personality) — filled in Task 5 -->
-    <section class="cabinet" aria-label="Arcade cabinet">
-      <!-- CabinetFrame + level/avatar art mounts here in Task 5 -->
-    </section>
+    <!-- Cabinet region (arcade personality, confined) -->
+    <CabinetFrame v-if="board" :board="board" :img-base="config.imgBase" />
 
     <!-- Real accessible leaderboard -->
     <section class="gb-leaderboard-region" aria-label="Leaderboard">

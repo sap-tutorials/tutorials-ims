@@ -1,3 +1,49 @@
 /* Gameboard island styles — arcade cabinet confined to .cabinet; leaderboard/progress
  * are Horizon/Fundamental semantic components. Full styling in Plan C Task 5. */
 .gb-root { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+
+/* ---- Leaderboard (Horizon/Fundamental semantic) ---- */
+.gb-title { font-family: var(--sapFontHeaderFamily, var(--sapFontFamily)); color: var(--sapTextColor, #1d2d3e); }
+.gb-lb-table { width: 100%; border-collapse: collapse; }
+.gb-lb-caption { text-align: left; font-weight: 600; padding: .5rem 0; color: var(--sapTextColor, #1d2d3e); }
+.gb-score-track { display: inline-block; width: 120px; height: 8px; margin-left: .5rem;
+  background: var(--gb-track-bg, rgba(0,0,0,.08)); border-radius: 4px; vertical-align: middle; }
+.gb-score-bar { display: block; height: 100%; border-radius: 4px;
+  background: var(--gb-accent, #0070f2); } /* swap for dataviz palette var */
+.gb-lb-empty { color: var(--sapContent_LabelColor, #556b82); }
+
+/* ---- Cabinet region (arcade personality, contained) ---- */
+.cabinet { margin: 1.5rem 0; border-radius: 14px; padding: 4px;
+  background: linear-gradient(165deg, #5D36FF 0%, #7B42F0 45%, #A100C2 100%);
+  box-shadow: 0 4px 16px rgba(0,0,0,.18); isolation: isolate; }
+.cabinet-screen { position: relative; border-radius: 10px; padding: 1.25rem 1.5rem;
+  background: #0b1020; color: #e8f0ff; overflow: hidden; }
+/* CRT scanline overlay (from styles.css:36-50 precedent) */
+.cabinet-screen::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background-image: repeating-linear-gradient(to bottom,
+    rgba(255,255,255,.05) 0, rgba(255,255,255,.05) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode: overlay; }
+/* Drifting glow (from styles.css:53-71 precedent) */
+.cabinet-screen::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse at 20% 120%, rgba(128,0,220,.5), transparent 55%),
+              radial-gradient(ellipse at 85% -10%, rgba(241,172,255,.3), transparent 55%);
+  filter: blur(28px); opacity: .85; animation: gbGlow 14s ease-in-out infinite alternate; }
+.cabinet-screen > * { position: relative; z-index: 1; }
+@keyframes gbGlow { from { transform: translate3d(-3%,0,0) scale(1.05); } to { transform: translate3d(3%,-2%,0) scale(1.12); } }
+/* Pixel font for cabinet headings only (system pixel stack; no external font dependency) */
+.cabinet-title, .cabinet-sub { font-family: "Press Start 2P", "Courier New", monospace;
+  letter-spacing: .06em; text-transform: uppercase; }
+.cabinet-title { font-size: 1.1rem; margin: 0 0 .75rem; text-shadow: 0 0 8px rgba(129,140,248,.7); }
+.cabinet-sub { font-size: .7rem; margin: 1rem 0 .5rem; opacity: .9; }
+.cabinet-avatar { image-rendering: pixelated; border: 2px solid rgba(255,255,255,.25); border-radius: 8px; }
+.cabinet-meter { display: inline-block; width: 160px; height: 10px; margin-left: .5rem; vertical-align: middle;
+  background: rgba(255,255,255,.15); border-radius: 5px; overflow: hidden; }
+.cabinet-meter-fill { display: block; height: 100%; background: var(--gb-accent, #7858ff); border-radius: 5px;
+  transition: width .4s ease; }
+.cabinet-meters { list-style: none; padding: 0; margin: 0; display: grid; gap: .4rem; }
+
+/* ---- Reduced motion: kill ALL cabinet animation/transition ---- */
+@media (prefers-reduced-motion: reduce) {
+  .cabinet-screen::after { animation: none; }
+  .cabinet-meter-fill { transition: none; }
+}
