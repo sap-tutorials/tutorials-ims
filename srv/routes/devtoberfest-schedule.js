@@ -31,6 +31,7 @@ async function scheduleHandler(req, res) {
     }
 
     const editionId = await resolveEditionId(ext, req.query.edition);
+    if (!editionId) return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
 
     let tracks = [];
     let editions = [];
@@ -38,9 +39,7 @@ async function scheduleHandler(req, res) {
     let activities = [];
     try {
       editions = await SELECT.from(ext.Edition);
-      tracks = editionId
-        ? await SELECT.from(ext.Track).where({ EDITION_ID: editionId })
-        : await SELECT.from(ext.Track);
+      tracks = await SELECT.from(ext.Track).where({ EDITION_ID: editionId });
       const trackIds = tracks.map((t) => t.ID);
       sessions = trackIds.length ? await SELECT.from(ext.Session).where({ TRACK_ID: { in: trackIds } }) : [];
       activities = trackIds.length ? await SELECT.from(ext.Activity).where({ TRACK_ID: { in: trackIds } }) : [];
@@ -60,7 +59,7 @@ async function myCompletionsHandler(req, res) {
   try {
     await cds.connect.to('db');
     const user = resolveUser(req, cds);
-    const sapId = user ? resolveUserSapId(user) : null;
+    const sapId = resolveUserSapId(user);
     if (!sapId) return res.status(200).json({ authenticated: false });
 
     // Use the canonical helper — it resolves legacyId→slug internally and
@@ -83,7 +82,7 @@ async function myCompletionsHandler(req, res) {
           activities = await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG');
         }
       }
-    } catch { /* facade unavailable in unit SQLite — earnedPoints stays 0 */ }
+    } catch (e) { LOG.warn('myCompletions facade read failed:', e?.message); }
 
     const { earnedPoints, maxPoints, completedActivityIds } = completedActivityPoints(activities, completedSlugSet);
 
