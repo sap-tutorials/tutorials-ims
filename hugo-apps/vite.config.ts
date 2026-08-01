@@ -276,6 +276,7 @@ export default defineConfig({
         puzzle: resolve(__dirname, 'src/puzzle/main.ts'),
         'devtoberfest-schedule': resolve(__dirname, 'src/devtoberfest-schedule/main.ts'),
         'devtoberfest-sessions-grid': resolve(__dirname, 'src/devtoberfest-sessions-grid/main.ts'),
+        'devtoberfest-sessions-calendar': resolve(__dirname, 'src/devtoberfest-sessions-calendar/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
