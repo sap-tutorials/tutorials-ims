@@ -23,7 +23,7 @@ defineProps<{
     <template v-else>
       <div class="points-banner__signin">
         <span class="points-banner__signin-text">Sign in to track your progress and earn points.</span>
-        <a href="/auth/login" class="points-banner__signin-link">Sign in</a>
+        <a href="/login" class="points-banner__signin-link">Sign in</a>
       </div>
     </template>
   </div>

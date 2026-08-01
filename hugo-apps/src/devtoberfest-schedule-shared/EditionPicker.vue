@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Edition } from './types';
 
+// v-model default (modelValue/update:modelValue); parents bind v-model="editionId"
 const props = defineProps<{
   editions: Edition[];
   modelValue: string | null;
