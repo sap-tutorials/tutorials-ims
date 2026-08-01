@@ -152,6 +152,25 @@
       "httpMethods": ["GET", "HEAD", "OPTIONS"]
     },
     {
+      "source": "^/community/khoros/eventRegs/(.*)$",
+      "target": "/community/khoros/eventRegs/$1",
+      "destination": "gameboard-auth-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.Author"
+    },
+    {
+      "source": "^/community/(.*)$",
+      "target": "/community/$1",
+      "destination": "gameboard-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/community-profile-ui/(.*)$",
+      "target": "/community-profile-ui/$1",
+      "destination": "gameboard-api",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/admin/exports/(.*)$",
       "target": "/admin/exports/$1",
       "destination": "srv-api",
