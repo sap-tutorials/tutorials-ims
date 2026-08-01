@@ -1,0 +1,167 @@
+/* Devtoberfest Arcade island styles.
+ * Responsive scale-to-fit of the legacy 1347x1612 canvas; absolute-positioned
+ * sprite layers; ported keyframes from srv/images/devtoberfest/css/devtoberfestSVG.css.
+ * All motion gated behind prefers-reduced-motion: reduce. */
+
+@font-face {
+  font-family: 'Joystix Monospace';
+  src: url('/images/devtoberfest/arcade/fonts/joystix_monospace.ttf') format('truetype');
+  font-display: swap;
+}
+
+.arcade-root {
+  position: relative;
+  width: 100%;
+  max-width: 1347px;
+  margin: 0 auto;
+  container-type: inline-size;
+}
+
+/* The scene keeps the legacy aspect ratio and scales to the container width. */
+.scene {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1347 / 1612;
+  overflow: hidden;
+  font-family: 'Joystix Monospace', 'Courier New', monospace;
+  background: #000;
+}
+
+/* All sprite layers are absolutely positioned as a % of the canvas. */
+.scene > img,
+.scene > .s-cloud,
+.scene > .s-banner,
+.scene > .s-heart,
+.scene > .s-led,
+.scene > .s-avatar {
+  position: absolute;
+}
+
+.s-frame { inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 0; }
+.s-bezel { left: 0; bottom: 0; width: 100%; z-index: 6; }
+.s-title { left: 12%; top: 4%; width: 76%; z-index: 2; opacity: 0; animation: fadeInAnimation .8s ease-in-out forwards; }
+.s-sky   { left: 10%; top: 16%; width: 80%; z-index: 1; }
+
+/* 4 level clouds/waypoints (approx legacy positions, expressed as %). */
+.s-cloud { width: 16%; height: 8%; z-index: 2; }
+.cloud-0 { left: 12%; top: 74%; }
+.cloud-1 { left: 30%; top: 60%; }
+.cloud-2 { left: 50%; top: 46%; }
+.cloud-3 { left: 68%; top: 32%; }
+.cloud-4 { left: 74%; top: 18%; }
+
+/* Ambient sprites. */
+.s-lobster { left: 6%;  top: 40%; width: 14%; z-index: 3; }
+.s-alien   { left: 78%; top: 52%; width: 12%; z-index: 3; }
+.s-runner  { left: 42%; top: 78%; width: 12%; z-index: 4; }
+.s-logo    { left: 4%;  top: 3%;  width: 12%; z-index: 5; }
+.s-sap     { right: 4%; top: 4%;  width: 8%;  z-index: 5; }
+
+/* HUD. */
+.s-banner {
+  left: 50%; top: 90%; transform: translateX(-50%);
+  color: #66ff66; font-size: clamp(10px, 2.4cqw, 28px);
+  text-shadow: 0 0 6px rgba(102,255,102,.7); white-space: nowrap; z-index: 7;
+  opacity: 0; animation: fadeInAnimation .8s ease-in-out forwards;
+}
+
+/* The user's avatar, placed on its level cloud. */
+.s-avatar {
+  width: 10%; z-index: 8; transform-origin: center bottom;
+  image-rendering: pixelated;
+}
+.s-avatar.cloud-0 { left: 14%; top: 66%; }
+.s-avatar.cloud-1 { left: 32%; top: 52%; }
+.s-avatar.cloud-2 { left: 52%; top: 38%; }
+.s-avatar.cloud-3 { left: 70%; top: 24%; }
+.s-avatar.cloud-4 { left: 76%; top: 10%; }
+
+/* Hearts (level count) — pulse via `beat`. */
+.s-heart { top: 88%; color: red; font-size: clamp(12px, 2cqw, 24px); z-index: 8; }
+.s-heart:nth-of-type(1) { left: 40%; }
+.s-heart:nth-of-type(2) { left: 46%; }
+.s-heart:nth-of-type(3) { left: 52%; }
+.s-heart:nth-of-type(4) { left: 58%; }
+
+/* Blinking status LED. */
+.s-led {
+  left: 90%; top: 92%; width: 20px; height: 4px; border-radius: 50%;
+  background-color: #abff00;
+  box-shadow: rgba(0,0,0,.2) 0 -1px 7px 1px, inset #304701 0 -1px 9px, #89ff00 0 2px 12px;
+  z-index: 7;
+}
+
+/* Sound toggle button. */
+.s-sound {
+  position: absolute; right: 4%; bottom: 4%; z-index: 9;
+  display: inline-flex; align-items: center; gap: .4rem;
+  background: rgba(0,0,0,.5); color: #66ff66; border: 1px solid #66ff66;
+  border-radius: 6px; padding: .3rem .6rem; cursor: pointer;
+  font-family: inherit; font-size: clamp(8px, 1.6cqw, 16px);
+}
+.s-sound img { width: 1.2em; height: 1.2em; }
+
+/* Register CTA overlay (anonymous/demo). */
+.arcade-cta {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  z-index: 20; pointer-events: none;
+}
+.arcade-cta-btn {
+  pointer-events: auto;
+  background: #a100c2; color: #fff; text-decoration: none;
+  font-family: 'Joystix Monospace', 'Courier New', monospace;
+  padding: .9rem 1.4rem; border-radius: 10px; font-size: clamp(12px, 2.4cqw, 24px);
+  box-shadow: 0 6px 24px rgba(0,0,0,.4); border: 2px solid #fff;
+}
+
+/* ---- Ported legacy keyframes (verbatim) ---- */
+@keyframes fadeInAnimation { from { opacity: 0 } to { opacity: 1 } }
+
+@keyframes bounce-7 {
+  0%   { transform: scale(1,1)    translateY(0);     opacity: 0 }
+  10%  { transform: scale(1.1,.9) translateY(0);     opacity: 1 }
+  30%  { transform: scale(.9,1.1) translateY(-100px) }
+  50%  { transform: scale(1.05,.95) translateY(0) }
+  57%  { transform: scale(1,1)    translateY(-7px) }
+  64%  { transform: scale(1,1)    translateY(0) }
+  100% { transform: scale(1,1)    translateY(0);     opacity: 1 }
+}
+
+@keyframes beat {
+  0%   { font-size: 2em; color: #000 }
+  50%  { font-size: 4em; color: red }
+  100% { font-size: 2em; color: #fff }
+}
+
+@keyframes blinkGreen {
+  from { background-color: #89ff00 }
+  50%  { background-color: #304701 }
+  to   { background-color: #abff00 }
+}
+
+/* Transform-based drifts (replacing legacy inline SVG <animate>). */
+@keyframes driftX { from { transform: translateX(-8%) } to { transform: translateX(8%) } }
+@keyframes driftY { from { transform: translateY(-6%) } to { transform: translateY(6%) } }
+
+/* Avatar bounce — iteration count = level (avatar-1 also serves level 0). */
+.s-avatar { opacity: 0; animation-timing-function: cubic-bezier(0.280,0.840,0.420,1); }
+.avatar-1 { animation: bounce-7 1s 0s 1 cubic-bezier(0.280,0.840,0.420,1) forwards; }
+.avatar-2 { animation: bounce-7 1s 0s 2 cubic-bezier(0.280,0.840,0.420,1) forwards; }
+.avatar-3 { animation: bounce-7 1s 0s 3 cubic-bezier(0.280,0.840,0.420,1) forwards; }
+.avatar-4 { animation: bounce-7 1s 0s infinite cubic-bezier(0.280,0.840,0.420,1); }
+
+.heart { animation: beat 1s 0s infinite; }
+.led-green { animation: blinkGreen .5s infinite; }
+.drift-x { animation: driftX 6s ease-in-out infinite alternate; }
+.drift-y { animation: driftY 5s ease-in-out infinite alternate; }
+
+/* ---- Accessibility: disable ALL animation under reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .arcade-root *,
+  .s-title, .s-banner,
+  .s-avatar, .s-lobster, .s-alien, .s-heart, .s-led, .drift-x, .drift-y,
+  .avatar-1, .avatar-2, .avatar-3, .avatar-4, .heart, .led-green {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
