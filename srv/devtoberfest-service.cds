@@ -8,6 +8,7 @@ service DevtoberfestService @(path: '/devtoberfest') {
   @readonly entity Track as projection on ext.Track;
   @readonly entity Trackowner as projection on ext.Trackowner;
   @readonly entity Session as projection on ext.Session;
+  @readonly entity Activity as projection on ext.Activity;
   @readonly entity Speaker as projection on ext.Speaker;
   @readonly entity Sessionspeaker as projection on ext.Sessionspeaker;
   @readonly entity Speakerconsent as projection on ext.Speakerconsent;
