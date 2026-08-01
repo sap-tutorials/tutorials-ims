@@ -5,7 +5,9 @@ VIEW "GAMEBOARD_PARTICIPANT_V1" AS
          u."KHOROSID"                             AS "COMMUNITY_ID",
          u."KHOROSLOGIN"                          AS "COMMUNITY_LOGIN",
          r."JOINEDAT"                             AS "JOINED_AT",
-         r."EVENT_ID"                             AS "EVENT_ID"
+         r."EVENT_ID"                             AS "EVENT_ID",
+         e."STARTDATE"                            AS "EVENT_START",
+         e."ENDDATE"                              AS "EVENT_END"
   FROM "COM_SAP_DEVELOPERS_IMS_EVENTREGISTRATIONS" r
   JOIN "COM_SAP_DEVELOPERS_IMS_USERS"  u ON u."ID" = r."USER_ID"
   JOIN "COM_SAP_DEVELOPERS_IMS_EVENTS" e ON e."ID" = r."EVENT_ID"
