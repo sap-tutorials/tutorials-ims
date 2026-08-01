@@ -1,0 +1,5 @@
+{{ define "main" }}
+<main id="devtoberfest-sessions-grid-mount"></main>
+<noscript>The Devtoberfest sessions grid requires JavaScript.</noscript>
+<script type="module" src="{{ "/js/devtoberfest-sessions-grid.js" | relURL }}?v={{ now.Unix }}"></script>
+{{ end }}
