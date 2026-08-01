@@ -102,7 +102,7 @@ describe.skipIf(!hasBaseUrl())('e2e: devtoberfest schedule pages', () => {
         // Fallback: in-page fetch (same-origin — no CORS issue against approuter).
         ({ status, body } = await page.evaluate(async () => {
           const r = await fetch('/api/devtoberfest/schedule');
-          return { status: r.status, body: r.ok ? r.json() : null };
+          return { status: r.status, body: r.ok ? await r.json() : null };
         }));
       }
 
