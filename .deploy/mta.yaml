@@ -273,6 +273,20 @@ modules:
         properties:
           name: gameboard-api
           url: ~{gameboard-url}
+      # gameboard-auth-api — SAME gameboard-srv URL, but forwardAuthToken:true.
+      # Used ONLY by the authenticated /community/khoros/eventRegs* admin route
+      # (Tutorial.Author-gated) so the shared-XSUAA JWT reaches gameboard-srv's
+      # requireAuthorScope check. Kept separate from gameboard-api (public,
+      # no-token) so the public /community/* + SPA routes never forward a token
+      # out-of-MTA (csrf-with-token-forwarding guard — same public/auth split
+      # Plan A used for /gameboard). Reuses the self-provided gameboard-dest
+      # property set for mbt strict validation.
+      - name: gameboard-dest
+        group: destinations
+        properties:
+          name: gameboard-auth-api
+          url: ~{gameboard-url}
+          forwardAuthToken: true
       # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
       # SAP BTP convention — putting it on the resource block via path: is
       # silently ignored. Range 1..4, CPU 70% / 30% thresholds. Memory metric
