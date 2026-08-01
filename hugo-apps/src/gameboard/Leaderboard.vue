@@ -7,6 +7,19 @@ const maxScore = computed(() => Math.max(1, ...props.rows.map(r => r.score)))
 function barWidth(score: number): string {
   return `${Math.round((score / maxScore.value) * 100)}%`
 }
+
+// communityUrl derives from user-controlled Users.khorosId/khorosLogin. Vue does NOT
+// sanitize :href, so a `javascript:`/`data:` URI would execute on click. Only render
+// the anchor for an http(s) scheme; otherwise fall back to a plain span.
+function safeHref(u: string | null): string | null {
+  if (!u) return null
+  try {
+    const parsed = new URL(u, window.location.origin)
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? u : null
+  } catch {
+    return null
+  }
+}
 </script>
 
 <template>
@@ -25,7 +38,7 @@ function barWidth(score: number): string {
         <tr v-for="r in rows" :key="r.rank">
           <td class="gb-lb-rank">{{ r.rank }}</td>
           <td>
-            <a v-if="r.communityUrl" :href="r.communityUrl" rel="noopener noreferrer" target="_blank">{{ r.displayName }}</a>
+            <a v-if="safeHref(r.communityUrl)" :href="safeHref(r.communityUrl)!" rel="noopener noreferrer" target="_blank">{{ r.displayName }}</a>
             <span v-else>{{ r.displayName }}</span>
           </td>
           <td>

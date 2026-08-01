@@ -27,4 +27,17 @@ describe('Leaderboard.vue', () => {
     const w = mount(Leaderboard, { props: { rows: [] } })
     expect(w.text().toLowerCase()).toContain('no scores yet')
   })
+
+  it('refuses a javascript: URI (renders a plain span, no anchor) but keeps a normal https link', () => {
+    const rows: LeaderboardRow[] = [
+      { rank: 1, displayName: 'Evil', score: 10, level: 1, communityUrl: 'javascript:alert(1)' },
+      { rank: 2, displayName: 'Good', score: 5, level: 1, communityUrl: 'https://community.sap.com/u/2' },
+    ]
+    const w = mount(Leaderboard, { props: { rows } })
+    const evilCell = w.findAll('tbody tr')[0]
+    expect(evilCell.find('a').exists()).toBe(false)
+    expect(evilCell.text()).toContain('Evil')
+    const goodCell = w.findAll('tbody tr')[1]
+    expect(goodCell.find('a').attributes('href')).toBe('https://community.sap.com/u/2')
+  })
 })

@@ -73,7 +73,7 @@ function earnedPoints(week: string, t: WeekTrackTotal): number {
               <!-- Label by resolved track TITLE (falls back to trackId only if unknown). -->
               <span class="cabinet-meter-label">{{ trackTitle(t.trackId) }}</span>
               <span class="cabinet-meter" role="progressbar"
-                    :aria-valuenow="earnedPoints(wk.week, t)" :aria-valuemin="0" :aria-valuemax="t.totalPoints"
+                    :aria-valuenow="earnedPoints(wk.week, t)" :aria-valuemin="0" :aria-valuemax="Math.max(1, t.totalPoints)"
                     :aria-label="`Week ${wk.week}, ${trackTitle(t.trackId)}: ${earnedPoints(wk.week, t)} of ${t.totalPoints} points`">
                 <span class="cabinet-meter-fill" :style="{ width: pct(wk.week, t) + '%' }"></span>
               </span>
