@@ -239,6 +239,7 @@ export default defineConfig({
         devtoberfest: resolve(__dirname, 'src/devtoberfest/main.ts'),
         gameboard: resolve(__dirname, 'src/gameboard/main.ts'),
         arcade: resolve(__dirname, 'src/arcade/main.ts'),
+        selfie: resolve(__dirname, 'src/selfie/main.ts'),
         'event-display': resolve(__dirname, 'src/event-display/main.ts'),
         'nav-dropdown': resolve(__dirname, 'src/nav-dropdown/main.ts'),
         'scanner-vue': resolve(__dirname, 'src/scanner-vue/main.ts'),
