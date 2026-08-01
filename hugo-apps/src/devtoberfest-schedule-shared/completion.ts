@@ -1,6 +1,14 @@
 import { youtubeId } from './youtube';
 import type { Feed, MyCompletions, ScheduleRow } from './types';
 
+export function safeHref(u?: string | null): string {
+  if (!u) return '';
+  try {
+    const p = new URL(u, window.location.origin);
+    return (p.protocol === 'https:' || p.protocol === 'http:') ? u : '';
+  } catch { return ''; }
+}
+
 export function youtubeThumb(url: string): string | null {
   const id = youtubeId(url);
   return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;

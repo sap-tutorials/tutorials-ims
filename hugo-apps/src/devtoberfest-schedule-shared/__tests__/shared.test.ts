@@ -1,6 +1,7 @@
+// @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
 import { youtubeId } from '../youtube';
-import { youtubeThumb, mergeCompletion } from '../completion';
+import { youtubeThumb, mergeCompletion, safeHref } from '../completion';
 
 describe('youtube helpers', () => {
   it('extracts id from youtu.be, watch, embed', () => {
@@ -41,5 +42,20 @@ describe('mergeCompletion', () => {
     const out = mergeCompletion(feed, { authenticated: false } as any);
     expect(out.rows.every((r) => !r.complete)).toBe(true);
     expect(out.earnedPoints).toBe(0);
+  });
+});
+
+describe('safeHref', () => {
+  it('returns https url unchanged', () => {
+    expect(safeHref('https://youtu.be/x')).toBe('https://youtu.be/x');
+  });
+  it('blocks javascript: scheme', () => {
+    expect(safeHref('javascript:alert(1)')).toBe('');
+  });
+  it('returns empty string for empty input', () => {
+    expect(safeHref('')).toBe('');
+  });
+  it('returns empty string for null', () => {
+    expect(safeHref(null)).toBe('');
   });
 });

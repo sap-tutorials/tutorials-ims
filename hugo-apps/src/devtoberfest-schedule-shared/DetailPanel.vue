@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ScheduleRow } from './types';
-import { youtubeThumb } from './completion';
+import { youtubeThumb, safeHref } from './completion';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -74,14 +74,14 @@ const isActivity = computed(() => props.row?.kind === 'activity');
         <div class="detail-panel__links">
           <a
             v-if="(row as any).youtubeUrl"
-            :href="(row as any).youtubeUrl"
+            :href="safeHref((row as any).youtubeUrl)"
             target="_blank"
             rel="noopener noreferrer"
             class="detail-panel__link detail-panel__link--youtube"
           >Watch on YouTube</a>
           <a
             v-if="(row as any).communityEventUrl"
-            :href="(row as any).communityEventUrl"
+            :href="safeHref((row as any).communityEventUrl)"
             target="_blank"
             rel="noopener noreferrer"
             class="detail-panel__link"

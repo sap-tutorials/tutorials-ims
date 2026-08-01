@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
-import { mergeCompletion } from '../devtoberfest-schedule-shared/completion';
+import { mergeCompletion, safeHref } from '../devtoberfest-schedule-shared/completion';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
@@ -15,7 +15,6 @@ const rows = ref<ScheduleRow[]>([]);
 const earnedPoints = ref(0);
 const maxPoints = ref(0);
 const isAuthenticated = ref(false);
-const completedActivityIds = ref<Set<string>>(new Set());
 const selectedRow = ref<ScheduleRow | null>(null);
 
 // Exposed for tests
@@ -100,7 +99,6 @@ async function loadData(edition?: string) {
     rows.value = merged.rows;
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
-    completedActivityIds.value = merged.completedActivityIds;
   } catch (e: any) {
     error.value = e?.message ?? 'Failed to load schedule.';
   } finally {
@@ -245,7 +243,7 @@ defineExpose({ filters });
               <td class="sched-links-cell">
                 <a
                   v-if="(row as any).youtubeUrl"
-                  :href="(row as any).youtubeUrl"
+                  :href="safeHref((row as any).youtubeUrl)"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="sched-link sched-link--yt"
@@ -254,7 +252,7 @@ defineExpose({ filters });
                 >▶</a>
                 <a
                   v-if="(row as any).communityEventUrl"
-                  :href="(row as any).communityEventUrl"
+                  :href="safeHref((row as any).communityEventUrl)"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="sched-link"
