@@ -43,6 +43,7 @@ hugo/static-qa/
 !hugo/static/img/knowledge-graph/surfaces/*.png
 !test/unit/advocates/fixtures/*.png
 !hugo/static/images/devtoberfest/avatars/*.png
+!hugo/static/images/devtoberfest/selfie/thumbnails/*.png
 hugo/static/js/*
 !hugo/static/js/joule.js
 !hugo/static/js/joule-render.js
