@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { MountConfig } from './types'
 import FramePicker from './FramePicker.vue'
 import Uploader from './Uploader.vue'
+import Editor from './Editor.vue'
 defineProps<{ config: MountConfig }>()
 const selectedFrame = ref<string | null>(null)
 const composite = ref<string | null>(null)
@@ -16,11 +17,16 @@ function onResult(dataUrl: string) {
 function onError(message: string) {
   errorMsg.value = message
 }
+function restart() {
+  composite.value = null
+  errorMsg.value = null
+}
 </script>
 <template>
   <div class="selfie-root">
     <p class="selfie-note">Your photo is uploaded to build the image and is <strong>not stored</strong>.</p>
 
+    <!-- Pick + upload (collapses once a composite comes back, as legacy did on image load) -->
     <template v-if="!composite">
       <FramePicker :frames="config.frames" :img-base="config.imgBase" @select="selectedFrame = $event" />
       <Uploader :api-upload="config.apiUpload" :selected-frame="selectedFrame" @result="onResult" @error="onError" />
@@ -28,7 +34,7 @@ function onError(message: string) {
 
     <p v-if="errorMsg" class="selfie-error" role="alert">{{ errorMsg }}</p>
 
-    <!-- Editor (crop/rotate/download) wired in Task 4; placeholder preview for now -->
-    <img v-if="composite" :src="composite" alt="Your selfie composite" class="selfie-composite-preview" />
+    <!-- Crop / rotate / download -->
+    <Editor v-if="composite" :data-url="composite" @restart="restart" />
   </div>
 </template>
