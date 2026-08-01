@@ -3,7 +3,8 @@
     "name": "gameboard_reader#",
     "object_privileges": [
       { "name": "GAMEBOARD_PARTICIPANT_V1", "type": "VIEW", "privileges_with_grant_option": [ "SELECT" ] },
-      { "name": "GAMEBOARD_COMPLETION_V1",  "type": "VIEW", "privileges_with_grant_option": [ "SELECT" ] }
+      { "name": "GAMEBOARD_COMPLETION_V1",  "type": "VIEW", "privileges_with_grant_option": [ "SELECT" ] },
+      { "name": "GAMEBOARD_ACTIVE_EVENT_V1", "type": "VIEW", "privileges_with_grant_option": [ "SELECT" ] }
     ]
   }
 }

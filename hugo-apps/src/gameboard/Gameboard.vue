@@ -10,6 +10,10 @@ const props = defineProps<{ config: MountConfig }>()
 const rows = ref<LeaderboardRow[]>([])
 const board = ref<GameboardConfig | null>(null)
 const state = ref<'loading' | 'ready' | 'error'>('loading')
+// Whether the caller is signed in. getMyGameboard is auth-gated: a 401 means
+// anonymous ('log in'); a 2xx (any status) means authenticated (then the
+// message keys off personalized.status — join vs progress).
+const authState = ref<'unknown' | 'anonymous' | 'authenticated'>('unknown')
 const { connect, disconnect } = useGameboardStream()
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -31,13 +35,16 @@ async function loadBoard(): Promise<void> {
 }
 
 async function loadMine(): Promise<void> {
-  // Personalized arm is a SEPARATE authenticated endpoint. Anonymous callers get
-  // 401/403 — swallow it (public board stands, cabinet shows a sign-in invite).
+  // Personalized arm is a SEPARATE authenticated endpoint. A 401/403 → anonymous
+  // (cabinet shows "log in"); a 2xx → authenticated (cabinet keys off the
+  // returned status: 'joined' → progress, 'not_joined' → "Join Devtoberfest").
   try {
     const mine = await fetchJson<MyGameboard>(`${props.config.apiMyGameboard}()`)
+    authState.value = 'authenticated'
     if (board.value) board.value = { ...board.value, personalized: mine }
   } catch (e) {
-    // 401/403 (anonymous) or a soft failure — leave personalized null.
+    // 401/403 (anonymous) or a soft failure — treat as anonymous, personalized null.
+    authState.value = 'anonymous'
     console.debug('[gameboard] getMyGameboard unavailable (likely anonymous)', e)
   }
 }
@@ -68,7 +75,7 @@ onUnmounted(disconnect)
     <h1 class="gb-title">Devtoberfest Gameboard</h1>
 
     <!-- Cabinet region (arcade personality, confined) -->
-    <CabinetFrame v-if="board" :board="board" :img-base="config.imgBase" />
+    <CabinetFrame v-if="board" :board="board" :img-base="config.imgBase" :auth-state="authState" join-url="/devtoberfest/#join" />
 
     <!-- Real accessible leaderboard -->
     <section class="gb-leaderboard-region" aria-label="Leaderboard">
