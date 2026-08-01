@@ -32,6 +32,7 @@ import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-cata
 import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
+import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
 import * as alertsPublic from './routes/alerts-public.js';
 import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
@@ -370,6 +371,7 @@ cds.on('bootstrap', (app) => {
   // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   advocatesPublic.register(app);
   devtoberfestPublic.register(app);
+  devtoberfestSchedule.register(app);
   devtoberfestAuth.register(app);
 
   // /api/alerts (anonymous) + /api/alerts/me (authenticated).

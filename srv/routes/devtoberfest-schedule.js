@@ -1,0 +1,110 @@
+// Public + authed read endpoints for the dynamic Devtoberfest schedule pages.
+//   GET /api/devtoberfest/schedule?edition=<id>   (anonymous) -> feed
+//   GET /api/devtoberfest/my-completions?edition=<id> (authed) -> completions+points
+// Reads the cross-container planner facades (external.devtoberfest.*). Fails
+// soft (503 / empty) when the facades are unavailable (e.g. unit SQLite).
+import cds from '@sap/cds';
+import { assembleFeed, completedActivityPoints, normalizeSlugSet } from '../lib/devtoberfest-feed.js';
+import { resolveUser } from '../lib/resolve-user.js';
+import { resolveUserSapId } from '../lib/resolve-db-user.js';
+import { getMyCompletedTutorials } from '../lib/user-progress.js';
+
+const LOG = cds.log('devtoberfest');
+
+async function resolveEditionId(ext, requested) {
+  if (requested) return requested;
+  try {
+    const cur = await SELECT.one.from(ext.Edition).columns('ID').where({ ISCURRENT: true });
+    return cur?.ID || null;
+  } catch { return null; }
+}
+
+async function scheduleHandler(req, res) {
+  try {
+    await cds.connect.to('db');
+    let ext;
+    try {
+      ext = cds.entities('external.devtoberfest');
+    } catch { ext = null; }
+    if (!ext?.Session || !ext?.Activity) {
+      return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
+    }
+
+    const editionId = await resolveEditionId(ext, req.query.edition);
+
+    let tracks = [];
+    let editions = [];
+    let sessions = [];
+    let activities = [];
+    try {
+      editions = await SELECT.from(ext.Edition);
+      tracks = editionId
+        ? await SELECT.from(ext.Track).where({ EDITION_ID: editionId })
+        : await SELECT.from(ext.Track);
+      const trackIds = tracks.map((t) => t.ID);
+      sessions = trackIds.length ? await SELECT.from(ext.Session).where({ TRACK_ID: { in: trackIds } }) : [];
+      activities = trackIds.length ? await SELECT.from(ext.Activity).where({ TRACK_ID: { in: trackIds } }) : [];
+    } catch (err) {
+      LOG.warn('schedule facade read failed, returning empty feed:', err.message);
+      return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
+    }
+
+    return res.status(200).json(assembleFeed({ sessions, activities, tracks, editions, activeEditionId: editionId }));
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/schedule failed:', err);
+    return res.status(500).json({ error: 'INTERNAL' });
+  }
+}
+
+async function myCompletionsHandler(req, res) {
+  try {
+    await cds.connect.to('db');
+    const user = resolveUser(req, cds);
+    const sapId = user ? resolveUserSapId(user) : null;
+    if (!sapId) return res.status(200).json({ authenticated: false });
+
+    // Use the canonical helper — it resolves legacyId→slug internally and
+    // handles COMPLETED + SUPERSEDED rows for both TUTORIAL and PUZZLE types.
+    const rows = await getMyCompletedTutorials(user);
+    const completedSlugSet = normalizeSlugSet(rows);
+
+    let activities = [];
+    try {
+      const ext = cds.entities('external.devtoberfest');
+      if (ext?.Activity) {
+        // Scope to the requested edition's tracks when an edition is given.
+        if (req.query.edition && ext.Track) {
+          const tracks = await SELECT.from(ext.Track).where({ EDITION_ID: req.query.edition });
+          const trackIds = tracks.map((t) => t.ID);
+          activities = trackIds.length
+            ? await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG', 'TRACK_ID').where({ TRACK_ID: { in: trackIds } })
+            : [];
+        } else {
+          activities = await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG');
+        }
+      }
+    } catch { /* facade unavailable in unit SQLite — earnedPoints stays 0 */ }
+
+    const { earnedPoints, maxPoints, completedActivityIds } = completedActivityPoints(activities, completedSlugSet);
+
+    return res.status(200).json({
+      authenticated: true,
+      completedSlugs: [...completedSlugSet],
+      earnedPoints,
+      maxPoints,
+      completedActivityIds,
+    });
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/my-completions failed:', err);
+    return res.status(500).json({ error: 'INTERNAL' });
+  }
+}
+
+export function register(app) {
+  const _contextMw = cds.middlewares?.context?.() || ((req, _res, next) => next());
+  const _authMw = cds.middlewares?.auth?.() || ((req, _res, next) => next());
+  app.get('/api/devtoberfest/schedule', _contextMw, _authMw, scheduleHandler);
+  app.get('/api/devtoberfest/my-completions', _contextMw, _authMw, myCompletionsHandler);
+}
+
+export { scheduleHandler, myCompletionsHandler };
