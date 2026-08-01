@@ -7,6 +7,11 @@ export async function uploadSelfie(apiUrl: string, file: File, frameName: string
   fd.append('selectedPic', frameName)
   let res: Response
   try {
+    // /community/upload_selfie is authenticationType:"none" in approuter/xs-app.json,
+    // so AppRouter enforces no CSRF. Routing this through csrfFetch would break it (its
+    // GET /auth/user token handshake fails for anonymous visitors). apiUrl is computed,
+    // so the build guard can't match ANON_URL_ALLOWLIST — the marker below is the audited exemption.
+    // csrf-exempt-anon: ^/community/(.*)$ (gameboard-api) — anonymous selfie upload
     res = await fetch(apiUrl, { method: 'POST', body: fd })
   } catch {
     // A raw fetch() rejection (offline / DNS / CORS) must not leak "Failed to
