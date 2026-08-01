@@ -2,9 +2,37 @@
 import { computed } from 'vue'
 import type { GameboardConfig, WeekTrackTotal, WeekTrackBreakdown } from './types'
 
-const props = defineProps<{ board: GameboardConfig; imgBase: string }>()
+const props = defineProps<{ board: GameboardConfig; imgBase: string; authState?: 'unknown' | 'anonymous' | 'authenticated'; joinUrl?: string }>()
 
 const personalized = computed(() => props.board.personalized)
+const joinHref = computed(() => props.joinUrl || '/devtoberfest/#join')
+
+// Is the caller a joined participant? (status from the backend.)
+const joined = computed(() => personalized.value?.status === 'joined')
+
+// The cabinet message + CTA, keyed on auth + status:
+//   anonymous            → "Log in"       (they must sign in first)
+//   authenticated + not_joined → "Join Devtoberfest" (the real CTA — the bug was
+//                          telling logged-in users to log in)
+//   no active event      → "not running right now"
+//   activities coming soon (active event, 0 activities) → "coming soon"
+//   joined               → show avatar/progress (handled separately)
+type Cta = { kind: 'login' | 'join' | 'no_event' | 'coming_soon' | 'none'; text: string }
+const cta = computed<Cta>(() => {
+  if (joined.value) return { kind: 'none', text: '' }
+  if (props.authState === 'anonymous') {
+    return { kind: 'login', text: 'Log in (user menu, top-right) to play Devtoberfest and track your progress.' }
+  }
+  const status = personalized.value?.status
+  if (status === 'no_event' || props.board.hasActiveEvent === false) {
+    return { kind: 'no_event', text: "Devtoberfest isn't running right now — check back soon!" }
+  }
+  if (props.board.hasActiveEvent && (props.board.activityCount ?? 0) === 0) {
+    return { kind: 'coming_soon', text: 'Activities are coming soon — check back when Devtoberfest kicks off!' }
+  }
+  // authenticated + not_joined
+  return { kind: 'join', text: 'Join Devtoberfest to start earning points and climbing the levels!' }
+})
 
 // avatarIndex (0..37) → Group-<n>.png. Clamp defensively to the shipped range.
 const avatarSrc = computed(() => {
@@ -59,11 +87,16 @@ function earnedPoints(week: string, t: WeekTrackTotal): number {
     <div class="cabinet-screen">
       <p class="cabinet-title">DEVTOBERFEST</p>
 
-      <div v-if="personalized" class="cabinet-player">
-        <img :src="avatarSrc" :alt="`Your avatar, level ${personalized.level}`" class="cabinet-avatar" width="96" height="96" />
-        <p class="cabinet-level">Level {{ personalized.level }} · {{ personalized.score }} pts</p>
+      <div v-if="joined" class="cabinet-player">
+        <img :src="avatarSrc" :alt="`Your avatar, level ${personalized!.level}`" class="cabinet-avatar" width="96" height="96" />
+        <p class="cabinet-level">Level {{ personalized!.level }} · {{ personalized!.score }} pts</p>
       </div>
-      <p v-else class="cabinet-anon">Log in via the user menu (top-right) to see your level and progress.</p>
+      <p v-else class="cabinet-cta" :class="`cabinet-cta-${cta.kind}`">
+        <template v-if="cta.kind === 'join'">
+          <a :href="joinHref" class="cabinet-join-link">Join Devtoberfest</a> to start earning points and climbing the levels!
+        </template>
+        <template v-else>{{ cta.text }}</template>
+      </p>
 
       <div class="cabinet-progress">
         <div v-for="wk in weeks" :key="wk.week" class="cabinet-week">

@@ -4,7 +4,7 @@ import { mount } from '@vue/test-utils'
 import CabinetFrame from '../CabinetFrame.vue'
 import type { GameboardConfig } from '../types'
 
-const BOARD: GameboardConfig = {
+const BASE: GameboardConfig = {
   thresholds: [{ level: 0, minScore: 0 }, { level: 1, minScore: 3000 }, { level: 2, minScore: 14000 }],
   totals: [
     { week: '1', trackId: 't1', totalPoints: 3000, totalCount: 5 },
@@ -15,38 +15,63 @@ const BOARD: GameboardConfig = {
     { trackId: 't1', title: 'ABAP' },
     { trackId: 't2', title: 'BTP' },
   ],
-  personalized: {
-    userId: 'u1', score: 3500, level: 1, avatarIndex: 3,
-    breakdown: [
-      { week: '1', trackId: 't1', earnedPoints: 3000, earnedCount: 3, remainingPoints: 0, remainingCount: 2 },
-      { week: '2', trackId: 't1', earnedPoints: 500, earnedCount: 1, remainingPoints: 1000, remainingCount: 2 },
-    ],
-  },
+  hasActiveEvent: true,
+  activityCount: 3,
+  personalized: null,
+}
+
+const JOINED = {
+  status: 'joined' as const,
+  userId: 'u1', score: 3500, level: 1, avatarIndex: 3,
+  breakdown: [
+    { week: '1', trackId: 't1', earnedPoints: 3000, earnedCount: 3, remainingPoints: 0, remainingCount: 2 },
+    { week: '2', trackId: 't1', earnedPoints: 500, earnedCount: 1, remainingPoints: 1000, remainingCount: 2 },
+  ],
 }
 
 describe('CabinetFrame.vue', () => {
-  it('confines arcade styling to a .cabinet region and maps avatarIndex→art file', () => {
-    const w = mount(CabinetFrame, { props: { board: BOARD, imgBase: '/images/devtoberfest' } })
+  it('joined participant → avatar (avatarIndex→art) + progress meters, no CTA', () => {
+    const w = mount(CabinetFrame, { props: { board: { ...BASE, personalized: JOINED }, imgBase: '/images/devtoberfest', authState: 'authenticated' } })
     expect(w.find('.cabinet').exists()).toBe(true)
-    // avatarIndex 3 → Group-3.png under imgBase (static asset, not an inline SVG string)
-    const img = w.find('.cabinet img')
+    const img = w.find('.cabinet-player img')
     expect(img.attributes('src')).toBe('/images/devtoberfest/avatars/Group-3.png')
-    // alt text uses the personalized level
     expect(img.attributes('alt')).toContain('level 1')
-    // per-week progress rendered as accessible meters (progressbar role), not baked images.
-    // BOARD has weeks '1' and '2' → at least two week meters.
     const bars = w.findAll('[role="progressbar"]')
     expect(bars.length).toBeGreaterThanOrEqual(2)
-    expect(bars[0].attributes('aria-valuenow')).toBeDefined()
-    // meters are labelled by the resolved track TITLE, not the trackId GUID
-    expect(w.text()).toContain('ABAP')
+    expect(w.text()).toContain('ABAP')      // labelled by track title, not GUID
     expect(w.text()).not.toContain('t1')
     expect(w.text()).toContain('Level 1')
+    expect(w.find('.cabinet-cta').exists()).toBe(false)
   })
 
-  it('renders a public (no-personalized) cabinet without throwing', () => {
-    const w = mount(CabinetFrame, { props: { board: { ...BOARD, personalized: null }, imgBase: '/images/devtoberfest' } })
-    expect(w.find('.cabinet').exists()).toBe(true)
-    expect(w.text().toLowerCase()).toContain('log in') // invite to sign in for a personal slice
+  it('ANONYMOUS (401) → "Log in" CTA, no avatar', () => {
+    const w = mount(CabinetFrame, { props: { board: { ...BASE, personalized: null }, imgBase: '/images/devtoberfest', authState: 'anonymous' } })
+    expect(w.find('.cabinet-player').exists()).toBe(false)
+    expect(w.text().toLowerCase()).toContain('log in')
+    expect(w.find('.cabinet-cta-login').exists()).toBe(true)
+  })
+
+  it('LOGGED-IN but NOT JOINED → "Join Devtoberfest" CTA (the bug: was telling logged-in users to log in)', () => {
+    const w = mount(CabinetFrame, {
+      props: { board: { ...BASE, personalized: { status: 'not_joined', userId: 'u2', score: 0, level: 0, avatarIndex: 5, breakdown: [] } }, imgBase: '/images/devtoberfest', authState: 'authenticated' },
+    })
+    expect(w.text()).toContain('Join Devtoberfest')
+    expect(w.text().toLowerCase()).not.toContain('log in')
+    const link = w.find('.cabinet-join-link')
+    expect(link.attributes('href')).toBe('/devtoberfest/#join')
+  })
+
+  it('NO active event → "not running" CTA', () => {
+    const w = mount(CabinetFrame, {
+      props: { board: { ...BASE, hasActiveEvent: false, activityCount: 0, personalized: { status: 'no_event', userId: 'u3', score: 0, level: 0, avatarIndex: 0, breakdown: [] } }, imgBase: '/images/devtoberfest', authState: 'authenticated' },
+    })
+    expect(w.text().toLowerCase()).toContain("isn't running")
+  })
+
+  it('active event but NO activities → "coming soon" empty-state', () => {
+    const w = mount(CabinetFrame, {
+      props: { board: { ...BASE, hasActiveEvent: true, activityCount: 0, totals: [], personalized: { status: 'not_joined', userId: 'u4', score: 0, level: 0, avatarIndex: 0, breakdown: [] } }, imgBase: '/images/devtoberfest', authState: 'authenticated' },
+    })
+    expect(w.text().toLowerCase()).toContain('coming soon')
   })
 })
