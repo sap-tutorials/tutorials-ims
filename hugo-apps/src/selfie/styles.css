@@ -1,0 +1,47 @@
+/* Selfie island styles — advocate frame picker + uploader + crop/rotate editor.
+ * Horizon/Fundamental semantic tokens with safe fallbacks (same posture as the
+ * gameboard island). */
+.selfie-root { max-width: 900px; margin: 0 auto; padding: 1rem; }
+.selfie-note {
+  color: var(--sapContent_LabelColor, #556b82);
+  background: var(--sapInformationBackground, #f5faff);
+  border: 1px solid var(--sapInformationBorderColor, #bcdcff);
+  border-radius: 8px; padding: .6rem .9rem; margin: 0 0 1rem; font-size: .9rem;
+}
+
+/* ---- Frame picker ---- */
+.frame-picker {
+  list-style: none; padding: 0; margin: 0 0 1.25rem;
+  display: grid; gap: .6rem;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+.frame-thumb {
+  cursor: pointer; border: 2px solid transparent; border-radius: 8px;
+  overflow: hidden; background: var(--sapTile_Background, #fff);
+  box-shadow: 0 1px 4px rgba(0,0,0,.12); transition: border-color .15s ease, transform .15s ease;
+}
+.frame-thumb:hover, .frame-thumb:focus-within { border-color: var(--sapButton_Emphasized_Background, #0070f2); transform: translateY(-2px); }
+.frame-thumb[aria-selected="true"], .frame-thumb.is-selected { border-color: var(--sapButton_Emphasized_Background, #0070f2); }
+.frame-thumb img { display: block; width: 100%; height: auto; }
+
+/* ---- Uploader ---- */
+.selfie-uploader { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: 1rem 0; }
+.selfie-uploader input[type="file"] { max-width: 100%; }
+.selfie-btn {
+  cursor: pointer; border: none; border-radius: 6px; padding: .5rem 1rem;
+  font: inherit; color: #fff; background: var(--sapButton_Emphasized_Background, #0070f2);
+}
+.selfie-btn:disabled { opacity: .5; cursor: not-allowed; }
+.selfie-error {
+  color: var(--sapNegativeTextColor, #aa0808);
+  background: var(--sapErrorBackground, #fff4f4);
+  border: 1px solid var(--sapErrorBorderColor, #ffb0b0);
+  border-radius: 8px; padding: .6rem .9rem; margin: .75rem 0;
+}
+.selfie-busy { color: var(--sapContent_LabelColor, #556b82); }
+
+/* ---- Editor (cropper) ---- */
+.selfie-editor { margin: 1rem 0; }
+.selfie-editor-stage { max-width: 100%; max-height: 60vh; }
+.selfie-editor-stage img { display: block; max-width: 100%; }
+.selfie-editor-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
