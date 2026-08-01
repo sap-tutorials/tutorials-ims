@@ -1,0 +1,14 @@
+{{ define "main" }}
+<main id="arcade-mount"
+      data-api-my-gameboard="/gameboard/getMyGameboard"
+      data-join-url="/devtoberfest/#join"
+      data-img-base="/images/devtoberfest"
+      data-demo-avatar="7"></main>
+<noscript>
+  <div class="ds-noscript-fallback">
+    <h1>Devtoberfest Arcade</h1>
+    <p>The arcade needs JavaScript. Enable it and refresh to play.</p>
+  </div>
+</noscript>
+<script type="module" src="{{ "/js/arcade.js" | relURL }}"></script>
+{{ end }}
