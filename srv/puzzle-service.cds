@@ -33,7 +33,17 @@ service PuzzleService {
 
   @(requires: 'authenticated-user')
   action resetPuzzleProgress(slug : String) returns {
-    newAttemptNumber      : Integer;
-    supersededRecordCount : Integer;
+    newAttemptNumber           : Integer;
+    previousAttemptCompletedAt : DateTime;
+    supersededRecordCount      : Integer;
+  };
+
+  event PuzzleProgressReset : {
+    user                       : String;   // dbUser.ID, NOT email
+    puzzleSlug                 : String;
+    attemptNumber              : Integer;
+    supersededRecordCount      : Integer;
+    previousAttemptCompletedAt : DateTime;
+    tokenSource                : String;   // null | 'jwt' | 'pat'
   };
 }
