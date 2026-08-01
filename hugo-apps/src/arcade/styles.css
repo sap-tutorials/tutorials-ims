@@ -1,11 +1,23 @@
 /* Devtoberfest Arcade island styles.
- * Responsive scale-to-fit of the legacy 1347x1612 canvas; absolute-positioned
- * sprite layers; ported keyframes from srv/images/devtoberfest/css/devtoberfestSVG.css.
+ * Coordinates PORTED VERBATIM from the legacy Express gameboard
+ * (sap-community-activity-badges/srv/routes/devtoberfest.js + svgRender.js).
+ *
+ * Legacy canvas is 1347w x 1612h. Every legacy sprite is placed via
+ *   svgDevtoberfestItem(x, y, delay, img, scaleX, scaleY)
+ * which renders  translate(y, x)  with  <image height=scaleX width=scaleY>.
+ * So for each element:  CSS left = y/1347, top = x/1612,
+ *                       box width = scaleY/1347, box height = scaleX/1612.
+ * SVG <image> defaults to preserveAspectRatio="meet" == object-fit: contain.
+ *
+ * The scene is a beige (#E5E2DD, the legacy svgDevtoberfestBackground fill)
+ * canvas with the CRT frame in the top ~62.5%, the control-panel bezel at the
+ * bottom, and a beige middle band carrying the columns + logos. That is why
+ * there are no black gaps: areas outside images are beige, exactly like legacy.
  * All motion gated behind prefers-reduced-motion: reduce. */
 
 @font-face {
-  font-family: 'Joystix Monospace';
-  src: url('/images/devtoberfest/arcade/fonts/joystix_monospace.ttf') format('truetype');
+  font-family: "Joystix Monospace";
+  src: url("/images/devtoberfest/arcade/fonts/joystix_monospace.ttf") format("truetype");
   font-display: swap;
 }
 
@@ -17,17 +29,15 @@
   container-type: inline-size;
 }
 
-/* The scene keeps the legacy aspect ratio and scales to the container width. */
 .scene {
   position: relative;
   width: 100%;
   aspect-ratio: 1347 / 1612;
   overflow: hidden;
-  font-family: 'Joystix Monospace', 'Courier New', monospace;
-  background: #000;
+  font-family: "Joystix Monospace", "Courier New", monospace;
+  background: #e5e2dd;
 }
 
-/* All sprite layers are absolutely positioned as a % of the canvas. */
 .scene > img,
 .scene > .s-cloud,
 .scene > .s-banner,
@@ -39,107 +49,115 @@
 .scene > .s-avatar {
   position: absolute;
 }
+.scene > img { object-fit: contain; }
 
-.s-frame { inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 0; }
-.s-bezel { left: 0; bottom: 0; width: 100%; z-index: 6; }
-.s-title { left: 12%; top: 4%; width: 76%; z-index: 2; opacity: 0; animation: fadeInAnimation .8s ease-in-out forwards; }
-.s-sky   { left: 10%; top: 16%; width: 80%; z-index: 1; }
+/* Background CRT frame - legacy (0,0,0,BackgroundOKG,1007,1347): top 62.47% tall. */
+.s-frame { left: 0; top: 0; width: 100%; height: 62.47%; z-index: 0; }
+/* Bottom bezel - legacy (1507,0,...,okBottom,105,1347). */
+.s-bezel { left: 0; top: 93.49%; width: 100%; height: 6.51%; z-index: 6; }
+/* 3D title - legacy (80,50,750,Group_13,103,668). */
+.s-title { left: 3.71%; top: 4.96%; width: 49.6%; height: 6.39%; z-index: 2;
+  opacity: 0; animation: fadeInAnimation .8s ease-in-out forwards; }
+/* Sky/progress area - legacy (220,150,1000,Group_12a,692,983). */
+.s-sky { left: 11.14%; top: 13.65%; width: 72.98%; height: 42.93%; z-index: 1; }
 
-/* 4 level clouds/waypoints (approx legacy positions, expressed as %). */
-.s-cloud { width: 16%; height: 8%; z-index: 2; }
-.cloud-0 { left: 12%; top: 74%; }
-.cloud-1 { left: 30%; top: 60%; }
-.cloud-2 { left: 50%; top: 46%; }
-.cloud-3 { left: 68%; top: 32%; }
-.cloud-4 { left: 74%; top: 18%; }
+/* Invisible level waypoints (visible clouds live inside Group_12a.png). */
+.s-cloud { z-index: 2; width: 9.2%; height: 7.69%; }
+.s-cloud.cloud-1 { left: 20.79%; top: 26.98%; }
+.s-cloud.cloud-2 { left: 33.03%; top: 44.35%; }
+.s-cloud.cloud-3 { left: 69.04%; top: 35.67%; }
+.s-cloud.cloud-4 { left: 56.42%; top: 20.16%; }
 
 /* Ambient sprites. */
-.s-lobster { left: 6%;  top: 40%; width: 14%; z-index: 3; }
-.s-alien   { left: 78%; top: 52%; width: 12%; z-index: 3; }
-.s-runner  { left: 42%; top: 78%; width: 12%; z-index: 4; }
-.s-logo    { left: 4%;  top: 3%;  width: 12%; z-index: 5; }
-.s-sap     { right: 4%; top: 4%;  width: 8%;  z-index: 5; }
+/* Yellow lobster - legacy (220,1000,1250,Group8,103,91). */
+.s-lobster { left: 74.24%; top: 13.65%; width: 6.76%; height: 6.39%; z-index: 3; }
+/* Red alien - legacy (600,95,1250,Group10,103,91). */
+.s-alien   { left: 7.05%;  top: 37.22%; width: 6.76%; height: 6.39%; z-index: 3; }
+/* Running cat ON the pipe - legacy (710,300,1250,Runner.gif,148,102). */
+.s-runner  { left: 22.27%; top: 44.05%; width: 7.57%; height: 9.18%; z-index: 4;
+  animation: runnerRun 12s linear infinite alternate; }
+/* Devtoberfest logo - legacy (1250,925,0,gif,192,212). */
+.s-logo    { left: 68.67%; top: 77.54%; width: 15.74%; height: 11.91%; z-index: 5; }
+/* SAP logo - legacy (1350,1180,0,sap.svg,64,128). */
+.s-sap     { left: 87.6%;  top: 83.75%; width: 9.5%;  height: 3.97%; z-index: 5; }
 
-/* HUD banner — top-center (legacy points banner, canvas y~7%). */
+/* HUD points banner - legacy points text (122,995) middle/middle -> top-right. */
 .s-banner {
-  left: 50%; top: 10.5%; transform: translateX(-50%);
-  color: #66ff66; font-size: clamp(10px, 2.4cqw, 28px);
-  text-shadow: 0 0 6px rgba(102,255,102,.7); white-space: nowrap; z-index: 7;
+  left: 73.9%; top: 7.57%; transform: translate(-50%, -50%);
+  color: #1b5e20; font-weight: 700; font-size: clamp(10px, 2.2cqw, 26px);
+  white-space: nowrap; text-align: center; z-index: 7;
   opacity: 0; animation: fadeInAnimation .8s ease-in-out forwards;
 }
 
-/* Greeting header — top-center, just under the title logo. */
+/* Greeting header (green CRT text) - legacy buildGameboardHeader (220,120). */
 .s-header {
-  left: 50%; top: 1.5%; transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; gap: .1em;
-  color: #66ff66; text-align: center; z-index: 7; max-width: 80%;
-  font-size: clamp(9px, 1.8cqw, 20px); text-shadow: 0 0 6px rgba(102,255,102,.7);
+  left: 8.91%; top: 13.65%; max-width: 42%;
+  display: flex; flex-direction: column; align-items: flex-start; gap: .2em;
+  color: #66ff66; text-align: left; z-index: 7;
+  font-size: clamp(9px, 1.7cqw, 18px); text-shadow: 0 0 6px rgba(102,255,102,.7);
 }
 .s-header a { color: #a6e3ff; text-decoration: underline; }
 
-/* Legacy instructional columns — lower area, left ~4% / ~37% of the canvas
- * (matching legacy column x=60 / columnStart=500 on the 1347-wide canvas). */
+/* Instructional columns - legacy header (1050); HOW TO PLAY x=60, LAWYERS x=500. */
 .s-column {
-  top: 60%; width: 29%; z-index: 7; color: #d8ffd8;
-  font-size: clamp(7px, 1.3cqw, 14px); line-height: 1.35;
-  text-shadow: 0 0 4px rgba(0,0,0,.9);
+  top: 65.14%; width: 31%; z-index: 7; color: #111;
+  font-size: clamp(7px, 1.25cqw, 13px); line-height: 1.35;
 }
-.s-howto   { left: 4%; }
-.s-lawyers { left: 37%; }
+.s-howto   { left: 4.45%; }
+.s-lawyers { left: 37.12%; }
 .s-column-head {
-  margin: 0 0 .4em; color: #66ff66; font-size: clamp(9px, 1.7cqw, 18px);
-  text-shadow: 0 0 6px rgba(102,255,102,.7); letter-spacing: .04em;
+  margin: 0 0 .4em; color: #000; font-size: clamp(9px, 1.6cqw, 17px);
+  letter-spacing: .04em;
 }
 .s-column-body { margin: 0; }
-.s-column a { color: #a6e3ff; text-decoration: underline; }
+.s-column a { color: #1a6fb5; text-decoration: underline; }
 
-/* Menu — top-right, vertical stack of rules links + the sound toggle. */
+/* Menu - legacy buildMenu icons row at top 175 (10.85%), left 900..1080. */
 .s-menu {
-  right: 3%; top: 4%; z-index: 9;
-  display: flex; flex-direction: column; align-items: flex-end; gap: .35em;
+  left: 60%; top: 10.5%; z-index: 9;
+  display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: .3em;
 }
 .s-menu > a {
-  color: #66ff66; text-decoration: none; font-size: clamp(8px, 1.6cqw, 16px);
-  border: 1px solid #66ff66; border-radius: 6px; padding: .2rem .5rem;
-  background: rgba(0,0,0,.5); text-shadow: 0 0 6px rgba(102,255,102,.7);
+  color: #1b5e20; text-decoration: none; font-size: clamp(7px, 1.3cqw, 13px);
+  border: 1px solid #1b5e20; border-radius: 5px; padding: .15rem .4rem;
+  background: rgba(255,255,255,.35);
 }
-.s-menu > a:hover { background: rgba(102,255,102,.15); }
+.s-menu > a:hover { background: rgba(27,94,32,.15); }
 
-/* The user's avatar, placed on its level cloud. */
-.s-avatar {
-  width: 10%; z-index: 8; transform-origin: center bottom;
-  image-rendering: pixelated;
-}
-.s-avatar.cloud-0 { left: 14%; top: 66%; }
-.s-avatar.cloud-1 { left: 32%; top: 52%; }
-.s-avatar.cloud-2 { left: 52%; top: 38%; }
-.s-avatar.cloud-3 { left: 70%; top: 24%; }
-.s-avatar.cloud-4 { left: 76%; top: 10%; }
+/* Player avatar on its level cloud - legacy buildAvatar (avatarX=top, avatarY=left), 124x124. */
+.s-avatar { width: 9.2%; height: 7.69%; z-index: 8; transform-origin: center bottom;
+  image-rendering: pixelated; }
+.s-avatar.cloud-0 { left: 31.18%; top: 17.68%; } /* level 0: x=285,y=420 */
+.s-avatar.cloud-1 { left: 20.79%; top: 26.98%; } /* level 1: x=435,y=280 */
+.s-avatar.cloud-2 { left: 33.03%; top: 44.35%; } /* level 2: x=715,y=445 */
+.s-avatar.cloud-3 { left: 69.04%; top: 35.67%; } /* level 3: x=575,y=930 */
+.s-avatar.cloud-4 { left: 56.42%; top: 20.16%; } /* level 4: x=325,y=760 */
 
-/* Hearts (level count) — pulse via `beat`. */
-.s-heart { top: 88%; color: red; font-size: clamp(12px, 2cqw, 24px); z-index: 8; }
-.s-heart:nth-of-type(1) { left: 40%; }
+/* Hearts (level count) - centered pulsing row (pure-CSS fallback for per-level coords). */
+.s-heart { top: 50%; color: red; font-size: clamp(12px, 2cqw, 24px); z-index: 8; }
+.s-heart:nth-of-type(1) { left: 41%; }
 .s-heart:nth-of-type(2) { left: 46%; }
-.s-heart:nth-of-type(3) { left: 52%; }
-.s-heart:nth-of-type(4) { left: 58%; }
+.s-heart:nth-of-type(3) { left: 51%; }
+.s-heart:nth-of-type(4) { left: 56%; }
 
-/* Blinking status LED. */
+/* Blinking status LED - legacy translate(1180,1581); green hole in okBottom.png
+ * measured at 87.83%/72.14% of the bezel -> 87.6%/98.1% of canvas. */
 .s-led {
-  left: 90%; top: 92%; width: 20px; height: 4px; border-radius: 50%;
+  left: 86.8%; top: 97.9%; width: 1.6%; height: .4%; border-radius: 50%;
   background-color: #abff00;
   box-shadow: rgba(0,0,0,.2) 0 -1px 7px 1px, inset #304701 0 -1px 9px, #89ff00 0 2px 12px;
   z-index: 7;
 }
 
-/* Sound toggle button — flows within the top-right .s-menu stack. */
+/* Sound toggle button - flows within the .s-menu row. */
 .s-sound {
   z-index: 9;
-  display: inline-flex; align-items: center; gap: .4rem;
-  background: rgba(0,0,0,.5); color: #66ff66; border: 1px solid #66ff66;
-  border-radius: 6px; padding: .2rem .5rem; cursor: pointer;
-  font-family: inherit; font-size: clamp(8px, 1.6cqw, 16px);
+  display: inline-flex; align-items: center; gap: .3rem;
+  background: rgba(255,255,255,.35); color: #1b5e20; border: 1px solid #1b5e20;
+  border-radius: 5px; padding: .15rem .4rem; cursor: pointer;
+  font-family: inherit; font-size: clamp(7px, 1.3cqw, 13px);
 }
-.s-sound img { width: 1.2em; height: 1.2em; }
+.s-sound img { width: 1.1em; height: 1.1em; }
 
 /* Register CTA overlay (anonymous/demo). */
 .arcade-cta {
@@ -149,16 +167,15 @@
 .arcade-cta-btn {
   pointer-events: auto;
   background: #a100c2; color: #fff; text-decoration: none;
-  font-family: 'Joystix Monospace', 'Courier New', monospace;
+  font-family: "Joystix Monospace", "Courier New", monospace;
   padding: .9rem 1.4rem; border-radius: 10px; font-size: clamp(12px, 2.4cqw, 24px);
   box-shadow: 0 6px 24px rgba(0,0,0,.4); border: 2px solid #fff;
 }
-/* Non-actionable CTA copy (login / no-event / coming-soon). */
 .arcade-cta-msg {
   pointer-events: auto;
   max-width: 70%; text-align: center; margin: 0;
   background: rgba(0,0,0,.72); color: #66ff66;
-  font-family: 'Joystix Monospace', 'Courier New', monospace;
+  font-family: "Joystix Monospace", "Courier New", monospace;
   padding: .9rem 1.4rem; border-radius: 10px; font-size: clamp(11px, 2.2cqw, 22px);
   box-shadow: 0 6px 24px rgba(0,0,0,.4); border: 2px solid #66ff66;
   text-shadow: 0 0 6px rgba(102,255,102,.7);
@@ -189,11 +206,16 @@
   to   { background-color: #abff00 }
 }
 
-/* Transform-based drifts (replacing legacy inline SVG <animate>). */
 @keyframes driftX { from { transform: translateX(-8%) } to { transform: translateX(8%) } }
 @keyframes driftY { from { transform: translateY(-6%) } to { transform: translateY(6%) } }
+/* Cat runs back and forth along the pipe (legacy animated its x 710->0->-710). */
+@keyframes runnerRun {
+  0%   { transform: translateX(0)     scaleX(1)  }
+  49%  { transform: translateX(-180%) scaleX(1)  }
+  50%  { transform: translateX(-180%) scaleX(-1) }
+  100% { transform: translateX(20%)   scaleX(-1) }
+}
 
-/* Avatar bounce — iteration count = level (avatar-1 also serves level 0). */
 .s-avatar { opacity: 0; animation-timing-function: cubic-bezier(0.280,0.840,0.420,1); }
 .avatar-1 { animation: bounce-7 1s 0s 1 cubic-bezier(0.280,0.840,0.420,1) forwards; }
 .avatar-2 { animation: bounce-7 1s 0s 2 cubic-bezier(0.280,0.840,0.420,1) forwards; }
@@ -205,11 +227,10 @@
 .drift-x { animation: driftX 6s ease-in-out infinite alternate; }
 .drift-y { animation: driftY 5s ease-in-out infinite alternate; }
 
-/* ---- Accessibility: disable ALL animation under reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
   .arcade-root *,
   .s-title, .s-banner,
-  .s-avatar, .s-lobster, .s-alien, .s-heart, .s-led, .drift-x, .drift-y,
+  .s-avatar, .s-lobster, .s-alien, .s-runner, .s-heart, .s-led, .drift-x, .drift-y,
   .avatar-1, .avatar-2, .avatar-3, .avatar-4, .heart, .led-green {
     animation: none !important;
     opacity: 1 !important;
