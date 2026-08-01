@@ -200,7 +200,7 @@ export default class PuzzleService extends cds.ApplicationService {
         completionDate: new Date().toISOString(),
         titleSnapshot: puzzle.title,
         legacyId: await getNextLegacyId('TaskRecords', db),
-        attemptNumber: 1,
+        attemptNumber: prog?.attemptNumber ?? 1,
       });
       return { recorded: true, alreadyComplete: false };
     });
