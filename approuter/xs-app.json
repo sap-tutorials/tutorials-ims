@@ -145,6 +145,12 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/gameboard/(getMyGameboard|refreshGameboardCache)(.*)$",
+      "target": "/gameboard/$1$2",
+      "destination": "gameboard-auth-api",
+      "authenticationType": "xsuaa"
+    },
+    {
       "source": "^/gameboard/(.*)$",
       "target": "/gameboard/$1",
       "destination": "gameboard-api",
