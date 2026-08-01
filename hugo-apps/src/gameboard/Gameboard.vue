@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { MountConfig, LeaderboardRow, GameboardConfig, MyGameboard } from './types'
 import { useGameboardStream } from './useGameboardStream'
+import Leaderboard from './Leaderboard.vue'
 
 const props = defineProps<{ config: MountConfig }>()
 
@@ -70,24 +71,9 @@ onUnmounted(disconnect)
       <!-- CabinetFrame + level/avatar art mounts here in Task 5 -->
     </section>
 
-    <!-- Real accessible leaderboard (Task 4 extracts to Leaderboard.vue) -->
-    <section class="gb-leaderboard" aria-label="Leaderboard">
-      <table class="fd-table" aria-label="Devtoberfest leaderboard">
-        <thead>
-          <tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Score</th><th scope="col">Level</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in rows" :key="r.rank">
-            <td>{{ r.rank }}</td>
-            <td>
-              <a v-if="r.communityUrl" :href="r.communityUrl" rel="noopener">{{ r.displayName }}</a>
-              <span v-else>{{ r.displayName }}</span>
-            </td>
-            <td>{{ r.score }}</td>
-            <td>{{ r.level }}</td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- Real accessible leaderboard -->
+    <section class="gb-leaderboard-region" aria-label="Leaderboard">
+      <Leaderboard :rows="rows" />
       <p v-if="state === 'error'" class="gb-error" role="status">
         Couldn't reach the gameboard.
         <button type="button" data-testid="gameboard-retry" @click="loadAll">Retry</button>
