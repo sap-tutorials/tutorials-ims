@@ -145,10 +145,18 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/gameboard/(getMyGameboard|refreshGameboardCache)(.*)$",
-      "target": "/gameboard/$1$2",
+      "source": "^/gameboard/getMyGameboard(.*)$",
+      "target": "/gameboard/getMyGameboard$1",
       "destination": "gameboard-auth-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "xsuaa",
+      "httpMethods": ["GET", "HEAD"]
+    },
+    {
+      "source": "^/gameboard/refreshGameboardCache(.*)$",
+      "target": "/gameboard/refreshGameboardCache$1",
+      "destination": "gameboard-auth-api",
+      "authenticationType": "xsuaa",
+      "httpMethods": ["POST"]
     },
     {
       "source": "^/gameboard/(.*)$",
