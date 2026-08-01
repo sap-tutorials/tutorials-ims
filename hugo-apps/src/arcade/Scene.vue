@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { MyGameboard, MountConfig } from './types'
 import { sceneMap, avatarFile } from './scene-map'
+import SoundToggle from './SoundToggle.vue'
 const props = defineProps<{ board: MyGameboard; config: MountConfig; demo: boolean }>()
 const place = computed(() => sceneMap(props.board.level))
 const avatar = computed(() => avatarFile(props.config.imgBase, props.board.avatarIndex))
@@ -27,5 +28,6 @@ const img = (p: string) => `${props.config.imgBase}/${p}`
     <img class="s-avatar" :class="[`cloud-${place.cloud}`, place.bounceClass]" :src="avatar" :alt="`Your avatar, level ${board.level}`" />
     <span v-for="h in place.hearts" :key="h" class="s-heart heart">&#9829;</span>
     <div class="s-led led-green"></div>
+    <SoundToggle :img-base="config.imgBase" />
   </div>
 </template>
