@@ -73,19 +73,23 @@
 .s-lobster { left: 74.24%; top: 13.65%; width: 6.76%; height: 6.39%; z-index: 3; }
 /* Red alien - legacy (600,95,1250,Group10,103,91). */
 .s-alien   { left: 7.05%;  top: 37.22%; width: 6.76%; height: 6.39%; z-index: 3; }
-/* Running cat ON the pipe - legacy (710,300,1250,Runner.gif,148,102). */
+/* Running cat ON the pipe - legacy (710,300,1250,Runner.gif,148,102).
+ * runnerRun is a self-contained round-trip (no `alternate`, which would
+ * double-reverse the scaleX flips and make the cat face the wrong way). */
 .s-runner  { left: 22.27%; top: 44.05%; width: 7.57%; height: 9.18%; z-index: 4;
-  animation: runnerRun 12s linear infinite alternate; }
+  animation: runnerRun 10s linear infinite; }
 /* Devtoberfest logo - legacy (1250,925,0,gif,192,212). */
 .s-logo    { left: 68.67%; top: 77.54%; width: 15.74%; height: 11.91%; z-index: 5; }
 /* SAP logo - legacy (1350,1180,0,sap.svg,64,128). */
 .s-sap     { left: 87.6%;  top: 83.75%; width: 9.5%;  height: 3.97%; z-index: 5; }
 
-/* HUD points banner - legacy points text (122,995) middle/middle -> top-right. */
+/* HUD points banner - legacy points text (122,995) middle/middle -> top-right.
+ * Bright CRT green + glow so it reads on the dark screen (was dark #1b5e20). */
 .s-banner {
   left: 73.9%; top: 7.57%; transform: translate(-50%, -50%);
-  color: #1b5e20; font-weight: 700; font-size: clamp(10px, 2.2cqw, 26px);
+  color: #7CFC7C; font-weight: 700; font-size: clamp(10px, 2.2cqw, 26px);
   white-space: nowrap; text-align: center; z-index: 7;
+  text-shadow: 0 0 6px rgba(124,252,124,.8), 0 1px 2px #000;
   opacity: 0; animation: fadeInAnimation .8s ease-in-out forwards;
 }
 
@@ -140,10 +144,13 @@
 .s-heart:nth-of-type(3) { left: 51%; }
 .s-heart:nth-of-type(4) { left: 56%; }
 
-/* Blinking status LED - legacy translate(1180,1581); green hole in okBottom.png
- * measured at 87.83%/72.14% of the bezel -> 87.6%/98.1% of canvas. */
+/* Blinking status LED - green hole in okBottom.png measured at 87.89%/72.14%
+ * of the bezel; bezel spans scene top 93.49% + height 6.51%, full width.
+ * -> hole center in scene coords: x 87.89%, y 93.49% + 72.14%*6.51% = 98.18%.
+ * Positioned by CENTER (translate -50%,-50%) so the dot sits on the hole. */
 .s-led {
-  left: 86.8%; top: 97.9%; width: 1.6%; height: .4%; border-radius: 50%;
+  left: 87.89%; top: 98.18%; transform: translate(-50%, -50%);
+  width: 1.6%; height: .5%; border-radius: 50%;
   background-color: #abff00;
   box-shadow: rgba(0,0,0,.2) 0 -1px 7px 1px, inset #304701 0 -1px 9px, #89ff00 0 2px 12px;
   z-index: 7;
@@ -208,12 +215,18 @@
 
 @keyframes driftX { from { transform: translateX(-8%) } to { transform: translateX(8%) } }
 @keyframes driftY { from { transform: translateY(-6%) } to { transform: translateY(6%) } }
-/* Cat runs back and forth along the pipe (legacy animated its x 710->0->-710). */
+/* Cat runs back and forth along the LEFT horizontal pipe segment.
+ * Measured green pipe on the runner's row spans scene-x ~15.4%..18.4% under the
+ * runner's start (left 22.27%, width 7.57%). Keep the cat's body over the pipe:
+ * travel translateX 0 (start ~22%) .. -95% of its width (-> left edge ~15.1%),
+ * NOT the old -180% which ran it off the pipe's left end.
+ * Runner.gif art faces RIGHT, so face the direction of travel:
+ * face left (scaleX -1) while moving left, face right (scaleX 1) while moving right. */
 @keyframes runnerRun {
-  0%   { transform: translateX(0)     scaleX(1)  }
-  49%  { transform: translateX(-180%) scaleX(1)  }
-  50%  { transform: translateX(-180%) scaleX(-1) }
-  100% { transform: translateX(20%)   scaleX(-1) }
+  0%   { transform: translateX(0)    scaleX(-1) }
+  48%  { transform: translateX(-95%) scaleX(-1) }
+  52%  { transform: translateX(-95%) scaleX(1)  }
+  100% { transform: translateX(0)    scaleX(1)  }
 }
 
 .s-avatar { opacity: 0; animation-timing-function: cubic-bezier(0.280,0.840,0.420,1); }
@@ -224,8 +237,8 @@
 
 .heart { animation: beat 1s 0s infinite; }
 .led-green { animation: blinkGreen .5s infinite; }
-.drift-x { animation: driftX 6s ease-in-out infinite alternate; }
-.drift-y { animation: driftY 5s ease-in-out infinite alternate; }
+.drift-x { animation: driftX 2.6s ease-in-out infinite alternate; }
+.drift-y { animation: driftY 2.2s ease-in-out infinite alternate; }
 
 @media (prefers-reduced-motion: reduce) {
   .arcade-root *,
