@@ -11,6 +11,7 @@ export interface MyGameboard {
   level: number       // 0..4
   avatarIndex: number // 0..37
   firstName?: string       // arcade header greeting
+  eventName?: string | null // active Devtoberfest edition name (dynamic header; null when no event)
   communityUrl?: string | null  // SAP Community profile link (when linked)
   hasActiveEvent?: boolean       // is a Devtoberfest config active?
   activityCount?: number         // 0 with hasActiveEvent → 'coming soon' empty-state

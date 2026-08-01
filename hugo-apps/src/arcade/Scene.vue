@@ -10,7 +10,7 @@ const avatar = computed(() => avatarFile(props.config.imgBase, props.board.avata
 const img = (p: string) => `${props.config.imgBase}/${p}`
 const firstName = computed(() => props.board.firstName || 'Player')
 const banner = computed(() => pointsBanner(props.board.score, props.board.level))
-const header = computed(() => gameboardHeader(firstName.value))
+const header = computed(() => gameboardHeader(firstName.value, props.board.eventName))
 const communityUrl = computed(() => props.board.communityUrl || null)
 </script>
 <template>
