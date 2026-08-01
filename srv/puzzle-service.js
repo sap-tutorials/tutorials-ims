@@ -230,6 +230,11 @@ export default class PuzzleService extends cds.ApplicationService {
         taskType: 'PUZZLE',
         status: { '!=': 'SUPERSEDED' },
       });
+
+      // Capture prior completion date for audit + response
+      const priorCompleted = live.find(r => r.status === 'COMPLETED');
+      const previousAttemptCompletedAt = priorCompleted?.completionDate ?? null;
+
       if (live.length) {
         await UPDATE(TaskRecords)
           .set({ status: 'SUPERSEDED' })
@@ -249,7 +254,11 @@ export default class PuzzleService extends cds.ApplicationService {
         newAttempt = (prog.attemptNumber || 1) + 1;
         await UPDATE(PuzzleProgress, prog.ID).set({ filledGrid: '{}', attemptNumber: newAttempt });
       }
-      return { newAttemptNumber: newAttempt, supersededRecordCount: live.length };
+      return {
+        newAttemptNumber: newAttempt,
+        previousAttemptCompletedAt,
+        supersededRecordCount: live.length,
+      };
     });
   }
 }
