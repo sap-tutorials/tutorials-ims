@@ -2585,6 +2585,15 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // Puzzle progress reset audit listener (mirrors TutorialProgressReset)
+    cds.on('PuzzleProgressReset', (msg) => {
+      try {
+        cds.log('audit').info('PuzzleProgressReset', msg.data ?? msg);
+      } catch (err) {
+        cds.log('admin-service').warn(`audit listener for PuzzleProgressReset failed: ${err.message ?? err}`);
+      }
+    });
+
     // Phase 4.5 (#746): operator-grade api.sap.com seed trigger. Calls into
     // the same runSeedApiDocs() the CLI script (scripts/seed-api-docs.cjs)
     // uses — single source of truth. Dry-run when commit=false. Emits an

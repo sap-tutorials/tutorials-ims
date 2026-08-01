@@ -6,6 +6,10 @@ import cds from '@sap/cds';
 import { gradeEntries, deriveSlotIds } from './lib/puzzle-grading.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
+import { checkRateLimit } from './lib/per-user-rate-limit.js';
+
+const RESET_LIMIT_PER_HOUR = 5;
+const RESET_WINDOW_MS = 60 * 60 * 1000;
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -196,7 +200,7 @@ export default class PuzzleService extends cds.ApplicationService {
         completionDate: new Date().toISOString(),
         titleSnapshot: puzzle.title,
         legacyId: await getNextLegacyId('TaskRecords', db),
-        attemptNumber: 1,
+        attemptNumber: prog?.attemptNumber ?? 1,
       });
       return { recorded: true, alreadyComplete: false };
     });
@@ -206,10 +210,24 @@ export default class PuzzleService extends cds.ApplicationService {
     // restart PuzzleProgress (clear grid, bump attempt). Never deletes history.
     this.on('resetPuzzleProgress', async (req) => {
       const { slug } = req.data;
+
+      // Rate-limit BEFORE any DB work — independent quota from tutorial resets.
+      const sapId = resolveUserSapId(req.user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+      if (!checkRateLimit(`puzzle-reset:${sapId}`, RESET_LIMIT_PER_HOUR, RESET_WINDOW_MS)) {
+        return req.reject(429, 'You have reset too many puzzles recently — please wait a few minutes.');
+      }
+
       const puzzle = await loadPuzzle(slug);
       if (!puzzle) return req.reject(404, 'Puzzle not found');
-      const dbUser = await resolveOrCreateUser(req.user);
-      if (!dbUser) return req.reject(401, 'Unauthenticated');
+
+      // Look up existing user WITHOUT creating one — parity with resetTutorialProgress
+      // (developer-service.js:252-255).  A caller who has never interacted with this
+      // puzzle has nothing to reset; we must not mint a Users row for them.
+      const dbUser = await SELECT.one.from(Users).where({ sapId });
+      if (!dbUser) {
+        return { newAttemptNumber: 1, previousAttemptCompletedAt: null, supersededRecordCount: 0 };
+      }
 
       // Supersede live PUZZLE TaskRecords for this user + puzzle.
       const live = await SELECT.from(TaskRecords).where({
@@ -218,6 +236,11 @@ export default class PuzzleService extends cds.ApplicationService {
         taskType: 'PUZZLE',
         status: { '!=': 'SUPERSEDED' },
       });
+
+      // Capture prior completion date for audit + response
+      const priorCompleted = live.find(r => r.status === 'COMPLETED');
+      const previousAttemptCompletedAt = priorCompleted?.completionDate ?? null;
+
       if (live.length) {
         await UPDATE(TaskRecords)
           .set({ status: 'SUPERSEDED' })
@@ -237,7 +260,24 @@ export default class PuzzleService extends cds.ApplicationService {
         newAttempt = (prog.attemptNumber || 1) + 1;
         await UPDATE(PuzzleProgress, prog.ID).set({ filledGrid: '{}', attemptNumber: newAttempt });
       }
-      return { newAttemptNumber: newAttempt, supersededRecordCount: live.length };
+      // Emit audit event on the global CDS bus — mirrors TutorialProgressReset in
+      // developer-service.js (cds.emit only; no this.emit).  The admin-service.js
+      // listener uses cds.on parity with the TutorialProgressReset handler.
+      const auditPayload = {
+        user: dbUser.ID,
+        puzzleSlug: slug,
+        attemptNumber: newAttempt,
+        supersededRecordCount: live.length,
+        previousAttemptCompletedAt,
+        tokenSource: req.user?.tokenSource ?? null,
+      };
+      await cds.emit('PuzzleProgressReset', auditPayload);
+
+      return {
+        newAttemptNumber: newAttempt,
+        previousAttemptCompletedAt,
+        supersededRecordCount: live.length,
+      };
     });
   }
 }
