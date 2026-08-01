@@ -65,9 +65,16 @@ describe('Scene.vue — legacy instructional content', () => {
     expect(labels).toEqual(expect.arrayContaining(['AWARDS', 'POINTS', 'RULES']))
   })
 
-  it('shows the greeting header with first name', () => {
+  it('shows the greeting header with the dynamic event edition (not a hardcoded year)', () => {
+    const w = mount(Scene, { props: { board: board(1, 3, { firstName: 'Tom', eventName: 'Devtoberfest 2026' }), config: CFG, demo: false } })
+    expect(w.find('.s-header').text()).toContain('Tom, Devtoberfest 2026 has started!')
+  })
+
+  it('falls back to a year-less greeting when no event name is available', () => {
     const w = mount(Scene, { props: { board: board(1, 3, { firstName: 'Tom' }), config: CFG, demo: false } })
-    expect(w.find('.s-header').text()).toContain('Tom, Devtoberfest 2025 has started!')
+    const text = w.find('.s-header').text()
+    expect(text).toContain('Tom, Devtoberfest has started!')
+    expect(text).not.toContain('2025')
   })
 
   it('links the SAP Community profile only when community-linked', () => {

@@ -10,9 +10,12 @@ export const JOIN_GROUP_URL =
 export const COMMUNITY_PROFILE_BASE =
   'https://community.sap.com/t5/user/viewprofilepage/user-id/'
 
-// devtoberfest.gameboardHeaderEnd — {0} is the player's first name.
-export const gameboardHeader = (firstName: string): string =>
-  `${firstName}, Devtoberfest 2025 has started!`
+// devtoberfest.gameboardHeaderEnd — {0} is the player's first name, {1} the
+// active Devtoberfest edition name (from config, e.g. "Devtoberfest 2026").
+// Falls back to a year-less "Devtoberfest" when no edition name is available,
+// so the greeting is never stale/hardcoded.
+export const gameboardHeader = (firstName: string, eventName?: string | null): string =>
+  `${firstName}, ${eventName || 'Devtoberfest'} has started!`
 
 // devtoberfest.scn — the SAP Community profile link label.
 export const SCN_LINK_LABEL = 'SAP Community Profile'
