@@ -163,8 +163,9 @@ function detectMutatingFetches(content: string, filePath: string): Array<{
   line: number;
   method: string;
   url: string | null;
+  exemptAnon: boolean;
 }> {
-  const hits: Array<{ line: number; method: string; url: string | null }> = [];
+  const hits: Array<{ line: number; method: string; url: string | null; exemptAnon: boolean }> = [];
   const lines = content.split('\n');
 
   // Slide a small window over lines and look for a mutating method
@@ -198,7 +199,19 @@ function detectMutatingFetches(content: string, filePath: string): Array<{
     }
     if (fetchLine === -1) continue; // orphan `method: 'POST'` — not our concern
 
-    hits.push({ line: fetchLine + 1, method, url });
+    // Inline exemption for computed-URL calls that target an anonymous
+    // (authenticationType: "none") approuter route, where the guard's URL
+    // detector sees only a variable/template and so can't match
+    // ANON_URL_ALLOWLIST. AppRouter never enforces CSRF on anon routes, and
+    // routing such a call through csrfFetch would BREAK it (csrfFetch does a
+    // GET /auth/user token handshake that fails for anonymous visitors). Marker
+    // must sit within 2 lines of the fetch( open so it stays local + auditable:
+    //   // csrf-exempt-anon: <approuter route> — <reason>
+    const exemptAnon = lines
+      .slice(Math.max(0, fetchLine - 2), fetchLine + 3)
+      .some((l) => /csrf-exempt-anon:/.test(l));
+
+    hits.push({ line: fetchLine + 1, method, url, exemptAnon });
   }
   return hits;
 }
@@ -232,6 +245,10 @@ function scanClientFile(
   for (const hit of mutating) {
     // Anonymous URLs never need CSRF, regardless of file.
     if (isAnonymousUrl(hit.url)) continue;
+
+    // Computed-URL calls explicitly marked as targeting an anonymous route
+    // (see `csrf-exempt-anon:` handling in detectMutatingFetches).
+    if (hit.exemptAnon) continue;
 
     // Vite-bundled callers (hugo-app / analytics-explorer): must import
     // csrfFetch. The regex-based detector doesn't guarantee THIS call went
