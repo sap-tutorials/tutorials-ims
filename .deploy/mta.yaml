@@ -244,6 +244,13 @@ modules:
       - name: gameboard-dest
         properties:
           gameboard-url: ${gameboard-url}
+      # Second self-provides matching the gameboard-auth-dest require below.
+      # mbt resolves a require's ~{x} by matching the require NAME to a provides
+      # NAME — and require names must be unique — so the token-forwarding auth
+      # destination needs its own identically-valued property set.
+      - name: gameboard-auth-dest
+        properties:
+          gameboard-url: ${gameboard-url}
     requires:
       - name: tutorials-xsuaa
       # #867 — approuter reads REBUILD_API_KEY from credstore via
@@ -279,9 +286,11 @@ modules:
       # requireAuthorScope check. Kept separate from gameboard-api (public,
       # no-token) so the public /community/* + SPA routes never forward a token
       # out-of-MTA (csrf-with-token-forwarding guard — same public/auth split
-      # Plan A used for /gameboard). Reuses the self-provided gameboard-dest
-      # property set for mbt strict validation.
-      - name: gameboard-dest
+      # Plan A used for /gameboard). The require NAME must be UNIQUE within the
+      # module (MTA rejects a duplicate required-dependency name), so this is
+      # `gameboard-auth-dest`; it still pulls the same ~{gameboard-url} from the
+      # single self-provided property set.
+      - name: gameboard-auth-dest
         group: destinations
         properties:
           name: gameboard-auth-api
