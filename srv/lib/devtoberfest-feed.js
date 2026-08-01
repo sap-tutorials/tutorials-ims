@@ -54,11 +54,11 @@ function completedActivityPoints(activities = [], completedSlugSet = new Set()) 
 }
 
 function sortByWeekThenDate(a, b) {
-  const w = String(a.week || '').localeCompare(String(b.week || ''));
+  const w = String(a.week || '').localeCompare(String(b.week || ''), undefined, { numeric: true });
   return w !== 0 ? w : String(a.scheduledDate || '').localeCompare(String(b.scheduledDate || ''));
 }
 function sortByWeekThenTitle(a, b) {
-  const w = String(a.week || '').localeCompare(String(b.week || ''));
+  const w = String(a.week || '').localeCompare(String(b.week || ''), undefined, { numeric: true });
   return w !== 0 ? w : String(a.title || '').localeCompare(String(b.title || ''));
 }
 

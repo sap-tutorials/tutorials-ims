@@ -79,6 +79,7 @@ const sorted = computed(() => {
     if (av == null) return 1;
     if (bv == null) return -1;
     if (k === 'points') return ((av as number) - (bv as number)) * dir;
+    if (k === 'week') return String(av).localeCompare(String(bv), undefined, { numeric: true }) * dir;
     return String(av).localeCompare(String(bv)) * dir;
   });
   return list;
@@ -261,10 +262,10 @@ defineExpose({ filters });
                 >↗</a>
                 <a
                   v-if="(row as any).taskSlug"
-                  :href="`/${(row as any).taskType === 'puzzle' ? 'puzzles' : 'tutorials'}/${(row as any).taskSlug}`"
+                  :href="`/${String((row as any).taskType).toLowerCase() === 'puzzle' ? 'puzzles' : 'tutorials'}/${(row as any).taskSlug}`"
                   class="sched-link"
                   @click.stop
-                  :title="(row as any).taskType === 'puzzle' ? 'Open puzzle' : 'Open tutorial'"
+                  :title="String((row as any).taskType).toLowerCase() === 'puzzle' ? 'Open puzzle' : 'Open tutorial'"
                 >→</a>
               </td>
               <td v-if="isAuthenticated">

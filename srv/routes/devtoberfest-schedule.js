@@ -41,8 +41,16 @@ async function scheduleHandler(req, res) {
       editions = await SELECT.from(ext.Edition);
       tracks = await SELECT.from(ext.Track).where({ EDITION_ID: editionId });
       const trackIds = tracks.map((t) => t.ID);
-      sessions = trackIds.length ? await SELECT.from(ext.Session).where({ TRACK_ID: { in: trackIds } }) : [];
-      activities = trackIds.length ? await SELECT.from(ext.Activity).where({ TRACK_ID: { in: trackIds } }) : [];
+      sessions = trackIds.length
+        ? await SELECT.from(ext.Session)
+            .columns('ID', 'SESSIONCODE', 'TRACK_ID', 'TITLE', 'ABSTRACT', 'STATUS', 'SESSIONLENGTH', 'WEEK', 'SCHEDULEDDATE', 'SCHEDULEDTIME', 'YOUTUBEURL', 'COMMUNITYEVENTURL', 'ACTIVITY_ID')
+            .where({ TRACK_ID: { in: trackIds } })
+        : [];
+      activities = trackIds.length
+        ? await SELECT.from(ext.Activity)
+            .columns('ID', 'TITLE', 'TRACK_ID', 'STATUS', 'WEEK', 'POINTS', 'TASKSLUG', 'TASKTITLE', 'TASKTYPE', 'TASK_ID')
+            .where({ TRACK_ID: { in: trackIds } })
+        : [];
     } catch (err) {
       LOG.warn('schedule facade read failed, returning empty feed:', err.message);
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
@@ -70,17 +78,18 @@ async function myCompletionsHandler(req, res) {
     let activities = [];
     try {
       const ext = cds.entities('external.devtoberfest');
-      if (ext?.Activity) {
-        // Scope to the requested edition's tracks when an edition is given.
-        if (req.query.edition && ext.Track) {
-          const tracks = await SELECT.from(ext.Track).where({ EDITION_ID: req.query.edition });
+      if (ext?.Activity && ext?.Track) {
+        // Always resolve the edition (same logic as scheduleHandler) so that
+        // points are scoped to the same edition as the feed, not all editions.
+        const editionId = await resolveEditionId(ext, req.query.edition);
+        if (editionId) {
+          const tracks = await SELECT.from(ext.Track).where({ EDITION_ID: editionId });
           const trackIds = tracks.map((t) => t.ID);
           activities = trackIds.length
             ? await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG', 'TRACK_ID').where({ TRACK_ID: { in: trackIds } })
             : [];
-        } else {
-          activities = await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG');
         }
+        // If editionId is null, activities stays [] → earnedPoints/maxPoints 0 (fail-soft).
       }
     } catch (e) { LOG.warn('myCompletions facade read failed:', e?.message); }
 

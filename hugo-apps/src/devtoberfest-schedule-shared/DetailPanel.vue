@@ -20,7 +20,7 @@ const thumb = computed(() => {
 const taskUrl = computed(() => {
   const r = props.row as any;
   if (!r?.taskSlug) return null;
-  const prefix = r.taskType === 'puzzle' ? '/puzzles' : '/tutorials';
+  const prefix = String(r.taskType).toLowerCase() === 'puzzle' ? '/puzzles' : '/tutorials';
   return `${prefix}/${r.taskSlug}`;
 });
 
@@ -90,7 +90,7 @@ const isActivity = computed(() => props.row?.kind === 'activity');
             v-if="taskUrl"
             :href="taskUrl"
             class="detail-panel__link detail-panel__link--task"
-          >{{ (row as any).taskType === 'puzzle' ? 'Open Puzzle' : 'Open Tutorial' }}</a>
+          >{{ String((row as any).taskType).toLowerCase() === 'puzzle' ? 'Open Puzzle' : 'Open Tutorial' }}</a>
         </div>
 
         <div v-if="row.complete" class="detail-panel__complete-badge">

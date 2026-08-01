@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
-import { mergeCompletion, youtubeThumb, safeHref } from '../devtoberfest-schedule-shared/completion';
+import { mergeCompletion, youtubeThumb } from '../devtoberfest-schedule-shared/completion';
 import { useAuth } from '../devtoberfest-schedule-shared/useAuth';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
