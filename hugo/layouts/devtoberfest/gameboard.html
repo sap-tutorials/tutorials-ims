@@ -1,0 +1,16 @@
+{{ define "main" }}
+<main id="gameboard-mount"
+      data-api-leaderboard="/gameboard/getLeaderboard"
+      data-api-gameboard="/gameboard/getGameboard"
+      data-api-my-gameboard="/gameboard/getMyGameboard"
+      data-ws=""
+      data-img-base="/images/devtoberfest"
+      data-top="25"></main>
+<noscript>
+  <div class="ds-noscript-fallback">
+    <h1>Devtoberfest Gameboard</h1>
+    <p>The live leaderboard needs JavaScript. Enable it and refresh to see scores update in real time.</p>
+  </div>
+</noscript>
+<script type="module" src="{{ "/js/gameboard.js" | relURL }}"></script>
+{{ end }}
