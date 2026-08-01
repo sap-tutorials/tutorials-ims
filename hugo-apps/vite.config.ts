@@ -237,6 +237,7 @@ export default defineConfig({
         navigator: resolve(__dirname, 'src/navigator/main.ts'),
         'app-space': resolve(__dirname, 'src/app-space/main.ts'),
         devtoberfest: resolve(__dirname, 'src/devtoberfest/main.ts'),
+        gameboard: resolve(__dirname, 'src/gameboard/main.ts'),
         'event-display': resolve(__dirname, 'src/event-display/main.ts'),
         'nav-dropdown': resolve(__dirname, 'src/nav-dropdown/main.ts'),
         'scanner-vue': resolve(__dirname, 'src/scanner-vue/main.ts'),

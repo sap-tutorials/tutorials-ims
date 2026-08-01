@@ -1,0 +1,3 @@
+/* Gameboard island styles — arcade cabinet confined to .cabinet; leaderboard/progress
+ * are Horizon/Fundamental semantic components. Full styling in Plan C Task 5. */
+.gb-root { max-width: 1200px; margin: 0 auto; padding: 1rem; }
