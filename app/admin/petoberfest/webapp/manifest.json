@@ -1,0 +1,145 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.petoberfest",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.1.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Petoberfest-manage": {
+          "semanticObject": "Petoberfest",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.petoberfest.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "PetSubmissionsList",
+          "target": "PetSubmissionsList"
+        },
+        {
+          "pattern": "PetSubmissions({key}):?query:",
+          "name": "PetSubmissionsObjectPage",
+          "target": "PetSubmissionsObjectPage"
+        },
+        {
+          "pattern": "Petoberfests:?query:",
+          "name": "PetoberfestsList",
+          "target": "PetoberfestsList"
+        },
+        {
+          "pattern": "Petoberfests({key}):?query:",
+          "name": "PetoberfestsObjectPage",
+          "target": "PetoberfestsObjectPage"
+        }
+      ],
+      "targets": {
+        "PetSubmissionsList": {
+          "type": "Component",
+          "id": "PetSubmissionsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/PetSubmissions",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "PetSubmissions": { "detail": { "route": "PetSubmissionsObjectPage" } }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "columns": {
+                    "PhotoThumbColumn": {
+                      "header": "Photo",
+                      "width": "80px",
+                      "importance": "High",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "DataField::petName"
+                      },
+                      "template": "sap.tutorials.admin.petoberfest.ext.PhotoThumb",
+                      "availability": "Default"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "PetSubmissionsObjectPage": {
+          "type": "Component",
+          "id": "PetSubmissionsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/PetSubmissions",
+              "editableHeaderContent": false
+            }
+          }
+        },
+        "PetoberfestsList": {
+          "type": "Component",
+          "id": "PetoberfestsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Petoberfests",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Petoberfests": { "detail": { "route": "PetoberfestsObjectPage" } }
+              }
+            }
+          }
+        },
+        "PetoberfestsObjectPage": {
+          "type": "Component",
+          "id": "PetoberfestsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Petoberfests",
+              "editableHeaderContent": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

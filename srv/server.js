@@ -63,6 +63,8 @@ import { backfillUserProfile, resolveDbUser } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import multer from 'multer';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
+import { uploadPetSubmission } from './lib/petoberfest-upload.js';
+import { fetchPetPhoto } from './lib/petoberfest-photo-store.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
 import './graphql-config.js';
 import { makeA2aRouter } from './lib/a2a/rpc-router.js';
@@ -171,6 +173,20 @@ express.static = function(root, options) {
   const isWindows = process.platform === 'win32';
   return _static(root, isWindows ? { redirect: false, ...options } : options);
 };
+
+// Helper: set ETag + Cache-Control on a pet photo response and send the buffer.
+// Public route: ETag on sha256, 5-min cache w/ revalidation (permits fast takedown of hidden photos).
+// Admin route: private, non-cacheable (photo may be in any moderation state).
+function sendPetPhoto(res, p, { isPrivate = false } = {}) {
+  res.setHeader('Content-Type', p.mimeType || 'image/webp');
+  if (isPrivate) {
+    res.setHeader('Cache-Control', 'private, no-store');
+  } else {
+    res.setHeader('ETag', `"${p.sha256}"`);
+    res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+  }
+  return res.send(p.buffer);
+}
 
 cds.on('bootstrap', (app) => {
   // #1105: copy the PAT synthetic user (req.user, tokenSource==='pat') onto
@@ -815,6 +831,72 @@ cds.on('bootstrap', (app) => {
                    : 'UPLOAD_FAILED';
         return res.status(400).json({ error: code, message: e.message });
       }
+    });
+
+  // ── Petoberfest: multipart upload (authenticated) + photo serve (public/admin) ──
+  // Reserved BEFORE CAP mounts PetoberfestService at /petoberfest-api and
+  // AdminService at /admin — same rationale as the advocate photo route above.
+  const _petCtxMw  = cds.middlewares?.context?.() || ((req, res, next) => next());
+  const _petAuthMw = cds.middlewares?.auth?.()    || ((req, res, next) => next());
+  const _petUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+  app.post('/petoberfest-api/:slug/upload',
+    _petCtxMw, _petAuthMw, captureUserMiddleware(cds),
+    (req, res, next) => {
+      _petUpload.single('photo')(req, res, (err) => {
+        if (err) return res.status(400).json({ error: err.code || 'UPLOAD_ERROR', message: err.message });
+        next();
+      });
+    },
+    async (req, res) => {
+      try {
+        const user = resolveUser(req, cds);
+        if (!user) return res.status(401).json({ error: 'UNAUTHENTICATED', message: 'Sign in to upload' });
+        if (!req.file) return res.status(400).json({ error: 'MISSING_FIELD', message: "missing 'photo' field" });
+        const db = await cds.connect.to('db');
+        const out = await uploadPetSubmission(db, {
+          slug: req.params.slug, user, buffer: req.file.buffer,
+          mimeType: req.file.mimetype, petName: req.body?.petName,
+        });
+        if (out.duplicate) return res.status(409).json({ error: 'DUPLICATE', message: 'You already uploaded this photo' });
+        return res.json({ id: out.id, awarded: out.awarded, moderation: out.moderation });
+      } catch (e) {
+        const code = e.code === 'NOT_FOUND' ? 'NOT_FOUND'
+                   : /unsupported MIME/i.test(e.message) ? 'BAD_MIME'
+                   : /too large/i.test(e.message) ? 'TOO_LARGE'
+                   : /animated/i.test(e.message) ? 'ANIMATED'
+                   : /invalid image/i.test(e.message) ? 'BAD_IMAGE'
+                   : 'UPLOAD_FAILED';
+        const status = code === 'NOT_FOUND' ? 404 : e.code === 'UNAUTHENTICATED' ? 401 : 400;
+        return res.status(status).json({ error: code, message: e.message });
+      }
+    });
+
+  // Public photo serve — APPROVED only (404 otherwise so unapproved can't leak).
+  app.get('/petoberfest-api/photo/:id', async (req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const size = req.query.size === 'thumb' ? 'thumb' : 'display';
+      const p = await fetchPetPhoto(db, { id: req.params.id, size, requireApproved: true });
+      if (!p) return res.status(404).end();
+      return sendPetPhoto(res, p);
+    } catch (e) { cds.log('petoberfest').error(e); return res.status(500).end(); }
+  });
+
+  // Admin photo serve — any moderation state (Author/Admin gated) for queue thumbnails.
+  app.get('/admin/petoberfest/photo/:id',
+    _petCtxMw, _petAuthMw,
+    async (req, res) => {
+      const user = resolveUser(req, cds);
+      if (!user) return res.status(401).end();
+      if (!(user.is?.('Admin') || user.is?.('Tutorial.Author'))) return res.status(403).end();
+      try {
+        const db = await cds.connect.to('db');
+        const size = req.query.size === 'thumb' ? 'thumb' : 'display';
+        const p = await fetchPetPhoto(db, { id: req.params.id, size, requireApproved: false });
+        if (!p) return res.status(404).end();
+        return sendPetPhoto(res, p, { isPrivate: true });
+      } catch (e) { cds.log('petoberfest').error(e); return res.status(500).end(); }
     });
 
   // AnalyticsService at /admin/analytics (after this reservation), so calling next()

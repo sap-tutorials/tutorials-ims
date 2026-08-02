@@ -26,3 +26,18 @@ VIEW "TASK_VALUE_HELP_V1" AS
          "LAYOUT"                AS "LAYOUT"
   FROM "COM_SAP_DEVELOPERS_IMS_PUZZLES"
   WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL
+  UNION ALL
+  -- Petoberfests has no mdFileUrl/stepCount/layout columns (not a tutorial or puzzle); NULL like the other arms' non-applicable columns
+  SELECT "ID"                    AS "ID",
+         "SLUG"                  AS "SLUG",
+         "TITLE"                 AS "TITLE",
+         "PRIMARYTAG"            AS "PRIMARYTAG",
+         "EXPERIENCETAG"         AS "EXPERIENCETAG",
+         "AVERAGETIMETOCOMPLETE" AS "AVERAGETIMETOCOMPLETE",
+         "DESCRIPTION"           AS "DESCRIPTION",
+         'PETOBERFEST'           AS "TASKTYPE",
+         CAST(NULL AS NVARCHAR(1000)) AS "MDFILEURL",
+         CAST(NULL AS INTEGER)   AS "STEPCOUNT",
+         CAST(NULL AS NCLOB)     AS "LAYOUT"
+  FROM "COM_SAP_DEVELOPERS_IMS_PETOBERFESTS"
+  WHERE "STATUS" = 'ACTIVE' OR "STATUS" IS NULL

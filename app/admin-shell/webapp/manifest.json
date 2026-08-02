@@ -89,7 +89,8 @@
       "sap.tutorials.admin.videos": "./components/videos",
       "sap.tutorials.admin.videoRotation": "./components/video-rotation",
       "sap.tutorials.admin.pats": "./components/pats",
-      "sap.tutorials.admin.featureFlags": "./components/featureFlags"
+      "sap.tutorials.admin.featureFlags": "./components/featureFlags",
+      "sap.tutorials.admin.petoberfest": "./components/petoberfest"
     },
     "models": {
       "admin": {
@@ -348,6 +349,12 @@
       },
       "featureFlagsComponent": {
         "name": "sap.tutorials.admin.featureFlags",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "petoberfestComponent": {
+        "name": "sap.tutorials.admin.petoberfest",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -812,6 +819,16 @@
           ]
         },
         {
+          "name": "petoberfest",
+          "pattern": "petoberfest",
+          "target": [
+            {
+              "name": "petoberfestTarget",
+              "prefix": "pb"
+            }
+          ]
+        },
+        {
           "name": "feedbackDashboard",
           "pattern": "feedback/dashboard",
           "target": "feedbackDashboardTarget"
@@ -1125,6 +1142,13 @@
           "id": "featureFlagsTarget",
           "viewLevel": 1,
           "prefix": "ffl"
+        },
+        "petoberfestTarget": {
+          "type": "Component",
+          "usage": "petoberfestComponent",
+          "id": "petoberfestTarget",
+          "viewLevel": 1,
+          "prefix": "pb"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",

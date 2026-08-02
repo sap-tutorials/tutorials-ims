@@ -1,0 +1,20 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_PetSubmissions (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  petoberfest_ID NVARCHAR(36) NOT NULL,
+  user_ID NVARCHAR(36) NOT NULL,
+  petName NVARCHAR(120),
+  uploaderName NVARCHAR(120),
+  moderation NVARCHAR(12) DEFAULT 'PENDING',
+  photoDisplay BLOB,
+  photoThumb BLOB,
+  "MIMETYPE" NVARCHAR(40) DEFAULT 'image/webp',
+  sizeBytes INTEGER,
+  sha256 NVARCHAR(64),
+  uploadedAt TIMESTAMP,
+  PRIMARY KEY(ID)
+)

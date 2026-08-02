@@ -115,6 +115,14 @@
       ]
     },
     {
+      "key": "petoberfestGroup",
+      "title": "Petoberfest",
+      "icon": "sap-icon://photo-voltaic",
+      "items": [
+        { "key": "petoberfest", "title": "Pet Photo Moderation" }
+      ]
+    },
+    {
       "key": "runtimeSettings",
       "title": "Runtime Settings",
       "icon": "sap-icon://settings",

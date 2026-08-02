@@ -1,0 +1,14 @@
+{{/*
+  Petoberfest pet photo contest page.
+  Content shape: one .md file per event under hugo/content/petoberfest/<slug>.md
+  (front-matter: type: petoberfest, slug: <slug>). The Vue island reads data-slug;
+  island also falls back to window.location.pathname's last segment.
+*/}}
+{{ define "main" }}
+<main id="petoberfest-mount"
+      data-page-kind="petoberfest"
+      data-slug="{{ .Params.slug | default .File.ContentBaseName }}"
+      data-api="/petoberfest-api"></main>
+<noscript><p>This page requires JavaScript.</p></noscript>
+<script type="module" src="{{ "/js/petoberfest.js" | relURL }}"></script>
+{{ end }}

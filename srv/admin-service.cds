@@ -107,6 +107,33 @@ service AdminService {
   entity Puzzles as projection on ims.Puzzles { *, cast(legacyId as String) as legacyIdStr : String };
   // Puzzle-designer grid templates (built-in + author-saved).
   entity GridTemplates as projection on ims.GridTemplates;
+
+  // Petoberfest — pet photo contest CRUD + moderation queue.
+  // Draft-enabled for the event/contest metadata; submissions are read-only
+  // from the admin surface (moderation happens via bound actions only).
+  // Blob columns (photoDisplay/photoThumb) are intentionally excluded from
+  // the PetSubmissions projection — LOB locators expire when mixed with
+  // non-BLOB columns on HANA. Photo thumbnails are served via the dedicated
+  // express route /admin/petoberfest/photo/:id?size=thumb (Task 4).
+  @odata.draft.enabled
+  entity Petoberfests as projection on ims.Petoberfests;
+
+  // NOTE: AdminService is @requires:'Admin' at the service level (line 13).
+  // CAP enforces service-level auth first — action-level @requires below ANDs
+  // with it (not ORs). In practice, moderation callers need the Admin scope;
+  // the ['Tutorial.Author','Admin'] annotation documents the intended policy
+  // (any platform author with Admin can moderate) consistent with how the
+  // admin user is provisioned (Admin + Tutorial.Author roles together).
+  // A Tutorial.Author-only user (without Admin) cannot reach this service.
+  entity PetSubmissions as projection on ims.PetSubmissions {
+    ID, petName, uploaderName, moderation, sizeBytes, uploadedAt,
+    petoberfest.slug as contestSlug, petoberfest.title as contestTitle
+  } actions {
+    @(requires: ['Tutorial.Author', 'Admin'])
+    action approve();
+    @(requires: ['Tutorial.Author', 'Admin'])
+    action hide();
+  };
   entity Events as projection on ims.Events { *, cast(legacyId as String) as legacyIdStr : String };
   entity Prizes as projection on ims.Prizes { *, cast(legacyId as String) as legacyIdStr : String };
   entity PrizeRecords as projection on ims.PrizeRecords;
@@ -167,6 +194,13 @@ service AdminService {
     *,
     puzzle : Association to ims.Puzzles on puzzle.legacyId = taskLegacyId
   } where taskType = 'PUZZLE';
+
+  @readonly @cds.redirection.target: false
+  entity PetoberfestTaskRecords as projection on ims.TaskRecords {
+    *,
+    petoberfest : Association to ims.Petoberfests on petoberfest.legacyId = taskLegacyId
+  } where taskType = 'PETOBERFEST';
+
   entity TutorialMeta as projection on ims.TutorialMeta;
   entity TutorialContributors as projection on ims.TutorialContributors;
   entity TutorialRepositories as projection on ims.TutorialRepositories;

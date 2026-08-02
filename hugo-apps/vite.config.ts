@@ -15,6 +15,7 @@ const MAX_RELATED_GRAPH_GZIP = 12 * 1024;
 const MAX_ALERTS_GZIP = 12 * 1024;
 const MAX_HOMEPAGE_EXPLAINERS_GZIP = 12 * 1024;
 const MAX_HOMEPAGE_PERSONALIZER_GZIP = 12 * 1024;
+const MAX_PETOBERFEST_GZIP = 35 * 1024;
 
 function codeCheckBudget() {
   return {
@@ -214,8 +215,26 @@ function relatedGraphBudget() {
   };
 }
 
+function petoberfestBudget() {
+  return {
+    name: 'petoberfest-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['petoberfest.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_PETOBERFEST_GZIP) {
+        // @ts-ignore
+        this.error(`petoberfest.js is ${gz} bytes gzipped (> ${MAX_PETOBERFEST_GZIP}).`);
+      } else {
+        // @ts-ignore
+        this.warn(`petoberfest.js: ${gz} bytes gzipped (budget ${MAX_PETOBERFEST_GZIP}).`);
+      }
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), puzzleBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), puzzleBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget(), petoberfestBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -274,6 +293,7 @@ export default defineConfig({
         'featured-topics-carousel': resolve(__dirname, 'src/featured-topics-carousel/main.ts'),
         'homepage-events-band': resolve(__dirname, 'src/homepage-events-band/main.ts'),
         puzzle: resolve(__dirname, 'src/puzzle/main.ts'),
+        petoberfest: resolve(__dirname, 'src/petoberfest/main.ts'),
         'devtoberfest-schedule': resolve(__dirname, 'src/devtoberfest-schedule/main.ts'),
         'devtoberfest-sessions-grid': resolve(__dirname, 'src/devtoberfest-sessions-grid/main.ts'),
         'devtoberfest-sessions-calendar': resolve(__dirname, 'src/devtoberfest-sessions-calendar/main.ts'),

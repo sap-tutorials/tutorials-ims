@@ -76,7 +76,8 @@ module.exports = {
     'videos',
     'video-rotation',
     'pats',
-    'featureFlags'
+    'featureFlags',
+    'petoberfest'
   ],
 
   //
@@ -153,7 +154,8 @@ module.exports = {
     'video-rotation': 'vr',
     'content-moderation': 'cm',
     pats: 'pt',
-    featureFlags: 'ffl'
+    featureFlags: 'ffl',
+    petoberfest: 'pb'
   },
 
   //
