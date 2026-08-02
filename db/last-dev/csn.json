@@ -2265,6 +2265,10 @@
           },
           "@cds.persistence.name": "TERMSVERSION"
         },
+        "faqText": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "FAQTEXT"
+        },
         "contentRulesUrl": {
           "type": "cds.String",
           "length": 500,

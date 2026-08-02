@@ -30,6 +30,7 @@ entity DevtoberfestConfig : cuid, managed {
   edition           : Association to planner.Edition;   // planner GUID stored in edition_ID
   termsText         : LargeString;          // markdown body
   termsVersion      : Integer default 1;
+  faqText           : LargeString;          // markdown body for the public FAQ page
   contentRulesUrl   : String(500);
   faqUrl            : String(500);
   gameboardUrl      : String(500);
