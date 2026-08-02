@@ -14,8 +14,45 @@ export const COMMUNITY_PROFILE_BASE =
 // active Devtoberfest edition name (from config, e.g. "Devtoberfest 2026").
 // Falls back to a year-less "Devtoberfest" when no edition name is available,
 // so the greeting is never stale/hardcoded.
-export const gameboardHeader = (firstName: string, eventName?: string | null): string =>
-  `${firstName}, ${eventName || 'Devtoberfest'} has started!`
+//
+// The greeting is gated on the event lifecycle relative to now vs the configured
+// [startDate, endDate] window (#1439) — "… has started!" is only shown once the
+// event is actually running:
+//   'upcoming' → "… starts <date>!" (or "… is coming soon!" when no date known)
+//   'running'  → "… has started!"
+//   'ended'    → "… has ended."
+// A missing/unknown phase falls back to 'running' — matches the legacy
+// unconditional greeting and the backend's both-bounds-absent default.
+export type EventPhase = 'upcoming' | 'running' | 'ended'
+
+// Formats an ISO date string as a short, locale-stable "Oct 6" label for the
+// upcoming greeting. Formatted in UTC so the label matches the configured
+// window's calendar date regardless of the viewer's timezone (an event
+// starting 2026-10-06T00:00:00Z should read "Oct 6" everywhere, not "Oct 5"
+// for viewers west of UTC). Returns null on a missing/unparsable date so the
+// caller falls back to "is coming soon!".
+export const formatEventDate = (iso?: string | null): string | null => {
+  if (!iso) return null
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return null
+  return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+export const gameboardHeader = (
+  firstName: string,
+  eventName?: string | null,
+  phase?: EventPhase | null,
+  eventStart?: string | null,
+): string => {
+  const name = eventName || 'Devtoberfest'
+  if (phase === 'upcoming') {
+    const when = formatEventDate(eventStart)
+    return when ? `${firstName}, ${name} starts ${when}!` : `${firstName}, ${name} is coming soon!`
+  }
+  if (phase === 'ended') return `${firstName}, ${name} has ended.`
+  // 'running' (and the null/unknown fallback)
+  return `${firstName}, ${name} has started!`
+}
 
 // devtoberfest.scn — the SAP Community profile link label.
 export const SCN_LINK_LABEL = 'SAP Community Profile'
