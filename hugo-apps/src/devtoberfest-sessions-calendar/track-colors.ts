@@ -13,7 +13,7 @@ const PALETTE: TrackColor[] = [
 ];
 
 export function buildTrackColorMap(trackNames: string[]): Map<string, TrackColor> {
-  const distinct = [...new Set(trackNames.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const distinct = [...new Set(trackNames.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en'));
   const map = new Map<string, TrackColor>();
   distinct.forEach((name, i) => map.set(name, PALETTE[i % PALETTE.length]));
   return map;
