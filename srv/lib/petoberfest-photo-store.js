@@ -2,6 +2,7 @@
 // (1280px display + 320px thumb) and serves gated on moderation state.
 import sharp from 'sharp';
 import crypto from 'node:crypto';
+import cds from '@sap/cds';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -37,7 +38,7 @@ export async function processPetUpload(buffer, mimeType) {
 }
 
 export async function findDuplicate(db, { petoberfestID, userID, sha256 }) {
-  const { PetSubmissions } = db.entities('com.sap.developers.ims');
+  const { PetSubmissions } = cds.entities('com.sap.developers.ims');
   const row = await db.run(
     SELECT.one.from(PetSubmissions).columns('ID')
       .where({ petoberfest_ID: petoberfestID, user_ID: userID, sha256 }),
@@ -48,7 +49,7 @@ export async function findDuplicate(db, { petoberfestID, userID, sha256 }) {
 export async function insertSubmission(db, {
   petoberfestID, userID, petName, uploaderName, photoDisplay, photoThumb, sha256, sizeBytes, mimeType,
 }) {
-  const { PetSubmissions } = db.entities('com.sap.developers.ims');
+  const { PetSubmissions } = cds.entities('com.sap.developers.ims');
   const id = cryptoRandomId();
   await db.run(INSERT.into(PetSubmissions).entries({
     ID: id,
@@ -85,7 +86,7 @@ export async function fetchPetPhoto(db, { id, size = 'display', requireApproved 
     return { buffer: r.buffer, mimeType: r.mimeType, sha256: r.sha256, moderation: r.moderation };
   }
   // SQLite (unit tests): the media column comes back as a Buffer/Uint8Array.
-  const { PetSubmissions } = db.entities('com.sap.developers.ims');
+  const { PetSubmissions } = cds.entities('com.sap.developers.ims');
   const metaRow = await db.run(
     SELECT.one.from(PetSubmissions).columns('mimeType', 'sha256', 'moderation').where({ ID: id }));
   if (!metaRow) return null;
