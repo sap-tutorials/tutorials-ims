@@ -318,6 +318,37 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/petoberfest-api/photo/(.*)$",
+      "target": "/petoberfest-api/photo/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/petoberfest-api/slideshow(.*)$",
+      "target": "/petoberfest-api/slideshow$1",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/petoberfest-api/Petoberfests(.*)$",
+      "target": "/petoberfest-api/Petoberfests$1",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/petoberfest-api/(.*)/upload$",
+      "target": "/petoberfest-api/$1/upload",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
+      "source": "^/petoberfest-api/(.*)$",
+      "target": "/petoberfest-api/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",
