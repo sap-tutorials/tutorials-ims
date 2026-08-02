@@ -64,7 +64,7 @@ export async function resolveSecret(alias, opts = {}) {
   const logTag = opts.logTag ?? '[secret-resolver]';
   const entry = entryFor(alias);
 
-  if (entry.value && Date.now() < entry.expiresAt) {
+  if (entry.value != null && Date.now() < entry.expiresAt) {
     return entry.value;
   }
 
@@ -83,10 +83,10 @@ export async function resolveSecret(alias, opts = {}) {
       entry.warnedWindowAt = now;
     }
   }
-  if (!value) {
+  if (value == null) {
     value = process.env[alias] ?? null;
   }
-  if (value) {
+  if (value != null) {
     entry.value = value;
     entry.expiresAt = Date.now() + ttlMs;
   }
