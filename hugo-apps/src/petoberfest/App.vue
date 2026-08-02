@@ -1,6 +1,6 @@
 <!-- hugo-apps/src/petoberfest/App.vue -->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { fetchSlideshow, fetchMyUploads, uploadPet, probeAuth, photoUrl,
          type SlideEntry, type MyUpload } from './lib/server';
 
@@ -11,6 +11,7 @@ const loggedIn = ref(false);
 const idx = ref(0);
 const petName = ref('');
 const file = ref<File | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
 const status = ref<string>('');
 const busy = ref(false);
 
@@ -24,10 +25,15 @@ onMounted(async () => {
   if (loggedIn.value) mine.value = await fetchMyUploads(props.slug);
 });
 
+onUnmounted(() => { if (timer !== undefined) clearInterval(timer); });
+
 function onPick(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0] || null;
-  if (f && (!/^image\//.test(f.type) || f.size > 10 * 1024 * 1024)) {
-    status.value = 'Please choose an image under 10 MB.'; file.value = null; return;
+  if (f && !/^image\//.test(f.type)) {
+    status.value = 'Please choose an image file under 10 MB.'; file.value = null; return;
+  }
+  if (f && f.size > 10 * 1024 * 1024) {
+    status.value = 'Please choose an image file under 10 MB.'; file.value = null; return;
   }
   file.value = f; status.value = '';
 }
@@ -41,9 +47,10 @@ async function submit() {
       ? 'Your pet is uploaded — pending approval 🐾 You earned your Petoberfest points!'
       : 'Your pet is uploaded — pending approval 🐾';
     petName.value = ''; file.value = null;
+    if (fileInput.value) fileInput.value.value = '';
     mine.value = await fetchMyUploads(props.slug);
   } catch (e: any) {
-    status.value = e.code === 'DUPLICATE' ? 'You already uploaded that photo.' : (e.message || 'Upload failed.');
+    status.value = e.code === 'DUPLICATE' || e.status === 409 ? 'You already uploaded that photo.' : (e.message || 'Upload failed.');
   } finally { busy.value = false; }
 }
 </script>
@@ -63,7 +70,7 @@ async function submit() {
   <section class="pet-upload">
     <template v-if="loggedIn">
       <h2>Add your pet</h2>
-      <input type="file" accept="image/*" @change="onPick" :disabled="busy" />
+      <input ref="fileInput" type="file" accept="image/*" @change="onPick" :disabled="busy" />
       <input type="text" v-model="petName" maxlength="120" placeholder="Pet name / caption" :disabled="busy" />
       <button @click="submit" :disabled="busy || !file">Upload</button>
       <p class="pet-status" v-if="status">{{ status }}</p>

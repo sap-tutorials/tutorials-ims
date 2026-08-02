@@ -12,7 +12,7 @@ export function photoUrl(id: string, size: 'display' | 'thumb' = 'display'): str
 
 export async function probeAuth(): Promise<boolean> {
   try { const r = await fetch('/auth/user', { credentials: 'include' }); return r.ok; }
-  catch { return false; }
+  catch (e) { console.warn('probeAuth: unexpected network error', e); return false; }
 }
 
 export async function fetchSlideshow(slug: string): Promise<SlideEntry[]> {
