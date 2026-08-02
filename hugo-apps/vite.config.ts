@@ -277,6 +277,8 @@ export default defineConfig({
         'devtoberfest-schedule': resolve(__dirname, 'src/devtoberfest-schedule/main.ts'),
         'devtoberfest-sessions-grid': resolve(__dirname, 'src/devtoberfest-sessions-grid/main.ts'),
         'devtoberfest-sessions-calendar': resolve(__dirname, 'src/devtoberfest-sessions-calendar/main.ts'),
+        'devtoberfest-rules': resolve(__dirname, 'src/devtoberfest-rules/main.ts'),
+        'devtoberfest-faq': resolve(__dirname, 'src/devtoberfest-faq/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',

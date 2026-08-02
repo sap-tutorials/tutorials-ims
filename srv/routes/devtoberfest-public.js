@@ -83,6 +83,21 @@ async function termsHandler(_req, res) {
   }
 }
 
+async function faqHandler(_req, res) {
+  try {
+    await cds.connect.to('db');
+    const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
+    const config = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true });
+    if (!config) {
+      return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
+    }
+    return res.status(200).json({ text: config.faqText || '' });
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/faq failed:', err);
+    return res.status(500).json({ error: 'INTERNAL' });
+  }
+}
+
 async function bannerHandler(req, res) {
   try {
     await cds.connect.to('db');
@@ -114,7 +129,8 @@ export function register(app) {
   const _authMw    = cds.middlewares?.auth?.()    || ((req, _res, next) => next());
   app.get('/api/devtoberfest/status', _contextMw, _authMw, statusHandler);
   app.get('/api/devtoberfest/terms',  _contextMw, _authMw, termsHandler);
+  app.get('/api/devtoberfest/faq',    _contextMw, _authMw, faqHandler);
   app.get('/api/devtoberfest/banner', bannerHandler);
 }
 
-export { statusHandler, termsHandler, bannerHandler };
+export { statusHandler, termsHandler, faqHandler, bannerHandler };
