@@ -2226,6 +2226,25 @@ export default class AdminService extends cds.ApplicationService {
       });
     });
 
+    // Petoberfest moderation bound actions on PetSubmissions.
+    // Row ID arrives via req.params[0].ID — same canonical pattern as the
+    // bound markReviewed/regenerate handlers above (see #759 hotfix comment).
+    // Gated on Tutorial.Author OR Admin (inherited from the service @requires
+    // plus the action-specific @(requires:['Tutorial.Author','Admin']) in CDS).
+    const { PetSubmissions } = this.entities;
+    this.on('approve', PetSubmissions, async (req) => {
+      const id = req.params?.[0]?.ID ?? req.params?.[0];
+      if (!id) return req.reject(400, 'approve: missing entity key');
+      await UPDATE(this.entities.PetSubmissions).set({ moderation: 'APPROVED' }).where({ ID: id });
+      return req.reply();
+    });
+    this.on('hide', PetSubmissions, async (req) => {
+      const id = req.params?.[0]?.ID ?? req.params?.[0];
+      if (!id) return req.reject(400, 'hide: missing entity key');
+      await UPDATE(this.entities.PetSubmissions).set({ moderation: 'HIDDEN' }).where({ ID: id });
+      return req.reply();
+    });
+
 
     // Phase 2-B (#464): Severity-classified expiry warnings for the
     // admin-shell notifications popover. Read-only — no DB writes.

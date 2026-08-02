@@ -3866,3 +3866,92 @@ annotate AdminService.FeatureFlags with @UI: {
     { Value: howToChangeText, Label: 'How to change' }
   ]}
 };
+
+// --- Petoberfest admin moderation surface ---
+// PetSubmissions: moderation queue list report with approve/hide actions.
+// Blob columns (photoDisplay/photoThumb) are NOT exposed here; thumbnails are
+// served via the express route /admin/petoberfest/photo/:id?size=thumb.
+// UI.DataFieldForAction is required for action buttons in the LR toolbar —
+// manifest controlConfiguration.actions entries alone render nothing.
+annotate AdminService.PetSubmissions with @(
+  UI.LineItem: [
+    { $Type: 'UI.DataField', Value: petName,      Label: 'Pet Name' },
+    { $Type: 'UI.DataField', Value: uploaderName, Label: 'Uploader' },
+    { $Type: 'UI.DataField', Value: contestTitle, Label: 'Contest' },
+    { $Type: 'UI.DataField', Value: moderation,   Label: 'Status' },
+    { $Type: 'UI.DataField', Value: uploadedAt,   Label: 'Uploaded' },
+    {
+      $Type: 'UI.DataFieldForAnnotation',
+      Target: '@UI.DataPoint#Thumbnail',
+      Label: 'Thumbnail'
+    },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.PetSubmissions/approve', Label: 'Approve' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.PetSubmissions/hide',    Label: 'Hide' }
+  ],
+  UI.DataPoint#Thumbnail: {
+    Value: ID,
+    Title: 'Photo'
+  },
+  UI.SelectionFields: [ moderation, contestSlug ],
+  UI.HeaderInfo: {
+    TypeName: 'Submission',
+    TypeNamePlural: 'Submissions',
+    Title:    { Value: petName },
+    Description: { Value: uploaderName }
+  },
+  UI.FieldGroup#Details: { Data: [
+    { Value: petName,      Label: 'Pet Name' },
+    { Value: uploaderName, Label: 'Uploader' },
+    { Value: contestTitle, Label: 'Contest' },
+    { Value: contestSlug,  Label: 'Contest Slug' },
+    { Value: moderation,   Label: 'Status' },
+    { Value: sizeBytes,    Label: 'File Size (bytes)' },
+    { Value: uploadedAt,   Label: 'Uploaded At' }
+  ]},
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Label: 'Details', Target: '@UI.FieldGroup#Details' }
+  ],
+  UI.Identification: [
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.PetSubmissions/approve', Label: 'Approve' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.PetSubmissions/hide',    Label: 'Hide' }
+  ],
+  Capabilities.DeleteRestrictions: { Deletable: false },
+  Capabilities.InsertRestrictions: { Insertable: false },
+  Capabilities.UpdateRestrictions: { Updatable: false }
+);
+
+annotate AdminService.PetSubmissions with {
+  ID           @Common.Label: 'ID';
+  petName      @Common.Label: 'Pet Name';
+  uploaderName @Common.Label: 'Uploader';
+  moderation   @Common.Label: 'Status';
+  sizeBytes    @Common.Label: 'Size (bytes)';
+  uploadedAt   @Common.Label: 'Uploaded At';
+  contestSlug  @Common.Label: 'Contest Slug';
+  contestTitle @Common.Label: 'Contest Title';
+};
+
+// Petoberfests: contest event metadata (draft-enabled CRUD).
+annotate AdminService.Petoberfests with @(
+  UI.LineItem: [
+    { $Type: 'UI.DataField', Value: title,  Label: 'Title' },
+    { $Type: 'UI.DataField', Value: slug,   Label: 'Slug' },
+    { $Type: 'UI.DataField', Value: status, Label: 'Status' }
+  ],
+  UI.SelectionFields: [ status ],
+  UI.HeaderInfo: {
+    TypeName: 'Petoberfest',
+    TypeNamePlural: 'Petoberfests',
+    Title:    { Value: title },
+    Description: { Value: slug }
+  },
+  UI.FieldGroup#General: { Data: [
+    { Value: title,  Label: 'Title' },
+    { Value: slug,   Label: 'Slug' },
+    { Value: status, Label: 'Status' },
+    { Value: intro,  Label: 'Introduction' }
+  ]},
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Label: 'General', Target: '@UI.FieldGroup#General' }
+  ]
+);

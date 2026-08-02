@@ -107,6 +107,24 @@ service AdminService {
   entity Puzzles as projection on ims.Puzzles { *, cast(legacyId as String) as legacyIdStr : String };
   // Puzzle-designer grid templates (built-in + author-saved).
   entity GridTemplates as projection on ims.GridTemplates;
+
+  // Petoberfest — pet photo contest CRUD + moderation queue.
+  // Draft-enabled for the event/contest metadata; submissions are read-only
+  // from the admin surface (moderation happens via bound actions only).
+  // Blob columns (photoDisplay/photoThumb) are intentionally excluded from
+  // the PetSubmissions projection — LOB locators expire when mixed with
+  // non-BLOB columns on HANA. Photo thumbnails are served via the dedicated
+  // express route /admin/petoberfest/photo/:id?size=thumb (Task 4).
+  @odata.draft.enabled
+  entity Petoberfests as projection on ims.Petoberfests;
+
+  entity PetSubmissions as projection on ims.PetSubmissions {
+    ID, petName, uploaderName, moderation, sizeBytes, uploadedAt,
+    petoberfest.slug as contestSlug, petoberfest.title as contestTitle
+  } actions {
+    action approve();
+    action hide();
+  };
   entity Events as projection on ims.Events { *, cast(legacyId as String) as legacyIdStr : String };
   entity Prizes as projection on ims.Prizes { *, cast(legacyId as String) as legacyIdStr : String };
   entity PrizeRecords as projection on ims.PrizeRecords;
