@@ -863,7 +863,7 @@ cds.on('bootstrap', (app) => {
                    : /animated/i.test(e.message) ? 'ANIMATED'
                    : /invalid image/i.test(e.message) ? 'BAD_IMAGE'
                    : 'UPLOAD_FAILED';
-        const status = code === 'NOT_FOUND' ? 404 : 400;
+        const status = code === 'NOT_FOUND' ? 404 : e.code === 'UNAUTHENTICATED' ? 401 : 400;
         return res.status(status).json({ error: code, message: e.message });
       }
     });
@@ -876,7 +876,7 @@ cds.on('bootstrap', (app) => {
       const p = await fetchPetPhoto(db, { id: req.params.id, size, requireApproved: true });
       if (!p) return res.status(404).end();
       return sendPetPhoto(res, p);
-    } catch { return res.status(500).end(); }
+    } catch (e) { cds.log('petoberfest').error(e); return res.status(500).end(); }
   });
 
   // Admin photo serve — any moderation state (Author/Admin gated) for queue thumbnails.
@@ -885,14 +885,14 @@ cds.on('bootstrap', (app) => {
     async (req, res) => {
       const user = resolveUser(req, cds);
       if (!user) return res.status(401).end();
-      if (typeof user.is === 'function' && !(user.is('Admin') || user.is('Tutorial.Author'))) return res.status(403).end();
+      if (!(user.is?.('Admin') || user.is?.('Tutorial.Author'))) return res.status(403).end();
       try {
         const db = await cds.connect.to('db');
         const size = req.query.size === 'thumb' ? 'thumb' : 'display';
         const p = await fetchPetPhoto(db, { id: req.params.id, size, requireApproved: false });
         if (!p) return res.status(404).end();
         return sendPetPhoto(res, p);
-      } catch { return res.status(500).end(); }
+      } catch (e) { cds.log('petoberfest').error(e); return res.status(500).end(); }
     });
 
   // AnalyticsService at /admin/analytics (after this reservation), so calling next()
