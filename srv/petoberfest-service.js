@@ -14,8 +14,8 @@ export async function resolveOrCreatePetUser(db, user) {
     await db.run(INSERT.into(Users).entries({
       ID, sapId,
       email: user.attr?.email || null,
-      givenName: user.attr?.given_name || null,
-      familyName: user.attr?.family_name || null,
+      firstName: user.attr?.given_name || null,
+      lastName: user.attr?.family_name || null,
     }));
     row = { ID, sapId };
   }
