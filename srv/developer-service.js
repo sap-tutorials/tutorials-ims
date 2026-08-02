@@ -77,7 +77,8 @@ export default class DeveloperService extends cds.ApplicationService {
     const { Tutorials: dbTutorials, Steps: dbSteps, TaskRecords: dbTaskRecords,
             Users: dbUsers, Events: dbEvents, Missions: dbMissions,
             CompletionPaths: dbPaths, CompletionPathItems: dbPathItems,
-            Checkpoints: dbCheckpoints, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
+            Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests,
+            UserLearningPreferences } = cds.entities('com.sap.developers.ims');
 
     // Auto-assign legacyId on TaskRecord creation
     this.before('CREATE', 'TaskRecords', async (req) => {
@@ -444,10 +445,14 @@ export default class DeveloperService extends cds.ApplicationService {
       const checkpoints = taskLegacyIds.length > 0
         ? await SELECT.from(dbCheckpoints).where({ legacyId: { in: taskLegacyIds } })
         : [];
+      const petoberfests = taskLegacyIds.length > 0
+        ? await SELECT.from(dbPetoberfests).where({ legacyId: { in: taskLegacyIds } })
+        : [];
 
       const taskMap = new Map();
       for (const t of tutorials) taskMap.set(`TUTORIAL:${t.legacyId}`, t);
       for (const c of checkpoints) taskMap.set(`CHECKPOINT:${c.legacyId}`, c);
+      for (const p of petoberfests) taskMap.set(`PETOBERFEST:${p.legacyId}`, p);
 
       const missingSlugIds = allItems
         .filter(i => i.taskType === 'TUTORIAL' && taskMap.has(`TUTORIAL:${i.taskLegacyId}`))
@@ -552,10 +557,14 @@ export default class DeveloperService extends cds.ApplicationService {
       const checkpoints = taskLegacyIds.length > 0
         ? await SELECT.from(dbCheckpoints).where({ legacyId: { in: taskLegacyIds } })
         : [];
+      const petoberfests = taskLegacyIds.length > 0
+        ? await SELECT.from(dbPetoberfests).where({ legacyId: { in: taskLegacyIds } })
+        : [];
 
       const taskMap = new Map();
       for (const t of tutorials) taskMap.set(`TUTORIAL:${t.legacyId}`, t);
       for (const c of checkpoints) taskMap.set(`CHECKPOINT:${c.legacyId}`, c);
+      for (const p of petoberfests) taskMap.set(`PETOBERFEST:${p.legacyId}`, p);
 
       let userRecords = [];
       const sapId = resolveUserSapId(user);

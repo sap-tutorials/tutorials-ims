@@ -194,6 +194,13 @@ service AdminService {
     *,
     puzzle : Association to ims.Puzzles on puzzle.legacyId = taskLegacyId
   } where taskType = 'PUZZLE';
+
+  @readonly @cds.redirection.target: false
+  entity PetoberfestTaskRecords as projection on ims.TaskRecords {
+    *,
+    petoberfest : Association to ims.Petoberfests on petoberfest.legacyId = taskLegacyId
+  } where taskType = 'PETOBERFEST';
+
   entity TutorialMeta as projection on ims.TutorialMeta;
   entity TutorialContributors as projection on ims.TutorialContributors;
   entity TutorialRepositories as projection on ims.TutorialRepositories;

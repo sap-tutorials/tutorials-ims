@@ -320,7 +320,10 @@ export default class AdminService extends cds.ApplicationService {
       // Issue #644 — Puzzle surfaces in admin analytics dropdowns. The
       // matching @analytics.exposed entity association lives on
       // db/views.cds TaskRecordsAnalytics.
-      { code: 'PUZZLE',   label: 'Puzzle'   }
+      { code: 'PUZZLE',   label: 'Puzzle'   },
+      // Task 8 — Petoberfest surfaces in admin analytics dropdowns. The
+      // matching association lives on db/views.cds TaskRecordsAnalytics.
+      { code: 'PETOBERFEST', label: 'Petoberfest' }
     ]);
     this.on('READ', 'AnalyticsLevels', () => [
       { code: 'beginner',     label: 'Beginner'     },

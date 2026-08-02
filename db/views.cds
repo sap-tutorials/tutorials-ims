@@ -48,6 +48,16 @@ view Tasks as
     primaryTag, experienceTag, averageTimeToComplete,
     'PUZZLE' as taskType : String(20),
     createdAt, modifiedAt
+  }
+  UNION ALL
+  // Task 8 — Petoberfests join the Tasks UNION so CompletionAnalytics' LEFT JOIN
+  // Tasks resolves taskTitle for PETOBERFEST TaskRecords. Column shape matches
+  // the other branches exactly — Petoberfests extends TaskBase so all fields exist.
+  SELECT from ims.Petoberfests {
+    ID, legacyId, title, description, status, deletionReason,
+    primaryTag, experienceTag, averageTimeToComplete,
+    'PETOBERFEST' as taskType : String(20),
+    createdAt, modifiedAt
   };
 
 // MissionTutorialItems — a slice, NOT the full navigator catalog.
@@ -409,6 +419,9 @@ entity TaskRecordsAnalytics as projection on ims.TaskRecords {
   // association pattern. Used by AdminService.PuzzleTaskRecords + admin
   // analytics groupings.
   puzzle   : Association to ims.Puzzles   on puzzle.legacyId   = taskLegacyId and taskType = 'PUZZLE',
+  // Task 8 — soft-link to Petoberfests, mirroring the puzzle pattern.
+  // Used by AdminService.PetoberfestTaskRecords + admin analytics groupings.
+  petoberfest : Association to ims.Petoberfests on petoberfest.legacyId = taskLegacyId and taskType = 'PETOBERFEST',
 };
 
 entity TutorialFeedbackAggregate as
