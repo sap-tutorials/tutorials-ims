@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   iso, parseISO, addDays, addWeeks, addMonths,
-  startOfWeek, weekDays, monthGridCells, groupByDate,
+  startOfWeek, weekDays, monthGridCells, groupByDate, unscheduled,
 } from '../calendar-core';
 
 describe('calendar-core date helpers', () => {
@@ -17,6 +17,17 @@ describe('calendar-core date helpers', () => {
     expect(iso(addWeeks(base, 1))).toBe('2026-11-07');
     expect(iso(addMonths(parseISO('2026-12-15')!, 1))).toBe('2027-01-15');
     expect(iso(base)).toBe('2026-10-31'); // unchanged
+  });
+
+  it('addMonths clamps day to target month length (no month-skip)', () => {
+    // Aug 31 + 1 → Sep has 30 days → clamps to Sep 30, NOT Oct 1 (would skip Sep)
+    expect(iso(addMonths(parseISO('2026-08-31')!, 1))).toBe('2026-09-30');
+    // Jan 31 + 1 → Feb 2027 (28 days) → clamps to Feb 28
+    expect(iso(addMonths(parseISO('2027-01-31')!, 1))).toBe('2027-02-28');
+    // Mar 31 - 1 → Feb 2026 (28 days) → clamps to Feb 28
+    expect(iso(addMonths(parseISO('2026-03-31')!, -1))).toBe('2026-02-28');
+    // year-wrap still works for a safe day
+    expect(iso(addMonths(parseISO('2026-12-15')!, 1))).toBe('2027-01-15');
   });
 
   it('startOfWeek returns Monday for any day', () => {
@@ -54,10 +65,21 @@ describe('calendar-core date helpers', () => {
       { id: 'b', kind: 'session', title: 'B', scheduledDate: '2026-10-05', scheduledTime: '16:00' },
       { id: 'a', kind: 'session', title: 'A', scheduledDate: '2026-10-05', scheduledTime: '14:00' },
       { id: 'n', kind: 'session', title: 'N', scheduledDate: '2026-10-05' }, // no time → last
-      { id: 'x', kind: 'session', title: 'X' }, // no date → excluded
+      { id: 'x', kind: 'session', title: 'X' }, // no date → excluded from the date map
     ] as any;
     const map = groupByDate(sessions);
     expect([...map.keys()]).toEqual(['2026-10-05']);
     expect(map.get('2026-10-05')!.map((s) => s.id)).toEqual(['a', 'b', 'n']);
+  });
+
+  it('unscheduled surfaces sessions with no parseable scheduledDate', () => {
+    const sessions = [
+      { id: 'a', kind: 'session', title: 'A', scheduledDate: '2026-10-05' },
+      { id: 'x', kind: 'session', title: 'X' }, // no date
+      { id: 'y', kind: 'session', title: 'Y', scheduledDate: '' }, // blank date
+      { id: 'z', kind: 'session', title: 'Z', scheduledDate: 'not-a-date' }, // unparseable
+    ] as any;
+    // the undated/unparseable rows are surfaced here rather than silently vanishing
+    expect(unscheduled(sessions).map((s) => s.id)).toEqual(['x', 'y', 'z']);
   });
 });

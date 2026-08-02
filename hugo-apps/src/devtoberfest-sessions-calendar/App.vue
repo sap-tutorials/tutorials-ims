@@ -9,7 +9,7 @@ import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow, Session } from '../devtoberfest-schedule-shared/types';
 import {
-  iso, parseISO, addMonths, addWeeks, addDays, startOfWeek, groupByDate,
+  iso, parseISO, addMonths, addWeeks, addDays, startOfWeek, groupByDate, unscheduled,
 } from './calendar-core';
 import { buildTrackColorMap, legendFor } from './track-colors';
 import MonthGrid from './MonthGrid.vue';
@@ -83,6 +83,7 @@ const filteredSessions = computed<Session[]>(() => {
 });
 
 const byDate = computed(() => groupByDate(filteredSessions.value));
+const unscheduledSessions = computed<Session[]>(() => unscheduled(filteredSessions.value));
 const todayIso = iso(new Date());
 
 const title = computed(() => {
@@ -156,6 +157,25 @@ onMounted(() => loadData());
       <MonthGrid v-if="viewMode === 'month'" :cursor="cursor" :by-date="byDate" :colors="colorMap" :today="todayIso" :is-authenticated="isAuthenticated" @select="selectedRow = $event as any" @open-day="openDay" />
       <WeekAgenda v-else-if="viewMode === 'week'" :cursor="cursor" :by-date="byDate" :colors="colorMap" :today="todayIso" :is-authenticated="isAuthenticated" @select="selectedRow = $event as any" />
       <DayAgenda v-else :cursor="cursor" :by-date="byDate" :colors="colorMap" :is-authenticated="isAuthenticated" @select="selectedRow = $event as any" />
+
+      <!-- unscheduled bucket: sessions with no scheduledDate, surfaced rather than dropped (spec §7) -->
+      <div v-if="unscheduledSessions.length" class="cal-unscheduled">
+        <h2 class="cal-unscheduled-title">Unscheduled</h2>
+        <div class="cal-unscheduled-list">
+          <button
+            v-for="s in unscheduledSessions"
+            :key="s.id"
+            class="cal-unscheduled-card"
+            :class="{ 'cal-unscheduled-card--complete': isAuthenticated && (s as any).complete }"
+            :style="{ borderLeftColor: (s.trackName && colorMap.get(s.trackName)?.border) || 'var(--sapContent_ForegroundBorderColor, #e4e7ed)' }"
+            @click="selectedRow = s as any"
+          >
+            <span class="cal-unscheduled-name">{{ s.title }}</span>
+            <span v-if="s.trackName" class="cal-unscheduled-track">{{ s.trackName }}</span>
+            <span v-if="isAuthenticated && (s as any).complete" class="cal-unscheduled-done" aria-label="Completed">✓</span>
+          </button>
+        </div>
+      </div>
     </template>
 
     <DetailPanel :row="selectedRow ?? null" @close="selectedRow = null" />
@@ -183,4 +203,12 @@ onMounted(() => loadData());
 .cal-legend-dot { width: 0.7rem; height: 0.7rem; border-radius: 3px; display: inline-block; }
 .sc-field { display: flex; flex-direction: column; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.cal-unscheduled { display: flex; flex-direction: column; gap: 0.5rem; }
+.cal-unscheduled-title { font-size: var(--sapFontHeader5Size, 1rem); font-weight: 700; margin: 0.5rem 0 0; color: var(--sapContent_LabelColor, #6a6d70); }
+.cal-unscheduled-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.cal-unscheduled-card { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--sapList_BorderColor, #e4e7ed); border-left: 4px solid transparent; border-radius: 6px; padding: 0.4rem 0.6rem; cursor: pointer; font: inherit; text-align: left; background: var(--sapBaseColor, #fff); }
+.cal-unscheduled-card--complete { background: var(--sapSuccessBackground, #f1fdf6); }
+.cal-unscheduled-name { font-size: 0.8rem; font-weight: 600; }
+.cal-unscheduled-track { font-size: 0.7rem; color: var(--sapContent_LabelColor, #6a6d70); }
+.cal-unscheduled-done { color: var(--sapPositiveColor, #107e3e); font-size: 0.7rem; font-weight: 700; }
 </style>

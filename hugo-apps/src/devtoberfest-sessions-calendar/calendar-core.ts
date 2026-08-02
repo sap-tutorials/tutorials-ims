@@ -24,9 +24,14 @@ export function addWeeks(date: Date, n: number): Date {
 }
 
 export function addMonths(date: Date, n: number): Date {
-  const d = new Date(date.getTime());
-  d.setUTCMonth(d.getUTCMonth() + n);
-  return d;
+  // Clamp the day to the target month's length so end-of-month cursors
+  // (e.g. Aug 31 + 1) land on the last valid day (Sep 30) instead of
+  // overflowing into the following month (Oct 1) and silently skipping one.
+  const y = date.getUTCFullYear();
+  const targetMonth = date.getUTCMonth() + n;
+  const daysInTarget = new Date(Date.UTC(y, targetMonth + 1, 0)).getUTCDate();
+  const day = Math.min(date.getUTCDate(), daysInTarget);
+  return new Date(Date.UTC(y, targetMonth, day, date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(), date.getUTCMilliseconds()));
 }
 
 // Monday-first weekday index: 0 = Monday … 6 = Sunday
@@ -65,4 +70,10 @@ export function groupByDate(sessions: Session[]): Map<string, Session[]> {
     });
   }
   return map;
+}
+
+// Sessions with no parseable scheduledDate — surfaced in a clearly-labelled
+// "Unscheduled" bucket rather than silently dropped (design spec §7).
+export function unscheduled(sessions: Session[]): Session[] {
+  return sessions.filter((s) => !parseISO(s.scheduledDate));
 }
