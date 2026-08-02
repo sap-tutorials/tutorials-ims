@@ -72,11 +72,13 @@ function cryptoRandomId() {
 // passes requireApproved:false to preview PENDING/HIDDEN.
 export async function fetchPetPhoto(db, { id, size = 'display', requireApproved = true }) {
   const col = size === 'thumb' ? 'PHOTOTHUMB' : 'PHOTODISPLAY';
-  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+  const isHana = (db.kind || '').toLowerCase() === 'hana'
+    || db.options?.kind === 'hana'
+    || db.constructor?.name === 'HANAService';
   if (isHana) {
     const rows = await db.run(
       `SELECT ${col} AS "buffer", MIMETYPE AS "mimeType", SHA256 AS "sha256", MODERATION AS "moderation" ` +
-      `FROM "${PET_TABLE}" WHERE "ID" = ?`, [id]);
+      `FROM ${PET_TABLE} WHERE ID = ?`, [id]);
     const r = rows && rows[0];
     if (!r || !r.buffer) return null;
     if (requireApproved && r.moderation !== 'APPROVED') return null;
