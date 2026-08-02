@@ -56,6 +56,7 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
   'e2e: petoberfest (authenticated upload → approve → photo serve)',
   () => {
     let browser;
+    // NOTE: steps share uploadedId via closure and MUST run serially — do not add .concurrent to this describe.
     let uploadedId = null; // filled in by the upload step
 
     beforeAll(async () => { browser = await launchBrowser(); });
@@ -64,27 +65,8 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
     it('authenticated upload lands a PENDING submission', async () => {
       const { context } = await newPage(browser, { authenticated: true });
       try {
-        // Build a minimal 1×1 white WebP in memory (no fs I/O needed in the
-        // browser context — Playwright's request API sends it directly).
-        // We use a raw FormData via context.request (Playwright APIRequestContext)
-        // which honours the Basic Authorization header from the browser context.
-        //
-        // The 1×1 PNG is the smallest valid image buffer accepted by sharp.
-        // hex: PNG signature + IHDR + IDAT + IEND (137 bytes total).
-        const png1x1 = Buffer.from(
-          '89504e470d0a1a0a0000000d494844520000000100000001' +
-          '080200000090wc3d0000000c4944415408d7636060600000' +
-          '00040001f4b77540000000049454e44ae426082',
-          'hex'
-        ).toString('base64');
-        // NOTE: Buffer.from(hex) is safer — build the blob in the API call below
-        // via a Uint8Array to avoid any base64 decode path difference.
-
-        // Use the raw Playwright fetch API for multipart. This requires the
-        // context's Authorization header to be set (done in newPage).
-        const form = new FormData();
-        // Playwright's request API doesn't have a browser FormData; use fetch
-        // via page.evaluate to stay inside the authenticated browser context.
+        // Use the Playwright APIRequestContext for multipart — it honours the
+        // Basic Authorization header baked into the browser context by newPage().
         const result = await context.request.fetch('/petoberfest-api/petoberfest-2026/upload', {
           method: 'POST',
           multipart: {
