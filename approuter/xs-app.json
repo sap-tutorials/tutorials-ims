@@ -179,6 +179,12 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/community-profile-ui$",
+      "target": "/community-profile-ui/",
+      "destination": "gameboard-api",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/community-profile-ui/(.*)$",
       "target": "/community-profile-ui/$1",
       "destination": "gameboard-api",
