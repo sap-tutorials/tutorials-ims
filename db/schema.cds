@@ -15,7 +15,7 @@ aspect LegacyKeyed {
 type ExperienceLevel : String(255) enum { beginner; intermediate; advanced; }
 type TaskStatus      : String(50)  enum { ACTIVE; INACTIVE; }
 type MissionType     : String(20)  enum { SEQUENTIAL; SET; }
-type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; }
+type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; PETOBERFEST; }
 type EventType       : String(20)  enum { DEVTOBERFEST; TECHED; CODEJAM; CHALLENGE; OTHER; }
 
 aspect TaskBase : cuid, managed, LegacyKeyed {
@@ -186,7 +186,7 @@ entity TaskRecords : cuid, managed, LegacyKeyed {
   // NVARCHAR(5000); the enum is enforced at the CDS layer (@Common.ValueList
   // dropdowns + admin write-paths) rather than as a DB constraint, so this
   // change requires no .hdbmigrationtable ALTER.
-  taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; PUZZLE; };
+  taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; PUZZLE; PETOBERFEST; };
   status                    : String enum { COMPLETED; IN_PROGRESS; SUPERSEDED; };
   progress                  : Integer default 0;
   completionTime            : Int64;
@@ -209,6 +209,26 @@ entity PuzzleProgress : cuid, managed {
   puzzle        : Association to Puzzles @mandatory;
   filledGrid    : LargeString;   // JSON {"r,c":"LETTER"}
   attemptNumber : Integer default 1;
+}
+
+@assert.unique.slug: [slug]
+entity Petoberfests : TaskBase {
+  slug  : String(255) @mandatory;
+  intro : LargeString;
+}
+
+entity PetSubmissions : cuid, managed {
+  petoberfest  : Association to Petoberfests not null;
+  user         : Association to Users not null;
+  petName      : String(120);
+  uploaderName : String(120);
+  moderation   : String(12) enum { PENDING; APPROVED; HIDDEN; } default 'PENDING';
+  photoDisplay : LargeBinary @Core.MediaType: mimeType;
+  photoThumb   : LargeBinary @Core.MediaType: 'image/webp';
+  mimeType     : String(40)  @Core.IsMediaType default 'image/webp';
+  sizeBytes    : Integer;
+  sha256       : String(64);
+  uploadedAt   : Timestamp;
 }
 
 entity UserMetaData : cuid, LegacyKeyed {

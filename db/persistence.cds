@@ -7,6 +7,8 @@ annotate ims.Groups with @cds.persistence.journal;
 annotate ims.Steps with @cds.persistence.journal;
 annotate ims.Checkpoints with @cds.persistence.journal;
 annotate ims.Puzzles with @cds.persistence.journal;
+annotate ims.Petoberfests with @cds.persistence.journal;
+annotate ims.PetSubmissions with @cds.persistence.journal;
 annotate ims.GridTemplates with @cds.persistence.journal;
 annotate ims.Users with @cds.persistence.journal;
 annotate ims.TaskRecords with @cds.persistence.journal;
