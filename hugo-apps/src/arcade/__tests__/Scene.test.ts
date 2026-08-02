@@ -77,6 +77,32 @@ describe('Scene.vue — legacy instructional content', () => {
     expect(text).not.toContain('2025')
   })
 
+  it("says 'has started!' when the event phase is running", () => {
+    const w = mount(Scene, { props: { board: board(1, 3, { firstName: 'Tom', eventName: 'Devtoberfest 2026', eventPhase: 'running' }), config: CFG, demo: false } })
+    expect(w.find('.s-header').text()).toContain('Tom, Devtoberfest 2026 has started!')
+  })
+
+  it("says 'starts <date>!' before the event has begun (upcoming, #1439)", () => {
+    const w = mount(Scene, { props: { board: board(1, 3, { firstName: 'Tom', eventName: 'Devtoberfest 2026', eventPhase: 'upcoming', eventStart: '2026-10-06T00:00:00Z' }), config: CFG, demo: false } })
+    const text = w.find('.s-header').text()
+    expect(text).toContain('Tom, Devtoberfest 2026 starts Oct 6!')
+    expect(text).not.toContain('has started!')
+  })
+
+  it("says 'is coming soon!' when upcoming with no known start date", () => {
+    const w = mount(Scene, { props: { board: board(1, 3, { firstName: 'Tom', eventName: 'Devtoberfest 2026', eventPhase: 'upcoming' }), config: CFG, demo: false } })
+    const text = w.find('.s-header').text()
+    expect(text).toContain('Tom, Devtoberfest 2026 is coming soon!')
+    expect(text).not.toContain('has started!')
+  })
+
+  it("says 'has ended.' after the event window closes", () => {
+    const w = mount(Scene, { props: { board: board(1, 3, { firstName: 'Tom', eventName: 'Devtoberfest 2026', eventPhase: 'ended' }), config: CFG, demo: false } })
+    const text = w.find('.s-header').text()
+    expect(text).toContain('Tom, Devtoberfest 2026 has ended.')
+    expect(text).not.toContain('has started!')
+  })
+
   it('links the SAP Community profile only when community-linked', () => {
     const linked = mount(Scene, { props: { board: board(1, 3, { firstName: 'Tom', communityUrl: `${COMMUNITY_PROFILE_BASE}42` }), config: CFG, demo: false } })
     expect(linked.find('.s-header a').exists()).toBe(true)
