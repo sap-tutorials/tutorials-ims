@@ -220,13 +220,13 @@
  * runner's start (left 22.27%, width 7.57%). Keep the cat's body over the pipe:
  * travel translateX 0 (start ~22%) .. -95% of its width (-> left edge ~15.1%),
  * NOT the old -180% which ran it off the pipe's left end.
- * Runner.gif art faces RIGHT, so face the direction of travel:
- * face left (scaleX -1) while moving left, face right (scaleX 1) while moving right. */
+ * Runner.gif art faces LEFT, so face the direction of travel:
+ * face left (scaleX 1) while moving left, face right (scaleX -1) while moving right. */
 @keyframes runnerRun {
-  0%   { transform: translateX(0)    scaleX(-1) }
-  48%  { transform: translateX(-95%) scaleX(-1) }
-  52%  { transform: translateX(-95%) scaleX(1)  }
-  100% { transform: translateX(0)    scaleX(1)  }
+  0%   { transform: translateX(0)    scaleX(1)  }
+  48%  { transform: translateX(-95%) scaleX(1)  }
+  52%  { transform: translateX(-95%) scaleX(-1) }
+  100% { transform: translateX(0)    scaleX(-1) }
 }
 
 .s-avatar { opacity: 0; animation-timing-function: cubic-bezier(0.280,0.840,0.420,1); }
