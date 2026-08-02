@@ -175,12 +175,16 @@ express.static = function(root, options) {
 };
 
 // Helper: set ETag + Cache-Control on a pet photo response and send the buffer.
-// Reuses the same pattern as the advocate photo serve conventions (ETag on sha256,
-// one-day public cache). No Content-Type override — mimeType comes from the store.
-function sendPetPhoto(res, p) {
-  res.setHeader('ETag', `"${p.sha256}"`);
-  res.setHeader('Cache-Control', 'public, max-age=86400');
+// Public route: ETag on sha256, 5-min cache w/ revalidation (permits fast takedown of hidden photos).
+// Admin route: private, non-cacheable (photo may be in any moderation state).
+function sendPetPhoto(res, p, { isPrivate = false } = {}) {
   res.setHeader('Content-Type', p.mimeType || 'image/webp');
+  if (isPrivate) {
+    res.setHeader('Cache-Control', 'private, no-store');
+  } else {
+    res.setHeader('ETag', `"${p.sha256}"`);
+    res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+  }
   return res.send(p.buffer);
 }
 
@@ -891,7 +895,7 @@ cds.on('bootstrap', (app) => {
         const size = req.query.size === 'thumb' ? 'thumb' : 'display';
         const p = await fetchPetPhoto(db, { id: req.params.id, size, requireApproved: false });
         if (!p) return res.status(404).end();
-        return sendPetPhoto(res, p);
+        return sendPetPhoto(res, p, { isPrivate: true });
       } catch (e) { cds.log('petoberfest').error(e); return res.status(500).end(); }
     });
 
