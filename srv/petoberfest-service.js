@@ -1,6 +1,7 @@
 // srv/petoberfest-service.js
 import cds from '@sap/cds';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
+import { getNextLegacyId } from './lib/legacy-id.js';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,254}$/;
 
@@ -12,10 +13,13 @@ export async function resolveOrCreatePetUser(db, user) {
   if (!row) {
     const ID = cds.utils.uuid();
     await db.run(INSERT.into(Users).entries({
-      ID, sapId,
-      email: user.attr?.email || null,
-      firstName: user.attr?.given_name || null,
-      lastName: user.attr?.family_name || null,
+      ID,
+      uuid: user.id,
+      sapId,
+      legacyId: await getNextLegacyId('Users', db),
+      email: user.attr?.email || '',
+      firstName: user.attr?.given_name || '',
+      lastName: user.attr?.family_name || '',
     }));
     row = { ID, sapId };
   }
