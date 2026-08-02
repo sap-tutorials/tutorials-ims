@@ -2794,6 +2794,9 @@ annotate AdminService.DevtoberfestConfig with {
   termsText         @title: 'Content Rules (markdown)'
                     @Common.Label: 'Content Rules (markdown)'
                     @UI.MultiLineText;
+  faqText           @title: 'FAQ (markdown)'
+                    @Common.Label: 'FAQ (markdown)'
+                    @UI.MultiLineText;
   termsVersion      @title: 'Terms Version' @Common.Label: 'Terms Version';
   contentRulesUrl   @title: 'Content Rules URL' @Common.Label: 'Content Rules URL';
   faqUrl            @title: 'FAQ URL' @Common.Label: 'FAQ URL';
@@ -2831,7 +2834,7 @@ annotate AdminService.DevtoberfestConfig with @UI: {
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General',  Label: 'Event & Status' },
-    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Terms',    Label: 'Content Rules / Terms' },
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Terms',    Label: 'Content Rules, Terms & FAQ' },
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#SubPages', Label: 'Sub-pages (leave blank to hide)' },
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Banner',   Label: 'Event Banner' }
   ],
@@ -2842,7 +2845,8 @@ annotate AdminService.DevtoberfestConfig with @UI: {
     { Value: termsVersion }
   ]},
   FieldGroup#Terms: { Data: [
-    { Value: termsText }
+    { Value: termsText },
+    { Value: faqText }
   ]},
   FieldGroup#SubPages: { Data: [
     { Value: contentRulesUrl },
