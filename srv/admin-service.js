@@ -2229,8 +2229,13 @@ export default class AdminService extends cds.ApplicationService {
     // Petoberfest moderation bound actions on PetSubmissions.
     // Row ID arrives via req.params[0].ID — same canonical pattern as the
     // bound markReviewed/regenerate handlers above (see #759 hotfix comment).
-    // Gated on Tutorial.Author OR Admin (inherited from the service @requires
-    // plus the action-specific @(requires:['Tutorial.Author','Admin']) in CDS).
+    //
+    // Auth note: AdminService is @requires:'Admin' at service level (admin-service.cds:13).
+    // CAP enforces service-level auth first; action-level @requires in the CDS ANDs with it.
+    // In practice, callers need Admin scope. The CDS annotation ['Tutorial.Author','Admin']
+    // documents that users with Admin+Tutorial.Author (the standard admin user provisioning)
+    // are the intended moderators. Tutorial.Author-only users (without Admin) cannot reach
+    // this service and are rejected at the service gate before these handlers run.
     const { PetSubmissions } = this.entities;
     this.on('approve', PetSubmissions, async (req) => {
       const id = req.params?.[0]?.ID ?? req.params?.[0];

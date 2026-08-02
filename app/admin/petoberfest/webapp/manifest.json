@@ -5,7 +5,7 @@
     "type": "application",
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
-    "applicationVersion": { "version": "0.1.0" },
+    "applicationVersion": { "version": "0.1.1" },
     "i18n": "i18n/i18n.properties",
     "dataSources": {
       "mainService": {
@@ -81,6 +81,23 @@
               "initialLoad": "Enabled",
               "navigation": {
                 "PetSubmissions": { "detail": { "route": "PetSubmissionsObjectPage" } }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "columns": {
+                    "PhotoThumbColumn": {
+                      "header": "Photo",
+                      "width": "80px",
+                      "importance": "High",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "DataField::petName"
+                      },
+                      "template": "sap.tutorials.admin.petoberfest.ext.PhotoThumb",
+                      "availability": "Default"
+                    }
+                  }
+                }
               }
             }
           }

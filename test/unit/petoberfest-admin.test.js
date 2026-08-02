@@ -2,7 +2,10 @@
 import { expect, test, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 
-const project = cds.test('serve', '--project', '.', '--in-memory');
+cds.test('serve', '--project', '.', '--in-memory');
+
+const ADMIN_USER = { id: 'admin', roles: ['Admin', 'Tutorial.Author', 'authenticated-user'] };
+const UNPRIV_USER = { id: 'unprivileged', roles: ['authenticated-user'] };
 
 let db;
 beforeAll(async () => {
@@ -14,7 +17,6 @@ beforeAll(async () => {
 });
 
 test('approve sets moderation APPROVED', async () => {
-  const ADMIN_USER = { id: 'admin', roles: ['Admin', 'Tutorial.Author', 'authenticated-user'] };
   const srv = await cds.connect.to('AdminService');
   await srv.tx({ user: ADMIN_USER }, async (tx) => {
     await tx.send({ event: 'approve', entity: 'PetSubmissions', params: [{ ID: 's1' }] });
@@ -25,7 +27,6 @@ test('approve sets moderation APPROVED', async () => {
 });
 
 test('hide sets moderation HIDDEN', async () => {
-  const ADMIN_USER = { id: 'admin', roles: ['Admin', 'Tutorial.Author', 'authenticated-user'] };
   const srv = await cds.connect.to('AdminService');
   await srv.tx({ user: ADMIN_USER }, async (tx) => {
     await tx.send({ event: 'hide', entity: 'PetSubmissions', params: [{ ID: 's1' }] });
@@ -33,4 +34,25 @@ test('hide sets moderation HIDDEN', async () => {
   const { PetSubmissions } = cds.entities('com.sap.developers.ims');
   const row = await db.run(SELECT.one.from(PetSubmissions).where({ ID: 's1' }));
   expect(row.moderation).toBe('HIDDEN');
+});
+
+test('authenticated-user without Admin is rejected (403) from approve', async () => {
+  // AdminService is @requires:'Admin' at service level — CAP rejects non-Admin callers
+  // before any action handler runs. Action-level @requires(['Tutorial.Author','Admin'])
+  // in the CDS ANDs with the service gate; it does not lower the bar for non-Admin callers.
+  const srv = await cds.connect.to('AdminService');
+  await expect(
+    srv.tx({ user: UNPRIV_USER }, (tx) =>
+      tx.send({ event: 'approve', entity: 'PetSubmissions', params: [{ ID: 's1' }] })
+    )
+  ).rejects.toMatchObject({ code: 403 });
+});
+
+test('authenticated-user without Admin is rejected (403) from hide', async () => {
+  const srv = await cds.connect.to('AdminService');
+  await expect(
+    srv.tx({ user: UNPRIV_USER }, (tx) =>
+      tx.send({ event: 'hide', entity: 'PetSubmissions', params: [{ ID: 's1' }] })
+    )
+  ).rejects.toMatchObject({ code: 403 });
 });

@@ -118,11 +118,20 @@ service AdminService {
   @odata.draft.enabled
   entity Petoberfests as projection on ims.Petoberfests;
 
+  // NOTE: AdminService is @requires:'Admin' at the service level (line 13).
+  // CAP enforces service-level auth first — action-level @requires below ANDs
+  // with it (not ORs). In practice, moderation callers need the Admin scope;
+  // the ['Tutorial.Author','Admin'] annotation documents the intended policy
+  // (any platform author with Admin can moderate) consistent with how the
+  // admin user is provisioned (Admin + Tutorial.Author roles together).
+  // A Tutorial.Author-only user (without Admin) cannot reach this service.
   entity PetSubmissions as projection on ims.PetSubmissions {
     ID, petName, uploaderName, moderation, sizeBytes, uploadedAt,
     petoberfest.slug as contestSlug, petoberfest.title as contestTitle
   } actions {
+    @(requires: ['Tutorial.Author', 'Admin'])
     action approve();
+    @(requires: ['Tutorial.Author', 'Admin'])
     action hide();
   };
   entity Events as projection on ims.Events { *, cast(legacyId as String) as legacyIdStr : String };

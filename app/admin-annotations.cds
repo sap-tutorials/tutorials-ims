@@ -3880,18 +3880,9 @@ annotate AdminService.PetSubmissions with @(
     { $Type: 'UI.DataField', Value: contestTitle, Label: 'Contest' },
     { $Type: 'UI.DataField', Value: moderation,   Label: 'Status' },
     { $Type: 'UI.DataField', Value: uploadedAt,   Label: 'Uploaded' },
-    {
-      $Type: 'UI.DataFieldForAnnotation',
-      Target: '@UI.DataPoint#Thumbnail',
-      Label: 'Thumbnail'
-    },
     { $Type: 'UI.DataFieldForAction', Action: 'AdminService.PetSubmissions/approve', Label: 'Approve' },
     { $Type: 'UI.DataFieldForAction', Action: 'AdminService.PetSubmissions/hide',    Label: 'Hide' }
   ],
-  UI.DataPoint#Thumbnail: {
-    Value: ID,
-    Title: 'Photo'
-  },
   UI.SelectionFields: [ moderation, contestSlug ],
   UI.HeaderInfo: {
     TypeName: 'Submission',

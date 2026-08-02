@@ -1,0 +1,11 @@
+<core:FragmentDefinition
+  xmlns:core="sap.ui.core"
+  xmlns:m="sap.m">
+  <m:Image
+    src="{= '/admin/petoberfest/photo/' + ${ID} + '?size=thumb' }"
+    width="60px"
+    height="60px"
+    decorative="true"
+    densityAware="false"
+    class="sapUiTinyMargin" />
+</core:FragmentDefinition>
