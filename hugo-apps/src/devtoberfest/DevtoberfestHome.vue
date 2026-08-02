@@ -124,16 +124,17 @@ interface RailItem {
   href: string
 }
 
-const railItems = computed<RailItem[]>(() => {
-  const s = status.value
-  if (!s) return []
-  return [
-    { label: 'THE RULES', href: s.contentRulesUrl || '#' },
-    { label: 'THE WEEKS', href: s.activitiesUrl   || '#' },
-    { label: 'FAQ',       href: s.faqUrl          || '#' },
-    { label: 'GAMEBOARD', href: s.gameboardUrl    || '#' },
-  ]
-})
+// Fixed internal navigation — independent of admin-entered config URLs.
+// Order is intentional (spec 2026-08-02). All targets are stable Hugo routes.
+const railItems: RailItem[] = [
+  { label: 'THE WEEKS',   href: '/devtoberfest/calendar/' },
+  { label: 'ACTIVITIES',  href: '/devtoberfest/schedule/' },
+  { label: 'SESSIONS',    href: '/devtoberfest/sessions/' },
+  { label: 'ARCADE',      href: '/devtoberfest/arcade/' },
+  { label: 'LEADERBOARD', href: '/devtoberfest/gameboard/' },
+  { label: 'THE RULES',   href: '/devtoberfest/rules/' },
+  { label: 'FAQ',         href: '/devtoberfest/faq/' },
+]
 
 function onCtaClick(): void {
   if (state.value === 'anonymous') {

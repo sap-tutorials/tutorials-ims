@@ -374,6 +374,9 @@
 .dtf-rail-item:nth-child(2) { --rail-color: #7858ff; }
 .dtf-rail-item:nth-child(3) { --rail-color: #1ea672; }
 .dtf-rail-item:nth-child(4) { --rail-color: #f5a623; }
+.dtf-rail-item:nth-child(5) { --rail-color: #e76500; }
+.dtf-rail-item:nth-child(6) { --rail-color: #d20a0a; }
+.dtf-rail-item:nth-child(7) { --rail-color: #aa0dc9; }
 
 .dtf-rail-item:hover {
   transform: translateX(2px);
