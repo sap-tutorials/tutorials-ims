@@ -2397,6 +2397,13 @@
           "type": "cds.String",
           "length": 500,
           "@cds.persistence.name": "A2ATOKENURL"
+        },
+        "alertsEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "ALERTSENABLED"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"

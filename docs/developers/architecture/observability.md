@@ -116,8 +116,8 @@ failure paths where passive dashboards are not enough.
 
 - **Fail-open** — all errors are caught and warn-logged; the alert never throws
   into or blocks the call path it watches.
-- **Default off** — no-ops unless `ALERTS_ENABLED=true` is set in the CF
-  environment.
+- **Default off** — no-ops unless `ChatSettings.alertsEnabled` is `true`
+  (admin-editable in the DB; see below).
 - **Memoised** — `cds.connect.to('alerts')` is called once; the promise is
   cleared on error to allow reconnect on the next raise.
 
@@ -191,11 +191,15 @@ mapping and reads the token from the environment:
 - **Local dev / CF deploy:** set `NODE_AUTH_TOKEN` to a token with `read:packages`
   on the `sap-tutorials` org before `npm install`.
 
-## Feature flag
+## Master toggle (DB-backed, admin-editable)
 
-- `ALERTS_ENABLED` (default `false` / absent) — master switch for the helper.
-  Set to `'true'` to enable; any other value (including unset) silently skips
-  every `raise()` call.
+- **`ChatSettings.alertsEnabled`** (Boolean, default `false`) — the master
+  switch for the helper. Resolved via `srv/lib/runtime-config/alert-settings.js`
+  (5 s cache; fail-safe default `false`). This is a **DB column, not an env
+  var** — per project convention, operational toggles live in the DB and are
+  edited live in the admin UI (`/admin-ui/#joule`, the Joule/ChatSettings page)
+  with no restart. There is deliberately **no `ALERTS_ENABLED` env fallback**:
+  an env var could silently shadow a fresh admin write until the next restart.
 
 ## Operator post-merge checklist
 
@@ -241,13 +245,12 @@ email ACTION pointing to the real `devrel-oncall` distribution-list address.
 Wire it to the `devrel-oncall` CONDITION (minSeverity ERROR). Without this step
 the instance is bound but no emails are sent.
 
-**6. Enable alerting.**
+**6. Enable alerting (admin UI — no restart).**
 
-```bash
-cf target -s dev   # confirm space before set-env
-cf set-env tutorials-srv ALERTS_ENABLED true
-cf restart tutorials-srv
-```
+Toggle `ChatSettings.alertsEnabled` to `true` in the admin UI at
+`/admin-ui/#joule` (the Joule/ChatSettings settings page). The resolver picks it
+up within ~5 s — no `cf set-env`, no restart. (Equivalently, a direct
+`PATCH /admin/ChatSettings(<ID>)` with `{ "alertsEnabled": true }`.)
 
 **7. Live-verify one alert end-to-end.**
 Trigger a known failure (e.g. a publish-reject via the admin UI with a
@@ -268,7 +271,7 @@ after deploy and check the buildpack version log.
 ## Surfaces
 
 - CF logs — `cds.log('alerting')` warn lines on any raise failure (e.g. ANS
-  unreachable, `ALERTS_ENABLED` off).
+  unreachable, or `ChatSettings.alertsEnabled` off).
 - ANS cockpit — alert history under the `tutorials-alert-notification`
   instance.
 - No admin-UI tile in v1 — the metrics module's existing `/admin-ui/#metrics`

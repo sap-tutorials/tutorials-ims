@@ -2,10 +2,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import cds from '@sap/cds'
 
-describe('alerting helper', () => {
-  beforeEach(() => { vi.resetModules(); delete process.env.ALERTS_ENABLED })
+// Gating is DB-backed via the alert-settings resolver (ChatSettings.alertsEnabled),
+// NOT an env var. Mock the resolver to toggle enabled/disabled in tests.
+const enabledState = { value: true }
+vi.mock('../../srv/lib/runtime-config/alert-settings.js', () => ({
+  isAlertingEnabled: () => Promise.resolve(enabledState.value),
+  _resetForTest: () => {}
+}))
 
-  it('no-ops when ALERTS_ENABLED is not set (never connects)', async () => {
+describe('alerting helper', () => {
+  beforeEach(() => { vi.resetModules(); enabledState.value = true })
+
+  it('no-ops when alerting is disabled in the DB (never connects)', async () => {
+    enabledState.value = false
     const spy = vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn() })
     const { raise } = await import('../../srv/lib/alerting.js')
     await raise({ eventType: 'X', severity: 'ERROR' })
@@ -15,7 +24,6 @@ describe('alerting helper', () => {
   })
 
   it('routes to the alerts service when enabled', async () => {
-    process.env.ALERTS_ENABLED = 'true'
     const raiseSpy = vi.fn().mockResolvedValue(undefined)
     vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: raiseSpy }) })
     const { raise } = await import('../../srv/lib/alerting.js')
@@ -24,21 +32,18 @@ describe('alerting helper', () => {
   })
 
   it('never throws when the service.raise throws (fail-open)', async () => {
-    process.env.ALERTS_ENABLED = 'true'
     vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: vi.fn().mockRejectedValue(new Error('boom')) }) })
     const { raise } = await import('../../srv/lib/alerting.js')
     await expect(raise({ eventType: 'X', severity: 'ERROR' })).resolves.toBeUndefined()
   })
 
   it('never throws when connect itself throws (fail-open)', async () => {
-    process.env.ALERTS_ENABLED = 'true'
     vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockRejectedValue(new Error('no binding')) })
     const { raise } = await import('../../srv/lib/alerting.js')
     await expect(raise({ eventType: 'X', severity: 'ERROR' })).resolves.toBeUndefined()
   })
 
   it('publish-reject envelope shape is correct', async () => {
-    process.env.ALERTS_ENABLED = 'true'
     const raiseSpy = vi.fn().mockResolvedValue(undefined)
     vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: raiseSpy }) })
     const { raise } = await import('../../srv/lib/alerting.js')
@@ -56,7 +61,6 @@ describe('alerting helper', () => {
   })
 
   it('scheduled-job-failed envelope uses jobName as resourceName', async () => {
-    process.env.ALERTS_ENABLED = 'true'
     const raiseSpy = vi.fn().mockResolvedValue(undefined)
     vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: raiseSpy }) })
     const { raise } = await import('../../srv/lib/alerting.js')
@@ -73,7 +77,6 @@ describe('alerting helper', () => {
   })
 
   it('rebuild-dispatch-failed envelope shape is correct', async () => {
-    process.env.ALERTS_ENABLED = 'true'
     const raiseSpy = vi.fn().mockResolvedValue(undefined)
     vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: raiseSpy }) })
     const { raise } = await import('../../srv/lib/alerting.js')
