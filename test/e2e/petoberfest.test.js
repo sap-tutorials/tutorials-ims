@@ -9,6 +9,45 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { hasBaseUrl, hasCredentials, authHeader } from './e2e.config.js';
 import { launchBrowser, newPage } from './_browser.js';
 
+// ── 0. Admin nav reachability: contest maintenance LR (issue #1449) ─────────
+// Regression guard for the "shipped but unreachable" nav gap: the Petoberfests
+// contest List Report existed in app/admin/petoberfest/ but no shell nav item
+// surfaced it. The fix adds a "Contests" item to petoberfestGroup that deep-links
+// the petoberfest componentUsage to its inner Petoberfests route. We assert the
+// exact hash onNavItemSelect emits ("petoberfestContests&/pb/Petoberfests")
+// resolves to a rendered FE List Report inside the shell — proving route +
+// componentUsage target + inner deep-link all line up. Needs admin creds.
+describe.skipIf(!hasBaseUrl() || !hasCredentials())(
+  'e2e: petoberfest contest maintenance is reachable from admin nav (#1449)',
+  () => {
+    let browser;
+    beforeAll(async () => { browser = await launchBrowser(); });
+    afterAll(async () => { await browser?.close(); });
+
+    it('#petoberfestContests deep-links to the Petoberfests contest List Report', async () => {
+      const { context, page } = await newPage(browser, { authenticated: true });
+      try {
+        // The full hash produced by the "Contests" nav click in Shell.controller.js.
+        await page.goto('/admin-ui/#petoberfestContests&/pb/Petoberfests', {
+          waitUntil: 'domcontentloaded',
+        });
+        // FE List Report surfaces as sap.m.List or sap.ui.table.Table — role-first
+        // with a UI5-class fallback (mirrors admin-shell.test.js).
+        await page
+          .locator('[role="list"], [role="grid"], .sapMList, .sapUiTable')
+          .first()
+          .waitFor({ state: 'visible', timeout: 30_000 });
+        expect(
+          await page.locator('[role="list"], [role="grid"], .sapMList, .sapUiTable').count(),
+          'contest List Report should render inside the shell'
+        ).toBeGreaterThan(0);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+);
+
 // ── 1. Anonymous page load ─────────────────────────────────────────────────
 describe.skipIf(!hasBaseUrl())('e2e: petoberfest (anonymous)', () => {
   let browser;

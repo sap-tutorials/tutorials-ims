@@ -119,6 +119,7 @@
       "title": "Petoberfest",
       "icon": "sap-icon://photo-voltaic",
       "items": [
+        { "key": "petoberfestContests", "title": "Contests" },
         { "key": "petoberfest", "title": "Pet Photo Moderation" }
       ]
     },
