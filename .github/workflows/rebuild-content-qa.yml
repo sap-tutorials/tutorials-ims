@@ -19,6 +19,21 @@ env:
   NODE_VERSION: '22'
   CHANNEL: qa
 
+# Serialize QA rebuilds. The single srv-side `content-publish` JobLock
+# (srv/lib/content-publish-session.js, 30-min TTL) admits ONE publish session
+# at a time; two QA rebuilds racing it means the loser gets a hard
+# 409 "Another publish in progress" and the run fails. This is the #1454
+# mirror of the #1384 fix already on rebuild-content.yml — QA runs through a
+# SEPARATE workflow (`tutorial-qa-updated`), so it never inherited that block,
+# and bursts of QA dispatches (e.g. two merges to a -Contribution repo minutes
+# apart) collided on the lock. QA is a single channel, so the group is static.
+# cancel-in-progress:false because a rebuild that has already acquired the lock
+# and is mid-publish must finish — cancelling it would strand the lock until its
+# 30-min TTL and orphan the PUBLISHING manifest row.
+concurrency:
+  group: rebuild-content-qa
+  cancel-in-progress: false
+
 jobs:
   rebuild-qa:
     runs-on: ubuntu-latest
