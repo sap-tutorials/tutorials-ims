@@ -43,7 +43,7 @@ async function scheduleHandler(req, res) {
       const trackIds = tracks.map((t) => t.ID);
       sessions = trackIds.length
         ? await SELECT.from(ext.Session)
-            .columns('ID', 'SESSIONCODE', 'TRACK_ID', 'TITLE', 'ABSTRACT', 'STATUS', 'SESSIONLENGTH', 'WEEK', 'SCHEDULEDDATE', 'SCHEDULEDTIME', 'YOUTUBEURL', 'COMMUNITYEVENTURL', 'ACTIVITY_ID')
+            .columns('ID', 'SESSIONCODE', 'TRACK_ID', 'TITLE', 'ABSTRACT', 'STATUS', 'SESSIONLENGTH', 'WEEK', 'SCHEDULEDSTART', 'SCHEDULEDTIMEZONE', 'YOUTUBEURL', 'COMMUNITYEVENTURL', 'ACTIVITY_ID')
             .where({ TRACK_ID: { in: trackIds } })
         : [];
       activities = trackIds.length

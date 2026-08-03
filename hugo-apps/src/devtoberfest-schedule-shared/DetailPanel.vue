@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ScheduleRow } from './types';
 import { youtubeThumb, safeHref } from './completion';
+import { formatViewerLocal, formatHomeZone } from './format-session-time';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -53,13 +54,12 @@ const isActivity = computed(() => props.row?.kind === 'activity');
             <dt>Week</dt>
             <dd>{{ row.week }}</dd>
           </template>
-          <template v-if="(row as any).scheduledDate">
-            <dt>Date</dt>
-            <dd>{{ (row as any).scheduledDate }}</dd>
-          </template>
-          <template v-if="(row as any).scheduledTime">
-            <dt>Time</dt>
-            <dd>{{ (row as any).scheduledTime }}</dd>
+          <template v-if="(row as any).scheduledStart">
+            <dt>When</dt>
+            <dd>
+              {{ formatViewerLocal((row as any).scheduledStart) }}
+              <span v-if="(row as any).scheduledTimeZone" class="detail-panel__homezone">{{ formatHomeZone((row as any).scheduledStart, (row as any).scheduledTimeZone) }} · event time</span>
+            </dd>
           </template>
           <template v-if="isActivity && (row as any).points">
             <dt>Points</dt>
@@ -251,5 +251,12 @@ const isActivity = computed(() => props.row?.kind === 'activity');
   font-size: 0.8125rem;
   font-weight: 600;
   align-self: flex-start;
+}
+
+.detail-panel__homezone {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin-top: 0.1rem;
 }
 </style>

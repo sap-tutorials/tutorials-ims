@@ -16,13 +16,13 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
   return {
     activeEditionId,
     editions: editions
-      .map((e) => ({ id: e.ID, name: e.NAME, year: e.YEAR, isCurrent: !!e.ISCURRENT, startDate: e.STARTDATE, endDate: e.ENDDATE }))
+      .map((e) => ({ id: e.ID, name: e.NAME, year: e.YEAR, isCurrent: !!e.ISCURRENT, startsAt: e.STARTSAT, endsAt: e.ENDSAT, timeZone: e.TIMEZONE }))
       .sort((a, b) => String(b.year || '').localeCompare(String(a.year || ''))),
     sessions: sessions
       .map((s) => ({
         id: s.ID, kind: 'session', title: s.TITLE, abstract: s.ABSTRACT,
         trackId: s.TRACK_ID, trackName: mapTrack(s.TRACK_ID).NAME || '', trackDay: mapTrack(s.TRACK_ID).DAYOFWEEK || '',
-        week: s.WEEK, scheduledDate: s.SCHEDULEDDATE, scheduledTime: s.SCHEDULEDTIME,
+        week: s.WEEK, scheduledStart: s.SCHEDULEDSTART, scheduledTimeZone: s.SCHEDULEDTIMEZONE, recordingStart: s.RECORDINGSTART,
         youtubeUrl: s.YOUTUBEURL || '', communityEventUrl: s.COMMUNITYEVENTURL || '',
         activityId: s.ACTIVITY_ID || null, status: s.STATUS,
       }))
@@ -55,7 +55,7 @@ function completedActivityPoints(activities = [], completedSlugSet = new Set()) 
 
 function sortByWeekThenDate(a, b) {
   const w = String(a.week || '').localeCompare(String(b.week || ''), undefined, { numeric: true });
-  return w !== 0 ? w : String(a.scheduledDate || '').localeCompare(String(b.scheduledDate || ''));
+  return w !== 0 ? w : String(a.scheduledStart || '').localeCompare(String(b.scheduledStart || ''));
 }
 function sortByWeekThenTitle(a, b) {
   const w = String(a.week || '').localeCompare(String(b.week || ''), undefined, { numeric: true });

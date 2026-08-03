@@ -9,8 +9,9 @@ import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow, Session } from '../devtoberfest-schedule-shared/types';
 import {
-  iso, parseISO, addMonths, addWeeks, addDays, startOfWeek, groupByDate, unscheduled,
+  addMonths, addWeeks, addDays, startOfWeek, groupByDate, unscheduled,
 } from './calendar-core';
+import { viewerDayKey } from '../devtoberfest-schedule-shared/format-session-time';
 import { buildTrackColorMap, legendFor } from './track-colors';
 import MonthGrid from './MonthGrid.vue';
 import WeekAgenda from './WeekAgenda.vue';
@@ -53,13 +54,21 @@ async function loadData(edition?: string) {
   }
 }
 
+/** Return the UTC month-start Date for any ISO string (date-only or full timestamp). */
+function monthStartFromISO(isoString?: string): Date | null {
+  if (!isoString) return null;
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
 function initialCursor(): Date {
   const active = feed.value?.editions.find((e) => e.id === editionId.value) ?? feed.value?.editions[0];
-  const fromEdition = parseISO(active?.startDate);
-  if (fromEdition) return new Date(Date.UTC(fromEdition.getUTCFullYear(), fromEdition.getUTCMonth(), 1));
-  const dated = sessions.value.map((s) => (s as any).scheduledDate).filter(Boolean).sort();
-  const earliest = parseISO(dated[0]);
-  if (earliest) return new Date(Date.UTC(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1));
+  const fromEdition = monthStartFromISO(active?.startsAt);
+  if (fromEdition) return fromEdition;
+  const dated = sessions.value.map((s) => (s as any).scheduledStart).filter(Boolean).sort();
+  const earliest = monthStartFromISO(dated[0]);
+  if (earliest) return earliest;
   return new Date();
 }
 
@@ -84,7 +93,7 @@ const filteredSessions = computed<Session[]>(() => {
 
 const byDate = computed(() => groupByDate(filteredSessions.value));
 const unscheduledSessions = computed<Session[]>(() => unscheduled(filteredSessions.value));
-const todayIso = iso(new Date());
+const todayIso = viewerDayKey(new Date().toISOString());
 
 const title = computed(() => {
   const c = cursor.value;
@@ -158,7 +167,7 @@ onMounted(() => loadData());
       <WeekAgenda v-else-if="viewMode === 'week'" :cursor="cursor" :by-date="byDate" :colors="colorMap" :today="todayIso" :is-authenticated="isAuthenticated" @select="selectedRow = $event as any" />
       <DayAgenda v-else :cursor="cursor" :by-date="byDate" :colors="colorMap" :is-authenticated="isAuthenticated" @select="selectedRow = $event as any" />
 
-      <!-- unscheduled bucket: sessions with no scheduledDate, surfaced rather than dropped (spec §7) -->
+      <!-- unscheduled bucket: sessions with no scheduledStart, surfaced rather than dropped (spec §7) -->
       <div v-if="unscheduledSessions.length" class="cal-unscheduled">
         <h2 class="cal-unscheduled-title">Unscheduled</h2>
         <div class="cal-unscheduled-list">

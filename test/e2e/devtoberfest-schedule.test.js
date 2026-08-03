@@ -124,7 +124,45 @@ describe.skipIf(!hasBaseUrl())('e2e: devtoberfest schedule pages', () => {
     }
   });
 
-  // ── 5. Logged-in points banner (optional — skips without credentials) ─────
+  // ── 5. Zone-labeled session times (verifies timezone-aware rendering) ───────
+  it('schedule page renders session times with a timezone label when rows are present', async () => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      const response = await page.goto('/devtoberfest/schedule/', { waitUntil: 'domcontentloaded' });
+      expect(response, 'no response received').not.toBeNull();
+      expect(response.status(), `unexpected status ${response.status()}`).toBe(200);
+
+      await page.locator('main').first().waitFor({ state: 'visible', timeout: 15_000 });
+      await page.locator('#devtoberfest-schedule-mount').waitFor({ state: 'attached', timeout: 20_000 });
+
+      // Collect all table-cell texts that contain a time-like pattern (HH:MM).
+      // A fresh / unpublished DEV edition renders no rows → skip the zone assertion.
+      const timeCellTexts = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('td'))
+          .map(td => td.textContent?.trim() ?? '')
+          .filter(text => /\d{1,2}:\d{2}/.test(text))
+      );
+
+      if (timeCellTexts.length === 0) {
+        // Empty-state tolerance: no sessions rendered; zone check is N/A.
+        return;
+      }
+
+      // At least one time cell is present — assert it carries a timezone-name token,
+      // proving viewer-local + zone-label rendering shipped (not a bare HH:MM naive string).
+      // Matches: GMT+2, GMT-5, CEST, EST, PDT, BST, UTC, etc.
+      const zoneTokenRe = /GMT[+-]\d{1,2}|[A-Z]{2,5}T\b|\bUTC\b/;
+      const hasZone = timeCellTexts.some(text => zoneTokenRe.test(text));
+      expect(
+        hasZone,
+        `no timezone label found in time cells: ${JSON.stringify(timeCellTexts.slice(0, 3))}`
+      ).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+
+  // ── 6. Logged-in points banner (optional — skips without credentials) ─────
   it.skipIf(!hasCredentials())('authenticated /devtoberfest/schedule/ shows a points banner or sign-in prompt', async () => {
     const { context, page } = await newPage(browser, { authenticated: true });
     try {

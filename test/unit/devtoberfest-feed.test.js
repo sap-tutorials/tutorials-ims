@@ -3,7 +3,7 @@ import { assembleFeed, completedActivityPoints, normalizeSlugSet } from '../../s
 
 describe('devtoberfest-feed', () => {
   const tracks = [{ ID: 't1', NAME: 'ABAP', DAYOFWEEK: 'Monday' }];
-  const sessions = [{ ID: 's1', TITLE: 'Intro', TRACK_ID: 't1', WEEK: '1', SCHEDULEDDATE: '2026-10-05', YOUTUBEURL: 'https://youtu.be/abc', ACTIVITY_ID: 'a1' }];
+  const sessions = [{ ID: 's1', TITLE: 'Intro', TRACK_ID: 't1', WEEK: '1', SCHEDULEDSTART: '2026-10-05T09:00:00.000Z', SCHEDULEDTIMEZONE: 'Europe/Berlin', YOUTUBEURL: 'https://youtu.be/abc', ACTIVITY_ID: 'a1' }];
   const activities = [
     { ID: 'a1', TITLE: 'Do Intro', WEEK: '1', POINTS: 500, TASKTYPE: 'TUTORIAL', TASKSLUG: 'Intro-Slug', TRACK_ID: 't1' },
     { ID: 'a2', TITLE: 'Puzzle', WEEK: '1', POINTS: 300, TASKTYPE: 'PUZZLE', TASKSLUG: 'puz-1', TRACK_ID: 't1' },
@@ -15,6 +15,34 @@ describe('devtoberfest-feed', () => {
     expect(out.sessions[0].trackName).toBe('ABAP');
     expect(out.sessions[0].trackDay).toBe('Monday');
     expect(out.activities).toHaveLength(2);
+  });
+
+  it('assembleFeed emits scheduledStart and scheduledTimeZone, not scheduledDate/scheduledTime', () => {
+    const out = assembleFeed({ sessions, activities, tracks, editions: [], activeEditionId: null });
+    const s = out.sessions[0];
+    expect(s.scheduledStart).toBe('2026-10-05T09:00:00.000Z');
+    expect(s.scheduledTimeZone).toBe('Europe/Berlin');
+    expect('scheduledDate' in s).toBe(false);
+    expect('scheduledTime' in s).toBe(false);
+  });
+
+  it('assembleFeed emits edition startsAt/endsAt/timeZone, not startDate/endDate', () => {
+    const editions = [{ ID: 'e1', NAME: '2026', YEAR: '2026', ISCURRENT: true, STARTSAT: '2026-10-01T00:00:00.000Z', ENDSAT: '2026-10-31T23:59:59.000Z', TIMEZONE: 'Europe/Berlin' }];
+    const out = assembleFeed({ sessions: [], activities: [], tracks: [], editions, activeEditionId: 'e1' });
+    const e = out.editions[0];
+    expect(e.startsAt).toBe('2026-10-01T00:00:00.000Z');
+    expect(e.endsAt).toBe('2026-10-31T23:59:59.000Z');
+    expect(e.timeZone).toBe('Europe/Berlin');
+    expect('startDate' in e).toBe(false);
+    expect('endDate' in e).toBe(false);
+  });
+
+  it('sessions sort by week then scheduledStart (ISO lexicographic)', () => {
+    const s2 = { ID: 's2', TITLE: 'Later', TRACK_ID: 't1', WEEK: '1', SCHEDULEDSTART: '2026-10-05T11:00:00.000Z' };
+    const s1 = { ID: 's1', TITLE: 'Earlier', TRACK_ID: 't1', WEEK: '1', SCHEDULEDSTART: '2026-10-05T09:00:00.000Z' };
+    const out = assembleFeed({ sessions: [s2, s1], activities: [], tracks, editions: [], activeEditionId: null });
+    expect(out.sessions[0].id).toBe('s1');
+    expect(out.sessions[1].id).toBe('s2');
   });
 
   it('normalizeSlugSet lowercases and dedupes', () => {

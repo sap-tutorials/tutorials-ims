@@ -515,7 +515,7 @@ service AdminService {
   @readonly
   @cds.redirection.target: false
   entity DevtoberfestEditionPickList as projection on external_dtf.Edition {
-    ID, YEAR, NAME, STARTDATE, ENDDATE, ISCURRENT
+    ID, YEAR, NAME, STARTSAT, ENDSAT, TIMEZONE, ISCURRENT
   };
 
   @readonly

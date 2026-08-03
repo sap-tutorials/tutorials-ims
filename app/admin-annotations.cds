@@ -2786,8 +2786,8 @@ annotate AdminService.DevtoberfestConfig with {
                         { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: edition_ID, ValueListProperty: 'ID' },
                         { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'NAME' },
                         { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'YEAR' },
-                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'STARTDATE' },
-                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'ENDDATE' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'STARTSAT' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'ENDSAT' },
                         { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'ISCURRENT' }
                       ]
                     };
@@ -2871,8 +2871,9 @@ annotate AdminService.DevtoberfestEditionPickList with {
   ID        @Common.Label: 'Edition ID';
   NAME      @Common.Label: 'Name';
   YEAR      @Common.Label: 'Year';
-  STARTDATE @Common.Label: 'Start';
-  ENDDATE   @Common.Label: 'End';
+  STARTSAT  @Common.Label: 'Start';
+  ENDSAT    @Common.Label: 'End';
+  TIMEZONE  @Common.Label: 'Time Zone';
   ISCURRENT @Common.Label: 'Is Current';
 };
 
@@ -2883,8 +2884,8 @@ annotate AdminService.DevtoberfestEditionPickList with @(
     LineItem: [
       { Value: NAME },
       { Value: YEAR },
-      { Value: STARTDATE },
-      { Value: ENDDATE },
+      { Value: STARTSAT },
+      { Value: ENDSAT },
       { Value: ISCURRENT }
     ]
   }

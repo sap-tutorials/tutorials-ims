@@ -13,8 +13,9 @@ entity Edition {
       MODIFIEDBY            : String(255);
       YEAR                  : String(4);
       NAME                  : String(100);
-      STARTDATE             : Date;
-      ENDDATE               : Date;
+      STARTSAT              : Timestamp;
+      ENDSAT                : Timestamp;
+      TIMEZONE              : String(50);
       ISCURRENT             : Boolean;
 }
 
@@ -56,9 +57,9 @@ entity Session {
       BROADCASTINGPREFERENCE: String(5000);
       SESSIONLENGTH         : String(5000);
       WEEK                  : String(5000);
-      SCHEDULEDDATE         : Date;
-      SCHEDULEDTIME         : Time;
-      RECORDINGDATE         : Date;
+      SCHEDULEDSTART        : Timestamp;
+      SCHEDULEDTIMEZONE     : String(50);
+      RECORDINGSTART        : Timestamp;
       MEETINGTITLE          : String(200);
       ZOOMURL               : String(500);
       ZOOMINVITEDETAILS     : LargeString;
@@ -121,9 +122,9 @@ entity Speakerconsent {
       MODIFIEDBY            : String(255);
       SPEAKER_ID            : String(36);
       EDITION_ID            : String(36);
-      CONSENTSENTDATE       : Date;
+      CONSENTSENTDATE       : Timestamp;
       CONSENTRECEIVED       : Boolean;
-      CONSENTRECEIVEDDATE   : Date;
+      CONSENTRECEIVEDDATE   : Timestamp;
 }
 
 @cds.persistence.exists

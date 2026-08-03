@@ -1,17 +1,22 @@
 // hugo-apps/src/devtoberfest-sessions-calendar/__tests__/App.view.test.ts
 //
 // @vitest-environment happy-dom
+//
+// TZ-pinning: set BEFORE any import so Intl resolves viewer-local zone
+// to UTC — noon UTC strings then land on the same day in the viewer zone.
+process.env.TZ = 'UTC';
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 
 const FEED = {
   activeEditionId: 'e1',
-  editions: [{ id: 'e1', name: 'Devtoberfest 2026', isCurrent: true, startDate: '2026-10-01', endDate: '2026-10-31' }],
+  editions: [{ id: 'e1', name: 'Devtoberfest 2026', isCurrent: true, startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-10-31T00:00:00Z' }],
   sessions: [
-    { id: 's1', kind: 'session', title: 'A', trackName: 'CAP', scheduledDate: '2026-10-05', scheduledTime: '14:00' },
-    { id: 's2', kind: 'session', title: 'B', trackName: 'ABAP', scheduledDate: '2026-10-05', scheduledTime: '15:00' },
-    { id: 's3', kind: 'session', title: 'C', trackName: 'AI', scheduledDate: '2026-10-05', scheduledTime: '16:00' },
-    { id: 's4', kind: 'session', title: 'D', trackName: 'BTP', scheduledDate: '2026-10-05', scheduledTime: '17:00' },
+    { id: 's1', kind: 'session', title: 'A', trackName: 'CAP',  scheduledStart: '2026-10-05T14:00:00Z', scheduledTimeZone: 'Europe/Berlin' },
+    { id: 's2', kind: 'session', title: 'B', trackName: 'ABAP', scheduledStart: '2026-10-05T15:00:00Z', scheduledTimeZone: 'Europe/Berlin' },
+    { id: 's3', kind: 'session', title: 'C', trackName: 'AI',   scheduledStart: '2026-10-05T16:00:00Z', scheduledTimeZone: 'Europe/Berlin' },
+    { id: 's4', kind: 'session', title: 'D', trackName: 'BTP',  scheduledStart: '2026-10-05T17:00:00Z', scheduledTimeZone: 'Europe/Berlin' },
   ],
   activities: [],
 };
@@ -34,6 +39,10 @@ describe('calendar App views', () => {
     expect(wrapper.findAll('.mg-cell')).toHaveLength(42);
     // Oct 5 has 4 sessions, maxChips=3 → "+1 more"
     expect(wrapper.html()).toContain('+1 more');
+    // initialCursor must land on October 2026 from the edition's startsAt,
+    // NOT fall through to new Date() — the calendar title must show October 2026.
+    // This assertion would FAIL if startsAt is unread (bug C1 regression guard).
+    expect(wrapper.find('.cal-title').text()).toMatch(/October\s+2026/);
   });
 
   it('switches to week and day views', async () => {

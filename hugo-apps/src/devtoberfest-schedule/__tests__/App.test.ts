@@ -6,7 +6,7 @@ import App from '../App.vue';
 const feed = {
   activeEditionId: 'e1',
   editions: [{ id: 'e1', name: '2026', isCurrent: true }],
-  sessions: [{ id: 's1', kind: 'session', title: 'Intro Session', trackName: 'ABAP', week: '1', scheduledDate: '2026-10-05', activityId: 'a1' }],
+  sessions: [{ id: 's1', kind: 'session', title: 'Intro Session', trackName: 'ABAP', week: '1', scheduledStart: '2026-10-05T14:00:00Z', scheduledTimeZone: 'Europe/Berlin', activityId: 'a1' }],
   activities: [{ id: 'a1', kind: 'activity', title: 'Do Intro', trackName: 'ABAP', week: '1', points: 500, taskType: 'TUTORIAL', taskSlug: 'intro' }],
 };
 

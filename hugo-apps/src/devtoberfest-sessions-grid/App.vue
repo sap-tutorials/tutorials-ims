@@ -6,6 +6,7 @@ import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow } from '../devtoberfest-schedule-shared/types';
+import { formatViewerLocal, formatHomeZone } from '../devtoberfest-schedule-shared/format-session-time';
 
 const loading = ref(true);
 const error = ref('');
@@ -185,9 +186,9 @@ onMounted(() => loadData());
             <h3 class="sg-card-title">{{ session.title }}</h3>
 
             <!-- date/time -->
-            <p v-if="(session as any).scheduledDate" class="sg-datetime">
-              {{ (session as any).scheduledDate }}
-              <span v-if="(session as any).scheduledTime" class="sg-time">{{ (session as any).scheduledTime }}</span>
+            <p v-if="(session as any).scheduledStart" class="sg-datetime">
+              {{ formatViewerLocal((session as any).scheduledStart) }}
+              <span v-if="(session as any).scheduledTimeZone" class="sg-time">{{ formatHomeZone((session as any).scheduledStart, (session as any).scheduledTimeZone) }}</span>
             </p>
 
             <!-- links -->
