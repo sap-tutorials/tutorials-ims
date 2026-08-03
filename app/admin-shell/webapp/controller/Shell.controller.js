@@ -56,7 +56,8 @@ sap.ui.define([
     videos: "videos",
     videoRotation: "videoRotation",
     pats: "pats",
-    petoberfest: "petoberfest"
+    petoberfest: "petoberfest",
+    petoberfestContests: "petoberfestContests"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -109,7 +110,8 @@ sap.ui.define([
     videos: "Videos",
     videoRotation: "Video Rotation",
     pats: "Personal Access Tokens",
-    petoberfest: "Pet Photo Moderation"
+    petoberfest: "Pet Photo Moderation",
+    petoberfestContests: "Petoberfest Contests"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
@@ -164,6 +166,15 @@ sap.ui.define([
           // the ID key), so it was demoted to a keyed collection with a
           // single well-known row. See srv/admin-service.cds header comment.
           HashChanger.getInstance().setHash("homepageConfig&/hp/HomepageConfig(00000000-0000-0000-0000-00000000c8ae)");
+        }
+        if (sKey === "petoberfestContests") {
+          // Deep-link into the petoberfest componentUsage's inner "Petoberfests"
+          // List Report route (contest maintenance). The bare "petoberfest" route
+          // lands on the PetSubmissions moderation queue; this second outer route
+          // shares the same componentUsage target (prefix "pb") and drives the
+          // inner hash to the contest LR — mirrors the pipelinelog/joblog pattern
+          // above that reuses the operations target. (#1449)
+          HashChanger.getInstance().setHash("petoberfestContests&/pb/Petoberfests");
         }
       }
     },
