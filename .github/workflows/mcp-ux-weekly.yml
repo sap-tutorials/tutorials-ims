@@ -25,6 +25,9 @@ jobs:
     name: MCP LLM UX quality check
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +39,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Start CAP dev server (anonymous MCP routes only)
         run: |
