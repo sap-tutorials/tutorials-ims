@@ -31,20 +31,12 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Generate GitHub App token
-        id: app-token
-        if: ${{ vars.USE_GITHUB_APP == 'true' }}
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.TUTORIALS_APP_ID }}
-          private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
-          owner: sap-tutorials
       # `npm ci` is overkill (we only need tsx + the source tree). The
       # check has no runtime SAP deps and doesn't touch gen/. But ci
       # is the safe choice; ~30s on a warm cache.
       - name: Install dependencies
         run: npm ci
         env:
-          NODE_AUTH_TOKEN: ${{ steps.app-token.outputs.token || secrets.PACKAGES_READ_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Run srv-qa cp-list check
         run: npx tsx scripts/check-srv-qa-cp-list.ts
