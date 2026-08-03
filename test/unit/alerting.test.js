@@ -71,4 +71,21 @@ describe('alerting helper', () => {
       resource: { resourceName: 'kg-pagerank-job', resourceType: 'job' }
     }))
   })
+
+  it('rebuild-dispatch-failed envelope shape is correct', async () => {
+    process.env.ALERTS_ENABLED = 'true'
+    const raiseSpy = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: raiseSpy }) })
+    const { raise } = await import('../../srv/lib/alerting.js')
+    await raise({
+      eventType: 'RebuildDispatchFailed', severity: 'ERROR', category: 'ALERT',
+      subject: 'Rebuild dispatch failed',
+      body: 'fetch failed: 503',
+      resource: { resourceName: 'rebuild-dispatch', resourceType: 'service' }
+    })
+    expect(raiseSpy).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'RebuildDispatchFailed', category: 'ALERT',
+      resource: { resourceName: 'rebuild-dispatch', resourceType: 'service' }
+    }))
+  })
 })
