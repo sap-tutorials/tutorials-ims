@@ -61,6 +61,7 @@ import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js'
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
 import { deleteStuckOutboxRow } from '../lib/scheduler-wedge.js';
+import * as alerting from '../lib/alerting.js';
 import cds from '@sap/cds';
 
 const instanceId = process.env.CF_INSTANCE_INDEX || '0';
@@ -172,6 +173,14 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
     errorMessage = err.message ?? String(err);
     LOG.error(`Job ${jobName} failed:`, errorMessage);
     await logPipelineEnd(logId, 'FAILED', jobName, errorMessage);
+    void alerting.raise({
+      eventType: 'ScheduledJobFailed',
+      severity: 'ERROR',
+      category: 'ALERT',
+      subject: `Scheduled job failed: ${jobName}`,
+      body: String(errorMessage),
+      resource: { resourceName: jobName, resourceType: 'job' }
+    }); // fail-open, non-blocking
   } finally {
     // #1021: belt-and-suspenders — clear any stuck cds.outbox.Messages
     // row for this jobName before recording JobLastRun. Runs on every

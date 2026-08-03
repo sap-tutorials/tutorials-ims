@@ -54,4 +54,21 @@ describe('alerting helper', () => {
       resource: { resourceName: 'content-publish', resourceType: 'service' }
     }))
   })
+
+  it('scheduled-job-failed envelope uses jobName as resourceName', async () => {
+    process.env.ALERTS_ENABLED = 'true'
+    const raiseSpy = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: raiseSpy }) })
+    const { raise } = await import('../../srv/lib/alerting.js')
+    await raise({
+      eventType: 'ScheduledJobFailed', severity: 'ERROR', category: 'ALERT',
+      subject: 'Scheduled job failed: kg-pagerank-job',
+      body: 'TypeError: boom',
+      resource: { resourceName: 'kg-pagerank-job', resourceType: 'job' }
+    })
+    expect(raiseSpy).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'ScheduledJobFailed',
+      resource: { resourceName: 'kg-pagerank-job', resourceType: 'job' }
+    }))
+  })
 })
