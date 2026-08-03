@@ -152,7 +152,7 @@
     "yauzl": "3.4.0"
   },
   "dependencies": {
-    "@sap-devrel/cds-alert-notification": "git+https://github.tools.sap/developer-relations/cds-alert-notification.git#v1.0.0",
+    "@sap-tutorials/cds-alert-notification": "^1.0.0",
     "@cap-js-community/websocket": "^1.10.5",
     "@cap-js/ai": "~1.0.1",
     "@cap-js/audit-logging": "^1.2.2",
@@ -277,7 +277,7 @@
         }
       },
       "alerts": {
-        "impl": "@sap-devrel/cds-alert-notification",
+        "impl": "@sap-tutorials/cds-alert-notification",
         "kind": "alert-notification-console",
         "[test]": {
           "kind": "alert-notification-memory"

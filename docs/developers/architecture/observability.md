@@ -144,7 +144,7 @@ In `package.json` `cds.requires.alerts`:
 
 ```json
 "alerts": {
-  "impl": "@sap-devrel/cds-alert-notification",
+  "impl": "@sap-tutorials/cds-alert-notification",
   "kind": "alert-notification-console",
   "[test]":       { "kind": "alert-notification-memory" },
   "[hybrid]":     { "kind": "alert-notification" },
@@ -167,20 +167,29 @@ In `package.json` `cds.requires.alerts`:
 
 ## Plugin dependency
 
-The plugin is `@sap-devrel/cds-alert-notification` v1.0.0, declared as a
-**git dependency** pointing to an internal GitHub instance
-(`github.tools.sap`):
+The plugin is `@sap-tutorials/cds-alert-notification` v1.0.0, published **privately
+to the org's GitHub Packages** npm registry and consumed by version:
 
 ```
-"@sap-devrel/cds-alert-notification":
-  "git+https://github.tools.sap/developer-relations/cds-alert-notification.git#v1.0.0"
+"@sap-tutorials/cds-alert-notification": "^1.0.0"
 ```
 
-This means `npm install` requires network access to `github.tools.sap`.
-Workstations with a global `allow-git: none` npmrc cannot install it locally.
-CI and CF deploy pipelines do not have that restriction, so standard deploys
-work. If the plugin is ever moved to an internal npm registry, update the
-dependency accordingly and remove this caveat.
+Because the `@sap-tutorials` scope is private, installs need a scope→registry
+mapping and a token with `read:packages`. The repo's root `.npmrc` provides the
+mapping and reads the token from the environment:
+
+```ini
+@sap-tutorials:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+- **CI:** the four `npm ci` jobs (`unit`, `check`/`cds-build-staging-check`,
+  `check-cp-list`/`srv-qa-cp-list-check`, `validate`) mint a token via the repo's
+  existing GitHub App (`actions/create-github-app-token`, gated on
+  `vars.USE_GITHUB_APP`) and export it as `NODE_AUTH_TOKEN`, falling back to a
+  `PACKAGES_READ_TOKEN` secret. Each job also declares `permissions: packages: read`.
+- **Local dev / CF deploy:** set `NODE_AUTH_TOKEN` to a token with `read:packages`
+  on the `sap-tutorials` org before `npm install`.
 
 ## Feature flag
 
@@ -193,29 +202,37 @@ dependency accordingly and remove this caveat.
 These steps cannot be performed from a PR and must be completed after the MTA
 is deployed.
 
-**1. Confirm plugin install succeeds in the deploy pipeline.**
-The plugin is a git-dep from `github.tools.sap`. Before deploying, verify that
-the CI/CF npm install can clone it. If not (e.g. a pip/npm proxy blocks
-`github.tools.sap`), publish the plugin to an internal npm registry first and
-update the dependency reference in `package.json`.
+**1. Confirm the GitHub App (or `PACKAGES_READ_TOKEN`) can read GitHub Packages.**
+The four CI `npm ci` jobs authenticate to `@sap-tutorials`'s private GitHub
+Packages registry via the App token (`vars.USE_GITHUB_APP == 'true'` +
+`TUTORIALS_APP_ID`/`TUTORIALS_APP_PRIVATE_KEY`) or the `PACKAGES_READ_TOKEN`
+fallback secret. Verify: (a) the App installation on `sap-tutorials` grants
+**packages:read** and covers the `cds-alert-notification` repo, OR (b)
+`PACKAGES_READ_TOKEN` exists with `read:packages`. Also confirm the CF deploy
+pipeline exports a `NODE_AUTH_TOKEN` with the same scope before its `npm install`.
+If neither is in place, `npm ci`/`npm install` fails to fetch the plugin.
 
-**2. Regenerate `package-lock.json`.**
-The `@sap-devrel/cds-alert-notification` git-dependency could not be installed
-on the authoring workstation (`allow-git: none`), so the committed
-`package-lock.json` does not yet include it. In an environment with
-`github.tools.sap` npm/git access, run `npm install` to regenerate the lockfile
-and commit it. Until this is done, CI jobs that run `npm ci` (e.g.
-`smoke-test`, `e2e` in `deploy.yml`) will fail on the package.json/lockfile
-mismatch. (The `deploy` job uses `npm install`, so the MTA deploy itself is not
-blocked — but do this to keep CI green.)
+**2. Publish the plugin to GitHub Packages.**
+The plugin must be published before this consumer can install v1.0.0. On the
+`sap-tutorials/cds-alert-notification` repo, cut a `v1.0.0` GitHub Release — its
+`publish.yml` workflow publishes to GitHub Packages (private). Confirm the
+package appears under the org's Packages tab before deploying tutorials-ims.
 
-**3. Deploy the MTA (v1.10.0).**
+**3. Regenerate `package-lock.json`.**
+`package.json` now references `@sap-tutorials/cds-alert-notification` by version,
+but the committed lockfile predates that change (the authoring workstation could
+not reach the private registry to resolve it). In an environment with a
+`read:packages` `NODE_AUTH_TOKEN` for the `sap-tutorials` org, run `npm install`
+to add the resolved entry and commit the updated `package-lock.json`. Until then,
+`npm ci` jobs fail on the package.json/lockfile mismatch.
+
+**4. Deploy the MTA (v1.10.0).**
 `.deploy/mta.yaml` declares `tutorials-alert-notification` as a managed
 `alert-notification` service (plan `standard`). The `mbt build` + `cf deploy`
 run provisions the instance and binds it to `tutorials-srv`. No manual `cf
 create-service` is needed.
 
-**4. Bind the email action to the `devrel-oncall` distribution list.**
+**5. Bind the email action to the `devrel-oncall` distribution list.**
 The MTA creates the ANS **instance** but does NOT configure email routing —
 that requires a post-deploy step in the ANS cockpit (or via the plugin's
 generated `provision.sh`). Open the ANS cockpit for the `tutorial-system`
@@ -224,7 +241,7 @@ email ACTION pointing to the real `devrel-oncall` distribution-list address.
 Wire it to the `devrel-oncall` CONDITION (minSeverity ERROR). Without this step
 the instance is bound but no emails are sent.
 
-**5. Enable alerting.**
+**6. Enable alerting.**
 
 ```bash
 cf target -s dev   # confirm space before set-env
@@ -232,7 +249,7 @@ cf set-env tutorials-srv ALERTS_ENABLED true
 cf restart tutorials-srv
 ```
 
-**6. Live-verify one alert end-to-end.**
+**7. Live-verify one alert end-to-end.**
 Trigger a known failure (e.g. a publish-reject via the admin UI with a
 deliberately bad slug, or force a scheduled job error in DEV) and confirm the
 email arrives at the `devrel-oncall` address. This is the **one path not proven
@@ -241,7 +258,7 @@ shapes in memory, but `cds.outboxed()` posting to a real ANS endpoint has not
 been exercised against a live CAP runtime. This live-verify is **mandatory**
 before declaring the integration done.
 
-**7. Confirm Node runtime floor.**
+**8. Confirm Node runtime floor.**
 `package.json` now declares `"engines": { "node": ">=22.12" }` (the plugin's
 requirement). Verify the CF buildpack runtime satisfies this before deploying
 to PROD. The CI pipeline already runs Node 22; the CF Node.js buildpack default
