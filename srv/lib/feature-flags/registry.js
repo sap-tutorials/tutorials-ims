@@ -175,6 +175,13 @@ export const FEATURE_FLAGS = [
   },
   // ---- Observability ----
   {
+    key: 'ALERTS_ENABLED', label: 'ANS push alerting', category: 'Observability',
+    kind: 'env', envVar: 'ALERTS_ENABLED', envRule: 'true-enables',
+    valueType: 'boolean', default: false, issue: '', status: 'ga',
+    description: 'Enables SAP Alert Notification Service push alerts for publish-reject, scheduled-job failures, and rebuild-dispatch failures. Default OFF — enable after deploying the MTA and binding the email action.',
+    howToChange: cfEnv('ALERTS_ENABLED', 'true'),
+  },
+  {
     key: 'METRICS_ENABLED', label: 'Metrics collection', category: 'Observability',
     kind: 'env', envVar: 'METRICS_ENABLED', envRule: 'false-disables',
     valueType: 'boolean', default: true, issue: '', status: 'ga',
