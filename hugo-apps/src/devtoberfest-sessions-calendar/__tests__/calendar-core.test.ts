@@ -1,3 +1,17 @@
+/**
+ * Tests for calendar-core.ts date helpers.
+ *
+ * TZ-pinning: process.env.TZ is set BEFORE any import so that Intl resolves
+ * viewer-local zone to America/Los_Angeles (PDT in Oct, UTC-7). This makes
+ * groupByDate (which uses viewerDayKey) deterministic in tests.
+ *
+ * The date-math helpers (iso, parseISO, addDays, etc.) operate on UTC Date
+ * objects and are unaffected by local TZ — they're tested with UTC assertions.
+ */
+
+// Pin viewer-local TZ BEFORE any module is imported.
+process.env.TZ = 'America/Los_Angeles';
+
 import { describe, it, expect } from 'vitest';
 import {
   iso, parseISO, addDays, addWeeks, addMonths,
@@ -60,26 +74,43 @@ describe('calendar-core date helpers', () => {
     expect(cells).toHaveLength(42);
   });
 
-  it('groupByDate keys by ISO date, sorts by time, drops undated', () => {
+  it('groupByDate keys by viewer-local day (decision B), sorts by scheduledStart instant, drops undated', () => {
+    // TZ=America/Los_Angeles (PDT = UTC-7 in October)
+    // 2026-10-05T21:00:00Z = 2026-10-05 14:00 PDT (later that day)
+    // 2026-10-05T17:00:00Z = 2026-10-05 10:00 PDT (earlier that day)
+    // 2026-10-05T22:00:00Z = 2026-10-05 15:00 PDT (no-time session, sorts last)
+    // 2026-10-06T05:00:00Z = 2026-10-05 22:00 PDT (prev-day in LA!)
     const sessions = [
-      { id: 'b', kind: 'session', title: 'B', scheduledDate: '2026-10-05', scheduledTime: '16:00' },
-      { id: 'a', kind: 'session', title: 'A', scheduledDate: '2026-10-05', scheduledTime: '14:00' },
-      { id: 'n', kind: 'session', title: 'N', scheduledDate: '2026-10-05' }, // no time → last
-      { id: 'x', kind: 'session', title: 'X' }, // no date → excluded from the date map
+      { id: 'b', kind: 'session', title: 'B', scheduledStart: '2026-10-05T21:00:00Z' },
+      { id: 'a', kind: 'session', title: 'A', scheduledStart: '2026-10-05T17:00:00Z' },
+      // crosses midnight: 2026-10-06T05:00:00Z = 2026-10-05 22:00 PDT → same day as a/b
+      { id: 'c', kind: 'session', title: 'C', scheduledStart: '2026-10-06T05:00:00Z' },
+      { id: 'x', kind: 'session', title: 'X' }, // no scheduledStart → excluded
     ] as any;
     const map = groupByDate(sessions);
+    // All three with scheduledStart bucket to the same viewer-local day key
     expect([...map.keys()]).toEqual(['2026-10-05']);
-    expect(map.get('2026-10-05')!.map((s) => s.id)).toEqual(['a', 'b', 'n']);
+    // Sorted by scheduledStart ISO ascending: 17:00Z < 21:00Z < 06T05:00Z
+    expect(map.get('2026-10-05')!.map((s: any) => s.id)).toEqual(['a', 'b', 'c']);
   });
 
-  it('unscheduled surfaces sessions with no parseable scheduledDate', () => {
+  it('groupByDate: session crossing UTC midnight stays on viewer-local prev-day', () => {
+    // 2026-10-02T05:00:00Z = 2026-10-01 22:00 PDT → should land on '2026-10-01'
     const sessions = [
-      { id: 'a', kind: 'session', title: 'A', scheduledDate: '2026-10-05' },
-      { id: 'x', kind: 'session', title: 'X' }, // no date
-      { id: 'y', kind: 'session', title: 'Y', scheduledDate: '' }, // blank date
-      { id: 'z', kind: 'session', title: 'Z', scheduledDate: 'not-a-date' }, // unparseable
+      { id: 'late', kind: 'session', title: 'Late', scheduledStart: '2026-10-02T05:00:00Z' },
     ] as any;
-    // the undated/unparseable rows are surfaced here rather than silently vanishing
-    expect(unscheduled(sessions).map((s) => s.id)).toEqual(['x', 'y', 'z']);
+    const map = groupByDate(sessions);
+    expect([...map.keys()]).toEqual(['2026-10-01']);
+  });
+
+  it('unscheduled surfaces sessions with no scheduledStart', () => {
+    const sessions = [
+      { id: 'a', kind: 'session', title: 'A', scheduledStart: '2026-10-05T14:00:00Z' },
+      { id: 'x', kind: 'session', title: 'X' }, // no scheduledStart
+      { id: 'y', kind: 'session', title: 'Y', scheduledStart: '' }, // blank → no start
+      { id: 'z', kind: 'session', title: 'Z', scheduledStart: undefined }, // undefined
+    ] as any;
+    // The undated rows are surfaced here rather than silently vanishing
+    expect(unscheduled(sessions).map((s: any) => s.id)).toEqual(['x', 'y', 'z']);
   });
 });

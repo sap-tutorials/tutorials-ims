@@ -1,4 +1,5 @@
 import type { Session } from '../devtoberfest-schedule-shared/types';
+import { viewerDayKey } from '../devtoberfest-schedule-shared/format-session-time';
 
 export function iso(date: Date): string {
   const y = date.getUTCFullYear();
@@ -57,23 +58,23 @@ export function monthGridCells(date: Date): Date[] {
 export function groupByDate(sessions: Session[]): Map<string, Session[]> {
   const map = new Map<string, Session[]>();
   for (const s of sessions) {
-    const d = parseISO(s.scheduledDate);
-    if (!d) continue;
-    const key = iso(d);
+    const key = viewerDayKey(s.scheduledStart ?? '');
+    if (!key) continue;
     (map.get(key) ?? map.set(key, []).get(key)!).push(s);
   }
   for (const list of map.values()) {
+    // ISO strings compare correctly with localeCompare; missing start sorts last.
     list.sort((a, b) => {
-      const ta = a.scheduledTime ?? '99:99';
-      const tb = b.scheduledTime ?? '99:99';
+      const ta = a.scheduledStart ?? '￿';
+      const tb = b.scheduledStart ?? '￿';
       return ta.localeCompare(tb);
     });
   }
   return map;
 }
 
-// Sessions with no parseable scheduledDate — surfaced in a clearly-labelled
+// Sessions with no scheduledStart — surfaced in a clearly-labelled
 // "Unscheduled" bucket rather than silently dropped (design spec §7).
 export function unscheduled(sessions: Session[]): Session[] {
-  return sessions.filter((s) => !parseISO(s.scheduledDate));
+  return sessions.filter((s) => !s.scheduledStart);
 }
