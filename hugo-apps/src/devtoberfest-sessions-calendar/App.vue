@@ -57,7 +57,7 @@ function initialCursor(): Date {
   const active = feed.value?.editions.find((e) => e.id === editionId.value) ?? feed.value?.editions[0];
   const fromEdition = parseISO(active?.startDate);
   if (fromEdition) return new Date(Date.UTC(fromEdition.getUTCFullYear(), fromEdition.getUTCMonth(), 1));
-  const dated = sessions.value.map((s) => (s as any).scheduledDate).filter(Boolean).sort();
+  const dated = sessions.value.map((s) => (s as any).scheduledStart).filter(Boolean).sort();
   const earliest = parseISO(dated[0]);
   if (earliest) return new Date(Date.UTC(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1));
   return new Date();
@@ -158,7 +158,7 @@ onMounted(() => loadData());
       <WeekAgenda v-else-if="viewMode === 'week'" :cursor="cursor" :by-date="byDate" :colors="colorMap" :today="todayIso" :is-authenticated="isAuthenticated" @select="selectedRow = $event as any" />
       <DayAgenda v-else :cursor="cursor" :by-date="byDate" :colors="colorMap" :is-authenticated="isAuthenticated" @select="selectedRow = $event as any" />
 
-      <!-- unscheduled bucket: sessions with no scheduledDate, surfaced rather than dropped (spec §7) -->
+      <!-- unscheduled bucket: sessions with no scheduledStart, surfaced rather than dropped (spec §7) -->
       <div v-if="unscheduledSessions.length" class="cal-unscheduled">
         <h2 class="cal-unscheduled-title">Unscheduled</h2>
         <div class="cal-unscheduled-list">

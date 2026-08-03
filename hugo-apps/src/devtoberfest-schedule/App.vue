@@ -6,6 +6,7 @@ import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow } from '../devtoberfest-schedule-shared/types';
+import { formatViewerLocal, formatHomeZone } from '../devtoberfest-schedule-shared/format-session-time';
 
 const loading = ref(true);
 const error = ref('');
@@ -25,7 +26,7 @@ const filters = reactive({
   q: '',
 });
 
-type SortKey = 'kind' | 'title' | 'trackName' | 'week' | 'scheduledDate' | 'points';
+type SortKey = 'kind' | 'title' | 'trackName' | 'week' | 'scheduledStart' | 'points';
 const sortKey = ref<SortKey>('week');
 const sortDir = ref<'asc' | 'desc'>('asc');
 
@@ -209,7 +210,7 @@ defineExpose({ filters });
               <th @click="setSort('title')"><button>Title{{ sortIcon('title') }}</button></th>
               <th @click="setSort('trackName')"><button>Track{{ sortIcon('trackName') }}</button></th>
               <th @click="setSort('week')"><button>Week{{ sortIcon('week') }}</button></th>
-              <th @click="setSort('scheduledDate')"><button>Date / Time{{ sortIcon('scheduledDate') }}</button></th>
+              <th @click="setSort('scheduledStart')"><button>Date / Time{{ sortIcon('scheduledStart') }}</button></th>
               <th @click="setSort('points')" class="num"><button>Points{{ sortIcon('points') }}</button></th>
               <th>Links</th>
               <th v-if="isAuthenticated">Status</th>
@@ -234,9 +235,9 @@ defineExpose({ filters });
               <td>{{ (row as any).trackName ?? '—' }}</td>
               <td>{{ row.week ?? '—' }}</td>
               <td>
-                <template v-if="(row as any).scheduledDate">
-                  {{ (row as any).scheduledDate }}
-                  <span v-if="(row as any).scheduledTime" class="sched-time">{{ (row as any).scheduledTime }}</span>
+                <template v-if="(row as any).scheduledStart">
+                  {{ formatViewerLocal((row as any).scheduledStart) }}
+                  <span v-if="(row as any).scheduledTimeZone" class="sched-time">{{ formatHomeZone((row as any).scheduledStart, (row as any).scheduledTimeZone) }}</span>
                 </template>
                 <template v-else>—</template>
               </td>

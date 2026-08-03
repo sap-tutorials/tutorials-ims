@@ -4,6 +4,7 @@ import { computed } from 'vue';
 import { weekDays, iso } from './calendar-core';
 import type { TrackColor } from './track-colors';
 import type { Session } from '../devtoberfest-schedule-shared/types';
+import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
 
 const props = defineProps<{
   cursor: Date;
@@ -39,7 +40,7 @@ function borderColor(s: Session): string {
           :style="{ borderLeftColor: borderColor(s) }"
           @click="emit('select', s)"
         >
-          <span v-if="s.scheduledTime" class="wk-t">{{ s.scheduledTime }}</span>
+          <span v-if="s.scheduledStart" class="wk-t">{{ formatViewerLocal(s.scheduledStart) }}</span>
           <span class="wk-n">{{ s.title }}</span>
           <span v-if="isAuthenticated && (s as any).complete" class="wk-done" aria-label="Completed">✓</span>
         </button>

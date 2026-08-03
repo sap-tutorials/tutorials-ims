@@ -4,6 +4,7 @@ import { computed } from 'vue';
 import { monthGridCells, iso } from './calendar-core';
 import type { TrackColor } from './track-colors';
 import type { Session } from '../devtoberfest-schedule-shared/types';
+import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
 
 const props = withDefaults(defineProps<{
   cursor: Date;
@@ -59,7 +60,7 @@ function chipStyle(s: Session) {
             @click="emit('select', s)"
             :title="s.title"
           >
-            <span v-if="s.scheduledTime" class="mg-chip-t">{{ s.scheduledTime }}</span>
+            <span v-if="s.scheduledStart" class="mg-chip-t">{{ formatViewerLocal(s.scheduledStart) }}</span>
             <span class="mg-chip-n">{{ s.title }}</span>
           </button>
         </template>

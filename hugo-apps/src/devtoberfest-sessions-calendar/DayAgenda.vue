@@ -5,6 +5,7 @@ import { iso } from './calendar-core';
 import type { TrackColor } from './track-colors';
 import type { Session } from '../devtoberfest-schedule-shared/types';
 import { youtubeThumb } from '../devtoberfest-schedule-shared/completion';
+import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
 
 const props = defineProps<{
   cursor: Date;
@@ -46,7 +47,7 @@ function onThumbError(ev: Event) {
         <div v-else class="da-thumb-ph" aria-hidden="true"></div>
       </div>
       <div class="da-meta">
-        <span v-if="s.scheduledTime" class="da-time">{{ s.scheduledTime }}</span>
+        <span v-if="s.scheduledStart" class="da-time">{{ formatViewerLocal(s.scheduledStart) }}</span>
         <span class="da-title">{{ s.title }}</span>
         <span v-if="s.trackName" class="da-track">{{ s.trackName }}</span>
         <span v-if="isAuthenticated && (s as any).complete" class="da-done" aria-label="Completed">✓ Completed</span>
