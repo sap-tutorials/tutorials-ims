@@ -9,15 +9,23 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(__dirname, '..', '..', 'scripts', 'check-e2e-coverage-nudge.ts');
 
+// Resolve the LOCAL tsx CLI once and spawn `node <cli>` directly. NOT `npx
+// tsx`: npx re-resolves the package on every spawn (~15s cold on Windows vs
+// ~0.4s here), and under the unit tier's unbounded worker fan-out (a worker
+// per core — 24 on Tom's box) those cold spawns starve past the 30s
+// testTimeout. That contention — not any real slowness — is what the timeout
+// bumps in 0096070f were chasing. Spawning node directly also drops the
+// Windows `shell:true` layer that `npx.cmd` needed.
+const TSX_CLI = fileURLToPath(import.meta.resolve('tsx/cli'));
+
 interface RunResult { stdout: string; status: number; }
 
 function run(files: string[]): RunResult {
   try {
-    const stdout = execFileSync('npx', ['tsx', SCRIPT], {
+    const stdout = execFileSync(process.execPath, [TSX_CLI, SCRIPT], {
       env: { ...process.env, E2E_NUDGE_FILES: files.join('\n') },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
     });
     return { stdout, status: 0 };
   } catch (err: any) {
