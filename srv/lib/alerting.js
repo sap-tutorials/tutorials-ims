@@ -1,19 +1,18 @@
 // srv/lib/alerting.js
-// Fail-open push-alert helper. Mirrors metrics.js: namespace import, never throws,
-// env kill-switch. Sits BESIDE existing failure signals (metrics/log/PipelineLog),
-// never replaces them. Default OFF (ALERTS_ENABLED !== 'true').
+// Fail-open push-alert helper. Never throws — sits BESIDE existing failure
+// signals (metrics/log/PipelineLog), never replaces them. Gating is DB-backed
+// and admin-editable: ChatSettings.alertsEnabled via the alert-settings
+// resolver (NOT an env var — project rule: tunable behavior lives in the DB,
+// toggled live in the admin UI). Default OFF until an admin enables it.
 import cds from '@sap/cds'
+import { isAlertingEnabled } from './runtime-config/alert-settings.js'
 
 const LOG = cds.log('alerting')
 let svcPromise  // memoised connection
 
-function isEnabled () {
-  return process.env.ALERTS_ENABLED === 'true'
-}
-
 export async function raise (input) {
-  if (!isEnabled()) return
   try {
+    if (!(await isAlertingEnabled())) return
     svcPromise ??= cds.connect.to('alerts')
     const svc = await svcPromise
     await svc.raise(input)

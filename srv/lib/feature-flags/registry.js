@@ -175,11 +175,11 @@ export const FEATURE_FLAGS = [
   },
   // ---- Observability ----
   {
-    key: 'ALERTS_ENABLED', label: 'ANS push alerting', category: 'Observability',
-    kind: 'env', envVar: 'ALERTS_ENABLED', envRule: 'true-enables',
+    key: 'ChatSettings.alertsEnabled', label: 'ANS push alerting', category: 'Observability',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'alertsEnabled', resolver: 'chat',
     valueType: 'boolean', default: false, issue: '', status: 'ga',
-    description: 'Enables SAP Alert Notification Service push alerts for publish-reject, scheduled-job failures, and rebuild-dispatch failures. Default OFF — enable after deploying the MTA and binding the email action.',
-    howToChange: cfEnv('ALERTS_ENABLED', 'true'),
+    description: 'Master switch for SAP Alert Notification push alerts (publish-reject, scheduled-job failures, rebuild-dispatch failures). DB-backed, admin-editable; no env var. Enable after deploying the MTA and binding the email action.',
+    howToChange: adminTile('joule', '#joule', 'Managed via ChatSettings.alertsEnabled DB column.'),
   },
   {
     key: 'METRICS_ENABLED', label: 'Metrics collection', category: 'Observability',

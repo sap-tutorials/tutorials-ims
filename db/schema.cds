@@ -748,6 +748,11 @@ entity ChatSettings : cuid, managed {
   a2aEnabled        : Boolean default true;
   a2aPublicBaseUrl  : String(500);
   a2aTokenUrl       : String(500);
+
+  // Master on/off for operational alerting (SAP Alert Notification integration,
+  // srv/lib/alerting.js). Admin-editable via /admin-ui/#joule; DB-backed (NOT an
+  // env var) so ops can toggle live without a restart. Default false = dark.
+  alertsEnabled     : Boolean default false;
 }
 
 // Phase 2-A foundation (#463). Mirrors the ChatSettings singleton pattern.
