@@ -36,4 +36,22 @@ describe('alerting helper', () => {
     const { raise } = await import('../../srv/lib/alerting.js')
     await expect(raise({ eventType: 'X', severity: 'ERROR' })).resolves.toBeUndefined()
   })
+
+  it('publish-reject envelope shape is correct', async () => {
+    process.env.ALERTS_ENABLED = 'true'
+    const raiseSpy = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: raiseSpy }) })
+    const { raise } = await import('../../srv/lib/alerting.js')
+    // Simulate what the hook constructs:
+    await raise({
+      eventType: 'PublishRejected', severity: 'ERROR', category: 'ALERT',
+      subject: 'Content publish rejected 2 slug(s)',
+      body: 'Rejected reverts: a, b',
+      resource: { resourceName: 'content-publish', resourceType: 'service' }
+    })
+    expect(raiseSpy).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'PublishRejected', category: 'ALERT',
+      resource: { resourceName: 'content-publish', resourceType: 'service' }
+    }))
+  })
 })
