@@ -199,13 +199,23 @@ the CI/CF npm install can clone it. If not (e.g. a pip/npm proxy blocks
 `github.tools.sap`), publish the plugin to an internal npm registry first and
 update the dependency reference in `package.json`.
 
-**2. Deploy the MTA (v1.10.0).**
+**2. Regenerate `package-lock.json`.**
+The `@sap-devrel/cds-alert-notification` git-dependency could not be installed
+on the authoring workstation (`allow-git: none`), so the committed
+`package-lock.json` does not yet include it. In an environment with
+`github.tools.sap` npm/git access, run `npm install` to regenerate the lockfile
+and commit it. Until this is done, CI jobs that run `npm ci` (e.g.
+`smoke-test`, `e2e` in `deploy.yml`) will fail on the package.json/lockfile
+mismatch. (The `deploy` job uses `npm install`, so the MTA deploy itself is not
+blocked — but do this to keep CI green.)
+
+**3. Deploy the MTA (v1.10.0).**
 `.deploy/mta.yaml` declares `tutorials-alert-notification` as a managed
 `alert-notification` service (plan `standard`). The `mbt build` + `cf deploy`
 run provisions the instance and binds it to `tutorials-srv`. No manual `cf
 create-service` is needed.
 
-**3. Bind the email action to the `devrel-oncall` distribution list.**
+**4. Bind the email action to the `devrel-oncall` distribution list.**
 The MTA creates the ANS **instance** but does NOT configure email routing —
 that requires a post-deploy step in the ANS cockpit (or via the plugin's
 generated `provision.sh`). Open the ANS cockpit for the `tutorial-system`
@@ -214,7 +224,7 @@ email ACTION pointing to the real `devrel-oncall` distribution-list address.
 Wire it to the `devrel-oncall` CONDITION (minSeverity ERROR). Without this step
 the instance is bound but no emails are sent.
 
-**4. Enable alerting.**
+**5. Enable alerting.**
 
 ```bash
 cf target -s dev   # confirm space before set-env
@@ -222,7 +232,7 @@ cf set-env tutorials-srv ALERTS_ENABLED true
 cf restart tutorials-srv
 ```
 
-**5. Live-verify one alert end-to-end.**
+**6. Live-verify one alert end-to-end.**
 Trigger a known failure (e.g. a publish-reject via the admin UI with a
 deliberately bad slug, or force a scheduled job error in DEV) and confirm the
 email arrives at the `devrel-oncall` address. This is the **one path not proven
@@ -231,7 +241,7 @@ shapes in memory, but `cds.outboxed()` posting to a real ANS endpoint has not
 been exercised against a live CAP runtime. This live-verify is **mandatory**
 before declaring the integration done.
 
-**6. Confirm Node runtime floor.**
+**7. Confirm Node runtime floor.**
 `package.json` now declares `"engines": { "node": ">=22.12" }` (the plugin's
 requirement). Verify the CF buildpack runtime satisfies this before deploying
 to PROD. The CI pipeline already runs Node 22; the CF Node.js buildpack default
