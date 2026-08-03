@@ -142,7 +142,12 @@ beforeAll(async () => {
   // ── 4. Start the HTTP server on an ephemeral port ────────────────────────
   httpServer = http.createServer(app);
   await new Promise((r) => httpServer.listen(0, r));
-}, 60_000);
+  // 120s (was 60s): this hook does a full in-memory CDS deploy + serves three
+  // services + boots @cap-js/mcp — ~10s ALONE. The unit tier runs vitest's
+  // unbounded default fan-out (a worker per core — 24 on Tom's box), so under
+  // full-suite CPU contention this cold boot breached the 60s hookTimeout
+  // (timed out only in the full run, 61/61 pass alone). Headroom absorbs it.
+}, 120_000);
 
 afterAll(async () => {
   // Close HTTP server and release the DB connection.
@@ -157,7 +162,10 @@ afterAll(async () => {
   }
   delete cds.db;
   delete cds.model;
-});
+  // 120s: matches the beforeAll headroom — cds.disconnect() + server close can
+  // also stall under the same full-suite CPU contention (this hook timed out in
+  // the full run too, as a cascade from the boot hook breaching its budget).
+}, 120_000);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

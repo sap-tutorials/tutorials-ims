@@ -25,31 +25,39 @@ function run(files: string[]): RunResult {
   }
 }
 
+// Each `it` shells out to a COLD `npx tsx <script>` child (6–12s alone on
+// Windows; the last case spawns twice). The unit tier runs vitest's unbounded
+// default fan-out (a worker per core — 24 on Tom's box), so when several
+// subprocess-spawning files coincide these cold spawns starve and breach the
+// tier's 30s testTimeout (timed out only in the full run, all 4 pass alone).
+// 60s per case absorbs the contention slowdown.
+const NUDGE_TIMEOUT = 60_000;
+
 describe('check-e2e-coverage-nudge CLI', () => {
   it('nudges when a UI dir changes without a test/e2e change (exit 0)', () => {
     const r = run(['app/admin/missions/webapp/ext/Foo.controller.js', 'srv/admin-service.cds']);
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/::warning/);
     expect(r.stdout).toMatch(/app\/admin\/missions\/webapp\/ext\/Foo\.controller\.js/);
-  });
+  }, NUDGE_TIMEOUT);
 
   it('does NOT nudge when a UI change is accompanied by a test/e2e change', () => {
     const r = run(['app/admin/missions/webapp/ext/Foo.controller.js', 'test/e2e/missions.test.js']);
     expect(r.status).toBe(0);
     expect(r.stdout).not.toMatch(/::warning/);
     expect(r.stdout).toMatch(/::notice/);
-  });
+  }, NUDGE_TIMEOUT);
 
   it('does NOT nudge for backend-only changes', () => {
     const r = run(['srv/admin-service.cds', 'db/schema.cds']);
     expect(r.status).toBe(0);
     expect(r.stdout).not.toMatch(/::warning/);
-  });
+  }, NUDGE_TIMEOUT);
 
   it('matches the hugo-apps and hugo/layouts UI globs', () => {
     const r = run(['hugo-apps/src/island.vue']);
     expect(r.stdout).toMatch(/::warning/);
     const r2 = run(['hugo/layouts/partials/x.html']);
     expect(r2.stdout).toMatch(/::warning/);
-  });
+  }, NUDGE_TIMEOUT);
 });

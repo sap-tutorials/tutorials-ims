@@ -171,7 +171,13 @@ describe('hugo homepage partials render against normalized browse.json', () => {
       );
     }
     expect(r.status).toBe(0);
-  }, 60_000);
+    // 180s (was 60s): this spawns a full `hugo` site build — ~43s ALONE, but
+    // the unit tier runs vitest's unbounded default fan-out (one worker per
+    // core; 24 on Tom's box). When several subprocess-spawning files coincide
+    // the CPU is badly oversubscribed and this build — already near its old
+    // 60s budget in isolation — tipped past it (timed out only in the full
+    // run, passed alone). Headroom absorbs the contention slowdown.
+  }, 180_000);
 
   it('renders the featured-missions teaser on the homepage', () => {
     const homepageHtml = join(PUBLIC_DIR, 'index.html');
