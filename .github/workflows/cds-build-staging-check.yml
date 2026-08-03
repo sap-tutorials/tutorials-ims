@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,7 +31,10 @@ jobs:
       # `cds build --production` invokes the cds-compiler which lives in
       # @sap/cds-dk (devDependency). `npm ci` ensures it's available.
       # ~30s cold; ~5s with cache.
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Run CDS build staging check
         # Approach: regenerate the artifacts via `cds build --production`,
         # then `git diff --exit-code` against the staged outputs. Any

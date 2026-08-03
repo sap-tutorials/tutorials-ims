@@ -26,6 +26,7 @@ import {
   _primeForTests as _primeResolver,
 } from './secret-resolver.js';
 import { resolveGithubToken, invalidateInstallationToken } from './github-app-token.js';
+import * as alerting from './alerting.js';
 
 const REPO_OWNER = 'sap-tutorials';
 const REPO_NAME = 'tutorials-ims';
@@ -180,6 +181,14 @@ export async function scheduleRebuild(reason, opts = {}) {
       await _state.dispatchFn(inputs, token);
     } catch (err) {
       console.error('[rebuild-trigger] dispatch failed:', err.message ?? err);
+      void alerting.raise({
+        eventType: 'RebuildDispatchFailed',
+        severity: 'ERROR',
+        category: 'ALERT',
+        subject: 'Rebuild dispatch failed',
+        body: String(err?.message ?? err),
+        resource: { resourceName: 'rebuild-dispatch', resourceType: 'service' },
+      });
       // Do NOT rethrow. Admin save already succeeded; the next trigger
       // picks up the missed change.
     }

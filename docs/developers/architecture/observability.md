@@ -99,3 +99,182 @@ Both retention jobs use `job-lock.js`; the rollup writer does NOT
 
 - Spec: [`docs/superpowers/specs/2026-07-02-805-observability-instrumentation-design.md`](../../superpowers/specs/2026-07-02-805-observability-instrumentation-design.md)
 - Issue: [#805](https://github.com/sap-tutorials/tutorials-ims/issues/805)
+
+---
+
+# Alerting (SAP Alert Notification Service)
+
+The alerting layer escalates a **subset of failures that need a human** to the
+`devrel-oncall` distribution list via SAP Alert Notification Service (ANS). It
+sits **beside** the metrics module and structured logs — it does not replace
+them. The metrics module is unchanged; alerting adds a push signal on the
+failure paths where passive dashboards are not enough.
+
+## Implementation
+
+`srv/lib/alerting.js` exports a single `raise(input)` helper. It is:
+
+- **Fail-open** — all errors are caught and warn-logged; the alert never throws
+  into or blocks the call path it watches.
+- **Default off** — no-ops unless `ALERTS_ENABLED=true` is set in the CF
+  environment.
+- **Memoised** — `cds.connect.to('alerts')` is called once; the promise is
+  cleared on error to allow reconnect on the next raise.
+
+The helper mirrors `metrics.js` in calling convention: import as a namespace,
+call the exported function directly, never `await` from the failure path (use
+`void alerting.raise(...)`).
+
+## Alerted failure paths
+
+| Hook site | File | `eventType` | When raised |
+|---|---|---|---|
+| Content-publish soft-reject | `srv/lib/content-publish-session.js` `commitSession` | `PublishRejected` | `outcome === 'rejected'` — one or more slug reverts were blocked; content partially published |
+| Scheduled job failure | `srv/jobs/scheduler.js` `runWithLock` catch | `ScheduledJobFailed` | Any scheduled job throws; `resource.resourceName` = job name; deduplicates per job via ANS `dedupWindowMs` |
+| Rebuild dispatch failure | `srv/lib/rebuild-trigger.js` dispatch catch | `RebuildDispatchFailed` | GitHub Actions dispatch throws; admin save already succeeded; next trigger picks up the miss |
+
+All three hooks use `severity: 'ERROR'` and `category: 'ALERT'`.
+`ScheduledJobFailed` covers **every** scheduled job (metrics-rollup, KG
+nightly jobs, community-events refresh, etc.) through the single chokepoint in
+`runWithLock`.
+
+## Configuration
+
+In `package.json` `cds.requires.alerts`:
+
+```json
+"alerts": {
+  "impl": "@sap-tutorials/cds-alert-notification",
+  "kind": "alert-notification-console",
+  "[test]":       { "kind": "alert-notification-memory" },
+  "[hybrid]":     { "kind": "alert-notification" },
+  "[production]": { "kind": "alert-notification" },
+  "channels": ["email:devrel-oncall"],
+  "routes": [{ "minSeverity": "ERROR", "channels": ["email:devrel-oncall"] }],
+  "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed"],
+  "dedupWindowMs": 300000
+}
+```
+
+- `alert-notification-console` — local `cds watch` logs alerts to stdout only
+  (no ANS traffic, no quota).
+- `alert-notification-memory` — unit-test profile; alerts accumulate in memory
+  for assertion.
+- `alert-notification` — hybrid/production; posts to the bound ANS service
+  instance via `cds.outboxed()`.
+- `dedupWindowMs: 300000` — 5-minute dedup window; repeated failures of the
+  same job within the window produce one email, not a flood.
+
+## Plugin dependency
+
+The plugin is `@sap-tutorials/cds-alert-notification` v1.0.0, published **privately
+to the org's GitHub Packages** npm registry and consumed by version:
+
+```
+"@sap-tutorials/cds-alert-notification": "^1.0.0"
+```
+
+Because the `@sap-tutorials` scope is private, installs need a scope→registry
+mapping and a token with `read:packages`. The repo's root `.npmrc` provides the
+mapping and reads the token from the environment:
+
+```ini
+@sap-tutorials:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+- **CI:** the four `npm ci` jobs (`unit`, `check`/`cds-build-staging-check`,
+  `check-cp-list`/`srv-qa-cp-list-check`, `validate`) mint a token via the repo's
+  existing GitHub App (`actions/create-github-app-token`, gated on
+  `vars.USE_GITHUB_APP`) and export it as `NODE_AUTH_TOKEN`, falling back to a
+  `PACKAGES_READ_TOKEN` secret. Each job also declares `permissions: packages: read`.
+- **Local dev / CF deploy:** set `NODE_AUTH_TOKEN` to a token with `read:packages`
+  on the `sap-tutorials` org before `npm install`.
+
+## Feature flag
+
+- `ALERTS_ENABLED` (default `false` / absent) — master switch for the helper.
+  Set to `'true'` to enable; any other value (including unset) silently skips
+  every `raise()` call.
+
+## Operator post-merge checklist
+
+These steps cannot be performed from a PR and must be completed after the MTA
+is deployed.
+
+**1. Confirm the GitHub App (or `PACKAGES_READ_TOKEN`) can read GitHub Packages.**
+The four CI `npm ci` jobs authenticate to `@sap-tutorials`'s private GitHub
+Packages registry via the App token (`vars.USE_GITHUB_APP == 'true'` +
+`TUTORIALS_APP_ID`/`TUTORIALS_APP_PRIVATE_KEY`) or the `PACKAGES_READ_TOKEN`
+fallback secret. Verify: (a) the App installation on `sap-tutorials` grants
+**packages:read** and covers the `cds-alert-notification` repo, OR (b)
+`PACKAGES_READ_TOKEN` exists with `read:packages`. Also confirm the CF deploy
+pipeline exports a `NODE_AUTH_TOKEN` with the same scope before its `npm install`.
+If neither is in place, `npm ci`/`npm install` fails to fetch the plugin.
+
+**2. Publish the plugin to GitHub Packages.**
+The plugin must be published before this consumer can install v1.0.0. On the
+`sap-tutorials/cds-alert-notification` repo, cut a `v1.0.0` GitHub Release — its
+`publish.yml` workflow publishes to GitHub Packages (private). Confirm the
+package appears under the org's Packages tab before deploying tutorials-ims.
+
+**3. Regenerate `package-lock.json`.**
+`package.json` now references `@sap-tutorials/cds-alert-notification` by version,
+but the committed lockfile predates that change (the authoring workstation could
+not reach the private registry to resolve it). In an environment with a
+`read:packages` `NODE_AUTH_TOKEN` for the `sap-tutorials` org, run `npm install`
+to add the resolved entry and commit the updated `package-lock.json`. Until then,
+`npm ci` jobs fail on the package.json/lockfile mismatch.
+
+**4. Deploy the MTA (v1.10.0).**
+`.deploy/mta.yaml` declares `tutorials-alert-notification` as a managed
+`alert-notification` service (plan `standard`). The `mbt build` + `cf deploy`
+run provisions the instance and binds it to `tutorials-srv`. No manual `cf
+create-service` is needed.
+
+**5. Bind the email action to the `devrel-oncall` distribution list.**
+The MTA creates the ANS **instance** but does NOT configure email routing —
+that requires a post-deploy step in the ANS cockpit (or via the plugin's
+generated `provision.sh`). Open the ANS cockpit for the `tutorial-system`
+subaccount, locate the `tutorials-alert-notification` instance, and create an
+email ACTION pointing to the real `devrel-oncall` distribution-list address.
+Wire it to the `devrel-oncall` CONDITION (minSeverity ERROR). Without this step
+the instance is bound but no emails are sent.
+
+**6. Enable alerting.**
+
+```bash
+cf target -s dev   # confirm space before set-env
+cf set-env tutorials-srv ALERTS_ENABLED true
+cf restart tutorials-srv
+```
+
+**7. Live-verify one alert end-to-end.**
+Trigger a known failure (e.g. a publish-reject via the admin UI with a
+deliberately bad slug, or force a scheduled job error in DEV) and confirm the
+email arrives at the `devrel-oncall` address. This is the **one path not proven
+by any automated test** — the unit tests assert the helper contract and envelope
+shapes in memory, but `cds.outboxed()` posting to a real ANS endpoint has not
+been exercised against a live CAP runtime. This live-verify is **mandatory**
+before declaring the integration done.
+
+**8. Confirm Node runtime floor.**
+`package.json` now declares `"engines": { "node": ">=22.12" }` (the plugin's
+requirement). Verify the CF buildpack runtime satisfies this before deploying
+to PROD. The CI pipeline already runs Node 22; the CF Node.js buildpack default
+should be ≥22.12 — confirm with `cf env tutorials-srv | grep VCAP_APPLICATION`
+after deploy and check the buildpack version log.
+
+## Surfaces
+
+- CF logs — `cds.log('alerting')` warn lines on any raise failure (e.g. ANS
+  unreachable, `ALERTS_ENABLED` off).
+- ANS cockpit — alert history under the `tutorials-alert-notification`
+  instance.
+- No admin-UI tile in v1 — the metrics module's existing `/admin-ui/#metrics`
+  is unchanged; alerting is a push channel only.
+
+## References
+
+- Spec: [`docs/superpowers/specs/2026-08-03-ans-integration-tutorials-ims/spec.md`](../../superpowers/specs/2026-08-03-ans-integration-tutorials-ims/spec.md) (if present)
+- Issue: ANS integration tracking issue (see PR description for link)

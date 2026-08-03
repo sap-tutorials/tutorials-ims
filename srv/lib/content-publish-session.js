@@ -5,6 +5,7 @@ import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { getNextLegacyId } from './legacy-id.js';
 import { toBuffer } from './content-store.js';
 import * as metrics from './metrics.js';
+import * as alerting from './alerting.js';
 import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';
 import { tutorialsTableInfo } from './_tutorials-table.js';
 import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
@@ -514,6 +515,16 @@ export function createSessionHelpers({ namespace }) {
         metrics.observe('publish.commit.ms', commitMs);
         metrics.observe('publish.total.ms', totalMs);
         metrics.counter(outcome === 'rejected' ? 'publish.commit.reject' : 'publish.commit.ok');
+        if (outcome === 'rejected') {
+          void alerting.raise({
+            eventType: 'PublishRejected',
+            severity: 'ERROR',
+            category: 'ALERT',
+            subject: `Content publish rejected ${rejectedReverts.length} slug(s)`,
+            body: `Rejected reverts: ${rejectedReverts.join(', ')}`,
+            resource: { resourceName: 'content-publish', resourceType: 'service' }
+          }); // fire-and-forget; helper is fail-open, do NOT await-block the commit path
+        }
       }
     } catch (metricsErr) {
       LOG.warn(`[content/publish/commit] PublishTimings insert failed (non-fatal): ${metricsErr.message}`);

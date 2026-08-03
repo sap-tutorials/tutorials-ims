@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "start": "cds-serve",
@@ -152,6 +152,7 @@
     "yauzl": "3.4.0"
   },
   "dependencies": {
+    "@sap-tutorials/cds-alert-notification": "^1.0.0",
     "@cap-js-community/websocket": "^1.10.5",
     "@cap-js/ai": "~1.0.1",
     "@cap-js/audit-logging": "^1.2.2",
@@ -274,6 +275,23 @@
         "[production]": {
           "kind": "telemetry-to-cloud-logging"
         }
+      },
+      "alerts": {
+        "impl": "@sap-tutorials/cds-alert-notification",
+        "kind": "alert-notification-console",
+        "[test]": {
+          "kind": "alert-notification-memory"
+        },
+        "[hybrid]": {
+          "kind": "alert-notification"
+        },
+        "[production]": {
+          "kind": "alert-notification"
+        },
+        "channels": ["email:devrel-oncall"],
+        "routes": [{ "minSeverity": "ERROR", "channels": ["email:devrel-oncall"] }],
+        "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed"],
+        "dedupWindowMs": 300000
       }
     },
     "hana": {
