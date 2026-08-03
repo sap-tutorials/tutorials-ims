@@ -1,0 +1,46 @@
+name: Regenerate lockfile (alerts dep)
+
+# One-shot helper: resolves @sap-tutorials/cds-alert-notification from the
+# private GitHub Packages registry and writes it into package-lock.json, then
+# commits the updated lockfile back to the branch. Uses the built-in
+# GITHUB_TOKEN (packages:read to fetch the package, contents:write to push) —
+# no PAT, no App key. Run via "Run workflow" against the PR branch, then delete
+# this file once the lockfile is committed.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  regen-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@sap-tutorials'
+
+      - name: Resolve dep into package-lock.json
+        run: npm install --package-lock-only --no-audit --no-fund
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit updated lockfile
+        run: |
+          if git diff --quiet package-lock.json; then
+            echo "package-lock.json already up to date — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore(alerts): add @sap-tutorials/cds-alert-notification to package-lock.json [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
