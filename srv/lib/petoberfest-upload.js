@@ -10,6 +10,7 @@ export async function uploadPetSubmission(db, { slug, user, buffer, mimeType, pe
   if (!SLUG_RE.test(s)) throw new Error('uploadPetSubmission: bad slug');
 
   const { Petoberfests, TaskRecords } = cds.entities('com.sap.developers.ims');
+  // slug-canonical: pre-canonicalized
   const contest = await db.run(SELECT.one.from(Petoberfests).where({ slug: s }));
   if (!contest) { const e = new Error('contest not found'); e.code = 'NOT_FOUND'; throw e; }
 
