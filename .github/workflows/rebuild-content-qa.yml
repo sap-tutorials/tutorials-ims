@@ -40,6 +40,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      packages: read
       # #1373 — the failure/recovery notifier opens, comments on, and closes a
       # deduplicated GitHub issue; assignment triggers GitHub's native email.
       issues: write
@@ -59,6 +60,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Restore QA tutorial cache
         uses: actions/cache@v4

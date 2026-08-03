@@ -48,6 +48,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      packages: read
       pull-requests: write   # gh pr comment from 'Comment HDI tripwire on PR' step (#257 follow-up)
     outputs:
       environment: ${{ steps.env.outputs.target }}
@@ -194,6 +195,7 @@ jobs:
         run: npm install && npm run fetch-tutorials -- --target hugo
         env:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
 
       - name: Prefetch QA tutorials (warms .tutorial-cache-qa)
@@ -793,6 +795,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -805,6 +808,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Wait for app stabilization
         run: sleep 30
@@ -853,6 +858,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -865,6 +871,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Install Chromium for playwright-core
         # playwright-core ships without browsers; install the same headless shell
@@ -923,6 +931,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -935,6 +944,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
