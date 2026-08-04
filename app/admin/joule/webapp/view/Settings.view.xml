@@ -201,6 +201,10 @@
           <Label text="" />
           <Text text="{i18n>alertsEnabledHelp}" wrapping="true" />
         </f:SimpleForm>
+        <Toolbar>
+          <Button text="{i18n>sendTestAlertButton}" press=".onSendTestAlert" type="Default" enabled="{settings>/alertsEnabled}" />
+        </Toolbar>
+        <Text text="{i18n>sendTestAlertHelp}" wrapping="true" class="sapUiSmallMargin" />
       </Panel>
 
       <Panel headerText="{i18n>a2aSection}" expandable="true" expanded="false" class="sapUiSmallMarginBottom">

@@ -290,6 +290,57 @@ sap.ui.define([
         });
     },
 
+    // #1469: fire an on-demand end-to-end ANS test alert via the bound
+    // AdminService.sendTestAlert action, and report the outcome. Mirrors
+    // onSeedConceptEmbeddings' CSRF-fetch → POST → parse shape.
+    onSendTestAlert: function () {
+      var self = this;
+      fetch("/admin/$metadata", {
+        method: "HEAD",
+        credentials: "include",
+        headers: { "x-csrf-token": "fetch" }
+      })
+        .then(function (res) {
+          return res.headers.get("x-csrf-token") || "";
+        })
+        .then(function (token) {
+          return fetch("/admin/ChatSettings/AdminService.sendTestAlert", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "x-csrf-token": token
+            },
+            body: JSON.stringify({})
+          });
+        })
+        .then(function (res) {
+          if (!res.ok) {
+            return res.text().then(function (txt) {
+              throw new Error(txt || "HTTP " + res.status);
+            });
+          }
+          return res.json();
+        })
+        .then(function (payload) {
+          // OData wraps action results in { value: {...} } on some protocol
+          // versions and returns the flat object on others. Accept both.
+          var r = payload && payload.value ? payload.value : payload;
+          var outcome = r && r.outcome ? r.outcome : "error";
+          if (outcome === "delivered") {
+            MessageToast.show("Test alert sent (eventType AlertingTest). Check the devrel-oncall inbox.");
+          } else if (outcome === "disabled") {
+            MessageBox.warning("Alerting is disabled — enable ANS push alerts above, click Save, then retry.");
+          } else {
+            MessageBox.error("Test alert failed: " + ((r && r.reason) || "unknown error"));
+          }
+        })
+        .catch(function (err) {
+          MessageBox.error("Test alert failed: " + err.message);
+        });
+    },
+
     _refreshStats: function () {
       var self = this;
       fetch("/admin/embeddings/stats", {
