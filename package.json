@@ -288,9 +288,32 @@
         "[production]": {
           "kind": "alert-notification"
         },
-        "channels": ["email:devrel-oncall"],
-        "routes": [{ "minSeverity": "ERROR", "channels": ["email:devrel-oncall"] }],
-        "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed"],
+        "channels": [
+          "email:devrel-oncall",
+          "email:devrel-deploys"
+        ],
+        "routes": [
+          {
+            "minSeverity": "ERROR",
+            "channels": [
+              "email:devrel-oncall"
+            ]
+          },
+          {
+            "minSeverity": "NOTICE",
+            "channels": [
+              "email:devrel-deploys"
+            ]
+          }
+        ],
+        "eventTypes": [
+          "PublishRejected",
+          "ScheduledJobFailed",
+          "RebuildDispatchFailed",
+          "DeployStarted",
+          "DeployFinished",
+          "DeployFailed"
+        ],
         "dedupWindowMs": 300000
       }
     },
