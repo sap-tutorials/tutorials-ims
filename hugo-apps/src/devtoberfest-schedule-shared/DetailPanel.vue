@@ -3,7 +3,7 @@ import type { ScheduleRow } from './types';
 import { youtubeThumb, safeHref } from './completion';
 import { youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal, formatHomeZone } from './format-session-time';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{
   row: ScheduleRow | null;
@@ -12,6 +12,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void;
 }>();
+
+const expanded = ref(false);
+
+function toggleExpand() {
+  expanded.value = !expanded.value;
+  try { sessionStorage.setItem('dtf-detail-expanded', expanded.value ? '1' : '0'); } catch {}
+}
+
+try { expanded.value = sessionStorage.getItem('dtf-detail-expanded') === '1'; } catch {}
 
 const thumb = computed(() => {
   if (!props.row) return null;
@@ -35,14 +44,16 @@ const isSession = computed(() => props.row?.kind === 'session');
 const isActivity = computed(() => props.row?.kind === 'activity');
 
 function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.display = 'none'; }
+
 </script>
 
 <template>
   <div v-if="row" class="detail-panel" role="dialog" aria-modal="true" :aria-label="row.title">
     <div class="detail-panel__backdrop" @click="emit('close')" />
-    <div class="detail-panel__drawer">
+    <div class="detail-panel__drawer" :class="{ 'detail-panel__drawer--wide': expanded }">
       <div class="detail-panel__header">
         <h2 class="detail-panel__title">{{ row.title }}</h2>
+        <button class="detail-panel__enlarge" @click="toggleExpand" :aria-pressed="expanded" :aria-label="expanded ? 'Shrink panel' : 'Enlarge panel'">{{ expanded ? '⤡' : '⤢' }}</button>
         <button class="detail-panel__close" @click="emit('close')" aria-label="Close">&#x2715;</button>
       </div>
 
@@ -333,5 +344,23 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
 
 .detail-panel__link--linkedin {
   color: #0a66c2;
+}
+
+.detail-panel__enlarge {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--sapContent_IconColor, #6a6d70);
+  padding: 0.25rem;
+  flex-shrink: 0;
+}
+
+.detail-panel__enlarge:hover {
+  color: var(--sapTextColor, #32363a);
+}
+
+.detail-panel__drawer--wide {
+  width: min(70vw, 100vw);
 }
 </style>
