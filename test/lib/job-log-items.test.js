@@ -156,8 +156,8 @@ describe('JobLogItems', () => {
         adminAuth
       );
       expect(status).toBe(200);
-      expect(data.cfLogsUrl).toMatch(/^https:\/\/dashboards-test\.example\.com\/app\/discover/);
-      expect(decodeURIComponent(data.cfLogsUrl)).toContain('cf_app_name : "tutorials-srv"');
+      expect(data.cfLogsUrl).toMatch(/^https:\/\/dashboards-test\.example\.com\/app\/data-explorer\/discover/);
+      expect(decodeURIComponent(data.cfLogsUrl)).toContain('app_name : "tutorials-srv"');
     });
 
     it('exposes cfLogsUrl on PipelineLog (content pipeline) rows', async () => {
