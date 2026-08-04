@@ -235,6 +235,14 @@ modules:
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
       XS_APP_LOG_LEVEL: info
+      # The approuter framework injects X-Frame-Options: SAMEORIGIN by default
+      # (sendXFrameOptions defaults true; its lookup for our config header is
+      # case-mismatched — searches lowercase 'x-frame-options' but xs-app.json
+      # keys are 'X-Frame-Options' — so it never dedupes and always appends its
+      # own). SAMEORIGIN overrides our CSP frame-ancestors allow-list in every
+      # browser, blocking the SAP sister-site iframe embeds we deliberately
+      # allow via CSP. Turn the framework injection off so frame-ancestors wins.
+      SEND_XFRAMEOPTIONS: false
     provides:
       # Self-provided property set so the gameboard-api destination require
       # below resolves under mbt strict validation. gameboard-api fronts a
