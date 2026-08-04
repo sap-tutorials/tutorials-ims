@@ -24,6 +24,22 @@ providing defense-in-depth against the other two.
 | `youtu.be` | YouTube short-link form. Browsers evaluate CSP against the original src URL *before* any redirect, so this needs its own entry. |
 | `microlearning.opensap.com` | SAP openSAP microlearning embed (~7 occurrences). |
 | `sapvideo.cfapps.eu10-004.hana.ondemand.com` | SAP internal video service. |
+| `player.vimeo.com` | Vimeo player embed (standard `<iframe>` form). |
+| `vimeo.com` | Vimeo bare-domain form — some author embed codes use this origin directly. |
+
+## `<video>` element support
+
+Native `<video src>` elements are supported in tutorial markdown. Because
+`default-src 'self'` would otherwise block external media sources, the CSP
+also carries a `media-src` directive:
+
+```
+media-src 'self' https://raw.githubusercontent.com
+```
+
+This allows `<video>` files served from GitHub raw content
+(`https://raw.githubusercontent.com`). If a new raw-media host is needed,
+add it to `media-src` in `approuter/xs-app.json` and document it here.
 
 ## Extending the allowlist
 

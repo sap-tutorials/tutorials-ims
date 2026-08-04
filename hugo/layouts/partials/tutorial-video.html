@@ -1,0 +1,14 @@
+{{/* Styled intro video player from the optional `video:` frontmatter object
+     ({ embedUrl, title, provider }). Rendered above the steps. Renders nothing
+     when .Params.video is absent. YouTube/Vimeo/openSAP/sapvideo are iframe
+     embeds; provider is informational. */}}
+{{ with .Params.video }}
+<div class="tutorial-video" data-provider="{{ .provider }}">
+  <div class="tutorial-video__frame">
+    <iframe src="{{ .embedUrl }}" title="{{ .title }}" loading="lazy"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen></iframe>
+  </div>
+</div>
+{{ end }}

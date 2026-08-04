@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 
-import { composeTutorial, renderHugoFrontmatter } from './lib/parsers.bundle.mjs';
+import { composeTutorial, renderHugoFrontmatter, normalizeVideo } from './lib/parsers.bundle.mjs';
 
 const HUGO_TIMEOUT_MS_DEFAULT = 5000;
 const PREVIEW_SITE_PATH_DEFAULT = new URL('../preview-site/', import.meta.url).pathname;
@@ -109,6 +109,8 @@ export async function renderPreview(markdown, rulesVr) {
       // narrows to image/(png|jpeg|gif|webp); SVG data URLs stay blocked.
       // Production publish + Hugo build paths keep the default allowlist.
       allowDataUrls: true,
+      intro: composed.intro,
+      video: normalizeVideo(composed.frontmatter?.video, '__preview__'),
     });
     const contentDir = join(tmpDirPath, 'content', 'tutorials', '__preview__');
     mkdirSync(contentDir, { recursive: true });

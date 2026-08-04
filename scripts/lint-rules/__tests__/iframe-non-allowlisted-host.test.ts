@@ -12,11 +12,11 @@ function runRule(source: string, slug = 'fixture') {
 }
 
 describe('iframe-non-allowlisted-host', () => {
-  it('warns on Vimeo iframe with correct line + severity', () => {
+  it('warns on non-allowlisted iframe with correct line + severity', () => {
     const src = [
       'Some prose.',
       '',
-      '<iframe src="https://player.vimeo.com/video/123"></iframe>',
+      '<iframe src="https://www.dailymotion.com/video/123"></iframe>',
       '',
       'More prose.',
     ].join('\n')
@@ -27,7 +27,7 @@ describe('iframe-non-allowlisted-host', () => {
       line: 3,
       severity: 'warning',
     })
-    expect(findings[0].message).toContain('player.vimeo.com')
+    expect(findings[0].message).toContain('www.dailymotion.com')
   })
 
   it('does not fire on YouTube iframe (allowlisted)', () => {
@@ -49,10 +49,15 @@ describe('iframe-non-allowlisted-host', () => {
   })
 
   it('fires once per iframe when multiple iframes are on the same line', () => {
-    const src = '<iframe src="https://vimeo.com/1"></iframe><iframe src="https://dailymotion.com/2"></iframe>'
+    const src = '<iframe src="https://twitch.tv/1"></iframe><iframe src="https://dailymotion.com/2"></iframe>'
     const findings = runRule(src)
     expect(findings).toHaveLength(2)
-    expect(findings[0].message).toContain('vimeo.com')
+    expect(findings[0].message).toContain('twitch.tv')
     expect(findings[1].message).toContain('dailymotion.com')
+  })
+
+  it('does not fire on Vimeo iframes (allowlisted)', () => {
+    expect(runRule('<iframe src="https://player.vimeo.com/video/123456"></iframe>')).toHaveLength(0)
+    expect(runRule('<iframe src="https://vimeo.com/123456"></iframe>')).toHaveLength(0)
   })
 })

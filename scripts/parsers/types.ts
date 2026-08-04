@@ -1,3 +1,9 @@
+export interface NormalizedVideo {
+  embedUrl: string
+  title: string
+  provider: 'youtube' | 'vimeo' | 'opensap' | 'sapvideo'
+}
+
 export interface TutorialFrontmatter {
   time: number
   author_name: string
@@ -7,6 +13,13 @@ export interface TutorialFrontmatter {
   parser?: string
   title?: string
   description?: string
+  /**
+   * Optional author-supplied intro video. Object `{ url, title?, provider? }`
+   * or a bare URL/id string. Normalized by scripts/parsers/video.ts →
+   * emitted as the `video` Hugo frontmatter object. Unrecognized hosts are
+   * dropped (warn) rather than rendered as a broken frame.
+   */
+  video?: { url?: string; title?: string; provider?: string } | string
   /**
    * Computed during fetch (not present in source markdown). Extracted from
    * author_profile when it is a github.com URL. Null when the URL is not

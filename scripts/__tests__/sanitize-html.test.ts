@@ -98,11 +98,19 @@ describe('stripDangerousHtml', () => {
     expect(stripDangerousHtml('<style id="x">@import url("https://evil.example/track.css")</style>')).toBe('')
   })
 
-  it('removes media tags (video, audio, picture, source, track)', () => {
-    expect(stripDangerousHtml('<video src="https://evil.example/track.mp4"></video>')).toBe('')
+  it('removes audio and picture tags; preserves video/source/track (now allowlisted)', () => {
+    // video/source/track were added to the allowlist (Task 3: Vimeo + video support).
+    // audio/picture remain blocked.
     expect(stripDangerousHtml('<audio src="x.mp3"></audio>')).toBe('')
-    expect(stripDangerousHtml('<picture><source srcset="x.webp"><img src="x.png"></picture>')).toBe('<img src="x.png" />')
-    expect(stripDangerousHtml('<track kind="captions" src="x.vtt">')).toBe('')
+    // <picture> is stripped but its children survive: <source> now survives (srcset stripped
+    // since it's not in source's allowed attrs), and <img> survives as before.
+    const pictureOut = stripDangerousHtml('<picture><source srcset="x.webp"><img src="x.png"></picture>')
+    expect(pictureOut).toContain('<img src="x.png" />')
+    expect(pictureOut).not.toContain('<picture')
+    // video: tag now survives (src stripped as off-allowlist scheme, but tag persists).
+    expect(stripDangerousHtml('<video controls></video>')).toContain('<video')
+    // track: now survives with its allowed attrs.
+    expect(stripDangerousHtml('<track kind="captions" src="x.vtt">')).toContain('<track')
   })
 
   it('removes deprecated frame tags (and noframes content #140)', () => {
@@ -312,9 +320,12 @@ describe('stripDangerousHtml', () => {
       expect(out).toMatch(/src="https:\/\/sapvideo\.cfapps\.eu10-004\.hana\.ondemand\.com/)
     })
 
-    it('strips iframe from off-allowlist host (vimeo) (spec 5)', () => {
+    it('preserves Vimeo player iframe (now on allowlist) (spec 5)', () => {
+      // player.vimeo.com and vimeo.com were added in Task 3.
       const input = '<iframe src="https://player.vimeo.com/video/123456"></iframe>'
-      expect(stripDangerousHtml(input)).toBe('')
+      const out = stripDangerousHtml(input)
+      expect(out).toMatch(/<iframe\b/)
+      expect(out).toMatch(/src="https:\/\/player\.vimeo\.com\/video\/123456"/)
     })
 
     it('strips srcdoc attribute on allowlisted-host iframe (defense-in-depth, spec 6)', () => {
@@ -356,6 +367,28 @@ describe('stripDangerousHtml', () => {
       expect(out).toContain('placeholder')
     })
   })
+
+describe('video + vimeo support', () => {
+  it('preserves a <video> element with controls and <source>', () => {
+    const out = stripDangerousHtml('<video controls width="640"><source src="https://raw.githubusercontent.com/x/y/clip.mp4" type="video/mp4"></video>')
+    expect(out).toContain('<video')
+    expect(out).toContain('controls')
+    expect(out).toContain('<source')
+    expect(out).toContain('clip.mp4')
+  })
+  it('strips onerror/onload from <video>', () => {
+    const out = stripDangerousHtml('<video controls onerror="alert(1)" src="https://raw.githubusercontent.com/x/y/c.mp4"></video>')
+    expect(out).not.toContain('onerror')
+  })
+  it('preserves a Vimeo player iframe', () => {
+    const out = stripDangerousHtml('<iframe src="https://player.vimeo.com/video/123456789"></iframe>')
+    expect(out).toContain('player.vimeo.com/video/123456789')
+  })
+  it('still drops an off-allowlist iframe host', () => {
+    const out = stripDangerousHtml('<iframe src="https://evil.example/x"></iframe>')
+    expect(out).not.toContain('evil.example')
+  })
+})
 
   // #1102: opt-in `data:` image URLs for the VSCode author-preview endpoint.
   // Default behaviour stays lockdown; preview-renderer.js passes

@@ -45,6 +45,8 @@ export const ALLOWED_IFRAME_HOSTNAMES = [
   'youtu.be',
   'microlearning.opensap.com',
   'sapvideo.cfapps.eu10-004.hana.ondemand.com',
+  'player.vimeo.com',
+  'vimeo.com',
 ] as const
 
 // Author placeholder pseudo-tags appear in tutorial markdown as freeform
@@ -116,7 +118,7 @@ function escapePseudoTags(line: string): string {
   })
 }
 
-const ALLOWED_TAGS = [...SEMANTIC_TAGS, 'iframe']
+const ALLOWED_TAGS = [...SEMANTIC_TAGS, 'iframe', 'video', 'source', 'track']
 
 const ALLOWED_ATTRS: Record<string, Array<string | { name: string; multiple?: boolean; values?: string[] }>> = {
   // Common attributes on every allowed tag. Wildcard `data-*` / `aria-*`
@@ -131,6 +133,9 @@ const ALLOWED_ATTRS: Record<string, Array<string | { name: string; multiple?: bo
   table: ['summary'],
   abbr: ['title'],
   iframe: ['src', 'width', 'height', 'frameborder', 'allow', 'allowfullscreen', 'title', 'loading', 'referrerpolicy'],
+  video: ['controls', 'width', 'height', 'poster', 'preload', 'loop', 'muted', 'playsinline', 'src'],
+  source: ['src', 'type'],
+  track: ['kind', 'src', 'srclang', 'label', 'default'],
 }
 
 // Explicit URI-scheme allowlist replaces the scheme blocklist that issue

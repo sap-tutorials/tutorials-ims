@@ -28,6 +28,7 @@
       <a href="#" onclick="collapseAllSteps(); return false">Close all</a>
     </div>
 
+    {{ partial "tutorial-video.html" . }}
     <div class="tutorial-steps">{{ .Content }}</div>
 
     {{ partial "next-steps.html" . }}
