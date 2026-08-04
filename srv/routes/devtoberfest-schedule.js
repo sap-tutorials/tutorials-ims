@@ -1,6 +1,7 @@
 // Public + authed read endpoints for the dynamic Devtoberfest schedule pages.
 //   GET /api/devtoberfest/schedule?edition=<id>   (anonymous) -> feed
 //   GET /api/devtoberfest/my-completions?edition=<id> (authed) -> completions+points
+//   GET /api/devtoberfest/transcript?video=<id>   (anonymous) -> cached segments
 // Reads the cross-container planner facades (external.devtoberfest.*). Fails
 // soft (503 / empty) when the facades are unavailable (e.g. unit SQLite).
 import cds from '@sap/cds';
@@ -8,6 +9,8 @@ import { assembleFeed, completedActivityPoints, normalizeSlugSet } from '../lib/
 import { resolveUser } from '../lib/resolve-user.js';
 import { resolveUserSapId } from '../lib/resolve-db-user.js';
 import { getMyCompletedTutorials } from '../lib/user-progress.js';
+import { fetchTranscript } from '../lib/devtoberfest-transcript.js';
+import { gzipSync, gunzipSync } from 'node:zlib';
 
 const LOG = cds.log('devtoberfest');
 
@@ -120,6 +123,40 @@ async function myCompletionsHandler(req, res) {
   }
 }
 
+const TRANSCRIPT_TTL_MS = 1000 * 60 * 60 * 24 * 7;   // 7d for real transcripts
+const TRANSCRIPT_NONE_TTL_MS = 1000 * 60 * 60;        // 1h for negative cache
+
+async function transcriptHandler(req, res) {
+  const videoId = String(req.query.video || '').trim();
+  if (!videoId) return res.status(400).json({ error: 'MISSING_VIDEO' });
+  try {
+    await cds.connect.to('db');
+    const { Transcript } = cds.entities('com.sap.developers.ims');
+    const now = Date.now();
+    const cached = await SELECT.one.from(Transcript).where({ videoId });
+    if (cached) {
+      const age = now - new Date(cached.fetchedAt).getTime();
+      const ttl = cached.source === 'none' ? TRANSCRIPT_NONE_TTL_MS : TRANSCRIPT_TTL_MS;
+      if (age < ttl) {
+        // NOTE: reading `segments` (LargeBinary) together with other columns via
+        // CDS QL is fine on SQLite (unit tests). On HANA, LOB locators expire when
+        // mixed with non-BLOB columns — verified as a hybrid-test concern (Task 15).
+        const segments = cached.source === 'none' ? [] : JSON.parse(gunzipSync(cached.segments).toString('utf8'));
+        return res.status(200).json({ videoId, source: cached.source, lang: cached.lang, segments });
+      }
+    }
+    const fresh = await fetchTranscript(videoId);
+    // gzipSync returns a Buffer; on HANA the CDS UPSERT binding may need
+    // base64 — flag for Task 15 hybrid run if needed.
+    const blob = fresh.source === 'none' ? null : gzipSync(Buffer.from(JSON.stringify(fresh.segments), 'utf8'));
+    await UPSERT.into(Transcript).entries({ videoId, source: fresh.source, lang: fresh.lang, segments: blob, fetchedAt: new Date().toISOString() });
+    return res.status(200).json({ videoId, source: fresh.source, lang: fresh.lang, segments: fresh.segments });
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/transcript failed:', err);
+    return res.status(500).json({ error: 'INTERNAL' });
+  }
+}
+
 // Physical synonym name for the cross-container Speaker facade.
 // @cds.persistence.exists entities are named by the HDI synonym: EXTERNAL_DEVTOBERFEST_SPEAKER.
 // Raw SQL is required to avoid HANA LOB locator expiry when reading a BLOB alongside metadata.
@@ -163,6 +200,7 @@ export function register(app) {
   app.get('/api/devtoberfest/schedule', _contextMw, _authMw, scheduleHandler);
   app.get('/api/devtoberfest/my-completions', _contextMw, _authMw, myCompletionsHandler);
   app.get('/api/devtoberfest/speaker/:id/photo', _contextMw, speakerPhotoHandler);
+  app.get('/api/devtoberfest/transcript', _contextMw, transcriptHandler);
 }
 
-export { scheduleHandler, myCompletionsHandler, speakerPhotoHandler };
+export { scheduleHandler, myCompletionsHandler, speakerPhotoHandler, transcriptHandler };

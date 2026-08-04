@@ -32,4 +32,9 @@ describe('devtoberfest schedule route', () => {
     expect(res.status).toBe(503);
     expect(res.data.error).toBe('EVENT_NOT_CONFIGURED');
   });
+
+  it('transcript endpoint 400s without a video id', async () => {
+    const res = await project.axios.get('/api/devtoberfest/transcript', { validateStatus: () => true });
+    expect(res.status).toBe(400);
+  });
 });
