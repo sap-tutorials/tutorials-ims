@@ -290,7 +290,7 @@
         },
         "channels": ["email:devrel-oncall"],
         "routes": [{ "minSeverity": "ERROR", "channels": ["email:devrel-oncall"] }],
-        "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed"],
+        "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed", "AlertingTest"],
         "dedupWindowMs": 300000
       }
     },
