@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-04
 **Issue:** [#1469](https://github.com/sap-tutorials/tutorials-ims/issues/1469)
-**Related:** #1468 (add `alertsEnabled` toggle to Joule Settings admin UI) — folded into this PR.
+**Related:** #1468 (add `alertsEnabled` toggle to Joule Settings admin UI) — **already merged** (PR #1471) into `main` after this design was drafted. The "Operational Alerting" panel + `alertsEnabled` Switch already exist in `app/admin/joule/webapp/`. This PR therefore **only adds the Send-test-alert button** into that existing panel — it does NOT re-add the toggle.
 
 ## Problem
 
@@ -74,29 +74,21 @@ action sendTestAlert(severity: String) returns {
 
 Because `Date.now()`/`new Date()` are used only in the **runtime handler** (not a workflow script), there is no restriction here.
 
-### 4. Joule Settings UI — new "Operational Alerting" panel
+### 4. Joule Settings UI — add button to the existing "Operational Alerting" panel
 
-`app/admin/joule/webapp/` (auto-copied to `dist/components/joule/` by `copy-components.js` at `mbt build`). Add a panel to `view/Settings.view.xml`, wire two things in `controller/Settings.controller.js`, and add i18n keys.
+`app/admin/joule/webapp/` (auto-copied to `dist/components/joule/` by `copy-components.js` at `mbt build`). The "Operational Alerting" panel and `alertsEnabled` Switch **already exist** (shipped by #1468 / PR #1471). This PR adds only the **button + its controller handler + two i18n keys** into that panel.
 
-**Panel** (placed near the top, after the General panel — alerting is an operational master switch, not a Joule-feature toggle):
+**Panel edit** (append a `Toolbar` + help `Text` inside the existing `alertsSection` panel, after the `SimpleForm`):
 
 ```xml
-<Panel headerText="{i18n>alertingSection}" expandable="true" expanded="true" class="sapUiSmallMarginBottom">
-  <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
-    <Label text="{i18n>alertsEnabled}" />
-    <Switch state="{settings>/alertsEnabled}" />
-    <Label text="" />
-    <Text text="{i18n>alertsEnabledHelp}" wrapping="true" class="sapUiTinyMarginBottom" />
-  </f:SimpleForm>
-  <Toolbar>
-    <Button text="{i18n>sendTestAlertButton}" press=".onSendTestAlert" type="Default"
-            enabled="{settings>/alertsEnabled}" />
-  </Toolbar>
-  <Text text="{i18n>sendTestAlertHelp}" wrapping="true" class="sapUiSmallMargin" />
-</Panel>
+      <Toolbar>
+        <Button text="{i18n>sendTestAlertButton}" press=".onSendTestAlert" type="Default"
+                enabled="{settings>/alertsEnabled}" />
+      </Toolbar>
+      <Text text="{i18n>sendTestAlertHelp}" wrapping="true" class="sapUiSmallMargin" />
 ```
 
-- **`alertsEnabled` Switch** — closes #1468. Add `alertsEnabled: false` to the `onInit` JSONModel default, read it in `_loadSettings` (`!!data.alertsEnabled`), and include `alertsEnabled: !!data.alertsEnabled` in the `onSave` PATCH body. This threads through the **existing** save/reload flow — no new endpoint.
+- The `alertsEnabled` Switch, its `onInit` default, `_loadSettings` read, and `onSave` PATCH body are **already wired** by #1468 — do NOT touch them.
 - **Button** disabled when `alertsEnabled` is off (visual reinforcement); the handler still reports `disabled` defensively if somehow clicked while off (e.g. unsaved toggle).
 
 **`onSendTestAlert`** controller method — mirrors `onSeedConceptEmbeddings` exactly (CSRF fetch → POST to the bound action → parse `{value}`-or-flat → toast). POSTs to `/admin/ChatSettings/AdminService.sendTestAlert` with `{}` (severity defaults server-side). Maps the outcome to a message:
