@@ -11,7 +11,7 @@ export function safeHref(u?: string | null): string {
 
 export function youtubeThumb(url: string): string | null {
   const id = youtubeId(url);
-  return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;
+  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
 }
 
 /**

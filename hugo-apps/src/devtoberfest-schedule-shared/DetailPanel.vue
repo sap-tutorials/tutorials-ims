@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { ScheduleRow } from './types';
 import { youtubeThumb, safeHref, taskHref, taskLinkLabel } from './completion';
+import { youtubeId, youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal, formatHomeZone } from './format-session-time';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{
   row: ScheduleRow | null;
@@ -12,11 +13,57 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
+const expanded = ref(false);
+
+function toggleExpand() {
+  expanded.value = !expanded.value;
+  try { sessionStorage.setItem('dtf-detail-expanded', expanded.value ? '1' : '0'); } catch {}
+}
+
+try { expanded.value = sessionStorage.getItem('dtf-detail-expanded') === '1'; } catch {}
+
 const thumb = computed(() => {
   if (!props.row) return null;
   const r = props.row as any;
   return r.youtubeUrl ? youtubeThumb(r.youtubeUrl) : null;
 });
+
+const embedUrl = computed(() => {
+  const r = props.row as any;
+  const base = r?.youtubeUrl ? youtubeEmbedUrl(r.youtubeUrl) : '';
+  return base ? `${base}?enablejsapi=1` : '';
+});
+
+const transcript = ref<{ start: number; text: string }[]>([]);
+const transcriptSource = ref('');
+const transcriptOpen = ref(false);
+const transcriptLoaded = ref(false);
+
+async function toggleTranscript() {
+  transcriptOpen.value = !transcriptOpen.value;
+  if (transcriptOpen.value && !transcriptLoaded.value) {
+    const id = youtubeId((props.row as any)?.youtubeUrl || '');
+    if (!id) { transcriptLoaded.value = true; return; }
+    try {
+      const r = await fetch(`/api/devtoberfest/transcript?video=${encodeURIComponent(id)}`);
+      const data = await r.json();
+      transcript.value = data.segments || [];
+      transcriptSource.value = data.source || '';
+    } catch { transcript.value = []; }
+    transcriptLoaded.value = true;
+  }
+}
+
+function fmtTs(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function seekTo(sec: number) {
+  const iframe = document.querySelector('iframe.detail-panel__embed') as HTMLIFrameElement | null;
+  iframe?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [sec, true] }), '*');
+}
 
 const taskUrl = computed(() => {
   const r = props.row as any;
@@ -32,22 +79,55 @@ const taskLinkLabelTitle = computed(() =>
 
 const isSession = computed(() => props.row?.kind === 'session');
 const isActivity = computed(() => props.row?.kind === 'activity');
+
+function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.display = 'none'; }
+
 </script>
 
 <template>
   <div v-if="row" class="detail-panel" role="dialog" aria-modal="true" :aria-label="row.title">
     <div class="detail-panel__backdrop" @click="emit('close')" />
-    <div class="detail-panel__drawer">
+    <div class="detail-panel__drawer" :class="{ 'detail-panel__drawer--wide': expanded }">
       <div class="detail-panel__header">
         <h2 class="detail-panel__title">{{ row.title }}</h2>
+        <button class="detail-panel__enlarge" @click="toggleExpand" :aria-pressed="expanded" :aria-label="expanded ? 'Shrink panel' : 'Enlarge panel'">{{ expanded ? '⤡' : '⤢' }}</button>
         <button class="detail-panel__close" @click="emit('close')" aria-label="Close">&#x2715;</button>
       </div>
 
-      <div v-if="thumb" class="detail-panel__thumb-wrap">
+      <div v-if="embedUrl" class="detail-panel__embed-wrap">
+        <iframe class="detail-panel__embed" :src="embedUrl"
+          title="Session video" loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
+      <div v-if="embedUrl" class="detail-panel__transcript-wrap">
+        <button class="detail-panel__transcript-toggle" @click="toggleTranscript" :aria-expanded="transcriptOpen">
+          {{ transcriptOpen ? 'Hide transcript' : 'Show transcript' }}
+        </button>
+        <div v-if="transcriptOpen" class="detail-panel__transcript">
+          <p v-if="transcriptLoaded && !transcript.length" class="detail-panel__transcript-empty">Transcript not available.</p>
+          <p v-if="transcriptSource === 'auto'" class="detail-panel__transcript-tag">auto-generated</p>
+          <button v-for="(seg, i) in transcript" :key="i" class="detail-panel__transcript-line" @click="seekTo(seg.start)">
+            <span class="detail-panel__transcript-ts">{{ fmtTs(seg.start) }}</span>
+            <span>{{ seg.text }}</span>
+          </button>
+        </div>
+      </div>
+      <div v-else-if="thumb" class="detail-panel__thumb-wrap">
         <img :src="thumb" :alt="`Thumbnail for ${row.title}`" class="detail-panel__thumb" />
       </div>
 
       <div class="detail-panel__body">
+        <div v-if="(row as any).speakers && (row as any).speakers.length" class="detail-panel__speakers">
+          <div v-for="sp in (row as any).speakers" :key="sp.id" class="detail-panel__speaker">
+            <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
+            <div class="detail-panel__speaker-meta">
+              <span class="detail-panel__speaker-name">{{ sp.name }}</span>
+              <span v-if="sp.role || sp.company" class="detail-panel__speaker-role">{{ [sp.role, sp.company].filter(Boolean).join(' @ ') }}</span>
+            </div>
+          </div>
+        </div>
+
         <p v-if="(row as any).abstract" class="detail-panel__abstract">{{ (row as any).abstract }}</p>
 
         <dl class="detail-panel__meta">
@@ -91,6 +171,13 @@ const isActivity = computed(() => props.row?.kind === 'activity');
             rel="noopener noreferrer"
             class="detail-panel__link"
           >Community Event</a>
+          <a
+            v-if="(row as any).linkedinUrl"
+            :href="safeHref((row as any).linkedinUrl)"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="detail-panel__link detail-panel__link--linkedin"
+          >LinkedIn</a>
           <a
             v-if="taskUrl"
             :href="taskUrl"
@@ -250,5 +337,148 @@ const isActivity = computed(() => props.row?.kind === 'activity');
   font-size: 0.75rem;
   color: var(--sapContent_LabelColor, #6a6d70);
   margin-top: 0.1rem;
+}
+
+.detail-panel__embed-wrap {
+  flex-shrink: 0;
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+}
+
+.detail-panel__embed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.detail-panel__speakers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.detail-panel__speaker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.detail-panel__speaker-photo {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.detail-panel__speaker-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.detail-panel__speaker-name {
+  font-size: var(--sapFontSize, 0.875rem);
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+}
+
+.detail-panel__speaker-role {
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+.detail-panel__link--linkedin {
+  color: #0a66c2;
+}
+
+.detail-panel__enlarge {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--sapContent_IconColor, #6a6d70);
+  padding: 0.25rem;
+  flex-shrink: 0;
+}
+
+.detail-panel__enlarge:hover {
+  color: var(--sapTextColor, #32363a);
+}
+
+.detail-panel__drawer--wide {
+  width: min(70vw, 100vw);
+}
+
+.detail-panel__transcript-wrap {
+  flex-shrink: 0;
+  border-top: 1px solid var(--sapList_BorderColor, #e4e5e7);
+}
+
+.detail-panel__transcript-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--sapFontSize, 0.875rem);
+  color: var(--sapLinkColor, #0854a0);
+  padding: 0.5rem 1.25rem;
+  text-align: left;
+}
+
+.detail-panel__transcript-toggle:hover {
+  text-decoration: underline;
+}
+
+.detail-panel__transcript {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 0.5rem 1.25rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.detail-panel__transcript-tag {
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin: 0 0 0.25rem;
+  font-style: italic;
+}
+
+.detail-panel__transcript-empty {
+  font-size: var(--sapFontSize, 0.875rem);
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin: 0;
+}
+
+.detail-panel__transcript-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 0.125rem 0;
+  font-size: var(--sapFontSize, 0.875rem);
+  color: var(--sapTextColor, #32363a);
+  border-radius: 2px;
+}
+
+.detail-panel__transcript-line:hover {
+  background: var(--sapList_Hover_Background, #f5f6f7);
+}
+
+.detail-panel__transcript-ts {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--sapLinkColor, #0854a0);
+  min-width: 2.75rem;
+  flex-shrink: 0;
 }
 </style>

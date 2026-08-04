@@ -59,6 +59,36 @@ describe('devtoberfest-feed', () => {
     expect(r.completedActivityIds).toEqual(['a1']);
   });
 
+  it('assembleFeed attaches ordered speakers and maps linkedinUrl', () => {
+    const sess = [{ ID: 's1', TITLE: 'Intro', TRACK_ID: 't1', STATUS: 'Confirmed', WEEK: '1', LINKEDINURL: 'https://linkedin.com/in/x' }];
+    const speakers = [
+      { ID: 'sp2', FIRSTNAME: 'Bea', LASTNAME: 'Two', ROLE: 'Dev', COMPANY: 'SAP' },
+      { ID: 'sp1', FIRSTNAME: 'Al', LASTNAME: 'One', ROLE: 'PM', COMPANY: 'SAP' },
+    ];
+    const sessionSpeakers = [
+      { SESSION_ID: 's1', SPEAKER_ID: 'sp2', SPEAKERORDER: 2 },
+      { SESSION_ID: 's1', SPEAKER_ID: 'sp1', SPEAKERORDER: 1 },
+    ];
+    const out = assembleFeed({ sessions: sess, activities: [], tracks, editions: [], activeEditionId: null, speakers, sessionSpeakers });
+    const s = out.sessions[0];
+    expect(s.linkedinUrl).toBe('https://linkedin.com/in/x');
+    expect(s.speakers.map((sp) => sp.id)).toEqual(['sp1', 'sp2']); // ordered
+    expect(s.speakers[0]).toEqual({ id: 'sp1', name: 'Al One', role: 'PM', company: 'SAP', photoUrl: '/api/devtoberfest/speaker/sp1/photo' });
+  });
+
+  it('assembleFeed defaults speakers to [] and linkedinUrl to empty when none', () => {
+    const out = assembleFeed({ sessions: [{ ID: 's9', TITLE: 'X', TRACK_ID: 't1', STATUS: 'Confirmed' }], activities: [], tracks, editions: [], activeEditionId: null });
+    expect(out.sessions[0].speakers).toEqual([]);
+    expect(out.sessions[0].linkedinUrl).toBe('');
+  });
+
+  it('assembleFeed carries trackColor and trackEmoji onto sessions', () => {
+    const colorTracks = [{ ID: 't1', NAME: 'ABAP', DAYOFWEEK: 'Monday', COLOR: 'Green', EMOJI: '🟢' }];
+    const out = assembleFeed({ sessions: [{ ID: 's1', TITLE: 'X', TRACK_ID: 't1', STATUS: 'Confirmed' }], activities: [], tracks: colorTracks, editions: [], activeEditionId: null });
+    expect(out.sessions[0].trackColor).toBe('Green');
+    expect(out.sessions[0].trackEmoji).toBe('🟢');
+  });
+
   describe('filterCompletionsWithinWindow', () => {
     const start = '2026-10-01T00:00:00.000Z';
     const end = '2026-10-31T23:59:59.000Z';

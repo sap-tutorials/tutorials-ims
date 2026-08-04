@@ -32,6 +32,8 @@ entity Track {
       DAYOFWEEK             : String(5000);
       ISACTIVITYTRACK       : Boolean;
       ACRONYM               : String(10);
+      COLOR                 : String(16);
+      EMOJI                 : String(8);
 }
 
 @cds.persistence.exists

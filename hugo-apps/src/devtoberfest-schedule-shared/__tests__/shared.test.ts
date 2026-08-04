@@ -12,7 +12,7 @@ describe('youtube helpers', () => {
     expect(youtubeId('https://example.com')).toBeNull();
   });
   it('thumb returns hqdefault url or null', () => {
-    expect(youtubeThumb('https://youtu.be/abc123')).toBe('https://img.youtube.com/vi/abc123/hqdefault.jpg');
+    expect(youtubeThumb('https://youtu.be/abc123')).toBe('https://i.ytimg.com/vi/abc123/hqdefault.jpg');
     expect(youtubeThumb('nope')).toBeNull();
   });
 });

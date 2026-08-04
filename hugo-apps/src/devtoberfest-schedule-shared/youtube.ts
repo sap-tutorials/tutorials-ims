@@ -3,3 +3,8 @@ export function youtubeId(url: string): string | null {
   const m = url.match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([\w-]{6,})/);
   return m ? m[1] : null;
 }
+
+export function youtubeEmbedUrl(url: string): string {
+  const id = youtubeId(url);
+  return id ? `https://www.youtube.com/embed/${id}` : '';
+}
