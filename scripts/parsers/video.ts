@@ -38,8 +38,12 @@ export function normalizeVideo(input: unknown, slug: string): NormalizedVideo | 
 
   if (parsed) {
     const host = parsed.hostname.replace(/^www\./, '')
-    if (host === 'vimeo.com' || host === 'player.vimeo.com') {
-      const m = parsed.pathname.match(/(\d+)/)
+    if (host === 'vimeo.com') {
+      const m = parsed.pathname.match(/^\/(\d+)$/)
+      if (m) return { embedUrl: `https://player.vimeo.com/video/${m[1]}`, title, provider: 'vimeo' }
+    }
+    if (host === 'player.vimeo.com') {
+      const m = parsed.pathname.match(/^\/video\/(\d+)$/)
       if (m) return { embedUrl: `https://player.vimeo.com/video/${m[1]}`, title, provider: 'vimeo' }
     }
     if (parsed.hostname === 'microlearning.opensap.com') {

@@ -37,4 +37,28 @@ describe('normalizeVideo', () => {
     expect(normalizeVideo(undefined, 's')).toBeNull()
     expect(normalizeVideo({}, 's')).toBeNull()
   })
+  it('passes through a sapvideo URL', () => {
+    const r = normalizeVideo({ url: 'https://sapvideo.cfapps.eu10-004.hana.ondemand.com/media/x' }, 's')
+    expect(r?.provider).toBe('sapvideo')
+    expect(r?.embedUrl).toBe('https://sapvideo.cfapps.eu10-004.hana.ondemand.com/media/x')
+  })
+  it('normalizes an already-embed YouTube URL', () => {
+    expect(normalizeVideo({ url: 'https://www.youtube.com/embed/6WY70LyLS1c' }, 's')).toEqual({
+      embedUrl: 'https://www.youtube.com/embed/6WY70LyLS1c',
+      title: 'Video tutorial',
+      provider: 'youtube',
+    })
+  })
+  it('normalizes a player.vimeo.com URL', () => {
+    expect(normalizeVideo({ url: 'https://player.vimeo.com/video/123456789' }, 's')).toEqual({
+      embedUrl: 'https://player.vimeo.com/video/123456789',
+      title: 'Video tutorial',
+      provider: 'vimeo',
+    })
+  })
+  it('returns null for a non-canonical vimeo URL', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(normalizeVideo({ url: 'https://vimeo.com/channels/staffpicks/12345' }, 's')).toBeNull()
+    warn.mockRestore()
+  })
 })
