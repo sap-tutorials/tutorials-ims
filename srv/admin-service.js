@@ -1804,6 +1804,37 @@ export default class AdminService extends cds.ApplicationService {
       };
     });
 
+    this.on('toggleNgdsAutoSend', async (req) => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const { enabled } = req.data;
+      const value = String(enabled);
+      const existing = await SELECT.one.from(ImsConfig).where({ key: 'ngds.autosend.enabled' });
+      if (existing) {
+        await UPDATE(ImsConfig, existing.ID).set({ value });
+      } else {
+        await INSERT.into(ImsConfig).entries({ key: 'ngds.autosend.enabled', value });
+      }
+      // Flush the 60s flag cache so the toggle takes effect immediately rather
+      // than after the TTL window.
+      const { resetAutoSendFlagCache } = await import('./lib/ngds-autosend.js');
+      resetAutoSendFlagCache();
+      return { enabled };
+    });
+
+    this.on('getNgdsAutoSendConfig', async () => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const { resolveDeployEnvironment } = await import('./lib/deploy-environment.js');
+      const cfg = await SELECT.one.from(ImsConfig).where({ key: 'ngds.autosend.enabled' });
+      const enabled = cfg?.value === 'true';
+      const env = resolveDeployEnvironment();
+      return {
+        enabled,
+        environment: env.label,
+        // effective = will actually send: the flag is on AND we're in PROD.
+        effective: enabled && env.id === 'prod'
+      };
+    });
+
     this.on('findMissingSlugs', async () => {
       const { findMissingSlugs } = await import('./lib/slug-mapping.js');
       return findMissingSlugs();
