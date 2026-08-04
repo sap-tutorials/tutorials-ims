@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import Scene from '../Scene.vue'
 import type { MountConfig, MyGameboard } from '../types'
-import { RULES_URL, JOIN_GROUP_URL, COMMUNITY_PROFILE_BASE } from '../scene-text'
+import { RULES_URL, SCHEDULE_URL, JOIN_GROUP_URL, COMMUNITY_PROFILE_BASE } from '../scene-text'
 const CFG: MountConfig = { apiMyGameboard: '', joinUrl: '', imgBase: '/images/devtoberfest', demoAvatar: 7 }
 const board = (level: number, avatarIndex = 3, extra: Partial<MyGameboard> = {}): MyGameboard =>
   ({ userId: 'u', score: 3500, level, avatarIndex, breakdown: [], ...extra })
@@ -33,15 +33,16 @@ describe('Scene.vue — sprites + banner', () => {
 })
 
 describe('Scene.vue — legacy instructional content', () => {
-  it('renders the HOW TO PLAY column with join + rules links', () => {
+  it('renders the HOW TO PLAY column with the local join + schedule links', () => {
     const w = mount(Scene, { props: { board: board(1), config: CFG, demo: false } })
     const col = w.find('.s-howto')
     expect(col.exists()).toBe(true)
     expect(col.text()).toContain('HOW TO PLAY')
+    expect(col.text()).toContain('Devtoberfest Here by Clicking Join the Fest')
     const links = col.findAll('a')
     const hrefs = links.map((a) => a.attributes('href'))
-    expect(hrefs).toContain(JOIN_GROUP_URL)
-    expect(hrefs).toContain(RULES_URL)
+    expect(hrefs).toContain(JOIN_GROUP_URL)   // '/devtoberfest/'
+    expect(hrefs).toContain(SCHEDULE_URL)     // published activity list → schedule
   })
 
   it('renders the MAKING THE LAWYERS HAPPY column with a rules link', () => {
@@ -53,16 +54,15 @@ describe('Scene.vue — legacy instructional content', () => {
     expect(col.findAll('a').some((a) => a.attributes('href') === RULES_URL)).toBe(true)
   })
 
-  it('renders the 3 rules-link menu items opening in a new tab', () => {
+  it('renders the 3 menu items (AWARDS/RULES → rules, POINTS → schedule) opening in a new tab', () => {
     const w = mount(Scene, { props: { board: board(1), config: CFG, demo: false } })
     const items = w.findAll('.s-menu a')
     expect(items).toHaveLength(3)
     for (const a of items) {
-      expect(a.attributes('href')).toBe(RULES_URL)
       expect(a.attributes('target')).toBe('_blank')
     }
-    const labels = items.map((a) => a.text())
-    expect(labels).toEqual(expect.arrayContaining(['AWARDS', 'POINTS', 'RULES']))
+    const byLabel = Object.fromEntries(items.map((a) => [a.text(), a.attributes('href')]))
+    expect(byLabel).toEqual({ AWARDS: RULES_URL, POINTS: SCHEDULE_URL, RULES: RULES_URL })
   })
 
   it('shows the greeting header with the dynamic event edition (not a hardcoded year)', () => {

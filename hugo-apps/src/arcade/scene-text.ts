@@ -3,10 +3,11 @@
 // Strings are reproduced CHARACTER-FOR-CHARACTER (incl. the U+2019 apostrophe in
 // "It's simple") so the arcade scene matches the retired SVG gameboard exactly.
 
-export const RULES_URL =
-  'https://community.sap.com/t5/devtoberfest-blog-posts/devtoberfest-2025-contest-official-rules/ba-p/13781577'
-export const JOIN_GROUP_URL =
-  'https://groups.community.sap.com/t5/devtoberfest/gh-p/Devtoberfest'
+// Local Devtoberfest pages on this site (replace the retired external blog/group
+// links). Both Hugo pages exist under hugo/content/devtoberfest/.
+export const RULES_URL = '/devtoberfest/rules/'
+export const SCHEDULE_URL = '/devtoberfest/schedule/'
+export const JOIN_GROUP_URL = '/devtoberfest/'
 export const COMMUNITY_PROFILE_BASE =
   'https://community.sap.com/t5/user/viewprofilepage/user-id/'
 
@@ -76,11 +77,11 @@ export const levelLabel = (level: number): string =>
 export const howToPlay = {
   heading: 'HOW TO PLAY',
   intro: 'It’s simple.  Register for',
-  joinLinkLabel: 'Devtoberfest here by clicking Join Group',
+  joinLinkLabel: 'Devtoberfest Here by Clicking Join the Fest',
   joinLinkUrl: JOIN_GROUP_URL,
   body: 'Complete activities like tutorials or event surveys. Please reference the published list of activities to see where you can earn points:',
   hereLabel: 'here',
-  hereUrl: RULES_URL,
+  hereUrl: SCHEDULE_URL,
 }
 
 // --- MAKING THE LAWYERS HAPPY column (devtoberfest.column2*) ---
@@ -92,10 +93,10 @@ export const lawyersHappy = {
 }
 
 // --- Menu icons (devtoberfest.awards/points/rules/sound) ---
-// Awards/Points/Rules all link the contest rules blog (target=_blank); Sound is
-// the existing in-scene toggle (rendered by SoundToggle.vue, not this list).
+// Awards/Rules link the local rules page; Points links the local schedule page;
+// Sound is the existing in-scene toggle (rendered by SoundToggle.vue, not this list).
 export const menuItems: Array<{ label: string; href: string }> = [
   { label: 'AWARDS', href: RULES_URL },
-  { label: 'POINTS', href: RULES_URL },
+  { label: 'POINTS', href: SCHEDULE_URL },
   { label: 'RULES', href: RULES_URL },
 ]

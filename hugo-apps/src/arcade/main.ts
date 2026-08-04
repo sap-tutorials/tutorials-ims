@@ -7,7 +7,7 @@ if (el) {
   const d = el.dataset
   const config: MountConfig = {
     apiMyGameboard: d.apiMyGameboard || '/gameboard/getMyGameboard',
-    joinUrl: d.joinUrl || '/devtoberfest/#join',
+    joinUrl: d.joinUrl || '/devtoberfest/',
     imgBase: d.imgBase || '/images/devtoberfest',
     demoAvatar: Number(d.demoAvatar ?? 7)
   }
