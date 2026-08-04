@@ -92,7 +92,7 @@ async function myCompletionsHandler(req, res) {
           const tracks = await SELECT.from(ext.Track).where({ EDITION_ID: editionId });
           const trackIds = tracks.map((t) => t.ID);
           activities = trackIds.length
-            ? await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG', 'TRACK_ID').where({ TRACK_ID: { in: trackIds } })
+            ? await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG', 'TRACK_ID', 'STATUS').where({ TRACK_ID: { in: trackIds } })
             : [];
         }
         // If editionId is null, activities stays [] → earnedPoints/maxPoints 0 (fail-soft).
