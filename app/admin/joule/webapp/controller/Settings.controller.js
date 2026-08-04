@@ -59,7 +59,12 @@ sap.ui.define([
         // a2aPublicBaseUrl overrides the auto-detected platform host.
         a2aEnabled: true,
         a2aPublicBaseUrl: "",
-        a2aTokenUrl: ""
+        a2aTokenUrl: "",
+        // ANS master switch (#1468). Default false to mirror the schema default
+        // (db/schema.cds:755). When on, SAP Alert Notification push alerts fire
+        // for publish-rejects, scheduled-job failures, and rebuild-dispatch
+        // failures (resolved via srv/lib/runtime-config/alert-settings.js).
+        alertsEnabled: false
       });
       this.getView().setModel(oJSON, "settings");
       this._loadSettings();
@@ -116,7 +121,8 @@ sap.ui.define([
             kgRelatedContentEnabled: data.kgRelatedContentEnabled ?? true,
             a2aEnabled: data.a2aEnabled ?? true,
             a2aPublicBaseUrl: data.a2aPublicBaseUrl || "",
-            a2aTokenUrl: data.a2aTokenUrl || ""
+            a2aTokenUrl: data.a2aTokenUrl || "",
+            alertsEnabled: !!data.alertsEnabled
           });
         })
         .catch(function (err) {
@@ -163,7 +169,8 @@ sap.ui.define([
         kgRelatedContentEnabled: !!data.kgRelatedContentEnabled,
         a2aEnabled: !!data.a2aEnabled,
         a2aPublicBaseUrl: data.a2aPublicBaseUrl || "",
-        a2aTokenUrl: data.a2aTokenUrl || ""
+        a2aTokenUrl: data.a2aTokenUrl || "",
+        alertsEnabled: !!data.alertsEnabled
       };
 
       fetch("/admin/$metadata", {
