@@ -28,6 +28,7 @@ const feed = ref<Feed | null>(null);
 const sessions = ref<ScheduleRow[]>([]);
 const earnedPoints = ref(0);
 const maxPoints = ref(0);
+const joined = ref(false);
 const selectedRow = ref<ScheduleRow | null>(null);
 const filterTrack = ref('');
 const viewMode = ref<ViewMode>('month');
@@ -44,6 +45,7 @@ async function loadData(edition?: string) {
     editionId.value = edition ?? feedData.activeEditionId;
     const merged = mergeCompletion(feedData, myData);
     sessions.value = merged.rows.filter((r) => r.kind === 'session');
+    joined.value = merged.joined;
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
     cursor.value = initialCursor();
@@ -133,7 +135,7 @@ onMounted(() => loadData());
       <EditionPicker v-if="feed" :editions="feed.editions" :model-value="editionId" @update:model-value="onEditionChange" />
     </div>
 
-    <PointsBanner v-if="!loading && !error" :earned-points="earnedPoints" :max-points="maxPoints" :complete-count="completeCount" :is-authenticated="isAuthenticated" />
+    <PointsBanner v-if="!loading && !error" :earned-points="earnedPoints" :max-points="maxPoints" :complete-count="completeCount" :is-authenticated="isAuthenticated" :joined="joined" />
 
     <div v-if="loading" class="sc-state">Loading sessions…</div>
     <div v-else-if="error" class="sc-state sc-state--error">

@@ -77,7 +77,7 @@
  * runnerRun is a self-contained round-trip (no `alternate`, which would
  * double-reverse the scaleX flips and make the cat face the wrong way). */
 .s-runner  { left: 22.27%; top: 44.05%; width: 7.57%; height: 9.18%; z-index: 4;
-  animation: runnerRun 10s linear infinite; }
+  animation: runnerRun 6s linear infinite; }
 /* Devtoberfest logo - legacy (1250,925,0,gif,192,212). */
 .s-logo    { left: 68.67%; top: 77.54%; width: 15.74%; height: 11.91%; z-index: 5; }
 /* SAP logo - legacy (1350,1180,0,sap.svg,64,128). */
@@ -215,18 +215,21 @@
 
 @keyframes driftX { from { transform: translateX(-8%) } to { transform: translateX(8%) } }
 @keyframes driftY { from { transform: translateY(-6%) } to { transform: translateY(6%) } }
-/* Cat runs back and forth along the LEFT horizontal pipe segment.
- * Measured green pipe on the runner's row spans scene-x ~15.4%..18.4% under the
- * runner's start (left 22.27%, width 7.57%). Keep the cat's body over the pipe:
- * travel translateX 0 (start ~22%) .. -95% of its width (-> left edge ~15.1%),
- * NOT the old -180% which ran it off the pipe's left end.
- * Runner.gif art faces LEFT, so face the direction of travel:
- * face left (scaleX 1) while moving left, face right (scaleX -1) while moving right. */
+/* Cat runs back and forth along the horizontal pipe segment.
+ * IMPORTANT: translateX(%) is relative to the CAT'S OWN width (7.57% of the
+ * scene), NOT the scene — so the old -95% moved him only ~7% of the board,
+ * which is why his feet churned but he barely travelled ("silly distance").
+ * He starts at scene-left ~22% and the pipe runway extends RIGHTWARD to the
+ * elbow riser at ~50%, so he sweeps right (positive translateX) ~280% of his
+ * width to reach the elbow, then runs back. Endpoint calibrated on a rendered
+ * screenshot to stay over the pipe.
+ * Runner.gif art faces LEFT, so face the direction of travel: face right
+ * (scaleX -1) while moving right, face left (scaleX 1) while moving left. */
 @keyframes runnerRun {
-  0%   { transform: translateX(0)    scaleX(1)  }
-  48%  { transform: translateX(-95%) scaleX(1)  }
-  52%  { transform: translateX(-95%) scaleX(-1) }
-  100% { transform: translateX(0)    scaleX(-1) }
+  0%   { transform: translateX(0)    scaleX(-1) }
+  48%  { transform: translateX(280%) scaleX(-1) }
+  52%  { transform: translateX(280%) scaleX(1)  }
+  100% { transform: translateX(0)    scaleX(1)  }
 }
 
 .s-avatar { opacity: 0; animation-timing-function: cubic-bezier(0.280,0.840,0.420,1); }
@@ -237,8 +240,8 @@
 
 .heart { animation: beat 1s 0s infinite; }
 .led-green { animation: blinkGreen .5s infinite; }
-.drift-x { animation: driftX 2.6s ease-in-out infinite alternate; }
-.drift-y { animation: driftY 2.2s ease-in-out infinite alternate; }
+.drift-x { animation: driftX 1.6s ease-in-out infinite alternate; }
+.drift-y { animation: driftY 1.4s ease-in-out infinite alternate; }
 
 @media (prefers-reduced-motion: reduce) {
   .arcade-root *,

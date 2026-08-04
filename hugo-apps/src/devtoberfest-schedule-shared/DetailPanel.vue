@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ScheduleRow } from './types';
-import { youtubeThumb, safeHref } from './completion';
+import { youtubeThumb, safeHref, taskHref, taskLinkLabel } from './completion';
 import { youtubeId, youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal, formatHomeZone } from './format-session-time';
 import { computed, ref } from 'vue';
@@ -68,9 +68,14 @@ function seekTo(sec: number) {
 const taskUrl = computed(() => {
   const r = props.row as any;
   if (!r?.taskSlug) return null;
-  const prefix = String(r.taskType).toLowerCase() === 'puzzle' ? '/puzzles' : '/tutorials';
-  return `${prefix}/${r.taskSlug}`;
+  return taskHref(r);
 });
+
+// DetailPanel's visible link uses Title Case ("Open Tutorial"); the schedule
+// table's tooltip uses sentence case ("Open tutorial") via taskLinkLabel.
+const taskLinkLabelTitle = computed(() =>
+  taskLinkLabel(props.row as any).replace(/\b\w/g, (c) => c.toUpperCase()),
+);
 
 const isSession = computed(() => props.row?.kind === 'session');
 const isActivity = computed(() => props.row?.kind === 'activity');
@@ -177,7 +182,7 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
             v-if="taskUrl"
             :href="taskUrl"
             class="detail-panel__link detail-panel__link--task"
-          >{{ String((row as any).taskType).toLowerCase() === 'puzzle' ? 'Open Puzzle' : 'Open Tutorial' }}</a>
+          >{{ taskLinkLabelTitle }}</a>
         </div>
 
         <div v-if="row.complete" class="detail-panel__complete-badge">

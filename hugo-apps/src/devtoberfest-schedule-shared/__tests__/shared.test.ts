@@ -28,8 +28,9 @@ describe('mergeCompletion', () => {
   } as any;
 
   it('marks sessions+activities complete and totals points', () => {
-    const my = { authenticated: true, completedSlugs: ['slug-a'], earnedPoints: 500, maxPoints: 800, completedActivityIds: ['a1'] } as any;
+    const my = { authenticated: true, joined: true, completedSlugs: ['slug-a'], earnedPoints: 500, maxPoints: 800, completedActivityIds: ['a1'] } as any;
     const out = mergeCompletion(feed, my);
+    expect(out.joined).toBe(true);
     expect(out.earnedPoints).toBe(500);
     expect(out.maxPoints).toBe(800);
     const session = out.rows.find((r) => r.id === 's1')!;
@@ -38,8 +39,18 @@ describe('mergeCompletion', () => {
     expect(a2.complete).toBe(false);
   });
 
+  it('authenticated-but-not-joined reports joined:false and zero earned points', () => {
+    const my = { authenticated: true, joined: false, earnedPoints: 0, maxPoints: 800, completedSlugs: [], completedActivityIds: [] } as any;
+    const out = mergeCompletion(feed, my);
+    expect(out.joined).toBe(false);
+    expect(out.earnedPoints).toBe(0);
+    expect(out.maxPoints).toBe(800); // goal denominator still shown
+    expect(out.rows.every((r) => !r.complete)).toBe(true);
+  });
+
   it('anonymous merge leaves everything incomplete', () => {
     const out = mergeCompletion(feed, { authenticated: false } as any);
+    expect(out.joined).toBe(false);
     expect(out.rows.every((r) => !r.complete)).toBe(true);
     expect(out.earnedPoints).toBe(0);
   });

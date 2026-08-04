@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
-import { mergeCompletion, safeHref } from '../devtoberfest-schedule-shared/completion';
+import { mergeCompletion, safeHref, taskHref, taskLinkLabel } from '../devtoberfest-schedule-shared/completion';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
@@ -16,6 +16,7 @@ const rows = ref<ScheduleRow[]>([]);
 const earnedPoints = ref(0);
 const maxPoints = ref(0);
 const isAuthenticated = ref(false);
+const joined = ref(false);
 const selectedRow = ref<ScheduleRow | null>(null);
 
 // Exposed for tests
@@ -99,6 +100,7 @@ async function loadData(edition?: string) {
     isAuthenticated.value = myData.authenticated;
     const merged = mergeCompletion(feedData, myData);
     rows.value = merged.rows;
+    joined.value = merged.joined;
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
   } catch (e: any) {
@@ -144,6 +146,7 @@ defineExpose({ filters });
       :max-points="maxPoints"
       :complete-count="completeCount"
       :is-authenticated="isAuthenticated"
+      :joined="joined"
     />
 
     <!-- loading -->
@@ -263,10 +266,10 @@ defineExpose({ filters });
                 >↗</a>
                 <a
                   v-if="(row as any).taskSlug"
-                  :href="`/${String((row as any).taskType).toLowerCase() === 'puzzle' ? 'puzzles' : 'tutorials'}/${(row as any).taskSlug}`"
+                  :href="taskHref(row)"
                   class="sched-link"
                   @click.stop
-                  :title="String((row as any).taskType).toLowerCase() === 'puzzle' ? 'Open puzzle' : 'Open tutorial'"
+                  :title="taskLinkLabel(row)"
                 >→</a>
               </td>
               <td v-if="isAuthenticated">

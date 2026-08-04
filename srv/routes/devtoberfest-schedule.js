@@ -5,12 +5,13 @@
 // Reads the cross-container planner facades (external.devtoberfest.*). Fails
 // soft (503 / empty) when the facades are unavailable (e.g. unit SQLite).
 import cds from '@sap/cds';
-import { assembleFeed, completedActivityPoints, normalizeSlugSet } from '../lib/devtoberfest-feed.js';
+import { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow } from '../lib/devtoberfest-feed.js';
 import { resolveUser } from '../lib/resolve-user.js';
 import { resolveUserSapId } from '../lib/resolve-db-user.js';
 import { getMyCompletedTutorials } from '../lib/user-progress.js';
 import { fetchTranscript } from '../lib/devtoberfest-transcript.js';
 import { gzipSync, gunzipSync } from 'node:zlib';
+import { isJoinedCurrentEvent } from '../lib/devtoberfest-registration.js';
 
 const LOG = cds.log('devtoberfest');
 
@@ -83,14 +84,17 @@ async function myCompletionsHandler(req, res) {
     await cds.connect.to('db');
     const user = resolveUser(req, cds);
     const sapId = resolveUserSapId(user);
-    if (!sapId) return res.status(200).json({ authenticated: false });
+    if (!sapId) return res.status(200).json({ authenticated: false, joined: false });
 
-    // Use the canonical helper — it resolves legacyId→slug internally and
-    // handles COMPLETED + SUPERSEDED rows for both TUTORIAL and PUZZLE types.
-    const rows = await getMyCompletedTutorials(user);
-    const completedSlugSet = normalizeSlugSet(rows);
+    // Points are earned by joining Devtoberfest AND completing activities
+    // *during* the edition window. A user who never joined — or who completed
+    // a tutorial before the event — must see 0 earned points. We still return
+    // authenticated:true so the banner can show the "Join" CTA rather than the
+    // anonymous "Sign in" prompt.
+    const joined = await isJoinedCurrentEvent(user);
 
     let activities = [];
+    let editionWindow = { start: null, end: null };
     try {
       const ext = cds.entities('external.devtoberfest');
       if (ext?.Activity && ext?.Track) {
@@ -98,20 +102,40 @@ async function myCompletionsHandler(req, res) {
         // points are scoped to the same edition as the feed, not all editions.
         const editionId = await resolveEditionId(ext, req.query.edition);
         if (editionId) {
+          const edition = await SELECT.one.from(ext.Edition).columns('ID', 'STARTSAT', 'ENDSAT').where({ ID: editionId });
+          editionWindow = { start: edition?.STARTSAT || null, end: edition?.ENDSAT || null };
           const tracks = await SELECT.from(ext.Track).where({ EDITION_ID: editionId });
           const trackIds = tracks.map((t) => t.ID);
           activities = trackIds.length
-            ? await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG', 'TRACK_ID').where({ TRACK_ID: { in: trackIds } })
+            ? await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG', 'TRACK_ID', 'STATUS').where({ TRACK_ID: { in: trackIds } })
             : [];
         }
         // If editionId is null, activities stays [] → earnedPoints/maxPoints 0 (fail-soft).
       }
     } catch (e) { LOG.warn('myCompletions facade read failed:', e?.message); }
 
-    const { earnedPoints, maxPoints, completedActivityIds } = completedActivityPoints(activities, completedSlugSet);
+    // maxPoints (the goal denominator) is the sum of the edition's visible
+    // (Confirmed/Completed) activities — completedActivityPoints filters hidden
+    // statuses via isVisibleStatus, matching the feed. Independent of join/date
+    // state. earnedPoints is gated: only completions inside the edition window
+    // count, and only when the user has joined.
+    const { maxPoints } = completedActivityPoints(activities, new Set());
+
+    let earnedPoints = 0;
+    let completedSlugSet = new Set();
+    let completedActivityIds = [];
+    if (joined) {
+      // Use the canonical helper — it resolves legacyId→slug internally and
+      // handles COMPLETED + SUPERSEDED rows for both TUTORIAL and PUZZLE types.
+      const rows = await getMyCompletedTutorials(user);
+      const windowed = filterCompletionsWithinWindow(rows, editionWindow.start, editionWindow.end);
+      completedSlugSet = normalizeSlugSet(windowed);
+      ({ earnedPoints, completedActivityIds } = completedActivityPoints(activities, completedSlugSet));
+    }
 
     return res.status(200).json({
       authenticated: true,
+      joined,
       completedSlugs: [...completedSlugSet],
       earnedPoints,
       maxPoints,
