@@ -1622,18 +1622,11 @@ export default class AdminService extends cds.ApplicationService {
       const record = await SELECT.one.from(TaskRecords).where({ legacyId: taskRecordLegacyId });
       if (!record) return req.reject(404, `TaskRecord not found: ${taskRecordLegacyId}`);
 
-      const user = await SELECT.one.from(Users).where({ ID: record.user_ID });
-      const { sendToNgds: send } = await import('./lib/ngds-client.js');
-      const result = await send({
-        uuid: user?.uuid,
-        taskLegacyId: record.taskLegacyId,
-        taskType: record.taskType,
-        taskTitle: record.titleSnapshot || '',
-        completionDate: record.completionDate,
-        eventLegacyId: null,
-        sapId: user?.sapId
-      });
-      return result;
+      // Payload is now assembled inside the client from the persisted record
+      // (resolves parent task title, mission CommunityID, interest-item tags,
+      // and visitor id) so the wire shape matches the legacy Java contract.
+      const { sendTaskRecordToNgds } = await import('./lib/ngds-client.js');
+      return sendTaskRecordToNgds(record, db);
     });
 
     this.on('syncTutorialMetadata', async (req) => {
