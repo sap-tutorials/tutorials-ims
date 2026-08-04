@@ -37,6 +37,8 @@ async function scheduleHandler(req, res) {
     let editions = [];
     let sessions = [];
     let activities = [];
+    let sessionSpeakers = [];
+    let speakers = [];
     try {
       editions = await SELECT.from(ext.Edition);
       tracks = await SELECT.from(ext.Track).where({ EDITION_ID: editionId });
@@ -52,8 +54,6 @@ async function scheduleHandler(req, res) {
             .where({ TRACK_ID: { in: trackIds } })
         : [];
       const sessionIds = sessions.map((s) => s.ID);
-      let sessionSpeakers = [];
-      let speakers = [];
       if (sessionIds.length && ext.Sessionspeaker && ext.Speaker) {
         sessionSpeakers = await SELECT.from(ext.Sessionspeaker)
           .columns('SESSION_ID', 'SPEAKER_ID', 'SPEAKERORDER')
