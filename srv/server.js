@@ -35,6 +35,7 @@ import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
 import * as alertsPublic from './routes/alerts-public.js';
+import * as deployEvents from './routes/deploy-events.js';
 import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
 import { resolveUser, captureUserMiddleware } from './lib/resolve-user.js';
 import { patMiddleware, pinPatUserToContext } from './lib/mcp-pat-middleware.js';
@@ -464,6 +465,11 @@ cds.on('bootstrap', (app) => {
   // build, auth 503) — so they surface in the admin PipelineLog instead of only
   // going red in an unwatched CI tab. Same auth as /content/publish.
   app.post('/content/pipeline-log', express.json({ limit: '256kb' }), contentAuthMiddleware, pipelineLogFailureHandler);
+
+  // Deploy lifecycle alerts (#deploy-alerts): scripts/deploy-mta.cjs pings this
+  // at start/end/fail of a deploy → ANS. Same bearer auth (CONTENT_API_KEY) as
+  // the other ops endpoints. Body parser is applied inside register().
+  deployEvents.register(app, { authMw: contentAuthMiddleware });
 
   // Analytics Builder Phase 1 — streaming CSV export. Mounted later in this
   // bootstrap block (after contextMw/authMw are defined) so req.user is
