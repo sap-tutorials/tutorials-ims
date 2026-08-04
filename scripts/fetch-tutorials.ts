@@ -16,6 +16,7 @@ import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, cleanPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
 import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
+import { normalizeVideo } from './parsers/video.js'
 import { extractGithubLoginFromProfile } from './parsers/github-login-from-profile.js'
 import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 import { QUESTION_TYPE_TEXT } from './parsers/types.js'
@@ -474,6 +475,8 @@ export function writeHugoPage(
   outputDir: string,
   registry: TagLabelRegistry = {},
   hasOsOptions: boolean = false,
+  intro: string = '',
+  video: import('./parsers/types.js').NormalizedVideo | null = null,
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -495,6 +498,8 @@ export function writeHugoPage(
     githubLogin,
     registry,
     hasOsOptions,
+    intro,
+    video,
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -1000,6 +1005,8 @@ async function main() {
           OUTPUT_DIR,
           tagRegistry,
           composed.hasOsOptions,
+          composed.intro,
+          normalizeVideo(frontmatter.video, t.slug),
         )
       } else {
         writeVitePressPage(
