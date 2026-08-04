@@ -81,4 +81,11 @@ describe('devtoberfest-feed', () => {
     expect(out.sessions[0].speakers).toEqual([]);
     expect(out.sessions[0].linkedinUrl).toBe('');
   });
+
+  it('assembleFeed carries trackColor and trackEmoji onto sessions', () => {
+    const colorTracks = [{ ID: 't1', NAME: 'ABAP', DAYOFWEEK: 'Monday', COLOR: 'Green', EMOJI: '🟢' }];
+    const out = assembleFeed({ sessions: [{ ID: 's1', TITLE: 'X', TRACK_ID: 't1' }], activities: [], tracks: colorTracks, editions: [], activeEditionId: null });
+    expect(out.sessions[0].trackColor).toBe('Green');
+    expect(out.sessions[0].trackEmoji).toBe('🟢');
+  });
 });

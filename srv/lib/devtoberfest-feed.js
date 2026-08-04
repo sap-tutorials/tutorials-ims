@@ -37,6 +37,7 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
       .map((s) => ({
         id: s.ID, kind: 'session', title: s.TITLE, abstract: s.ABSTRACT,
         trackId: s.TRACK_ID, trackName: mapTrack(s.TRACK_ID).NAME || '', trackDay: mapTrack(s.TRACK_ID).DAYOFWEEK || '',
+        trackColor: mapTrack(s.TRACK_ID).COLOR || '', trackEmoji: mapTrack(s.TRACK_ID).EMOJI || '',
         week: s.WEEK, scheduledStart: s.SCHEDULEDSTART, scheduledTimeZone: s.SCHEDULEDTIMEZONE, recordingStart: s.RECORDINGSTART,
         youtubeUrl: s.YOUTUBEURL || '', communityEventUrl: s.COMMUNITYEVENTURL || '',
         linkedinUrl: s.LINKEDINURL || '',
