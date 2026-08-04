@@ -63,6 +63,30 @@ views (`devtoberfest-planner-db`), wired by `db/src/EXTERNAL_DEVTOBERFEST_*.hdbs
 - `youtube.ts` has only `youtubeId(url)`. `youtubeThumb(url)` lives in `completion.ts`.
   **No embed-URL helper exists.**
 
+## Diagnosed findings (2026-08-04, live DEV)
+
+Investigating item 2 revealed it is a **bug, not missing work** — the day-view
+thumbnail code IS built, deployed, and served (in chunk `DetailPanel-*.js`). Root
+cause: **CSP `img-src` mismatch**. The deployed approuter CSP allowlists
+`https://i.ytimg.com` but NOT `https://img.youtube.com`, while `youtubeThumb()`
+(`completion.ts:14`) emits `https://img.youtube.com/vi/{id}/hqdefault.jpg`. Proven
+with the same video ID at the same path: `i.ytimg.com` loads (480px), `img.youtube.com`
+is blocked. On error the img is hidden and the placeholder shows — hence "no thumbnail."
+
+**Consequences for this design:**
+- **Thumbnail fix (item 2):** change `youtubeThumb()` to emit
+  `https://i.ytimg.com/vi/{id}/hqdefault.jpg` (already allowlisted). One-line change;
+  fixes both day view and detail panel. Failing test first.
+- **Embed host (item 3):** deployed CSP `frame-src` allows `www.youtube.com` /
+  `youtube.com` / `youtu.be` but NOT `youtube-nocookie.com`. Use
+  `https://www.youtube.com/embed/{id}` (already allowlisted) — do NOT add a CSP host.
+- **Track emoji (item 1):** the 🔴/🟢 glyphs visible on DEV today are **manually typed
+  into the track NAME text** by data entry — they are NOT the planner's `emoji`/`color`
+  enum config flowing through. Slice 2 (planner color/emoji plumbing) remains valid and
+  unstarted; the visible emoji are not evidence it works. When slice 2 lands, the feed
+  should surface the enum `color`/`emoji` separately from `trackName`, and data entry can
+  drop the hand-typed glyph from the name.
+
 ## Decisions (locked)
 
 | Topic | Decision |
@@ -72,7 +96,8 @@ views (`devtoberfest-planner-db`), wired by `db/src/EXTERNAL_DEVTOBERFEST_*.hdbs
 | Transcript interactivity | **Clickable timestamps** seek the embedded player (YouTube IFrame Player API). |
 | Speaker photo serving | **Dedicated streaming endpoint**; feed carries only `photoUrl`. |
 | LinkedIn | **Use `Session.linkedinURL` as-is** — no schema change. |
-| Thumbnail scope | **Day view only.** Week/month stay as colored chips. |
+| Thumbnail scope | **Day view only.** Week/month stay as colored chips. Item 2 is a **CSP fix** (`img.youtube.com`→`i.ytimg.com`), not new render work. |
+| Video embed host | **`www.youtube.com/embed/{id}`** (already in CSP `frame-src`). NOT `youtube-nocookie.com`. |
 | Enlarged panel layout | **Single-column, just wider** (not two-column). |
 | Emoji | Pull `emoji` through alongside `color`. |
 | Deploy gating | **All three slices complete + locally verified before DEV deploy.** |
@@ -110,8 +135,10 @@ views (`devtoberfest-planner-db`), wired by `db/src/EXTERNAL_DEVTOBERFEST_*.hdbs
 ### YouTube helpers
 
 `devtoberfest-schedule-shared/youtube.ts` — add `youtubeEmbedUrl(url)` →
-`https://www.youtube-nocookie.com/embed/<id>` (returns `''` when no id). Keep
-`youtubeId`. `youtubeThumb` stays in `completion.ts` (already consumed).
+`https://www.youtube.com/embed/<id>` (returns `''` when no id; host already in CSP
+`frame-src`). Keep `youtubeId`. Also fix `youtubeThumb` in `completion.ts` to emit
+`https://i.ytimg.com/vi/<id>/hqdefault.jpg` (was `img.youtube.com`, blocked by the
+deployed CSP `img-src` — see Diagnosed findings). This is the item-2 fix.
 
 ### DetailPanel.vue
 
@@ -131,15 +158,17 @@ views (`devtoberfest-planner-db`), wired by `db/src/EXTERNAL_DEVTOBERFEST_*.hdbs
 
 ### DayAgenda.vue
 
-- Each session row with `youtubeUrl` shows a small ~16:9 thumbnail
-  (`youtubeThumb`) left of the title, `loading="lazy"`, `onerror` collapse.
-  No `youtubeUrl` → unchanged. Week/month unchanged.
+- **DayAgenda.vue is already correct** — it renders the ~16:9 thumbnail with a
+  placeholder fallback and `onerror` collapse (merged 2026-08-03). No render change
+  needed; the item-2 fix is entirely the `youtubeThumb` host change in `completion.ts`.
+  Week/month unchanged.
 
 ### CSP
 
-Verify approuter CSP `frame-src` allows `https://www.youtube-nocookie.com`
-(outbound embed direction — distinct from the recent `frame-ancestors` work). Add
-if missing. Sync both `xs-security.json` copies if the change touches them.
+**No CSP change needed for embeds** — `www.youtube.com` is already in the deployed
+`frame-src`, and `i.ytimg.com` is already in `img-src`. The recent `frame-ancestors`
+work is unrelated (inbound). Do NOT add `youtube-nocookie.com`. If a future change
+does touch CSP, sync both `xs-security.json` copies.
 
 ## Slice 2 — Track colors + emoji from the planner (planner-repo lockstep)
 
