@@ -39,7 +39,7 @@ async function handler(req, res) {
     return res.status(400).json({ error: 'invalid or missing "phase" (start|end|fail)' });
   }
   // Fire-and-forget; alerting.raise is itself fail-open. Never block the deploy.
-  void alerting.raise(payload);
+  alerting.raise(payload).catch((err) => LOG.warn('deploy-event raise failed (swallowed):', err?.message ?? err));
   LOG.info(`deploy-event ${phase} env=${env ?? '?'} version=${version ?? '?'}`);
   return res.status(202).json({ ok: true });
 }
