@@ -1,6 +1,16 @@
 // Pure helpers for the public Devtoberfest schedule feed. No cds/db access here
 // so they are trivially unit-testable; the route module does the DB reads.
 
+const VISIBLE_STATUSES = new Set(['confirmed', 'completed']);
+
+// A planner Session/Activity is publicly visible only when its status is
+// Confirmed or Completed. Trimmed + case-insensitive (facade STATUS is free-text
+// String(5000)). Missing/empty status fails closed (hidden).
+function isVisibleStatus(row) {
+  const s = (row?.STATUS ?? row?.status ?? '').trim().toLowerCase();
+  return VISIBLE_STATUSES.has(s);
+}
+
 function normalizeSlugSet(rows) {
   const set = new Set();
   for (const r of rows || []) {
@@ -19,6 +29,7 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
       .map((e) => ({ id: e.ID, name: e.NAME, year: e.YEAR, isCurrent: !!e.ISCURRENT, startsAt: e.STARTSAT, endsAt: e.ENDSAT, timeZone: e.TIMEZONE }))
       .sort((a, b) => String(b.year || '').localeCompare(String(a.year || ''))),
     sessions: sessions
+      .filter(isVisibleStatus)
       .map((s) => ({
         id: s.ID, kind: 'session', title: s.TITLE, abstract: s.ABSTRACT,
         trackId: s.TRACK_ID, trackName: mapTrack(s.TRACK_ID).NAME || '', trackDay: mapTrack(s.TRACK_ID).DAYOFWEEK || '',
@@ -28,6 +39,7 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
       }))
       .sort(sortByWeekThenDate),
     activities: activities
+      .filter(isVisibleStatus)
       .map((a) => ({
         id: a.ID, kind: 'activity', title: a.TITLE, week: a.WEEK, points: a.POINTS || 0,
         trackId: a.TRACK_ID, trackName: mapTrack(a.TRACK_ID).NAME || '',
@@ -58,6 +70,7 @@ function completedActivityPoints(activities = [], completedSlugSet = new Set()) 
   let maxPoints = 0;
   const completedActivityIds = [];
   for (const a of activities) {
+    if (!isVisibleStatus(a)) continue;
     const pts = a.POINTS || a.points || 0;
     maxPoints += pts;
     const slug = (a.TASKSLUG || a.taskSlug || '').toLowerCase();
@@ -78,4 +91,4 @@ function sortByWeekThenTitle(a, b) {
   return w !== 0 ? w : String(a.title || '').localeCompare(String(b.title || ''));
 }
 
-export { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow };
+export { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow, isVisibleStatus };

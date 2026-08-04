@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow } from '../../srv/lib/devtoberfest-feed.js';
+import { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow, isVisibleStatus } from '../../srv/lib/devtoberfest-feed.js';
 
 describe('devtoberfest-feed', () => {
   const tracks = [{ ID: 't1', NAME: 'ABAP', DAYOFWEEK: 'Monday' }];
-  const sessions = [{ ID: 's1', TITLE: 'Intro', TRACK_ID: 't1', WEEK: '1', SCHEDULEDSTART: '2026-10-05T09:00:00.000Z', SCHEDULEDTIMEZONE: 'Europe/Berlin', YOUTUBEURL: 'https://youtu.be/abc', ACTIVITY_ID: 'a1' }];
+  const sessions = [{ ID: 's1', TITLE: 'Intro', TRACK_ID: 't1', STATUS: 'Confirmed', WEEK: '1', SCHEDULEDSTART: '2026-10-05T09:00:00.000Z', SCHEDULEDTIMEZONE: 'Europe/Berlin', YOUTUBEURL: 'https://youtu.be/abc', ACTIVITY_ID: 'a1' }];
   const activities = [
-    { ID: 'a1', TITLE: 'Do Intro', WEEK: '1', POINTS: 500, TASKTYPE: 'TUTORIAL', TASKSLUG: 'Intro-Slug', TRACK_ID: 't1' },
-    { ID: 'a2', TITLE: 'Puzzle', WEEK: '1', POINTS: 300, TASKTYPE: 'PUZZLE', TASKSLUG: 'puz-1', TRACK_ID: 't1' },
+    { ID: 'a1', TITLE: 'Do Intro', STATUS: 'Confirmed', WEEK: '1', POINTS: 500, TASKTYPE: 'TUTORIAL', TASKSLUG: 'Intro-Slug', TRACK_ID: 't1' },
+    { ID: 'a2', TITLE: 'Puzzle', STATUS: 'Completed', WEEK: '1', POINTS: 300, TASKTYPE: 'PUZZLE', TASKSLUG: 'puz-1', TRACK_ID: 't1' },
   ];
 
   it('assembleFeed maps track name/day and keeps active edition', () => {
@@ -38,8 +38,8 @@ describe('devtoberfest-feed', () => {
   });
 
   it('sessions sort by week then scheduledStart (ISO lexicographic)', () => {
-    const s2 = { ID: 's2', TITLE: 'Later', TRACK_ID: 't1', WEEK: '1', SCHEDULEDSTART: '2026-10-05T11:00:00.000Z' };
-    const s1 = { ID: 's1', TITLE: 'Earlier', TRACK_ID: 't1', WEEK: '1', SCHEDULEDSTART: '2026-10-05T09:00:00.000Z' };
+    const s2 = { ID: 's2', TITLE: 'Later', TRACK_ID: 't1', STATUS: 'Confirmed', WEEK: '1', SCHEDULEDSTART: '2026-10-05T11:00:00.000Z' };
+    const s1 = { ID: 's1', TITLE: 'Earlier', TRACK_ID: 't1', STATUS: 'Confirmed', WEEK: '1', SCHEDULEDSTART: '2026-10-05T09:00:00.000Z' };
     const out = assembleFeed({ sessions: [s2, s1], activities: [], tracks, editions: [], activeEditionId: null });
     expect(out.sessions[0].id).toBe('s1');
     expect(out.sessions[1].id).toBe('s2');
@@ -92,6 +92,41 @@ describe('devtoberfest-feed', () => {
     it('handles empty/nullish rows input', () => {
       expect(filterCompletionsWithinWindow(null, start, end)).toEqual([]);
       expect(filterCompletionsWithinWindow([], start, end)).toEqual([]);
+    });
+  });
+
+  describe('status filtering (Confirmed/Completed only)', () => {
+    const tracks = [{ ID: 't1', NAME: 'ABAP' }];
+    const mkSession = (id, status) => ({ ID: id, TITLE: id, TRACK_ID: 't1', STATUS: status, WEEK: '1' });
+    const mkActivity = (id, status, points = 100, slug = id) => ({ ID: id, TITLE: id, TRACK_ID: 't1', STATUS: status, WEEK: '1', POINTS: points, TASKSLUG: slug });
+
+    it('isVisibleStatus accepts only Confirmed/Completed, case-insensitively', () => {
+      for (const s of ['Confirmed', 'confirmed', 'CONFIRMED', '  Confirmed  ', 'Completed', 'completed']) {
+        expect(isVisibleStatus({ STATUS: s })).toBe(true);
+      }
+      for (const s of ['Draft', 'Invited', 'Declined', 'Cancelled', 'PendingTutorial', '', null, undefined]) {
+        expect(isVisibleStatus({ STATUS: s })).toBe(false);
+      }
+    });
+
+    it('assembleFeed drops hidden-status sessions and activities', () => {
+      const sessions = [mkSession('sV', 'Confirmed'), mkSession('sD', 'Draft'), mkSession('sX', 'Cancelled'), mkSession('sC', 'Completed')];
+      const acts = [mkActivity('aV', 'Confirmed'), mkActivity('aI', 'Invited'), mkActivity('aP', 'PendingTutorial'), mkActivity('aC', 'Completed')];
+      const out = assembleFeed({ sessions, activities: acts, tracks, editions: [], activeEditionId: null });
+      expect(out.sessions.map((s) => s.id).sort()).toEqual(['sC', 'sV']);
+      expect(out.activities.map((a) => a.id).sort()).toEqual(['aC', 'aV']);
+    });
+
+    it('completedActivityPoints ignores hidden-status activities in earned and max', () => {
+      const acts = [
+        mkActivity('aV', 'Confirmed', 500, 'done-slug'),
+        mkActivity('aHidden', 'Draft', 999, 'done-slug'),
+      ];
+      const set = normalizeSlugSet([{ slug: 'done-slug' }]);
+      const r = completedActivityPoints(acts, set);
+      expect(r.earnedPoints).toBe(500);
+      expect(r.maxPoints).toBe(500);
+      expect(r.completedActivityIds).toEqual(['aV']);
     });
   });
 });

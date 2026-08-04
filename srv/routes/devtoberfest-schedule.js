@@ -92,16 +92,18 @@ async function myCompletionsHandler(req, res) {
           const tracks = await SELECT.from(ext.Track).where({ EDITION_ID: editionId });
           const trackIds = tracks.map((t) => t.ID);
           activities = trackIds.length
-            ? await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG', 'TRACK_ID').where({ TRACK_ID: { in: trackIds } })
+            ? await SELECT.from(ext.Activity).columns('ID', 'POINTS', 'TASKSLUG', 'TRACK_ID', 'STATUS').where({ TRACK_ID: { in: trackIds } })
             : [];
         }
         // If editionId is null, activities stays [] → earnedPoints/maxPoints 0 (fail-soft).
       }
     } catch (e) { LOG.warn('myCompletions facade read failed:', e?.message); }
 
-    // maxPoints (the goal denominator) is the sum of ALL edition activities —
-    // independent of join/date state. earnedPoints is gated: only completions
-    // inside the edition window count, and only when the user has joined.
+    // maxPoints (the goal denominator) is the sum of the edition's visible
+    // (Confirmed/Completed) activities — completedActivityPoints filters hidden
+    // statuses via isVisibleStatus, matching the feed. Independent of join/date
+    // state. earnedPoints is gated: only completions inside the edition window
+    // count, and only when the user has joined.
     const { maxPoints } = completedActivityPoints(activities, new Set());
 
     let earnedPoints = 0;
