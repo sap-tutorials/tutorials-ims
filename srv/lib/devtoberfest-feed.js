@@ -10,9 +10,24 @@ function normalizeSlugSet(rows) {
   return set;
 }
 
-function assembleFeed({ sessions = [], activities = [], tracks = [], editions = [], activeEditionId = null }) {
+function assembleFeed({ sessions = [], activities = [], tracks = [], editions = [], activeEditionId = null, speakers = [], sessionSpeakers = [] }) {
   const trackById = new Map(tracks.map((t) => [t.ID, t]));
   const mapTrack = (id) => trackById.get(id) || {};
+  const speakerById = new Map(speakers.map((sp) => [sp.ID, sp]));
+  const speakersBySession = new Map();
+  for (const link of sessionSpeakers) {
+    const arr = speakersBySession.get(link.SESSION_ID) || [];
+    arr.push(link);
+    speakersBySession.set(link.SESSION_ID, arr);
+  }
+  const speakerFor = (sessionId) => (speakersBySession.get(sessionId) || [])
+    .slice()
+    .sort((a, b) => (a.SPEAKERORDER || 0) - (b.SPEAKERORDER || 0))
+    .map((link) => {
+      const sp = speakerById.get(link.SPEAKER_ID) || {};
+      const name = `${sp.FIRSTNAME || ''} ${sp.LASTNAME || ''}`.trim();
+      return { id: link.SPEAKER_ID, name, role: sp.ROLE || '', company: sp.COMPANY || '', photoUrl: `/api/devtoberfest/speaker/${link.SPEAKER_ID}/photo` };
+    });
   return {
     activeEditionId,
     editions: editions
@@ -24,6 +39,8 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
         trackId: s.TRACK_ID, trackName: mapTrack(s.TRACK_ID).NAME || '', trackDay: mapTrack(s.TRACK_ID).DAYOFWEEK || '',
         week: s.WEEK, scheduledStart: s.SCHEDULEDSTART, scheduledTimeZone: s.SCHEDULEDTIMEZONE, recordingStart: s.RECORDINGSTART,
         youtubeUrl: s.YOUTUBEURL || '', communityEventUrl: s.COMMUNITYEVENTURL || '',
+        linkedinUrl: s.LINKEDINURL || '',
+        speakers: speakerFor(s.ID),
         activityId: s.ACTIVITY_ID || null, status: s.STATUS,
       }))
       .sort(sortByWeekThenDate),
