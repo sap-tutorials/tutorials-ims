@@ -126,6 +126,13 @@ async function myCompletionsHandler(req, res) {
 const TRANSCRIPT_TTL_MS = 1000 * 60 * 60 * 24 * 7;   // 7d for real transcripts
 const TRANSCRIPT_NONE_TTL_MS = 1000 * 60 * 60;        // 1h for negative cache
 
+// Physical table name for the owned Transcript entity.
+// com.sap.developers.ims.Transcript → dots/camel → COM_SAP_DEVELOPERS_IMS_TRANSCRIPT
+// (same derivation pattern as COM_SAP_DEVELOPERS_IMS_USERS, _TUTORIALS, etc.)
+// Raw SQL is required for BLOB reads to avoid HANA LOB-locator expiry when
+// mixing LargeBinary with metadata columns in one CDS QL SELECT.
+const TRANSCRIPT_TABLE = '"COM_SAP_DEVELOPERS_IMS_TRANSCRIPT"';
+
 async function transcriptHandler(req, res) {
   const videoId = String(req.query.video || '').trim();
   if (!videoId) return res.status(400).json({ error: 'MISSING_VIDEO' });
@@ -133,15 +140,28 @@ async function transcriptHandler(req, res) {
     await cds.connect.to('db');
     const { Transcript } = cds.entities('com.sap.developers.ims');
     const now = Date.now();
-    const cached = await SELECT.one.from(Transcript).where({ videoId });
+    // Metadata-only SELECT — no segments column — to avoid HANA LOB-locator expiry.
+    // Mirror of speakerPhotoHandler: metadata via CDS QL, BLOB via raw db.run().
+    const cached = await SELECT.one.from(Transcript)
+      .columns('videoId', 'source', 'lang', 'fetchedAt')
+      .where({ videoId });
     if (cached) {
       const age = now - new Date(cached.fetchedAt).getTime();
       const ttl = cached.source === 'none' ? TRANSCRIPT_NONE_TTL_MS : TRANSCRIPT_TTL_MS;
       if (age < ttl) {
-        // NOTE: reading `segments` (LargeBinary) together with other columns via
-        // CDS QL is fine on SQLite (unit tests). On HANA, LOB locators expire when
-        // mixed with non-BLOB columns — verified as a hybrid-test concern (Task 15).
-        const segments = cached.source === 'none' ? [] : JSON.parse(gunzipSync(cached.segments).toString('utf8'));
+        if (cached.source === 'none') {
+          return res.status(200).json({ videoId, source: 'none', lang: cached.lang, segments: [] });
+        }
+        // BLOB isolated via raw SQL — LOB-locator-safe on HANA.
+        const db = cds.db;
+        const rows = await db.run(
+          `SELECT "SEGMENTS" FROM ${TRANSCRIPT_TABLE} WHERE "VIDEOID" = ?`, [videoId]
+        );
+        const row = Array.isArray(rows) ? rows[0] : rows;
+        const buf = row && (row.SEGMENTS || row.segments);
+        const segments = buf
+          ? JSON.parse(gunzipSync(Buffer.isBuffer(buf) ? buf : Buffer.from(buf)).toString('utf8'))
+          : [];
         return res.status(200).json({ videoId, source: cached.source, lang: cached.lang, segments });
       }
     }
