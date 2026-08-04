@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
-import { mergeCompletion, safeHref } from '../devtoberfest-schedule-shared/completion';
+import { mergeCompletion, safeHref, taskHref, taskLinkLabel } from '../devtoberfest-schedule-shared/completion';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
@@ -263,10 +263,10 @@ defineExpose({ filters });
                 >↗</a>
                 <a
                   v-if="(row as any).taskSlug"
-                  :href="`/${String((row as any).taskType).toLowerCase() === 'puzzle' ? 'puzzles' : 'tutorials'}/${(row as any).taskSlug}`"
+                  :href="taskHref(row)"
                   class="sched-link"
                   @click.stop
-                  :title="String((row as any).taskType).toLowerCase() === 'puzzle' ? 'Open puzzle' : 'Open tutorial'"
+                  :title="taskLinkLabel(row)"
                 >→</a>
               </td>
               <td v-if="isAuthenticated">
