@@ -29,6 +29,7 @@ export function mergeCompletion(feed: Feed, my: MyCompletions) {
 
   return {
     rows: [...sessionRows, ...activityRows],
+    joined: !!my?.authenticated && !!my.joined,
     earnedPoints: my?.authenticated ? my.earnedPoints || 0 : 0,
     maxPoints: my?.authenticated ? my.maxPoints || feed.activities.reduce((n, a) => n + (a.points || 0), 0) : feed.activities.reduce((n, a) => n + (a.points || 0), 0),
     completedActivityIds,

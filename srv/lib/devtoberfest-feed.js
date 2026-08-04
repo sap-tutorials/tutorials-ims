@@ -37,6 +37,22 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
   };
 }
 
+// Retain only completion rows whose completionDate falls within the edition's
+// [start, end] window (inclusive). Points are earned by *participating during*
+// Devtoberfest, so an all-time completion must not count. Fail-closed: if the
+// window is not fully defined, or a row has no parseable completionDate, it is
+// dropped rather than counted. `start`/`end` are ISO strings (Edition
+// STARTSAT/ENDSAT); rows carry `completionDate` (see getMyCompletedTutorials).
+function filterCompletionsWithinWindow(rows, start, end) {
+  const startMs = start ? Date.parse(start) : NaN;
+  const endMs = end ? Date.parse(end) : NaN;
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return [];
+  return (rows || []).filter((r) => {
+    const t = r?.completionDate ? Date.parse(r.completionDate) : NaN;
+    return !Number.isNaN(t) && t >= startMs && t <= endMs;
+  });
+}
+
 function completedActivityPoints(activities = [], completedSlugSet = new Set()) {
   let earnedPoints = 0;
   let maxPoints = 0;
@@ -62,4 +78,4 @@ function sortByWeekThenTitle(a, b) {
   return w !== 0 ? w : String(a.title || '').localeCompare(String(b.title || ''));
 }
 
-export { assembleFeed, completedActivityPoints, normalizeSlugSet };
+export { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow };

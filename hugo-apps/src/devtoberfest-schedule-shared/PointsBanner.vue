@@ -4,12 +4,13 @@ defineProps<{
   maxPoints: number;
   completeCount: number;
   isAuthenticated: boolean;
+  joined?: boolean;
 }>();
 </script>
 
 <template>
   <div class="points-banner">
-    <template v-if="isAuthenticated">
+    <template v-if="isAuthenticated && joined">
       <div class="points-banner__score">
         <span class="points-banner__earned">{{ earnedPoints.toLocaleString() }}</span>
         <span class="points-banner__sep"> / </span>
@@ -18,6 +19,12 @@ defineProps<{
       <div class="points-banner__activities">
         <span class="points-banner__count">{{ completeCount }}</span>
         <span class="points-banner__label"> activities completed</span>
+      </div>
+    </template>
+    <template v-else-if="isAuthenticated">
+      <div class="points-banner__signin">
+        <span class="points-banner__signin-text">Join Devtoberfest to earn points for completing activities.</span>
+        <a href="/devtoberfest/" class="points-banner__signin-link">Join Devtoberfest</a>
       </div>
     </template>
     <template v-else>

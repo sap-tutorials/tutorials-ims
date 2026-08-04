@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assembleFeed, completedActivityPoints, normalizeSlugSet } from '../../srv/lib/devtoberfest-feed.js';
+import { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow } from '../../srv/lib/devtoberfest-feed.js';
 
 describe('devtoberfest-feed', () => {
   const tracks = [{ ID: 't1', NAME: 'ABAP', DAYOFWEEK: 'Monday' }];
@@ -57,5 +57,41 @@ describe('devtoberfest-feed', () => {
     expect(r.earnedPoints).toBe(500);
     expect(r.maxPoints).toBe(800);
     expect(r.completedActivityIds).toEqual(['a1']);
+  });
+
+  describe('filterCompletionsWithinWindow', () => {
+    const start = '2026-10-01T00:00:00.000Z';
+    const end = '2026-10-31T23:59:59.000Z';
+    const rows = [
+      { slug: 'inside', completionDate: '2026-10-15T12:00:00.000Z' },
+      { slug: 'before', completionDate: '2026-09-30T23:59:59.000Z' },
+      { slug: 'after', completionDate: '2026-11-01T00:00:00.000Z' },
+      { slug: 'on-start', completionDate: '2026-10-01T00:00:00.000Z' },
+      { slug: 'on-end', completionDate: '2026-10-31T23:59:59.000Z' },
+      { slug: 'no-date', completionDate: null },
+    ];
+
+    it('keeps only completions with completionDate within [start,end] inclusive', () => {
+      const out = filterCompletionsWithinWindow(rows, start, end);
+      const slugs = out.map((r) => r.slug).sort();
+      expect(slugs).toEqual(['inside', 'on-end', 'on-start']);
+    });
+
+    it('excludes rows with a missing/unparseable completionDate', () => {
+      const out = filterCompletionsWithinWindow(rows, start, end);
+      expect(out.some((r) => r.slug === 'no-date')).toBe(false);
+      expect(filterCompletionsWithinWindow([{ slug: 'bad', completionDate: 'not-a-date' }], start, end)).toEqual([]);
+    });
+
+    it('returns [] when the window is not fully defined (fail-closed)', () => {
+      expect(filterCompletionsWithinWindow(rows, null, end)).toEqual([]);
+      expect(filterCompletionsWithinWindow(rows, start, null)).toEqual([]);
+      expect(filterCompletionsWithinWindow(rows, undefined, undefined)).toEqual([]);
+    });
+
+    it('handles empty/nullish rows input', () => {
+      expect(filterCompletionsWithinWindow(null, start, end)).toEqual([]);
+      expect(filterCompletionsWithinWindow([], start, end)).toEqual([]);
+    });
   });
 });
