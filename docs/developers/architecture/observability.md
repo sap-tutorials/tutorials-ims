@@ -157,11 +157,12 @@ Alerting panel, beside the `alertsEnabled` toggle).
 - Each click uses a **unique** `resource.resourceName`
   (`admin-test:<user>:<ISO-ts>`) so the plugin's 5-min dedup window never
   silently drops a test — every click actually fires.
-- **Ops requirement:** for a `delivered` test to reach an inbox, wire an
-  `AlertingTest` ANS condition → subscription in the BTP cockpit for the
-  target env, exactly like the three real eventTypes. The plugin routes alerts
-  to channels by severity threshold only; per-eventType filtering happens in
-  the BTP cockpit (condition matching on `eventType`). If the
+- **Ops requirement:** `cds build` generates a matching `AlertingTest`
+  condition into `ans-conditions.json` (from the `eventTypes` config); an
+  operator then wires that condition to a subscription in the BTP cockpit for
+  the target env, exactly like the three real eventTypes. The plugin routes
+  alerts to channels by severity threshold only; per-eventType filtering
+  happens in the BTP cockpit (condition matching on `eventType`). If the
   `AlertingTest` condition/subscription is absent, `raiseTest()` still reports
   `delivered` (our code did its job) but no email arrives — itself a useful
   signal that the ANS-side wiring is missing.
