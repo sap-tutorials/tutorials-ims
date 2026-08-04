@@ -138,6 +138,35 @@ All three hooks use `severity: 'ERROR'` and `category: 'ALERT'`.
 nightly jobs, community-events refresh, etc.) through the single chokepoint in
 `runWithLock`.
 
+## Testing the alert path (#1469)
+
+An admin can verify the ANS code path end-to-end on demand — without forcing a
+real failure — via **Send test alert** on `/admin-ui/#joule` (Operational
+Alerting panel, beside the `alertsEnabled` toggle).
+
+- The button invokes `AdminService.sendTestAlert`, which calls
+  `alerting.raiseTest()` with a TEST envelope: `eventType: 'AlertingTest'`,
+  `subject: '[TEST] Admin-triggered alert'`, `severity` defaulting to `ERROR`.
+- `raiseTest()` is a result-returning sibling of `raise()` — same fail-open
+  contract (never throws) but returns `{ outcome: 'delivered' | 'disabled' |
+  'error', reason? }` so the admin sees whether it fired:
+  - `disabled` — `ChatSettings.alertsEnabled` is false (doubles as an
+    "is alerting on?" probe). Enable + Save first (~5s resolver cache).
+  - `delivered` — handed to the ANS sink without error.
+  - `error` — connect/raise threw; `reason` carries the message.
+- Each click uses a **unique** `resource.resourceName`
+  (`admin-test:<user>:<ISO-ts>`) so the plugin's 5-min dedup window never
+  silently drops a test — every click actually fires.
+- **Ops requirement:** `cds build` generates a matching `AlertingTest`
+  condition into `ans-conditions.json` (from the `eventTypes` config); an
+  operator then wires that condition to a subscription in the BTP cockpit for
+  the target env, exactly like the three real eventTypes. The plugin routes
+  alerts to channels by severity threshold only; per-eventType filtering
+  happens in the BTP cockpit (condition matching on `eventType`). If the
+  `AlertingTest` condition/subscription is absent, `raiseTest()` still reports
+  `delivered` (our code did its job) but no email arrives — itself a useful
+  signal that the ANS-side wiring is missing.
+
 ## Configuration
 
 In `package.json` `cds.requires.alerts`:
@@ -151,7 +180,7 @@ In `package.json` `cds.requires.alerts`:
   "[production]": { "kind": "alert-notification" },
   "channels": ["email:devrel-oncall"],
   "routes": [{ "minSeverity": "ERROR", "channels": ["email:devrel-oncall"] }],
-  "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed"],
+  "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed", "AlertingTest"],
   "dedupWindowMs": 300000
 }
 ```

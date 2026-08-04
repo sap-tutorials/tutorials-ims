@@ -312,7 +312,8 @@
           "RebuildDispatchFailed",
           "DeployStarted",
           "DeployFinished",
-          "DeployFailed"
+          "DeployFailed",
+          "AlertingTest"
         ],
         "dedupWindowMs": 300000
       }

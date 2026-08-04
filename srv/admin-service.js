@@ -31,6 +31,7 @@ import { runSeedApiDocs } from './lib/seed-api-docs.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
+import { raiseTest } from './lib/alerting.js'; // #1469 admin test alert
 import { isAllowedTarget } from './lib/redirect-allowlist.js';
 import { validatePuzzle } from './lib/puzzle-grading.js';
 import { recomputeSnapshot } from './lib/featured-topics-snapshot.js';
@@ -2678,6 +2679,43 @@ export default class AdminService extends cds.ApplicationService {
         });
       }
       return result;
+    });
+
+    // #1469: on-demand end-to-end ANS alert test. Fires the REAL alerting
+    // code path (raiseTest → dedup → routing → cds.outboxed → ANS POST) with
+    // a TEST-marked envelope, and — unlike the fail-open production hooks —
+    // reports the outcome back so the admin knows if it actually fired.
+    // Placed after the auditEvent closure (line ~2390) so the reference
+    // resolves. Auth via entity-level @requires:'Admin' on ChatSettings.
+    this.on('sendTestAlert', 'ChatSettings', async (req) => {
+      const SEVERITIES = ['INFO', 'NOTICE', 'WARNING', 'ERROR', 'FATAL'];
+      const severity = SEVERITIES.includes(req.data?.severity) ? req.data.severity : 'ERROR';
+      const user = req.user?.id ?? 'unknown';
+      const ts = new Date().toISOString();
+      // Unique resourceName per click dodges the plugin's 5-min dedup window
+      // (dedup key is `${eventType}:${resourceName}`), so every click fires.
+      const resourceName = `admin-test:${user}:${ts}`;
+
+      // TEST-INJECTION HOOK: globalThis.__TEST_raiseTest lets unit tests inject
+      // a controlled stub (same pattern as __TEST_emitJobAudit at line ~2971).
+      const _raiseTest = globalThis.__TEST_raiseTest ?? raiseTest;
+      const result = await _raiseTest({
+        eventType: 'AlertingTest',
+        severity,
+        category: 'ALERT',
+        subject: '[TEST] Admin-triggered alert',
+        body: `Manual end-to-end verification of the ANS alerting path. Not a real incident. Triggered by ${user} at ${ts}.`,
+        resource: { resourceName, resourceType: 'service' },
+        tags: { 'ans:correlationId': 'admin-test' },
+      });
+
+      // Fire-and-forget audit (mirrors seedApiDocs). Never fails the action.
+      setImmediate(() => {
+        auditEvent('alerting.test-alert', { user, outcome: result.outcome, severity })
+          .catch((err) => cds.log('admin-service').warn(`sendTestAlert audit emit failed: ${err.message ?? err}`));
+      });
+
+      return { outcome: result.outcome, reason: result.reason ?? null, eventType: 'AlertingTest', severity };
     });
 
     // Phase 4.6 (#747): operator-grade SAP-samples corpus bootstrap.

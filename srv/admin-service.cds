@@ -379,6 +379,19 @@ service AdminService {
       failed    : Integer;
       latencyMs : Integer;
     };
+    // #1469: admin-triggered end-to-end ANS test. Invokes alerting.raiseTest()
+    // with a TEST-marked envelope (eventType 'AlertingTest'). Reports outcome
+    // 'disabled' when ChatSettings.alertsEnabled is false (doubles as an
+    // "is alerting on?" probe), 'delivered' when handed to the ANS sink, or
+    // 'error' (+reason) on connect/raise failure. severity defaults to ERROR
+    // (matches the real hooks + the minSeverity:ERROR route). Auth via the
+    // entity-level @requires:'Admin'.
+    action sendTestAlert(severity: String) returns {
+      outcome  : String;
+      reason   : String;
+      eventType: String;
+      severity : String;
+    };
   };
 
   @odata.singleton

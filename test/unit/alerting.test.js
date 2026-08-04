@@ -92,3 +92,43 @@ describe('alerting helper', () => {
     }))
   })
 })
+
+describe('raiseTest helper', () => {
+  beforeEach(() => { vi.restoreAllMocks(); vi.resetModules(); enabledState.value = true })
+
+  it('returns { outcome: "disabled" } when alerting is disabled (never connects)', async () => {
+    enabledState.value = false
+    const spy = vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn() })
+    const { raiseTest } = await import('../../srv/lib/alerting.js')
+    const res = await raiseTest({ eventType: 'AlertingTest', severity: 'ERROR' })
+    expect(res).toEqual({ outcome: 'disabled' })
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('returns { outcome: "delivered" } when enabled and the sink resolves', async () => {
+    const raiseSpy = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: raiseSpy }) })
+    const { raiseTest } = await import('../../srv/lib/alerting.js')
+    const res = await raiseTest({ eventType: 'AlertingTest', severity: 'ERROR',
+      resource: { resourceName: 'admin-test:u:2026', resourceType: 'service' } })
+    expect(res).toEqual({ outcome: 'delivered' })
+    expect(raiseSpy).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'AlertingTest' }))
+  })
+
+  it('returns { outcome: "error", reason } when the sink raise throws (never throws)', async () => {
+    vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: vi.fn().mockRejectedValue(new Error('boom')) }) })
+    const { raiseTest } = await import('../../srv/lib/alerting.js')
+    const res = await raiseTest({ eventType: 'AlertingTest', severity: 'ERROR' })
+    expect(res.outcome).toBe('error')
+    expect(res.reason).toContain('boom')
+  })
+
+  it('returns { outcome: "error", reason } when connect itself throws', async () => {
+    vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockRejectedValue(new Error('no binding')) })
+    const { raiseTest } = await import('../../srv/lib/alerting.js')
+    const res = await raiseTest({ eventType: 'AlertingTest', severity: 'ERROR' })
+    expect(res.outcome).toBe('error')
+    expect(res.reason).toContain('no binding')
+  })
+})
