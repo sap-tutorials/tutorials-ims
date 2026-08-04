@@ -23,15 +23,25 @@ export const NAMED_PALETTE: Record<string, TrackColor> = {
 };
 
 export function buildTrackColorMap(tracks: { name: string; color?: string }[]): Map<string, TrackColor> {
-  const map = new Map<string, TrackColor>();
-  const uncolored = tracks.filter((t) => t.name && !NAMED_PALETTE[t.color || '']);
-  const distinct = [...new Set(uncolored.map((t) => t.name))].sort((a, b) => a.localeCompare(b, 'en'));
-  const hashIndex = new Map<string, number>();
-  distinct.forEach((name, i) => hashIndex.set(name, i));
+  // Deduplicate: first color wins per name
+  const colorByName = new Map<string, string | undefined>();
   for (const t of tracks) {
-    if (!t.name) continue;
-    const named = NAMED_PALETTE[t.color || ''];
-    map.set(t.name, named || PALETTE[(hashIndex.get(t.name) || 0) % PALETTE.length]);
+    if (t.name && !colorByName.has(t.name)) colorByName.set(t.name, t.color);
+  }
+  // Hash-index only the uncolored tracks (no named-palette entry), alphabetically
+  const uncolored = [...colorByName.entries()]
+    .filter(([, c]) => !NAMED_PALETTE[c || ''])
+    .map(([name]) => name)
+    .sort((a, b) => a.localeCompare(b, 'en'));
+  const hashIndex = new Map<string, number>();
+  uncolored.forEach((name, i) => hashIndex.set(name, i));
+  // Insert into map in alphabetical order so [..map.keys()] and legendFor are stable
+  const map = new Map<string, TrackColor>();
+  const allNames = [...colorByName.keys()].sort((a, b) => a.localeCompare(b, 'en'));
+  for (const name of allNames) {
+    const c = colorByName.get(name);
+    const named = NAMED_PALETTE[c || ''];
+    map.set(name, named || PALETTE[(hashIndex.get(name) || 0) % PALETTE.length]);
   }
   return map;
 }
