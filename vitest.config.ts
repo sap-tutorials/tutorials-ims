@@ -39,8 +39,9 @@ export default defineConfig({
         plugins: [vue()],
         test: {
           name: 'unit',
+          globals: true,
           environment: 'node',
-          include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts', 'scripts/**/__tests__/**/*.test.ts', 'srv/**/__tests__/**/*.test.{js,ts}', 'app/analytics-explorer/src/**/__tests__/**/*.test.ts', 'app/explore/src/**/__tests__/**/*.test.ts', 'hugo-apps/src/**/*.{test,spec}.{js,ts}'],
+          include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.{js,ts}', 'scripts/**/__tests__/**/*.test.{js,ts}', 'srv/**/__tests__/**/*.test.{js,ts}', 'app/analytics-explorer/src/**/__tests__/**/*.test.ts', 'app/explore/src/**/__tests__/**/*.test.ts', 'hugo-apps/src/**/*.{test,spec}.{js,ts}'],
           // test/e2e/** is the Playwright-driven `e2e` project (below). Its
           // specs launch a real browser against a DEPLOYED approuter and would
           // hang the unit tier (which has no BASE_URL); the broad
