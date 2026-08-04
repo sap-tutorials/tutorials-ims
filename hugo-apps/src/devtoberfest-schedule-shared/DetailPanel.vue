@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ScheduleRow } from './types';
 import { youtubeThumb, safeHref } from './completion';
+import { youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal, formatHomeZone } from './format-session-time';
 import { computed } from 'vue';
 
@@ -18,6 +19,11 @@ const thumb = computed(() => {
   return r.youtubeUrl ? youtubeThumb(r.youtubeUrl) : null;
 });
 
+const embedUrl = computed(() => {
+  const r = props.row as any;
+  return r?.youtubeUrl ? youtubeEmbedUrl(r.youtubeUrl) : '';
+});
+
 const taskUrl = computed(() => {
   const r = props.row as any;
   if (!r?.taskSlug) return null;
@@ -27,6 +33,8 @@ const taskUrl = computed(() => {
 
 const isSession = computed(() => props.row?.kind === 'session');
 const isActivity = computed(() => props.row?.kind === 'activity');
+
+function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.display = 'none'; }
 </script>
 
 <template>
@@ -38,11 +46,27 @@ const isActivity = computed(() => props.row?.kind === 'activity');
         <button class="detail-panel__close" @click="emit('close')" aria-label="Close">&#x2715;</button>
       </div>
 
-      <div v-if="thumb" class="detail-panel__thumb-wrap">
+      <div v-if="embedUrl" class="detail-panel__embed-wrap">
+        <iframe class="detail-panel__embed" :src="embedUrl"
+          title="Session video" loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
+      <div v-else-if="thumb" class="detail-panel__thumb-wrap">
         <img :src="thumb" :alt="`Thumbnail for ${row.title}`" class="detail-panel__thumb" />
       </div>
 
       <div class="detail-panel__body">
+        <div v-if="(row as any).speakers && (row as any).speakers.length" class="detail-panel__speakers">
+          <div v-for="sp in (row as any).speakers" :key="sp.id" class="detail-panel__speaker">
+            <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
+            <div class="detail-panel__speaker-meta">
+              <span class="detail-panel__speaker-name">{{ sp.name }}</span>
+              <span v-if="sp.role || sp.company" class="detail-panel__speaker-role">{{ [sp.role, sp.company].filter(Boolean).join(' @ ') }}</span>
+            </div>
+          </div>
+        </div>
+
         <p v-if="(row as any).abstract" class="detail-panel__abstract">{{ (row as any).abstract }}</p>
 
         <dl class="detail-panel__meta">
@@ -86,6 +110,13 @@ const isActivity = computed(() => props.row?.kind === 'activity');
             rel="noopener noreferrer"
             class="detail-panel__link"
           >Community Event</a>
+          <a
+            v-if="(row as any).linkedinUrl"
+            :href="safeHref((row as any).linkedinUrl)"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="detail-panel__link detail-panel__link--linkedin"
+          >LinkedIn</a>
           <a
             v-if="taskUrl"
             :href="taskUrl"
@@ -245,5 +276,62 @@ const isActivity = computed(() => props.row?.kind === 'activity');
   font-size: 0.75rem;
   color: var(--sapContent_LabelColor, #6a6d70);
   margin-top: 0.1rem;
+}
+
+.detail-panel__embed-wrap {
+  flex-shrink: 0;
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+}
+
+.detail-panel__embed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.detail-panel__speakers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.detail-panel__speaker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.detail-panel__speaker-photo {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.detail-panel__speaker-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.detail-panel__speaker-name {
+  font-size: var(--sapFontSize, 0.875rem);
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+}
+
+.detail-panel__speaker-role {
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+.detail-panel__link--linkedin {
+  color: #0a66c2;
 }
 </style>
