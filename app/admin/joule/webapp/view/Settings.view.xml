@@ -185,6 +185,24 @@
         </f:SimpleForm>
       </Panel>
 
+      <!-- ANS master switch (issue #1468; feature added PR #1464/#1466).
+           alertsEnabled defaults OFF in the schema (db/schema.cds:755). When on,
+           SAP Alert Notification push alerts fire for publish-rejects,
+           scheduled-job failures, and rebuild-dispatch failures
+           (srv/lib/alerting.js, resolved via srv/lib/runtime-config/alert-settings.js).
+           DB-backed (no env var) so ops can toggle live without a restart. The ANS
+           email action must be configured in the BTP cockpit first, else alerts
+           have nowhere to go. Rollback by flipping this back off — no redeploy. -->
+      <Panel headerText="{i18n>alertsSection}" expandable="true" expanded="true" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="{i18n>alertsEnabled}" />
+          <Switch state="{settings>/alertsEnabled}" />
+
+          <Label text="" />
+          <Text text="{i18n>alertsEnabledHelp}" wrapping="true" />
+        </f:SimpleForm>
+      </Panel>
+
       <Panel headerText="{i18n>a2aSection}" expandable="true" expanded="false" class="sapUiSmallMarginBottom">
         <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
           <Label text="{i18n>a2aEnabledLabel}" />
