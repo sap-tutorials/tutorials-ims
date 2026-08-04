@@ -79,16 +79,24 @@ describe('buildCfLogsUrl', () => {
       startedAt: '2026-05-22T10:00:00.000Z',
       finishedAt: '2026-05-22T10:01:00.000Z'
     });
-    expect(url).toMatch(/^https:\/\/dashboards-x\.cls-21\.cloud\.logs\.services\.eu10\.hana\.ondemand\.com\/app\/discover#\/\?_g=/);
+    expect(url).toMatch(/^https:\/\/dashboards-x\.cls-21\.cloud\.logs\.services\.eu10\.hana\.ondemand\.com\/app\/data-explorer\/discover#\?_a=/);
 
     const u = new URL(url);
     const g = decodeURIComponent(u.hash.split('_g=')[1].split('&')[0]);
     expect(g).toContain("from:'2026-05-22T09:59:50.000Z'");
     expect(g).toContain("to:'2026-05-22T10:01:30.000Z'");
 
-    const a = decodeURIComponent(u.hash.split('_a=')[1]);
-    expect(a).toContain('language:kuery');
-    expect(a).toContain('cf_app_name : "tutorials-srv"');
+    // _a pins the cfsyslog index pattern — the load-bearing fix; without it
+    // Discover falls back to the OTLP index where app_name does not exist.
+    const a = decodeURIComponent(u.hash.split('_a=')[1].split('&')[0]);
+    expect(a).toContain('indexPattern:maintained-by-perfx_cf-content-package_index-pattern-logs-cfsyslog');
+
+    // _q filters by the cfsyslog `app_name` field (NOT `cf_app_name`, which does
+    // not exist in that index), matching VCAP_APPLICATION.application_name.
+    const q = decodeURIComponent(u.hash.split('_q=')[1]);
+    expect(q).toContain('language:kuery');
+    expect(q).toContain('app_name : "tutorials-srv"');
+    expect(q).not.toContain('cf_app_name');
   });
 
   it('uses now()+30s as the upper bound when the run is still RUNNING', () => {
