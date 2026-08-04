@@ -4,6 +4,7 @@ import type { TagLabelRegistry } from './frontmatter-utils.js'
 import { escapeHugoDelimiters } from './hugo-delimiters.js'
 import { stripDangerousHtml } from './sanitize-html.js'
 import type { TutorialStep, TutorialNavEntry } from './types.js'
+import type { NormalizedVideo } from './types.js'
 
 export interface RenderHugoFrontmatterArgs {
   slug: string
@@ -53,6 +54,12 @@ export interface RenderHugoFrontmatterArgs {
    * stays on the default HTTPS-scheme allowlist.
    */
   allowDataUrls?: boolean
+  /** Pre-step passthrough content (e.g. a `## Video Version` iframe) captured
+   *  by extractIntro. Emitted as a {{% tutorial-intro %}} shortcode above the
+   *  steps. Sanitized like step content. */
+  intro?: string
+  /** Optional styled video slot, already normalized by normalizeVideo. */
+  video?: NormalizedVideo | null
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -79,6 +86,8 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     hasAi,
     githubLogin,
     allowDataUrls,
+    intro,
+    video,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -149,13 +158,19 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     fm.githubLogin = githubLogin
   }
 
+  if (video) fm.video = { embedUrl: video.embedUrl, title: video.title, provider: video.provider }
+
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 
   const stepsMd = steps.map(step =>
     `{{% tutorial-step number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" %}}\n\n${escapeHugoDelimiters(stripDangerousHtml(step.content, { allowDataUrls }))}\n\n{{% /tutorial-step %}}`
   ).join('\n\n')
 
-  const content = `${frontmatter}${stepsMd}\n`
+  const introMd = intro && intro.trim()
+    ? `{{% tutorial-intro %}}\n\n${escapeHugoDelimiters(stripDangerousHtml(intro, { allowDataUrls }))}\n\n{{% /tutorial-intro %}}\n\n`
+    : ''
+
+  const content = `${frontmatter}${introMd}${stepsMd}\n`
 
   return content
 }

@@ -1,4 +1,5 @@
 import { extractFrontmatter } from './frontmatter.js'
+import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
 import { convertOptionBlocks } from './options.js'
 import { parseV1Steps } from './v1.js'
@@ -53,6 +54,7 @@ export interface ComposeResult {
   steps: TutorialStep[]
   body: string
   hasOsOptions: boolean
+  intro: string
 }
 
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
@@ -111,6 +113,8 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   }
   const steps = isV2 ? parseV2Steps(v2Body) : parseV1Steps(processedBody)
 
+  const intro = extractIntro(isV2 ? v2Body : processedBody, isV2)
+
   // Merge branchGroups onto parent step entries by parentStepNumber.
   for (const g of branchGroups) {
     const parent = steps.find(s => s.number === g.parentStepNumber)
@@ -162,5 +166,6 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     steps,
     body: processedBody,
     hasOsOptions: hasOsOptionsFlag.value,
+    intro,
   }
 }
