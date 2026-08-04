@@ -321,8 +321,7 @@
       "source": "^/petoberfest-api/photo/(.*)$",
       "target": "/petoberfest-api/photo/$1",
       "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
+      "authenticationType": "none"
     },
     {
       "source": "^/petoberfest-api/slideshow(.*)$",
