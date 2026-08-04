@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ScheduleRow } from './types';
 import { youtubeThumb, safeHref } from './completion';
-import { youtubeEmbedUrl } from './youtube';
+import { youtubeId, youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal, formatHomeZone } from './format-session-time';
 import { computed, ref } from 'vue';
 
@@ -30,8 +30,40 @@ const thumb = computed(() => {
 
 const embedUrl = computed(() => {
   const r = props.row as any;
-  return r?.youtubeUrl ? youtubeEmbedUrl(r.youtubeUrl) : '';
+  const base = r?.youtubeUrl ? youtubeEmbedUrl(r.youtubeUrl) : '';
+  return base ? `${base}?enablejsapi=1` : '';
 });
+
+const transcript = ref<{ start: number; text: string }[]>([]);
+const transcriptSource = ref('');
+const transcriptOpen = ref(false);
+const transcriptLoaded = ref(false);
+
+async function toggleTranscript() {
+  transcriptOpen.value = !transcriptOpen.value;
+  if (transcriptOpen.value && !transcriptLoaded.value) {
+    const id = youtubeId((props.row as any)?.youtubeUrl || '');
+    if (!id) { transcriptLoaded.value = true; return; }
+    try {
+      const r = await fetch(`/api/devtoberfest/transcript?video=${encodeURIComponent(id)}`);
+      const data = await r.json();
+      transcript.value = data.segments || [];
+      transcriptSource.value = data.source || '';
+    } catch { transcript.value = []; }
+    transcriptLoaded.value = true;
+  }
+}
+
+function fmtTs(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function seekTo(sec: number) {
+  const iframe = document.querySelector('iframe.detail-panel__embed') as HTMLIFrameElement | null;
+  iframe?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [sec, true] }), '*');
+}
 
 const taskUrl = computed(() => {
   const r = props.row as any;
@@ -62,6 +94,19 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
           title="Session video" loading="lazy"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
+      <div v-if="embedUrl" class="detail-panel__transcript-wrap">
+        <button class="detail-panel__transcript-toggle" @click="toggleTranscript" :aria-expanded="transcriptOpen">
+          {{ transcriptOpen ? 'Hide transcript' : 'Show transcript' }}
+        </button>
+        <div v-if="transcriptOpen" class="detail-panel__transcript">
+          <p v-if="transcriptLoaded && !transcript.length" class="detail-panel__transcript-empty">Transcript not available.</p>
+          <p v-if="transcriptSource === 'auto'" class="detail-panel__transcript-tag">auto-generated</p>
+          <button v-for="(seg, i) in transcript" :key="i" class="detail-panel__transcript-line" @click="seekTo(seg.start)">
+            <span class="detail-panel__transcript-ts">{{ fmtTs(seg.start) }}</span>
+            <span>{{ seg.text }}</span>
+          </button>
+        </div>
       </div>
       <div v-else-if="thumb" class="detail-panel__thumb-wrap">
         <img :src="thumb" :alt="`Thumbnail for ${row.title}`" class="detail-panel__thumb" />
@@ -362,5 +407,73 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
 
 .detail-panel__drawer--wide {
   width: min(70vw, 100vw);
+}
+
+.detail-panel__transcript-wrap {
+  flex-shrink: 0;
+  border-top: 1px solid var(--sapList_BorderColor, #e4e5e7);
+}
+
+.detail-panel__transcript-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--sapFontSize, 0.875rem);
+  color: var(--sapLinkColor, #0854a0);
+  padding: 0.5rem 1.25rem;
+  text-align: left;
+}
+
+.detail-panel__transcript-toggle:hover {
+  text-decoration: underline;
+}
+
+.detail-panel__transcript {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 0.5rem 1.25rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.detail-panel__transcript-tag {
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin: 0 0 0.25rem;
+  font-style: italic;
+}
+
+.detail-panel__transcript-empty {
+  font-size: var(--sapFontSize, 0.875rem);
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin: 0;
+}
+
+.detail-panel__transcript-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 0.125rem 0;
+  font-size: var(--sapFontSize, 0.875rem);
+  color: var(--sapTextColor, #32363a);
+  border-radius: 2px;
+}
+
+.detail-panel__transcript-line:hover {
+  background: var(--sapList_Hover_Background, #f5f6f7);
+}
+
+.detail-panel__transcript-ts {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--sapLinkColor, #0854a0);
+  min-width: 2.75rem;
+  flex-shrink: 0;
 }
 </style>

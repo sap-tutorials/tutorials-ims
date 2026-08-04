@@ -15,7 +15,7 @@ describe('DetailPanel enrichments', () => {
     const w = mount(DetailPanel, { props: { row } });
     const iframe = w.find('iframe.detail-panel__embed');
     expect(iframe.exists()).toBe(true);
-    expect(iframe.attributes('src')).toBe('https://www.youtube.com/embed/Zmo7YU9BUlc');
+    expect(iframe.attributes('src')).toBe('https://www.youtube.com/embed/Zmo7YU9BUlc?enablejsapi=1');
   });
   it('renders a speaker with photo and name', () => {
     const w = mount(DetailPanel, { props: { row } });
