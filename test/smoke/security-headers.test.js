@@ -11,17 +11,21 @@ describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
       expect(csp).toMatch(/default-src\s+'self'/);
     });
 
-    it('sets X-Frame-Options SAMEORIGIN', async () => {
+    it('allows SAP sister-site iframe embedding via CSP frame-ancestors', async () => {
+      // Legacy AEM allowed partner sites (Discovery Center, *.sap.com, hybris,
+      // gigya, lookbookhq, *.cloud.sap) to iframe-embed developer.sap.com pages.
+      // We restore that via CSP frame-ancestors (NOT X-Frame-Options, which
+      // can't express an allow-list). X-Frame-Options must be ABSENT — if it
+      // were present with SAMEORIGIN it would override frame-ancestors and
+      // re-block cross-origin framing. The approuter framework's own default
+      // injection is disabled via SEND_XFRAMEOPTIONS=false in mta.yaml.
       const res = await fetchWithRetry(`${BASE_URL}/`);
-      // The approuter injects its own SAMEORIGIN default AND the xs-app.json
-      // custom header, so the deployed value can arrive as "SAMEORIGIN,
-      // SAMEORIGIN". Every token must be SAMEORIGIN — no weaker value slips in.
-      // (The duplication itself is benign but worth de-duping in xs-app.json;
-      // tracked as a follow-up in issue #1258.)
-      const xfo = res.headers.get('x-frame-options') || '';
-      const tokens = xfo.split(',').map((t) => t.trim()).filter(Boolean);
-      expect(tokens.length).toBeGreaterThan(0);
-      for (const t of tokens) expect(t).toBe('SAMEORIGIN');
+      const csp = res.headers.get('content-security-policy');
+      expect(csp).toMatch(/frame-ancestors[^;]*'self'/);
+      expect(csp).toMatch(/frame-ancestors[^;]*\*\.sap\.com/);
+      expect(csp).toMatch(/frame-ancestors[^;]*\*\.cloud\.sap/);
+      // X-Frame-Options must not slip back in and override frame-ancestors.
+      expect(res.headers.get('x-frame-options')).toBeNull();
     });
 
     it('sets X-Content-Type-Options nosniff', async () => {
