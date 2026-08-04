@@ -70,6 +70,7 @@ author_profile: https://github.com/janedoe
 | `time` | Yes | Estimated minutes to complete. Integer. |
 | `auto_validation` | No | Set `true` if the tutorial has quiz rules in the `-Contribution` repo. |
 | `author_name`, `author_profile` | Recommended | Shown on the tutorial page. |
+| `video` | No | Optional intro video shown as a styled player at the top of the steps. See [§3.3 Adding a video](#_3-3-adding-a-video). |
 
 A canonical taxonomy of allowed `primary_tag` and `tags` values is maintained in the platform's `Tags` entity. To add a new tag or category, see [Center Admin](center-admin.md) § "Import a new tag".
 
@@ -101,6 +102,46 @@ Immediately after the frontmatter:
 > Only include a single contiguous set of bullet points in the Prerequisites
 > section, and don't include any normal paragraphs. Otherwise the rendered
 > version may be unpredictable and not what you intend.
+
+#### 3.2.1 Adding a video
+
+Many tutorials include a companion video. There are two supported ways to add one; the frontmatter approach is preferred for a single intro video.
+
+**Preferred — `video:` frontmatter.** Add a `video` object to the frontmatter. The platform renders it as a styled, responsive 16:9 player at the top of the **Steps** section:
+
+```yaml
+---
+parser: v2
+primary_tag: products>sap-hana-cloud
+tags: [tutorial>beginner, products>sap-hana]
+time: 20
+author_name: Jane Doe
+author_profile: https://github.com/janedoe
+video:
+  url: https://www.youtube.com/watch?v=6WY70LyLS1c
+  title: Create a User Interface with CAP
+---
+```
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `video.url` | Yes | A YouTube watch/short/embed URL (or a bare 11-char YouTube ID), a Vimeo URL, or an openSAP microlearning / SAP video URL. |
+| `video.title` | No | Accessible title for the player. Defaults to `Video tutorial`. |
+
+Supported hosts: YouTube (`youtube.com`, `youtu.be`), Vimeo (`vimeo.com`, `player.vimeo.com`), `microlearning.opensap.com`, and the SAP video service. An unrecognized host is ignored (no broken frame) — the build logs a warning naming the slug.
+
+**Also supported — raw HTML in the body.** You can still embed a player inline anywhere in the tutorial (including a `## Video Version` section before the first step) using a raw `<iframe>`:
+
+```markdown
+## Video Version
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/6WY70LyLS1c" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+```
+
+The iframe host must be on the platform allowlist (same hosts as above) or it is stripped for security. `<video>` elements are also supported. See the platform reference [iframe allowlist](../developers/reference/iframe-allowlist.md).
+
+> [!TIP]
+> Don't do both for the same video. If you set `video:` frontmatter, remove any `## Video Version` iframe so the player isn't rendered twice.
 
 ### 3.3 Steps (V2 parser)
 
