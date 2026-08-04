@@ -294,7 +294,6 @@ sap.ui.define([
     // AdminService.sendTestAlert action, and report the outcome. Mirrors
     // onSeedConceptEmbeddings' CSRF-fetch → POST → parse shape.
     onSendTestAlert: function () {
-      var self = this;
       fetch("/admin/$metadata", {
         method: "HEAD",
         credentials: "include",
