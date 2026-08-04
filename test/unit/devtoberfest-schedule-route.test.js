@@ -23,4 +23,13 @@ describe('devtoberfest schedule route', () => {
     expect(res.status).toBe(200);
     expect(res.data.authenticated).toBe(false);
   });
+
+  it('registers the speaker photo route and returns 503 EVENT_NOT_CONFIGURED when facade absent', async () => {
+    const res = await project.axios.get('/api/devtoberfest/speaker/nope/photo', { validateStatus: () => true });
+    // In the unit (SQLite) env the external.devtoberfest facades are absent.
+    // The handler must explicitly return 503 { error: 'EVENT_NOT_CONFIGURED' },
+    // distinguishing it from an unregistered-route 404 (which has no JSON body).
+    expect(res.status).toBe(503);
+    expect(res.data.error).toBe('EVENT_NOT_CONFIGURED');
+  });
 });

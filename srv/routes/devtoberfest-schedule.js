@@ -51,12 +51,24 @@ async function scheduleHandler(req, res) {
             .columns('ID', 'TITLE', 'TRACK_ID', 'STATUS', 'WEEK', 'POINTS', 'TASKSLUG', 'TASKTITLE', 'TASKTYPE', 'TASK_ID')
             .where({ TRACK_ID: { in: trackIds } })
         : [];
+      const sessionIds = sessions.map((s) => s.ID);
+      let sessionSpeakers = [];
+      let speakers = [];
+      if (sessionIds.length && ext.Sessionspeaker && ext.Speaker) {
+        sessionSpeakers = await SELECT.from(ext.Sessionspeaker)
+          .columns('SESSION_ID', 'SPEAKER_ID', 'SPEAKERORDER')
+          .where({ SESSION_ID: { in: sessionIds } });
+        const speakerIds = [...new Set(sessionSpeakers.map((l) => l.SPEAKER_ID))];
+        speakers = speakerIds.length
+          ? await SELECT.from(ext.Speaker).columns('ID', 'FIRSTNAME', 'LASTNAME', 'ROLE', 'COMPANY').where({ ID: { in: speakerIds } })
+          : [];
+      }
     } catch (err) {
       LOG.warn('schedule facade read failed, returning empty feed:', err.message);
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
 
-    return res.status(200).json(assembleFeed({ sessions, activities, tracks, editions, activeEditionId: editionId }));
+    return res.status(200).json(assembleFeed({ sessions, activities, tracks, editions, activeEditionId: editionId, speakers, sessionSpeakers }));
   } catch (err) {
     LOG.error('GET /api/devtoberfest/schedule failed:', err);
     return res.status(500).json({ error: 'INTERNAL' });
@@ -108,11 +120,49 @@ async function myCompletionsHandler(req, res) {
   }
 }
 
+// Physical synonym name for the cross-container Speaker facade.
+// @cds.persistence.exists entities are named by the HDI synonym: EXTERNAL_DEVTOBERFEST_SPEAKER.
+// Raw SQL is required to avoid HANA LOB locator expiry when reading a BLOB alongside metadata.
+const SPEAKER_TABLE = '"EXTERNAL_DEVTOBERFEST_SPEAKER"';
+
+async function speakerPhotoHandler(req, res) {
+  try {
+    await cds.connect.to('db');
+    let ext;
+    try { ext = cds.entities('external.devtoberfest'); } catch { ext = null; }
+    if (!ext?.Speaker) return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
+    const db = cds.db;
+    // Raw SQL: never SELECT a HANA BLOB alongside metadata via CDS QL (LOB locator expires).
+    let rows;
+    try {
+      rows = await db.run(
+        `SELECT PHOTO, PHOTOTYPE FROM ${SPEAKER_TABLE} WHERE ID = ?`,
+        [req.params.id]
+      );
+    } catch (sqlErr) {
+      // Facade synonym absent (e.g. unit SQLite env where @cds.persistence.exists
+      // tables are not created). Treat as not-configured, same as scheduleHandler.
+      LOG.warn('speaker photo facade unavailable:', sqlErr.message);
+      return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
+    }
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    const buf = row && (row.PHOTO || row.photo);
+    if (!buf) return res.status(404).end();
+    res.setHeader('Content-Type', (row.PHOTOTYPE || row.phototype) || 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.status(200).end(Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/speaker/:id/photo failed:', err);
+    return res.status(500).json({ error: 'INTERNAL' });
+  }
+}
+
 export function register(app) {
   const _contextMw = cds.middlewares?.context?.() || ((req, _res, next) => next());
   const _authMw = cds.middlewares?.auth?.() || ((req, _res, next) => next());
   app.get('/api/devtoberfest/schedule', _contextMw, _authMw, scheduleHandler);
   app.get('/api/devtoberfest/my-completions', _contextMw, _authMw, myCompletionsHandler);
+  app.get('/api/devtoberfest/speaker/:id/photo', _contextMw, speakerPhotoHandler);
 }
 
-export { scheduleHandler, myCompletionsHandler };
+export { scheduleHandler, myCompletionsHandler, speakerPhotoHandler };
