@@ -22,6 +22,7 @@ describe('Sessions grid', () => {
     expect(wrapper.text()).toContain('With Video');
     expect(wrapper.text()).toContain('No Video');
     const imgs = wrapper.findAll('img').map((i) => i.attributes('src') || '');
-    expect(imgs.some((s) => s.includes('img.youtube.com/vi/abc123'))).toBe(true);
+    // i.ytimg.com, not img.youtube.com — the latter is CSP-blocked (see completion.ts, commit 307be4e5).
+    expect(imgs.some((s) => s.includes('i.ytimg.com/vi/abc123'))).toBe(true);
   });
 });
