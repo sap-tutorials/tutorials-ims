@@ -509,3 +509,27 @@ The `before-all` build hook in `.deploy/mta.yaml` copies app builds into the app
 
    Should show ONE file. Two = ghost.
 3. Long-term fix worth proposing: prepend the static-dir copy with `rm -rf static/admin-ui` (or per-component `rm -rf static/admin-ui/components/<X>`). Adds ~100ms to build, eliminates the ghost-file class of bug entirely. Same hazard exists for analytics-ui, scanner-ui, display-app cp lines.
+
+## Deploy lifecycle alerts (start / end / fail)
+
+`npm run deploy -- --env <env>` pings the deployed srv's `POST /ops/deploy-event`
+(bearer `CONTENT_API_KEY`) at three points: **start** (before `cf deploy`),
+**end** (after the smoke gate passes), and **fail** (on a `cf deploy` or
+smoke-gate failure). The srv raises an SAP Alert Notification event:
+
+- `DeployStarted` / `DeployFinished` → severity `NOTICE` → `email:devrel-deploys`.
+- `DeployFailed` → severity `ERROR` → `email:devrel-deploys` **and** `email:devrel-oncall`.
+
+**Prerequisites for delivery:**
+1. `ChatSettings.alertsEnabled` must be ON in the target env (admin UI `/admin-ui`).
+   Default is OFF. (Note: a deploy that flips this flag can suppress its own
+   end/fail ping — accepted edge case.)
+2. The `devrel-deploys` channel's email **action** must be provisioned in ANS
+   (cockpit / `gen/alerts/provision.sh`) with the real distribution-list address,
+   exactly like `devrel-oncall`.
+3. `CONTENT_API_KEY` must be present in the operator/CI environment running the
+   deploy (it already is, for content publish).
+
+**Blue-green caveat:** a `--strategy blue-green` deploy pauses before the traffic
+swap and exits, so it emits **start** and (on failure) **fail**, but NOT an
+automatic **finished** — the swap happens later via `cf deploy -i <OP_ID> -a resume`.

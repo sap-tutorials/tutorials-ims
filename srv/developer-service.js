@@ -10,6 +10,7 @@ import * as khorosCache from './lib/khoros-cache.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
 import * as metrics from './lib/metrics.js';
 import * as mcpDev from './lib/mcp-developer-tools.js';
+import { maybeAutoSendCompletion } from './lib/ngds-autosend.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
@@ -338,6 +339,7 @@ export default class DeveloperService extends cds.ApplicationService {
       });
 
       if (existing) {
+        const priorStatus = existing.status;
         if (existing.status !== 'COMPLETED') {
           await UPDATE(dbTaskRecords, existing.ID).set({
             status: 'COMPLETED',
@@ -345,7 +347,10 @@ export default class DeveloperService extends cds.ApplicationService {
             completionDate: new Date().toISOString()
           });
         }
-        return SELECT.one.from(dbTaskRecords, existing.ID);
+        const [row] = await SELECT.from(dbTaskRecords).where({ ID: existing.ID });
+        // Fire only on the edge → COMPLETED (skip when it was already complete).
+        await maybeAutoSendCompletion({ record: row, priorStatus, db });
+        return row;
       }
 
       const record = {
@@ -360,7 +365,9 @@ export default class DeveloperService extends cds.ApplicationService {
       };
 
       await INSERT.into(dbTaskRecords).entries(record);
-      return SELECT.one.from(dbTaskRecords).where({ legacyId: record.legacyId });
+      const [persisted] = await SELECT.from(dbTaskRecords).where({ legacyId: record.legacyId });
+      await maybeAutoSendCompletion({ record: persisted, priorStatus: null, db });
+      return persisted;
     });
 
     this.on('findTaskProgressByUserAndTasksIds', async (req) => {
@@ -1073,20 +1080,35 @@ export default class DeveloperService extends cds.ApplicationService {
     );
 
     if (existing) {
+      const priorStatus = existing.status;
       await UPDATE(dbTaskRecords, existing.ID).set({
         progress, status,
         completionDate: status === 'COMPLETED' ? new Date().toISOString() : existing.completionDate
       });
+      // PROD-only auto-send: fire on the edge → COMPLETED (not on repeat saves
+      // of an already-complete tutorial). Re-read to hand the client the
+      // persisted row (legacyId etc.). Gated + non-throwing inside the helper.
+      if (status === 'COMPLETED' && priorStatus !== 'COMPLETED') {
+        const [completed] = await SELECT.from(dbTaskRecords).where({ ID: existing.ID });
+        await maybeAutoSendCompletion({ record: completed, priorStatus, db });
+      }
     } else {
+      const newLegacyId = await getNextLegacyId('TaskRecords', db);
       await INSERT.into(dbTaskRecords).entries({
         user_ID: dbUser.ID,
         taskLegacyId: tutorial.legacyId,
         taskType: 'TUTORIAL',
         status, progress,
         titleSnapshot: tutorial.title,
-        legacyId: await getNextLegacyId('TaskRecords', db),
+        legacyId: newLegacyId,
         attemptNumber: currentAttempt,
       });
+      // New row that lands directly in COMPLETED (single-step tutorial): treat
+      // as a fresh completion (priorStatus null → not previously complete).
+      if (status === 'COMPLETED') {
+        const [completed] = await SELECT.from(dbTaskRecords).where({ legacyId: newLegacyId });
+        await maybeAutoSendCompletion({ record: completed, priorStatus: null, db });
+      }
     }
   }
 

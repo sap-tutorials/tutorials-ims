@@ -99,11 +99,6 @@ const isActivity = computed(() => props.row?.kind === 'activity');
       </div>
     </div>
   </div>
-  <div v-else class="detail-panel detail-panel--empty">
-    <ui5-illustrated-message name="NoData" size="Scene">
-      <div slot="subtitle">Select an activity to see details</div>
-    </ui5-illustrated-message>
-  </div>
 </template>
 
 <style scoped>
@@ -113,14 +108,6 @@ const isActivity = computed(() => props.row?.kind === 'activity');
   z-index: 100;
   display: flex;
   justify-content: flex-end;
-}
-
-.detail-panel--empty {
-  position: static;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
 }
 
 .detail-panel__backdrop {

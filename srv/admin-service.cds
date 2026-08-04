@@ -687,6 +687,11 @@ service AdminService {
   action updateNotificationRecipients(emails : String) returns { updated : Boolean };
   action toggleNotifications(enabled : Boolean) returns { enabled : Boolean };
   function getNotificationConfig() returns { enabled : Boolean; recipients : String };
+  // PROD-only NGDS auto-send kill-switch (ImsConfig 'ngds.autosend.enabled').
+  // Only takes effect when the app is running in the CF 'prod' space; in other
+  // spaces the flag is inert (the env gate in ngds-autosend.js blocks sending).
+  action toggleNgdsAutoSend(enabled : Boolean) returns { enabled : Boolean };
+  function getNgdsAutoSendConfig() returns { enabled : Boolean; environment : String; effective : Boolean };
   action testNotificationEmail(to: String, level: Integer) returns {
     success : Boolean;
     error   : String;

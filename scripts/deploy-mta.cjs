@@ -120,6 +120,37 @@ function shCapture(cmd, args, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Deploy lifecycle alert ping (best-effort). POSTs to the srv's
+// /ops/deploy-event, which raises an ANS alert. NEVER throws, NEVER changes the
+// deploy exit code — a down/misconfigured alerting path must not block a deploy.
+// deps is a test seam: { fetchImpl, apiKey, log }.
+// ---------------------------------------------------------------------------
+async function notifyDeploy(phase, cfg, extra = {}, deps = {}) {
+  const fetchImpl = deps.fetchImpl || globalThis.fetch;
+  const apiKey = deps.apiKey !== undefined ? deps.apiKey : process.env.CONTENT_API_KEY;
+  const logFn = deps.log || warn;
+  if (!apiKey) {
+    logFn(`deploy-event ${phase}: CONTENT_API_KEY not set — skipping alert ping`);
+    return;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetchImpl(`${cfg.srvUrl}/ops/deploy-event`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ phase, ...extra }),
+      signal: controller.signal,
+    });
+    if (!res.ok) logFn(`deploy-event ${phase}: srv returned ${res.status} (ignored)`);
+  } catch (e) {
+    logFn(`deploy-event ${phase}: ping failed (ignored) — ${e.message ?? e}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Step 0: preconditions
 // ---------------------------------------------------------------------------
 function guardPrimaryTreeOnMain() {
@@ -255,7 +286,7 @@ function abortFailedBlueGreen() {
   }
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.help) {
@@ -278,6 +309,7 @@ function main() {
   }
   const envName = args.env;
   const cfg = ENVS[envName];
+  let deployVersion;
 
   console.log(C.cyn('\n══════════════════════════════════════════════════════'));
   console.log(C.cyn(`  Deploy → ${envName.toUpperCase()}`) + (args.dryRun ? C.ylw('  (DRY RUN)') : '') + (args.strategy !== 'default' ? C.ylw(`  [${args.strategy}]`) : ''));
@@ -317,10 +349,12 @@ function main() {
   step(1.5, 'Write srv/version.json (build metadata for GET /version)');
   if (args.skipBuild) {
     warn('--skip-build: leaving the existing srv/version.json (baked into the reused mtar).');
+    deployVersion = readMtaVersion();
   } else if (args.dryRun) {
     warn(`dry-run: would write ${path.relative(ROOT, VERSION_FILE)} from .deploy/mta.yaml version + git sha`);
   } else {
     const v = writeVersionFile();
+    deployVersion = v.version;
     ok(`wrote srv/version.json — version ${v.version} · commit ${v.sha} · built ${v.builtAt}`);
   }
 
@@ -406,9 +440,11 @@ function main() {
     // Windows git-bash does not expand it and cf.exe panics (issue #1226).
     const mtar = newestMtarPath();
     if (!mtar) die(1, `no .mtar found in ${path.relative(ROOT, MTAR_GLOB_DIR)} to deploy. Run without --skip-build, or build the mtar first.`);
+    await notifyDeploy('start', cfg, { env: envName, version: deployVersion });
     const code = sh('cf', ['deploy', mtar, '-e', mtaext, ...strategyFlags, '-f'], { cwd: DEPLOY_DIR });
     if (code !== 0) {
       if (bg) abortFailedBlueGreen();
+      await notifyDeploy('fail', cfg, { env: envName, version: deployVersion, detail: 'cf deploy failed' });
       die(1, '`cf deploy` failed. Check `cf logs` and the deployer output above.');
     }
     if (bg) {
@@ -417,6 +453,7 @@ function main() {
       warn('             cf mta-ops                    # find the RUNNING op id');
       warn('             cf deploy -i <OP_ID> -a resume   # swap to green + retire blue');
       warn('             cf deploy -i <OP_ID> -a abort    # discard green, keep blue');
+      warn('No automatic "deploy finished" alert will fire for blue-green (paused before swap).');
     } else {
       ok(`cf deploy complete (${mtar})`);
     }
@@ -445,9 +482,11 @@ function main() {
     if (code !== 0) {
       console.error('\n' + C.red('[deploy] SMOKE GATE FAILED') + ' — the deploy landed but a post-deploy check regressed.');
       console.error(C.red('         Treat the deployed env as BROKEN until this is triaged.'));
+      await notifyDeploy('fail', cfg, { env: envName, version: deployVersion, detail: 'smoke gate failed' });
       process.exit(2);
     }
     ok('smoke tests passed — deploy verified');
+    await notifyDeploy('end', cfg, { env: envName, version: deployVersion });
   }
 
   console.log('\n' + C.grn('══════════════════════════════════════════════════════'));
@@ -458,4 +497,8 @@ function main() {
   console.log(C.grn('══════════════════════════════════════════════════════') + '\n');
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { notifyDeploy };

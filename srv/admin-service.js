@@ -1623,18 +1623,11 @@ export default class AdminService extends cds.ApplicationService {
       const record = await SELECT.one.from(TaskRecords).where({ legacyId: taskRecordLegacyId });
       if (!record) return req.reject(404, `TaskRecord not found: ${taskRecordLegacyId}`);
 
-      const user = await SELECT.one.from(Users).where({ ID: record.user_ID });
-      const { sendToNgds: send } = await import('./lib/ngds-client.js');
-      const result = await send({
-        uuid: user?.uuid,
-        taskLegacyId: record.taskLegacyId,
-        taskType: record.taskType,
-        taskTitle: record.titleSnapshot || '',
-        completionDate: record.completionDate,
-        eventLegacyId: null,
-        sapId: user?.sapId
-      });
-      return result;
+      // Payload is now assembled inside the client from the persisted record
+      // (resolves parent task title, mission CommunityID, interest-item tags,
+      // and visitor id) so the wire shape matches the legacy Java contract.
+      const { sendTaskRecordToNgds } = await import('./lib/ngds-client.js');
+      return sendTaskRecordToNgds(record, db);
     });
 
     this.on('syncTutorialMetadata', async (req) => {
@@ -1809,6 +1802,37 @@ export default class AdminService extends cds.ApplicationService {
       return {
         enabled: enabledConfig?.value === 'true',
         recipients: recipientsConfig?.value || ''
+      };
+    });
+
+    this.on('toggleNgdsAutoSend', async (req) => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const { enabled } = req.data;
+      const value = String(enabled);
+      const existing = await SELECT.one.from(ImsConfig).where({ key: 'ngds.autosend.enabled' });
+      if (existing) {
+        await UPDATE(ImsConfig, existing.ID).set({ value });
+      } else {
+        await INSERT.into(ImsConfig).entries({ key: 'ngds.autosend.enabled', value });
+      }
+      // Flush the 60s flag cache so the toggle takes effect immediately rather
+      // than after the TTL window.
+      const { resetAutoSendFlagCache } = await import('./lib/ngds-autosend.js');
+      resetAutoSendFlagCache();
+      return { enabled };
+    });
+
+    this.on('getNgdsAutoSendConfig', async () => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const { resolveDeployEnvironment } = await import('./lib/deploy-environment.js');
+      const cfg = await SELECT.one.from(ImsConfig).where({ key: 'ngds.autosend.enabled' });
+      const enabled = cfg?.value === 'true';
+      const env = resolveDeployEnvironment();
+      return {
+        enabled,
+        environment: env.label,
+        // effective = will actually send: the flag is on AND we're in PROD.
+        effective: enabled && env.id === 'prod'
       };
     });
 
