@@ -81,7 +81,14 @@ const trackOptions = computed(() => {
 });
 
 // colours assigned over the FULL track set so they stay stable under filtering
-const colorMap = computed(() => buildTrackColorMap(trackOptions.value));
+const colorMap = computed(() => {
+  const seen = new Map<string, string | undefined>();
+  sessions.value.forEach((r) => {
+    const s = r as any;
+    if (s.trackName && !seen.has(s.trackName)) seen.set(s.trackName, s.trackColor ?? undefined);
+  });
+  return buildTrackColorMap([...seen.entries()].map(([name, color]) => ({ name, color })));
+});
 const legend = computed(() => legendFor(colorMap.value));
 
 const completeCount = computed(() => sessions.value.filter((r) => r.complete).length);
