@@ -54,12 +54,17 @@ function formatLevel(level: string | null) {
 }
 
 function itemUrl(item: Completion): string {
-  const base = item.kind === 'puzzle' ? '/puzzles/' : '/tutorials/'
+  // Petoberfest and puzzles are served from their own content sections, not
+  // /tutorials/ — linking their slug under /tutorials/ 404s (verified live).
+  const base = item.kind === 'puzzle' ? '/puzzles/'
+    : item.kind === 'petoberfest' ? '/petoberfest/'
+    : '/tutorials/'
   return `${base}${item.slug}/`
 }
 
 function itemKindLabel(item: Completion): string {
   if (item.kind === 'puzzle') return 'Puzzle'
+  if (item.kind === 'petoberfest') return 'Petoberfest'
   return item.primaryTag || 'Tutorial'
 }
 

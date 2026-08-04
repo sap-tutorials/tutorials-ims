@@ -83,7 +83,11 @@ function formatLevel(level: string | null) {
 }
 
 function itemUrl(r: Completion): string {
-  const base = r.kind === 'puzzle' ? '/puzzles/' : '/tutorials/'
+  // Petoberfest and puzzles are served from their own content sections, not
+  // /tutorials/ — linking their slug under /tutorials/ 404s (verified live).
+  const base = r.kind === 'puzzle' ? '/puzzles/'
+    : r.kind === 'petoberfest' ? '/petoberfest/'
+    : '/tutorials/'
   return `${base}${r.slug}/`
 }
 
