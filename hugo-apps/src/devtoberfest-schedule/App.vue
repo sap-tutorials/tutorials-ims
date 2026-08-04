@@ -16,6 +16,7 @@ const rows = ref<ScheduleRow[]>([]);
 const earnedPoints = ref(0);
 const maxPoints = ref(0);
 const isAuthenticated = ref(false);
+const joined = ref(false);
 const selectedRow = ref<ScheduleRow | null>(null);
 
 // Exposed for tests
@@ -99,6 +100,7 @@ async function loadData(edition?: string) {
     isAuthenticated.value = myData.authenticated;
     const merged = mergeCompletion(feedData, myData);
     rows.value = merged.rows;
+    joined.value = merged.joined;
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
   } catch (e: any) {
@@ -144,6 +146,7 @@ defineExpose({ filters });
       :max-points="maxPoints"
       :complete-count="completeCount"
       :is-authenticated="isAuthenticated"
+      :joined="joined"
     />
 
     <!-- loading -->
