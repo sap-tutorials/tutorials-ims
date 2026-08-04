@@ -55,7 +55,7 @@ onMounted(async () => {
   <div class="arcade-root">
     <Scene :board="board" :config="config" :demo="demo" />
     <div v-if="cta.kind !== 'none'" class="arcade-cta">
-      <a v-if="cta.kind === 'join'" :href="config.joinUrl" class="arcade-cta-btn">Join Devtoberfest to play</a>
+      <a v-if="cta.kind === 'join'" :href="config.joinUrl" class="arcade-cta-btn">Join the Fest</a>
       <p v-else class="arcade-cta-msg" :class="`arcade-cta-${cta.kind}`">{{ cta.text }}</p>
     </div>
   </div>

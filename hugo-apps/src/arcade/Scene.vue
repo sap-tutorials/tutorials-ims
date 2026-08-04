@@ -61,8 +61,8 @@ const communityUrl = computed(() => props.board.communityUrl || null)
       <SoundToggle :img-base="config.imgBase" />
     </nav>
 
-    <!-- HUD -->
-    <div class="s-banner">{{ banner }}</div>
+    <!-- HUD — points only for a joined participant (never in demo/not-joined). -->
+    <div v-if="!demo" class="s-banner">{{ banner }}</div>
     <!-- the player avatar on its level cloud -->
     <img class="s-avatar" :class="[`cloud-${place.cloud}`, place.bounceClass]" :src="avatar" :alt="`Your avatar, level ${board.level}`" />
     <span v-for="h in place.hearts" :key="h" class="s-heart heart">&#9829;</span>
