@@ -99,9 +99,11 @@ async function myCompletionsHandler(req, res) {
       }
     } catch (e) { LOG.warn('myCompletions facade read failed:', e?.message); }
 
-    // maxPoints (the goal denominator) is the sum of ALL edition activities —
-    // independent of join/date state. earnedPoints is gated: only completions
-    // inside the edition window count, and only when the user has joined.
+    // maxPoints (the goal denominator) is the sum of the edition's visible
+    // (Confirmed/Completed) activities — completedActivityPoints filters hidden
+    // statuses via isVisibleStatus, matching the feed. Independent of join/date
+    // state. earnedPoints is gated: only completions inside the edition window
+    // count, and only when the user has joined.
     const { maxPoints } = completedActivityPoints(activities, new Set());
 
     let earnedPoints = 0;
