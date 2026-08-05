@@ -71,11 +71,18 @@ function parseTimedText(xml) {
   const out = [];
 
   // Modern srv3 <p t=".."> — milliseconds. Word timings live in nested <s>.
-  const pre = /<p\b[^>]*\bt="(\d+)"[^>]*>([\s\S]*?)<\/p>/g;
+  // A cue may omit t when its start is 0 (`<p d="..">`); treat missing as 0.
+  const pre = /<p\b([^>]*)>([\s\S]*?)<\/p>/g;
   let m;
   while ((m = pre.exec(xml))) {
+    const attrs = m[1];
+    // Only treat as srv3 when the <p> carries a timing attribute (t or d);
+    // a bare <p> in some other markup must not be misread as a cue.
+    const tm = /\bt="(\d+)"/.exec(attrs);
+    const dm = /\bd="(\d+)"/.exec(attrs);
+    if (!tm && !dm) continue;
     const text = cleanText(m[2]);
-    if (text) out.push({ start: parseInt(m[1], 10) / 1000, text });
+    if (text) out.push({ start: (tm ? parseInt(tm[1], 10) : 0) / 1000, text });
   }
   if (out.length) return out;
 
