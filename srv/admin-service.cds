@@ -691,7 +691,10 @@ service AdminService {
   // Only takes effect when the app is running in the CF 'prod' space; in other
   // spaces the flag is inert (the env gate in ngds-autosend.js blocks sending).
   action toggleNgdsAutoSend(enabled : Boolean) returns { enabled : Boolean };
-  function getNgdsAutoSendConfig() returns { enabled : Boolean; environment : String; effective : Boolean };
+  // Cutover watermark: completions earned before this ISO date are not sent
+  // (legacy IMS already credited them). Empty/null clears it. See ngds-autosend.js.
+  action setNgdsAutoSendEpoch(epoch : String) returns { epoch : String };
+  function getNgdsAutoSendConfig() returns { enabled : Boolean; environment : String; epoch : String; effective : Boolean };
   action testNotificationEmail(to: String, level: Integer) returns {
     success : Boolean;
     error   : String;

@@ -36,9 +36,21 @@ describe('NGDS auto-send on completion (PROD-only)', () => {
       // sapId must equal the login name — see resolve-db-user.js fallback chain.
       uuid: 'developer', legacyId: 7001, sapId: 'developer'
     });
+    // Second user whose sapId is a canonical SCI uid (P-number). The identity
+    // gate in ngds-autosend.js only sends for canonical P/S/I-numbers, so the
+    // positive send-case below must complete as this user. 'developer' has a
+    // non-canonical sapId and would (correctly) be suppressed.
+    await INSERT.into(Users).entries({
+      ID: 'aaaaaaaa-auto-0000-0000-000000000002',
+      uuid: 'P0009999001', legacyId: 7002, sapId: 'P0009999001'
+    });
     await INSERT.into(Groups).entries({
       ID: 'cccccccc-auto-0000-0000-000000000001',
       slug: 'auto-group', title: 'Auto Group', legacyId: 7100, status: 'ACTIVE'
+    });
+    await INSERT.into(Groups).entries({
+      ID: 'cccccccc-auto-0000-0000-000000000002',
+      slug: 'auto-group-2', title: 'Auto Group 2', legacyId: 7102, status: 'ACTIVE'
     });
     await INSERT.into(Missions).entries({
       ID: 'bbbbbbbb-auto-0000-0000-000000000001',
@@ -73,13 +85,31 @@ describe('NGDS auto-send on completion (PROD-only)', () => {
     const before = await countFailed();
 
     // Fresh (user, task) pair → createTaskRecord takes the INSERT branch and
-    // fires the edge → COMPLETED auto-send.
+    // fires the edge → COMPLETED auto-send. Uses the canonical-sapId user so
+    // the identity gate lets the send through.
     const { status } = await project.post('/api/createTaskRecord',
       { taskLegacyId: 7101, taskType: 'MISSION' },
-      { auth: { username: 'developer', password: 'developer' } });
+      { auth: { username: 'P0009999001', password: 'P0009999001' } });
     expect(status).toBe(200);
 
     // Send was attempted; with no NGDS destination it lands in the retry queue.
     expect(await countFailed()).toBeGreaterThan(before);
+  });
+
+  it('does NOT auto-send when the user has a non-canonical sapId (identity gate)', async () => {
+    process.env.VCAP_APPLICATION = JSON.stringify({ space_name: 'prod' });
+    await setAutoSendFlag(true);
+    const before = await countFailed();
+
+    // 'developer' has sapId='developer' (non-canonical) → unresolvable uid.
+    // The completion still succeeds, but no send is attempted or queued. Uses a
+    // fresh (user, task) pair so it takes the INSERT/edge branch rather than the
+    // already-COMPLETED skip.
+    const { status } = await project.post('/api/createTaskRecord',
+      { taskLegacyId: 7102, taskType: 'GROUP' },
+      { auth: { username: 'developer', password: 'developer' } });
+    expect(status).toBe(200);
+
+    expect(await countFailed()).toBe(before);
   });
 });
