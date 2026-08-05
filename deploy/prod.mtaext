@@ -21,10 +21,8 @@ modules:
       instances: 2
 
   - name: tutorials-approuter
-    # No prod-specific `properties:` overrides. REBUILD_API_KEY is credstore-only
-    # (PR #903 rollout step 3 / #871 follow-up); APPROUTER_URL was removed (no
-    # runtime readers). An empty `properties:` mapping parses as null and is
-    # rejected by the deployer, so it is omitted rather than left blank.
+    # REBUILD_API_KEY is credstore-only (PR #903 rollout step 3 / #871 follow-up);
+    # APPROUTER_URL was removed (no runtime readers).
     parameters:
       app-name: tutorials-prod-approuter
       instances: 2
@@ -35,6 +33,18 @@ modules:
       # dynamically from the bound xsuaa VCAP credentials + request host, so no
       # per-env config is needed — the prod tenant/region resolve automatically
       # from the xsuaa-imsprod binding, resolving the old "verify prod tenant" TODO.
+    properties:
+      # TEMPORARY (developers.sap.com DNS cutover test). Forces the approuter to
+      # build OAuth redirect_uri / host-derived URLs against this fixed external
+      # host, because the temporary Akamai vanity host developers-qa.sap.com is
+      # NOT forwarding X-Forwarded-Host to the origin yet (the approuter otherwise
+      # sees its own *.cfapps host and the login callback fails). Read by
+      # approuter/lib/force-forwarded-host.js. Allowlisted in xs-security-prod.json
+      # (PR #1495). LIFECYCLE: set to developers-qa.sap.com to validate login on
+      # the QA host now; flip to developers.sap.com at DNS cutover, or remove this
+      # property entirely once Akamai forwards the real host natively. Unset =>
+      # middleware is a no-op.
+      FORCE_FORWARDED_HOST: developers-qa.sap.com
 
 resources:
   - name: tutorials-xsuaa
