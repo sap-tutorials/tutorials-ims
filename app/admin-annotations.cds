@@ -621,6 +621,7 @@ annotate AdminService.TutorialMeta with {
             { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: owner, ValueListProperty: 'owner' }
           ]
         };
+  ownerEmail @Common.Label: 'Owner Email' @Common.FieldControl: #ReadOnly;
 };
 
 annotate AdminService.Tutorials with @UI: {
@@ -629,7 +630,7 @@ annotate AdminService.Tutorials with @UI: {
     Title: { Value: title },
     Description: { Value: slug }
   },
-  SelectionFields: [ title, primaryTag, experienceTag, status, meta.owner, isolated ],
+  SelectionFields: [ title, primaryTag, experienceTag, status, meta.owner, meta.ownerEmail, isolated ],
   LineItem: [
     { Value: legacyIdStr },
     { Value: title },
@@ -639,6 +640,7 @@ annotate AdminService.Tutorials with @UI: {
     { Value: averageTimeToComplete },
     { Value: status },
     { Value: meta.owner, Label: 'Owner' },
+    { Value: meta.ownerEmail, Label: 'Owner Email' },
     { Value: redirectTo.title, Label: 'Redirect To' },
     // #918 — Isolated column. Criticality 1 (Negative/red) when this
     // tutorial's WCC size is <= KG_WCC_ISOLATION_THRESHOLD (default 1).
@@ -669,7 +671,8 @@ annotate AdminService.Tutorials with @UI: {
     { Value: primaryTag },
     { Value: experienceTag },
     { Value: averageTimeToComplete },
-    { Value: meta.owner, Label: 'Owner' }
+    { Value: meta.owner, Label: 'Owner' },
+    { Value: meta.ownerEmail, Label: 'Owner Email' }
   ]},
   FieldGroup#Lifecycle: { Data: [
     { Value: status },

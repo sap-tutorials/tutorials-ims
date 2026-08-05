@@ -38,7 +38,12 @@ service AdminService {
   // not just title. description is a LargeString, search-only here (not a VH
   // column). Fixes valid rows (e.g. cp-aibus-dox-ui-sub) being unfindable
   // behind a title-only match across ~2000 paged tutorials.
-  @cds.search: { title, slug, primaryTag, description }
+  //
+  // meta.owner + meta.ownerEmail extend $search across the TutorialMeta
+  // composition so the List Report search box matches by owner name OR
+  // owner email. Improves findability where owner-name text is inconsistent
+  // (umlaut vs ASCII, e.g. "Matthäus Schüle" vs "Matthaeus Schuele").
+  @cds.search: { title, slug, primaryTag, description, meta.owner, meta.ownerEmail }
   entity Tutorials as projection on ims.Tutorials {
     *,
     cast(legacyId as String) as legacyIdStr : String,
