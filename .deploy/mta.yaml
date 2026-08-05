@@ -10,7 +10,7 @@ ID: tutorials-ims
 # Bump this on each release you deploy — it's the version shown by `cf mtas`
 # and in the mtar filename (tutorials-ims_<version>.mtar). Deploy is manual:
 # `cd .deploy && mbt build && cf deploy mta_archives/tutorials-ims_<version>.mtar -e ../deploy/<env>.mtaext -f`.
-version: 1.11.1
+version: 1.11.2
 
 # Top-level parameters (overridable per-env via deploy/<env>.mtaext).
 parameters:

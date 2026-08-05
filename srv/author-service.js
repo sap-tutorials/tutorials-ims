@@ -6,7 +6,7 @@ import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
-import { resolveDbUser, resolveUserSapId, backfillUserProfile } from './lib/resolve-db-user.js';
+import { resolveDbUser, resolveUserSapId, provisionDbUser } from './lib/resolve-db-user.js';
 import { AUTHOR_EXPOSED_ENTITIES } from './lib/author-exposed-entities.js'; // #1089
 
 const OS_VALUES = ['Windows', 'macOS', 'Linux', 'BAS'];
@@ -115,14 +115,17 @@ export default cds.service.impl(async function () {
       return req.reject(401, 'Authentication required');
     }
     // See assertOwnership above for the req.user.id-vs-Users.uuid rationale.
-    // resolveDbUser falls back to req.user.id for non-JWT auth contexts
-    // (basic-auth tech users, tests, mock contexts) so old behavior is
-    // preserved there.
-    const dbUser = await resolveDbUser(req.user, ['uuid']);
+    // provisionDbUser is get-or-create keyed on sapId: it mints the Users row
+    // from THIS caller's JWT claims when none exists yet (the common case for
+    // Sage-authenticated authors who never browser-logged-in — the migrator
+    // never created their row), and fills blank name/email on an existing row.
+    // Both make the priority-3 (ownerEmail) and priority-4 (name) join signals
+    // resolvable for THIS request's view query. Falls back to req.user.id for
+    // non-JWT auth contexts (basic-auth tech users, tests, mock contexts).
+    const dbUser = await provisionDbUser(req.user, ['uuid']);
     if (!dbUser?.uuid) {
-      // No Users row for this caller — could be a fresh-login user whose
-      // row hasn't been auto-provisioned yet, or a test context with no
-      // matching sapId, or (#1027) a token minted against a stale XSUAA
+      // Still no Users row — genuinely anonymous, a token with no usable
+      // profile claims, or (#1027) a token minted against a stale XSUAA
       // client whose user_uuid doesn't match any Users.sapId. Return zero
       // rows rather than 401: the user IS authenticated; they simply own
       // no tutorials. Log at WARN so the diagnostic is grep-able next
@@ -131,15 +134,6 @@ export default cds.service.impl(async function () {
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }
-    // #339 followup — Sage path self-heal. backfillUserProfile only ran on
-    // the browser's GET /auth/user, so Sage-authenticated callers (who never
-    // hit that endpoint) left Users.firstName/lastName/email blank forever —
-    // which zeroed MyOwnedTutorials' priority-3 (ownerEmail) and priority-4
-    // (owner = firstName ‖ ' ' ‖ lastName) joins. Await it here so the freshly
-    // written name is visible to THIS request's view query, not just the next.
-    // Idempotent (fills blanks only); safe to await on every read.
-    await backfillUserProfile(req.user).catch((err) =>
-      cds.log('author-service').warn('[backfill-user-profile]', err.message));
     req.query.where({ userId: dbUser.uuid });
   });
 
@@ -152,36 +146,32 @@ export default cds.service.impl(async function () {
     if (!req.user?.id || req.user.id === 'anonymous') {
       return req.reject(401, 'Authentication required');
     }
-    const dbUser = await resolveDbUser(req.user, ['uuid']);
+    const dbUser = await provisionDbUser(req.user, ['uuid']);
     if (!dbUser?.uuid) {
       warnUsersRowMiss(cds.log('author-service'), 'MyAuthoredTutorials', req.user);
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }
-    await backfillUserProfile(req.user).catch((err) =>
-      cds.log('author-service').warn('[backfill-user-profile]', err.message));
     req.query.where({ userId: dbUser.uuid });
   });
 
   // #862 reopen — MyOwnedTutorials is Sage's "My Tutorials" panel. The
   // projection sources from MyTutorialsView.bestPriority IN (3, 4) —
-  // either ownerEmail match OR owner-display-name match. Stamps userId
-  // from resolveDbUser so both joins are caller-scoped. #923's
-  // MyMonitoredTutorialsView repoint was reverted; see srv/author-
-  // service.cds for the rationale. TutorialMonitors + toggleMonitor
-  // from #923 remain for the eye-icon watch feature.
+  // either ownerEmail match OR owner-display-name match. provisionDbUser
+  // stamps a caller-scoped userId AND ensures the row exists so both joins
+  // can hit. #923's MyMonitoredTutorialsView repoint was reverted; see
+  // srv/author-service.cds for the rationale. TutorialMonitors +
+  // toggleMonitor from #923 remain for the eye-icon watch feature.
   this.before('READ', MyOwnedTutorials, async (req) => {
     if (!req.user?.id || req.user.id === 'anonymous') {
       return req.reject(401, 'Authentication required');
     }
-    const dbUser = await resolveDbUser(req.user, ['uuid']);
+    const dbUser = await provisionDbUser(req.user, ['uuid']);
     if (!dbUser?.uuid) {
       warnUsersRowMiss(cds.log('author-service'), 'MyOwnedTutorials', req.user);
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }
-    await backfillUserProfile(req.user).catch((err) =>
-      cds.log('author-service').warn('[backfill-user-profile]', err.message));
     req.query.where({ userId: dbUser.uuid });
   });
 

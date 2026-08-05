@@ -37,6 +37,7 @@
 // Returns null for anonymous; callers MUST handle null.
 
 import cds from '@sap/cds';
+import { getNextLegacyId } from './legacy-id.js';
 
 /**
  * Extract the SAP ID for the authenticated user from the request context.
@@ -135,4 +136,93 @@ export async function backfillUserProfile(user) {
 
   await UPDATE(Users).where({ sapId }).set(updates);
   return { backfilled: true, fields: Object.keys(updates) };
+}
+
+/**
+ * Get-or-create the Users row for the authenticated request, keyed on sapId.
+ *
+ * **Why this exists (SAGE ownership under-reporting):**
+ *
+ * backfillUserProfile above is UPDATE-only — it no-ops (`reason: 'no-user'`)
+ * when the caller has no Users row yet. That's the common case for the
+ * ~797k migrated learners AND for tutorial authors who have never logged
+ * into the browser Admin UI: the migrator (scripts/migrate-from-hana.js)
+ * copied only ID/UUID/SAP_ID, never profile fields, and never created rows
+ * for users who existed only in legacy IMS's author tables.
+ *
+ * The AuthorService MyTutorials-family read handlers resolve ownership by
+ * joining TutorialMeta.owner/ownerEmail to a Users row (db/views.cds
+ * MyTutorialsRaw priority 3 = ownerEmail=Users.email, priority 4 =
+ * owner=firstName||' '||lastName). With no Users row, those joins return
+ * zero — so SAGE under-reports for every author who hasn't been provisioned,
+ * not just one. This helper closes that gap by minting the row from the
+ * caller's OWN JWT claims on first authenticated call.
+ *
+ * Generalizes the get-or-create INSERT already used in developer-service.js
+ * (completeStep / setLearningPreferences / setPreferredEventRegion) so the
+ * read path and the write path can't diverge.
+ *
+ * Semantics:
+ *   - Anonymous / no sapId → returns null (callers keep their fail-closed guard).
+ *   - Existing row → opportunistically fills blank firstName/lastName/email
+ *     from JWT claims (same as backfillUserProfile), then returns it.
+ *   - No row + JWT carries a usable identity → INSERTs a row from claims,
+ *     then re-selects and returns it. Concurrent first-calls race safely:
+ *     a unique-violation on sapId is swallowed and the winning row returned.
+ *   - No row + no usable claims (no email AND no name) → does NOT invent an
+ *     empty-profile row; returns null so the caller stays fail-closed. This
+ *     matches backfillUserProfile's "nothing to write" posture and avoids
+ *     minting useless rows for tokens that carry no profile.
+ *
+ * @param {object} user — see resolveUserSapId.
+ * @param {string[]} [columns] — optional columns subset for the returned row.
+ * @returns {Promise<object | null>} the Users row, or null if anonymous /
+ *   unprovisionable.
+ */
+export async function provisionDbUser(user, columns) {
+  const sapId = resolveUserSapId(user);
+  if (!sapId) return null;
+
+  const { Users } = cds.entities('com.sap.developers.ims');
+  const select = () => {
+    let q = SELECT.one.from(Users).where({ sapId });
+    if (columns && columns.length) q = q.columns(...columns);
+    return q;
+  };
+
+  const existing = await select();
+  if (existing) {
+    // Fill blanks from claims (idempotent; UPDATE-only when something's blank).
+    await backfillUserProfile(user).catch((err) =>
+      cds.log('resolve-db-user').warn('[provision-backfill]', err?.message ?? err));
+    // Re-select so the freshly-filled fields are visible to the caller.
+    return await select();
+  }
+
+  // No row yet. Only provision when the JWT carries a usable identity —
+  // otherwise a bare token would mint an empty-profile row that resolves
+  // nothing. Same claim shape as backfillUserProfile.
+  const claimFirstName = user.attr?.given_name || user.attr?.givenName;
+  const claimLastName  = user.attr?.family_name || user.attr?.familyName;
+  const claimEmail     = user.attr?.email;
+  if (!claimEmail && !claimFirstName && !claimLastName) return null;
+
+  const db = await cds.connect.to('db');
+  try {
+    await INSERT.into(Users).entries({
+      uuid: user.id,
+      sapId,
+      legacyId: await getNextLegacyId('Users', db),
+      email: claimEmail || '',
+      firstName: claimFirstName || '',
+      lastName: claimLastName || '',
+    });
+  } catch (err) {
+    // Concurrent first-call race: another request provisioned the same sapId
+    // between our SELECT and INSERT. The invariant is "row exists after this
+    // call" — it does; fall through to the re-select. Only swallow the
+    // uniqueness collision; rethrow anything else.
+    if (!/unique|duplicate|assert|constraint/i.test(String(err?.message ?? ''))) throw err;
+  }
+  return await select();
 }

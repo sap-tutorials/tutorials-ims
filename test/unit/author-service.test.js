@@ -382,21 +382,28 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
     expect(rows).toHaveLength(0);
   });
 
-  // #1027 — diagnostic surface: when the caller authenticates but has no
-  // matching Users row (stale OAuth clientId, wrong IdP, un-provisioned
-  // token, ...), the handler MUST log a WARN so `cf logs tutorials-srv
-  // --recent | grep 'Users-row miss'` finds it. Silent 0-row responses
-  // hid the real failure mode on #1027 for the better part of an
-  // afternoon; the log line is the fix.
-  it('logs a Users-row miss WARN when caller has no matching Users row (#1027)', async () => {
+  // #1027 — diagnostic surface: when the caller authenticates but STILL has
+  // no Users row after provisioning is attempted (a token that carries no
+  // usable profile claims — no email, no given/family name — so
+  // provisionDbUser can't mint a row), the handler MUST log a WARN so
+  // `cf logs tutorials-srv --recent | grep 'Users-row miss'` finds it.
+  // Silent 0-row responses hid the real failure mode on #1027 for the better
+  // part of an afternoon; the log line is the fix.
+  //
+  // NOTE (SAGE-ownership fix): a caller WITH profile claims but no Users row
+  // no longer reaches this branch — provisionDbUser now mints the row from
+  // the claims (see the get-or-create test below), so the miss only fires for
+  // genuinely un-provisionable tokens.
+  it('logs a Users-row miss WARN when the caller cannot be provisioned (#1027)', async () => {
     const authorLog = cds.log('author-service');
     const originalWarn = authorLog.warn;
     const warnCalls = [];
     authorLog.warn = (...args) => { warnCalls.push(args.join(' ')); };
     try {
       const srv = await cds.connect.to('AuthorService');
+      // No `attr` claims → provisionDbUser returns null → miss branch.
       await srv.tx(
-        { user: { id: 'no-such-user', attr: { email: 'ghost@example.com' }, roles: { 'Tutorial.Author': true } } },
+        { user: { id: 'no-such-user', roles: { 'Tutorial.Author': true } } },
         (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
       );
       const missLine = warnCalls.find((s) => s.includes('[Users-row miss]'));
@@ -405,13 +412,43 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
       // are distinguishable) and the resolved sapId (direct FK into Users.sapId).
       expect(missLine).toContain('endpoint=MyOwnedTutorials');
       expect(missLine).toContain('resolved-sapId=no-such-user');
-      // PII gate: the caller's email and free-text user.id are user-identifiable
-      // information and MUST NOT appear in application logs. sapId alone is
-      // sufficient for the correlation the log line documents.
-      expect(missLine).not.toContain('ghost@example.com');
-      expect(missLine).not.toContain('attr.email');
     } finally {
       authorLog.warn = originalWarn;
+    }
+  });
+
+  // SAGE-ownership fix: a caller WITH profile claims but no Users row is now
+  // PROVISIONED (row minted from JWT claims) rather than logged as a miss.
+  it('provisions a Users row from JWT claims instead of logging a miss (SAGE fix)', async () => {
+    const authorLog = cds.log('author-service');
+    const originalWarn = authorLog.warn;
+    const warnCalls = [];
+    authorLog.warn = (...args) => { warnCalls.push(args.join(' ')); };
+    const { Users } = cds.entities('com.sap.developers.ims');
+    const sapId = 'prov-unit-sapId';
+    try {
+      const srv = await cds.connect.to('AuthorService');
+      await srv.tx(
+        {
+          user: {
+            id: 'prov-unit@example.com',
+            attr: { email: 'prov-unit@example.com', given_name: 'Prov', family_name: 'Unit' },
+            authInfo: { token: { userId: sapId } },
+            roles: { 'Tutorial.Author': true },
+          },
+        },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      // No miss logged — the row was minted.
+      expect(warnCalls.find((s) => s.includes('[Users-row miss]'))).toBeUndefined();
+      const row = await SELECT.one.from(Users).where({ sapId });
+      expect(row).toBeTruthy();
+      expect(row.email).toBe('prov-unit@example.com');
+      expect(row.firstName).toBe('Prov');
+      expect(row.lastName).toBe('Unit');
+    } finally {
+      authorLog.warn = originalWarn;
+      try { await DELETE.from(Users).where({ sapId }); } catch (e) { /* swallow */ }
     }
   });
 

@@ -110,4 +110,100 @@ describe.runIf(isSafeForWrites())('AuthorService on HANA', () => {
     const afterMs = Date.parse(after.modifiedAt || '2000-01-01');
     expect(afterMs).toBeGreaterThan(beforeMs);
   });
+
+  // SAGE-ownership fix: provisionDbUser mints a Users row from the caller's
+  // JWT claims when none exists, so an author who has never been provisioned
+  // (the ~105-owner prod gap) resolves their owned tutorials on first call.
+  describe('provisionDbUser get-or-create (SAGE ownership resolution)', () => {
+    const PROV_SAP_ID = `${RUN_ID}-PROVSAP`;
+    const PROV_EMAIL = `${RUN_ID}-prov@example.com`;
+    const PROV_SLUG = `${RUN_ID}-prov-slug`;
+    let provTutorialId;
+    let provMetaId;
+
+    beforeAll(async () => {
+      const { Tutorials, TutorialMeta } = cds.entities('com.sap.developers.ims');
+      const { getNextLegacyId } = await import('../../srv/lib/legacy-id.js');
+      const db = await cds.connect.to('db');
+
+      // Seed a tutorial owned (by email) by a user who has NO Users row yet.
+      const tLegacy = await getNextLegacyId('Tutorials', db);
+      await INSERT.into(Tutorials).entries({
+        slug: PROV_SLUG, title: `${TEST_PREFIX} prov tutorial`, status: 'ACTIVE', legacyId: tLegacy,
+      });
+      provTutorialId = (await SELECT.one.from(Tutorials).where({ slug: PROV_SLUG })).ID;
+
+      const mLegacy = await getNextLegacyId('TutorialMeta', db);
+      await INSERT.into(TutorialMeta).entries({
+        tutorial_ID: provTutorialId,
+        owner: `${TEST_PREFIX} ProvTest`,
+        ownerEmail: PROV_EMAIL,
+        monitoredStatus: 'ACTIVE', notificationNumber: 0, legacyId: mLegacy,
+      });
+      provMetaId = (await SELECT.one.from(TutorialMeta).where({ tutorial_ID: provTutorialId })).ID;
+    });
+
+    afterAll(async () => {
+      const { Users, Tutorials, TutorialMeta } = cds.entities('com.sap.developers.ims');
+      if (provMetaId) { try { await DELETE.from(TutorialMeta).where({ ID: provMetaId }); } catch (e) { /* swallow */ } }
+      if (provTutorialId) { try { await DELETE.from(Tutorials).where({ ID: provTutorialId }); } catch (e) { /* swallow */ } }
+      try { await DELETE.from(Users).where({ sapId: PROV_SAP_ID }); } catch (e) { /* swallow */ }
+    });
+
+    it('mints a Users row from JWT claims when none exists, then MyTutorialsView resolves the owned tutorial', async () => {
+      const { Users, MyTutorialsView } = cds.entities('com.sap.developers.ims');
+      const { provisionDbUser } = await import('../../srv/lib/resolve-db-user.js');
+
+      // Precondition: no Users row for this sapId.
+      expect(await SELECT.one.from(Users).where({ sapId: PROV_SAP_ID })).toBeFalsy();
+
+      // JWT-shaped caller: user.id is the email (Users.uuid), sapId in token,
+      // profile in claims.
+      const user = {
+        id: PROV_EMAIL,
+        attr: { email: PROV_EMAIL, given_name: TEST_PREFIX, family_name: 'ProvTest' },
+        authInfo: { token: { userId: PROV_SAP_ID } },
+      };
+
+      const provisioned = await provisionDbUser(user, ['uuid']);
+      expect(provisioned?.uuid).toBe(PROV_EMAIL);
+
+      // Row now exists with the claim profile.
+      const row = await SELECT.one.from(Users).where({ sapId: PROV_SAP_ID });
+      expect(row).toBeTruthy();
+      expect(row.email).toBe(PROV_EMAIL);
+      expect(row.firstName).toBe(TEST_PREFIX);
+      expect(row.lastName).toBe('ProvTest');
+
+      // The owned tutorial now resolves through the view (priority-3 ownerEmail).
+      const rows = await SELECT.from(MyTutorialsView).where({ userId: row.uuid });
+      const match = rows.find(r => r.ID === provTutorialId);
+      expect(match).toBeTruthy();
+      expect(match.slug).toBe(PROV_SLUG);
+    });
+
+    it('is idempotent + race-safe: a second call returns the same row, no duplicate', async () => {
+      const { Users } = cds.entities('com.sap.developers.ims');
+      const { provisionDbUser } = await import('../../srv/lib/resolve-db-user.js');
+      const user = {
+        id: PROV_EMAIL,
+        attr: { email: PROV_EMAIL, given_name: TEST_PREFIX, family_name: 'ProvTest' },
+        authInfo: { token: { userId: PROV_SAP_ID } },
+      };
+      const again = await provisionDbUser(user, ['uuid']);
+      expect(again?.uuid).toBe(PROV_EMAIL);
+      const all = await SELECT.from(Users).where({ sapId: PROV_SAP_ID });
+      expect(all.length).toBe(1);
+    });
+
+    it('returns null and mints nothing when the token carries no usable profile claims', async () => {
+      const { Users } = cds.entities('com.sap.developers.ims');
+      const { provisionDbUser } = await import('../../srv/lib/resolve-db-user.js');
+      const noClaimSapId = `${RUN_ID}-NOCLAIM`;
+      const user = { id: 'noclaim@example.com', authInfo: { token: { userId: noClaimSapId } } };
+      const result = await provisionDbUser(user, ['uuid']);
+      expect(result).toBeNull();
+      expect(await SELECT.one.from(Users).where({ sapId: noClaimSapId })).toBeFalsy();
+    });
+  });
 });
