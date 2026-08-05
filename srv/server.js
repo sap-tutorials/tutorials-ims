@@ -1284,6 +1284,15 @@ cds.on('served', async () => {
     // mints the row from THIS caller's claims when absent, so a browser login
     // fixes ownership resolution up-front (parity with the AuthorService read
     // handlers). Fire-and-forget; never block the response on this self-heal.
+    //
+    // Best-effort by design: this is NOT awaited, so the INSERT may still be in
+    // flight when the response returns, and it runs against the request's
+    // closing tx. Do not rely on the browser path having committed a row by the
+    // time /auth/user responds — the RELIABLE provision is the awaited
+    // provisionDbUser inside the AuthorService before('READ') handlers. This
+    // call is a convenience so a browser login also warms the row; the
+    // /auth/user response itself is unaffected (id/email/name all come straight
+    // from the token, not this write).
     provisionDbUser(user).catch(err =>
       console.warn('[provision-user]', err.message));
     // Issue #566: fetch Khoros link state from the Users row. We need a DB read
