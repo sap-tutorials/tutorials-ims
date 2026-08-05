@@ -93,7 +93,27 @@ function extractGithubLogin(profile) {
   return login;
 }
 
-// Given the current row + resolved frontmatter/user signals, decide the
+// Normalize a person name for matching frontmatter author_name against
+// Users.firstName+lastName. The two sources disagree on diacritics: tutorial
+// frontmatter uses German umlauts ("Matthäus Schüle"), while Users rows are
+// populated from SAP IDP JWT claims in ASCII transliteration ("Matthaeus
+// Schuele"). Apply German transliteration (ä→ae ö→oe ü→ue ß→ss) FIRST, then
+// strip any remaining accents (é→e), collapse whitespace, lowercase.
+// Order matters: ü→ue must run before generic accent-strip (which would give
+// ü→u → "schule", missing "schuele").
+function normalizeName(name) {
+  if (!name || typeof name !== 'string') return '';
+  return name
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+    .replace(/Ä/g, 'Ae').replace(/Ö/g, 'Oe').replace(/Ü/g, 'Ue')
+    .replace(/ß/g, 'ss')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip remaining accents (combining marks)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+
 // owner/ownerEmail/githubLogin actions. Pure — the heart of the reconciliation
 // and the unit-test surface.
 //
@@ -252,15 +272,18 @@ async function main() {
   await cds.connect.to('db');
   const { TutorialMeta, Tutorials, Users } = cds.entities('com.sap.developers.ims');
 
-  // Preload Users → maps by login / name / email.
+  // Preload Users → maps by login and by normalized name.
   const users = await SELECT.from(Users).columns('ID', 'email', 'firstName', 'lastName', 'githubLogin');
   const usersByLogin = new Map();
-  const usersByName = new Map();
+  const usersByNormName = new Map();
   for (const u of users) {
     if (u.githubLogin) usersByLogin.set(u.githubLogin.toLowerCase(), u);
-    if (u.firstName && u.lastName) usersByName.set(`${u.firstName} ${u.lastName}`.toLowerCase(), u);
+    if (u.firstName && u.lastName) {
+      const key = normalizeName(`${u.firstName} ${u.lastName}`);
+      if (key) usersByNormName.set(key, u);
+    }
   }
-  log.info(`loaded ${users.length} users (${usersByLogin.size} with githubLogin)`);
+  log.info(`loaded ${users.length} users (${usersByLogin.size} with githubLogin, ${usersByNormName.size} name-indexed)`);
 
   // Preload Tutorials (slug map) + TutorialMeta. Preload rather than WHERE-IN
   // (the id list exceeds HANA's packet cap — see scrub script note).
@@ -289,8 +312,17 @@ async function main() {
       }
     }
 
-    // Resolve the Users row from the frontmatter login (for ownerEmail + seed).
-    const user = fm && fm.githubLogin ? (usersByLogin.get(fm.githubLogin.toLowerCase()) || null) : null;
+    // Resolve the Users row for ownerEmail + githubLogin seeding. Try the
+    // frontmatter github login first (strongest signal), then fall back to a
+    // normalized name match (author_name → Users.firstName+lastName, with
+    // umlaut transliteration — the primary path today since Users.githubLogin
+    // is empty but ~24 authors have a name+email from their JWT-provisioned row).
+    let user = null;
+    if (fm && fm.githubLogin) user = usersByLogin.get(fm.githubLogin.toLowerCase()) || null;
+    if (!user && fm && fm.authorName) {
+      const nk = normalizeName(fm.authorName);
+      if (nk) user = usersByNormName.get(nk) || null;
+    }
 
     const d = buildOwnerDecision(
       { owner: meta.owner, ownerEmail: meta.ownerEmail },
@@ -373,10 +405,13 @@ async function main() {
   log.info(`committed: owner=${ownerWrites} ownerEmail=${emailWrites} githubLogin=${loginWrites}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Run main() only when invoked directly (not when require()'d by unit tests).
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
 
-// Export the pure decision fn + login parser for unit tests.
-module.exports = { buildOwnerDecision, extractGithubLogin };
+// Export the pure helpers for unit tests.
+module.exports = { buildOwnerDecision, extractGithubLogin, normalizeName };

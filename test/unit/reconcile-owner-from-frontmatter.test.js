@@ -11,8 +11,34 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { buildOwnerDecision, extractGithubLogin } =
+const { buildOwnerDecision, extractGithubLogin, normalizeName } =
   require('../../scripts/reconcile-tutorial-owner-from-frontmatter.cjs');
+
+describe('normalizeName (German transliteration + accent-strip)', () => {
+  it('matches umlaut frontmatter name to ASCII Users-row name (the Matthäus case)', () => {
+    // Frontmatter "Matthäus Schüle" vs Users "Matthaeus Schuele" — must match.
+    expect(normalizeName('Matthäus Schüle')).toBe(normalizeName('Matthaeus Schuele'));
+    expect(normalizeName('Matthäus Schüle')).toBe('matthaeus schuele');
+  });
+  it('transliterates ä→ae ö→oe ü→ue ß→ss before generic accent-strip', () => {
+    expect(normalizeName('Jürgen Groß')).toBe('juergen gross');
+    expect(normalizeName('Björn Öman')).toBe('bjoern oeman');
+  });
+  it('strips non-German accents (é→e) and collapses/lowercases', () => {
+    expect(normalizeName('Céline  Audin')).toBe('celine audin');
+    expect(normalizeName('  DJ   Adams ')).toBe('dj adams');
+  });
+  it('returns empty string for blank/non-string', () => {
+    expect(normalizeName('')).toBe('');
+    expect(normalizeName(null)).toBe('');
+    expect(normalizeName(undefined)).toBe('');
+  });
+  it('does NOT collapse Schüle→Schule (which would miss Schuele)', () => {
+    // Guards the ordering bug: generic accent-strip alone gives ü→u.
+    expect(normalizeName('Schüle')).toBe('schuele');
+    expect(normalizeName('Schüle')).not.toBe('schule');
+  });
+});
 
 describe('extractGithubLogin', () => {
   it('extracts the login from a github.com profile URL', () => {
