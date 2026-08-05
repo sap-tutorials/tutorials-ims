@@ -44,7 +44,34 @@ describe('buildOwnerDecision — owner (frontmatter wins)', () => {
     );
     expect(d.ownerAction).toBe('overwrite');
     expect(d.newOwner).toBe('Matthäus Schüle');
-    // ownerEmail already set → not clobbered (fill-NULL only).
+    // ownerEmail belonged to the OLD owner (Achim). With the new author (Matthäus)
+    // resolvable to a Users row, recompute it to the new email.
+    expect(d.ownerEmailAction).toBe('overwrite');
+    expect(d.newOwnerEmail).toBe('matthaeus.schuele@sap.com');
+  });
+
+  it('on overwrite with an UNRESOLVABLE new author, CLEARS the stale old-owner email', () => {
+    // The real prod case today: Users.githubLogin is empty, so the new author's
+    // login resolves to no Users row → we must NOT leave Achim's email under
+    // Matthäus's name. Null it instead (fillable later once githubLogin seeded).
+    const d = buildOwnerDecision(
+      { owner: 'Achim Seubert', ownerEmail: 'achim.seubert@sap.com' },
+      { authorName: 'Matthäus Schüle', githubLogin: 'MatthaeusSchuele' },
+      null, // no matching Users row
+    );
+    expect(d.ownerAction).toBe('overwrite');
+    expect(d.newOwner).toBe('Matthäus Schüle');
+    expect(d.ownerEmailAction).toBe('clear');
+    expect(d.newOwnerEmail).toBeNull();
+  });
+
+  it('on overwrite where the existing email already matches the new author, no-change', () => {
+    const d = buildOwnerDecision(
+      { owner: 'Old Name', ownerEmail: 'matthaeus.schuele@sap.com' },
+      { authorName: 'Matthäus Schüle', ...login },
+      user,
+    );
+    expect(d.ownerAction).toBe('overwrite');
     expect(d.ownerEmailAction).toBe('no-change');
   });
 

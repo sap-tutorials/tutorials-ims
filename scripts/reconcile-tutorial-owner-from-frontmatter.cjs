@@ -129,9 +129,31 @@ function buildOwnerDecision(cur, fm, user) {
     out.newOwner = fmName;
   }
 
-  // ── ownerEmail ← resolved Users.email (FILL-NULL only) ──
+  // ── ownerEmail ──
+  // Two regimes:
+  //  - owner OVERWRITE (a DIFFERENT person now owns this): the existing
+  //    ownerEmail belongs to the OLD owner and is now WRONG. Recompute it to
+  //    the new author's resolved email, or NULL it if unresolvable — never
+  //    leave the previous owner's email under a new owner name. (NULL is
+  //    correctly fillable later once githubLogin seeding resolves the user.)
+  //  - otherwise (fill / no-change / skip owner): FILL-NULL only — never
+  //    clobber an existing monitoring signal for the SAME owner.
   const resolvedEmail = user && user.email ? user.email : null;
-  if (cur.ownerEmail && cur.ownerEmail.trim()) {
+  if (out.ownerAction === 'overwrite') {
+    const curEmail = (cur.ownerEmail ?? '').trim();
+    if (resolvedEmail && resolvedEmail.toLowerCase() === curEmail.toLowerCase()) {
+      out.ownerEmailAction = 'no-change';
+    } else if (resolvedEmail) {
+      out.ownerEmailAction = 'overwrite';
+      out.newOwnerEmail = resolvedEmail;
+    } else if (curEmail) {
+      // Stale email from the previous owner, and we can't resolve a new one → clear it.
+      out.ownerEmailAction = 'clear';
+      out.newOwnerEmail = null;
+    } else {
+      out.ownerEmailAction = 'skip'; // already empty, nothing to resolve
+    }
+  } else if (cur.ownerEmail && cur.ownerEmail.trim()) {
     out.ownerEmailAction = 'no-change';
   } else if (resolvedEmail) {
     out.ownerEmailAction = 'fill';
@@ -250,7 +272,7 @@ async function main() {
   const rows = [];
   const counts = {
     ownerOverwrite: 0, ownerFill: 0, ownerNoChange: 0, ownerNoFrontmatter: 0,
-    emailFill: 0, loginSeed: 0,
+    emailFill: 0, emailOverwrite: 0, emailClear: 0, loginSeed: 0,
   };
   // Track distinct Users.githubLogin seeds (one login may back several metas).
   const loginSeeds = new Map(); // userID → login
@@ -281,6 +303,8 @@ async function main() {
     else if (d.ownerAction === 'skip-no-frontmatter') counts.ownerNoFrontmatter++;
     else counts.ownerNoChange++;
     if (d.ownerEmailAction === 'fill') counts.emailFill++;
+    else if (d.ownerEmailAction === 'overwrite') counts.emailOverwrite++;
+    else if (d.ownerEmailAction === 'clear') counts.emailClear++;
     if (d.githubLoginAction === 'seed' && user) {
       if (!loginSeeds.has(user.ID)) { loginSeeds.set(user.ID, d.seedLogin); counts.loginSeed++; }
     }
@@ -315,7 +339,8 @@ async function main() {
   console.log(
     `\nsummary: owner[overwrite=${counts.ownerOverwrite} fill=${counts.ownerFill} ` +
     `no-change=${counts.ownerNoChange} no-frontmatter=${counts.ownerNoFrontmatter}] ` +
-    `ownerEmail[fill=${counts.emailFill}] githubLogin[seed=${counts.loginSeed}]`
+    `ownerEmail[fill=${counts.emailFill} overwrite=${counts.emailOverwrite} clear=${counts.emailClear}] ` +
+    `githubLogin[seed=${counts.loginSeed}]`
   );
 
   if (!COMMIT) {
@@ -330,11 +355,14 @@ async function main() {
   for (const r of rows) {
     const set = {};
     if (r.d.ownerAction === 'overwrite' || r.d.ownerAction === 'fill') set.owner = r.d.newOwner;
-    if (r.d.ownerEmailAction === 'fill') set.ownerEmail = r.d.newOwnerEmail;
+    // ownerEmail: 'fill' + 'overwrite' both set a value; 'clear' nulls the
+    // stale previous-owner email. 'no-change'/'skip' leave it alone.
+    if (r.d.ownerEmailAction === 'fill' || r.d.ownerEmailAction === 'overwrite') set.ownerEmail = r.d.newOwnerEmail;
+    else if (r.d.ownerEmailAction === 'clear') set.ownerEmail = null;
     if (Object.keys(set).length) {
       await UPDATE(TutorialMeta).set(set).where({ ID: r.meta.ID });
       if (set.owner !== undefined) ownerWrites++;
-      if (set.ownerEmail !== undefined) emailWrites++;
+      if ('ownerEmail' in set) emailWrites++;
     }
   }
   // Seed Users.githubLogin once per user (fill-NULL only).
