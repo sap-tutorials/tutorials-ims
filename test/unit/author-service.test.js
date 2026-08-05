@@ -401,9 +401,19 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
     authorLog.warn = (...args) => { warnCalls.push(args.join(' ')); };
     try {
       const srv = await cds.connect.to('AuthorService');
-      // No `attr` claims → provisionDbUser returns null → miss branch.
+      // Real-token shape: a resolvable sapId (JWT user_uuid) but NO usable
+      // profile claims (empty attr) → provisionDbUser returns null → miss
+      // branch. user.id is the caller's email (PII); the token's userId is the
+      // I-number sapId.
       await srv.tx(
-        { user: { id: 'no-such-user', roles: { 'Tutorial.Author': true } } },
+        {
+          user: {
+            id: 'ghost@example.com',
+            attr: {},
+            authInfo: { token: { userId: 'I999999' } },
+            roles: { 'Tutorial.Author': true },
+          },
+        },
         (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
       );
       const missLine = warnCalls.find((s) => s.includes('[Users-row miss]'));
@@ -411,7 +421,11 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
       // Diagnostic MUST include the endpoint (so multi-endpoint miss batches
       // are distinguishable) and the resolved sapId (direct FK into Users.sapId).
       expect(missLine).toContain('endpoint=MyOwnedTutorials');
-      expect(missLine).toContain('resolved-sapId=no-such-user');
+      expect(missLine).toContain('resolved-sapId=I999999');
+      // PII gate (regression guard): the caller's email-shaped user.id is
+      // user-identifiable and MUST NOT appear in the log line — only the
+      // sapId is emitted. Guards against a future change that logs user.id.
+      expect(missLine).not.toContain('ghost@example.com');
     } finally {
       authorLog.warn = originalWarn;
     }

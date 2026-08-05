@@ -167,12 +167,28 @@ export async function backfillUserProfile(user) {
  *   - Existing row → opportunistically fills blank firstName/lastName/email
  *     from JWT claims (same as backfillUserProfile), then returns it.
  *   - No row + JWT carries a usable identity → INSERTs a row from claims,
- *     then re-selects and returns it. Concurrent first-calls race safely:
- *     a unique-violation on sapId is swallowed and the winning row returned.
+ *     then re-selects and returns it.
  *   - No row + no usable claims (no email AND no name) → does NOT invent an
  *     empty-profile row; returns null so the caller stays fail-closed. This
  *     matches backfillUserProfile's "nothing to write" posture and avoids
  *     minting useless rows for tokens that carry no profile.
+ *
+ * **Concurrency (best-effort, NOT DB-enforced):** two parallel first-calls
+ * for the same brand-new sapId (e.g. a SAGE panel firing MyTutorials +
+ * MyOwnedTutorials + /auth/user at once) can both SELECT-empty then both
+ * INSERT. There is NO DB-level uniqueness on Users.sapId to collapse them:
+ * @assert.unique.sapId (db/schema.cds) is a CAP application-service runtime
+ * check only, and this direct cds.db INSERT bypasses it — so the INSERT does
+ * not throw on a duplicate and the catch below is a backstop for the SQLite
+ * unit path, not HANA. This is deliberately tolerated: (1) prod has 0
+ * duplicate sapId rows across 797k rows despite developer-service.js running
+ * this same SELECT-then-INSERT pattern unguarded for months, so the window
+ * has never fired in practice; (2) every caller reads via SELECT.one, so even
+ * if a duplicate were ever minted the caller still gets a single consistent
+ * row and ownership resolution is unaffected. If a duplicate is ever OBSERVED,
+ * revisit with a real UNIQUE index (needs an hdbmigrationtable migration on
+ * the 797k-row table) or an UPSERT — tracked as separate hardening, not
+ * forced preemptively.
  *
  * @param {object} user — see resolveUserSapId.
  * @param {string[]} [columns] — optional columns subset for the returned row.
@@ -218,11 +234,15 @@ export async function provisionDbUser(user, columns) {
       lastName: claimLastName || '',
     });
   } catch (err) {
-    // Concurrent first-call race: another request provisioned the same sapId
-    // between our SELECT and INSERT. The invariant is "row exists after this
-    // call" — it does; fall through to the re-select. Only swallow the
-    // uniqueness collision; rethrow anything else.
-    if (!/unique|duplicate|assert|constraint/i.test(String(err?.message ?? ''))) throw err;
+    // Backstop for the SQLite unit path (which DOES enforce @assert.unique):
+    // if a concurrent first-call already inserted this sapId, swallow the
+    // uniqueness collision and fall through to the re-select — the invariant
+    // is "a row exists after this call." On HANA there is no DB-level
+    // uniqueness on sapId (see the concurrency note above), so this rarely
+    // fires there. Only swallow true uniqueness collisions; rethrow anything
+    // else (FK / NOT NULL / etc.) so real INSERT failures aren't masked as a
+    // silent zero-row "miss".
+    if (!/unique|duplicate/i.test(String(err?.message ?? ''))) throw err;
   }
   return await select();
 }

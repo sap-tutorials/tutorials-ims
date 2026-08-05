@@ -182,7 +182,7 @@ describe.runIf(isSafeForWrites())('AuthorService on HANA', () => {
       expect(match.slug).toBe(PROV_SLUG);
     });
 
-    it('is idempotent + race-safe: a second call returns the same row, no duplicate', async () => {
+    it('is idempotent: a second sequential call returns the same single row', async () => {
       const { Users } = cds.entities('com.sap.developers.ims');
       const { provisionDbUser } = await import('../../srv/lib/resolve-db-user.js');
       const user = {
@@ -192,8 +192,47 @@ describe.runIf(isSafeForWrites())('AuthorService on HANA', () => {
       };
       const again = await provisionDbUser(user, ['uuid']);
       expect(again?.uuid).toBe(PROV_EMAIL);
+      // Sequential re-call hits the existing-row branch (SELECT finds call-1's
+      // row), so no second INSERT happens. NOTE: this asserts idempotency, NOT
+      // concurrency-safety — see the concurrent test below.
       const all = await SELECT.from(Users).where({ sapId: PROV_SAP_ID });
       expect(all.length).toBe(1);
+    });
+
+    it('concurrent first-calls: every caller still gets one consistent row via SELECT.one', async () => {
+      // The real SAGE first-load shape: MyTutorials + MyOwnedTutorials +
+      // /auth/user fire in parallel for the same brand-new author. There is NO
+      // DB-level uniqueness on Users.sapId (see provisionDbUser's concurrency
+      // note), so we deliberately do NOT assert "exactly one row inserted" —
+      // that's not DB-guaranteed on HANA. What we DO guarantee, and what
+      // callers actually depend on, is that provisionDbUser returns via
+      // SELECT.one, so every concurrent caller gets a single, consistent row
+      // (never an array, never a throw) and ownership resolution is unaffected.
+      const { provisionDbUser } = await import('../../srv/lib/resolve-db-user.js');
+      const raceSapId = `${RUN_ID}-RACE`;
+      const raceEmail = `${RUN_ID}-race@example.com`;
+      const { Users } = cds.entities('com.sap.developers.ims');
+      const mkUser = () => ({
+        id: raceEmail,
+        attr: { email: raceEmail, given_name: TEST_PREFIX, family_name: 'RaceTest' },
+        authInfo: { token: { userId: raceSapId } },
+      });
+      try {
+        const results = await Promise.all([
+          provisionDbUser(mkUser(), ['uuid', 'sapId']),
+          provisionDbUser(mkUser(), ['uuid', 'sapId']),
+          provisionDbUser(mkUser(), ['uuid', 'sapId']),
+        ]);
+        // Every caller got a single consistent row (not null, not an array).
+        for (const r of results) {
+          expect(r).toBeTruthy();
+          expect(Array.isArray(r)).toBe(false);
+          expect(r.sapId).toBe(raceSapId);
+          expect(r.uuid).toBe(raceEmail);
+        }
+      } finally {
+        try { await DELETE.from(Users).where({ sapId: raceSapId }); } catch (e) { /* swallow */ }
+      }
     });
 
     it('returns null and mints nothing when the token carries no usable profile claims', async () => {
