@@ -14,6 +14,7 @@ One happy-path smoke assertion per surface. Intentionally narrow — load-proves
 | `analytics-explorer.test.js` | `/analytics-ui/` (XSUAA) → Vue 3 SPA → CAP `/admin/analytics` | Basic |
 | `display-app.test.js` | `/display-app/` (XSUAA scope `DisplayApp`) → Socket.IO `/ws/display` | Basic |
 | `petoberfest.test.js` | `/petoberfest/:slug/` → upload → `/admin` approve → `/petoberfest-api/photo/:id` | anonymous + Basic |
+| `admin-tutorials-owner-search.test.js` | `/admin-ui/#tutorials` (XSUAA) → FE List Report → Owner/Owner Email columns + `/admin/Tutorials?$search=` | Basic |
 
 All specs self-skip with no output when `SMOKE_BASE_URL`/`PLAYWRIGHT_BASE_URL` is absent — `npm test` (unit tier) is unaffected.
 
