@@ -1822,15 +1822,42 @@ export default class AdminService extends cds.ApplicationService {
       return { enabled };
     });
 
+    this.on('setNgdsAutoSendEpoch', async (req) => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const { epoch } = req.data;
+      // Empty/null clears the watermark (no date suppression). A non-empty value
+      // must parse as a date; reject otherwise so we never store garbage that
+      // silently disables suppression.
+      let value = '';
+      if (epoch != null && String(epoch).trim() !== '') {
+        const t = new Date(epoch).getTime();
+        if (!Number.isFinite(t)) return req.reject(400, `Invalid epoch date: ${epoch}`);
+        value = new Date(t).toISOString();
+      }
+      const existing = await SELECT.one.from(ImsConfig).where({ key: 'ngds.autosend.epoch' });
+      if (existing) {
+        await UPDATE(ImsConfig, existing.ID).set({ value });
+      } else {
+        await INSERT.into(ImsConfig).entries({ key: 'ngds.autosend.epoch', value });
+      }
+      const { resetAutoSendFlagCache } = await import('./lib/ngds-autosend.js');
+      resetAutoSendFlagCache();
+      return { epoch: value || null };
+    });
+
     this.on('getNgdsAutoSendConfig', async () => {
       const { ImsConfig } = cds.entities('com.sap.developers.ims');
       const { resolveDeployEnvironment } = await import('./lib/deploy-environment.js');
       const cfg = await SELECT.one.from(ImsConfig).where({ key: 'ngds.autosend.enabled' });
+      const epochCfg = await SELECT.one.from(ImsConfig).where({ key: 'ngds.autosend.epoch' });
       const enabled = cfg?.value === 'true';
       const env = resolveDeployEnvironment();
       return {
         enabled,
         environment: env.label,
+        // Cutover watermark (ISO date) below which completions are suppressed;
+        // null when unset.
+        epoch: epochCfg?.value || null,
         // effective = will actually send: the flag is on AND we're in PROD.
         effective: enabled && env.id === 'prod'
       };

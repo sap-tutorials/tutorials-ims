@@ -33,6 +33,15 @@
             "family_name": "Developer"
           }
         },
+        "P0009999001": {
+          "password": "P0009999001",
+          "roles": ["DeveloperApp", "Tutorial.Author", "authenticated-user"],
+          "attr": {
+            "email": "canonical@test.com",
+            "given_name": "Canonical",
+            "family_name": "User"
+          }
+        },
         "admin": {
           "password": "admin",
           "roles": ["Admin", "KnowledgeGraph.Admin", "DeveloperApp", "DisplayApp", "ContentAuthor", "ConsolidationScope", "Tutorial.Author", "authenticated-user"]
