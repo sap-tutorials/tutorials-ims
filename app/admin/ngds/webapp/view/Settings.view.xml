@@ -1,0 +1,69 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.ngds.controller.Settings"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:f="sap.ui.layout.form"
+  xmlns:core="sap.ui.core"
+  height="100%">
+  <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
+    <VBox class="sapUiMediumMargin">
+      <Title text="{i18n>pageTitle}" level="H2" class="sapUiSmallMarginBottom" />
+
+      <MessageStrip
+        text="{i18n>gateInfo}"
+        type="Information"
+        showIcon="true"
+        class="sapUiSmallMarginBottom" />
+
+      <!-- Read-only runtime status. `environment` is the CF space (env gate);
+           `effective` = true only when the enable flag is on AND we are in the
+           PROD space — i.e. sends will actually fire. Populated from
+           GET /admin/getNgdsAutoSendConfig. -->
+      <Panel headerText="{i18n>statusHeader}" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="false" layout="ResponsiveGridLayout">
+          <Label text="{i18n>fieldEnvironment}" />
+          <Text text="{settings>/environment}" />
+
+          <Label text="{i18n>fieldEffective}" />
+          <ObjectStatus
+            text="{= ${settings>/effective} ? ${i18n>effectiveYes} : ${i18n>effectiveNo} }"
+            state="{= ${settings>/effective} ? 'Success' : 'Warning' }" />
+        </f:SimpleForm>
+      </Panel>
+
+      <!-- Editable config: the DB kill-switch (ImsConfig 'ngds.autosend.enabled',
+           via toggleNgdsAutoSend) and the cutover epoch (ImsConfig
+           'ngds.autosend.epoch', via setNgdsAutoSendEpoch). Completions earned
+           before the epoch, or carried over from legacy (createdBy='migration'),
+           are never sent — legacy IMS already credited those. Leave the epoch
+           blank to disable date suppression. -->
+      <Panel headerText="{i18n>configHeader}" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="{i18n>fieldEnabled}" />
+          <Switch state="{settings>/enabled}" />
+
+          <Label text="" />
+          <Text text="{i18n>fieldEnabledHelp}" wrapping="true" class="sapUiTinyMarginBottom" />
+
+          <Label text="{i18n>fieldEpoch}" />
+          <DateTimePicker
+            id="epochPicker"
+            change=".onEpochChange"
+            displayFormat="medium"
+            placeholder="{i18n>placeholderEpoch}"
+            width="20rem" />
+
+          <Label text="" />
+          <Text text="{i18n>fieldEpochHelp}" wrapping="true" />
+          <Label text="" />
+          <Text text="{settings>/epochUtcDisplay}" wrapping="true" class="sapUiTinyMarginTop" />
+        </f:SimpleForm>
+      </Panel>
+
+      <HBox class="sapUiSmallMarginTop">
+        <Button text="{i18n>btnSave}" press=".onSave" type="Emphasized" class="sapUiTinyMarginEnd" />
+        <Button text="{i18n>btnReload}" press=".onReload" />
+      </HBox>
+    </VBox>
+  </ScrollContainer>
+</mvc:View>

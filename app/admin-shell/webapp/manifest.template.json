@@ -9,7 +9,7 @@
     "type": "application",
     "title": "Admin Console",
     "description": "Unified admin shell for tutorial platform management",
-    "applicationVersion": { "version": "0.0.3" },
+    "applicationVersion": { "version": "0.0.5" },
     "dataSources": {
       "adminService": {
         "uri": "/admin/",
