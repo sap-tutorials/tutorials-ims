@@ -68,6 +68,7 @@ module.exports = {
     'navigator',
     'display',
     'tenant',
+    'ngds',
     'homepage',
     'shelf-definitions',
     'verb-definitions',
@@ -145,6 +146,7 @@ module.exports = {
     navigator: 'nv',
     display: 'dp',
     tenant: 'tn',
+    ngds: 'ng',
     homepage: 'hp',
     'verb-definitions': 'vd',
     'shelf-definitions': 'sd',
@@ -183,6 +185,16 @@ module.exports = {
       { name: 'homepageShelves', pattern: 'homepage' },
       { name: 'homepageRedirects', pattern: 'homepageRedirects' },
       { name: 'homepageConfig', pattern: 'homepageConfig' }
+    ],
+    petoberfest: [
+      // Two routes into the same petoberfestTarget: the default "petoberfest"
+      // (Pet Photo Moderation) plus "petoberfestContests", which Shell.controller.js
+      // deep-links to the componentUsage's inner Petoberfests List Report
+      // ("petoberfestContests&/pb/Petoberfests"). Without this override the
+      // generator emits only the default route and the Contests nav key 404s on
+      // the next manifest regeneration (every prebuild/deploy).
+      { name: 'petoberfest', pattern: 'petoberfest' },
+      { name: 'petoberfestContests', pattern: 'petoberfestContests' }
     ]
   }
 }

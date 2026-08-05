@@ -133,6 +133,7 @@
         { "key": "navigator", "title": "Navigator" },
         { "key": "display", "title": "Display" },
         { "key": "tenant", "title": "Tenant" },
+        { "key": "ngds", "title": "NGDS Auto-Send", "requiredScope": "Admin" },
         { "key": "featureFlags", "title": "Feature Flags", "requiredScope": "Admin" }
       ]
     },

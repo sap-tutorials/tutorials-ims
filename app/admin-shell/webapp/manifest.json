@@ -10,7 +10,7 @@
     "title": "Admin Console",
     "description": "Unified admin shell for tutorial platform management",
     "applicationVersion": {
-      "version": "0.0.4"
+      "version": "0.0.5"
     },
     "dataSources": {
       "adminService": {
@@ -81,6 +81,7 @@
       "sap.tutorials.admin.navigator": "./components/navigator",
       "sap.tutorials.admin.display": "./components/display",
       "sap.tutorials.admin.tenant": "./components/tenant",
+      "sap.tutorials.admin.ngds": "./components/ngds",
       "sap.tutorials.admin.homepage": "./components/homepage",
       "sap.tutorials.admin.shelfDefinitions": "./components/shelf-definitions",
       "sap.tutorials.admin.verbDefinitions": "./components/verb-definitions",
@@ -295,6 +296,12 @@
       },
       "tenantSettingsComponent": {
         "name": "sap.tutorials.admin.tenant",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "ngdsComponent": {
+        "name": "sap.tutorials.admin.ngds",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -709,6 +716,16 @@
           ]
         },
         {
+          "name": "ngds",
+          "pattern": "ngds",
+          "target": [
+            {
+              "name": "ngdsTarget",
+              "prefix": "ng"
+            }
+          ]
+        },
+        {
           "name": "homepageShelves",
           "pattern": "homepage",
           "target": [
@@ -1089,6 +1106,13 @@
           "id": "tenantSettingsTarget",
           "viewLevel": 1,
           "prefix": "tn"
+        },
+        "ngdsTarget": {
+          "type": "Component",
+          "usage": "ngdsComponent",
+          "id": "ngdsTarget",
+          "viewLevel": 1,
+          "prefix": "ng"
         },
         "homepageTarget": {
           "type": "Component",
