@@ -60,7 +60,7 @@ import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
-import { backfillUserProfile, resolveDbUser } from './lib/resolve-db-user.js';
+import { provisionDbUser, resolveDbUser } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import multer from 'multer';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
@@ -1274,14 +1274,18 @@ cds.on('served', async () => {
     if (!user?.id || user.id === 'anonymous') {
       return res.status(401).json({ authenticated: false, environment });
     }
-    // Issue #339: opportunistically backfill firstName/lastName/email on the
-    // migrated Users row from JWT claims. The migrator copies SAP_ID and
-    // pre-computed totals only — IMS Java JIT-fetched names from SAP IDP and
-    // never persisted them. SAP ID Service has no SCIM bulk API, so this
-    // per-request lazy fill is the only path post-cutover. Fire-and-forget;
-    // never block the response on a write that's pure self-heal.
-    backfillUserProfile(user).catch(err =>
-      console.warn('[backfill-user-profile]', err.message));
+    // Issue #339 / SAGE-ownership: get-or-create the migrated Users row and
+    // backfill firstName/lastName/email from JWT claims. The migrator copies
+    // SAP_ID and pre-computed totals only — IMS Java JIT-fetched names from SAP
+    // IDP and never persisted them, and never created rows for users present
+    // only in legacy author tables. SAP ID Service has no SCIM bulk API, so
+    // this per-request path (now provisioning, not just UPDATE-backfilling) is
+    // the only way the row + profile get populated post-cutover. provisionDbUser
+    // mints the row from THIS caller's claims when absent, so a browser login
+    // fixes ownership resolution up-front (parity with the AuthorService read
+    // handlers). Fire-and-forget; never block the response on this self-heal.
+    provisionDbUser(user).catch(err =>
+      console.warn('[provision-user]', err.message));
     // Issue #566: fetch Khoros link state from the Users row. We need a DB read
     // here because the JWT never carries khorosId/khorosLogin/khorosAvatarUrl —
     // those are stored in HANA. Null for unlinked users; always emits the keys
