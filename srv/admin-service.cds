@@ -39,11 +39,14 @@ service AdminService {
   // column). Fixes valid rows (e.g. cp-aibus-dox-ui-sub) being unfindable
   // behind a title-only match across ~2000 paged tutorials.
   //
-  // meta.owner + meta.ownerEmail extend $search across the TutorialMeta
-  // composition so the List Report search box matches by owner name OR
-  // owner email. Improves findability where owner-name text is inconsistent
-  // (umlaut vs ASCII, e.g. "Matthäus Schüle" vs "Matthaeus Schuele").
-  @cds.search: { title, slug, primaryTag, description, meta.owner, meta.ownerEmail }
+  // owner + ownerEmail (flattened scalars from the TutorialMeta composition,
+  // see the projection body below) extend $search so the List Report search
+  // box matches by owner name OR owner email. Improves findability where
+  // owner-name text is inconsistent (umlaut vs ASCII, e.g. "Matthäus Schüle"
+  // vs "Matthaeus Schuele"). The flattened author.* columns add FK-author
+  // name/email coverage for tutorials whose ownership lives on the author FK.
+  @cds.search: { title, slug, primaryTag, description,
+                 owner, ownerEmail, authorDisplayName, authorEmail, authorFirstName, authorLastName }
   entity Tutorials as projection on ims.Tutorials {
     *,
     cast(legacyId as String) as legacyIdStr : String,
@@ -74,6 +77,13 @@ service AdminService {
     author.displayName as authorDisplayName : String @Common.FieldControl: #ReadOnly,
     author.firstName   as authorFirstName   : String @Common.FieldControl: #ReadOnly,
     author.lastName    as authorLastName    : String @Common.FieldControl: #ReadOnly,
+    // Flattened free-text owner + owner email from the (to-one, in this
+    // projection) meta association — same derived/read-only pattern as the
+    // author.* columns above. Makes them scalars so they are $search-able and
+    // filterable with contains/wildcard (the association-path form meta.owner
+    // only honors eq). Spec 2026-08-05-admin-tutorials-owner-search-filter.
+    meta.owner      as owner      : String @Common.FieldControl: #ReadOnly,
+    meta.ownerEmail as ownerEmail : String @Common.FieldControl: #ReadOnly,
     // #918 — populated by after('READ') decorator in admin-service.js.
     // True iff a KgIsolation row exists for this tutorial slug. Fail-quiet:
     // if the SELECT throws or the sidecar is missing, stays null.
