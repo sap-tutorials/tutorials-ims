@@ -123,14 +123,20 @@
       "destination": "srv-api"
     },
     {
-      "source": "^/api/devtoberfest/(status|terms|banner|schedule)$",
-      "target": "/api/devtoberfest/$1",
+      "source": "^/api/devtoberfest/speaker/([^/?]+)/photo(\\?.*)?$",
+      "target": "/api/devtoberfest/speaker/$1/photo$2",
       "destination": "srv-api",
       "authenticationType": "none"
     },
     {
-      "source": "^/api/devtoberfest/(join|me|my-completions)$",
-      "target": "/api/devtoberfest/$1",
+      "source": "^/api/devtoberfest/(status|terms|banner|faq|schedule|transcript)(\\?.*)?$",
+      "target": "/api/devtoberfest/$1$2",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/api/devtoberfest/(join|me|my-completions)(\\?.*)?$",
+      "target": "/api/devtoberfest/$1$2",
       "destination": "srv-api",
       "authenticationType": "xsuaa"
     },
