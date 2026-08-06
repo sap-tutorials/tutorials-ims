@@ -836,10 +836,14 @@ export async function linkTutorialAuthorship(namespace, metadata) {
   const userRows = await db.run(
     `SELECT "ID" AS id, "EMAIL" AS raw_email, LOWER(TRIM("EMAIL")) AS email FROM ${usersTable} WHERE "EMAIL" IS NOT NULL AND LENGTH(TRIM("EMAIL")) > 0`
   );
-  if (!userRows || userRows.length === 0) return;
+  // #1501 — do NOT return early when Users is empty: TutorialMeta.owner comes
+  // from frontmatterAuthorName (no Users lookup needed) and must be stamped
+  // even on a fresh deploy with no user rows. The user-dependent phases
+  // (author_ID, ownerEmail) are already gated on authorUserId / map hits and
+  // will naturally no-op when the maps are empty.
   const emailToUserId = new Map();
   const userIdToEmail = new Map(); // #862 reopen — id → raw email (canonical case)
-  for (const r of userRows) {
+  for (const r of (userRows || [])) {
     const email = r.email || r.EMAIL;
     const id = r.id || r.ID;
     const rawEmail = r.raw_email || r.RAW_EMAIL;
@@ -877,6 +881,7 @@ export async function linkTutorialAuthorship(namespace, metadata) {
   let linkedAuthors = 0;
   let linkedContributors = 0;
   let linkedOwnerEmails = 0;  // #862 reopen
+  let linkedOwners = 0;  // #1501 — TutorialMeta.owner from frontmatter author_name
 
   for (const [rawSlug, meta] of Object.entries(metadata)) {
     const slug = rawSlug.toLowerCase();
@@ -1025,13 +1030,30 @@ export async function linkTutorialAuthorship(namespace, metadata) {
           if (res && (typeof res === 'number' ? res : 1) > 0) linkedOwnerEmails++;
         }
       }
+
+      // #1501 — TutorialMeta.owner from the declared-author display name.
+      // Overwrite-on-strong-signal: frontmatter author_name always wins when
+      // present (same policy as Tutorials.author_ID above; both derive from the
+      // same declared-author signal). Never blanks owner from an empty value.
+      // Raw db.run to match the sibling writes (bypasses managed modifiedBy —
+      // intentional; see spec's rejected-modifiedBy note).
+      const fmAuthorName = (typeof meta.frontmatterAuthorName === 'string' && meta.frontmatterAuthorName.trim())
+        ? meta.frontmatterAuthorName.trim()
+        : null;
+      if (fmAuthorName) {
+        const res = await db.run(
+          `UPDATE ${tutorialMetaTable} SET "OWNER" = ? WHERE "TUTORIAL_ID" = ?`,
+          [fmAuthorName, tutorialId]
+        );
+        if (res && (typeof res === 'number' ? res : 1) > 0) linkedOwners++;
+      }
     } catch (perSlugErr) {
       LOG.warn(`linkTutorialAuthorship: ${slug} failed`, perSlugErr.message);
     }
   }
 
-  if (linkedAuthors || linkedContributors || linkedOwnerEmails) {
-    LOG.info(`linkTutorialAuthorship: linked ${linkedAuthors} author(s), ${linkedContributors} contributor(s), ${linkedOwnerEmails} ownerEmail(s)`);
+  if (linkedAuthors || linkedContributors || linkedOwnerEmails || linkedOwners) {
+    LOG.info(`linkTutorialAuthorship: linked ${linkedAuthors} author(s), ${linkedContributors} contributor(s), ${linkedOwnerEmails} ownerEmail(s), ${linkedOwners} owner(s)`);
   }
 }
 
