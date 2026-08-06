@@ -338,6 +338,51 @@
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
 }
 
+/* ------------------------------ Intro + ticker ------------------------------ */
+
+.dtf-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.dtf-ticker {
+  margin: 0.35rem 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #A100C2;
+}
+
+.dtf-ticker-prompt {
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(161, 0, 194, 0.6);
+}
+
+/* Re-fade each time the tip text changes (keyed :key swaps the node). */
+.dtf-ticker-text {
+  animation: dtfTickerFade 4.5s ease-in-out both;
+}
+
+@keyframes dtfTickerFade {
+  0%   { opacity: 0; transform: translateY(2px); }
+  8%   { opacity: 1; transform: translateY(0); }
+  92%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0.85; }
+}
+
+html[data-theme="sap_horizon_dark"] .dtf-ticker { color: #f1acff; }
+@media (prefers-color-scheme: dark) {
+  .dtf-ticker { color: #f1acff; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dtf-ticker-text { animation: none; opacity: 1; }
+}
+
 @keyframes dtfBob {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-10px); }
