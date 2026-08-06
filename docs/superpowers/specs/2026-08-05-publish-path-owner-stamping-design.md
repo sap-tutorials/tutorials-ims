@@ -33,40 +33,34 @@ frontmatterAuthorName: trim(fm.author),
 
 ### Change 2 — write `TutorialMeta.owner` in `linkTutorialAuthorship`
 
-In the per-slug loop of `linkTutorialAuthorship` (`srv/lib/content-publish-session.js`, alongside the existing `ownerEmail` write at `~line 1018`), add an `owner` write governed by the **"overwrite on strong signal, skip admin edits"** policy (Tom's decision):
+In the per-slug loop of `linkTutorialAuthorship` (`srv/lib/content-publish-session.js`, alongside the existing `ownerEmail` write at `~line 1018`), add an `owner` write using the **overwrite-on-strong-signal** policy — the SAME "frontmatter wins" rule the sibling `author_ID` write already uses on this path (`~line 966`), via raw `db.run()` to match:
 
 ```js
 // Set TutorialMeta.owner from the declared-author display name (frontmatter
-// author_name). "Overwrite on strong signal, skip admin edits":
-//   - only write when frontmatter carries a usable author_name (strong signal);
-//   - overwrite an existing owner ONLY when the row was NOT last edited by a
-//     human admin — detected via modifiedBy: the publish path runs under a
-//     system identity, /admin-ui edits stamp the admin's JWT identity.
+// author_name). Overwrite on strong signal: whenever frontmatter carries a
+// usable author_name, it wins — identical policy to Tutorials.author_ID above
+// (both derive from the same declared-author frontmatter signal, so they stay
+// consistent). Never blanks owner from a missing/empty author_name.
 const fmAuthorName = (typeof meta.frontmatterAuthorName === 'string' && meta.frontmatterAuthorName.trim())
   ? meta.frontmatterAuthorName.trim() : null;
 if (fmAuthorName) {
-  // Overwrite unless a human admin last touched this row. PUBLISH_IDENTITIES =
-  // the set of non-human modifiedBy values the pipeline itself writes
-  // (publish/system/anonymous/migration-script labels).
-  await db.run(
-    `UPDATE ${tutorialMetaTable} SET "OWNER" = ? WHERE "TUTORIAL_ID" = ?
-       AND ("MODIFIEDBY" IS NULL OR "MODIFIEDBY" IN (${PUBLISH_IDENTITIES_PLACEHOLDERS}))`,
-    [fmAuthorName, tutorialId, ...PUBLISH_IDENTITIES]
+  const res = await db.run(
+    `UPDATE ${tutorialMetaTable} SET "OWNER" = ? WHERE "TUTORIAL_ID" = ?`,
+    [fmAuthorName, tutorialId]
   );
+  if (res && (typeof res === 'number' ? res : 1) > 0) linkedOwners++;
 }
 ```
 
-The exact `PUBLISH_IDENTITIES` set is derived from what the publish/pipeline path actually stamps as `modifiedBy` (confirm at implementation: the CAP managed aspect under the publish request context, plus historical bulk labels like `anonymous` and the `scripts/*` initiators). If the set can't be pinned confidently, fall back to fill-NULL-only for `owner` (the safe subset) and log the skipped overwrites for review.
-
-### Write-policy rationale (Tom's decision: "overwrite on strong signal, skip admin edits")
+### Write-policy rationale (Tom's decision: "overwrite unconditionally, like author_ID")
 
 - **Strong signal only:** never blank an owner from a missing/empty `author_name`.
-- **Overwrite** keeps owner in sync with the declared author on every publish (fixes migrated mis-attributions like the Achim→Matthäus case automatically on the next content rebuild).
-- **Skip admin edits** preserves deliberate `/admin-ui` owner corrections.
+- **Overwrite unconditionally:** whenever frontmatter has an author_name, it wins — matching the existing `Tutorials.author_ID` policy on the same code path. `owner` and `author_ID` derive from the same declared-author signal, so a single consistent rule keeps them in lock-step and self-heals migrated mis-attributions (e.g. Achim→Matthäus) on the next content rebuild.
+- **Trade-off (accepted):** a manual `/admin-ui` owner correction is reverted on the next publish/rebuild of that tutorial. Acceptable because `owner` is defined as "the declared author," which the frontmatter is the source of truth for; deliberate owner reassignment belongs in the tutorial's frontmatter, not a transient admin edit.
 
-### Known limitation (documented, accepted)
+### Why not `modifiedBy`-based admin-edit skipping (rejected during planning)
 
-`modifiedBy` is **row-level, not field-level**. If an admin edits any other field on a `TutorialMeta` row (e.g. `monitoredStatus`), that row's `modifiedBy` becomes the admin, and the publish path will then skip overwriting `owner` even though the admin never touched `owner` — a false-skip. This errs toward preserving human edits (the safe direction). A field-level fix (an `ownerManuallySet` boolean set only by the admin owner-edit handler) is deliberately out of scope: it needs a schema migration + admin-handler wiring, disproportionate to the benefit. Revisit if false-skips prove common.
+An earlier design draft proposed skipping overwrite when `modifiedBy` indicated a human admin. This does NOT work reliably: the publish path writes via raw `db.run()`, which bypasses CAP's managed `modifiedBy` stamping, so publish never refreshes `modifiedBy`. Historical `modifiedBy` values on prod are dominated by bulk-write residue (`thomas.jung@sap.com` on 1,410 rows from the resync, `anonymous` on 268) that are indistinguishable from genuine admin edits — the same ambiguity that complicated the reconciliation script. A precise field-level `ownerManuallySet` flag would work but needs a schema migration + admin-handler wiring, disproportionate to the benefit. Overwrite-unconditionally sidesteps all of it.
 
 ## Shared-helper note
 
@@ -74,8 +68,8 @@ The one-shot script's `normalizeName`/`extractGithubLogin` are NOT needed here: 
 
 ## Testing
 
-- **Unit** (`test/unit/`, in-memory SQLite): a publish payload with `frontmatterAuthorName` set stamps `TutorialMeta.owner`; overwrites a system-owned row; skips a row whose `modifiedBy` is a human admin; no-ops on empty `author_name`. Model on existing `linkTutorialAuthorship` unit coverage.
-- **Hybrid** (`test/hybrid/`, real HANA): publish a seeded tutorial, assert `owner` is set from frontmatter; re-publish after an admin edit, assert owner is preserved.
+- **Unit** (`test/unit/`, in-memory SQLite): a publish payload with `frontmatterAuthorName` set stamps `TutorialMeta.owner`; overwrites an existing (different) owner value; no-ops on empty/missing `author_name` (never blanks). Model on existing `linkTutorialAuthorship` unit coverage.
+- **Hybrid** (`test/hybrid/`, real HANA): publish a seeded tutorial, assert `owner` is set from frontmatter; change the seeded frontmatter author and re-publish, assert `owner` follows (overwrite).
 - **Regression:** confirm the existing `author_ID`/`ownerEmail`/`githubLogin` writes are unchanged (same test file).
 
 ## Rollout
