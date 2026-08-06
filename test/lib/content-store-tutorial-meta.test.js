@@ -218,4 +218,34 @@ describe('content-store TutorialMeta auto-init', () => {
     expect(meta.ownerEmail).toBeNull();
     expect(meta.owner).toBeNull();
   });
+
+  it('stamps TutorialMeta.owner from frontmatter author_name (#1501)', async () => {
+    const { linkTutorialAuthorship } = await import('../../srv/lib/content-publish-session.js');
+    const slug = 'owner-stamp-1';
+    const tutId = cds.utils.uuid();
+    await INSERT.into(Tutorials).entries({ ID: tutId, slug, title: 'T', status: 'ACTIVE', legacyId: 90000001 });
+    await INSERT.into(TutorialMeta).entries({ ID: cds.utils.uuid(), tutorial_ID: tutId, owner: 'Wrong Person', ownerEmail: null, monitoredStatus: 'ACTIVE', notificationNumber: 0, legacyId: 90000001 });
+
+    await linkTutorialAuthorship('com.sap.developers.ims', {
+      [slug]: { frontmatterAuthorName: 'Matthäus Schüle', frontmatterGithubLogin: null, primaryContributorEmail: null }
+    });
+
+    const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutId });
+    expect(meta.owner).toBe('Matthäus Schüle');
+  });
+
+  it('does NOT blank owner when frontmatter author_name is missing (#1501)', async () => {
+    const { linkTutorialAuthorship } = await import('../../srv/lib/content-publish-session.js');
+    const slug = 'owner-stamp-2';
+    const tutId = cds.utils.uuid();
+    await INSERT.into(Tutorials).entries({ ID: tutId, slug, title: 'T2', status: 'ACTIVE', legacyId: 90000002 });
+    await INSERT.into(TutorialMeta).entries({ ID: cds.utils.uuid(), tutorial_ID: tutId, owner: 'Keep Me', ownerEmail: null, monitoredStatus: 'ACTIVE', notificationNumber: 0, legacyId: 90000002 });
+
+    await linkTutorialAuthorship('com.sap.developers.ims', {
+      [slug]: { frontmatterAuthorName: null, frontmatterGithubLogin: null, primaryContributorEmail: null }
+    });
+
+    const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutId });
+    expect(meta.owner).toBe('Keep Me');
+  });
 });
