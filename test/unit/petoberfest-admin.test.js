@@ -56,3 +56,57 @@ test('authenticated-user without Admin is rejected (403) from hide', async () =>
     )
   ).rejects.toMatchObject({ code: 403 });
 });
+
+test('purge deletes a HIDDEN submission (row and blobs gone)', async () => {
+  const { Petoberfests, PetSubmissions, Users } = cds.entities('com.sap.developers.ims');
+  await db.run(INSERT.into(PetSubmissions).entries({
+    ID: 'del-hidden', petoberfest_ID: 'p1', user_ID: 'u1', petName: 'ToDelete',
+    moderation: 'HIDDEN', mimeType: 'image/webp', uploadedAt: '2026-08-01T00:00:00Z',
+  }));
+  const srv = await cds.connect.to('AdminService');
+  await srv.tx({ user: ADMIN_USER }, (tx) =>
+    tx.send({ event: 'purge', entity: 'PetSubmissions', params: [{ ID: 'del-hidden' }] }));
+  const row = await db.run(SELECT.one.from(PetSubmissions).where({ ID: 'del-hidden' }));
+  expect(row).toBeUndefined();
+});
+
+test('purge rejects a PENDING submission (400)', async () => {
+  const { PetSubmissions } = cds.entities('com.sap.developers.ims');
+  await db.run(INSERT.into(PetSubmissions).entries({
+    ID: 'del-pending', petoberfest_ID: 'p1', user_ID: 'u1', petName: 'Nope',
+    moderation: 'PENDING', mimeType: 'image/webp', uploadedAt: '2026-08-01T00:00:00Z',
+  }));
+  const srv = await cds.connect.to('AdminService');
+  await expect(
+    srv.tx({ user: ADMIN_USER }, (tx) =>
+      tx.send({ event: 'purge', entity: 'PetSubmissions', params: [{ ID: 'del-pending' }] }))
+  ).rejects.toMatchObject({ code: 400 });
+  const row = await db.run(SELECT.one.from(PetSubmissions).where({ ID: 'del-pending' }));
+  expect(row).toBeDefined();     // still there
+});
+
+test('purge rejects an APPROVED submission (400)', async () => {
+  const { PetSubmissions } = cds.entities('com.sap.developers.ims');
+  await db.run(INSERT.into(PetSubmissions).entries({
+    ID: 'del-approved', petoberfest_ID: 'p1', user_ID: 'u1', petName: 'Live',
+    moderation: 'APPROVED', mimeType: 'image/webp', uploadedAt: '2026-08-01T00:00:00Z',
+  }));
+  const srv = await cds.connect.to('AdminService');
+  await expect(
+    srv.tx({ user: ADMIN_USER }, (tx) =>
+      tx.send({ event: 'purge', entity: 'PetSubmissions', params: [{ ID: 'del-approved' }] }))
+  ).rejects.toMatchObject({ code: 400 });
+});
+
+test('authenticated-user without Admin is rejected (403) from purge', async () => {
+  const { PetSubmissions } = cds.entities('com.sap.developers.ims');
+  await db.run(INSERT.into(PetSubmissions).entries({
+    ID: 'del-unpriv', petoberfest_ID: 'p1', user_ID: 'u1', petName: 'Guard',
+    moderation: 'HIDDEN', mimeType: 'image/webp', uploadedAt: '2026-08-01T00:00:00Z',
+  }));
+  const srv = await cds.connect.to('AdminService');
+  await expect(
+    srv.tx({ user: UNPRIV_USER }, (tx) =>
+      tx.send({ event: 'purge', entity: 'PetSubmissions', params: [{ ID: 'del-unpriv' }] }))
+  ).rejects.toMatchObject({ code: 403 });
+});
