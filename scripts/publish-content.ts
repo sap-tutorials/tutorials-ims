@@ -388,6 +388,7 @@ export interface TutorialMeta {
   primaryContributorEmail: string | null;
   primaryContributorLogin: string | null;
   frontmatterGithubLogin: string | null;
+  frontmatterAuthorName: string | null;
 }
 
 export function extractMetadata(
@@ -421,6 +422,7 @@ export function extractMetadata(
     const primaryContributorLogin = primary ? trim((primary as any).login) : null;
 
     const frontmatterGithubLogin = trim(fm.githubLogin);
+    const frontmatterAuthorName = trim(fm.author);
 
     result[slug] = {
       slug,
@@ -435,6 +437,7 @@ export function extractMetadata(
       primaryContributorEmail,
       primaryContributorLogin,
       frontmatterGithubLogin,
+      frontmatterAuthorName,
     };
   }
 
