@@ -470,5 +470,51 @@ describe.runIf(isSafeForWrites() && process.env.ALLOW_HYBRID_WRITES === 'true')(
       expect(meta.ownerEmail).toBe(adminSetEmail);
       expect(meta.ownerEmail).not.toBe(aliceEmail);
     }, 60_000);
+
+    // -------------------------------------------------------------------------
+    // Test 8 — #1501: TutorialMeta.owner stamped from frontmatter author_name
+    //
+    // frontmatterAuthorName is the declared author display name from frontmatter.
+    // After linkTutorialAuthorship, TutorialMeta.owner MUST equal the trimmed
+    // frontmatterAuthorName value, overwriting any pre-existing NULL owner.
+    // No Users lookup is required — the name comes directly from frontmatter.
+    // -------------------------------------------------------------------------
+    it('Test 8 — #1501: TutorialMeta.owner stamped from frontmatterAuthorName', async () => {
+      const slug = TEST_PREFIX + 'owner-stamp-' + Date.now();
+      const ownerName = `${TEST_PREFIX}Owner Name`;
+
+      const tutId = cds.utils.uuid();
+      const metaId = cds.utils.uuid();
+      cleanup.tutorials.push(tutId);
+      cleanup.meta.push(metaId);
+
+      const { Tutorials, TutorialMeta } = cds.entities(NS);
+
+      await INSERT.into(Tutorials).entries({
+        ID: tutId,
+        slug,
+        title: TEST_PREFIX + slug,
+        status: 'ACTIVE',
+      });
+      // Seed TutorialMeta with NULL owner — the state before a frontmatter
+      // author_name has ever been stamped.
+      await INSERT.into(TutorialMeta).entries({
+        ID: metaId,
+        tutorial_ID: tutId,
+        owner: null,
+        ownerEmail: null,
+        monitoredStatus: 'ACTIVE',
+        notificationNumber: 0,
+        legacyId: 9_998_800 + Math.floor(Math.random() * 100),
+      });
+
+      // #1501: owner stamped from frontmatter author_name on real HANA
+      await linkTutorialAuthorship(NS, {
+        [slug]: { frontmatterAuthorName: ownerName, frontmatterGithubLogin: null, primaryContributorEmail: null },
+      });
+
+      const metaRow = await SELECT.one.from(TutorialMeta).where({ ID: metaId }).columns('owner');
+      expect(metaRow.owner).toBe(ownerName);
+    }, 60_000);
   }
 );
