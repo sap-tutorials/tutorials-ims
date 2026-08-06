@@ -5,7 +5,7 @@
     "type": "application",
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
-    "applicationVersion": { "version": "0.1.1" },
+    "applicationVersion": { "version": "0.1.2" },
     "i18n": "i18n/i18n.properties",
     "dataSources": {
       "mainService": {
@@ -84,6 +84,9 @@
               },
               "controlConfiguration": {
                 "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "selectionMode": "Multi"
+                  },
                   "columns": {
                     "PhotoThumbColumn": {
                       "header": "Photo",
