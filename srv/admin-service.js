@@ -2304,6 +2304,21 @@ export default class AdminService extends cds.ApplicationService {
       await UPDATE(this.entities.PetSubmissions).set({ moderation: 'HIDDEN' }).where({ ID: id });
       return req.reply();
     });
+    // purge — permanent DELETE of a submission (row + BLOB columns). Guarded:
+    // only HIDDEN submissions may be deleted (Hide-first). Same auth as approve/hide.
+    // SELECT only the moderation scalar — never read BLOBs alongside (LOB hygiene);
+    // the row DELETE removes photoDisplay/photoThumb as a side effect.
+    this.on('purge', PetSubmissions, async (req) => {
+      const id = req.params?.[0]?.ID ?? req.params?.[0];
+      if (!id) return req.reject(400, 'purge: missing entity key');
+      const row = await SELECT.one.from(this.entities.PetSubmissions).columns('moderation').where({ ID: id });
+      if (!row) return req.reject(404, 'purge: submission not found');
+      if (row.moderation !== 'HIDDEN') {
+        return req.reject(400, 'Only hidden submissions can be deleted — hide it first.');
+      }
+      await DELETE.from(this.entities.PetSubmissions).where({ ID: id });
+      return req.reply();
+    });
 
 
     // Phase 2-B (#464): Severity-classified expiry warnings for the

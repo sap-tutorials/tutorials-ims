@@ -148,6 +148,8 @@ service AdminService {
     action approve();
     @(requires: ['Tutorial.Author', 'Admin'])
     action hide();
+    @(requires: ['Tutorial.Author', 'Admin'])
+    action purge();
   };
   entity Events as projection on ims.Events { *, cast(legacyId as String) as legacyIdStr : String };
   entity Prizes as projection on ims.Prizes { *, cast(legacyId as String) as legacyIdStr : String };
