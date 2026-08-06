@@ -48,6 +48,53 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
   }
 );
 
+// ── 0b. Moderation List Report supports row selection (issue: approve no-op) ─
+// Regression guard for "the approval button doesn't do anything" + the
+// mass-approve request. The PetSubmissions moderation List Report toolbar
+// carries the approve/hide bound-action buttons (UI.DataFieldForAction), which
+// need a selected row context to fire. The table shipped with the FE default
+// selectionMode:"None" — no checkboxes rendered, so clicking approve was a
+// no-op and multi-select was impossible. The fix sets tableSettings.selectionMode
+// "Multi" in app/admin/petoberfest/webapp/manifest.json. We assert the rendered
+// moderation table exposes row-selection controls (checkboxes / rowselect cells),
+// which proves the manifest selectionMode took effect end-to-end. Needs admin creds.
+describe.skipIf(!hasBaseUrl() || !hasCredentials())(
+  'e2e: petoberfest moderation List Report allows multi-select for approve',
+  () => {
+    let browser;
+    beforeAll(async () => { browser = await launchBrowser(); });
+    afterAll(async () => { await browser?.close(); });
+
+    it('renders row-selection controls on the PetSubmissions moderation table', async () => {
+      const { context, page } = await newPage(browser, { authenticated: true });
+      try {
+        await page.goto('/admin-ui/#/petoberfest', { waitUntil: 'domcontentloaded' });
+
+        // Wait for the FE List Report table to render.
+        await page
+          .locator('[role="grid"], [role="list"], .sapMList, .sapUiTable, .sapUiMdcTable')
+          .first()
+          .waitFor({ state: 'visible', timeout: 30_000 });
+
+        // selectionMode:"Multi" surfaces per-row selection controls. FE renders
+        // these as checkboxes (role="checkbox") in ResponsiveTable/MDC, or
+        // rowselect cells in a GridTable. Either proves selection is enabled;
+        // with selectionMode:"None" (the pre-fix default) none of these exist.
+        const selectionControls = page.locator(
+          '[role="checkbox"], .sapMListTblSelCol, .sapUiTableRowSelectionCell, .sapMCb'
+        );
+        await selectionControls.first().waitFor({ state: 'attached', timeout: 30_000 });
+        expect(
+          await selectionControls.count(),
+          'moderation table should render row-selection controls (selectionMode:"Multi")'
+        ).toBeGreaterThan(0);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+);
+
 // ── 1. Anonymous page load ─────────────────────────────────────────────────
 describe.skipIf(!hasBaseUrl())('e2e: petoberfest (anonymous)', () => {
   let browser;
