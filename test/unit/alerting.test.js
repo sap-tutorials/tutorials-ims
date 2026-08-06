@@ -131,4 +131,42 @@ describe('raiseTest helper', () => {
     expect(res.outcome).toBe('error')
     expect(res.reason).toContain('no binding')
   })
+
+  // #1503 follow-up: the ANS sink delivers via a raw fetch with no client-side
+  // timeout, so a hung ANS connection makes svc.raise() block forever (neither
+  // resolve nor reject). Symptom in PROD: 86s worker hang → 502 Gateway Timeout
+  // on the admin "Send test alert". raiseWithTimeout must race the raise and
+  // report outcome:'timeout' fast instead of hanging.
+  it('returns { outcome: "timeout" } when the sink raise never resolves', async () => {
+    vi.useFakeTimers()
+    try {
+      // A raise() that never settles — models the timeout-less fetch hang.
+      const neverResolves = () => new Promise(() => {})
+      vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: neverResolves }) })
+      const { raiseTest } = await import('../../srv/lib/alerting.js')
+      const p = raiseTest({ eventType: 'AlertingTest', severity: 'ERROR',
+        resource: { resourceName: 'admin-test:u:hang', resourceType: 'service' } })
+      // Advance past the 5s deadline; the timeout branch rejects → caught → 'timeout'.
+      await vi.advanceTimersByTimeAsync(5001)
+      const res = await p
+      expect(res.outcome).toBe('timeout')
+      expect(res.reason).toMatch(/timed out/)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('raise() (production path) never hangs when the sink raise never resolves', async () => {
+    vi.useFakeTimers()
+    try {
+      const neverResolves = () => new Promise(() => {})
+      vi.spyOn(cds, 'connect', 'get').mockReturnValue({ to: vi.fn().mockResolvedValue({ raise: neverResolves }) })
+      const { raise } = await import('../../srv/lib/alerting.js')
+      const p = raise({ eventType: 'X', severity: 'ERROR' })
+      await vi.advanceTimersByTimeAsync(5001)
+      await expect(p).resolves.toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

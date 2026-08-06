@@ -10,12 +10,35 @@ import { isAlertingEnabled } from './runtime-config/alert-settings.js'
 const LOG = cds.log('alerting')
 let svcPromise  // memoised connection
 
+// #1503 follow-up: the ANS sink (`@sap-tutorials/cds-alert-notification`)
+// delivers via a raw `fetch` with NO client-side timeout. A hung connection to
+// ANS (e.g. blocked CF egress) therefore never resolves AND never throws — so
+// the try/catch below is powerless against it. Symptom: a `svc.raise()` call
+// blocks the worker ~86s until CF drops the socket → 502 Gateway Timeout on the
+// admin "Send test alert". This wrapper races every raise against a hard
+// deadline so a stuck delivery fails FAST (and clean) instead of hanging.
+// Belt-and-braces with the AbortController timeout added plugin-side (v1.0.2).
+const RAISE_TIMEOUT_MS = 5000
+
+async function raiseWithTimeout (svc, input, ms = RAISE_TIMEOUT_MS) {
+  let timer
+  const timeout = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`alert delivery timed out after ${ms}ms`)), ms)
+    timer.unref?.()
+  })
+  try {
+    await Promise.race([svc.raise(input), timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function raise (input) {
   try {
     if (!(await isAlertingEnabled())) return
     svcPromise ??= cds.connect.to('alerts')
     const svc = await svcPromise
-    await svc.raise(input)
+    await raiseWithTimeout(svc, input)
   } catch (e) {
     // Never propagate — alerting must not break the path it watches.
     svcPromise = undefined // allow a later reconnect attempt
@@ -34,13 +57,14 @@ export async function raiseTest (input) {
     if (!(await isAlertingEnabled())) return { outcome: 'disabled' }
     svcPromise ??= cds.connect.to('alerts')
     const svc = await svcPromise
-    await svc.raise(input)
+    await raiseWithTimeout(svc, input)
     return { outcome: 'delivered' }
   } catch (e) {
     svcPromise = undefined // allow a later reconnect attempt
     const reason = e?.message ?? String(e)
+    const timedOut = /timed out/.test(reason)
     LOG.warn('test alert raise failed:', reason)
-    return { outcome: 'error', reason }
+    return { outcome: timedOut ? 'timeout' : 'error', reason }
   }
 }
 
