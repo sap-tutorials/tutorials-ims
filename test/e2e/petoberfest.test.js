@@ -99,6 +99,81 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
   }
 );
 
+// ── 0c. Moderation action buttons reference a resolvable bound action ───────
+// Regression guard for "select a row, press Approve — nothing happens, no error,
+// no feedback." The approve/hide buttons are UI.DataFieldForAction entries whose
+// Action string FE resolves against the OData metamodel. They were authored as
+// 'AdminService.PetSubmissions/approve' (the Service.Entity/action *slash* form),
+// which FE resolves as an unbound *action import* — none exists, so FE threw
+// "Unknown action import" deep inside callActionImport, swallowed it, and never
+// issued the POST (hence no visible effect and no console error). Single-overload
+// bound actions must use the 'Service.action' form ('AdminService.approve'); the
+// slash form is only for multi-overload actions needing entity disambiguation
+// (e.g. AdminService.VerbDefinitions/regenerate). This test drives FE's own
+// metamodel to assert every LineItem DataFieldForAction Action resolves to a
+// bound action overload — the exact resolution FE performs on button press.
+// With the pre-fix slash form, resolution yields null and this fails. Needs admin creds.
+describe.skipIf(!hasBaseUrl() || !hasCredentials())(
+  'e2e: petoberfest moderation actions resolve to bound actions (approve no-op fix)',
+  () => {
+    let browser;
+    beforeAll(async () => { browser = await launchBrowser(); });
+    afterAll(async () => { await browser?.close(); });
+
+    it('every PetSubmissions LineItem DataFieldForAction resolves to a bound action', async () => {
+      const { context, page } = await newPage(browser, { authenticated: true });
+      try {
+        await page.goto('/admin-ui/#/petoberfest', { waitUntil: 'domcontentloaded' });
+
+        // Wait for the FE table (proves the OData V4 model + metamodel are live).
+        await page
+          .locator('[role="grid"], [role="list"], .sapMList, .sapUiTable, .sapUiMdcTable')
+          .first()
+          .waitFor({ state: 'visible', timeout: 30_000 });
+
+        // Resolve each Action string exactly as FE does at press time.
+        const result = await page.evaluate(async () => {
+          const Core = sap.ui.require('sap/ui/core/Element') || sap.ui.core.Element;
+          let model;
+          Core.registry.forEach((el) => {
+            const m = el.getModel && el.getModel();
+            if (!model && m && m.isA && m.isA('sap.ui.model.odata.v4.ODataModel')) model = m;
+          });
+          if (!model) return { error: 'no OData V4 model found' };
+          const mm = model.getMetaModel();
+          const lineItem = mm.getObject('/PetSubmissions/@com.sap.vocabularies.UI.v1.LineItem') || [];
+          const actions = lineItem
+            .filter((x) => x.$Type === 'com.sap.vocabularies.UI.v1.DataFieldForAction')
+            .map((x) => x.Action);
+          const resolved = actions.map((name) => {
+            const o = mm.getObject('/' + name);
+            const overloads = Array.isArray(o) ? o : (o ? [o] : []);
+            const bound = overloads.some((ov) => ov && ov.$kind === 'Action' && ov.$IsBound);
+            return { name, resolvesToBoundAction: bound };
+          });
+          return { actions, resolved };
+        });
+
+        expect(result.error, `page eval failed: ${result.error}`).toBeUndefined();
+        expect(
+          result.actions.length,
+          'PetSubmissions LineItem should carry DataFieldForAction buttons'
+        ).toBeGreaterThan(0);
+        for (const r of result.resolved) {
+          expect(
+            r.resolvesToBoundAction,
+            `action "${r.name}" must resolve to a bound action overload — the ` +
+            `Service.Entity/action slash form resolves to a non-existent action ` +
+            `import (FE throws "Unknown action import" and silently no-ops)`
+          ).toBe(true);
+        }
+      } finally {
+        await context.close();
+      }
+    });
+  }
+);
+
 // ── 1. Anonymous page load ─────────────────────────────────────────────────
 describe.skipIf(!hasBaseUrl())('e2e: petoberfest (anonymous)', () => {
   let browser;
