@@ -276,6 +276,17 @@
           "kind": "telemetry-to-cloud-logging"
         }
       },
+      "kinds": {
+        "alert-notification": {
+          "impl": "@sap-tutorials/cds-alert-notification"
+        },
+        "alert-notification-console": {
+          "impl": "@sap-tutorials/cds-alert-notification"
+        },
+        "alert-notification-memory": {
+          "impl": "@sap-tutorials/cds-alert-notification"
+        }
+      },
       "alerts": {
         "impl": "@sap-tutorials/cds-alert-notification",
         "kind": "alert-notification-console",
