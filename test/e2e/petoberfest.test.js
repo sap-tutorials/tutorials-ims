@@ -55,9 +55,13 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
 // need a selected row context to fire. The table shipped with the FE default
 // selectionMode:"None" — no checkboxes rendered, so clicking approve was a
 // no-op and multi-select was impossible. The fix sets tableSettings.selectionMode
-// "Multi" in app/admin/petoberfest/webapp/manifest.json. We assert the rendered
-// moderation table exposes row-selection controls (checkboxes / rowselect cells),
-// which proves the manifest selectionMode took effect end-to-end. Needs admin creds.
+// "ForceMulti" in app/admin/petoberfest/webapp/manifest.json — plain "Multi" is
+// advisory and FE's getSelectionMode() downgrades it to "None" on a read-only
+// table (PetSubmissions has all Capabilities.*Restrictions=false, moderation is
+// via bound actions only); "ForceMulti" short-circuits that downgrade. We assert
+// the rendered moderation table exposes row-selection controls (checkboxes /
+// rowselect cells), which proves the manifest selectionMode took effect end-to-end.
+// Needs admin creds.
 describe.skipIf(!hasBaseUrl() || !hasCredentials())(
   'e2e: petoberfest moderation List Report allows multi-select for approve',
   () => {
@@ -76,17 +80,17 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
           .first()
           .waitFor({ state: 'visible', timeout: 30_000 });
 
-        // selectionMode:"Multi" surfaces per-row selection controls. FE renders
+        // selectionMode:"ForceMulti" surfaces per-row selection controls. FE renders
         // these as checkboxes (role="checkbox") in ResponsiveTable/MDC, or
         // rowselect cells in a GridTable. Either proves selection is enabled;
-        // with selectionMode:"None" (the pre-fix default) none of these exist.
+        // with the resolved "None" (plain "Multi" on a read-only table) none exist.
         const selectionControls = page.locator(
           '[role="checkbox"], .sapMListTblSelCol, .sapUiTableRowSelectionCell, .sapMCb'
         );
         await selectionControls.first().waitFor({ state: 'attached', timeout: 30_000 });
         expect(
           await selectionControls.count(),
-          'moderation table should render row-selection controls (selectionMode:"Multi")'
+          'moderation table should render row-selection controls (selectionMode:"ForceMulti")'
         ).toBeGreaterThan(0);
       } finally {
         await context.close();
