@@ -98,6 +98,9 @@ export async function decideHandler(req, res) {
     }
 
     if (!noCache) storeCache(cacheKey, out);
+    // Auth-aware: skip decisions vary per user and this path writes per-user
+    // telemetry. Never shared-cacheable at the CDN edge.
+    res.setHeader('Cache-Control', 'no-store');
     res.json(out);
 
   } catch (err) {

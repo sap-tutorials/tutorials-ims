@@ -72,6 +72,10 @@ async function scheduleHandler(req, res) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
 
+    // Admin-editable schedule feed (sessions/activities/tracks). Must not be
+    // cached at the CDN edge, or admin edits stay invisible until the edge's
+    // heuristic TTL lapses.
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json(assembleFeed({ sessions, activities, tracks, editions, activeEditionId: editionId, speakers, sessionSpeakers }));
   } catch (err) {
     LOG.error('GET /api/devtoberfest/schedule failed:', err);
@@ -84,6 +88,8 @@ async function myCompletionsHandler(req, res) {
     await cds.connect.to('db');
     const user = resolveUser(req, cds);
     const sapId = resolveUserSapId(user);
+    // Per-user response — never shared-cacheable at the CDN edge.
+    res.setHeader('Cache-Control', 'no-store');
     if (!sapId) return res.status(200).json({ authenticated: false, joined: false });
 
     // Points are earned by joining Devtoberfest AND completing activities
@@ -162,6 +168,10 @@ async function transcriptHandler(req, res) {
   if (!videoId) return res.status(400).json({ error: 'MISSING_VIDEO' });
   try {
     await cds.connect.to('db');
+    // Part of the /api/devtoberfest/* JSON set served no-store. The origin
+    // keeps its own 7d/1h transcript cache (below), so bypassing the CDN edge
+    // costs nothing but keeps this consistent with the rest of the set.
+    res.setHeader('Cache-Control', 'no-store');
     const { Transcript } = cds.entities('com.sap.developers.ims');
     const now = Date.now();
     // Metadata-only SELECT — no segments column — to avoid HANA LOB-locator expiry.

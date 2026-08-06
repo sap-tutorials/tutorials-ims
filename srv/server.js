@@ -302,6 +302,8 @@ cds.on('bootstrap', (app) => {
   app.get('/build/slug-mapping', async (req, res) => {
     const { buildSlugMapping } = await import('./lib/slug-mapping.js');
     const mapping = await buildSlugMapping();
+    // Shared, non-personalized feed — 60s edge cache like the other /build/* feeds.
+    res.set('Cache-Control', 'public, max-age=60');
     res.json(mapping);
   });
   app.get('/build/repo-catalog', repoCatalogReadHandler);

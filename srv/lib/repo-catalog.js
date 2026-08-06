@@ -15,6 +15,7 @@ export async function repoCatalogReadHandler(req, res) {
         cds.log('repo-catalog').warn(`payload parse failed for slug=${row.slug}`, err.message);
       }
     }
+    res.set('Cache-Control', 'public, max-age=60');
     res.json(map);
   } catch (err) {
     cds.log('repo-catalog').error('read failed', err.message);
