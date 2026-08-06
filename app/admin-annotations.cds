@@ -3891,7 +3891,8 @@ annotate AdminService.PetSubmissions with @(
     { $Type: 'UI.DataField', Value: moderation,   Label: 'Status' },
     { $Type: 'UI.DataField', Value: uploadedAt,   Label: 'Uploaded' },
     { $Type: 'UI.DataFieldForAction', Action: 'AdminService.approve', Label: 'Approve' },
-    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.hide',    Label: 'Hide' }
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.hide',    Label: 'Hide' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.purge',   Label: 'Delete' }
   ],
   UI.SelectionFields: [ moderation, contestSlug ],
   UI.HeaderInfo: {
@@ -3914,7 +3915,8 @@ annotate AdminService.PetSubmissions with @(
   ],
   UI.Identification: [
     { $Type: 'UI.DataFieldForAction', Action: 'AdminService.approve', Label: 'Approve' },
-    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.hide',    Label: 'Hide' }
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.hide',    Label: 'Hide' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.purge',   Label: 'Delete' }
   ],
   Capabilities.DeleteRestrictions: { Deletable: false },
   Capabilities.InsertRestrictions: { Insertable: false },
