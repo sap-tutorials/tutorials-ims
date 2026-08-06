@@ -52,6 +52,10 @@ export async function recommendationsHandler(req, res) {
       return res.status(404).json({ error: 'unknown slug', currentSlug: slug });
     }
     LOG.info(`slug=${slug} user=${user ? 'auth' : 'anon'} personalized=${result.personalized} count=${result.recommendations.length} durationMs=${Date.now() - start}`);
+    // Response varies per user (result.personalized reflects the caller's
+    // progress). Never shared-cacheable at the CDN edge, or one user's
+    // personalized recommendations leak to all anonymous callers.
+    res.setHeader('Cache-Control', 'no-store');
     res.json(result);
   } catch (err) {
     LOG.error('recommendations handler failed', err.message);

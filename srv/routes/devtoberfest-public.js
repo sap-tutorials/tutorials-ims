@@ -31,6 +31,12 @@ async function statusHandler(req, res) {
 
     const event = await SELECT.one.from(Events).where({ ID: config.currentEvent_ID });
 
+    // Response carries per-user join state (joined/termsRequired) AND
+    // admin-editable config. Must never be shared-cached at the CDN edge:
+    // a cached copy would leak one user's join state to all anonymous
+    // callers and serve stale rules/URLs after an admin edit.
+    res.setHeader('Cache-Control', 'no-store');
+
     const user = resolveUser(req, cds);
     let joined = false;
     if (user) {
@@ -73,6 +79,9 @@ async function termsHandler(_req, res) {
     if (!config) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
+    // Admin-editable content — must not be cached at the CDN edge, or edits
+    // stay invisible until the edge's heuristic TTL lapses.
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
       text: config.termsText || '',
       version: config.termsVersion || 1,
@@ -91,6 +100,8 @@ async function faqHandler(_req, res) {
     if (!config) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
+    // Admin-editable content — see termsHandler.
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ text: config.faqText || '' });
   } catch (err) {
     LOG.error('GET /api/devtoberfest/faq failed:', err);

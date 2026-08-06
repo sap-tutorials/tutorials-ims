@@ -11,6 +11,8 @@ export async function buildConceptsHandler(req, res) {
   try {
     const db = await cds.connect.to('db');
     const payload = await buildConceptsPayload(db);
+    // Shared, non-personalized feed — 60s edge cache like the other /build/* feeds.
+    res.set('Cache-Control', 'public, max-age=60');
     res.json(payload);
   } catch (err) {
     log.error('failed to build /build/concepts payload', err);

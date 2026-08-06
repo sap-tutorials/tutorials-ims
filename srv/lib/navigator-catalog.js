@@ -31,6 +31,7 @@ export async function navigatorCatalogHandler(req, res) {
   const bypassCache = req.query.nocache === '1';
   if (!bypassCache && cachedResponse && (now - cacheTimestamp) < CACHE_TTL_MS) {
     res.setHeader('X-Cache', 'HIT');
+    res.setHeader('Cache-Control', 'public, max-age=60');
     return res.json(cachedResponse);
   }
 
@@ -230,6 +231,8 @@ export async function navigatorCatalogHandler(req, res) {
     cachedResponse = result;
     cacheTimestamp = now;
     res.setHeader('X-Cache', 'MISS');
+    // Shared, non-personalized feed — 60s edge cache like the other /build/* feeds.
+    res.setHeader('Cache-Control', 'public, max-age=60');
     res.json(result);
   } catch (err) {
     console.error('[build/navigator]', err instanceof Error ? err.message : String(err));

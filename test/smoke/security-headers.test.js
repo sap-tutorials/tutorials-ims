@@ -78,3 +78,43 @@ describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
     });
   },
 );
+
+describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
+  'CDN cacheability of dynamic feeds (#devtoberfest-cache)',
+  () => {
+    // Akamai fronts the public domain and applies a heuristic/default TTL to
+    // any 200 GET that lacks an explicit Cache-Control (the approuter is a
+    // transparent proxy that adds none). Admin-editable / per-user JSON feeds
+    // must send no-store; shared catalog feeds send public,max-age.
+
+    // Admin-editable + per-user → must NOT be shared-cacheable at the edge.
+    const NO_STORE = [
+      '/api/devtoberfest/terms',
+      '/api/devtoberfest/faq',
+      '/api/devtoberfest/status',
+      '/api/devtoberfest/schedule',
+    ];
+    for (const path of NO_STORE) {
+      it(`${path} sends Cache-Control: no-store`, async () => {
+        const res = await fetchWithRetry(`${BASE_URL}${path}`);
+        // 503 EVENT_NOT_CONFIGURED is a valid state (no active edition); the
+        // header is still set on the 200 path, which is what we assert when
+        // the feed is live. Skip the assertion only when the feed is 503.
+        if (res.status === 503) return;
+        expect(res.headers.get('cache-control')).toMatch(/no-store/);
+      });
+    }
+
+    // Shared, non-personalized catalog feeds → short edge cache is fine.
+    const CACHEABLE = ['/build/catalog', '/build/navigator', '/build/slug-mapping'];
+    for (const path of CACHEABLE) {
+      it(`${path} sends a bounded public Cache-Control`, async () => {
+        const res = await fetchWithRetry(`${BASE_URL}${path}`);
+        if (!res.ok) return;
+        const cc = res.headers.get('cache-control');
+        expect(cc).toMatch(/public/);
+        expect(cc).toMatch(/max-age=\d+/);
+      });
+    }
+  },
+);

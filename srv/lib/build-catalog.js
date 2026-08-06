@@ -199,6 +199,10 @@ export async function buildCatalogHandler(req, res) {
 
     const categoriesPayload = buildCategoriesPayload(categories, missionAssign, groupAssign, tutorialAssign);
 
+    // Shared, non-personalized catalog. 60s edge cache matches the other
+    // /build/* island feeds (homepage-shelves, verb-definitions, etc.) and
+    // caps HANA load without letting the CDN serve badly stale data.
+    res.set('Cache-Control', 'public, max-age=60');
     res.json({ missions: missionList, hierarchies, featured, standaloneGroups, tutorials: tutorialList, categories: categoriesPayload });
   } catch (err) {
     console.error('[build/catalog]', err instanceof Error ? err.message : String(err));

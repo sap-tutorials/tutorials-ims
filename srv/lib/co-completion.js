@@ -111,6 +111,8 @@ export async function loadCoCompletionsFor(slug, { topN = 10, db: dbOverride } =
 export async function coCompletionsHandler(req, res) {
   try {
     const result = await computeCoCompletions()
+    // Shared, non-personalized feed — 60s edge cache like the other /build/* feeds.
+    res.set('Cache-Control', 'public, max-age=60')
     res.json(result)
   } catch (err) {
     console.error('[build/co-completions]', err instanceof Error ? err.message : String(err))
