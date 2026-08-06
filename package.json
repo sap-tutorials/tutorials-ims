@@ -152,7 +152,7 @@
     "yauzl": "3.4.0"
   },
   "dependencies": {
-    "@sap-tutorials/cds-alert-notification": "^1.0.0",
+    "@sap-tutorials/cds-alert-notification": "^1.0.2",
     "@cap-js-community/websocket": "^1.10.5",
     "@cap-js/ai": "~1.0.1",
     "@cap-js/audit-logging": "^1.2.2",
