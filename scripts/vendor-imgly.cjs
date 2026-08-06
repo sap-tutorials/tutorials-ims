@@ -25,12 +25,19 @@
 //
 // Dest layout: hugo/static/vendor/imgly/ (flat)  →  served at /vendor/imgly/
 //
-// The copy set is derived at run time by parsing resources.json from the
-// extracted tarball — we collect chunk names for onnxruntime-web + isnet_quint8
-// only. A structural guard checks that the 4 onnxruntime-web keys and 3 model
-// keys still exist (throws on any key added/removed so a human vets upgrades).
-// Hard-coding all 22 chunk hashes is avoided so the guard naturally adapts to
-// upstream chunk splits without a manual list update.
+// Idempotency + version tracking:
+//   A sentinel file .imgly-vendored-version is written alongside the chunks
+//   after each successful run. If the sentinel is missing OR its recorded
+//   version differs from the currently-installed package version, the dest dir
+//   is wiped and re-vendored (prevents stale old-version chunks when a developer
+//   bumps the package version, reinstalls, and re-runs vendor:imgly locally).
+//   CI is unaffected — clean envs have no pre-existing dest.
+//
+// Drift guard:
+//   The copy set is derived at run time from resources.json. A structural guard
+//   checks that the 4 onnxruntime-web keys and 3 model keys still exist (throws
+//   on key addition/removal so a human vets upgrades). Hard-coding chunk hashes
+//   is avoided so the guard adapts to upstream chunk splits automatically.
 //
 // Note: extraction uses a pure Node.js streaming tar parser (node:zlib) to
 // avoid system tar path issues on Windows (Git Bash tar treats Windows
@@ -43,9 +50,10 @@ const zlib = require('node:zlib');
 const { pipeline } = require('node:stream/promises');
 const { Readable }  = require('node:stream');
 
-const ROOT     = path.resolve(__dirname, '..');
-const PKG_DIR  = path.join(ROOT, 'hugo-apps', 'node_modules', '@imgly', 'background-removal');
-const DEST_DIR = path.join(ROOT, 'hugo', 'static', 'vendor', 'imgly');
+const ROOT      = path.resolve(__dirname, '..');
+const PKG_DIR   = path.join(ROOT, 'hugo-apps', 'node_modules', '@imgly', 'background-removal');
+const DEST_DIR  = path.join(ROOT, 'hugo', 'static', 'vendor', 'imgly');
+const SENTINEL  = path.join(DEST_DIR, '.imgly-vendored-version');
 
 // Structural guards on resources.json top-level keys.
 // Throws if the data package adds or removes keys between versions so a human
@@ -118,28 +126,64 @@ async function main() {
     throw new Error(`Missing ${PKG_DIR}. Run "npm --prefix hugo-apps install" first.`);
   }
 
-  const pkgJson  = JSON.parse(fs.readFileSync(path.join(PKG_DIR, 'package.json'), 'utf8'));
-  const version  = pkgJson.version;
-  const dataUrl  = `https://staticimgly.com/@imgly/background-removal-data/${version}/package.tgz`;
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(PKG_DIR, 'package.json'), 'utf8'));
+  const version = pkgJson.version;
+  const dataUrl = `https://staticimgly.com/@imgly/background-removal-data/${version}/package.tgz`;
 
   fs.mkdirSync(DEST_DIR, { recursive: true });
 
+  // ---- Step 1: version sentinel check ----
+  // If the sentinel records a different version, wipe dest so stale old-version
+  // chunks cannot linger after a package bump + reinstall.
+  const vendoredVersion = fs.existsSync(SENTINEL)
+    ? fs.readFileSync(SENTINEL, 'utf8').trim()
+    : null;
+
+  if (vendoredVersion !== null && vendoredVersion !== version) {
+    console.log(
+      `  detected version change (vendored=${vendoredVersion}, installed=${version}) — wiping stale assets`
+    );
+    fs.rmSync(DEST_DIR, { recursive: true, force: true });
+    fs.mkdirSync(DEST_DIR, { recursive: true });
+  }
+
+  // ---- Step 2: early-return if already fully up to date ----
+  // Requires sentinel version matches AND resources.json present (from which we
+  // derive the copy set to check file completeness).
+  // tmpDir is NOT created on this path — no needless syscall on the hot path.
   const manifestDest = path.join(DEST_DIR, 'resources.json');
+  if (vendoredVersion === version && fs.existsSync(manifestDest)) {
+    const resources  = JSON.parse(fs.readFileSync(manifestDest, 'utf8'));
+    const copyKeys   = [...EXPECTED_ONNX_KEYS, '/models/isnet_quint8'];
+    const chunkNames = new Set(['resources.json']);
+    for (const k of copyKeys) {
+      for (const c of resources[k].chunks) chunkNames.add(c.name);
+    }
+    const missingFiles = [...chunkNames].filter(f => !fs.existsSync(path.join(DEST_DIR, f)));
+    if (missingFiles.length === 0) {
+      console.log(`  @imgly assets already present (${chunkNames.size} files) — skipped`);
+      console.log('@imgly assets up to date at', DEST_DIR);
+      return;
+    }
+    // sentinel matched but some chunks missing — fall through to download
+    console.log(`  ${missingFiles.length} chunk(s) missing despite sentinel match — re-fetching`);
+  }
+
+  // ---- Step 3: download the data tarball (single download covers all files) ----
+  // tmpDir is created only here, never on the idempotent early-return path above.
   const tmpDir  = fs.mkdtempSync(path.join(os.tmpdir(), 'imgly-vendor-'));
   const tarball = path.join(tmpDir, 'package.tgz');
 
   try {
-    // ---- Step 1: obtain resources.json (download tarball if not cached) ----
-    let resources;
-    if (fs.existsSync(manifestDest)) {
-      resources = JSON.parse(fs.readFileSync(manifestDest, 'utf8'));
-    } else {
-      await downloadTarball(dataUrl, tarball);
-      await extractFromTgz(tarball, DEST_DIR, new Set(['resources.json']));
-      resources = JSON.parse(fs.readFileSync(manifestDest, 'utf8'));
-    }
+    await downloadTarball(dataUrl, tarball);
 
-    // ---- Step 2: structural guard on resources.json ----
+    // ---- Step 4: extract resources.json to read the manifest ----
+    if (!fs.existsSync(manifestDest)) {
+      await extractFromTgz(tarball, DEST_DIR, new Set(['resources.json']));
+    }
+    const resources = JSON.parse(fs.readFileSync(manifestDest, 'utf8'));
+
+    // ---- Step 5: structural guard on resources.json ----
     const allKeys       = Object.keys(resources);
     const missingOnnx   = EXPECTED_ONNX_KEYS.filter(k => !allKeys.includes(k));
     const missingModels = EXPECTED_MODEL_KEYS.filter(k => !allKeys.includes(k));
@@ -157,35 +201,21 @@ async function main() {
       );
     }
 
-    // ---- Step 3: compute copy set (onnxruntime-web + isnet_quint8 chunks) ----
+    // ---- Step 6: compute copy set and extract missing chunks ----
     const copyKeys   = [...EXPECTED_ONNX_KEYS, '/models/isnet_quint8'];
     const chunkNames = new Set(['resources.json']);
     for (const k of copyKeys) {
       for (const c of resources[k].chunks) chunkNames.add(c.name);
     }
 
-    // ---- Step 4: idempotency — skip if all files already present ----
     const missingFiles = [...chunkNames].filter(f => !fs.existsSync(path.join(DEST_DIR, f)));
-    if (missingFiles.length === 0) {
-      console.log(`  @imgly assets already present (${chunkNames.size} files) — skipped`);
-      console.log('@imgly assets up to date at', DEST_DIR);
-      return;
-    }
-
     console.log(
       `  ${chunkNames.size - missingFiles.length} of ${chunkNames.size} files present; ` +
-      `need ${missingFiles.length} more from v${version} data package...`
+      `extracting ${missingFiles.length} missing...`
     );
 
-    // ---- Step 5: download tarball if not already done above ----
-    if (!fs.existsSync(tarball)) {
-      await downloadTarball(dataUrl, tarball);
-    }
-
-    // ---- Step 6: extract missing chunks (resources.json already written) ----
     const toExtract = new Set(missingFiles.filter(f => f !== 'resources.json'));
     if (toExtract.size > 0) {
-      console.log(`  extracting ${toExtract.size} chunk files...`);
       const n = await extractFromTgz(tarball, DEST_DIR, toExtract);
       console.log(`  extracted ${n} files`);
     }
@@ -201,6 +231,9 @@ async function main() {
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+
+  // ---- Step 8: write version sentinel ----
+  fs.writeFileSync(SENTINEL, `${version}\n`);
 
   console.log('@imgly assets vendored to', DEST_DIR);
 }
