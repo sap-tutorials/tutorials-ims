@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { HomeState, MountConfig, StatusResponse } from './types'
+import { buildTicker } from './ticker'
 import TermsDialog from './TermsDialog.vue'
 
 const props = defineProps<{ config: MountConfig }>()
@@ -136,6 +137,41 @@ const railItems: RailItem[] = [
   { label: 'FAQ',         href: '/devtoberfest/faq/' },
 ]
 
+// Show the full welcome intro on the visitor-facing states (the empty-column
+// problem is worst for people who haven't joined yet). Registered players get
+// the shorter "head to the Gameboard" nudge instead.
+const showIntro = computed<boolean>(
+  () =>
+    state.value === 'anonymous' ||
+    state.value === 'unregistered' ||
+    state.value === 'registered',
+)
+
+// Rotating "insert coin"-style ticker under the intro — echoes the arcade
+// strip's blinking INSERT_COIN. Tips are static; the event window (when known)
+// is spliced in so the line also carries one real fact. No fabricated stats.
+// Builder lives in ./ticker.ts so it's unit-testable without mounting the SFC.
+const ticker = computed<string[]>(() => buildTicker(eventWindow.value))
+
+const tipIndex = ref<number>(0)
+const currentTip = computed<string>(
+  () => ticker.value[tipIndex.value % ticker.value.length] || '',
+)
+
+let tipTimer: ReturnType<typeof setInterval> | undefined
+const prefersReducedMotion =
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+function startTicker(): void {
+  // Respect reduced-motion: show the first tip, don't cycle.
+  if (prefersReducedMotion || tipTimer) return
+  tipTimer = setInterval(() => {
+    tipIndex.value = (tipIndex.value + 1) % ticker.value.length
+  }, 4500)
+}
+
 function onCtaClick(): void {
   if (state.value === 'anonymous') {
     // Tom's spec: auth flows via shellbar user menu; CTA is a no-op with hint.
@@ -158,7 +194,14 @@ function onJoined(): void {
   }
 }
 
-onMounted(fetchStatus)
+onMounted(async () => {
+  await fetchStatus()
+  startTicker()
+})
+
+onUnmounted(() => {
+  if (tipTimer) clearInterval(tipTimer)
+})
 
 defineExpose({ fetchStatus })
 </script>
@@ -237,6 +280,28 @@ defineExpose({ fetchStatus })
         <p v-else-if="state === 'registered'" class="dtf-msg">
           You're registered — head to the Gameboard to start scoring!
         </p>
+
+        <!-- Static welcome intro (Option A) + rotating arcade ticker (Option D).
+             Shown on the visitor + registered states to fill the column. -->
+        <div v-if="showIntro" class="dtf-intro">
+          <p class="dtf-msg">
+            One month. Every corner of the SAP developer world. Devtoberfest is
+            our annual community celebration — a season of hands-on sessions,
+            tutorials, and challenges where building something is the whole point.
+          </p>
+          <p class="dtf-msg">
+            Rack up points as you go, watch your name climb the
+            <strong>leaderboard</strong>, and blow off steam in the
+            <strong>arcade</strong> between rounds. Whether you're shipping your
+            first AI Agent or your hundredth, there's a spot on the board with
+            your name on it.
+          </p>
+          <p class="dtf-ticker" role="status" aria-live="polite">
+            <span class="dtf-ticker-prompt" aria-hidden="true">&gt;</span>
+            <span :key="currentTip" class="dtf-ticker-text">{{ currentTip }}</span>
+          </p>
+        </div>
+
         <p v-if="state === 'error'" class="dtf-error">
           {{ errorMsg || "Something went wrong loading Devtoberfest." }}
           <button class="dtf-error-retry" @click="fetchStatus">Retry</button>
