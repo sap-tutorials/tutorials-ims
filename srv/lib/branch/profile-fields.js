@@ -10,18 +10,11 @@
 // Drift guard: scripts/__tests__/profile-fields-sync.test.ts asserts these
 // values match the CDS enum strings on UserLearningPreferences (Task 11).
 
-export const PROFILE_FIELDS = ['deployment', 'role', 'cloud', 'preferredEventRegion'];   // #1030
+export const PROFILE_FIELDS = ['deployment', 'role', 'preferredEventRegion'];   // #1030
 
 export const PROFILE_VOCAB = {
   deployment: ['cloud', 'onprem'],
   role: ['developer', 'architect', 'sysadmin', 'student'],
-  // Issue #669: extended from [btp, aws, gcp] to cover the major cloud
-  // providers. The order here is the order rendered in the Select; SAP-first
-  // is deliberate. Any new value MUST be mirrored in (a) db/schema.cds
-  // UserLearningPreferences.cloud enum, and (b) the CLOUD_LABEL map in
-  // hugo-apps/src/me/LearningPreferences.vue. The profile-fields-sync.test.ts
-  // drift guard enforces (a).
-  cloud: ['btp', 'aws', 'azure', 'gcp', 'alibaba', 'oracle', 'ibm'],
   // #1030 — homepage Row 3 events band region preference.
   // VIRTUAL and ALL are UI modes (never physical regions).
   preferredEventRegion: ['AMERICAS', 'EMEA', 'APJ', 'VIRTUAL', 'ALL'],

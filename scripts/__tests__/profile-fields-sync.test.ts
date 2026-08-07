@@ -8,7 +8,7 @@ describe('profile-fields-sync (drift guard)', () => {
     const def = csn.definitions['com.sap.developers.ims.UserLearningPreferences'];
     expect(def, 'UserLearningPreferences entity must exist in CSN').toBeDefined();
 
-    for (const field of ['deployment', 'role', 'cloud'] as const) {
+    for (const field of ['deployment', 'role'] as const) {
       const elementEnum = def.elements?.[field]?.enum;
       expect(elementEnum, `${field} must have enum on element`).toBeDefined();
       const schemaValues = Object.keys(elementEnum).sort();
