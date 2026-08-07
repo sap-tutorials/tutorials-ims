@@ -1671,7 +1671,7 @@ export default cds.service.impl(async function () {
       return req.error(500, `Preview failed: ${err.message ?? 'unknown error'}`);
     }
 
-    // db.tx returned either an existing ID (string) or {id, fresh:true}.
+    // cds.tx(req) returned either an existing ID (string) or {id, fresh:true}.
     if (typeof runId === 'string') {
       return { runId, status: 'RUNNING', coalesced: true };
     }

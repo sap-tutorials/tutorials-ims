@@ -7,15 +7,16 @@
 //   - srv/jobs/consolidate-concepts-job.js  (weekly cron, applies merges)
 //   - srv/knowledge-graph-service.js previewMerges (admin dry-run)
 //
-// Why raw SQL on HANA: HANA returns LargeBinary columns as a Readable stream
-// backed by a LOB locator that expires before consumption when SELECTed
-// alongside scalar columns in CDS QL. The raw-SQL escape hatch mirrors the
+// Why raw SQL on HANA: HANA returns LargeBinary columns as a Buffer via raw
+// db.run() SQL. If fetched via CDS QL alongside scalar columns, the LOB locator
+// expires before consumption. The raw-SQL escape hatch mirrors the
 // established pattern in srv/lib/embedding-query.js +
 // srv/jobs/extract-concepts-job.js.
 //
-// SQLite via CDS QL also returns LargeBinary as a Readable (confirmed by probe
-// in _probe_blob.mjs — CDS wraps the SQLite blob in a stream unconditionally).
-// drainReadable() normalises both paths into a Buffer before Float32Array decode.
+// SQLite via CDS QL returns LargeBinary as a Readable (CDS wraps the SQLite
+// blob in a stream unconditionally — confirmed by probe in _probe_blob.mjs).
+// drainReadable() normalises the SQLite Readable path into a Buffer before
+// Float32Array decode. The HANA raw-SQL path already returns a Buffer directly.
 //
 // Plan ref: docs/superpowers/plans/2026-06-17-knowledge-graph-implementation.md
 //           (PR 6 / Task 6.1 — extracted from consolidate-concepts-job.js)
@@ -27,7 +28,9 @@ const NAMESPACE = 'com.sap.developers.ims';
 
 /**
  * Drain a Node.js Readable stream into a Buffer.
- * CDS QL wraps LargeBinary columns in a Readable on both SQLite and HANA.
+ * Used for the SQLite CDS-QL path: CDS wraps LargeBinary columns in a Readable
+ * on SQLite unconditionally. The HANA raw-SQL path returns a Buffer directly
+ * and does not go through this function.
  * @param {Readable} stream
  * @returns {Promise<Buffer>}
  */

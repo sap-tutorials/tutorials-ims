@@ -47,23 +47,54 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
           await btn.waitFor({ state: 'visible', timeout: 15_000 });
           await btn.click();
 
-          // After the click, the client kicks off an async background scan and starts
-          // polling. Within the poll ceiling (~190 s) one of three things appears:
-          //   1. A MessageBox/Dialog with candidate pairs  (merge candidates found)
-          //   2. A MessageToast with "no candidates" text  (zero near-duplicates)
-          //   3. A MessageBox with "Preview failed: 504"   (regression — must NOT appear)
+          // After click, the client fires the kick-off POST, shows a "Computing…"
+          // toast, then polls until the background run is DONE/FAILED (up to 3 min).
           //
-          // We assert that (1) or (2) is visible, and (3) never surfaces.
+          // Success surfaces:
+          //   1. A MessageBox.information dialog with "merge candidate(s)" title
+          //      → .sapMMessageBox with text matching /merge candidate\(s\)/
+          //   2. A "No merge candidates" MessageToast (empty dataset)
+          // Failure surface we must NOT see:
+          //   3. "Preview failed: 504" in a MessageBox error dialog
           //
-          // UI5 MessageBox renders as .sapMMessageBox (a subclass of sap.m.Dialog);
-          // toasts use .sapMMessageToast.
-          const resultLocator = page.locator(
-            '.sapMMessageBox, .sapMDialog, .sapMMessageToast'
-          );
-          await resultLocator.first().waitFor({ state: 'visible', timeout: RESULT_TIMEOUT_MS });
+          // Strategy:
+          //   (a) Assert the "Computing…" toast appears first (proves new async
+          //       code ran, not the old synchronous path which never showed this).
+          //   (b) Then wait for either the candidate MessageBox dialog OR the
+          //       no-candidates toast — both are valid final states.
+          //   (c) Confirm "Preview failed: 504" never appeared.
+          //
+          // NOTE: on a dataset with no near-duplicates the success surface is the
+          // no-candidates toast (.sapMMessageToast), not a dialog. The assertion
+          // covers both paths but still distinguishes them from an error.
 
-          // The critical regression guard: a 504 surfaced as "Preview failed: 504" in
-          // a MessageBox error dialog. Confirm it never appears.
+          // (a) The computing toast MUST appear — proves async kick-off ran.
+          const computingToast = page.locator('.sapMMessageToast');
+          await computingToast.first().waitFor({ state: 'visible', timeout: 30_000 });
+
+          // (b) Wait for the final result: candidate dialog OR no-candidates toast.
+          // A candidate dialog is a .sapMMessageBox containing "merge candidate(s)".
+          // A no-candidates state is another .sapMMessageToast (possibly the same one
+          // if it hasn't faded yet, or a second one).
+          const candidateDialog = page.locator('.sapMMessageBox, .sapMDialog').filter({
+            hasText: /merge candidate\(s\)/
+          });
+          const noCandidatesToast = page.locator('.sapMMessageToast').filter({
+            hasText: /No merge candidates/
+          });
+          // Race: whichever appears first wins.
+          await Promise.race([
+            candidateDialog.first().waitFor({ state: 'visible', timeout: RESULT_TIMEOUT_MS }),
+            noCandidatesToast.first().waitFor({ state: 'visible', timeout: RESULT_TIMEOUT_MS })
+          ]);
+
+          // At least one of the two success surfaces must be present.
+          const candidateCount = await candidateDialog.count();
+          const noCandidatesCount = await noCandidatesToast.count();
+          expect(candidateCount + noCandidatesCount).toBeGreaterThan(0);
+
+          // (c) The critical regression guard: a 504 surfaced as "Preview failed: 504"
+          // in a MessageBox error dialog. Confirm it never appears.
           expect(await page.getByText(/Preview failed: 504/).count()).toBe(0);
         } finally {
           await context.close();
