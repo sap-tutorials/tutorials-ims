@@ -1,12 +1,14 @@
 # CDN / edge caching
 
-> **Status:** design analysis + proposal. As of this writing the platform runs
-> **without** a project-owned CDN configuration and **without** any external
-> cache-purge signal on publish. `developers.sap.com` almost certainly already
-> fronts with Akamai at the SAP-domain level, so in practice this is less
+> **Status:** origin + AppRouter changes **implemented** (this doc's §"The
+> origin is CDN-shaped" and §"Static assets" describe live behavior); the
+> **publish-time purge hook remains proposed** (§"Invalidation on publish").
+> `developers.sap.com` is **confirmed** to already front with Akamai — the smoke
+> suite (`test/smoke/security-headers.test.js`) asserts the edge applies a
+> heuristic TTL to any 200 GET lacking an explicit `Cache-Control`, so the
+> header work here takes effect against a real edge immediately. This is less
 > "should we adopt a CDN" and more "what edge caching rules are safe for *this*
-> origin, and how do we invalidate them on publish." Confirm the existing edge
-> before treating this as greenfield.
+> origin, and how do we invalidate them on publish."
 
 ## Does a CDN even make sense for a data-driven site?
 
@@ -27,7 +29,7 @@ Traffic splits cleanly, and the split maps almost 1:1 onto the AppRouter's
 | Traffic class | Cache at edge? | Notes |
 |---|---|---|
 | `/tutorials/*`, `/concepts/*`, missions/groups, homepage, catalog feeds | **Yes — high value** | Same for everyone; changes only on publish. Likely the bulk of read volume. |
-| Static assets (Hugo CSS, Vue-island JS, images, fonts) | **Yes** | Classic CDN offload; fingerprinted → long TTL. |
+| Static assets (Hugo CSS, Vue-island JS, images, fonts) | **Yes** | Classic CDN offload. See §"Static assets" — currently a modest 1 h TTL because assets are **not** fingerprinted. |
 | Progress (`/homepage/personalized`), admin UI, Joule chat, gameboard-per-user, QA channel | **No — bypass** | Per-user / JWT-bearing. Caching these is a data-leak bug, not a perf win. |
 | XSUAA login redirects / anything with `Set-Cookie` | **No — never cache** | Auth-flow correctness. |
 
@@ -41,37 +43,77 @@ Even if read traffic were mostly authenticated, a CDN still earns its place for
 latency** — the audience is worldwide, the CF org is single-region
 (`eu10-005`). Those benefits do not depend on cacheability at all.
 
-## The origin is already CDN-shaped
+## The origin is CDN-shaped
 
-The content handler (`serveHandler` in `srv/lib/content-store.js`) already emits
-correct validators and TTLs — no origin changes are required to put an edge in
-front:
+The content handler (`serveHandler` in `srv/lib/content-store.js`) and the
+concepts-index handler (`srv/lib/concept-list-page.js`) emit CDN-tuned headers
+via a shared helper, `srv/lib/edge-cache-headers.js` (`setContentCacheHeaders`),
+applied to every cacheable 200 content response:
 
 ```js
 // srv/lib/content-store.js — DB-served tutorial (~line 1073)
-res.setHeader('ETag', `"${meta.contentHash}"`);        // SHA-256 of the HTML
-res.setHeader('Cache-Control', 'public, max-age=300');
+res.setHeader('ETag', `"${meta.contentHash}"`);   // SHA-256 of the HTML
+setContentCacheHeaders(res, { slug });            // Cache-Control + Vary + Edge-Cache-Tag
 res.setHeader('X-Content-Source', 'db');
 ```
+
+`setContentCacheHeaders` sets three headers:
+
+- **`Cache-Control: public, max-age=60, s-maxage=86400, stale-while-revalidate=600`**
+  — a deliberately **split browser/edge TTL**:
+  - `max-age=60` (browser) — a hard refresh picks up a new publish within a
+    minute.
+  - `s-maxage=86400` (shared edge) — the edge may hold content for a day,
+    because a publish is expected to issue a **targeted purge-by-tag** (see
+    §"Invalidation on publish"); without the purge this is the staleness ceiling.
+  - `stale-while-revalidate=600` — the edge serves the stale copy instantly
+    while revalidating in the background.
+- **`Vary: Accept-Encoding`** — so the edge keys gzip/br/identity variants
+  correctly (the concepts-index path serves pre-gzipped bytes with an explicit
+  `Content-Encoding: gzip`).
+- **`Edge-Cache-Tag`** — a per-response tag set for purge-by-tag (Akamai
+  `Edge-Cache-Tag`; the equivalent Fastly header is `Surrogate-Key`). See
+  §"Purge-by-tag scheme" below.
 
 - **ETag = `contentHash`** (SHA-256 of the served HTML). The handler honors
   `If-None-Match` and returns `304` on a match, so a CDN gets cheap
   revalidation.
-- **`Cache-Control: public, max-age=300`** on the DB-served path, the in-process
-  cache-hit path (~line 1024), and the rendered/render-cache catalog paths
-  (~lines 923, 967). `serveNotFound` → `max-age=60`; 301 redirects →
-  `max-age=3600` (~lines 841, 860).
 - **No `Last-Modified`** anywhere — ETag is the only validator (fine; don't rely
   on `Last-Modified` at the edge).
-- The delta/drift probes (`/content/hashes`, `/content/source-hashes`) set
-  `Cache-Control: no-cache` (~lines 1105, 1173) — correct, they must never be
-  cached.
+- **Unchanged, deliberately not run through the helper:** `serveNotFound` →
+  `max-age=60`; 301 redirects → `max-age=3600`/`300` (~lines 841, 860, 1007);
+  the `/content/nav` handler → `max-age=60`; the delta/drift probes
+  (`/content/hashes`, `/content/source-hashes`) → `no-cache` (~lines 1105, 1173);
+  the concepts-index stale error-fallback branch keeps `max-age=60`. These must
+  not inherit the long shared-edge TTL.
 
-So an edge keying on ETag + a short TTL is viable **today**. The only thing
-missing is **push invalidation on publish**: with a pure 300s TTL, worst-case
-edge staleness after a publish is 5 minutes. That is the one gap that would turn
-a CDN from an upgrade into a regression relative to the "serve live from HANA to
-avoid staleness" design intent.
+## Purge-by-tag scheme
+
+`cacheTagsFor(slug)` in `srv/lib/edge-cache-headers.js` builds the
+`Edge-Cache-Tag` set so a publish can purge by tag instead of enumerating URLs.
+Every cacheable content response carries the coarse `content` tag (enables a
+full-corpus purge); slugs additionally get finer tags:
+
+| Served slug | Edge-Cache-Tag value |
+|---|---|
+| tutorial `abap-basics` | `content, item-abap-basics` |
+| group page `group-getting-started` | `content, group, item-group-getting-started` |
+| mission page `mission-cap-intro` | `content, mission, item-mission-cap-intro` |
+| concepts index (`concepts`) | `content, concepts-index` |
+| concept detail `concept-oauth` | `content, concepts, concept-oauth` |
+
+Slug tokens are sanitized to `[A-Za-z0-9_-]` and length-capped, so an exotic
+slug can never produce a malformed header. The helper is **fail-open** — a
+header-write fault warn-logs and never breaks content serving. When the
+publish-time purge hook lands (§"Invalidation on publish"), it maps each fresh
+slug to its `item-<slug>` tag and issues a Fast-Purge by tag.
+
+So an edge keying on ETag + these headers is viable **today**. The one remaining
+gap is **push invalidation on publish**: until the purge hook lands, worst-case
+edge staleness after a publish is bounded by `s-maxage` (currently a day) rather
+than seconds. That is the single change still outstanding that keeps a CDN from
+being a regression relative to the "serve live from HANA to avoid staleness"
+design intent — see the checklist.
 
 ## Cacheable allow-list (default-deny)
 
@@ -92,7 +134,34 @@ sources are from `approuter/xs-app.json`; see [runtime.md](runtime.md) and
 | `/api/advocates` | `srv` | short |
 | `/api/devtoberfest/(status\|terms\|banner\|faq\|schedule\|transcript)` | `srv` | short |
 | `/graph/(neighborhood(Full)?\|Concepts\|ConceptEdges\|TutorialConceptLinks\|pathBetween\|conceptsForUser\|explore-data\|path\|searchKG\|PublishedConcepts)` | `srv` (public KG read arm) | short |
-| Hugo static assets (CSS/JS/img/fonts) + the `^(.*)$` catch-all → `localDir: static` | AppRouter static dir | long (fingerprinted) |
+| Hugo static assets (CSS/JS/img/fonts) | dedicated `cacheControl` asset route → `localDir: static` | 1 h (see §"Static assets") |
+
+### Static assets
+
+`approuter/xs-app.json` carries an explicit static-asset route **ahead of the
+`^(.*)$` catch-all**:
+
+```json
+{
+  "source": "^/((?:css|js|img|fonts|vendor)/.*)$",
+  "target": "/$1",
+  "localDir": "static",
+  "authenticationType": "none",
+  "cacheControl": "public, max-age=3600"
+}
+```
+
+`cacheControl` is an AppRouter route property that **only applies to
+`localDir`-served static resources** — it cannot be set on `destination`-backed
+routes (that is why the content TTLs are set at the CAP origin, not here).
+
+The TTL is a **deliberately modest 1 hour**, not `immutable`/1-year, because the
+Hugo assets are **not content-fingerprinted** — the templates reference
+`/css/sap-fundamental.css`, `/js/joule.js`, etc. by stable path (some carry a
+`?v=` query, many do not). A long/immutable TTL would strand a stale asset
+across a redeploy. Raising this to `immutable` + a 1-year TTL is gated on
+introducing fingerprinted asset filenames in the Hugo build; until then 1 h
+keeps redeploys safe while still offloading the bulk of asset requests.
 
 ### ⛔ Never cache — explicit bypass
 
@@ -182,21 +251,32 @@ rollback  ---------->  POST /content/rollback
 
 ## Adoption checklist
 
-1. **Confirm the edge** — determine whether `developers.sap.com` already fronts
-   with Akamai and whether this project owns any of its caching rules. Adjust
-   scope accordingly (configure vs. adopt).
-2. **Edge config = cache-on-allow-list, not cache-by-default** — apply the
-   allow-list above; hard-bypass every `xsuaa` route plus the three deceptive
-   `none`-but-personalized routes.
-3. **Honor origin headers** — respect the origin `Cache-Control` / `ETag`;
-   forward `If-None-Match` for cheap 304 revalidation; never cache a response
-   carrying `Set-Cookie`.
-4. **Wire the purge** — add the fire-and-forget Fast-Purge in `commitHandler` +
-   `rollbackHandler` keyed off `freshSlugs`; keep it fail-open.
-5. **Verify** — after a slug-targeted publish, confirm the edge serves the new
+1. **Edge confirmed** — ✅ `developers.sap.com` already fronts with Akamai
+   (asserted by `test/smoke/security-headers.test.js`). Treat this as adopt, not
+   greenfield: origin headers land against a live edge.
+2. **Origin headers** — ✅ **done.** `setContentCacheHeaders`
+   (`srv/lib/edge-cache-headers.js`) emits the split `max-age`/`s-maxage` +
+   `stale-while-revalidate` `Cache-Control`, `Vary: Accept-Encoding`, and a
+   per-response `Edge-Cache-Tag` on every cacheable 200 content response in
+   `content-store.js` and `concept-list-page.js`. Guarded by
+   `test/unit/edge-cache-headers.test.js`.
+3. **Static-asset TTL** — ✅ **done.** The `cacheControl` asset route in
+   `approuter/xs-app.json` sets a redeploy-safe 1 h TTL (§"Static assets").
+4. **Edge config = cache-on-allow-list, not cache-by-default** — apply the
+   allow-list above at the Akamai config; hard-bypass every `xsuaa` route plus
+   the three deceptive `none`-but-personalized routes. (Edge-side config, not in
+   this repo.)
+5. **Honor origin headers** — respect the origin `Cache-Control` / `ETag` /
+   `Vary`; forward `If-None-Match` for cheap 304 revalidation; never cache a
+   response carrying `Set-Cookie`. (Edge-side config.)
+6. **Wire the purge** — ⏳ **remaining.** Add the fire-and-forget Fast-Purge in
+   `commitHandler` + `rollbackHandler` keyed off `freshSlugs`, mapping each slug
+   to its `item-<slug>` `Edge-Cache-Tag`; keep it fail-open. This is the one code
+   change still outstanding.
+7. **Verify** — after a slug-targeted publish, confirm the edge serves the new
    `contentHash` (compare the `ETag` / `X-Content-Source` header) within seconds,
-   not on the 300s TTL.
+   not on the `s-maxage` ceiling.
 
-Skip step 4 and you trade a solved staleness problem (live-from-HANA) for an
-unsolved one (5-min edge staleness after every publish) — the one outcome that
-makes a CDN a regression here rather than an upgrade.
+Skip step 6 and you trade a solved staleness problem (live-from-HANA) for an
+unsolved one (edge staleness bounded by `s-maxage` after every publish) — the
+one outcome that makes a CDN a regression here rather than an upgrade.
