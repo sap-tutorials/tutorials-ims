@@ -225,6 +225,8 @@ service AdminService {
   entity StepFailures as projection on ims.StepFailures;
   entity NGDSFailedMessages as projection on ims.NGDSFailedMessages;
   entity DeveloperEnvironmentTabs as projection on ims.DeveloperEnvironmentTabs;
+  @odata.draft.enabled
+  @assert.unique.feature: [ taskLegacyId, taskType ]
   entity FeaturedTasks as projection on ims.FeaturedTasks;
 
   @odata.draft.enabled
