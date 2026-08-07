@@ -75,6 +75,12 @@ service KnowledgeGraphService {
 
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
 
+  // #1531 — polled by the Concepts admin UI to watch an async previewMerges
+  // run to completion. Admin-gated; rides the service before('*') KG gate.
+  @readonly
+  @requires : 'KnowledgeGraph.Admin'
+  entity ConceptMergePreviewRuns as projection on ims.ConceptMergePreviewRuns;
+
   // #1046 — writable projection so the Concept OP's inline sub-table can
   // CREATE/UPDATE/DELETE aliases. Auth inherited from the service
   // (@requires: 'any' at line 33), but writes are only reachable through
@@ -326,8 +332,17 @@ service KnowledgeGraphService {
   // No writes; returns the candidate (loser, canonical, similarity) triples that
   // a forced consolidation pass would collapse. Used by the admin "Preview merges"
   // toolbar button before a curator decides whether to invoke mergeConcepts.
+  // #1531 — previewMerges is now async. It inserts a RUNNING
+  // ConceptMergePreviewRuns row and returns a ticket immediately; the O(n^2)
+  // scan finishes in the background and writes resultJson onto the row, which
+  // the admin UI polls. The MergePreview type below is retained as the element
+  // shape encoded inside resultJson.
   @requires : 'KnowledgeGraph.Admin'
-  action previewMerges() returns array of MergePreview;
+  action previewMerges() returns {
+    runId     : UUID;
+    status    : String;
+    coalesced : Boolean;
+  };
 
   @requires : 'KnowledgeGraph.Admin'
   action vetoConcept(conceptId : UUID);
