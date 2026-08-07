@@ -1,0 +1,51 @@
+name: Site Feedback
+description: Report a problem or share feedback about developers.sap.com
+title: "[Feedback]: "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us improve the SAP Developers site! Please describe what you ran into below.
+  - type: dropdown
+    id: area
+    attributes:
+      label: What area is this about?
+      options:
+        - A specific tutorial
+        - A mission or learning path
+        - Search
+        - My account / progress
+        - AI-generated content (incorrect or imprecise)
+        - The site in general
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: ai-content
+    attributes:
+      label: AI-generated content — what's wrong?
+      description: |
+        Only needed if you picked "AI-generated content" above. Tell us which AI-generated
+        answer, summary, or recommendation was incorrect or not precise enough — and what
+        the accurate answer should have been. Paste the text you saw and, if you can, the
+        question or prompt that produced it.
+      placeholder: "The AI said X, but the correct answer is Y because…"
+    validations:
+      required: false
+  - type: input
+    id: page-url
+    attributes:
+      label: Page URL
+      description: The address of the page where you noticed this (if applicable).
+      placeholder: https://developers.sap.com/tutorials/...
+    validations:
+      required: false
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened?
+      description: Describe the problem or suggestion. Screenshots are welcome.
+      placeholder: Tell us what you expected and what you saw instead.
+    validations:
+      required: true
