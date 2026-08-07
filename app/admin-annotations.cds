@@ -3092,9 +3092,17 @@ annotate AdminService.HomepageShelves with @(
   // BOUND actions on the entity (srv/admin-service.cds) — FE V4 reads
   // UI.Identification and renders DataFieldForAction entries automatically.
   // Replaces PR 3b's broken manifest controlConfiguration[Identification].
+  // (#1532) Action string MUST be the bare 'Service.action' form. regenerate /
+  // markReviewed are 3-way OVERLOADED bound actions (HomepageShelves +
+  // VerbDefinitions + ShelfDefinitions); ODataMetaModel returns the overload
+  // array for 'AdminService.regenerate' and FE selects the overload matching
+  // the OP binding-context entity type. The 'Service.Entity/action' slash form
+  // is misparsed as an unbound *action import* (none exists) → FE throws
+  // "Unknown action import" in callActionImport, swallows it, and the button
+  // silently no-ops. Same root cause + fix as petoberfest approve/hide (25faff53).
   UI.Identification : [
-    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.HomepageShelves/regenerate',   Label: 'Regenerate explainer with AI' },
-    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.HomepageShelves/markReviewed', Label: 'Mark explainer as reviewed' }
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.regenerate',   Label: 'Regenerate explainer with AI' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.markReviewed', Label: 'Mark explainer as reviewed' }
   ],
   UI.SelectionFields : [ verb, shelf, isActive, linkStatus ],
   UI.Facets : [
@@ -3262,8 +3270,8 @@ annotate AdminService.VerbDefinitions with @(
   // manifest `controlConfiguration[Identification]` needed. Same precedent
   // as KnowledgeGraphService.Concepts.publishConcept (admin-annotations.cds:2542).
   UI.Identification : [
-    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.VerbDefinitions/regenerate',   Label: 'Regenerate with AI' },
-    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.VerbDefinitions/markReviewed', Label: 'Mark as reviewed' }
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.regenerate',   Label: 'Regenerate with AI' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.markReviewed', Label: 'Mark as reviewed' }
   ],
   UI.Facets : [
     { $Type: 'UI.ReferenceFacet', Label: 'Identity',  Target: '@UI.FieldGroup#Identity' },
@@ -3307,8 +3315,8 @@ annotate AdminService.ShelfDefinitions with @(
     { Value: authoringStatus, Label: 'Status', Criticality: authoringStatus }
   ],
   UI.Identification : [
-    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.ShelfDefinitions/regenerate',   Label: 'Regenerate with AI' },
-    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.ShelfDefinitions/markReviewed', Label: 'Mark as reviewed' }
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.regenerate',   Label: 'Regenerate with AI' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.markReviewed', Label: 'Mark as reviewed' }
   ],
   UI.Facets : [
     { $Type: 'UI.ReferenceFacet', Label: 'Identity',  Target: '@UI.FieldGroup#Identity' },
