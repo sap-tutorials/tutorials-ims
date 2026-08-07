@@ -538,7 +538,7 @@ import {
 import { graphRebuild } from './lib/kg-graph-rebuild.js';
 import { loadCoCompletionsFor } from './lib/co-completion.js';
 import { mergeConceptPair } from './lib/kg-merge-pair.js';
-import { findNearDuplicates } from './lib/kg-similarity.js';
+import { findNearDuplicatesChunked } from './lib/kg-similarity.js';
 import { loadConceptsWithEmbeddings } from './lib/kg-concept-loader.js';
 import { resolveKnowledgeGraphSettings } from './lib/runtime-config/kg-settings.js';
 import { mergeOtherResources, MAX_OTHER_RESOURCES } from './lib/kg-neighborhood-merge.js';
@@ -1624,45 +1624,127 @@ export default cds.service.impl(async function () {
     }
   });
 
-  // ─── previewMerges — dry-run dedupe over ACTIVE concepts ───────────────
-  // Thin wrapper around findNearDuplicates: loads every ACTIVE concept (with
-  // its cached embedding decoded to Float32Array via the shared
-  // kg-concept-loader), runs the same pairwise cosine-similarity scan the
-  // weekly consolidator uses, and returns the candidate (loser, canonical,
-  // similarity) triples without writing anything. Threshold mirrors the
-  // consolidator: KG_MERGE_SIM_THRESHOLD env var (default 0.92).
+  // ─── previewMerges — ASYNC dry-run dedupe over ACTIVE concepts (#1531) ──
+  // Was synchronous and 504'd behind the 30s gateway on large concept sets.
+  // Now: single-flight INSERT of a RUNNING ConceptMergePreviewRuns row +
+  // immediate {runId} return; the O(n^2) scan finishes in the background via
+  // setImmediate (yielding to the event loop) and writes resultJson onto the
+  // row, which the admin UI polls. Mirrors the fire-and-return shape of
+  // AdminService.JobControls.runJob + the coalescing SELECT-then-INSERT of
+  // srv/lib/kg/on-demand-enqueue.js.
+  const PREVIEW_STALE_MS = 5 * 60 * 1000; // coalesce onto runs newer than this
+  const PREVIEW_RESULT_CAP = 500;         // max pairs stored in resultJson
+
   this.on('previewMerges', async (req) => {
-    let concepts;
+    const { ConceptMergePreviewRuns } = cds.entities(NAMESPACE);
+    const user = req.user?.id ?? 'unknown';
+
+    // (1) Single-flight: coalesce onto a RUNNING run started < 5 min ago.
+    // Use cds.tx(req) to join the request's existing DB transaction rather
+    // than db.tx() which opens a nested transaction and deadlocks on SQLite.
+    const cutoffIso = new Date(Date.now() - PREVIEW_STALE_MS).toISOString();
+    let runId;
     try {
-      concepts = await loadConceptsWithEmbeddings(db, log);
+      const tx = cds.tx(req);
+      const [existing] = await tx.run(
+        SELECT.from(ConceptMergePreviewRuns)
+          .columns('ID')
+          .where({ status: 'RUNNING', startedAt: { '>': cutoffIso } })
+          .limit(1),
+      );
+      if (existing) {
+        runId = existing.ID; // coalesce
+      } else {
+        const id = cds.utils.uuid();
+        await tx.run(
+          INSERT.into(ConceptMergePreviewRuns).entries({
+            ID: id,
+            status: 'RUNNING',
+            requestedBy: user,
+            startedAt: new Date().toISOString(),
+          }),
+        );
+        runId = { id, fresh: true };
+      }
     } catch (err) {
-      log.error(`kg-service: previewMerges loader failed: ${err.message ?? err}`);
+      log.error(`kg-service: previewMerges enqueue failed: ${err.message ?? err}`);
       return req.error(500, `Preview failed: ${err.message ?? 'unknown error'}`);
     }
 
-    const { mergeSimThreshold: threshold } = await resolveKnowledgeGraphSettings();
-    const pairs = findNearDuplicates(concepts, threshold);
-    log.info(
-      `kg-service: previewMerges scanned ${concepts.length} ACTIVE concepts at threshold=${threshold}, found ${pairs.length} candidate pair(s)`,
-    );
-    await audit('KnowledgeGraphPreviewMerges', {
-      user: req.user?.id ?? 'unknown',
-      threshold,
-      conceptsScanned: concepts.length,
-      candidatePairs: pairs.length,
+    // db.tx returned either an existing ID (string) or {id, fresh:true}.
+    if (typeof runId === 'string') {
+      return { runId, status: 'RUNNING', coalesced: true };
+    }
+    const freshId = runId.id;
+
+    // (2) Kick the scan AFTER responding. Never rethrows (response already sent).
+    setImmediate(() => {
+      runPreviewScan(freshId, user).catch((err) => {
+        log.error(`kg-service: previewMerges background scan crashed: ${err?.message ?? err}`);
+      });
     });
 
-    return pairs.map((p) => ({
-      loserId: p.loser.ID,
-      loserSlug: p.loser.slug,
-      loserName: p.loser.name,
-      canonicalId: p.canonical.ID,
-      canonicalSlug: p.canonical.slug,
-      canonicalName: p.canonical.name,
-      // Round to 3 decimals to match the Decimal(4, 3) wire type.
-      similarity: Number(p.sim.toFixed(3)),
-    }));
+    return { runId: freshId, status: 'RUNNING', coalesced: false };
   });
+
+  // Background worker for a single preview run. Loads embeddings, runs the
+  // yielding scan, finalizes the row DONE/FAILED. Self-contained error handling.
+  async function runPreviewScan(runId, user) {
+    const { ConceptMergePreviewRuns } = cds.entities(NAMESPACE);
+    const startedMs = Date.now();
+    try {
+      const concepts = await loadConceptsWithEmbeddings(db, log);
+      const { mergeSimThreshold: threshold } = await resolveKnowledgeGraphSettings();
+      const pairs = await findNearDuplicatesChunked(concepts, threshold, { chunkSize: 50 });
+
+      const capped = pairs.slice(0, PREVIEW_RESULT_CAP).map((p) => ({
+        loserId: p.loser.ID,
+        loserSlug: p.loser.slug,
+        loserName: p.loser.name,
+        canonicalId: p.canonical.ID,
+        canonicalSlug: p.canonical.slug,
+        canonicalName: p.canonical.name,
+        similarity: Number(p.sim.toFixed(3)),
+      }));
+
+      await db.run(
+        UPDATE(ConceptMergePreviewRuns).set({
+          status: 'DONE',
+          finishedAt: new Date().toISOString(),
+          durationMs: Date.now() - startedMs,
+          threshold,
+          conceptsScanned: concepts.length,
+          candidatePairs: pairs.length,
+          resultJson: JSON.stringify(capped),
+        }).where({ ID: runId }),
+      );
+
+      log.info(
+        `kg-service: previewMerges run ${runId} scanned ${concepts.length} ACTIVE concepts at threshold=${threshold}, found ${pairs.length} candidate pair(s)`,
+      );
+      await audit('KnowledgeGraphPreviewMerges', {
+        user,
+        threshold,
+        conceptsScanned: concepts.length,
+        candidatePairs: pairs.length,
+      });
+    } catch (err) {
+      const msg = (err?.message ?? String(err)).slice(0, 500);
+      log.error(`kg-service: previewMerges run ${runId} failed: ${msg}`);
+      try {
+        await db.run(
+          UPDATE(ConceptMergePreviewRuns).set({
+            status: 'FAILED',
+            finishedAt: new Date().toISOString(),
+            durationMs: Date.now() - startedMs,
+            lastError: msg,
+          }).where({ ID: runId }),
+        );
+      } catch (uerr) {
+        log.error(`kg-service: previewMerges run ${runId} FAILED-flag write also failed: ${uerr?.message ?? uerr}`);
+      }
+    }
+  }
 
   // ─── vetoConcept — admin curation ──────────────────────────────────────
   this.on('vetoConcept', async (req) => {

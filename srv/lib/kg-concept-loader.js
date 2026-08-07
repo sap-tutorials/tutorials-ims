@@ -11,14 +11,33 @@
 // backed by a LOB locator that expires before consumption when SELECTed
 // alongside scalar columns in CDS QL. The raw-SQL escape hatch mirrors the
 // established pattern in srv/lib/embedding-query.js +
-// srv/jobs/extract-concepts-job.js. SQLite (unit-test path) is fine with CDS QL.
+// srv/jobs/extract-concepts-job.js.
+//
+// SQLite via CDS QL also returns LargeBinary as a Readable (confirmed by probe
+// in _probe_blob.mjs — CDS wraps the SQLite blob in a stream unconditionally).
+// drainReadable() normalises both paths into a Buffer before Float32Array decode.
 //
 // Plan ref: docs/superpowers/plans/2026-06-17-knowledge-graph-implementation.md
 //           (PR 6 / Task 6.1 — extracted from consolidate-concepts-job.js)
 
 import cds from '@sap/cds';
+import { Readable } from 'node:stream';
 
 const NAMESPACE = 'com.sap.developers.ims';
+
+/**
+ * Drain a Node.js Readable stream into a Buffer.
+ * CDS QL wraps LargeBinary columns in a Readable on both SQLite and HANA.
+ * @param {Readable} stream
+ * @returns {Promise<Buffer>}
+ */
+async function drainReadable(stream) {
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
 
 /**
  * Detect whether the bound DB is HANA (vs SQLite, used in unit tests).
@@ -82,8 +101,14 @@ export async function loadConceptsWithEmbeddings(db, log) {
     const name = r.NAME ?? r.name;
     const extractionCount = r.EXTRACTIONCOUNT ?? r.extractionCount ?? 0;
     const firstSeenAt = r.FIRSTSEENAT ?? r.firstSeenAt;
-    const embedding = r.EMBEDDING ?? r.embedding;
+    let embedding = r.EMBEDDING ?? r.embedding;
     if (!ID) continue;
+
+    // CDS QL (SQLite and HANA) wraps LargeBinary in a Readable stream.
+    // Drain to Buffer before passing to the sync Float32Array decoder.
+    if (embedding instanceof Readable) {
+      embedding = await drainReadable(embedding);
+    }
 
     const embeddingVec = bufferToFloat32Array(embedding);
     if (!embeddingVec) {
