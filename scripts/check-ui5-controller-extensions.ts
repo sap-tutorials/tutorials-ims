@@ -31,6 +31,23 @@
 // Both directions coexist in this single script. Output prints distinct hints
 // per direction so the remediation is obvious.
 //
+// === Direction C: hardcoded standalone FE view id (#1105, #1530) ===
+//
+// A plain-module toolbar handler (Direction B file) that needs the host
+// ListReport/ObjectPage view sometimes resolves it via the STANDALONE FE
+// container id, e.g.
+//   sap.ui.getCore().byId(
+//     "container-sap.tutorials.admin.tags---sap.fe.templates.ListReport.view.ListReport")
+// That id only exists under standalone `cds watch`. Inside the admin-shell
+// every admin app runs as a lazy `componentUsage` whose view id is the
+// routing-target id (`sap.tutorials.admin.tags::TagsList`), so the hardcoded
+// lookup returns null → "Could not resolve the ... view" on every press in
+// the shell, while standalone stays green — so it ships (PATs #1105, Tags
+// #1530). The robust fix is ElementRegistry-based resolution (anchor on the
+// deterministic inner-table id + view-id-suffix scan). This direction fails
+// the build if any `ext/*.js` hardcodes the `container-<sap.app.id>---...`
+// view id string.
+//
 // === How it works ===
 //
 //   1. Walk every `app/admin/*/webapp/manifest.json` (and admin-shell).
@@ -40,6 +57,8 @@
 //   3. Direction B: walk the manifest tree for every `press: "<m>.<n>"`
 //      string, extract the dotted module prefix, dedupe by module.
 //      Assert `<module>.js` exists (NOT only `.controller.js`).
+//   4. Direction C: for every `ext/*.js` beside the manifest, assert it does
+//      NOT hardcode the standalone `container-<sap.app.id>---...` view id.
 //
 // Designed to run as part of `postbuild:apps` in package.json. Exit code 1
 // on any mismatch; stderr prints the offending entry + expected file path.
@@ -50,11 +69,14 @@ import { pathToFileURL } from 'node:url';
 
 interface Issue {
   manifestPath: string;
-  /** 'controllerExtension' for direction A, 'press' for direction B. */
-  direction: 'controllerExtension' | 'press';
-  /** The dotted module ID from the manifest. */
+  /**
+   * 'controllerExtension' for direction A, 'press' for direction B,
+   * 'hardcodedViewId' for direction C.
+   */
+  direction: 'controllerExtension' | 'press' | 'hardcodedViewId';
+  /** The dotted module ID from the manifest (or the offending ext/*.js path for C). */
   moduleId: string;
-  /** The path the script asserted must exist (but didn't). */
+  /** The path the script asserted must exist (but didn't); the hardcoded id string for C. */
   expected: string;
   hint?: string;
 }
@@ -127,6 +149,50 @@ export function collectPressTargets(node: unknown): string[] {
   }
   walk(node);
   return [...acc];
+}
+
+// Direction C (#1105, #1530): detect a hardcoded standalone FE container view
+// id for THIS app inside a source file. The standalone FE id has the shape
+//   container-<sap.app.id>---sap.fe.templates.<Template>.view.<Template>
+// which is absent when the app runs as a componentUsage in the admin-shell.
+// Pure string scan (regex-free) so it can't produce false positives on the
+// legitimate ElementRegistry-based resolution. Returns the matching id
+// substrings found (empty when clean).
+export function findHardcodedContainerViewIds(
+  source: string,
+  appNamespace: string,
+): string[] {
+  const needle = `container-${appNamespace}---sap.fe.templates`;
+  const hits: string[] = [];
+  let from = 0;
+  for (;;) {
+    const idx = source.indexOf(needle, from);
+    if (idx === -1) break;
+    // Capture up to the closing quote for a readable diagnostic.
+    let end = idx;
+    while (end < source.length && source[end] !== '"' && source[end] !== "'") end++;
+    hits.push(source.slice(idx, end));
+    from = idx + needle.length;
+  }
+  return hits;
+}
+
+// Collect every `*.js` file directly under an app's `ext/` folder (the home
+// of Direction B plain-module handlers). We scan file CONTENT for Direction C,
+// so we skip `.controller.js` siblings — those are registered CEs, not the
+// files FE V4 loads for press: handlers, and a comment mentioning the old id
+// there is harmless. Non-recursive: ext/ is flat in every admin app today.
+function collectExtJsFiles(webappDir: string): string[] {
+  const extDir = join(webappDir, 'ext');
+  if (!existsSync(extDir)) return [];
+  const out: string[] = [];
+  for (const ent of readdirSync(extDir, { withFileTypes: true })) {
+    if (!ent.isFile()) continue;
+    if (!ent.name.endsWith('.js')) continue;
+    if (ent.name.endsWith('.controller.js')) continue;
+    out.push(join(extDir, ent.name));
+  }
+  return out;
 }
 
 // Resolve a UI5 module ID like "sap.tutorials.admin.missions.ext.BranchAnalyticsHandler"
@@ -217,6 +283,26 @@ function checkManifest(manifestPath: string): Issue[] {
     });
   }
 
+  // Direction C (#1105, #1530): scan ext/*.js for a hardcoded standalone FE
+  // container view id belonging to THIS app.
+  for (const jsFile of collectExtJsFiles(webappDir)) {
+    let src: string;
+    try {
+      src = readFileSync(jsFile, 'utf-8');
+    } catch {
+      continue;
+    }
+    for (const badId of findHardcodedContainerViewIds(src, appNamespace)) {
+      issues.push({
+        manifestPath,
+        direction: 'hardcodedViewId',
+        moduleId: jsFile,
+        expected: badId,
+        hint: `Hardcoded standalone FE view id "${badId}..." resolves to null inside the admin-shell (the app runs as a componentUsage; its view id is the routing-target id, not the container-<app> id). Resolve the view via sap/ui/core/ElementRegistry instead — anchor on the inner-table id and/or scan for the view by id suffix. See PatActionsController.js / TagImportController.js (#1105, #1530).`,
+      });
+    }
+  }
+
   return issues;
 }
 
@@ -247,15 +333,25 @@ export function main(): number {
   console.error(`\n✗ check-ui5-controller-extensions: ${allIssues.length} mismatch${allIssues.length === 1 ? '' : 'es'}\n`);
   for (const i of allIssues) {
     console.error(`  ${i.manifestPath}`);
-    console.error(`    direction:      ${i.direction === 'press' ? "press: reference (FE V4)" : "controllerExtension"}`);
-    console.error(`    module ID:      ${i.moduleId}`);
-    console.error(`    expected file:  ${i.expected}`);
+    const label =
+      i.direction === 'press' ? "press: reference (FE V4)"
+      : i.direction === 'hardcodedViewId' ? "hardcoded standalone view id"
+      : "controllerExtension";
+    console.error(`    direction:      ${label}`);
+    if (i.direction === 'hardcodedViewId') {
+      console.error(`    file:           ${i.moduleId}`);
+      console.error(`    hardcoded id:   ${i.expected}...`);
+    } else {
+      console.error(`    module ID:      ${i.moduleId}`);
+      console.error(`    expected file:  ${i.expected}`);
+    }
     if (i.hint) console.error(`    hint:           ${i.hint}`);
     console.error('');
   }
   console.error('UI5 controller-suffix-collision: manifest references and file names must match.');
   console.error('controllerExtensions → <Name>.controller.js  |  press: "<dotted>.<method>" → <dotted>.js');
-  console.error('See #362 (direction A) and #539 (direction B / PR #537 reference).');
+  console.error('Hardcoded view id: resolve via ElementRegistry, never container-<app>--- ids (fails in admin-shell).');
+  console.error('See #362 (direction A), #539 (direction B / PR #537), #1105/#1530 (direction C).');
   return 1;
 }
 
