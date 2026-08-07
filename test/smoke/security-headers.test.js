@@ -60,6 +60,26 @@ describe.skipIf(!BASE_URL || BASE_URL.startsWith('http://localhost'))(
       expect(csp).toMatch(/connect-src[^;]*user-consent-center\.trustarc\.com/);
     });
 
+    it("scopes 'unsafe-eval' to the /devtoberfest/* route only (#selfie)", async () => {
+      // The selfie tool's in-browser background removal (onnxruntime-web + imgly)
+      // calls new Function() at model init, which needs 'unsafe-eval'. We grant it
+      // on the devtoberfest subtree ONLY via a route-level CSP — the global CSP
+      // must NOT carry 'unsafe-eval'. Guards against drift between the two copies.
+      const root = await fetchWithRetry(`${BASE_URL}/`);
+      const rootCsp = root.headers.get('content-security-policy') || '';
+      expect(rootCsp).not.toMatch(/script-src[^;]*'unsafe-eval'/);
+
+      const dt = await fetchWithRetry(`${BASE_URL}/devtoberfest/selfie/`);
+      const dtCsp = dt.headers.get('content-security-policy') || '';
+      // Route may 404 if the selfie page isn't published in this env; only assert
+      // when the route-level CSP header is actually present.
+      if (dtCsp) {
+        expect(dtCsp).toMatch(/script-src[^;]*'unsafe-eval'/);
+        // wasm-unsafe-eval must remain too (WASM compile is separate from JS eval).
+        expect(dtCsp).toMatch(/script-src[^;]*'wasm-unsafe-eval'/);
+      }
+    });
+
     it('serves the TrustArc notice script in the homepage HTML (#trustarc-cmp)', async (ctx) => {
       const res = await fetchWithRetry(`${BASE_URL}/`);
       const html = await res.text();
