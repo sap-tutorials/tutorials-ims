@@ -15,6 +15,7 @@ import cds from '@sap/cds';
 import { gzipSync } from 'node:zlib';
 import { createShellLoader, ShellMarkerError, composeShell } from './chrome-shell.js';
 import { buildConceptsPayload as realBuildConceptsPayload } from './published-concepts-query.js';
+import { setContentCacheHeaders } from './edge-cache-headers.js';
 import * as metrics from './metrics.js';
 
 const DEFAULT_NAMESPACE = 'com.sap.developers.ims';
@@ -254,7 +255,7 @@ export function createConceptListPage({ namespace = DEFAULT_NAMESPACE, deps = {}
         if (ifNoneMatch && ifNoneMatch === cache.etag) return res.status(304).end();
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Content-Encoding', 'gzip');
-        res.setHeader('Cache-Control', 'public, max-age=300');
+        setContentCacheHeaders(res, { slug: 'concepts' });
         res.setHeader('ETag', cache.etag);
         res.setHeader('X-Content-Source', 'memcache');
         return res.status(200).send(cache.gzip);
@@ -285,7 +286,7 @@ export function createConceptListPage({ namespace = DEFAULT_NAMESPACE, deps = {}
       if (ifNoneMatch && ifNoneMatch === etag) return res.status(304).end();
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Encoding', 'gzip');
-      res.setHeader('Cache-Control', 'public, max-age=300');
+      setContentCacheHeaders(res, { slug: 'concepts' });
       res.setHeader('ETag', etag);
       res.setHeader('X-Content-Source', 'fresh');
       return res.status(200).send(gzip);

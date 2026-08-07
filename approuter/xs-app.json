@@ -546,6 +546,13 @@
       "scope": "$XSAPPNAME.Admin"
     },
     {
+      "source": "^/((?:css|js|img|fonts|vendor)/.*)$",
+      "target": "/$1",
+      "localDir": "static",
+      "authenticationType": "none",
+      "cacheControl": "public, max-age=3600"
+    },
+    {
       "source": "^(.*)$",
       "localDir": "static",
       "authenticationType": "none"

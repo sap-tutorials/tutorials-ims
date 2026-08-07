@@ -15,6 +15,7 @@ import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-
 import { tutorialsTableInfo } from './_tutorials-table.js';
 import * as metrics from './metrics.js';
 import { resolveSecret } from './secret-resolver.js';
+import { setContentCacheHeaders } from './edge-cache-headers.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -920,7 +921,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         }
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('ETag', `"${cachedRender.hash}"`);
-        res.setHeader('Cache-Control', 'public, max-age=300');
+        setContentCacheHeaders(res, { slug });
         res.setHeader('X-Content-Source', 'render-cache');
         return res.send(cachedRender.buffer);
       }
@@ -964,7 +965,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
         res.setHeader('Content-Type', rendered.contentType);
         res.setHeader('ETag', `"${hash}"`);
-        res.setHeader('Cache-Control', 'public, max-age=300');
+        setContentCacheHeaders(res, { slug });
         res.setHeader('X-Content-Source', 'rendered');
         return res.status(200).send(buffer);
       } catch (err) {
@@ -1021,7 +1022,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       }
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('ETag', `"${cached.hash}"`);
-      res.setHeader('Cache-Control', 'public, max-age=300');
+      setContentCacheHeaders(res, { slug });
       res.setHeader('X-Content-Source', 'cache');
       return res.send(cached.buffer);
     }
@@ -1071,7 +1072,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
       res.setHeader('Content-Type', `${meta.mimeType}; charset=utf-8`);
       res.setHeader('ETag', `"${meta.contentHash}"`);
-      res.setHeader('Cache-Control', 'public, max-age=300');
+      setContentCacheHeaders(res, { slug });
       res.setHeader('X-Content-Source', 'db');
       res.send(decompressed);
     } catch (err) {
