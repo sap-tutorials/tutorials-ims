@@ -73,7 +73,7 @@
       <hr class="tut-prefs__sep" />
       <p class="tut-prefs__footer">
         Camera processing happens entirely in your browser. Nothing is sent to a server.
-        <a href="/end-users/experimental-features" target="_blank" rel="noopener">Learn more</a>
+        <a href="https://sap-tutorials.github.io/tutorials-ims/end-users/experimental-features" target="_blank" rel="noopener">Learn more</a>
       </p>
     </div>
   </ui5-popover>
