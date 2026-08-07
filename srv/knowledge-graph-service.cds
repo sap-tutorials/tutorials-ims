@@ -39,6 +39,14 @@
 // the runtime returns empty results.
 
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
+// #1531 — ConceptMergePreviewRuns lives in a split db file that nothing else
+// pulls into the srv using-graph. Without this bare using, a srv-only model
+// load (cds.load('srv/') in scripts/emit-graphql-sdl.ts → build:sdl) cannot
+// resolve the projection at ConceptMergePreviewRuns below and the build fails.
+// `cds build --production` loads the whole db/ root so it compiled regardless —
+// which is why the PR's CI was green. Mirrors how admin-service.cds wires in
+// knowledge-graph-communities / knowledge-graph-ondemand.
+using from '../db/knowledge-graph-merge-preview';
 
 @requires : 'any'
 // #1105 fix: object-form @protocol so ONLY OData inherits `/graph`. The inline
