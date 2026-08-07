@@ -17,6 +17,7 @@ How the platform fits together. Read these when you need to understand a subsyst
 
 - [Authentication](architecture/authentication.md) — IdP → JWT → user resolution
 - [Runtime Architecture](architecture/runtime.md) — request flow, AppRouter, CAP
+- [CDN / Edge Caching](architecture/cdn-caching.md) — cacheable allow-list, publish-time purge
 - [Build Architecture](architecture/build.md) — fetch → parse → Hugo → publish
 - [Joule Architecture](architecture/joule.md) — chat, tools, RAG, embeddings
 - [Joule Aurora Background](architecture/joule-aurora.md) — aurora mesh background animation (#392)
