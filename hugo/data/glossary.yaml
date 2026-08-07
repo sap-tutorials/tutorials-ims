@@ -203,6 +203,24 @@ terms:
     definition: SAP's graph-database product line for modelling and querying interconnected business entities — pairs with HANA's SPARQL engine.
     link: https://help.sap.com/docs/hana-cloud-knowledge-graph
 
+  # --- AI ecosystem: tabular models & open hubs (expansion 2026-08-07) ---
+  RPT-1:
+    term: SAP RPT-1
+    definition: SAP's relational/tabular foundation model — predicts directly on structured data (classification, regression) with no task-specific training.
+    link: https://rpt.cloud.sap
+  Prior Labs:
+    term: Prior Labs
+    definition: AI research company (now part of SAP) behind TabPFN and tabular foundation models for structured-data prediction.
+    link: https://priorlabs.ai
+  TabPFN:
+    term: TabPFN
+    definition: Prior Labs' pre-trained foundation model for tabular data — strong predictions on small datasets with no training pipeline.
+    link: https://github.com/PriorLabs/TabPFN
+  Hugging Face:
+    term: Hugging Face
+    definition: Hub for open models, datasets, and ML tooling — the de facto registry for the AI ecosystem; SAP RPT-1 ships open-source here.
+    link: https://huggingface.co
+
   # --- SAP Build family (expansion 2026-06-24) ---
   SAP Build:
     term: SAP Build
@@ -292,6 +310,22 @@ terms:
     term: SAP Datasphere
     definition: SAP's business data fabric — federates data across SAP and non-SAP sources for analytics, planning, and AI workloads (successor to SAP Data Warehouse Cloud).
     link: https://www.sap.com/products/technology-platform/datasphere.html
+  Business Data Cloud:
+    term: SAP Business Data Cloud
+    definition: SAP's unified data platform combining SAP data products with Databricks to deliver AI-ready, governed business data.
+    link: https://www.sap.com/products/data-cloud/business-data-cloud.html
+  Dremio:
+    term: Dremio
+    definition: Open lakehouse platform for SQL analytics directly on data-lake storage, built around Apache Iceberg — a common companion to SAP Datasphere and Business Data Cloud.
+    link: https://www.dremio.com
+  Apache Iceberg:
+    term: Apache Iceberg
+    definition: Open table format for huge analytic datasets — the storage standard behind modern lakehouses, including SAP Business Data Cloud.
+    link: https://iceberg.apache.org
+  Reltio:
+    term: Reltio
+    definition: Cloud master-data-management platform for entity resolution and data quality — often paired with SAP master data.
+    link: https://www.reltio.com
   Steampunk:
     term: SAP BTP ABAP Environment
     definition: Internal SAP nickname (and widely-used community term) for the BTP-managed ABAP runtime — formerly "Steampunk", now officially BTP ABAP Environment.
@@ -334,3 +368,13 @@ terms:
     term: Kubernetes
     definition: Open-source container orchestration platform — SAP BTP Kyma Runtime is built on Kubernetes; AI Core also uses K8s under the hood.
     link: https://kubernetes.io/
+
+  # --- Third-party dev & integration tooling (expansion 2026-08-07) ---
+  Vercel:
+    term: Vercel
+    definition: Frontend cloud for building and deploying React, Vue, and static sites to a global edge — a common host for CAP's first-class React/Vue frontends.
+    link: https://vercel.com
+  n8n:
+    term: n8n
+    definition: Open-source workflow-automation tool for wiring together SAP and non-SAP systems via visual, node-based flows.
+    link: https://n8n.io
