@@ -51,7 +51,7 @@ export function makeBranchLoaders() {
         if (!dbUser?.ID) return null;
         const row = await SELECT.one.from(UserLearningPreferences)
           .where({ user_ID: dbUser.ID });
-        return row ? { deployment: row.deployment, role: row.role, cloud: row.cloud } : null;
+        return row ? { deployment: row.deployment, role: row.role } : null;
       } catch (err) {
         LOG.warn(`loadProfile: ${err.message} — degrading to null profile`);
         return null;

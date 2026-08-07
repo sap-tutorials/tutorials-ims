@@ -2237,20 +2237,19 @@ annotate AdminService.LearningPreferences with @UI: {
     Title: { Value: user.email },
     Description: { Value: user.displayName }
   },
-  SelectionFields: [ deployment, role, cloud ],
+  SelectionFields: [ deployment, role ],
   LineItem: [
     { Value: user.email },
     { Value: user.displayName },
     { Value: deployment },
     { Value: role },
-    { Value: cloud },
     { Value: modifiedAt }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Preferences' }
   ],
   FieldGroup#General: { Data: [
-    { Value: user.email }, { Value: deployment }, { Value: role }, { Value: cloud }
+    { Value: user.email }, { Value: deployment }, { Value: role }
   ]}
 };
 

@@ -2,10 +2,10 @@ import cds from '@sap/cds';
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('loadProfile (PR 6 typed read)', () => {
-  it('returns {deployment, role, cloud} shape from UserLearningPreferences', async () => {
+  it('returns {deployment, role} shape from UserLearningPreferences', async () => {
     // Use the existing in-memory CDS test serve; create a Users row + a
     // matching UserLearningPreferences row; assert loadProfile returns the
-    // typed shape.
+    // typed shape (cloud field removed as part of cloud-pref removal).
     const { Users, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
     const userUuid = '__test__-pr6-load-1';
     await INSERT.into(Users).entries({
@@ -13,12 +13,12 @@ describe('loadProfile (PR 6 typed read)', () => {
     });
     const dbUserId = (await SELECT.one.from(Users).where({ uuid: userUuid })).ID;
     await INSERT.into(UserLearningPreferences).entries({
-      user_ID: dbUserId, deployment: 'cloud', role: 'developer', cloud: 'btp',
+      user_ID: dbUserId, deployment: 'cloud', role: 'developer',
     });
     const { makeBranchLoaders } = await import('../../../srv/lib/branch/loaders.js');
     const loaders = makeBranchLoaders();
     const profile = await loaders.loadProfile({ id: userUuid });
-    expect(profile).toEqual({ deployment: 'cloud', role: 'developer', cloud: 'btp' });
+    expect(profile).toEqual({ deployment: 'cloud', role: 'developer' });
   });
 
   it('returns null when user has no UserLearningPreferences row', async () => {
