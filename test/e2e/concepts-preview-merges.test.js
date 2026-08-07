@@ -44,7 +44,7 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
           // Locate the "Preview merges" toolbar button (i18n: previewMergesButton).
           // Role-first; UI5 toolbar buttons carry role="button".
           const btn = page.getByRole('button', { name: 'Preview merges' });
-          await expect(btn).toBeVisible({ timeout: 15_000 });
+          await btn.waitFor({ state: 'visible', timeout: 15_000 });
           await btn.click();
 
           // After the click, the client kicks off an async background scan and starts
@@ -60,11 +60,11 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
           const resultLocator = page.locator(
             '.sapMMessageBox, .sapMDialog, .sapMMessageToast'
           );
-          await expect(resultLocator.first()).toBeVisible({ timeout: RESULT_TIMEOUT_MS });
+          await resultLocator.first().waitFor({ state: 'visible', timeout: RESULT_TIMEOUT_MS });
 
           // The critical regression guard: a 504 surfaced as "Preview failed: 504" in
           // a MessageBox error dialog. Confirm it never appears.
-          await expect(page.getByText(/Preview failed: 504/)).toHaveCount(0);
+          expect(await page.getByText(/Preview failed: 504/).count()).toBe(0);
         } finally {
           await context.close();
         }
