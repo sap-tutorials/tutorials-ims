@@ -506,6 +506,25 @@ jobs:
       - name: Check Hugo security annotations
         run: npm run check:security-annotations
 
+      # Preserve /browse/ across catalog-only rebuilds (root-caused 2026-08-07).
+      # catalog-only skips the "Fetch tutorials" step, so scripts/fetch-tutorials.ts
+      # never runs writeBrowseData() → hugo/data/browse.json is absent → the Hugo
+      # build below renders an EMPTY browse/index.html, which the tarball then
+      # ships and the approuter's /admin/rebuild atomically swaps over the good,
+      # populated browse page (the incident this fixes). browse cards CANNOT be
+      # rebuilt here (buildAllCards needs per-tutorial fields only the skipped
+      # GitHub fetch provides), so instead re-hydrate browse.json from the page
+      # the approuter is CURRENTLY serving. Fails the run (non-zero) rather than
+      # ship an empty /browse/ if the deployed page can't be read or is empty.
+      # Not needed in `full` (regenerates browse.json) or `slug-targeted` (no
+      # tarball push) — so this runs ONLY for catalog-only.
+      - name: Preserve browse.json for catalog-only rebuild
+        if: ${{ steps.mode.outputs.effective_mode == 'catalog-only' }}
+        env:
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
+          BROWSE_CHANNEL: ${{ steps.env.outputs.target == 'qa' && 'qa' || 'prod' }}
+        run: npx tsx scripts/seed-browse-from-deployed.ts
+
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
