@@ -187,7 +187,7 @@ export async function buildCatalogHandler(req, res) {
         };
       });
 
-    const groupByLegacyId = new Map(groups.map(g => [g.legacyId, g]));
+    const groupByLegacyId = new Map(groups.filter(g => g.published).map(g => [g.legacyId, g]));
     const featured = featuredRows
       .map(f => resolveFeatured(f, { missionByLegacyId, groupByLegacyId, tutorialByLegacyId }))
       .filter(Boolean);

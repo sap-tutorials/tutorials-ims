@@ -29,7 +29,7 @@ export async function fetchFeatured(db) {
   const rows = await db.run(SELECT.from(FeaturedTasks).orderBy('featuredOrder').limit(FEATURED_LIMIT));
   if (!rows.length) return [];
   const missions  = await db.run(SELECT.from(Missions).columns('legacyId', 'slug', 'title', 'description').where({ published: true }));
-  const groups    = await db.run(SELECT.from(Groups).columns('legacyId', 'slug', 'title', 'description'));
+  const groups    = await db.run(SELECT.from(Groups).columns('legacyId', 'slug', 'title', 'description').where({ published: true }));
   const tutorials = await db.run(SELECT.from(Tutorials).columns('legacyId', 'slug', 'title', 'description').where(`status = 'ACTIVE' or status is null`));
   const maps = {
     missionByLegacyId:  new Map(missions.map(m => [m.legacyId, m])),
