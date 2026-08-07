@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { buildEnvelope, hashEnvelope } from '../../../srv/lib/homepage/personalized-envelope.js';
 import { BASE_ORDER } from '../../../srv/lib/homepage/persona-map.js';
 
-const dev = { role: 'developer', deployment: 'cloud', cloud: 'aws' };
+const dev = { role: 'developer', deployment: 'cloud' };
 const shelves = [
   { ID: 's1', verb: 'BUILD',     shelf: 'START_HERE', sortOrder: 100, title: 'S1', personaTags: ['role:developer'], personaWeight: 10 },
   { ID: 's2', verb: 'BUILD',     shelf: 'START_HERE', sortOrder: 50,  title: 'S2' },
@@ -41,12 +41,12 @@ describe('buildEnvelope', () => {
     expect(env.forYou).toEqual([]);
   });
 
-  it('videoFilterTags include cloud and btp when profile has cloud', () => {
+  it('videoFilterTags always includes btp (cloud fan-out removed 2026-08-07)', () => {
     const env = buildEnvelope({ profile: dev, shelves, forYouCandidates: [], teaserSlugs: [] });
-    expect(env.videoFilterTags).toEqual(expect.arrayContaining(['aws', 'btp']));
+    expect(env.videoFilterTags).toEqual(['btp']);
   });
 
-  it('rssFilterTags include role and cloud derivatives', () => {
+  it('rssFilterTags include role derivatives', () => {
     const env = buildEnvelope({ profile: dev, shelves, forYouCandidates: [], teaserSlugs: [] });
     expect(env.rssFilterTags).toEqual(expect.arrayContaining(['btp-development']));
   });
@@ -61,7 +61,7 @@ describe('hashEnvelope', () => {
 
   it('differs when profile differs', () => {
     const a = buildEnvelope({ profile: dev, shelves, forYouCandidates: [], teaserSlugs: [] });
-    const other = { role: 'student', deployment: null, cloud: null };
+    const other = { role: 'student', deployment: null };
     const b = buildEnvelope({ profile: other, shelves, forYouCandidates: [], teaserSlugs: [] });
     expect(hashEnvelope(a)).not.toBe(hashEnvelope(b));
   });

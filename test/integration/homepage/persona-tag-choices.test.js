@@ -2,7 +2,7 @@
 //
 // (#763) Integration test for AdminService.PersonaTagChoices value-help entity.
 // Verifies that GET /admin/PersonaTagChoices returns every KNOWN_TAG as a
-// { tag } row, including spot-checks for 'role:developer' and 'cloud:btp'.
+// { tag } row, including spot-checks for 'role:developer' and 'deployment:cloud'.
 //
 // The expected row count is derived from KNOWN_TAGS (single source of truth
 // in srv/lib/homepage/persona-tag-validator.js) so vocab expansions in
@@ -43,11 +43,11 @@ describe('PersonaTagChoices value-help entity', () => {
     }
   });
 
-  it('contains role:developer and cloud:btp', async () => {
+  it('contains role:developer and deployment:cloud', async () => {
     const r = await project.get('/admin/PersonaTagChoices', adminAuth);
     const items = r.data?.value ?? r.data;
     const tags = items.map((row) => row.tag);
     expect(tags).toContain('role:developer');
-    expect(tags).toContain('cloud:btp');
+    expect(tags).toContain('deployment:cloud');
   });
 });
