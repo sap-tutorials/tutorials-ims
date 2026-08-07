@@ -25,7 +25,6 @@ const { normalizeLegacyCatalogUrl } = require('./lib/catalog-legacy-redirects')
 const { bump, startAutoFlush } = require('./lib/hit-counter')
 const { safeFetch } = require('./lib/safe-fetch')
 const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
-const { forceForwardedHostHandler } = require('./lib/force-forwarded-host')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
 // array) injected by the approuter framework when mta.yaml declares
@@ -537,12 +536,6 @@ ar.start({
     {
       insertMiddleware: {
         first: [
-          // TEMPORARY (DNS cutover): force X-Forwarded-Host when
-          // FORCE_FORWARDED_HOST is set, so OAuth redirect_uri targets the
-          // external vanity host even though Akamai isn't forwarding it. MUST
-          // be first — before wellKnownOAuthHandler and the built-in login
-          // middleware both read the header. No-op when the env var is unset.
-          { path: '/', handler: forceForwardedHostHandler },
           { path: '/', handler: wellKnownOAuthHandler },
           { path: '/admin/rebuild', handler: rebuildHandler },
           { path: '/', handler: imgCdnHandler },
