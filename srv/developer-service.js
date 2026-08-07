@@ -802,19 +802,19 @@ export default class DeveloperService extends cds.ApplicationService {
       req.query.where(dbUser?.ID ? { user_ID: dbUser.ID } : { user_ID: null });
     });
 
-    // PR 6 — Self-service write surface. PUT-style: all three fields are
+    // PR 6 — Self-service write surface. PUT-style: all fields are
     // written every time; values omitted by the caller default to null and
     // explicitly clear the slot. SELECT-then-INSERT-or-UPDATE matches the
     // codebase-wide idiom (zero direct UPSERT statements anywhere under srv/).
     // Spec: §4.2, §7.2
     this.on('setLearningPreferences', async (req) => {
-      const { deployment = null, role = null, cloud = null } = req.data;
+      const { deployment = null, role = null } = req.data;
 
       // Validate each field: null OR a value from the vocab. JS validation
       // layer is the actual runtime gate — CAP's @assert.range fires only at
       // the OData protocol layer, not on programmatic CQL writes from action
       // handlers, so the explicit loop here IS the security boundary.
-      for (const [field, value] of Object.entries({ deployment, role, cloud })) {
+      for (const [field, value] of Object.entries({ deployment, role })) {
         if (value === null) continue;
         if (!PROFILE_VOCAB[field].includes(value)) {
           return req.error(400, `${field}: must be one of [${PROFILE_VOCAB[field].join(', ')}]`);
@@ -848,10 +848,10 @@ export default class DeveloperService extends cds.ApplicationService {
       if (existing) {
         await UPDATE(UserLearningPreferences)
           .where({ user_ID: dbUser.ID })
-          .set({ deployment, role, cloud });
+          .set({ deployment, role });
       } else {
         await INSERT.into(UserLearningPreferences).entries({
-          user_ID: dbUser.ID, deployment, role, cloud,
+          user_ID: dbUser.ID, deployment, role,
         });
       }
       return SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID });
