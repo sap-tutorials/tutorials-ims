@@ -24,9 +24,6 @@
 .frame-thumb[aria-selected="true"], .frame-thumb.is-selected { border-color: var(--sapButton_Emphasized_Background, #0070f2); }
 .frame-thumb img { display: block; width: 100%; height: auto; }
 
-/* ---- Uploader ---- */
-.selfie-uploader { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: 1rem 0; }
-.selfie-uploader input[type="file"] { max-width: 100%; }
 .selfie-btn {
   cursor: pointer; border: none; border-radius: 6px; padding: .5rem 1rem;
   font: inherit; color: #fff; background: var(--sapButton_Emphasized_Background, #0070f2);
@@ -40,10 +37,6 @@
 }
 .selfie-busy { color: var(--sapContent_LabelColor, #556b82); }
 
-/* ---- Editor (cropper) ---- */
-.selfie-editor { margin: 1rem 0; }
-.selfie-editor-stage { max-width: 100%; max-height: 60vh; }
-.selfie-editor-stage img { display: block; max-width: 100%; }
 .selfie-editor-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
 
 /* ---- Capture (camera) ---- */

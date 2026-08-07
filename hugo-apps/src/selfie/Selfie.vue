@@ -24,9 +24,12 @@ async function onPhoto(blob: Blob) {
   step.value = 'segment'
   try {
     const { blob: cut, removed } = await removeBackground(blob, (p) => { segmentProgress.value = p })
-    if (!removed) errorMsg.value = 'Couldn’t remove the background — using your full photo.'
+    if (!removed) errorMsg.value = "Couldn't remove the background — using your full photo."
     cutout.value = cut
     step.value = 'compose'
+  } catch {
+    errorMsg.value = 'Something went wrong processing your photo. Please try again.'
+    step.value = 'capture'
   } finally {
     segmenting.value = false
   }

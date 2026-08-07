@@ -8,7 +8,9 @@ export interface SelfieStage {
 }
 
 function loadKImage(url: string): Promise<Konva.Image> {
-  return new Promise((resolve) => Konva.Image.fromURL(url, (node: Konva.Image) => resolve(node)))
+  return new Promise((resolve, reject) =>
+    Konva.Image.fromURL(url, (node: Konva.Image) => resolve(node), (e) => reject(e)),
+  )
 }
 
 export async function buildStage(

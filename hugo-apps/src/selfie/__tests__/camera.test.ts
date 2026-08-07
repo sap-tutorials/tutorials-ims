@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { startCamera, captureFrame, CameraUnavailableError } from '../camera'
+import { startCamera, captureFrame, stopCamera, CameraUnavailableError } from '../camera'
 
 describe('camera', () => {
   beforeEach(() => { vi.restoreAllMocks() })
@@ -25,5 +25,14 @@ describe('camera', () => {
     vi.spyOn(canvasProto, 'toBlob').mockImplementation((cb: (b: Blob | null) => void) => cb(blob))
     const video = { videoWidth: 1280, videoHeight: 720 } as HTMLVideoElement
     await expect(captureFrame(video)).resolves.toBe(blob)
+  })
+
+  it('stopCamera calls stop() on every track in the stream', () => {
+    const t1 = { stop: vi.fn() }
+    const t2 = { stop: vi.fn() }
+    const fakeStream = { getTracks: () => [t1, t2] } as unknown as MediaStream
+    stopCamera(fakeStream)
+    expect(t1.stop).toHaveBeenCalledOnce()
+    expect(t2.stop).toHaveBeenCalledOnce()
   })
 })
