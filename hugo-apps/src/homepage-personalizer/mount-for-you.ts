@@ -9,12 +9,11 @@ export interface ForYouItem {
 
 // Human-readable "Because you're …" chip. Fires from the personalized-envelope
 // profile so users see at a glance why the row surfaced these picks.
-function becauseString(profile: { role?: string | null; deployment?: string | null; cloud?: string | null } | null): string {
+function becauseString(profile: { role?: string | null; deployment?: string | null } | null): string {
   if (!profile) return '';
   const parts: string[] = [];
   if (profile.role) parts.push(profile.role);
   if (profile.deployment) parts.push(profile.deployment);
-  if (profile.cloud) parts.push(`on ${profile.cloud.toUpperCase()}`);
   if (parts.length === 0) return '';
   return `Because you're a ${parts.join(' ')} developer`;
 }

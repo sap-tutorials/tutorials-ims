@@ -11,13 +11,10 @@ const VERBS_UPPER = ['LEARN','BUILD','INTEGRATE','MODEL','OPERATE','AI','CONNECT
 const VERB_TO_LOWER = { LEARN:'learn', BUILD:'build', INTEGRATE:'integrate',
                         MODEL:'model', OPERATE:'operate', AI:'ai', CONNECT:'connect' };
 
-// Cloud-provider fan-out: knowing you're on aws is useful; we always
-// include btp too because SAP-first content dominates the corpus.
-function deriveVideoFilterTags(profile) {
-  const out = [];
-  if (profile?.cloud) out.push(profile.cloud);
-  if (!out.includes('btp')) out.push('btp');
-  return out;
+// Cloud-provider fan-out removed (2026-08-07). SAP-first content dominates,
+// so we always seed btp.
+function deriveVideoFilterTags(_profile) {
+  return ['btp'];
 }
 
 // RSS tags are tag-shaped hints matched against blog post categories.
@@ -28,17 +25,10 @@ const ROLE_RSS = {
   sysadmin:  ['operations'],
   student:   ['getting-started'],
 };
-const CLOUD_RSS = {
-  btp:  ['btp-development'],
-  aws:  ['btp-development'],
-  azure:['btp-development'],
-  gcp:  ['btp-development'],
-};
 
 function deriveRssFilterTags(profile) {
   const tags = new Set();
   for (const t of ROLE_RSS[profile?.role] || []) tags.add(t);
-  for (const t of CLOUD_RSS[profile?.cloud] || []) tags.add(t);
   return [...tags];
 }
 
@@ -101,7 +91,6 @@ export function buildEnvelope({ profile, shelves, forYouCandidates, teaserSlugs,
     profile: {
       role: p.role ?? null,
       deployment: p.deployment ?? null,
-      cloud: p.cloud ?? null,
     },
     verbOrder,
     forYou,
