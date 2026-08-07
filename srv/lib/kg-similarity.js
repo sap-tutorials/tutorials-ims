@@ -101,3 +101,47 @@ export function findNearDuplicates(concepts, threshold = 0.92) {
   out.sort((x, y) => y.sim - x.sim);
   return out;
 }
+
+/**
+ * Event-loop-yielding variant of {@link findNearDuplicates}.
+ *
+ * Same math and same output (identical pairs, identical descending-sim sort),
+ * but `await`s a macrotask yield every `chunkSize` outer-loop rows so other
+ * HTTP requests on the single-threaded Node event loop can interleave. Used by
+ * the interactive admin "Preview merges" action (issue #1531); the weekly
+ * consolidator keeps using the synchronous finder.
+ *
+ * @param {Array<{ID: string, embeddingVec: Float32Array, extractionCount: number, firstSeenAt: string|Date}>} concepts
+ * @param {number} [threshold=0.92]
+ * @param {{ chunkSize?: number, onYield?: () => void }} [opts]
+ * @returns {Promise<Array<{ canonical: object, loser: object, sim: number }>>}
+ */
+export async function findNearDuplicatesChunked(concepts, threshold = 0.92, opts = {}) {
+  if (!Array.isArray(concepts) || concepts.length < 2) return [];
+  const chunkSize = opts.chunkSize && opts.chunkSize > 0 ? opts.chunkSize : 50;
+  const onYield = typeof opts.onYield === 'function' ? opts.onYield : null;
+  const out = [];
+  for (let i = 0; i < concepts.length; i++) {
+    const a = concepts[i];
+    if (a && a.embeddingVec) {
+      for (let j = i + 1; j < concepts.length; j++) {
+        const b = concepts[j];
+        if (!b || !b.embeddingVec) continue;
+        const sim = cosineSim(a.embeddingVec, b.embeddingVec);
+        if (sim > threshold) {
+          const canonical = pickCanonical(a, b);
+          const loser = canonical === a ? b : a;
+          out.push({ canonical, loser, sim });
+        }
+      }
+    }
+    // Yield to the event loop between outer-loop chunks.
+    if ((i + 1) % chunkSize === 0) {
+      if (onYield) onYield();
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+  out.sort((x, y) => y.sim - x.sim);
+  return out;
+}
