@@ -16,7 +16,7 @@ beforeEach(async () => {
 });
 
 function makeRes() {
-  const res = { status: vi.fn(() => res), json: vi.fn(() => res) };
+  const res = { status: vi.fn(() => res), json: vi.fn(() => res), setHeader: vi.fn(() => res) };
   return res;
 }
 

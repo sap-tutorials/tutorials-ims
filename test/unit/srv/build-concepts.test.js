@@ -15,7 +15,7 @@ describe('buildConceptsHandler (Express middleware)', () => {
     const { buildConceptsHandler } = await import('../../../srv/lib/build-concepts.js')
 
     const req = {}
-    const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() }
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis(), set: vi.fn().mockReturnThis() }
     await buildConceptsHandler(req, res)
 
     expect(res.status).not.toHaveBeenCalled()
@@ -30,7 +30,7 @@ describe('buildConceptsHandler (Express middleware)', () => {
     const { buildConceptsHandler } = await import('../../../srv/lib/build-concepts.js')
 
     const req = {}
-    const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() }
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis(), set: vi.fn().mockReturnThis() }
     await buildConceptsHandler(req, res)
 
     expect(res.status).toHaveBeenCalledWith(500)
