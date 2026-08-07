@@ -28,6 +28,19 @@ sap.ui.define([
   // never flipped. Verified against DEV UI5 1.136 that only
   // `getSource().getSelectedContexts()` returns the selected rows.
   function readSelectedContexts(oEvent) {
+    // FE V4 invokes manifest LineItem actions with DIFFERENT arg shapes
+    // depending on template + host (standalone app vs admin-shell
+    // componentUsage — these explainer apps run as the latter):
+    //   - array of selected contexts (LR multi-select toolbar) — common case
+    //   - a UI5 Event (legacy / direct wiring) → getSource().getSelectedContexts()
+    //   - undefined / null (some shell paths) → treat as empty selection
+    // Guarding `oEvent` itself is load-bearing: `oEvent.getSource?.()`
+    // optional-chains the CALL, not the property read, so a bare undefined
+    // arg threw "Cannot read properties of undefined (reading 'getSource')"
+    // on "Regenerate selected with AI" / "Mark selected as reviewed".
+    // Mirrors resolveCtx in concepts/ + kgCommunities/ ActionsControllers.
+    if (!oEvent) return [];
+    if (Array.isArray(oEvent)) return oEvent;
     const src = oEvent.getSource?.();
     if (src && typeof src.getSelectedContexts === "function") {
       const ctxs = src.getSelectedContexts();
