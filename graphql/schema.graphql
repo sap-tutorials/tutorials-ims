@@ -1536,19 +1536,16 @@ type DeveloperService_LearningPreferences {
   user: com_sap_developers_ims_Users
   deployment: String
   role: String
-  cloud: String
 }
 
 input DeveloperService_LearningPreferences_filter {
   deployment: [String_filter]
   role: [String_filter]
-  cloud: [String_filter]
 }
 
 input DeveloperService_LearningPreferences_orderBy {
   deployment: SortDirection
   role: SortDirection
-  cloud: SortDirection
 }
 
 type DeveloperService_Advocates_connection {
@@ -1835,6 +1832,7 @@ type KnowledgeGraphService {
   TutorialConceptLinks(top: Int, skip: Int, filter: [KnowledgeGraphService_TutorialConceptLinks_filter], orderBy: [KnowledgeGraphService_TutorialConceptLinks_orderBy]): KnowledgeGraphService_TutorialConceptLinks_connection
   ConceptEdges(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptEdges_filter], orderBy: [KnowledgeGraphService_ConceptEdges_orderBy]): KnowledgeGraphService_ConceptEdges_connection
   ConceptAliases(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptAliases_filter], orderBy: [KnowledgeGraphService_ConceptAliases_orderBy]): KnowledgeGraphService_ConceptAliases_connection
+  ConceptMergePreviewRuns(top: Int, skip: Int, filter: [KnowledgeGraphService_ConceptMergePreviewRuns_filter], orderBy: [KnowledgeGraphService_ConceptMergePreviewRuns_orderBy]): KnowledgeGraphService_ConceptMergePreviewRuns_connection
   PublishedConcepts(top: Int, skip: Int, filter: [KnowledgeGraphService_PublishedConcepts_filter], orderBy: [KnowledgeGraphService_PublishedConcepts_orderBy]): KnowledgeGraphService_PublishedConcepts_connection
   PublishedConceptsWithAliases(top: Int, skip: Int, filter: [KnowledgeGraphService_PublishedConceptsWithAliases_filter], orderBy: [KnowledgeGraphService_PublishedConceptsWithAliases_orderBy]): KnowledgeGraphService_PublishedConceptsWithAliases_connection
 }
@@ -2072,6 +2070,56 @@ input KnowledgeGraphService_Concepts_orderBy {
   aliasSearchBlob: SortDirection
   isolated: SortDirection
   isPublished: SortDirection
+}
+
+type KnowledgeGraphService_ConceptMergePreviewRuns_connection {
+  nodes: [KnowledgeGraphService_ConceptMergePreviewRuns]
+  totalCount: Int
+}
+
+type KnowledgeGraphService_ConceptMergePreviewRuns {
+  ID: ID
+  status: String
+  requestedBy: String
+  requestedAt: Timestamp
+  startedAt: Timestamp
+  finishedAt: Timestamp
+  durationMs: Int
+  threshold: Decimal
+  conceptsScanned: Int
+  candidatePairs: Int
+  resultJson: String
+  lastError: String
+}
+
+input KnowledgeGraphService_ConceptMergePreviewRuns_filter {
+  ID: [ID_filter]
+  status: [String_filter]
+  requestedBy: [String_filter]
+  requestedAt: [Timestamp_filter]
+  startedAt: [Timestamp_filter]
+  finishedAt: [Timestamp_filter]
+  durationMs: [Int_filter]
+  threshold: [Decimal_filter]
+  conceptsScanned: [Int_filter]
+  candidatePairs: [Int_filter]
+  resultJson: [String_filter]
+  lastError: [String_filter]
+}
+
+input KnowledgeGraphService_ConceptMergePreviewRuns_orderBy {
+  ID: SortDirection
+  status: SortDirection
+  requestedBy: SortDirection
+  requestedAt: SortDirection
+  startedAt: SortDirection
+  finishedAt: SortDirection
+  durationMs: SortDirection
+  threshold: SortDirection
+  conceptsScanned: SortDirection
+  candidatePairs: SortDirection
+  resultJson: SortDirection
+  lastError: SortDirection
 }
 
 type KnowledgeGraphService_PublishedConcepts_connection {
@@ -2981,13 +3029,11 @@ input DeveloperService_LearningPreferences_C {
   user: com_sap_developers_ims_Users_C
   deployment: String
   role: String
-  cloud: String
 }
 
 input DeveloperService_LearningPreferences_U {
   deployment: String
   role: String
-  cloud: String
 }
 
 type DeveloperService_Advocates_input {
@@ -3169,6 +3215,7 @@ type KnowledgeGraphService_input {
   TutorialConceptLinks: KnowledgeGraphService_TutorialConceptLinks_input
   ConceptEdges: KnowledgeGraphService_ConceptEdges_input
   ConceptAliases: KnowledgeGraphService_ConceptAliases_input
+  ConceptMergePreviewRuns: KnowledgeGraphService_ConceptMergePreviewRuns_input
   PublishedConcepts: KnowledgeGraphService_PublishedConcepts_input
   PublishedConceptsWithAliases: KnowledgeGraphService_PublishedConceptsWithAliases_input
 }
@@ -3329,6 +3376,41 @@ input KnowledgeGraphService_ConceptAliases_U {
   alias: String
   aliasLower: String
   source: String
+}
+
+type KnowledgeGraphService_ConceptMergePreviewRuns_input {
+  create(input: [KnowledgeGraphService_ConceptMergePreviewRuns_C]!): [KnowledgeGraphService_ConceptMergePreviewRuns]
+  update(filter: [KnowledgeGraphService_ConceptMergePreviewRuns_filter]!, input: KnowledgeGraphService_ConceptMergePreviewRuns_U!): [KnowledgeGraphService_ConceptMergePreviewRuns]
+  delete(filter: [KnowledgeGraphService_ConceptMergePreviewRuns_filter]!): Int
+}
+
+input KnowledgeGraphService_ConceptMergePreviewRuns_C {
+  ID: ID
+  status: String
+  requestedBy: String
+  requestedAt: Timestamp
+  startedAt: Timestamp
+  finishedAt: Timestamp
+  durationMs: Int
+  threshold: Decimal
+  conceptsScanned: Int
+  candidatePairs: Int
+  resultJson: String
+  lastError: String
+}
+
+input KnowledgeGraphService_ConceptMergePreviewRuns_U {
+  status: String
+  requestedBy: String
+  requestedAt: Timestamp
+  startedAt: Timestamp
+  finishedAt: Timestamp
+  durationMs: Int
+  threshold: Decimal
+  conceptsScanned: Int
+  candidatePairs: Int
+  resultJson: String
+  lastError: String
 }
 
 type KnowledgeGraphService_PublishedConcepts_input {
