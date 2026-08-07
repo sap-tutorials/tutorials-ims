@@ -1,0 +1,38 @@
+name: Site Feedback
+description: Report a problem or share feedback about developers.sap.com
+title: "[Feedback]: "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us improve the SAP Developers site! Please describe what you ran into below.
+  - type: dropdown
+    id: area
+    attributes:
+      label: What area is this about?
+      options:
+        - A specific tutorial
+        - A mission or learning path
+        - Search
+        - My account / progress
+        - The site in general
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: page-url
+    attributes:
+      label: Page URL
+      description: The address of the page where you noticed this (if applicable).
+      placeholder: https://developers.sap.com/tutorials/...
+    validations:
+      required: false
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened?
+      description: Describe the problem or suggestion. Screenshots are welcome.
+      placeholder: Tell us what you expected and what you saw instead.
+    validations:
+      required: true
