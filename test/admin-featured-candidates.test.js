@@ -1,5 +1,6 @@
 // test/admin-featured-candidates.test.js
 // Task 4: FeaturedTaskCandidates union value-help view.
+// Task 5: FeaturedTasks order default + cache-bust hooks.
 //
 // Uses a single shared cds.test() at module top-level so that Task 5 (and
 // later tasks) can add their own describe blocks to this same file without
@@ -104,5 +105,58 @@ describe('FeaturedTaskCandidates', () => {
     for (const r of rows) {
       expect(r.title).toContain(term);
     }
+  });
+});
+
+// Task 5: FeaturedTasks order default + cache-bust hooks.
+//
+// Tests the before('CREATE') handler that defaults featuredOrder to max+1.
+// FeaturedTasks is @odata.draft.enabled, so writes go through the draft flow:
+//   1. POST /admin/FeaturedTasks  → creates a draft (IsActiveEntity=false)
+//   2. POST /admin/FeaturedTasks(ID=...,IsActiveEntity=false)/AdminService.draftActivate
+//      → activates; before('CREATE') fires HERE (when the active row is written)
+//   3. GET /admin/FeaturedTasks(ID=...,IsActiveEntity=true) to read back the result
+// Direct db INSERT would bypass the service layer and the handler would never fire.
+//
+// Stable legacy IDs chosen well outside real-data range; cleaned up in afterAll.
+describe('FeaturedTasks order default', () => {
+  // IDs of active entities created during tests — collected for afterAll cleanup.
+  const createdIDs = [];
+
+  // Helper: POST draft + activate; returns the active entity's ID.
+  async function createFeaturedTask(body) {
+    const { status: draftStatus, data: draft } = await project.post(
+      '/admin/FeaturedTasks',
+      body,
+      adminAuth
+    );
+    expect(draftStatus).toBe(201);
+    const { status: activateStatus, data: active } = await project.post(
+      `/admin/FeaturedTasks(ID=${draft.ID},IsActiveEntity=false)/AdminService.draftActivate`,
+      {},
+      adminAuth
+    );
+    expect(activateStatus).toBe(201);
+    createdIDs.push(active.ID);
+    return active;
+  }
+
+  afterAll(async () => {
+    for (const id of createdIDs) {
+      await project.delete(`/admin/FeaturedTasks(ID=${id},IsActiveEntity=true)`, adminAuth);
+    }
+  });
+
+  it('defaults featuredOrder to max+1 when omitted', async () => {
+    const first = await createFeaturedTask({ taskLegacyId: 990010, taskType: 'TUTORIAL' });
+    const second = await createFeaturedTask({ taskLegacyId: 990011, taskType: 'TUTORIAL' });
+    expect(typeof first.featuredOrder).toBe('number');
+    expect(typeof second.featuredOrder).toBe('number');
+    expect(second.featuredOrder).toBe(first.featuredOrder + 1);
+  });
+
+  it('respects an explicit featuredOrder when provided', async () => {
+    const row = await createFeaturedTask({ taskLegacyId: 990012, taskType: 'MISSION', featuredOrder: 99 });
+    expect(row.featuredOrder).toBe(99);
   });
 });

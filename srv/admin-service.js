@@ -54,6 +54,7 @@ import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js
 import * as mcpAdmin from './lib/mcp-admin-tools.js';   // #1106 Phase 3 (WS2) admin MCP tools
 import { computeCoverage, resolveThreshold } from './lib/kg-community-coverage.js'; // #1172
 import { resolveFeatureFlags } from './lib/feature-flags/resolve.js'; // #feature-flags
+import { resetFeaturedCache } from './lib/featured-resolve.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -383,6 +384,20 @@ export default class AdminService extends cds.ApplicationService {
     // Returns all KNOWN_TAGS as { tag } rows for @Common.ValueList bindings on
     // HomepageShelves.personaTags / personaHidden.
     this.on('READ', 'PersonaTagChoices', () => KNOWN_TAGS.map((tag) => ({ tag })));
+
+    // Default featuredOrder to max+1 so admins rarely type it.
+    this.before('CREATE', 'FeaturedTasks', async (req) => {
+      if (req.data.featuredOrder == null) {
+        const { FeaturedTasks } = cds.entities('com.sap.developers.ims');
+        const [row] = await db.run(SELECT.from(FeaturedTasks).columns('max(featuredOrder) as maxOrder'));
+        req.data.featuredOrder = (row?.maxOrder ?? 0) + 1;
+      }
+    });
+
+    // Bust the /build/featured cache on any curation change (draft activate + delete).
+    this.after(['SAVE', 'CREATE', 'UPDATE', 'DELETE'], 'FeaturedTasks', () => {
+      resetFeaturedCache();
+    });
 
     // Value-help union for FeaturedTasks. Reads live from the three content
     // entities; honors $search/$filter/$top so FE type-ahead works.
