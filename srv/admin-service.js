@@ -384,6 +384,36 @@ export default class AdminService extends cds.ApplicationService {
     // HomepageShelves.personaTags / personaHidden.
     this.on('READ', 'PersonaTagChoices', () => KNOWN_TAGS.map((tag) => ({ tag })));
 
+    // Value-help union for FeaturedTasks. Reads live from the three content
+    // entities; honors $search/$filter/$top so FE type-ahead works.
+    this.on('READ', 'FeaturedTaskCandidates', async (req) => {
+      const { Missions, Groups, Tutorials } = cds.entities('com.sap.developers.ims');
+      try {
+        const [missions, groups, tutorials] = await Promise.all([
+          db.run(SELECT.from(Missions).columns('legacyId', 'title', 'slug').where({ published: true })),
+          db.run(SELECT.from(Groups).columns('legacyId', 'title', 'slug').where({ published: true })),
+          db.run(SELECT.from(Tutorials).columns('legacyId', 'title', 'slug').where(`status = 'ACTIVE' or status is null`)),
+        ]);
+        let rows = [
+          ...missions.map(m => ({ taskLegacyId: m.legacyId, taskType: 'MISSION', title: m.title || '', slug: m.slug || '' })),
+          ...groups.map(g => ({ taskLegacyId: g.legacyId, taskType: 'GROUP', title: g.title || '', slug: g.slug || '' })),
+          ...tutorials.map(t => ({ taskLegacyId: t.legacyId, taskType: 'TUTORIAL', title: t.title || '', slug: t.slug || '' })),
+        ].filter(r => r.taskLegacyId != null && r.slug);
+
+        // Honor a free-text search term from the value-help type-ahead.
+        const term = req.query?.SELECT?.search?.[0]?.val
+          ?? req._?.req?.query?.$search;
+        if (term) {
+          const t = String(term).replace(/(^"|"$)/g, '').toLowerCase();
+          rows = rows.filter(r => r.title.toLowerCase().includes(t));
+        }
+        return rows;
+      } catch (e) {
+        req.warn?.(`FeaturedTaskCandidates READ failed: ${e.message}`);
+        return [];
+      }
+    });
+
     // Feature Flag Viewer (#feature-flags): synthesize rows from the registry.
     // FeatureFlags is a @cds.persistence.skip entity, so there is no generic
     // DB handler behind us — this on('READ') must itself honor the OData query
