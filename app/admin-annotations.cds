@@ -1026,16 +1026,17 @@ annotate AdminService.Tags with @(
 
 // --- FeaturedTasks (inline editing of featuredOrder) ---
 annotate AdminService.FeaturedTasks with {
-  taskLegacyId  @Common.Label: 'Task ID';
-  taskType      @Common.Label: 'Type'
-                @Common.ValueListWithFixedValues
+  taskLegacyId  @Common.Label: 'Featured item'
                 @Common.ValueList: {
-                  CollectionPath: 'AnalyticsTaskTypes',  // reuse existing TUTORIAL/MISSION/GROUP code list (srv/admin-service.js:48)
+                  CollectionPath: 'FeaturedTaskCandidates',
                   Parameters: [
-                    { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: taskType, ValueListProperty: 'code'  },
-                    { $Type: 'Common.ValueListParameterDisplayOnly',                              ValueListProperty: 'label' }
+                    { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: taskLegacyId, ValueListProperty: 'taskLegacyId' },
+                    { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: taskType,     ValueListProperty: 'taskType'     },
+                    { $Type: 'Common.ValueListParameterDisplayOnly',                                  ValueListProperty: 'title'        },
+                    { $Type: 'Common.ValueListParameterDisplayOnly',                                  ValueListProperty: 'slug'         }
                   ]
                 };
+  taskType      @Common.Label: 'Type' @UI.ReadOnly;
   featuredOrder @Common.Label: 'Order';
 };
 
