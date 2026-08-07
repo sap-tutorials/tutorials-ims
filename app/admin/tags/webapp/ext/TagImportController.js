@@ -28,12 +28,27 @@
 // the handlers below.
 //
 // View resolution: FE V4 press handlers for List Report toolbar actions
-// pass either a UI5 Event (when wired via SAP UI sap.m.Button) or an
-// array of selected contexts (for FE V4 default toolbar handlers).
-// Both forms let us walk back to the View: event → getSource().getView();
-// array → contexts[0].getModel() ... but for an empty/no-context
-// case we fall back to sap.ui.getCore().byId() using the Component's
-// root view ID.
+// pass either a UI5 Event (when wired via sap.m.Button) or an array of
+// selected contexts (for FE V4 default toolbar handlers). `arg.getSource`
+// is usually undefined for the context-array shape, so we cannot rely on
+// walking up from the event alone.
+//
+// We MUST NOT hardcode the standalone FE view id (the
+// `container-<app>---sap.fe.templates.ListReport.view.ListReport` shape):
+// inside the admin-shell this app runs as a componentUsage, so the real
+// view id is the manifest routing-target id `TagsList`
+// (`sap.tutorials.admin.tags::TagsList`). The hardcoded id resolved to
+// null there → "Could not resolve the List Report view" on every Import
+// press in the shell, while standalone `cds watch` (which uses the
+// container id) stayed green — so it shipped. Same bug class + fix as
+// PatActionsController (#1105). Issue: #1530. The check-ui5-controller-
+// extensions.ts build guard (direction C) now fails on the hardcoded id.
+//
+// Robust strategy, in order (all shell/standalone-agnostic):
+//   1. Walk up from arg.getSource() when arg IS a UI5 Event.
+//   2. Anchor on the deterministic inner-table id via ElementRegistry,
+//      then walk up to the View.
+//   3. Scan ElementRegistry for the ListReport view by id suffix.
 sap.ui.define([
   "sap/ui/core/Fragment",
   "sap/ui/model/json/JSONModel",
@@ -64,43 +79,48 @@ sap.ui.define([
   // Resolve the active view from any of the press-arg shapes FE V4 might
   // hand us. Caches the result; the List Report view is a singleton so
   // re-resolving on every press would be wasteful.
+  function _viewFromControl(ctrl) {
+    while (ctrl && !(ctrl.isA && ctrl.isA("sap.ui.core.mvc.View"))) {
+      ctrl = ctrl.getParent && ctrl.getParent();
+    }
+    return ctrl || null;
+  }
+
   function _resolveView(arg) {
     if (_resolvedView) return _resolvedView;
     let candidate = null;
 
-    // Shape 1: UI5 Event with getSource() → button → walk up to View.
+    // (1) UI5 Event with getSource() → button → walk up to View.
     if (arg && typeof arg.getSource === "function") {
-      candidate = arg.getSource();
-      while (candidate && !candidate.isA("sap.ui.core.mvc.View")) {
-        candidate = candidate.getParent && candidate.getParent();
-      }
+      candidate = _viewFromControl(arg.getSource());
     }
 
-    // Shape 2: array of contexts (FE V4 default for List Report toolbar).
-    if (!candidate && Array.isArray(arg) && arg.length > 0) {
-      const ctx = arg[0];
-      if (ctx && typeof ctx.getModel === "function") {
-        // Walk back via the model's binding root — limited but worth a shot.
-        // Most realistically falls through to the byId fallback below.
-        const model = ctx.getModel();
-        if (model && model.getProperty) {
-          // No direct view-from-model API; skip.
+    // (2)/(3) Registry-based resolution — works in both the admin-shell
+    // (componentUsage id prefix `...::TagsList`) and standalone.
+    if (!candidate) {
+      // sap/ui/core/ElementRegistry (Element.registry is deprecated as of 1.120).
+      const registry = sap.ui.require("sap/ui/core/ElementRegistry");
+      if (registry) {
+        // (2) Anchor on the deterministic inner-table id, then walk up.
+        const anchor = registry.get(
+          "sap.tutorials.admin.tags::TagsList--fe::table::Tags::LineItem-innerTable"
+        );
+        candidate = _viewFromControl(anchor);
+
+        // (3) Fall back to scanning for the ListReport view by id suffix.
+        if (!candidate) {
+          registry.forEach(function (el, id) {
+            if (candidate) return;
+            if (
+              el.isA &&
+              el.isA("sap.ui.core.mvc.View") &&
+              /tags::TagsList$/.test(id)
+            ) {
+              candidate = el;
+            }
+          });
         }
       }
-    }
-
-    // Shape 3: fallback — find the singleton List Report view via UI5 core.
-    // The app's component ID convention is "container-<app-name>---<view>",
-    // produced by FE V4's RootContainer. We search for any view registered
-    // under the tags app namespace.
-    if (!candidate) {
-      const core = sap.ui.getCore();
-      // sap.ui.getCore().getElementsByName or byId; we don't know the exact
-      // ID, so iterate the controlled elements and find the first View
-      // whose viewName matches sap.fe.templates.ListReport.ListReport.
-      // Pragmatic: getEventBus is too indirect; just look up by known ID.
-      // The default FE V4 ID pattern is: "container-<app>---<view>".
-      candidate = core.byId("container-sap.tutorials.admin.tags---sap.fe.templates.ListReport.view.ListReport");
     }
 
     _resolvedView = candidate || null;

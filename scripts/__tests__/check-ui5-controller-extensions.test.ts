@@ -20,6 +20,7 @@ import {
   collectControllerNames,
   collectPressTargets,
   resolveModulePath,
+  findHardcodedContainerViewIds,
 } from '../check-ui5-controller-extensions';
 
 describe('collectControllerNames', () => {
@@ -149,5 +150,67 @@ describe('resolveModulePath', () => {
       '/r/webapp',
     );
     expect(result.jsPath.replace(/\\/g, '/')).toBe('/r/webapp/ext/deep/Nested.js');
+  });
+});
+
+describe('findHardcodedContainerViewIds (#1105, #1530 / direction C)', () => {
+  it('flags a hardcoded standalone FE container view id for the app', () => {
+    // The exact anti-pattern that shipped in TagImportController before #1530.
+    const src =
+      'candidate = core.byId("container-sap.tutorials.admin.tags---sap.fe.templates.ListReport.view.ListReport");';
+    expect(
+      findHardcodedContainerViewIds(src, 'sap.tutorials.admin.tags'),
+    ).toEqual([
+      'container-sap.tutorials.admin.tags---sap.fe.templates.ListReport.view.ListReport',
+    ]);
+  });
+
+  it('flags an ObjectPage-flavoured hardcoded id too', () => {
+    const src =
+      "byId('container-sap.tutorials.admin.pats---sap.fe.templates.ObjectPage.view.Details')";
+    expect(
+      findHardcodedContainerViewIds(src, 'sap.tutorials.admin.pats'),
+    ).toEqual([
+      'container-sap.tutorials.admin.pats---sap.fe.templates.ObjectPage.view.Details',
+    ]);
+  });
+
+  it('does NOT flag a comment that merely mentions another app id', () => {
+    // kgCommunities keeps the old id in a historical comment; scanning it with
+    // ITS OWN namespace must stay clean (the mentioned id is a different app).
+    const src =
+      '// the old fallback id "container-sap.tutorials.admin.tags---sap.fe.templates..." is gone';
+    expect(
+      findHardcodedContainerViewIds(src, 'sap.tutorials.admin.kgCommunities'),
+    ).toEqual([]);
+  });
+
+  it('flags a hardcoded id even inside a comment for the SAME app (belt-and-braces)', () => {
+    // We intentionally scan comments too — a copy-paste into live code is one
+    // keystroke away, and the ElementRegistry path never needs this literal.
+    const src =
+      '// container-sap.tutorials.admin.tags---sap.fe.templates.ListReport.view.ListReport';
+    expect(
+      findHardcodedContainerViewIds(src, 'sap.tutorials.admin.tags'),
+    ).toHaveLength(1);
+  });
+
+  it('returns empty for the ElementRegistry-based resolution (the fix)', () => {
+    const src = `
+      const registry = sap.ui.require("sap/ui/core/ElementRegistry");
+      const anchor = registry.get("sap.tutorials.admin.tags::TagsList--fe::table::Tags::LineItem-innerTable");
+      registry.forEach(function (el, id) { if (/tags::TagsList$/.test(id)) candidate = el; });
+    `;
+    expect(
+      findHardcodedContainerViewIds(src, 'sap.tutorials.admin.tags'),
+    ).toEqual([]);
+  });
+
+  it('finds multiple hardcoded ids in one file', () => {
+    const src = `
+      a = core.byId("container-app.ns---sap.fe.templates.ListReport.view.ListReport");
+      b = core.byId("container-app.ns---sap.fe.templates.ObjectPage.view.OP");
+    `;
+    expect(findHardcodedContainerViewIds(src, 'app.ns')).toHaveLength(2);
   });
 });

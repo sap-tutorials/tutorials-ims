@@ -15,8 +15,8 @@
 //
 // VIEW-AGNOSTIC (#1172, PR re-applying the gate-2 fix): these handlers do NOT
 // resolve a view. The earlier revision fell back to a hardcoded standalone FE
-// view id ("container-sap.tutorials.admin.kgCommunities---sap.fe.templates.
-// ListReport.view.ListReport") which is ABSENT when the app runs as a
+// view id (the `container-<app>---sap.fe.templates.ListReport.view.ListReport`
+// shape) which is ABSENT when the app runs as a
 // componentUsage inside the admin-shell tnt ToolPage — the real ids are
 // sap.tutorials.admin.kgCommunities::KgCommunitiesList / ::KgCommunityObjectPage.
 // On both the LR toolbar (press-arg is a context array, no getSource) and the
