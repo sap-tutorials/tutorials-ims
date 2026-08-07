@@ -49,6 +49,10 @@ sap.ui.define([
 
     // ---- List Report toolbar actions -------------------------------------
 
+    // NOTE: This file is a ControllerExtension (.controller.js). Fiori Elements
+    // v4 resolves manifest `press` references to the PLAIN module (.js), not this
+    // file. The live onPreviewMerges implementation lives in
+    // ConceptActionsController.js. Do not add async preview-merges logic here.
     onPreviewMerges: async function () {
       try {
         const result = await postAction("previewMerges", {});
