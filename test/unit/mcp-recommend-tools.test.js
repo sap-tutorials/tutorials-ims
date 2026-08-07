@@ -42,34 +42,34 @@ describe('HomepageService recommendation MCP tools', () => {
 
     const { Users, UserLearningPreferences, HomepageForYouCandidates } = cds.entities(NS);
 
-    // Seed a user whose persona is role=developer, cloud=btp.
+    // Seed a user whose persona is role=developer, deployment=cloud.
     await INSERT.into(Users).entries({
       ID: 'rec-u1-id', sapId: U_SAPID, uuid: 'uuid-rec-u1',
       displayName: 'RecUser', email: U_SAPID,
     });
     await INSERT.into(UserLearningPreferences).entries({
-      user_ID: 'rec-u1-id', role: 'developer', cloud: 'btp', deployment: 'cloud',
+      user_ID: 'rec-u1-id', role: 'developer', deployment: 'cloud',
     });
 
     // Seed HomepageForYouCandidates: two tutorials + one mission + one inactive.
-    // personaTags must match the user's profile (role:developer, cloud:btp).
+    // personaTags must match the user's profile (role:developer, deployment:cloud).
     await INSERT.into(HomepageForYouCandidates).entries([
       {
         ID: 'cand-t1', kind: 'tutorial', targetSlug: 'cap-getting-started',
         title: 'CAP Getting Started', description: 'Intro to CAP on BTP',
-        personaTags:   ['role:developer', 'cloud:btp'],
+        personaTags:   ['role:developer', 'deployment:cloud'],
         personaWeight: 10, sortOrder: 1, active: true,
       },
       {
         ID: 'cand-t2', kind: 'tutorial', targetSlug: 'btp-hana-cloud-intro',
         title: 'HANA Cloud Intro', description: 'Learn HANA Cloud',
-        personaTags:   ['role:developer', 'cloud:btp'],
+        personaTags:   ['role:developer', 'deployment:cloud'],
         personaWeight: 5, sortOrder: 2, active: true,
       },
       {
         ID: 'cand-m1', kind: 'mission', targetSlug: 'build-cap-mission',
         title: 'Build with CAP Mission', description: 'Multi-tutorial CAP mission',
-        personaTags:   ['role:developer', 'cloud:btp'],
+        personaTags:   ['role:developer', 'deployment:cloud'],
         personaWeight: 8, sortOrder: 1, active: true,
       },
       // inactive — must never appear

@@ -31,7 +31,7 @@ describe('UserLearningPreferences (hybrid HANA)', () => {
       // throws an error whose .response.status carries the HTTP status.
       const userUuid = `${PREFIX}-enum`;
       const res = await project.post('/api/setLearningPreferences',
-        { deployment: 'hybrid', role: null, cloud: null },
+        { deployment: 'hybrid', role: null },
         { auth: { username: userUuid } }
       ).catch(e => e);
       expect(res.response?.status || res.status).toBe(400);
@@ -44,19 +44,19 @@ describe('UserLearningPreferences (hybrid HANA)', () => {
       const userUuid = `${PREFIX}-schema`;
       // First call INSERTs.
       await project.post('/api/setLearningPreferences',
-        { deployment: 'cloud', role: 'developer', cloud: 'btp' },
+        { deployment: 'cloud', role: 'developer' },
         { auth: { username: userUuid } }
       );
       // Same payload twice — idempotent: existing row UPDATEd, no duplicate INSERT.
       await project.post('/api/setLearningPreferences',
-        { deployment: 'cloud', role: 'developer', cloud: 'btp' },
+        { deployment: 'cloud', role: 'developer' },
         { auth: { username: userUuid } }
       );
       const { Users, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
       const dbUser = await SELECT.one.from(Users).where({ uuid: userUuid });
       const rows = await SELECT.from(UserLearningPreferences).where({ user_ID: dbUser.ID });
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({ deployment: 'cloud', role: 'developer', cloud: 'btp' });
+      expect(rows[0]).toMatchObject({ deployment: 'cloud', role: 'developer' });
     }
   );
 
@@ -72,7 +72,7 @@ describe('UserLearningPreferences (hybrid HANA)', () => {
       // Both layers must agree for cascade-delete to actually fire end-to-end.
       const userUuid = `${PREFIX}-cascade`;
       await project.post('/api/setLearningPreferences',
-        { deployment: 'cloud', role: null, cloud: null },
+        { deployment: 'cloud', role: null },
         { auth: { username: userUuid } }
       );
       const { Users, UserLearningPreferences } = cds.entities('com.sap.developers.ims');

@@ -257,11 +257,12 @@ entity UserLearningPreferences : managed {
   key user       : Association to Users;
   deployment     : String(20) @assert.range enum { cloud; onprem; };
   role           : String(20) @assert.range enum { developer; architect; sysadmin; student; };
-  // Issue #669: extended cloud vocab to include the major providers.
-  // Drift-locked to srv/lib/branch/profile-fields.js via
-  // scripts/__tests__/profile-fields-sync.test.ts. Reminder: a HANA enum
-  // widen on a String(20) column is additive only — no data migration needed
-  // (existing 'btp'/'aws'/'gcp' rows stay valid).
+  // DEPRECATED (2026-08-07): the "Preferred cloud provider" preference was removed
+  // from the UI + service. This column is retained (not dropped) to avoid a
+  // destructive ALTER on the live PROD table; it is no longer read or written and
+  // stays NULL for new rows. Drop it in a dedicated migration if ever needed.
+  // NOTE: intentionally NOT in srv/lib/branch/profile-fields.js PROFILE_VOCAB, so
+  // the profile-fields-sync drift guard does not assert this enum.
   cloud          : String(20) @assert.range enum { btp; aws; azure; gcp; alibaba; oracle; ibm; };
   // #1030 — homepage Row 3 events band region preference. Null = never set,
   // client falls through to browser-TZ hint. VIRTUAL/ALL are UI filter modes

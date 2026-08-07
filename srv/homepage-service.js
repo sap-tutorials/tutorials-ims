@@ -682,7 +682,7 @@ export default class HomepageService extends cds.ApplicationService {
       const [prefsRow, shelves, forYou, featuredRows] = await Promise.all([
         dbUser?.ID
           ? SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID })
-              .columns('deployment', 'role', 'cloud', 'preferredEventRegion')
+              .columns('deployment', 'role', 'preferredEventRegion')
           : Promise.resolve(null),
         SELECT.from(HomepageShelves).where({ isActive: true })
           .columns('ID', 'verb', 'shelf', 'sortOrder', 'title',
@@ -704,7 +704,6 @@ export default class HomepageService extends cds.ApplicationService {
       const profile = {
         role:       prefsRow?.role       ?? null,
         deployment: prefsRow?.deployment ?? null,
-        cloud:      prefsRow?.cloud      ?? null,
       };
 
       // (#763 Task 12) Compose teaserSlugs: static featured top-8 + for-you tutorials,

@@ -36,9 +36,9 @@ describe('validateTags', () => {
     expect(r.invalid).toEqual(['role:manager', 'cloud:oops']);
   });
 
-  it('KNOWN_TAGS contains role:developer and cloud:btp', () => {
+  it('KNOWN_TAGS contains role:developer and deployment:cloud', () => {
     expect(KNOWN_TAGS).toContain('role:developer');
-    expect(KNOWN_TAGS).toContain('cloud:btp');
+    expect(KNOWN_TAGS).toContain('deployment:cloud');
     expect(KNOWN_TAGS).toContain('deployment:onprem');
   });
 });

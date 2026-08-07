@@ -38,7 +38,7 @@ describe('Admin persona-tag validation', () => {
         shelf: 'START_HERE',
         title: 'X',
         url: 'https://x',
-        personaTags: ['role:developer', 'cloud:aws'],
+        personaTags: ['role:developer', 'deployment:cloud'],
         personaWeight: 5,
       },
       adminAuth

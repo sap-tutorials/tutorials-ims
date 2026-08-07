@@ -10,17 +10,16 @@ describe('renderBadge', () => {
   const slot = () => document.querySelector<HTMLElement>('.personalized-badge-slot')!;
 
   it('renders personalized copy with profile echo', () => {
-    renderBadge(slot(), { role: 'developer', deployment: 'cloud', cloud: 'aws' }, 'personalized');
+    renderBadge(slot(), { role: 'developer', deployment: 'cloud' }, 'personalized');
     expect(slot().hidden).toBe(false);
     expect(slot().textContent).toContain('Personalized for you');
     expect(slot().textContent).toContain('developer');
-    expect(slot().textContent).toContain('AWS');
     expect(slot().querySelector('a[href="/me/#learning-preferences"]')).toBeTruthy();
     expect(slot().querySelector('a[href="?default=1"]')).toBeTruthy();
   });
 
   it('omits profile clause when all fields null', () => {
-    renderBadge(slot(), { role: null, deployment: null, cloud: null }, 'personalized');
+    renderBadge(slot(), { role: null, deployment: null }, 'personalized');
     expect(slot().textContent).toContain('Personalized for you');
     expect(slot().textContent).not.toContain('null');
   });

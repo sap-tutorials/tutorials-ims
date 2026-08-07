@@ -1,25 +1,18 @@
-const CLOUD_LABEL: Record<string, string> = {
-  btp: 'SAP BTP', aws: 'AWS', azure: 'Microsoft Azure',
-  gcp: 'Google Cloud', alibaba: 'Alibaba Cloud',
-  oracle: 'Oracle Cloud', ibm: 'IBM Cloud',
-};
-
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c]);
 }
 
-function profileClause(p: { role: string | null; deployment: string | null; cloud: string | null }): string {
+function profileClause(p: { role: string | null; deployment: string | null }): string {
   const parts: string[] = [];
   if (p.role) parts.push(p.role);
-  if (p.cloud) parts.push(CLOUD_LABEL[p.cloud] || p.cloud.toUpperCase());
   if (p.deployment) parts.push(p.deployment === 'onprem' ? 'on-premise' : p.deployment);
   return parts.join(', ');
 }
 
 export function renderBadge(
   root: HTMLElement | null,
-  profile: { role: string | null; deployment: string | null; cloud: string | null } | null,
+  profile: { role: string | null; deployment: string | null } | null,
   mode: 'personalized' | 'default'
 ): void {
   if (!root) return;

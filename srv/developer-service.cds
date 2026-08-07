@@ -218,17 +218,16 @@ service DeveloperService {
   // Spec: §4.2
   @(requires: 'authenticated-user')
   @readonly entity LearningPreferences as projection on ims.UserLearningPreferences {
-    user, deployment, role, cloud
+    user, deployment, role
   };
 
-  // PR 6 — Self-service write surface. PUT-style: all three fields are written every time;
+  // PR 6 — Self-service write surface. PUT-style: all fields are written every time;
   // values omitted by the caller are explicitly cleared to null.
   // Spec: §4.2, §7.2
   @(requires: 'authenticated-user')
   action setLearningPreferences(
     deployment : String,
-    role       : String,
-    cloud      : String
+    role       : String
   ) returns LearningPreferences;
 
   // #1030 — Homepage Row 3 events band region preference. Null = clear (fall

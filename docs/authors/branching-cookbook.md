@@ -130,7 +130,9 @@ https://.../tutorials-qa/<slug>/?profile.deployment=onprem&profile.role=architec
 
 - `profile.deployment`: `cloud`, `onprem`
 - `profile.role`: `developer`, `architect`, `sysadmin`, `student`
-- `profile.cloud`: `btp`, `aws`, `gcp`
+
+> **Note (2026-08-07):** the `profile.cloud` preference was removed. Conditions
+> referencing `profile.cloud` will never match.
 
 **Cache fingerprint:** the override is mixed into the per-callsite cache key, so override-mode traffic gets a separate cache slot from learner-mode traffic. You won't poison cache for real learners.
 

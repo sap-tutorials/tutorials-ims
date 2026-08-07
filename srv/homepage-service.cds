@@ -99,7 +99,7 @@ service HomepageService {
   // the service-level @requires:'any' — CAP honors the stricter annotation.
   // Returns 204 when the kill switch is off, 200+envelope when on.
   // Response headers: Cache-Control:private,no-store; X-Personalization:1; ETag.
-  type PersonalizedProfile { role: String; deployment: String; cloud: String; }
+  type PersonalizedProfile { role: String; deployment: String; }
   type ShelfOverride       { reorder: array of UUID; hidden: array of UUID; }
   type ShelfOverrideMap {
     learn: ShelfOverride; build: ShelfOverride; integrate: ShelfOverride;

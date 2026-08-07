@@ -10,7 +10,7 @@ describe('buildUserState', () => {
     });
     expect(state.completedSlugs).toBeInstanceOf(Set);
     expect(state.completedSlugs.size).toBe(0);
-    expect(state.profile).toEqual({ deployment: null, role: null, cloud: null, preferredEventRegion: null });
+    expect(state.profile).toEqual({ deployment: null, role: null, preferredEventRegion: null });
     expect(Object.isFrozen(state)).toBe(true);
     expect(Object.isFrozen(state.profile)).toBe(true);
   });
@@ -33,7 +33,7 @@ describe('buildUserState', () => {
       loadCompletedMissionSlugs: async () => [],
       loadProfile:               async () => ({ deployment: 'onprem' }),
     });
-    expect(state.profile).toEqual({ deployment: 'onprem', role: null, cloud: null, preferredEventRegion: null });
+    expect(state.profile).toEqual({ deployment: 'onprem', role: null, preferredEventRegion: null });
   });
 });
 
@@ -85,10 +85,10 @@ describe('buildUserState — override merge (PR 6)', () => {
     const { buildUserState } = await import('../../../srv/lib/branch/user-state.js');
     const state = await buildUserState(
       { id: 'u' },
-      makeFakeDeps({ deployment: 'onprem', role: null, cloud: null }),
+      makeFakeDeps({ deployment: 'onprem', role: null }),
       { override: { deployment: 'cloud' } }
     );
-    expect(state.profile).toEqual({ deployment: 'cloud', role: null, cloud: null, preferredEventRegion: null });
+    expect(state.profile).toEqual({ deployment: 'cloud', role: null, preferredEventRegion: null });
   });
 
   it('respects null fields in override merge — partial override + real profile preserved', async () => {
@@ -98,12 +98,12 @@ describe('buildUserState — override merge (PR 6)', () => {
       makeFakeDeps({ deployment: 'onprem', role: 'developer', cloud: null }),
       { override: { deployment: 'cloud' } }
     );
-    expect(state.profile).toEqual({ deployment: 'cloud', role: 'developer', cloud: null, preferredEventRegion: null });
+    expect(state.profile).toEqual({ deployment: 'cloud', role: 'developer', preferredEventRegion: null });
   });
 
   it('fingerprint-cache isolation: override-mode and learner-mode produce distinct fingerprints', async () => {
     const { buildUserState, fingerprintUserState } = await import('../../../srv/lib/branch/user-state.js');
-    const deps = makeFakeDeps({ deployment: 'onprem', role: null, cloud: null });
+    const deps = makeFakeDeps({ deployment: 'onprem', role: null });
     const learner = await buildUserState({ id: 'u' }, deps);
     const override = await buildUserState({ id: 'u' }, deps, { override: { deployment: 'cloud' } });
     expect(fingerprintUserState(override)).not.toBe(fingerprintUserState(learner));

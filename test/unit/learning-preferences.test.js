@@ -20,33 +20,31 @@ describe('setLearningPreferences action handler', () => {
     const userUuid = '__test__-pr6-act-1';
     const { data: result } = await project.post(
       '/api/setLearningPreferences',
-      { deployment: 'cloud', role: null, cloud: 'btp' },
+      { deployment: 'cloud', role: null },
       { auth: { username: userUuid } }
     );
     expect(result.deployment).toBe('cloud');
     expect(result.role).toBeNull();
-    expect(result.cloud).toBe('btp');
   });
 
-  it('2. PUT-style clearing: re-call with {deployment: onprem, role: null, cloud: null} — clears prior role+cloud', async () => {
+  it('2. PUT-style clearing: re-call with {deployment: onprem, role: null} — clears prior role', async () => {
     const userUuid = '__test__-pr6-act-2';
     await project.post('/api/setLearningPreferences',
-      { deployment: 'cloud', role: 'developer', cloud: 'btp' },
+      { deployment: 'cloud', role: 'developer' },
       { auth: { username: userUuid } }
     );
     const { data: result } = await project.post('/api/setLearningPreferences',
-      { deployment: 'onprem', role: null, cloud: null },
+      { deployment: 'onprem', role: null },
       { auth: { username: userUuid } }
     );
     expect(result.deployment).toBe('onprem');
     expect(result.role).toBeNull();
-    expect(result.cloud).toBeNull();
   });
 
   it('3. Invalid enum value returns 400 with field-level error message', async () => {
     const userUuid = '__test__-pr6-act-3';
     const res = await project.post('/api/setLearningPreferences',
-      { deployment: 'hybrid', role: null, cloud: null },
+      { deployment: 'hybrid', role: null },
       { auth: { username: userUuid } }
     ).catch(e => e);
     expect(res.response?.status || res.status).toBe(400);
@@ -54,7 +52,7 @@ describe('setLearningPreferences action handler', () => {
 
   it('4. Anonymous caller is rejected by the XSUAA gate (401)', async () => {
     const res = await project.post('/api/setLearningPreferences',
-      { deployment: 'cloud', role: null, cloud: null }
+      { deployment: 'cloud', role: null }
     ).catch(e => e);
     expect(res.response?.status || res.status).toBe(401);
   });
@@ -62,20 +60,20 @@ describe('setLearningPreferences action handler', () => {
   it('5. GET /api/LearningPreferences returns the caller own row only (before-READ filter)', async () => {
     const userUuid = '__test__-pr6-act-5';
     await project.post('/api/setLearningPreferences',
-      { deployment: 'cloud', role: 'architect', cloud: 'aws' },
+      { deployment: 'cloud', role: 'architect' },
       { auth: { username: userUuid } }
     );
     const { data: list } = await project.get('/api/LearningPreferences', { auth: { username: userUuid } });
     expect(list.value).toHaveLength(1);
     expect(list.value[0]).toMatchObject({
-      deployment: 'cloud', role: 'architect', cloud: 'aws',
+      deployment: 'cloud', role: 'architect',
     });
   });
 
   it('6. role = sysadmin is a valid enum value (regression guard against admin XSUAA collision)', async () => {
     const userUuid = '__test__-pr6-act-6';
     const { data: result } = await project.post('/api/setLearningPreferences',
-      { deployment: null, role: 'sysadmin', cloud: null },
+      { deployment: null, role: 'sysadmin' },
       { auth: { username: userUuid } }
     );
     expect(result.role).toBe('sysadmin');

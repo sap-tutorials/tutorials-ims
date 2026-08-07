@@ -26,7 +26,7 @@ async function withToolMetrics(req, fn) {
 
 /**
  * Resolve the user's persona profile from UserLearningPreferences.
- * Returns {role, deployment, cloud} with nulls for unknown/anonymous users.
+ * Returns {role, deployment} with nulls for unknown/anonymous users.
  * Mirrors homepage-service.js:676-708 (the personalized() handler pattern).
  */
 async function resolvePersona(req) {
@@ -38,12 +38,11 @@ async function resolvePersona(req) {
   const prefs = dbUser?.ID
     ? await SELECT.one.from(UserLearningPreferences)
         .where({ user_ID: dbUser.ID })
-        .columns('deployment', 'role', 'cloud')
+        .columns('deployment', 'role')
     : null;
   return {
     role:       prefs?.role       ?? null,
     deployment: prefs?.deployment ?? null,
-    cloud:      prefs?.cloud      ?? null,
   };
 }
 

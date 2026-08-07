@@ -12,7 +12,7 @@
     "authoringStatus": "REVIEWED", "personaWeight": 0,
     "tagline": "Predict on your tables with RPT-1 — no training, right in the browser.",
     "whyItMatters": "RPT-1 is SAP's semantics-aware foundation model for tabular data. The playground lets you run classification and regression on your own tables or SAP sample datasets without any setup — the fastest way to see what the model does.",
-    "personaTags": ["role:developer", "role:student", "deployment:cloud", "cloud:btp"]
+    "personaTags": ["role:developer", "role:student", "deployment:cloud"]
   },
   {
     "ID": "66333900-rpt1-0005-0001-000000000002",
@@ -24,7 +24,7 @@
     "authoringStatus": "REVIEWED", "personaWeight": 0,
     "tagline": "The open-source RPT-1 model card, weights, and examples.",
     "whyItMatters": "RPT-1 is published open-source on Hugging Face as a semantics-aware tabular in-context learner for classification and regression. The model card is the reference for developers integrating it into their own pipelines.",
-    "personaTags": ["role:developer", "role:student", "deployment:cloud", "cloud:btp"]
+    "personaTags": ["role:developer", "role:student", "deployment:cloud"]
   },
   {
     "ID": "66333900-rpt1-1029-0001-000000000001",
@@ -36,7 +36,7 @@
     "authoringStatus": "REVIEWED", "personaWeight": 0,
     "tagline": "A foundation model that predicts directly on your data models.",
     "whyItMatters": "RPT-1 brings foundation-model prediction to structured, tabular data — the shape of most SAP business data. For teams modeling data in HANA Cloud or Datasphere, it is a fast path to classification and regression without building a bespoke ML pipeline.",
-    "personaTags": ["role:developer", "role:architect", "deployment:cloud", "cloud:btp"]
+    "personaTags": ["role:developer", "role:architect", "deployment:cloud"]
   },
   {
     "ID": "66333900-3rd0-0002-0001-000000000001",

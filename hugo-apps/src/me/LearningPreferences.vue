@@ -12,14 +12,14 @@
       and will activate when branching is turned on.
     </ui5-message-strip>
 
-    <!--
+      <!--
       Issue #669: bind selection imperatively via the parent <ui5-select>'s
       `value` property (set in a watcher; see syncSelectValue below). Avoid
       Vue's `:selected` template binding on each <ui5-option>: that writes the
       HTML attribute, and per the UI5 spec, when multiple options resolve to
       `selected=""` the LAST one in document order wins — so reactive updates
       after mount silently fall back to the last vocab value (in our case
-      On-premise / Student / Google Cloud). The UI5 docs are explicit:
+      On-premise / Student). The UI5 docs are explicit:
       "Use either the Select's value or the Options' selected property.
       Mixed usage could result in unexpected behavior."
       Pattern source: [feedback_ui5_dialog_open_imperative_only].
@@ -46,16 +46,6 @@
         :key="value"
         :value="value"
       >{{ ROLE_LABEL[value] || value }}</ui5-option>
-    </ui5-select>
-
-    <ui5-label for="cloud">Preferred cloud provider?</ui5-label>
-    <ui5-select id="cloud" ref="cloudRef" @change="(e) => onChange('cloud', e)">
-      <ui5-option value="__none__">— No preference —</ui5-option>
-      <ui5-option
-        v-for="value in PROFILE_VOCAB.cloud"
-        :key="value"
-        :value="value"
-      >{{ CLOUD_LABEL[value] || value }}</ui5-option>
     </ui5-select>
 
     <label>
@@ -103,24 +93,12 @@ const ROLE_LABEL: Record<string, string> = {
   sysadmin: 'System administrator',
   student: 'Student',
 };
-// Issue #669: include the major cloud providers explicitly (was 3 of ~7).
-// Adding a key here without growing PROFILE_VOCAB.cloud is a no-op — labels
-// fall back to the raw value via `|| value` in the template anyway.
-const CLOUD_LABEL: Record<string, string> = {
-  btp:      'SAP BTP',
-  aws:      'AWS',
-  gcp:      'Google Cloud',
-  azure:    'Microsoft Azure',
-  alibaba:  'Alibaba Cloud',
-  oracle:   'Oracle Cloud',
-  ibm:      'IBM Cloud',
-};
 
-type ProfileField = 'deployment' | 'role' | 'cloud';
+type ProfileField = 'deployment' | 'role';
 type ProfileValue = string | null;
 
-const prefs = reactive<{ deployment: ProfileValue; role: ProfileValue; cloud: ProfileValue; preferredEventRegion: ProfileValue }>({
-  deployment: null, role: null, cloud: null, preferredEventRegion: null,
+const prefs = reactive<{ deployment: ProfileValue; role: ProfileValue; preferredEventRegion: ProfileValue }>({
+  deployment: null, role: null, preferredEventRegion: null,
 });
 const dirty = ref(false);
 const status = ref<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -129,7 +107,6 @@ const saving = computed(() => status.value === 'saving');
 
 const deploymentRef = ref<HTMLElement | null>(null);
 const roleRef = ref<HTMLElement | null>(null);
-const cloudRef = ref<HTMLElement | null>(null);
 
 let savedTimer: number | undefined;
 
@@ -159,7 +136,6 @@ onMounted(async () => {
       if (row) {
         prefs.deployment = row.deployment ?? null;
         prefs.role = row.role ?? null;
-        prefs.cloud = row.cloud ?? null;
         prefs.preferredEventRegion = row.preferredEventRegion ?? null;
       }
     }
@@ -189,7 +165,6 @@ onMounted(async () => {
   await nextTick();
   syncSelectValue(deploymentRef.value, prefs.deployment);
   syncSelectValue(roleRef.value, prefs.role);
-  syncSelectValue(cloudRef.value, prefs.cloud);
 });
 
 // Keep the DOM selects in step with prefs after the initial mount. Covers the
@@ -197,7 +172,6 @@ onMounted(async () => {
 // belt-and-braces guard against UI5 re-rendering its slotted options.
 watch(() => prefs.deployment, (v) => syncSelectValue(deploymentRef.value, v));
 watch(() => prefs.role,       (v) => syncSelectValue(roleRef.value, v));
-watch(() => prefs.cloud,      (v) => syncSelectValue(cloudRef.value, v));
 
 function onChange(field: ProfileField, ev: any) {
   const raw = ev?.detail?.selectedOption?.value ?? '__none__';
@@ -217,7 +191,6 @@ async function onSave() {
       body: JSON.stringify({
         deployment: prefs.deployment,
         role: prefs.role,
-        cloud: prefs.cloud,
       }),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -237,7 +210,7 @@ async function onSave() {
   } catch {
     status.value = 'error';
     // A11y: focus the first Select for the user to retry
-    const focusable = (deploymentRef.value as any) || (roleRef.value as any) || (cloudRef.value as any);
+    const focusable = (deploymentRef.value as any) || (roleRef.value as any);
     focusable?.focus?.();
   }
 }

@@ -3,7 +3,7 @@ const TTL_MS = 5 * 60 * 1000;
 
 export interface Envelope {
   hash: string;
-  profile?: { role: string | null; deployment: string | null; cloud: string | null };
+  profile?: { role: string | null; deployment: string | null };
   verbOrder?: string[];
   forYou?: any[];
   teaserOrder?: string[];
