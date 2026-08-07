@@ -50,24 +50,79 @@ sap.ui.define([
     // ---- List Report toolbar actions -------------------------------------
 
     onPreviewMerges: async function () {
+      const oBundle = this.getView().getModel("i18n") &&
+        this.getView().getModel("i18n").getResourceBundle();
+      const t = (key, fallback) => (oBundle && oBundle.getText(key)) || fallback;
+
       try {
-        const result = await postAction("previewMerges", {});
-        const pairs = (result && result.value) || [];
+        const ticket = await postAction("previewMerges", {});
+        const runId = ticket && ticket.runId;
+        if (!runId) {
+          MessageBox.error("Preview failed: no run id returned.");
+          return;
+        }
+        MessageToast.show(t("previewComputingToast", "Computing merge candidates…"));
+
+        const row = await this._pollPreviewRun(runId, 2000, 180000);
+        if (!row) {
+          MessageBox.warning(t("previewTimeoutMessage",
+            "Merge preview is still running. Please try again in a minute."));
+          return;
+        }
+        if (row.status === "FAILED") {
+          MessageBox.error("Preview failed: " + (row.lastError || "unknown error"));
+          return;
+        }
+        // DONE
+        const pairs = row.resultJson ? JSON.parse(row.resultJson) : [];
+        const total = (typeof row.candidatePairs === "number") ? row.candidatePairs : pairs.length;
         if (pairs.length === 0) {
-          MessageToast.show("No merge candidates at the current threshold.");
+          MessageToast.show(t("previewNoCandidates", "No merge candidates at the current threshold."));
           return;
         }
         const lines = pairs.slice(0, 50).map(function (p) {
           const sim = (Number(p.similarity) * 100).toFixed(1);
           return p.loserSlug + " → " + p.canonicalSlug + " (" + sim + "%)";
         });
-        const moreSuffix = pairs.length > 50 ? "\n... and " + (pairs.length - 50) + " more" : "";
+        const moreSuffix = total > 50 ? "\n... and " + (total - 50) + " more" : "";
         MessageBox.information(lines.join("\n") + moreSuffix, {
-          title: pairs.length + " merge candidate(s)"
+          title: total + " merge candidate(s)"
         });
       } catch (err) {
         MessageBox.error("Preview failed: " + (err && err.message ? err.message : String(err)));
       }
+    },
+
+    /**
+     * Poll GET /graph/ConceptMergePreviewRuns(<runId>) every `intervalMs` until
+     * status leaves RUNNING or `ceilingMs` elapses. Returns the row (DONE/FAILED)
+     * or null on ceiling. Mirrors the bounded setInterval poll in the admin-shell
+     * Board dashboard (job-controls refresh).
+     */
+    _pollPreviewRun: function (runId, intervalMs, ceilingMs) {
+      const deadline = Date.now() + ceilingMs;
+      const url = "/graph/ConceptMergePreviewRuns(" + runId + ")";
+      return new Promise(function (resolve) {
+        (function tick() {
+          fetch(url, { headers: { "Accept": "application/json" } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (row) {
+              if (row && row.status && row.status !== "RUNNING") {
+                resolve(row);
+                return;
+              }
+              if (Date.now() >= deadline) {
+                resolve(null);
+                return;
+              }
+              setTimeout(tick, intervalMs);
+            })
+            .catch(function () {
+              if (Date.now() >= deadline) { resolve(null); return; }
+              setTimeout(tick, intervalMs);
+            });
+        })();
+      });
     },
 
     onTriggerGraphRebuild: async function () {
