@@ -225,7 +225,20 @@ service AdminService {
   entity StepFailures as projection on ims.StepFailures;
   entity NGDSFailedMessages as projection on ims.NGDSFailedMessages;
   entity DeveloperEnvironmentTabs as projection on ims.DeveloperEnvironmentTabs;
+  @odata.draft.enabled
+  @assert.unique.feature: [ taskLegacyId, taskType ]
   entity FeaturedTasks as projection on ims.FeaturedTasks;
+
+  // Runtime UNION for the FeaturedTasks value help. Read-only; not persisted.
+  // (taskLegacyId, taskType) together identify the picked content item.
+  @readonly
+  @cds.persistence.skip
+  entity FeaturedTaskCandidates {
+    key taskLegacyId : Integer;
+    key taskType     : String(20);
+        title        : String;
+        slug         : String;
+  }
 
   @odata.draft.enabled
   entity Alerts as projection on ims.Alerts;

@@ -98,3 +98,7 @@ Cross-references:
 ## Devtoberfest
 
 - **Devtoberfest banner is admin-uploadable** — per-`DevtoberfestConfig` `DevtoberfestBanner` composition (wide WebP BLOB, `uploadBanner`/`clearBanner` actions), served anonymously at `GET /api/devtoberfest/banner` for the active row; the Vue island renders it as the hero with the CTA overlaid lower-right, falling back to the CSS gradient header when unset. Full deploy required (schema + admin bundle + approuter). Spec: `docs/superpowers/specs/2026-07-29-devtoberfest-banner-upload-design.md`.
+
+## Tutorial Navigator
+
+- **Navigator "Featured" rail is curated via `/admin-ui/#/operations` → Featured Tasks** — draft CRUD (pick items by title via `FeaturedTaskCandidates` value-help, unique per item, order defaults to next integer); SSR from `browse.json`'s `featured[]` array (mission-curated or first-6-missions fallback when empty); live-rehydrated from `GET /build/featured` (ETag/304, 60s server cache, mixed tutorial/mission/group types); cache busts automatically on `FeaturedTasks` save/delete via `resetFeaturedCache()`.

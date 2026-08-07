@@ -1,6 +1,7 @@
 import cds from '@sap/cds';
 import { categorySlugsFor, buildCategoriesPayload } from './build-catalog-categories.js';
 import { assembleMissionHierarchy, collectAltGroups } from './catalog-mission-hierarchy.js';
+import { resolveFeatured } from './featured-resolve.js';
 
 const FEATURED_LIMIT = 6;
 
@@ -186,8 +187,9 @@ export async function buildCatalogHandler(req, res) {
         };
       });
 
+    const groupByLegacyId = new Map(groups.filter(g => g.published).map(g => [g.legacyId, g]));
     const featured = featuredRows
-      .map(f => resolveFeatured(f, { missionByLegacyId, pathByLegacyId, tutorialByLegacyId }))
+      .map(f => resolveFeatured(f, { missionByLegacyId, groupByLegacyId, tutorialByLegacyId }))
       .filter(Boolean);
 
     const tutorialList = tutorials.map(t => ({
@@ -210,36 +212,4 @@ export async function buildCatalogHandler(req, res) {
   }
 }
 
-function resolveFeatured(f, { missionByLegacyId, pathByLegacyId, tutorialByLegacyId }) {
-  if (f.taskType === 'MISSION') {
-    const m = missionByLegacyId.get(f.taskLegacyId);
-    if (!m) return null;
-    return {
-      type: 'mission',
-      slug: m.slug || String(m.legacyId),
-      title: m.title || '',
-      description: m.description || '',
-    };
-  }
-  if (f.taskType === 'GROUP') {
-    const p = pathByLegacyId.get(f.taskLegacyId);
-    if (!p) return null;
-    return {
-      type: 'group',
-      slug: p.slug || String(p.legacyId),
-      title: p.name || '',
-      description: '',
-    };
-  }
-  if (f.taskType === 'TUTORIAL') {
-    const t = tutorialByLegacyId.get(f.taskLegacyId);
-    if (!t || !t.slug) return null;
-    return {
-      type: 'tutorial',
-      slug: t.slug,
-      title: t.title || '',
-      description: t.description || '',
-    };
-  }
-  return null;
-}
+

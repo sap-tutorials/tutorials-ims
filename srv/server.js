@@ -372,6 +372,25 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // Featured curated tasks — consumed by Tutorial Navigator at build/runtime.
+  // Public, unauthenticated. ETag + 304 support. 60s CDN/browser cache.
+  app.get('/build/featured', async (req, res) => {
+    try {
+      const { getFeaturedPayload } = await import('./lib/featured-resolve.js');
+      const db = await cds.connect.to('db');
+      const payload = await getFeaturedPayload(db);
+      res.set('Cache-Control', 'public, max-age=60');
+      res.set('ETag', payload.etag);
+      if (req.headers['if-none-match'] === payload.etag) {
+        return res.status(304).end();
+      }
+      res.json({ ...payload, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/featured]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/build/shelf-definitions', async (_req, res) => {
     try {
       const db = await cds.connect.to('db');
