@@ -46,6 +46,7 @@ hugo/static-qa/
 !hugo/static/images/devtoberfest/arcade/**/*.png
 !hugo/static/images/devtoberfest/selfie/thumbnails/*.png
 !hugo/static/images/devtoberfest/selfie/stickers/*.png
+!hugo/static/images/devtoberfest/selfie/backgrounds/*.png
 hugo/static/js/*
 !hugo/static/js/joule.js
 !hugo/static/js/joule-render.js
