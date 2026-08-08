@@ -62,3 +62,20 @@
   font-size: .95rem; border-radius: 8px; pointer-events: none;
 }
 .selfie-final { display: block; max-width: 100%; margin: 1rem auto; border-radius: 8px; }
+
+/* ---- Caption input + danger button ---- */
+.selfie-btn--danger { background: var(--sapButton_Reject_Background, #aa0808); }
+.selfie-caption-input { font: inherit; padding: .4rem .6rem; border: 1px solid var(--sapField_BorderColor, #89919a); border-radius: 6px; min-width: 12rem; }
+.selfie-caption-input:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ---- Sticker picker ---- */
+.sticker-picker { width: 100%; }
+.sticker-tabs { display: flex; gap: .5rem; margin-bottom: .5rem; }
+.sticker-tabs button { cursor: pointer; border: none; background: none; font: inherit; padding: .3rem .6rem; border-bottom: 2px solid transparent; color: var(--sapContent_LabelColor, #556b82); }
+.sticker-tabs button.is-active { border-bottom-color: var(--sapButton_Emphasized_Background, #0070f2); color: var(--sapButton_Emphasized_Background, #0070f2); }
+.sticker-grid { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
+.sticker-thumb { cursor: pointer; border: 2px solid transparent; border-radius: 8px; overflow: hidden; background: var(--sapTile_Background, #fff); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.sticker-thumb:hover, .sticker-thumb:focus-within { border-color: var(--sapButton_Emphasized_Background, #0070f2); }
+.sticker-thumb img { display: block; width: 100%; height: auto; }
+.emoji-grid button.emoji-btn { cursor: pointer; border: none; background: none; font-size: 1.6rem; line-height: 1; padding: .25rem; }
+.sticker-empty { color: var(--sapContent_LabelColor, #556b82); font-size: .9rem; grid-column: 1 / -1; }
