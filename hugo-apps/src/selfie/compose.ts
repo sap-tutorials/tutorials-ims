@@ -1,6 +1,7 @@
 import Konva from 'konva'
 import { STAGE_WIDTH, STAGE_HEIGHT, FRAME_LAYERING } from './constants'
 import { createOverlayManager, type OverlayKind } from './overlays'
+import { paintPolaroid, type PolaroidStyleId } from './polaroid'
 
 export interface SelfieStage {
   addCutout(img: HTMLImageElement): void
@@ -12,7 +13,7 @@ export interface SelfieStage {
    * No-op if addCutout was never called.
    */
   setImage(img: HTMLImageElement): void
-  exportPng(): Promise<Blob>
+  exportPng(border?: { style: PolaroidStyleId; name: string }): Promise<Blob>
   destroy(): void
   addSticker(img: HTMLImageElement): void
   addEmoji(char: string): void
@@ -123,10 +124,7 @@ export async function buildStage(
       cutoutNode.image(img)
       cutoutLayer.batchDraw()
     },
-    exportPng() {
-      // Hide BOTH transformers (cutout + overlay) during rasterization so no
-      // selection UI bakes into the exported PNG. Restore both afterwards so
-      // the user can keep editing.
+    exportPng(border?: { style: PolaroidStyleId; name: string }) {
       return new Promise<Blob>((resolve, reject) => {
         overlay.deselect()
         const cutoutTVisible = transformer.visible()
@@ -134,13 +132,30 @@ export async function buildStage(
         const overlayTVisible = overlay.hideTransformer()
         cutoutLayer.batchDraw()
         overlaysLayer.batchDraw()
+        const restore = () => {
+          if (cutoutTVisible) transformer.show()
+          if (overlayTVisible) overlay.showTransformer()
+          cutoutLayer.batchDraw()
+          overlaysLayer.batchDraw()
+        }
+        if (border) {
+          try {
+            const composite = stage.toCanvas() as HTMLCanvasElement
+            const bordered = paintPolaroid(composite, border)
+            bordered.toBlob((b: Blob | null) => {
+              restore()
+              b ? resolve(b) : reject(new Error('export failed'))
+            }, 'image/png')
+          } catch (e) {
+            restore()
+            reject(e as Error)
+          }
+          return
+        }
         stage.toBlob({
           mimeType: 'image/png',
           callback: (b: Blob | null) => {
-            if (cutoutTVisible) transformer.show()
-            if (overlayTVisible) overlay.showTransformer()
-            cutoutLayer.batchDraw()
-            overlaysLayer.batchDraw()
+            restore()
             b ? resolve(b) : reject(new Error('export failed'))
           },
         })

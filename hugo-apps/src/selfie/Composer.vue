@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { buildStage, type SelfieStage } from './compose'
 import StickerPicker from './StickerPicker.vue'
+import PolaroidControls from './PolaroidControls.vue'
 import { CAPTION_PLACEHOLDER } from './stickers'
 import type { StickerDef } from './stickers'
+import { POLAROID_STYLES, type PolaroidStyleId } from './polaroid'
 
 const props = defineProps<{
   rawPhoto: Blob
@@ -25,6 +27,18 @@ const stageEl = ref<HTMLDivElement | null>(null)
 let stage: SelfieStage | null = null
 const selectedKind = ref<'none' | 'sticker' | 'caption'>('none')
 const captionText = ref('')
+const borderEnabled = ref(false)
+const borderStyle = ref<PolaroidStyleId>('classic')
+const borderName = ref('')
+
+// Live preview matte background — mirrors POLAROID_STYLES so the on-screen
+// matte matches the baked export. Decorative only; paintPolaroid is authoritative.
+const previewMatte = computed(() => {
+  const s = POLAROID_STYLES[borderStyle.value]
+  return s.matte.kind === 'gradient'
+    ? `linear-gradient(${s.matte.from}, ${s.matte.to})`
+    : s.matte.color
+})
 
 function blobToImage(blob: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -116,14 +130,24 @@ function onDelete() {
 
 async function doExport() {
   if (!stage) return emit('fallback', effectiveBlob())
-  try { emit('export', await stage.exportPng()) }
-  catch { emit('fallback', effectiveBlob()) }
+  try {
+    const blob = borderEnabled.value
+      ? await stage.exportPng({ style: borderStyle.value, name: borderName.value })
+      : await stage.exportPng()
+    emit('export', blob)
+  } catch { emit('fallback', effectiveBlob()) }
 }
 </script>
 <template>
   <div class="selfie-composer">
     <div class="selfie-stage-wrap">
-      <div ref="stageEl" class="selfie-stage"></div>
+      <div
+        class="selfie-polaroid-preview" data-testid="polaroid-preview"
+        :class="{ 'is-bordered': borderEnabled }"
+        :style="borderEnabled ? { background: previewMatte } : undefined"
+      >
+        <div ref="stageEl" class="selfie-stage"></div>
+      </div>
       <p v-if="segmenting" class="selfie-stage-overlay" role="status">Removing the background&hellip;</p>
     </div>
     <div class="selfie-editor-toolbar">
@@ -136,6 +160,12 @@ async function doExport() {
         Remove background
       </label>
       <StickerPicker :stickers="stickers" :img-base="imgBase" @add-sticker="onAddSticker" @add-emoji="onAddEmoji" />
+      <PolaroidControls
+        :enabled="borderEnabled" :style="borderStyle" :name="borderName"
+        @update:enabled="borderEnabled = $event"
+        @update:style="borderStyle = $event"
+        @update:name="borderName = $event"
+      />
       <button type="button" class="selfie-btn" data-testid="add-caption" @click="onAddCaption">Add caption</button>
       <input
         type="text" class="selfie-caption-input" data-testid="caption-input"

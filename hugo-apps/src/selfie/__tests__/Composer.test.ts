@@ -180,4 +180,62 @@ describe('Composer.vue', () => {
     await w.findAll('.emoji-btn')[0].trigger('click')
     expect(h.addEmoji).toHaveBeenCalledTimes(1)
   })
+
+  it('shows the polaroid preview matte only when the border is enabled', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    expect(w.find('[data-testid="polaroid-preview"]').classes()).not.toContain('is-bordered')
+    // enable via the controls' toggle
+    const cb = w.find('[data-testid="border-toggle"]')
+    ;(cb.element as HTMLInputElement).checked = true
+    await cb.trigger('change')
+    await flushPromises()
+    expect(w.find('[data-testid="polaroid-preview"]').classes()).toContain('is-bordered')
+  })
+
+  it('export with border OFF calls exportPng with no border arg', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    await w.find('[data-testid="export"]').trigger('click')
+    await flushPromises()
+    expect(h.exportPng).toHaveBeenCalledWith()
+  })
+
+  it('export with border ON forwards the current { style, name } to exportPng', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    // enable border
+    const cb = w.find('[data-testid="border-toggle"]')
+    ;(cb.element as HTMLInputElement).checked = true
+    await cb.trigger('change')
+    await flushPromises()
+    // pick a style
+    await w.find('[data-testid="border-style-joule"]').trigger('click')
+    // type a name
+    const nameField = w.find('[data-testid="border-name"]')
+    ;(nameField.element as HTMLInputElement).value = 'Tom'
+    await nameField.trigger('input')
+    // export
+    await w.find('[data-testid="export"]').trigger('click')
+    await flushPromises()
+    expect(h.exportPng).toHaveBeenCalledWith({ style: 'joule', name: 'Tom' })
+  })
+
+  it('a bordered export that rejects falls back to a plain download instead of throwing', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    // enable the border so doExport takes the paintPolaroid branch
+    const cb = w.find('[data-testid="border-toggle"]')
+    ;(cb.element as HTMLInputElement).checked = true
+    await cb.trigger('change')
+    await flushPromises()
+    // the bake rejects (e.g. paintPolaroid / toBlob failure)
+    h.exportPng.mockRejectedValueOnce(new Error('bake failed'))
+    await w.find('[data-testid="export"]').trigger('click')
+    await flushPromises()
+    // fail-soft: parent is asked to offer the un-bordered blob, no export emitted
+    expect(w.emitted('export')).toBeUndefined()
+    const payload = w.emitted('fallback')?.[0]?.[0] as Blob
+    expect(payload).toBeInstanceOf(Blob)
+  })
 })
