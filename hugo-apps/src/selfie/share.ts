@@ -52,3 +52,11 @@ export async function copyImage(blob: Blob): Promise<'copied' | 'unavailable'> {
     return 'copied'
   } catch { return 'unavailable' }
 }
+
+// Desktop social: guarantee the user has the file (auto-download), then open the
+// prefilled intent popup so they can attach it. Fail-soft on popup blockers.
+export function openSocialShare(blob: Blob, network: 'x' | 'linkedin', filename = 'selfie.png'): void {
+  try { downloadBlob(blob, filename) } catch { /* download best-effort */ }
+  const url = network === 'x' ? xIntentUrl() : linkedInIntentUrl()
+  try { window.open(url, '_blank', 'noopener,noreferrer') } catch { /* popup blocked → no-op */ }
+}

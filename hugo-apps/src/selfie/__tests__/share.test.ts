@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { shareOrDownload, xIntentUrl, linkedInIntentUrl, SHARE_TEXT, SHARE_URL, copyImage } from '../share'
+import { shareOrDownload, xIntentUrl, linkedInIntentUrl, SHARE_TEXT, SHARE_URL, copyImage, openSocialShare } from '../share'
 
 describe('share.shareOrDownload', () => {
   beforeEach(() => {
@@ -68,5 +68,37 @@ describe('share.copyImage', () => {
     ;(globalThis as any).ClipboardItem = class { constructor(_: any) {} }
     setClipboard({ write: vi.fn().mockRejectedValue(new Error('denied')) })
     expect(await copyImage(png)).toBe('unavailable')
+  })
+})
+
+describe('share.openSocialShare', () => {
+  const png = new Blob(['x'], { type: 'image/png' })
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    ;(globalThis.URL as any).createObjectURL = vi.fn(() => 'blob:x')
+    ;(globalThis.URL as any).revokeObjectURL = vi.fn()
+  })
+
+  it('downloads the file then opens the X intent popup', () => {
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    openSocialShare(png, 'x')
+    expect(clickSpy).toHaveBeenCalled() // download fired first
+    expect(openSpy).toHaveBeenCalledTimes(1)
+    expect(openSpy.mock.calls[0][0]).toContain('twitter.com/intent/tweet')
+  })
+
+  it('opens the LinkedIn intent popup', () => {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    openSocialShare(png, 'linkedin')
+    expect(openSpy.mock.calls[0][0]).toContain('linkedin.com/sharing/share-offsite')
+  })
+
+  it('does not throw when window.open is blocked (fail-soft)', () => {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    vi.spyOn(window, 'open').mockImplementation(() => { throw new Error('popup blocked') })
+    expect(() => openSocialShare(png, 'x')).not.toThrow()
   })
 })
