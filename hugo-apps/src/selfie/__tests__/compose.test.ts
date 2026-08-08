@@ -10,6 +10,13 @@ const layerAddMock = vi.fn()
 const toBlobMock = vi.fn((opts: any) => opts.callback(new Blob(['png'], { type: 'image/png' })))
 const stageCtorArgs: any[] = []
 const imageCtorArgs: any[] = []
+// Records the frame image's listening() calls so we can assert it is made
+// non-interactive (transparent overlay frames must not eat pointer events).
+const imageListeningCalls: boolean[] = []
+// Tracks the transformer's visibility across the export so we can assert the
+// selection UI is hidden during rasterization and restored afterwards.
+const transformerEvents: string[] = []
+let lastTransformer: any = null
 
 vi.mock('konva', () => {
   class Stage {
@@ -18,16 +25,25 @@ vi.mock('konva', () => {
     add = addMock; toBlob = toBlobMock; destroy = vi.fn()
     width() { return this._w } height() { return this._h }
   }
-  class Layer { add = layerAddMock; draw = vi.fn(); batchDraw = vi.fn() }
+  class Layer { add = layerAddMock; draw = vi.fn(); batchDraw = vi.fn(); listening = vi.fn() }
   class KImage {
+    _listening = true
     constructor(cfg?: any) { if (cfg) imageCtorArgs.push(cfg) }
     setAttrs = vi.fn()
+    listening(v?: boolean) { if (v !== undefined) { this._listening = v; imageListeningCalls.push(v) } return this._listening }
     width() { return frameDims.w }
     height() { return frameDims.h }
   }
   ;(KImage as any).fromURL = (_u: string, cb: (n: any) => void) =>
     cb(new (KImage as any)())
-  class Transformer { nodes = vi.fn() }
+  class Transformer {
+    _visible = true
+    nodes = vi.fn()
+    constructor() { lastTransformer = this }
+    visible() { return this._visible }
+    hide() { this._visible = false; transformerEvents.push('hide') }
+    show() { this._visible = true; transformerEvents.push('show') }
+  }
   return { default: { Stage, Layer, Image: KImage, Transformer }, Stage, Layer, Image: KImage, Transformer }
 })
 
@@ -38,6 +54,8 @@ beforeEach(() => {
   frameDims = { w: 1080, h: 1080 }
   addMock.mockClear(); layerAddMock.mockClear()
   stageCtorArgs.length = 0; imageCtorArgs.length = 0
+  imageListeningCalls.length = 0; transformerEvents.length = 0
+  lastTransformer = null
 })
 
 function fakeImg(w: number, h: number): HTMLImageElement {
@@ -86,5 +104,32 @@ describe('compose.buildStage', () => {
     expect(cfg.x).toBe(Math.round((1080 - cfg.width) / 2))
     expect(cfg.y).toBe(Math.round((1080 - cfg.height) / 2))
     expect(cfg.draggable).toBe(true)
+  })
+
+  it('makes the decorative frame non-interactive so it does not eat pointer events', async () => {
+    // A transparent overlay frame drawn in front of the cutout must not swallow
+    // drags/transforms — its whole bounding box is otherwise a hit region.
+    await buildStage(document.createElement('div'), '/f.png')
+    expect(imageListeningCalls).toContain(false)
+  })
+
+  it('hides the transformer during export and restores it afterwards', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    stage.addCutout(fakeImg(1280, 720))
+    // Transformer is visible before export.
+    expect(lastTransformer.visible()).toBe(true)
+    let visibleAtRasterize: boolean | null = null
+    toBlobMock.mockImplementationOnce((opts: any) => {
+      // Capture visibility at the moment the PNG is rasterized.
+      visibleAtRasterize = lastTransformer.visible()
+      opts.callback(new Blob(['png'], { type: 'image/png' }))
+    })
+    const out = await stage.exportPng()
+    expect(out).toBeInstanceOf(Blob)
+    // Hidden while the bitmap was produced (no selection box baked in)…
+    expect(visibleAtRasterize).toBe(false)
+    // …and restored so the user can keep editing.
+    expect(lastTransformer.visible()).toBe(true)
+    expect(transformerEvents).toEqual(['hide', 'show'])
   })
 })

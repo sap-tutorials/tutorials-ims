@@ -51,7 +51,14 @@ export async function buildStage(
 
   // Frame fills the (aspect-matched) stage exactly — no distortion.
   frameNode.setAttrs({ x: 0, y: 0, width: stageW, height: stageH })
+  // The frame is purely decorative. A Konva.Image's hit region is its whole
+  // bounding box (transparent pixels included), so an 'overlay' frame drawn IN
+  // FRONT of the cutout would otherwise swallow every pointer event and the
+  // draggable cutout + transformer handles beneath it would never respond.
+  frameNode.listening(false)
   frameLayer.add(frameNode)
+  // Belt-and-braces: the whole frame layer is non-interactive either way.
+  frameLayer.listening(false)
 
   // Layer order per Task 1 decision:
   //   background → frame behind, cutout on top; overlay → cutout behind, frame in front.
@@ -82,8 +89,21 @@ export async function buildStage(
       cutoutLayer.batchDraw()
     },
     exportPng() {
+      // Hide the selection UI (transformer border + resize/rotate handles)
+      // during rasterization, otherwise it bakes into the exported PNG. Restore
+      // it afterwards so the user can keep editing if they don't like the result.
       return new Promise<Blob>((resolve, reject) => {
-        stage.toBlob({ mimeType: 'image/png', callback: (b: Blob | null) => (b ? resolve(b) : reject(new Error('export failed'))) })
+        const wasVisible = transformer.visible()
+        transformer.hide()
+        cutoutLayer.batchDraw()
+        stage.toBlob({
+          mimeType: 'image/png',
+          callback: (b: Blob | null) => {
+            if (wasVisible) transformer.show()
+            cutoutLayer.batchDraw()
+            b ? resolve(b) : reject(new Error('export failed'))
+          },
+        })
       })
     },
     destroy() { stage.destroy() },
