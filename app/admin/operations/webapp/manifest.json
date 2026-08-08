@@ -3,7 +3,7 @@
   "sap.app": {
     "id": "sap.tutorials.admin.operations",
     "type": "application",
-    "applicationVersion": { "version": "1.0.0" },
+    "applicationVersion": { "version": "1.0.1" },
     "title": "Featured Tasks",
     "crossNavigation": {
       "inbounds": {
@@ -45,6 +45,7 @@
     "routing": {
       "routes": [
         { "pattern": ":?query:", "name": "FeaturedTasksList", "target": "FeaturedTasksList" },
+        { "pattern": "FeaturedTasks({key}):?query:", "name": "FeaturedTasksDetail", "target": "FeaturedTasksDetail" },
         { "pattern": "ImsConfig:?query:", "name": "ImsConfigList", "target": "ImsConfigList" },
         { "pattern": "ImsConfig({key}):?query:", "name": "ImsConfigDetail", "target": "ImsConfigDetail" },
         { "pattern": "StepFailures:?query:", "name": "StepFailuresList", "target": "StepFailuresList" },
@@ -64,6 +65,9 @@
             "settings": {
               "contextPath": "/FeaturedTasks",
               "initialLoad": "Enabled",
+              "navigation": {
+                "FeaturedTasks": { "detail": { "route": "FeaturedTasksDetail" } }
+              },
               "controlConfiguration": {
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "actions": {
@@ -76,6 +80,17 @@
                   }
                 }
               }
+            }
+          }
+        },
+        "FeaturedTasksDetail": {
+          "type": "Component",
+          "id": "FeaturedTasksDetail",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/FeaturedTasks",
+              "editableHeaderContent": false
             }
           }
         },
