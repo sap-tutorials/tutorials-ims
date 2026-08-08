@@ -5,7 +5,7 @@
     "type": "application",
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
-    "applicationVersion": { "version": "0.0.3" },
+    "applicationVersion": { "version": "0.0.4" },
     "i18n": "i18n/i18n.properties",
     "dataSources": {
       "mainService": {
