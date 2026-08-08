@@ -8,6 +8,8 @@ import type { StickerDef } from './stickers'
 import { POLAROID_STYLES, type PolaroidStyleId } from './polaroid'
 import EffectPicker from './EffectPicker.vue'
 import { EFFECTS, type EffectId } from './effects'
+import BackgroundPicker from './BackgroundPicker.vue'
+import { backgroundUrl, BACKGROUNDS } from './backgrounds'
 
 const props = defineProps<{
   rawPhoto: Blob
@@ -33,6 +35,9 @@ const borderEnabled = ref(false)
 const borderStyle = ref<PolaroidStyleId>('classic')
 const borderName = ref('')
 const effectId = ref<EffectId>('none')
+const backgroundId = ref('none')
+const cartoonBusy = ref(false)
+const effectNote = ref('')
 
 // Live preview matte background — mirrors POLAROID_STYLES so the on-screen
 // matte matches the baked export. Decorative only; paintPolaroid is authoritative.
@@ -139,6 +144,8 @@ function onDelete() {
 
 async function doExport() {
   if (!stage) return emit('fallback', effectiveBlob())
+  effectNote.value = ''
+  if (effectId.value === 'cartoon') cartoonBusy.value = true
   try {
     const blob = await stage.exportPng({
       effect: effectId.value,
@@ -146,6 +153,23 @@ async function doExport() {
     })
     emit('export', blob)
   } catch { emit('fallback', effectiveBlob()) }
+  finally { cartoonBusy.value = false }
+}
+
+async function onPickBackground(id: string) {
+  backgroundId.value = id
+  if (!stage) return
+  if (id === 'none') { stage.setBackground(null); return }
+  // A themed background is meaningless without the cutout — force removeBg on.
+  if (!props.removeBg) emit('update:removeBg', true)
+  const scene = BACKGROUNDS.find((b) => b.id === id)
+  if (!scene) return
+  try {
+    const img = await urlToImage(backgroundUrl(props.imgBase, scene.file))
+    stage.setBackground(img)
+  } catch (e) {
+    console.warn('[selfie] background load failed', e)
+  }
 }
 </script>
 <template>
@@ -186,17 +210,19 @@ async function doExport() {
         @update:name="borderName = $event"
       />
       <EffectPicker :effect="effectId" @update:effect="effectId = $event" />
+      <BackgroundPicker :background="backgroundId" :img-base="imgBase" @update:background="onPickBackground" />
       <button type="button" class="selfie-btn" data-testid="add-caption" @click="onAddCaption">Add caption</button>
       <input
         type="text" class="selfie-caption-input" data-testid="caption-input"
         :disabled="selectedKind !== 'caption'" :value="captionText"
         @input="onCaptionInput" placeholder="Caption text"
       />
-      <button
-        type="button" class="selfie-btn selfie-btn--danger" data-testid="delete-overlay"
+      <button type="button" class="selfie-btn selfie-btn--danger" data-testid="delete-overlay"
         :disabled="selectedKind === 'none'" @click="onDelete"
       >Delete</button>
-      <button type="button" class="selfie-btn" data-testid="export" :disabled="segmenting" @click="doExport">Export</button>
+      <span v-if="cartoonBusy" class="selfie-busy" role="status" data-testid="cartoon-busy">Cartoonifying&hellip;</span>
+      <p v-if="effectNote" class="selfie-note" role="status">{{ effectNote }}</p>
+      <button type="button" class="selfie-btn" data-testid="export" :disabled="segmenting || cartoonBusy" @click="doExport">Export</button>
     </div>
   </div>
 </template>
