@@ -6,6 +6,8 @@ import PolaroidControls from './PolaroidControls.vue'
 import { CAPTION_PLACEHOLDER } from './stickers'
 import type { StickerDef } from './stickers'
 import { POLAROID_STYLES, type PolaroidStyleId } from './polaroid'
+import EffectPicker from './EffectPicker.vue'
+import { EFFECTS, type EffectId } from './effects'
 
 const props = defineProps<{
   rawPhoto: Blob
@@ -30,6 +32,7 @@ const captionText = ref('')
 const borderEnabled = ref(false)
 const borderStyle = ref<PolaroidStyleId>('classic')
 const borderName = ref('')
+const effectId = ref<EffectId>('none')
 
 // Live preview matte background — mirrors POLAROID_STYLES so the on-screen
 // matte matches the baked export. Decorative only; paintPolaroid is authoritative.
@@ -39,6 +42,12 @@ const previewMatte = computed(() => {
     ? `linear-gradient(${s.matte.from}, ${s.matte.to})`
     : s.matte.color
 })
+
+// Live CSS approximation of the active effect. `previewFilter` binds to the stage
+// element; `previewOverlay` renders an absolutely-positioned blend layer over the
+// photo. Decorative only — applyEffect is authoritative at export.
+const previewFilter = computed(() => EFFECTS[effectId.value].preview.filter ?? 'none')
+const previewOverlay = computed(() => EFFECTS[effectId.value].preview.overlay ?? null)
 
 function blobToImage(blob: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -131,9 +140,10 @@ function onDelete() {
 async function doExport() {
   if (!stage) return emit('fallback', effectiveBlob())
   try {
-    const blob = borderEnabled.value
-      ? await stage.exportPng({ style: borderStyle.value, name: borderName.value })
-      : await stage.exportPng()
+    const blob = await stage.exportPng({
+      effect: effectId.value,
+      border: borderEnabled.value ? { style: borderStyle.value, name: borderName.value } : undefined,
+    })
     emit('export', blob)
   } catch { emit('fallback', effectiveBlob()) }
 }
@@ -146,7 +156,16 @@ async function doExport() {
         :class="{ 'is-bordered': borderEnabled }"
         :style="borderEnabled ? { background: previewMatte } : undefined"
       >
-        <div ref="stageEl" class="selfie-stage"></div>
+        <div class="selfie-stage-fx">
+          <div
+            ref="stageEl" class="selfie-stage"
+            :style="previewFilter !== 'none' ? { filter: previewFilter } : undefined"
+          ></div>
+          <div
+            v-if="previewOverlay" class="selfie-effect-overlay" data-testid="effect-overlay" aria-hidden="true"
+            :style="{ background: previewOverlay.background, mixBlendMode: previewOverlay.blend, opacity: previewOverlay.opacity }"
+          ></div>
+        </div>
       </div>
       <p v-if="segmenting" class="selfie-stage-overlay" role="status">Removing the background&hellip;</p>
     </div>
@@ -166,6 +185,7 @@ async function doExport() {
         @update:style="borderStyle = $event"
         @update:name="borderName = $event"
       />
+      <EffectPicker :effect="effectId" @update:effect="effectId = $event" />
       <button type="button" class="selfie-btn" data-testid="add-caption" @click="onAddCaption">Add caption</button>
       <input
         type="text" class="selfie-caption-input" data-testid="caption-input"

@@ -92,6 +92,11 @@ vi.mock('../polaroid', () => ({
   POLAROID_STYLES: {}, POLAROID_STYLE_IDS: ['classic', 'devtoberfest', 'joule'],
 }))
 
+const applyEffectMock = vi.fn((canvas: any) => canvas)
+vi.mock('../effects', () => ({
+  applyEffect: (c: any, id: any) => applyEffectMock(c, id),
+}))
+
 import { buildStage } from '../compose'
 import { STAGE_WIDTH, STAGE_HEIGHT } from '../constants'
 
@@ -102,6 +107,7 @@ beforeEach(() => {
   imageListeningCalls.length = 0; transformers.length = 0
   lastCutoutNode = null
   paintPolaroidMock.mockClear()
+  applyEffectMock.mockClear()
 })
 
 function fakeImg(w: number, h: number): HTMLImageElement {
@@ -223,19 +229,19 @@ describe('compose.buildStage', () => {
     expect(transformers.every((t) => t.visible())).toBe(true) // restored
   })
 
-  it('exportPng() with no border does NOT invoke paintPolaroid and still returns a blob', async () => {
+  it('exportPng() with no effect/border does NOT invoke applyEffect or paintPolaroid', async () => {
     const stage = await buildStage(document.createElement('div'), '/f.png')
     const out = await stage.exportPng()
     expect(out).toBeInstanceOf(Blob)
+    expect(applyEffectMock).not.toHaveBeenCalled()
     expect(paintPolaroidMock).not.toHaveBeenCalled()
   })
 
   it('exportPng({ border }) routes the composite canvas through paintPolaroid', async () => {
     const stage = await buildStage(document.createElement('div'), '/f.png')
-    const out = await stage.exportPng({ style: 'joule', name: 'Tom' })
+    const out = await stage.exportPng({ border: { style: 'joule', name: 'Tom' } })
     expect(out).toBeInstanceOf(Blob)
     expect(paintPolaroidMock).toHaveBeenCalledTimes(1)
-    // forwarded opts
     expect(paintPolaroidMock.mock.calls[0][1]).toEqual({ style: 'joule', name: 'Tom' })
   })
 
@@ -249,8 +255,35 @@ describe('compose.buildStage', () => {
       allHiddenAtBake = transformers.every((t) => !t.visible())
       return { width: composite.width, height: composite.height, toBlob: (cb: any) => cb(new Blob(['b'], { type: 'image/png' })) }
     })
-    await stage.exportPng({ style: 'classic', name: '' })
+    await stage.exportPng({ border: { style: 'classic', name: '' } })
     expect(allHiddenAtBake).toBe(true)
     expect(transformers.every((t) => t.visible())).toBe(true)
+  })
+
+  it('exportPng({ effect }) routes the composite through applyEffect once with the id (canvas path, no border)', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const out = await stage.exportPng({ effect: 'mono' })
+    expect(out).toBeInstanceOf(Blob)
+    expect(applyEffectMock).toHaveBeenCalledTimes(1)
+    expect(applyEffectMock.mock.calls[0][1]).toBe('mono')
+    expect(paintPolaroidMock).not.toHaveBeenCalled() // no border → effect-only canvas path
+  })
+
+  it('exportPng({ effect: "none" }) takes the fast toBlob path — no applyEffect, no paintPolaroid', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const out = await stage.exportPng({ effect: 'none' })
+    expect(out).toBeInstanceOf(Blob)
+    expect(applyEffectMock).not.toHaveBeenCalled()
+    expect(paintPolaroidMock).not.toHaveBeenCalled()
+  })
+
+  it('bakes the effect BEFORE the polaroid border when both are set', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    await stage.exportPng({ effect: 'duotone', border: { style: 'classic', name: '' } })
+    expect(applyEffectMock).toHaveBeenCalledTimes(1)
+    expect(paintPolaroidMock).toHaveBeenCalledTimes(1)
+    // effect runs first: its invocation order precedes paintPolaroid's
+    expect(applyEffectMock.mock.invocationCallOrder[0])
+      .toBeLessThan(paintPolaroidMock.mock.invocationCallOrder[0])
   })
 })
