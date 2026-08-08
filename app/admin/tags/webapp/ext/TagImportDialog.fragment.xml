@@ -21,7 +21,7 @@
                   id="tagImportFileUploader"
                   fileType="csv,json"
                   maximumFileSize="1"
-                  change=".extension.sap.tutorials.admin.tags.onFileSelected"
+                  change=".onFileSelected"
                   buttonText="{i18n>tagImport.tab.file}"
                   uploadOnChange="false"
                   width="100%" />
@@ -49,7 +49,7 @@
         <Button
           text="{i18n>tagImport.button.preview}"
           type="Emphasized"
-          press=".extension.sap.tutorials.admin.tags.onPreview"
+          press=".onPreview"
           enabled="{= !!${viewState>/payload} }"
           class="sapUiSmallMarginTop" />
       </VBox>
@@ -108,15 +108,15 @@
       <Button
         text="{i18n>tagImport.button.back}"
         visible="{= ${viewState>/state} === 'preview' }"
-        press=".extension.sap.tutorials.admin.tags.onBack" />
+        press=".onBack" />
       <Button
         text="{i18n>tagImport.button.import}"
         type="Emphasized"
         visible="{= ${viewState>/state} === 'preview' }"
-        press=".extension.sap.tutorials.admin.tags.onCommit" />
+        press=".onCommit" />
       <Button
         text="{i18n>tagImport.button.close}"
-        press=".extension.sap.tutorials.admin.tags.onClose" />
+        press=".onClose" />
     </buttons>
   </Dialog>
 </core:FragmentDefinition>
