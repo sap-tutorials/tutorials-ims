@@ -220,4 +220,22 @@ describe('Composer.vue', () => {
     await flushPromises()
     expect(h.exportPng).toHaveBeenCalledWith({ style: 'joule', name: 'Tom' })
   })
+
+  it('a bordered export that rejects falls back to a plain download instead of throwing', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    // enable the border so doExport takes the paintPolaroid branch
+    const cb = w.find('[data-testid="border-toggle"]')
+    ;(cb.element as HTMLInputElement).checked = true
+    await cb.trigger('change')
+    await flushPromises()
+    // the bake rejects (e.g. paintPolaroid / toBlob failure)
+    h.exportPng.mockRejectedValueOnce(new Error('bake failed'))
+    await w.find('[data-testid="export"]').trigger('click')
+    await flushPromises()
+    // fail-soft: parent is asked to offer the un-bordered blob, no export emitted
+    expect(w.emitted('export')).toBeUndefined()
+    const payload = w.emitted('fallback')?.[0]?.[0] as Blob
+    expect(payload).toBeInstanceOf(Blob)
+  })
 })
