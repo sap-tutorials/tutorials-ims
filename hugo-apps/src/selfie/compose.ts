@@ -3,6 +3,14 @@ import { STAGE_WIDTH, STAGE_HEIGHT, FRAME_LAYERING } from './constants'
 
 export interface SelfieStage {
   addCutout(img: HTMLImageElement): void
+  /**
+   * Swap the current cutout's bitmap in place, keeping its position, scale,
+   * rotation and the transformer selection. Used by the live "remove
+   * background" toggle to flip between the raw photo and the segmented cutout
+   * without rebuilding the stage (which would reset the user's placement).
+   * No-op if addCutout was never called.
+   */
+  setImage(img: HTMLImageElement): void
   exportPng(): Promise<Blob>
   destroy(): void
 }
@@ -68,6 +76,9 @@ export async function buildStage(
   const transformer = new Konva.Transformer()
   cutoutLayer.add(transformer)
 
+  // The current cutout node, tracked so setImage can swap its bitmap in place.
+  let cutoutNode: Konva.Image | null = null
+
   return {
     addCutout(img: HTMLImageElement) {
       // Fit the capture inside the stage (contain) and center it, so it is
@@ -84,8 +95,17 @@ export async function buildStage(
         width: fit.width,
         height: fit.height,
       })
+      cutoutNode = node
       cutoutLayer.add(node)
       transformer.nodes([node])
+      cutoutLayer.batchDraw()
+    },
+    setImage(img: HTMLImageElement) {
+      // Swap the bitmap only. The raw photo and its segmented cutout share the
+      // same source dimensions, so the existing contain-fit box still applies —
+      // keep the node's position/scale/rotation and the transformer intact.
+      if (!cutoutNode) return
+      cutoutNode.image(img)
       cutoutLayer.batchDraw()
     },
     exportPng() {
