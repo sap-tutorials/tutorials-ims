@@ -144,13 +144,7 @@
       "source": "^/devtoberfest(/.*)?$",
       "target": "/devtoberfest$1",
       "localDir": "static",
-      "authenticationType": "none",
-      "responseHeaders": [
-        {
-          "name": "Content-Security-Policy",
-          "value": "default-src 'self'; frame-ancestors 'self' https://*.sap.com https://*.sap.cn https://*.cloud.sap https://hybris.com https://*.hybris.com https://*.lookbookhq.com https://www.gigya.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://ui5.sap.com https://www.youtube.com https://consent.trustarc.com; worker-src 'self' blob:; frame-src https://www.youtube.com https://youtube.com https://youtu.be https://microlearning.opensap.com https://sapvideo.cfapps.eu10-004.hana.ondemand.com https://player.vimeo.com https://vimeo.com; media-src 'self' https://raw.githubusercontent.com; img-src 'self' blob: https://raw.githubusercontent.com https://avatars.githubusercontent.com https://github.com https://*.sap.com https://i.ytimg.com data: https://consent.trustarc.com; style-src 'self' 'unsafe-inline' https://*.sap.com https://ui5.sap.com https://unpkg.com; font-src 'self' https://*.sap.com https://ui5.sap.com https://unpkg.com https://cdn.jsdelivr.net https://consent.trustarc.com; connect-src 'self' blob: https://ui5.sap.com https://*.cfapps.eu10-005.hana.ondemand.com wss://*.cfapps.eu10-005.hana.ondemand.com https://consent.trustarc.com https://user-consent-center.trustarc.com"
-        }
-      ]
+      "authenticationType": "none"
     },
     {
       "source": "^/gameboard/getMyGameboard(.*)$",

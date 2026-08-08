@@ -110,6 +110,41 @@ function legacyRedirectsHandler(req, res, next) {
   next()
 }
 
+// #selfie (PR #1546 follow-up): the selfie tool's in-browser background removal
+// (onnxruntime-web + imgly) calls new Function() at model init, which needs
+// 'unsafe-eval'. The global CSP (xs-app.json top-level responseHeaders) grants
+// only 'wasm-unsafe-eval' and must stay that strict everywhere else.
+//
+// approuter 16.9.0 has NO route-scoped CSP: route-level `responseHeaders` is not
+// in its xs-app schema (only `cacheControl` is valid per route), so putting a CSP
+// there fails xs-app.json validation and CRASH-LOOPS the approuter at boot. The
+// global CSP is applied by the approuter's own additionalHeaders middleware via
+// res.setHeader. So we scope 'unsafe-eval' to /devtoberfest/* by wrapping
+// res.setHeader on that subtree ONLY: when the approuter sets Content-Security-
+// Policy, we splice 'unsafe-eval' into its script-src. Deriving from the value the
+// approuter actually emits (rather than a second hardcoded CSP copy) means the two
+// can never drift, and we still emit exactly ONE CSP header (a duplicate header
+// would be intersected by the browser and defeat the grant). Guarded by
+// test/smoke/security-headers.test.js (unsafe-eval on the route, absent at root).
+function devtoberfestCspHandler(req, res, next) {
+  const url = req.url || '/'
+  if (url !== '/devtoberfest' && !url.startsWith('/devtoberfest/') && !url.startsWith('/devtoberfest?')) {
+    return next()
+  }
+  const origSetHeader = res.setHeader.bind(res)
+  res.setHeader = function patchedSetHeader(name, value) {
+    if (String(name).toLowerCase() === 'content-security-policy' && typeof value === 'string') {
+      // Add 'unsafe-eval' to script-src if not already present. wasm-unsafe-eval
+      // stays (WASM compile is separate from JS eval).
+      if (/script-src/.test(value) && !/script-src[^;]*'unsafe-eval'/.test(value)) {
+        value = value.replace(/(script-src)(\s+)/, "$1$2'unsafe-eval' ")
+      }
+    }
+    return origSetHeader(name, value)
+  }
+  next()
+}
+
 let _sharp
 function getSharp() {
   if (_sharp === undefined) {
@@ -537,6 +572,7 @@ ar.start({
       insertMiddleware: {
         first: [
           { path: '/', handler: wellKnownOAuthHandler },
+          { path: '/', handler: devtoberfestCspHandler },
           { path: '/admin/rebuild', handler: rebuildHandler },
           { path: '/', handler: imgCdnHandler },
           { path: '/', handler: legacyRedirectsHandler },
