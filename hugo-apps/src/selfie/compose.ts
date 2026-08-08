@@ -2,6 +2,7 @@ import Konva from 'konva'
 import { STAGE_WIDTH, STAGE_HEIGHT, FRAME_LAYERING } from './constants'
 import { createOverlayManager, type OverlayKind } from './overlays'
 import { paintPolaroid, type PolaroidStyleId } from './polaroid'
+import { applyEffect, type EffectId } from './effects'
 
 export interface SelfieStage {
   addCutout(img: HTMLImageElement): void
@@ -13,7 +14,7 @@ export interface SelfieStage {
    * No-op if addCutout was never called.
    */
   setImage(img: HTMLImageElement): void
-  exportPng(border?: { style: PolaroidStyleId; name: string }): Promise<Blob>
+  exportPng(opts?: { effect?: EffectId; border?: { style: PolaroidStyleId; name: string } }): Promise<Blob>
   destroy(): void
   addSticker(img: HTMLImageElement): void
   addEmoji(char: string): void
@@ -124,7 +125,12 @@ export async function buildStage(
       cutoutNode.image(img)
       cutoutLayer.batchDraw()
     },
-    exportPng(border?: { style: PolaroidStyleId; name: string }) {
+    exportPng(opts?: { effect?: EffectId; border?: { style: PolaroidStyleId; name: string } }) {
+      const effect = opts?.effect
+      const border = opts?.border
+      // The fast Konva path can only be skipped when we actually need a pixel
+      // pass — an active effect (not 'none') or a polaroid border.
+      const needsCanvas = (!!effect && effect !== 'none') || !!border
       return new Promise<Blob>((resolve, reject) => {
         overlay.deselect()
         const cutoutTVisible = transformer.visible()
@@ -138,11 +144,13 @@ export async function buildStage(
           cutoutLayer.batchDraw()
           overlaysLayer.batchDraw()
         }
-        if (border) {
+        if (needsCanvas) {
           try {
-            const composite = stage.toCanvas() as HTMLCanvasElement
-            const bordered = paintPolaroid(composite, border)
-            bordered.toBlob((b: Blob | null) => {
+            let composite = stage.toCanvas() as HTMLCanvasElement
+            // Effect bakes BEFORE the border so the white matte stays untinted.
+            if (effect && effect !== 'none') composite = applyEffect(composite, effect)
+            const finalCanvas = border ? paintPolaroid(composite, border) : composite
+            finalCanvas.toBlob((b: Blob | null) => {
               restore()
               b ? resolve(b) : reject(new Error('export failed'))
             }, 'image/png')
