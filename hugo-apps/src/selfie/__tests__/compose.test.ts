@@ -17,6 +17,10 @@ const imageListeningCalls: boolean[] = []
 // selection UI is hidden during rasterization and restored afterwards.
 const transformerEvents: string[] = []
 let lastTransformer: any = null
+// The last Konva.Image constructed WITH a config — i.e. the draggable cutout
+// node (the frame node comes in via fromURL with no config). Lets setImage
+// tests assert the bitmap is swapped in place.
+let lastCutoutNode: any = null
 
 vi.mock('konva', () => {
   class Stage {
@@ -28,9 +32,12 @@ vi.mock('konva', () => {
   class Layer { add = layerAddMock; draw = vi.fn(); batchDraw = vi.fn(); listening = vi.fn() }
   class KImage {
     _listening = true
-    constructor(cfg?: any) { if (cfg) imageCtorArgs.push(cfg) }
+    _image: any = null
+    imageCalls: any[] = []
+    constructor(cfg?: any) { if (cfg) { imageCtorArgs.push(cfg); this._image = cfg.image; lastCutoutNode = this } }
     setAttrs = vi.fn()
     listening(v?: boolean) { if (v !== undefined) { this._listening = v; imageListeningCalls.push(v) } return this._listening }
+    image(v?: any) { if (v !== undefined) { this._image = v; this.imageCalls.push(v) } return this._image }
     width() { return frameDims.w }
     height() { return frameDims.h }
   }
@@ -56,6 +63,7 @@ beforeEach(() => {
   stageCtorArgs.length = 0; imageCtorArgs.length = 0
   imageListeningCalls.length = 0; transformerEvents.length = 0
   lastTransformer = null
+  lastCutoutNode = null
 })
 
 function fakeImg(w: number, h: number): HTMLImageElement {
@@ -131,5 +139,25 @@ describe('compose.buildStage', () => {
     // …and restored so the user can keep editing.
     expect(lastTransformer.visible()).toBe(true)
     expect(transformerEvents).toEqual(['hide', 'show'])
+  })
+
+  it('setImage swaps the cutout bitmap in place without rebuilding', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const original = fakeImg(1280, 720)
+    stage.addCutout(original)
+    const node = lastCutoutNode
+    expect(node.image()).toBe(original) // starts on the first cutout
+    const swapped = fakeImg(1280, 720)
+    stage.setImage(swapped)
+    // Same node, new bitmap — no new Konva.Image was constructed for the swap.
+    expect(node.image()).toBe(swapped)
+    expect(node.imageCalls).toEqual([swapped])
+    expect(lastCutoutNode).toBe(node)
+  })
+
+  it('setImage is a no-op before any cutout is added', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    // No addCutout yet → nothing to swap, must not throw.
+    expect(() => stage.setImage(fakeImg(100, 100))).not.toThrow()
   })
 })

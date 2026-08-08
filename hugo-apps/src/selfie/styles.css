@@ -37,12 +37,28 @@
 }
 .selfie-busy { color: var(--sapContent_LabelColor, #556b82); }
 
-.selfie-editor-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+.selfie-editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: .75rem 0; }
+
+/* "Remove background" toggle — used at both the capture and compose steps. */
+.selfie-toggle {
+  display: inline-flex; align-items: center; gap: .4rem;
+  color: var(--sapContent_LabelColor, #556b82); font-size: .9rem; cursor: pointer;
+  margin: .25rem 0 .75rem;
+}
+.selfie-toggle input { cursor: pointer; }
+.selfie-toggle input:disabled { cursor: not-allowed; }
 
 /* ---- Capture (camera) ---- */
 .selfie-video { display: block; width: 100%; max-width: 640px; border-radius: 8px; background: #000; margin: 0 0 .75rem; transform: scaleX(-1); }
 .selfie-link { color: var(--sapLinkColor, #0070f2); cursor: pointer; text-decoration: underline; }
 /* ---- Composer (Konva stage) ---- */
 .selfie-composer { margin: 1rem 0; }
+.selfie-stage-wrap { position: relative; max-width: 100%; margin: 0 auto; width: fit-content; }
 .selfie-stage { max-width: 100%; margin: 0 auto; touch-action: none; }
+.selfie-stage-overlay {
+  position: absolute; inset: 0; margin: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, .7); color: var(--sapContent_LabelColor, #556b82);
+  font-size: .95rem; border-radius: 8px; pointer-events: none;
+}
 .selfie-final { display: block; max-width: 100%; margin: 1rem auto; border-radius: 8px; }
