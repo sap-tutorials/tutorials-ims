@@ -6,6 +6,7 @@ import Capture from './Capture.vue'
 import Composer from './Composer.vue'
 import ExportBar from './ExportBar.vue'
 import { removeBackground } from './segment'
+import { parseStickerList } from './stickers'
 
 defineProps<{ config: MountConfig }>()
 
@@ -127,6 +128,7 @@ onBeforeUnmount(() => {
       v-else-if="step === 'compose' && rawPhoto && selectedFrame"
       :raw-photo="rawPhoto" :cutout="cutout" :remove-bg="removeBg" :segmenting="segmenting"
       :frame-name="selectedFrame" :img-base="config.imgBase"
+      :stickers="parseStickerList(config.stickers.join(','))"
       @update:remove-bg="removeBg = $event" @segment="onDemandSegment"
       @export="onExport" @fallback="onFallback"
     />

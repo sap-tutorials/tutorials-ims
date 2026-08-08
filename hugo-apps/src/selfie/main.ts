@@ -8,6 +8,7 @@ if (el) {
   const config: MountConfig = {
     imgBase: d.imgBase || '/images/devtoberfest/selfie',
     frames: (d.frames || '').split(',').map(s => s.trim()).filter(Boolean),
+    stickers: (d.stickers || '').split(',').map(s => s.trim()).filter(Boolean),
   }
   createApp(Selfie, { config }).mount(el)
 }

@@ -7,11 +7,11 @@ const removeBackground = vi.hoisted(() =>
 )
 vi.mock('../segment', () => ({ removeBackground }))
 vi.mock('../Capture.vue', () => ({ default: { name: 'Capture', emits: ['photo', 'error'], setup(_p: unknown, { emit }: { emit: (e: string, ...a: unknown[]) => void }) { return { doSnap: () => emit('photo', new Blob(['x'], { type: 'image/png' })) } }, template: '<button data-testid="fake-snap" @click="doSnap()">snap</button>' } }))
-vi.mock('../Composer.vue', () => ({ default: { name: 'Composer', props: ['rawPhoto', 'cutout', 'removeBg', 'segmenting', 'frameName', 'imgBase'], emits: ['export', 'fallback', 'update:removeBg', 'segment'], template: '<div data-testid="composer"></div>' } }))
+vi.mock('../Composer.vue', () => ({ default: { name: 'Composer', props: ['rawPhoto', 'cutout', 'removeBg', 'segmenting', 'frameName', 'imgBase', 'stickers'], emits: ['export', 'fallback', 'update:removeBg', 'segment'], template: '<div data-testid="composer"></div>' } }))
 
 import Selfie from '../Selfie.vue'
 
-const config = { imgBase: '/images/devtoberfest/selfie', frames: ['Thomas', 'DJ2'] }
+const config = { imgBase: '/images/devtoberfest/selfie', frames: ['Thomas', 'DJ2'], stickers: ['pumpkin', 'star'] }
 
 async function pickFrameAndSnap(w: ReturnType<typeof mount>) {
   await w.findAll('.frame-thumb')[0].trigger('click')
@@ -68,5 +68,13 @@ describe('Selfie.vue', () => {
     // Reaches the composer despite the failure, and surfaces the fallback notice.
     expect(w.find('[data-testid="composer"]').exists()).toBe(true)
     expect(w.text()).toMatch(/using your full photo/i)
+  })
+
+  it('forwards a parsed sticker list to the Composer', async () => {
+    const w = mount(Selfie, { props: { config } })
+    await pickFrameAndSnap(w)
+    const composer = w.findComponent({ name: 'Composer' })
+    const passed = composer.props('stickers') as Array<{ name: string; file: string }>
+    expect(passed.map((s) => s.file)).toEqual(['pumpkin', 'star'])
   })
 })
