@@ -4,10 +4,18 @@ import { mount, flushPromises } from '@vue/test-utils'
 
 const h = vi.hoisted(() => {
   const exportPng = vi.fn().mockResolvedValue(new Blob(['png'], { type: 'image/png' }))
-  const addCutout = vi.fn()
-  const setImage = vi.fn()
-  const buildStage = vi.fn().mockResolvedValue({ addCutout, setImage, exportPng, destroy: vi.fn() })
-  return { exportPng, addCutout, setImage, buildStage }
+  const addCutout = vi.fn(); const setImage = vi.fn()
+  const addSticker = vi.fn(); const addEmoji = vi.fn()
+  const addCaption = vi.fn(); const updateCaption = vi.fn(); const deleteSelected = vi.fn()
+  const hasCaption = vi.fn().mockReturnValue(false)
+  let selCb: ((k: string) => void) | null = null
+  const onSelectionChange = vi.fn((cb: (k: string) => void) => { selCb = cb })
+  const buildStage = vi.fn().mockResolvedValue({
+    addCutout, setImage, exportPng, destroy: vi.fn(),
+    addSticker, addEmoji, addCaption, updateCaption, deleteSelected, onSelectionChange,
+    hasCaption, selectedIsCaption: () => false, deselect: vi.fn(),
+  })
+  return { exportPng, addCutout, setImage, addSticker, addEmoji, addCaption, updateCaption, deleteSelected, onSelectionChange, hasCaption, buildStage, fireSel: (k: string) => selCb?.(k) }
 })
 vi.mock('../compose', () => ({
   buildStage: h.buildStage,
@@ -17,10 +25,13 @@ import Composer from '../Composer.vue'
 
 const raw = new Blob(['raw'], { type: 'image/png' })
 const cut = new Blob(['cut'], { type: 'image/png' })
-const base = { frameName: 'Thomas', imgBase: '/images/devtoberfest/selfie' }
+const base = { frameName: 'Thomas', imgBase: '/images/devtoberfest/selfie', stickers: [{ name: 'pumpkin', file: 'pumpkin' }] }
 
 beforeEach(() => {
   h.exportPng.mockClear(); h.addCutout.mockClear(); h.setImage.mockClear(); h.buildStage.mockClear()
+  h.addSticker.mockClear(); h.addEmoji.mockClear(); h.addCaption.mockClear()
+  h.updateCaption.mockClear(); h.deleteSelected.mockClear(); h.onSelectionChange.mockClear()
+  h.hasCaption.mockReset(); h.hasCaption.mockReturnValue(false)
   // happy-dom does not fire <img> onload for blob: URLs, so Composer's
   // blobToImage() would hang forever. Stub Image to resolve on the next tick.
   vi.stubGlobal('Image', class {
@@ -101,5 +112,72 @@ describe('Composer.vue', () => {
     ;(cb.element as HTMLInputElement).checked = false
     await cb.trigger('change')
     expect(w.emitted('update:removeBg')?.[0]?.[0]).toBe(false)
+  })
+
+  it('Add caption calls stage.addCaption with the placeholder', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    await w.find('[data-testid="add-caption"]').trigger('click')
+    expect(h.addCaption).toHaveBeenCalledWith('#Devtoberfest')
+  })
+
+  it('second Add caption click does not reset toolbar input when caption already exists', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    // First click: no caption yet → placeholder is set
+    h.hasCaption.mockReturnValue(false)
+    await w.find('[data-testid="add-caption"]').trigger('click')
+    await flushPromises()
+    // Simulate user typing a custom caption
+    h.fireSel('caption'); await flushPromises()
+    const field = w.find('[data-testid="caption-input"]')
+    ;(field.element as HTMLInputElement).value = 'Hello'
+    await field.trigger('input')
+    expect((field.element as HTMLInputElement).value).toBe('Hello')
+    // Second click: caption already exists → toolbar value must NOT revert to placeholder
+    h.hasCaption.mockReturnValue(true)
+    await w.find('[data-testid="add-caption"]').trigger('click')
+    await flushPromises()
+    const input = w.find('[data-testid="caption-input"]').element as HTMLInputElement
+    expect(input.value).toBe('Hello')
+  })
+
+  it('caption input is disabled until a caption is selected', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    const input = () => w.find('[data-testid="caption-input"]').element as HTMLInputElement
+    expect(input().disabled).toBe(true)
+    h.fireSel('caption') // stage reports a caption is selected
+    await flushPromises()
+    expect(input().disabled).toBe(false)
+  })
+
+  it('typing in the caption field updates the caption on the stage', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    h.fireSel('caption'); await flushPromises()
+    const field = w.find('[data-testid="caption-input"]')
+    ;(field.element as HTMLInputElement).value = 'I met an advocate!'
+    await field.trigger('input')
+    expect(h.updateCaption).toHaveBeenCalledWith('I met an advocate!')
+  })
+
+  it('Delete is disabled with nothing selected and enabled once something is', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    const del = () => w.find('[data-testid="delete-overlay"]').element as HTMLButtonElement
+    expect(del().disabled).toBe(true)
+    h.fireSel('sticker'); await flushPromises()
+    expect(del().disabled).toBe(false)
+    await w.find('[data-testid="delete-overlay"]').trigger('click')
+    expect(h.deleteSelected).toHaveBeenCalled()
+  })
+
+  it('adding an emoji from the palette calls stage.addEmoji', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    await w.find('[data-testid="tab-emoji"]').trigger('click')
+    await w.findAll('.emoji-btn')[0].trigger('click')
+    expect(h.addEmoji).toHaveBeenCalledTimes(1)
   })
 })

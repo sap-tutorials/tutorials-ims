@@ -1,5 +1,6 @@
 import Konva from 'konva'
 import { STAGE_WIDTH, STAGE_HEIGHT, FRAME_LAYERING } from './constants'
+import { createOverlayManager, type OverlayKind } from './overlays'
 
 export interface SelfieStage {
   addCutout(img: HTMLImageElement): void
@@ -13,6 +14,15 @@ export interface SelfieStage {
   setImage(img: HTMLImageElement): void
   exportPng(): Promise<Blob>
   destroy(): void
+  addSticker(img: HTMLImageElement): void
+  addEmoji(char: string): void
+  addCaption(text: string): void
+  updateCaption(text: string): void
+  hasCaption(): boolean
+  selectedIsCaption(): boolean
+  deleteSelected(): void
+  deselect(): void
+  onSelectionChange(cb: (kind: OverlayKind) => void): void
 }
 
 function loadKImage(url: string): Promise<Konva.Image> {
@@ -76,6 +86,11 @@ export async function buildStage(
   const transformer = new Konva.Transformer()
   cutoutLayer.add(transformer)
 
+  // Overlays layer sits topmost so stickers/captions render above both cutout and frame.
+  const overlaysLayer = new Konva.Layer()
+  stage.add(overlaysLayer) // topmost — overlays sit above cutout and frame
+  const overlay = createOverlayManager(stage, overlaysLayer)
+
   // The current cutout node, tracked so setImage can swap its bitmap in place.
   let cutoutNode: Konva.Image | null = null
 
@@ -109,23 +124,37 @@ export async function buildStage(
       cutoutLayer.batchDraw()
     },
     exportPng() {
-      // Hide the selection UI (transformer border + resize/rotate handles)
-      // during rasterization, otherwise it bakes into the exported PNG. Restore
-      // it afterwards so the user can keep editing if they don't like the result.
+      // Hide BOTH transformers (cutout + overlay) during rasterization so no
+      // selection UI bakes into the exported PNG. Restore both afterwards so
+      // the user can keep editing.
       return new Promise<Blob>((resolve, reject) => {
-        const wasVisible = transformer.visible()
+        overlay.deselect()
+        const cutoutTVisible = transformer.visible()
         transformer.hide()
+        const overlayTVisible = overlay.hideTransformer()
         cutoutLayer.batchDraw()
+        overlaysLayer.batchDraw()
         stage.toBlob({
           mimeType: 'image/png',
           callback: (b: Blob | null) => {
-            if (wasVisible) transformer.show()
+            if (cutoutTVisible) transformer.show()
+            if (overlayTVisible) overlay.showTransformer()
             cutoutLayer.batchDraw()
+            overlaysLayer.batchDraw()
             b ? resolve(b) : reject(new Error('export failed'))
           },
         })
       })
     },
-    destroy() { stage.destroy() },
+    destroy() { overlay.destroy(); stage.destroy() },
+    addSticker: (img) => overlay.addSticker(img),
+    addEmoji: (char) => overlay.addEmoji(char),
+    addCaption: (text) => overlay.addCaption(text),
+    updateCaption: (text) => overlay.updateCaption(text),
+    hasCaption: () => overlay.hasCaption(),
+    selectedIsCaption: () => overlay.selectedIsCaption(),
+    deleteSelected: () => overlay.deleteSelected(),
+    deselect: () => overlay.deselect(),
+    onSelectionChange: (cb) => overlay.onSelectionChange(cb),
   }
 }
