@@ -79,3 +79,14 @@
 .sticker-thumb img { display: block; width: 100%; height: auto; }
 .emoji-grid button.emoji-btn { cursor: pointer; border: none; background: none; font-size: 1.6rem; line-height: 1; padding: .25rem; }
 .sticker-empty { color: var(--sapContent_LabelColor, #556b82); font-size: .9rem; grid-column: 1 / -1; }
+
+/* ---- Polaroid border preview (matte around the Konva stage) ---- */
+.selfie-polaroid-preview { display: inline-block; line-height: 0; }
+.selfie-polaroid-preview.is-bordered {
+  padding: 5% 5% 22%; border-radius: 4px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.25);
+}
+.selfie-polaroid-controls { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.selfie-polaroid-styles { display: inline-flex; gap: .35rem; }
+.selfie-polaroid-style { background: var(--sapButton_Background, #fff); color: var(--sapButton_TextColor, #0070f2); border: 1px solid var(--sapButton_BorderColor, #0070f2); }
+.selfie-polaroid-style.is-active { background: var(--sapButton_Emphasized_Background, #0070f2); color: #fff; }
