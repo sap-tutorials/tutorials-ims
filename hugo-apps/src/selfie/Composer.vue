@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { buildStage, type SelfieStage } from './compose'
+import StickerPicker from './StickerPicker.vue'
+import { CAPTION_PLACEHOLDER } from './stickers'
+import type { StickerDef } from './stickers'
 
 const props = defineProps<{
   rawPhoto: Blob
@@ -9,6 +12,7 @@ const props = defineProps<{
   segmenting: boolean
   frameName: string
   imgBase: string
+  stickers: StickerDef[]
 }>()
 const emit = defineEmits<{
   export: [blob: Blob]
@@ -19,6 +23,8 @@ const emit = defineEmits<{
 
 const stageEl = ref<HTMLDivElement | null>(null)
 let stage: SelfieStage | null = null
+const selectedKind = ref<'none' | 'sticker' | 'caption'>('none')
+const captionText = ref('')
 
 function blobToImage(blob: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -27,6 +33,15 @@ function blobToImage(blob: Blob): Promise<HTMLImageElement> {
     img.onload = () => { URL.revokeObjectURL(url); resolve(img) }
     img.onerror = (e) => { URL.revokeObjectURL(url); reject(e) }
     img.src = url
+  })
+}
+
+function urlToImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = (e) => reject(e)
+    img.src = src
   })
 }
 
@@ -40,6 +55,7 @@ onMounted(async () => {
   if (!stageEl.value) return
   try {
     stage = await buildStage(stageEl.value, `${props.imgBase}/frames/${props.frameName}.png`)
+    stage.onSelectionChange((k) => { selectedKind.value = k as 'none' | 'sticker' | 'caption' })
     stage.addCutout(await blobToImage(effectiveBlob()))
   } catch (e) {
     // Fail-soft: stage init failed → let the parent offer a plain download.
@@ -65,6 +81,38 @@ watch(() => [props.removeBg, props.cutout] as const, async () => {
   }
 })
 
+async function onAddSticker(src: string) {
+  if (!stage) return
+  try {
+    const img = await urlToImage(src)
+    stage.addSticker(img)
+  } catch (e) {
+    console.warn('[selfie] sticker load failed', e)
+  }
+}
+
+function onAddEmoji(char: string) {
+  if (!stage) return
+  stage.addEmoji(char)
+}
+
+function onAddCaption() {
+  if (!stage) return
+  stage.addCaption(CAPTION_PLACEHOLDER)
+  captionText.value = CAPTION_PLACEHOLDER
+}
+
+function onCaptionInput(e: Event) {
+  if (!stage) return
+  captionText.value = (e.target as HTMLInputElement).value
+  stage.updateCaption(captionText.value)
+}
+
+function onDelete() {
+  if (!stage) return
+  stage.deleteSelected()
+}
+
 async function doExport() {
   if (!stage) return emit('fallback', effectiveBlob())
   try { emit('export', await stage.exportPng()) }
@@ -86,6 +134,17 @@ async function doExport() {
         />
         Remove background
       </label>
+      <StickerPicker :stickers="stickers" :img-base="imgBase" @add-sticker="onAddSticker" @add-emoji="onAddEmoji" />
+      <button type="button" class="selfie-btn" data-testid="add-caption" @click="onAddCaption">Add caption</button>
+      <input
+        type="text" class="selfie-caption-input" data-testid="caption-input"
+        :disabled="selectedKind !== 'caption'" :value="captionText"
+        @input="onCaptionInput" placeholder="Caption text"
+      />
+      <button
+        type="button" class="selfie-btn selfie-btn--danger" data-testid="delete-overlay"
+        :disabled="selectedKind === 'none'" @click="onDelete"
+      >Delete</button>
       <button type="button" class="selfie-btn" data-testid="export" :disabled="segmenting" @click="doExport">Export</button>
     </div>
   </div>
