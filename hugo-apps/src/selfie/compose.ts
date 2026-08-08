@@ -14,6 +14,12 @@ export interface SelfieStage {
    * No-op if addCutout was never called.
    */
   setImage(img: HTMLImageElement): void
+  /**
+   * Set (or clear) the themed background scene drawn on the bottom-most layer,
+   * behind the cut-out person. Pass null to remove it. The node fills the stage
+   * and is non-interactive. #1520.
+   */
+  setBackground(img: HTMLImageElement | null): void
   exportPng(opts?: { effect?: EffectId; border?: { style: PolaroidStyleId; name: string } }): Promise<Blob>
   destroy(): void
   addSticker(img: HTMLImageElement): void
@@ -66,6 +72,14 @@ export async function buildStage(
   const stageH = stageBox.height
 
   const stage = new Konva.Stage({ container, width: stageW, height: stageH })
+
+  // Themed background scene (#1520) — bottom-most, behind everything. Added first
+  // so it renders under the frame, cutout and overlays regardless of FRAME_LAYERING.
+  const bgLayer = new Konva.Layer()
+  bgLayer.listening(false)
+  stage.add(bgLayer)
+  let bgNode: Konva.Image | null = null
+
   const frameLayer = new Konva.Layer()
   const cutoutLayer = new Konva.Layer()
 
@@ -124,6 +138,16 @@ export async function buildStage(
       if (!cutoutNode) return
       cutoutNode.image(img)
       cutoutLayer.batchDraw()
+    },
+    setBackground(img: HTMLImageElement | null) {
+      if (bgNode) { bgNode.destroy(); bgNode = null }
+      if (img) {
+        bgNode = new Konva.Image({
+          image: img, x: 0, y: 0, width: stageW, height: stageH, listening: false,
+        })
+        bgLayer.add(bgNode)
+      }
+      bgLayer.batchDraw()
     },
     exportPng(opts?: { effect?: EffectId; border?: { style: PolaroidStyleId; name: string } }) {
       const effect = opts?.effect
