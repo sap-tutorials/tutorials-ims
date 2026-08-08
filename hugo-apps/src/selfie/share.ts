@@ -1,3 +1,17 @@
+// Single source of truth for share copy + link.
+export const SHARE_TEXT = 'I met an SAP Developer Advocate! #Devtoberfest'
+export const SHARE_URL = 'https://developers.sap.com/devtoberfest/'
+
+export function xIntentUrl(): string {
+  const p = new URLSearchParams({ text: SHARE_TEXT, url: SHARE_URL })
+  return `https://twitter.com/intent/tweet?${p}`
+}
+
+export function linkedInIntentUrl(): string {
+  const p = new URLSearchParams({ url: SHARE_URL })
+  return `https://www.linkedin.com/sharing/share-offsite/?${p}`
+}
+
 export function downloadBlob(blob: Blob, filename = 'selfie.png'): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -20,7 +34,7 @@ export async function shareOrDownload(blob: Blob, filename = 'selfie.png'): Prom
   if (canShareImage() && typeof navigator.share === 'function') {
     try {
       const file = new File([blob], filename, { type: 'image/png' })
-      await navigator.share({ files: [file], title: 'Selfie with an Advocate', text: 'I met an SAP Developer Advocate! #Devtoberfest' })
+      await navigator.share({ files: [file], title: 'Selfie with an Advocate', text: SHARE_TEXT })
       return 'shared'
     } catch {
       // User cancelled or share failed → guaranteed download path.
@@ -28,4 +42,21 @@ export async function shareOrDownload(blob: Blob, filename = 'selfie.png'): Prom
   }
   downloadBlob(blob, filename)
   return 'downloaded'
+}
+
+// Copy the PNG to the clipboard. Feature-detected + fail-soft.
+export async function copyImage(blob: Blob): Promise<'copied' | 'unavailable'> {
+  try {
+    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) return 'unavailable'
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })])
+    return 'copied'
+  } catch { return 'unavailable' }
+}
+
+// Desktop social: guarantee the user has the file (auto-download), then open the
+// prefilled intent popup so they can attach it. Fail-soft on popup blockers.
+export function openSocialShare(blob: Blob, network: 'x' | 'linkedin', filename = 'selfie.png'): void {
+  try { downloadBlob(blob, filename) } catch { /* download best-effort */ }
+  const url = network === 'x' ? xIntentUrl() : linkedInIntentUrl()
+  try { window.open(url, '_blank', 'noopener,noreferrer') } catch { /* popup blocked → no-op */ }
 }
