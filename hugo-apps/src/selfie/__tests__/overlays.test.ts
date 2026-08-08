@@ -93,8 +93,10 @@ describe('OverlayManager', () => {
     const { mgr } = build()
     expect(() => mgr.updateCaption('later')).not.toThrow() // no caption yet
     mgr.addCaption('#Devtoberfest')
+    const captionNode = transformerNodesCalls.at(-1)?.[0]
     mgr.updateCaption('I met an advocate!')
     expect(mgr.selectedIsCaption()).toBe(true)
+    expect(captionNode.text()).toBe('I met an advocate!')
   })
 
   it('deleteSelected removes the node and clears hasCaption for a caption', () => {

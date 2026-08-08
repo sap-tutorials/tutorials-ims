@@ -98,8 +98,9 @@ function onAddEmoji(char: string) {
 
 function onAddCaption() {
   if (!stage) return
+  const existed = stage.hasCaption()
   stage.addCaption(CAPTION_PLACEHOLDER)
-  captionText.value = CAPTION_PLACEHOLDER
+  if (!existed) captionText.value = CAPTION_PLACEHOLDER
 }
 
 function onCaptionInput(e: Event) {
