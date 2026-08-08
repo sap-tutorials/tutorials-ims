@@ -2092,7 +2092,13 @@ export default class AdminService extends cds.ApplicationService {
     const EXPLAINER_GENERATOR_CONCURRENCY = 4;
     const EXPLAINER_HARD_CAP = 100;
 
-    async function runExplainerAction({ kind, entityName, ids, mode, contextLookup, req }) {
+    // (#1552) `writeEntity` defaults to `entityName` (the active table). For
+    // the OP-header BOUND actions invoked while the Object Page is in EDIT
+    // mode, Fiori Elements POSTs to the `.drafts` shadow — the caller passes
+    // the draft-shadow entity ref here so the generated content lands on the
+    // row the admin is currently editing (visible mid-edit, persisted on Save)
+    // instead of the active row (invisible until reload, lost on Discard).
+    async function runExplainerAction({ kind, entityName, writeEntity, ids, mode, contextLookup, req }) {
       if (process.env.AICORE_EXPLAINER_GENERATOR_DISABLED === 'true') {
         req.reject(503, 'AI_GENERATION_DISABLED');
         return;
@@ -2102,21 +2108,23 @@ export default class AdminService extends cds.ApplicationService {
         req.reject(400, `CAP_EXCEEDED: limit ${EXPLAINER_HARD_CAP}`);
         return;
       }
+      const readEntity = writeEntity || entityName;
 
       const { generateExplainer } = await import('./lib/explainer-generator.js');
       const { centsToUsdString } = await import('./lib/_token-cost.js');
       const db = await cds.connect.to('db');
 
-      // Select target rows by mode.
+      // Select target rows by mode. Read + write hit the SAME table so a draft
+      // regeneration reads the (possibly edited) draft row and writes it back.
       let rows;
       if (mode === 'fill-blanks') {
         rows = await db.run(
-          SELECT.from(entityName).where({ authoringStatus: 'BLANK' })
+          SELECT.from(readEntity).where({ authoringStatus: 'BLANK' })
         );
       } else if (mode === 'regenerate-selected') {
         if (idsArr.length === 0) return { processed: 0, skipped: 0, cost: '$0.00' };
         rows = await db.run(
-          SELECT.from(entityName).where({ ID: { in: idsArr } })
+          SELECT.from(readEntity).where({ ID: { in: idsArr } })
         );
       } else {
         req.reject(400, `unknown mode: ${mode}`);
@@ -2134,7 +2142,7 @@ export default class AdminService extends cds.ApplicationService {
           const result = await generateExplainer({ kind, row, context });
           if (!result) return null;
           await db.run(
-            UPDATE(entityName)
+            UPDATE(readEntity)
               .set({
                 tagline:         result.tagline,
                 whyItMatters:    result.whyItMatters,
@@ -2203,14 +2211,15 @@ export default class AdminService extends cds.ApplicationService {
     // (the read-only constraint exists to prevent admins from free-form
     // editing status via the object-page form — they go through this
     // explicit "Mark as reviewed" button instead).
-    async function runMarkReviewed({ entityName, id, req }) {
+    async function runMarkReviewed({ entityName, writeEntity, id, req }) {
+      const target = writeEntity || entityName;
       const db = await cds.connect.to('db');
-      const row = await db.run(SELECT.one.from(entityName).where({ ID: id }));
+      const row = await db.run(SELECT.one.from(target).where({ ID: id }));
       if (!row) {
         req.reject(404, `not found: ${id}`);
         return;
       }
-      await db.run(UPDATE(entityName).set({ authoringStatus: 'REVIEWED' }).where({ ID: id }));
+      await db.run(UPDATE(target).set({ authoringStatus: 'REVIEWED' }).where({ ID: id }));
       return { processed: 1, skipped: 0, cost: '$0.00' };
     }
 
@@ -2271,50 +2280,75 @@ export default class AdminService extends cds.ApplicationService {
     // Concepts.publishConcept). Row ID arrives via `req.params[0].ID` — the
     // canonical bound-action pattern. The unbound handlers above stay for
     // ListReport bulk fan-out (`generate*Explainers` / `mark*Reviewed`).
+    //
+    // (#1552) Each action is registered on BOTH the active entity AND its
+    // `.drafts` shadow. When the Object Page is in EDIT mode, FE binds the
+    // page to the draft (IsActiveEntity=false) and POSTs the bound action to
+    // `Entity.drafts`; registering only on the active entity returned HTTP 501
+    // ("no handler for regenerate AdminService.HomepageShelves.drafts"),
+    // surfaced to the admin as "The server does not support the functionality
+    // required to fulfill the request." `resolveWriteEntity` picks the draft
+    // shadow when the invocation target is the draft, so the generated content
+    // lands on the row the admin is editing (persisted on Save).
     function pickBoundId(req) {
       return req.params?.[0]?.ID;
     }
+    // Returns the entity ref the action should read/write: the `.drafts`
+    // shadow when invoked on a draft (edit mode), otherwise the active table
+    // name. `req.target.name` ends with `.drafts` for draft invocations
+    // (verified live in-memory).
+    function resolveWriteEntity(req, activeEntity, draftEntity) {
+      return req.target?.name?.endsWith('.drafts') ? draftEntity : activeEntity;
+    }
+    const VerbDefinitionsE  = this.entities.VerbDefinitions;
+    const ShelfDefinitionsE = this.entities.ShelfDefinitions;
+    const HomepageShelvesE  = this.entities.HomepageShelves;
 
-    this.on('markReviewed', 'VerbDefinitions', async (req) => {
-      const id = pickBoundId(req);
-      if (!id) return req.reject(400, 'Bound markReviewed invoked without entity context');
-      return runMarkReviewed({ entityName: 'com.sap.developers.ims.VerbDefinitions', id, req });
-    });
-    this.on('markReviewed', 'ShelfDefinitions', async (req) => {
-      const id = pickBoundId(req);
-      if (!id) return req.reject(400, 'Bound markReviewed invoked without entity context');
-      return runMarkReviewed({ entityName: 'com.sap.developers.ims.ShelfDefinitions', id, req });
-    });
-    this.on('markReviewed', 'HomepageShelves', async (req) => {
-      const id = pickBoundId(req);
-      if (!id) return req.reject(400, 'Bound markReviewed invoked without entity context');
-      return runMarkReviewed({ entityName: 'com.sap.developers.ims.HomepageShelves', id, req });
-    });
+    const markReviewedTargets = [
+      [VerbDefinitionsE,  'com.sap.developers.ims.VerbDefinitions'],
+      [ShelfDefinitionsE, 'com.sap.developers.ims.ShelfDefinitions'],
+      [HomepageShelvesE,  'com.sap.developers.ims.HomepageShelves'],
+    ];
+    for (const [entity, activeName] of markReviewedTargets) {
+      const draftName = entity.drafts.name; // AdminService.<Entity>.drafts
+      this.on('markReviewed', [entity, entity.drafts], async (req) => {
+        const id = pickBoundId(req);
+        if (!id) return req.reject(400, 'Bound markReviewed invoked without entity context');
+        return runMarkReviewed({
+          entityName: activeName,
+          writeEntity: resolveWriteEntity(req, activeName, draftName),
+          id, req,
+        });
+      });
+    }
 
-    this.on('regenerate', 'VerbDefinitions', async (req) => {
+    this.on('regenerate', [VerbDefinitionsE, VerbDefinitionsE.drafts], async (req) => {
       const id = pickBoundId(req);
       if (!id) return req.reject(400, 'Bound regenerate invoked without entity context');
       return runExplainerAction({
         kind: 'verb',
         entityName: 'com.sap.developers.ims.VerbDefinitions',
+        writeEntity: resolveWriteEntity(req, 'com.sap.developers.ims.VerbDefinitions', VerbDefinitionsE.drafts.name),
         ids: [id], mode: 'regenerate-selected', req,
       });
     });
-    this.on('regenerate', 'ShelfDefinitions', async (req) => {
+    this.on('regenerate', [ShelfDefinitionsE, ShelfDefinitionsE.drafts], async (req) => {
       const id = pickBoundId(req);
       if (!id) return req.reject(400, 'Bound regenerate invoked without entity context');
       return runExplainerAction({
         kind: 'shelf',
         entityName: 'com.sap.developers.ims.ShelfDefinitions',
+        writeEntity: resolveWriteEntity(req, 'com.sap.developers.ims.ShelfDefinitions', ShelfDefinitionsE.drafts.name),
         ids: [id], mode: 'regenerate-selected', req,
       });
     });
-    this.on('regenerate', 'HomepageShelves', async (req) => {
+    this.on('regenerate', [HomepageShelvesE, HomepageShelvesE.drafts], async (req) => {
       const id = pickBoundId(req);
       if (!id) return req.reject(400, 'Bound regenerate invoked without entity context');
       return runExplainerAction({
         kind: 'shelf-entry',
         entityName: 'com.sap.developers.ims.HomepageShelves',
+        writeEntity: resolveWriteEntity(req, 'com.sap.developers.ims.HomepageShelves', HomepageShelvesE.drafts.name),
         ids: [id], mode: 'regenerate-selected', req,
         contextLookup: async (row) => {
           const db = await cds.connect.to('db');
