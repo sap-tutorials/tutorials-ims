@@ -25,7 +25,7 @@ async function getSession(ort: typeof import('onnxruntime-web')) {
   if (!sessionPromise) {
     sessionPromise = ort.InferenceSession.create(MODEL_URL, {
       executionProviders: ['webgpu', 'wasm'],
-    })
+    }).catch((e: unknown) => { sessionPromise = null; throw e })
   }
   return sessionPromise
 }

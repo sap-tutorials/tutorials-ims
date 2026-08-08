@@ -22,6 +22,9 @@ function fakeCanvas(w = 256, h = 256): HTMLCanvasElement {
   return { width: w, height: h, getContext: vi.fn(() => ctx) } as unknown as HTMLCanvasElement
 }
 
+// Reset between tests so each one exercises its own failure mode from a clean
+// session state. stylize.ts clears sessionPromise on rejection, so a failed
+// test 1 no longer poisons the singleton for tests 2 and 3.
 beforeEach(() => { runMock.mockReset(); createMock.mockClear() })
 
 describe('cartoonify fail-soft', () => {
@@ -29,15 +32,20 @@ describe('cartoonify fail-soft', () => {
     createMock.mockRejectedValueOnce(new Error('no wasm'))
     const c = fakeCanvas()
     expect(await cartoonify(c)).toBe(c)
+    // sessionPromise is now null (cleared by the catch in getSession)
+    // so the next test starts with a fresh session slot.
   })
 
   it('returns the INPUT canvas unchanged when inference throws', async () => {
+    // createMock resolves (default impl), so this genuinely reaches session.run()
     runMock.mockRejectedValueOnce(new Error('run failed'))
     const c = fakeCanvas()
     expect(await cartoonify(c)).toBe(c)
   })
 
   it('returns the INPUT canvas unchanged when the 2D context is null', async () => {
+    // The internal work canvas's getContext('2d') returns null in happy-dom,
+    // triggering the null-context guard inside cartoonify.
     const c = { width: 256, height: 256, getContext: vi.fn(() => null) } as unknown as HTMLCanvasElement
     expect(await cartoonify(c)).toBe(c)
   })
