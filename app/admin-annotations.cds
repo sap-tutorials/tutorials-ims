@@ -1027,6 +1027,15 @@ annotate AdminService.Tags with @(
 // --- FeaturedTasks (inline editing of featuredOrder) ---
 annotate AdminService.FeaturedTasks with {
   taskLegacyId  @Common.Label: 'Featured item'
+                // @UI.RecommendationState: 0 opts this field out of the @cap-js/ai
+                // RPT-1 recommendation hook (docs/developers/reference/cap-ai-plugin.md).
+                // FeaturedTasks is @odata.draft.enabled and now has an editable
+                // ObjectPage (#1551), so a draft POST → read-after-write on this
+                // @Common.ValueList field would otherwise fire the plugin handler,
+                // call cds.connect.to('AICore') and throw "No service definition
+                // found for 'AICore'" on CF — surfacing as "Internal Server Error"
+                // on Create. Same escape as HomepageForYouCandidatesAdmin.
+                @UI.RecommendationState: 0
                 @Common.ValueList: {
                   CollectionPath: 'FeaturedTaskCandidates',
                   Parameters: [
@@ -1050,7 +1059,17 @@ annotate AdminService.FeaturedTasks with @UI: {
     { Value: taskLegacyId },
     { Value: taskType },
     { Value: featuredOrder, ![@UI.Importance]: #High }
-  ]
+  ],
+  // #1551: row-click now navigates to an editable ObjectPage. Facets +
+  // FieldGroup give the detail page fields to render.
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Label: 'General', Target: '@UI.FieldGroup#General' }
+  ],
+  FieldGroup #General: { Data: [
+    { Value: taskLegacyId },
+    { Value: taskType },
+    { Value: featuredOrder }
+  ]}
 };
 
 // --- ImsConfig (key/value CRUD) ---
