@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { shareOrDownload, xIntentUrl, linkedInIntentUrl, SHARE_TEXT, SHARE_URL } from '../share'
+import { shareOrDownload, xIntentUrl, linkedInIntentUrl, SHARE_TEXT, SHARE_URL, copyImage } from '../share'
 
 describe('share.shareOrDownload', () => {
   beforeEach(() => {
@@ -43,5 +43,30 @@ describe('share intent URLs', () => {
     expect(q.get('url')).toBe(SHARE_URL)
     expect(q.get('text')).toBeNull()
     expect(q.get('summary')).toBeNull()
+  })
+})
+
+describe('share.copyImage', () => {
+  const png = new Blob(['x'], { type: 'image/png' })
+  const setClipboard = (v: any) => Object.defineProperty(navigator, 'clipboard', { value: v, configurable: true })
+
+  it('returns "copied" and calls clipboard.write when the API is present', async () => {
+    const write = vi.fn().mockResolvedValue(undefined)
+    ;(globalThis as any).ClipboardItem = class { constructor(_: any) {} }
+    setClipboard({ write })
+    expect(await copyImage(png)).toBe('copied')
+    expect(write).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns "unavailable" when ClipboardItem is missing (no throw)', async () => {
+    ;(globalThis as any).ClipboardItem = undefined
+    setClipboard({ write: vi.fn() })
+    expect(await copyImage(png)).toBe('unavailable')
+  })
+
+  it('returns "unavailable" when clipboard.write rejects (fail-soft)', async () => {
+    ;(globalThis as any).ClipboardItem = class { constructor(_: any) {} }
+    setClipboard({ write: vi.fn().mockRejectedValue(new Error('denied')) })
+    expect(await copyImage(png)).toBe('unavailable')
   })
 })

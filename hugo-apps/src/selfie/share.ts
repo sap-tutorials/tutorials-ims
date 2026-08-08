@@ -43,3 +43,12 @@ export async function shareOrDownload(blob: Blob, filename = 'selfie.png'): Prom
   downloadBlob(blob, filename)
   return 'downloaded'
 }
+
+// Copy the PNG to the clipboard. Feature-detected + fail-soft.
+export async function copyImage(blob: Blob): Promise<'copied' | 'unavailable'> {
+  try {
+    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) return 'unavailable'
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })])
+    return 'copied'
+  } catch { return 'unavailable' }
+}
