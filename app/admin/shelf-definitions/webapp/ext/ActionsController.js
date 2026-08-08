@@ -1,12 +1,18 @@
 sap.ui.define([
   "sap/m/MessageBox",
-  "sap/m/MessageToast"
-], function (MessageBox, MessageToast) {
+  "sap/m/MessageToast",
+  "sap/ui/core/Element"
+], function (MessageBox, MessageToast, Element) {
   "use strict";
 
   // Estimated cost per generation call in cents. PR 3a observed ~$0.005 per
   // verb explainer (small prompts + small responses). Update if costs shift.
   const EST_COST_PER_ROW_CENTS = 0.5;
+
+  // The OData entity path this app's List Report table binds to. Used to
+  // identify the correct sap.ui.mdc.Table in the Element registry when FE V4
+  // hands the handler no selection (see readSelectedContexts).
+  const LR_ENTITY_PATH = "/ShelfDefinitions";
 
   function fmtUsd(cents) {
     const dollars = Math.floor(cents / 100);
@@ -15,39 +21,65 @@ sap.ui.define([
   }
 
   // FE V4 (UI5 ≥ 1.108) does NOT populate `oEvent.getParameter("selectedContexts")`
-  // for custom manifest LineItem actions. The reliable path is
-  // `oEvent.getSource().getSelectedContexts()` on the ExtensionAPI. Older FE
-  // builds occasionally exposed `contexts` as a parameter, and the legacy
-  // `selectedContexts` name shipped by SmartTable is kept as a last-resort
-  // fallback so a future FE version bump can't silently regress. Cost of the
-  // wrong reader: "Mark selected as reviewed" toast-showed "Select one or
-  // more rows first" and the POST never left the browser, so AI_SEEDED rows
-  // never flipped. Verified against DEV UI5 1.136 that only
-  // `getSource().getSelectedContexts()` returns the selected rows.
+  // for custom manifest LineItem actions, and inside the admin-shell
+  // componentUsage host (where these explainer apps run) it invokes the
+  // `press` handler with NO ARGUMENT AT ALL — verified live against DEV UI5
+  // 1.136 on 2026-08-08: `arg === undefined` even with rows selected and the
+  // `requiresSelection`-gated button correctly enabled. The earlier reader
+  // (which returned [] for a falsy arg) therefore ALWAYS toast-showed "Select
+  // one or more rows first" and the POST never left the browser, so AI_SEEDED
+  // rows never flipped — the exact bug this file has now been "fixed" for
+  // twice. The load-bearing recovery is `_selectedFromTable()`: when the arg
+  // yields nothing, read the selection straight off this app's
+  // sap.ui.mdc.Table via the Element registry.
+  function _selectedFromTable() {
+    // Find THIS app's List Report MDC table by its bound entity path. Only one
+    // mdc.Table is mounted per active admin-shell componentUsage, but keying on
+    // the row-binding path keeps this correct if that ever changes. Returns the
+    // selected V4 contexts (each exposes getObject()), or [] on any failure —
+    // fail-quiet so a registry/table-shape change never re-crashes the handler.
+    let ctxs = [];
+    try {
+      Element.registry.forEach(function (el) {
+        if (ctxs.length) return;
+        if (!el.isA || !el.isA("sap.ui.mdc.Table")) return;
+        try {
+          const b = el.getRowBinding && el.getRowBinding();
+          if (b && b.getPath && b.getPath() === LR_ENTITY_PATH &&
+              typeof el.getSelectedContexts === "function") {
+            const c = el.getSelectedContexts();
+            if (Array.isArray(c) && c.length > 0) ctxs = c;
+          }
+        } catch (e) { /* fail-quiet per table */ }
+      });
+    } catch (e) { /* registry unavailable → [] */ }
+    return ctxs;
+  }
+
   function readSelectedContexts(oEvent) {
     // FE V4 invokes manifest LineItem actions with DIFFERENT arg shapes
     // depending on template + host (standalone app vs admin-shell
     // componentUsage — these explainer apps run as the latter):
-    //   - array of selected contexts (LR multi-select toolbar) — common case
+    //   - array of selected contexts (LR multi-select toolbar in some builds)
     //   - a UI5 Event (legacy / direct wiring) → getSource().getSelectedContexts()
-    //   - undefined / null (some shell paths) → treat as empty selection
+    //   - undefined / null (admin-shell — the OBSERVED case on DEV 1.136)
     // Guarding `oEvent` itself is load-bearing: `oEvent.getSource?.()`
     // optional-chains the CALL, not the property read, so a bare undefined
-    // arg threw "Cannot read properties of undefined (reading 'getSource')"
-    // on "Regenerate selected with AI" / "Mark selected as reviewed".
-    // Mirrors resolveCtx in concepts/ + kgCommunities/ ActionsControllers.
-    if (!oEvent) return [];
-    if (Array.isArray(oEvent)) return oEvent;
-    const src = oEvent.getSource?.();
+    // arg threw "Cannot read properties of undefined (reading 'getSource')".
+    // When NONE of the arg-borne shapes yield rows, fall back to reading the
+    // selection off the app's mdc.Table (the admin-shell reality).
+    if (Array.isArray(oEvent) && oEvent.length > 0) return oEvent;
+    const src = oEvent && oEvent.getSource ? oEvent.getSource() : null;
     if (src && typeof src.getSelectedContexts === "function") {
       const ctxs = src.getSelectedContexts();
       if (Array.isArray(ctxs) && ctxs.length > 0) return ctxs;
     }
-    return (
-      oEvent.getParameter?.("contexts") ??
-      oEvent.getParameter?.("selectedContexts") ??
-      []
-    );
+    const fromParam =
+      (oEvent && oEvent.getParameter && oEvent.getParameter("contexts")) ??
+      (oEvent && oEvent.getParameter && oEvent.getParameter("selectedContexts"));
+    if (Array.isArray(fromParam) && fromParam.length > 0) return fromParam;
+    // Admin-shell: the arg carried no selection — recover it from the table.
+    return _selectedFromTable();
   }
 
   async function postAdminAction(actionName, payload) {
