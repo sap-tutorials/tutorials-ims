@@ -101,8 +101,12 @@ vi.mock('../polaroid', () => ({
 }))
 
 const applyEffectMock = vi.fn((canvas: any) => canvas)
+// Async dispatcher mock — delegates to applyEffectMock so existing assertions on it
+// continue to hold (invocationCallOrder, call args) without touching those tests.
+const applyEffectAsyncMock = vi.fn(async (canvas: any, id: any) => applyEffectMock(canvas, id))
 vi.mock('../effects', () => ({
   applyEffect: (c: any, id: any) => applyEffectMock(c, id),
+  applyEffectAsync: (c: any, id: any) => applyEffectAsyncMock(c, id),
 }))
 
 import { buildStage } from '../compose'
@@ -117,6 +121,7 @@ beforeEach(() => {
   lastCutoutNode = null
   paintPolaroidMock.mockClear()
   applyEffectMock.mockClear()
+  applyEffectAsyncMock.mockClear()
 })
 
 function fakeImg(w: number, h: number): HTMLImageElement {
@@ -354,5 +359,26 @@ describe('setBackground', () => {
     expect(node.destroy).toHaveBeenCalled()
     // No further nodes added to bg layer after null
     expect(bgLayer._addCalls).toHaveLength(1)
+  })
+})
+
+describe('exportPng cartoon path', () => {
+  it('takes the canvas (not fast) path for cartoon and awaits applyEffectAsync', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const out = await stage.exportPng({ effect: 'cartoon' })
+    expect(out).toBeInstanceOf(Blob)
+    // applyEffectAsync must be called with the toCanvas() result and id 'cartoon'
+    expect(applyEffectAsyncMock).toHaveBeenCalledTimes(1)
+    expect(applyEffectAsyncMock.mock.calls[0][1]).toBe('cartoon')
+  })
+
+  it('bakes the effect BEFORE the polaroid border (order preserved)', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    await stage.exportPng({ effect: 'mono', border: { style: 'classic', name: '' } })
+    expect(applyEffectAsyncMock).toHaveBeenCalledTimes(1)
+    expect(paintPolaroidMock).toHaveBeenCalledTimes(1)
+    // effect must resolve before paintPolaroid is invoked
+    expect(applyEffectAsyncMock.mock.invocationCallOrder[0])
+      .toBeLessThan(paintPolaroidMock.mock.invocationCallOrder[0])
   })
 })

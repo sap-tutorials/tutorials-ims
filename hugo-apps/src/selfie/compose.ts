@@ -2,7 +2,7 @@ import Konva from 'konva'
 import { STAGE_WIDTH, STAGE_HEIGHT, FRAME_LAYERING } from './constants'
 import { createOverlayManager, type OverlayKind } from './overlays'
 import { paintPolaroid, type PolaroidStyleId } from './polaroid'
-import { applyEffect, type EffectId } from './effects'
+import { applyEffectAsync, type EffectId } from './effects'
 
 export interface SelfieStage {
   addCutout(img: HTMLImageElement): void
@@ -169,19 +169,21 @@ export async function buildStage(
           overlaysLayer.batchDraw()
         }
         if (needsCanvas) {
-          try {
-            let composite = stage.toCanvas() as HTMLCanvasElement
-            // Effect bakes BEFORE the border so the white matte stays untinted.
-            if (effect && effect !== 'none') composite = applyEffect(composite, effect)
-            const finalCanvas = border ? paintPolaroid(composite, border) : composite
-            finalCanvas.toBlob((b: Blob | null) => {
+          void (async () => {
+            try {
+              let composite = stage.toCanvas() as HTMLCanvasElement
+              // Effect bakes BEFORE the border so the white matte stays untinted.
+              if (effect && effect !== 'none') composite = await applyEffectAsync(composite, effect)
+              const finalCanvas = border ? paintPolaroid(composite, border) : composite
+              finalCanvas.toBlob((b: Blob | null) => {
+                restore()
+                b ? resolve(b) : reject(new Error('export failed'))
+              }, 'image/png')
+            } catch (e) {
               restore()
-              b ? resolve(b) : reject(new Error('export failed'))
-            }, 'image/png')
-          } catch (e) {
-            restore()
-            reject(e as Error)
-          }
+              reject(e as Error)
+            }
+          })()
           return
         }
         stage.toBlob({
