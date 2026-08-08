@@ -1446,19 +1446,16 @@ type DeveloperService_LearningPreferences {
   user: com_sap_developers_ims_Users
   deployment: String
   role: String
-  cloud: String
 }
 
 input DeveloperService_LearningPreferences_filter {
   deployment: [String_filter]
   role: [String_filter]
-  cloud: [String_filter]
 }
 
 input DeveloperService_LearningPreferences_orderBy {
   deployment: SortDirection
   role: SortDirection
-  cloud: SortDirection
 }
 
 type DeveloperService_Advocates_connection {
@@ -2746,13 +2743,11 @@ input DeveloperService_LearningPreferences_C {
   user: com_sap_developers_ims_Users_C
   deployment: String
   role: String
-  cloud: String
 }
 
 input DeveloperService_LearningPreferences_U {
   deployment: String
   role: String
-  cloud: String
 }
 
 type DeveloperService_Advocates_input {
