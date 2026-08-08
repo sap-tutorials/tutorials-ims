@@ -26,6 +26,12 @@ vi.mock('konva', () => {
     _w: number; _h: number
     constructor(cfg: any) { stageCtorArgs.push(cfg); this._w = cfg.width; this._h = cfg.height }
     add = addMock; toBlob = toBlobMock; destroy = vi.fn(); on = vi.fn()
+    // Returns a fake composite canvas whose toBlob yields a border-sized blob.
+    toCanvas = vi.fn(() => ({
+      width: this._w,
+      height: this._h,
+      toBlob: (cb: (b: Blob | null) => void) => cb(new Blob(['bordered-png-larger'], { type: 'image/png' })),
+    }))
     width() { return this._w } height() { return this._h }
   }
   class Layer { add = layerAddMock; draw = vi.fn(); batchDraw = vi.fn(); listening = vi.fn() }
@@ -76,6 +82,16 @@ vi.mock('konva', () => {
   return { default: { Stage, Layer, Image: KImage, Transformer, Text: KText }, Stage, Layer, Image: KImage, Transformer, Text: KText }
 })
 
+const paintPolaroidMock = vi.fn((composite: any) => ({
+  width: composite.width + 100,
+  height: composite.height + 270,
+  toBlob: (cb: (b: Blob | null) => void) => cb(new Blob(['x'.repeat(5000)], { type: 'image/png' })),
+}))
+vi.mock('../polaroid', () => ({
+  paintPolaroid: (c: any, o: any) => paintPolaroidMock(c, o),
+  POLAROID_STYLES: {}, POLAROID_STYLE_IDS: ['classic', 'devtoberfest', 'joule'],
+}))
+
 import { buildStage } from '../compose'
 import { STAGE_WIDTH, STAGE_HEIGHT } from '../constants'
 
@@ -85,6 +101,7 @@ beforeEach(() => {
   stageCtorArgs.length = 0; imageCtorArgs.length = 0
   imageListeningCalls.length = 0; transformers.length = 0
   lastCutoutNode = null
+  paintPolaroidMock.mockClear()
 })
 
 function fakeImg(w: number, h: number): HTMLImageElement {
@@ -204,5 +221,36 @@ describe('compose.buildStage', () => {
     await stage.exportPng()
     expect(allHiddenAtRasterize).toBe(true)      // no handles baked in
     expect(transformers.every((t) => t.visible())).toBe(true) // restored
+  })
+
+  it('exportPng() with no border does NOT invoke paintPolaroid and still returns a blob', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const out = await stage.exportPng()
+    expect(out).toBeInstanceOf(Blob)
+    expect(paintPolaroidMock).not.toHaveBeenCalled()
+  })
+
+  it('exportPng({ border }) routes the composite canvas through paintPolaroid', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const out = await stage.exportPng({ style: 'joule', name: 'Tom' })
+    expect(out).toBeInstanceOf(Blob)
+    expect(paintPolaroidMock).toHaveBeenCalledTimes(1)
+    // forwarded opts
+    expect(paintPolaroidMock.mock.calls[0][1]).toEqual({ style: 'joule', name: 'Tom' })
+  })
+
+  it('border export still hides BOTH transformers during rasterization, then restores', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    stage.addCutout(fakeImg(1280, 720))
+    stage.addEmoji('🎉')
+    expect(transformers.every((t) => t.visible())).toBe(true)
+    let allHiddenAtBake = false
+    paintPolaroidMock.mockImplementationOnce((composite: any) => {
+      allHiddenAtBake = transformers.every((t) => !t.visible())
+      return { width: composite.width, height: composite.height, toBlob: (cb: any) => cb(new Blob(['b'], { type: 'image/png' })) }
+    })
+    await stage.exportPng({ style: 'classic', name: '' })
+    expect(allHiddenAtBake).toBe(true)
+    expect(transformers.every((t) => t.visible())).toBe(true)
   })
 })
