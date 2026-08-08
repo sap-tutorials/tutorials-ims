@@ -198,7 +198,7 @@ describe('Composer.vue', () => {
     await flushPromises()
     await w.find('[data-testid="export"]').trigger('click')
     await flushPromises()
-    expect(h.exportPng).toHaveBeenCalledWith()
+    expect(h.exportPng).toHaveBeenCalledWith({ effect: 'none', border: undefined })
   })
 
   it('export with border ON forwards the current { style, name } to exportPng', async () => {
@@ -218,7 +218,23 @@ describe('Composer.vue', () => {
     // export
     await w.find('[data-testid="export"]').trigger('click')
     await flushPromises()
-    expect(h.exportPng).toHaveBeenCalledWith({ style: 'joule', name: 'Tom' })
+    expect(h.exportPng).toHaveBeenCalledWith({ effect: 'none', border: { style: 'joule', name: 'Tom' } })
+  })
+
+  it('renders the effect picker', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    expect(w.find('[data-testid="effect-none"]').exists()).toBe(true)
+    expect(w.find('[data-testid="effect-mono"]').exists()).toBe(true)
+  })
+
+  it('picking an effect forwards it to exportPng', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    await w.find('[data-testid="effect-mono"]').trigger('click')
+    await w.find('[data-testid="export"]').trigger('click')
+    await flushPromises()
+    expect(h.exportPng).toHaveBeenCalledWith({ effect: 'mono', border: undefined })
   })
 
   it('a bordered export that rejects falls back to a plain download instead of throwing', async () => {

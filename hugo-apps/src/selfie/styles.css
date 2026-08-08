@@ -90,3 +90,10 @@
 .selfie-polaroid-styles { display: inline-flex; gap: .35rem; }
 .selfie-polaroid-style { background: var(--sapButton_Background, #fff); color: var(--sapButton_TextColor, #0070f2); border: 1px solid var(--sapButton_BorderColor, #0070f2); }
 .selfie-polaroid-style.is-active { background: var(--sapButton_Emphasized_Background, #0070f2); color: #fff; }
+
+/* ---- Effect presets (live CSS preview + picker) ---- */
+.selfie-stage-fx { position: relative; line-height: 0; }
+.selfie-effect-overlay { position: absolute; inset: 0; pointer-events: none; }
+.selfie-effect-controls { display: inline-flex; flex-wrap: wrap; gap: .35rem; }
+.selfie-effect-btn { background: var(--sapButton_Background, #fff); color: var(--sapButton_TextColor, #0070f2); border: 1px solid var(--sapButton_BorderColor, #0070f2); }
+.selfie-effect-btn.is-active { background: var(--sapButton_Emphasized_Background, #0070f2); color: #fff; }
