@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { shareOrDownload } from '../share'
+import { shareOrDownload, xIntentUrl, linkedInIntentUrl, SHARE_TEXT, SHARE_URL } from '../share'
 
 describe('share.shareOrDownload', () => {
   beforeEach(() => {
@@ -24,5 +24,24 @@ describe('share.shareOrDownload', () => {
     const out = await shareOrDownload(new Blob(['x'], { type: 'image/png' }))
     expect(out).toBe('downloaded')
     expect(clickSpy).toHaveBeenCalled()
+  })
+})
+
+describe('share intent URLs', () => {
+  it('xIntentUrl targets the X/Twitter intent host with encoded text and url', () => {
+    const u = xIntentUrl()
+    expect(u).toContain('https://twitter.com/intent/tweet?')
+    const q = new URLSearchParams(u.split('?')[1])
+    expect(q.get('text')).toBe(SHARE_TEXT)
+    expect(q.get('url')).toBe(SHARE_URL)
+  })
+
+  it('linkedInIntentUrl targets share-offsite with only the url param', () => {
+    const u = linkedInIntentUrl()
+    expect(u).toContain('https://www.linkedin.com/sharing/share-offsite/?')
+    const q = new URLSearchParams(u.split('?')[1])
+    expect(q.get('url')).toBe(SHARE_URL)
+    expect(q.get('text')).toBeNull()
+    expect(q.get('summary')).toBeNull()
   })
 })
