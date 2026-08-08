@@ -132,6 +132,7 @@ export default defineConfig({
           { text: 'AuthorService',                    link: '/developers/architecture/author-service' },
           { text: 'Build pipeline',                   link: '/developers/architecture/build' },
           { text: 'CAP backend',                      link: '/developers/architecture/cap-backend' },
+          { text: 'CDN / edge caching',               link: '/developers/architecture/cdn-caching' },
           { text: 'Cross-container integration',      link: '/developers/architecture/cross-container-integration' },
           { text: 'Frontend apps',                    link: '/developers/architecture/frontend-apps' },
           { text: 'Homepage',                         link: '/developers/architecture/homepage' },
