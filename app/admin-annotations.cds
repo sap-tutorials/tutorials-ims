@@ -3161,6 +3161,18 @@ annotate AdminService.HomepageShelves {
   badge           @Common.ValueListWithFixedValues @Common.Label: 'Badge';
   linkStatus      @Common.ValueListWithFixedValues @Common.Label: 'Link health';
   authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
+  // (#1552) Labels for the remaining OP form fields. The OP FieldGroup #Main
+  // record entries carry no inline `Label:`, so without a @Common.Label these
+  // rendered with the technical element name on the edit detail screen.
+  sortOrder    @Common.Label: 'Sort order';
+  title        @Common.Label: 'Title';
+  url          @Common.Label: 'URL';
+  description  @Common.Label: 'Description';
+  isExternal   @Common.Label: 'Opens in new tab';
+  isActive     @Common.Label: 'Active';
+  tagline      @Common.Label: 'Tagline';
+  whyItMatters @Common.Label: 'Why it matters';
+  lastChecked  @Common.Label: 'Last checked';
   // (#763) Persona facet fields
   personaTags   @Common.Label: 'Persona tags (positive)' @Common.ValueList: {
     CollectionPath: 'PersonaTagChoices',
@@ -3173,6 +3185,19 @@ annotate AdminService.HomepageShelves {
     Parameters: [{ $Type: 'Common.ValueListParameterInOut',
                    LocalDataProperty: personaHidden, ValueListProperty: 'tag' }]
   };
+};
+
+// (#1552) SideEffects so the OP-header explainer actions refresh the row after
+// they run. Without this, invoking `regenerate` / `markReviewed` in DISPLAY
+// mode returned 200 but the page kept showing the old tagline / whyItMatters /
+// authoringStatus until a manual reload — the admin saw "nothing happened".
+// TargetProperties are relative to the action's binding parameter (`_it`), the
+// FE V4 convention for a bound-action self-refresh. Draft (edit-mode) writes
+// already round-trip through the draft shadow (srv/admin-service.js #1552), but
+// the annotation applies to both overloads so display + edit both refresh.
+annotate AdminService.HomepageShelves actions {
+  regenerate   @(Common.SideEffects: { TargetProperties: ['_it/tagline', '_it/whyItMatters', '_it/authoringStatus'] });
+  markReviewed @(Common.SideEffects: { TargetProperties: ['_it/authoringStatus'] });
 };
 
 annotate AdminService.LegacyRedirects with @(
@@ -3293,6 +3318,19 @@ annotate AdminService.VerbDefinitions with @(
 annotate AdminService.VerbDefinitions {
   verbKey         @Common.FieldControl: #ReadOnly @Common.Label: 'Verb key';
   authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
+  // (#1552) Element-level labels so every surface (LineItem, form, filters)
+  // shows a friendly name, not the technical element id.
+  label        @Common.Label: 'Label';
+  iconName     @Common.Label: 'Icon';
+  sortOrder    @Common.Label: 'Sort order';
+  tagline      @Common.Label: 'Tagline';
+  whyItMatters @Common.Label: 'Why it matters';
+};
+
+// (#1552) OP-header explainer action self-refresh — see HomepageShelves above.
+annotate AdminService.VerbDefinitions actions {
+  regenerate   @(Common.SideEffects: { TargetProperties: ['_it/tagline', '_it/whyItMatters', '_it/authoringStatus'] });
+  markReviewed @(Common.SideEffects: { TargetProperties: ['_it/authoringStatus'] });
 };
 
 // (#759 PR 3b) Shelf Definitions admin app annotations.
@@ -3338,6 +3376,18 @@ annotate AdminService.ShelfDefinitions with @(
 annotate AdminService.ShelfDefinitions {
   shelfKey        @Common.FieldControl: #ReadOnly @Common.Label: 'Shelf key';
   authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
+  // (#1552) Element-level labels — see VerbDefinitions above.
+  label        @Common.Label: 'Label';
+  iconName     @Common.Label: 'Icon';
+  sortOrder    @Common.Label: 'Sort order';
+  tagline      @Common.Label: 'Tagline';
+  whyItMatters @Common.Label: 'Why it matters';
+};
+
+// (#1552) OP-header explainer action self-refresh — see HomepageShelves above.
+annotate AdminService.ShelfDefinitions actions {
+  regenerate   @(Common.SideEffects: { TargetProperties: ['_it/tagline', '_it/whyItMatters', '_it/authoringStatus'] });
+  markReviewed @(Common.SideEffects: { TargetProperties: ['_it/authoringStatus'] });
 };
 
 // --- HomepageForYouCandidates (#763 Task 18) ---
