@@ -57,7 +57,8 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     // #1030 adds refresh-community-events (41 -> 42)
     // #1115 adds kg-retire-orphans        (42 -> 43)
     // #1126 adds kg-community-labels      (43 -> 44)
-    expect(_getJobRegistry().size).toBe(44);
+    // topics-discovery adds kg-topic-clusters (44 -> 45)
+    expect(_getJobRegistry().size).toBe(45);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
@@ -73,6 +74,7 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(names).toContain('fetch-news');
     expect(names).toContain('kg-retire-orphans');
     expect(names).toContain('kg-community-labels');
+    expect(names).toContain('kg-topic-clusters');
   });
 
   it('runJobByName(unknownName) throws', async () => {

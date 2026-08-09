@@ -58,7 +58,8 @@ sap.ui.define([
     videoRotation: "videoRotation",
     pats: "pats",
     petoberfest: "petoberfest",
-    petoberfestContests: "petoberfestContests"
+    petoberfestContests: "petoberfestContests",
+    topicClusters: "topicClusters"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -113,7 +114,8 @@ sap.ui.define([
     videoRotation: "Video Rotation",
     pats: "Personal Access Tokens",
     petoberfest: "Pet Photo Moderation",
-    petoberfestContests: "Petoberfest Contests"
+    petoberfestContests: "Petoberfest Contests",
+    topicClusters: "Topic Clusters"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
