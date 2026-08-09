@@ -14,6 +14,7 @@ import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
 import { buildTopicClustersHandler } from './lib/build-topic-clusters.js';
+import { buildTopicsGalleryHandler } from './lib/build-topics-gallery.js';
 import { exploreDataHandler } from './lib/build-explore-data.js';
 import { graphPathHandler } from './lib/graph-path-route.js';
 import { coCompletionsHandler } from './lib/co-completion.js';
@@ -283,6 +284,7 @@ cds.on('bootstrap', (app) => {
   app.get('/build/kg-stats', kgStatsHandler);
   app.get('/build/concepts', buildConceptsHandler);
   app.get('/build/topic-clusters', buildTopicClustersHandler);
+  app.get('/build/topics-gallery', buildTopicsGalleryHandler);
   app.get('/graph/explore-data', exploreDataHandler);
   app.get('/graph/path', graphPathHandler);
   app.get('/build/co-completions', coCompletionsHandler);
