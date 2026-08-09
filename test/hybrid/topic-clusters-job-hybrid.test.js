@@ -43,4 +43,33 @@ describe.runIf(isSafeForWrites())('kg-topic-clusters job (hybrid)', () => {
     const after = new Set((await SELECT.from(TopicClusters).where({ status: 'ACTIVE' })).map((r) => r.slug));
     expect([...after]).toEqual(expect.arrayContaining([...before]));
   }, 60_000);
+
+  it('admin curatedLabel + hidden override survives a job re-run (overridesBySlug carry-forward)', async () => {
+    const { runKgTopicClusters } = await import('../../srv/jobs/kg-topic-clusters-job.js');
+    const { TopicClusters } = cds.entities('com.sap.developers.ims');
+
+    // Pick any ACTIVE slug to test carry-forward on.
+    const target = await SELECT.one.from(TopicClusters).where({ status: 'ACTIVE' });
+    if (!target) {
+      // No ACTIVE clusters — nothing to carry forward. Skip gracefully.
+      return;
+    }
+    const { slug } = target;
+
+    // Set admin overrides directly on the underlying table.
+    await UPDATE(TopicClusters).set({ curatedLabel: '__hybrid_override__', hidden: true }).where({ slug });
+
+    // Re-run the job — this does a TRUNCATE+INSERT internally.
+    await runKgTopicClusters();
+
+    // The overridesBySlug map in _buildCommunitiesInput should have read and
+    // re-applied these values so they survive the TRUNCATE.
+    const after = await SELECT.one.from(TopicClusters).where({ slug });
+    expect(after).not.toBeNull();
+    expect(after.curatedLabel).toBe('__hybrid_override__');
+    expect(after.hidden).toBe(true);
+
+    // Clean up the override so subsequent test runs start clean.
+    await UPDATE(TopicClusters).set({ curatedLabel: null, hidden: false }).where({ slug });
+  }, 60_000);
 });
