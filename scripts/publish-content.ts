@@ -97,39 +97,6 @@ export function discoverTutorials(hugoDir: string): Map<string, string> {
   return result;
 }
 
-// Concept landing pages (#446 Track 3-A). Walks hugo/public/concepts/<slug>/
-// and emits a map keyed by `concept-<slug>` so the rest of the publish
-// pipeline (hash, payload, session) handles them transparently alongside
-// tutorials. The `concept-` prefix lets the serve handler (srv/server.js)
-// and ContentFiles share one slug column without a schema change.
-export function discoverConcepts(hugoDir: string): Map<string, string> {
-  const conceptsDir = join(hugoDir, 'concepts');
-  const result = new Map<string, string>();
-
-  let entries: string[];
-  try {
-    entries = readdirSync(conceptsDir).filter(e => !e.startsWith('_'));
-  } catch {
-    // concepts/ directory missing entirely (no concepts published yet) —
-    // that's a normal state for fresh installs and the QA channel.
-    return result;
-  }
-
-  for (const entry of entries) {
-    const indexPath = join(conceptsDir, entry, 'index.html');
-    try {
-      const stat = statSync(indexPath);
-      if (stat.isFile()) {
-        result.set(`concept-${entry}`, indexPath);
-      }
-    } catch {
-      // not a concept directory
-    }
-  }
-
-  return result;
-}
-
 // Concept slug predicate — used to skip Tutorials-only metadata extraction
 // for concept landing pages (metadata, bodyText, branchSpecs, source markdown
 // are all keyed off Tutorials.slug; concept-* keys would orphan in those
@@ -959,24 +926,13 @@ async function main() {
     );
   }
 
-  // #446 Track 3-A — concept landing pages. Merged into the same map so
-  // hash/payload/session orchestration treats them uniformly; the `concept-`
-  // prefix on each key is what lets the serve handler route correctly.
-  //
-  // #1327 Thread B — under the new pipeline (default) CAP renders concept
-  // detail pages server-side via the render-concepts phase (below), so we do
-  // NOT walk hugo/public/concepts here — that would double-publish. The legacy
-  // Hugo-walk stays available behind LEGACY_CONCEPT_RENDER=true as the escape
-  // hatch (paired with fetch-concepts.ts, which only emits concept .md under
-  // the same flag).
-  const legacyConceptRender = process.env.LEGACY_CONCEPT_RENDER === 'true';
-  if (legacyConceptRender) {
-    const concepts = discoverConcepts(opts.hugoDir);
-    if (concepts.size > 0) {
-      for (const [slug, path] of concepts) tutorials.set(slug, path);
-      log(`Found ${concepts.size} concept landing page(s) (concept-*) in ${opts.hugoDir}/concepts [LEGACY_CONCEPT_RENDER]`);
-    }
-  }
+  // #446 Track 3-A / #1327 Thread B — concept detail pages are rendered
+  // server-side by CAP via the render-concepts publish phase (below), NOT
+  // walked from hugo/public/concepts here. The legacy Hugo concept pipeline
+  // (fetch-concepts.ts + hugo/layouts/concepts + the LEGACY_CONCEPT_RENDER
+  // escape hatch) was retired in #1327 Task 6 once the CAP path was stable on
+  // DEV + PROD. The `concept-<slug>` key convention, serve path, and delta
+  // machinery are unchanged — only the source of the BLOBs moved to CAP.
 
   // #1278 — single-tutorial fast path. Filter the discovered map down to the
   // one requested slug BEFORE hashing (computeLocalHashes reads 1 file instead
@@ -1158,8 +1114,7 @@ async function main() {
 
   // #1327 Thread B — render concept detail pages server-side into the open
   // session, AFTER all tutorial batches (so __shell__ is present) and BEFORE
-  // commit. Skipped under the legacy flag (Hugo-walk already supplied concept
-  // BLOBs above) and on a single-tutorial slug hotfix (concepts aren't part of
+  // commit. Skipped on a single-tutorial slug hotfix (concepts aren't part of
   // that scope; the server carries them forward unchanged at commit). A phase
   // failure aborts the session — same posture as an append failure.
   //
@@ -1171,7 +1126,7 @@ async function main() {
   // absent route → 404 → abortSession → exit 1, which is exactly what silently
   // broke every QA merge-to-main publish. Gating here keeps the caller
   // consistent with the server's route surface.
-  if (!legacyConceptRender && !opts.slug && channel === 'prod') {
+  if (!opts.slug && channel === 'prod') {
     try {
       const rc = await withRetry(
         () => renderConceptsPhase({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId }),

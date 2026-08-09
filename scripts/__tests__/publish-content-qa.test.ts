@@ -51,7 +51,7 @@ describe('publish-content qa channel', () => {
   // merge-to-main publish. The caller MUST gate the phase to channel==='prod'.
   it('gates the render-concepts phase to the prod channel only', () => {
     const gate = SRC.match(
-      /if \(!legacyConceptRender && !opts\.slug && channel === 'prod'\) \{/,
+      /if \(!opts\.slug && channel === 'prod'\) \{/,
     );
     expect(
       gate,

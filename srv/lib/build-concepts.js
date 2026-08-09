@@ -1,6 +1,7 @@
 // Express middleware backing GET /build/concepts.
-// Pattern matches srv/lib/build-catalog.js. Unauthenticated by design;
-// consumed by scripts/fetch-concepts.ts at Hugo build time.
+// Pattern matches srv/lib/build-catalog.js. Unauthenticated by design.
+// Shares buildConceptsPayload with the CAP concept-render pipeline
+// (concept-list-page.js + publish-concepts.js, #1327).
 
 import cds from '@sap/cds';
 import { buildConceptsPayload } from './published-concepts-query.js';

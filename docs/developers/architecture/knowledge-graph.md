@@ -22,8 +22,11 @@ Each sub-phase adds one corpus with:
   and `renderMeta`.
 - A union extension in `hugo-apps/src/related-graph/types.ts` (`NodeType` +
   `OtherResource.type`).
-- A Hugo template section appended to `hugo/layouts/concepts/single.html`.
-- A frontmatter emission block in `scripts/fetch-concepts.ts`.
+- A `<section data-kg-section="…">` block in the concept detail template
+  `srv/lib/templates/concept-detail.ejs`, rendered server-side by CAP
+  (`srv/lib/concept-detail-render.js`) into the `concept-<slug>` BLOB. (The
+  legacy Hugo concept path — `hugo/layouts/concepts/single.html` +
+  `scripts/fetch-concepts.ts` — was retired in #1327.)
 
 ### Phase 4.1 — Learning journeys (#447)
 

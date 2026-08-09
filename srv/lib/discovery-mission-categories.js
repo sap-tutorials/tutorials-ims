@@ -5,8 +5,7 @@
 // (e.g. 'onboard', 'intgn'); this table renders them as labels.
 //
 // Imported by:
-//   - scripts/fetch-concepts.ts (concept-page frontmatter resolution)
-//   - srv/knowledge-graph-service.js (sidebar neighborhood enrichment)
+//   - srv/lib/kg-other-resources-loader.js (categoryLabel for KG resource enrichment)
 //
 // Single source of truth. Add new entries as SAP adds categories; title-case
 // fallback handles unknown slugs gracefully.

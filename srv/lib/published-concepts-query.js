@@ -80,8 +80,8 @@ export async function buildConceptsPayload(db) {
   // once `ids` grows past a few thousand (5,946 published concepts as of
   // 2026-07-08). Every `.where({ concept_ID: { in: ids } })` below sends
   // one bound parameter per element; on HANA the packet blows and the
-  // whole /build/concepts endpoint 500s, taking `npm run fetch-concepts`
-  // (and therefore `npm run build:all`) with it.
+  // whole /build/concepts endpoint 500s, taking the CAP concept-render
+  // pipeline (concept-list-page.js / publish-concepts.js) with it.
   //
   // Same class of defect as #1063 (kg-featured-topics — slug IN over all
   // ConceptRank). Same repair pattern: fetch link tables unbounded and
