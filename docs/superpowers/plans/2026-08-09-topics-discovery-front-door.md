@@ -1180,3 +1180,354 @@ git commit -m "feat(topics): Hugo gallery + cluster-detail layouts (baked static
 ```
 
 **Phase 2 checkpoint:** `/topics/` gallery and `/topics/<slug>/` detail pages bake as static HTML with suggested paths and peer links. Fully functional without JS. Map island not yet built (Phase 3).
+
+---
+
+## Phase 3 — Cluster map endpoint + Sigma island + /explore/ deep-link
+
+**Deliverable:** the cluster map renders below the gallery (super-nodes + inter-cluster edges, expand-in-place), and "See full graph →" deep-links into `/explore/` pre-focused on a cluster.
+
+### Task 8: `/graph/clusters-data` endpoint
+
+**Files:**
+- Create: `srv/lib/kg-clusters-data.js` (pure builder)
+- Create: `srv/lib/build-clusters-data.js` (cached Express wrapper)
+- Modify: `srv/server.js` (import + register `GET /graph/clusters-data` ~line 286, alongside `/graph/explore-data`)
+- Modify: `scripts/check-public-endpoints.ts` (allowlist `/graph/clusters-data`)
+- Test: `test/unit/srv/kg-clusters-data.test.js` + `test/hybrid/clusters-data-hybrid.test.js`
+
+**Interfaces:**
+- Consumes: `buildTopicsGalleryPayload` (reuse — it already computes clusters + peer weights + top concepts).
+- Produces:
+  - `buildClustersDataPayload(db)` -> `{ nodes, edges, generatedAt }` where:
+    - `nodes` = one super-node per ACTIVE non-hidden cluster: `{ id: 'c:<slug>', type: 'cluster', slug, label, size: memberCount }`.
+    - `edges` = inter-cluster edges: `{ s: 'c:<slugA>', o: 'c:<slugB>', weight }` from peer weights.
+    - Matches the `/graph/explore-data` field convention (`id`, `s`/`o`) so the island can reuse `/explore/`'s graphology-building code.
+  - `buildClusterSubgraph(db, slug)` -> `{ nodes, edges }` for expand-in-place: the cluster's top concepts as nodes (`id: 't:<conceptSlug>'`) + intra-cluster `requires` edges.
+  - `clustersDataHandler(req, res)` -> cached (TTL 5min, like `build-explore-data.js`), `Cache-Control: public, max-age=300`, `X-Cache: HIT|MISS`. Supports `?cluster=<slug>` → returns the subgraph; else the super-graph.
+- Fail-open: 500 `{ error: 'clusters-data query failed' }` on throw; island degrades.
+
+- [ ] **Step 1: Write the failing unit test** (`test/unit/srv/kg-clusters-data.test.js`)
+
+```js
+import { describe, it, expect, vi } from 'vitest';
+import { buildClustersDataPayload } from '../../../srv/lib/kg-clusters-data.js';
+
+vi.mock('../../../srv/lib/build-topics-gallery.js', () => ({
+  buildTopicsGalleryPayload: vi.fn(async () => ({
+    gallery: [
+      { slug: 'hana', label: 'HANA', memberCount: 10, tutorialCount: 5, topConcepts: [] },
+      { slug: 'cap', label: 'CAP', memberCount: 8, tutorialCount: 4, topConcepts: [] },
+    ],
+    clusters: {
+      hana: { slug: 'hana', label: 'HANA', memberCount: 10, tutorialCount: 5, peers: [{ slug: 'cap', label: 'CAP', weight: 3 }], concepts: [] },
+      cap:  { slug: 'cap',  label: 'CAP',  memberCount: 8,  tutorialCount: 4, peers: [{ slug: 'hana', label: 'HANA', weight: 3 }], concepts: [] },
+    },
+    buildAt: 'now', error: null,
+  })),
+}));
+
+describe('buildClustersDataPayload', () => {
+  it('emits one super-node per cluster and deduped inter-cluster edges', async () => {
+    const { nodes, edges } = await buildClustersDataPayload({});
+    expect(nodes.map((n) => n.id).sort()).toEqual(['c:cap', 'c:hana']);
+    expect(nodes.find((n) => n.id === 'c:hana').size).toBe(10);
+    // hana<->cap appears once, not twice
+    expect(edges).toHaveLength(1);
+    expect(edges[0].weight).toBe(3);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/unit/srv/kg-clusters-data.test.js`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Write the pure builder** (`srv/lib/kg-clusters-data.js`)
+
+```js
+import cds from '@sap/cds';
+import { buildTopicsGalleryPayload } from './build-topics-gallery.js';
+
+export async function buildClustersDataPayload(db) {
+  const { gallery, clusters } = await buildTopicsGalleryPayload(db);
+  const nodes = gallery.map((c) => ({ id: `c:${c.slug}`, type: 'cluster', slug: c.slug, label: c.label, size: c.memberCount || 1 }));
+  const seen = new Set();
+  const edges = [];
+  for (const c of gallery) {
+    const detail = clusters[c.slug];
+    for (const p of (detail?.peers || [])) {
+      const key = c.slug < p.slug ? `${c.slug}|${p.slug}` : `${p.slug}|${c.slug}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({ s: `c:${c.slug}`, o: `c:${p.slug}`, weight: p.weight });
+    }
+  }
+  return { nodes, edges, generatedAt: new Date().toISOString() };
+}
+
+export async function buildClusterSubgraph(db, slug) {
+  const { clusters } = await buildTopicsGalleryPayload(db);
+  const detail = clusters[slug];
+  if (!detail) return { nodes: [], edges: [] };
+  const nodes = detail.concepts.slice(0, 30).map((c) => ({ id: `t:${c.slug}`, type: 'concept', slug: c.slug, label: c.name }));
+  // Intra-cluster requires edges are already reflected in concept order; for v1 the subgraph
+  // shows concepts as nodes (edges optional). Implementer may add requires edges here from
+  // build-topics-gallery if the ordered path exposes them.
+  return { nodes, edges: [] };
+}
+
+export default { buildClustersDataPayload, buildClusterSubgraph };
+```
+
+> NOTE: to draw intra-cluster edges in the subgraph, have `build-topics-gallery.js` also return each cluster's in-cluster `requires` slug-pairs on the `clusters[slug]` detail (add a `pathEdges` field). Optional for v1 — nodes-only is acceptable; if you add it, extend the Task 5 payload + its test.
+
+- [ ] **Step 4: Write the cached handler** (`srv/lib/build-clusters-data.js`)
+
+Mirror `build-explore-data.js` (TTL 5min module cache, `X-Cache` header, `_resetClustersDataCache()` test hook). Branch on `req.query.cluster`:
+```js
+import cds from '@sap/cds';
+import { buildClustersDataPayload, buildClusterSubgraph } from './kg-clusters-data.js';
+
+const TTL_MS = 5 * 60 * 1000;
+let cached = null; let cachedAt = 0;
+
+export async function clustersDataHandler(req, res) {
+  try {
+    const db = await cds.connect.to('db');
+    const clusterSlug = typeof req.query.cluster === 'string' ? req.query.cluster.toLowerCase() : '';
+    if (clusterSlug) {
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(clusterSlug)) return res.status(400).json({ error: 'bad cluster slug' });
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      return res.json(await buildClusterSubgraph(db, clusterSlug));
+    }
+    const now = Date.now();
+    if (cached && now - cachedAt < TTL_MS) { res.setHeader('X-Cache', 'HIT'); res.setHeader('Cache-Control', 'public, max-age=300'); return res.json(cached); }
+    cached = await buildClustersDataPayload(db); cachedAt = now;
+    res.setHeader('X-Cache', 'MISS'); res.setHeader('Cache-Control', 'public, max-age=300');
+    return res.json(cached);
+  } catch (err) {
+    cds.log('build-clusters-data').error('failed', err);
+    return res.status(500).json({ error: 'clusters-data query failed' });
+  }
+}
+export function _resetClustersDataCache() { cached = null; cachedAt = 0; }
+export default { clustersDataHandler, _resetClustersDataCache };
+```
+
+- [ ] **Step 5: Register the route** (`srv/server.js`, ~line 286)
+
+```js
+import { clustersDataHandler } from './lib/build-clusters-data.js';
+// ...
+app.get('/graph/clusters-data', clustersDataHandler);
+```
+
+- [ ] **Step 6: Allowlist the public endpoint**
+
+Add `/graph/clusters-data` to `scripts/check-public-endpoints.ts` (it runs in `postbuild:apps`). The island fetches this client-side from a Hugo page, so it must be reachable — verify the intended auth posture matches `/graph/explore-data` (which is registered after `basicAuthMiddleware` but treated as public via the allowlist). Match whatever `/graph/explore-data` does exactly.
+
+- [ ] **Step 7: Run unit test to verify it passes**
+
+Run: `npx vitest run test/unit/srv/kg-clusters-data.test.js`
+Expected: PASS.
+
+- [ ] **Step 8: Write + run the hybrid test** (`test/hybrid/clusters-data-hybrid.test.js`)
+
+```js
+import { describe, it, expect, beforeAll } from 'vitest';
+import cds from '@sap/cds';
+import { buildClustersDataPayload, buildClusterSubgraph } from '../../srv/lib/kg-clusters-data.js';
+
+describe('clusters-data (hybrid)', () => {
+  let db;
+  beforeAll(async () => { db = await cds.connect.to('db'); });
+  it('emits cluster super-nodes from real data', async () => {
+    const { nodes, edges } = await buildClustersDataPayload(db);
+    expect(nodes.length).toBeGreaterThan(0);
+    expect(nodes[0].id).toMatch(/^c:/);
+    expect(Array.isArray(edges)).toBe(true);
+  });
+  it('returns a subgraph for a real cluster slug', async () => {
+    const { nodes } = await buildClustersDataPayload(db);
+    const slug = nodes[0].slug;
+    const sub = await buildClusterSubgraph(db, slug);
+    expect(Array.isArray(sub.nodes)).toBe(true);
+  });
+});
+```
+Run: `npx vitest run --project hybrid test/hybrid/clusters-data-hybrid.test.js`
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add srv/lib/kg-clusters-data.js srv/lib/build-clusters-data.js srv/server.js scripts/check-public-endpoints.ts test/unit/srv/kg-clusters-data.test.js test/hybrid/clusters-data-hybrid.test.js
+git commit -m "feat(topics): /graph/clusters-data super-graph + subgraph endpoint"
+```
+
+---
+
+### Task 9: Sigma cluster-map island
+
+**Files:**
+- Create: `hugo-apps/src/topics-map/{main.ts,App.vue,ClusterMap.vue}`
+- Modify: `hugo-apps/vite.config.ts` (add `topics-map` rollup input ~line 290; add a gzip-budget plugin mirroring `relatedGraphBudget`)
+- Create: `scripts/build-topics-map-manifest.ts` + wire into build (only if the island needs a hash manifest like `/explore/`; if it emits to `/js/topics-map.js` via hugo-apps, it uses the standard `[name].js` output and NO manifest is needed — prefer this)
+- Test: `hugo-apps/src/topics-map/App.test.ts` (mount + fetch-mock) + `test/unit/hugo/topics-map-vite-input.test.ts` (config assertion)
+
+**Interfaces:**
+- Consumes: `GET /graph/clusters-data` (super-graph) and `?cluster=<slug>` (subgraph); mounts on `[data-vue-island="topics-map"]`.
+- Produces: `hugo/static/js/topics-map.js` bundle. Reads optional `data-focus-cluster` attribute to auto-expand a cluster (used by the cluster-detail mini-map).
+
+**Reuse:** copy the graphology + Sigma + ForceAtlas2 setup from `app/explore/src/components/ExploreGraph.vue` (`MultiDirectedGraph`, `forceAtlas2.assign(graph, { iterations: 50 })`, `new Sigma(...)`, `nodeReducer`/`edgeReducer`). Add `sigma`, `graphology`, `graphology-layout-forceatlas2` to `hugo-apps/package.json` (same versions as `app/explore/package.json`: sigma 3.0.3, graphology 0.26.0, graphology-layout-forceatlas2 0.10.1).
+
+**Interactions to implement:**
+- Render super-nodes sized by `size`, colored per-cluster (stable hash of slug → hue). Edge thickness ∝ `weight`.
+- Click super-node → fetch `?cluster=<slug>`, add its concept child-nodes, dim others (expand-in-place).
+- A "See full graph →" link/button on an expanded cluster → navigate to `/explore/?focus=<topConceptSlug>` (Task 10 deep-link). Use the cluster's first concept slug as the focus target.
+- Progressive enhancement: on fetch error, hide the island container (the baked gallery above remains).
+
+- [ ] **Step 1: Write the failing config test** (`test/unit/hugo/topics-map-vite-input.test.ts`)
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+describe('topics-map island is registered', () => {
+  it('has a rollup input entry', () => {
+    const cfg = readFileSync('hugo-apps/vite.config.ts', 'utf-8');
+    expect(cfg).toMatch(/['"]topics-map['"]\s*:\s*resolve\(__dirname,\s*['"]src\/topics-map\/main\.ts['"]\)/);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/unit/hugo/topics-map-vite-input.test.ts`
+Expected: FAIL.
+
+- [ ] **Step 3: Add the rollup input** (`hugo-apps/vite.config.ts`)
+
+Add after the `concepts-filter` entry (~line 290):
+```js
+'topics-map': resolve(__dirname, 'src/topics-map/main.ts'),
+```
+Add a gzip-budget plugin for it mirroring `relatedGraphBudget()` (Sigma is heavy — set budget ~150KB gzip like `/explore/`).
+
+- [ ] **Step 4: Write the island** (`main.ts`, `App.vue`, `ClusterMap.vue`)
+
+`main.ts` (discovery mount, like `related-graph/main.ts`):
+```ts
+import { createApp } from 'vue';
+import App from './App.vue';
+document.querySelectorAll('[data-vue-island="topics-map"]').forEach((el) => {
+  createApp(App, { focusCluster: el.getAttribute('data-focus-cluster') || '' }).mount(el);
+});
+```
+`App.vue` — fetch `/graph/clusters-data`, pass nodes/edges to `ClusterMap.vue`; on fetch failure emit nothing (container stays empty). `ClusterMap.vue` — the Sigma graph (copy `ExploreGraph.vue` structure), click-to-expand via `/graph/clusters-data?cluster=<slug>`, "See full graph" link to `/explore/?focus=<slug>`.
+
+- [ ] **Step 5: Write the mount test** (`hugo-apps/src/topics-map/App.test.ts`)
+
+```ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mount } from '@vue/test-utils';
+import App from './App.vue';
+
+describe('topics-map App', () => {
+  beforeEach(() => { globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ nodes: [{id:'c:hana',slug:'hana',label:'HANA',size:5}], edges: [] }) } as any); });
+  it('fetches clusters-data on mount without throwing', async () => {
+    const wrapper = mount(App, { props: { focusCluster: '' } });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('/graph/clusters-data'));
+    expect(wrapper.exists()).toBe(true);
+  });
+  it('degrades quietly when fetch fails', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('down'));
+    const wrapper = mount(App, { props: { focusCluster: '' } });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(wrapper.exists()).toBe(true); // no throw
+  });
+});
+```
+
+> NOTE: mocking Sigma/WebGL in jsdom is painful. Keep `ClusterMap.vue`'s Sigma init behind an `onMounted` guard that no-ops if `container` has zero size (jsdom), so `App.test.ts` exercises fetch + data flow without a real WebGL context. The `/explore/` app tests take the same approach — check `app/explore` tests for the guard pattern before writing.
+
+- [ ] **Step 6: Run tests + build the island**
+
+Run: `npx vitest run test/unit/hugo/topics-map-vite-input.test.ts hugo-apps/src/topics-map/App.test.ts`
+Then: `npm --prefix hugo-apps run build` and confirm `hugo/static/js/topics-map.js` emits within budget.
+Expected: PASS + bundle emitted.
+
+- [ ] **Step 7: Wire the bundle into the layouts**
+
+In `hugo/layouts/topics/list.html` and `single.html`, include `<script type="module" src="/js/topics-map.js" defer></script>` near the island mount. (hugo-apps bundles are served at `/js/` — no hash manifest needed since output is `[name].js`.)
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add hugo-apps/src/topics-map/ hugo-apps/vite.config.ts hugo-apps/package.json hugo/layouts/topics/ test/unit/hugo/topics-map-vite-input.test.ts
+git commit -m "feat(topics): Sigma cluster-map island with expand-in-place"
+```
+
+---
+
+### Task 10: /explore/ deep-link pre-focus
+
+**Files:**
+- Modify: `app/explore/src/App.vue` (read `?focus=<slug>` on mount, resolve to node id, pre-focus camera)
+- Test: extend an existing `app/explore` test or add `app/explore/src/App.focus.test.ts`
+
+**Interfaces:**
+- Consumes: URL `?focus=<conceptOrTutorialSlug>`.
+- Produces: on load, `/explore/` centers/zooms the camera on that node (reuse the `applyPathOverlay` camera-fit block + `resolveNodeId(slug)` helper already in `App.vue:67-75`).
+
+- [ ] **Step 1: Write the failing test** (`app/explore/src/App.focus.test.ts`)
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { parseFocusParam } from './focus-param';
+
+describe('parseFocusParam', () => {
+  it('extracts a valid focus slug from a query string', () => {
+    expect(parseFocusParam('?focus=cap-handlers')).toBe('cap-handlers');
+  });
+  it('returns empty for missing or malformed focus', () => {
+    expect(parseFocusParam('?x=1')).toBe('');
+    expect(parseFocusParam('?focus=Bad Slug!')).toBe('');
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run app/explore/src/App.focus.test.ts` (or via the explore project's test runner — check `app/explore/package.json` test script)
+Expected: FAIL.
+
+- [ ] **Step 3: Implement `parseFocusParam` + wire into App.vue**
+
+Create `app/explore/src/focus-param.ts`:
+```ts
+export function parseFocusParam(search: string): string {
+  const v = new URLSearchParams(search).get('focus') || '';
+  return /^[a-z0-9][a-z0-9-]{0,80}$/.test(v) ? v : '';
+}
+```
+In `App.vue`, on mount: `const focus = parseFocusParam(window.location.search); if (focus) { const id = resolveNodeId(focus); if (id) <center camera on id via the applyPathOverlay camera-fit block> }`. Keep it additive — do not disturb the existing find-path flow.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run app/explore/src/App.focus.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Build + manual verify**
+
+Run: `npm run build:explore` then load `/explore/?focus=<a-real-concept-slug>` and confirm the camera centers on that node.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/explore/src/focus-param.ts app/explore/src/App.vue app/explore/src/App.focus.test.ts
+git commit -m "feat(explore): ?focus= deep-link pre-focuses camera for topics handoff"
+```
+
+**Phase 3 checkpoint:** cluster map renders below the gallery, expands in place, and "See full graph" deep-links into a pre-focused `/explore/`. The continuous zoom (gallery → map → full graph) is complete.
