@@ -11,7 +11,13 @@ const props = defineProps<{
   /** Ordered list of node IDs on the active find-path overlay. null = no overlay. */
   path?: string[] | null
 }>()
-const emit = defineEmits<{ nodeClick: [{ id: string; node: ExploreNode }] }>()
+const emit = defineEmits<{
+  nodeClick: [{ id: string; node: ExploreNode }]
+  /** Emitted once after buildGraph() + forceAtlas2 layout completes. Used by
+   *  App.vue to trigger the ?focus= deep-link camera focus at the correct
+   *  moment — after the graphology instance has node x/y coordinates. */
+  graphReady: []
+}>()
 
 // Path-overlay styling. Kept here next to the edge-default palette so a
 // future themer touches one file.
@@ -116,6 +122,10 @@ function buildGraph() {
   // Apply any initial path overlay (when path prop is already set on first
   // render — e.g. SSR/hydration).
   applyPathOverlay(props.path ?? null)
+  // Signal to parent that the graph + forceAtlas2 layout are complete and
+  // node x/y coordinates are valid. App.vue uses this to trigger the ?focus=
+  // deep-link camera focus at the right moment.
+  emit('graphReady')
 }
 
 onBeforeUnmount(() => {

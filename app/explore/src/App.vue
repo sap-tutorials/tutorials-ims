@@ -39,20 +39,21 @@ watch(isMobile, () => {
   pathError.value = null
 })
 
-// ?focus=<slug> deep-link: once graph data is loaded, resolve the slug to a
-// node id and centre/zoom the camera on it. Fires at most once (immediate
-// watch that auto-stops on first truthy hasData). No-op if slug is absent,
-// malformed, or doesn't match any node. Does NOT disturb the find-path flow.
+// ?focus=<slug> deep-link: when ExploreGraph emits 'graphReady' (i.e. after
+// buildGraph() + forceAtlas2 layout — node x/y coordinates valid), resolve
+// the slug to a node id and centre/zoom the camera on it. Using 'graphReady'
+// rather than a 'hasData' watcher avoids the ordering hazard where hasData
+// turns true before ExploreGraph's own watch([nodes,edges]) has run
+// buildGraph(), so node coordinates would not yet exist. No-op if slug is
+// absent/malformed or doesn't resolve to a node. Does NOT disturb find-path.
 const focusSlug = parseFocusParam(typeof window !== 'undefined' ? window.location.search : '')
-if (focusSlug) {
-  const stopFocusWatch = watch(hasData, (ready) => {
-    if (!ready) return
-    stopFocusWatch()
-    const id = resolveNodeId(focusSlug)
-    if (id && graphRef.value) {
-      graphRef.value.focusSingleNode(id)
-    }
-  }, { immediate: true })
+
+function onGraphReady() {
+  if (!focusSlug) return
+  const id = resolveNodeId(focusSlug)
+  if (id && graphRef.value) {
+    graphRef.value.focusSingleNode(id)
+  }
 }
 
 // Defeat Vue 3.5 SFC template hoisting (which breaks refs under @vue/test-utils).
@@ -165,6 +166,7 @@ async function onFindPath(p: { from: string; to: string }) {
               :edges="filteredEdges"
               :path="pathNodeIds"
               @nodeClick="onNodeClick"
+              @graphReady="onGraphReady"
             />
           </div>
           <NodeDetailPanel

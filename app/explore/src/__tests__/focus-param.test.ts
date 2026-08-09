@@ -21,4 +21,16 @@ describe('parseFocusParam', () => {
   it('returns empty for an empty string', () => {
     expect(parseFocusParam('')).toBe('');
   });
+  it('rejects an 83-character slug (one past the {0,80} suffix bound)', () => {
+    // regex is /^[a-z0-9][a-z0-9-]{0,80}$/ — first char + 80 suffix = 81 chars max
+    // 82 chars = 1 + 81 suffix → should still reject (suffix bound is 0,80)
+    // 83 chars = 1 + 82 suffix → definitely rejects
+    const slug83 = 'a' + 'b'.repeat(82); // 1 + 82 = 83 chars
+    expect(parseFocusParam(`?focus=${slug83}`)).toBe('');
+  });
+  it('accepts a maximum-valid 81-character slug (1 + 80 suffix chars)', () => {
+    const slug81 = 'a' + 'b'.repeat(80); // 1 + 80 = 81 chars — at the boundary
+    expect(parseFocusParam(`?focus=${slug81}`)).toBe(slug81);
+  });
 });
+
