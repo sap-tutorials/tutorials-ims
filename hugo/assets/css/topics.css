@@ -1,0 +1,329 @@
+/* hugo/assets/css/topics.css
+   Topics gallery + cluster-detail page styles.
+   Uses Horizon CSS tokens per project convention (see homepage.css).
+   Namespace: .topics-*
+*/
+
+/* ===== Page wrapper ===== */
+.topics-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+/* ===== Hero / header ===== */
+.topics-hero {
+  padding: 2.5rem 0 2rem;
+}
+.topics-hero__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+.topics-hero__title {
+  flex: 1 1 auto;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+  margin: 0;
+}
+.topics-hero__intro {
+  flex-basis: 100%;
+  font-size: 1rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin: 0.25rem 0 0;
+  max-width: 680px;
+}
+
+/* ===== Search box ===== */
+.topics-search {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--sapContent_ForegroundBorderColor, #ccc);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--sapBaseColor, #fff);
+  flex: 0 0 auto;
+}
+.topics-search__label {
+  /* visually hidden but accessible */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.topics-search__input {
+  border: none;
+  outline: none;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--sapTextColor, #32363a);
+  background: transparent;
+  min-width: 200px;
+}
+.topics-search__input::placeholder {
+  color: var(--sapContent_PlaceholderTextColor, #9ea0a2);
+}
+.topics-search__btn {
+  border: none;
+  background: var(--sapButton_Background, #f5f6f7);
+  color: var(--sapButton_TextColor, #32363a);
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.15s;
+}
+.topics-search__btn:hover {
+  background: var(--sapButton_Hover_Background, #e5e5e5);
+}
+.topics-search__btn:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0854a0);
+  outline-offset: 2px;
+}
+
+/* ===== Gallery grid ===== */
+.topics-gallery {
+  margin-top: 0.5rem;
+}
+.topics-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* ===== Topic card ===== */
+.topics-card {
+  display: flex;
+}
+.topics-card__link {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 1.25rem;
+  text-decoration: none;
+  border: 1px solid var(--sapContent_ForegroundBorderColor, #e5e5e5);
+  border-radius: 8px;
+  background: var(--sapBaseColor, #fff);
+  color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.topics-card__link:hover {
+  border-color: var(--sapLinkColor, #0064d9);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+.topics-card__link:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0854a0);
+  outline-offset: 3px;
+}
+.topics-card__label {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--sapLinkColor, #0064d9);
+  margin: 0 0 0.5rem;
+  line-height: 1.35;
+}
+.topics-card__rationale {
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin: 0 0 0.75rem;
+  flex: 1;
+  /* Clamp to 3 lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.topics-card__meta {
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+.topics-card__counts {
+  font-size: 0.78rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+/* concept chips */
+.topics-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.65rem 0 0;
+}
+.topics-card__chip {
+  font-size: 0.73rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--sapList_Hover_Background, rgba(0, 112, 242, 0.06));
+  color: var(--sapLinkColor, #0064d9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+/* ===== Empty state ===== */
+.topics-empty {
+  padding: 3rem 0;
+  text-align: center;
+}
+.topics-empty__msg {
+  font-size: 1rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+.topics-empty__msg a {
+  color: var(--sapLinkColor, #0064d9);
+}
+
+/* ===== Map section (progressive enhancement) ===== */
+.topics-map-section {
+  margin-top: 2.5rem;
+  min-height: 0; /* collapses if island not mounted */
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 600px) {
+  .topics-gallery__grid { grid-template-columns: 1fr; }
+  .topics-hero__inner { flex-direction: column; align-items: flex-start; }
+  .topics-search { width: 100%; }
+  .topics-search__input { min-width: 0; flex: 1; }
+}
+
+/* ========================================================
+   Cluster detail page (.topics-detail)
+   ======================================================== */
+.topics-detail {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+/* ===== Breadcrumb ===== */
+.topics-breadcrumb {
+  padding: 1.25rem 0 0;
+}
+.topics-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85rem;
+}
+.topics-breadcrumb__link {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+.topics-breadcrumb__link:hover {
+  text-decoration: underline;
+}
+.topics-breadcrumb__sep {
+  color: var(--sapContent_LabelColor, #9ea0a2);
+  padding: 0 0.1rem;
+}
+.topics-breadcrumb__item--current {
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+/* ===== Detail header ===== */
+.topics-detail__header {
+  padding: 1.5rem 0 1rem;
+}
+.topics-detail__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+  margin: 0 0 0.5rem;
+}
+.topics-detail__rationale {
+  font-size: 1rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin: 0 0 0.75rem;
+}
+.topics-detail__meta {
+  font-size: 0.85rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+/* ===== Section titles ===== */
+.topics-detail__section-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  margin: 0 0 0.75rem;
+}
+
+/* ===== Concepts section ===== */
+.topics-detail__concepts {
+  margin: 1.75rem 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--sapContent_ForegroundBorderColor, #e5e5e5);
+}
+.topics-concepts-list {
+  margin: 0;
+  padding-left: 1.5rem;
+}
+.topics-concepts-list--unordered {
+  list-style: disc;
+}
+.topics-concepts-list--ordered {
+  list-style: decimal;
+}
+.topics-concepts-list__item {
+  padding: 0.2rem 0;
+}
+.topics-concepts-list__link {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+.topics-concepts-list__link:hover {
+  text-decoration: underline;
+}
+
+/* ===== Peers section ===== */
+.topics-detail__peers {
+  margin: 1.75rem 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--sapContent_ForegroundBorderColor, #e5e5e5);
+}
+.topics-peers-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.topics-peers-list__link {
+  display: inline-block;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--sapContent_ForegroundBorderColor, #ccc);
+  border-radius: 999px;
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+.topics-peers-list__link:hover {
+  background: var(--sapList_Hover_Background, rgba(0, 112, 242, 0.06));
+  border-color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+
+/* ===== Detail mini-map ===== */
+.topics-detail__map {
+  margin-top: 2rem;
+  min-height: 0;
+}
