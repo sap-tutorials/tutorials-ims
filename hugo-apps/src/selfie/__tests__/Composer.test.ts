@@ -8,14 +8,16 @@ const h = vi.hoisted(() => {
   const addSticker = vi.fn(); const addEmoji = vi.fn()
   const addCaption = vi.fn(); const updateCaption = vi.fn(); const deleteSelected = vi.fn()
   const hasCaption = vi.fn().mockReturnValue(false)
+  const setBackground = vi.fn()
   let selCb: ((k: string) => void) | null = null
   const onSelectionChange = vi.fn((cb: (k: string) => void) => { selCb = cb })
   const buildStage = vi.fn().mockResolvedValue({
     addCutout, setImage, exportPng, destroy: vi.fn(),
     addSticker, addEmoji, addCaption, updateCaption, deleteSelected, onSelectionChange,
     hasCaption, selectedIsCaption: () => false, deselect: vi.fn(),
+    setBackground,
   })
-  return { exportPng, addCutout, setImage, addSticker, addEmoji, addCaption, updateCaption, deleteSelected, onSelectionChange, hasCaption, buildStage, fireSel: (k: string) => selCb?.(k) }
+  return { exportPng, addCutout, setImage, addSticker, addEmoji, addCaption, updateCaption, deleteSelected, onSelectionChange, hasCaption, buildStage, setBackground, fireSel: (k: string) => selCb?.(k) }
 })
 vi.mock('../compose', () => ({
   buildStage: h.buildStage,
@@ -32,6 +34,7 @@ beforeEach(() => {
   h.addSticker.mockClear(); h.addEmoji.mockClear(); h.addCaption.mockClear()
   h.updateCaption.mockClear(); h.deleteSelected.mockClear(); h.onSelectionChange.mockClear()
   h.hasCaption.mockReset(); h.hasCaption.mockReturnValue(false)
+  h.setBackground.mockClear()
   // happy-dom does not fire <img> onload for blob: URLs, so Composer's
   // blobToImage() would hang forever. Stub Image to resolve on the next tick.
   vi.stubGlobal('Image', class {
@@ -253,5 +256,39 @@ describe('Composer.vue', () => {
     expect(w.emitted('export')).toBeUndefined()
     const payload = w.emitted('fallback')?.[0]?.[0] as Blob
     expect(payload).toBeInstanceOf(Blob)
+  })
+
+  it('renders the background picker', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    expect(w.find('[data-testid="bg-none"]').exists()).toBe(true)
+    expect(w.find('[data-testid="bg-terminal"]').exists()).toBe(true)
+  })
+
+  it('picking a scene sets it on the stage and forces removeBg on', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: false, segmenting: false, ...base } })
+    await flushPromises()
+    await w.find('[data-testid="bg-terminal"]').trigger('click')
+    await flushPromises()
+    expect(h.setBackground).toHaveBeenCalledTimes(1) // an <img> was loaded + set
+    expect(w.emitted('update:removeBg')?.[0]?.[0]).toBe(true) // forced on
+  })
+
+  it('picking None clears the stage background', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    await w.find('[data-testid="bg-terminal"]').trigger('click'); await flushPromises()
+    h.setBackground.mockClear()
+    await w.find('[data-testid="bg-none"]').trigger('click'); await flushPromises()
+    expect(h.setBackground).toHaveBeenCalledWith(null)
+  })
+
+  it('picking cartoon forwards effect: cartoon to exportPng', async () => {
+    const w = mount(Composer, { props: { rawPhoto: raw, cutout: cut, removeBg: true, segmenting: false, ...base } })
+    await flushPromises()
+    await w.find('[data-testid="effect-cartoon"]').trigger('click')
+    await w.find('[data-testid="export"]').trigger('click')
+    await flushPromises()
+    expect(h.exportPng).toHaveBeenCalledWith({ effect: 'cartoon', border: undefined })
   })
 })

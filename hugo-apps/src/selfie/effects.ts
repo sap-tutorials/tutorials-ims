@@ -3,7 +3,7 @@
 // and an authoritative Canvas-2D bake applied to the export composite. The Konva
 // stage is never mutated — switching or clearing an effect just resets a ref.
 
-export type EffectId = 'none' | 'duotone' | 'warm' | 'mono' | 'vignette' | 'joule'
+export type EffectId = 'none' | 'duotone' | 'warm' | 'mono' | 'vignette' | 'joule' | 'cartoon'
 
 export interface Effect {
   label: string
@@ -112,10 +112,15 @@ export const EFFECTS: Record<EffectId, Effect> = {
       return canvas
     },
   },
+  cartoon: {
+    label: 'Cartoon',
+    preview: {}, // no CSS approximation — the ONNX bake only materializes at export
+    apply: (canvas) => canvas, // sync no-op; async bake lives in applyEffectAsync/cartoonify
+  },
 }
 
 // Picker order — the control renders effects in this sequence; 'none' is first.
-export const EFFECT_IDS: EffectId[] = ['none', 'duotone', 'warm', 'mono', 'vignette', 'joule']
+export const EFFECT_IDS: EffectId[] = ['none', 'duotone', 'warm', 'mono', 'vignette', 'joule', 'cartoon']
 
 // Pure dispatcher. Returns the input canvas unchanged for 'none', an unknown id, a
 // missing 2D context, or ANY thrown error inside apply(). Fail-soft.
@@ -128,4 +133,17 @@ export function applyEffect(canvas: HTMLCanvasElement, id: EffectId): HTMLCanvas
     console.warn('[selfie] effect failed', id, e)
     return canvas
   }
+}
+
+import { cartoonify } from './stylize'
+
+// Async effect dispatcher. 'cartoon' runs the in-browser ONNX style transfer;
+// every other id delegates to the synchronous applyEffect. Fail-soft: a failed
+// cartoonify returns the input canvas (cartoonify already guards internally; the
+// try/catch is belt-and-braces, matching applyEffect's outer guard).
+export async function applyEffectAsync(canvas: HTMLCanvasElement, id: EffectId): Promise<HTMLCanvasElement> {
+  if (id === 'cartoon') {
+    try { return await cartoonify(canvas) } catch { return canvas }
+  }
+  return applyEffect(canvas, id)
 }

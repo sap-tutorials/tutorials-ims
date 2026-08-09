@@ -97,3 +97,11 @@
 .selfie-effect-controls { display: inline-flex; flex-wrap: wrap; gap: .35rem; }
 .selfie-effect-btn { background: var(--sapButton_Background, #fff); color: var(--sapButton_TextColor, #0070f2); border: 1px solid var(--sapButton_BorderColor, #0070f2); }
 .selfie-effect-btn.is-active { background: var(--sapButton_Emphasized_Background, #0070f2); color: #fff; }
+
+/* ---- Background scene picker (#1520) ---- */
+.selfie-bg-controls { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.selfie-bg-btn { background: var(--sapButton_Background, #fff); color: var(--sapButton_TextColor, #0070f2); border: 1px solid var(--sapButton_BorderColor, #0070f2); }
+.selfie-bg-btn.is-active { background: var(--sapButton_Emphasized_Background, #0070f2); color: #fff; }
+.selfie-bg-thumb { cursor: pointer; padding: 0; width: 48px; height: 48px; border: 2px solid transparent; border-radius: 8px; overflow: hidden; background: var(--sapTile_Background, #fff); }
+.selfie-bg-thumb.is-active { border-color: var(--sapButton_Emphasized_Background, #0070f2); }
+.selfie-bg-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }

@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { EFFECTS, EFFECT_IDS, applyEffect, type EffectId } from '../effects'
+import { EFFECTS, EFFECT_IDS, applyEffect, applyEffectAsync, type EffectId } from '../effects'
+
+vi.mock('../stylize', () => ({ cartoonify: vi.fn(async (c: HTMLCanvasElement) => ({ ...c, _cartooned: true } as unknown as HTMLCanvasElement)) }))
 
 // Spy 2D context capturing the calls each effect's apply() makes.
 function makeCtx() {
@@ -33,8 +35,8 @@ function composite(w = 1000, h = 1000): HTMLCanvasElement {
 beforeEach(() => { ctx = makeCtx(); ctxIsNull = false })
 
 describe('effects table', () => {
-  it('lists none first and exposes exactly the six presets in order', () => {
-    expect(EFFECT_IDS).toEqual(['none', 'duotone', 'warm', 'mono', 'vignette', 'joule'])
+  it('lists none first and exposes every preset in order', () => {
+    expect(EFFECT_IDS).toEqual(['none', 'duotone', 'warm', 'mono', 'vignette', 'joule', 'cartoon'])
     expect(EFFECT_IDS[0]).toBe('none')
     for (const id of EFFECT_IDS) {
       expect(typeof EFFECTS[id].label).toBe('string')
@@ -125,5 +127,27 @@ describe('applyEffect fail-soft', () => {
     const spy = vi.spyOn(EFFECTS.duotone, 'apply').mockImplementation(() => { throw new Error('boom') })
     expect(applyEffect(c, 'duotone')).toBe(c)
     spy.mockRestore()
+  })
+})
+
+describe('applyEffectAsync', () => {
+  it('routes cartoon through cartoonify', async () => {
+    const { cartoonify } = await import('../stylize')
+    const c = composite()
+    await applyEffectAsync(c, 'cartoon')
+    expect(cartoonify).toHaveBeenCalledWith(c)
+  })
+
+  it('delegates non-cartoon ids to the sync applyEffect (none returns the input unchanged)', async () => {
+    const c = composite()
+    const out = await applyEffectAsync(c, 'none')
+    expect(out).toBe(c) // none is a no-op in both paths
+  })
+
+  it('fail-soft: returns the input canvas when cartoonify throws', async () => {
+    const { cartoonify } = await import('../stylize')
+    ;(cartoonify as unknown as { mockRejectedValueOnce: (e: Error) => void }).mockRejectedValueOnce(new Error('boom'))
+    const c = composite()
+    expect(await applyEffectAsync(c, 'cartoon')).toBe(c)
   })
 })

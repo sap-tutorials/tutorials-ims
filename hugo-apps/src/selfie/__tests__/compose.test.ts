@@ -7,6 +7,9 @@ let frameDims = { w: 1080, h: 1080 }
 
 const addMock = vi.fn()
 const layerAddMock = vi.fn()
+// Records every Konva.Layer instance in construction order so tests can assert
+// which layer is first (bottom-most) and inspect its per-instance add calls.
+const layers: any[] = []
 const toBlobMock = vi.fn((opts: any) => opts.callback(new Blob(['png'], { type: 'image/png' })))
 const stageCtorArgs: any[] = []
 const imageCtorArgs: any[] = []
@@ -34,7 +37,12 @@ vi.mock('konva', () => {
     }))
     width() { return this._w } height() { return this._h }
   }
-  class Layer { add = layerAddMock; draw = vi.fn(); batchDraw = vi.fn(); listening = vi.fn() }
+  class Layer {
+    _addCalls: any[] = []
+    add = vi.fn((node: any) => { this._addCalls.push(node); layerAddMock(node) })
+    draw = vi.fn(); batchDraw = vi.fn(); listening = vi.fn()
+    constructor() { layers.push(this) }
+  }
   class KImage {
     _listening = true
     _image: any = null
@@ -93,8 +101,12 @@ vi.mock('../polaroid', () => ({
 }))
 
 const applyEffectMock = vi.fn((canvas: any) => canvas)
+// Async dispatcher mock — delegates to applyEffectMock so existing assertions on it
+// continue to hold (invocationCallOrder, call args) without touching those tests.
+const applyEffectAsyncMock = vi.fn(async (canvas: any, id: any) => applyEffectMock(canvas, id))
 vi.mock('../effects', () => ({
   applyEffect: (c: any, id: any) => applyEffectMock(c, id),
+  applyEffectAsync: (c: any, id: any) => applyEffectAsyncMock(c, id),
 }))
 
 import { buildStage } from '../compose'
@@ -105,9 +117,11 @@ beforeEach(() => {
   addMock.mockClear(); layerAddMock.mockClear()
   stageCtorArgs.length = 0; imageCtorArgs.length = 0
   imageListeningCalls.length = 0; transformers.length = 0
+  layers.length = 0
   lastCutoutNode = null
   paintPolaroidMock.mockClear()
   applyEffectMock.mockClear()
+  applyEffectAsyncMock.mockClear()
 })
 
 function fakeImg(w: number, h: number): HTMLImageElement {
@@ -284,6 +298,87 @@ describe('compose.buildStage', () => {
     expect(paintPolaroidMock).toHaveBeenCalledTimes(1)
     // effect runs first: its invocation order precedes paintPolaroid's
     expect(applyEffectMock.mock.invocationCallOrder[0])
+      .toBeLessThan(paintPolaroidMock.mock.invocationCallOrder[0])
+  })
+})
+
+describe('setBackground', () => {
+  it('adds a background layer to the stage BEFORE the cutout layer (bottom-most)', async () => {
+    await buildStage(document.createElement('div'), '/f.png')
+    // layers[] records every Konva.Layer in construction order.
+    // The bgLayer must be added to the stage first — index 0 in addMock.calls.
+    // addMock records each layer passed to stage.add() in call order.
+    const layersAddedToStage = addMock.mock.calls.map((c) => c[0])
+    // bgLayer is the first layer added to the stage (bottom-most).
+    expect(layersAddedToStage[0]).toBe(layers[0])
+  })
+
+  it('setBackground(img) adds one Konva.Image sized to the full stage, listening(false)', async () => {
+    frameDims = { w: 1080, h: 1080 }
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const bgLayer = layers[0]
+    const img = fakeImg(800, 600)
+    stage.setBackground(img)
+    // One image node added to bgLayer
+    expect(bgLayer._addCalls).toHaveLength(1)
+    // Node was constructed with the stage dimensions and listening:false
+    const nodeCfg = imageCtorArgs.find((c) => c.image === img)
+    expect(nodeCfg).toBeDefined()
+    expect(nodeCfg.x).toBe(0)
+    expect(nodeCfg.y).toBe(0)
+    expect(nodeCfg.width).toBe(1080)
+    expect(nodeCfg.height).toBe(1080)
+    expect(nodeCfg.listening).toBe(false)
+  })
+
+  it('setBackground(img) called twice replaces the node, not stacks it', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const bgLayer = layers[0]
+    const img1 = fakeImg(800, 600)
+    const img2 = fakeImg(800, 600)
+    stage.setBackground(img1)
+    const firstNode = bgLayer._addCalls[0]
+    stage.setBackground(img2)
+    // First node was destroyed
+    expect(firstNode.destroy).toHaveBeenCalled()
+    // bg layer has exactly one image node (the replacement)
+    expect(bgLayer._addCalls).toHaveLength(2)
+    // The second node uses img2
+    const secondNodeCfg = imageCtorArgs.find((c) => c.image === img2)
+    expect(secondNodeCfg).toBeDefined()
+  })
+
+  it('setBackground(null) clears the background node', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const bgLayer = layers[0]
+    const img = fakeImg(800, 600)
+    stage.setBackground(img)
+    const node = bgLayer._addCalls[0]
+    stage.setBackground(null)
+    // The node was destroyed
+    expect(node.destroy).toHaveBeenCalled()
+    // No further nodes added to bg layer after null
+    expect(bgLayer._addCalls).toHaveLength(1)
+  })
+})
+
+describe('exportPng cartoon path', () => {
+  it('takes the canvas (not fast) path for cartoon and awaits applyEffectAsync', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    const out = await stage.exportPng({ effect: 'cartoon' })
+    expect(out).toBeInstanceOf(Blob)
+    // applyEffectAsync must be called with the toCanvas() result and id 'cartoon'
+    expect(applyEffectAsyncMock).toHaveBeenCalledTimes(1)
+    expect(applyEffectAsyncMock.mock.calls[0][1]).toBe('cartoon')
+  })
+
+  it('bakes the effect BEFORE the polaroid border (order preserved)', async () => {
+    const stage = await buildStage(document.createElement('div'), '/f.png')
+    await stage.exportPng({ effect: 'mono', border: { style: 'classic', name: '' } })
+    expect(applyEffectAsyncMock).toHaveBeenCalledTimes(1)
+    expect(paintPolaroidMock).toHaveBeenCalledTimes(1)
+    // effect must resolve before paintPolaroid is invoked
+    expect(applyEffectAsyncMock.mock.invocationCallOrder[0])
       .toBeLessThan(paintPolaroidMock.mock.invocationCallOrder[0])
   })
 })
