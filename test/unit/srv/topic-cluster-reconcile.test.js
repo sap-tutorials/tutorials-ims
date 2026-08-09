@@ -55,4 +55,31 @@ describe('reconcile', () => {
     const slugs = upserts.map(u => u.slug).sort();
     expect(slugs).toEqual(['sap-build', 'sap-build-2']);
   });
+
+  it('prevents double-match: higher-Jaccard community keeps existing slug, second mints new', () => {
+    const existing = [{ slug: 'data-platform', fingerprint: 'X', previousFingerprints: '', status: 'ACTIVE', memberSlugs: ['t1','t2','t3'] }];
+    const communities = [
+      { fingerprint: 'A', label: 'Data Platform', memberSlugs: ['t1','t2','t3','t4'], memberCount: 4, tutorialCount: 4 },
+      { fingerprint: 'B', label: 'Data Analytics', memberSlugs: ['t1','t2'], memberCount: 2, tutorialCount: 2 },
+    ];
+    const { upserts, retired } = reconcile({ existing, communities, threshold: 0.4 });
+    expect(retired).toEqual([]);
+    expect(upserts).toHaveLength(2);
+    const keptSlug = upserts.find(u => u.slug === 'data-platform');
+    const mintedSlug = upserts.find(u => u.slug === 'data-analytics');
+    expect(keptSlug).toBeDefined();
+    expect(keptSlug.fingerprint).toBe('A');
+    expect(mintedSlug).toBeDefined();
+    expect(mintedSlug.fingerprint).toBe('B');
+  });
+
+  it('chains multi-generation fingerprint history', () => {
+    const existing = [{ slug: 'data-stack', fingerprint: 'FP2', previousFingerprints: 'FP1', status: 'ACTIVE', memberSlugs: ['t1','t2'] }];
+    const communities = [{ fingerprint: 'FP3', label: 'Data Stack', memberSlugs: ['t1','t2','t3'], memberCount: 3, tutorialCount: 3 }];
+    const { upserts } = reconcile({ existing, communities, threshold: 0.4 });
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].slug).toBe('data-stack');
+    expect(upserts[0].fingerprint).toBe('FP3');
+    expect(upserts[0].previousFingerprints).toBe('FP1\nFP2');
+  });
 });
