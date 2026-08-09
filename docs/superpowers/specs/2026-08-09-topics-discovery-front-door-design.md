@@ -3,9 +3,16 @@
 **Date:** 2026-08-09
 **Status:** Approved (design), pending implementation plan
 **Author:** Tom + Claude (brainstorming session)
-**Related:** #1327 (concepts moved to CAP), #917/#1126 (Louvain communities + labels), #916 (PageRank), #918 (WCC isolation), #985 (community fingerprint), `/explore/` graph app
+**Related:** #1327 (concepts moved to CAP), #917/#1126 (Louvain communities + labels), #916 (PageRank), #918 (WCC isolation), #985 (community fingerprint), #1170 (homepage "Explore topic clusters" band), #1032 (featured-topics carousel), `/explore/` graph app
 
 ---
+
+## Decisions locked after codebase recon (2026-08-09)
+
+- **Route:** `/topics/` (front door) + `/topics/<cluster>/` (cluster detail). Confirmed free — no existing route, Hugo content dir, or CAP entity collides. Caveat: a legacy redirect `^/topics/([^/]+)\.html$` → `/tags/$1/` exists, so cluster slugs must not collide with a bare `<name>.html` shape (they won't — detail pages are `/topics/<slug>/`, not `.html`).
+- **Rendering model = Hugo-bake (Model B), NOT CAP/HANA.** This *reverses* the original brainstorm assumption that `/topics/` would mirror `/concepts/`'s `ContentFiles` publish/serve model. Rationale: the data is ~18–60 clusters updated at most nightly (vs 5,946 per-request-fresh concepts), and the sibling #1170 band + `/explore/` already use the build-time-baked model. So: nightly job → `/build/*` JSON feed → `scripts/fetch-*.ts` → `hugo/data/*.json` → Hugo layouts bake the gallery + all cluster-detail pages statically; Vue islands (Sigma map, filter) hydrate. `/topics/` falls through the approuter catch-all to Hugo static — **no approuter route change needed.**
+- **Relationship to #1170:** the existing homepage "Explore topic clusters" band (6-cluster teaser, `build-topic-clusters.js`) stays. It gains a "See all topics →" link into the new `/topics/` front door. The new gallery uses a **new builder** (`build-topics-gallery.js`) reusing #1170's KG read patterns (`KgCommunityLabel` → `KgCommunitySummaryV` → `KgCommunity` → `Tutorials`) but without the 6-cluster cap. `build-topic-clusters.js` is left untouched so its #1170 hybrid-test contract is preserved.
+- **Naming caution:** "topic clusters" / "featured topics" strings are already in active use (homepage band, `/build/topic-clusters`, `/build/featured-topics`, `fetch-topic-clusters`, CSS `hp-topic-clusters`, #1032 carousel). New files/CSS/scripts use distinct names (`topics-gallery`, `topics-map`, `.topics-*`) to avoid confusion.
 
 ## Problem
 
@@ -155,9 +162,10 @@ entity TopicClusters {
 
 This mirrors the KG's existing *identity-across-recompute* patterns (concept merge-on-write cosine matching; community label `memberSlugsHash` skip-keys).
 
-**Rendering strategy — match the existing split:**
-- **Gallery + cluster detail pages** → pre-rendered into HANA `ContentFiles` as `topic-<slug>` BLOBs by a **publish step**, served by the same `serveHandler` plumbing that serves `/tutorials/` and `/concepts/<slug>`. SSR/SEO/no-JS for free; consistent with how the platform already works.
-- **Cluster map + expand-in-place** → the two new JSON endpoints (`/graph/clusters-data`, per-cluster subgraph) consumed by a Vue island. Progressive enhancement.
+**Rendering strategy — Hugo-bake (Model B), matching #1170 + `/explore/`:**
+- **Nightly job** writes the `TopicClusters` sidecar (stable slug ↔ current fingerprint) → the gallery/detail data is exposed via a **`/build/topics-gallery` JSON feed** (new builder `build-topics-gallery.js`, reusing #1170's KG read patterns) → **`scripts/fetch-topics-gallery.ts`** writes `hugo/data/topics_gallery.json` at build time → **Hugo layouts** bake the gallery page (`/topics/`) and every cluster-detail page (`/topics/<slug>/`) as static HTML. SSR/SEO/no-JS for free.
+- **Cluster map + expand-in-place** → new JSON endpoint(s) (`/graph/clusters-data` for super-nodes + inter-cluster edges; per-cluster subgraph) consumed by a new Sigma-based Vue island (`hugo-apps/src/topics-map/`), reusing `/explore/`'s graphology + Sigma + ForceAtlas2 stack. Progressive enhancement — if the island fails, the baked gallery is fully functional.
+- **No approuter route change** — `/topics/` and `/topics/<slug>/` fall through the approuter catch-all (`^(.*)$` → static) to Hugo-generated pages, exactly like `/explore/`.
 
 **Admin surface:** a cluster admin view to override labels (`curatedLabel`), hide junk clusters, and inspect reconciliation history — reusing the existing `#kgCommunities` FE app pattern.
 
@@ -174,9 +182,9 @@ This mirrors the KG's existing *identity-across-recompute* patterns (concept mer
 - Retired cluster slug → 301 to gallery or "this topic was reorganized" notice.
 
 **Testing:**
-- **Unit** — reconciliation Jaccard matching; topo-sort + fallback ordering; gallery model build; cluster-card selection (top concepts by PageRank).
-- **Hybrid** (real HANA via `cds bind`) — publish `topic-<slug>` BLOBs; `/graph/clusters-data` endpoint shape; reconciliation against real community data.
-- **Smoke** — `/topics/` returns 200 with SSR content; a `/topics/<slug>/` returns 200.
+- **Unit** — reconciliation Jaccard matching; topo-sort + fallback ordering; gallery builder model build; cluster-card selection (top concepts by PageRank); `build-topics-gallery.js` payload shape; Hugo layout template assertions (like `topic-clusters-band.test.ts`).
+- **Hybrid** (real HANA via `cds bind`) — `/build/topics-gallery` feed against real community data; `/graph/clusters-data` endpoint shape; reconciliation against real KgCommunity data.
+- **Smoke** — `/topics/` returns 200 with baked gallery content; a `/topics/<slug>/` returns 200.
 - **E2E** (committed spec, per Tom's #1 rule + the e2e-nudge convention) — drive the real gallery → cluster detail → map → `/explore/` handoff in a browser.
 
 ---
@@ -187,24 +195,27 @@ This mirrors the KG's existing *identity-across-recompute* patterns (concept mer
 - `KgCommunity`, `KgCommunitySummaryV`, `KgCommunityLabel` (Louvain output).
 - `ConceptRank` / `TutorialRank` (PageRank sidecars).
 - `ConceptEdges`, `TutorialConceptLinks` (graph edges).
+- KG read patterns from `build-topic-clusters.js` (#1170) — reused, file untouched.
 - `PublishedConceptsWithAliases` (`$search` for fast-jump).
-- `ContentFiles` + `serveHandler` publish/serve plumbing.
-- `/explore/` Vue app + its viz library + `/graph/explore-data` / `/graph/path`.
-- `concepts-filter.js` island pattern.
+- `/explore/` Vue app + its Sigma/graphology/ForceAtlas2 stack + `/graph/explore-data` / `/graph/path`.
+- Build-time fetch → `hugo/data/*.json` → Hugo-bake pipeline (like #1170 / #1032 / `/explore/`).
+- `concepts-filter.js` island pattern + `hugo-apps/` island build config.
 - `#kgCommunities` FE app pattern (for the new admin view).
 - Existing `/concepts/<slug>` pages (drill-down target, unchanged).
+- Nightly job chassis (`scheduler.js` + `cron-service.js`), metrics helper.
 
 **New:**
-- `/topics/` front door (gallery + map) — SSR pages + Vue island.
-- `/topics/<cluster>/` cluster detail pages — SSR.
-- `TopicClusters` entity + nightly reconciliation job.
+- Hugo layouts for `/topics/` gallery + `/topics/<slug>/` cluster detail (baked static).
+- `TopicClusters` entity + nightly reconciliation job (`kg-topic-clusters-job.js`).
+- `build-topics-gallery.js` + `/build/topics-gallery` feed + `scripts/fetch-topics-gallery.ts` → `hugo/data/topics_gallery.json`.
 - `GET /graph/clusters-data` (super-nodes + inter-cluster edges) + per-cluster subgraph endpoint.
+- `hugo-apps/src/topics-map/` Sigma island (cluster map, expand-in-place).
 - `/explore/` deep-link/pre-focus parameter.
-- Publish step for `topic-<slug>` BLOBs.
+- "See all topics →" link added to the #1170 homepage band.
 - Admin cluster view (label override, hide, reconciliation history).
 
 ---
 
 ## Open Item
 
-**Naming.** Working name is `/topics/`. Alternatives: `/learn/`, `/discover/`, `/explore-topics/`. To be decided before implementation (the route string threads through publish slugs, AppRouter config, and internal links, so pick once).
+_None._ Route name (`/topics/`) and rendering model (Hugo-bake) locked after recon — see "Decisions locked" at top.
