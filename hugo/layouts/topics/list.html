@@ -68,13 +68,11 @@
   </section>
   {{ end }}
 
-  {{- /* Map island mount point. Populated by /js/topics-map.js (Task 9).
-         Progressive enhancement: if the bundle is absent the section is
-         invisible (no height, no content). */ -}}
+  {{- /* Map island mount point. Populated by /js/topics-map.js (built by hugo-apps,
+         always present after npm run build:apps). Mount is inert until JS loads,
+         so no empty-state guard is needed here — same posture as concepts-filter.js. */ -}}
   <section id="topics-map" class="topics-map-section" data-vue-island="topics-map" aria-label="Topic map" aria-hidden="true"></section>
-  {{ with site.Data.topics_map_bundle }}
   <script type="module" src="/js/topics-map.js" defer></script>
-  {{ end }}
 
 </div>
 {{ end }}

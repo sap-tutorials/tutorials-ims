@@ -40,8 +40,10 @@ describe('topics/list.html — gallery page', () => {
     expect(listSrc).toContain('id="topics-map"');
   });
 
-  it('includes the topics-map island script (guarded by topics_map_bundle)', () => {
+  it('includes the topics-map island script unconditionally', () => {
     expect(listSrc).toContain('topics-map.js');
+    // Must NOT be gated behind a {{ with site.Data.topics_map_bundle }} guard.
+    expect(listSrc).not.toContain('topics_map_bundle');
   });
 
   it('has a search form pointing to /search/', () => {

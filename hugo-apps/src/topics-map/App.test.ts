@@ -32,10 +32,12 @@ describe('topics-map App', () => {
     expect(wrapper.exists()).toBe(true);
   });
 
-  it('degrades quietly when fetch fails', async () => {
+  it('degrades quietly when fetch fails — island container not rendered', async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('down'));
     const wrapper = mount(App, { props: { focusCluster: '' } });
     await new Promise((r) => setTimeout(r, 0));
-    expect(wrapper.exists()).toBe(true); // no throw
+    // The v-if="!failed && graphData" gate must suppress the container on error.
+    expect(wrapper.find('.topics-map-island').exists()).toBe(false);
+    expect(wrapper.exists()).toBe(true); // component itself still mounted, no throw
   });
 });
