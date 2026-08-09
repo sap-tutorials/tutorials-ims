@@ -2,6 +2,8 @@
 title: "U11 reading-progress demo"
 description: "Demo for reading-progress bar + scrollspy TOC (U11 prototype)."
 draft: false
+private: true
+robotsNoIndex: true
 ---
 
 # Reading-progress + scrollspy (U11)

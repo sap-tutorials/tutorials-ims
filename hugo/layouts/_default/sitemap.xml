@@ -2,7 +2,10 @@
 {{- printf "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>" | safeHTML }}
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 {{- range site.Pages }}
-{{- if and (not .Params.private) (ne .Kind "taxonomy") (ne .Kind "term") }}
+{{- /* The bare /tutorials/ section index is served by CAP (approuter routes
+       /tutorials/* to srv-api), so Hugo's generated section list page 404s and
+       must not appear in the sitemap. Individual tutorials are Kind "page". */ -}}
+{{- if and (not .Params.private) (ne .Kind "taxonomy") (ne .Kind "term") (not (and (eq .Kind "section") (eq .Type "tutorials"))) }}
   <url>
     <loc>{{ .Permalink }}</loc>
     {{- with .Lastmod }}<lastmod>{{ .Format "2006-01-02T15:04:05-07:00" }}</lastmod>{{ end }}
