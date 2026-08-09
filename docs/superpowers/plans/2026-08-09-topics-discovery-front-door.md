@@ -75,7 +75,7 @@
 - Test: `test/unit/srv/topic-clusters-model.test.js`
 
 **Interfaces:**
-- Produces: entity `com.sap.developers.ims.TopicClusters` with fields `slug` (key, String 80), `label` (String 120), `curatedLabel` (String 120, nullable), `fingerprint` (String 64), `previousFingerprints` (String 2000, newline-joined history), `status` (String 20, ACTIVE|RETIRED), `hidden` (Boolean default false), `memberCount` (Integer), `tutorialCount` (Integer), `computedAt` (Timestamp).
+- Produces: entity `com.sap.developers.ims.TopicClusters` with fields `slug` (key, String 80), `label` (String 120), `curatedLabel` (String 120, nullable), `rationale` (String 500), `fingerprint` (String 64), `previousFingerprints` (String 2000, newline-joined history), `status` (String 20, ACTIVE|RETIRED), `hidden` (Boolean default false), `memberCount` (Integer), `tutorialCount` (Integer), `computedAt` (Timestamp).
 
 - [ ] **Step 1: Write the failing test** (`test/unit/srv/topic-clusters-model.test.js`)
 
@@ -117,6 +117,7 @@ entity TopicClusters {
   key slug                 : String(80);   // stable, derived from label once, never changes
       label                : String(120);  // current LLM label (from KgCommunityLabel)
       curatedLabel         : String(120);  // optional admin override; wins over label at render
+      rationale            : String(500);  // LLM rationale (from KgCommunityLabel), carried forward nightly
       fingerprint          : String(64);   // CURRENT Louvain fingerprint this slug points to
       previousFingerprints : String(2000); // newline-joined history of prior fingerprints
       status               : String(20)  default 'ACTIVE';  // ACTIVE | RETIRED
@@ -126,6 +127,8 @@ entity TopicClusters {
       computedAt           : Timestamp;
 }
 ```
+
+Also add `expect(e.elements.rationale).toBeTruthy();` to the Step-1 test.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -413,8 +416,9 @@ const JACCARD_THRESHOLD = Number(process.env.KG_TOPIC_CLUSTERS_JACCARD || '0.5')
 export async function _buildCommunitiesInput(db) {
   const { KgCommunity, KgCommunityLabel, KgCommunitySummaryV, TopicClusters } = cds.entities(NS);
 
-  const labels = await db.run(SELECT.from(KgCommunityLabel).columns('communityFingerprint', 'label'));
+  const labels = await db.run(SELECT.from(KgCommunityLabel).columns('communityFingerprint', 'label', 'rationale'));
   const labelByFp = new Map(labels.map((l) => [l.communityFingerprint, l.label]));
+  const rationaleByFp = new Map(labels.map((l) => [l.communityFingerprint, l.rationale || '']));
 
   const members = await db.run(SELECT.from(KgCommunity).columns('communityFingerprint', 'vertexType', 'slug'));
   const tutMembersByFp = new Map();   // fp -> Set(tutorial slugs, lowercased)
@@ -443,6 +447,7 @@ export async function _buildCommunitiesInput(db) {
     communities.push({
       fingerprint: fp,
       label,
+      rationale: rationaleByFp.get(fp) || '',
       memberSlugs: [...tutSet],            // matching uses tutorial slugs (stable fingerprint basis)
       memberCount: allSet.size,
       tutorialCount: tutCountByFp.get(fp) || tutSet.size,
@@ -450,21 +455,24 @@ export async function _buildCommunitiesInput(db) {
   }
 
   const existingRows = await db.run(
-    SELECT.from(TopicClusters).columns('slug', 'fingerprint', 'previousFingerprints', 'status')
+    SELECT.from(TopicClusters).columns('slug', 'fingerprint', 'previousFingerprints', 'status', 'curatedLabel', 'hidden')
   );
   const existing = existingRows.map((r) => ({
     ...r,
     memberSlugs: [...(tutMembersByFp.get(r.fingerprint) || new Set())],
   }));
 
-  return { communities, existing };
+  // Overrides to carry across the nightly TRUNCATE (admin curatedLabel/hidden), keyed by stable slug.
+  const overridesBySlug = new Map(existingRows.map((r) => [r.slug, { curatedLabel: r.curatedLabel || null, hidden: !!r.hidden }]));
+
+  return { communities, existing, rationaleByFp, overridesBySlug };
 }
 
 export async function runKgTopicClusters() {
   const started = Date.now();
   const db = await cds.connect.to('db');
   try {
-    const { communities, existing } = await _buildCommunitiesInput(db);
+    const { communities, existing, rationaleByFp, overridesBySlug } = await _buildCommunitiesInput(db);
     const { upserts, retired } = reconcile({ existing, communities, threshold: JACCARD_THRESHOLD });
     const now = new Date().toISOString();
     const minted = upserts.filter((u) => !u.previousFingerprints).length;
@@ -473,11 +481,17 @@ export async function runKgTopicClusters() {
     await db.tx(async (tx) => {
       await tx.run(`TRUNCATE TABLE ${TABLE}`);
       const insertSql = `INSERT INTO ${TABLE}
-        ("SLUG","LABEL","CURATEDLABEL","FINGERPRINT","PREVIOUSFINGERPRINTS","STATUS","HIDDEN","MEMBERCOUNT","TUTORIALCOUNT","COMPUTEDAT")
-        VALUES (?,?,?,?,?,?,?,?,?,?)`;
+        ("SLUG","LABEL","CURATEDLABEL","RATIONALE","FINGERPRINT","PREVIOUSFINGERPRINTS","STATUS","HIDDEN","MEMBERCOUNT","TUTORIALCOUNT","COMPUTEDAT")
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`;
       const rows = [
-        ...upserts.map((u) => [u.slug, u.label, null, u.fingerprint, u.previousFingerprints, 'ACTIVE', false, u.memberCount, u.tutorialCount, now]),
-        ...retired.map((slug) => [slug, '', null, '', '', 'RETIRED', false, 0, 0, now]),
+        ...upserts.map((u) => {
+          const ov = overridesBySlug.get(u.slug) || { curatedLabel: null, hidden: false };
+          return [u.slug, u.label, ov.curatedLabel, rationaleByFp.get(u.fingerprint) || '', u.fingerprint, u.previousFingerprints, 'ACTIVE', ov.hidden, u.memberCount, u.tutorialCount, now];
+        }),
+        ...retired.map((slug) => {
+          const ov = overridesBySlug.get(slug) || { curatedLabel: null, hidden: false };
+          return [slug, '', ov.curatedLabel, '', '', '', 'RETIRED', ov.hidden, 0, 0, now];
+        }),
       ];
       for (let i = 0; i < rows.length; i += INSERT_BATCH_SIZE) {
         await tx.run(insertSql, rows.slice(i, i + INSERT_BATCH_SIZE));
@@ -909,7 +923,7 @@ export async function buildTopicsGalleryHandler(_req, res) {
 export default { buildTopicsGalleryPayload, buildTopicsGalleryHandler };
 ```
 
-> NOTE: `rationale` is on `KgCommunityLabel`, not `TopicClusters`. The implementer must either (a) add `rationale` to the `TopicClusters` sidecar in the Task 1 entity + Task 3 job (simplest — carry it forward nightly), or (b) join `KgCommunityLabel` by fingerprint here. **Prefer (a)** — add `rationale : String(500)` to `TopicClusters`, populate it in the job from `labelByFp`, and update the Task 1 test. Adjust this builder to read `c.rationale` directly. Make this entity/job change as the first sub-step of this task and re-run Task 1/3 tests.
+> NOTE: `rationale` is now a real column on `TopicClusters` (Task 1), populated nightly by the job from `KgCommunityLabel` (Task 3). Read `c.rationale` directly — no join needed here.
 
 - [ ] **Step 4: Register the route** (`srv/server.js`)
 
@@ -1552,7 +1566,7 @@ git commit -m "feat(explore): ?focus= deep-link pre-focuses camera for topics ha
   - `action setTopicClusterHidden(slug: String(80), hidden: Boolean) returns Boolean;`
 - Handlers write `curatedLabel` / `hidden` directly on `TopicClusters` via `UPDATE` (these two columns survive the nightly TRUNCATE only if the job preserves them — see NOTE).
 
-> IMPORTANT NOTE (state survival): the nightly job TRUNCATE+INSERTs `TopicClusters`, which would wipe admin `curatedLabel`/`hidden` overrides. FIX: the job must read the PRIOR `curatedLabel`/`hidden` per slug (it already reads existing rows for reconciliation) and carry them forward into the new rows for slugs that persist. Add this to the Task 3 job: when building `existing`, also select `curatedLabel, hidden`; in the write step, for each upsert whose slug matched an existing row, use the prior `curatedLabel`/`hidden` instead of null/false. Update the Task 3 hybrid test to assert an override survives a re-run. **This task depends on that job change — make it here and re-run Task 3 tests.**
+> IMPORTANT NOTE (state survival): the nightly job TRUNCATE+INSERTs `TopicClusters`, which would wipe admin `curatedLabel`/`hidden` overrides. The Task 3 job **already** carries these forward (it reads `curatedLabel, hidden` into `overridesBySlug` and re-applies them per persisting slug). This task's job responsibility is only to **add a hybrid assertion** that an override survives a re-run (Step 5) — the carry-forward code already exists. If for any reason the Task 3 job as-built lacks `overridesBySlug`, add it here and re-run Task 3 tests.
 
 - [ ] **Step 1: Write the failing test** (`test/unit/srv/admin-topic-clusters.test.js`)
 
@@ -1640,9 +1654,9 @@ this.on('setTopicClusterHidden', async (req) => {
 });
 ```
 
-- [ ] **Step 5: Update the Task 3 job to carry forward curatedLabel/hidden** (state survival)
+- [ ] **Step 5: Verify the Task 3 job carries curatedLabel/hidden across re-runs** (state survival)
 
-In `_buildCommunitiesInput`, add `curatedLabel, hidden` to the existing-rows SELECT and expose an `overridesBySlug` Map. In `runKgTopicClusters`, when inserting an upsert whose slug matched an existing row, use the prior `curatedLabel`/`hidden`. Add to the Task 3 hybrid test: set an override, re-run the job, assert it survived.
+The Task 3 job already reads `curatedLabel, hidden` into `overridesBySlug` and re-applies them per persisting slug. Confirm that code is present. Add to the Task 3 hybrid test (`test/hybrid/topic-clusters-job-hybrid.test.js`): set `curatedLabel`/`hidden` on one slug via `UPDATE`, re-run `runKgTopicClusters()`, assert both survived. If `overridesBySlug` is somehow absent from the built job, add it (per the Task 3 code) and re-run Task 3 tests.
 
 - [ ] **Step 6: Run tests to verify they pass**
 
