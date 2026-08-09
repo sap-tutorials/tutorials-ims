@@ -451,6 +451,24 @@ jobs:
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm --prefix hugo-apps run build
 
+      # Stage the vendored WASM/model bundles into hugo/static/vendor/ BEFORE the
+      # Hugo build below. These dirs (mediapipe, imgly, animegan) are gitignored
+      # (.gitignore) so they are ABSENT on the clean CI runner, and this workflow
+      # runs `npm --prefix hugo-apps run build` (NOT `npm run build:apps`, which
+      # chains vendor:*), so nothing here regenerates them. Without this step the
+      # Hugo build ships a vendor-less static/, the tarball is pushed to
+      # /admin/rebuild, and approuter/server.js atomically renames it over the
+      # previously-good static/ — wiping the /vendor/* that the last mbt deploy
+      # shipped. Symptom: 404 on /vendor/mediapipe/vision_wasm_internal.js when
+      # activating the camera (root-caused 2026-08-09). Same failure class as the
+      # copy-joule-vendor (#350) and build:explore (#726/#744) retrofits below.
+      - name: Build vendor WASM bundles
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        run: |
+          npm run vendor:mediapipe
+          npm run vendor:imgly
+          npm run vendor:animegan
+
       # Build the /explore Vue/Sigma bundle AND emit hugo/data/explore_bundle.json
       # BEFORE the Hugo build below. Hugo reads site.Data.explore_bundle at
       # render time (hugo/layouts/explore/single.html); if the manifest is
