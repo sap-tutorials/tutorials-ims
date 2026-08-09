@@ -2,6 +2,8 @@
 title: "U9 glossary demo"
 description: "Demo page for inline SAP-acronym tooltips (U9 prototype)."
 draft: false
+private: true
+robotsNoIndex: true
 ---
 
 # Inline glossary tooltips (U9)

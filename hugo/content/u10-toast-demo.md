@@ -2,6 +2,8 @@
 title: "U10 toast demo"
 description: "Demo page for ui5-toast step-completion feedback (U10 prototype)."
 draft: false
+private: true
+robotsNoIndex: true
 ---
 
 # Step-completion toast (U10)
