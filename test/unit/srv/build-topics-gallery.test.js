@@ -34,4 +34,16 @@ describe('buildTopicsGalleryPayload', () => {
     expect(payload.clusters.hana).toBeTruthy();
     expect(payload.clusters.hana.concepts.map((x) => x.slug)).toContain('hana-sql');
   });
+
+  it('fail-open catch branch returns static token, never leaks error details', async () => {
+    const secret = 'INTERNAL SQL: SELECT * FROM SECRET_TABLE at /var/secret/path';
+    // A db whose .run() throws forces the catch branch in buildTopicsGalleryPayload.
+    const throwingDb = { run: async () => { throw new Error(secret); } };
+    const payload = await build.buildTopicsGalleryPayload(throwingDb);
+    expect(payload.gallery).toEqual([]);
+    expect(payload.clusters).toEqual({});
+    expect(payload.error).toBe('topics_gallery_build_failed');
+    expect(payload.error).not.toContain(secret);
+    expect(payload).toHaveProperty('buildAt');
+  });
 });
