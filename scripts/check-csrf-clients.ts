@@ -117,6 +117,15 @@ const ROOTS = [
   // the #953 follow-up: joule.js was doing an unauthenticated POST /chat/stream
   // that broke silently once #895 flipped CSRF on for every XSUAA route.
   { glob: 'hugo/static/js/**/*.js', flavour: 'hugo-static' as const },
+  // TS bundled by Hugo's `js.Build` (esbuild) from hugo/assets/js. Unlike the
+  // plain hugo/static JS above, these CAN import a sibling module — the shared
+  // csrfFetch canonical source lives at `hugo/assets/js/csrf-fetch.ts` so a
+  // `./csrf-fetch` import resolves under esbuild (which has no Hugo module
+  // mounts and only sees siblings + node_modules). Treated like the Vite
+  // bundles: mutating fetches must import csrfFetch. This root was added after
+  // tutorial.ts's `apiPost` shipped an unauthenticated POST /api/completeStep
+  // that 403'd — the guard previously never scanned hugo/assets/js.
+  { glob: 'hugo/assets/js/**/*.ts', flavour: 'hugo-assets' as const },
 ];
 
 // Files that legitimately don't need CSRF because they only ever call
@@ -232,7 +241,7 @@ function isAnonymousUrl(url: string | null): boolean {
 function scanClientFile(
   absPath: string,
   relPath: string,
-  flavour: 'hugo-app' | 'analytics-explorer' | 'admin-ext' | 'scanner' | 'hugo-static',
+  flavour: 'hugo-app' | 'analytics-explorer' | 'admin-ext' | 'scanner' | 'hugo-static' | 'hugo-assets',
 ): Violation[] {
   const content = readFileSync(absPath, 'utf8');
   const mutating = detectMutatingFetches(content, relPath);
@@ -250,11 +259,13 @@ function scanClientFile(
     // (see `csrf-exempt-anon:` handling in detectMutatingFetches).
     if (hit.exemptAnon) continue;
 
-    // Vite-bundled callers (hugo-app / analytics-explorer): must import
-    // csrfFetch. The regex-based detector doesn't guarantee THIS call went
-    // through csrfFetch, but the import is a strong signal + the guard is
-    // paired with the runtime smoke test.
-    if (flavour === 'hugo-app' || flavour === 'analytics-explorer') {
+    // Import-based callers that CAN reach the shared csrfFetch source:
+    //   - Vite bundles (hugo-app / analytics-explorer) via `@shared`/`../api`
+    //   - Hugo esbuild TS (hugo-assets) via the `./csrf-fetch` sibling
+    // All must import csrfFetch. The regex-based detector doesn't guarantee
+    // THIS call went through csrfFetch, but the import is a strong signal +
+    // the guard is paired with the runtime smoke test.
+    if (flavour === 'hugo-app' || flavour === 'analytics-explorer' || flavour === 'hugo-assets') {
       if (!hasImport) {
         violations.push({
           file: relPath,
@@ -262,7 +273,7 @@ function scanClientFile(
           method: hit.method,
           url: hit.url,
           reason:
-            'Mutating fetch() without an import of csrfFetch. Import from `@shared/csrf-fetch` (hugo-apps) or `../api/csrf-fetch` (analytics-explorer) and switch fetch() → csrfFetch(). See docs/superpowers/specs/2026-07-02-895-csrf-reenablement-design.md.',
+            'Mutating fetch() without an import of csrfFetch. Import from `@shared/csrf-fetch` (hugo-apps), `../api/csrf-fetch` (analytics-explorer), or `./csrf-fetch` (hugo/assets/js) and switch fetch() → csrfFetch(). See docs/superpowers/specs/2026-07-02-895-csrf-reenablement-design.md.',
         });
       }
       continue;
