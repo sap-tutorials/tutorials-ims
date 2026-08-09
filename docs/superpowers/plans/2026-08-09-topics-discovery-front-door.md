@@ -581,3 +581,602 @@ git commit -m "feat(topics): nightly TopicClusters reconciliation job (04:47 UTC
 ```
 
 **Phase 1 checkpoint:** `TopicClusters` populates nightly with stable slugs. Reconciliation is unit-tested (pure) and hybrid-tested (real data + idempotency). No user-facing surface yet.
+
+---
+
+## Phase 2 — Gallery data feed + Hugo-baked pages
+
+**Deliverable:** `/topics/` (gallery) and `/topics/<slug>/` (cluster detail with suggested path) render as baked static Hugo pages, data-driven from a `/build/topics-gallery` feed.
+
+### Task 4: Suggested-order path (pure topo-ish sort)
+
+**Files:**
+- Create: `srv/lib/topic-path-order.js`
+- Test: `test/unit/srv/topic-path-order.test.js`
+
+**Interfaces:**
+- Consumes: nothing (pure).
+- Produces: `orderConcepts({ concepts, requiresEdges, rankBySlug })` -> `{ ordered, mode }`:
+  - `concepts` = array `{ slug, name }` (a cluster's concept members).
+  - `requiresEdges` = array `{ source, target }` (concept slug pairs; `source requires target` -> target is a prerequisite, comes first).
+  - `rankBySlug` = Map(slug -> pagerank score) for tiebreak/fallback.
+  - Returns `ordered` = concepts sorted so prerequisites precede dependents (Kahn topological sort over the requires DAG restricted to in-cluster concepts); cycles broken by higher PageRank first. `mode` = `'path'` when the requires subgraph has enough edges (>= `max(2, floor(concepts.length/4))`), else `'ranked'` — in `'ranked'` mode `ordered` is pure PageRank-desc and the UI drops the "suggested order" framing (per spec: no fake precision).
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+import { describe, it, expect } from 'vitest';
+import { orderConcepts } from '../../../srv/lib/topic-path-order.js';
+
+const rank = new Map([['a',0.9],['b',0.5],['c',0.3],['d',0.1]]);
+
+describe('orderConcepts', () => {
+  it('puts prerequisites before dependents (path mode)', () => {
+    const concepts = [{slug:'a',name:'A'},{slug:'b',name:'B'},{slug:'c',name:'C'},{slug:'d',name:'D'}];
+    // c requires a; d requires c; b requires a  => a before b/c, c before d
+    const requiresEdges = [{source:'c',target:'a'},{source:'d',target:'c'},{source:'b',target:'a'}];
+    const { ordered, mode } = orderConcepts({ concepts, requiresEdges, rankBySlug: rank });
+    expect(mode).toBe('path');
+    const pos = (s) => ordered.findIndex((x) => x.slug === s);
+    expect(pos('a')).toBeLessThan(pos('c'));
+    expect(pos('c')).toBeLessThan(pos('d'));
+    expect(pos('a')).toBeLessThan(pos('b'));
+  });
+
+  it('falls back to PageRank order (ranked mode) when requires data is too thin', () => {
+    const concepts = [{slug:'a',name:'A'},{slug:'b',name:'B'},{slug:'c',name:'C'},{slug:'d',name:'D'}];
+    const requiresEdges = []; // no edges
+    const { ordered, mode } = orderConcepts({ concepts, requiresEdges, rankBySlug: rank });
+    expect(mode).toBe('ranked');
+    expect(ordered.map((x) => x.slug)).toEqual(['a','b','c','d']); // pagerank desc
+  });
+
+  it('breaks cycles by higher PageRank first without dropping nodes', () => {
+    const concepts = [{slug:'a',name:'A'},{slug:'b',name:'B'},{slug:'c',name:'C'}];
+    const requiresEdges = [{source:'a',target:'b'},{source:'b',target:'a'},{source:'c',target:'a'}]; // a<->b cycle
+    const { ordered } = orderConcepts({ concepts, requiresEdges, rankBySlug: rank });
+    expect(ordered).toHaveLength(3); // all present despite cycle
+    expect(new Set(ordered.map((x) => x.slug))).toEqual(new Set(['a','b','c']));
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/unit/srv/topic-path-order.test.js`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Write the implementation** (`srv/lib/topic-path-order.js`)
+
+```js
+// Pure suggested-order sort for a cluster's concepts.
+// Kahn topological sort over in-cluster `requires` edges; PageRank breaks ties
+// and cycles; falls back to pure PageRank order when the requires subgraph is thin.
+
+export function orderConcepts({ concepts = [], requiresEdges = [], rankBySlug = new Map() }) {
+  const inCluster = new Set(concepts.map((c) => c.slug));
+  const rank = (s) => rankBySlug.get(s) || 0;
+  const bySlug = new Map(concepts.map((c) => [c.slug, c]));
+
+  // Restrict edges to in-cluster concept pairs. source requires target => target first.
+  const edges = requiresEdges.filter((e) => inCluster.has(e.source) && inCluster.has(e.target) && e.source !== e.target);
+  const rankedFallback = [...concepts].sort((a, b) => rank(b.slug) - rank(a.slug));
+
+  const threshold = Math.max(2, Math.floor(concepts.length / 4));
+  if (edges.length < threshold) {
+    return { ordered: rankedFallback, mode: 'ranked' };
+  }
+
+  // Build indegree from prerequisite -> dependent (target -> source).
+  const dependents = new Map();  // prereq -> [dependents]
+  const indeg = new Map(concepts.map((c) => [c.slug, 0]));
+  for (const e of edges) {
+    if (!dependents.has(e.target)) dependents.set(e.target, []);
+    dependents.get(e.target).push(e.source);
+    indeg.set(e.source, (indeg.get(e.source) || 0) + 1);
+  }
+
+  // Kahn with a PageRank-desc ready queue (stable, deterministic).
+  const ready = concepts.filter((c) => (indeg.get(c.slug) || 0) === 0).map((c) => c.slug);
+  const pick = (arr) => { arr.sort((x, y) => rank(y) - rank(x)); return arr.shift(); };
+  const ordered = [];
+  const placed = new Set();
+  while (ready.length) {
+    const slug = pick(ready);
+    if (placed.has(slug)) continue;
+    placed.add(slug);
+    ordered.push(bySlug.get(slug));
+    for (const dep of dependents.get(slug) || []) {
+      indeg.set(dep, (indeg.get(dep) || 0) - 1);
+      if ((indeg.get(dep) || 0) <= 0 && !placed.has(dep)) ready.push(dep);
+    }
+  }
+  // Cycle remainder: append any unplaced concepts in PageRank-desc order.
+  for (const c of rankedFallback) if (!placed.has(c.slug)) { ordered.push(c); placed.add(c.slug); }
+
+  return { ordered, mode: 'path' };
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run test/unit/srv/topic-path-order.test.js`
+Expected: PASS (all 3).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add srv/lib/topic-path-order.js test/unit/srv/topic-path-order.test.js
+git commit -m "feat(topics): suggested-order topo sort with PageRank fallback"
+```
+
+---
+
+### Task 5: `/build/topics-gallery` feed builder
+
+**Files:**
+- Create: `srv/lib/build-topics-gallery.js`
+- Modify: `srv/server.js` (import ~line 29; register ~line 285 among `/build/*`)
+- Modify: `approuter/xs-app.json` (`/build/*` allowlist regex, ~line 383 — add `topics-gallery`)
+- Test: `test/unit/srv/build-topics-gallery.test.js` + `test/hybrid/topics-gallery-hybrid.test.js`
+
+**Interfaces:**
+- Consumes: `cds.entities(NS)` for `TopicClusters`, `KgCommunity`, `Concepts`, `ConceptEdges`, `Tutorials`; `loadRankMaps` from `../knowledge-graph-service.js`; `orderConcepts` from `./topic-path-order.js`.
+- Produces:
+  - `buildTopicsGalleryPayload(db)` -> `Promise<{ gallery, clusters, buildAt, error }>` where:
+    - `gallery` = array of cards `{ slug, label, rationale, memberCount, tutorialCount, topConcepts:[{slug,name}] }` (ACTIVE, non-hidden clusters, sorted by `tutorialCount * log(1+memberCount)` desc; top ~4 concepts by PageRank per card).
+    - `clusters` = map `slug -> { slug, label, rationale, memberCount, tutorialCount, orderMode, concepts:[{slug,name,rank}], peers:[{slug,label,weight}] }` (full detail for baking each `/topics/<slug>/`).
+    - `buildAt` = ISO string; `error` = null or `'topics_gallery_build_failed'`.
+  - `buildTopicsGalleryHandler(_req, res)` -> Express handler, `Cache-Control: public, max-age=60`, `res.json(payload)`.
+- Fail-open: any throw -> `{ gallery: [], clusters: {}, buildAt, error: 'topics_gallery_build_failed' }`.
+
+**Mechanics (from recon):**
+- `label = curatedLabel || label`. Concept members per cluster: `KgCommunity` where `communityFingerprint = cluster.fingerprint AND vertexType='concept'` (slugs lowercased). `rationale` from `KgCommunityLabel`.
+- PageRank via `loadRankMaps()` (`rankMaps.conceptRank`), fail-open to `[]`/no-sort.
+- Peer edges (for the detail page "topics that connect"): count `ConceptEdges` (status ACTIVE) whose source/target concepts fall in two different clusters; resolve concept `ID -> slug -> fingerprint -> cluster.slug`. Weight = crossing-edge count. Cap peers per cluster at 6, weight desc.
+- Suggested path via `orderConcepts({ concepts, requiresEdges: <in-cluster requires ConceptEdges>, rankBySlug })`.
+- Packet-safe: read `ConceptEdges`/`KgCommunity` unbounded and bucket in Node (5,946 concepts; matches `published-concepts-query.js` and coverage-chunk patterns) rather than `WHERE IN` over thousands of ids.
+
+- [ ] **Step 1: Write the failing unit test** (`test/unit/srv/build-topics-gallery.test.js`)
+
+Use `cds.test('serve','--project','.','--in-memory')` bootstrap (project rule). Seed a couple of `TopicClusters` + `KgCommunity` + `Concepts` rows, assert payload shape.
+
+```js
+import { describe, it, expect, beforeAll } from 'vitest';
+import cds from '@sap/cds';
+
+describe('buildTopicsGalleryPayload', () => {
+  let db, build;
+  beforeAll(async () => {
+    await cds.test('serve', '--project', '.', '--in-memory');
+    db = await cds.connect.to('db');
+    build = await import('../../../srv/lib/build-topics-gallery.js');
+    const { TopicClusters, KgCommunity, Concepts } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(TopicClusters).entries([
+      { slug: 'hana', label: 'HANA', curatedLabel: null, fingerprint: 'FP1', previousFingerprints: '', status: 'ACTIVE', hidden: false, memberCount: 2, tutorialCount: 5, computedAt: new Date().toISOString() },
+      { slug: 'hidden-one', label: 'Hidden', fingerprint: 'FP2', previousFingerprints: '', status: 'ACTIVE', hidden: true, memberCount: 1, tutorialCount: 1, computedAt: new Date().toISOString() },
+    ]);
+    await INSERT.into(Concepts).entries([
+      { ID: cds.utils.uuid(), slug: 'hana-sql', name: 'HANA SQL', status: 'ACTIVE' },
+    ]);
+    await INSERT.into(KgCommunity).entries([
+      { communityId: 1, vertexKey: 'concept:hana-sql', vertexType: 'concept', slug: 'hana-sql', detectedAt: new Date().toISOString(), communityFingerprint: 'FP1' },
+    ]);
+  });
+
+  it('returns ACTIVE non-hidden gallery cards with top concepts', async () => {
+    const payload = await build.buildTopicsGalleryPayload(db);
+    expect(payload.error).toBeNull();
+    const slugs = payload.gallery.map((c) => c.slug);
+    expect(slugs).toContain('hana');
+    expect(slugs).not.toContain('hidden-one'); // hidden excluded
+    const hana = payload.gallery.find((c) => c.slug === 'hana');
+    expect(hana.topConcepts.map((x) => x.slug)).toContain('hana-sql');
+    expect(payload.clusters.hana).toBeTruthy();
+    expect(payload.clusters.hana.concepts.map((x) => x.slug)).toContain('hana-sql');
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/unit/srv/build-topics-gallery.test.js`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Write the builder** (`srv/lib/build-topics-gallery.js`)
+
+Follow `build-topic-clusters.js` (the #1170 builder) for the `cds.entities(NS)` + fail-open shape. Key skeleton:
+
+```js
+import cds from '@sap/cds';
+import { orderConcepts } from './topic-path-order.js';
+import { loadRankMaps } from '../knowledge-graph-service.js';
+
+const NS = 'com.sap.developers.ims';
+const MAX_TOP_CONCEPTS = 4;
+const MAX_PEERS = 6;
+
+export async function buildTopicsGalleryPayload(db) {
+  const buildAt = new Date().toISOString();
+  try {
+    const { TopicClusters, KgCommunity, Concepts, ConceptEdges } = cds.entities(NS);
+
+    const clusters = await db.run(
+      SELECT.from(TopicClusters).where({ status: 'ACTIVE', hidden: false })
+    );
+    if (!clusters.length) return { gallery: [], clusters: {}, buildAt, error: null };
+
+    // fingerprint -> cluster
+    const clusterByFp = new Map(clusters.map((c) => [c.fingerprint, c]));
+
+    // concept memberships (all clusters at once, bucket in Node)
+    const conceptMembers = await db.run(
+      SELECT.from(KgCommunity).columns('communityFingerprint', 'slug').where({ vertexType: 'concept' })
+    );
+    const conceptSlugsByFp = new Map();
+    const fpBySlug = new Map();
+    for (const m of conceptMembers) {
+      const fp = m.communityFingerprint;
+      if (!clusterByFp.has(fp)) continue;
+      const slug = (m.slug || '').toLowerCase();
+      if (!slug) continue;
+      (conceptSlugsByFp.get(fp) || conceptSlugsByFp.set(fp, []).get(fp)).push(slug);
+      fpBySlug.set(slug, fp);
+    }
+
+    // concept names + rank
+    const allConceptSlugs = [...fpBySlug.keys()];
+    const conceptRows = allConceptSlugs.length
+      ? await db.run(SELECT.from(Concepts).columns('ID', 'slug', 'name').where({ slug: { in: allConceptSlugs } }))
+      : [];
+    const nameBySlug = new Map(conceptRows.map((r) => [(r.slug || '').toLowerCase(), r.name]));
+    const idToSlug = new Map(conceptRows.map((r) => [r.ID, (r.slug || '').toLowerCase()]));
+
+    let rankMaps = { conceptRank: new Map() };
+    try { rankMaps = await loadRankMaps(); } catch { /* fail-open: no ranks */ }
+    const rankBySlug = rankMaps.conceptRank || new Map();
+
+    // requires edges (ACTIVE) + inter-cluster peer weights
+    const edges = await db.run(
+      SELECT.from(ConceptEdges).columns('source_ID', 'target_ID', 'predicate').where({ status: 'ACTIVE' })
+    );
+    const requiresBySlugPair = [];
+    const peerWeight = new Map(); // `${aSlug}|${bSlug}` -> count
+    for (const e of edges) {
+      const s = idToSlug.get(e.source_ID);
+      const t = idToSlug.get(e.target_ID);
+      if (!s || !t) continue;
+      if (e.predicate === 'requires') requiresBySlugPair.push({ source: s, target: t });
+      const fpS = fpBySlug.get(s);
+      const fpT = fpBySlug.get(t);
+      if (fpS && fpT && fpS !== fpT) {
+        const cs = clusterByFp.get(fpS).slug;
+        const ct = clusterByFp.get(fpT).slug;
+        const key = cs < ct ? `${cs}|${ct}` : `${ct}|${cs}`;
+        peerWeight.set(key, (peerWeight.get(key) || 0) + 1);
+      }
+    }
+
+    // assemble per-cluster detail + gallery card
+    const labelOf = (c) => c.curatedLabel || c.label;
+    const clusterDetail = {};
+    const gallery = [];
+    for (const c of clusters) {
+      const memberSlugs = conceptSlugsByFp.get(c.fingerprint) || [];
+      const concepts = memberSlugs.map((s) => ({ slug: s, name: nameBySlug.get(s) || s, rank: rankBySlug.get(s) || 0 }));
+      const clusterRequires = requiresBySlugPair.filter((p) => memberSlugs.includes(p.source) && memberSlugs.includes(p.target));
+      const { ordered, mode } = orderConcepts({ concepts, requiresEdges: clusterRequires, rankBySlug });
+      const topConcepts = [...concepts].sort((a, b) => b.rank - a.rank).slice(0, MAX_TOP_CONCEPTS).map((x) => ({ slug: x.slug, name: x.name }));
+
+      const peers = [];
+      for (const [key, weight] of peerWeight) {
+        const [a, b] = key.split('|');
+        if (a === c.slug || b === c.slug) {
+          const otherSlug = a === c.slug ? b : a;
+          const other = clusters.find((x) => x.slug === otherSlug);
+          if (other) peers.push({ slug: otherSlug, label: labelOf(other), weight });
+        }
+      }
+      peers.sort((x, y) => y.weight - x.weight);
+
+      clusterDetail[c.slug] = {
+        slug: c.slug, label: labelOf(c), rationale: c.rationale || '',
+        memberCount: c.memberCount, tutorialCount: c.tutorialCount,
+        orderMode: mode, concepts: ordered.map((x) => ({ slug: x.slug, name: x.name })),
+        peers: peers.slice(0, MAX_PEERS),
+      };
+      gallery.push({
+        slug: c.slug, label: labelOf(c), rationale: c.rationale || '',
+        memberCount: c.memberCount, tutorialCount: c.tutorialCount, topConcepts,
+      });
+    }
+    gallery.sort((a, b) => (b.tutorialCount * Math.log(1 + b.memberCount)) - (a.tutorialCount * Math.log(1 + a.memberCount)));
+
+    return { gallery, clusters: clusterDetail, buildAt, error: null };
+  } catch (err) {
+    cds.log('build-topics-gallery').error('failed', err);
+    return { gallery: [], clusters: {}, buildAt, error: 'topics_gallery_build_failed' };
+  }
+}
+
+export async function buildTopicsGalleryHandler(_req, res) {
+  const db = await cds.connect.to('db');
+  const payload = await buildTopicsGalleryPayload(db);
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  res.json(payload);
+}
+
+export default { buildTopicsGalleryPayload, buildTopicsGalleryHandler };
+```
+
+> NOTE: `rationale` is on `KgCommunityLabel`, not `TopicClusters`. The implementer must either (a) add `rationale` to the `TopicClusters` sidecar in the Task 1 entity + Task 3 job (simplest — carry it forward nightly), or (b) join `KgCommunityLabel` by fingerprint here. **Prefer (a)** — add `rationale : String(500)` to `TopicClusters`, populate it in the job from `labelByFp`, and update the Task 1 test. Adjust this builder to read `c.rationale` directly. Make this entity/job change as the first sub-step of this task and re-run Task 1/3 tests.
+
+- [ ] **Step 4: Register the route** (`srv/server.js`)
+
+Import near the other `/build` imports (~line 16-29):
+```js
+import { buildTopicsGalleryHandler } from './lib/build-topics-gallery.js';
+```
+Register among the `/build/*` feeds (~line 285, after `/build/topic-clusters`):
+```js
+app.get('/build/topics-gallery', buildTopicsGalleryHandler);
+```
+
+- [ ] **Step 5: Allowlist in approuter** (`approuter/xs-app.json`, ~line 383)
+
+Add `topics-gallery` to the `/build/(...)` alternation regex (the existing list includes `concepts`, `homepage-shelves`, etc. — add `|topics-gallery`). This lets the fetch script reach it through the approuter if ever needed; the local build calls CAP directly so this is belt-and-suspenders.
+
+- [ ] **Step 6: Run unit test to verify it passes**
+
+Run: `npx vitest run test/unit/srv/build-topics-gallery.test.js`
+Expected: PASS.
+
+- [ ] **Step 7: Write + run the hybrid test** (`test/hybrid/topics-gallery-hybrid.test.js`)
+
+```js
+import { describe, it, expect, beforeAll } from 'vitest';
+import cds from '@sap/cds';
+import { buildTopicsGalleryPayload } from '../../srv/lib/build-topics-gallery.js';
+
+describe('topics-gallery (hybrid)', () => {
+  let db;
+  beforeAll(async () => { db = await cds.connect.to('db'); });
+  it('builds a non-empty gallery from real clusters', async () => {
+    const payload = await buildTopicsGalleryPayload(db);
+    expect(payload.error).toBeNull();
+    expect(Array.isArray(payload.gallery)).toBe(true);
+    expect(payload.gallery.length).toBeGreaterThan(0);
+    const first = payload.gallery[0];
+    expect(typeof first.label).toBe('string');
+    expect(payload.clusters[first.slug].concepts.length).toBeGreaterThan(0);
+    expect(['path','ranked']).toContain(payload.clusters[first.slug].orderMode);
+  });
+});
+```
+Run: `npx vitest run --project hybrid test/hybrid/topics-gallery-hybrid.test.js` (requires the Phase-1 job to have run against DEV; if empty, run the job first). Do not treat a self-skip as green.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add srv/lib/build-topics-gallery.js srv/server.js approuter/xs-app.json test/unit/srv/build-topics-gallery.test.js test/hybrid/topics-gallery-hybrid.test.js db/knowledge-graph-topic-clusters.cds srv/jobs/kg-topic-clusters-job.js
+git commit -m "feat(topics): /build/topics-gallery feed with paths + peer edges"
+```
+
+---
+
+### Task 6: Build-time fetch script
+
+**Files:**
+- Create: `scripts/fetch-topics-gallery.ts`
+- Modify: `package.json` (add `fetch-topics-gallery` script; wire into `build:all` after other `fetch-*`)
+- Test: `test/unit/scripts/fetch-topics-gallery.test.ts`
+
+**Interfaces:**
+- Consumes: `/build/topics-gallery` (CAP feed).
+- Produces: writes `hugo/data/topics_gallery.json` = the feed payload verbatim. Fail-open: on fetch error writes `{ gallery: [], clusters: {}, buildAt, error: 'fetch_failed' }`.
+
+Model exactly on `scripts/fetch-topic-clusters.ts` (native `fetch`, `CAP_BASE` default `http://localhost:4004`, fail-open writing empty payload).
+
+- [ ] **Step 1: Write the failing test** (`test/unit/scripts/fetch-topics-gallery.test.ts`)
+
+```ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { writeTopicsGallery } from '../../../scripts/fetch-topics-gallery';
+import * as fs from 'node:fs';
+
+vi.mock('node:fs', async (orig) => ({ ...(await orig<typeof fs>()), writeFileSync: vi.fn(), mkdirSync: vi.fn() }));
+
+describe('writeTopicsGallery', () => {
+  beforeEach(() => vi.clearAllMocks());
+  it('writes the fetched payload to hugo/data/topics_gallery.json', async () => {
+    const payload = { gallery: [{ slug: 'x', label: 'X' }], clusters: {}, buildAt: 'now', error: null };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => payload } as any);
+    await writeTopicsGallery('http://localhost:4004');
+    const call = (fs.writeFileSync as any).mock.calls[0];
+    expect(String(call[0])).toMatch(/topics_gallery\.json$/);
+    expect(JSON.parse(call[1]).gallery[0].slug).toBe('x');
+  });
+  it('writes an empty fail-open payload when the fetch throws', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('down'));
+    await writeTopicsGallery('http://localhost:4004');
+    const call = (fs.writeFileSync as any).mock.calls[0];
+    expect(JSON.parse(call[1]).error).toBe('fetch_failed');
+    expect(JSON.parse(call[1]).gallery).toEqual([]);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/unit/scripts/fetch-topics-gallery.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Write the script** (`scripts/fetch-topics-gallery.ts`)
+
+```ts
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+
+const OUT = join('hugo', 'data', 'topics_gallery.json');
+
+export async function writeTopicsGallery(capBase = process.env.CAP_BASE_URL || 'http://localhost:4004') {
+  let payload: any;
+  try {
+    const res = await fetch(`${capBase}/build/topics-gallery`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    payload = await res.json();
+  } catch (err) {
+    console.warn(`[fetch-topics-gallery] fail-open: ${(err as Error).message}`);
+    payload = { gallery: [], clusters: {}, buildAt: new Date().toISOString(), error: 'fetch_failed' };
+  }
+  mkdirSync(dirname(OUT), { recursive: true });
+  writeFileSync(OUT, JSON.stringify(payload, null, 2));
+  console.log(`[fetch-topics-gallery] wrote ${payload.gallery?.length ?? 0} cards -> ${OUT}`);
+}
+
+// CLI entry (tsx scripts/fetch-topics-gallery.ts)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  writeTopicsGallery();
+}
+```
+
+- [ ] **Step 4: Wire into package.json**
+
+Add to `scripts` (sibling to `fetch-topic-clusters`):
+```json
+"fetch-topics-gallery": "tsx scripts/fetch-topics-gallery.ts",
+```
+Add `&& npm run fetch-topics-gallery` into the `build:all` chain immediately after the existing `fetch-topic-clusters` invocation (find it: `jq '.scripts["build:all"]' package.json`). Keep it before the Hugo build step so the data file exists when Hugo bakes.
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `npx vitest run test/unit/scripts/fetch-topics-gallery.test.ts`
+Expected: PASS (both).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/fetch-topics-gallery.ts package.json test/unit/scripts/fetch-topics-gallery.test.ts
+git commit -m "feat(topics): build-time fetch of topics gallery to hugo/data"
+```
+
+---
+
+### Task 7: Hugo gallery + cluster-detail layouts
+
+**Files:**
+- Create: `hugo/content/topics/_index.md` (gallery page stub)
+- Create: `hugo/layouts/topics/list.html` (gallery: cards + filter mount + map mount)
+- Create: `hugo/layouts/topics/single.html` (cluster detail — used via a data-driven page-per-cluster, see Step 3)
+- Create: `hugo/assets/css/topics.css` (or inline `<style>` in the layouts — match how `homepage.css`/`concepts` inline styling is done)
+- Test: `test/unit/hugo/topics-layouts.test.ts` (template-source assertions, like `topic-clusters-band.test.ts`)
+
+**Interfaces:**
+- Consumes: `site.Data.topics_gallery` (`{ gallery, clusters, buildAt, error }`), `site.Data.topics_map_bundle` (island hash, Task 9).
+- Produces: baked `/topics/index.html` + one `/topics/<slug>/index.html` per cluster.
+
+**Cluster-detail pages via a Hugo data-driven approach:** Hugo won't auto-create a page per JSON entry. Two options — pick the one matching repo convention:
+- **(a) Fetch script also writes content stubs** — extend `fetch-topics-gallery.ts` to write a thin `hugo/content/topics/<slug>.md` (front matter `{title, layout: "single", type: "topics", cluster: "<slug>"}`) per cluster, so Hugo bakes each via `topics/single.html`. Clean up stale stubs each run (delete `hugo/content/topics/*.md` except `_index.md` before writing).
+- **(b) Single-page app** — bake only the gallery and render cluster detail client-side. Rejected: loses SSR/SEO for detail pages (a spec requirement).
+
+**Choose (a).** Add stub-writing to the Task 6 script (make this Step 1 here, then re-run Task 6 test — add an assertion that per-cluster stubs are written and stale ones removed).
+
+- [ ] **Step 1: Extend the fetch script to write per-cluster content stubs**
+
+In `fetch-topics-gallery.ts`, after writing the JSON: remove existing `hugo/content/topics/*.md` except `_index.md`, then for each `slug` in `payload.clusters` write `hugo/content/topics/<slug>.md`:
+```
+---
+title: "{label}"
+type: topics
+layout: single
+cluster: "{slug}"
+---
+```
+Add a unit assertion in `test/unit/scripts/fetch-topics-gallery.test.ts` that a stub path `hugo/content/topics/x.md` is written when `clusters` has key `x`. (Mock `readdirSync`/`unlinkSync` alongside `writeFileSync`.)
+
+- [ ] **Step 2: Write the failing layout test** (`test/unit/hugo/topics-layouts.test.ts`)
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+
+describe('topics layouts', () => {
+  it('gallery list.html renders cards from site.Data.topics_gallery and guards empty', () => {
+    const src = readFileSync('hugo/layouts/topics/list.html', 'utf-8');
+    expect(src).toContain('site.Data.topics_gallery');
+    expect(src).toMatch(/topics-gallery|topics-card/);
+    expect(src).toContain('/topics/');           // card links
+    expect(src).toMatch(/if .*gallery/);          // empty guard
+    expect(src).toContain('id="topics-map"');     // map island mount
+  });
+  it('single.html renders suggested path + concepts + peers and honors orderMode', () => {
+    const src = readFileSync('hugo/layouts/topics/single.html', 'utf-8');
+    expect(src).toContain('orderMode');
+    expect(src).toContain('/concepts/');          // concept links
+    expect(src).toMatch(/peers|connect/i);        // peer clusters section
+  });
+});
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `npx vitest run test/unit/hugo/topics-layouts.test.ts`
+Expected: FAIL — files not found.
+
+- [ ] **Step 4: Write `hugo/content/topics/_index.md`**
+
+```
+---
+title: "Topics"
+type: topics
+layout: list
+description: "Explore SAP developer topics — browse clusters of related concepts and follow a suggested learning path."
+---
+```
+
+- [ ] **Step 5: Write `hugo/layouts/topics/list.html`** (gallery)
+
+Render the hero gallery from `site.Data.topics_gallery.gallery`. Model chrome on the existing homepage band + `hugo/layouts/explore/single.html` (for the island-bundle include). Requirements:
+- `{{ $g := site.Data.topics_gallery }}` then `{{ if and $g (gt (len $g.gallery) 0) }}` guard (empty → friendly message, no crash).
+- `<h1>Explore topics</h1>` + intro.
+- Understated search box (top-right) — a plain form posting to `/search/` (reuse existing site search; priority C, table stakes).
+- Grid of cards: each card links `href="/topics/{{ .slug }}/"`, shows `{{ .label }}`, truncated `{{ .rationale }}`, `{{ .memberCount }} concepts · {{ .tutorialCount }} tutorials`, and up to 4 `.topConcepts` as chips.
+- Below the grid: `<section id="topics-map" data-vue-island="topics-map"></section>` + the map island `<script>`/`<link>` include from `site.Data.topics_map_bundle` (guard if absent — island is progressive enhancement).
+- Inline the `#topics-gallery` JSON for the filter island if reusing the concepts-filter pattern: `<script type="application/json" id="topics-data">{{ $g.gallery | jsonify }}</script>` + the `topics-filter.js` island (optional for v1 — the gallery is small; a simple client filter can be deferred. If deferred, omit the filter island and keep the static grid).
+
+> Decision for the implementer: cluster count is small (~18-60), so a virtualized filter island is NOT required for v1. Ship the static SSR grid + the map island. A text-filter island can be a fast follow. (This keeps the phase lean — YAGNI.)
+
+- [ ] **Step 6: Write `hugo/layouts/topics/single.html`** (cluster detail)
+
+Look up the cluster by the page's `cluster` param: `{{ $c := index site.Data.topics_gallery.clusters .Params.cluster }}`. Guard `{{ if $c }}`. Render:
+- Header: `{{ $c.label }}`, full `{{ $c.rationale }}`, `{{ $c.memberCount }} concepts · {{ $c.tutorialCount }} tutorials`.
+- Suggested order: `{{ if eq $c.orderMode "path" }}<h2>A suggested order through this topic</h2>{{ else }}<h2>Concepts in this topic</h2>{{ end }}` then an ordered/unordered list of `$c.concepts`, each `<a href="/concepts/{{ .slug }}/">{{ .name }}</a>`. In `path` mode use `<ol>`; in `ranked` mode `<ul>`.
+- Peer clusters: `{{ with $c.peers }}<h2>Topics that connect to this one</h2>...{{ end }}` linking `href="/topics/{{ .slug }}/"` showing `{{ .label }}`.
+- A `<div data-vue-island="topics-map" data-focus-cluster="{{ .Params.cluster }}"></div>` optional mini-map (island reads `data-focus-cluster`).
+- Breadcrumb: Home / Topics / label.
+
+- [ ] **Step 7: Write `hugo/assets/css/topics.css`** (or inline)
+
+Namespace `.topics-*`. Match Horizon CSS-var usage from `homepage.css` (`var(--sapLinkColor, #0070f2)` etc.). Card grid, chips, path list. Wire it into the layouts via the site's asset pipeline (follow how `homepage.css` is included).
+
+- [ ] **Step 8: Run layout test to verify it passes**
+
+Run: `npx vitest run test/unit/hugo/topics-layouts.test.ts`
+Expected: PASS.
+
+- [ ] **Step 9: Local bake smoke-check**
+
+Run (needs CAP up + job data or a hand-seeded `hugo/data/topics_gallery.json`):
+```bash
+npm run fetch-topics-gallery && npm run dev
+```
+Visit `http://localhost:1313/topics/` and one `/topics/<slug>/`. Confirm gallery cards render, a cluster page shows the path + peers. (Per Tom's #1 rule: verify the real page in a browser, not just the unit test.)
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add hugo/content/topics/_index.md hugo/layouts/topics/ hugo/assets/css/topics.css scripts/fetch-topics-gallery.ts test/unit/hugo/topics-layouts.test.ts test/unit/scripts/fetch-topics-gallery.test.ts
+git commit -m "feat(topics): Hugo gallery + cluster-detail layouts (baked static)"
+```
+
+**Phase 2 checkpoint:** `/topics/` gallery and `/topics/<slug>/` detail pages bake as static HTML with suggested paths and peer links. Fully functional without JS. Map island not yet built (Phase 3).
