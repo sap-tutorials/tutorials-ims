@@ -1531,3 +1531,296 @@ git commit -m "feat(explore): ?focus= deep-link pre-focuses camera for topics ha
 ```
 
 **Phase 3 checkpoint:** cluster map renders below the gallery, expands in place, and "See full graph" deep-links into a pre-focused `/explore/`. The continuous zoom (gallery → map → full graph) is complete.
+
+---
+
+## Phase 4 — Admin surface + homepage tie-in + e2e
+
+**Deliverable:** admins can override a cluster's label and hide junk clusters; the #1170 homepage band links into the new front door; a committed e2e spec exercises the whole flow.
+
+### Task 11: AdminService `TopicClusters` projection + actions
+
+**Files:**
+- Modify: `srv/admin-service.cds` (projection + actions; add bare `using` for the new db file if needed — but the entity is in `db/knowledge-graph-topic-clusters.cds`, a NEW split file, so **the #1531 rule applies: add `using from '../db/knowledge-graph-topic-clusters';` at the top of `srv/admin-service.cds`**)
+- Modify: `srv/admin-service.js` (`after('READ')` virtual rollups + `overrideTopicLabel` / `setTopicClusterHidden` action handlers)
+- Test: `test/unit/srv/admin-topic-clusters.test.js`
+
+**Interfaces:**
+- Produces (CDS):
+  - `@readonly entity TopicClustersAdmin as projection on ims.TopicClusters { *, virtual null as effectiveLabel : String(120) };` (effectiveLabel = curatedLabel || label, computed in after('READ')).
+  - `action overrideTopicLabel(slug: String(80), label: String(120)) returns Boolean;` (@requires 'Tutorial.Author' or 'SuperAdmin' — match the KgCommunities admin gate).
+  - `action setTopicClusterHidden(slug: String(80), hidden: Boolean) returns Boolean;`
+- Handlers write `curatedLabel` / `hidden` directly on `TopicClusters` via `UPDATE` (these two columns survive the nightly TRUNCATE only if the job preserves them — see NOTE).
+
+> IMPORTANT NOTE (state survival): the nightly job TRUNCATE+INSERTs `TopicClusters`, which would wipe admin `curatedLabel`/`hidden` overrides. FIX: the job must read the PRIOR `curatedLabel`/`hidden` per slug (it already reads existing rows for reconciliation) and carry them forward into the new rows for slugs that persist. Add this to the Task 3 job: when building `existing`, also select `curatedLabel, hidden`; in the write step, for each upsert whose slug matched an existing row, use the prior `curatedLabel`/`hidden` instead of null/false. Update the Task 3 hybrid test to assert an override survives a re-run. **This task depends on that job change — make it here and re-run Task 3 tests.**
+
+- [ ] **Step 1: Write the failing test** (`test/unit/srv/admin-topic-clusters.test.js`)
+
+```js
+import { describe, it, expect, beforeAll } from 'vitest';
+import cds from '@sap/cds';
+
+describe('AdminService TopicClusters', () => {
+  let admin;
+  beforeAll(async () => {
+    await cds.test('serve', '--project', '.', '--in-memory');
+    admin = await cds.connect.to('AdminService');
+    const { TopicClusters } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(TopicClusters).entries([{ slug: 'hana', label: 'HANA', curatedLabel: null, fingerprint: 'FP', previousFingerprints: '', status: 'ACTIVE', hidden: false, memberCount: 1, tutorialCount: 1, computedAt: new Date().toISOString() }]);
+  });
+
+  it('effectiveLabel falls back to label, prefers curatedLabel', async () => {
+    const rows = await admin.run(SELECT.from('AdminService.TopicClustersAdmin').where({ slug: 'hana' }));
+    expect(rows[0].effectiveLabel).toBe('HANA');
+  });
+
+  it('overrideTopicLabel sets curatedLabel', async () => {
+    await admin.send('overrideTopicLabel', { slug: 'hana', label: 'SAP HANA Cloud' });
+    const { TopicClusters } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(TopicClusters).where({ slug: 'hana' });
+    expect(row.curatedLabel).toBe('SAP HANA Cloud');
+  });
+
+  it('setTopicClusterHidden toggles hidden', async () => {
+    await admin.send('setTopicClusterHidden', { slug: 'hana', hidden: true });
+    const { TopicClusters } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(TopicClusters).where({ slug: 'hana' });
+    expect(row.hidden).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/unit/srv/admin-topic-clusters.test.js`
+Expected: FAIL.
+
+- [ ] **Step 3: Add the `using` + projection + actions** (`srv/admin-service.cds`)
+
+At the top, alongside the other `using from '../db/...'` lines:
+```cds
+using from '../db/knowledge-graph-topic-clusters';
+```
+In `extend service AdminService with { ... }` (near the KgCommunities projection ~line 1153):
+```cds
+@readonly
+entity TopicClustersAdmin as projection on ims.TopicClusters {
+  *,
+  virtual null as effectiveLabel : String(120),
+};
+
+@requires: 'Tutorial.Author'
+action overrideTopicLabel(slug : String(80), label : String(120)) returns Boolean;
+
+@requires: 'Tutorial.Author'
+action setTopicClusterHidden(slug : String(80), hidden : Boolean) returns Boolean;
+```
+
+- [ ] **Step 4: Implement handlers** (`srv/admin-service.js`)
+
+```js
+this.after('READ', 'TopicClustersAdmin', (rows) => {
+  if (!rows) return;
+  const list = Array.isArray(rows) ? rows : [rows];
+  for (const r of list) r.effectiveLabel = r.curatedLabel || r.label;
+});
+
+this.on('overrideTopicLabel', async (req) => {
+  const { slug, label } = req.data;
+  const { TopicClusters } = cds.entities('com.sap.developers.ims');
+  await UPDATE(TopicClusters).set({ curatedLabel: label }).where({ slug });
+  return true;
+});
+
+this.on('setTopicClusterHidden', async (req) => {
+  const { slug, hidden } = req.data;
+  const { TopicClusters } = cds.entities('com.sap.developers.ims');
+  await UPDATE(TopicClusters).set({ hidden }).where({ slug });
+  return true;
+});
+```
+
+- [ ] **Step 5: Update the Task 3 job to carry forward curatedLabel/hidden** (state survival)
+
+In `_buildCommunitiesInput`, add `curatedLabel, hidden` to the existing-rows SELECT and expose an `overridesBySlug` Map. In `runKgTopicClusters`, when inserting an upsert whose slug matched an existing row, use the prior `curatedLabel`/`hidden`. Add to the Task 3 hybrid test: set an override, re-run the job, assert it survived.
+
+- [ ] **Step 6: Run tests to verify they pass**
+
+Run: `npx vitest run test/unit/srv/admin-topic-clusters.test.js`
+Then re-run: `npx vitest run test/unit/srv/kg-topic-clusters-job.test.js`
+Then: `npx cds deploy --to sqlite::memory: 2>&1 | tail -5`
+Expected: PASS + clean deploy.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add srv/admin-service.cds srv/admin-service.js srv/jobs/kg-topic-clusters-job.js test/unit/srv/admin-topic-clusters.test.js
+git commit -m "feat(topics): admin label-override + hide actions with nightly carry-forward"
+```
+
+---
+
+### Task 12: Admin FE app + shell nav
+
+**Files:**
+- Create: `app/admin/topicClusters/webapp/{Component.js,manifest.json,i18n/i18n.properties,ext/TopicClusterActionsController.controller.js}`
+- Modify: `app/admin-annotations.cds` (`TopicClustersAdmin` LR/OP annotations)
+- Modify: `app/admin-shell/webapp/model/navigation.json` (nav entry in `system` group)
+- Modify: `app/admin-shell/scripts/admin-shell-overrides.js` (`order:` array + `prefix:` map — add `topicClusters: 'tc'`, verify no collision)
+- Test: `test/unit/admin/topic-clusters-manifest.test.js` (manifest shape) — plus the shell manifest is generated, so also run the generator
+
+**Interfaces:**
+- Produces: `#topicClusters` admin route rendering a FE List Report over `AdminService.TopicClustersAdmin` with the two custom actions.
+
+Scaffold by mirroring `app/admin/kgCommunities/` exactly (Component.js class name `sap.tutorials.admin.topicClusters.Component`, `dataSources.mainService.uri: "/admin/"`, LR route `TopicClustersList` + OP route `TopicClusters({key})`, contextPath `/TopicClustersAdmin`). Custom actions wired as manifest `controlConfiguration[...LineItem].actions` pressing `...ext.TopicClusterActionsController.onOverrideLabel` / `onToggleHidden` (JS-controller-driven dialogs — the label override needs an input dialog).
+
+- [ ] **Step 1: Write the failing manifest test** (`test/unit/admin/topic-clusters-manifest.test.js`)
+
+```js
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+
+describe('topicClusters admin manifest', () => {
+  it('targets AdminService TopicClustersAdmin with LR + OP routes', () => {
+    const m = JSON.parse(readFileSync('app/admin/topicClusters/webapp/manifest.json', 'utf-8'));
+    expect(m['sap.app'].id).toBe('sap.tutorials.admin.topicClusters');
+    expect(m['sap.app'].dataSources.mainService.uri).toBe('/admin/');
+    const targets = m['sap.ui5'].routing.targets;
+    const hasContextPath = JSON.stringify(targets).includes('/TopicClustersAdmin');
+    expect(hasContextPath).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/unit/admin/topic-clusters-manifest.test.js`
+Expected: FAIL.
+
+- [ ] **Step 3: Scaffold the app** (copy `app/admin/kgCommunities/webapp/` → `app/admin/topicClusters/webapp/`)
+
+Rename ids to `topicClusters`, contextPath to `/TopicClustersAdmin`, routes to `TopicClustersList`/`TopicClusters({key})`. Add `ext/TopicClusterActionsController.controller.js` with `onOverrideLabel` (opens an input dialog, calls the `overrideTopicLabel` action) and `onToggleHidden` (calls `setTopicClusterHidden`). Follow the `KgCommunityActionsController` pattern for action invocation. Add `Component.js` + `i18n/i18n.properties`.
+
+- [ ] **Step 4: Add annotations** (`app/admin-annotations.cds`)
+
+`annotate AdminService.TopicClustersAdmin with @(UI: {...})` mirroring the KgCommunities block (HeaderInfo TypeName 'Topic Cluster', LineItem showing `effectiveLabel`, `tutorialCount`, `memberCount`, `status`, `hidden`; SelectionFields; FieldGroup). Add field-label annotations. **Heed the #986 gotcha:** do NOT put a default LR filter over a virtual column (`effectiveLabel` is virtual) — filter on the real `status='ACTIVE'` instead if a default filter is wanted.
+
+- [ ] **Step 5: Register in the shell**
+
+- `navigation.json`: add `{ "key": "topicClusters", "title": "Topic Clusters" }` in the `system` group.
+- `admin-shell-overrides.js`: add `'topicClusters'` to the `order:` array and `topicClusters: 'tc'` to the `prefix:` map (verify `tc` is collision-free against existing prefixes).
+- Regenerate the shell manifest: `node app/admin-shell/scripts/generate-manifest.js` (or the npm script that wraps it — check `jq '.scripts' package.json | grep -i manifest`).
+
+- [ ] **Step 6: Run test + build the admin app**
+
+Run: `npx vitest run test/unit/admin/topic-clusters-manifest.test.js`
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add app/admin/topicClusters/ app/admin-annotations.cds app/admin-shell/webapp/model/navigation.json app/admin-shell/scripts/admin-shell-overrides.js app/admin-shell/webapp/manifest.json test/unit/admin/topic-clusters-manifest.test.js
+git commit -m "feat(topics): admin FE app for topic-cluster label override + hide"
+```
+
+---
+
+### Task 13: Homepage band "See all topics →" link
+
+**Files:**
+- Modify: `hugo/layouts/partials/homepage/topic-clusters-band.html`
+- Test: `test/unit/hugo/topic-clusters-band.test.ts` (extend the existing #1170 test — add an assertion, do NOT change existing ones)
+
+**Interfaces:** additive — the #1170 band gains a link to `/topics/`. Its 6-cluster content + #1170 hybrid contract are untouched.
+
+- [ ] **Step 1: Extend the existing test** (add a case, keep all #1170 assertions)
+
+```ts
+it('links to the full /topics/ front door', () => {
+  const src = readFileSync('hugo/layouts/partials/homepage/topic-clusters-band.html', 'utf-8');
+  expect(src).toContain('/topics/');
+  expect(src).toMatch(/See all topics|Explore all topics|View all/i);
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run test/unit/hugo/topic-clusters-band.test.ts`
+Expected: FAIL on the new case only.
+
+- [ ] **Step 3: Add the link** to the band's heading/footer
+
+Inside the existing `{{ if gt (len $clusters) 0 }}` block, add near the `<h2>`:
+```html
+<a class="hp-topic-clusters__see-all" href="/topics/">See all topics &rarr;</a>
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run test/unit/hugo/topic-clusters-band.test.ts`
+Expected: PASS (all, including #1170 originals).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add hugo/layouts/partials/homepage/topic-clusters-band.html test/unit/hugo/topic-clusters-band.test.ts
+git commit -m "feat(topics): link homepage topic-clusters band into /topics/ front door"
+```
+
+---
+
+### Task 14: E2E spec + full-suite verification
+
+**Files:**
+- Create: `test/e2e/topics-discovery.spec.ts` (Playwright, self-skipping like the other e2e specs)
+- Test: the spec itself
+
+**Interfaces:** post-deploy Playwright, gated on `SMOKE_BASE_URL`/`PLAYWRIGHT_BASE_URL` (self-skips when absent, per the #1338 convention). Drives the real flow.
+
+- [ ] **Step 1: Write the e2e spec** (`test/e2e/topics-discovery.spec.ts`)
+
+Model on the existing `test/e2e/*.spec.ts` (auth via `SMOKE_TECH_USER`/`SMOKE_TECH_PASSWORD` basic auth; self-skip guard at top). Assert:
+```ts
+// 1. /topics/ renders gallery cards (main + h1; served pages use <main>+<h1>, NOT <article>)
+// 2. clicking a card navigates to /topics/<slug>/ and shows the suggested-order/concepts list
+// 3. a concept link goes to /concepts/<slug>
+// 4. a peer-cluster link goes to another /topics/<slug>/
+// 5. (best-effort) the cluster map island mounts (#topics-map has child nodes) — skip if WebGL unavailable in CI
+```
+
+- [ ] **Step 2: Run the e2e spec locally against DEV** (if creds available)
+
+Run: `SMOKE_BASE_URL=https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com npx playwright test test/e2e/topics-discovery.spec.ts`
+Expected: PASS (or self-skip if creds/URL absent — note the skip for review, don't call it green).
+
+- [ ] **Step 3: Run the full unit suite + lints**
+
+Run:
+```bash
+npm test
+npx cds deploy --to sqlite::memory: 2>&1 | tail -5
+```
+Expected: all unit tests green; clean SQLite deploy. Fix any regressions before proceeding.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add test/e2e/topics-discovery.spec.ts
+git commit -m "test(topics): e2e spec for gallery -> cluster -> concept -> explore flow"
+```
+
+**Phase 4 checkpoint:** admins can curate labels + hide clusters (surviving nightly re-runs); the homepage band funnels into the front door; a committed e2e spec guards the full flow.
+
+---
+
+## Final verification (before PR)
+
+- [ ] Run the full unit suite: `npm test` — green.
+- [ ] Run hybrid tests (needs `cf login` + `cds bind`): `npm run test:hybrid` — green or documented skips.
+- [ ] `npx cds deploy --to sqlite::memory:` — clean.
+- [ ] Run the nightly job once against DEV (`node -e "import('./srv/jobs/kg-topic-clusters-job.js').then(m=>m.runKgTopicClusters())"` via `cds bind --exec`), then `npm run fetch-topics-gallery`, then `npm run dev` and **manually verify `/topics/` + a cluster page + the map in a browser** (Tom's #1 rule — test the real user-facing thing through the real entry point).
+- [ ] Open a PR with `gh pr create` (never direct-merge). Summarize: new front door, reconciliation pipeline, map + explore handoff, admin curation, homepage tie-in. Note the #1170 band is unchanged and the new feature is DEV-first.
+
+## Deployment note
+
+Per project rules: this touches `srv/`, `db/`, `hugo/`, `app/admin/**`, `app/explore/`, `hugo-apps/`, and the approuter allowlist. It requires a FULL deploy (`npm run deploy -- --env dev`, NO `--skip-build`/`-m`) — admin-UI + Hugo + approuter are all in scope. Deploy from a fresh `origin/main` after merge, not from this worktree. The nightly job runs at 04:47 UTC; on first deploy, trigger it once manually so `/topics/` has data before the first Hugo bake, or the gallery bakes empty until the next night.
