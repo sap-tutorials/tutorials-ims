@@ -4035,3 +4035,93 @@ annotate AdminService.Petoberfests with @(
     { $Type: 'UI.ReferenceFacet', Label: 'General', Target: '@UI.FieldGroup#General' }
   ]
 );
+
+// --- Topic Clusters (#topics-discovery) ---
+// LR/OP annotations for the topic-cluster curation tile.
+// TopicClustersAdmin is @readonly by construction (projection-only); the only
+// mutation surfaces are overrideTopicLabel and setTopicClusterHidden, wired as
+// manifest custom actions (controlConfiguration in
+// topicClusters/webapp/manifest.json — not annotation-driven DataFieldForAction).
+//
+// #986 gotcha: do NOT add a default SelectionPresentationVariant filter over
+// the VIRTUAL `effectiveLabel` column — virtual columns cannot be used in a
+// default LR filter because HANA has no DB column to filter. Default filter on
+// the real `status` column is safe.
+annotate AdminService.TopicClustersAdmin with {
+  slug          @Common.Label: 'Slug';
+  label         @Common.Label: 'Computed Label';
+  curatedLabel  @Common.Label: 'Curated Label';
+  effectiveLabel @Common.Label: 'Effective Label';
+  rationale     @Common.Label: 'Rationale';
+  status        @Common.Label: 'Status';
+  hidden        @Common.Label: 'Hidden';
+  memberCount   @Common.Label: 'Members';
+  tutorialCount @Common.Label: 'Tutorials';
+  computedAt    @Common.Label: 'Computed At';
+};
+
+annotate AdminService.TopicClustersAdmin with @(
+  UI: {
+    HeaderInfo: {
+      TypeName       : 'Topic Cluster',
+      TypeNamePlural : 'Topic Clusters',
+      Title          : { Value: effectiveLabel },
+      Description    : { Value: slug }
+    },
+    SelectionFields : [ status, hidden, tutorialCount ],
+    LineItem : [
+      { Value: effectiveLabel },
+      { Value: tutorialCount },
+      { Value: memberCount },
+      { Value: status },
+      { Value: hidden }
+    ],
+    // Default sort tutorialCount desc — largest clusters first.
+    PresentationVariant : {
+      SortOrder     : [ { Property: tutorialCount, Descending: true } ],
+      Visualizations: [ '@UI.LineItem' ]
+    },
+    // Default filter: show only ACTIVE clusters (status is a real DB column, safe
+    // to use as a default filter — see #986 gotcha re: virtual effectiveLabel).
+    SelectionPresentationVariant #default : {
+      $Type: 'UI.SelectionPresentationVariantType',
+      Text : 'Active clusters',
+      SelectionVariant : {
+        $Type: 'UI.SelectionVariantType',
+        SelectOptions : [{
+          $Type: 'UI.SelectOptionType',
+          PropertyName : status,
+          Ranges : [{
+            $Type: 'UI.SelectionRangeType',
+            Sign  : #I,       // INCLUDE
+            Option: #EQ,
+            Low   : 'ACTIVE'
+          }]
+        }]
+      },
+      PresentationVariant : { Visualizations: [ '@UI.LineItem' ] }
+    },
+    Facets : [
+      { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Topic Cluster' }
+    ],
+    FieldGroup #General : { Data : [
+      { Value: slug },
+      { Value: effectiveLabel },
+      { Value: label },
+      { Value: curatedLabel },
+      { Value: rationale },
+      { Value: status },
+      { Value: hidden },
+      { Value: tutorialCount },
+      { Value: memberCount },
+      { Value: computedAt }
+    ]},
+    // The overrideTopicLabel and setTopicClusterHidden buttons are manifest
+    // custom actions (controlConfiguration in topicClusters/webapp/manifest.json)
+    // wired to TopicClusterActionsController. No annotation-driven
+    // DataFieldForAction is used (avoids duplicate buttons in OP header).
+  },
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable : false,
+  Capabilities.DeleteRestrictions.Deletable : false
+);

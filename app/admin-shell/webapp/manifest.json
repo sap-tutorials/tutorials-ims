@@ -74,6 +74,7 @@
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
       "sap.tutorials.admin.kgCommunities": "./components/kgCommunities",
       "sap.tutorials.admin.kgOnDemand": "./components/kgOnDemand",
+      "sap.tutorials.admin.topicClusters": "./components/topicClusters",
       "sap.tutorials.admin.feedback": "./components/feedback",
       "sap.tutorials.admin.secrets": "./components/secrets",
       "sap.tutorials.admin.uiEvents": "./components/uiEvents",
@@ -254,6 +255,12 @@
       },
       "kgOnDemandComponent": {
         "name": "sap.tutorials.admin.kgOnDemand",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "topicClustersComponent": {
+        "name": "sap.tutorials.admin.topicClusters",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -642,6 +649,16 @@
             {
               "name": "kgOnDemandTarget",
               "prefix": "kod"
+            }
+          ]
+        },
+        {
+          "name": "topicClusters",
+          "pattern": "topicClusters",
+          "target": [
+            {
+              "name": "topicClustersTarget",
+              "prefix": "tc"
             }
           ]
         },
@@ -1057,6 +1074,13 @@
           "id": "kgOnDemandTarget",
           "viewLevel": 1,
           "prefix": "kod"
+        },
+        "topicClustersTarget": {
+          "type": "Component",
+          "usage": "topicClustersComponent",
+          "id": "topicClustersTarget",
+          "viewLevel": 1,
+          "prefix": "tc"
         },
         "feedbackTarget": {
           "type": "Component",
