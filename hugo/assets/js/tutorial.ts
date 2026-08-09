@@ -1,4 +1,5 @@
 import { initMermaid } from './mermaid-bootstrap'
+import { csrfFetch } from './csrf-fetch'
 
 // --- Copy code block ---
 ;(window as any).copyCodeBlock = function(btn: HTMLButtonElement) {
@@ -156,7 +157,12 @@ async function apiGet<T>(path: string): Promise<T | null> {
 
 async function apiPost(path: string, body?: unknown): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    // csrfFetch attaches the AppRouter CSRF token (x-csrf-token handshake via
+    // GET /auth/user) required for mutating POSTs on the XSUAA-protected
+    // /api/(.*) route. A plain fetch() here 403s — this is the completeStep
+    // regression (issue #895 re-enabled CSRF but this main-page path was
+    // missed; only the tutorial-pip island was migrated to csrfFetch).
+    const res = await csrfFetch(`${API_BASE}${path}`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
