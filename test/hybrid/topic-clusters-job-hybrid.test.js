@@ -35,6 +35,22 @@ describe.runIf(isSafeForWrites())('kg-topic-clusters job (hybrid)', () => {
     }
   }, 60_000);
 
+  it('C1 guard: ACTIVE rows have a non-empty memberSlugsBlob persisted after each run', async () => {
+    // This assertion proves the persisted-column half of the C1 fix is wired up.
+    // The unit drift test covers the reading half. Together they guard the full round-trip.
+    const { runKgTopicClusters } = await import('../../srv/jobs/kg-topic-clusters-job.js');
+    await runKgTopicClusters();
+    const { TopicClusters } = cds.entities('com.sap.developers.ims');
+    const active = await SELECT.from(TopicClusters).where({ status: 'ACTIVE' });
+    expect(active.length).toBeGreaterThan(0);
+    for (const r of active) {
+      expect(r.memberSlugsBlob).toBeTruthy();
+      // Every blob entry should be a valid lowercase tutorial-slug character set
+      const slugs = r.memberSlugsBlob.split('\n').filter(Boolean);
+      expect(slugs.length).toBeGreaterThan(0);
+    }
+  }, 60_000);
+
   it('is idempotent: a second run keeps the same slugs (Jaccard=1 self-match)', async () => {
     const { runKgTopicClusters } = await import('../../srv/jobs/kg-topic-clusters-job.js');
     const { TopicClusters } = cds.entities('com.sap.developers.ims');

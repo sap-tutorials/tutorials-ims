@@ -23,6 +23,15 @@ export function jaccard(a, b) {
 export function reconcile({ existing = [], communities = [], threshold = 0.5 }) {
   const usedExisting = new Set();
   const assignedSlugs = new Set();
+
+  // Seed the mint-dedup set with ALL existing slugs (ACTIVE + RETIRED) so that
+  // minted slugs never collide with a retired slug being written in the same
+  // INSERT batch (I1 fix). C1 makes this collision common: drift retires
+  // 'hana-cloud' and re-mints 'hana-cloud' from the same label in one run.
+  for (const ex of existing) {
+    if (ex.slug) assignedSlugs.add(ex.slug);
+  }
+
   const upserts = [];
 
   const mintSlug = (label) => {
@@ -72,5 +81,11 @@ export function reconcile({ existing = [], communities = [], threshold = 0.5 }) 
     .filter((ex) => ex.status === 'ACTIVE' && !usedExisting.has(ex.slug))
     .map((ex) => ex.slug);
 
-  return { upserts, retired };
+  // Safety dedup: if a minted upsert slug somehow collides with a retired slug
+  // (belt-and-suspenders after the assignedSlugs seed above), drop the retired
+  // entry — ACTIVE wins. This keeps the INSERT batch free of duplicate PKs.
+  const upsertSlugs = new Set(upserts.map((u) => u.slug));
+  const deduped = retired.filter((s) => !upsertSlugs.has(s));
+
+  return { upserts, retired: deduped };
 }

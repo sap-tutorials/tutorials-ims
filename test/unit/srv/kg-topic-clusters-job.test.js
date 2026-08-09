@@ -95,17 +95,81 @@ describe('runKgTopicClusters (logic)', () => {
           return [{ communityFingerprint: 'FP-NEW', vertexType: 'tutorial', slug: 'new-slug' }];
         }
         if (ref.includes('TopicClusters')) {
-          // One existing row with OLD fingerprint that has no members in this run
-          return [{ slug: 'old-topic', fingerprint: 'FP-OLD', previousFingerprints: '', status: 'ACTIVE', curatedLabel: null, hidden: false }];
+          // One existing row with OLD fingerprint that has no members in this run,
+          // and no persisted memberSlugsBlob either.
+          return [{ slug: 'old-topic', fingerprint: 'FP-OLD', previousFingerprints: '', status: 'ACTIVE', curatedLabel: null, hidden: false, memberSlugsBlob: null }];
         }
         return [];
       },
     };
 
     const { existing } = await job._buildCommunitiesInput(fakeDb);
-    // Existing row's memberSlugs should be empty because FP-OLD is gone
+    // Existing row has no persisted blob → memberSlugs is empty
     expect(existing).toHaveLength(1);
     expect(existing[0].slug).toBe('old-topic');
     expect(existing[0].memberSlugs).toEqual([]);
+  });
+
+  // --- C1 regression test ---
+  // Simulates membership drift: existing row was written with memberSlugsBlob
+  // [t1,t2,t3] under an OLD fingerprint. Tonight Louvain assigns a NEW
+  // fingerprint but overlapping members [t1,t2,t4] (Jaccard 0.5).
+  // The fix: _buildCommunitiesInput reads the persisted blob for existing.memberSlugs
+  // so reconcile() can score Jaccard against LAST night's set, not this run's set.
+  // Without the fix: tutMembersByFp has no entry for FP-OLD → memberSlugs=[] →
+  // Jaccard=0 → no match → slug is re-minted every night.
+  it('C1: existing.memberSlugs comes from persisted memberSlugsBlob, not this run\'s tutMembersByFp', async () => {
+    const fakeDb = {
+      run: async (q) => {
+        const ref = q?.SELECT?.from?.ref?.[0] ?? '';
+        if (ref.includes('KgCommunityLabel')) {
+          // Current run: community has NEW fingerprint
+          return [{ communityFingerprint: 'FP-NEW', label: 'HANA Cloud', rationale: 'r' }];
+        }
+        if (ref.includes('KgCommunitySummaryV')) {
+          return [{ communityFingerprint: 'FP-NEW', tutorialCount: 3 }];
+        }
+        if (ref.includes('KgCommunity')) {
+          // Current run: NEW fingerprint with t1,t2,t4
+          return [
+            { communityFingerprint: 'FP-NEW', vertexType: 'tutorial', slug: 'T1' },
+            { communityFingerprint: 'FP-NEW', vertexType: 'tutorial', slug: 'T2' },
+            { communityFingerprint: 'FP-NEW', vertexType: 'tutorial', slug: 'T4' },
+          ];
+        }
+        if (ref.includes('TopicClusters')) {
+          // Last night's cluster: OLD fingerprint + persisted blob of t1,t2,t3
+          return [{
+            slug: 'hana-cloud',
+            fingerprint: 'FP-OLD',
+            previousFingerprints: '',
+            status: 'ACTIVE',
+            curatedLabel: null,
+            hidden: false,
+            memberSlugsBlob: 't1\nt2\nt3',
+          }];
+        }
+        return [];
+      },
+    };
+
+    const { existing, communities } = await job._buildCommunitiesInput(fakeDb);
+
+    // The existing entry must carry the PERSISTED member set [t1,t2,t3]
+    expect(existing).toHaveLength(1);
+    expect(existing[0].slug).toBe('hana-cloud');
+    expect(existing[0].memberSlugs).toEqual(expect.arrayContaining(['t1','t2','t3']));
+    expect(existing[0].memberSlugs).toHaveLength(3);
+
+    // The community carries this run's [t1,t2,t4]
+    expect(communities[0].memberSlugs).toEqual(expect.arrayContaining(['t1','t2','t4']));
+
+    // Jaccard([t1,t2,t4], [t1,t2,t3]) = 2/4 = 0.5 → should match at threshold 0.5
+    const { reconcile: rec } = await import('../../../srv/lib/topic-cluster-reconcile.js');
+    const { upserts, retired } = rec({ existing, communities, threshold: 0.5 });
+    expect(retired).toEqual([]);
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].slug).toBe('hana-cloud');   // slug preserved!
+    expect(upserts[0].fingerprint).toBe('FP-NEW'); // fingerprint rolled
   });
 });

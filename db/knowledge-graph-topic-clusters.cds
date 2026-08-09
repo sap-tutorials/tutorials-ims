@@ -15,5 +15,6 @@ entity TopicClusters {
       hidden               : Boolean      default false;     // admin can hide junk clusters from gallery
       memberCount          : Integer;
       tutorialCount        : Integer;
+      memberSlugsBlob      : String(5000);   // newline-joined tutorial slugs persisted for next-night Jaccard matching (C1 fix)
       computedAt           : Timestamp;
 }

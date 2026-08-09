@@ -67,11 +67,13 @@ export async function _buildCommunitiesInput(db) {
   for (const [fp, label] of labelByFp) {
     const tutSet = tutMembersByFp.get(fp) || new Set();
     const allSet = allMembersByFp.get(fp) || new Set();
+    const memberSlugsArr = [...tutSet];
     communities.push({
       fingerprint: fp,
       label,
       rationale: rationaleByFp.get(fp) || '',
-      memberSlugs: [...tutSet],            // matching basis = tutorial slugs only
+      memberSlugs: memberSlugsArr,            // matching basis = tutorial slugs only
+      memberSlugsBlob: memberSlugsArr.join('\n').slice(0, 5000), // persisted for C1 fix
       memberCount: allSet.size,
       tutorialCount: tutCountByFp.get(fp) || tutSet.size,
     });
@@ -79,16 +81,19 @@ export async function _buildCommunitiesInput(db) {
 
   // Current TopicClusters — needed both for reconcile() and for carrying
   // forward admin overrides (curatedLabel/hidden) across the nightly TRUNCATE.
+  // Also read memberSlugsBlob so we can Jaccard-match against LAST night's
+  // member set, not this run's (C1 fix: fingerprint has changed on drift, so
+  // tutMembersByFp.get(r.fingerprint) would return undefined → empty set →
+  // Jaccard=0 → slug re-minted every night).
   const existingRows = await db.run(
-    SELECT.from(TopicClusters).columns('slug', 'fingerprint', 'previousFingerprints', 'status', 'curatedLabel', 'hidden')
+    SELECT.from(TopicClusters).columns('slug', 'fingerprint', 'previousFingerprints', 'status', 'curatedLabel', 'hidden', 'memberSlugsBlob')
   );
 
-  // Supply memberSlugs for reconcile by mapping existing fingerprint → this
-  // run's tutorial member set. A vanished fingerprint gets an empty set, which
-  // produces a Jaccard score of 0 and correctly forces remint + retire.
+  // Use the persisted blob (last night's member set) as the matching basis so
+  // that a drifted fingerprint can still be recognised by overlap.
   const existing = existingRows.map((r) => ({
     ...r,
-    memberSlugs: [...(tutMembersByFp.get(r.fingerprint) || new Set())],
+    memberSlugs: r.memberSlugsBlob ? r.memberSlugsBlob.split('\n').filter(Boolean) : [],
   }));
 
   // Admin overrides keyed by stable slug — carried forward across TRUNCATE.
@@ -110,6 +115,9 @@ export async function runKgTopicClusters() {
     const { communities, existing, rationaleByFp, overridesBySlug } = await _buildCommunitiesInput(db);
     const { upserts, retired } = reconcile({ existing, communities, threshold: JACCARD_THRESHOLD });
 
+    // Build a lookup from fingerprint → memberSlugsBlob for the write step.
+    const memberSlugsBlobByFp = new Map(communities.map((c) => [c.fingerprint, c.memberSlugsBlob || '']));
+
     const now = new Date().toISOString();
     // minted = new slugs (no pre-existing match, so previousFingerprints is empty)
     const minted = upserts.filter((u) => !u.previousFingerprints).length;
@@ -119,8 +127,8 @@ export async function runKgTopicClusters() {
       await tx.run(`TRUNCATE TABLE ${TABLE}`);
 
       const insertSql = `INSERT INTO ${TABLE}
-        ("SLUG","LABEL","CURATEDLABEL","RATIONALE","FINGERPRINT","PREVIOUSFINGERPRINTS","STATUS","HIDDEN","MEMBERCOUNT","TUTORIALCOUNT","COMPUTEDAT")
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`;
+        ("SLUG","LABEL","CURATEDLABEL","RATIONALE","FINGERPRINT","PREVIOUSFINGERPRINTS","STATUS","HIDDEN","MEMBERCOUNT","TUTORIALCOUNT","MEMBERSLUGSBLOB","COMPUTEDAT")
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`;
 
       const rows = [
         ...upserts.map((u) => {
@@ -136,12 +144,13 @@ export async function runKgTopicClusters() {
             ov.hidden ? 1 : 0,
             u.memberCount || 0,
             u.tutorialCount || 0,
+            memberSlugsBlobByFp.get(u.fingerprint) || '',
             now,
           ];
         }),
         ...retired.map((slug) => {
           const ov = overridesBySlug.get(slug) || { curatedLabel: null, hidden: false };
-          return [slug, '', ov.curatedLabel, '', '', '', 'RETIRED', ov.hidden ? 1 : 0, 0, 0, now];
+          return [slug, '', ov.curatedLabel, '', '', '', 'RETIRED', ov.hidden ? 1 : 0, 0, 0, '', now];
         }),
       ];
 

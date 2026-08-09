@@ -82,4 +82,34 @@ describe('reconcile', () => {
     expect(upserts[0].fingerprint).toBe('FP3');
     expect(upserts[0].previousFingerprints).toBe('FP1\nFP2');
   });
+
+  // --- I1 regression test ---
+  it('I1: minted slug avoids a retired slug so INSERT batch has unique PKs', () => {
+    // Scenario: 'hana-cloud' is ACTIVE last night; tonight its community
+    // has drifted past the Jaccard threshold (or gone entirely) → it retires.
+    // A brand-new community whose label also slugifies to 'hana-cloud' arrives.
+    // Without the fix mintSlug would produce 'hana-cloud' → duplicate PK → crash.
+    const existing = [
+      { slug: 'hana-cloud', fingerprint: 'OLD-FP', previousFingerprints: '', status: 'ACTIVE', memberSlugs: ['old-t1'] },
+    ];
+    // New community with completely different members (Jaccard=0 → no match → mint)
+    const communities = [
+      { fingerprint: 'NEW-FP', label: 'HANA Cloud', memberSlugs: ['new-t1', 'new-t2'], memberCount: 2, tutorialCount: 2 },
+    ];
+    const { upserts, retired } = reconcile({ existing, communities, threshold: 0.5 });
+
+    // The old slug must be retired
+    expect(retired).toContain('hana-cloud');
+
+    // The new community must get a DIFFERENT slug (suffixed)
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].slug).not.toBe('hana-cloud');
+    expect(upserts[0].slug).toMatch(/^hana-cloud-\d+$/);
+
+    // No slug appears in both upserts and retired → no duplicate PK
+    const upsertSlugs = new Set(upserts.map((u) => u.slug));
+    for (const s of retired) {
+      expect(upsertSlugs.has(s)).toBe(false);
+    }
+  });
 });
