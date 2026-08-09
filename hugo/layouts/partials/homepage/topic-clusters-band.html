@@ -15,6 +15,7 @@
 {{- if gt (len $clusters) 0 -}}
 <section class="hp-band hp-topic-clusters" aria-labelledby="hp-topic-clusters-title">
   <h2 id="hp-topic-clusters-title" class="hp-band__title">Explore topic clusters</h2>
+  <a class="hp-topic-clusters__see-all" href="/topics/">See all topics &rarr;</a>
   <div class="hp-topic-clusters__grid">
     {{- range $clusters -}}
     <div class="hp-topic-clusters__cluster" id="cluster-{{ .communityFingerprint }}">
