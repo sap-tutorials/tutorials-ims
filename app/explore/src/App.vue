@@ -10,6 +10,7 @@ import ExploreGraph from './components/ExploreGraph.vue'
 import NodeDetailPanel from './components/NodeDetailPanel.vue'
 import MobileTypedList from './components/MobileTypedList.vue'
 import { fetchPath } from './api/path'
+import { parseFocusParam } from './focus-param'
 import type { ExploreNode } from './types'
 
 const { payload, hasData, error } = useGraphData()
@@ -17,6 +18,9 @@ const { enabledNodeTypes, enabledPredicates, toggleNodeType, togglePredicate } =
 const { selectedNode, selectNode } = useSelectedNode()
 const { isMobile } = useViewport()
 useTelemetry({ payload })
+
+// Ref to the ExploreGraph component, used for ?focus= deep-link camera centering.
+const graphRef = ref<InstanceType<typeof ExploreGraph> | null>(null)
 
 // Active path overlay — null when no path is drawn. Stored as the ordered
 // list of node IDs the graph already uses (t:<slug> / c:<slug>) so
@@ -34,6 +38,22 @@ watch(isMobile, () => {
   pathNodeIds.value = null
   pathError.value = null
 })
+
+// ?focus=<slug> deep-link: once graph data is loaded, resolve the slug to a
+// node id and centre/zoom the camera on it. Fires at most once (immediate
+// watch that auto-stops on first truthy hasData). No-op if slug is absent,
+// malformed, or doesn't match any node. Does NOT disturb the find-path flow.
+const focusSlug = parseFocusParam(typeof window !== 'undefined' ? window.location.search : '')
+if (focusSlug) {
+  const stopFocusWatch = watch(hasData, (ready) => {
+    if (!ready) return
+    stopFocusWatch()
+    const id = resolveNodeId(focusSlug)
+    if (id && graphRef.value) {
+      graphRef.value.focusSingleNode(id)
+    }
+  }, { immediate: true })
+}
 
 // Defeat Vue 3.5 SFC template hoisting (which breaks refs under @vue/test-utils).
 const appLabel = computed(() => `explore-app-${isMobile.value ? 'mobile' : 'desktop'}`)
@@ -140,6 +160,7 @@ async function onFindPath(p: { from: string; to: string }) {
         <div class="explore__body">
           <div class="explore__canvas">
             <ExploreGraph
+              ref="graphRef"
               :nodes="filteredNodes"
               :edges="filteredEdges"
               :path="pathNodeIds"

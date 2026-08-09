@@ -264,6 +264,31 @@ function edgeColorForType(p: PredicateType): string {
   return EDGE_COLORS[p] ?? '#999999'
 }
 
+// Centre the camera on a single node — used by the ?focus= deep-link in
+// App.vue after graph data loads. Reuses the same camera.animate call as
+// the applyPathOverlay camera-fit block, but targets one node (no path
+// overlay / recolouring).
+function focusSingleNode(id: string): void {
+  if (!graph || !renderer) return
+  const g = graph
+  try {
+    const camera = renderer.getCamera?.()
+    if (!camera || typeof g.getNodeAttribute !== 'function') return
+    const x = g.getNodeAttribute(id, 'x')
+    const y = g.getNodeAttribute(id, 'y')
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      // ratio 0.3 → reasonably zoomed in on the target node without hitting
+      // the Sigma minCameraRatio (0.1). Matches the animation duration used
+      // by applyPathOverlay (600 ms).
+      camera.animate?.({ x: x as number, y: y as number, ratio: 0.3 }, { duration: 600 })
+    }
+  } catch {
+    // No-op if the camera API isn't available in test mocks.
+  }
+}
+
+defineExpose({ focusSingleNode })
+
 // Record<NodeType, string> is meant to make TS catch missing variants — but
 // only under a strict typecheck (not `vite build`), so keep this in sync with
 // the NodeType union in types.ts by hand AND rely on the `?? ` fallback above.
