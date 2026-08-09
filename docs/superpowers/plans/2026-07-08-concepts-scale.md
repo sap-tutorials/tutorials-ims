@@ -607,7 +607,7 @@ Fetch payload once. Read shell fragments once (throw → whole phase fails: "she
 - [ ] **Step 1** Snapshot parity (**required PR check before Task 5 lands**): 10 hand-picked slugs (varied shapes) in the fixture. Fetch legacy Hugo output from DEV; render same slugs via new pipeline; diff allowing an explicit expected-diff list (render-source marker, `<script>` whitespace). Fail on unexpected diffs.
 - [ ] **Step 2** Smoke (`test/smoke/concepts-page.test.js`): `/concepts/` 200, `text/html`, gzip < 2MB, `#concepts-data` array of expected length, SSR `<li>` count == min(100,N), `/concepts/cap/` 200, cache headers, p50 cold < 200ms / warm < 30ms.
 - [ ] **Step 3** Load characterization (`hyperfine`, not a merge gate) — document p50/p95 in PR; block cutover if p95 cold > 300ms pending investigation.
-- [ ] **Step 4 (deferred, own PR)** After ~2 weeks DEV stability: delete legacy Hugo concept path + flag (~200 lines net deletion).
+- [x] **Step 4 (done, this PR)** Legacy Hugo concept path + `LEGACY_CONCEPT_RENDER` flag deleted after DEV+PROD stability confirmed (2026-08-09): removed `scripts/fetch-concepts.ts`, `hugo/layouts/concepts/{list,single}.html`, the `fetch-concepts` npm script + `build:all` reference, the workflow `legacy-concept-render` input + fetch step + publish env, and the `legacyConceptRender` branch in `publish-content.ts`.
 
 ---
 

@@ -171,7 +171,7 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/build/slug-mapping` | GET | Slug→ID mapping for all missions/groups | None |
 | `/build/repo-catalog` | GET | Slug-keyed `DiscoveredTutorial` map (third-tier discovery fallback) | None |
 | `/build/repo-catalog` | POST | Write the discovered-tutorial baseline (CI-as-canonical-writer) | Bearer (`CONTENT_API_KEY`) |
-| `/build/concepts` | GET | Published Knowledge-Graph concepts (slug, name, description, teaches/requires/requiredBy/relatedTo). Consumed at build time by `scripts/fetch-concepts.ts`. | None |
+| `/build/concepts` | GET | Published Knowledge-Graph concepts (slug, name, description, teaches/requires/requiredBy/relatedTo). Shares `buildConceptsPayload` with the CAP concept-render pipeline (`GET /content/concepts-index` list page + the `POST /content/publish/render-concepts` detail phase, #1327). | None |
 | `/graph/publishConcept` | POST | Admin action — sets `publishedAt` + `publishedBy` on a Concept | XSUAA + `KnowledgeGraph.Admin` |
 | `/graph/unpublishConcept` | POST | Admin action — clears `publishedAt` + `publishedBy` on a Concept | XSUAA + `KnowledgeGraph.Admin` |
 | `/graph/explore-data` | GET | Bulk graph JSON for the `/explore/` page (nodes + edges + generatedAt; 5-min LRU cache) | None |
