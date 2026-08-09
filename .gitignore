@@ -39,6 +39,8 @@ hugo/static-qa/
 .playwright-mcp/
 *.png
 !docs/public/launch/*.png
+!docs/public/apple-touch-icon.png
+!hugo/static/apple-touch-icon.png
 !hugo/static/img/advocates-world-map.png
 !hugo/static/img/knowledge-graph/surfaces/*.png
 !test/unit/advocates/fixtures/*.png
