@@ -46,12 +46,19 @@ watch(isMobile, () => {
 // turns true before ExploreGraph's own watch([nodes,edges]) has run
 // buildGraph(), so node coordinates would not yet exist. No-op if slug is
 // absent/malformed or doesn't resolve to a node. Does NOT disturb find-path.
+//
+// focusDone is a one-shot guard: graphReady fires on every buildGraph() call
+// (filter toggles, initial load, etc.). Without the guard the camera snaps
+// back to the deep-linked node on every filter toggle, overriding the user's
+// manual pan/zoom. Set to true after the first successful focus.
 const focusSlug = parseFocusParam(typeof window !== 'undefined' ? window.location.search : '')
+const focusDone = ref(false)
 
 function onGraphReady() {
-  if (!focusSlug) return
+  if (!focusSlug || focusDone.value) return
   const id = resolveNodeId(focusSlug)
   if (id && graphRef.value) {
+    focusDone.value = true
     graphRef.value.focusSingleNode(id)
   }
 }
