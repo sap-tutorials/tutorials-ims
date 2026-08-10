@@ -3468,6 +3468,36 @@ export default class AdminService extends cds.ApplicationService {
     // column at the DB layer, and the previous Node-side compute has been
     // dropped. See db/knowledge-graph-communities.cds and issue #985/#986.
 
+    // ── TopicClustersAdmin read decorator — Task 11 (#topics-discovery) ──
+    // Populate the virtual effectiveLabel column: prefer curatedLabel, fall
+    // back to label. Mirrors the KgCommunities topConceptSlugs pattern above.
+    this.after('READ', 'TopicClustersAdmin', (rows) => {
+      if (!rows) return;
+      const list = Array.isArray(rows) ? rows : [rows];
+      for (const r of list) r.effectiveLabel = r.curatedLabel || r.label;
+    });
+
+    // ── overrideTopicLabel — Task 11 (#topics-discovery) ──
+    // Sets curatedLabel on the underlying TopicClusters row. The nightly job
+    // carries curatedLabel forward via overridesBySlug, so the override
+    // survives TRUNCATE+INSERT cycles.
+    this.on('overrideTopicLabel', async (req) => {
+      const { slug, label } = req.data;
+      const { TopicClusters } = cds.entities('com.sap.developers.ims');
+      await UPDATE(TopicClusters).set({ curatedLabel: label }).where({ slug });
+      return true;
+    });
+
+    // ── setTopicClusterHidden — Task 11 (#topics-discovery) ──
+    // Toggles the hidden flag on the underlying TopicClusters row. The nightly
+    // job carries hidden forward via overridesBySlug across TRUNCATE cycles.
+    this.on('setTopicClusterHidden', async (req) => {
+      const { slug, hidden } = req.data;
+      const { TopicClusters } = cds.entities('com.sap.developers.ims');
+      await UPDATE(TopicClusters).set({ hidden }).where({ slug });
+      return true;
+    });
+
     // ── clearKhorosLink — admin on-behalf-of variant (issue #566) ──
     // Bound action on Users. Nulls the 4 Khoros columns, evicts the
     // in-process cache, and emits an INFO log for operational debugging.

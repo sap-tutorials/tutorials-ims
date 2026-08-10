@@ -50,6 +50,7 @@ import { runMaterializeCoCompletions } from './materialize-co-completions.js';
 import { runKgPageRank } from './kg-pagerank-job.js';
 import { runKgCommunities } from './kg-communities-job.js';
 import { runKgCommunityLabels } from './kg-community-label-job.js';
+import { runKgTopicClusters } from './kg-topic-clusters-job.js';
 import { runKgWcc } from './kg-wcc-job.js';
 import { runOnDemandDrain } from './kg-ondemand-job.js';
 import { runKgFeaturedTopics } from './kg-featured-topics-job.js';
@@ -662,6 +663,23 @@ export function registerJobs() {
     ttlMs: 900000,
     description: 'LLM-label KG communities into KgCommunityLabel (#1126)',
     fn: () => runKgCommunityLabels(),
+  });
+
+  // Daily 04:47 UTC — reconcile Louvain communities into the stable-slug
+  // TopicClusters sidecar for the /topics/ front door (#topics-discovery).
+  // Runs after labeling (04:12) so every community that qualifies for the
+  // gallery already has a KgCommunityLabel row. TRUNCATE+INSERT inside one
+  // db.tx; admin curatedLabel/hidden overrides are carried forward. Fail-open:
+  // on any error the scheduler chassis writes PipelineLog FAILED while
+  // yesterday's rows survive (the tx rolls back). Off-minute :47 is free
+  // after Louvain (03:57), labeling (04:12), WCC (04:07), FeaturedTopics
+  // (04:13), retire-orphans (04:37). ttlMs 10 min matches the PageRank ceiling.
+  registerJob({
+    jobName: 'kg-topic-clusters',
+    schedule: '47 4 * * *',
+    ttlMs: 600000,
+    description: 'Reconcile Louvain communities into stable-slug TopicClusters for /topics/ (#topics-discovery)',
+    fn: () => runKgTopicClusters(),
   });
 
   // Daily 04:07 UTC — weakly-connected-components pass over the KG

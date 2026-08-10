@@ -25,3 +25,12 @@ describe('header.html — Knowledge Graph nav entry', () => {
     expect(m![1].trim().toLowerCase()).toMatch(/knowledge graph/)
   })
 })
+
+describe('header.html — Topics nav entry', () => {
+  it('has a /topics/ <ui5-li>', () => {
+    const re = /<ui5-li[^>]*data-href="\/topics\/"[^>]*>([^<]+)<\/ui5-li>/
+    const m = header.match(re)
+    expect(m, '/topics/ <ui5-li> in nav popover').toBeTruthy()
+    expect(m![1].trim().toLowerCase()).toMatch(/topics/)
+  })
+})

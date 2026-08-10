@@ -1,0 +1,157 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.topicClusters",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appSubtitle}}",
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "TopicCluster-manage": {
+          "semanticObject": "TopicCluster",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "sap.tutorials.admin.topicClusters.ext.TopicClusterActionsController"
+          },
+          "sap.fe.templates.ObjectPage.ObjectPageController": {
+            "controllerName": "sap.tutorials.admin.topicClusters.ext.TopicClusterActionsController"
+          }
+        }
+      }
+    },
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.fe.templates": {},
+        "sap.m": {},
+        "sap.ui.core": {}
+      }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "sap.tutorials.admin.topicClusters.i18n.i18n"
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "TopicClustersList",
+          "target": "TopicClustersList"
+        },
+        {
+          "pattern": "TopicClusters({key}):?query:",
+          "name": "TopicClustersObjectPage",
+          "target": "TopicClustersObjectPage"
+        }
+      ],
+      "targets": {
+        "TopicClustersList": {
+          "type": "Component",
+          "id": "TopicClustersList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/TopicClustersAdmin",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "TopicClustersAdmin": {
+                  "detail": {
+                    "route": "TopicClustersObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "overrideLabel": {
+                      "press": "sap.tutorials.admin.topicClusters.ext.TopicClusterActionsController.onOverrideLabel",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>overrideLabelButton}"
+                    },
+                    "toggleHidden": {
+                      "press": "sap.tutorials.admin.topicClusters.ext.TopicClusterActionsController.onToggleHidden",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>toggleHiddenButton}"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "TopicClustersObjectPage": {
+          "type": "Component",
+          "id": "TopicClustersObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/TopicClustersAdmin",
+              "editableHeaderContent": false,
+              "content": {
+                "header": {
+                  "actions": {
+                    "overrideLabel": {
+                      "press": "sap.tutorials.admin.topicClusters.ext.TopicClusterActionsController.onOverrideLabel",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>overrideLabelButton}"
+                    },
+                    "toggleHidden": {
+                      "press": "sap.tutorials.admin.topicClusters.ext.TopicClusterActionsController.onToggleHidden",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>toggleHiddenButton}"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -12,6 +12,7 @@ const MAX_ADVOCATES_GZIP = 30 * 1024;
 const MAX_PUZZLE_GZIP = 30 * 1024;
 const MAX_ADVOCATE_PROFILE_GZIP = 25 * 1024;
 const MAX_RELATED_GRAPH_GZIP = 12 * 1024;
+const MAX_TOPICS_MAP_GZIP = 150 * 1024;
 const MAX_ALERTS_GZIP = 12 * 1024;
 const MAX_HOMEPAGE_EXPLAINERS_GZIP = 12 * 1024;
 const MAX_HOMEPAGE_PERSONALIZER_GZIP = 12 * 1024;
@@ -215,6 +216,24 @@ function relatedGraphBudget() {
   };
 }
 
+function topicsMapBudget() {
+  return {
+    name: 'topics-map-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['topics-map.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_TOPICS_MAP_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`topics-map.js is ${gz} bytes gzipped (> ${MAX_TOPICS_MAP_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`topics-map.js: ${gz} bytes gzipped (budget ${MAX_TOPICS_MAP_GZIP}).`);
+      }
+    }
+  };
+}
+
 function petoberfestBudget() {
   return {
     name: 'petoberfest-budget',
@@ -234,7 +253,7 @@ function petoberfestBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), puzzleBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget(), petoberfestBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), puzzleBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget(), petoberfestBudget(), topicsMapBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -288,6 +307,7 @@ export default defineConfig({
         'homepage-bands': resolve(__dirname, 'src/homepage-bands/index.ts'),
         'kg-stats-counter': resolve(__dirname, 'src/kg-stats-counter/main.ts'),
         'concepts-filter': resolve(__dirname, 'src/concepts-filter/main.ts'),
+        'topics-map': resolve(__dirname, 'src/topics-map/main.ts'),
         'homepage-explainers': resolve(__dirname, 'src/homepage-explainers/index.ts'),
         'homepage-personalizer': resolve(__dirname, 'src/homepage-personalizer/index.ts'),
         'featured-topics-carousel': resolve(__dirname, 'src/featured-topics-carousel/main.ts'),

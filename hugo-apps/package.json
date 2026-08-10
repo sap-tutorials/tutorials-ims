@@ -11,9 +11,12 @@
     "@imgly/background-removal": "^1.7.0",
     "onnxruntime-web": "^1.20.0",
     "@mediapipe/tasks-vision": "^0.10.35",
+    "graphology": "0.26.0",
+    "graphology-layout-forceatlas2": "0.10.1",
     "konva": "^9.3.0",
     "canvas-confetti": "1.9.4",
     "cropperjs": "1.6.2",
+    "sigma": "3.0.3",
     "socket.io-client": "^4.8.0",
     "vue": "^3.5.0",
     "vue-virtual-scroller": "3.0.4"

@@ -10,6 +10,7 @@ import ExploreGraph from './components/ExploreGraph.vue'
 import NodeDetailPanel from './components/NodeDetailPanel.vue'
 import MobileTypedList from './components/MobileTypedList.vue'
 import { fetchPath } from './api/path'
+import { parseFocusParam } from './focus-param'
 import type { ExploreNode } from './types'
 
 const { payload, hasData, error } = useGraphData()
@@ -17,6 +18,9 @@ const { enabledNodeTypes, enabledPredicates, toggleNodeType, togglePredicate } =
 const { selectedNode, selectNode } = useSelectedNode()
 const { isMobile } = useViewport()
 useTelemetry({ payload })
+
+// Ref to the ExploreGraph component, used for ?focus= deep-link camera centering.
+const graphRef = ref<InstanceType<typeof ExploreGraph> | null>(null)
 
 // Active path overlay — null when no path is drawn. Stored as the ordered
 // list of node IDs the graph already uses (t:<slug> / c:<slug>) so
@@ -34,6 +38,30 @@ watch(isMobile, () => {
   pathNodeIds.value = null
   pathError.value = null
 })
+
+// ?focus=<slug> deep-link: when ExploreGraph emits 'graphReady' (i.e. after
+// buildGraph() + forceAtlas2 layout — node x/y coordinates valid), resolve
+// the slug to a node id and centre/zoom the camera on it. Using 'graphReady'
+// rather than a 'hasData' watcher avoids the ordering hazard where hasData
+// turns true before ExploreGraph's own watch([nodes,edges]) has run
+// buildGraph(), so node coordinates would not yet exist. No-op if slug is
+// absent/malformed or doesn't resolve to a node. Does NOT disturb find-path.
+//
+// focusDone is a one-shot guard: graphReady fires on every buildGraph() call
+// (filter toggles, initial load, etc.). Without the guard the camera snaps
+// back to the deep-linked node on every filter toggle, overriding the user's
+// manual pan/zoom. Set to true after the first successful focus.
+const focusSlug = parseFocusParam(typeof window !== 'undefined' ? window.location.search : '')
+const focusDone = ref(false)
+
+function onGraphReady() {
+  if (!focusSlug || focusDone.value) return
+  const id = resolveNodeId(focusSlug)
+  if (id && graphRef.value) {
+    focusDone.value = true
+    graphRef.value.focusSingleNode(id)
+  }
+}
 
 // Defeat Vue 3.5 SFC template hoisting (which breaks refs under @vue/test-utils).
 const appLabel = computed(() => `explore-app-${isMobile.value ? 'mobile' : 'desktop'}`)
@@ -140,10 +168,12 @@ async function onFindPath(p: { from: string; to: string }) {
         <div class="explore__body">
           <div class="explore__canvas">
             <ExploreGraph
+              ref="graphRef"
               :nodes="filteredNodes"
               :edges="filteredEdges"
               :path="pathNodeIds"
               @nodeClick="onNodeClick"
+              @graphReady="onGraphReady"
             />
           </div>
           <NodeDetailPanel

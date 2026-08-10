@@ -49,4 +49,9 @@ describe('topic-clusters-band partial (#1170)', () => {
   it('reads from .Site.Data.topic_clusters', () => {
     expect(tpl).toContain('.Site.Data.topic_clusters')
   })
+
+  it('links to the full /topics/ front door', () => {
+    expect(tpl).toContain('/topics/')
+    expect(tpl).toMatch(/See all topics|Explore all topics|View all/i)
+  })
 })

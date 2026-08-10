@@ -1,6 +1,7 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 using { com.sap.developers.ims.external as external } from '../db/external-content';
 using from '../db/knowledge-graph-communities';
+using from '../db/knowledge-graph-topic-clusters';
 using from '../db/knowledge-graph-ondemand';
 using from '../db/community-blogs';
 using from '../db/homepage-featured';
@@ -1184,6 +1185,28 @@ extend service AdminService with {
     missionSlug : String(255),
     title       : String(255)
   ) returns AdminService.Missions;
+}
+
+// Topic Clusters admin surface (#topics-discovery, Task 11).
+// TopicClustersAdmin is a @readonly projection with a virtual effectiveLabel
+// (curatedLabel || label) computed in the after('READ') handler.
+// Two @requires:'Tutorial.Author' actions let curators override the LLM label
+// or hide junk clusters from the /topics/ gallery.
+// NOTE: do NOT put a default LR filter over effectiveLabel (virtual/Node-only
+// column evaluates as NULL at DB layer and drops every row — #986 gotcha).
+extend service AdminService with {
+
+  @readonly
+  entity TopicClustersAdmin as projection on ims.TopicClusters {
+    *,
+    virtual null as effectiveLabel : String(120),
+  };
+
+  @requires: 'Tutorial.Author'
+  action overrideTopicLabel(slug : String(80), label : String(120)) returns Boolean;
+
+  @requires: 'Tutorial.Author'
+  action setTopicClusterHidden(slug : String(80), hidden : Boolean) returns Boolean;
 }
 
 // (#1032) Featured missions carousel — editorial rows + read-only snapshot.

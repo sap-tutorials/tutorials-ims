@@ -1,0 +1,108 @@
+{{ define "main" }}
+{{- /*
+  topics/single.html — Cluster detail page (/topics/<slug>/).
+  Reads cluster data from site.Data.topics_gallery.clusters keyed by
+  .Params.cluster (set in the per-cluster content stub written by
+  scripts/fetch-topics-gallery.ts).
+
+  Data shape for a cluster entry:
+    { slug, label, rationale, memberCount, tutorialCount,
+      orderMode: 'path'|'ranked',
+      concepts: [{slug, name}],
+      peers: [{slug, label, weight}] }
+*/ -}}
+{{- $c := index site.Data.topics_gallery.clusters .Params.cluster -}}
+{{- $css := resources.Get "css/topics.css" -}}
+{{ if $css }}<link rel="stylesheet" href="{{ $css.RelPermalink }}">{{ end }}
+
+{{ if $c }}
+
+<article class="topics-detail">
+
+  <nav class="topics-breadcrumb" aria-label="Breadcrumb">
+    <ol class="topics-breadcrumb__list">
+      <li class="topics-breadcrumb__item"><a class="topics-breadcrumb__link" href="/">Home</a></li>
+      <li class="topics-breadcrumb__sep" aria-hidden="true">/</li>
+      <li class="topics-breadcrumb__item"><a class="topics-breadcrumb__link" href="/topics/">Topics</a></li>
+      <li class="topics-breadcrumb__sep" aria-hidden="true">/</li>
+      <li class="topics-breadcrumb__item topics-breadcrumb__item--current" aria-current="page">{{ $c.label }}</li>
+    </ol>
+  </nav>
+
+  <header class="topics-detail__header">
+    <h1 class="topics-detail__title">{{ $c.label }}</h1>
+    {{- with $c.rationale }}
+    <p class="topics-detail__rationale">{{ . }}</p>
+    {{- end }}
+    <div class="topics-detail__meta">
+      <span class="topics-detail__counts">{{ $c.memberCount }} concepts &middot; {{ $c.tutorialCount }} tutorials</span>
+    </div>
+  </header>
+
+  {{- /* Suggested order / concept list — switches on orderMode */ -}}
+  {{ with $c.concepts }}
+  <section class="topics-detail__concepts" aria-labelledby="topics-concepts-heading">
+    {{ if eq $c.orderMode "path" }}
+    <h2 id="topics-concepts-heading" class="topics-detail__section-title">A suggested order through this topic</h2>
+    <ol class="topics-concepts-list topics-concepts-list--ordered">
+      {{- range . -}}
+      <li class="topics-concepts-list__item">
+        <a class="topics-concepts-list__link" href="/concepts/{{ .slug }}/">{{ .name }}</a>
+      </li>
+      {{- end -}}
+    </ol>
+    {{ else }}
+    <h2 id="topics-concepts-heading" class="topics-detail__section-title">Concepts in this topic</h2>
+    <ul class="topics-concepts-list topics-concepts-list--unordered">
+      {{- range . -}}
+      <li class="topics-concepts-list__item">
+        <a class="topics-concepts-list__link" href="/concepts/{{ .slug }}/">{{ .name }}</a>
+      </li>
+      {{- end -}}
+    </ul>
+    {{ end }}
+  </section>
+  {{ end }}
+
+  {{- /* Peer clusters section */ -}}
+  {{ with $c.peers }}
+  <section class="topics-detail__peers" aria-labelledby="topics-peers-heading">
+    <h2 id="topics-peers-heading" class="topics-detail__section-title">Topics that connect to this one</h2>
+    <ul class="topics-peers-list" role="list">
+      {{- range . -}}
+      <li class="topics-peers-list__item">
+        <a class="topics-peers-list__link" href="/topics/{{ .slug }}/">{{ .label }}</a>
+      </li>
+      {{- end -}}
+    </ul>
+  </section>
+  {{ end }}
+
+  {{- /* Optional mini-map island: progressively enhanced.
+         data-focus-cluster is read by the topics-map island to
+         highlight the current cluster in the graph. */ -}}
+  <div
+    class="topics-detail__map"
+    data-vue-island="topics-map"
+    data-focus-cluster="{{ .Params.cluster }}"
+    aria-hidden="true"
+  ></div>
+  <script type="module" src="/js/topics-map.js" defer></script>
+
+</article>
+
+{{ else }}
+<div class="topics-detail topics-detail--missing">
+  <nav class="topics-breadcrumb" aria-label="Breadcrumb">
+    <ol class="topics-breadcrumb__list">
+      <li class="topics-breadcrumb__item"><a class="topics-breadcrumb__link" href="/">Home</a></li>
+      <li class="topics-breadcrumb__sep" aria-hidden="true">/</li>
+      <li class="topics-breadcrumb__item"><a class="topics-breadcrumb__link" href="/topics/">Topics</a></li>
+    </ol>
+  </nav>
+  <h1>Topic not found</h1>
+  <p>The cluster data for this topic was not available at build time. <a href="/topics/">Browse all topics</a>.</p>
+</div>
+{{ end }}
+
+{{ end }}

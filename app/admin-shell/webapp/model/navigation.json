@@ -93,6 +93,7 @@
         { "key": "knowledgeGraph", "title": "Knowledge Graph" },
         { "key": "kgCommunities", "title": "KG Communities" },
         { "key": "kgOnDemand", "title": "KG On-Demand" },
+        { "key": "topicClusters", "title": "Topic Clusters" },
         { "key": "secrets", "title": "Secrets" },
         { "key": "privacy", "title": "Privacy" },
         { "key": "privacyAudit", "title": "Privacy Audit" },

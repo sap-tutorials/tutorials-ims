@@ -11,7 +11,13 @@ const props = defineProps<{
   /** Ordered list of node IDs on the active find-path overlay. null = no overlay. */
   path?: string[] | null
 }>()
-const emit = defineEmits<{ nodeClick: [{ id: string; node: ExploreNode }] }>()
+const emit = defineEmits<{
+  nodeClick: [{ id: string; node: ExploreNode }]
+  /** Emitted once after buildGraph() + forceAtlas2 layout completes. Used by
+   *  App.vue to trigger the ?focus= deep-link camera focus at the correct
+   *  moment — after the graphology instance has node x/y coordinates. */
+  graphReady: []
+}>()
 
 // Path-overlay styling. Kept here next to the edge-default palette so a
 // future themer touches one file.
@@ -116,6 +122,10 @@ function buildGraph() {
   // Apply any initial path overlay (when path prop is already set on first
   // render — e.g. SSR/hydration).
   applyPathOverlay(props.path ?? null)
+  // Signal to parent that the graph + forceAtlas2 layout are complete and
+  // node x/y coordinates are valid. App.vue uses this to trigger the ?focus=
+  // deep-link camera focus at the right moment.
+  emit('graphReady')
 }
 
 onBeforeUnmount(() => {
@@ -263,6 +273,31 @@ function colorForNodeType(t: NodeType): string {
 function edgeColorForType(p: PredicateType): string {
   return EDGE_COLORS[p] ?? '#999999'
 }
+
+// Centre the camera on a single node — used by the ?focus= deep-link in
+// App.vue after graph data loads. Reuses the same camera.animate call as
+// the applyPathOverlay camera-fit block, but targets one node (no path
+// overlay / recolouring).
+function focusSingleNode(id: string): void {
+  if (!graph || !renderer) return
+  const g = graph
+  try {
+    const camera = renderer.getCamera?.()
+    if (!camera || typeof g.getNodeAttribute !== 'function') return
+    const x = g.getNodeAttribute(id, 'x')
+    const y = g.getNodeAttribute(id, 'y')
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      // ratio 0.3 → reasonably zoomed in on the target node without hitting
+      // the Sigma minCameraRatio (0.1). Matches the animation duration used
+      // by applyPathOverlay (600 ms).
+      camera.animate?.({ x: x as number, y: y as number, ratio: 0.3 }, { duration: 600 })
+    }
+  } catch {
+    // No-op if the camera API isn't available in test mocks.
+  }
+}
+
+defineExpose({ focusSingleNode })
 
 // Record<NodeType, string> is meant to make TS catch missing variants — but
 // only under a strict typecheck (not `vite build`), so keep this in sync with

@@ -245,7 +245,7 @@
       "authenticationType": "xsuaa"
     },
     {
-      "source": "^/graph/(neighborhood(?:Full)?|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path|searchKG|PublishedConcepts)(\\(.*\\))?(/.*)?(\\?.*)?$",
+      "source": "^/graph/(neighborhood(?:Full)?|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|clusters-data|path|searchKG|PublishedConcepts)(\\(.*\\))?(/.*)?(\\?.*)?$",
       "target": "/graph/$1$2$3$4",
       "destination": "srv-api",
       "authenticationType": "none"
@@ -380,7 +380,7 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/build/(breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|kg-stats|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels)(/.*)?(\\?.*)?$",
+      "source": "^/build/(breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|kg-stats|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels|topics-gallery)(/.*)?(\\?.*)?$",
       "target": "/build/$1$2$3",
       "destination": "srv-api",
       "authenticationType": "none"

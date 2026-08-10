@@ -1,0 +1,68 @@
+{
+  "gallery": [
+    {
+      "slug": "cap-fundamentals",
+      "label": "CAP Fundamentals",
+      "rationale": "Core concepts for building cloud-native apps with SAP CAP — service definitions, data models, event handlers.",
+      "memberCount": 12,
+      "tutorialCount": 8,
+      "topConcepts": [
+        { "slug": "cds-data-model", "name": "CDS Data Model" },
+        { "slug": "cap-service", "name": "CAP Service" },
+        { "slug": "odata-v4", "name": "OData V4" },
+        { "slug": "node-js-runtime", "name": "Node.js Runtime" }
+      ]
+    },
+    {
+      "slug": "btp-basics",
+      "label": "BTP Basics",
+      "rationale": "Getting started with SAP Business Technology Platform — subaccounts, runtimes, and service bindings.",
+      "memberCount": 9,
+      "tutorialCount": 6,
+      "topConcepts": [
+        { "slug": "subaccount", "name": "Subaccount" },
+        { "slug": "cloud-foundry", "name": "Cloud Foundry" },
+        { "slug": "service-binding", "name": "Service Binding" }
+      ]
+    }
+  ],
+  "clusters": {
+    "cap-fundamentals": {
+      "slug": "cap-fundamentals",
+      "label": "CAP Fundamentals",
+      "rationale": "Core concepts for building cloud-native apps with SAP CAP — service definitions, data models, event handlers.",
+      "memberCount": 12,
+      "tutorialCount": 8,
+      "orderMode": "path",
+      "concepts": [
+        { "slug": "cds-data-model", "name": "CDS Data Model" },
+        { "slug": "cap-service", "name": "CAP Service" },
+        { "slug": "odata-v4", "name": "OData V4" },
+        { "slug": "node-js-runtime", "name": "Node.js Runtime" },
+        { "slug": "cds-annotations", "name": "CDS Annotations" }
+      ],
+      "peers": [
+        { "slug": "btp-basics", "label": "BTP Basics", "weight": 0.72 }
+      ]
+    },
+    "btp-basics": {
+      "slug": "btp-basics",
+      "label": "BTP Basics",
+      "rationale": "Getting started with SAP Business Technology Platform — subaccounts, runtimes, and service bindings.",
+      "memberCount": 9,
+      "tutorialCount": 6,
+      "orderMode": "ranked",
+      "concepts": [
+        { "slug": "subaccount", "name": "Subaccount" },
+        { "slug": "cloud-foundry", "name": "Cloud Foundry" },
+        { "slug": "service-binding", "name": "Service Binding" },
+        { "slug": "xsuaa", "name": "XSUAA" }
+      ],
+      "peers": [
+        { "slug": "cap-fundamentals", "label": "CAP Fundamentals", "weight": 0.72 }
+      ]
+    }
+  },
+  "buildAt": "2026-08-09T15:00:00.000Z",
+  "error": null
+}

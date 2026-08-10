@@ -297,6 +297,122 @@ describe('ExploreGraph', () => {
     unmount()
   })
 
+  // Regression guard for the ?focus= deep-link timing fix: ExploreGraph must
+  // emit 'graphReady' after buildGraph() completes (forceAtlas2 layout done,
+  // node x/y coords valid). App.vue calls focusSingleNode() in response to
+  // this event — if the event fires too early (e.g. before buildGraph) then
+  // getNodeAttribute(id,'x') returns undefined and the camera silently no-ops.
+  it('emits graphReady after buildGraph populates the graph with node coordinates', async () => {
+    let graphReadyFired = false
+    let graphReadyGraphSize = -1
+    const { unmount } = mountExploreGraph({
+      ...fixture,
+      onGraphReady: () => {
+        graphReadyFired = true
+        // At the moment graphReady fires, the graphology instance must already
+        // have the nodes with numeric x/y (set by addNode before forceAtlas2).
+        graphReadyGraphSize = mockGraphInstances[mockGraphInstances.length - 1]?.nodes.size ?? -1
+      },
+    })
+    await nextTick()
+    expect(graphReadyFired).toBe(true)
+    // Both fixture nodes must be present when graphReady fires.
+    expect(graphReadyGraphSize).toBe(fixture.nodes.length)
+    // focusSingleNode relies on getNodeAttribute(id,'x') being numeric.
+    // Verify the graphology mock has x/y for all nodes at graphReady time.
+    const g = mockGraphInstances[mockGraphInstances.length - 1]
+    for (const n of fixture.nodes) {
+      expect(typeof g.getNodeAttribute(n.id, 'x')).toBe('number')
+      expect(typeof g.getNodeAttribute(n.id, 'y')).toBe('number')
+    }
+    unmount()
+  })
+
+  // Verify focusSingleNode calls camera.animate with numeric x/y when the
+  // graph has been built (nodes have coordinates). This is the call that was
+  // silently no-oping before the graphReady timing fix.
+  it('focusSingleNode calls camera.animate with the node coordinates', async () => {
+    const { app, unmount } = mountExploreGraph(fixture)
+    await nextTick()
+    // ExploreGraph exposes focusSingleNode via defineExpose.
+    const instance = app._instance as any
+    const exposed = instance?.exposed ?? instance?.proxy
+    // The graphology mock assigns random x/y via `Math.random()` in addNode
+    // (the spread `...n` doesn't include x/y, so buildGraph sets them via the
+    // graphology addNode attrs). In the real component x is set as Math.random()
+    // during buildGraph — the mock stores whatever was passed in addNode.
+    // Our mock's addNode stores the attrs object as-is; buildGraph calls
+    // addNode(id, { x: Math.random(), y: Math.random(), ... }), so x/y ARE numeric.
+    const g = mockGraphInstances[0]
+    const targetId = fixture.nodes[0].id
+    const expectedX = g.getNodeAttribute(targetId, 'x')
+    const expectedY = g.getNodeAttribute(targetId, 'y')
+    expect(typeof expectedX).toBe('number')
+
+    const sigma = mockSigmaInstances[0]
+    const camera = sigma.getCamera()
+    const animateSpy = vi.spyOn(camera, 'animate')
+    sigma.getCamera = () => camera
+
+    if (exposed?.focusSingleNode) {
+      exposed.focusSingleNode(targetId)
+      expect(animateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ x: expectedX, y: expectedY }),
+        expect.objectContaining({ duration: 600 }),
+      )
+    } else {
+      // focusSingleNode is not exposed — fail loudly so the test is noticed.
+      throw new Error('ExploreGraph does not expose focusSingleNode')
+    }
+    unmount()
+  })
+
+  // One-shot guard regression: ExploreGraph emits graphReady on EVERY buildGraph
+  // call (initial + each filter toggle). App.vue's focusDone guard ref must
+  // ensure focusSingleNode is called only on the FIRST graphReady, not again on
+  // subsequent rebuilds (which would snap the camera back overriding user panning).
+  // This test simulates App.vue's guard by capturing graphReady events and
+  // asserting the camera-animate side effect fires exactly once.
+  it('graphReady fires on each rebuild; a one-shot guard limits focusSingleNode to the first', async () => {
+    let graphReadyCount = 0
+    let animateCallCount = 0
+    // Simulate the App.vue focusDone guard: only call focusSingleNode on the
+    // first graphReady event.
+    let focusDone = false
+
+    const { app, unmount } = mountExploreGraph({
+      ...fixture,
+      onGraphReady: () => {
+        graphReadyCount++
+        // Guard: only act on the first graphReady (mirrors App.vue's focusDone ref).
+        if (focusDone) return
+        focusDone = true
+        // Simulate calling focusSingleNode — we track via the sigma animate call.
+        const sigma = mockSigmaInstances[mockSigmaInstances.length - 1]
+        if (!sigma) return
+        const camera = sigma.getCamera()
+        camera.animate({ x: 0, y: 0, ratio: 0.3 }, { duration: 600 })
+        animateCallCount++
+      },
+    })
+    await nextTick()
+    // First build: graphReady should have fired once, camera called once.
+    expect(graphReadyCount).toBe(1)
+    expect(animateCallCount).toBe(1)
+
+    // Trigger a second build by changing the nodes prop (simulates a filter toggle).
+    app._instance!.props.nodes = [
+      { id: 't:a', type: 'tutorial' as const, label: 'A', slug: 'a' },
+    ]
+    await nextTick()
+
+    // graphReady fires again on rebuild — correct ExploreGraph behavior.
+    expect(graphReadyCount).toBe(2)
+    // But the guard prevented a second focusSingleNode call — still exactly 1.
+    expect(animateCallCount).toBe(1)
+    unmount()
+  })
+
   // Regression: filter toggles in App.vue change the `filteredNodes` /
   // `filteredEdges` computed props passed to ExploreGraph. The graph was built
   // only in onMounted with no watch on props.nodes/edges, so every toggle was
