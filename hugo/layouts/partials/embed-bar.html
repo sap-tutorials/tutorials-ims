@@ -1,0 +1,10 @@
+{{/* #1584 slim bar shown only in embed=minimal (CSS-gated). No nav/search/
+     share/profile — just branding, title, step progress, theme toggle. */}}
+<div class="embed-bar" role="banner">
+  <a href="?embed=full" target="_blank" rel="noopener" aria-label="Open full SAP Developer Center site">
+    <img class="embed-bar__logo" src="/img/sap-logo.svg" alt="SAP">
+  </a>
+  <span class="embed-bar__title">{{ .Title }}</span>
+  {{ with .Params.stepCount }}<span class="embed-bar__progress" id="embed-step-progress" data-step-count="{{ . }}">Step 1 of {{ . }}</span>{{ end }}
+  <ui5-button data-action="toggle-theme" icon="dark-mode" design="Transparent" tooltip="Toggle theme" aria-label="Toggle theme"></ui5-button>
+</div>

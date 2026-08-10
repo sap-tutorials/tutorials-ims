@@ -19,6 +19,10 @@
   {{ partial "qa-banner.html" . }}
   {{ partial "preview-banner.html" . }}
   {{ partial "header.html" . }}
+  {{ partial "embed-bar.html" . }}
+  {{/* #1584 escape hatch — only visible under embed=none (CSS-gated). Opens the
+       full site in a new top-level context so a framed user escapes the frame. */}}
+  <a class="embed-escape" href="?embed=full" target="_blank" rel="noopener">⤢ Open full site</a>
   {{/* U14: top-of-viewport navigation progress indicator. */}}
   {{ partial "nav-progress.html" . }}
   {{/* U11: top-of-viewport reading-progress bar. Hidden until tutorial.ts
@@ -62,6 +66,7 @@
   <script type="module" src="{{ $ui5.RelPermalink }}"></script>
   {{ end }}
   {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/alerts.js" defer></script>{{ end }}
+  <script type="module" src="/js/embed.js" defer></script>
   {{ if and (or .IsHome (eq .Type "verb")) (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/homepage-explainers.js" defer></script>{{ end }}
   {{ if or .IsHome (eq .Type "verb") }}<script type="module" src="/js/homepage-personalizer.js" defer></script>{{ end }}
   {{ if site.Params.previewMode }}
