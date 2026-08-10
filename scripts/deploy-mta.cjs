@@ -374,6 +374,37 @@ async function main() {
     ok('build:deploy complete (explore bundle + manifest included via build:all)');
   }
 
+  // ---- Step 2.5: verify Hugo baked FINGERPRINTED island bundles ---------
+  // WHY (2026-08-10): the #1604 island-fingerprint pipeline builds
+  // hugo/data/island_manifest.json in `build:island-manifest`. That step was
+  // originally ONLY wired into the `postbuild:apps` npm lifecycle hook — but
+  // this repo runs with `ignore-scripts=true` globally, so the hook is SILENT
+  // during a local `npm run build:all`. Result: the manifest was never
+  // written, hugo/layouts/partials/island-src.html fell back to the UNHASHED
+  // /js/<name>.js path, and the approuter shipped a stale bundle while the
+  // fresh (fingerprinted) one sat unreferenced next to it. The compiled fixes
+  // were present but never served. build:all now calls build:island-manifest
+  // explicitly; this guard is the belt-and-suspenders that fails the deploy if
+  // that ever regresses again (renamed step, reordered pipeline, etc.).
+  if (!args.dryRun && !args.skipBuild) {
+    const viteManifest = path.join(ROOT, 'hugo', 'static', 'js', '.vite', 'manifest.json');
+    const homepage = path.join(ROOT, 'hugo', 'public', 'index.html');
+    if (fs.existsSync(viteManifest) && fs.existsSync(homepage)) {
+      const html = fs.readFileSync(homepage, 'utf8');
+      // A correctly fingerprinted homepage references at least one hashed
+      // island bundle: /js/<name>-<8+hexish>.js. If EVERY island script tag is
+      // the bare unhashed fallback, the manifest never took effect.
+      const hashed = /\/js\/[a-zA-Z0-9-]+-[A-Za-z0-9_-]{8,}\.js/.test(html);
+      if (!hashed) {
+        die(1, 'Hugo baked only UNHASHED island bundle paths despite a Vite manifest existing.\n' +
+               '             hugo/data/island_manifest.json was likely not built (ignore-scripts=true\n' +
+               '             silences the postbuild:apps hook). Fresh JS fixes will NOT be served.\n' +
+               '             Fix: ensure `npm run build:island-manifest` runs inside build:all, then rebuild.');
+      }
+      ok('island bundles fingerprinted in hugo/public (manifest took effect)');
+    }
+  }
+
   // ---- Step 3: mbt build (+ fresh-mtar verify) -------------------------
   step(3, 'Package MTA (mbt build)');
   if (args.skipBuild) {
