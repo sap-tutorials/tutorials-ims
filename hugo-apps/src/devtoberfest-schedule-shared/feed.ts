@@ -14,6 +14,13 @@ export async function fetchMyCompletions(editionId?: string): Promise<MyCompleti
     const q = editionId ? `?edition=${encodeURIComponent(editionId)}` : '';
     const r = await fetch(`/api/devtoberfest/my-completions${q}`, opts);
     if (!r.ok) return { authenticated: false };
-    return r.json();
+    // Defense-in-depth: if the approuter gate ever returns a 200 login-redirect
+    // HTML page (rather than the backend's JSON), don't parse it as JSON —
+    // treat the caller as anonymous. Only bail when the content-type is
+    // positively non-JSON; awaiting r.json() keeps any parse rejection inside
+    // this try/catch.
+    const ct = r.headers?.get?.('content-type');
+    if (ct && !ct.includes('application/json')) return { authenticated: false };
+    return await r.json();
   } catch { return { authenticated: false }; }
 }

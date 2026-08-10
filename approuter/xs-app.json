@@ -129,13 +129,13 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/api/devtoberfest/(status|terms|banner|faq|schedule|transcript)(\\?.*)?$",
+      "source": "^/api/devtoberfest/(status|terms|banner|faq|schedule|transcript|my-completions)(\\?.*)?$",
       "target": "/api/devtoberfest/$1$2",
       "destination": "srv-api",
       "authenticationType": "none"
     },
     {
-      "source": "^/api/devtoberfest/(join|me|my-completions)(\\?.*)?$",
+      "source": "^/api/devtoberfest/(join|me)(\\?.*)?$",
       "target": "/api/devtoberfest/$1$2",
       "destination": "srv-api",
       "authenticationType": "xsuaa"
