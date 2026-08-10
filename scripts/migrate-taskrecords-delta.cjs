@@ -123,7 +123,12 @@ const DRY_RUN_CSV = path.join(
 const FRESH_DRY_RUN_MS = 60 * 60 * 1000;
 const PAGE_SIZE = 50_000;
 const BATCH_SIZE = 5000;
-const CHUNK = 5000; // IN-list chunk for existence probes (HANA param cap ~32k)
+// IN-list chunk for existence probes. Bounded by HANA's packet-size cap
+// (cqn-where-in-hana-packet-cap): the limit is total packet BYTES, not param
+// count — 5000×36-char UUIDs (~180KB) exceeds it ("maximum packet size
+// exceeded"). 1000 (~40KB) is safely under while halving round-trips vs the
+// repo's proven 500 (migrate-from-hana.js / migrate-dashboard-monitors).
+const CHUNK = 1000;
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-testable, no I/O)
