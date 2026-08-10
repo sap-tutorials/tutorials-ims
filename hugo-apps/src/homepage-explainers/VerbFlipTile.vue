@@ -51,10 +51,13 @@ const isVerb = computed(() => !!props.verbKey);
 const hasBackContent = computed(() => !!(props.tagline || props.whyItMatters));
 
 function onClick(e: MouseEvent) {
-  // Front face + has href → allow default <a> navigation.
-  // Back face (any) → flip back to front.
-  // Front face + no href (shelf header) → flip to back.
-  if (!flipped.value && props.href) return;
+  // Verb tile (has href): a click ALWAYS navigates — even when hover-intent
+  // has already flipped the card to its back face. Previously a click on the
+  // flipped face just flipped it back to the front, so users had to click
+  // twice to navigate (issue #1596). Navigation is the primary action; the
+  // flip is a passive hover affordance, so let the default <a> click through.
+  if (props.href) return;
+  // Shelf header (no href): click toggles the flip.
   e.preventDefault();
   flipped.value = !flipped.value;
 }

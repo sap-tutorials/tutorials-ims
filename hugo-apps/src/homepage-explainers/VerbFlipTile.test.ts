@@ -103,6 +103,46 @@ describe('VerbFlipTile', () => {
     expect(wrapper.find('[data-flipped="false"]').exists()).toBe(true);
   });
 
+  it('click on verb tile navigates (does NOT preventDefault) even when hover has already flipped it', async () => {
+    const wrapper = mount(VerbFlipTile, {
+      props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
+               tagline: 'T', whyItMatters: 'W', href: '/learn/' },
+    });
+    const tile = wrapper.find('.hp-flip');
+    // Hover-intent flips the tile to the back face (matches the bug repro).
+    await tile.trigger('pointerenter');
+    vi.advanceTimersByTime(250);
+    await nextTick();
+    expect(wrapper.find('[data-flipped="true"]').exists()).toBe(true);
+
+    // First click must navigate — i.e. NOT call preventDefault, and NOT
+    // just flip the card back to the front (issue #1596).
+    const evt = new MouseEvent('click', { cancelable: true, bubbles: true });
+    wrapper.element.dispatchEvent(evt);
+    expect(evt.defaultPrevented).toBe(false);
+  });
+
+  it('click on verb tile front face navigates (does NOT preventDefault)', () => {
+    const wrapper = mount(VerbFlipTile, {
+      props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
+               tagline: 'T', whyItMatters: 'W', href: '/learn/' },
+    });
+    const evt = new MouseEvent('click', { cancelable: true, bubbles: true });
+    wrapper.element.dispatchEvent(evt);
+    expect(evt.defaultPrevented).toBe(false);
+  });
+
+  it('click on shelf-header (no href) toggles flip', async () => {
+    const wrapper = mount(VerbFlipTile, {
+      props: { shelfKey: 'START_HERE', label: 'Start here', tagline: 'T', whyItMatters: 'W' },
+    });
+    const tile = wrapper.find('.hp-flip');
+    await tile.trigger('click');
+    expect(wrapper.find('[data-flipped="true"]').exists()).toBe(true);
+    await tile.trigger('click');
+    expect(wrapper.find('[data-flipped="false"]').exists()).toBe(true);
+  });
+
   it('verb tile renders as <a> with role NOT equal to button', () => {
     const wrapper = mount(VerbFlipTile, {
       props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
