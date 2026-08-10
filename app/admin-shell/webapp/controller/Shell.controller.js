@@ -341,6 +341,17 @@ sap.ui.define([
     // green (Success), QA/other amber (Warning), LOCAL neutral (Information).
     _applyEnvironment: function (env) {
       var oViewModel = this.getView().getModel("viewModel");
+      // Feed the authoritative deploy environment (CF space_name, via
+      // /auth/user) into the Component so env-specific external links
+      // (hrefDev/hrefProd, e.g. the Devtoberfest Planner) resolve correctly
+      // even on the vanity host developers.sap.com, where the hostname sniff
+      // in Component._resolveEnvLinks carries no "-prod" and would otherwise
+      // fall back to DEV. Only assert prod when the server says so; any other
+      // label (dev/qa/local/other) resolves to the non-prod href.
+      var oComponent = this.getOwnerComponent();
+      if (oComponent && oComponent.setDeployEnvironment) {
+        oComponent.setDeployEnvironment(env && env.id === "prod");
+      }
       if (!env || !env.label) {
         oViewModel.setProperty("/envLabel", "");
         oViewModel.setProperty("/envState", "None");
