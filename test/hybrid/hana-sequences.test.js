@@ -15,7 +15,8 @@ describe('HANA sequences (legacyId generation)', () => {
     'ActiveLearnerRecords', 'DashboardMonitoredRecords',
     'StepFailures', 'NGDSFailedMessages', 'ImsConfig',
     'PrimaryAccounts', 'SecondaryAccounts',
-    'PrivacyProtectionActions', 'FeaturedTasks'
+    'PrivacyProtectionActions', 'FeaturedTasks',
+    'EventRegistrations'
   ];
 
   it('getNextLegacyId is importable', async () => {
