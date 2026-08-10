@@ -51,6 +51,36 @@
     document.documentElement.dataset.reader = 'on';
   }
   {{ end }}
+  {{ if not site.Params.previewMode }}
+  // #1584 embed/hosted mode pre-paint. Mirrors the reader-mode pattern: set
+  // html[data-embed] before first paint so hosted chrome never flashes. URL
+  // param wins over persisted value; embed=full resets. Allowlist kept in sync
+  // with hugo-apps/src/embed/params.ts (duplicated intentionally — this runs
+  // before any module can load).
+  (function () {
+    try {
+      var q = new URLSearchParams(location.search);
+      var host = q.get('host') === '1';
+      var raw = q.get('embed');
+      var modes = ['none', 'minimal', 'reader'];
+      var mode = null;
+      if (raw === 'full') {
+        localStorage.removeItem('embed');
+      } else if (raw && modes.indexOf(raw) !== -1) {
+        mode = raw;
+      } else if (host) {
+        mode = 'minimal';
+      } else {
+        mode = localStorage.getItem('embed');
+        if (mode && modes.indexOf(mode) === -1) mode = null;
+      }
+      if (mode) {
+        document.documentElement.dataset.embed = mode;
+        localStorage.setItem('embed', mode);
+      }
+    } catch (e) {}
+  })();
+  {{ end }}
   // U14: hydration shimmer pre-paint. Only tutorial layouts mark themselves
   // unhydrated; loadProgress() in tutorial.ts flips this to "true" after
   // /getProgress resolves (or 1.5s race timeout, or catch).
