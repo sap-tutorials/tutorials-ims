@@ -23,9 +23,16 @@
         {{ with $a.location }}{{ . }} &middot;{{ end }} {{ $a.region }}
       </div>
       {{ with $a.links }}
+      {{/* Map the AdvocateLinks.kind enum (db/advocates.cds) to human-readable
+           display names so raw technical labels like "SapCommunity" never reach
+           the page. An explicit per-link .label always wins (#1578). */}}
+      {{ $kindLabels := dict
+        "SapCommunity" "SAP Community"
+        "BlueSky" "Bluesky" }}
       <ul class="adv-profile-links">
         {{ range . }}
-          <li><a href="{{ .url }}" target="_blank" rel="noopener" title="{{ .label | default .kind }}">{{ .kind }}</a></li>
+          {{ $display := .label | default (index $kindLabels .kind) | default .kind }}
+          <li><a href="{{ .url }}" target="_blank" rel="noopener" title="{{ $display }}">{{ $display }}</a></li>
         {{ end }}
       </ul>
       {{ end }}
