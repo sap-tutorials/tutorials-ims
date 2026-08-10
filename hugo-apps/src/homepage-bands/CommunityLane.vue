@@ -4,6 +4,10 @@ import { applyRssFilter } from '../homepage-personalizer/rss-filter';
 
 interface Advocate {
   ID?: string | number;
+  // /api/advocates returns firstName + lastName (see srv/routes/advocates-public.js
+  // shapeAdvocateRow). fullName/name are legacy shapes kept for defensiveness.
+  firstName?: string;
+  lastName?: string;
   name?: string;
   fullName?: string;
   region?: string;
@@ -53,7 +57,8 @@ function formatDate(iso?: string): string {
 }
 
 function advocateName(a: Advocate): string {
-  return a.fullName || a.name || 'SAP Developer Advocate';
+  const full = [a.firstName, a.lastName].filter(Boolean).join(' ').trim();
+  return full || a.fullName || a.name || 'SAP Developer Advocate';
 }
 
 /** Pick up to `n` random elements from an array (no shuffle mutation). */
