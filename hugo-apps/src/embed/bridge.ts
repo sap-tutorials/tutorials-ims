@@ -10,6 +10,7 @@ export interface BridgeDeps {
 
 export interface BridgeHandle {
   emitReady(info: { slug: string; title: string; stepCount: number }): void;
+  emitCompleted(): void;
   destroy(): void;
 }
 
@@ -42,7 +43,15 @@ export function createEmbedBridge(deps: BridgeDeps): BridgeHandle {
     // tutorial.ts dispatches { stepNumber } — normalize to stepIndex on the wire.
     const idx = d && typeof d.stepNumber === 'number' ? d.stepNumber
       : (d && typeof d.stepIndex === 'number' ? d.stepIndex : null);
-    if (idx != null) post({ type: 'sap:tutorial:step-completed', slug: currentSlug, stepIndex: idx });
+    if (idx != null) {
+      post({ type: 'sap:tutorial:step-completed', slug: currentSlug, stepIndex: idx });
+      // Auto-emit whole-tutorial completion when the final step is completed.
+      // Only when stepCount is known (>0); otherwise the island calls
+      // emitCompleted() explicitly.
+      if (currentStepCount > 0 && idx === currentStepCount) {
+        post({ type: 'sap:tutorial:completed', slug: currentSlug });
+      }
+    }
   };
 
   const onMessage = (e: MessageEvent) => {
@@ -69,6 +78,7 @@ export function createEmbedBridge(deps: BridgeDeps): BridgeHandle {
   };
 
   let currentSlug = '';
+  let currentStepCount = 0;
 
   doc.addEventListener('tutorial:step-change', onStepChange);
   doc.addEventListener('tutorial:step-completed', onStepCompleted);
@@ -77,7 +87,11 @@ export function createEmbedBridge(deps: BridgeDeps): BridgeHandle {
   return {
     emitReady(info) {
       currentSlug = info.slug;
+      currentStepCount = info.stepCount;
       post({ type: 'sap:tutorial:ready', slug: info.slug, title: info.title, stepCount: info.stepCount });
+    },
+    emitCompleted() {
+      post({ type: 'sap:tutorial:completed', slug: currentSlug });
     },
     destroy() {
       doc.removeEventListener('tutorial:step-change', onStepChange);
