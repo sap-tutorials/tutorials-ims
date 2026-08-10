@@ -62,7 +62,13 @@
  *
  *   IMS_HANA_CREDENTIALS   JSON {host,port,user,password,schema}
  *                          OR IMS_DB_URL + IMS_DB_USERNAME + IMS_DB_PASSWORD
- *   CAP_HANA_CREDENTIALS   JSON service-key for target CAP HDI (PROD)
+ *   CAP_HANA_CREDENTIALS   JSON service-key for target CAP HDI (PROD).
+ *                          OPTIONAL — if unset, the target is auto-resolved
+ *                          via `cf service-key tutorials-hana tutorials-hana-key`
+ *                          off your current `cf target` (same as
+ *                          migrate-from-hana.js). So, like last time, you only
+ *                          need to stage the SOURCE creds; target comes from
+ *                          your `cf target tutorial-system/prod`.
  *
  * ── Usage ───────────────────────────────────────────────────────────────
  *
@@ -257,9 +263,28 @@ function resolveSourceCreds() {
   }
   throw new Error('No source creds. Set IMS_HANA_CREDENTIALS or IMS_DB_URL+IMS_DB_USERNAME+IMS_DB_PASSWORD.');
 }
+// Target creds resolution mirrors migrate-from-hana.js so this script has the
+// same ergonomics as the full migrator you ran last time: if
+// CAP_HANA_CREDENTIALS isn't set, auto-resolve from a `cf service-key` off
+// whatever org/space you're currently `cf target`'d at. That's why last time
+// you only had to stage the SOURCE creds — the target came from your cf target.
+const TARGET_INSTANCE = argVal('--target-instance') || 'tutorials-hana';
+const TARGET_KEY = argVal('--target-key') || 'tutorials-hana-key';
+
+function credsFromServiceKey(serviceInstance, serviceKey) {
+  const { execFileSync } = require('node:child_process');
+  const raw = execFileSync('cf', ['service-key', serviceInstance, serviceKey], { encoding: 'utf-8' });
+  const jsonStart = raw.indexOf('{');
+  if (jsonStart < 0) throw new Error(`cf service-key ${serviceInstance} ${serviceKey} returned no JSON`);
+  const parsed = JSON.parse(raw.slice(jsonStart));
+  return parsed.credentials || parsed;
+}
+
 function resolveTargetCreds() {
   if (process.env.CAP_HANA_CREDENTIALS) return JSON.parse(process.env.CAP_HANA_CREDENTIALS);
-  throw new Error('No target creds. Set CAP_HANA_CREDENTIALS to the JSON service-key.');
+  // Fallback: resolve from the currently-targeted CF org/space. Re-assert your
+  // `cf target` at tutorial-system/prod immediately before running (drift risk).
+  return credsFromServiceKey(TARGET_INSTANCE, TARGET_KEY);
 }
 
 // ---------------------------------------------------------------------------
