@@ -20,17 +20,25 @@
 .adv-card-inner {
   position: relative; width: 100%; aspect-ratio: 4 / 5;
   transition: transform .85s cubic-bezier(.2,.85,.25,1);
-  transform-style: preserve-3d; cursor: pointer;
+  -webkit-transform-style: preserve-3d; transform-style: preserve-3d; cursor: pointer;
 }
 .adv-flipwrap:hover .adv-card-inner,
 .adv-flipwrap.is-flipped .adv-card-inner { transform: rotateY(180deg); }
 .adv-face {
-  position: absolute; inset: 0; backface-visibility: hidden;
+  position: absolute; inset: 0;
+  /* iOS Safari (WebKit) needs the -webkit- prefix; without it the front face
+     (photo) is NOT hidden on flip and shows through — mirrored — over the
+     back-face text, making it unreadable on Apple devices (#1607). The
+     unprefixed property alone is enough for Blink/Gecko but not WebKit. */
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
   border-radius: var(--adv-card-radius); overflow: hidden;
   background: #fff; border: 1px solid #e4e4e8;
   box-shadow: 0 8px 24px rgba(8,32,80,.06);
   display: flex; flex-direction: column;
 }
+/* Explicit front-face transform gives it its own 3D layer so WebKit reliably
+   applies backface culling to it (matches the working homepage flip-card). */
+.adv-front { -webkit-transform: rotateY(0deg); transform: rotateY(0deg); }
 .adv-flipwrap:hover .adv-face { box-shadow: 0 18px 44px rgba(8,32,80,.14); }
 
 .adv-front .adv-hero { height: 56%; position: relative; overflow: hidden; }
@@ -77,7 +85,7 @@
 .adv-chip { font-size:11px; padding: 3px 9px; border-radius: 999px; background:#eaf4ff; color:#0a3d91; border:1px solid #cfe3ff; }
 .adv-legend { margin-top:auto; padding-top: 12px; font-size: 11px; color:#aab5c6; letter-spacing:.08em; text-transform:uppercase; }
 
-.adv-back { transform: rotateY(180deg); padding: 22px; color: #fff; background: var(--adv-back); }
+.adv-back { -webkit-transform: rotateY(180deg); transform: rotateY(180deg); padding: 22px; color: #fff; background: var(--adv-back); }
 .adv-back .adv-name, .adv-back h3 { color: #fff; }
 .adv-back .adv-bio { font-size: 13px; line-height: 1.55; margin: 14px 0; flex: 1; overflow: auto; }
 .adv-links { display: flex; flex-wrap: wrap; gap: 8px; }
