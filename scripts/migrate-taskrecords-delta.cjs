@@ -123,7 +123,7 @@ const DRY_RUN_CSV = path.join(
 const FRESH_DRY_RUN_MS = 60 * 60 * 1000;
 const PAGE_SIZE = 50_000;
 const BATCH_SIZE = 5000;
-const CHUNK = 500; // IN-list chunking for existence probes
+const CHUNK = 5000; // IN-list chunk for existence probes (HANA param cap ~32k)
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-testable, no I/O)
@@ -385,14 +385,17 @@ function writeDryRunCsv(rows) {
 
 async function backfillReferencedUsers(source, sourceSchema, target, targetTable, referencedUserLegacyIds, sampleRows, dryRun) {
   const uniq = [...new Set(referencedUserLegacyIds)].filter((v) => v != null);
-  if (uniq.length === 0) return { needed: 0, created: 0, errors: 0 };
+  if (uniq.length === 0) return { needed: 0, created: 0, errors: 0, presentLegacy: new Set() };
 
   // Which derived user UUIDs already exist in CAP?
   const derivedIds = uniq.map((lid) => deriveUuid('user', lid));
   const present = await fetchExistingIds(target, targetTable, derivedIds);
-  const missingLegacyIds = uniq.filter((lid) => !present.has(deriveUuid('user', lid)));
+  const presentLegacy = new Set(uniq.filter((lid) => present.has(deriveUuid('user', lid))));
+  const missingLegacyIds = uniq.filter((lid) => !presentLegacy.has(lid));
 
-  if (missingLegacyIds.length === 0) return { needed: 0, created: 0, errors: 0 };
+  if (missingLegacyIds.length === 0) {
+    return { needed: 0, created: 0, errors: 0, presentLegacy };
+  }
 
   // Fetch the source rows for the missing users so we can create them.
   const created = [];
@@ -418,10 +421,17 @@ async function backfillReferencedUsers(source, sourceSchema, target, targetTable
     }
   }
 
-  if (dryRun) return { needed: missingLegacyIds.length, created: 0, errors: 0, wouldCreate: created.length };
+  // Every source-resolvable user is now (or will be, on commit) present.
+  // Add them to the present set so callers don't re-probe. A referenced
+  // user legacyId with NO source IMS_USER row stays absent → orphan-user.
+  for (const u of created) presentLegacy.add(u.LEGACYID);
+
+  if (dryRun) {
+    return { needed: missingLegacyIds.length, created: 0, errors: 0, wouldCreate: created.length, presentLegacy };
+  }
 
   const res = await batchInsert(target, targetTable, created);
-  return { needed: missingLegacyIds.length, created: res.inserted, errors: res.errors };
+  return { needed: missingLegacyIds.length, created: res.inserted, errors: res.errors, presentLegacy };
 }
 
 // ---------------------------------------------------------------------------
@@ -469,13 +479,15 @@ async function processTaskRecords(ctx) {
     seen += pageRows.length;
 
     // Ensure every referenced user exists in CAP first (FK is @mandatory).
+    // backfillReferencedUsers returns the set of user legacyIds that exist (or
+    // will, on commit) — reuse it instead of re-probing the Users table.
     const refUserLegacy = pageRows.map((r) => r.USER_ID).filter((v) => v != null);
     const bf = await backfillReferencedUsers(source, ctx.sourceSchema, target, usersTable, refUserLegacy, pageRows, DRY_RUN);
     if (bf.created) console.log(`    backfilled ${bf.created} referenced Users`);
     if (DRY_RUN && bf.wouldCreate) console.log(`    would backfill ${bf.wouldCreate} referenced Users`);
+    const presentUsers = bf.presentLegacy;
 
-    // Resolve user + event existence for this page.
-    const presentUsers = await loadPresentLegacyIds(target, usersTable, 'user', refUserLegacy);
+    // Resolve event existence for this page (nullable FK).
     const refEventLegacy = pageRows.map((r) => r.EVENT_ID).filter((v) => v != null);
     const presentEvents = await loadPresentLegacyIds(target, eventsTable, 'event', refEventLegacy);
 
@@ -527,7 +539,7 @@ async function processAccomplishmentRecords(ctx) {
   if (bf.created) console.log(`  backfilled ${bf.created} referenced Users`);
   if (DRY_RUN && bf.wouldCreate) console.log(`  would backfill ${bf.wouldCreate} referenced Users`);
 
-  const presentUsers = await loadPresentLegacyIds(target, usersTable, 'user', refUserLegacy);
+  const presentUsers = bf.presentLegacy;
   const presentAcc = await loadPresentLegacyIds(target, accTable, 'accomplishment', rows.map((r) => r.ACCOMPLISHMENT_ID));
 
   let inserted = 0, updated = 0, orphanUser = 0, errors = 0;
@@ -577,7 +589,7 @@ async function processPrizeRecords(ctx) {
   if (bf.created) console.log(`  backfilled ${bf.created} referenced Users`);
   if (DRY_RUN && bf.wouldCreate) console.log(`  would backfill ${bf.wouldCreate} referenced Users`);
 
-  const presentUsers = await loadPresentLegacyIds(target, usersTable, 'user', refUserLegacy);
+  const presentUsers = bf.presentLegacy;
   const presentPrizes = await loadPresentLegacyIds(target, prizesTable, 'prize', rows.map((r) => r.PRIZE_ID));
   const presentEvents = await loadPresentLegacyIds(target, eventsTable, 'event', rows.map((r) => r.EVENT_ID).filter((v) => v != null));
 
