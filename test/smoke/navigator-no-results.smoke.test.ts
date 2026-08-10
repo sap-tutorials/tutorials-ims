@@ -35,14 +35,15 @@ describe('navigator no-results stability smoke (#159)', () => {
     // Hugo's production minifier strips quotes from safe attribute values,
     // so accept both quoted and unquoted forms.
     expect(html).toMatch(/id=["']?tutorial-navigator["']?/)
-    // The page must reference the navigator chunk under /js/.
-    expect(html).toMatch(/\/js\/navigator(\.[a-z0-9]+)?\.js/)
+    // The page must reference the navigator chunk under /js/ (content-hashed
+    // as navigator-<hash>.js since #1604).
+    expect(html).toMatch(/\/js\/navigator(?:-[\w-]+)?\.js/)
   })
 
   it('navigator JS chunk contains the new result-region contract', async () => {
     // Find the navigator chunk URL from the HTML, then fetch and inspect it.
     const html = await fetchText(NAV_PAGE)
-    const chunkMatch = html.match(/(\/js\/navigator(?:\.[a-z0-9]+)?\.js(?:\?[^"'\s]*)?)/)
+    const chunkMatch = html.match(/(\/js\/navigator(?:-[\w-]+)?\.js(?:\?[^"'\s]*)?)/)
     expect(chunkMatch, 'navigator JS chunk URL not found in HTML').toBeTruthy()
     const chunkUrl = chunkMatch![1]
 

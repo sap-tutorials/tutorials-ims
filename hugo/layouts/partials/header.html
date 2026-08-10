@@ -428,4 +428,4 @@
   window.handleProfileClick = () => shellbar.dispatchEvent(new CustomEvent('profile-click', { detail: { targetRef: avatar } }));
 })();
 </script>
-{{ if not site.Params.qa }}<script type="module" src="/js/tutorial-prefs.js"></script>{{ end }}
+{{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-prefs" }}"></script>{{ end }}

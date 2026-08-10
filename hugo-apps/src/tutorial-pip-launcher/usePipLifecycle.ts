@@ -8,6 +8,24 @@ export function isPipSupported(): boolean {
   return typeof window !== 'undefined' && 'documentPictureInPicture' in window;
 }
 
+// Locate the tutorial-pip bundle's <script> tag on the page so we can clone it
+// into the PiP window. #1604: the bundle filename is content-hashed
+// (/js/tutorial-pip-<hash>.js), so match on the `/js/tutorial-pip` prefix and
+// then confirm the basename is `tutorial-pip(-<hash>)?.js` — explicitly
+// EXCLUDING `tutorial-pip-launcher(-<hash>)?.js` (this very bundle), which
+// shares the prefix. Returns null when no matching tag is present.
+export function findPipScriptTag(doc: Document): HTMLScriptElement | null {
+  const candidates = Array.from(
+    doc.querySelectorAll<HTMLScriptElement>('script[src*="/js/tutorial-pip"]'),
+  );
+  return (
+    candidates.find((s) => {
+      const base = (s.getAttribute('src') || '').split('/').pop()?.split('?')[0] || '';
+      return /^tutorial-pip(?:-[\w-]+)?\.js$/.test(base) && !base.startsWith('tutorial-pip-launcher');
+    }) || null
+  );
+}
+
 export function cloneStylesIntoDocument(src: Document, dest: Document): void {
   // <link rel="stylesheet"> + <link rel="preconnect" for fonts> + <style>
   const links = src.head.querySelectorAll('link[rel="stylesheet"], link[rel="preconnect"], link[rel="preload"]');
@@ -74,12 +92,11 @@ export function usePipLifecycle(ctx: LauncherCtx) {
       win.document.body.appendChild(mount);
 
       // Inject the bundle into the PiP window. We piggy-back on the same
-      // /js/tutorial-pip.js that was loaded into the main tab — but only the
+      // tutorial-pip bundle that was loaded into the main tab — but only the
       // PiP window's `globalThis` will have `__mountTutorialPip` if we load
       // the script there. Easiest path: copy the <script> tag the main page
-      // already includes.
-      const tagSelector = 'script[src*="/js/tutorial-pip.js"]';
-      const scriptTag = document.querySelector<HTMLScriptElement>(tagSelector);
+      // already includes (see findPipScriptTag for the #1604 hashed-name match).
+      const scriptTag = findPipScriptTag(document);
       if (!scriptTag) {
         win.close();
         return false;

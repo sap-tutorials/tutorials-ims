@@ -441,14 +441,14 @@
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
 {{ end }}
-<script type="module" src="/js/nav-dropdown.js"></script>
-{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/tutorial-pip-launcher.js"></script>{{ end }}
-{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/tutorial-pip.js"></script>{{ end }}
-{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/tutorial-rating.js" defer></script>{{ end }}
-{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/code-check.js" defer></script>{{ end }}
-<script type="module" src="/js/validation.js" defer></script>
-{{ if not site.Params.previewMode }}<script type="module" src="/js/tutorial-branches.js" defer></script>{{ end }}
-{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/related-graph.js" defer></script>{{ end }}
+<script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip" }}"></script>{{ end }}
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-rating" }}" defer></script>{{ end }}
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "code-check" }}" defer></script>{{ end }}
+<script type="module" src="{{ partial "island-src.html" "validation" }}" defer></script>
+{{ if not site.Params.previewMode }}<script type="module" src="{{ partial "island-src.html" "tutorial-branches" }}" defer></script>{{ end }}
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "related-graph" }}" defer></script>{{ end }}
 
 <script type="module">
   // U1 Object Page — keep --op-header-h in sync with the rendered .op-header height

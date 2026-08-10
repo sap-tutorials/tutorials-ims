@@ -73,7 +73,7 @@
          always present after npm run build:apps). Mount is inert until JS loads,
          so no empty-state guard is needed here — same posture as concepts-filter.js. */ -}}
   <section id="topics-map" class="topics-map-section" data-vue-island="topics-map" aria-label="Topic map" aria-hidden="true"></section>
-  <script type="module" src="/js/topics-map.js" defer></script>
+  <script type="module" src="{{ partial "island-src.html" "topics-map" }}" defer></script>
 
 </div>
 {{ end }}

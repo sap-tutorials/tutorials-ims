@@ -22,8 +22,8 @@ function codeCheckBudget() {
   return {
     name: 'code-check-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['code-check.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'code-check');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_CODE_CHECK_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -40,8 +40,8 @@ function validationBudget() {
   return {
     name: 'validation-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['validation.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'validation');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_VALIDATION_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -58,8 +58,8 @@ function tutorialBranchesBudget() {
   return {
     name: 'tutorial-branches-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['tutorial-branches.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'tutorial-branches');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_TUTORIAL_BRANCHES_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -76,8 +76,8 @@ function advocatesBudget() {
   return {
     name: 'advocates-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['advocates.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'advocates');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_ADVOCATES_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -94,8 +94,8 @@ function puzzleBudget() {
   return {
     name: 'puzzle-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['puzzle.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'puzzle');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_PUZZLE_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -112,8 +112,8 @@ function advocateProfileBudget() {
   return {
     name: 'advocate-profile-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['advocate-profile.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'advocate-profile');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_ADVOCATE_PROFILE_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -130,8 +130,8 @@ function tutorialPrefsBudget() {
   return {
     name: 'tutorial-prefs-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['tutorial-prefs.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'tutorial-prefs');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_TUTORIAL_PREFS_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -148,8 +148,8 @@ function alertsBudget() {
   return {
     name: 'alerts-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['alerts.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'alerts');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_ALERTS_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -166,8 +166,8 @@ function homepagePersonalizerBudget() {
   return {
     name: 'homepage-personalizer-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['homepage-personalizer.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'homepage-personalizer');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_HOMEPAGE_PERSONALIZER_GZIP) {
         // @ts-ignore
@@ -184,8 +184,8 @@ function homepageExplainersBudget() {
   return {
     name: 'homepage-explainers-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['homepage-explainers.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'homepage-explainers');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_HOMEPAGE_EXPLAINERS_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -202,8 +202,8 @@ function relatedGraphBudget() {
   return {
     name: 'related-graph-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['related-graph.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'related-graph');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_RELATED_GRAPH_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -220,8 +220,8 @@ function topicsMapBudget() {
   return {
     name: 'topics-map-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['topics-map.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'topics-map');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_TOPICS_MAP_GZIP) {
         // @ts-ignore — Rollup plugin context
@@ -238,8 +238,8 @@ function petoberfestBudget() {
   return {
     name: 'petoberfest-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
-      const chunk = bundle['petoberfest.js'];
-      if (!chunk || chunk.type !== 'chunk') return;
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'petoberfest');
+      if (!chunk) return;
       const gz = gzipSync(chunk.code).length;
       if (gz > MAX_PETOBERFEST_GZIP) {
         // @ts-ignore
@@ -268,6 +268,10 @@ export default defineConfig({
     },
   },
   build: {
+    // Emit hugo/static/js/.vite/manifest.json so the post-Vite build step
+    // (scripts/build-island-manifest.cjs, run in postbuild:apps) can map each
+    // entry name to its content-hashed filename for Hugo to resolve.
+    manifest: true,
     outDir: '../hugo/static/js',
     emptyOutDir: false,
     rollupOptions: {
@@ -322,7 +326,21 @@ export default defineConfig({
         'devtoberfest-faq': resolve(__dirname, 'src/devtoberfest-faq/main.ts'),
       },
       output: {
-        entryFileNames: '[name].js',
+        // Content-hash entry bundles so a changed bundle gets a new URL the
+        // CDN edge (Akamai on PROD) has never cached — fresh HTML can no
+        // longer pair with a stale cached bundle (#1604, the JS analog of the
+        // 2026-08-10 giant-logo CSS incident, PR #1601/#1603).
+        //
+        // Two entries stay at stable, un-hashed filenames because the CAP
+        // runtime renderers hardcode their paths at request time and cannot
+        // read Hugo's build-time manifest:
+        //   - nav-dropdown    → srv/lib/catalog-renderer.js (L120, L204)
+        //   - concepts-filter → srv/lib/concept-list-page.js (L160, L212)
+        // Their CDN cache policy is a separate follow-up (#1604 item 4).
+        entryFileNames: (chunkInfo) =>
+          (chunkInfo.name === 'nav-dropdown' || chunkInfo.name === 'concepts-filter')
+            ? '[name].js'
+            : '[name]-[hash].js',
         chunkFileNames: 'chunks/[name]-[hash].js',
       },
     },

@@ -35,7 +35,7 @@ window.openTutorialFeedbackPopup = function(slug) {
   }
   const s = document.createElement('script');
   s.type = 'module';
-  s.src = '/js/tutorial-feedback.js';
+  s.src = {{ partial "island-src.html" "tutorial-feedback" | jsonify }};
   s.onload = () => window.mountTutorialFeedback(slug, 'tutorial-feedback-popup');
   document.head.appendChild(s);
 };

@@ -27,6 +27,9 @@ hugo/data/shelf_definitions.json
 # Build artifact written by scripts/build-explore-manifest.ts; consumed by
 # Hugo as site.Data.explore_bundle (issue #744).
 hugo/data/explore_bundle.json
+# Build artifact written by scripts/build-island-manifest.cjs from Vite's
+# manifest; consumed by Hugo as site.Data.island_manifest (issue #1604).
+hugo/data/island_manifest.json
 hugo/data-qa/
 hugo/static-qa/
 .comparison-results/

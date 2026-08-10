@@ -128,6 +128,6 @@
        so the Vue island seeds allCards synchronously and renders cards in the
        first paint after mount, no fetch wait. Same shape as /browse/'s. */ -}}
 <script id="browse-data" type="application/json">{{ $browse | jsonify | safeJS }}</script>
-<script type="module" src="/js/navigator.js?v={{ now.Unix }}"></script>
+<script type="module" src="{{ partial "island-src.html" "navigator" }}"></script>
 <script defer src="/js/featured-rail.js?v={{ now.Unix }}"></script>
 {{ end }}

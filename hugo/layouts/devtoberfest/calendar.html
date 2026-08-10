@@ -1,5 +1,5 @@
 {{ define "main" }}
 <main id="devtoberfest-sessions-calendar-mount"></main>
 <noscript>The Devtoberfest sessions calendar requires JavaScript.</noscript>
-<script type="module" src="{{ "/js/devtoberfest-sessions-calendar.js" | relURL }}?v={{ now.Unix }}"></script>
+<script type="module" src="{{ partial "island-src.html" "devtoberfest-sessions-calendar" | relURL }}"></script>
 {{ end }}

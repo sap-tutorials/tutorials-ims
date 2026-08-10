@@ -124,7 +124,7 @@
        renders nothing, so the SSR empty-state above is the user-visible
        result. */ -}}
 <script id="browse-data" type="application/json">{{ $browse | jsonify | safeJS }}</script>
-<script type="module" src="/js/browse.js?v={{ $buildAt | replaceRE `[^0-9]` `` }}"></script>
+<script type="module" src="{{ partial "island-src.html" "browse" }}"></script>
 
 {{ $css := resources.Get "css/browse.css" | fingerprint }}
 {{- if $css -}}
