@@ -514,8 +514,8 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/concepts/?$",
-      "target": "/content/concepts-index",
+      "source": "^/concepts/?(\\?.*)?$",
+      "target": "/content/concepts-index$1",
       "destination": "srv-api",
       "authenticationType": "none"
     },
