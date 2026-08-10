@@ -285,23 +285,11 @@ sap.ui.define([
       // dashboard) keep the property undefined; UI5 NavigationListItem treats
       // missing `expanded` as the default (open), which is the right behavior
       // for leaf items that have no expand chevron.
+      this._oNavModel = oNavModel;
       oNavModel.attachRequestCompleted(function () {
         var groups = oNavModel.getProperty("/groups") || [];
-        // Resolve env-specific external links (hrefDev/hrefProd -> href). The
-        // admin-shell bundle is built once and deployed to both DEV and PROD,
-        // so URLs that differ per environment can't be hardcoded in the JSON —
-        // pick the right one from the approuter hostname at runtime. PROD hosts
-        // carry "-prod" in the CF app name; everything else falls back to DEV.
-        var bIsProd = /-prod\b/.test(window.location.hostname);
-        var resolveHref = function (oItem) {
-          if (oItem.hrefDev || oItem.hrefProd) {
-            oItem.href = (bIsProd ? oItem.hrefProd : oItem.hrefDev) || oItem.href;
-          }
-        };
-        groups.forEach(function (g) {
-          resolveHref(g);
-          (g.items || []).forEach(resolveHref);
-        });
+        // Resolve env-specific external links (hrefDev/hrefProd -> href).
+        this._resolveEnvLinks();
         groups.forEach(function (g) {
           if (!g.items || !g.items.length) return;
           var sStored = localStorage.getItem("sap-tutorials-admin-nav-group-" + g.key);
@@ -310,7 +298,7 @@ sap.ui.define([
           g.expanded = (sStored === null) ? true : (sStored !== "false");
         });
         oNavModel.setProperty("/groups", groups);
-      });
+      }.bind(this));
       // Persist any user-driven change to `expanded` via two-way binding.
       // The NavigationListItem writes through `nav>expanded` on chevron
       // click; the resulting propertyChange fires here. Restoring the same
@@ -335,6 +323,49 @@ sap.ui.define([
         localStorage.setItem("sap-tutorials-admin-nav-group-" + oGroup.key, String(!!bValue));
       });
       this.setModel(oNavModel, "nav");
+    },
+
+    // Resolve env-specific external links (hrefDev/hrefProd -> href). The
+    // admin-shell bundle is built once and deployed to both DEV and PROD, so
+    // URLs that differ per environment can't be hardcoded in the JSON — they're
+    // picked at runtime.
+    //
+    // Precedence:
+    //   1. The authoritative deploy environment reported by /auth/user
+    //      (derived from the CF space_name — see srv/lib/deploy-environment.js;
+    //      chosen because the Host header is spoofable). Fed in via
+    //      setDeployEnvironment() once the Shell controller has it. This is the
+    //      ONLY signal that is correct on the vanity host developers.sap.com,
+    //      where the hostname carries no "-prod" and the sniff below misses.
+    //   2. Fallback: the approuter hostname. PROD CF app names carry "-prod";
+    //      everything else falls back to DEV. Used before /auth/user resolves,
+    //      and correct on the raw *.cfapps.* approuter routes.
+    _resolveEnvLinks: function () {
+      var oNavModel = this._oNavModel;
+      if (!oNavModel) return;
+      var groups = oNavModel.getProperty("/groups") || [];
+      var bIsProd = (typeof this._bEnvIsProd === "boolean")
+        ? this._bEnvIsProd
+        : /-prod\b/.test(window.location.hostname);
+      var resolveHref = function (oItem) {
+        if (oItem.hrefDev || oItem.hrefProd) {
+          oItem.href = (bIsProd ? oItem.hrefProd : oItem.hrefDev) || oItem.href;
+        }
+      };
+      groups.forEach(function (g) {
+        resolveHref(g);
+        (g.items || []).forEach(resolveHref);
+      });
+      oNavModel.setProperty("/groups", groups);
+    },
+
+    // Called by Shell.controller once /auth/user reports the deploy environment.
+    // Stores the authoritative prod/non-prod flag and re-resolves env-specific
+    // links so a hostname-based mis-resolution (e.g. on the vanity domain) is
+    // corrected as soon as the server truth arrives.
+    setDeployEnvironment: function (bIsProd) {
+      this._bEnvIsProd = !!bIsProd;
+      this._resolveEnvLinks();
     }
   });
 });
