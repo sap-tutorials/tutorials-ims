@@ -344,6 +344,99 @@ html[data-reader="on"][data-page-kind="tutorial"] .op-header:focus-within {
   html[data-reader="on"][data-page-kind="tutorial"] .op-header { transition: none; }
 }
 
+/* #1584 embed/hosted mode. `reader` reuses the focus-mode cascade above via
+   these aliases; `none` and `minimal` add their own chrome removal. Unlike
+   reader mode (tutorial-only), embed selectors are NOT gated on
+   data-page-kind so a hosted mission/concept page also strips. */
+
+/* embed=reader → same as pressing 'f'. */
+html[data-embed="reader"] .tutorial-right-col,
+html[data-embed="reader"] .breadcrumbs,
+html[data-embed="reader"] .feedback-share,
+html[data-embed="reader"] .step-controls,
+html[data-embed="reader"] .tutorial-stepnav,
+html[data-embed="reader"] footer,
+html[data-embed="reader"] #joule-panel,
+html[data-embed="reader"] #joule-starters {
+  display: none !important;
+}
+
+/* embed=none / minimal → hide site chrome everywhere it appears. */
+html[data-embed="none"] .tutorial-right-col,
+html[data-embed="minimal"] .tutorial-right-col,
+html[data-embed="none"] .breadcrumbs,
+html[data-embed="minimal"] .breadcrumbs,
+html[data-embed="none"] .feedback-share,
+html[data-embed="minimal"] .feedback-share,
+html[data-embed="none"] footer,
+html[data-embed="minimal"] footer,
+html[data-embed="none"] #joule-panel,
+html[data-embed="minimal"] #joule-panel,
+html[data-embed="none"] #joule-starters,
+html[data-embed="minimal"] #joule-starters {
+  display: none !important;
+}
+
+/* embed=none additionally removes the real shellbar and progress bar entirely
+   (reader only dims the shellbar). */
+html[data-embed="none"] ui5-shellbar,
+html[data-embed="none"] #reading-progress,
+html[data-embed="none"] #cmd-palette {
+  display: none !important;
+}
+
+/* embed=minimal hides the real shellbar (the slim embed-bar renders instead). */
+html[data-embed="minimal"] ui5-shellbar {
+  display: none !important;
+}
+
+/* The slim embed bar and escape pill are hidden unless their mode is active. */
+.embed-bar { display: none; }
+html[data-embed="minimal"] .embed-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 44px;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--sapObjectHeader_BorderColor, #d9d9d9);
+  background: var(--sapObjectHeader_Background, #fff);
+}
+.embed-bar__logo { height: 20px; }
+.embed-bar__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.embed-bar__progress {
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-variant-numeric: tabular-nums;
+}
+
+.embed-escape { display: none; }
+html[data-embed="none"] .embed-escape {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 9999;
+  padding: 0.5rem 0.75rem;
+  border-radius: 999px;
+  background: var(--sapButton_Emphasized_Background, #0070f2);
+  color: var(--sapButton_Emphasized_TextColor, #fff);
+  font-size: 0.8125rem;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
 /* Dark-mode fix for shellbar popover items (PR #575 + revised 2026-06-23).
    ORIGINAL approach used `var(--sapList_TextColor)`. That was wrong:
    `--sapList_TextColor` is an INSIDE-the-shadow-DOM UI5 list token, set on
