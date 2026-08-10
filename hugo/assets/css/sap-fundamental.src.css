@@ -1,0 +1,3006 @@
+/* SOURCE — edit here, then run `npm run build:css` to regenerate the committed
+   compiled hugo/assets/css/sap-fundamental.css that Hugo fingerprints + publishes. */
+@import './sap-theme-vars.css';
+@import 'fundamental-styles/dist/theming/sap_horizon.css';
+@import 'fundamental-styles/dist/button.css';
+@import 'fundamental-styles/dist/card.css';
+@import 'fundamental-styles/dist/panel.css';
+@import 'fundamental-styles/dist/progress-indicator.css';
+@import 'fundamental-styles/dist/badge.css';
+@import 'fundamental-styles/dist/icon.css';
+@import 'fundamental-styles/dist/tabs.css';
+@import 'fundamental-styles/dist/breadcrumb.css';
+@import 'fundamental-styles/dist/popover.css';
+@import 'fundamental-styles/dist/bar.css';
+@import 'fundamental-styles/dist/form-item.css';
+@import 'fundamental-styles/dist/form-label.css';
+@import 'fundamental-styles/dist/radio.css';
+@import 'fundamental-styles/dist/input.css';
+@import 'fundamental-styles/dist/input-group.css';
+@import 'fundamental-styles/dist/link.css';
+@import 'fundamental-styles/dist/checkbox.css';
+@import 'fundamental-styles/dist/info-label.css';
+@import 'fundamental-styles/dist/toolbar.css';
+@import 'fundamental-styles/dist/shellbar.css';
+@import 'fundamental-styles/dist/avatar.css';
+@import 'fundamental-styles/dist/tile.css';
+@import 'fundamental-styles/dist/counter.css';
+@import 'fundamental-styles/dist/object-status.css';
+@import './sap-horizon-dark.css';
+
+:root {
+  --vp-c-brand-1: var(--sapBrandColor, #0070f2);
+  --vp-c-brand-2: var(--sapHighlightColor, #0064d9);
+  --vp-c-brand-3: var(--sapBrandColor, #0070f2);
+
+  --vp-c-bg: var(--sapBackgroundColor, #f5f6f7);
+  --vp-c-bg-soft: var(--sapGroup_ContentBackground, #fff);
+  --vp-c-bg-alt: var(--sapBaseColor, #fff);
+
+  --vp-c-text-1: var(--sapTextColor, #32363a);
+  --vp-c-text-2: var(--sapContent_LabelColor, #556b82);
+  --vp-c-text-3: var(--sapNeutralTextColor, #6a6d70);
+
+  --vp-c-divider: var(--sapGroup_ContentBorderColor, #d9d9d9);
+  --vp-c-gutter: var(--sapGroup_ContentBorderColor, #d9d9d9);
+
+  --vp-font-family-base: var(--sapFontFamily, '72', '72full', Arial, Helvetica, sans-serif);
+
+  --vp-nav-bg-color: var(--sapShellColor, #354a5f);
+
+  --vp-c-default-1: var(--sapButton_BorderColor, #0064d9);
+  --vp-c-default-soft: var(--sapField_Background, #f5f6f7);
+}
+
+/* Sticky shellbar */
+.fd-shellbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* Shellbar text color overrides */
+.fd-shellbar .fd-shellbar__title {
+  color: var(--sapShell_TextColor, #fff);
+}
+.fd-shellbar .fd-shellbar__button {
+  background: transparent;
+  border: none;
+  color: var(--sapShell_TextColor, #fff);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+}
+.fd-shellbar .fd-shellbar__button:hover {
+  background: var(--sapShell_Hover_Background, rgba(255,255,255,0.1));
+}
+.fd-shellbar .fd-shellbar__button i {
+  color: var(--sapShell_InteractiveTextColor, #d1e8ff);
+  font-size: 1rem;
+}
+.fd-shellbar .fd-shellbar__action {
+  color: var(--sapShell_TextColor, #fff);
+  text-decoration: none;
+}
+.fd-shellbar .fd-shellbar__action:hover {
+  color: var(--sapShell_InteractiveTextColor, #d1e8ff);
+}
+.fd-shellbar .fd-shellbar__logo img {
+  height: 1.5rem;
+}
+#notification-badge:empty {
+  display: none;
+}
+
+/* Nav links layout */
+.fd-shellbar nav {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Shellbar separator between nav items and controls */
+.shellbar-separator {
+  display: inline-block;
+  vertical-align: middle;
+  width: 1px;
+  height: 1.25rem;
+  background: rgba(255,255,255,0.3);
+  margin: 0 0.5rem;
+}
+
+/* Nav dropdown (custom shellbar popover) */
+.shellbar-nav-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.shellbar-nav-dropdown__label {
+  color: var(--sapShell_TextColor, #fff);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.shellbar-nav-dropdown__arrow {
+  color: var(--sapShell_TextColor, #fff);
+  font-size: 0.75rem;
+  margin-left: 0.25rem;
+}
+.shellbar-popover {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 100;
+  min-width: 12rem;
+  background: var(--sapList_Background, #fff);
+  border: 1px solid var(--sapList_BorderColor, #e4e4e4);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.25rem 1rem rgba(0,0,0,0.15);
+  padding: 0.25rem 0;
+  margin-top: 0.25rem;
+}
+html.dark .shellbar-popover {
+  background: #1e2833;
+  border-color: #2f4763;
+  box-shadow: 0 0.25rem 1rem rgba(0,0,0,0.4);
+}
+.shellbar-popover .fd-menu__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.shellbar-popover .fd-menu__item {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.shellbar-popover .fd-menu__link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+  white-space: nowrap;
+}
+html.dark .shellbar-popover .fd-menu__link {
+  color: #dee1e4;
+}
+.shellbar-popover .fd-menu__link:hover {
+  background: var(--sapList_Hover_Background, #e8f0fe);
+}
+html.dark .shellbar-popover .fd-menu__link:hover {
+  background: #29394b;
+}
+.shellbar-popover .nav-auth-only { display: none; }
+html[data-authenticated="true"] .shellbar-popover .nav-auth-only { display: list-item; }
+.shellbar-popover .fd-menu__addon-before {
+  color: var(--sapContent_IconColor, #556b82);
+  font-size: 1rem;
+}
+html.dark .shellbar-popover .fd-menu__addon-before {
+  color: #778ea6;
+}
+.shellbar-popover .fd-menu__title {
+  font-size: 0.875rem;
+}
+.shellbar-popover--share {
+  min-width: 22rem;
+  padding: 0.75rem;
+}
+.share-popover__label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #556b82);
+  margin-bottom: 0.25rem;
+}
+html.dark .share-popover__label {
+  color: #a9b4be;
+}
+.share-popover__row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.share-popover__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+.share-popover__copy {
+  flex: 0 0 auto;
+}
+.share-popover__status {
+  font-size: 0.75rem;
+  color: var(--sapPositiveColor, #107e3e);
+  margin-top: 0.375rem;
+  min-height: 1rem;
+}
+html.dark .share-popover__status {
+  color: #36a956;
+}
+
+/* Theme toggle switch */
+.theme-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  margin: 0 0.5rem;
+  line-height: 0;
+  height: 2.25rem;
+}
+.theme-toggle-track {
+  position: relative;
+  width: 2.5rem;
+  height: 1.375rem;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.3rem;
+  transition: background 0.2s, border-color 0.2s;
+}
+.theme-toggle-thumb {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 1rem;
+  height: 1rem;
+  background: #fff;
+  border-radius: 50%;
+  transition: left 0.2s;
+  transform: translateY(-50%);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+[data-theme="dark"] .theme-toggle-thumb {
+  left: calc(100% - 1rem - 2px);
+}
+[data-theme="dark"] .theme-toggle-track {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.3);
+}
+.theme-toggle-icon {
+  color: rgba(255,255,255,0.85);
+  flex-shrink: 0;
+}
+.theme-toggle-sun { opacity: 1; }
+.theme-toggle-moon { opacity: 0.5; }
+[data-theme="dark"] .theme-toggle-sun { opacity: 0.5; }
+[data-theme="dark"] .theme-toggle-moon { opacity: 1; }
+
+/* User menu (shellbar profile) */
+#user-menu {
+  position: relative;
+}
+#user-avatar {
+  cursor: pointer;
+  transition: box-shadow 0.2s ease;
+}
+#user-avatar.fd-avatar--authenticated {
+  box-shadow: 0 0 0 2px var(--sapContent_Illustrative_Color1, #0070f2);
+}
+#user-popover {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 2.5rem;
+  z-index: 100;
+  background: var(--sapBackgroundColor, #fff);
+  border: 1px solid var(--sapGroup_TitleBorderColor, #d9d9d9);
+  border-radius: var(--sapElement_BorderCornerRadius, 0.5rem);
+  box-shadow: var(--sapContent_Shadow1, 0 0 0.5rem rgba(0,0,0,0.15));
+}
+#user-popover .user-popover__content {
+  padding: 1rem 1.25rem;
+  min-width: 14rem;
+}
+#user-popover .user-popover__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+#user-popover .user-popover__name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-top: 0.75rem;
+}
+#user-popover .user-popover__email {
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin-top: 0.25rem;
+}
+#user-popover .user-popover__separator {
+  border: none;
+  border-top: 1px solid var(--sapGroup_TitleBorderColor, #d9d9d9);
+  margin: 0.75rem 0;
+}
+#user-popover .user-popover__link {
+  display: block;
+  padding: 0.5rem 0;
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+#user-popover .user-popover__link:hover {
+  color: var(--sapLinkColor, #0064d9);
+}
+#user-popover #logout-btn {
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+/* Body font */
+body {
+  font-family: var(--sapFontFamily, '72', '72full', Arial, Helvetica, sans-serif);
+  font-size: var(--sapFontSize, 0.875rem);
+  color: var(--sapTextColor, #32363a);
+  margin: 0;
+  /* Sticky footer: short pages (e.g. home) shouldn't leave a strip of body
+     background showing below the footer. Flex column + main:flex:1 pushes
+     the footer to the bottom of the viewport when content is short. */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+body > main { flex: 1 0 auto; }
+
+/* Breadcrumb dropdown toggle */
+.breadcrumb-dropdown-toggle {
+  background: none;
+  border: none;
+  color: var(--sapTextColor, #32363a);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.breadcrumb-dropdown-toggle:hover {
+  color: var(--sapLinkColor, #0064d9);
+}
+.breadcrumb-chevron {
+  font-size: 0.75em;
+  margin-left: 0.25rem;
+}
+.nav-dropdown-container {
+  position: relative;
+}
+
+/* Tutorial breadcrumb bar */
+.tutorial-breadcrumbs {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0.625rem 2rem;
+}
+
+.fd-breadcrumb__separator {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ── Action bar (feedback / share / nav pills) ── */
+.action-bar {
+  background: var(--sapShellColor, #354a5f);
+  padding: 0.625rem 0;
+}
+.action-bar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.action-bar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.action-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: none;
+  border: none;
+  color: var(--sapShell_TextColor, #fff);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.9;
+  padding: 0;
+  font-family: inherit;
+}
+.action-link:hover { opacity: 1; color: var(--sapShell_TextColor, #fff); }
+.action-link svg { flex-shrink: 0; }
+
+/* Nav pills */
+.nav-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1.25rem;
+  border-radius: 2rem;
+  border: 1px solid var(--sapBrandColor, #0070f2);
+  color: var(--sapBrandColor, #0070f2);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.nav-pill:hover {
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+}
+.nav-pill--primary {
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+}
+.nav-pill--primary:hover {
+  background: var(--sapHighlightColor, #0064d9);
+  color: #fff;
+}
+.nav-pill--shell {
+  border-color: var(--sapShell_TextColor, #fff);
+  color: var(--sapShell_TextColor, #fff);
+}
+.nav-pill--shell:hover {
+  background: rgba(255,255,255,0.15);
+  color: var(--sapShell_TextColor, #fff);
+}
+.nav-pill--primary-shell {
+  background: var(--sapContent_ContrastTextColor, #fff);
+  color: var(--sapShellColor, #354a5f);
+  border-color: var(--sapContent_ContrastTextColor, #fff);
+}
+.nav-pill--primary-shell:hover {
+  background: rgba(255,255,255,0.9);
+  color: var(--sapShellColor, #354a5f);
+}
+
+/* Popup overlay */
+.popup-hidden { display: none !important; }
+.popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--sapBlockLayer_Background, rgba(0, 0, 0, 0.4));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.popup-card {
+  background: var(--sapBackgroundColor, #f5f6f7);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+  border-radius: 0.75rem;
+  padding: 2rem 2.5rem;
+  max-width: 640px;
+  width: 90%;
+  position: relative;
+  box-shadow: var(--sapContent_Shadow2, 0 8px 32px rgba(0, 0, 0, 0.15));
+}
+.popup-card--share {
+  max-width: 400px;
+  text-align: center;
+}
+.popup-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--sapContent_IconColor, #6a6d70);
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+.popup-close:hover { color: var(--sapTextColor, #32363a); }
+.popup-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem;
+  color: var(--sapTitleColor, #32363a);
+}
+.feedback-options {
+  display: flex;
+  gap: 1.5rem;
+}
+.feedback-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+}
+.feedback-icon {
+  color: var(--sapContent_IconColor, #6a6d70);
+}
+.feedback-option span {
+  font-size: 0.8125rem;
+  color: var(--sapContent_LabelColor, #556b82);
+  line-height: 1.4;
+}
+.feedback-btn {
+  display: inline-block;
+  padding: 0 1.25rem;
+  height: 2.25rem;
+  line-height: 2.25rem;
+  border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+  background: var(--sapButton_Emphasized_Background, #0070f2);
+  color: var(--sapButton_Emphasized_TextColor, #fff);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.feedback-btn:hover {
+  background: var(--sapButton_Emphasized_Hover_Background, #0064d9);
+  color: var(--sapButton_Emphasized_TextColor, #fff);
+}
+.share-icons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.share-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+.share-icon:hover { transform: scale(1.1); }
+
+/* Bottom nav */
+/* Next Steps section */
+.next-steps {
+  margin-top: 2rem;
+}
+
+.next-steps-heading {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.next-steps-card {
+  display: block;
+  position: relative;
+  padding: 1rem 3rem 1rem 1.25rem;
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  background: var(--sapGroup_ContentBackground, #fff);
+  text-decoration: none;
+  transition: box-shadow 0.15s;
+}
+
+.next-steps-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.next-steps-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin-bottom: 0.25rem;
+}
+
+.next-steps-title {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--sapLinkColor, #0064d9);
+}
+
+.next-steps-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+.next-steps-time-icon {
+  font-size: 0.875rem;
+}
+
+.next-steps-expand {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.5rem;
+  color: var(--sapLinkColor, #0064d9);
+  font-weight: 300;
+}
+
+/* Related Tutorials rail (v1 recommendations) */
+.next-steps-rail {
+  margin-top: 1.5rem;
+}
+
+.next-steps-rail-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.next-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.next-steps-rail-card {
+  display: block;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  background: var(--sapGroup_ContentBackground, #fff);
+  text-decoration: none;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.next-steps-rail-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.next-steps-rail-card .next-steps-title {
+  font-size: 0.9375rem;
+  line-height: 1.3;
+}
+
+.next-steps-rail-card .next-steps-meta {
+  font-size: 0.75rem;
+}
+
+.tutorial-nav-bottom {
+  display: flex;
+  align-items: center;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+}
+.nav-spacer { flex: 1; }
+
+/* Sidebar back-to-top link */
+.step-toc-back {
+  display: block;
+  text-align: right;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+}
+.step-toc-back:hover { text-decoration: underline; }
+
+/* Sidebar step label */
+.step-toc-text {
+  display: inline;
+}
+.step-toc-label {
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .feedback-options { flex-direction: column; gap: 1rem; }
+  .popup-card { padding: 1.5rem; }
+  .action-bar-inner { flex-wrap: wrap; gap: 0.5rem; }
+}
+
+/* Prevent horizontal scrollbar from full-bleed elements */
+html {
+  overflow-x: hidden;
+  background-color: var(--sapBackgroundColor, #f5f6f7);
+}
+
+/* Tutorial page overrides */
+.tutorial-page {
+  background-color: var(--sapBackgroundColor, #f5f6f7);
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+}
+
+.tutorial-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  position: sticky;
+  top: 4rem;
+  align-self: start;
+  max-height: calc(100vh - 5rem);
+  overflow-y: auto;
+}
+
+.tutorial-main {
+  background-color: var(--sapBaseColor, #fff);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+}
+
+.tutorial-sidebar {
+  align-self: start;
+}
+
+/* Ensure proper link colors */
+a {
+  color: var(--sapLinkColor, #0064d9);
+}
+
+a:hover {
+  color: var(--sapLink_Hover_Color, #0064d9);
+}
+
+/* Code blocks */
+/* Code blocks with language label + copy */
+.code-block {
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.75rem;
+  background: var(--sapNeutralBackground, #f5f6f7);
+  border-bottom: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+}
+
+.code-block-lang {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+.code-block-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--sapLinkColor, #0064d9);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.code-block-copy:hover {
+  background: var(--sapList_Hover_Background, #eaecee);
+}
+
+.code-block-copy .copy-label {
+  font-weight: 500;
+}
+
+.code-block-body pre {
+  margin: 0;
+  border-radius: 0;
+  border: none;
+}
+
+pre {
+  background-color: var(--sapField_Background, #f5f6f7);
+  padding: 1rem;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+}
+
+pre code {
+  color: var(--sapTextColor, #32363a);
+}
+
+/* Inline code */
+:not(pre) > code {
+  background-color: var(--sapField_Background, #f5f6f7);
+  color: var(--sapTextColor, #32363a);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+}
+
+/* Blockquotes */
+blockquote {
+  border-left: 4px solid var(--sapInformationBorderColor, #0070f2);
+  background-color: var(--sapInformationBackground, #e1f4ff);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0.25rem 0.25rem 0;
+  color: var(--sapTextColor, #32363a);
+  margin: 1rem 0;
+}
+
+/* Tutorial meta bar (tags + time) */
+.tutorial-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.meta-icon {
+  font-size: 1rem;
+}
+
+.meta-level {
+  text-transform: capitalize;
+}
+
+.meta-tags {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tutorial-tag {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--sapBrandColor, #0070f2);
+  border-radius: 1rem;
+  color: var(--sapBrandColor, #0070f2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+/* Step progress bar */
+#progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 1.25rem 0 0.5rem;
+}
+
+/* Step controls (Open all / Close all) */
+.step-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+}
+
+.step-controls a {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+
+.step-controls a:hover {
+  text-decoration: underline;
+}
+
+/* Sidebar step TOC card */
+.step-toc {
+  background-color: var(--sapBaseColor, #fff);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+}
+
+.step-toc h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+}
+
+.step-toc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-toc-list li {
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.step-toc-list a {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.step-toc-list a:hover {
+  color: var(--sapBrandColor, #0070f2);
+}
+
+.step-toc-list a:hover .step-toc-circle {
+  border-color: var(--sapBrandColor, #0070f2);
+  color: var(--sapBrandColor, #0070f2);
+}
+
+.step-toc-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: var(--sapContent_LabelColor, #556b82);
+  transition: border-color 0.15s, color 0.15s;
+  position: relative;
+}
+
+.step-toc-list li.active .step-toc-circle {
+  border-color: var(--sapBrandColor, #0070f2);
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+}
+
+.step-toc-list li.completed .step-toc-circle {
+  border-color: var(--sapPositiveColor, #30914c);
+  background: var(--sapPositiveColor, #30914c);
+  color: #fff;
+}
+
+/* Issue #568 (extended): step-nav indicator badges. Three slot indicators
+   (quiz, codecheck, branch) sharing one visual treatment so a user can scan
+   the step TOC and tell at a glance which steps demand which kind of work.
+   See docs/superpowers/specs/2026-06-23-step-nav-codecheck-branch-indicators-design.md.
+
+   Each badge is a 14px-outer circle (11px inner color + 1.5px background-colored
+   border so the badge stays legible when overlapping an .active (blue-filled)
+   or .completed (green-filled) circle). The glyph is rendered via CSS
+   `mask-image` with `background-color: currentColor`, so each modifier only
+   needs to override `color:` and `--mask-image:`. */
+
+.step-badge-row {
+  display: inline-flex;
+  flex-direction: row-reverse; /* rightmost slot fills first; cluster anchors right edge */
+  pointer-events: none;
+}
+
+/* Desktop right-column TOC: float over the bubble's top-right corner. */
+.step-toc-circle .step-badge-row {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+}
+
+/* Mobile step-sheet: sit inline before the step number text. */
+ui5-li .step-badge-row {
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.step-badge {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid var(--sapList_Background, var(--sapBackgroundColor, #fff));
+  background-color: currentColor;
+  -webkit-mask-position: center;
+          mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-size: 9px 9px;
+          mask-size: 9px 9px;
+  margin-left: -3px; /* overlap previous sibling in the row */
+  box-sizing: content-box;
+  flex: 0 0 auto;
+}
+.step-badge:last-child { margin-left: 0; } /* leftmost-in-row-reverse has no overlap */
+
+/* question-mark (SAP-icons-v5) — copied verbatim from
+   @ui5/webcomponents-icons/dist/v5/question-mark.js */
+.step-badge--quiz {
+  color: var(--sapPositiveColor, #30914c);
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm0-8a2.99 2.99 0 0 1 .75 5.884v.366a.75.75 0 0 1-1.5 0V8.231c0-.547.407-.716.904-.757.498-.042 1.346-.54 1.346-1.483A1.49 1.49 0 0 0 8 4.5c-.883 0-1.414.582-1.504 1.567A.75.75 0 0 1 5 5.991 2.99 2.99 0 0 1 8 3Z'/></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm0-8a2.99 2.99 0 0 1 .75 5.884v.366a.75.75 0 0 1-1.5 0V8.231c0-.547.407-.716.904-.757.498-.042 1.346-.54 1.346-1.483A1.49 1.49 0 0 0 8 4.5c-.883 0-1.414.582-1.504 1.567A.75.75 0 0 1 5 5.991 2.99 2.99 0 0 1 8 3Z'/></svg>");
+}
+
+/* source-code (SAP-icons-v5) — copied verbatim from
+   @ui5/webcomponents-icons/dist/v5/source-code.js */
+.step-badge--codecheck {
+  color: var(--sapInformativeColor, #0070f2);
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3.742 4.2a.75.75 0 0 1 1.02 1.1L1.853 7.997l2.91 2.704a.75.75 0 0 1-1.022 1.1L.239 8.546A.757.757 0 0 1 .24 7.45L3.742 4.2Zm7.463.04a.75.75 0 0 1 1.06-.04l3.502 3.249a.757.757 0 0 1 0 1.098l-3.5 3.253a.752.752 0 0 1-1.023-1.1l2.91-2.703L11.245 5.3a.75.75 0 0 1-.04-1.06Z'/></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3.742 4.2a.75.75 0 0 1 1.02 1.1L1.853 7.997l2.91 2.704a.75.75 0 0 1-1.022 1.1L.239 8.546A.757.757 0 0 1 .24 7.45L3.742 4.2Zm7.463.04a.75.75 0 0 1 1.06-.04l3.502 3.249a.757.757 0 0 1 0 1.098l-3.5 3.253a.752.752 0 0 1-1.023-1.1l2.91-2.703L11.245 5.3a.75.75 0 0 1-.04-1.06Z'/></svg>");
+}
+
+/* decision (SAP-icons-v5) — copied verbatim from
+   @ui5/webcomponents-icons/dist/v5/decision.js */
+.step-badge--branch {
+  color: var(--sapAccentColor6, #df9941);
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M12.821 3.999c.492.4 1.045.991 1.145 1.647.176 1.16-.256 2.314-1.03 3.172a5.2 5.2 0 0 1-.536.511c.665.77.775 1.812.115 2.647a1.943 1.943 0 0 1-1.89.698 1.5 1.5 0 0 1-.524.763h.001c-.45.381-1.033.57-1.617.462-.264.613-.86.974-1.51 1.077a1.799 1.799 0 0 1-1.593-.522l-.012-.012-3.445-3.6C1.325 10.174 1 9.275 1 8.322c0-1.05.379-1.853 1.024-2.625l.828-.908A.75.75 0 0 1 3.961 5.8l-.828.909C2.72 7.188 2.5 7.77 2.5 8.322c0 .659.238 1.219.608 1.59l.012.01 3.323 3.473c.287.289.857.083.66-.34-.189-.313-.1-.8.17-1.007.314-.242.752-.222 1.012.077.153.175.312.306.565.306.283 0 .425-.364.239-.55a.75.75 0 0 1 .945-1.155l.455.302c.258.162.597.277.85.017.142-.146.202-.42.06-.582-.682-.776-1.392-1.522-2.101-2.272l-.598.961-.013.02a1.753 1.753 0 0 1-1.452.778h-.869a.75.75 0 0 1-.75-.75V6.213c0-1.28.878-2.373 2.106-2.676l2.18-.531c1.01-.122 2.153.368 2.92.993Zm-4.74.994c-.57.141-.965.643-.965 1.22V8.45c.122 0 .247.005.323-.11l1.148-1.837a.758.758 0 0 1 1.132-.049l1.67 1.765c.137-.11.288-.245.433-.406.437-.483.981-1.504.54-2.134-.513-.734-1.41-1.155-2.293-1.176l-1.988.49ZM2.22 1.22a.75.75 0 1 1 1.06 1.06l-2 2A.75.75 0 0 1 .22 3.22l2-2Zm10.5 0a.75.75 0 0 1 1.06 0l2 2a.75.75 0 1 1-1.06 1.06l-2-2a.75.75 0 0 1 0-1.06Z'/></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M12.821 3.999c.492.4 1.045.991 1.145 1.647.176 1.16-.256 2.314-1.03 3.172a5.2 5.2 0 0 1-.536.511c.665.77.775 1.812.115 2.647a1.943 1.943 0 0 1-1.89.698 1.5 1.5 0 0 1-.524.763h.001c-.45.381-1.033.57-1.617.462-.264.613-.86.974-1.51 1.077a1.799 1.799 0 0 1-1.593-.522l-.012-.012-3.445-3.6C1.325 10.174 1 9.275 1 8.322c0-1.05.379-1.853 1.024-2.625l.828-.908A.75.75 0 0 1 3.961 5.8l-.828.909C2.72 7.188 2.5 7.77 2.5 8.322c0 .659.238 1.219.608 1.59l.012.01 3.323 3.473c.287.289.857.083.66-.34-.189-.313-.1-.8.17-1.007.314-.242.752-.222 1.012.077.153.175.312.306.565.306.283 0 .425-.364.239-.55a.75.75 0 0 1 .945-1.155l.455.302c.258.162.597.277.85.017.142-.146.202-.42.06-.582-.682-.776-1.392-1.522-2.101-2.272l-.598.961-.013.02a1.753 1.753 0 0 1-1.452.778h-.869a.75.75 0 0 1-.75-.75V6.213c0-1.28.878-2.373 2.106-2.676l2.18-.531c1.01-.122 2.153.368 2.92.993Zm-4.74.994c-.57.141-.965.643-.965 1.22V8.45c.122 0 .247.005.323-.11l1.148-1.837a.758.758 0 0 1 1.132-.049l1.67 1.765c.137-.11.288-.245.433-.406.437-.483.981-1.504.54-2.134-.513-.734-1.41-1.155-2.293-1.176l-1.988.49ZM2.22 1.22a.75.75 0 1 1 1.06 1.06l-2 2A.75.75 0 0 1 .22 3.22l2-2Zm10.5 0a.75.75 0 0 1 1.06 0l2 2a.75.75 0 1 1-1.06 1.06l-2-2a.75.75 0 0 1 0-1.06Z'/></svg>");
+}
+
+/* ── Tutorial step accordion ── */
+.tutorial-step {
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  margin-bottom: 0.75rem;
+  background: var(--sapBaseColor, #fff);
+  overflow: hidden;
+}
+
+.tutorial-step.completed {
+  border-color: var(--sapPositiveBorderColor, #30914c);
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.step-header:hover {
+  background: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
+}
+
+.step-check-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  color: transparent;
+}
+
+.tutorial-step.completed .step-check-circle {
+  border-color: var(--sapPositiveColor, #30914c);
+  background: var(--sapPositiveColor, #30914c);
+  color: #fff;
+}
+
+.step-header-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.step-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+
+.step-title-text {
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--sapBrandColor, #0070f2);
+  line-height: 1.3;
+}
+
+.step-toggle-icon {
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--sapContent_IconColor, #556b82);
+  flex-shrink: 0;
+  width: 1.25rem;
+  text-align: center;
+}
+
+.step-body {
+  padding: 0 1.25rem 1.25rem;
+}
+
+.step-divider {
+  border: none;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  margin: 0 0 1rem;
+}
+
+.step-content {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--sapTextColor, #32363a);
+}
+
+.step-content h2,
+.step-content h3,
+.step-content h4 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.step-content p {
+  margin: 0.75rem 0;
+}
+
+.step-content ul,
+.step-content ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.step-content li {
+  margin-bottom: 0.375rem;
+}
+
+/*
+ * Issue #168 — tighten malformed-nesting visuals.
+ *
+ * Tutorial markdown sometimes ships with item `2.` indented 4 spaces under `1.`,
+ * which CommonMark turns into a nested <ol start="N"> inside the parent <li>.
+ * Without these rules the nested list reads as a separate sub-block with full
+ * top/bottom margins and a deep indent, fragmenting the step.
+ *
+ * These rules don't fix the source markdown — they make the rendered output
+ * more forgiving across the catalogue. The same fragmentation appears on the
+ * legacy AEM site but is masked by tighter list CSS there.
+ */
+
+/* Nested list inside a list item: collapse vertical rhythm + reduce indent. */
+.step-content li > ol,
+.step-content li > ul {
+  margin-top: 0.125rem;
+  margin-bottom: 0.125rem;
+  padding-left: 1.25rem;
+}
+
+/* Empty paragraphs between figures and adjacent prose are an artefact of the
+ * markdown -> HTML pipeline (an empty line between `<!-- border -->` and the
+ * next image becomes `<p></p>`). They render as an extra blank line. */
+.step-content p:empty {
+  display: none;
+}
+
+/* A figure dropped inside a list item should sit flush with the surrounding
+ * prose instead of opening a centred, full-width block with extra rhythm. */
+.step-content li .tutorial-figure {
+  margin: 0.5rem 0;
+  align-items: flex-start;
+}
+
+/* Figcaption that is identical to the alt text adds noise without information.
+ * The pipeline emits `<figcaption>step1a-new-package</figcaption>` for every
+ * image that has no explicit caption -- collapse those to a smaller inline
+ * label so they stop reading as a content row of their own. */
+.step-content .tutorial-figcaption {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+/* When CommonMark sees `2.` indented under `1.`, it emits a NESTED
+ * <ol start="2"> inside the parent <li>. Visually un-nest those by removing
+ * indentation, so the items read as siblings of the parent list rather than
+ * a sub-block. The `:not([start="1"])` discriminator ensures legitimate
+ * nested numbered outlines (which always start at 1) are untouched. */
+.step-content li > ol[start]:not([start="1"]) {
+  padding-left: 0;
+  margin-left: -1.5rem;
+  list-style-position: inside;
+}
+
+.step-actions {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.step-actions button.is-auth-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.step-actions button.is-completed {
+  background: var(--sapPositiveColor, #30914c);
+  border-color: var(--sapPositiveColor, #30914c);
+  color: #fff;
+  cursor: default;
+  opacity: 1;
+}
+
+.step-validation-mount:empty {
+  display: none;
+}
+
+/* Progress bar segments */
+.progress-segments {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-segment {
+  flex: 1;
+  background: var(--sapField_Background, #e5e5e5);
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.progress-segment.completed {
+  background: var(--sapPositiveColor, #30914c);
+}
+
+.progress-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #556b82);
+  white-space: nowrap;
+}
+
+/* You will learn section */
+.you-will-learn {
+  margin: 0 0 1.5rem;
+}
+
+.you-will-learn h3 {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.you-will-learn ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.you-will-learn li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.you-will-learn .check-icon {
+  color: var(--sapPositiveColor, #30914c);
+  font-size: 0.75rem;
+}
+
+/* Tutorial title & description */
+.tutorial-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  line-height: 1.3;
+  color: var(--sapTextColor, #32363a);
+}
+
+.tutorial-description {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0 0 1.25rem;
+}
+
+/* Tutorial author line (compact single row matching production) */
+.tutorial-author-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  font-size: 0.8125rem;
+  padding: 0.75rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+}
+
+.tutorial-hidden {
+  display: none !important;
+}
+
+.author-line-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.author-line-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.author-line-avatar-link {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: 50%;
+}
+
+.author-line-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--sapAccentColor6, #286eb4);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.author-line-name {
+  font-weight: 600;
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+
+a.author-line-name:hover {
+  text-decoration: underline;
+}
+
+.author-line-date {
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  white-space: nowrap;
+}
+
+.author-line-label {
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+
+.author-line-icon {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  flex-shrink: 0;
+}
+
+.author-line-created {
+  gap: 0.375rem;
+}
+
+.author-line-contributors {
+  gap: 0.5rem;
+}
+
+.author-line-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.author-line-contrib-avatar-link {
+  display: flex;
+  margin-left: -4px;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: 50%;
+}
+
+.author-line-contrib-avatar-link:first-child {
+  margin-left: 0;
+}
+
+.author-line-contrib-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--sapBaseColor, #fff);
+}
+
+.author-line-expand-wrapper {
+  position: relative;
+}
+
+.author-line-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--sapNeutralBackground, #f5f6f7);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  color: var(--sapNeutralTextColor, #6a6d70);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.author-line-expand-btn:hover {
+  background: var(--sapList_Hover_Background, #eaecee);
+}
+
+.author-line-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  right: 0;
+  z-index: 100;
+  min-width: 180px;
+  background: var(--sapBaseColor, #fff);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 0.375rem;
+}
+
+.author-line-expand-wrapper.is-open .author-line-dropdown {
+  display: block;
+}
+
+.author-line-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.25rem;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.author-line-dropdown-item:hover {
+  background: var(--sapList_Hover_Background, #eaecee);
+}
+
+.author-line-dropdown-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.author-line-dropdown-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--sapLinkColor, #0064d9);
+}
+
+/* Tutorial prerequisites */
+.tutorial-prerequisites {
+  background: var(--sapInformationBackground, #e8f4fd);
+  border-left: 4px solid var(--sapBrandColor, #0070f2);
+  border-radius: 0 0.5rem 0.5rem 0;
+  padding: 1rem 1.25rem;
+  margin: 0 0 1.5rem;
+}
+
+.tutorial-prerequisites h3 {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.tutorial-prerequisites ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+
+.tutorial-prerequisites li {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-bottom: 0.25rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+/* #1388: prerequisites now renders markdown structure (prose paragraphs and/or
+   lists), not just a bullet list. Style paragraphs to match the list items and
+   collapse the outer margins so the info box hugs its content. */
+.tutorial-prerequisites p {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0 0 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.tutorial-prerequisites__body > :first-child {
+  margin-top: 0;
+}
+
+.tutorial-prerequisites__body > :last-child {
+  margin-bottom: 0;
+}
+
+.tutorial-prerequisites a {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+
+.tutorial-prerequisites a:hover {
+  text-decoration: underline;
+}
+
+/* Option tabs (multi-option steps) */
+.option-tabs {
+  margin: 1rem 0;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.option-tabs .fd-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  background: var(--sapField_Background, #f5f6f7);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.option-tabs .fd-tabs__item {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--sapContent_LabelColor, #556b82);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.option-tabs .fd-tabs__item:hover {
+  color: var(--sapBrandColor, #0070f2);
+  background: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
+}
+
+.option-tabs .fd-tabs__item.is-selected {
+  color: var(--sapBrandColor, #0070f2);
+  border-bottom-color: var(--sapBrandColor, #0070f2);
+  background: var(--sapBaseColor, #fff);
+}
+
+.tab-panels {
+  padding: 1.25rem;
+}
+
+.tab-panel {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+/* Sidebar TOC active state */
+.step-toc-item.active a {
+  color: var(--sapBrandColor, #0070f2);
+  font-weight: 700;
+}
+
+.step-toc-item.completed a {
+  color: var(--sapPositiveColor, #30914c);
+}
+
+.step-toc-item.completed a::after {
+  content: ' ✓';
+  font-size: 0.6875rem;
+}
+
+/* Tables in tutorial content */
+.step-content table,
+.tutorial-main table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+
+.step-content th,
+.tutorial-main th {
+  background: var(--sapField_Background, #f5f6f7);
+  font-weight: 700;
+  text-align: left;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  color: var(--sapTextColor, #32363a);
+}
+
+.step-content td,
+.tutorial-main td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  color: var(--sapTextColor, #32363a);
+}
+
+.step-content tr:nth-child(even),
+.tutorial-main tr:nth-child(even) {
+  background: var(--sapField_Background, #f9fafb);
+}
+
+/* Images in tutorials */
+.tutorial-main img {
+  border-radius: 0.375rem;
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: zoom-in;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tutorial-main img:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+html.dark .tutorial-main img {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  filter: brightness(0.9) contrast(1.05);
+}
+
+html.dark .tutorial-main img:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.tutorial-figure {
+  margin: 1.25rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tutorial-figcaption {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  font-style: italic;
+  text-align: center;
+  max-width: 90%;
+}
+
+/* Headings in tutorial main area */
+.tutorial-main h2 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.75rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.tutorial-main h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+/* FD button Horizon styling */
+.fd-button {
+  cursor: pointer;
+  font-family: var(--sapFontFamily);
+  font-size: var(--sapFontSize, 0.875rem);
+  font-weight: 700;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0 0.625rem;
+  border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+  transition: all 0.15s ease;
+}
+
+.fd-button--emphasized {
+  background: var(--sapButton_Emphasized_Background, #0070f2) !important;
+  border-color: var(--sapButton_Emphasized_BorderColor, #0064d9) !important;
+  color: var(--sapButton_Emphasized_TextColor, #fff) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.fd-button--emphasized:hover {
+  background: var(--sapButton_Emphasized_Hover_Background, #0064d9) !important;
+  border-color: var(--sapButton_Emphasized_Hover_BorderColor, #0058c0) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.16);
+}
+
+.fd-button--emphasized:active,
+.fd-button--emphasized.is-active {
+  background: var(--sapButton_Emphasized_Active_Background, #0058c0) !important;
+  border-color: var(--sapButton_Emphasized_Active_BorderColor, #004da5) !important;
+}
+
+.fd-button--emphasized[disabled],
+.fd-button--emphasized.is-disabled {
+  background: var(--sapButton_Background, #fff) !important;
+  border-color: var(--sapButton_BorderColor, #bcc3ca) !important;
+  color: var(--sapContent_DisabledTextColor, #bcc3ca) !important;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.fd-button--transparent {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sapButton_Lite_TextColor, #0064d9);
+}
+
+.fd-button--transparent:hover {
+  background: var(--sapButton_Lite_Hover_Background, rgba(0, 100, 217, 0.06));
+}
+
+/* Search input in light mode */
+.search-input {
+  background-color: var(--sapField_Background, #fff);
+  color: var(--sapField_TextColor, #32363a);
+}
+
+/* Tutorial cards white background */
+.tutorial-card {
+  background-color: var(--sapTile_Background, #fff);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Mission & Group Layout Styles
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared: breadcrumb bars ── */
+.mission-breadcrumb-bar,
+.group-breadcrumb-bar {
+  background: var(--sapBaseColor, #fff);
+  border-bottom: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  padding: 0.75rem 0;
+}
+.mission-breadcrumb-bar .breadcrumb-inner,
+.group-breadcrumb-bar .breadcrumb-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  font-size: 0.8125rem;
+}
+.mission-breadcrumb-bar .fd-breadcrumb,
+.group-breadcrumb-bar .fd-breadcrumb {
+  padding: 0;
+  margin: 0;
+}
+.mission-breadcrumb-bar .fd-breadcrumb__link,
+.group-breadcrumb-bar .fd-breadcrumb__link {
+  font-size: 0.8125rem;
+}
+.mission-breadcrumb-bar .fd-breadcrumb__link--current,
+.group-breadcrumb-bar .fd-breadcrumb__link--current {
+  color: var(--sapTextColor, #32363a);
+  cursor: default;
+}
+
+/* ── Shared: type badges ── */
+.type-badge {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.625rem;
+  border-radius: 1rem;
+  margin-bottom: 0.75rem;
+}
+.type-badge--mission {
+  background: rgba(4, 108, 122, 0.2);
+  color: #7dd3de;
+  border: 1px solid rgba(125, 211, 222, 0.3);
+}
+.type-badge--group {
+  background: rgba(108, 50, 169, 0.15);
+  color: var(--sapAccentColor8, #6c32a9);
+  border: 1px solid rgba(108, 50, 169, 0.25);
+}
+
+/* In hero context, group badge uses lighter palette */
+.mission-hero .type-badge--mission,
+.group-hero .type-badge--group {
+  color: #c4a0ef;
+  background: rgba(108, 50, 169, 0.2);
+  border: 1px solid rgba(196, 160, 239, 0.3);
+}
+.mission-hero .type-badge--mission {
+  color: #7dd3de;
+  background: rgba(4, 108, 122, 0.2);
+  border: 1px solid rgba(125, 211, 222, 0.3);
+}
+
+/* ── Shared: meta ── */
+.mission-meta,
+.group-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  opacity: 0.85;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.meta-sep {
+  opacity: 0.5;
+}
+
+/* ── Shared: tag pills ── */
+.mission-tags,
+.group-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+.tag-pill {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 1rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ── Mission wrapper ── */
+.mission-wrapper,
+.group-wrapper {
+  background: var(--sapBackgroundColor, #f5f6f7);
+  min-height: 100vh;
+}
+
+/* ── Mission hero ── */
+.mission-hero,
+.group-hero {
+  background: var(--sapShellColor, #354a5f);
+  color: var(--sapShell_TextColor, #fff);
+  padding: 2.5rem 2rem;
+}
+.mission-hero .hero-inner,
+.group-hero .hero-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.mission-hero .hero-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+}
+.mission-hero .hero-text {
+  flex: 1;
+  min-width: 0;
+}
+.mission-hero h1,
+.group-hero h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  color: inherit;
+  line-height: 1.25;
+}
+.mission-description,
+.group-description {
+  font-size: 1rem;
+  line-height: 1.7;
+  opacity: 0.9;
+  max-width: 700px;
+  margin: 0 0 1rem;
+}
+
+/* ── Mission body ── */
+.mission-body,
+.group-body {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3rem;
+}
+
+.groups-section h2,
+.group-body h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 1.5rem 0 1rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+/* ── Group cards (on mission page) ── */
+.group-card {
+  background: var(--sapBaseColor, #fff);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.group-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.group-header-left {
+  flex: 1;
+  min-width: 0;
+}
+.group-card-header h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0.25rem;
+  color: var(--sapTextColor, #32363a);
+}
+.group-card-header h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+.group-card-header h3 a:hover {
+  color: var(--sapBrandColor, #0070f2);
+}
+.group-card-header .group-meta {
+  font-size: 0.8125rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  opacity: 1;
+  margin-bottom: 0;
+}
+.group-chevron {
+  font-size: 0.875rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+  padding: 0.25rem;
+}
+.group-card.expanded .group-chevron {
+  transform: rotate(180deg);
+}
+
+/* Collapse/expand group card body */
+.group-card-body {
+  margin-top: 1rem;
+  display: none;
+}
+.group-card.expanded .group-card-body {
+  display: block;
+}
+
+/* ── Tutorial list (shared by mission groups + group page) ── */
+.group-tutorials {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tutorial-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+}
+.tutorial-item:last-child {
+  border-bottom: none;
+}
+.tutorial-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-weight: 600;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+.tutorial-info {
+  flex: 1;
+  min-width: 0;
+}
+.tutorial-link {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.tutorial-link:hover {
+  text-decoration: underline;
+}
+.tutorial-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  margin-top: 0.15rem;
+}
+.tutorial-meta-row .meta-sep {
+  color: var(--sapNeutralBorderColor, #d9d9d9);
+}
+
+.group-start-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: var(--sapBrandColor, #0070f2);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.group-start-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Timeline (group page) ── */
+.tutorial-timeline {
+  display: flex;
+  flex-direction: column;
+}
+.timeline-item {
+  display: flex;
+  gap: 1rem;
+}
+.timeline-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 2rem;
+}
+.timeline-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  background: var(--sapBaseColor, #fff);
+  z-index: 1;
+}
+.timeline-line {
+  width: 2px;
+  flex: 1;
+  background: var(--sapNeutralBorderColor, #bcc3ca);
+  min-height: 1rem;
+}
+.timeline-card {
+  flex: 1;
+  background: var(--sapBaseColor, #fff);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.15s;
+  position: relative;
+}
+.timeline-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+.timeline-card__new-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: var(--sapAccentColor8, #6c32a9);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  line-height: 1;
+}
+.timeline-card-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+  line-height: 1.4;
+}
+.timeline-card-header h3 a {
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+}
+.timeline-card-header h3 a:hover {
+  color: var(--sapBrandColor, #0070f2);
+}
+.timeline-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+.timeline-card-meta .meta-sep {
+  color: var(--sapNeutralBorderColor, #d9d9d9);
+}
+.timeline-card-desc {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0.5rem 0;
+}
+.timeline-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+}
+.timeline-card-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapBrandColor, #0070f2);
+}
+.start-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 1rem;
+  border-radius: 2rem;
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.start-btn:hover {
+  background: var(--sapHighlightColor, #0064d9);
+  color: #fff;
+}
+
+/* ── Tutorial prev/next navigation ── */
+.tutorial-nav-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  gap: 1rem;
+}
+
+.tutorial-nav-prev,
+.tutorial-nav-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  font-size: 0.875rem;
+  color: var(--sapLinkColor, #0064d9);
+}
+
+.tutorial-nav-prev:hover,
+.tutorial-nav-next:hover {
+  color: var(--sapLink_Hover_Color, #0064d9);
+  text-decoration: underline;
+}
+
+.tutorial-nav-next {
+  margin-left: auto;
+}
+
+/* ── Tutorial page responsive breakpoints ── */
+@media (max-width: 1024px) {
+  .tutorial-page {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+  .tutorial-right-col {
+    display: none;
+  }
+}
+
+/* Knowledge-graph "Related concepts" sidebar — responsive split.
+   .kg-sidebar-desktop lives inside <aside class="tutorial-right-col"> which
+   itself goes display:none below 960px. The companion .kg-sidebar-mobile
+   placeholder lives in the main content column and is only visible below
+   960px. main.ts uses window.matchMedia to mount the Vue app onto exactly
+   one placeholder per viewport — the other stays in the DOM but unmounted. */
+.kg-sidebar-desktop {
+  display: block;
+}
+.kg-sidebar-mobile {
+  display: none;
+}
+@media (max-width: 960px) {
+  .kg-sidebar-mobile {
+    display: block;
+  }
+  .kg-sidebar-desktop {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .tutorial-nav-bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tutorial-nav-next {
+    margin-left: 0;
+    text-align: right;
+  }
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .mission-hero h1,
+  .group-hero h1 {
+    font-size: 1.5rem;
+  }
+  .mission-body,
+  .group-body {
+    padding: 1rem;
+  }
+  .group-card {
+    padding: 1rem;
+  }
+  .mission-hero .hero-top {
+    flex-direction: column;
+  }
+  .timeline-card {
+    padding: 1rem;
+  }
+}
+
+/* ── Code block: filename + collapse + Chroma integration ── */
+.code-block-filename {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  margin-right: 0.75rem;
+}
+
+.code-block-lang-secondary {
+  margin-left: auto;
+  margin-right: 0.5rem;
+  opacity: 0.7;
+}
+
+/* The Chroma <pre> sits inside .code-block-body — strip its own background so the block uses our header/body styling */
+.code-block-body .chroma {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.code-block-body .chroma pre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+html.dark .code-block {
+  border-color: var(--sapField_BorderColor, #4a4d52);
+}
+
+html.dark .code-block-header {
+  background: var(--sapList_HeaderBackground, #1a1d21);
+  border-bottom-color: var(--sapField_BorderColor, #4a4d52);
+}
+
+html.dark .code-block-body,
+html.dark .code-block-body .chroma {
+  background: #0d1117;
+}
+
+html.dark pre,
+html.dark :not(pre) > code {
+  background-color: #0d1117;
+  color: #e6edf3;
+}
+
+/* Long-block collapse */
+.code-block-long .code-block-body[data-collapsed="true"] {
+  max-height: 28rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.code-block-long .code-block-body[data-collapsed="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 4rem;
+  background: linear-gradient(to bottom, transparent, var(--sapField_Background, #f5f6f7));
+  pointer-events: none;
+}
+
+html.dark .code-block-long .code-block-body[data-collapsed="true"]::after {
+  background: linear-gradient(to bottom, transparent, #0d1117);
+}
+
+.code-block-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  background: var(--sapNeutralBackground, #f5f6f7);
+  border: none;
+  border-top: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  font-size: 0.8125rem;
+  color: var(--sapLinkColor, #0064d9);
+  cursor: pointer;
+}
+
+.code-block-toggle:hover {
+  background: var(--sapList_Hover_Background, #eaecee);
+}
+
+.code-block-toggle .toggle-hide { display: none; }
+.code-block-toggle[aria-expanded="true"] .toggle-show { display: none; }
+.code-block-toggle[aria-expanded="true"] .toggle-hide { display: inline; }
+
+html.dark .code-block-toggle {
+  background: var(--sapList_HeaderBackground, #1a1d21);
+  border-top-color: var(--sapField_BorderColor, #4a4d52);
+}
+
+/* Diff block colour overrides — work in both themes thanks to Chroma classes */
+.chroma .gd { background-color: rgba(255, 129, 130, 0.15); }
+.chroma .gi { background-color: rgba(63, 185, 80, 0.15); }
+html.dark .chroma .gd { background-color: rgba(248, 81, 73, 0.15); }
+html.dark .chroma .gi { background-color: rgba(46, 160, 67, 0.15); }
+
+/* Chroma readability overrides (dark mode).
+ * Hugo's `gen chromastyles --style=github-dark` emits empty rules for
+ * unstyled tokens (.p, .n, .nx, .x, .na, .nb, .bp), expecting them to
+ * inherit the foreground color from `pre.chroma`. But our `pre code`
+ * rule (color: var(--sapTextColor)) intercepts that cascade, so we lock
+ * in explicit colors here. We also brighten the function-name purple,
+ * which reads dim against the very dark #0d1117 background. */
+html.dark .chroma code { color: #e6edf3; }
+html.dark .chroma .p,
+html.dark .chroma .n,
+html.dark .chroma .nx,
+html.dark .chroma .x,
+html.dark .chroma .na,
+html.dark .chroma .nb,
+html.dark .chroma .bp { color: #e6edf3; }
+html.dark .chroma .nf,
+html.dark .chroma .fm,
+html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
+
+/* ── Mobile responsive: code blocks + images ── */
+@media (max-width: 640px) {
+  .code-block-body .chroma,
+  .code-block-body pre {
+    font-size: 0.75rem;
+    padding: 0.625rem;
+  }
+
+  .code-block-header {
+    padding: 0.25rem 0.5rem;
+  }
+
+  .code-block-filename {
+    font-size: 0.6875rem;
+  }
+
+  .code-block-lang {
+    font-size: 0.6875rem;
+  }
+
+  .copy-label {
+    display: none;
+  }
+
+  .tutorial-main img {
+    max-height: 70vh;
+  }
+
+  .tutorial-figcaption {
+    font-size: 0.8125rem;
+  }
+}
+
+
+/* Phase 4.4 (#447 §9): concept-page "Videos teaching this" inline
+   thumbnail. 120×68 hot-linked from i.ytimg.com (CSP `img-src` already
+   allows). Sits inline with the row text — title + meta render to the
+   right of the thumbnail on the same baseline. The sidebar branch in
+   RelatedGraph.vue intentionally does NOT render a thumbnail to
+   preserve visual rhythm (spec §9). */
+.concept-page__section .kg-video-thumb {
+  display: inline-block;
+  width: 120px;
+  height: 68px;
+  border-radius: 4px;
+  margin-right: 0.5em;
+  vertical-align: middle;
+  object-fit: cover;
+}
+
+
+/* Phase 4.5 (#746 §5): concept-page "Official reference documentation"
+   inline link-out icon (↗) + apiType badge. No thumbnail — api-docs
+   don't have them; the ↗ signals "external authority" instead. The
+   sidebar branch in RelatedGraph.vue likewise renders no thumbnail to
+   preserve the existing visual rhythm. */
+.concept-page__section .kg-link-out {
+  display: inline-block;
+  margin-left: 0.25em;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.concept-page__section .kg-api-type {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  font-family: var(--sapFontFamily, monospace);
+  font-size: 0.85em;
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
+  border-radius: 3px;
+}
+
+/* Phase 4.6 (#747 §5): concept-page "Code samples embodying this"
+   inline language badge. Same shape as .kg-api-type — the language
+   token (e.g. "JavaScript", "Java", "ABAP") renders as a small
+   monospaced pill. The .kg-link-out icon (↗) is reused from Phase
+   4.5 to signal external authority. No thumbnail rendering — samples
+   are GitHub repos and don't have them; the badge + ↗ carry the
+   visual weight instead. */
+.concept-page__section .kg-language {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  font-family: var(--sapFontFamily, monospace);
+  font-size: 0.85em;
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
+  border-radius: 3px;
+}
+
+/* Phase 4.7 (#748 §4.8.1): help-docs source badge + metadata classes.
+   Three-source discriminator visible at a glance. Mirrors the shape of
+   .kg-api-type (Phase 4.5) and .kg-language (Phase 4.6) — small
+   monospaced pill — but with per-source tinted backgrounds instead of
+   the neutral gray. The tint palette is intentionally muted (soft,
+   Fundamental-Style neutral tones — no saturated brand colors) so the
+   badge signals canonicality without visually dominating the row.
+
+   Precedent: .kg-api-type / .kg-language are neutral pills (single
+   background). Phase 4.7 needs source discrimination, so each source
+   gets a distinct pastel background but the shape stays identical. */
+.concept-page__section .kg-help-source,
+.kg-sidebar-meta .kg-help-source {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  font-family: var(--sapFontFamily, sans-serif);
+  font-size: 0.8em;
+  font-weight: 500;
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
+  border-radius: 3px;
+  margin-right: 0.25em;
+  vertical-align: baseline;
+}
+
+.concept-page__section .kg-help-source--cap-cloud-sap,
+.kg-sidebar-meta .kg-help-source--cap-cloud-sap {
+  /* CAP: muted blue (matches SAP Fiori design's info-blue tone). */
+  background: #e5f0ff;
+  color: #0a5a9e;
+}
+
+.concept-page__section .kg-help-source--help-sap-com,
+.kg-sidebar-meta .kg-help-source--help-sap-com {
+  /* help.sap.com: muted orange (SAP corporate accent). */
+  background: #fff2e0;
+  color: #a05a10;
+}
+
+.concept-page__section .kg-help-source--ui5-sap-com,
+.kg-sidebar-meta .kg-help-source--ui5-sap-com {
+  /* UI5: muted teal (matches UI5 Horizon accent). */
+  background: #e0f5f0;
+  color: #10704a;
+}
+
+/* Anchor label — the human-readable H2/H3 title next to the
+   ` · ` separator. Muted so it reads as metadata, not primary content. */
+.concept-page__section .kg-help-anchor {
+  color: var(--sapContent_LabelColor, #555);
+  font-size: 0.9em;
+}
+
+/* Snippet — first ~120 chars of the docs page description. Muted like
+   .kg-help-anchor, and ellipsis-truncated when it exceeds the row
+   width. `max-width` deliberately generous — full one-liner snippets
+   render intact on desktop; long ones truncate cleanly on narrow
+   screens. */
+.concept-page__section .kg-help-snippet {
+  color: var(--sapContent_LabelColor, #555);
+  font-size: 0.9em;
+  display: inline-block;
+  max-width: 60ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* ==========================================================================
+   KG widget redesign (#850) — sidebar row icons, expanded panel dialog,
+   sidebar fade-during-expand, reduced-motion respect.
+   ========================================================================== */
+
+/* Sidebar Other-resources rows use the ResourceRow.vue layout:
+     [icon] [title-link] [meta-text]
+   The row is a flex container so the icon stays aligned with the link's
+   baseline and meta text wraps as needed. */
+.kg-resource-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  line-height: 1.35;
+  list-style: none;
+  margin: 0.35rem 0;
+  padding: 0;
+}
+.kg-resource-row__icon {
+  flex: 0 0 auto;
+  font-size: 0.95em;
+  opacity: 0.85;
+}
+.kg-resource-row__link {
+  flex: 1 1 auto;
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.kg-resource-row__link:hover,
+.kg-resource-row__link:focus-visible {
+  text-decoration: underline;
+}
+.kg-resource-row__meta {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-size: 0.82em;
+}
+
+/* Sidebar fades to 40% while the expanded panel is open so the reader's
+   eyes drift to the dialog. The RelatedGraph orchestrator applies
+   data-dimmed="true" via inheritAttrs on <SidebarPanel>. */
+.kg-sidebar[data-dimmed="true"] {
+  opacity: 0.4;
+  transition: opacity 200ms ease;
+}
+
+/* Sidebar header hosts the expand (⤢) button on the right. */
+.kg-sidebar__expand-btn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 0.15rem 0.4rem;
+  color: var(--sapButton_Lite_TextColor, #0064d9);
+  border-radius: 0.25rem;
+}
+.kg-sidebar__expand-btn:hover,
+.kg-sidebar__expand-btn:focus-visible {
+  background: var(--sapButton_Lite_Hover_Background, rgba(0, 100, 217, 0.06));
+  outline: 2px solid var(--sapBrandColor, #0070f2);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Expanded panel dialog — Joule-style, teleported to #kg-expanded-root.
+   ========================================================================== */
+#kg-expanded-root {
+  position: relative;
+  z-index: 1000;
+}
+.kg-expanded {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(480px, 90vw);
+  background: var(--sapBaseColor, #fff);
+  color: var(--sapTextColor, #32363a);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
+  transform: translateX(0);
+  animation: kg-expanded-in 200ms ease;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+}
+.kg-expanded[data-wide="true"] {
+  width: min(800px, 90vw);
+}
+
+.kg-expanded__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  flex: 0 0 auto;
+}
+.kg-expanded__header h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+.kg-expanded__subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.82em;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+.kg-expanded__widen,
+.kg-expanded__close {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.05rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.25rem;
+  color: var(--sapButton_Lite_TextColor, #0064d9);
+}
+.kg-expanded__widen:hover,
+.kg-expanded__widen:focus-visible,
+.kg-expanded__close:hover,
+.kg-expanded__close:focus-visible {
+  background: var(--sapButton_Lite_Hover_Background, rgba(0, 100, 217, 0.06));
+  outline: 2px solid var(--sapBrandColor, #0070f2);
+  outline-offset: 2px;
+}
+
+.kg-expanded__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 1rem 1.15rem;
+  container-type: inline-size;
+}
+
+.kg-expanded__prereq,
+.kg-expanded__shared,
+.kg-expanded__next {
+  margin-bottom: 1.25rem;
+}
+.kg-expanded__prereq h3,
+.kg-expanded__shared h3,
+.kg-expanded__next h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: var(--sapTextColor, #32363a);
+}
+.kg-expanded__prereq ul,
+.kg-expanded__shared ul,
+.kg-expanded__next ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.kg-expanded__prereq li,
+.kg-expanded__shared li,
+.kg-expanded__next li {
+  margin: 0.25rem 0;
+}
+.kg-expanded__reason {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-size: 0.85em;
+  margin-left: 0.25rem;
+}
+
+/* Per-type grid: single-column by default; 2-column when the dialog is
+   widened (via container query on inline size, not viewport width). */
+.kg-expanded__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin: 1rem 0 1.25rem;
+}
+@container (min-width: 720px) {
+  .kg-expanded__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.kg-expanded__section {
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.02));
+}
+.kg-expanded__section summary {
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.15rem 0;
+  color: var(--sapTextColor, #32363a);
+  list-style: none;
+}
+.kg-expanded__section summary::-webkit-details-marker {
+  display: none;
+}
+.kg-expanded__section summary::marker {
+  content: '';
+}
+.kg-expanded__section[open] summary {
+  margin-bottom: 0.4rem;
+}
+.kg-expanded__section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kg-expanded__no-resources {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-style: italic;
+  padding: 0.75rem 0;
+  margin: 0;
+}
+
+.kg-expanded__skeleton {
+  padding: 0.5rem 0;
+}
+.kg-expanded__error {
+  padding: 1rem;
+  text-align: center;
+}
+.kg-expanded__error button {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--sapButton_Lite_BorderColor, #0064d9);
+  background: transparent;
+  color: var(--sapButton_Lite_TextColor, #0064d9);
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+/* Motion — slide in from the right on open. Honors OS reduced-motion. */
+@keyframes kg-expanded-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kg-expanded {
+    animation: none;
+  }
+  .kg-sidebar[data-dimmed="true"] {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   #1127 — concept-page related-content CARDS. Converts the 12 related-content
+   sections from <ul>/<li> link lists to a responsive card grid. Namespaced
+   `concept-card` (self-contained — no dependency on the Vue-owned
+   hugo-apps/src/shared/cards/card.css) but visually aligned with .nav-card:
+   same radius, subtle shadow, hover lift, --sap* theme vars throughout so
+   dark mode adapts automatically.
+   ========================================================================== */
+.concept-page__section {
+  margin-bottom: 1.5rem;
+}
+
+.concept-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.concept-card {
+  display: flex;
+  flex-direction: column;
+  /* #1127: content-box + height:100% made each card render 34px taller than
+     its grid track (padding 2×1rem + border 2×1px), overflowing onto the next
+     section's H2. border-box folds that padding+border into the 100% height so
+     the card exactly fills its cell — footer pinning via .concept-card__meta
+     margin-top:auto still works. */
+  box-sizing: border-box;
+  height: 100%;
+  background: var(--sapBaseColor, #fff);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.concept-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+a.concept-card:hover .concept-card__title {
+  color: var(--sapBrandColor, #0070f2);
+}
+
+/* Type micro-label with a colored dot, matching .nav-card__type. */
+.concept-card__type {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+
+.concept-card__type::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.concept-card__type--tutorial { color: var(--sapAccentColor10, #5b738b); }
+.concept-card__type--concept { color: var(--sapAccentColor6, #046c7a); }
+.concept-card__type--external { color: var(--sapAccentColor8, #6c32a9); }
+
+.concept-card__title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+  margin: 0 0 0.375rem;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.concept-card__body {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0 0 0.5rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Thumbnail (videos). Reuses the 120x68 aspect but scales to the column. */
+.concept-card__thumb {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 120 / 68;
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+  object-fit: cover;
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
+}
+
+/* Footer meta row — pushed to the bottom, dot-separated, small + muted. */
+.concept-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: auto;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+
+/* Badge row (source badge + link-out) at the card top-right. Reuses the
+   existing .kg-help-source--* / .kg-link-out / .kg-api-type / .kg-language
+   inline classes verbatim inside the card. */
+.concept-card__badges {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+/* #1127: difficulty badge inside tutorial "teaches" cards — neutral pill
+   matching the .kg-api-type / .kg-language shape but with label weight to
+   distinguish a categorical tag from a monospaced type token. */
+.concept-card__meta .kg-difficulty {
+  display: inline-block;
+  padding: 0.05em 0.4em;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #556b82);
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
+  border-radius: 3px;
+}
+
+@media (max-width: 640px) {
+  .concept-card-grid { gap: 0.75rem; }
+  .concept-card { padding: 0.875rem; }
+}
+
+/* Intro passthrough + styled video slot (tutorial video embeds). */
+.tutorial-intro {
+  margin: 0 0 1.5rem;
+}
+.tutorial-intro iframe {
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  height: auto;
+  border: 0;
+  border-radius: 0.5rem;
+}
+.tutorial-video {
+  margin: 0 0 1.5rem;
+}
+.tutorial-video__frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #000;
+}
+.tutorial-video__frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

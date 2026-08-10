@@ -17,7 +17,8 @@
   {{ $darkVars := resources.Get "css/sap-horizon-dark.css" }}
   <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
   <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
-  <link rel="stylesheet" href="/css/sap-fundamental.css">
+  {{ $fundamental := resources.Get "css/sap-fundamental.css" }}{{ $fundamental.Publish }}
+  <link rel="stylesheet" href="{{ ($fundamental | fingerprint).RelPermalink }}">
   <script>
     const t = localStorage.getItem('theme') ||
       (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');

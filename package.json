@@ -60,7 +60,7 @@
     "hana:rowcounts": "cds bind --exec -- node scripts/check-hana-rowcounts.cjs",
     "hana:scrape-deployer-log": "node scripts/scrape-deployer-log.cjs",
     "hana:orphan-views": "node scripts/check-orphan-views.cjs",
-    "build:css": "postcss hugo/assets/css/sap-fundamental.css --config hugo/ --no-map -o hugo/static/css/sap-fundamental.css",
+    "build:css": "postcss hugo/assets/css/sap-fundamental.src.css --config hugo/ --no-map -o hugo/assets/css/sap-fundamental.css",
     "vendor:mediapipe": "node scripts/vendor-mediapipe.cjs",
     "vendor:imgly": "node scripts/vendor-imgly.cjs",
     "vendor:animegan": "node scripts/vendor-animegan.mjs",

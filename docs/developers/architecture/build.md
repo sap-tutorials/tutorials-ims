@@ -150,7 +150,7 @@ CAP_BASE_URL/build/catalog (unauth)
   ↓
 hugo/content/missions/*.md, groups/*.md             mission + completion-path pages
 
-build:css   → PostCSS Fundamental Styles → hugo/static/css/sap-fundamental.css
+build:css   → PostCSS Fundamental Styles → hugo/assets/css/sap-fundamental.css
 build:apps  → Vite bundles hugo-apps/ Vue 3 islands → hugo/static/js/*.js
               (navigator, app-space, event-display, nav-dropdown, scanner-vue,
                tutorial-feedback, tutorial-rating, cmd-palette, me)

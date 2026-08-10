@@ -44,7 +44,7 @@
 <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaLight.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaDark.RelPermalink }}">
-<link rel="stylesheet" href="/css/sap-fundamental.css">
+{{ $fundamental := resources.Get "css/sap-fundamental.css" }}{{ $fundamental.Publish }}<link rel="stylesheet" href="{{ ($fundamental | fingerprint).RelPermalink }}">
 <link rel="stylesheet" href="{{ $ui5overrides.RelPermalink }}">
 <link rel="stylesheet" href="{{ $print.RelPermalink }}" media="print">
 <link rel="stylesheet" href="{{ $viewTransitions.RelPermalink }}">
