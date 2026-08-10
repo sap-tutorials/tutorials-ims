@@ -7,10 +7,10 @@
       "memberCount": 12,
       "tutorialCount": 8,
       "topConcepts": [
-        { "slug": "cds-data-model", "name": "CDS Data Model" },
-        { "slug": "cap-service", "name": "CAP Service" },
-        { "slug": "odata-v4", "name": "OData V4" },
-        { "slug": "node-js-runtime", "name": "Node.js Runtime" }
+        { "slug": "core-data-services-cds", "name": "CDS Data Model" },
+        { "slug": "cap-application-development", "name": "CAP Service" },
+        { "slug": "odata-v4-service", "name": "OData V4" },
+        { "slug": "cap-for-nodejs", "name": "Node.js Runtime" }
       ]
     },
     {
@@ -20,9 +20,9 @@
       "memberCount": 9,
       "tutorialCount": 6,
       "topConcepts": [
-        { "slug": "subaccount", "name": "Subaccount" },
-        { "slug": "cloud-foundry", "name": "Cloud Foundry" },
-        { "slug": "service-binding", "name": "Service Binding" }
+        { "slug": "btp-account-model", "name": "Subaccount" },
+        { "slug": "cloud-foundry-account-model", "name": "Cloud Foundry" },
+        { "slug": "cf-service-bindings", "name": "Service Binding" }
       ]
     }
   ],
@@ -35,10 +35,10 @@
       "tutorialCount": 8,
       "orderMode": "path",
       "concepts": [
-        { "slug": "cds-data-model", "name": "CDS Data Model" },
-        { "slug": "cap-service", "name": "CAP Service" },
-        { "slug": "odata-v4", "name": "OData V4" },
-        { "slug": "node-js-runtime", "name": "Node.js Runtime" },
+        { "slug": "core-data-services-cds", "name": "CDS Data Model" },
+        { "slug": "cap-application-development", "name": "CAP Service" },
+        { "slug": "odata-v4-service", "name": "OData V4" },
+        { "slug": "cap-for-nodejs", "name": "Node.js Runtime" },
         { "slug": "cds-annotations", "name": "CDS Annotations" }
       ],
       "peers": [
@@ -53,10 +53,10 @@
       "tutorialCount": 6,
       "orderMode": "ranked",
       "concepts": [
-        { "slug": "subaccount", "name": "Subaccount" },
-        { "slug": "cloud-foundry", "name": "Cloud Foundry" },
-        { "slug": "service-binding", "name": "Service Binding" },
-        { "slug": "xsuaa", "name": "XSUAA" }
+        { "slug": "btp-account-model", "name": "Subaccount" },
+        { "slug": "cloud-foundry-account-model", "name": "Cloud Foundry" },
+        { "slug": "cf-service-bindings", "name": "Service Binding" },
+        { "slug": "xsuaa-authentication", "name": "XSUAA" }
       ],
       "peers": [
         { "slug": "cap-fundamentals", "label": "CAP Fundamentals", "weight": 0.72 }
