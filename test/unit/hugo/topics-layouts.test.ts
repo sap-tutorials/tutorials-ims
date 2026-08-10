@@ -53,6 +53,10 @@ describe('topics/list.html — gallery page', () => {
   it('shows concept chips from topConcepts', () => {
     expect(listSrc).toContain('topConcepts');
   });
+
+  it('cross-links to /explore/ from the hero', () => {
+    expect(listSrc).toContain('href="/explore/"');
+  });
 });
 
 describe('topics/single.html — cluster detail page', () => {

@@ -35,6 +35,18 @@
   margin: 0.25rem 0 0;
   max-width: 680px;
 }
+.topics-hero__graphlink {
+  flex-basis: 100%;
+  font-size: 0.875rem;
+  margin: 0.25rem 0 0;
+}
+.topics-hero__graphlink a {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+.topics-hero__graphlink a:hover {
+  text-decoration: underline;
+}
 
 /* ===== Search box ===== */
 .topics-search {

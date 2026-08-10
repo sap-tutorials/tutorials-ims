@@ -358,6 +358,13 @@
   text-decoration: none;
 }
 .kg-overview__cta-strip ul a:hover { text-decoration: underline; }
+.kg-overview__cta-strip a.secondary {
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 1.0625rem;
+}
+.kg-overview__cta-strip a.secondary:hover { text-decoration: underline; }
 
 /* "About this graph →" chrome link on /explore/ */
 .explore-page__about-link {
