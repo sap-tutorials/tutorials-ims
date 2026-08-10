@@ -134,3 +134,58 @@ describe('approuter /build/* route', () => {
     expect(target).toBe('/build/breadcrumb-context?tutorial=cap-mocking-auth')
   })
 })
+
+describe('approuter /concepts/ index route', () => {
+  // Regression guard for the query-string 404 (same class as the /build/* bug
+  // and #1571). AppRouter matches `source` against the path INCLUDING the query
+  // string. The index route's old `^/concepts/?$` rejected `/concepts/?q=Fiori`
+  // (the `$` won't allow the trailing `?q=...`), so a hard refresh on a
+  // filtered URL fell through to the `^/concepts/(.*)$` detail route, which
+  // captured `?q=Fiori` as an (empty) slug and forwarded to
+  // `/content/concepts/` — a route that requires a non-empty :slug — yielding
+  // "Cannot GET /content/concepts/". The fix adds an optional query-string
+  // group to the index route so it wins before the detail catch-all.
+  const routes = xsApp.routes
+  const indexIdx = routes.findIndex(
+    (r) => typeof r.source === 'string' && r.source.startsWith('^/concepts/?'),
+  )
+  const detailIdx = routes.findIndex((r) => r.source === '^/concepts/(.*)$')
+  const indexRoute = routes[indexIdx]
+
+  it('exists, is anonymous, and is ordered before the detail catch-all', () => {
+    expect(indexRoute, '/concepts/ index route').toBeTruthy()
+    expect(indexRoute.destination).toBe('srv-api')
+    expect(indexRoute.authenticationType).toBe('none')
+    expect(detailIdx).toBeGreaterThanOrEqual(0)
+    expect(indexIdx).toBeLessThan(detailIdx)
+  })
+
+  it('matches the list page WITH and WITHOUT a query string', () => {
+    const re = new RegExp(indexRoute.source)
+    // The bug: a filtered URL on hard refresh used to fall through to 404.
+    expect(re.test('/concepts/?q=Fiori')).toBe(true)
+    expect(re.test('/concepts?q=Fiori')).toBe(true)
+    // Path-only forms still match.
+    expect(re.test('/concepts/')).toBe(true)
+    expect(re.test('/concepts')).toBe(true)
+    // Detail slugs must NOT be swallowed by the index route.
+    expect(re.test('/concepts/cap/')).toBe(false)
+    expect(re.test('/concepts/cap')).toBe(false)
+  })
+
+  it('preserves the query string in the rewrite target', () => {
+    const re = new RegExp(indexRoute.source)
+    const m = re.exec('/concepts/?q=Fiori')
+    expect(m).toBeTruthy()
+    const target = indexRoute.target.replace('$1', m[1] || '')
+    expect(target).toBe('/content/concepts-index?q=Fiori')
+  })
+
+  it('detail route still matches concept slugs', () => {
+    const detail = routes[detailIdx]
+    const re = new RegExp(detail.source)
+    expect(re.test('/concepts/cap/')).toBe(true)
+    const m = re.exec('/concepts/cap/')
+    expect(detail.target.replace('$1', m[1])).toBe('/content/concepts/cap/')
+  })
+})
