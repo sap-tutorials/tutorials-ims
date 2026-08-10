@@ -156,12 +156,15 @@ sources are from `approuter/xs-app.json`; see [runtime.md](runtime.md) and
 routes (that is why the content TTLs are set at the CAP origin, not here).
 
 The TTL is a **deliberately modest 1 hour**, not `immutable`/1-year, because the
-Hugo assets are **not content-fingerprinted** — the templates reference
-`/css/sap-fundamental.css`, `/js/joule.js`, etc. by stable path (some carry a
-`?v=` query, many do not). A long/immutable TTL would strand a stale asset
-across a redeploy. Raising this to `immutable` + a 1-year TTL is gated on
-introducing fingerprinted asset filenames in the Hugo build; until then 1 h
-keeps redeploys safe while still offloading the bulk of asset requests.
+Hugo assets are **only partially** content-fingerprinted. The page-referenced
+stylesheets (`sap-fundamental.css`, `joule.css`, and the #1601/#1603 set) now emit
+content-hashed URLs (dual-emitted alongside a bare copy for static/runtime
+consumers — see #1605), but many JS islands (`/js/joule.js`, etc.) and the
+theme-var CSS still reference stable paths (some carry a `?v=` query, many do not).
+A long/immutable TTL would strand a stale un-fingerprinted asset across a redeploy.
+Raising this to `immutable` + a 1-year TTL is gated on fingerprinting the remaining
+`/js/*` assets; until then 1 h keeps redeploys safe while still offloading the bulk
+of asset requests.
 
 ### ⛔ Never cache — explicit bypass
 
