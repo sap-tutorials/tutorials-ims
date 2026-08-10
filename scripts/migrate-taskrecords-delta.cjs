@@ -109,6 +109,11 @@ function argVal(f) { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : nu
 const DRY_RUN = has('--dry-run') || !has('--commit');
 const COMMIT = has('--commit');
 const VERBOSE = has('--verbose');
+// --inserts-only: skip the (slow, row-by-row) UPDATE path entirely and apply
+// only new-derived-UUID INSERTs. Use when the update population is all no-op
+// re-touches (identical data) and only the inserts carry new information —
+// e.g. prizerecords, where 41,382 updates are no-ops and only 251 rows are new.
+const INSERTS_ONLY = has('--inserts-only');
 const SINCE = argVal('--since') || LAST_RUN_ISO;
 const ENTITIES = (argVal('--entity') || 'taskrecords,accomplishmentrecords,prizerecords')
   .split(',').map((s) => s.trim()).filter(Boolean);
@@ -517,7 +522,9 @@ async function processTaskRecords(ctx) {
 
     if (!DRY_RUN) {
       const insRes = await batchInsert(target, fullTable, inserts);
-      const updRes = await applyUpdates(target, fullTable, updates, ['ID', 'LEGACYID', 'CREATEDAT', 'CREATEDBY']);
+      const updRes = INSERTS_ONLY
+        ? { updated: 0, errors: 0 }
+        : await applyUpdates(target, fullTable, updates, ['ID', 'LEGACYID', 'CREATEDAT', 'CREATEDBY']);
       inserted += insRes.inserted; updated += updRes.updated; errors += insRes.errors + updRes.errors;
     } else {
       inserted += inserts.length; updated += updates.length;
@@ -568,7 +575,9 @@ async function processAccomplishmentRecords(ctx) {
 
   if (!DRY_RUN) {
     const insRes = await batchInsert(target, fullTable, inserts);
-    const updRes = await applyUpdates(target, fullTable, updates, ['ID', 'LEGACYID']);
+    const updRes = INSERTS_ONLY
+      ? { updated: 0, errors: 0 }
+      : await applyUpdates(target, fullTable, updates, ['ID', 'LEGACYID']);
     inserted = insRes.inserted; updated = updRes.updated; errors = insRes.errors + updRes.errors;
   } else {
     inserted = inserts.length; updated = updates.length;
@@ -620,7 +629,9 @@ async function processPrizeRecords(ctx) {
 
   if (!DRY_RUN) {
     const insRes = await batchInsert(target, fullTable, inserts);
-    const updRes = await applyUpdates(target, fullTable, updates, ['ID', 'LEGACYID']);
+    const updRes = INSERTS_ONLY
+      ? { updated: 0, errors: 0 }
+      : await applyUpdates(target, fullTable, updates, ['ID', 'LEGACYID']);
     inserted = insRes.inserted; updated = updRes.updated; errors = insRes.errors + updRes.errors;
   } else {
     inserted = inserts.length; updated = updates.length;
@@ -653,6 +664,7 @@ async function main() {
   console.log(`Window floor (SINCE): ${SINCE}`);
   console.log(`Entities: ${ENTITIES.join(', ')}`);
   console.log(DRY_RUN ? '=== DRY RUN — no writes will be issued ===' : `=== COMMIT (initiator=${INITIATOR}) ===`);
+  if (INSERTS_ONLY) console.log('  ⚠ --inserts-only: UPDATE path skipped (new-UUID INSERTs only)');
 
   const source = await connectHana(sourceCreds);
   await runSql(source, `SET SCHEMA "${sourceCreds.schema}"`);
