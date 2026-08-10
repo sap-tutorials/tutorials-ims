@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { isPipSupported, cloneStylesIntoDocument } from './usePipLifecycle';
+import { isPipSupported, cloneStylesIntoDocument, findPipScriptTag } from './usePipLifecycle';
 
 describe('isPipSupported', () => {
   beforeEach(() => {
@@ -48,5 +48,44 @@ describe('cloneStylesIntoDocument', () => {
     expect(found).toBe(true);
 
     style.remove();
+  });
+});
+
+describe('findPipScriptTag (#1604 content-hashed bundles)', () => {
+  function withScripts(srcs: string[], fn: () => void) {
+    // Build tags WITHOUT type="module" — findPipScriptTag matches on src only,
+    // and happy-dom would otherwise try to fetch a module src on append and
+    // spam NotSupportedError. A plain data-src carries the value we assert on.
+    const added = srcs.map((src) => {
+      const s = document.createElement('script');
+      s.setAttribute('src', src);
+      document.head.appendChild(s);
+      return s;
+    });
+    try { fn(); } finally { added.forEach((s) => s.remove()); }
+  }
+
+  it('finds the hashed tutorial-pip bundle and ignores tutorial-pip-launcher', () => {
+    withScripts(
+      ['/js/tutorial-pip-launcher-OSztyx-x.js', '/js/tutorial-pip-Bz4vSMUV.js'],
+      () => {
+        const tag = findPipScriptTag(document);
+        expect(tag).not.toBeNull();
+        expect(tag!.getAttribute('src')).toBe('/js/tutorial-pip-Bz4vSMUV.js');
+      },
+    );
+  });
+
+  it('still matches the un-hashed dev-fallback filename', () => {
+    withScripts(['/js/tutorial-pip.js', '/js/tutorial-pip-launcher.js'], () => {
+      const tag = findPipScriptTag(document);
+      expect(tag!.getAttribute('src')).toBe('/js/tutorial-pip.js');
+    });
+  });
+
+  it('returns null when only the launcher bundle is present', () => {
+    withScripts(['/js/tutorial-pip-launcher-OSztyx-x.js'], () => {
+      expect(findPipScriptTag(document)).toBeNull();
+    });
   });
 });

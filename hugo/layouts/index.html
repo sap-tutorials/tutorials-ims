@@ -19,7 +19,7 @@
 
 {{ $css := resources.Get "css/homepage.css" | fingerprint }}
 <link rel="stylesheet" href="{{ $css.RelPermalink }}">
-<script type="module" src="/js/homepage-bands.js?v={{ now.Unix }}"></script>
-<script type="module" src="/js/featured-topics-carousel.js?v={{ now.Unix }}"></script>
-<script type="module" src="/js/homepage-events-band.js?v={{ now.Unix }}"></script>
+<script type="module" src="{{ partial "island-src.html" "homepage-bands" }}"></script>
+<script type="module" src="{{ partial "island-src.html" "featured-topics-carousel" }}"></script>
+<script type="module" src="{{ partial "island-src.html" "homepage-events-band" }}"></script>
 {{ end }}

@@ -14,5 +14,5 @@
       data-slug="{{ .Params.slug | default .File.ContentBaseName }}"
       data-api="/puzzle-api"></main>
 <noscript><p>This puzzle requires JavaScript to play.</p></noscript>
-<script type="module" src="{{ "/js/puzzle.js" | relURL }}"></script>
+<script type="module" src="{{ partial "island-src.html" "puzzle" | relURL }}"></script>
 {{ end }}

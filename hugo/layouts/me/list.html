@@ -20,7 +20,7 @@
   </ui5-panel>
 </div>
 
-<script type="module" src="/js/me.js?v={{ now.Unix }}"></script>
+<script type="module" src="{{ partial "island-src.html" "me" }}"></script>
 <script>
   // Collapse-state persistence — runs once Panel is registered. Boolean attr
   // is set imperatively (template binding to UI5 boolean attrs is unreliable

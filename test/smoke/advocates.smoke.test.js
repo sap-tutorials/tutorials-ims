@@ -13,7 +13,7 @@ describe.skipIf(!BASE)('GET /developer-advocates/', () => {
     // (per feedback_hugo_minifier_strips_quotes — the minifier removes
     // attribute quotes when the value contains no special characters).
     expect(html).toMatch(/<main[^>]+id=["']?advocates-mount["']?/);
-    expect(html).toMatch(/src=["']?[^"']*\/js\/advocates\.js["']?/);
+    expect(html).toMatch(/src=["']?[^"']*\/js\/advocates(?:-[\w-]+)?\.js["']?/);
 
     // Joule advocates wiring (issue #564).
     // 1. Hugo emits data-page-kind="advocates" on this page (baseof.html).
@@ -26,12 +26,20 @@ describe.skipIf(!BASE)('GET /developer-advocates/', () => {
   });
 });
 
-describe.skipIf(!BASE)('GET /js/advocates.js bundle', () => {
+describe.skipIf(!BASE)('GET advocates island bundle', () => {
   it('contains the __JOULE_ADVOCATES handoff string', async () => {
     // Regression guard: if a future refactor of App.vue drops the
     // window.__JOULE_ADVOCATES publish, /developer-advocates/ still
     // renders fine but Joule loses its grounding. Smoke catches it.
-    const res = await fetchWithRetry(BASE + '/js/advocates.js');
+    //
+    // The bundle is content-hashed (#1604), so discover its URL from the
+    // served page rather than fetching a fixed /js/advocates.js path.
+    const page = await fetchWithRetry(BASE + '/developer-advocates/', { redirect: 'follow' });
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    const m = html.match(/src=["']?([^"'\s>]*\/js\/advocates(?:-[\w-]+)?\.js)["']?/);
+    expect(m, 'advocates island URL not found in HTML').toBeTruthy();
+    const res = await fetchWithRetry(BASE + m[1]);
     expect(res.status).toBe(200);
     const js = await res.text();
     expect(js).toContain('__JOULE_ADVOCATES');
@@ -100,7 +108,7 @@ describe.skipIf(!BASE || !SRV)('GET /developer-advocates/:slug/ profile page', (
     }
     // The Vue island mount point must be present so client-side hydration can fire.
     expect(html).toMatch(/id=["']?advocate-profile-mount["']?/);
-    expect(html).toMatch(/src=["']?[^"']*\/js\/advocate-profile\.js["']?/);
+    expect(html).toMatch(/src=["']?[^"']*\/js\/advocate-profile(?:-[\w-]+)?\.js["']?/);
   });
 });
 

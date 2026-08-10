@@ -46,7 +46,7 @@
 
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
-<script type="module" src="/js/nav-dropdown.js"></script>
-{{ if not site.Params.qa }}<script type="module" src="/js/tutorial-pip-launcher.js"></script>{{ end }}
-{{ if not site.Params.qa }}<script type="module" src="/js/tutorial-pip.js"></script>{{ end }}
+<script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
+{{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
+{{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip" }}"></script>{{ end }}
 {{ end }}

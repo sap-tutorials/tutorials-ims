@@ -1,5 +1,5 @@
 {{ define "main" }}
 <main id="devtoberfest-faq-mount"></main>
 <noscript>The Devtoberfest FAQ requires JavaScript.</noscript>
-<script type="module" src="{{ "/js/devtoberfest-faq.js" | relURL }}?v={{ now.Unix }}"></script>
+<script type="module" src="{{ partial "island-src.html" "devtoberfest-faq" | relURL }}"></script>
 {{ end }}

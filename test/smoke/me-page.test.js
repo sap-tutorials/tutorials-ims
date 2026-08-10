@@ -42,9 +42,9 @@ describeIf('/me page shape', () => {
 
     const html = await res.text();
 
-    // Tolerant of Hugo asset versioning cache-busting (?v=...).
-    // Matches src="/js/me.js?v=..." or data-src="/js/me.js?v=...".
-    expect(html).toMatch(/["\s/]\/js\/me\.js[\?\s"]/);
+    // Tolerant of content-hashed island filenames (#1604): matches
+    // src="/js/me-<hash>.js" or the un-hashed dev fallback /js/me.js.
+    expect(html).toMatch(/\/js\/me(?:-[\w-]+)?\.js/);
   });
 
   it('wraps content in three ui5-panel elements', async () => {

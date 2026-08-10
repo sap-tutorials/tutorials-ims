@@ -10,5 +10,5 @@
       data-slug="{{ .Params.slug | default .File.ContentBaseName }}"
       data-api="/petoberfest-api"></main>
 <noscript><p>This page requires JavaScript.</p></noscript>
-<script type="module" src="{{ "/js/petoberfest.js" | relURL }}"></script>
+<script type="module" src="{{ partial "island-src.html" "petoberfest" | relURL }}"></script>
 {{ end }}
