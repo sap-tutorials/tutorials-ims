@@ -1,6 +1,7 @@
 // hugo-apps/src/embed/main.ts
 import { resolveEmbedParams } from './params';
 import { createEmbedBridge, type BridgeHandle } from './bridge';
+import { pickAutoMode } from './autocompact';
 
 function isFramed(): boolean {
   try { return window.parent !== window || !!window.opener; } catch { return true; }
@@ -44,12 +45,14 @@ function armPipOnFirstGesture(): void {
 (function init() {
   const res = resolveEmbedParams(location.search);
   const framed = isFramed();
+  const auto = pickAutoMode({ framed, explicitMode: res.reset ? 'full' : res.mode, width: window.innerWidth });
+  const effectiveMode = res.mode ?? auto;
   const active = framed || res.mode !== null || res.reset || res.pip;
   if (!active) return; // inert for normal visitors
 
   // Reflect resolved mode (pre-paint already handled the common path; this
   // covers set-embed messages and keeps localStorage in sync).
-  applyEmbedMode(res.mode, res.reset);
+  applyEmbedMode(effectiveMode, res.reset);
 
   // Deep-link to a step once the tutorial DOM is present.
   if (res.step != null) {
@@ -69,7 +72,7 @@ function armPipOnFirstGesture(): void {
   try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch {}
 
   let bridge: BridgeHandle | null = null;
-  if (framed || res.pip || res.mode) {
+  if (framed || res.pip || effectiveMode) {
     bridge = createEmbedBridge({ hostOrigin: res.hostOrigin, targets });
     const html = document.documentElement;
     const slug = html.dataset.pageSlug || '';
