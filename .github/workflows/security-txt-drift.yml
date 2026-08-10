@@ -1,0 +1,169 @@
+name: security.txt drift check
+
+# SAP's security.txt (RFC 9116) is maintained centrally by the SGSC PSRT team
+# in an internal source-of-truth repo and published publicly at
+# https://www.sap.com/.well-known/security.txt. We serve our own copy from the
+# approuter (approuter/lib/security-txt.js) because the AEM/Akamai edge that
+# historically served developers.sap.com/.well-known/security.txt is being
+# decommissioned — once the vanity host points at our origin, we must serve it.
+#
+# This job detects when SAP changes the canonical file (typically a bump of the
+# Expires date) and opens a PR to update our served copy so it never goes stale.
+#
+# Why diff against www.sap.com and not the origin repo: the origin repo is on
+# github.tools.sap (SAP-internal), unreachable from GitHub.com hosted runners,
+# and we hold no Actions token for it. www.sap.com serves byte-identical content
+# with no token or internal-network requirement.
+#
+# This workflow NEVER auto-merges or auto-deploys. A human reviews the PR and
+# runs a full approuter deploy (npm run deploy -- --env <env>, no --skip-build).
+
+on:
+  schedule:
+    # Weekly, Monday 05:19 UTC. Off the :00/:30 marks and off the hour so we
+    # don't coalesce with the fleet of jobs pinned to "5am UTC sharp".
+    - cron: '19 5 * * 1'
+  workflow_dispatch: {}
+  pull_request:
+    # Run on PRs that touch the served copy, the drift script, or this workflow,
+    # so a regression in any of them surfaces on the PR that introduces it.
+    paths:
+      - 'approuter/lib/security-txt.js'
+      - 'scripts/check-security-txt-drift.cjs'
+      - '.github/workflows/security-txt-drift.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Run the drift check. Exit codes: 0 = match, 1 = tooling/connectivity
+      # failure, 2 = drift. We capture the log so the drift branch can extract
+      # the new upstream content from the ===UPSTREAM=== block.
+      - name: Check security.txt against upstream (www.sap.com)
+        id: check
+        run: |
+          set +e
+          node scripts/check-security-txt-drift.cjs > drift.log 2>&1
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat drift.log
+
+      # On a PR (or any non-drift run) a tooling failure (exit 1) should fail
+      # the job loudly; a match (exit 0) passes. Drift (exit 2) on a PR run also
+      # fails the check — the PR author changed the served copy in a way that no
+      # longer matches upstream, which is exactly what we want flagged.
+      - name: Fail on tooling error or (on PR) drift
+        if: ${{ github.event_name == 'pull_request' || steps.check.outputs.exit_code == '1' }}
+        run: |
+          EXIT="${{ steps.check.outputs.exit_code }}"
+          if [ "$EXIT" = "0" ]; then
+            echo "✅ security.txt matches upstream."
+            exit 0
+          fi
+          if [ "$EXIT" = "2" ]; then
+            echo "::error title=security.txt drift::approuter/lib/security-txt.js no longer matches https://www.sap.com/.well-known/security.txt. Update SECURITY_TXT to match upstream."
+            exit 2
+          fi
+          echo "::error title=security.txt drift check failed::check-security-txt-drift.cjs exited $EXIT (not a drift signal — see log). Common cause: www.sap.com unreachable."
+          exit "$EXIT"
+
+      # On a scheduled/dispatch run with drift (exit 2), open (or update) a PR
+      # that updates the served copy to the new upstream content.
+      - name: Generate GitHub App token
+        id: app-token
+        if: ${{ steps.check.outputs.exit_code == '2' && github.event_name != 'pull_request' && vars.USE_GITHUB_APP == 'true' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TUTORIALS_APP_ID }}
+          private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
+          owner: sap-tutorials
+
+      - name: Open or update drift PR
+        if: ${{ steps.check.outputs.exit_code == '2' && github.event_name != 'pull_request' && vars.USE_GITHUB_APP == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          BRANCH="chore/security-txt-drift"
+
+          # Extract the new upstream content captured between the markers.
+          awk '/^===UPSTREAM===$/{f=1;next} /^===END-UPSTREAM===$/{f=0} f' drift.log > upstream.txt
+          if [ ! -s upstream.txt ]; then
+            echo "::error::drift detected but no upstream content captured — aborting PR creation."
+            exit 1
+          fi
+
+          # Rewrite the SECURITY_TXT constant in the served copy from upstream.txt.
+          # The constant is two concatenated string literals ending in \n; rebuild
+          # it programmatically from the fetched bytes so we never hand-edit.
+          node - <<'NODE'
+          const fs = require('fs')
+          const file = 'approuter/lib/security-txt.js'
+          const upstream = fs.readFileSync('upstream.txt', 'utf8').replace(/\r\n/g, '\n')
+          // Build a JS string-literal expression: one quoted line per source line.
+          const lines = upstream.split('\n')
+          // drop a trailing empty element from the final newline, we re-add \n per line
+          if (lines[lines.length - 1] === '') lines.pop()
+          const expr = lines.map(l => `  '${l.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}\\n'`).join(' +\n')
+          let src = fs.readFileSync(file, 'utf8')
+          const re = /const SECURITY_TXT =\n[\s\S]*?\n\n/
+          const replacement = `const SECURITY_TXT =\n${expr}\n\n`
+          if (!re.test(src)) { console.error('could not locate SECURITY_TXT block'); process.exit(1) }
+          src = src.replace(re, replacement)
+          fs.writeFileSync(file, src)
+          console.log('Updated SECURITY_TXT in ' + file)
+          NODE
+
+          rm -f upstream.txt drift.log
+
+          git config user.name  "tutorials-security-txt-bot"
+          git config user.email "noreply@sap.com"
+
+          # Reset to a clean drift branch off the default branch each run so the
+          # PR always reflects current upstream (idempotent — no duplicate PRs).
+          git checkout -B "$BRANCH"
+          git add approuter/lib/security-txt.js
+          if git diff --cached --quiet; then
+            echo "No net change after regeneration — nothing to PR."
+            exit 0
+          fi
+          git commit -m "chore: sync .well-known/security.txt with SAP upstream"
+          git push --force-with-lease origin "$BRANCH"
+
+          # Open a PR if none is open for this head branch; otherwise the force-push
+          # already updated the existing one.
+          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')
+          if [ "$EXISTING" = "0" ]; then
+            gh pr create \
+              --title "chore: sync .well-known/security.txt with SAP upstream" \
+              --body "SAP's canonical security.txt (https://www.sap.com/.well-known/security.txt) has changed. This PR updates the copy served by the approuter (\`approuter/lib/security-txt.js\`) to match.
+
+          Source of truth: \`github.tools.sap/sgsc-engineering-and-automation/securitytxt\` (SGSC PSRT), mirrored publicly at www.sap.com.
+
+          **After merge:** deploy the approuter (\`npm run deploy -- --env <env>\`, full build — no \`--skip-build\`) so the new file is served.
+
+          _Opened automatically by \`.github/workflows/security-txt-drift.yml\`._" \
+              --head "$BRANCH"
+          else
+            echo "Existing open PR for $BRANCH updated via force-push."
+          fi
+
+      # If drift was detected on a scheduled run but the GitHub App isn't
+      # configured, still surface it loudly (no silent expiry).
+      - name: Warn if drift detected but no App token to open a PR
+        if: ${{ steps.check.outputs.exit_code == '2' && github.event_name != 'pull_request' && vars.USE_GITHUB_APP != 'true' }}
+        run: |
+          echo "::warning title=security.txt drift (no auto-PR)::Upstream security.txt changed but USE_GITHUB_APP is not 'true', so no PR was opened. Update approuter/lib/security-txt.js manually to match https://www.sap.com/.well-known/security.txt."
+          exit 1

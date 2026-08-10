@@ -48,4 +48,13 @@ describe('SEO files', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/image\/png/);
   });
+
+  it('serves /.well-known/security.txt (RFC 9116) with Contact + Expires', async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/.well-known/security.txt`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/plain/);
+    const text = await res.text();
+    expect(text).toMatch(/^Contact:\s+https?:\/\//m);
+    expect(text).toMatch(/^Expires:\s+\d{4}-\d{2}-\d{2}T/m);
+  });
 });
