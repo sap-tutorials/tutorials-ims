@@ -121,7 +121,7 @@
     <p class="topic-grid__more"><a href="/tags/">See all topics →</a></p>
   </section>
 </article>
-{{ $css := resources.Get "css/home.css" }}
+{{ $css := resources.Get "css/home.css" | fingerprint }}
 <link rel="stylesheet" href="{{ $css.RelPermalink }}">
 <script>window.__BROWSE_BUILD_AT = "{{ $buildAt }}";</script>
 {{- /* Inlined catalog payload — read by TutorialNavigator.vue at script-init

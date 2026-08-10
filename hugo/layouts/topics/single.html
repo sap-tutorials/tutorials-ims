@@ -12,7 +12,7 @@
       peers: [{slug, label, weight}] }
 */ -}}
 {{- $c := index site.Data.topics_gallery.clusters .Params.cluster -}}
-{{- $css := resources.Get "css/topics.css" -}}
+{{- $css := resources.Get "css/topics.css" | fingerprint -}}
 {{ if $css }}<link rel="stylesheet" href="{{ $css.RelPermalink }}">{{ end }}
 
 {{ if $c }}
