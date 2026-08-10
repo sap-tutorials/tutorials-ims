@@ -19,15 +19,27 @@
   font-display: swap;
 }
 </style>
+{{/* #1584 follow-up: fingerprint (content-hash) the Hugo-managed CSS so every
+     content change yields a NEW URL (ui5-overrides.<hash>.css). A CDN/edge
+     (Akamai on PROD) can never serve a stale copy against fresh HTML, because
+     the HTML now references a filename the edge has never cached. This is the
+     durable fix for the 2026-08-10 giant-logo incident, where the edge held a
+     stale un-fingerprinted /css/ui5-overrides.css lacking the .embed-bar rule.
+     NOTE: sap-theme-vars.css and sap-horizon-dark.css are deliberately NOT
+     fingerprinted — they are referenced by BARE path from the CAP runtime
+     renderers (srv/lib/content-store.js, srv/lib/concept-list-page.js) and
+     scanner-vue; fingerprinting would stop Hugo emitting the bare filename and
+     404 those server-rendered pages. Fingerprinting them needs those emitters
+     threaded with the hashed URL first (follow-up). */}}
 {{ $themeVars := resources.Get "css/sap-theme-vars.css" }}
 {{ $darkVars := resources.Get "css/sap-horizon-dark.css" }}
-{{ $chromaLight := resources.Get "css/chroma-light.css" }}
-{{ $chromaDark := resources.Get "css/chroma-dark.css" }}
-{{ $print := resources.Get "css/print.css" }}
-{{ $ui5overrides := resources.Get "css/ui5-overrides.css" }}
-{{ $viewTransitions := resources.Get "css/view-transitions.css" }}
-{{ $scrollAnimations := resources.Get "css/scroll-animations.css" }}
-{{ $osToggle := resources.Get "css/os-toggle.css" }}
+{{ $chromaLight := resources.Get "css/chroma-light.css" | fingerprint }}
+{{ $chromaDark := resources.Get "css/chroma-dark.css" | fingerprint }}
+{{ $print := resources.Get "css/print.css" | fingerprint }}
+{{ $ui5overrides := resources.Get "css/ui5-overrides.css" | fingerprint }}
+{{ $viewTransitions := resources.Get "css/view-transitions.css" | fingerprint }}
+{{ $scrollAnimations := resources.Get "css/scroll-animations.css" | fingerprint }}
+{{ $osToggle := resources.Get "css/os-toggle.css" | fingerprint }}
 <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaLight.RelPermalink }}">
