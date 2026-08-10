@@ -186,6 +186,7 @@ const {
   searchQuery, filters, currentPage, productSearch, topicSearch,
   totalPages, displayedItems, displayedCounts,
   hasActiveFilters, paginatorPages, goToPage, clearFilters, toggleFilter,
+  toggleProduct, isProductSelected,
   filteredProducts, filteredTopics,
   searchMode, isSubThreshold, isSearching,
   sort: composableSort,
@@ -392,10 +393,10 @@ onMounted(async () => {
               />
             </div>
             <div class="filter-list">
-              <label v-for="product in filteredProducts" :key="product.slug" class="filter-option">
+              <label v-for="product in filteredProducts" :key="product.label" class="filter-option">
                 <input type="checkbox"
-                       :checked="filters.products.includes(product.slug)"
-                       @change="toggleFilter(filters.products, product.slug)"
+                       :checked="isProductSelected(product.slugs)"
+                       @change="toggleProduct(product.slugs)"
                        class="filter-checkbox" />
                 <span class="filter-label">{{ product.label }}</span>
               </label>
