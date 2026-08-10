@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { useNavigatorFilters } from './useNavigatorFilters'
 import * as useSearchModule from '../../navigator/useSearch'
-import type { CardItem } from '@shared/types'
+import type { CardItem, TutorialEntry } from '@shared/types'
 
 const cards: CardItem[] = [
   { type: 'mission', id: 'm1', title: 'M1', description: '', time: 60, level: 'beginner', tutorialCount: 3, primaryTag: '', displayTags: [], displayTagSlugs: ['software-product>sap-build-apps'], href: '/x', stepCount: 6 },
@@ -164,6 +164,89 @@ describe('useNavigatorFilters', () => {
     const allCards = ref(cards)
     const f = useNavigatorFilters({ allCards, syncURL: false })
     expect(f.sort).toBeUndefined()
+  })
+})
+
+// Product-facet fixtures (#1594): two DISTINCT tag slugs render the SAME
+// human label. Mirrors the live PROD collision where
+// `products>mobile-development-kit-client` (1 tutorial) and
+// `software-product>mobile-development-kit-client` (34 tutorials) both
+// humanize to "Mobile Development Kit Client", surfacing as two checkboxes.
+const dupLabelTutorials: TutorialEntry[] = [
+  {
+    slug: 'mdk-a', title: 'MDK A', description: '', time: 30, level: 'beginner',
+    stepCount: 3, primaryTag: 'software-product>mobile-development-kit-client',
+    displayTags: ['Mobile Development Kit Client', 'SAP HANA'],
+    displayTagSlugs: ['software-product>mobile-development-kit-client', 'software-product>sap-hana'],
+    prev: null, next: null,
+  },
+  {
+    slug: 'mdk-b', title: 'MDK B', description: '', time: 30, level: 'beginner',
+    stepCount: 3, primaryTag: 'products>mobile-development-kit-client',
+    displayTags: ['Mobile Development Kit Client'],
+    displayTagSlugs: ['products>mobile-development-kit-client'],
+    prev: null, next: null,
+  },
+  {
+    slug: 'hana-only', title: 'HANA only', description: '', time: 30, level: 'beginner',
+    stepCount: 3, primaryTag: 'software-product>sap-hana',
+    displayTags: ['SAP HANA'], displayTagSlugs: ['software-product>sap-hana'],
+    prev: null, next: null,
+  },
+]
+
+const dupLabelCards: CardItem[] = dupLabelTutorials.map(t => ({
+  type: 'tutorial', id: t.slug, title: t.title, description: '', time: t.time,
+  level: t.level, tutorialCount: 1, primaryTag: t.primaryTag,
+  displayTags: t.displayTags, displayTagSlugs: t.displayTagSlugs,
+  href: `/tutorials/${t.slug}`, stepCount: t.stepCount,
+}))
+
+describe('useNavigatorFilters — product facet merge (#1594)', () => {
+  it('merges distinct slugs sharing one label into a single facet entry', () => {
+    const allCards = ref(dupLabelCards)
+    const tutorials = ref(dupLabelTutorials)
+    const f = useNavigatorFilters({ allCards, tutorials, syncURL: false })
+    const mdk = f.filteredProducts.value.filter(p => p.label === 'Mobile Development Kit Client')
+    expect(mdk).toHaveLength(1)
+    expect([...mdk[0].slugs].sort()).toEqual([
+      'products>mobile-development-kit-client',
+      'software-product>mobile-development-kit-client',
+    ])
+  })
+
+  it('toggleProduct selects ALL member slugs and matches tutorials tagged with either', async () => {
+    const allCards = ref(dupLabelCards)
+    const tutorials = ref(dupLabelTutorials)
+    const f = useNavigatorFilters({ allCards, tutorials, syncURL: false })
+    const mdk = f.filteredProducts.value.find(p => p.label === 'Mobile Development Kit Client')!
+    f.toggleProduct(mdk.slugs)
+    await nextTick()
+    // Both MDK tutorials match (one via software-product>, one via products>).
+    expect(f.displayedItems.value.map(c => c.id).sort()).toEqual(['mdk-a', 'mdk-b'])
+    expect(f.isProductSelected(mdk.slugs)).toBe(true)
+  })
+
+  it('toggleProduct is a full-group deselect', async () => {
+    const allCards = ref(dupLabelCards)
+    const tutorials = ref(dupLabelTutorials)
+    const f = useNavigatorFilters({ allCards, tutorials, syncURL: false })
+    const mdk = f.filteredProducts.value.find(p => p.label === 'Mobile Development Kit Client')!
+    f.toggleProduct(mdk.slugs)
+    await nextTick()
+    f.toggleProduct(mdk.slugs)
+    await nextTick()
+    expect(f.filters.products).toEqual([])
+    expect(f.displayedItems.value).toHaveLength(3)
+  })
+
+  it('isProductSelected is false when only some member slugs are present (deep-link seed)', () => {
+    const allCards = ref(dupLabelCards)
+    const tutorials = ref(dupLabelTutorials)
+    const f = useNavigatorFilters({ allCards, tutorials, syncURL: false })
+    f.filters.products = ['products>mobile-development-kit-client']
+    const mdk = f.filteredProducts.value.find(p => p.label === 'Mobile Development Kit Client')!
+    expect(f.isProductSelected(mdk.slugs)).toBe(false)
   })
 })
 

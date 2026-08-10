@@ -377,9 +377,17 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   }
 
   // ─── Available facet lists (driven by `tutorials` when provided) ───
+  // Each entry is { label, slugs }, deduped and MERGED BY LABEL (#1594),
+  // sorted by label. The legacy AEM taxonomy and the current one both feed
+  // this list, so the same human label ("Mobile Development Kit Client") can
+  // arrive under several distinct slugs (e.g. `products>…` AND
+  // `software-product>…`). Keying by slug (the old behaviour) surfaced each
+  // as a separate checkbox that filtered on only its own slug — hence the
+  // duplicate entry with different result counts reported in #1594. We now
+  // collapse all slugs that humanize to the same label into one entry and
+  // filter on the union of its slugs.
   const availableProducts = computed(() => {
-    // Each entry is { slug, label }, deduped by slug, sorted by label.
-    const map = new Map<string, string>()
+    const byLabel = new Map<string, Set<string>>()
     const tuts = tutorials?.value ?? []
     for (const t of tuts) {
       for (let i = 0; i < t.displayTagSlugs.length; i++) {
@@ -389,11 +397,16 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
         // Software Product) and the license chip (handled separately).
         if (slug === 'tutorial>beginner' || slug === 'tutorial>intermediate' || slug === 'tutorial>advanced') continue
         if (slug === LICENSE_SLUG) continue
-        if (!map.has(slug)) map.set(slug, label)
+        // Defensive: a slug without a paired label (ragged displayTags array)
+        // would otherwise merge under `undefined`. Fall back to the slug.
+        const key = label ?? slug
+        let slugs = byLabel.get(key)
+        if (!slugs) { slugs = new Set(); byLabel.set(key, slugs) }
+        slugs.add(slug)
       }
     }
-    return [...map.entries()]
-      .map(([slug, label]) => ({ slug, label }))
+    return [...byLabel.entries()]
+      .map(([label, slugs]) => ({ label, slugs: [...slugs] }))
       .sort((a, b) => a.label.localeCompare(b.label))
   })
 
@@ -484,6 +497,26 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     const idx = arr.indexOf(value)
     if (idx >= 0) arr.splice(idx, 1)
     else arr.push(value)
+  }
+
+  // Product facet entries are MERGED BY LABEL (#1594) and carry a set of
+  // member slugs. Selecting/deselecting one checkbox must add/remove ALL of
+  // that label's slugs so the union filter (filteredItems) treats it as one
+  // choice. A merged entry is "selected" iff every member slug is present —
+  // if a deep-link seeded only one member slug, the box shows unchecked and a
+  // click adds the rest (idempotent superset).
+  function isProductSelected(slugs: string[]): boolean {
+    return slugs.length > 0 && slugs.every(s => filters.products.includes(s))
+  }
+
+  function toggleProduct(slugs: string[]) {
+    if (isProductSelected(slugs)) {
+      filters.products = filters.products.filter(s => !slugs.includes(s))
+    } else {
+      const set = new Set(filters.products)
+      for (const s of slugs) set.add(s)
+      filters.products = [...set]
+    }
   }
 
   function clearFilters() {
@@ -629,6 +662,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     // Mutators
     clearFilters,
     toggleFilter,
+    toggleProduct,
+    isProductSelected,
     // URL helper
     currentNavState,
     // Facet lists
