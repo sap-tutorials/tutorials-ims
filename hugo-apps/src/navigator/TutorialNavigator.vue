@@ -405,7 +405,7 @@ onMounted(async () => {
 
           <div class="filter-column">
             <h3 class="filter-title">Experience</h3>
-            <div class="filter-list">
+            <div class="filter-list filter-list--static">
               <label v-for="level in ['beginner', 'intermediate', 'advanced']" :key="level" class="filter-option">
                 <input type="checkbox" :checked="filters.levels.includes(level)" @change="toggleFilter(filters.levels, level)" class="filter-checkbox" />
                 <span class="filter-label">{{ capitalizeLevel(level) }}</span>
@@ -415,7 +415,7 @@ onMounted(async () => {
 
           <div class="filter-column">
             <h3 class="filter-title">Type</h3>
-            <div class="filter-list">
+            <div class="filter-list filter-list--static">
               <label v-for="type in ['mission', 'group', 'tutorial']" :key="type" class="filter-option">
                 <input type="checkbox" :checked="filters.types.includes(type)" @change="toggleFilter(filters.types, type)" class="filter-checkbox" />
                 <span class="filter-label">{{ type.charAt(0).toUpperCase() + type.slice(1) }}</span>
@@ -747,6 +747,14 @@ onMounted(async () => {
   max-height: 7.5rem;
   overflow-y: auto;
   padding-right: 0.25rem;
+}
+
+/* Fixed-length lists (Type, Experience) have a small, known number of
+   options, so they should render fully rather than share the scroll cap
+   meant for the long dynamic Topic/Software Product lists (issue #1595). */
+.filter-list--static {
+  max-height: none;
+  overflow-y: visible;
 }
 
 .filter-list::-webkit-scrollbar {
