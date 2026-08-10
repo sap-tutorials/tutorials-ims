@@ -3484,7 +3484,10 @@ export default class AdminService extends cds.ApplicationService {
     this.on('overrideTopicLabel', async (req) => {
       const { slug, label } = req.data;
       const { TopicClusters } = cds.entities('com.sap.developers.ims');
-      await UPDATE(TopicClusters).set({ curatedLabel: label }).where({ slug });
+      // Slugs are minted lowercase (topic-cluster-reconcile slugify); canonicalize
+      // the action input so a mixed-case slug still matches the stored row.
+      const lcSlug = (slug || '').toLowerCase();
+      await UPDATE(TopicClusters).set({ curatedLabel: label }).where({ slug: lcSlug });
       return true;
     });
 
@@ -3494,7 +3497,9 @@ export default class AdminService extends cds.ApplicationService {
     this.on('setTopicClusterHidden', async (req) => {
       const { slug, hidden } = req.data;
       const { TopicClusters } = cds.entities('com.sap.developers.ims');
-      await UPDATE(TopicClusters).set({ hidden }).where({ slug });
+      // Slugs are minted lowercase; canonicalize the action input to match.
+      const lcSlug = (slug || '').toLowerCase();
+      await UPDATE(TopicClusters).set({ hidden }).where({ slug: lcSlug });
       return true;
     });
 
