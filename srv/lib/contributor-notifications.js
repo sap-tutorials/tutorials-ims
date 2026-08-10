@@ -173,7 +173,17 @@ export function escapeHtml(str) {
  * Returns the HTML string for substitution as ${tutorialListHtml}.
  * Avoids extending resolveTemplate() to support iteration.
  *
- * @param {Array<{title:string, slug:string, reviewedDate:string|Date|null}>} tutorials
+ * The anchor deep-links into the admin-shell's Tutorials Fiori Elements
+ * Object Page. That router keys the Object Page by the entity UUID — NOT the
+ * slug — via the "<outerRoute>&/<innerPrefix>/<Entity>(<key>)" hash format
+ * (mirrors the shell's own homepageConfig / petoberfestContests deep links in
+ * Shell.controller.js). The earlier "#/tutorial/<slug>" hash matched NO route
+ * and dropped recipients on a blank screen (#622 regression: the slug hash was
+ * invented in the design spec and never verified against the real router).
+ * `tutorialId` is populated by computeStaleNotifications() (tutorial.ID).
+ *
+ * @param {Array<{title:string, slug:string, tutorialId:string,
+ *   reviewedDate:string|Date|null}>} tutorials
  *   reviewedDate is normally an ISO timestamp string from CDS, but a JS Date
  *   instance is also accepted (normalized via .toISOString()).
  * @param {string} dashboardUrl
@@ -183,7 +193,7 @@ export function renderTutorialList(tutorials, dashboardUrl) {
   const safeDashboardUrl = escapeHtml(dashboardUrl);
   const items = tutorials.map(t => {
     const title = escapeHtml(t.title);
-    const slug = encodeURIComponent(t.slug);
+    const id = encodeURIComponent(t.tutorialId);
     let date = '—';
     if (t.reviewedDate) {
       const iso = t.reviewedDate instanceof Date
@@ -191,7 +201,8 @@ export function renderTutorialList(tutorials, dashboardUrl) {
         : String(t.reviewedDate);
       date = iso.slice(0, 10);
     }
-    return `<li><a href="${safeDashboardUrl}#/tutorial/${slug}">${title}</a> — last reviewed ${date}</li>`;
+    const deepLink = `${safeDashboardUrl}#tutorials&/tu/Tutorials(${id})`;
+    return `<li><a href="${deepLink}">${title}</a> — last reviewed ${date}</li>`;
   });
   return `<ul>${items.join('')}</ul>`;
 }
