@@ -1,0 +1,30 @@
+<!-- test/e2e/fixtures/embed-host-harness.html (#1584)
+     Manual iframe host harness for the BAIP embedded-tutorial POC team.
+     Open with ?src=<tutorial-url> (e.g.
+       embed-host-harness.html?src=https://<env>/tutorials/<slug>/?embed=minimal&host=1
+     ). It iframes the tutorial, logs any sap:tutorial:* postMessage the frame
+     emits, and the "goto step 2" button posts a sap:tutorial:goto back into the
+     frame — exercising the postMessage bridge (hugo-apps embed island) by hand.
+     Not wired into an automated cross-origin assertion (brittle in
+     playwright-core); bridge messaging is verified manually via this file. -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Embed host harness</title></head>
+<body>
+  <button id="goto">goto step 2</button>
+  <pre id="log"></pre>
+  <iframe id="frame" width="480" height="720"></iframe>
+  <script>
+    const log = (m) => { document.getElementById('log').textContent += m + '\n'; };
+    const frame = document.getElementById('frame');
+    const src = new URLSearchParams(location.search).get('src');
+    frame.src = src;
+    window.addEventListener('message', (e) => {
+      if (e.data && typeof e.data.type === 'string' && e.data.type.startsWith('sap:tutorial:')) {
+        log(e.data.type + ' ' + JSON.stringify(e.data));
+      }
+    });
+    document.getElementById('goto').addEventListener('click', () => {
+      frame.contentWindow.postMessage({ type: 'sap:tutorial:goto', stepIndex: 2 }, '*');
+    });
+  </script>
+</body></html>
