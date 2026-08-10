@@ -278,7 +278,9 @@ html:not([data-page-kind="tutorial"]) ui5-shellbar-item#sb-reader {
 }
 
 /* Hide chrome that fights focus: side rail, anchor tabs, wizard step indicator,
-   header chips, breadcrumbs, share row, sticky prev/next bar, footer, joule. */
+   header chips, breadcrumbs, share row, sticky prev/next bar, footer, joule.
+   embed=reader (#1584) aliases the identical hide-list, ungated on page-kind
+   so hosted mission/concept pages strip the same chrome. */
 html[data-reader="on"][data-page-kind="tutorial"] .tutorial-right-col,
 html[data-reader="on"][data-page-kind="tutorial"] .op-anchor,
 html[data-reader="on"][data-page-kind="tutorial"] .op-header__chips,
@@ -289,11 +291,23 @@ html[data-reader="on"][data-page-kind="tutorial"] .step-controls,
 html[data-reader="on"][data-page-kind="tutorial"] .tutorial-stepnav,
 html[data-reader="on"][data-page-kind="tutorial"] footer,
 html[data-reader="on"][data-page-kind="tutorial"] #joule-panel,
-html[data-reader="on"][data-page-kind="tutorial"] #joule-starters {
+html[data-reader="on"][data-page-kind="tutorial"] #joule-starters,
+html[data-embed="reader"] .tutorial-right-col,
+html[data-embed="reader"] .op-anchor,
+html[data-embed="reader"] .op-header__chips,
+html[data-embed="reader"] .op-wizard-wrap,
+html[data-embed="reader"] .breadcrumbs,
+html[data-embed="reader"] .feedback-share,
+html[data-embed="reader"] .step-controls,
+html[data-embed="reader"] .tutorial-stepnav,
+html[data-embed="reader"] footer,
+html[data-embed="reader"] #joule-panel,
+html[data-embed="reader"] #joule-starters {
   display: none !important;
 }
 /* Reserve-space rule for the (now-hidden) sticky stepnav: drop the body padding. */
-html[data-reader="on"][data-page-kind="tutorial"] body:has(.tutorial-stepnav) {
+html[data-reader="on"][data-page-kind="tutorial"] body:has(.tutorial-stepnav),
+html[data-embed="reader"] body:has(.tutorial-stepnav) {
   padding-bottom: 0;
 }
 
@@ -303,25 +317,31 @@ html[data-reader="on"][data-page-kind="tutorial"] body:has(.tutorial-stepnav) {
    the grid track inherits min-content sizing, so wide intrinsic elements
    inside an expanded step (long <pre> lines, unbroken URLs, tables) push
    the column past .op-page's max-width and overflow the reading pane. */
-html[data-reader="on"][data-page-kind="tutorial"] .op-twocol {
+html[data-reader="on"][data-page-kind="tutorial"] .op-twocol,
+html[data-embed="reader"] .op-twocol {
   grid-template-columns: minmax(0, 1fr);
 }
-html[data-reader="on"][data-page-kind="tutorial"] .op-page {
+html[data-reader="on"][data-page-kind="tutorial"] .op-page,
+html[data-embed="reader"] .op-page {
   max-width: 760px;
 }
-html[data-reader="on"][data-page-kind="tutorial"] .op-body {
+html[data-reader="on"][data-page-kind="tutorial"] .op-body,
+html[data-embed="reader"] .op-body {
   padding-left: 1rem;
   padding-right: 1rem;
 }
 
 /* Looser, larger type. The step body inherits this via cascade; leaving
    .step-header at default keeps section anchors at their normal weight. */
-html[data-reader="on"][data-page-kind="tutorial"] .tutorial-step {
+html[data-reader="on"][data-page-kind="tutorial"] .tutorial-step,
+html[data-embed="reader"] .tutorial-step {
   font-size: 1.0625rem;
   line-height: 1.65;
 }
 html[data-reader="on"][data-page-kind="tutorial"] .tutorial-step p,
-html[data-reader="on"][data-page-kind="tutorial"] .tutorial-step li {
+html[data-reader="on"][data-page-kind="tutorial"] .tutorial-step li,
+html[data-embed="reader"] .tutorial-step p,
+html[data-embed="reader"] .tutorial-step li {
   line-height: 1.7;
 }
 
@@ -329,19 +349,110 @@ html[data-reader="on"][data-page-kind="tutorial"] .tutorial-step li {
    Hover/focus restores them so the exit toggle and progress ring stay
    one gesture away — important for keyboard users who tab into the bar. */
 html[data-reader="on"][data-page-kind="tutorial"] ui5-shellbar,
-html[data-reader="on"][data-page-kind="tutorial"] .op-header {
+html[data-reader="on"][data-page-kind="tutorial"] .op-header,
+html[data-embed="reader"] ui5-shellbar,
+html[data-embed="reader"] .op-header {
   opacity: 0.4;
   transition: opacity 200ms ease;
 }
 html[data-reader="on"][data-page-kind="tutorial"] ui5-shellbar:hover,
 html[data-reader="on"][data-page-kind="tutorial"] ui5-shellbar:focus-within,
 html[data-reader="on"][data-page-kind="tutorial"] .op-header:hover,
-html[data-reader="on"][data-page-kind="tutorial"] .op-header:focus-within {
+html[data-reader="on"][data-page-kind="tutorial"] .op-header:focus-within,
+html[data-embed="reader"] ui5-shellbar:hover,
+html[data-embed="reader"] ui5-shellbar:focus-within,
+html[data-embed="reader"] .op-header:hover,
+html[data-embed="reader"] .op-header:focus-within {
   opacity: 1;
 }
 @media (prefers-reduced-motion: reduce) {
   html[data-reader="on"][data-page-kind="tutorial"] ui5-shellbar,
-  html[data-reader="on"][data-page-kind="tutorial"] .op-header { transition: none; }
+  html[data-reader="on"][data-page-kind="tutorial"] .op-header,
+  html[data-embed="reader"] ui5-shellbar,
+  html[data-embed="reader"] .op-header { transition: none; }
+}
+
+/* #1584 embed/hosted mode. `reader` reuses the focus-mode cascade above via
+   parallel `html[data-embed="reader"]` selectors appended to each reader-mode
+   rule group (single source of truth — no duplicated declarations here);
+   `none` and `minimal` add their own chrome removal below. Unlike reader mode
+   (tutorial-only), embed selectors are NOT gated on data-page-kind so a hosted
+   mission/concept page also strips. */
+
+/* embed=none / minimal → hide site chrome everywhere it appears. */
+html[data-embed="none"] .tutorial-right-col,
+html[data-embed="minimal"] .tutorial-right-col,
+html[data-embed="none"] .breadcrumbs,
+html[data-embed="minimal"] .breadcrumbs,
+html[data-embed="none"] .feedback-share,
+html[data-embed="minimal"] .feedback-share,
+html[data-embed="none"] footer,
+html[data-embed="minimal"] footer,
+html[data-embed="none"] #joule-panel,
+html[data-embed="minimal"] #joule-panel,
+html[data-embed="none"] #joule-starters,
+html[data-embed="minimal"] #joule-starters {
+  display: none !important;
+}
+
+/* embed=none additionally removes the real shellbar and progress bar entirely
+   (reader only dims the shellbar). */
+html[data-embed="none"] ui5-shellbar,
+html[data-embed="none"] #reading-progress,
+html[data-embed="none"] #cmd-palette {
+  display: none !important;
+}
+
+/* embed=minimal hides the real shellbar (the slim embed-bar renders instead). */
+html[data-embed="minimal"] ui5-shellbar {
+  display: none !important;
+}
+
+/* The slim embed bar and escape pill are hidden unless their mode is active. */
+.embed-bar { display: none; }
+html[data-embed="minimal"] .embed-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 44px;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--sapObjectHeader_BorderColor, #d9d9d9);
+  background: var(--sapObjectHeader_Background, #fff);
+}
+.embed-bar__logo { height: 20px; }
+.embed-bar__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.embed-bar__progress {
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-variant-numeric: tabular-nums;
+}
+
+.embed-escape { display: none; }
+html[data-embed="none"] .embed-escape {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 9999;
+  padding: 0.5rem 0.75rem;
+  border-radius: 999px;
+  background: var(--sapButton_Emphasized_Background, #0070f2);
+  color: var(--sapButton_Emphasized_TextColor, #fff);
+  font-size: 0.8125rem;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
 /* Dark-mode fix for shellbar popover items (PR #575 + revised 2026-06-23).
