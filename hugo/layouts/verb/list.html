@@ -123,6 +123,6 @@
   {{- end -}}
 </article>
 
-{{ $css := resources.Get "css/homepage.css" }}
+{{ $css := resources.Get "css/homepage.css" | fingerprint }}
 <link rel="stylesheet" href="{{ $css.RelPermalink }}">
 {{ end }}

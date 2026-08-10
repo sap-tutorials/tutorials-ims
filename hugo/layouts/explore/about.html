@@ -1,5 +1,5 @@
 {{ define "main" }}
-{{ $css := resources.Get "css/kg-overview.css" }}
+{{ $css := resources.Get "css/kg-overview.css" | fingerprint }}
 <link rel="stylesheet" href="{{ $css.RelPermalink }}">
 
 <main class="kg-overview" data-page-kind="explore-about">

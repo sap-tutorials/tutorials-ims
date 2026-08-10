@@ -1,5 +1,5 @@
 {{ define "main" }}
-{{ $kgCss := resources.Get "css/kg-overview.css" }}
+{{ $kgCss := resources.Get "css/kg-overview.css" | fingerprint }}
 <link rel="stylesheet" href="{{ $kgCss.RelPermalink }}">
 {{ with site.Data.explore_bundle }}
   {{/*

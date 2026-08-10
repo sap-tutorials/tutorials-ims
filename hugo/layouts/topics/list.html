@@ -11,7 +11,7 @@
       clusters: {slug: {...}}, buildAt, error }
 */ -}}
 {{- $g := site.Data.topics_gallery -}}
-{{- $css := resources.Get "css/topics.css" -}}
+{{- $css := resources.Get "css/topics.css" | fingerprint -}}
 {{ if $css }}<link rel="stylesheet" href="{{ $css.RelPermalink }}">{{ end }}
 
 <div class="topics-page">
