@@ -136,8 +136,12 @@ describe('AdminService.sendLastChanceEmail', () => {
     // "Dear Alice" appears in last-chance.html when authorName='Alice' (the
     // displayName from the Users FK). Proves variables.authorName wired.
     expect(queued[0].body).toContain('Dear Alice');
-    expect(queued[0].body).toContain('t1');
-    expect(queued[0].body).toContain('t2');
+    // The rendered tutorial list deep-links each row by entity UUID (see
+    // renderTutorialList in srv/lib/contributor-notifications.js — the href is
+    // "#tutorials&/tu/Tutorials(<uuid>)", NOT the slug, as of #1574). Assert on
+    // the stable tutorial titles, which prove the list rendered into the body.
+    expect(queued[0].body).toContain('Tutorial 1');
+    expect(queued[0].body).toContain('Tutorial 2');
   });
 
   it('author with no stale tutorials returns success=false', async () => {
