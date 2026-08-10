@@ -12,7 +12,7 @@
   <script type="application/json" id="rules-vr-source">{{ .Params.rulesVrSource | jsonify }}</script>
   {{ end }}
   {{ partial "head.html" . }}
-  {{ if not site.Params.qa }}<link rel="stylesheet" href="/css/joule.css">{{ end }}
+  {{ if not site.Params.qa }}{{ $joule := resources.Get "css/joule.css" }}{{ $joule.Publish }}<link rel="stylesheet" href="{{ ($joule | fingerprint).RelPermalink }}">{{ end }}
   {{ partial "site-jsonld.html" . }}
 </head>
 <body{{ if site.Params.previewMode }} data-has-ai="{{ if .Params.hasAi }}true{{ else }}false{{ end }}"{{ end }}>
