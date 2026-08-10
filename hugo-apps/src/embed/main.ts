@@ -7,12 +7,16 @@ function isFramed(): boolean {
   try { return window.parent !== window || !!window.opener; } catch { return true; }
 }
 
-function applyEmbedMode(mode: string | null, reset: boolean): void {
+export function applyEmbedMode(mode: string | null, reset: boolean, persist = true): void {
   const html = document.documentElement;
   if (reset) { delete html.dataset.embed; try { localStorage.removeItem('embed'); } catch {} return; }
   if (mode === 'none' || mode === 'minimal' || mode === 'reader') {
     html.dataset.embed = mode;
-    try { localStorage.setItem('embed', mode); } catch {}
+    // Only EXPLICIT modes persist. An auto-derived (viewport-heuristic) mode
+    // must apply to the current view only — persisting it would leak
+    // embed=minimal into the user's next NORMAL top-level visit, since an
+    // embedded iframe is same-origin with the top-level site (#1584).
+    if (persist) { try { localStorage.setItem('embed', mode); } catch {} }
   }
 }
 
@@ -51,8 +55,11 @@ function armPipOnFirstGesture(): void {
   if (!active) return; // inert for normal visitors
 
   // Reflect resolved mode (pre-paint already handled the common path; this
-  // covers set-embed messages and keeps localStorage in sync).
-  applyEmbedMode(effectiveMode, res.reset);
+  // covers set-embed messages and keeps localStorage in sync). An explicit
+  // res.mode (or reset) persists; an AUTO-derived mode (res.mode null, auto
+  // 'minimal') applies to the current view only — never persisted (#1584).
+  const persist = res.mode !== null || res.reset;
+  applyEmbedMode(effectiveMode, res.reset, persist);
 
   // Deep-link to a step once the tutorial DOM is present.
   if (res.step != null) {
