@@ -10,7 +10,7 @@ ID: tutorials-ims
 # Bump this on each release you deploy — it's the version shown by `cf mtas`
 # and in the mtar filename (tutorials-ims_<version>.mtar). Deploy is manual:
 # `cd .deploy && mbt build && cf deploy mta_archives/tutorials-ims_<version>.mtar -e ../deploy/<env>.mtaext -f`.
-version: 1.13.1
+version: 1.13.2
 
 # Top-level parameters (overridable per-env via deploy/<env>.mtaext).
 parameters:
@@ -230,7 +230,16 @@ modules:
         - "static/tutorials/"
     parameters:
       disk-quota: 2048M
-      memory: 512M
+      # Bumped 512M→2048M: at the developers.sap.com cutover (2026-08-10) the
+      # 512M container OOM-crash-looped (exit 137, cgroup OOM — NOT a V8 heap
+      # SIGABRT) once real prod traffic hit the vanity route. RSS is dominated
+      # by concurrent request buffering + the large static-asset surface
+      # (admin/analytics/explore/scanner/data-inspector bundles copied in at
+      # build), so headroom scales with load. Matches the emergency `cf scale`
+      # that stabilized prod; steady-state usage sits ~260M so 2GB is headroom,
+      # not baseline. disk-quota already 2048M (logs stream off-container to
+      # stdout/stderr, so disk is not the OOM vector — 33% used at steady state).
+      memory: 2048M
       app-name: tutorials-approuter
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
