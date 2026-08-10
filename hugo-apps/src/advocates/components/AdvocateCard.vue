@@ -19,6 +19,12 @@ const ICON: Record<string, string> = {
   LinkedIn: 'in', X: '𝕏', GitHub: 'gh', YouTube: '▶',
   BlueSky: 'B', Mastodon: 'M', Blog: 'B+', SapCommunity: 'SC', Email: '✉', Other: '·',
 };
+
+// Human-readable display names for the AdvocateLinks.kind enum, so a raw
+// technical label like "SapCommunity" never surfaces in the tooltip (#1578).
+const LABEL: Record<string, string> = {
+  SapCommunity: 'SAP Community', BlueSky: 'Bluesky',
+};
 </script>
 
 <template>
@@ -89,7 +95,7 @@ const ICON: Record<string, string> = {
           <a v-for="l in advocate.links" :key="l.kind + l.url"
              class="adv-iconbtn"
              :href="l.url" target="_blank" rel="noopener"
-             :title="l.label || l.kind">
+             :title="l.label || LABEL[l.kind] || l.kind">
             {{ ICON[l.kind] || l.kind.slice(0,2) }}
           </a>
         </div>
