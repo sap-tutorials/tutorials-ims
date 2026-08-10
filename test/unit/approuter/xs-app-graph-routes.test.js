@@ -92,3 +92,45 @@ describe('approuter /tutorials-qa/* routes', () => {
     expect(root.scope).toBe('$XSAPPNAME.Tutorial.Author')
   })
 })
+
+describe('approuter /build/* route', () => {
+  // Regression guard: the /build/* route regex must capture an optional query
+  // string, otherwise any request carrying a ?query falls through to the static
+  // 404. breadcrumb-context REQUIRES ?tutorial=<slug>, so a missing query group
+  // makes that endpoint 404 on every request (it silently did so on DEV+PROD
+  // until this fix — the frontend degraded to stale static breadcrumb text).
+  const buildRoute = xsApp.routes.find(
+    (r) => typeof r.source === 'string' && r.source.startsWith('^/build/(breadcrumb-context'),
+  )
+
+  it('exists and forwards to srv-api anonymously', () => {
+    expect(buildRoute, '/build/* route').toBeTruthy()
+    expect(buildRoute.destination).toBe('srv-api')
+    expect(buildRoute.authenticationType).toBe('none')
+  })
+
+  it('matches listed endpoints WITH a query string', () => {
+    const re = new RegExp(buildRoute.source)
+    // The bug: these carry a query string and used to fall through to 404.
+    expect(re.test('/build/breadcrumb-context?tutorial=cap-mocking-auth')).toBe(true)
+    expect(re.test('/build/catalog?foo=bar')).toBe(true)
+    expect(re.test('/build/mission/cloud?x=1')).toBe(true)
+    // Path-only forms still match.
+    expect(re.test('/build/catalog')).toBe(true)
+    expect(re.test('/build/breadcrumb-context')).toBe(true)
+    // Unlisted endpoints still fall through (no accidental widening).
+    expect(re.test('/build/verb-definitions')).toBe(false)
+  })
+
+  it('preserves the query string in the rewrite target', () => {
+    const re = new RegExp(buildRoute.source)
+    const m = re.exec('/build/breadcrumb-context?tutorial=cap-mocking-auth')
+    expect(m).toBeTruthy()
+    // Emulate the approuter $1$2$3 substitution.
+    const target = buildRoute.target
+      .replace('$1', m[1] || '')
+      .replace('$2', m[2] || '')
+      .replace('$3', m[3] || '')
+    expect(target).toBe('/build/breadcrumb-context?tutorial=cap-mocking-auth')
+  })
+})

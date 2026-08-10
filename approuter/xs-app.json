@@ -380,8 +380,8 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/build/(breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|kg-stats|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels|topics-gallery)(/.*)?$",
-      "target": "/build/$1$2",
+      "source": "^/build/(breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|kg-stats|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels|topics-gallery)(/.*)?(\\?.*)?$",
+      "target": "/build/$1$2$3",
       "destination": "srv-api",
       "authenticationType": "none"
     },

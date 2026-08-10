@@ -25,6 +25,7 @@ const { normalizeLegacyCatalogUrl } = require('./lib/catalog-legacy-redirects')
 const { bump, startAutoFlush } = require('./lib/hit-counter')
 const { safeFetch } = require('./lib/safe-fetch')
 const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
+const { securityTxtHandler } = require('./lib/security-txt')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
 // array) injected by the approuter framework when mta.yaml declares
@@ -572,6 +573,7 @@ ar.start({
       insertMiddleware: {
         first: [
           { path: '/', handler: wellKnownOAuthHandler },
+          { path: '/', handler: securityTxtHandler },
           { path: '/', handler: devtoberfestCspHandler },
           { path: '/admin/rebuild', handler: rebuildHandler },
           { path: '/', handler: imgCdnHandler },

@@ -2,6 +2,8 @@
 title: "U8 codetabs demo"
 description: "Demo page for the {{< codetabs >}} shortcode (U8 prototype)."
 draft: false
+private: true
+robotsNoIndex: true
 ---
 
 # Code-block language tabs (U8)
