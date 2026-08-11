@@ -194,6 +194,15 @@ export async function navigatorCatalogHandler(req, res) {
       : [];
     const missionById = new Map(missions.map(m => [m.ID, m]));
 
+    // Issue #1639: track which missions already have a missions[] ref (the main
+    // NavigatorCatalog loop above emits refs only for missions with direct
+    // TUTORIAL rows). Missions reached ONLY through a nested GROUP item produce
+    // no NavigatorCatalog rows, so without this their ref is never emitted — and
+    // the navigator's mission card, built from tutorialMappings, then can't
+    // resolve its slug (missionsMeta.find(...) === undefined) and links to the
+    // first tutorial instead of /tutorials/mission-<slug>.
+    const missionRefIds = new Set(missionRefs.map(m => m.id));
+
     for (const item of nestedGroupItems) {
       const path = pathById.get(item.path_ID);
       if (!path) continue;
@@ -201,6 +210,18 @@ export async function navigatorCatalogHandler(req, res) {
       if (!mission) continue;
       const group = groupRows.find(g => g.ID === item.group_ID);
       if (!group) continue;
+
+      // Emit the mission ref unconditionally (NOT gated by
+      // NAV_INCLUDE_NESTED_GROUPS): the mission card and its href resolution
+      // are independent of whether the nested-group *card* is surfaced. #1639.
+      if (!missionRefIds.has(mission.legacyId)) {
+        missionRefIds.add(mission.legacyId);
+        missionRefs.push({
+          id: mission.legacyId,
+          title: mission.title,
+          slug: mission.slug || String(mission.legacyId),
+        });
+      }
 
       const groupSlug = group.slug || String(group.legacyId);
       // Dedup: same Group nested under multiple Missions — first Mission wins.
