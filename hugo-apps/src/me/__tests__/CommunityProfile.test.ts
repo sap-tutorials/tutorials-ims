@@ -137,6 +137,29 @@ describe('CommunityProfile.vue', () => {
     expect(wrapper.text()).toMatch(/SAP Community is unreachable/i);
   });
 
+  it('surfaces a message on a raw HTTP error with no status field (issue #1614)', async () => {
+    // Previously setKhorosLink hard-rejected 404 with an OData error envelope
+    // (no `.status`), so the UI set errorStatus=undefined → silent. Now any
+    // non-ok/status-less response must still render a message.
+    const fetchMock = mockFetch({
+      '/api/getKhorosProfile()': async () => ({ body: { linked: false } }),
+      'POST /api/setKhorosLink': async () => ({
+        ok: false,
+        status: 404,
+        body: { error: { code: '404', message: 'User row missing' } },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(CommunityProfile);
+    await flushPromises();
+    const vm = wrapper.vm as any;
+    vm.input = 'someone';
+    await vm.onLink();
+    await flushPromises();
+    expect(vm.errorStatus).toBeTruthy();
+    expect(wrapper.text()).toMatch(/couldn.?t save/i);
+  });
+
   it('Unlink → POST /api/clearKhorosLink → transitions to unlinked', async () => {
     let cleared = false;
     const fetchMock = mockFetch({

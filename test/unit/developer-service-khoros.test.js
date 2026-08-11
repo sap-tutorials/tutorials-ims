@@ -159,6 +159,26 @@ describe('DeveloperService — Khoros endpoints', () => {
     expect(_khorosCalls).toBe(0);
   });
 
+  it('setKhorosLink → auto-provisions a missing Users row instead of 404 (issue #1614)', async () => {
+    const { Users } = cds.entities('com.sap.developers.ims');
+    // A brand-new learner with no Users row (never completed a tutorial).
+    await DELETE.from(Users).where({ sapId: 'TEST_USER_1614' });
+    _fetchHandler = async () => khorosOkResponse(THOMAS_JUNG);
+    try {
+      const { data } = await project.post(
+        '/api/setKhorosLink', { input: 'thomas_jung' },
+        { auth: { username: 'TEST_USER_1614' } }
+      );
+      // Previously this hard-rejected 404 "User row missing" (silent in the UI).
+      expect(data.status).toBe('ok');
+      const row = await SELECT.one.from(Users).where({ sapId: 'TEST_USER_1614' });
+      expect(row).toBeTruthy();
+      expect(row.khorosId).toBe('12345');
+    } finally {
+      await DELETE.from(Users).where({ sapId: 'TEST_USER_1614' });
+    }
+  });
+
   it('clearKhorosLink → ok nulls all 4 columns', async () => {
     // Seed via setKhorosLink so the khorosId is in DB (beforeEach starts clean).
     _fetchHandler = async () => khorosOkResponse(THOMAS_JUNG);
