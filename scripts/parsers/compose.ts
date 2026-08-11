@@ -1,6 +1,7 @@
 import { extractFrontmatter } from './frontmatter.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
+import { prepPrerequisitesMarkup } from './prerequisites-markup.js'
 import { convertOptionBlocks } from './options.js'
 import { parseV1Steps } from './v1.js'
 import { parseV2Steps } from './v2.js'
@@ -67,6 +68,16 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
 
   const isV2 = frontmatter.parser === 'v2'
   let processedBody = resolveImageURLs(body, {
+    repo: opts.repo, branch: opts.branch, slug: opts.slug,
+    rewriteImages: opts.rewriteImages,
+  })
+
+  // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because
+  // its content is markdownified as-is, markdown images/links inside a raw
+  // <table> (a common QR-code pattern) rendered as literal text. Run the same
+  // rewrite + an HTML-block-aware transform so those images and adjacent links
+  // render. Single feed point — both emit paths consume compose's output.
+  const resolvedPrerequisites = prepPrerequisitesMarkup(prerequisites, {
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
   })
@@ -160,7 +171,7 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     title,
     description,
     youWillLearn,
-    prerequisites,
+    prerequisites: resolvedPrerequisites,
     level,
     frontmatter,
     steps,
