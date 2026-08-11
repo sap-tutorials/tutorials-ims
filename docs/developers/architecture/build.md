@@ -1081,25 +1081,35 @@ Result: 200 OK — user sees tutorial content as normal
 
 If the AppRouter is deployed before any content has been published to HANA, `/tutorials/*` returns 404. This is the expected "empty state." Run `npm run publish-content` against the deployed CAP srv to populate content.
 
-## Content Pages from HANA (Phase 1, issue #1659)
+## Content Pages from HANA (Phase 1–2, issue #1659)
 
-Selected Hugo-generated pages are stored in and served from the same `ContentFiles`/`ContentManifest` tables as tutorials, eliminating the approuter static-filesystem dependency for high-traffic landing pages. The approuter routes are not yet wired (see dark-launch note below) — Phase 2 will flip them one by one, homepage last.
+Selected Hugo-generated pages are stored in and served from the same `ContentFiles`/`ContentManifest` tables as tutorials, eliminating the approuter static-filesystem dependency for high-traffic landing pages.
+
+**Phase 2 route flips (merged):** The following routes now use AppRouter rewrites to `srv-api` `/content/pages/*`:
+- `/browse/`, `/topics/` (root only), `/tutorial-navigator/`, `/developer-advocates/`, `/devtoberfest/` (root only)
+- The 7 verb hubs: `/ai/`, `/build/`, `/connect/`, `/integrate/`, `/learn/`, `/model/`, `/operate/`
+- Sitemaps: `/sitemap.xml`, `/index.xml`, `/llms-full.txt`
+
+**Homepage `/` flip deferred:** The homepage (root, highest-traffic) will be flipped in a separate follow-up PR **after DEV cache/fail-open verification**. Flipped last, with the most-watched smoke gates and asset-coupling guards.
+
+**Long-tail pages remain static:** Legal pages (`/privacy/`, `/cookies/`, `/ai-notice/`), island shells (`/me/`, `/explore/`, `/app-space/`, `/event-display/`), `/api-docs/`, topic articles (`/topics/<x>/`), puzzles/petoberfest, and error pages intentionally stay on the catch-all static route and `errorPage` mechanism. Phase 3 (future) will retire the runtime `/admin/rebuild` push but keeps the catch-all + errorPage for these low-churn pages.
 
 ### Key namespace
 
 Pages use a `page-<name>` key (e.g. `page-index`, `page-browse`, `page-sitemap.xml`) in `ContentFiles`. This prefix coexists safely with tutorial bare slugs and `concept-<slug>` keys. The fixed allow-list in `srv/lib/page-key-map.js` is the single source of truth — it defines the bijection between incoming route paths and storage keys. The allow-list IS the validator: an incoming path that does not match a table entry is rejected without a DB lookup.
 
-| Route | Key | MIME |
-| --- | --- | --- |
-| `/` | `page-index` | `text/html` |
-| `/browse/` | `page-browse` | `text/html` |
-| `/topics/` | `page-topics` | `text/html` |
-| `/tutorial-navigator/` | `page-tutorial-navigator` | `text/html` |
-| `/developer-advocates/` | `page-developer-advocates` | `text/html` |
-| `/devtoberfest/` | `page-devtoberfest` | `text/html` |
-| `/sitemap.xml` | `page-sitemap.xml` | `application/xml` |
-| `/index.xml` | `page-index.xml` | `application/xml` |
-| `/llms-full.txt` | `page-llms-full.txt` | `text/plain` |
+| Route | Key | MIME | Phase |
+| --- | --- | --- | --- |
+| `/` | `page-index` | `text/html` | Phase 3 (follow-up) |
+| `/browse/` | `page-browse` | `text/html` | Phase 2 |
+| `/topics/` | `page-topics` | `text/html` | Phase 2 |
+| `/tutorial-navigator/` | `page-tutorial-navigator` | `text/html` | Phase 2 |
+| `/developer-advocates/` | `page-developer-advocates` | `text/html` | Phase 2 |
+| `/devtoberfest/` | `page-devtoberfest` | `text/html` | Phase 2 |
+| `/ai/`, `/build/`, `/connect/`, `/integrate/`, `/learn/`, `/model/`, `/operate/` | `page-<verb>` | `text/html` | Phase 2 |
+| `/sitemap.xml` | `page-sitemap.xml` | `application/xml` | Phase 2 |
+| `/index.xml` | `page-index.xml` | `application/xml` | Phase 2 |
+| `/llms-full.txt` | `page-llms-full.txt` | `text/plain` | Phase 2 |
 
 To add a new in-scope page, add one row to `IN_SCOPE_PAGES` in `srv/lib/page-key-map.js`. The snapshot is picked up on the next `build:all` automatically.
 
@@ -1109,15 +1119,13 @@ To add a new in-scope page, add one row to `IN_SCOPE_PAGES` in `srv/lib/page-key
 - **`srv/server.js`** — public, no auth required (mirrors `serveHandler` for tutorials).
 - **`srv-qa/server.js`** — requires the `Tutorial.Author` XSUAA scope (mirrors the QA tutorial handler).
 
-**Dark-launched.** No AppRouter route currently points to `/content/pages/*`. Phase 2 will add per-route rewrites (e.g. `/browse/` → `/content/pages/browse/`), with the homepage (`/`) flipped last.
-
 ### Fail-open ladder
 
 For in-scope keys, the handler tries three layers before giving up:
 
 1. **LRU cache hit** — the shared 50 MB in-memory cache (same as tutorials). Serves immediately with ETag support.
 2. **HANA `ContentFiles` lookup** — active-version BLOB, decompressed and sent. Cache-populated on the way out.
-3. **Baked deploy snapshot** — `srv/page-fallback/<key>.<ext>`, written at build time by `scripts/build-page-fallback.cjs` (an explicit `build:all` step, after `build:hugo`). Served with `X-Content-Source: fallback` and a short 60-second cache TTL.
+3. **Baked deploy snapshot** — `srv/page-fallback/<key>.<ext>`, written at build time by `scripts/build-page-fallback.cjs` (an explicit `build:all` step, after `build:hugo`). Serves on a HANA miss (cold cache or unpublished page), with `X-Content-Source: fallback` and a short 60-second cache TTL. This bridges the window before the first content-rebuild publish lands in HANA, enabling flipped routes to never 404.
 4. **503** — if no layer has a response. A naked 500 is never returned for in-scope pages.
 
 Out-of-scope paths get a short-TTL 404 immediately (never touch the DB or fallback).
@@ -1130,10 +1138,9 @@ Pages ride the same delta publish pipeline as tutorials. `discoverPageFiles(hugo
 
 Every served page response carries three tags: `content` (full-corpus purge), `page` (all-pages purge), and `page-<name>` (single-page purge). This mirrors the `group`/`mission`/`concept` per-kind tags used for tutorial catalog and concept pages.
 
-### Phase 2 / 3 forward pointers
+### Phase 3 forward pointers
 
-- **Phase 2** — per-route AppRouter rewrites. Each page route is flipped individually; the homepage (`/`) is last because it currently carries the most static-asset coupling.
-- **Phase 3** — retire `/admin/rebuild` + `deploy-self-heal` + the `rebuild-content.yml` tarball/asset-build removal steps; purge-by-tag on publish (gates on Akamai credentials). See `docs/superpowers/specs/2026-08-11-workstream-b-pages-from-hana-design.md`.
+- **Phase 3** — retire `/admin/rebuild` + `deploy-self-heal` + the `rebuild-content.yml` tarball/asset-build removal steps; purge-by-tag on publish (gates on Akamai credentials). Long-tail pages remain on catch-all static + errorPage. See `docs/superpowers/specs/2026-08-11-workstream-b-pages-from-hana-design.md`.
 
 ---
 
