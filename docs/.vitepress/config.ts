@@ -128,6 +128,7 @@ export default defineConfig({
           { text: 'Security review (2026-07)', link: '/developers/security-review-2026-07' }
         ]},
         { text: 'Architecture', items: [
+          { text: 'Approuter static serving',         link: '/developers/architecture/approuter-static-serving' },
           { text: 'Authentication and authorization', link: '/developers/architecture/authentication' },
           { text: 'AuthorService',                    link: '/developers/architecture/author-service' },
           { text: 'Build pipeline',                   link: '/developers/architecture/build' },
