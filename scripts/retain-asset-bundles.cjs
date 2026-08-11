@@ -4,16 +4,21 @@ const { readdirSync, existsSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { mergeRetention } = require('./lib/asset-retention.cjs');
 
-// <name>-<hash>.<js|css>, hash >= 8 chars of [A-Za-z0-9_-] with at least one uppercase or digit.
-// Vite/Hugo content hashes are base62 and effectively always contain an uppercase letter or digit
-// within 8 chars, so pure-lowercase-no-digit hashes are rare/nonexistent. This filters out
-// committed files that mimic the pattern (e.g., consent-trustarc.js) without requiring island-manifest
-// cross-reference (which only covers islands, not Hugo-fingerprinted CSS). Acceptable for MVP.
-const HASHED_RE = /-(?=.*[0-9A-Z])[A-Za-z0-9_-]{8,}\.(js|css)$/;
+// Hash detection: support TWO formats from the build pipeline:
+// 1. Vite bundles: <name>-<hash>.(js|css) — dash separator, hash ≥ 8 chars of [A-Za-z0-9_-]
+//    containing at least one uppercase letter or digit (filters committed files like consent-trustarc.js).
+// 2. Hugo-fingerprinted CSS: <name>.<hash>.css — dot separator, hash a long lowercase-hex string
+//    of ≥ 32 chars (e.g., sap-fundamental.9f8e7d6c...64hex...css). Covers stale-HTML→deleted-CSS incidents.
+const VITE_HASHED_RE = /-(?=.*[0-9A-Z])[A-Za-z0-9_-]{8,}\.(js|css)$/;
+const HUGO_HASHED_RE = /\.[0-9a-f]{32,}\.css$/;
+
+function isHashedFile(filename) {
+  return VITE_HASHED_RE.test(filename) || HUGO_HASHED_RE.test(filename);
+}
 
 function collectHashedFiles(dir) {
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter(f => HASHED_RE.test(f));
+  return readdirSync(dir).filter(isHashedFile);
 }
 
 function parseArgs(argv) {

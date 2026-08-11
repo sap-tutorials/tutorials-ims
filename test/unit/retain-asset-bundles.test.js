@@ -9,12 +9,32 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ret-')); });
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
 
 describe('collectHashedFiles', () => {
-  it('returns only hashed bundle filenames, ignoring unhashed and non-js/css', () => {
+  it('returns Vite-hashed js/css bundles (dash separator, uppercase/digit in hash)', () => {
     writeFileSync(join(dir, 'embed-Coqc9fp6.js'), '');
-    writeFileSync(join(dir, 'consent-trustarc.js'), '');   // unhashed → ignored
-    writeFileSync(join(dir, 'notes.txt'), '');             // non-bundle → ignored
+    writeFileSync(join(dir, 'style-XyZ9wVu8.css'), '');
     const got = collectHashedFiles(dir).sort();
-    expect(got).toEqual(['embed-Coqc9fp6.js']);
+    expect(got).toEqual(['embed-Coqc9fp6.js', 'style-XyZ9wVu8.css']);
+  });
+
+  it('returns Hugo-fingerprinted CSS (dot separator, 32+ char lowercase-hex hash)', () => {
+    writeFileSync(join(dir, 'sap-fundamental.9a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9.css'), '');
+    writeFileSync(join(dir, 'chroma-light.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.css'), '');
+    const got = collectHashedFiles(dir).sort();
+    expect(got).toEqual([
+      'chroma-light.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.css',
+      'sap-fundamental.9a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9.css',
+    ]);
+  });
+
+  it('ignores bare/committed css files and short hashes', () => {
+    writeFileSync(join(dir, 'styles.css'), '');                   // bare css → ignored
+    writeFileSync(join(dir, 'consent-trustarc.js'), '');           // lowercase-only hash → ignored
+    writeFileSync(join(dir, 'consent.js'), '');                   // no hash → ignored
+    writeFileSync(join(dir, 'featured-rail.js'), '');             // no hash → ignored
+    writeFileSync(join(dir, 'ui5-bootstrap.js'), '');             // no hash → ignored
+    writeFileSync(join(dir, 'short.9a1b2c3d.css'), '');           // < 32 hex chars → ignored
+    const got = collectHashedFiles(dir);
+    expect(got).toEqual([]);
   });
 
   it('returns [] for a missing directory', () => {
