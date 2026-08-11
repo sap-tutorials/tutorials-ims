@@ -18,23 +18,38 @@ import { BASE_URL, fetchWithRetry } from './smoke.config.js';
 const SMOKE_TARGET = process.env.SMOKE_BASE_URL;
 const describeIf = SMOKE_TARGET ? describe : describe.skip;
 
+// Parse the manifest body, failing with a clear message if it's not valid JSON.
+async function parseManifest(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    expect.fail(
+      '/_retained-assets.json returned 200 but body was not valid JSON: ' +
+      text.slice(0, 120)
+    );
+  }
+}
+
 describeIf('asset retention', () => {
   it('/_retained-assets.json is reachable and is a JSON array', async () => {
-    const res = await fetchWithRetry(`${BASE_URL}/_retained-assets.json`);
+    // redirect: 'follow' — static file, no redirect expected, but follow any
+    // approuter rewrite rather than surface a false 3xx failure.
+    const res = await fetchWithRetry(`${BASE_URL}/_retained-assets.json`, { redirect: 'follow' });
     expect(res.status).toBe(200);
-    const manifest = await res.json();
+    const manifest = await parseManifest(res);
     expect(Array.isArray(manifest)).toBe(true);
   });
 
   it('every bundle in _retained-assets.json serves 200', async () => {
-    const res = await fetchWithRetry(`${BASE_URL}/_retained-assets.json`);
+    const res = await fetchWithRetry(`${BASE_URL}/_retained-assets.json`, { redirect: 'follow' });
     expect(res.status).toBe(200);
-    const manifest = await res.json();
+    const manifest = await parseManifest(res);
     expect(Array.isArray(manifest)).toBe(true);
 
     for (const { file } of manifest) {
       const kind = file.endsWith('.css') ? 'css' : 'js';
-      const r = await fetchWithRetry(`${BASE_URL}/${kind}/${file}`, { method: 'HEAD' });
+      const r = await fetchWithRetry(`${BASE_URL}/${kind}/${file}`, { method: 'HEAD', redirect: 'follow' });
       expect(r.status, `${file} should serve 200`).toBe(200);
     }
   });
