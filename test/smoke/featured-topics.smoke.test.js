@@ -83,7 +83,13 @@ describe.skipIf(!SRV)('GET /homepage/featuredTopics() smoke (#1032)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe.skipIf(!BASE)('GET /js/featured-topics-carousel.js bundle smoke (#1032)', () => {
   it('is served with 200 and JS content-type', async () => {
-    const res = await fetchWithRetry(`${BASE}/js/featured-topics-carousel.js`);
+    // #1604: the island bundle is content-hashed, so resolve its real URL from
+    // the homepage rather than assuming the unhashed /js/<name>.js path.
+    const home = await fetchWithRetry(`${BASE}/`, { redirect: 'follow' });
+    const html = await home.text();
+    const m = html.match(/\/js\/featured-topics-carousel(?:-[A-Za-z0-9_-]+)?\.js/);
+    const bundlePath = m ? m[0] : '/js/featured-topics-carousel.js';
+    const res = await fetchWithRetry(`${BASE}${bundlePath}`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/javascript/);
   });
@@ -97,9 +103,14 @@ describe.skipIf(!BASE)('Homepage HTML includes featured-topics carousel mount (#
     const res = await fetchWithRetry(`${BASE}/`, { redirect: 'follow' });
     expect(res.status).toBe(200);
     const html = await res.text();
-    // Either the SSR partial rendered the mount div, or the island script tag is present.
-    const hasMountPoint = /id=["']?featured-topics-carousel["']?/.test(html)
-      || /featured-topics-carousel\.js/.test(html);
+    // The SSR partial renders <section data-app="featured-topics-carousel">
+    // (the island's actual mount attribute — see hugo-apps/src/featured-topics-carousel/main.ts,
+    // which does document.querySelectorAll('[data-app="featured-topics-carousel"]')).
+    // The island <script> is emitted by island-src.html and is CONTENT-HASHED
+    // (#1604), e.g. /js/featured-topics-carousel-<hash>.js — so match the name
+    // with an optional hash suffix, never the bare unhashed literal.
+    const hasMountPoint = /data-app=["']?featured-topics-carousel["']?/.test(html)
+      || /featured-topics-carousel(-[A-Za-z0-9_-]+)?\.js/.test(html);
     expect(hasMountPoint).toBe(true);
   });
 });
