@@ -116,6 +116,22 @@ describeIf('#1659 Phase 2 flipped page routes', () => {
     expect(body).toContain('<urlset');
   });
 
+  it('/index.xml → 200 XML from CAP RSS feed containing <rss', async () => {
+    const r = await fetchWithRetry(`${BASE_URL}/index.xml`, { redirect: 'follow' });
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type') || '').toContain('xml');
+    const body = await r.text();
+    expect(body).toContain('<rss');
+  });
+
+  it('/llms-full.txt → 200 plain-text catalog containing marker', async () => {
+    const r = await fetchWithRetry(`${BASE_URL}/llms-full.txt`, { redirect: 'follow' });
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type') || '').toContain('text/plain');
+    const body = await r.text();
+    expect(body).toContain('# SAP Developers Tutorials');
+  });
+
   it('homepage / is NOT yet flipped — still 200 via catch-all static', async () => {
     // / is served by approuter static, NOT yet in the CAP page store.
     // This test documents the boundary and will need updating when / flips.
