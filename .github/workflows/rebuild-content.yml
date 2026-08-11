@@ -451,6 +451,25 @@ jobs:
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm --prefix hugo-apps run build
 
+      # [#1604] Bridge Vite's content-hashed island bundles to Hugo BEFORE the
+      # Hugo build below. build-island-manifest.cjs reads the Vite manifest
+      # (hugo/static/js/.vite/manifest.json, emitted by "Build Vue apps" above)
+      # and writes hugo/data/island_manifest.json, which island-src.html reads at
+      # render time to emit hashed <script src>. This workflow invokes /tmp/hugo
+      # directly (not `npm run build:all`, which calls build:island-manifest
+      # explicitly), so — like the vendor/explore/joule retrofits below — nothing
+      # else emits the manifest. Without it, island-src.html falls back to bare
+      # /js/<name>.js; post-#1604 the droplet ships ONLY hashed bundles, so the
+      # tarball pushed to /admin/rebuild atomically renames a bare-path index.html
+      # over the good droplet static and every hashed-only island (embed,
+      # navigator, cmd-palette, topics-map, devtoberfest) 404s until a
+      # `cf restart` re-extracts the droplet (PROD outage 2026-08-10/11). Same
+      # failure class as the retrofits below; guarded on the deploy path by
+      # deploy-mta.cjs Step 2.5.
+      - name: Build island manifest
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        run: npm run build:island-manifest
+
       # Stage the vendored WASM/model bundles into hugo/static/vendor/ BEFORE the
       # Hugo build below. These dirs (mediapipe, imgly, animegan) are gitignored
       # (.gitignore) so they are ABSENT on the clean CI runner, and this workflow
