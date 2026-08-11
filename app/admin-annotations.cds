@@ -3105,6 +3105,7 @@ annotate AdminService.HomepageShelves with @(
     { Value : url,         Label : 'URL' },
     { Value : badge,       Label : 'Badge' },
     { Value : linkStatus,  Label : 'Link health' },
+    { Value : requiresLogin, Label : 'Sign-in required' },
     { Value : isActive,    Label : 'Active' }
   ],
   // (#759 hotfix) OP-header buttons for the per-link explainer workflow.
@@ -3138,6 +3139,7 @@ annotate AdminService.HomepageShelves with @(
     { Value : description },
     { Value : badge },
     { Value : isExternal },
+    { Value : requiresLogin },
     { Value : isActive }
   ]},
   UI.FieldGroup #Explainer : { Data : [
@@ -3189,6 +3191,7 @@ annotate AdminService.HomepageShelves {
   description  @Common.Label: 'Description';
   isExternal   @Common.Label: 'Opens in new tab';
   isActive     @Common.Label: 'Active';
+  requiresLogin @Common.Label: 'Sign-in required';
   tagline      @Common.Label: 'Tagline';
   whyItMatters @Common.Label: 'Why it matters';
   lastChecked  @Common.Label: 'Last checked';

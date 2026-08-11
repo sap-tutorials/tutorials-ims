@@ -97,4 +97,25 @@ describe('LinkExplainerPopover', () => {
     expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
     wrapper.unmount();
   });
+
+  // (#1651) Sign-in-required padlock.
+  it('renders the sign-in padlock inside the link when requiresLogin is "true"', () => {
+    const wrapper = mount(LinkExplainerPopover, {
+      props: { ...BASE_PROPS, requiresLogin: 'true' },
+    });
+    const lock = wrapper.find('.hp-login-lock');
+    expect(lock.exists()).toBe(true);
+    expect(lock.attributes('aria-label')).toBe('Sign-in required');
+    // Must sit inside the anchor so it travels with the link.
+    expect(wrapper.find('a.hp-popover-link .hp-login-lock').exists()).toBe(true);
+  });
+
+  it('does NOT render the padlock when requiresLogin is absent or "false"', () => {
+    const off = mount(LinkExplainerPopover, {
+      props: { ...BASE_PROPS, requiresLogin: 'false' },
+    });
+    expect(off.find('.hp-login-lock').exists()).toBe(false);
+    const absent = mount(LinkExplainerPopover, { props: BASE_PROPS });
+    expect(absent.find('.hp-login-lock').exists()).toBe(false);
+  });
 });

@@ -415,6 +415,22 @@
   }
 }
 
+/* (#1651) Sign-in-required padlock. Rendered inline after a link title in the
+   directory footer + verb sub-pages (and by the link-explainer Vue island
+   after hydration). Muted so it reads as a hint, not a warning. */
+.hp-login-lock {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: baseline;
+  margin-left: 0.25rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  line-height: 0;
+}
+.hp-login-lock svg {
+  width: 0.7em;
+  height: 0.7em;
+}
+
 /* ===== Verb sub-pages (Task 19) ===== */
 .verb-page { max-width: 1200px; margin: 0 auto; padding: 2rem 1rem; }
 .verb-page__hero { padding: 2rem 0 1rem; border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5); margin-bottom: 2rem; }

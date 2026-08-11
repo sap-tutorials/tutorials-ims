@@ -25,6 +25,9 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
     it('declares authoringStatus with default BLANK and @assert.range', () => {
       expect(SCHEMA).toMatch(/authoringStatus\s*:\s*AuthoringStatus\s+default\s+'BLANK'\s+@assert\.range\s*;/);
     });
+    it('declares requiresLogin : Boolean default false (#1651)', () => {
+      expect(SCHEMA).toMatch(/requiresLogin\s*:\s*Boolean\s+default\s+false\s*;/);
+    });
   });
 
   describe('VerbDefinitions entity', () => {

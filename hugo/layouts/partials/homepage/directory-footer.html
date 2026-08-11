@@ -25,6 +25,12 @@
       {{- if gt (len $verbShelves) 0 -}}
         <ul>
           {{- range sort $verbShelves "sortOrder" -}}
+            {{- /* (#1651) Skip links the nightly link-health job flagged as
+                   BROKEN so visitors never click a known-dead destination.
+                   linkStatus is baked into homepage_shelves.json for every
+                   row (build feed SELECTs the whole entity); a missing/UNKNOWN
+                   value renders normally. */ -}}
+            {{- if ne .linkStatus "BROKEN" -}}
             <li data-island="link-explainer-popover"
                 data-entry-id="{{ .ID }}"
                 data-title="{{ .title }}"
@@ -33,10 +39,12 @@
                 data-description="{{ .description | default "" }}"
                 data-href="{{ .url }}"
                 data-is-external="{{ if .isExternal }}true{{ else }}false{{ end }}"
+                data-requires-login="{{ if .requiresLogin }}true{{ else }}false{{ end }}"
                 {{- with .badge }} data-badge="{{ . }}"{{ end }}
                 class="hp-directory__item">
-              <a href="{{ .url }}"{{ if .isExternal }} target="_blank" rel="noopener"{{ end }}>{{ .title }}</a>
+              <a href="{{ .url }}"{{ if .isExternal }} target="_blank" rel="noopener"{{ end }}>{{ .title }}{{ if .requiresLogin }} {{ partial "homepage/login-lock.html" . }}{{ end }}</a>
             </li>
+            {{- end -}}
           {{- end -}}
         </ul>
       {{- end -}}
