@@ -18,6 +18,7 @@ import * as metrics from './metrics.js';
 import { resolveSecret } from './secret-resolver.js';
 import { setContentCacheHeaders } from './edge-cache-headers.js';
 import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
+import { loadPageFallback } from './page-fallback.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -838,10 +839,19 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
-  // --- servePageFallback stub (replaced in Task 4) ---
-  // Task 4 replaces this with baked-snapshot fallback logic.
-  // Returns true if a fallback response was sent, false otherwise.
-  function servePageFallback() { return false; }
+  // --- servePageFallback: baked deploy-snapshot fallback ---
+  // Sends the baked HTML/XML/text snapshot from srv/page-fallback/<key>.<ext>
+  // (written at build time by scripts/build-page-fallback.cjs).
+  // Returns true if a fallback was sent, false if no snapshot exists.
+  function servePageFallback(res, key) {
+    const fb = loadPageFallback(key);
+    if (!fb) return false;
+    res.setHeader('Content-Type', `${fb.mimeType}; charset=utf-8`);
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.setHeader('X-Content-Source', 'fallback');
+    res.status(200).end(fb.buffer);
+    return true;
+  }
 
   // --- serveStoredSlug: reusable ContentFiles serve core ---
   //

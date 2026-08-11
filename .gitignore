@@ -83,6 +83,9 @@ _check-*.cjs
 cookies.txt
 
 # Build artifacts
+# Page-fallback snapshots (written at build time by scripts/build-page-fallback.cjs)
+srv/page-fallback/*
+!srv/page-fallback/.gitkeep
 mta_archives/
 saptutorialsadminshell-*/
 app/admin-shell/deploy/
