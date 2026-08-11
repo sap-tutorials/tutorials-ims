@@ -17,6 +17,7 @@ import { tutorialsTableInfo } from './_tutorials-table.js';
 import * as metrics from './metrics.js';
 import { resolveSecret } from './secret-resolver.js';
 import { setContentCacheHeaders } from './edge-cache-headers.js';
+import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -837,6 +838,92 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- servePageFallback stub (replaced in Task 4) ---
+  // Task 4 replaces this with baked-snapshot fallback logic.
+  // Returns true if a fallback response was sent, false otherwise.
+  function servePageFallback() { return false; } // eslint-disable-line no-unused-vars
+
+  // --- serveStoredSlug: reusable ContentFiles serve core ---
+  //
+  // Serves a stored slug from ContentFiles (LRU cache + DB). Used by both
+  // `serveHandler` (tutorial HTML) and `pageServeHandler` (baked content pages).
+  //
+  // `tagSlug`  — drives Edge-Cache-Tag (defaults to slug).
+  // `mimeType` — overrides the stored MIME type (pages use this for XML/plain).
+  //
+  // Returns:
+  //   'served'     — response was sent (200 or 304).
+  //   'no-version' — no active content version; caller decides (503 vs 404).
+  //   'not-found'  — no ContentFiles row for this slug+version.
+  async function serveStoredSlug(req, res, { slug, tagSlug = slug, mimeType } = {}) {
+    // #1621: TTL-gated cross-instance cache coherence check before trusting our
+    // local cache — a publish on a peer instance bumps the shared generation,
+    // which drops our now-stale entry so we reload the current HTML from the DB.
+    await refreshCacheGeneration();
+    const cached = cache.get(slug);
+    if (cached) {
+      metrics.counter('content.cache.hit');  // #805
+      const ifNoneMatch = req.headers['if-none-match'];
+      if (ifNoneMatch && ifNoneMatch === `"${cached.hash}"`) {
+        res.status(304).end();
+        return 'served';
+      }
+      res.setHeader('Content-Type', `${mimeType || 'text/html'}; charset=utf-8`);
+      res.setHeader('ETag', `"${cached.hash}"`);
+      setContentCacheHeaders(res, { slug: tagSlug });
+      res.setHeader('X-Content-Source', 'cache');
+      res.send(cached.buffer);
+      return 'served';
+    }
+    metrics.counter('content.cache.miss');  // #805
+
+    const { ContentFiles } = cds.entities(namespace);
+    const activeVersion = await getActiveVersion();
+    if (activeVersion === null) return 'no-version';
+
+    // Serve only from the active version — each publish is a full snapshot.
+    // slug-canonical: callers canonicalize before calling.
+    const [meta] = await SELECT.from(ContentFiles)
+      .where({ slug, version: activeVersion })
+      .columns('contentHash', 'mimeType', 'version');
+
+    if (!meta) return 'not-found';
+
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch && ifNoneMatch === `"${meta.contentHash}"`) {
+      res.status(304).end();
+      return 'served';
+    }
+
+    // Read BLOB separately — CDS QL returns HANA BLOBs as streams with locators
+    // that expire before consumption. Raw SQL returns a Buffer directly.
+    // For SQLite (tests), CDS QL works fine since there's no LOB streaming.
+    const db = await cds.connect.to('db');
+    let contentBuf;
+    if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
+      const [blobRow] = await db.run(
+        `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
+        [slug, meta.version]
+      );
+      contentBuf = blobRow.CONTENT;
+    } else {
+      const blobRow = await SELECT.one.from(ContentFiles)
+        // slug-canonical: callers canonicalize before calling.
+        .where({ slug, version: meta.version })
+        .columns('content');
+      contentBuf = await toBuffer(blobRow.content);
+    }
+    const decompressed = gunzipSync(contentBuf);
+    cache.set(slug, decompressed, meta.contentHash);
+
+    res.setHeader('Content-Type', `${mimeType || meta.mimeType}; charset=utf-8`);
+    res.setHeader('ETag', `"${meta.contentHash}"`);
+    setContentCacheHeaders(res, { slug: tagSlug });
+    res.setHeader('X-Content-Source', 'db');
+    res.send(decompressed);
+    return 'served';
+  }
+
   async function serveHandler(req, res) {
     const segments = Array.isArray(req.params.slug) ? req.params.slug : [req.params.slug];
     const pathStr = segments.join('/');
@@ -1026,73 +1113,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       return serveNotFound(res, slug);
     }
 
-    // Check cache (only for ACTIVE / unknown-but-published slugs)
-    // #1621: TTL-gated cross-instance check before trusting our local content
-    // cache — a publish on a peer instance bumps the shared generation, which
-    // drops our now-stale entry so we reload the current HTML from the DB.
-    await refreshCacheGeneration();
-    const cached = cache.get(slug);
-    if (cached) {
-      metrics.counter('content.cache.hit');  // #805
-      const ifNoneMatch = req.headers['if-none-match'];
-      if (ifNoneMatch && ifNoneMatch === `"${cached.hash}"`) {
-        return res.status(304).end();
-      }
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('ETag', `"${cached.hash}"`);
-      setContentCacheHeaders(res, { slug });
-      res.setHeader('X-Content-Source', 'cache');
-      return res.send(cached.buffer);
-    }
-    metrics.counter('content.cache.miss');  // #805
-
+    // Delegate to the shared serve core — handles cache hit, DB BLOB read,
+    // ETag/304, and cache population. Callers handle the 503/404 distinction.
     try {
-      const activeVersion = await getActiveVersion();
-      if (activeVersion === null) {
-        return res.status(503).json({ error: 'No active content version' });
-      }
-
-      // Serve only from the active version — each publish is a full snapshot
-      const [meta] = await SELECT.from(ContentFiles)
-        // slug-canonical: caller-canonicalizes
-        .where({ slug, version: activeVersion })
-        .columns('contentHash', 'mimeType', 'version');
-
-      if (!meta) {
-        return serveNotFound(res, slug);
-      }
-
-      const ifNoneMatch = req.headers['if-none-match'];
-      if (ifNoneMatch && ifNoneMatch === `"${meta.contentHash}"`) {
-        return res.status(304).end();
-      }
-
-      // Read BLOB separately — CDS QL returns HANA BLOBs as streams with locators
-      // that expire before consumption. Raw SQL returns a Buffer directly.
-      // For SQLite (tests), CDS QL works fine since there's no LOB streaming.
-      const db = await cds.connect.to('db');
-      let contentBuf;
-      if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
-        const [blobRow] = await db.run(
-          `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
-          [slug, meta.version]
-        );
-        contentBuf = blobRow.CONTENT;
-      } else {
-        const blobRow = await SELECT.one.from(ContentFiles)
-          // slug-canonical: caller-canonicalizes
-          .where({ slug, version: meta.version })
-          .columns('content');
-        contentBuf = await toBuffer(blobRow.content);
-      }
-      const decompressed = gunzipSync(contentBuf);
-      cache.set(slug, decompressed, meta.contentHash);
-
-      res.setHeader('Content-Type', `${meta.mimeType}; charset=utf-8`);
-      res.setHeader('ETag', `"${meta.contentHash}"`);
-      setContentCacheHeaders(res, { slug });
-      res.setHeader('X-Content-Source', 'db');
-      res.send(decompressed);
+      const result = await serveStoredSlug(req, res, { slug });
+      if (result === 'served') return;
+      if (result === 'no-version') return res.status(503).json({ error: 'No active content version' });
+      return serveNotFound(res, slug);
     } catch (err) {
       console.error('[content/serve]', err instanceof Error ? err.message : String(err));
       res.status(500).json({ error: 'Content retrieval failed' });
@@ -1689,6 +1716,39 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- pageServeHandler: Express handler for /content/pages/* ---
+  //
+  // Strips the /content/pages prefix, resolves to a page key via
+  // pageKeyForPath (the fixed allow-list), and serves the stored BLOB.
+  // Fail-open: out-of-scope paths get a short-TTL 404; in-scope but
+  // unpublished paths fall to servePageFallback (Task 4) then 404.
+  async function pageServeHandler(req, res) {
+    const rest = String(req.path || req.url || '').replace(/^\/content\/pages/, '') || '/';
+    const key = pageKeyForPath(rest);
+    if (!key) {
+      // Out-of-scope path → short-TTL 404 (fail-open).
+      res.status(404);
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.end('Not found');
+    }
+    try {
+      const mimeType = mimeTypeForPageKey(key);
+      const result = await serveStoredSlug(req, res, { slug: key, tagSlug: key, mimeType });
+      if (result === 'served') return;
+      // In-scope but unpublished (or no active version) → fail-open ladder.
+      if (servePageFallback(res, key)) return;   // Task 4 (baked snapshot)
+      res.status(404);
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.end('Not found');
+    } catch (err) {
+      LOG.warn(`[pages] serve failed for ${key}:`, err?.message ?? err);
+      if (servePageFallback(res, key)) return;
+      res.status(503);
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.end('Service Unavailable');
+    }
+  }
+
   return {
     contentAuthMiddleware,
     publishHandler,
@@ -1703,7 +1763,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     appendHandler,
     commitHandler,
     abortHandler,
-    pipelineLogFailureHandler
+    pipelineLogFailureHandler,
+    pageServeHandler
   };
 }
 
@@ -1726,3 +1787,4 @@ export const appendHandler = _defaults.appendHandler;
 export const commitHandler = _defaults.commitHandler;
 export const abortHandler = _defaults.abortHandler;
 export const pipelineLogFailureHandler = _defaults.pipelineLogFailureHandler;
+export const pageServeHandler = _defaults.pageServeHandler;
