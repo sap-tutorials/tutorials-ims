@@ -4,7 +4,7 @@
 
 **Goal:** Retain prior content-hashed JS/CSS island bundles across deploys for ≥ the HTML edge-cache TTL, so edge-cached HTML never 404s on a bundle hash that a later deploy deleted.
 
-**Architecture:** A build-time step, run after the island bundles are produced and before the Hugo build copies them into `hugo/public`, unions the current build's hashed bundles with recent prior bundles. Prior bundles are discovered from a small `_retained-assets.json` manifest that the currently-deployed approuter serves, downloaded from that same approuter, and re-emitted (pruned by age) so the set rolls forward deploy-over-deploy. Content-hashed filenames are immutable, so unioning is always safe.
+**Architecture:** A build-time step, run **after** the Hugo build (which both copies Vite's hashed JS into `hugo/public/js` and emits Hugo-fingerprinted CSS into `hugo/public/css`), unions the current build's hashed JS+CSS with recent prior bundles. Prior bundles are discovered from a small `_retained-assets.json` manifest that the currently-deployed approuter serves, downloaded from that same approuter into `hugo/public`, and re-emitted (pruned by age) so the set rolls forward deploy-over-deploy. `hugo/public` is copied verbatim into the approuter droplet, so retained bundles ship. Content-hashed filenames are immutable, so unioning is always safe.
 
 **Tech Stack:** Node.js CJS build scripts (native `fetch`), Vitest unit tests, npm scripts, mbt `before-all` (root `mta.yaml`).
 
@@ -15,7 +15,8 @@
 - Node.js: use native `fetch` (no axios/node-fetch). CJS (`.cjs`) build scripts, matching `scripts/*.cjs`.
 - Prefer `fetch` with an `AbortController` timeout; never let a network failure fail the build — retention is **fail-open** (warn, proceed with whatever was gathered).
 - Retention window: **48 hours** (≥ the ~24h `s-maxage` on HTML, doubled for overlapping deploys/skew). Configurable via `RETENTION_WINDOW_HOURS` env, default `48`.
-- Hashed-bundle filename shape (same regex as `deploy-mta.cjs` Step 2.5): `<name>-<hash>.<ext>` where hash matches `[A-Za-z0-9_-]{8,}` and ext ∈ {`js`,`css`}.
+- Hashed-bundle filename shapes — detect **both**: Vite islands `<name>-<hash>.<js|css>` (dash separator, `<hash>` base62 ≥ 8 chars, effectively always containing an uppercase letter or digit) **and** Hugo-fingerprinted CSS `<name>.<hash>.css` (dot separator, `<hash>` a long lowercase-hex SHA, ≥ 8 chars). Committed unhashed files (`consent-trustarc.js`, `consent.js`, `featured-rail.js`, bare `ui5-bootstrap.js`) must NOT match.
+- Injection point: retention runs **after** `build:hugo` / the Hugo build, operating on `hugo/public/js` and `hugo/public/css`, writing the manifest to `hugo/public/_retained-assets.json`. This is the only stage where both Vite-hashed JS and Hugo-fingerprinted CSS coexist, and `hugo/public` is what the approuter builder copies to the droplet.
 - Dual build paths must both be wired: local `build:all` (→ `.deploy/mta.yaml`) and CI root `mta.yaml` before-all (→ deploy.yml).
 - Windows dev host: scripts run under Git Bash / Node; use `path` join, never hard-coded `/`.
 
@@ -298,20 +299,19 @@ git commit -m "feat(retention): CLI to carry forward prior hashed bundles + emit
 
 In `package.json` `scripts`, add:
 ```json
-"retain:assets": "node scripts/retain-asset-bundles.cjs"
+"retain:assets": "node scripts/retain-asset-bundles.cjs --js-dir hugo/public/js --css-dir hugo/public/css --manifest-out hugo/public/_retained-assets.json"
 ```
 
-- [ ] **Step 2: Insert into `build:all` before `build:hugo`**
+- [ ] **Step 2: Insert into `build:all` immediately AFTER `build:hugo`**
 
-In the `build:all` chain, change `... && npm run build:island-manifest && npm run build:hugo && ...` to:
+In the `build:all` chain, insert `npm run retain:assets` immediately **after** `npm run build:hugo` (retention operates on the Hugo output in `hugo/public`, so it must run once Hugo has produced both the copied JS and the fingerprinted CSS):
 ```
-... && npm run build:island-manifest && npm run retain:assets && npm run build:hugo && ...
+... && npm run build:hugo && npm run retain:assets && ...
 ```
-(Exact current `build:all` value is in `package.json`; insert `npm run retain:assets &&` immediately before `npm run build:hugo`.)
 
 - [ ] **Step 3: Verify build:all still parses and orders correctly**
 
-Run: `node -e "const s=require('./package.json').scripts; const b=s['build:all']; const i=b.indexOf('retain:assets'), h=b.indexOf('build:hugo'), m=b.indexOf('build:island-manifest'); if(!(m<i && i<h)) throw new Error('retain:assets must sit between island-manifest and build:hugo'); console.log('order OK');"`
+Run: `node -e "const b=require('./package.json').scripts['build:all']; const r=b.indexOf('retain:assets'), h=b.indexOf('build:hugo'); if(!(h<r && r>=0)) throw new Error('retain:assets must come AFTER build:hugo'); console.log('order OK');"`
 Expected: `order OK`.
 
 - [ ] **Step 4: Commit**
@@ -333,11 +333,10 @@ git commit -m "build(retention): run retain:assets in build:all before build:hug
 
 - [ ] **Step 1: Insert the retention command after the hugo-apps build, before Hugo**
 
-In root `mta.yaml` `before-all` `commands`, the hugo-apps build is the parallel block ending with `wait $p2` (islands → `hugo/static/js`), and the Hugo build is the `/tmp/hugo --source hugo --minify` line. Insert **between** them:
+In root `mta.yaml` `before-all` `commands`, the Hugo build is the `/tmp/hugo --source hugo --minify` line (it also runs the QA build in parallel). Insert the retention command **immediately after** the command that completes the Hugo build (so `hugo/public/js` + `hugo/public/css` exist), and before the approuter module copies `hugo/public` into the droplet:
 ```yaml
         - bash -c "cd .. && npm run retain:assets"
 ```
-(Place it as its own command after the `wait` that completes the hugo-apps build and before the `/tmp/hugo --source hugo` command, so `hugo/static/js|css` carry the retained set before Hugo copies `static/` → `public/`.)
 
 - [ ] **Step 2: Validate YAML**
 
@@ -346,8 +345,8 @@ Expected: `YAML OK`.
 
 - [ ] **Step 3: Confirm ordering in the before-all**
 
-Run: `yq -r '.build-parameters."before-all"[].commands[]' mta.yaml 2>/dev/null | grep -nE "hugo-apps run build|retain:assets|source hugo"`
-Expected: `retain:assets` line number is greater than the `hugo-apps run build` line and less than the `--source hugo` line.
+Run: `yq -r '.build-parameters."before-all"[].commands[]' mta.yaml 2>/dev/null | grep -nE "source hugo|retain:assets"`
+Expected: the `retain:assets` line number is greater than the `--source hugo` line.
 
 - [ ] **Step 4: Commit**
 

@@ -77,6 +77,11 @@ build-parameters:
         # locking. Saves ~30-60s on every run.
         # QA fetch was moved to deploy.yml workflow step (see fetch comment above).
         - bash -c 'set -e; /tmp/hugo --source hugo --minify & p1=$!; /tmp/hugo --source hugo --config ../hugo.qa.toml --minify & p2=$!; wait $p1; wait $p2'
+        # Asset-hash retention (#1640): preserve hashed JS + fingerprinted CSS
+        # in a JSON manifest before the approuter static copy wipes old bundles.
+        # Must run after Hugo emits public/js + public/css and before approx
+        # static copy (line 88 below).
+        - npm run retain:assets
         - npx tsx scripts/verify-qa-build.ts hugo/public-qa
         - mkdir -p approuter/static/qa
         - cp -r hugo/public-qa/. approuter/static/qa/
