@@ -31,27 +31,38 @@ async function loadResolver() {
   return _resolverModule
 }
 
-// Pre-build the bootstrap index synchronously once the resolver is loaded.
-// Until the first async refresh completes, the index starts as a plain object
-// that resolveRedirect() safely handles (returns null on empty/no-match).
-let _index = { exactMap: new Map(), patterns: [] }
+// The bootstrap IIFE and refresh() BOTH await a dynamic import() before they
+// write an index, so they race on module load. #1311/#1409 fixed the "bootstrap
+// clobbers live rows" symptom with a shared `_index` + a `_loadedFromSrv` guard,
+// but that guard still flaked intermittently in CI (the detached bootstrap IIFE
+// and the first refresh() write the SAME variable, so any scheduler ordering the
+// guard doesn't anticipate can leave `_index` pointing at BOOTSTRAP_MAP —
+// getIndex() then returns an index with only the 3 seed redirects, and
+// resolveRedirect('/abap') → undefined; see #1311 regression test).
+//
+// Structural fix (#1409 follow-up): the two producers write DIFFERENT variables
+// and never touch each other's. `getIndex()` prefers the live index once a
+// refresh has succeeded. Because `_liveIndex` is assigned before `_loadedFromSrv`
+// (no await between), a reader that observes the flag always sees a populated
+// live index; and because the bootstrap only ever writes `_bootstrapIndex`, it
+// cannot clobber live rows no matter when its import settles. This removes the
+// race entirely rather than timing-guarding it, and closes the prod window where
+// the approuter briefly served only the 3 bootstrap redirects at boot.
+const EMPTY_INDEX = { exactMap: new Map(), patterns: [] }
 
-// True once a refresh() has successfully loaded rows from the srv endpoint.
-// The bootstrap IIFE below and refresh() both resolve a dynamic import()
-// before writing _index, so they race on module load: if the bootstrap
-// import settles AFTER the first refresh() has already populated _index with
-// live rows, a naive assignment would clobber the good index back to the
-// 3-row BOOTSTRAP_MAP. This flag makes the bootstrap a no-op once real data
-// has landed. (Manifested as an intermittent CI failure + a boot-time window
-// where production briefly served only the 3 bootstrap redirects. #1311.)
+// Seeded by the module-load IIFE from BOOTSTRAP_MAP. Served until refresh() wins.
+let _bootstrapIndex = EMPTY_INDEX
+
+// Set once refresh() has successfully loaded rows from the srv endpoint.
+let _liveIndex = null
 let _loadedFromSrv = false
 
-// Bootstrap synchronously from BOOTSTRAP_MAP on module load.
+// Bootstrap from BOOTSTRAP_MAP on module load. Only ever writes _bootstrapIndex,
+// so it can never clobber live rows a concurrent refresh() has loaded.
 ;(async () => {
   try {
     const { buildIndex } = await loadResolver()
-    // Don't overwrite an index a concurrent refresh() already populated.
-    if (!_loadedFromSrv) _index = buildIndex(BOOTSTRAP_MAP)
+    _bootstrapIndex = buildIndex(BOOTSTRAP_MAP)
   } catch (err) {
     // If even dynamic import fails (e.g. missing file), keep the empty index.
     console.warn('[redirects-loader] bootstrap failed:', err.message)
@@ -80,8 +91,10 @@ async function refresh(srvUrl, logger = console) {
     // so only the 3 bootstrap redirects worked and every seeded row 404'd. #1311.)
     const rows = Array.isArray(body) ? body : body?.value
     if (!Array.isArray(rows)) throw new Error('not an array (nor an OData {value:[]} envelope)')
-    _index = buildIndex(rows.map(r => ({ ...r, isActive: true })))
-    _loadedFromSrv = true  // block the bootstrap IIFE from clobbering live rows
+    // Assign the index BEFORE flipping the flag: getIndex() keys off the flag,
+    // so a reader that sees _loadedFromSrv===true must already see _liveIndex.
+    _liveIndex = buildIndex(rows.map(r => ({ ...r, isActive: true })))
+    _loadedFromSrv = true
     logger.log?.(`[redirects-loader] refreshed ${rows.length} entries`)
   } catch (err) {
     logger.warn?.(`[redirects-loader] refresh failed: ${err.message}; keeping last good index`)
@@ -89,10 +102,11 @@ async function refresh(srvUrl, logger = console) {
 }
 
 /**
- * Return the current pre-built redirect index.
+ * Return the current pre-built redirect index. Prefers the live index once a
+ * refresh() has succeeded; falls back to the bootstrap index until then.
  * @returns {{ exactMap: Map, patterns: Array }}
  */
-function getIndex() { return _index }
+function getIndex() { return _loadedFromSrv ? _liveIndex : _bootstrapIndex }
 
 /**
  * Start the hourly auto-refresh loop. Fires immediately on first call,

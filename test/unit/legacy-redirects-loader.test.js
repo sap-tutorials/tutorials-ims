@@ -7,6 +7,12 @@
 // to its 3-row BOOTSTRAP_MAP — every seeded redirect (/abap, /leonardo-iot, …)
 // 404'd in production even though 33 rows were live in HANA. These tests lock in
 // that refresh() accepts BOTH the OData envelope and a bare array.
+//
+// #1409 follow-up: the loader now keeps the bootstrap seed and the live rows in
+// SEPARATE variables (getIndex() prefers live once refresh() succeeds), so the
+// detached module-load bootstrap IIFE can no longer clobber live rows under CI
+// scheduler ordering — the intermittent "expected undefined to be
+// '/topics/abap-platform.html'" failure this file guards against.
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { refresh, getIndex } from '../../approuter/lib/legacy-redirects-loader.js';
