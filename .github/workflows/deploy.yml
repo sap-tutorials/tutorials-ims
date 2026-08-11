@@ -270,6 +270,11 @@ jobs:
           # "TypeError: fetch failed" since no local CAP runs in CI. The
           # build is target-aware so qa fetches its own QA-channel catalog.
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
+          # APPROUTER_URL for asset-hash-retention (Task 5): allows mta.yaml's
+          # before-all retention step to fetch the currently-deployed approuter's
+          # _retained-assets.json and carry hashed bundles forward. Maps per-env
+          # secrets: prod→APPROUTER_URL_PROD, qa→APPROUTER_URL_QA, else→APPROUTER_URL_DEV.
+          APPROUTER_URL: ${{ steps.env.outputs.target == 'prod' && secrets.APPROUTER_URL_PROD || (steps.env.outputs.target == 'qa' && secrets.APPROUTER_URL_QA || secrets.APPROUTER_URL_DEV) }}
 
       - name: Upload MTAR artifact
         uses: actions/upload-artifact@v4
