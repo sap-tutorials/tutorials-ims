@@ -224,11 +224,11 @@ Admin shell (`build:admin`) and QA pipeline (`fetch-tutorials:qa` → `build:qa`
 
 ### Asset-hash retention (#1604 follow-up)
 
-After `build:hugo` (and before `mbt build`), `scripts/retain-asset-bundles.cjs` unions the current build's content-hashed JS and CSS files in `hugo/static/js/` and `hugo/static/css/` with bundles carried forward from the live approuter. The result is written to `hugo/static/_retained-assets.json` — a served manifest of all retained bundles, exposed by the approuter at `/_retained-assets.json` so the next build's retention step can read it. Each entry is `{ file, firstSeenMs }`.
+After `build:hugo` (and before `mbt build`), `scripts/retain-asset-bundles.cjs` unions the current build's content-hashed JS and CSS files in `hugo/public/js/` and `hugo/public/css/` with bundles carried forward from the live approuter. The result is written to `hugo/public/_retained-assets.json` — a served manifest of all retained bundles; the approuter builder copies `hugo/public/` into `approuter/static/`, so the manifest ends up exposed at `/_retained-assets.json` for the next build's retention step to read. Each entry is `{ file, firstSeenMs }`.
 
 Key properties:
 
-- **48-hour window** — any prior bundle whose `firstSeenMs` is within 48 hours of the current build timestamp is carried forward (downloaded from the live approuter and placed into the appropriate `hugo/static/js/` or `hugo/static/css/` directory). Bundles older than 48 h are pruned from the manifest.
+- **48-hour window** — any prior bundle whose `firstSeenMs` is within 48 hours of the current build timestamp is carried forward (downloaded from the live approuter and placed into the appropriate `hugo/public/js/` or `hugo/public/css/` directory). Bundles older than 48 h are pruned from the manifest.
 - **Fail-open** — if the live approuter is unreachable or the prior manifest fetch fails, the step completes using only current files and exits 0; no build is blocked.
 - **Safe to union** — content-hashed filenames are immutable (the hash is derived from file content), so adding prior bundles alongside current ones can never overwrite live files. The union prevents `<script src>` references baked into cached HTML from 404-ing after a new deploy rotates the hashes.
 
