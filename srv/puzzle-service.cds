@@ -26,7 +26,7 @@ service PuzzleService {
   action saveProgress(slug : String, filledGrid : LargeString) returns Boolean;
 
   @(requires: 'authenticated-user')
-  function getProgress(slug : String) returns { filledGrid : LargeString; attemptNumber : Integer; };
+  function getProgress(slug : String) returns { filledGrid : LargeString; attemptNumber : Integer; completed : Boolean; };
 
   @(requires: 'authenticated-user')
   action complete(slug : String) returns { recorded : Boolean; alreadyComplete : Boolean; };

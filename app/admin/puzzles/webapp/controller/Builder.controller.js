@@ -6,8 +6,9 @@ sap.ui.define([
   "sap/ui/core/Fragment",
   "sap/tutorials/admin/puzzles/lib/crossword-geometry",
   "sap/tutorials/admin/puzzles/lib/puzzle-io",
-  "sap/tutorials/admin/puzzles/lib/solver-core"
-], function (Controller, JSONModel, MessageToast, MessageBox, Fragment, geom, io, solver) {
+  "sap/tutorials/admin/puzzles/lib/solver-core",
+  "sap/tutorials/admin/puzzles/lib/draft-save"
+], function (Controller, JSONModel, MessageToast, MessageBox, Fragment, geom, io, solver, draftSave) {
   "use strict";
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -523,54 +524,15 @@ sap.ui.define([
           "Accept": "application/json",
           "x-csrf-token": token
         };
-
-        if (editId) {
-          // ── UPDATE: draftEdit → PATCH draft → draftActivate ──────────────
-          return fetch(
-            "/admin/Puzzles(ID=" + editId + ",IsActiveEntity=true)/AdminService.draftEdit",
-            { method: "POST", credentials: "include", headers: headers, body: "{}" }
-          ).then(function (r) {
-            if (!r.ok) { return r.text().then(function (t) { throw new Error("draftEdit HTTP " + r.status + ": " + t); }); }
-            return r.json();
-          }).then(function (draft) {
-            var draftId = draft.ID || editId;
-            return fetch(
-              "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)",
-              { method: "PATCH", credentials: "include", headers: headers, body: JSON.stringify(fields) }
-            ).then(function (r2) {
-              if (!r2.ok) { return r2.text().then(function (t) { throw new Error("PATCH draft HTTP " + r2.status + ": " + t); }); }
-              return draftId;
-            });
-          }).then(function (draftId) {
-            return fetch(
-              "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)/AdminService.draftActivate",
-              { method: "POST", credentials: "include", headers: headers, body: "{}" }
-            ).then(function (r3) {
-              if (!r3.ok) { return r3.text().then(function (t) { throw new Error("draftActivate HTTP " + r3.status + ": " + t); }); }
-              return r3.json();
-            });
-          });
-        }
-
-        // ── CREATE: POST draft → draftActivate ───────────────────────────
-        return fetch("/admin/Puzzles", {
-          method: "POST",
-          credentials: "include",
+        // Draft orchestration (create vs. update, incl. recovery from an
+        // orphaned edit draft that returns 409 DRAFT_ALREADY_EXISTS — issue
+        // #1650 bug 3) lives in the unit-tested lib/draft-save module.
+        return draftSave.performPuzzleSave({
+          fetchFn: fetch,
           headers: headers,
-          body: JSON.stringify(fields)
-        }).then(function (r) {
-          if (!r.ok) { return r.text().then(function (t) { throw new Error("POST draft HTTP " + r.status + ": " + t); }); }
-          return r.json();
-        }).then(function (draft) {
-          return fetch(
-            "/admin/Puzzles(ID=" + draft.ID + ",IsActiveEntity=false)/AdminService.draftActivate",
-            { method: "POST", credentials: "include", headers: headers, body: "{}" }
-          ).then(function (r2) {
-            if (!r2.ok) { return r2.text().then(function (t) { throw new Error("draftActivate HTTP " + r2.status + ": " + t); }); }
-            return r2.json();
-          });
+          editId: editId,
+          fields: fields
         });
-
       }).then(function (active) {
         var savedSlug = (active && active.slug) || slug;
         var savedId = (active && active.ID) || editId;

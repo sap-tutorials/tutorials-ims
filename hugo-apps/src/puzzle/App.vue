@@ -27,7 +27,7 @@ import {
   postComplete,
   postResetProgress,
 } from './lib/server';
-import { emptyWhiteCells, shouldMigrate } from './lib/progress';
+import { emptyWhiteCells, mergeProgress } from './lib/progress';
 
 const props = defineProps<{ slug: string; apiUrl: string }>();
 
@@ -146,30 +146,49 @@ async function resumeProgress() {
 
   if (authed.value) {
     let serverGrid: string | null = null;
+    let completed = false;
     try {
       const prog = await fetchProgress(props.apiUrl, props.slug);
       serverGrid = prog.filledGrid ?? null;
+      completed = prog.completed === true;
     } catch { /* 401/network — treat as empty */ }
 
-    // Server grid non-empty → server wins
-    if (serverGrid) {
-      let parsed: Record<string, string> = {};
-      try { parsed = JSON.parse(serverGrid) as Record<string, string>; } catch { /* ignore */ }
-      if (Object.values(parsed).some((v: any) => v)) {
-        answers.value = parsed;
-        return;
-      }
+    // Merge local ∪ server: the server is authoritative for the cells it holds,
+    // but any answers typed while logged out (present only in localStorage) are
+    // preserved instead of being overwritten (issue #1650 bug 1).
+    const { merged, changed } = mergeProgress(serverGrid, local);
+    answers.value = merged;
+    if (changed) {
+      try { await postSaveProgress(props.apiUrl, props.slug, JSON.stringify(merged)); }
+      catch { /* best-effort; local copy remains */ }
     }
-    // Server empty but local has data → migrate local to server
-    if (shouldMigrate(true, serverGrid, local)) {
-      answers.value = local;
-      try { await postSaveProgress(props.apiUrl, props.slug, JSON.stringify(local)); }
-      catch { /* migration best-effort; local copy remains */ }
-      return;
+
+    // Re-hydrate the solved state so the completed banner + Reset button survive
+    // a page reload (issue #1650 bug 2). Painting the grid green is derived from
+    // the (correct) completed grid — no answer key is shipped to the client.
+    if (completed) markSolvedFromServer();
+    return;
+  }
+  // Anonymous: use local only.
+  answers.value = local;
+}
+
+/**
+ * Reflect a server-recorded completion in the UI on load: show the solved
+ * banner + Reset button and paint every filled white cell green. A completed
+ * puzzle is fully and correctly filled, so marking filled white cells 'correct'
+ * matches the server's verdict without re-grading or exposing the solution.
+ */
+function markSolvedFromServer() {
+  solved.value = true;
+  const status: Record<string, 'correct' | 'wrong'> = {};
+  for (let r = 0; r < grid.value.length; r++) {
+    for (let c = 0; c < grid.value[r].length; c++) {
+      if (grid.value[r][c]?.black) continue;
+      if (answers.value[`${r},${c}`]) status[`${r},${c}`] = 'correct';
     }
   }
-  // Anonymous, or authed with nothing anywhere: use local.
-  answers.value = local;
+  cellStatus.value = status;
 }
 
 // ── Autosave (debounced) ──────────────────────────────────────────────────────

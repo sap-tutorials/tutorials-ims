@@ -125,7 +125,11 @@ export default class PuzzleService extends cds.ApplicationService {
     });
 
     // ── getProgress ───────────────────────────────────────────────────────────
-    // Return the caller's saved grid (or an empty grid if none stored yet).
+    // Return the caller's saved grid (or an empty grid if none stored yet) plus
+    // a `completed` flag so the solver can re-hydrate the solved state (banner +
+    // Reset button) after a page reload (issue #1650 bug 2). Completion lives in
+    // TaskRecords (taskType 'PUZZLE'), NOT PuzzleProgress, so we read it here —
+    // a non-SUPERSEDED PUZZLE record means the puzzle was fully solved.
     this.on('getProgress', async (req) => {
       const { slug } = req.data;
       const puzzle = await loadPuzzle(slug);
@@ -134,7 +138,17 @@ export default class PuzzleService extends cds.ApplicationService {
       if (!dbUser) return req.reject(401, 'Unauthenticated');
       const row = await SELECT.one.from(PuzzleProgress)
         .where({ user_ID: dbUser.ID, puzzle_ID: puzzle.ID });
-      return { filledGrid: row?.filledGrid || '{}', attemptNumber: row?.attemptNumber ?? 1 };
+      const completedRec = await SELECT.one.from(TaskRecords).where({
+        user_ID: dbUser.ID,
+        taskLegacyId: puzzle.legacyId,
+        taskType: 'PUZZLE',
+        status: 'COMPLETED',
+      });
+      return {
+        filledGrid: row?.filledGrid || '{}',
+        attemptNumber: row?.attemptNumber ?? 1,
+        completed: !!completedRec,
+      };
     });
 
     // ── complete ──────────────────────────────────────────────────────────────
