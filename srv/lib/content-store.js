@@ -841,7 +841,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // --- servePageFallback stub (replaced in Task 4) ---
   // Task 4 replaces this with baked-snapshot fallback logic.
   // Returns true if a fallback response was sent, false otherwise.
-  function servePageFallback() { return false; } // eslint-disable-line no-unused-vars
+  function servePageFallback() { return false; }
 
   // --- serveStoredSlug: reusable ContentFiles serve core ---
   //
@@ -1726,10 +1726,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     const rest = String(req.path || req.url || '').replace(/^\/content\/pages/, '') || '/';
     const key = pageKeyForPath(rest);
     if (!key) {
-      // Out-of-scope path → short-TTL 404 (fail-open).
-      res.status(404);
-      res.setHeader('Cache-Control', 'public, max-age=60');
-      return res.end('Not found');
+      // Out-of-scope path → styled 404 page (short-TTL, fail-open).
+      return serveNotFound(res, rest || '(out-of-scope)');
     }
     try {
       const mimeType = mimeTypeForPageKey(key);
@@ -1737,9 +1735,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       if (result === 'served') return;
       // In-scope but unpublished (or no active version) → fail-open ladder.
       if (servePageFallback(res, key)) return;   // Task 4 (baked snapshot)
-      res.status(404);
-      res.setHeader('Cache-Control', 'public, max-age=60');
-      return res.end('Not found');
+      return serveNotFound(res, key);
     } catch (err) {
       LOG.warn(`[pages] serve failed for ${key}:`, err?.message ?? err);
       if (servePageFallback(res, key)) return;
