@@ -920,8 +920,25 @@ export default class DeveloperService extends cds.ApplicationService {
       }
       if (!profile) return { status: 'not-found' };
       try {
-        const dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-        if (!dbUser) return req.reject(404, 'User row missing');
+        // Auto-provision the Users row if missing — a learner can land on
+        // /me/#learning-preferences and link their community profile before
+        // completing any tutorial (same SELECT-then-INSERT idiom as
+        // setLearningPreferences above; issue #343 / #1614). Previously this
+        // hard-rejected 404 "User row missing", which the frontend surfaced as
+        // silence (an OData error envelope has no `.status` field).
+        let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
+        if (!dbUser) {
+          const newUser = {
+            uuid: req.user.id,
+            sapId,
+            legacyId: await getNextLegacyId('Users', db),
+            email: req.user.attr?.email || '',
+            firstName: req.user.attr?.given_name || '',
+            lastName: req.user.attr?.family_name || '',
+          };
+          await INSERT.into(dbUsers).entries(newUser);
+          dbUser = await SELECT.one.from(dbUsers).where({ sapId });
+        }
         await UPDATE(dbUsers)
           .set({
             khorosId: profile.id,

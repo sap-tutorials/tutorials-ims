@@ -79,17 +79,58 @@ function shape(author) {
 }
 
 /**
- * Resolve a Khoros user from either a numeric id or a login slug.
+ * Normalise user-typed input to either a numeric id or a login slug.
  *
- * @param {string} input — user-typed: "12345" or "thomas_jung" or "thomas.jung"
+ * The UI (CommunityProfile.vue) explicitly tells users they can paste their
+ * whole community profile URL or its trailing fragment — e.g.
+ * "https://community.sap.com/t5/user/viewprofilepage/user-id/11295",
+ * "/user-id/11295", or "/user/thomas_jung". A bare "12345" or "thomas_jung"
+ * must still work. This extracts what to look up so a pasted URL doesn't get
+ * treated as a literal login slug (which matches nothing → false "not-found").
+ *
+ * @param {string} raw
+ * @returns {{ kind: 'id'|'login', value: string } | null}
+ */
+export function parseKhorosInput(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+
+  // .../user-id/<digits>  (full URL or bare "/user-id/11295" fragment)
+  const idMatch = s.match(/user-id\/(\d+)/i);
+  if (idMatch) return { kind: 'id', value: idMatch[1] };
+
+  // .../user/<slug>  (profile URL or "/user/thomas_jung" fragment).
+  // Excludes "viewprofilepage" so ".../t5/user/viewprofilepage/..." without a
+  // user-id doesn't capture the literal "viewprofilepage".
+  const loginMatch = s.match(/(?:^|\/)user\/([^/?#\s]+)/i);
+  if (loginMatch && loginMatch[1].toLowerCase() !== 'viewprofilepage') {
+    return { kind: 'login', value: loginMatch[1] };
+  }
+
+  // Bare numeric id.
+  if (/^\d+$/.test(s)) return { kind: 'id', value: s };
+
+  // Bare login slug (strip any leading slashes a user may have typed).
+  const slug = s.replace(/^\/+/, '');
+  if (!slug || /[/?#]/.test(slug)) return null;
+  return { kind: 'login', value: slug };
+}
+
+/**
+ * Resolve a Khoros user from a numeric id, a login slug, or a pasted
+ * community profile URL / fragment.
+ *
+ * @param {string} input — e.g. "12345", "thomas_jung", "thomas.jung",
+ *   "/user-id/11295", or a full profile URL.
  * @returns {Promise<{id, login, name, rank, avatarUrl} | null>}
- *   Null = upstream returned 0 items (lurker, deleted, or unknown).
- *   Throws on 5xx, non-success status, or network error.
+ *   Null = unparseable input, or upstream returned 0 items (lurker, deleted,
+ *   or unknown). Throws on 5xx, non-success status, or network error.
  */
 export async function resolveUser(input) {
-  const id = String(input).trim();
-  if (!id) return null;
-  const isNumeric = /^\d+$/.test(id);
+  const parsed = parseKhorosInput(input);
+  if (!parsed) return null;
+  const { value: id, kind } = parsed;
+  const isNumeric = kind === 'id';
 
   if (isNumeric) {
     const author = await searchAuthor(`author.id = '${id}'`);

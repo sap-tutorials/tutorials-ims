@@ -62,8 +62,8 @@ async function onLink() {
       credentials: 'include',
       body: JSON.stringify({ input: v }),
     });
-    const body = await r.json();
-    if (body.status === 'ok') {
+    const body = await r.json().catch(() => ({}));
+    if (r.ok && body.status === 'ok') {
       // Immediately populate the chip so the user sees feedback even if
       // refresh() races or returns stale data (e.g. test mock returning unlinked).
       profile.linked = true;
@@ -78,7 +78,10 @@ async function onLink() {
       refresh({ allowUnlink: false }).catch(() => {});
       setTimeout(() => { if (status.value === 'just-linked') status.value = 'idle'; }, 3000);
     } else {
-      errorStatus.value = body.status;
+      // Any recognised status maps to a message below; an unrecognised or
+      // absent status (e.g. a raw HTTP error envelope with no `.status`) must
+      // still surface *something* — never leave the user with silent feedback.
+      errorStatus.value = body.status || 'persist-failed';
     }
   } catch {
     errorStatus.value = 'upstream-unavailable';
