@@ -153,6 +153,20 @@ describe('/build/navigator: nested Group inside a Mission', () => {
     expect(tut.groupTitle).toBe('__TEST__ Nested Group');
   });
 
+  // Issue #1639: a Mission reachable ONLY via a nested GROUP CompletionPathItem
+  // (no direct TUTORIAL rows in NavigatorCatalog) must still get a missions[]
+  // ref. Without it, the Vue mission-card href lookup
+  // (missionsMeta.find(m => m.id === missionId)) returns undefined and the card
+  // falls back to linking at the first tutorial's slug instead of
+  // /tutorials/mission-<slug>.
+  it('surfaces the nested-only Mission in missions[] so the card link resolves (#1639)', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const m = data.missions.find(m => m.id === 99002);
+    expect(m).toBeDefined();
+    expect(m.slug).toBe('test-nested-mission');
+    expect(m.title).toBe('__TEST__ Nested Mission');
+  });
+
   // Defines the merge semantics for the (intentionally edge-case) scenario where a
   // tutorial is referenced BOTH directly under a Mission CompletionPath AND under a
   // nested Group inside the same or a different Mission. We accept duplicate entries
@@ -246,6 +260,18 @@ describe('/build/navigator: nested Group default-off (Issue #364)', () => {
     expect(tut).toBeDefined();
     expect(tut.missionId).toBe(99019);
     expect(tut.groupId).toBe(99019);
+  });
+
+  // Issue #1639: the missions[] ref must be emitted regardless of the
+  // nested-group card flag. The mission card is built from tutorialMappings
+  // (which still emit when the flag is off), so its href lookup needs the ref
+  // even though the nested-group *card* is suppressed here.
+  it('surfaces the nested-only Mission in missions[] even with nested-group cards off (#1639)', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const m = data.missions.find(m => m.id === 99019);
+    expect(m).toBeDefined();
+    expect(m.slug).toBe('test-defaultoff-mission');
+    expect(m.title).toBe('__TEST__ Default-Off Mission');
   });
 });
 
