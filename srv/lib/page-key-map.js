@@ -3,6 +3,19 @@ import path from 'node:path';
 
 export const PAGE_KEY_PREFIX = 'page-';
 
+// Single authoritative MIME → extension map shared by build and serve.
+const _EXT_MAP = { 'text/html': 'html', 'application/xml': 'xml', 'text/plain': 'txt' };
+
+/**
+ * Return the file extension for a MIME type recognised by IN_SCOPE_PAGES,
+ * or 'html' for anything unknown.
+ * @param {string} mimeType
+ * @returns {string}
+ */
+export function extForMime(mimeType) {
+  return _EXT_MAP[mimeType] || 'html';
+}
+
 // The fixed allow-list IS the validator: only these routes become page keys.
 // `file` is relative to the Hugo output dir (hugo/public).
 // Verb/landing pages are enumerated here explicitly — add new ones to this list.

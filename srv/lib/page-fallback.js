@@ -14,10 +14,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mimeTypeForPageKey } from './page-key-map.js';
+import { mimeTypeForPageKey, extForMime } from './page-key-map.js';
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'page-fallback');
-const EXT = { 'text/html': 'html', 'application/xml': 'xml', 'text/plain': 'txt' };
 const _cache = new Map();
 
 /**
@@ -28,7 +27,7 @@ const _cache = new Map();
 export function loadPageFallback(key) {
   if (_cache.has(key)) return _cache.get(key);
   const mimeType = mimeTypeForPageKey(key);
-  const file = path.join(DIR, `${key}.${EXT[mimeType] || 'html'}`);
+  const file = path.join(DIR, `${key}.${extForMime(mimeType)}`);
   let result = null;
   try {
     if (fs.existsSync(file)) result = { buffer: fs.readFileSync(file), mimeType };

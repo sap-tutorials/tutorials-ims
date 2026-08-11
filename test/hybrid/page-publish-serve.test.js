@@ -1,4 +1,10 @@
 // test/hybrid/page-publish-serve.test.js
+//
+// Serve-path regression guard for pageServeHandler against real HANA.
+// This is NOT a publish-pipeline test — rows are hand-inserted so the
+// test stays focused on the serve path (route resolution, BLOB decompress,
+// Content-Type, afterAll teardown).  A separate unit test covers the
+// publish-side discoverPageFiles integration (test/unit/discover-page-files.test.js).
 import { describe, it, expect, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { gzipSync } from 'node:zlib';
@@ -7,8 +13,9 @@ import { createHash } from 'node:crypto';
 const test = cds.test('serve', '--project', '.'); // hybrid: real HANA via cds bind --exec
 const NS = 'com.sap.developers.ims';
 
-// Simulate a committed page publish, then serve it back through the route.
-describe('page publish→serve round-trip (hybrid)', () => {
+// Serve-path regression guard: hand-inserts a committed page row, then
+// verifies the CAP route resolves it correctly from HANA.
+describe('page serve path: HANA regression guard (hybrid)', () => {
   let testVersion;
   let prevActiveVersion;
 

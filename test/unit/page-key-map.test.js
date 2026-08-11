@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  pageKeyForPath, pathForPageKey, isPageKey, discoverPageFiles, IN_SCOPE_PAGES,
+  pageKeyForPath, pathForPageKey, isPageKey, discoverPageFiles, IN_SCOPE_PAGES, extForMime,
 } from '../../srv/lib/page-key-map.js';
 
 describe('page-key-map', () => {
@@ -40,5 +40,36 @@ describe('page-key-map', () => {
     expect(isPageKey('abap-basics')).toBe(false);
     expect(isPageKey('concept-oauth')).toBe(false);
     expect(isPageKey('group-getting-started')).toBe(false);
+  });
+});
+
+describe('extForMime', () => {
+  it('maps text/html → html', () => {
+    expect(extForMime('text/html')).toBe('html');
+  });
+
+  it('maps application/xml → xml', () => {
+    expect(extForMime('application/xml')).toBe('xml');
+  });
+
+  it('maps text/plain → txt', () => {
+    expect(extForMime('text/plain')).toBe('txt');
+  });
+
+  it('falls back to html for unknown mime types', () => {
+    expect(extForMime('application/octet-stream')).toBe('html');
+    expect(extForMime(undefined)).toBe('html');
+    expect(extForMime('')).toBe('html');
+  });
+
+  it('covers every mimeType used in IN_SCOPE_PAGES without falling back', () => {
+    const knownMimes = new Set(['text/html', 'application/xml', 'text/plain']);
+    for (const p of IN_SCOPE_PAGES) {
+      expect(knownMimes.has(p.mimeType)).toBe(true);
+      // extForMime must return a non-'html' result for xml and txt entries
+      // (i.e. it is not silently falling through to the default for those).
+      if (p.mimeType === 'application/xml') expect(extForMime(p.mimeType)).toBe('xml');
+      if (p.mimeType === 'text/plain')      expect(extForMime(p.mimeType)).toBe('txt');
+    }
   });
 });
