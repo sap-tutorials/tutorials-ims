@@ -97,6 +97,19 @@ function runSql(client, sql, params) {
 
 function resolveSourceCreds() {
   if (process.env.IMS_HANA_CREDENTIALS) return JSON.parse(process.env.IMS_HANA_CREDENTIALS);
+  // File form (avoids passing secrets on the command line / through transcripts):
+  //   IMS_CREDS_FILE=<path> or default .migration-data/ims-creds.json
+  const f = process.env.IMS_CREDS_FILE || path.join('.migration-data', 'ims-creds.json');
+  if (fs.existsSync(f)) {
+    const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+    // Accept either {host,port,user,password,schema} or {IMS_DB_URL,...} shapes.
+    if (j.host) return { schema: 'IMSDBUSER', ...j };
+    if (j.IMS_DB_URL) {
+      const url = new URL(String(j.IMS_DB_URL).replace('jdbc:sap://', 'https://'));
+      return { host: url.hostname, port: url.port || '443', user: j.IMS_DB_USERNAME,
+        password: j.IMS_DB_PASSWORD, schema: url.searchParams.get('currentschema') || 'IMSDBUSER' };
+    }
+  }
   if (process.env.IMS_DB_URL) {
     const url = new URL(process.env.IMS_DB_URL.replace('jdbc:sap://', 'https://'));
     return {
@@ -105,11 +118,27 @@ function resolveSourceCreds() {
       schema: url.searchParams.get('currentschema') || 'IMSDBUSER',
     };
   }
-  throw new Error('No source creds. Set IMS_HANA_CREDENTIALS or IMS_DB_URL+IMS_DB_USERNAME+IMS_DB_PASSWORD.');
+  throw new Error('No IMS source creds. Provide .migration-data/ims-creds.json, IMS_CREDS_FILE, ' +
+    'IMS_HANA_CREDENTIALS, or IMS_DB_URL+IMS_DB_USERNAME+IMS_DB_PASSWORD.');
 }
 function resolveTargetCreds() {
   if (process.env.CAP_HANA_CREDENTIALS) return JSON.parse(process.env.CAP_HANA_CREDENTIALS);
-  throw new Error('No target creds. Set CAP_HANA_CREDENTIALS to the service-key JSON.');
+  // Preferred: run under `cds bind --exec` so VCAP_SERVICES carries the CAP HANA
+  // binding — no service-key materialization into the shell/transcript.
+  if (process.env.VCAP_SERVICES) {
+    const vcap = JSON.parse(process.env.VCAP_SERVICES);
+    const hana = (vcap.hana || vcap['hana-cloud'] || []).find(s => s && s.credentials);
+    if (hana) {
+      const c = hana.credentials;
+      return {
+        host: c.host, port: c.port || '443',
+        user: c.user || c.hdi_user, password: c.password || c.hdi_password,
+        schema: c.schema,
+      };
+    }
+  }
+  throw new Error('No CAP target creds. Run via `cds bind --to tutorials-hana:hdi-shared --exec` ' +
+    'or set CAP_HANA_CREDENTIALS to the service-key JSON.');
 }
 
 function csvCell(v) {
@@ -128,6 +157,11 @@ function csvCell(v) {
 
   const source = await connectHana(src);
   const target = await connectHana(tgt);
+
+  // Pin schemas so unqualified table names resolve regardless of the connect
+  // user's default. IMS source query qualifies with "${srcSchema}"; CAP query
+  // uses unqualified COM_SAP_DEVELOPERS_IMS_* which live in the container schema.
+  if (tgt.schema) await runSql(target, `SET SCHEMA "${tgt.schema}"`);
 
   // 1) Authoritative order from IMS: parent GROUP -> child TUTORIAL, with TASK_ORDER.
   const imsRows = await runSql(source, `
