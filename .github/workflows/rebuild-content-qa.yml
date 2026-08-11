@@ -164,6 +164,14 @@ jobs:
         # /usr/local/bin which needs sudo. Issue: this run failed at #27883670683.
         run: PATH="/tmp:$PATH" npm run build:qa
 
+      # [#1657] Restore CDS syntax highlighting on the QA publish path (parity
+      # with rebuild-content.yml). build:qa renders to hugo/public-qa (the
+      # publishDir override in hugo.qa.toml, which publish-content.ts --channel qa
+      # also reads), so point the Shiki pass there via --dir. Without it, QA
+      # author-preview serves the Chroma-SQL fallback with red-braced CDS blocks.
+      - name: Highlight CDS code blocks (Shiki)
+        run: npm run build:highlight -- --dir hugo/public-qa
+
       - name: Publish QA content to HANA
         run: npx tsx scripts/publish-content.ts --channel qa --initiator "ci/${{ github.run_id }}"
         env:

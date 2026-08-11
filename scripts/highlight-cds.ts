@@ -6,7 +6,22 @@ import { fileURLToPath } from 'url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const GRAMMAR_PATH = join(__dirname, 'grammars', 'cds.tmLanguage.json');
 
-const OUTPUT_DIR = resolve(__dirname, '..', 'hugo', 'public');
+// The directory of rendered Hugo HTML to post-process. Defaults to hugo/public
+// (the DEV/PROD publishDir used by build:all and rebuild-content.yml). The QA
+// channel renders to hugo/public-qa (hugo.qa.toml), so rebuild-content-qa.yml
+// passes `--dir hugo/public-qa`. Env HIGHLIGHT_DIR is honored as a fallback.
+// Relative paths resolve against the repo root (scripts/..), matching the
+// hardcoded default this replaced. See issue #1657.
+function resolveOutputDir(): string {
+  const argIdx = process.argv.indexOf('--dir');
+  const raw =
+    (argIdx !== -1 ? process.argv[argIdx + 1] : undefined) ||
+    process.env.HIGHLIGHT_DIR ||
+    'hugo/public';
+  return resolve(__dirname, '..', raw);
+}
+
+const OUTPUT_DIR = resolveOutputDir();
 
 function findHtmlFiles(dir: string): string[] {
   const files: string[] = [];
@@ -48,12 +63,14 @@ async function main() {
   const htmlFiles = findHtmlFiles(OUTPUT_DIR);
   let processedBlocks = 0;
   let processedFiles = 0;
+  let filesWithMarker = 0;
 
   const MARKER = 'data-lang=cds';
 
   for (const file of htmlFiles) {
     let html = readFileSync(file, 'utf-8');
     if (!html.includes(MARKER)) continue;
+    filesWithMarker++;
 
     let changed = false;
     let result = '';
@@ -103,8 +120,21 @@ async function main() {
     }
   }
 
-  console.log(`CDS highlighting: ${processedBlocks} blocks in ${processedFiles} files`);
+  console.log(`CDS highlighting: ${processedBlocks} blocks in ${processedFiles} files (dir: ${OUTPUT_DIR})`);
   highlighter.dispose();
+
+  // Regression guard (#1657): if the `data-lang=cds` marker is present but we
+  // replaced zero blocks, the block structure this matcher relies on (emitted
+  // by render-codeblock.html, minified by Hugo) has drifted. Failing here turns
+  // a silent revert-to-Chroma-SQL (braces rendered as red `.err` tokens) into a
+  // red build BEFORE the un-highlighted HTML is published to HANA.
+  if (filesWithMarker > 0 && processedBlocks === 0) {
+    console.error(
+      `highlight-cds: found ${filesWithMarker} file(s) with the '${MARKER}' marker but replaced 0 CDS blocks — ` +
+        `the code-block markup likely drifted from what this script matches. Refusing to leave the Chroma-SQL fallback in place.`
+    );
+    process.exit(1);
+  }
 }
 
 main().catch((err) => {
