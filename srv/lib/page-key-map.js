@@ -26,6 +26,15 @@ export const IN_SCOPE_PAGES = [
   { route: '/tutorial-navigator/',   key: 'page-tutorial-navigator',  file: 'tutorial-navigator/index.html', mimeType: 'text/html' },
   { route: '/developer-advocates/',  key: 'page-developer-advocates', file: 'developer-advocates/index.html', mimeType: 'text/html' },
   { route: '/devtoberfest/',         key: 'page-devtoberfest',        file: 'devtoberfest/index.html',   mimeType: 'text/html' },
+  // Verb hub landing pages (#1659 Phase 2) — each is a single Hugo page
+  // rendered by layouts/verb/list.html at /<verb>/index.html.
+  { route: '/ai/',        key: 'page-ai',        file: 'ai/index.html',        mimeType: 'text/html' },
+  { route: '/build/',     key: 'page-build',     file: 'build/index.html',     mimeType: 'text/html' },
+  { route: '/connect/',   key: 'page-connect',   file: 'connect/index.html',   mimeType: 'text/html' },
+  { route: '/integrate/', key: 'page-integrate', file: 'integrate/index.html', mimeType: 'text/html' },
+  { route: '/learn/',     key: 'page-learn',     file: 'learn/index.html',     mimeType: 'text/html' },
+  { route: '/model/',     key: 'page-model',     file: 'model/index.html',     mimeType: 'text/html' },
+  { route: '/operate/',   key: 'page-operate',   file: 'operate/index.html',   mimeType: 'text/html' },
   { route: '/sitemap.xml',           key: 'page-sitemap.xml',         file: 'sitemap.xml',               mimeType: 'application/xml' },
   { route: '/index.xml',             key: 'page-index.xml',           file: 'index.xml',                 mimeType: 'application/xml' },
   { route: '/llms-full.txt',         key: 'page-llms-full.txt',       file: 'llms-full.txt',             mimeType: 'text/plain' },

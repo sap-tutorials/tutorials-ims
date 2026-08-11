@@ -41,6 +41,13 @@ describe('page-key-map', () => {
     expect(isPageKey('concept-oauth')).toBe(false);
     expect(isPageKey('group-getting-started')).toBe(false);
   });
+
+  it('maps the 7 verb hub routes to page- keys', () => {
+    for (const v of ['ai', 'build', 'connect', 'integrate', 'learn', 'model', 'operate']) {
+      expect(pageKeyForPath(`/${v}/`)).toBe(`page-${v}`);
+      expect(pathForPageKey(`page-${v}`)).toBe(`/${v}/`);
+    }
+  });
 });
 
 describe('extForMime', () => {
