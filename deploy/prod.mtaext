@@ -18,7 +18,13 @@ modules:
     # parses as null and the multiapps controller rejects it
     # ("Null value for key modules#0#properties") — so it is omitted, not left blank.
     parameters:
-      instances: 2
+      # Bumped 2→4 for the developers.sap.com site-launch load (reconciles a
+      # live cockpit `cf scale`, so deploys don't revert to 2). NOTE: the rate
+      # limiters in srv/lib/ip-rate-limit.js + srv/lib/chat-rate-limit.js are
+      # in-process, so per-instance caps now run at 4× the intended aggregate —
+      # accepted as launch headroom; revisit a shared-store limiter if 4
+      # becomes steady state.
+      instances: 4
 
   - name: tutorials-approuter
     # REBUILD_API_KEY is credstore-only (PR #903 rollout step 3 / #871 follow-up);
