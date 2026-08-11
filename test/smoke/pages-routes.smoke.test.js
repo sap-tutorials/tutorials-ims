@@ -60,9 +60,15 @@ const HTML_ROUTES = [
 //    so these never match the src="..." capture.
 function collectIslandSrcs(html) {
   const results = [];
-  for (const [, attrs] of html.matchAll(/<script([^>]*)>/g)) {
-    if (!attrs.includes('type="module"')) continue;
-    const m = attrs.match(/src="(\/js\/[^"?]+\.js)"/);
+  for (const [, rawAttrs] of html.matchAll(/<script([^>]*)>/g)) {
+    // Production HTML is Hugo-minified: attribute values lose their quotes
+    // (type="module" → type=module, src="/js/x.js" → src=/js/x.js). Strip
+    // quotes so this matches both minified (deployed) and unminified (local)
+    // output — otherwise the src="..." capture finds nothing on a live env
+    // and every hash check silently no-ops.
+    const attrs = rawAttrs.replace(/["']/g, '');
+    if (!/\btype=module\b/.test(attrs)) continue;
+    const m = attrs.match(/\bsrc=(\/js\/[^\s>?]+\.js)/);
     if (!m) continue;
     const src = m[1];
     // Hugo esbuild assets are not content-hashed by design — skip.
@@ -70,6 +76,17 @@ function collectIslandSrcs(html) {
     results.push(src);
   }
   return results;
+}
+
+// Production HTML is Hugo-minified, so attribute values lose their quotes
+// (id="browse-results" → id=browse-results). Compare quote-insensitively so a
+// marker matches both the deployed (minified) and local (unminified) forms.
+const stripQuotes = (s) => s.replace(/["']/g, '');
+function assertContainsMarker(html, marker, path) {
+  expect(
+    stripQuotes(html).includes(stripQuotes(marker)),
+    `marker ${marker} not found on ${path}`
+  ).toBe(true);
 }
 
 function assertHashedIslands(html, path) {
@@ -90,7 +107,7 @@ describeIf('#1659 Phase 2 flipped page routes', () => {
       expect(r.headers.get('content-type') || '').toContain('text/html');
       const html = await r.text();
       expect(html.length).toBeGreaterThan(500);
-      expect(html).toContain(marker);
+      assertContainsMarker(html, marker, path);
       assertHashedIslands(html, path);
     });
   }
@@ -100,7 +117,7 @@ describeIf('#1659 Phase 2 flipped page routes', () => {
     const root = await fetchWithRetry(`${BASE_URL}/devtoberfest/`, { redirect: 'follow' });
     expect(root.status).toBe(200);
     expect(root.headers.get('content-type') || '').toContain('text/html');
-    expect(await root.text()).toContain('id="devtoberfest-mount"');
+    assertContainsMarker(await root.text(), 'id="devtoberfest-mount"', '/devtoberfest/');
 
     // /devtoberfest/faq/ is a static subpage served below the flipped root —
     // 200 or a redirect (301/302) is acceptable; what must NOT happen is a 404/500.
