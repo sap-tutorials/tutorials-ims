@@ -1660,9 +1660,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   async function commitHandler(req, res) {
     try {
-      const { sessionId } = req.body || {};
+      const { sessionId, allowRevertSlugs } = req.body || {};
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
-      const result = await sessionHelpers.commitSession({ sessionId });
+      const result = await sessionHelpers.commitSession({ sessionId, allowRevertSlugs });
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
       LOG.info(`[content/publish/commit] sessionId=${sessionId} version=${result.version} duration=${result.durationMs}ms alreadyActive=${result.alreadyActive}`);

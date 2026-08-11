@@ -349,7 +349,7 @@ export function createSessionHelpers({ namespace }) {
     return rejected;
   }
 
-  async function commitSession({ sessionId }) {
+  async function commitSession({ sessionId, allowRevertSlugs = [] }) {
     const { ContentManifest } = cds.entities(namespace);
 
     const existing = await SELECT.one.from(ContentManifest).where({ sessionId });
@@ -390,12 +390,27 @@ export function createSessionHelpers({ namespace }) {
     // the server has moved past). DELETE rejected slugs from the in-flight
     // version; carryForwardUnchanged below then re-pulls the current ACTIVE
     // row for them, so the result is "we silently kept the existing content."
-    const rejectedReverts = await detectReverts(newVersion, freshSlugs);
+    //
+    // Operator override (allowRevertSlugs): the guard cannot distinguish a
+    // stale-cache revert from an intentional re-publish of current upstream
+    // that the guard reads as an abandoned-history match (source-byte churn,
+    // e.g. commit-timestamp / injected-frontmatter drift across a branch
+    // migration). A slug explicitly listed in allowRevertSlugs is committed
+    // anyway — logged + recorded for audit, never silently. Default (empty
+    // list) preserves the original guard behavior exactly.
+    const detectedReverts = await detectReverts(newVersion, freshSlugs);
+    const allowRevertSet = new Set(Array.isArray(allowRevertSlugs) ? allowRevertSlugs : []);
+    const allowedReverts = detectedReverts.filter((s) => allowRevertSet.has(s));
+    const rejectedReverts = detectedReverts.filter((s) => !allowRevertSet.has(s));
+    if (allowedReverts.length) {
+      LOG.warn(`[content/publish/commit] #672 override: committing ${allowedReverts.length} operator-approved revert(s): ${allowedReverts.join(', ')}`);
+    }
     if (rejectedReverts.length) {
       LOG.warn(`[content/publish/commit] #672 rejecting ${rejectedReverts.length} revert(s): ${rejectedReverts.join(', ')}`);
       // Chunk to stay under HANA's packet cap: rejectedReverts can in
       // principle be as large as freshSlugs (~7,315 on a full publish).
-      // Same rationale as the appendToSession DELETE above.
+      // Same rationale as the appendToSession DELETE above. Only slugs NOT
+      // operator-approved are deleted; allowed reverts stay committed.
       for (let i = 0; i < rejectedReverts.length; i += 500) {
         const chunk = rejectedReverts.slice(i, i + 500);
         await DELETE.from(ContentFiles).where({ version: newVersion, slug: { in: chunk } });
@@ -460,7 +475,8 @@ export function createSessionHelpers({ namespace }) {
     // captures the full structured result for the Object Page Metadata facet.
     try {
       const revertSuffix = rejectedReverts.length ? ` (${rejectedReverts.length} revert${rejectedReverts.length === 1 ? '' : 's'} rejected)` : '';
-      const summary = `Published v${newVersion}: ${freshCount} new + ${carriedForward} carried = ${freshCount + carriedForward} slugs in ${durationMs}ms${revertSuffix}`;
+      const overrideSuffix = allowedReverts.length ? ` (${allowedReverts.length} revert${allowedReverts.length === 1 ? '' : 's'} overridden)` : '';
+      const summary = `Published v${newVersion}: ${freshCount} new + ${carriedForward} carried = ${freshCount + carriedForward} slugs in ${durationMs}ms${revertSuffix}${overrideSuffix}`;
       await logPipelineEnd(
         sessionId,
         'SUCCESS',
@@ -468,14 +484,16 @@ export function createSessionHelpers({ namespace }) {
         null,  // errorDetails — none on SUCCESS
         namespace
       );
-      // #672 — surface rejected slugs on the PipelineLog row's metadata.
-      // logPipelineEnd's 4th arg is errorDetails (not metadata); metadata
-      // was set at logPipelineStart. We merge here rather than changing the
-      // shared pipeline-log.js API.
-      if (rejectedReverts.length) {
+      // #672 — surface rejected + operator-overridden slugs on the PipelineLog
+      // row's metadata. logPipelineEnd's 4th arg is errorDetails (not
+      // metadata); metadata was set at logPipelineStart. We merge here rather
+      // than changing the shared pipeline-log.js API.
+      if (rejectedReverts.length || allowedReverts.length) {
         const { PipelineLog } = cds.entities(namespace);
         const existing = await SELECT.one.from(PipelineLog, sessionId).columns('metadata');
-        const merged = { ...(existing?.metadata ? safeJsonParse(existing.metadata) : {}), rejectedReverts };
+        const merged = { ...(existing?.metadata ? safeJsonParse(existing.metadata) : {}) };
+        if (rejectedReverts.length) merged.rejectedReverts = rejectedReverts;
+        if (allowedReverts.length) merged.allowedReverts = allowedReverts;
         await UPDATE(PipelineLog, sessionId).set({ metadata: JSON.stringify(merged) });
       }
     } catch (logErr) {
@@ -537,10 +555,11 @@ export function createSessionHelpers({ namespace }) {
       durationMs,
       carriedForward,
       // #672 — empty array (not omitted) so clients can rely on the field
-      // being present in every commit response. Task 4 adds the summary
-      // suffix and PipelineLog metadata threading; the response field is
-      // here so Task 3's tests can assert cleanly.
+      // being present in every commit response. `allowedReverts` lists slugs
+      // that WERE detected as reverts but committed anyway per an explicit
+      // operator override (allowRevertSlugs); also always present.
       rejectedReverts,
+      allowedReverts,
       alreadyActive: false
     };
   }

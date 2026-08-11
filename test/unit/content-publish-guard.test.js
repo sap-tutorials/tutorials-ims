@@ -212,4 +212,60 @@ describe('#672 publish staleness guard', () => {
     const v3 = await publishOne('flap-preserved-slug', 'A');
     expect(v3.rejectedReverts).toContain('flap-preserved-slug');
   });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // #672 operator override — allowRevertSlugs. The revert guard is
+  // structurally unable to distinguish "stale cache reverting to old
+  // content" from "intentional re-publish of current upstream that the
+  // guard reads as an abandoned-history match (source-byte churn)". So an
+  // explicit, per-slug operator override lets a verified revert commit.
+  // Default behavior (no allowRevertSlugs) is unchanged — covered above.
+  // ─────────────────────────────────────────────────────────────────────
+
+  async function publishAllowRevert(map, allowRevertSlugs) {
+    const { sessionId } = await helpers.beginPublishSession({
+      trigger: 'unit-test', hugoVersion: '0.147.0',
+      expectedSlugCount: Object.keys(map).length, initiator: 'unit-test',
+    });
+    const files = {}, sources = {};
+    for (const [slug, label] of Object.entries(map)) {
+      files[slug] = html(label);
+      sources[slug] = source(label);
+    }
+    await helpers.appendToSession({ sessionId, files, sources });
+    return helpers.commitSession({ sessionId, allowRevertSlugs });
+  }
+
+  it('commits an operator-approved revert listed in allowRevertSlugs', async () => {
+    // v1: A, v2: B (active) — v3: A would normally be rejected as a revert.
+    await publishOne('ovr-slug', 'A');
+    await publishOne('ovr-slug', 'B');
+    const v3 = await publishAllowRevert({ 'ovr-slug': 'A' }, ['ovr-slug']);
+
+    // Operator override lets it through: not rejected, reported as allowed.
+    expect(v3.rejectedReverts, 'listed slug must NOT be rejected').toEqual([]);
+    expect(v3.allowedReverts, 'listed slug reported as allowed').toEqual(['ovr-slug']);
+
+    // ACTIVE content is now A (the override actually applied the revert).
+    const active = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
+    const row = await SELECT.one.from(ContentFiles).where({ slug: 'ovr-slug', version: active.version });
+    expect(row.sourceHash, 'ACTIVE row is now A').toBe(sha256('A'));
+  });
+
+  it('scopes the override — a revert not listed in allowRevertSlugs stays rejected', async () => {
+    // Two slugs both flapped A → B (active). Re-publish both as A, overriding
+    // only ovr-a: ovr-a commits, ovr-b remains guarded.
+    await publishAllowRevert({ 'ovr-a': 'A', 'ovr-b': 'A' });
+    await publishAllowRevert({ 'ovr-a': 'B', 'ovr-b': 'B' });
+    const v3 = await publishAllowRevert({ 'ovr-a': 'A', 'ovr-b': 'A' }, ['ovr-a']);
+
+    expect(v3.allowedReverts, 'only ovr-a overridden').toEqual(['ovr-a']);
+    expect(v3.rejectedReverts, 'ovr-b still rejected').toEqual(['ovr-b']);
+
+    const active = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
+    const rowA = await SELECT.one.from(ContentFiles).where({ slug: 'ovr-a', version: active.version });
+    const rowB = await SELECT.one.from(ContentFiles).where({ slug: 'ovr-b', version: active.version });
+    expect(rowA.sourceHash, 'ovr-a overridden → A').toBe(sha256('A'));
+    expect(rowB.sourceHash, 'ovr-b rejected → stays B').toBe(sha256('B'));
+  });
 });

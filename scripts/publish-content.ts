@@ -439,6 +439,25 @@ export function validateFlagCombo(flags: { force: boolean; heal: boolean; verify
 
 export type PublishMode = 'force' | 'heal' | 'delta';
 
+/**
+ * #672 operator override. Resolve the set of slugs the operator has explicitly
+ * approved to commit even if the server's no-revert guard flags them as reverts
+ * (source-byte churn re-reads current upstream as an abandoned-history match).
+ *
+ * Intentionally per-slug: `--allow-revert` MUST be paired with `--slug` so an
+ * operator can only override the single tutorial they named — never blanket-
+ * override every revert in a full-catalog publish. Returns [] when the flag is
+ * off (guard fully active, default behavior).
+ */
+export function resolveAllowRevertSlugs(opts: { allowRevert: boolean; slug: string }): string[] {
+  if (!opts.allowRevert) return [];
+  const s = (opts.slug ?? '').trim();
+  if (!s) {
+    throw new Error('--allow-revert requires --slug (per-slug override only; refusing a blanket revert override)');
+  }
+  return [s];
+}
+
 export function computePublishPlan(opts: {
   local: Map<string, string>;
   remote: Record<string, string>;
@@ -536,6 +555,7 @@ function parseArgs(argv: string[]): PublishOptions {
     heal:      has('--heal'),
     verifyOnly: has('--verify-only'),
     verbose:   has('--verbose'),
+    allowRevert: has('--allow-revert'),
     concurrency: parseInt(get('--concurrency', '6'), 10),
     batchSize:   parseInt(get('--batch-size', '50'), 10),
     purgeOrphans: has('--purge-orphans'),
@@ -970,6 +990,13 @@ async function main() {
 
   validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly, purgeOrphans: opts.purgeOrphans });
 
+  // #672 — resolve the per-slug operator override up front so a misused
+  // `--allow-revert` (without `--slug`) fails loudly BEFORE any publish work.
+  const allowRevertSlugs = resolveAllowRevertSlugs({ allowRevert: opts.allowRevert, slug: opts.slug });
+  if (allowRevertSlugs.length) {
+    log(`[--allow-revert] #672 no-revert guard will be overridden for: ${allowRevertSlugs.join(', ')}`);
+  }
+
   // #1659 — content pages ride the same delta pipeline as tutorials under the
   // page- key namespace. Merge AFTER tutorial-only validation so page files are
   // not subject to tutorial production checks, and BEFORE hashing so the whole
@@ -1160,7 +1187,7 @@ async function main() {
   let commit;
   try {
     commit = await withRetry(
-      () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId }),
+      () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, allowRevertSlugs }),
       {
         attempts: 3, backoffMs: [1000, 3000, 9000],
         onAttemptFail: (attempt, err, willRetry) => {
@@ -1181,6 +1208,16 @@ async function main() {
   Server:     ${commit.durationMs} ms
   Total:      ${totalMs} ms
   Idempotent retry hit?  ${commit.alreadyActive}`);
+
+  // #672 — surface the guard outcome explicitly so a "Verify FAILED" isn't
+  // mistaken for a store failure when it's actually a deliberate revert-block.
+  if (commit.rejectedReverts?.length) {
+    console.warn(`  ⚠ ${commit.rejectedReverts.length} slug(s) rejected by the #672 no-revert guard (prior content kept): ${commit.rejectedReverts.join(', ')}`);
+    console.warn(`    Not updated. If reverting to this content is intentional, re-run: npm run publish-content -- --slug <slug> --allow-revert`);
+  }
+  if (commit.allowedReverts?.length) {
+    console.log(`  ✓ ${commit.allowedReverts.length} operator-approved revert(s) committed via --allow-revert: ${commit.allowedReverts.join(', ')}`);
+  }
 
   // --- code-check spec publish (non-fatal auxiliary step) ---
   try {
