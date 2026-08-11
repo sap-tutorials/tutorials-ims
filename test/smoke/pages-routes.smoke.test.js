@@ -43,22 +43,39 @@ const HTML_ROUTES = [
   { path: '/operate/',             marker: 'data-verb="operate"'     },
 ];
 
-// Assert that every /js/*.js script src in the HTML is content-hashed.
-// Hashed path pattern: /js/<name>-<hash>.js where hash is [A-Za-z0-9_-]{6,}
-// (Vite emits 8-char hashes; 6 is the lower bound for robustness).
+// Collect the src paths of island-src bundle scripts in the HTML.
 //
-// Extracts only bare src="..." attribute values — excludes:
-//  - query-string paths like /js/featured-rail.js?v=... (not from island-src)
-//  - inline-script string literals (not src attributes)
+// Island bundles are emitted as <script type="module" src="/js/name-hash.js">
+// (baseof.html:61,68-71 and per-page layouts like browse/list.html).
+// Attribute order varies — cmd-palette (baseof.html:61) puts src before
+// type="module"; most others put type="module" first. We match the full
+// opening <script ...> tag and check for both attrs independent of order.
+//
+// Excluded intentionally:
+//  - Vendor scripts (markdown-it.min.js, purify.min.js) and joule scripts:
+//    bare `defer` without type="module" (baseof.html:55-59).
+//  - /js/ui5-bootstrap.js: Hugo esbuild asset (assets/js/ui5-bootstrap.ts),
+//    NOT a Vite island, intentionally never content-hashed (no | fingerprint).
+//  - Query-string paths like /js/featured-rail.js?v=<unix>: [^"?] stops at ?
+//    so these never match the src="..." capture.
 function collectIslandSrcs(html) {
-  // Match src="/js/<path>.js" (no query string — [^"?] stops at ? or ")
-  return [...html.matchAll(/src="(\/js\/[^"?]+\.js)"/g)].map(m => m[1]);
+  const results = [];
+  for (const [, attrs] of html.matchAll(/<script([^>]*)>/g)) {
+    if (!attrs.includes('type="module"')) continue;
+    const m = attrs.match(/src="(\/js\/[^"?]+\.js)"/);
+    if (!m) continue;
+    const src = m[1];
+    // Hugo esbuild assets are not content-hashed by design — skip.
+    if (src.includes('ui5-bootstrap')) continue;
+    results.push(src);
+  }
+  return results;
 }
 
 function assertHashedIslands(html, path) {
   const srcs = collectIslandSrcs(html);
   if (srcs.length === 0) return; // page has no /js/*.js islands — skip hash check
-  const unhashed = srcs.filter(s => !/-[A-Za-z0-9_-]{6,}\.js$/.test(s));
+  const unhashed = srcs.filter(s => !/-[A-Za-z0-9_]{6,}\.js$/.test(s));
   expect(
     unhashed,
     `unhashed island srcs on ${path}: ${unhashed.join(', ')}`
