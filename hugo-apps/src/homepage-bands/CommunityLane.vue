@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { applyRssFilter } from '../homepage-personalizer/rss-filter';
+import { formatEventDate } from '@shared/format-date';
 
 interface Advocate {
   ID?: string | number;
@@ -48,12 +49,8 @@ const blogError = ref<string | null>(null);
 const newsError = ref<string | null>(null);
 
 function formatDate(iso?: string): string {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch {
-    return iso;
-  }
+  // #1615 — format in UTC so date-only values render on their own calendar day. See @shared/format-date.
+  return formatEventDate(iso, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function advocateName(a: Advocate): string {

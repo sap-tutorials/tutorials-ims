@@ -8,6 +8,7 @@ import type { Region } from './tz-to-region';
 import { tzToRegion } from './tz-to-region';
 import { readLocalStorageRegion, writeLocalStorageRegion } from './region-storage';
 import { csrfFetch } from '@shared/csrf-fetch';
+import { formatEventDate } from '@shared/format-date';
 
 type EventCard = {
   title: string;
@@ -110,14 +111,9 @@ onMounted(async () => {
 onBeforeUnmount(() => { bc?.close(); });
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: 'numeric', month: 'short', day: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
+  // #1615 — date-only values are calendar days; format in UTC so they never
+  // shift a day for behind-UTC (Americas) viewers. See @shared/format-date.
+  return formatEventDate(iso);
 }
 </script>
 
