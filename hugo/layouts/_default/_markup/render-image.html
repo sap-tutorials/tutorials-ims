@@ -26,21 +26,22 @@
   {{- $finalSrc = printf "/img-cdn/?u=%s&w=1440" $enc -}}
   {{- $srcset = printf "/img-cdn/?u=%s&w=480 480w, /img-cdn/?u=%s&w=960 960w, /img-cdn/?u=%s&w=1440 1440w" $enc $enc $enc -}}
 {{- end -}}
-{{- if $hasCaption -}}<figure class="tutorial-figure">{{- end -}}
-<img
-  src="{{ $finalSrc | safeURL }}"
-  {{/* security-reviewed: the following Hugo comment mentions the attribute helper by name in prose; not a template call */}}
-  {{/* safeHTMLAttr — not safeURL — because srcset is a comma-separated list of
+{{- /* Emit the <img> as a SINGLE contiguous, newline-free tag (issue #1591).
+       When an image sits inside an [OPTION BEGIN] block it becomes part of the
+       PERCENT-delimited option-tabs shortcode's .Inner, which Hugo re-processes
+       as markdown. A multi-line raw-HTML tag is split at its first newline:
+       Goldmark closes the <img> early and re-parses the remaining attribute
+       lines (srcset/alt/width/…) as markdown paragraphs — escaping the quotes
+       and smartypants-ing them into curly quotes, which then render as visible
+       source text after each image. Keeping the whole tag on one line lets
+       Goldmark pass it through verbatim. Same root cause as the option-tabs
+       button fix (PR #1597). */ -}}
+{{- /* security-reviewed: the following Hugo comment mentions the attribute helper by name in prose; not a template call */ -}}
+{{- /* safeHTMLAttr — not safeURL — because srcset is a comma-separated list of
         url+descriptor pairs, not a single URL. safeURL percent-encodes literal
         spaces and commas, breaking srcset syntax so the browser falls back to
-        src and resize hints are lost. */}}
-  {{/* security-reviewed: srcset is built from Hugo-known image URLs (raw.githubusercontent.com via /img-cdn/); markdown source is trusted authored content */}}
-  {{ with $srcset }}{{ printf `srcset=%q sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1440px"` . | safeHTMLAttr }}{{ end }}
-  alt="{{ $alt }}"
-  {{ with $title }}title="{{ . }}"{{ end }}
-  {{ with $width }}width="{{ . }}"{{ end }}
-  {{ with $height }}height="{{ . }}"{{ end }}
-  loading="lazy"
-  decoding="async"
-  data-zoomable="true">
+        src and resize hints are lost. */ -}}
+{{- /* security-reviewed: srcset is built from Hugo-known image URLs (raw.githubusercontent.com via /img-cdn/); markdown source is trusted authored content */ -}}
+{{- if $hasCaption -}}<figure class="tutorial-figure">{{- end -}}
+<img src="{{ $finalSrc | safeURL }}"{{ with $srcset }} {{ printf `srcset=%q sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1440px"` . | safeHTMLAttr }}{{ end }} alt="{{ $alt }}"{{ with $title }} title="{{ . }}"{{ end }}{{ with $width }} width="{{ . }}"{{ end }}{{ with $height }} height="{{ . }}"{{ end }} loading="lazy" decoding="async" data-zoomable="true">
 {{- if $hasCaption -}}<figcaption class="tutorial-figcaption">{{ $captionText }}</figcaption></figure>{{- end -}}
