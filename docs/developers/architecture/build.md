@@ -222,6 +222,16 @@ During `build:all`, the fetch step calls `GET /build/homepage-shelves` from the 
 
 Admin shell (`build:admin`) and QA pipeline (`fetch-tutorials:qa` → `build:qa` → `publish-content:qa`) are not in `build:all` — they're run independently or via `qa:full` for the QA loop. Tutorials must be fetched at least once before `dev` or `build:hugo` (otherwise `hugo/content/tutorials/` is empty).
 
+### Asset-hash retention (#1604 follow-up)
+
+After `build:hugo` (and before `mbt build`), `scripts/retain-asset-bundles.cjs` unions the current build's content-hashed JS and CSS files in `hugo/static/js/` and `hugo/static/css/` with bundles carried forward from the live approuter. The result is written to `hugo/static/_retained-assets.json` — a served manifest of all retained bundles, exposed by the approuter at `/_retained-assets.json` so the next build's retention step can read it. Each entry is `{ file, firstSeenMs }`.
+
+Key properties:
+
+- **48-hour window** — any prior bundle whose `firstSeenMs` is within 48 hours of the current build timestamp is carried forward (downloaded from the live approuter and placed into the appropriate `hugo/static/js/` or `hugo/static/css/` directory). Bundles older than 48 h are pruned from the manifest.
+- **Fail-open** — if the live approuter is unreachable or the prior manifest fetch fails, the step completes using only current files and exits 0; no build is blocked.
+- **Safe to union** — content-hashed filenames are immutable (the hash is derived from file content), so adding prior bundles alongside current ones can never overwrite live files. The union prevents `<script src>` references baked into cached HTML from 404-ing after a new deploy rotates the hashes.
+
 ### Parsers (scripts/parsers/)
 
 The fetch step (`scripts/fetch-tutorials.ts`) hands raw markdown + repo metadata to `composeTutorial()` (`compose.ts`), which orchestrates format detection, content transforms, and Hugo frontmatter emission. The same module set is bundled into `srv-qa/lib/parsers.bundle.mjs` (via `prebuild:parsers-bundle`) and re-used at runtime by the QA srv to render author-pushed drafts without re-running Hugo.
