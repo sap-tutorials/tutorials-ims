@@ -6756,6 +6756,32 @@ html.dark .tutorial-main img:hover {
   background: transparent;
   border: none;
 }
+/* CDS code blocks — Shiki dual-theme color mapping (#1657).
+   scripts/highlight-cds.ts emits Shiki output with defaultColor:false, so each
+   token span carries only --shiki-light / --shiki-dark CSS variables and no
+   `color`. These rules paint those variables and pick light/dark from the same
+   html.dark / [data-theme="dark"] flags the theme toggle sets in lockstep
+   (head.html). Without them, CDS blocks render as uncoloured text even though
+   the markup is correct. This block was dropped in a9d94110 (static
+   sap-fundamental.css cleanup); restored here in the SOURCE so build:css bakes
+   it into the served, fingerprinted stylesheet. */
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg);
+}
+html.dark .shiki,
+html.dark .shiki span,
+[data-theme="dark"] .shiki,
+[data-theme="dark"] .shiki span {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg);
+}
+.code-block-body .shiki {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+}
 html.dark .code-block {
   border-color: var(--sapField_BorderColor, #4a4d52);
 }
