@@ -33,9 +33,71 @@ describe('khoros-fetcher.parseKhoros', () => {
 
   it('formats start/end as YYYY-MM-DD', () => {
     const rows = parseKhoros(fixtureText, 'codejam', 'local', { now: new Date('2026-12-01T00:00:00Z') });
-    // 2027-01-15T09:30 +05:30 = 2027-01-15T04:00Z. Format uses local date component of the parsed timestamp.
-    expect(rows[0].date).toMatch(/^2027-01-1[45]$/);
-    expect(rows[0].end_date).toMatch(/^2027-01-1[45]$/);
+    // 2027-01-15T09:30 +05:30 = 2027-01-15 as authored locally.
+    expect(rows[0].date).toBe('2027-01-15');
+    expect(rows[0].end_date).toBe('2027-01-15');
+  });
+
+  // #1615 — an APJ-morning event (e.g. Sydney 09:00 +10:00) has a UTC instant on
+  // the PREVIOUS calendar day (23:00Z). The date shown must be the LOCAL authored
+  // day, not the UTC day. Regression guard for the Sydney/Brisbane report.
+  it('#1615: keeps the local authored day for a positive-offset morning event', () => {
+    const fixture = JSON.stringify({
+      status: 'success',
+      data: { items: [
+        {
+          id: 'syd',
+          subject: '🇦🇺 Build AI services using SAP CAP (Sydney, Australia)',
+          view_href: 'https://community.sap.com/t5/sap-codejam/sydney/ev-p/14446555',
+          occasion_data: {
+            start_time: '2026-09-04T09:00:00.000+10:00',   // UTC instant = 2026-09-03T23:00Z
+            end_time:   '2026-09-04T17:00:00.000+10:00',
+            timezone:   'Australia/Sydney',
+            location:   'The Mint, Macquarie Street, Sydney NSW, Australia',
+          },
+        },
+        {
+          id: 'bne',
+          subject: '🇦🇺 Build Code-based AI Agents (Brisbane, Australia)',
+          view_href: 'https://community.sap.com/t5/sap-codejam/brisbane/ev-p/14455650',
+          occasion_data: {
+            start_time: '2026-09-01T09:00:00.000+10:00',
+            end_time:   '2026-09-01T17:00:00.000+10:00',
+            timezone:   'Australia/Brisbane',
+            location:   'SAP Australia Brisbane, Creek Street, Brisbane City QLD, Australia',
+          },
+        },
+      ] },
+    });
+    const rows = parseKhoros(fixture, 'codejam', 'local', { now: new Date('2026-08-01T00:00:00Z') });
+    const syd = rows.find(r => r.id === 'codejam/syd');
+    const bne = rows.find(r => r.id === 'codejam/bne');
+    expect(syd.date).toBe('2026-09-04');
+    expect(syd.end_date).toBe('2026-09-04');
+    expect(bne.date).toBe('2026-09-01');
+    expect(bne.end_date).toBe('2026-09-01');
+  });
+
+  it('#1615: still formats a Z (UTC) timestamp on its own day', () => {
+    const fixture = JSON.stringify({
+      status: 'success',
+      data: { items: [
+        {
+          id: 'utc',
+          subject: 'UTC event',
+          view_href: 'https://community.sap.com/t5/sap-codejam/utc/ev-p/1',
+          occasion_data: {
+            start_time: '2027-03-10T09:00:00.000Z',
+            end_time:   '2027-03-10T17:00:00.000Z',
+            timezone:   'UTC',
+            location:   'Berlin, Germany',
+          },
+        },
+      ] },
+    });
+    const rows = parseKhoros(fixture, 'codejam', 'local', { now: new Date('2026-08-01T00:00:00Z') });
+    expect(rows[0].date).toBe('2027-03-10');
+    expect(rows[0].end_date).toBe('2027-03-10');
   });
 
   it('filters items whose view_href contains /ec-p/ (Go rss.go:87 rule)', () => {
