@@ -28,6 +28,7 @@ import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
+import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
@@ -1102,6 +1103,15 @@ cds.on('served', async () => {
         }
       } catch (err) {
         console.error('[render-cache] cache invalidation failed', err);
+      }
+      // #1592: the two invalidations above only clear THIS instance. Bump the
+      // shared generation token so peer srv instances drop their local catalog
+      // caches on their next serve (bounded by CATALOG_CACHE_CHECK_TTL_MS).
+      // Fail-open — a caching outage just means peers self-heal on next write.
+      try {
+        await bumpCacheGeneration();
+      } catch (err) {
+        console.error('[catalog-cache] generation bump failed', err);
       }
 
       // [#174 PR 3, #429, #541] Schedule a rebuild. classifyRebuildMode routes the
