@@ -542,6 +542,23 @@ jobs:
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
+      # [#1657] Restore CDS syntax highlighting to the runtime-push path. Hugo's
+      # render-codeblock.html maps ```cds → the Chroma SQL lexer as a PLACEHOLDER
+      # (Chroma has no CDS lexer) and tags the wrapper `data-lang=cds`; the SQL
+      # lexer flags CDS braces as illegal, emitting red `<span class=err>{`.
+      # scripts/highlight-cds.ts (Shiki + the community cds.tmLanguage.json
+      # grammar) then REPLACES those blocks with correct CDS highlighting. This
+      # workflow invokes /tmp/hugo directly (NOT `npm run build:all`, which chains
+      # build:highlight), so — like the island-manifest/vendor/explore/joule
+      # retrofits above — nothing else runs it. Without this step every rebuild
+      # publishes the Chroma-SQL fallback (red braces) straight to HANA, which is
+      # exactly the regression #1657 reports. Dropped from this path pre-#591 (see
+      # content-drift-check.yml). Runs in ALL modes so slug-targeted single-slug
+      # publishes are corrected too; the script no-ops on pages without CDS blocks
+      # and fails the run if the marker is present but no block matched.
+      - name: Highlight CDS code blocks (Shiki)
+        run: npm run build:highlight
+
       # [#1604/#1628] Belt-and-suspenders island-fingerprint guard for the
       # runtime-push path. #1628 added "Build island manifest" above so
       # island-src.html emits hashed /js/<name>-<hash>.js. This fails the run if
