@@ -542,6 +542,22 @@ jobs:
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
+      # [#1604/#1628] Belt-and-suspenders island-fingerprint guard for the
+      # runtime-push path. #1628 added "Build island manifest" above so
+      # island-src.html emits hashed /js/<name>-<hash>.js. This fails the run if
+      # the rendered homepage STILL carries only bare island paths (e.g. a future
+      # reorder/rename silently drops the manifest step again) — BEFORE the
+      # tarball is assembled and pushed to /admin/rebuild, where it would
+      # atomically clobber the good approuter static with 404-ing bare refs (the
+      # PROD outage of 2026-08-10/11). Mirrors deploy-mta.cjs Step 2.5, which
+      # guards the DEPLOY path only. Deterministic (checks hugo/public, not the
+      # multi-instance live approuter). Skipped in slug-targeted (no tarball push;
+      # CSS handled by the #1622 guard below). Gates on the Vite manifest, so it
+      # never false-fails when island bundles were not built.
+      - name: Guard - homepage islands fingerprinted
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        run: node scripts/check-hugo-island-fingerprint.cjs --hugo-dir hugo/public
+
       # #1622 — slug-targeted guard. A slug-targeted rebuild publishes tutorial
       # HTML to HANA but by design SKIPS the approuter static push ("Push content
       # to AppRouter" is gated to != slug-targeted). Hugo content-hash-
