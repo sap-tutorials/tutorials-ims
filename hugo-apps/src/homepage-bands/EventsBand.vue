@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { formatEventDate } from '@shared/format-date';
 
 interface EventCard {
   title: string;
@@ -16,15 +17,8 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 
 function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
+  // #1615 — format date-only values in UTC to avoid a one-day shift. See @shared/format-date.
+  return formatEventDate(iso);
 }
 
 function formatChipClass(format: string): string {
