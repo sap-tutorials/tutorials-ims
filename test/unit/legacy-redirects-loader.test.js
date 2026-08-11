@@ -8,11 +8,15 @@
 // 404'd in production even though 33 rows were live in HANA. These tests lock in
 // that refresh() accepts BOTH the OData envelope and a bare array.
 //
-// #1409 follow-up: the loader now keeps the bootstrap seed and the live rows in
-// SEPARATE variables (getIndex() prefers live once refresh() succeeds), so the
-// detached module-load bootstrap IIFE can no longer clobber live rows under CI
-// scheduler ordering — the intermittent "expected undefined to be
-// '/topics/abap-platform.html'" failure this file guards against.
+// #1636 follow-up: the intermittent CI failure ("expected undefined to be
+// '/topics/abap-platform.html'") was NOT the bootstrap clobbering the index
+// (the #1409 theory). With separate bootstrap/live indexes it still flaked, so
+// the real cause is deductive: getIndex() only lacks /abap after a refresh if
+// refresh() THREW — and the only throwing statement under the clean fetch mock
+// is `await loadResolver()`, i.e. the loader's dynamic import of the resolver
+// transiently REJECTING under vitest's parallel fork-pool load. Fix: share ONE
+// memoized resolver-import promise and retry a transient reject; the
+// resilience test below locks that in.
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { refresh, getIndex } from '../../approuter/lib/legacy-redirects-loader.js';
@@ -59,6 +63,35 @@ describe('legacy-redirects-loader refresh() body shapes', () => {
     global.fetch = mockFetchReturning({ nope: true });
     await refresh('http://srv.test', { log: () => {}, warn: () => {} });
     const idx = getIndex();
+    expect(resolveRedirect(idx, '/abap')?.toPath).toBe('/topics/abap-platform.html');
+  });
+});
+
+describe('legacy-redirects-loader resolver-import resilience (#1636 follow-up)', () => {
+  const realFetch = global.fetch;
+  afterEach(() => { global.fetch = realFetch; vi.restoreAllMocks(); vi.doUnmock('../../approuter/lib/legacy-redirects-resolver.js'); vi.resetModules(); });
+
+  it('recovers when the resolver dynamic import transiently rejects (retry)', async () => {
+    // ROOT CAUSE this locks: the module-load bootstrap and refresh() share ONE
+    // memoized resolver-import promise; if that import transiently rejects
+    // (observed as an intermittent vitest module-runner reject under CI
+    // fork-pool load), refresh() would otherwise bail to its catch and strand
+    // the index on the 3-row BOOTSTRAP_MAP → getIndex() returns an index
+    // without /abap. The bounded retry re-imports and recovers. Remove the
+    // retry and the single shared rejection fails refresh — this test goes red.
+    vi.resetModules();
+    let importAttempts = 0;
+    vi.doMock('../../approuter/lib/legacy-redirects-resolver.js', async () => {
+      importAttempts += 1;
+      if (importAttempts === 1) throw new Error('transient module-runner reject');
+      return await vi.importActual('../../approuter/lib/legacy-redirects-resolver.js');
+    });
+    global.fetch = mockFetchReturning({ value: ROWS });
+    const { refresh: refreshFresh, getIndex: getIndexFresh } =
+      await import('../../approuter/lib/legacy-redirects-loader.js');
+    await refreshFresh('http://srv.test', { log: () => {}, warn: () => {} });
+    const idx = getIndexFresh();
+    expect(importAttempts).toBeGreaterThan(1); // a retry actually happened
     expect(resolveRedirect(idx, '/abap')?.toPath).toBe('/topics/abap-platform.html');
   });
 });
