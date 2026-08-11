@@ -60,7 +60,7 @@ CAP backend (http://localhost:4004 or CAP_BASE_URL)
   → GET /build/catalog → missions/paths → hugo/content/missions/*.md and groups/*.md
 ```
 
-Tutorial HTML is **not** served from static files. `publish-content.ts` uploads gzip BLOBs to HANA via `POST /content/publish`; AppRouter routes `/tutorials/*` to CAP `/content/tutorials/:slug`.
+Tutorial HTML is **not** served from static files. `publish-content.ts` uploads gzip BLOBs to HANA via `POST /content/publish`; AppRouter routes `/tutorials/*` to CAP `/content/tutorials/:slug`. **Content pages** (`/`, `/browse/`, `/topics/`, etc.) use the same HANA BLOB pattern under the `page-<name>` key namespace — **dark-launched** on `GET /content/pages/*` (no AppRouter route yet; Phase 2 flips per-route rewrites). See [docs/developers/architecture/build.md](docs/developers/architecture/build.md) §"Content Pages from HANA".
 
 Deep dives (do not duplicate here — read the doc when relevant):
 

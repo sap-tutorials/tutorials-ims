@@ -1081,6 +1081,62 @@ Result: 200 OK — user sees tutorial content as normal
 
 If the AppRouter is deployed before any content has been published to HANA, `/tutorials/*` returns 404. This is the expected "empty state." Run `npm run publish-content` against the deployed CAP srv to populate content.
 
+## Content Pages from HANA (Phase 1, issue #1659)
+
+Selected Hugo-generated pages are stored in and served from the same `ContentFiles`/`ContentManifest` tables as tutorials, eliminating the approuter static-filesystem dependency for high-traffic landing pages. The approuter routes are not yet wired (see dark-launch note below) — Phase 2 will flip them one by one, homepage last.
+
+### Key namespace
+
+Pages use a `page-<name>` key (e.g. `page-index`, `page-browse`, `page-sitemap.xml`) in `ContentFiles`. This prefix coexists safely with tutorial bare slugs and `concept-<slug>` keys. The fixed allow-list in `srv/lib/page-key-map.js` is the single source of truth — it defines the bijection between incoming route paths and storage keys. The allow-list IS the validator: an incoming path that does not match a table entry is rejected without a DB lookup.
+
+| Route | Key | MIME |
+| --- | --- | --- |
+| `/` | `page-index` | `text/html` |
+| `/browse/` | `page-browse` | `text/html` |
+| `/topics/` | `page-topics` | `text/html` |
+| `/tutorial-navigator/` | `page-tutorial-navigator` | `text/html` |
+| `/developer-advocates/` | `page-developer-advocates` | `text/html` |
+| `/devtoberfest/` | `page-devtoberfest` | `text/html` |
+| `/sitemap.xml` | `page-sitemap.xml` | `application/xml` |
+| `/index.xml` | `page-index.xml` | `application/xml` |
+| `/llms-full.txt` | `page-llms-full.txt` | `text/plain` |
+
+To add a new in-scope page, add one row to `IN_SCOPE_PAGES` in `srv/lib/page-key-map.js`. The snapshot is picked up on the next `build:all` automatically.
+
+### Serve handler (`GET /content/pages/*`)
+
+`pageServeHandler` (exported from `srv/lib/content-store.js`) is registered:
+- **`srv/server.js`** — public, no auth required (mirrors `serveHandler` for tutorials).
+- **`srv-qa/server.js`** — requires the `Tutorial.Author` XSUAA scope (mirrors the QA tutorial handler).
+
+**Dark-launched.** No AppRouter route currently points to `/content/pages/*`. Phase 2 will add per-route rewrites (e.g. `/browse/` → `/content/pages/browse/`), with the homepage (`/`) flipped last.
+
+### Fail-open ladder
+
+For in-scope keys, the handler tries three layers before giving up:
+
+1. **LRU cache hit** — the shared 50 MB in-memory cache (same as tutorials). Serves immediately with ETag support.
+2. **HANA `ContentFiles` lookup** — active-version BLOB, decompressed and sent. Cache-populated on the way out.
+3. **Baked deploy snapshot** — `srv/page-fallback/<key>.<ext>`, written at build time by `scripts/build-page-fallback.cjs` (an explicit `build:all` step, after `build:hugo`). Served with `X-Content-Source: fallback` and a short 60-second cache TTL.
+4. **503** — if no layer has a response. A naked 500 is never returned for in-scope pages.
+
+Out-of-scope paths get a short-TTL 404 immediately (never touch the DB or fallback).
+
+### Publish pipeline
+
+Pages ride the same delta publish pipeline as tutorials. `discoverPageFiles(hugoDir)` in `srv/lib/page-key-map.js` maps each in-scope file found under `hugo/public/` to its page key. In `scripts/publish-content.ts`, the returned map is merged into the tutorial map before hashing, so the whole begin/append/commit and carry-forward path handles pages transparently. Pages are skipped on single-slug hotfixes (`--slug`), matching the behaviour of concept pages.
+
+### Edge-Cache-Tag scheme
+
+Every served page response carries three tags: `content` (full-corpus purge), `page` (all-pages purge), and `page-<name>` (single-page purge). This mirrors the `group`/`mission`/`concept` per-kind tags used for tutorial catalog and concept pages.
+
+### Phase 2 / 3 forward pointers
+
+- **Phase 2** — per-route AppRouter rewrites. Each page route is flipped individually; the homepage (`/`) is last because it currently carries the most static-asset coupling.
+- **Phase 3** — retire `/admin/rebuild` + `deploy-self-heal` + the `rebuild-content.yml` tarball/asset-build removal steps; purge-by-tag on publish (gates on Akamai credentials). See `docs/superpowers/specs/2026-08-11-workstream-b-pages-from-hana-design.md`.
+
+---
+
 ## Branching paths (issue #172)
 
 Mission curators can declare **alt-groups** on `CompletionPathItems` / `GroupPathItems`. At build time, `scripts/parsers/cap.ts` and `srv/lib/build-catalog.js` emit an optional `altGroups` array on mission frontmatter alongside `groups`. At runtime, the auth-aware endpoint `GET /build/mission/:slug`:
