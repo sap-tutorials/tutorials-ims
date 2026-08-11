@@ -1100,7 +1100,7 @@ Pages use a `page-<name>` key (e.g. `page-index`, `page-browse`, `page-sitemap.x
 
 | Route | Key | MIME | Phase |
 | --- | --- | --- | --- |
-| `/` | `page-index` | `text/html` | Phase 3 (follow-up) |
+| `/` | `page-index` | `text/html` | Phase 2 (follow-up) |
 | `/browse/` | `page-browse` | `text/html` | Phase 2 |
 | `/topics/` | `page-topics` | `text/html` | Phase 2 |
 | `/tutorial-navigator/` | `page-tutorial-navigator` | `text/html` | Phase 2 |
