@@ -54,6 +54,11 @@ entity HomepageShelves : cuid, managed {
   requiresLogin : Boolean          default false;
   lastChecked : Timestamp;
   linkStatus  : HomepageLinkStatus default 'UNKNOWN' @assert.range;
+  // Admin override for the automated link-health check. When set, the job
+  // applies this value to linkStatus without fetching the URL, silencing
+  // false-BROKEN alerts on auth-gated, geo-restricted, or bot-detecting URLs.
+  // Clear (set to null) to re-enable automatic detection on the next run.
+  linkStatusOverride : HomepageLinkStatus @assert.range;
   // (#759) Explainer content — see spec §2.4. tagline + whyItMatters
   // fill the popover; description stays as a third paragraph for
   // graceful fallback during phased rollout.
@@ -109,6 +114,13 @@ entity HomepageConfig : cuid, managed {
   // #1034 SAP News developer-relevance filter rollout flag. Two-layer with
   // env HOMEPAGE_NEWS_RELEVANCE_ENABLED: either falsy → legacy pass-through.
   newsRelevanceEnabled    : Boolean default false;
+  // Public site base URL used by the homepage link-health job to resolve
+  // root-relative shelf / For-You links (e.g. /missions/) into absolute URLs
+  // before the reachability probe. Node's fetch() rejects relative URLs, so
+  // without a base every internal link was falsely reported BROKEN. Blank →
+  // the job falls back to https://developers.sap.com. Set per-space (e.g. the
+  // DEV approuter URL) via /admin-ui/#homepage.
+  publicBaseUrl           : String(500);
 }
 
 // (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
@@ -164,6 +176,10 @@ entity HomepageForYouCandidates : cuid, managed {
   active        : Boolean       default true;
   linkStatus    : HomepageLinkStatus default 'UNKNOWN' @assert.range;
   lastChecked   : Timestamp;
+  // Admin override — same semantics as HomepageShelves.linkStatusOverride.
+  // Set to silence false-BROKEN on auth-gated / geo-restricted slugs;
+  // clear to re-enable automatic detection.
+  linkStatusOverride : HomepageLinkStatus @assert.range;
 }
 /**
  * (#1031) Materialised rotation slot set for the homepage video band.

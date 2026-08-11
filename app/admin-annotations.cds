@@ -3140,7 +3140,8 @@ annotate AdminService.HomepageShelves with @(
     { Value : badge },
     { Value : isExternal },
     { Value : requiresLogin },
-    { Value : isActive }
+    { Value : isActive },
+    { Value : linkStatusOverride, Label : 'Link health override (blank = auto-detect)' }
   ]},
   UI.FieldGroup #Explainer : { Data : [
     { Value : tagline,         Label : 'Tagline' },
@@ -3180,7 +3181,8 @@ annotate AdminService.HomepageShelves {
                     ]
                   };
   badge           @Common.ValueListWithFixedValues @Common.Label: 'Badge';
-  linkStatus      @Common.ValueListWithFixedValues @Common.Label: 'Link health';
+  linkStatus             @Common.ValueListWithFixedValues @Common.Label: 'Link health';
+  linkStatusOverride     @Common.ValueListWithFixedValues @Common.Label: 'Link health override';
   authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
   // (#1552) Labels for the remaining OP form fields. The OP FieldGroup #Main
   // record entries carry no inline `Label:`, so without a @Common.Label these
@@ -3287,7 +3289,11 @@ annotate AdminService.HomepageConfig with @(
     // (#1031) Video band expand + rotation tuning knobs.
     { Value : videoBandAnchorCount,        Label : 'Video band anchor slots' },
     { Value : videoBandRotationCount,      Label : 'Video band rotation slots' },
-    { Value : videoBandRotationWindowDays, Label : 'Rotation window (days)' }
+    { Value : videoBandRotationWindowDays, Label : 'Rotation window (days)' },
+    // Base URL the link-health job resolves root-relative shelf / For-You
+    // links against (blank → https://developers.sap.com). Set the DEV
+    // approuter URL here so internal links aren't checked against PROD.
+    { Value : publicBaseUrl,               Label : 'Public site base URL (internal link checks)' }
   ]}
 );
 
@@ -3443,6 +3449,7 @@ annotate AdminService.HomepageForYouCandidatesAdmin with @(
       { Value: imageUrl },
       { Value: sortOrder },
       { Value: active },
+      { Value: linkStatusOverride, Label: 'Link health override (blank = auto-detect)' },
     ]
   },
   UI.FieldGroup #Personalization: {
@@ -3485,6 +3492,7 @@ annotate AdminService.HomepageForYouCandidatesAdmin with {
                   Parameters: [{ $Type: 'Common.ValueListParameterInOut',
                                  LocalDataProperty: personaHidden, ValueListProperty: 'tag' }]
                 };
+  linkStatusOverride @Common.ValueListWithFixedValues @Common.Label: 'Link health override';
 };
 
 // --- KG Communities (#917) ---
