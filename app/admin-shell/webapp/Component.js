@@ -56,9 +56,84 @@ sap.ui.define([
         return false;
       }
 
+      // --- Reload-loop breaker -------------------------------------------------
+      // handleUnauthorized() reloads the page to restart the OAuth flow when a
+      // backend call fails on an expired session. bRedirecting suppresses repeat
+      // reloads within a single page instance, but it RESETS on every reload — so
+      // a backend request that fails on EVERY load (a persistent 401, an
+      // authorization failure, or an edge-cached login page) would reload the page
+      // forever ("the console keeps refreshing all the time"). Cap the number of
+      // automatic reloads within a short window in sessionStorage — which, unlike
+      // bRedirecting, survives reloads — and surface a message instead of
+      // refreshing endlessly.
+      var RELOAD_KEY = "sap-tutorials-admin-auth-reloads";
+      var RELOAD_WINDOW_MS = 30000;
+      var RELOAD_MAX = 2;
+
+      function readReloadRec() {
+        try {
+          var raw = sessionStorage.getItem(RELOAD_KEY);
+          var rec = raw ? JSON.parse(raw) : null;
+          return (rec && typeof rec.count === "number" && typeof rec.first === "number") ? rec : null;
+        } catch (e) { return null; }
+      }
+      function clearReloadRec() {
+        try { sessionStorage.removeItem(RELOAD_KEY); } catch (e) { /* swallow */ }
+      }
+      function recordAutoReload() {
+        try {
+          var now = Date.now();
+          var rec = readReloadRec();
+          if (!rec || (now - rec.first) > RELOAD_WINDOW_MS) rec = { count: 0, first: now };
+          rec.count += 1;
+          sessionStorage.setItem(RELOAD_KEY, JSON.stringify(rec));
+        } catch (e) { /* sessionStorage unavailable — proceed without the guard */ }
+      }
+      function isReloadLoop() {
+        var rec = readReloadRec();
+        if (!rec) return false;
+        if ((Date.now() - rec.first) > RELOAD_WINDOW_MS) return false;
+        return rec.count >= RELOAD_MAX;
+      }
+
+      function notifyAuthLoop() {
+        // Terminal state: we've auto-reloaded RELOAD_MAX times inside the window
+        // without reaching a stable session. Stop reloading and tell the user —
+        // most often this is an Author-only account opening an Admin-only view,
+        // which no amount of re-authentication can fix.
+        sap.ui.require(["sap/m/MessageBox"], function (MessageBox) {
+          MessageBox.error(
+            "The Admin Console couldn't finish loading this view. This usually means your " +
+            "account doesn't have access to it (for example, an Author account opening an " +
+            "Admin-only screen), or your session needs a fresh sign-in.",
+            {
+              title: "Access problem",
+              actions: ["Go to start", "Sign in again", MessageBox.Action.CLOSE],
+              emphasizedAction: "Go to start",
+              onClose: function (sAction) {
+                clearReloadRec();
+                if (sAction === "Sign in again") {
+                  window.location.href = "/logout";
+                } else if (sAction === "Go to start") {
+                  // Drop the hash so we land on the (Author-safe) Dashboard
+                  // rather than the view that can't load.
+                  window.location.href = window.location.pathname;
+                }
+              }
+            }
+          );
+        }, function () {
+          // MessageBox failed to load — fall back to the Author-safe start page.
+          clearReloadRec();
+          window.location.href = window.location.pathname;
+        });
+      }
+
       function handleUnauthorized() {
         if (bRedirecting) return;
         bRedirecting = true;
+        if (isReloadLoop()) { notifyAuthLoop(); return; }
+        recordAutoReload();
         // Reloading the current URL (incl. hash) makes the approuter restart the OAuth flow
         // and return the user to the same admin-shell route after re-authentication.
         try { window.location.reload(); } catch (e) { window.location.href = window.location.href; }
@@ -92,13 +167,22 @@ sap.ui.define([
         return fnOriginalFetch.apply(this, arguments).then(function (response) {
           if (!isBackendUrl(sUrl)) return response;
           var bMutating = sMethod !== "GET" && sMethod !== "HEAD" && sMethod !== "OPTIONS";
-          if (response.status === 401 || (response.status === 403 && !(bMutating && isCsrfRejection(response.headers, sUrl)))) {
+          var sCt = (response.headers && response.headers.get && response.headers.get("content-type")) || "";
+          if (response.status === 401) {
             handleUnauthorized();
-          } else if (response.status === 200 && looksLikeLoginHtml(
-            response.headers && response.headers.get && response.headers.get("content-type"),
-            response.url,
-            response.redirected
-          )) {
+          } else if (response.status === 403) {
+            if (bMutating && isCsrfRejection(response.headers, sUrl)) {
+              // CSRF 403 — the OData v4 client re-fetches the token on its own;
+              // reloading would strip the fresh token and reproduce it (#895).
+            } else if (looksLikeLoginHtml(sCt, response.url, response.redirected)) {
+              // Session expiry surfaced as a 403 carrying a login page / redirect.
+              handleUnauthorized();
+            }
+            // else: AUTHORIZATION denial (a JSON 403 — e.g. an Author account
+            // hitting an @requires:'Admin' /admin/ service). Do NOT reload: it
+            // cannot grant the missing scope and would loop forever. Let the view
+            // surface its own load error instead.
+          } else if (response.status === 200 && looksLikeLoginHtml(sCt, response.url, response.redirected)) {
             handleUnauthorized();
           }
           return response;
@@ -116,25 +200,25 @@ sap.ui.define([
         var that = this;
         this.addEventListener("load", function () {
           if (!isBackendUrl(that.__authUrl)) return;
-          if (that.status === 401 || that.status === 403) {
-            // XHR: emulate the fetch-side headers.get() so isCsrfRejection() works.
-            var oHdrs = { get: function (n) {
-              try { return that.getResponseHeader(n); } catch (e) { return null; }
-            }};
-            var bMutating = that.__authMethod !== "GET" && that.__authMethod !== "HEAD" && that.__authMethod !== "OPTIONS";
-            if (that.status === 403 && bMutating && isCsrfRejection(oHdrs, that.__authUrl)) return;
+          // XHR: emulate the fetch-side headers.get() so isCsrfRejection() works.
+          var oHdrs = { get: function (n) {
+            try { return that.getResponseHeader(n); } catch (e) { return null; }
+          }};
+          var sContentType = "";
+          try { sContentType = that.getResponseHeader("content-type") || ""; } catch (e) { /* swallow */ }
+          // responseURL reflects the final URL after any redirects the browser followed.
+          var sFinalUrl = that.responseURL || "";
+          var bRedirected = !!sFinalUrl && sFinalUrl !== new URL(that.__authUrl, window.location.origin).href;
+          var bMutating = that.__authMethod !== "GET" && that.__authMethod !== "HEAD" && that.__authMethod !== "OPTIONS";
+          if (that.status === 401) {
             handleUnauthorized();
-            return;
-          }
-          if (that.status === 200) {
-            var sContentType = "";
-            try { sContentType = that.getResponseHeader("content-type") || ""; } catch (e) { /* swallow */ }
-            // responseURL reflects the final URL after any redirects the browser followed.
-            var sFinalUrl = that.responseURL || "";
-            var bRedirected = !!sFinalUrl && sFinalUrl !== new URL(that.__authUrl, window.location.origin).href;
-            if (looksLikeLoginHtml(sContentType, sFinalUrl, bRedirected)) {
-              handleUnauthorized();
-            }
+          } else if (that.status === 403) {
+            if (bMutating && isCsrfRejection(oHdrs, that.__authUrl)) return;
+            // Only a session-artifact 403 (login page / redirect) is recoverable by
+            // reloading; a JSON authorization denial is not — see the fetch path.
+            if (looksLikeLoginHtml(sContentType, sFinalUrl, bRedirected)) handleUnauthorized();
+          } else if (that.status === 200 && looksLikeLoginHtml(sContentType, sFinalUrl, bRedirected)) {
+            handleUnauthorized();
           }
         });
         return fnOriginalSend.apply(this, arguments);
