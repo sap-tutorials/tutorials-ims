@@ -300,6 +300,6 @@ The full documentation set lives in [docs/](docs/) and is organized by persona:
 
 Start at [docs/README.md](docs/README.md) for the full index.
 
-## License
+## Licensing
 
-SAP Internal — Not for redistribution.
+Copyright 2026 SAP SE or an SAP affiliate company and tutorials-ims contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/sap-tutorials/tutorials-ims).
