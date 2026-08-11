@@ -17,10 +17,12 @@ const props = defineProps<{
   href: string;
   badge?: string;
   isExternal?: string;  // 'true' / 'false' / undefined — Hugo writes it as a string in data-*
+  requiresLogin?: string;  // (#1651) 'true' / 'false' — sign-in-required padlock
 }>();
 
 const hasContent = computed(() => !!(props.tagline || props.whyItMatters || props.description));
 const isExternalLink = computed(() => props.isExternal === 'true' || props.isExternal === '1');
+const needsLogin = computed(() => props.requiresLogin === 'true' || props.requiresLogin === '1');
 
 const open = ref(false);
 const openedViaClick = ref(false);  // role=dialog if clicked, role=tooltip if hovered
@@ -116,6 +118,21 @@ onBeforeUnmount(() => {
     >
       <strong>{{ title }}</strong>
       <span v-if="badge" :class="['badge', 'badge--' + badge.toLowerCase()]">{{ badge }}</span>
+      <!-- (#1651) Sign-in-required padlock — mirrors the Hugo first-paint
+           partial (hugo/layouts/partials/homepage/login-lock.html) so the
+           affordance survives hydration, which replaces this anchor's DOM. -->
+      <span
+        v-if="needsLogin"
+        class="hp-login-lock"
+        role="img"
+        aria-label="Sign-in required"
+        title="Sign-in required"
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+          <rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" />
+          <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="2" fill="none" />
+        </svg>
+      </span>
     </a>
     <!--
       Hover handler is on the ⓘ button (not the anchor div) so hovering

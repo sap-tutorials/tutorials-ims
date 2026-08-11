@@ -61,7 +61,11 @@
   {{- end -}}
 
   {{ range $shelfKey := slice "START_HERE" "REFERENCE" "TOOLS" "KEEP_CURRENT" }}
-    {{- $items := where $verbShelves "shelf" $shelfKey -}}
+    {{- /* (#1651) Drop links flagged BROKEN by the nightly link-health job so
+           the section count + rendered list both exclude known-dead
+           destinations. linkStatus is baked for every row (build feed SELECTs
+           the whole entity, default 'UNKNOWN'), so "!=" is reliable here. */ -}}
+    {{- $items := where (where $verbShelves "shelf" $shelfKey) "linkStatus" "!=" "BROKEN" -}}
     {{- if gt (len $items) 0 -}}
       {{- /* Look up shelf-level tagline + whyItMatters + label + icon from
              baked data, with fallback to the hard-coded label dict. */ -}}
@@ -104,11 +108,13 @@
             data-description="{{ .description | default "" }}"
             data-href="{{ .url }}"
             data-is-external="{{ if .isExternal }}true{{ else }}false{{ end }}"
+            data-requires-login="{{ if .requiresLogin }}true{{ else }}false{{ end }}"
             {{- with .badge }} data-badge="{{ . }}"{{ end }}
             class="verb-shelf__item">
           <a href="{{ .url }}" {{ if .isExternal }}target="_blank" rel="noopener"{{ end }}>
             <strong>{{ .title }}</strong>
             {{- if .badge }} <span class="badge badge--{{ .badge | lower }}">{{ .badge }}</span>{{ end -}}
+            {{- if .requiresLogin }} {{ partial "homepage/login-lock.html" . }}{{ end -}}
             {{- if .description }}<p>{{ .description }}</p>{{ end -}}
           </a>
         </li>

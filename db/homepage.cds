@@ -46,6 +46,12 @@ entity HomepageShelves : cuid, managed {
   badge       : HomepageBadge      @assert.range;
   isExternal  : Boolean            default true;
   isActive    : Boolean            default true;
+  // (#1651) When true the destination requires a sign-in before it is
+  // usable — the directory footer + verb sub-pages render a padlock
+  // affordance so visitors know a logon is expected. Admin-editable;
+  // deliberately absent from the seed CSV (like linkStatus/lastChecked)
+  // so an HDI redeploy never wipes admin-curated values.
+  requiresLogin : Boolean          default false;
   lastChecked : Timestamp;
   linkStatus  : HomepageLinkStatus default 'UNKNOWN' @assert.range;
   // (#759) Explainer content — see spec §2.4. tagline + whyItMatters
