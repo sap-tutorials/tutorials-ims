@@ -42,6 +42,11 @@ For one or a few tutorial fixes (parser fix, content typo, single-author edit). 
 
 **Auto-classified by admin writes for:** `Tutorials` and `Steps` CRUD (single slug), `Tags` CRUD (reverse-lookup of all tutorials carrying the tag, capped at 50 — beyond that, falls back to `full` + `force-cap-refetch=true`).
 
+> ⚠️ **Trap: unshipped CSS-fingerprint template changes (#1622).** Because `slug-targeted` skips the AppRouter push, it re-renders + publishes tutorial HTML but does **not** refresh the approuter static. Hugo content-hash-fingerprints its CSS (`head.html` / `baseof.html`: `sap-fundamental.<hash>.css`, `joule.<hash>.css`, …). If any CSS-fingerprinting template change (e.g. #1605) has landed since the last **full** deploy to the target env, the freshly-published HTML references a hash the deployed approuter lacks → the stylesheet **404s** → pages render **unstyled** (silent: publish + verify-rows still go green; the 404 is only visible in a browser). A `slug-targeted` rebuild is therefore **unsafe when a CSS-fingerprint template change is unshipped to the approuter** — do a **full build + deploy first**, then run the slug rebuild.
+>
+> The workflow now guards this automatically: the **"Guard - approuter serves referenced CSS (slug-targeted)"** step (`scripts/check-approuter-assets.cjs`) probes the target approuter for every `/css` asset the rendered HTML references and **fails the run before publishing to HANA** if any is missing — so the DB is never poisoned with HTML the approuter can't dress. (CSS-only; JS island bundles are guarded on the deploy path via `deploy-mta.cjs` Step 2.5 / #1604.) If it trips, run a full deploy to that env and re-run.
+
+
 **Manual dispatch:**
 
 ```bash
@@ -176,6 +181,12 @@ Flip to `false` only to bypass during incident triage. The `mode=catalog-only` p
 Lower if srv hits `HeadersTimeoutError`. Both defaults raised from `4`/`25` to `6`/`50` in #434 PR 2 after 9 stable runs at the prior levels. See #420 for the planned worker_threads change that would unlock higher concurrency.
 
 ## Troubleshooting
+
+### Guard failed: "the target approuter does NOT serve CSS the rendered HTML references" (#1622)
+
+The `slug-targeted` CSS guard (`scripts/check-approuter-assets.cjs`) found `/css/<name>.<hash>.css` in the freshly-rendered HTML that 404s on the target approuter. This means a CSS-fingerprinting template change has landed since the last **full** deploy to that env, and the slug rebuild — which never pushes approuter static — would have shipped HTML pointing at stylesheets the approuter lacks (see the trap note under [`slug-targeted`](#slug-targeted)).
+
+Fix: run a **full build + deploy** to that env (`npm run deploy -- --env <env>`, no `--skip-build`), which copies `hugo/public/css/*` into the approuter static. Then re-run the slug rebuild. The guard runs before the HANA publish, so a failed run leaves the DB untouched. (If the guard instead logs `INCONCLUSIVE` and passes, it means the approuter returned no 200 for any `/css` probe — a gated preview channel, wrong URL, or the approuter is down — which is not the fingerprint-drift signature and is not the slug rebuild's fault.)
 
 ### "HTTP 409: Another publish in progress"
 

@@ -523,6 +523,42 @@ jobs:
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
+      # #1622 — slug-targeted guard. A slug-targeted rebuild publishes tutorial
+      # HTML to HANA but by design SKIPS the approuter static push ("Push content
+      # to AppRouter" is gated to != slug-targeted). Hugo content-hash-
+      # fingerprints its CSS (head.html / baseof.html: `| fingerprint` →
+      # sap-fundamental.<hash>.css, joule.<hash>.css, …). If any CSS-fingerprinting
+      # template change (#1605) landed since the last FULL deploy to this env, the
+      # freshly-rendered HTML references a hash the deployed approuter static
+      # lacks → the stylesheet 404s → pages render unstyled. The failure is silent
+      # (publish + verify-rows still pass; only visible in a browser).
+      #
+      # This guard probes the target approuter for every /css asset the rendered
+      # HTML references and FAILS BEFORE the HANA publish, so the DB is never
+      # poisoned with HTML the approuter can't dress. Only meaningful in
+      # slug-targeted mode — full / catalog-only push the new static in the same
+      # run. The referenced /css hrefs are identical across all tutorial pages
+      # (shared head/baseof partials), so one representative page fully covers the
+      # failure class; PUBLISH_SLUG scopes it to the changed tutorial (empty →
+      # scans all rendered pages). CSS-only on purpose: JS island bundles use the
+      # Vite + island_manifest mechanism (not rebuilt in slug mode) and are
+      # guarded on the deploy path (deploy-mta.cjs Step 2.5 / #1604). Mirrors that
+      # Step 2.5 belt-and-suspenders. Static /css is public on the approuter, so
+      # no REBUILD_API_KEY is needed; a fully-gated/unreachable channel (no 200s
+      # at all) is treated as inconclusive and does not block.
+      - name: Guard - approuter serves referenced CSS (slug-targeted)
+        if: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' }}
+        env:
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
+          # Pass the (possibly dispatch-influenced) slug via env, NOT the command
+          # line — mirrors the publish step, so the value is never re-parsed by
+          # the shell. The guard reads PUBLISH_SLUG as its slug fallback.
+          PUBLISH_SLUG: ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
+        run: |
+          node scripts/check-approuter-assets.cjs \
+            --approuter-url "$APPROUTER_URL" \
+            --hugo-dir hugo/public
+
       - name: Publish tutorial content to HANA
         id: publish
         # Concurrency / batch-size are tunable via workflow_dispatch inputs
