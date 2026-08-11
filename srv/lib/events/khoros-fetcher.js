@@ -80,14 +80,14 @@ export function parseKhoros(rawJson, typeId, defaultScope, opts = {}) {
     if (item.occasion_data.end_time) {
       const endTs = normalizeTimestamp(item.occasion_data.end_time);
       const end = new Date(endTs);
-      if (!isNaN(end.getTime())) endDate = formatYMD(end);
+      if (!isNaN(end.getTime())) endDate = localYMD(endTs);
     }
 
     out.push({
       id: `${typeId}/${item.id}`,
       type: typeId,
       title: item.subject ?? '',
-      date: formatYMD(start),
+      date: localYMD(startTs),
       end_date: endDate,
       location: item.occasion_data.location ?? '',
       scope: defaultScope,
@@ -110,7 +110,19 @@ function normalizeTimestamp(ts) {
   return ts.slice(0, dot) + rest.slice(tzIdx);
 }
 
-function formatYMD(d) {
+// #1615 — The event's calendar day is the one AUTHORED in the source timezone,
+// not the UTC instant. A Sydney 09:00 +10:00 start is 23:00Z the day BEFORE, so
+// reading UTC calendar components (getUTCDate) rolled every APJ/Europe morning
+// event back one day. The normalized timestamp already carries the local offset
+// (e.g. "2026-09-04T09:00:00+10:00"), so its leading "YYYY-MM-DD" IS the local
+// day — slice it directly and never round-trip through Date's UTC coercion.
+// Falls back to UTC components only if the string lacks a parseable date prefix.
+function localYMD(normalizedTs) {
+  if (typeof normalizedTs === 'string' && /^\d{4}-\d{2}-\d{2}/.test(normalizedTs)) {
+    return normalizedTs.slice(0, 10);
+  }
+  const d = new Date(normalizedTs);
+  if (isNaN(d.getTime())) return '';
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, '0');
   const day = String(d.getUTCDate()).padStart(2, '0');
