@@ -71,6 +71,8 @@ export interface CheckResult {
 export interface ProgressResult {
   filledGrid: string | null;
   attemptNumber: number;
+  /** True when the caller has already solved this puzzle (issue #1650 bug 2). */
+  completed?: boolean;
 }
 
 export interface CompleteResult {
