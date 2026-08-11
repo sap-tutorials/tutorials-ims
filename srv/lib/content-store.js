@@ -892,8 +892,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     if (activeVersion === null) return 'no-version';
 
     // Serve only from the active version — each publish is a full snapshot.
-    // slug-canonical: callers canonicalize before calling.
     const [meta] = await SELECT.from(ContentFiles)
+      // slug-canonical: callers canonicalize before calling.
       .where({ slug, version: activeVersion })
       .columns('contentHash', 'mimeType', 'version');
 
