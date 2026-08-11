@@ -1,12 +1,14 @@
 'use strict';
 
-const { readdirSync, existsSync, readFileSync, writeFileSync } = require('node:fs');
-const { join, basename } = require('node:path');
+const { readdirSync, existsSync, writeFileSync } = require('node:fs');
+const { join } = require('node:path');
 const { mergeRetention } = require('./lib/asset-retention.cjs');
 
 // <name>-<hash>.<js|css>, hash >= 8 chars of [A-Za-z0-9_-] with at least one uppercase or digit.
-// Vite hashes look random (mixed case+digits); unhashed committed files look like words (lowercase).
-// Mirrors deploy-mta.cjs Step 2.5 but filters out committed files that happen to end in -<word>.js.
+// Vite/Hugo content hashes are base62 and effectively always contain an uppercase letter or digit
+// within 8 chars, so pure-lowercase-no-digit hashes are rare/nonexistent. This filters out
+// committed files that mimic the pattern (e.g., consent-trustarc.js) without requiring island-manifest
+// cross-reference (which only covers islands, not Hugo-fingerprinted CSS). Acceptable for MVP.
 const HASHED_RE = /-(?=.*[0-9A-Z])[A-Za-z0-9_-]{8,}\.(js|css)$/;
 
 function collectHashedFiles(dir) {
@@ -55,8 +57,8 @@ async function main(opts = {}) {
 
   const jsFiles = collectHashedFiles(args.jsDir).map(f => ({ file: f, dir: args.jsDir, kind: 'js' }));
   const cssFiles = collectHashedFiles(args.cssDir).map(f => ({ file: f, dir: args.cssDir, kind: 'css' }));
-  const all = [...jsFiles, ...cssFiles];
-  const currentFiles = all.map(x => x.file);
+  const allFiles = [...jsFiles, ...cssFiles];
+  const currentFiles = allFiles.map(x => x.file);
 
   let retainedManifest = [];
   if (approuter) {
@@ -69,12 +71,14 @@ async function main(opts = {}) {
 
   const { toDownload, manifest } = mergeRetention({ currentFiles, retainedManifest, nowMs, windowMs });
 
-  // Carry forward: download each in-window prior bundle into its dir (kind inferred by extension).
+  // Map downloaded files back to their kind/dir for download placement.
+  const fileMetadata = new Map(allFiles.map(f => [f.file, f]));
+
+  // Carry forward: download each in-window prior bundle into its dir.
   let ok = 0, miss = 0;
   for (const file of toDownload) {
-    const kind = file.endsWith('.css') ? 'css' : 'js';
-    const dir = kind === 'css' ? args.cssDir : args.jsDir;
-    const got = await downloadTo(`${approuter.replace(/\/$/, '')}/${kind}/${file}`, join(dir, file));
+    const meta = fileMetadata.get(file) || { kind: file.endsWith('.css') ? 'css' : 'js', dir: file.endsWith('.css') ? args.cssDir : args.jsDir };
+    const got = await downloadTo(`${approuter.replace(/\/$/, '')}/${meta.kind}/${file}`, join(meta.dir, file));
     if (got) ok++; else { miss++; console.warn(`[retain-assets] could not fetch carried ${file} — skipping (fail-open).`); }
   }
 
