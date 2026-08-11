@@ -26,6 +26,7 @@ const { bump, startAutoFlush } = require('./lib/hit-counter')
 const { safeFetch } = require('./lib/safe-fetch')
 const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
 const { securityTxtHandler } = require('./lib/security-txt')
+const shouldProcessImage = require('./lib/img-cdn-should-process')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
 // array) injected by the approuter framework when mta.yaml declares
@@ -220,7 +221,14 @@ async function imgCdnHandler(req, res, next) {
     }
     const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
     const sharp = getSharp()
-    const shouldProcess = sharp && (wantWidth > 0 || acceptsWebp) && /^image\/(png|jpeg|webp|avif|gif)/.test(contentType)
+    // #1640: animated GIFs are deliberately NOT processed — sharp would flatten
+    // them to a single frame (static WebP for WebP-capable clients). They fall
+    // through to the passthrough branch below and are served verbatim.
+    const shouldProcess = shouldProcessImage(contentType, {
+      hasSharp: !!sharp,
+      wantWidth,
+      acceptsWebp,
+    })
 
     if (!shouldProcess) {
       res.writeHead(200, {
