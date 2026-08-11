@@ -23,7 +23,7 @@ cds.on('bootstrap', (app) => {
     }
   });
 
-  const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware, pipelineLogFailureHandler } =
+  const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware, pipelineLogFailureHandler, pageServeHandler } =
     createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA', skipMetadataUpsert: true });
 
   // GET handlers serve in-flight author content from -Contribution repos. The
@@ -85,6 +85,10 @@ cds.on('bootstrap', (app) => {
   // key, browser-shell callers come in with XSUAA Tutorial.Author scope.
   app.get('/content/source-hashes', hashesAuth, sourceHashesHandler);
   app.get('/content/tutorials/*slug', requireAuthorScope, serveHandler);
+  // #1659 Task 5 — QA-channel content PAGES. Dark launch: no AppRouter route
+  // points here yet. Gated by Tutorial.Author scope — mirrors how serveHandler
+  // is registered on this app (QA content is always author-preview gated).
+  app.get('/content/pages/*path', requireAuthorScope, pageServeHandler);
   // Legacy single-shot publish (kept for compatibility); CLI now uses the
   // chunked begin/append/commit pipeline by default (publish-content.ts via
   // scripts/lib/publish-client.ts). Spec: 2026-05-29-publish-content-hardening-design.md.

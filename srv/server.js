@@ -27,7 +27,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, pageServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
 import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
@@ -475,6 +475,10 @@ cds.on('bootstrap', (app) => {
   // here yet (the /concepts/?$ flip lands in Task 5). Public, no auth — like
   // serveHandler.
   app.get('/content/concepts-index', conceptsIndexHandler);
+  // #1659 Task 5 — CAP-served content PAGES. Dark launch: no AppRouter route
+  // points here yet (the per-page flips land in Phase 2). Public, no auth —
+  // like serveHandler.
+  app.get('/content/pages/*path', pageServeHandler);
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/publish/begin',  express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
   app.post('/content/publish/append', express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);
