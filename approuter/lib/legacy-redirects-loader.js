@@ -18,17 +18,50 @@ const BOOTSTRAP_MAP = [
 ]
 
 // Lazily-loaded ESM resolver (approuter is CJS; srv/lib resolver is ESM).
-let _resolverModule = null
+// Memoize the PROMISE, not just the resolved module: the module-load bootstrap
+// IIFE and the first refresh() both call loadResolver() before either settles,
+// and a plain `if (_resolverModule) …` guard let them issue TWO concurrent
+// dynamic import() calls. Under vitest's parallel fork-pool load one of those
+// imports could transiently REJECT while the other succeeded, so refresh()'s
+// `await loadResolver()` threw, refresh bailed to its catch, and the index was
+// left on the 3-row BOOTSTRAP_MAP → getIndex() returned an index without /abap
+// (the intermittent "expected undefined to be '/topics/abap-platform.html'" CI
+// failure; #1636 follow-up). Sharing ONE promise means there is exactly one
+// import() in flight that every caller awaits.
+let _resolverPromise = null
+
+// Number of times to (re)issue the dynamic import before giving up. A resolved
+// import is memoized, so a success on any attempt short-circuits the rest; the
+// retry only matters when an attempt transiently rejects.
+const RESOLVER_LOAD_ATTEMPTS = 3
+
+function importResolver() {
+  if (!_resolverPromise) {
+    // Dynamic import bridges the CJS→ESM boundary. The resolver is a pure-function
+    // ESM module copied from srv/lib/ at MTA build time (see mta.yaml's before-all
+    // `cp` for tutorials-approuter). Self-contained in /home/vcap/app/lib/ on
+    // Cloud Foundry — DO NOT change to ../../srv/lib/ (that path works locally
+    // but doesn't exist when approuter and srv are separate CF apps).
+    _resolverPromise = import('./legacy-redirects-resolver.js').catch((err) => {
+      // A rejected import must not be cached forever: null the memo so the next
+      // loadResolver() attempt re-imports rather than replaying the failure.
+      _resolverPromise = null
+      throw err
+    })
+  }
+  return _resolverPromise
+}
 
 async function loadResolver() {
-  if (_resolverModule) return _resolverModule
-  // Dynamic import bridges the CJS→ESM boundary. The resolver is a pure-function
-  // ESM module copied from srv/lib/ at MTA build time (see mta.yaml's before-all
-  // `cp` for tutorials-approuter). Self-contained in /home/vcap/app/lib/ on
-  // Cloud Foundry — DO NOT change to ../../srv/lib/ (that path works locally
-  // but doesn't exist when approuter and srv are separate CF apps).
-  _resolverModule = await import('./legacy-redirects-resolver.js')
-  return _resolverModule
+  let lastErr
+  for (let attempt = 1; attempt <= RESOLVER_LOAD_ATTEMPTS; attempt++) {
+    try {
+      return await importResolver()
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr
 }
 
 // The bootstrap IIFE and refresh() BOTH await a dynamic import() before they
