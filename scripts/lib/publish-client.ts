@@ -21,13 +21,16 @@ export interface AppendInput {
 }
 export interface AppendResult { slugsAccepted: number; batchHash: string; totalSizeBytes: number }
 
-export interface CommitInput { baseUrl: string; apiKey: string; sessionId: string }
+export interface CommitInput { baseUrl: string; apiKey: string; sessionId: string; allowRevertSlugs?: string[] }
 export interface CommitResult {
   version: number; fileCount: number; totalSizeBytes: number;
   durationMs: number; alreadyActive: boolean;
   /** #672 — slugs whose incoming sourceHash matched a superseded version
    * and were carry-forwarded instead of committed. Always present, often `[]`. */
   rejectedReverts: string[];
+  /** #672 — slugs detected as reverts but committed anyway per an explicit
+   * operator override (allowRevertSlugs). Present when the server honored one. */
+  allowedReverts?: string[];
   /** Carry-forward count from the prior ACTIVE manifest (existing field, now declared). */
   carriedForward?: number;
 }
@@ -73,7 +76,7 @@ export async function appendBatch(i: AppendInput): Promise<AppendResult> {
 }
 
 export async function commitSession(i: CommitInput): Promise<CommitResult> {
-  return postJson(`${i.baseUrl}/content/publish/commit`, i.apiKey, { sessionId: i.sessionId });
+  return postJson(`${i.baseUrl}/content/publish/commit`, i.apiKey, { sessionId: i.sessionId, allowRevertSlugs: i.allowRevertSlugs ?? [] });
 }
 
 export interface RenderConceptsInput { baseUrl: string; apiKey: string; sessionId: string }
