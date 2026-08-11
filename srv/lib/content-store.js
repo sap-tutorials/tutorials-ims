@@ -8,6 +8,7 @@ import { logPipelineStart, logPipelineEnd, logPipelineItem, logPipeline } from '
 import { getNextLegacyId } from './legacy-id.js';
 import { embedSlugs } from './embedding-pipeline.js';
 import { renderCatalogPage } from './catalog-renderer.js';
+import { onCacheGenerationChange, refreshCacheGeneration, bumpCacheGeneration } from './content-cache-coherence.js';
 import { loadGroupContext, loadMissionContext } from './catalog-data.js';
 import { createShellLoader, ShellMarkerError, composeShell } from './chrome-shell.js';
 import { createSessionHelpers } from './content-publish-session.js';
@@ -195,8 +196,16 @@ class ContentCache {
 
 const cache = new ContentCache();
 
+// Cross-instance coherence (#1592, #1621): when another srv instance publishes
+// content or changes catalog data, it bumps a shared generation token; on our
+// next serve we drop ALL local entries (both bare-slug tutorial HTML and
+// render:<slug> catalog pages). Register the local invalidator once at load.
+onCacheGenerationChange(() => cache.invalidate());
+
 // Exported so AdminService write hooks can invalidate render: entries when
 // catalog data changes between publishes. See srv/server.js > 'served'.
+// This clears ONLY the local instance; server.js also calls
+// bumpCacheGeneration() so peer instances self-invalidate.
 export function invalidateRenderCache() {
   return cache.invalidateByPrefix('render:');
 }
@@ -488,6 +497,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         });
 
       cache.invalidate();
+      await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
 
       if (skipMetadataUpsert) LOG.info('[content/publish] skipMetadataUpsert=true; metadata + embeddings skipped');
 
@@ -911,6 +921,10 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // (no ContentFiles row exists for them after the #91 migration). Falls
     // through to the regular ContentFiles path for any non-prefixed slug.
     if (slug.startsWith('group-') || slug.startsWith('mission-')) {
+      // #1592/#1621: before trusting our local render cache, TTL-gated check of
+      // the shared generation — if a peer instance changed catalog data or
+      // published, this drops our now-stale entries. Fail-open (never throws).
+      await refreshCacheGeneration();
       const cacheKey = `render:${slug}`;
       const cachedRender = cache.get(cacheKey);
       if (cachedRender) {
@@ -1013,6 +1027,10 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
 
     // Check cache (only for ACTIVE / unknown-but-published slugs)
+    // #1621: TTL-gated cross-instance check before trusting our local content
+    // cache — a publish on a peer instance bumps the shared generation, which
+    // drops our now-stale entry so we reload the current HTML from the DB.
+    await refreshCacheGeneration();
     const cached = cache.get(slug);
     if (cached) {
       metrics.counter('content.cache.hit');  // #805
@@ -1451,6 +1469,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .set({ status: 'ACTIVE' });
 
       cache.invalidate();
+      await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
 
       res.json({ rolledBackTo: target.version, status: 'ACTIVE' });
     } catch (err) {
@@ -1608,6 +1627,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
       const result = await sessionHelpers.commitSession({ sessionId });
       cache.invalidate();
+      await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
       LOG.info(`[content/publish/commit] sessionId=${sessionId} version=${result.version} duration=${result.durationMs}ms alreadyActive=${result.alreadyActive}`);
       res.status(200).json(result);
     } catch (err) {

@@ -1,9 +1,16 @@
 import cds from '@sap/cds';
 import { resolveNavigatorSettings } from './runtime-config/navigator-settings.js';
+import { onCacheGenerationChange, refreshCacheGeneration } from './content-cache-coherence.js';
 
 let cachedResponse = null;
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// #1592: same cross-instance staleness as the render cache — this response
+// cache is process-local, so an admin write on one instance never cleared it
+// on the others (it only self-healed after the 5-min TTL). Drop it when a peer
+// bumps the shared catalog generation.
+onCacheGenerationChange(() => { cachedResponse = null; cacheTimestamp = 0; });
 
 // Issue #364: by default, do NOT emit a top-level groups[] card for groups
 // that only appear nested inside a Mission's CompletionPath. The legacy
@@ -29,6 +36,8 @@ export function invalidateNavigatorCache() {
 export async function navigatorCatalogHandler(req, res) {
   const now = Date.now();
   const bypassCache = req.query.nocache === '1';
+  // #1592: TTL-gated cross-instance check before trusting our local cache.
+  await refreshCacheGeneration();
   if (!bypassCache && cachedResponse && (now - cacheTimestamp) < CACHE_TTL_MS) {
     res.setHeader('X-Cache', 'HIT');
     res.setHeader('Cache-Control', 'public, max-age=60');
