@@ -83,6 +83,16 @@ describe('edge-cache-headers (CDN origin support)', () => {
       // item- prefix (5) + at most 128 token chars.
       expect(tags[1].length).toBeLessThanOrEqual('item-'.length + 128);
     });
+
+    it('emits page tags for page- keys', () => {
+      expect(cacheTagsFor('page-browse')).toEqual(['content', 'page', 'page-browse']);
+      expect(cacheTagsFor('page-index')).toEqual(['content', 'page', 'page-index']);
+    });
+
+    it('sanitizes dotted page keys into a valid tag token', () => {
+      // '.' is not in [A-Za-z0-9_-] → replaced with '-'
+      expect(cacheTagsFor('page-sitemap.xml')).toEqual(['content', 'page', 'page-sitemap-xml']);
+    });
   });
 
   describe('setContentCacheHeaders', () => {

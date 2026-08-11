@@ -60,7 +60,7 @@ CAP backend (http://localhost:4004 or CAP_BASE_URL)
   → GET /build/catalog → missions/paths → hugo/content/missions/*.md and groups/*.md
 ```
 
-Tutorial HTML is **not** served from static files. `publish-content.ts` uploads gzip BLOBs to HANA via `POST /content/publish`; AppRouter routes `/tutorials/*` to CAP `/content/tutorials/:slug`.
+Tutorial HTML is **not** served from static files. `publish-content.ts` uploads gzip BLOBs to HANA via `POST /content/publish`; AppRouter routes `/tutorials/*` to CAP `/content/tutorials/:slug`. **Content pages** (`/`, `/browse/`, `/topics/`, etc.) use the same HANA BLOB pattern under the `page-<name>` key namespace — **dark-launched** on `GET /content/pages/*` (no AppRouter route yet; Phase 2 flips per-route rewrites). See [docs/developers/architecture/build.md](docs/developers/architecture/build.md) §"Content Pages from HANA".
 
 Deep dives (do not duplicate here — read the doc when relevant):
 
@@ -113,6 +113,8 @@ Subsystem one-liners:
 - **Fresh worktree setup needs `npm run setup` after `npm install`** — global npmrc has `ignore-scripts=true`. Without it, `hugo-apps/node_modules` won't be populated and `better-sqlite3`'s native binding won't build. Symptoms: hugo-apps tests fail resolving `@mediapipe/tasks-vision`, `npm test` hangs.
 
 - **`ignore-scripts=true` silences `postbuild:apps` — build artifacts wired into it are NOT produced by local `npm run build:all`** — the global npmrc `ignore-scripts=true` (see above) means npm **lifecycle hooks never fire**. The `postbuild:apps` hook is where the #1604 island-fingerprint step (`build:island-manifest`, which writes `hugo/data/island_manifest.json`) and 8 static guards live. During a local `build:all`, none of them run. Symptom class: fresh JS/CSS **compiles** (Vite emits `navigator-<hash>.js`) but is **never referenced** — `hugo/layouts/partials/island-src.html` falls back to the unhashed `/js/<name>.js`, Hugo bakes the stale path, and the approuter ships old bundles sitting next to the new ones. **Merged fixes look "not deployed" even though the deploy succeeded.** CI dodges this because `deploy.yml`/`unit-tests.yml` run `npm run postbuild:apps` as an **explicit step** (see deploy.yml:217-223 comment). Fix (2026-08-10): `build:all` now calls `npm run build:island-manifest` **explicitly** (not via the hook), and `scripts/deploy-mta.cjs` Step 2.5 fails the deploy if `hugo/public/index.html` bakes only unhashed island paths while a Vite manifest exists. Rule: any build **artifact** (not just a guard) needed for a correct ship must be an explicit step in `build:all`, never left to a `post*`/`pre*` lifecycle hook.
+
+- **`build:page-fallback` is an explicit `build:all` step (NOT a lifecycle hook)** — `scripts/build-page-fallback.cjs` copies in-scope page snapshots from `hugo/public` into `srv/page-fallback/<key>.<ext>` after `build:hugo` runs. Because `ignore-scripts=true` silences all `pre*`/`post*` hooks (see above), it is wired as an explicit `npm run build:page-fallback` in the `build:all` chain, positioned right after `build:hugo`. If you add a new in-scope page to `IN_SCOPE_PAGES` in `srv/lib/page-key-map.js`, the snapshot is picked up automatically on the next full build. Snapshots are gitignored (`srv/page-fallback/*` except `.gitkeep`); the directory is committed empty and populated at build time.
 
 - **`hugo/content/tutorials/` is entirely generated** — Never edit; overwritten by `npm run fetch-tutorials`. Edit `scripts/parsers/` or source tutorials in `sap-tutorials` org.
 

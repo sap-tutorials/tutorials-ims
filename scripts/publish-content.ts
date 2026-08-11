@@ -11,6 +11,7 @@ import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
 import { publishValidateAnswerSpecs } from './lib/publish-validate-answer.js';
 import { computeOrphans, enforceCap, formatStepSummary } from './lib/purge-orphans.js';
+import { discoverPageFiles } from '../srv/lib/page-key-map.js';
 
 export type { Channel };
 
@@ -968,6 +969,17 @@ async function main() {
   log('Production build validation passed');
 
   validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly, purgeOrphans: opts.purgeOrphans });
+
+  // #1659 — content pages ride the same delta pipeline as tutorials under the
+  // page- key namespace. Merge AFTER tutorial-only validation so page files are
+  // not subject to tutorial production checks, and BEFORE hashing so the whole
+  // begin/append/commit + carry-forward path handles them transparently.
+  // Skipped on single-tutorial hotfixes (opts.slug), like concepts.
+  if (!opts.slug) {
+    const pages = discoverPageFiles(opts.hugoDir);
+    for (const [key, absPath] of pages) tutorials.set(key, absPath);
+    log(`[pages] merged ${pages.size} content page(s) into publish set`);
+  }
 
   log('Computing local hashes...');
   const localHashes = computeLocalHashes(tutorials);
