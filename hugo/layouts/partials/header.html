@@ -125,14 +125,42 @@
     });
   }
 
-  function openAt(popover, opener) {
+  // Issue #1652: on narrow/mobile viewports the shellbar collapses items into
+  // its built-in overflow (burger) popover. A clicked overflow item reports a
+  // `targetRef` that is the transient list item INSIDE that popover — and the
+  // overflow popover closes itself on the same click. A ui5-popover cannot
+  // anchor to a detached/hidden opener, so opening our nav/share popover against
+  // that targetRef silently no-ops and the menu just closes. Detect the overflow
+  // case and anchor to the always-present overflow button instead. Desktop keeps
+  // anchoring to the specific item button (targetRef).
+  function isOverflowed(item, targetRef) {
+    if (item && item.inOverflow === true) return true;
+    const tag = targetRef && targetRef.tagName && targetRef.tagName.toLowerCase();
+    return tag === 'ui5-li';
+  }
+
+  function resolveOpener(item, targetRef) {
+    if (isOverflowed(item, targetRef)) {
+      return shellbar.shadowRoot?.querySelector('[data-ui5-stable="overflow"]') || shellbar;
+    }
+    return targetRef || item;
+  }
+
+  function openAt(popover, opener, deferred) {
     closeAllExcept(popover);
     if (popover.open) {
       popover.open = false;
-    } else {
+      return;
+    }
+    // When opened from the overflow menu, defer one frame so our popover lands
+    // AFTER the overflow popover has finished closing — otherwise the two
+    // popovers fight over focus and ours is dismissed immediately.
+    const show = () => {
       popover.opener = opener;
       popover.open = true;
-    }
+    };
+    if (deferred) requestAnimationFrame(show);
+    else show();
   }
 
   shellbar.querySelectorAll('ui5-shellbar-item').forEach(item => {
@@ -147,11 +175,11 @@
         if (window.joule && typeof window.joule.open === 'function') window.joule.open();
       }
       {{ end }}
-      else if (id === 'sb-nav') openAt(navPopover, target);
+      else if (id === 'sb-nav') openAt(navPopover, resolveOpener(item, target), isOverflowed(item, target));
       else if (id === 'sb-share') {
         shareUrlInput.value = window.location.href;
         shareStatus.textContent = '';
-        openAt(sharePopover, target);
+        openAt(sharePopover, resolveOpener(item, target), isOverflowed(item, target));
       }
       else if (id === 'sb-help') window.open('https://community.sap.com', '_blank');
       else if (id === 'sb-theme') toggleTheme();
