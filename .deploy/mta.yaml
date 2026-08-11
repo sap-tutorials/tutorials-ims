@@ -10,7 +10,7 @@ ID: tutorials-ims
 # Bump this on each release you deploy — it's the version shown by `cf mtas`
 # and in the mtar filename (tutorials-ims_<version>.mtar). Deploy is manual:
 # `cd .deploy && mbt build && cf deploy mta_archives/tutorials-ims_<version>.mtar -e ../deploy/<env>.mtaext -f`.
-version: 1.13.3
+version: 1.13.4
 
 # Top-level parameters (overridable per-env via deploy/<env>.mtaext).
 parameters:
@@ -100,7 +100,10 @@ modules:
       # instances) — the line below forbids raising instances without first
       # addressing the in-process rate limiters.
       memory: 2048M
-      disk-quota: 1024M
+      # Bumped 1024M→2048M: the 1GB disk-quota was nearly exhausted on the
+      # running prod instance; raised live via the cockpit and reconciled here
+      # so the next deploy doesn't revert it back to 1GB.
+      disk-quota: 2048M
       buildpack: nodejs_buildpack
       # DO NOT raise instances without addressing in-process rate limiters in
       # srv/developer-service.js, srv/lib/ip-rate-limit.js, srv/lib/chat-rate-limit.js.
