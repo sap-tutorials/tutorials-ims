@@ -230,7 +230,8 @@ Key properties:
 
 - **48-hour window** — any prior bundle whose `firstSeenMs` is within 48 hours of the current build timestamp is carried forward (downloaded from the live approuter and placed into the appropriate `hugo/public/js/` or `hugo/public/css/` directory). Bundles older than 48 h are pruned from the manifest.
 - **Fail-open** — if the live approuter is unreachable or the prior manifest fetch fails, the step completes using only current files and exits 0; no build is blocked.
-- **Safe to union** — content-hashed filenames are immutable (the hash is derived from file content), so adding prior bundles alongside current ones can never overwrite live files. The union prevents `<script src>` references baked into cached HTML from 404-ing after a new deploy rotates the hashes.
+- **Safe to union** — content-hashed filenames are immutable (the hash is derived from file content), so adding prior bundles alongside current ones can never overwrite live files. The union prevents `<script src>` references baked into cached HTML from new deploy rotates the hashes.
+- **Local deploy requires `APPROUTER_URL`** — Carry-forward depends on fetching the prior manifest from a deployed approuter; CI sets this per environment, but a local `build:all`/`mbt build` deploy must `export APPROUTER_URL=<deployed-approuter-url>` beforehand, or retention will carry only the current build's bundles (fail-open, no error).
 
 ### Parsers (scripts/parsers/)
 

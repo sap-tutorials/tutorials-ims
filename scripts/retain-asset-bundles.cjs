@@ -57,7 +57,7 @@ async function downloadTo(url, dest, timeoutMs = 30000) {
 async function main(opts = {}) {
   const args = { ...parseArgs(process.argv.slice(2)), ...opts };
   const approuter = opts.approuterUrl ?? process.env.APPROUTER_URL ?? '';
-  const windowMs = (Number(process.env.RETENTION_WINDOW_HOURS) || 48) * 3600_000;
+  const windowMs = opts.windowMs ?? (Number(process.env.RETENTION_WINDOW_HOURS) || 48) * 3600_000;
   const nowMs = opts.nowMs ?? Date.now();
 
   const jsFiles = collectHashedFiles(args.jsDir).map(f => ({ file: f, dir: args.jsDir, kind: 'js' }));
