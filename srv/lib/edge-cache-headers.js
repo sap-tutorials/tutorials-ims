@@ -41,6 +41,10 @@ function cacheTagsFor(slug) {
     tags.push('concepts-index');
   } else if (slug.startsWith('concept-')) {
     tags.push('concepts', `concept-${tagToken(slug.slice('concept-'.length))}`);
+  } else if (slug.startsWith('page-')) {
+    // Content pages (#1659) — coarse `page` tag + a per-page tag so a publish
+    // can purge one page or the whole page set.
+    tags.push('page', `page-${tagToken(slug.slice('page-'.length))}`);
   } else {
     tags.push(`item-${tagToken(slug)}`);
   }
