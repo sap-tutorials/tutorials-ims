@@ -486,9 +486,16 @@ export default class DeveloperService extends cds.ApplicationService {
       const recordMap = new Map();
       for (const r of userRecords) recordMap.set(`${r.taskType}:${r.taskLegacyId}`, r);
 
-      const event = await SELECT.one.from(dbEvents)
-        .where({ mission_ID: mission.ID })
-        .orderBy('startDate desc');
+      // Prefer the mission-side link (Missions.event_ID) the admin UI actually
+      // sets; fall back to the forward Events.mission_ID lookup for legacy data.
+      let event = mission.event_ID
+        ? await SELECT.one.from(dbEvents).where({ ID: mission.event_ID })
+        : null;
+      if (!event) {
+        event = await SELECT.one.from(dbEvents)
+          .where({ mission_ID: mission.ID })
+          .orderBy('startDate desc');
+      }
 
       const result = {
         eventId: event?.legacyId ?? 0,
@@ -540,11 +547,25 @@ export default class DeveloperService extends cds.ApplicationService {
         if (!event) return req.reject(404, 'No events found');
       }
 
-      if (!event.mission_ID) {
+      // Resolve the event's mission. Prefer the forward link (Events.mission_ID)
+      // for any event already configured that way, then fall back to the
+      // mission-side backlink (Missions.event_ID) — the ONLY link the admin UI
+      // exposes (there is no Mission field on the Events object page). Tie-break
+      // when several missions point at one event: prefer published, then lowest
+      // legacyId for a stable, deterministic choice.
+      let missionId = event.mission_ID;
+      if (!missionId) {
+        const linked = await SELECT.one.from(dbMissions)
+          .columns('ID')
+          .where({ event_ID: event.ID })
+          .orderBy('published desc', 'legacyId');
+        missionId = linked?.ID;
+      }
+      if (!missionId) {
         return req.reject(400, `Event ${event.legacyId} has no mission configured`);
       }
 
-      const mission = await SELECT.one.from(dbMissions).where({ ID: event.mission_ID });
+      const mission = await SELECT.one.from(dbMissions).where({ ID: missionId });
       if (!mission) return req.reject(404, `Mission not found for event ${event.legacyId}`);
 
       const paths = await SELECT.from(dbPaths)

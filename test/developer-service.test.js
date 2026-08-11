@@ -310,4 +310,86 @@ describe('getEventProgress event association', () => {
     expect(data.eventName).toBe('Devtoberfest 2026');
     expect(data.eventType).toBe('DEVTOBERFEST');
   });
+
+  // The admin UI only exposes the mission-side link (Missions.event / event_ID);
+  // there is no Mission field on the Events object page. So an event configured
+  // the normal way has Events.mission_ID = null and must be resolved via the
+  // Missions.event backlink. See fix for the App Space "no mission configured" 400.
+  it('getAppSpaceProgress resolves the mission via the Missions.event backlink when Events.mission_ID is null', async () => {
+    const { Missions, CompletionPaths, CompletionPathItems, Events } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Events).entries({
+      ID: 'rev-e1', legacyId: 66310, name: 'Reverse Event',
+      startDate: '2026-07-01T00:00:00Z', endDate: '2026-07-05T00:00:00Z',
+      timeZone: '+00:00', mission_ID: null
+    });
+    await INSERT.into(Missions).entries({
+      ID: 'rev-m1', legacyId: 66010, slug: 'rev-mission-1', title: 'Reverse Mission',
+      published: true, event_ID: 'rev-e1'
+    });
+    await INSERT.into(CompletionPaths).entries({
+      ID: 'rev-p1', legacyId: 66110, slug: 'rev-path-1', name: 'Reverse Path', mission_ID: 'rev-m1'
+    });
+    await INSERT.into(CompletionPathItems).entries({
+      ID: 'rev-cpi1', path_ID: 'rev-p1', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1
+    });
+
+    const { status, data } = await project.get(
+      `/api/getAppSpaceProgress(eventLegacyId=66310)`, auth
+    );
+    expect(status).toBe(200);
+    expect(data.eventId).toBe(66310);
+    expect(data.paths.length).toBe(1);
+    expect(data.paths[0].title).toBe('Reverse Path');
+  });
+
+  it('getEventProgress resolves the event from the mission-side link (Missions.event)', async () => {
+    const { Missions, CompletionPaths, CompletionPathItems, Events } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Events).entries({
+      ID: 'rev-e2', legacyId: 66311, name: 'Reverse Event 2',
+      startDate: '2026-07-10T00:00:00Z', endDate: '2026-07-15T00:00:00Z',
+      timeZone: '+00:00', mission_ID: null
+    });
+    await INSERT.into(Missions).entries({
+      ID: 'rev-m2', legacyId: 66011, slug: 'rev-mission-2', title: 'Reverse Mission 2',
+      published: true, event_ID: 'rev-e2'
+    });
+    await INSERT.into(CompletionPaths).entries({
+      ID: 'rev-p2', legacyId: 66111, slug: 'rev-path-2', name: 'Reverse Path 2', mission_ID: 'rev-m2'
+    });
+    await INSERT.into(CompletionPathItems).entries({
+      ID: 'rev-cpi2', path_ID: 'rev-p2', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1
+    });
+
+    const { data } = await project.get(
+      `/api/getEventProgress(missionLegacyId=66011)`, auth
+    );
+    expect(data.eventId).toBe(66311);
+  });
+
+  it('getAppSpaceProgress prefers the published mission when multiple point at one event', async () => {
+    const { Missions, CompletionPaths, CompletionPathItems, Events } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Events).entries({
+      ID: 'rev-e3', legacyId: 66312, name: 'Shared Event',
+      startDate: '2026-07-20T00:00:00Z', endDate: '2026-07-25T00:00:00Z',
+      timeZone: '+00:00', mission_ID: null
+    });
+    await INSERT.into(Missions).entries([
+      { ID: 'rev-m3a', legacyId: 66012, slug: 'rev-mission-3a', title: 'Unpublished', published: false, event_ID: 'rev-e3' },
+      { ID: 'rev-m3b', legacyId: 66013, slug: 'rev-mission-3b', title: 'Published', published: true, event_ID: 'rev-e3' },
+    ]);
+    await INSERT.into(CompletionPaths).entries([
+      { ID: 'rev-p3a', legacyId: 66112, slug: 'rev-path-3a', name: 'Unpublished Path', mission_ID: 'rev-m3a' },
+      { ID: 'rev-p3b', legacyId: 66113, slug: 'rev-path-3b', name: 'Published Path', mission_ID: 'rev-m3b' },
+    ]);
+    await INSERT.into(CompletionPathItems).entries([
+      { ID: 'rev-cpi3a', path_ID: 'rev-p3a', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1 },
+      { ID: 'rev-cpi3b', path_ID: 'rev-p3b', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1 },
+    ]);
+
+    const { data } = await project.get(
+      `/api/getAppSpaceProgress(eventLegacyId=66312)`, auth
+    );
+    expect(data.paths.length).toBe(1);
+    expect(data.paths[0].title).toBe('Published Path');
+  });
 });

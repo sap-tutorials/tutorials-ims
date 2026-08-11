@@ -50,6 +50,7 @@ const tracks = ref<AppSpaceTrack[]>([])
 const selectedTrack = ref<AppSpaceTrack | null>(null)
 const loading = ref(true)
 const isLoggedIn = ref(false)
+const loadError = ref('')
 
 // ── Real-time celebration ─────────────────────────────────────────
 const { fireConfetti, particles, active: confettiActive } = useConfetti()
@@ -78,6 +79,13 @@ async function loadData(): Promise<AppSpaceData | null> {
       if (data.eventId) eventId.value = data.eventId
       return data
     }
+    // Non-OK from the configured endpoint (e.g. 400 "no mission configured",
+    // 404 "event not found"). Capture the reason so the UI can show a clear
+    // empty state instead of silently falling back to the default hero.
+    try {
+      const body = await res.json()
+      if (body?.error?.message) loadError.value = body.error.message
+    } catch {}
   } catch {}
   try {
     const res = await fetch('/app-space-data.json')
@@ -243,6 +251,20 @@ const completedTracks = computed(() =>
   tracks.value.filter(isTrackComplete).length
 )
 
+// Message for the empty state shown when no tracks resolve for the event.
+// Distinguishes a mission-less / not-found event (from the API error) from a
+// generic "nothing yet" so the visitor isn't left staring at the default hero.
+const emptyStateMessage = computed(() => {
+  const msg = loadError.value
+  if (/no mission configured/i.test(msg)) {
+    return 'This event doesn’t have a mission with tracks configured yet. Once a mission is linked to the event, its tracks will appear here.'
+  }
+  if (/not found/i.test(msg)) {
+    return 'We couldn’t find that event. Check the event ID in the link, or come back once it’s set up.'
+  }
+  return 'There are no tracks to show for this event yet. Please check back soon.'
+})
+
 
 
 </script>
@@ -298,6 +320,18 @@ const completedTracks = computed(() =>
           <div class="skeleton-line medium"></div>
           <div class="skeleton-line short"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── Empty / not-configured state ───────────────────── -->
+    <div class="content-area" v-else-if="!selectedTrack && tracks.length === 0">
+      <div class="empty-state">
+        <svg class="empty-state__icon" width="56" height="56" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M3 9h18M8 14h8M8 17h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <h2 class="empty-state__title">No tracks configured yet</h2>
+        <p class="empty-state__desc">{{ emptyStateMessage }}</p>
       </div>
     </div>
 
@@ -612,6 +646,36 @@ const completedTracks = computed(() =>
 .track-count {
   font-size: 0.8125rem;
   color: var(--sapContent_LabelColor, #556b82);
+}
+
+/* ── Empty / not-configured state ──────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+  padding: 3rem 1.5rem;
+  max-width: 32rem;
+  margin: 1.5rem auto 0;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+
+.empty-state__icon {
+  color: var(--sapContent_NonInteractiveIconColor, #a9b4be);
+}
+
+.empty-state__title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--sapTextColor, #32363a);
+}
+
+.empty-state__desc {
+  font-size: 0.875rem;
+  margin: 0;
+  line-height: 1.5;
 }
 
 /* ── Track Grid ────────────────────────────────────────── */
