@@ -22,7 +22,10 @@ const baseof = readFileSync(
 describe('baseof.html — homepage-personalizer <script> tag', () => {
   it('loads /js/homepage-personalizer.js with type="module"', () => {
     // Find the exact <script> tag that references the personalizer bundle.
-    const re = /<script\b[^>]*\bsrc="\/js\/homepage-personalizer\.js"[^>]*>/
+    // The path is fingerprinted via the `island-src.html` partial
+    // (#1609/#1611) rather than a literal `/js/homepage-personalizer.js`;
+    // accept either form.
+    const re = /<script\b[^>]*\bsrc="(?:\{\{\s*partial "island-src\.html" "homepage-personalizer"|\/js\/homepage-personalizer\.js)[^>]*>/
     const m = baseof.match(re)
     expect(m, 'homepage-personalizer <script> tag in baseof.html').toBeTruthy()
     // Attribute order is irrelevant — assert `type="module"` is present.

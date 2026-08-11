@@ -904,7 +904,16 @@ describe('Task 21 — Hugo wiring', () => {
 
   it('head.html loads the tutorial-reset.js bundle as a module', () => {
     const src = fs.readFileSync(headPath, 'utf8');
-    expect(src).toMatch(/<script[^>]*type="module"[^>]*src="\/js\/tutorial-reset\.js"/);
+    // The bundle path is fingerprinted via the `island-src.html` partial
+    // (#1609/#1611) rather than a literal `/js/tutorial-reset.js`. Accept
+    // either form — what matters for the regression guard is that the
+    // tutorial-reset island is loaded and that it is loaded as a module
+    // (its Vite output starts with `import`, so a classic <script> would
+    // throw "Cannot use import statement outside a module").
+    const re = /<script\b[^>]*\bsrc="(?:\{\{\s*partial "island-src\.html" "tutorial-reset"|\/js\/tutorial-reset\.js)[^>]*>/;
+    const m = src.match(re);
+    expect(m, 'tutorial-reset <script> tag in head.html').toBeTruthy();
+    expect(m[0]).toMatch(/\btype="module"/);
   });
 
   it('head.html registers a tutorial-reset event listener that clears localStorage', () => {
