@@ -15,8 +15,13 @@
 // CAP-stable entries nav-dropdown/concepts-filter are emitted un-hashed and
 // resolve to their bare path either way).
 //
-// Runs in `postbuild:apps` (package.json), right after `vite build` and well
-// before `build:hugo`, so the data file exists when Hugo builds.
+// Runs in `build:all` (package.json), right after `build:apps` (`vite build`)
+// and well before `build:hugo`, so the data file exists when Hugo builds. It
+// is deliberately NOT part of `postbuild:apps`: that target is a read-only
+// static-guard suite CI invokes directly (unit-tests.yml, deploy.yml) with no
+// prior `vite build`, so the Vite manifest would be absent and this step would
+// hard-fail (#1604 regression). Deploy-time correctness of the baked manifest
+// is instead guarded by `scripts/deploy-mta.cjs` Step 2.5.
 //
 // Exit codes:
 //   0  wrote the data file with >= 1 entry.
