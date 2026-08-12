@@ -8,7 +8,8 @@ const VERBS = new Set(['LEARN', 'BUILD', 'INTEGRATE', 'MODEL', 'OPERATE', 'AI', 
 const SHELVES = new Set(['START_HERE', 'REFERENCE', 'TOOLS', 'KEEP_CURRENT']);
 
 const jsonUrl = new URL('../../db/data/staging/homepage-thirdparty.json', import.meta.url);
-const csvUrl = new URL('../../db/data/com.sap.developers.ims-HomepageShelves.csv', import.meta.url);
+// Seed CSV moved db/data/ → test/data/ in #1673 (stops deploy wiping admin-editable columns).
+const csvUrl = new URL('../../test/data/com.sap.developers.ims-HomepageShelves.csv', import.meta.url);
 
 const raw = JSON.parse(readFileSync(fileURLToPath(jsonUrl), 'utf-8'));
 const rows = raw.filter((r) => !r._comment);
