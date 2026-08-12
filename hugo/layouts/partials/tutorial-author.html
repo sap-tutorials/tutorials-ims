@@ -7,7 +7,11 @@
 {{ $contributors := .Params.contributors }}
 
 {{/* Determine display name: prefer frontmatter author, fallback to first contributor */}}
+{{/* Treat the "Unknown" sentinel (written by fetch-tutorials when author_name is
+     absent) as unset, so the contributor-name fallback fires symmetrically with the
+     login fallback below instead of leaving the name stuck on "Unknown". */}}
 {{ $displayName := $author }}
+{{ if eq $displayName "Unknown" }}{{ $displayName = "" }}{{ end }}
 {{ $displayLogin := $authorUsername }}
 {{ $lastCommitterLogin := "" }}
 {{ if $contributors }}
@@ -16,6 +20,8 @@
   {{ if not $displayName }}{{ $displayName = $first.name }}{{ end }}
   {{ if not $displayLogin }}{{ $displayLogin = $first.login }}{{ end }}
 {{ end }}
+{{/* Last resort when neither frontmatter author nor any contributor is available. */}}
+{{ if not $displayName }}{{ $displayName = "Unknown" }}{{ end }}
 
 <div class="tutorial-author-line">
   {{/* Author avatar + name + last updated */}}
