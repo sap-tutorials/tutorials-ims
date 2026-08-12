@@ -331,6 +331,8 @@
           "DeployStarted",
           "DeployFinished",
           "DeployFailed",
+          "NgdsSendExhausted",
+          "NgdsBacklog",
           "AlertingTest"
         ],
         "dedupWindowMs": 300000
