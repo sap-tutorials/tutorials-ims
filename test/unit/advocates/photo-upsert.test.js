@@ -95,12 +95,14 @@ describe('uploadAndUpsertAdvocatePhoto (shared by OData + REST paths, issue #417
     // Result shape (no photo bytes — those go to HANA, not the response).
     expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(result.sizeBytes).toBeGreaterThan(0);
-    expect(result.photoUrl).toBe('/api/advocates/photo-upsert-test/photo');
+    // photoUrl now carries a ?v=<epoch> cache-buster (fixes the "uploaded photo
+    // doesn't change" bug — the admin OP avatar binds to this URL).
+    expect(result.photoUrl).toMatch(/^\/api\/advocates\/photo-upsert-test\/photo\?v=\d+$/);
 
     // Side effects on Advocates.
     const adv = await db.run(SELECT.one.from(Advocates).columns('hasPhoto', 'photoUrl').where({ ID: ADVOCATE_ID }));
     expect(adv.hasPhoto).toBe(true);
-    expect(adv.photoUrl).toBe('/api/advocates/photo-upsert-test/photo');
+    expect(adv.photoUrl).toBe(result.photoUrl);
 
     // AdvocatePhotos row written. Note: we don't fetch the BLOB columns
     // (LOB-locator weirdness on HANA, irrelevant on SQLite, but the cheap

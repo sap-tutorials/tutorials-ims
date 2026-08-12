@@ -35,4 +35,19 @@ describe('urlForSlug — photoUrl shape invariant (issue #415)', () => {
     expect(urlForSlug(undefined)).toBeNull();
     expect(urlForSlug(null)).toBeNull();
   });
+
+  it('appends a cache-busting ?v= token when a version is supplied', () => {
+    // The admin OP HeaderInfo.ImageUrl binds to the persisted photoUrl. Without
+    // a per-upload token the URL is byte-identical across re-uploads, so the
+    // browser (max-age=86400 on the photo route) serves the stale image. The
+    // token makes the URL change on every upload — same trick AdvocateCard.vue
+    // uses for the public page.
+    expect(urlForSlug('thomas-jung', 1699999999999)).toBe(
+      '/api/advocates/thomas-jung/photo?v=1699999999999',
+    );
+  });
+
+  it('omits the ?v= token when no version is supplied (back-compat)', () => {
+    expect(urlForSlug('thomas-jung')).toBe('/api/advocates/thomas-jung/photo');
+  });
 });

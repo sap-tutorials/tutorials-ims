@@ -87,6 +87,27 @@ export function _resetCache() {
   cacheBytes = 0;
 }
 
+/**
+ * Invalidate the cached photo bytes for one advocate slug (both 'full' and
+ * 'thumb' sizes). MUST be called by every write path that changes or removes
+ * an advocate's photo — otherwise the read path keeps serving the previously
+ * cached bytes from process memory until eviction or restart, and re-uploads
+ * appear to "not take" even on a hard browser refresh (the origin itself is
+ * stale). Slug is lowercased to match the read path's cache key.
+ */
+export function invalidatePhoto(slug) {
+  if (!slug) return;
+  const s = String(slug).toLowerCase();
+  for (const size of ['full', 'thumb']) {
+    const key = cacheKey(s, size);
+    const entry = cache.get(key);
+    if (entry) {
+      cacheBytes -= entry.buffer.length;
+      cache.delete(key);
+    }
+  }
+}
+
 function _evictIfOver() {
   // Map preserves insertion order, so .keys().next() gives the oldest entry.
   while (cacheBytes > CACHE_MAX_BYTES && cache.size > 0) {
@@ -110,7 +131,10 @@ function _evictIfOver() {
  */
 export async function fetchPhoto(slug, size) {
   const sz = size === 'thumb' ? 'thumb' : 'full';
-  const key = cacheKey(slug, sz);
+  // Key on the lowercased slug so it stays in lockstep with invalidatePhoto()
+  // and the read path's own LOWER(SLUG) DB lookup — mixed-case URLs must not
+  // mint a second, un-invalidatable cache entry.
+  const key = cacheKey(String(slug).toLowerCase(), sz);
   if (cache.has(key)) return cache.get(key);
 
   const db = await cds.connect.to('db');
