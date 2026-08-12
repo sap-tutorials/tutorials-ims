@@ -248,6 +248,48 @@ describe('check-approuter-assets (rebuild-content slug guard, #1622)', () => {
       rmSync(hugo, { recursive: true, force: true });
     }
   });
+
+  it('probes hashed island JS when --check-islands is set and fails on a 404 bundle', async () => {
+    SERVED.clear();
+    SERVED.add('/css/only.css');
+    // hashed island bundle tutorialHtml() emits is NOT served → must fail
+    const hugo = makeHugoDir({ 'my-tutorial': ['/css/only.css'] });
+    try {
+      const r = await run(['--approuter-url', baseUrl, '--hugo-dir', hugo, '--slug', 'my-tutorial', '--check-islands']);
+      expect(r.status).toBe(1);
+      const out = r.stdout + r.stderr;
+      expect(out).toContain('/js/tutorial-DBCzDHRV.js');
+      // unhashed fallback must never be blamed
+      expect(out).not.toMatch(/joule\.js.*(404|MISSING|not served)/i);
+    } finally {
+      rmSync(hugo, { recursive: true, force: true });
+    }
+  });
+
+  it('passes with --check-islands when both css and hashed island JS are served', async () => {
+    SERVED.clear();
+    SERVED.add('/css/only.css');
+    SERVED.add('/js/tutorial-DBCzDHRV.js');
+    const hugo = makeHugoDir({ 'my-tutorial': ['/css/only.css'] });
+    try {
+      const r = await run(['--approuter-url', baseUrl, '--hugo-dir', hugo, '--slug', 'my-tutorial', '--check-islands']);
+      expect(r.status).toBe(0);
+    } finally {
+      rmSync(hugo, { recursive: true, force: true });
+    }
+  });
+
+  it('does NOT probe island JS without --check-islands (back-compat, css-only)', async () => {
+    SERVED.clear();
+    SERVED.add('/css/only.css'); // hashed js NOT served, but flag absent → ignored
+    const hugo = makeHugoDir({ 'my-tutorial': ['/css/only.css'] });
+    try {
+      const r = await run(['--approuter-url', baseUrl, '--hugo-dir', hugo, '--slug', 'my-tutorial']);
+      expect(r.status).toBe(0);
+    } finally {
+      rmSync(hugo, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
