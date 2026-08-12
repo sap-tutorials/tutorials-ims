@@ -52,3 +52,12 @@ describe('rebuild-content.yml — island build runs in slug-targeted mode', () =
     expect(step!.if).toMatch(/!=\s*'slug-targeted'/);
   });
 });
+
+describe('rebuild-content.yml — approuter guard probes islands in slug mode', () => {
+  it('the slug-targeted approuter asset guard passes --check-islands', () => {
+    const step = findStep('Guard - approuter serves referenced CSS + islands (slug-targeted)');
+    expect(step, 'slug approuter guard step not found').toBeDefined();
+    expect(step!.run).toContain('check-approuter-assets.cjs');
+    expect(step!.run).toContain('--check-islands');
+  });
+});

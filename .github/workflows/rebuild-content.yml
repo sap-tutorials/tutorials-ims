@@ -567,8 +567,9 @@ jobs:
       # atomically clobber the good approuter static with 404-ing bare refs (the
       # PROD outage of 2026-08-10/11). Mirrors deploy-mta.cjs Step 2.5, which
       # guards the DEPLOY path only. Deterministic (checks hugo/public, not the
-      # multi-instance live approuter). Skipped in slug-targeted (no tarball push;
-      # CSS handled by the #1622 guard below). Gates on the Vite manifest, so it
+      # multi-instance live approuter). Runs in all modes including slug-targeted
+      # (Task 2 / #1628 ensures the island manifest is built in slug-targeted so
+      # hashed refs are baked). Gates on the Vite manifest, so it
       # never false-fails when island bundles were not built.
       - name: Guard - homepage islands fingerprinted
         # Now that the island manifest is built in slug-targeted too, this guard is
@@ -593,13 +594,14 @@ jobs:
       # run. The referenced /css hrefs are identical across all tutorial pages
       # (shared head/baseof partials), so one representative page fully covers the
       # failure class; PUBLISH_SLUG scopes it to the changed tutorial (empty →
-      # scans all rendered pages). CSS-only on purpose: JS island bundles use the
-      # Vite + island_manifest mechanism (not rebuilt in slug mode) and are
-      # guarded on the deploy path (deploy-mta.cjs Step 2.5 / #1604). Mirrors that
-      # Step 2.5 belt-and-suspenders. Static /css is public on the approuter, so
+      # scans all rendered pages). Also probes islands (hashed /js/<name>-<hash>.js):
+      # the island manifest is now built in slug-targeted mode (see "Build island
+      # manifest"), so the rendered HTML carries hashed island refs. --check-islands
+      # probes them against the approuter alongside /css; a bare /js/<name>.js
+      # fallback is never probed. Static /css is public on the approuter, so
       # no REBUILD_API_KEY is needed; a fully-gated/unreachable channel (no 200s
       # at all) is treated as inconclusive and does not block.
-      - name: Guard - approuter serves referenced CSS (slug-targeted)
+      - name: Guard - approuter serves referenced CSS + islands (slug-targeted)
         if: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' }}
         env:
           APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
@@ -610,7 +612,8 @@ jobs:
         run: |
           node scripts/check-approuter-assets.cjs \
             --approuter-url "$APPROUTER_URL" \
-            --hugo-dir hugo/public
+            --hugo-dir hugo/public \
+            --check-islands
 
       - name: Publish tutorial content to HANA
         id: publish
