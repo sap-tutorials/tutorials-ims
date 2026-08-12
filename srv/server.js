@@ -32,6 +32,7 @@ import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
+import { modelJsonHandler } from './lib/model-json-handler.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
@@ -434,6 +435,9 @@ cds.on('bootstrap', (app) => {
   // rationale (rendered HTML is volatile-by-design, source markdown isn't).
   app.get('/content/source-hashes', sourceHashesHandler);
   app.get('/content/tutorials/*slug', serveHandler);
+  // Legacy AEM `.model.json` compatibility for SAP Discovery Center (#DC cards).
+  // Approuter maps ^/tutorials/<slug>.model.json$ → here. See srv/lib/model-json.js.
+  app.get('/content/tutorial-model/*slug', modelJsonHandler);
   // Concept landing pages (#446 Track 3-A). Concept HTML is stored in
   // ContentFiles with slugs prefixed `concept-<slug>` so the same publish/
   // serve plumbing handles both kinds without a schema change or kind
