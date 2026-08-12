@@ -59,6 +59,7 @@
           "options": {
             "settings": {
               "contextPath": "/VerbDefinitions",
+              "initialLoad": "Enabled",
               "navigation": {
                 "VerbDefinitions": { "detail": { "route": "VerbOP" } }
               },

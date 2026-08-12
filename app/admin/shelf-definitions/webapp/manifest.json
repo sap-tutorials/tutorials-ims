@@ -59,6 +59,7 @@
           "options": {
             "settings": {
               "contextPath": "/ShelfDefinitions",
+              "initialLoad": "Enabled",
               "navigation": {
                 "ShelfDefinitions": { "detail": { "route": "ShelfOP" } }
               },
