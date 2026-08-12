@@ -93,6 +93,7 @@ let mod;
 beforeEach(async () => {
   vi.resetModules();
   sendSpy.mockReset();
+  sendSpy.mockResolvedValue({ success: true });
   counterSpy.mockReset();
   mockEnv = { id: 'prod', label: 'PROD', space: 'prod' };
   mod = await import('../../srv/lib/ngds-autosend.js');
@@ -194,6 +195,16 @@ describe('ngds-autosend gating', () => {
       db: makeDb({ flag: 'true', epoch: '2026-08-01T00:00:00Z' }),
     });
     expect(sendSpy).toHaveBeenCalledOnce();
+  });
+
+  it('counts ngds.autosend.failed (not sent) when the send fails without throwing', async () => {
+    sendSpy.mockResolvedValueOnce({ success: false, error: 'destination not found' });
+    await mod.maybeAutoSendCompletion({
+      record: COMPLETED_TUTORIAL, priorStatus: 'IN_PROGRESS', db: makeDb({ flag: 'true' }),
+    });
+    expect(sendSpy).toHaveBeenCalledOnce();
+    expect(counterSpy).toHaveBeenCalledWith('ngds.autosend.failed');
+    expect(counterSpy).not.toHaveBeenCalledWith('ngds.autosend.sent');
   });
 
   // --- Identity gate ---

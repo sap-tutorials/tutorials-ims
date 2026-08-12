@@ -183,8 +183,9 @@ export async function maybeAutoSendCompletion({ record, priorStatus = null, db }
     // Import lazily so unit tests that never enable auto-send don't pull the
     // client (and its cds.connect.to('ngds')) into their graph.
     const { sendTaskRecordToNgds } = await import('./ngds-client.js');
-    await sendTaskRecordToNgds(record, database);
-    metrics.counter('ngds.autosend.sent');
+    const outcome = await sendTaskRecordToNgds(record, database);
+    if (outcome && outcome.success) metrics.counter('ngds.autosend.sent');
+    else metrics.counter('ngds.autosend.failed');
   } catch (err) {
     // Never let an auto-send fault propagate into the completion transaction.
     cds.log('ngds').error('maybeAutoSendCompletion failed (non-fatal):', err.message);
