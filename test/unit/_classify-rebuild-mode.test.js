@@ -57,6 +57,9 @@ describe('classifyRebuildMode', () => {
     ['unpublishConcept',      'action', 'catalog-only', false, false, false],
     // #1032: FeaturedTopics carousel
     ['FeaturedTopics',        'crud', 'catalog-only', false, false, false],
+    // HomepageConfig: baked homepage config feed, same catalog-only shape as
+    // the explainer entities (previously fell through to the 'full' default).
+    ['HomepageConfig',        'crud', 'catalog-only', false, false, false],
     // Unrecognized action → safe default
     ['rotateSecretValue',     'action', 'full',         false, false, false],
     ['uploadPhoto',           'action', 'full',         false, false, false],
@@ -108,6 +111,14 @@ describe('classifyRebuildMode', () => {
   it('HomepageShelves write → catalog-only (pre-existing gap fix)', () => {
     const result = classifyRebuildMode('HomepageShelves', 'crud');
     expect(result.mode).toBe('catalog-only');
+  });
+
+  it('HomepageConfig write → catalog-only (was falling through to full)', () => {
+    const result = classifyRebuildMode('HomepageConfig', 'crud');
+    expect(result.mode).toBe('catalog-only');
+    expect(result.forceCapRefetch).toBe(false);
+    expect(result.needsSlug).toBe(false);
+    expect(result.needsSlugsByTag).toBe(false);
   });
 });
 

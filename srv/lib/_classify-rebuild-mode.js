@@ -52,6 +52,11 @@ const CATALOG_ONLY_ENTITIES = new Set([
   // mode rebuilds the full set of /build/* feeds in ~1 min wall-clock.
   'VerbDefinitions',
   'ShelfDefinitions',
+  // HomepageConfig admin writes affect the baked homepage config feed served
+  // from /build/* into hugo/data/*.json, not slug-keyed tutorial HTML — same
+  // catalog-only shape as the explainer entities above. Without this it fell
+  // through to the default 'full' rebuild (wasteful, not incorrect).
+  'HomepageConfig',
   // #1032: FeaturedTopics admin writes affect the featured topics carousel
   // served from /build/featured-topics, not tutorial-page HTML. catalog-only
   // mode rebuilds the full set in ~1 min wall-clock.
