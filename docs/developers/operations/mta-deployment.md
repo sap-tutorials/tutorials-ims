@@ -533,3 +533,25 @@ smoke-gate failure). The srv raises an SAP Alert Notification event:
 **Blue-green caveat:** a `--strategy blue-green` deploy pauses before the traffic
 swap and exits, so it emits **start** and (on failure) **fail**, but NOT an
 automatic **finished** — the swap happens later via `cf deploy -i <OP_ID> -a resume`.
+
+### Pre-swap asset guard (Step 4.5, advisory — #1678)
+
+During a blue-green deploy, once the green apps are up (and traffic still points
+at blue), `deploy-mta.cjs` runs an **advisory** pre-swap check:
+`scripts/check-approuter-assets.cjs --served-base <green-idle-url> --advisory`.
+It fetches a sample of the **HANA-served** tutorial *and* concept pages from the
+green approuter's `-idle` route and confirms the `/css` **and** hashed `/js`
+assets those live pages reference actually resolve on green. This catches the
+2026-08-12 CSS-404 incident class — a fingerprint-changing deploy whose new
+approuter dropped a hash that already-published HANA content still points at —
+*before* you swap. PR #1677 (asset retention) *prevents* the mismatch; this
+*catches* it if retention ever regresses.
+
+It is **advisory and fail-open by design** (the swap is already operator-gated):
+a genuine MISSING is printed as a loud warning but never blocks, and an
+unreachable/gated idle route is reported "inconclusive" and passes. Weigh a
+MISSING report before you `resume` — if it's real, republish content or redeploy
+the static first rather than swapping. Override the derived idle URL with
+`IDLE_APPROUTER_URL` if the `-idle` naming ever changes. CI mirrors this as a
+non-gating post-deploy step in the `smoke-test` job (CI prod uses
+`--skip-testing-phase`, so it probes the live approuter after the auto-swap).

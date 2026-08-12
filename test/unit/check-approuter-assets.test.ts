@@ -54,21 +54,52 @@ function tutorialHtml(cssPaths: string[]): string {
   );
 }
 
+// Served-mode fixtures (#1678): the fake approuter can also serve HANA-style
+// page HTML (tutorials/concepts) at arbitrary paths and a sitemap.xml, so the
+// guard's --served-base mode (fetch live pages → probe their assets) runs end
+// to end against real HTTP, no mocking.
+function pageHtml(cssPaths: string[], jsPaths: string[] = []): string {
+  const links = cssPaths.map((p) => `<link rel=stylesheet href=${p}>`).join('');
+  const scripts = jsPaths.map((p) => `<script src=${p}></script>`).join('');
+  return (
+    '<!doctype html><html><head><meta charset=utf-8>' +
+    '<link rel=stylesheet href=https://unpkg.com/fundamental-styles@0.41.4/dist/icon.css>' +
+    links +
+    scripts +
+    '<script src=/js/joule.js></script>' + // UNHASHED fallback — must be ignored even in served mode
+    '</head><body>hi</body></html>'
+  );
+}
+
 let server: Server;
 let baseUrl: string;
 const SERVED = new Set<string>();
+const PAGES = new Map<string, string>(); // served-mode: path -> HTML body
+let SITEMAP = ''; // served-mode: body for /sitemap.xml ('' -> 404)
 
 beforeAll(async () => {
   server = createServer((req, res) => {
     const path = (req.url || '').split('?')[0];
+    if (path === '/sitemap.xml') {
+      res.statusCode = SITEMAP ? 200 : 404;
+      res.setHeader('content-type', 'application/xml');
+      res.end(SITEMAP || 'not found');
+      return;
+    }
+    if (PAGES.has(path)) {
+      res.statusCode = 200;
+      res.setHeader('content-type', 'text/html');
+      res.end(PAGES.get(path));
+      return;
+    }
     if (SERVED.has(path)) {
       res.statusCode = 200;
-      res.setHeader('content-type', 'text/css');
+      res.setHeader('content-type', path.endsWith('.js') ? 'application/javascript' : 'text/css');
       res.end('/* ok */');
-    } else {
-      res.statusCode = 404;
-      res.end('not found');
+      return;
     }
+    res.statusCode = 404;
+    res.end('not found');
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
@@ -216,5 +247,80 @@ describe('check-approuter-assets (rebuild-content slug guard, #1622)', () => {
     } finally {
       rmSync(hugo, { recursive: true, force: true });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Served-content mode (#1678): --served-base fetches HANA-served tutorial AND
+// concept pages from the target (green/idle) approuter and probes BOTH their
+// /css and hashed /js assets against that same approuter — the deploy-vs-shared
+// -content mismatch the CSS-only, local-hugo mode cannot see.
+// ---------------------------------------------------------------------------
+describe('check-approuter-assets --served-base (deploy pre-swap guard, #1678)', () => {
+  function reset() {
+    SERVED.clear();
+    PAGES.clear();
+    SITEMAP = '';
+  }
+
+  it('passes when every css+hashed-js asset the served pages reference resolves', async () => {
+    reset();
+    SERVED.add('/css/sap-fundamental.abc123.css');
+    SERVED.add('/js/tutorial-DBCzDHRV.js'); // hashed island bundle, served
+    PAGES.set('/tutorials/t1/', pageHtml(['/css/sap-fundamental.abc123.css'], ['/js/tutorial-DBCzDHRV.js']));
+    PAGES.set('/concepts/c1/', pageHtml(['/css/sap-fundamental.abc123.css'], ['/js/tutorial-DBCzDHRV.js']));
+    const r = await run(['--served-base', baseUrl, '--served-pages', '/tutorials/t1/,/concepts/c1/']);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/asset/i);
+  });
+
+  it('fails when a hashed JS bundle the served HTML references 404s on the approuter', async () => {
+    reset();
+    SERVED.add('/css/sap-fundamental.abc123.css'); // css is fine
+    // hashed js bundle is NOT served (the drift class this guard exists to catch)
+    PAGES.set('/tutorials/t1/', pageHtml(['/css/sap-fundamental.abc123.css'], ['/js/navigator-NEWHASH1.js']));
+    const r = await run(['--served-base', baseUrl, '--served-pages', '/tutorials/t1/']);
+    expect(r.status).toBe(1);
+    const out = r.stdout + r.stderr;
+    expect(out).toContain('/js/navigator-NEWHASH1.js');
+    // unhashed fallback /js/joule.js must never be blamed
+    expect(out).not.toMatch(/joule\.js.*(404|MISSING|not served)/i);
+  });
+
+  it('discovers tutorial + concept pages from the sitemap when --served-pages is omitted', async () => {
+    reset();
+    SERVED.add('/css/ok.111.css');
+    // sitemap uses the CANONICAL host in <loc>; the guard must re-base onto --served-base
+    SITEMAP =
+      '<?xml version="1.0"?><urlset>' +
+      '<url><loc>https://developers.sap.com/api-docs/</loc></url>' +
+      '<url><loc>https://developers.sap.com/tutorials/t-disc/</loc></url>' +
+      '<url><loc>https://developers.sap.com/concepts/c-disc/</loc></url>' +
+      '</urlset>';
+    PAGES.set('/tutorials/t-disc/', pageHtml(['/css/ok.111.css']));
+    PAGES.set('/concepts/c-disc/', pageHtml(['/css/missing.222.css'])); // 404 → should fail the run
+    const r = await run(['--served-base', baseUrl]);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toContain('/css/missing.222.css');
+  });
+
+  it('--advisory downgrades a missing asset to a non-blocking warning (exit 0)', async () => {
+    reset();
+    SERVED.add('/css/sap-fundamental.abc123.css');
+    PAGES.set('/tutorials/t1/', pageHtml(['/css/sap-fundamental.abc123.css'], ['/js/navigator-NEWHASH1.js']));
+    const r = await run(['--served-base', baseUrl, '--served-pages', '/tutorials/t1/', '--advisory']);
+    expect(r.status).toBe(0);
+    const out = r.stdout + r.stderr;
+    expect(out).toContain('/js/navigator-NEWHASH1.js');
+    expect(out).toMatch(/advisory|not blocking|non-blocking/i);
+  });
+
+  it('does not block when the served base serves NO 200 for any asset (gated/unreachable)', async () => {
+    reset();
+    // page is reachable but every asset it references 404s → no 200 anywhere
+    PAGES.set('/tutorials/t1/', pageHtml(['/css/nope.aaa.css'], ['/js/nope-BBBBBBBB.js']));
+    const r = await run(['--served-base', baseUrl, '--served-pages', '/tutorials/t1/']);
+    expect(r.status).toBe(0);
+    expect(r.stdout + r.stderr).toMatch(/INCONCLUSIVE/i);
   });
 });
