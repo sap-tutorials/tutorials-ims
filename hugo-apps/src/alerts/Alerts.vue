@@ -18,7 +18,12 @@ function onCta(url: string)  { emit('cta', url); }
 
 <template>
   <div v-if="items.length === 0" class="alerts-empty">
-    <ui5-illustrated-message name="NoNotifications" title-text="You're all caught up." />
+    <ui5-illustrated-message
+      name="NoNotifications"
+      design="Spot"
+      title-text="You're all caught up."
+      subtitle-text="Check back later for new notifications."
+    />
   </div>
   <ui5-list v-else id="sb-alerts-list" separators="Inner" mode="None">
     <ui5-li-notification

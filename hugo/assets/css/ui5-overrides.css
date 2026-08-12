@@ -108,6 +108,24 @@ ui5-shellbar img[slot="logo"] {
   margin: 0 -1rem;
 }
 
+/* Alerts / notifications popover (#sb-alerts-popover, issue #1672) — give the
+   content a defined width. Without it the popover collapses to the illustrated
+   message's tiny intrinsic width when the bell is empty, crushing the
+   "You're all caught up" copy into a one-word-per-line column with an ugly
+   horizontal scrollbar (sibling shellbar popovers already set a width). */
+#sb-alerts-popover #sb-alerts-mount {
+  min-width: 20rem;
+  max-width: 24rem;
+}
+
+#sb-alerts-popover .alerts-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
 /* Tutorial-page banners (U5) — stack with consistent spacing */
 .tutorial-banners {
   display: flex;
