@@ -351,7 +351,8 @@ The `/auth/user` route in `xs-app.json` has `authenticationType: "xsuaa"`, so th
 
 - **Static content is fully public** — no redirect to login, no flash of login page
 - **API routes require auth** — the AppRouter enforces XSUAA session before proxying to CAP
-- **Login is explicit** — only triggered by user action (clicking profile icon)
+- **Login is explicit for first-time visitors** — a browser that has never authenticated here is only sent to `/login` by a deliberate user action (clicking the profile icon)
+- **Returning visitors are silently re-logged-in** — once a browser completes a successful login, a durable `auth.returning` localStorage flag is set. On later sessions, `maybeAutoLogin()` (in `hugo/layouts/partials/header.html`) auto-redirects such a browser to `/login` once per session on any non-homepage page. Because the user already has an IDP SSO session, the OAuth flow resolves transparently — no login screen. The homepage `/` is always exempt, and logout sets `autologin.optout` to suppress this until the next deliberate login. This is the #1689 balance: no-account visitors never see a login screen, account holders never have to click "login" each day.
 - **SSO is transparent** — if the user is already authenticated with SAP IDP (e.g., from another SAP site), the OAuth flow resolves immediately without showing a login form
 - **Session cookie** — after login, the AppRouter session cookie persists until the user logs out or the session expires. Subsequent page navigations retain the authenticated state.
 

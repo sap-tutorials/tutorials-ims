@@ -385,15 +385,23 @@
     document.dispatchEvent(new CustomEvent('auth-resolved', { detail: { authenticated: true } }));
   }
 
-  // Issue: automatic login attempt on first connect. On a definitive anonymous
-  // answer from /auth/user (see checkAuth), attempt login once per browser
-  // session — EXCEPT on the site root, which stays anonymous for drive-by
-  // readers. If an SSO session exists at the IDP, /login resolves transparently
-  // and returns the user authenticated; if not, the IDP bounces straight back
-  // and the 'tried' flag (set before the redirect) prevents a loop.
+  // Issue #1689: automatic login attempt for RETURNING visitors only. On a
+  // definitive anonymous answer from /auth/user (see checkAuth), attempt login
+  // once per browser session — but ONLY if this browser has completed a
+  // successful login before (the durable 'auth.returning' flag, set in
+  // checkAuth). This is the balance: first-time / no-account visitors are never
+  // bounced to the SAP IDP login screen (which they'd have to cancel out of),
+  // while account holders keep transparent daily login — their existing IDP SSO
+  // session resolves /login silently. The site root (/) is always exempt for
+  // drive-by readers. If an SSO session exists at the IDP, /login resolves
+  // transparently; if not, the IDP bounces straight back and the 'tried' flag
+  // (set before the redirect) prevents a loop.
   function maybeAutoLogin() {
     // Homepage (/) is exempt — never auto-redirect there.
     if (window.location.pathname === '/') return;
+    // Returning-visitor gate: only auto-login browsers that have authenticated
+    // here before. Fail closed (unreadable storage → don't bounce).
+    try { if (localStorage.getItem('auth.returning') !== '1') return; } catch { return; }
     // Cross-tab logout opt-out: the user intentionally logged out; respect it.
     try { if (localStorage.getItem('autologin.optout') === '1') return; } catch {}
     // Once per browser session.
@@ -434,6 +442,11 @@
       // auto-login for future sessions. Only on genuine /auth/user response,
       // never on cached-user application (which would break cross-tab logout).
       try { localStorage.removeItem('autologin.optout'); } catch {}
+      // Issue #1689: mark this browser as a returning (previously-authenticated)
+      // visitor so maybeAutoLogin will silently re-login on future sessions.
+      // Durable across sessions; only ever set on a genuine authenticated
+      // /auth/user response.
+      try { localStorage.setItem('auth.returning', '1'); } catch {}
     } catch (e) {
       console.debug('[header/checkAuth] fetch failed, attempting cache fallback', e);
       const cached = readCachedUser();
