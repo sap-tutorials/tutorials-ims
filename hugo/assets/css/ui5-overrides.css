@@ -172,6 +172,19 @@ body:has(.tutorial-stepnav) {
   padding-bottom: 4rem;
 }
 
+/* The Joule step-help FAB (#joule-step-fab) is position:fixed at the bottom-
+   right, exactly where the sticky prev/next bar's "Next" button sits. That bar
+   is position:fixed and present for the whole page, so the FAB must clear it
+   unconditionally — not only while some in-flow nav row is scrolled into view.
+   (The earlier scroll-driven [data-near-nav-bottom] lift observed the in-flow
+   .tutorial-nav-bottom / .next-steps in the LEFT content column, which never
+   actually overlap the right-aligned FAB, so the real collision with this fixed
+   bar was never handled.) Reuse the same 4rem clearance as the body padding
+   above, plus a small gap. Scroll-independent, so no JS lift is needed. */
+body:has(.tutorial-stepnav) .joule-step-fab {
+  bottom: 4.75rem;
+}
+
 /* U8: codetabs — render the syntax-highlighted block flush against the tab
    header so the code reads as the primary content, not a card-in-a-card. */
 ui5-tabcontainer.codetabs {
@@ -327,6 +340,11 @@ html[data-embed="reader"] #joule-starters {
 html[data-reader="on"][data-page-kind="tutorial"] body:has(.tutorial-stepnav),
 html[data-embed="reader"] body:has(.tutorial-stepnav) {
   padding-bottom: 0;
+}
+/* ...and reset the FAB lift too: with the bar hidden there is nothing to clear. */
+html[data-reader="on"][data-page-kind="tutorial"] body:has(.tutorial-stepnav) .joule-step-fab,
+html[data-embed="reader"] body:has(.tutorial-stepnav) .joule-step-fab {
+  bottom: 1rem;
 }
 
 /* Collapse the two-col grid into a single, reading-width column.
