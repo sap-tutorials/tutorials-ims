@@ -1091,7 +1091,15 @@ cds.on('served', async () => {
     // #429: classifier-driven rebuild. Each entity routes to a different
     // mode via classifyRebuildMode(); Steps + Tags added so their CRUD
     // also triggers a (slug-targeted or full+force-cap-refetch) rebuild.
-    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials', 'Steps', 'FeaturedTasks', 'Tags', 'Advocates', 'AdvocateTopics', 'AdvocateLinks'];
+    // Homepage entities (HomepageShelves/VerbDefinitions/ShelfDefinitions/
+    // HomepageConfig) added so admin edits to Shelf/Verb Explainers + Shelf
+    // Entries auto-dispatch a catalog-only rebuild instead of sitting baked
+    // until some unrelated catalog write happens to fire one. All four are
+    // classified catalog-only by classifyRebuildMode and are draft-enabled
+    // (hook fires once per SAVE, not per draft patch). Their READ-time
+    // auto-init INSERTs use the fully-qualified DB entity string → cds.db →
+    // bypass this service hook, so no spurious rebuild on boot.
+    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials', 'Steps', 'FeaturedTasks', 'Tags', 'Advocates', 'AdvocateTopics', 'AdvocateLinks', 'HomepageShelves', 'VerbDefinitions', 'ShelfDefinitions', 'HomepageConfig'];
     admin.after(['CREATE', 'UPDATE', 'DELETE'], navInvalidatingEntities, async (_data, req) => {
       // #429: migration-mode short-circuit. Bulk migration scripts set
       // x-migration-mode: true and dispatch one final rebuild at end-of-run.
