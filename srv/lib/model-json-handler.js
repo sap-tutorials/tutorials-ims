@@ -40,6 +40,7 @@ export async function modelJsonHandler(req, res) {
 
     const tut = await SELECT.one
       .from(Tutorials)
+      // slug-canonical: pre-canonicalized
       .where({ slug })
       .columns(
         'ID',
@@ -105,6 +106,7 @@ export async function modelJsonHandler(req, res) {
     // Fail-quiet: a catalog miss just drops the github feedback option.
     let repoInfo = {};
     try {
+      // slug-canonical: pre-canonicalized
       const row = await SELECT.one.from(RepoCatalog).where({ slug }).columns('payload');
       if (row?.payload) repoInfo = JSON.parse(row.payload) || {};
     } catch (err) {
