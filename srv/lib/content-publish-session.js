@@ -213,18 +213,23 @@ export function createSessionHelpers({ namespace }) {
       .where({ sessionId })
       .set({ lastAppendAt: new Date().toISOString() });
 
-    // #805 — accumulate wall-clock into ContentManifest so a load-balanced
+    // #805 — accumulate wall-clock onto ContentManifest so a load-balanced
     // append batch on instance A survives a commit on instance B.
+    // #1667 — use CQL, not raw SQL. The hand-authored .hdbmigrationtable
+    // declares these columns UNQUOTED, so HANA folds them to UPPERCASE
+    // (APPENDMSTOTAL/FIRSTAPPENDAT). The old raw `"appendMsTotal"` (quoted
+    // camelCase) UPDATE therefore never matched the real column — it failed
+    // every batch with "invalid column name" and the timing telemetry was
+    // silently lost. CQL lets CAP emit the correct per-dialect identifier
+    // casing on both HANA and SQLite. `firstAppendAt` is stamped once, on the
+    // first append (guarded by the already-loaded session row), reproducing
+    // the original COALESCE(firstAppendAt, now) intent without a raw SQL
+    // expression; `appendMsTotal` defaults to 0 at begin so `+=` is safe.
     try {
       const appendMs = Math.round(Number(process.hrtime.bigint() - appendStartHr) / 1e6);
-      const db = await cds.connect.to('db');
-      // Raw SQL — HANA column names are quoted-camelCase in migration tables
-      // (see db/src/*.hdbmigrationtable). COALESCE handles first-append case.
-      const hanaContentManifest = `${namespace.replace(/\./g, '_')}_ContentManifest`;
-      await db.run(
-        `UPDATE ${hanaContentManifest} SET "appendMsTotal" = COALESCE("appendMsTotal", 0) + ?, "firstAppendAt" = COALESCE("firstAppendAt", CURRENT_UTCTIMESTAMP) WHERE "sessionId" = ?`,
-        [appendMs, sessionId]
-      );
+      const setClause = { appendMsTotal: { '+=': appendMs } };
+      if (!session.firstAppendAt) setClause.firstAppendAt = new Date().toISOString();
+      await UPDATE(ContentManifest).where({ sessionId }).set(setClause);
     } catch (err) {
       LOG.warn(`[content/publish/append] timing update failed (non-fatal): ${err.message}`);
     }
