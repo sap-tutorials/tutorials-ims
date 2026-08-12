@@ -180,7 +180,7 @@ In `package.json` `cds.requires.alerts`:
   "[production]": { "kind": "alert-notification" },
   "channels": ["email:devrel-oncall"],
   "routes": [{ "minSeverity": "ERROR", "channels": ["email:devrel-oncall"] }],
-  "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed", "AlertingTest"],
+  "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed", "DeployStarted", "DeployFinished", "DeployFailed", "NgdsSendExhausted", "NgdsBacklog", "AlertingTest"],
   "dedupWindowMs": 300000
 }
 ```
@@ -273,6 +273,15 @@ subaccount, locate the `tutorials-alert-notification` instance, and create an
 email ACTION pointing to the real `devrel-oncall` distribution-list address.
 Wire it to the `devrel-oncall` CONDITION (minSeverity ERROR). Without this step
 the instance is bound but no emails are sent.
+
+> **Every `eventType` needs its own cockpit condition + subscription.** Delivery
+> is filtered per-`eventType` in ANS (the plugin only POSTs to the producer
+> API). A working `AlertingTest` email does NOT imply the other eventTypes are
+> wired — that was the 2026-08-12 gap where only the test path delivered. When
+> you add a new `eventType` in `cds.requires.alerts.eventTypes` (e.g.
+> `NgdsSendExhausted` (ERROR) / `NgdsBacklog` (WARNING) from the NGDS retry job),
+> `cds build` regenerates `gen/alerts/ans-*.json`, but you must also create the
+> matching condition + subscription in the cockpit or that alert stays silent.
 
 **6. Enable alerting (admin UI — no restart).**
 
