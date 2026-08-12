@@ -82,7 +82,10 @@ describe('retryNgds wiring (alerts + gauges)', () => {
     const events = raiseSpy.mock.calls.map(c => c[0].eventType);
     expect(events).toContain('NgdsSendExhausted');
     expect(events).toContain('NgdsBacklog');
-    expect(gaugeSpy).toHaveBeenCalledWith('ngds.failed_messages.pending', expect.any(Number));
+    // pendingRemaining = pending.length(1) - retried(0) - exhausted(1) = 0
+    expect(gaugeSpy).toHaveBeenCalledWith('ngds.failed_messages.pending', 0);
+    expect(counterSpy).toHaveBeenCalledWith('ngds.retry.failed', 1);
+    expect(counterSpy).toHaveBeenCalledWith('ngds.retry.exhausted', 1);
   });
 
   it('raises no alert and gauges 0 pending when all sends succeed', async () => {
@@ -91,5 +94,7 @@ describe('retryNgds wiring (alerts + gauges)', () => {
     await retryNgds('log-2');
     expect(raiseSpy).not.toHaveBeenCalled();
     expect(gaugeSpy).toHaveBeenCalledWith('ngds.failed_messages.pending', 0);
+    expect(counterSpy).not.toHaveBeenCalledWith('ngds.retry.failed', expect.anything());
+    expect(counterSpy).not.toHaveBeenCalledWith('ngds.retry.exhausted', expect.anything());
   });
 });
