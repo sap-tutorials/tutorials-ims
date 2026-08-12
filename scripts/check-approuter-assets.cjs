@@ -109,8 +109,8 @@ function parseArgs(argv) {
 }
 
 // Collect same-origin asset refs from a rendered HTML string. Always collects
-// `/css/*.css` hrefs. When `includeJs` is set (served-content mode only),
-// ALSO collects HASHED `/js/*-<hash>.js` script src's — the unhashed fallback
+// `/css/*.css` hrefs. When `includeJs` is set — served-content mode, or
+// local-hugo `--check-islands` — ALSO collects HASHED `/js/*-<hash>.js` script src's — the unhashed fallback
 // (`/js/name.js`, e.g. /js/joule.js) is deliberately excluded, mirroring the
 // deploy-mta.cjs Step 2.5 hashed-bundle convention (#1604). Tolerant of Hugo's
 // minified output where attributes are UNQUOTED (href=/css/x.css) as well as
@@ -434,7 +434,7 @@ async function main() {
 
   // Gather the union of /css refs across the pages, remembering which page each
   // came from so a failure can point at the offending tutorial. (Local-hugo mode
-  // is CSS-only — see the SCOPE note in the header.)
+  // probes hashed island /js assets too when --check-islands is passed; else CSS-only.)
   const refToPages = new Map(); // assetPath -> Set(slug)  (css + optionally hashed island js)
   for (const { slug, file } of pages) {
     const html = fs.readFileSync(file, 'utf8');
@@ -487,15 +487,16 @@ async function main() {
   }
 
   if (missing.length) {
-    console.error('\n' + C.red('[check-approuter-assets] the target approuter does NOT serve CSS the rendered HTML references:'));
+    const kind = args.checkIslands ? 'CSS/JS asset(s)' : 'CSS';
+    console.error('\n' + C.red(`[check-approuter-assets] the target approuter does NOT serve ${kind} the rendered HTML references:`));
     for (const m of missing) {
       const where = [...refToPages.get(m.ref)].slice(0, 3).join(', ');
       const detail = m.status ? `HTTP ${m.status}` : `network error${m.error ? ` (${m.error})` : ''}`;
       console.error(C.red(`  MISSING (${detail}): `) + m.ref + C.dim(`  ← referenced by: ${where}`));
     }
     console.error('\n' + C.ylw('  A slug-targeted rebuild publishes HTML but does NOT push approuter static, so'));
-    console.error(C.ylw('  the fingerprinted CSS above will 404 → pages render unstyled. This happens when a'));
-    console.error(C.ylw('  CSS-fingerprinting template change (e.g. #1605) has not been shipped to this'));
+    console.error(C.ylw(`  the fingerprinted ${kind} above will 404${args.checkIslands ? ' → pages render unstyled or island bundles fail to load' : ' → pages render unstyled'}. This happens when a`));
+    console.error(C.ylw(`  ${args.checkIslands ? 'CSS/JS-fingerprinting template change (e.g. #1605/#1604)' : 'CSS-fingerprinting template change (e.g. #1605)'} has not been shipped to this`));
     console.error(C.ylw('  approuter yet.'));
     console.error('\n' + C.ylw('  Fix: run a FULL build + deploy to this env first (ships hugo/public/css/* into'));
     console.error(C.ylw('  the approuter static), THEN re-run the slug rebuild. See'));
@@ -503,7 +504,8 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(C.grn(`  ✓ all ${refs.length} referenced /css asset(s) are served by the approuter`));
+  const kindLabel = args.checkIslands ? 'css+island-js' : '/css';
+  console.log(C.grn(`  ✓ all ${refs.length} referenced ${kindLabel} asset(s) are served by the approuter`));
   process.exit(0);
 }
 

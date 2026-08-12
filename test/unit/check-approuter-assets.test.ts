@@ -259,6 +259,8 @@ describe('check-approuter-assets (rebuild-content slug guard, #1622)', () => {
       expect(r.status).toBe(1);
       const out = r.stdout + r.stderr;
       expect(out).toContain('/js/tutorial-DBCzDHRV.js');
+      // failure header/remediation must name JS/islands (not be CSS-only wording)
+      expect(out).toMatch(/island|js|\.js/i);
       // unhashed fallback must never be blamed
       expect(out).not.toMatch(/joule\.js.*(404|MISSING|not served)/i);
     } finally {
