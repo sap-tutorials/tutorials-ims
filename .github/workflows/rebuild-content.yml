@@ -277,22 +277,17 @@ jobs:
 
       - name: Install dependencies
         env:
-          MODE: ${{ steps.mode.outputs.effective_mode }}
           NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           # --prefer-offline uses the warm setup-node npm cache; --no-audit/
           # --no-fund trim network + noise. (#1278)
           npm ci --prefer-offline --no-audit --no-fund
-          # hugo-apps deps are ONLY consumed by the Build Vue apps / explore /
-          # display / admin-SPA steps, all of which are skipped in slug-targeted
-          # mode — so don't install them there (#1278). Catalog-only also skips
-          # those builds, but it's a fast admin path already; keep it simple and
-          # only special-case slug-targeted.
-          if [ "$MODE" != "slug-targeted" ]; then
-            npm --prefix hugo-apps install
-          else
-            echo "::notice::slug-targeted — skipping hugo-apps install (no Vue/SPA builds run)"
-          fi
+          # hugo-apps deps are needed by the island Vite build, which now runs in
+          # EVERY content-producing mode (including slug-targeted) so island-src.html
+          # can bake hashed /js paths instead of bare /js/<name>.js that 404 on the
+          # approuter. (Was slug-skipped pre-2026-08 / #1278; that caused the
+          # step-6 validation-island outage on trial-get-productive-with-joule-work.)
+          npm --prefix hugo-apps install
 
       - name: Restore tutorial cache
         uses: actions/cache@v4
@@ -448,7 +443,10 @@ jobs:
         run: npm run validate-tutorials
 
       - name: Build Vue apps
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        # Runs in EVERY content-producing mode: the emitted Vite manifest
+        # (hugo/static/js/.vite/manifest.json) is what build:island-manifest turns
+        # into hugo/data/island_manifest.json → hashed island <script src>. Skipping
+        # it in slug-targeted baked bare /js/<name>.js that 404s on the approuter.
         run: npm --prefix hugo-apps run build
 
       # [#1604] Bridge Vite's content-hashed island bundles to Hugo BEFORE the
@@ -467,7 +465,8 @@ jobs:
       # failure class as the retrofits below; guarded on the deploy path by
       # deploy-mta.cjs Step 2.5.
       - name: Build island manifest
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        # Runs in EVERY content-producing mode (see "Build Vue apps"). Writes
+        # hugo/data/island_manifest.json, read by island-src.html at render time.
         run: npm run build:island-manifest
 
       # Stage the vendored WASM/model bundles into hugo/static/vendor/ BEFORE the
@@ -568,11 +567,14 @@ jobs:
       # atomically clobber the good approuter static with 404-ing bare refs (the
       # PROD outage of 2026-08-10/11). Mirrors deploy-mta.cjs Step 2.5, which
       # guards the DEPLOY path only. Deterministic (checks hugo/public, not the
-      # multi-instance live approuter). Skipped in slug-targeted (no tarball push;
-      # CSS handled by the #1622 guard below). Gates on the Vite manifest, so it
+      # multi-instance live approuter). Runs in all modes including slug-targeted
+      # (Task 2 / #1628 ensures the island manifest is built in slug-targeted so
+      # hashed refs are baked). Gates on the Vite manifest, so it
       # never false-fails when island bundles were not built.
       - name: Guard - homepage islands fingerprinted
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        # Now that the island manifest is built in slug-targeted too, this guard is
+        # meaningful in every mode: fail loud if index.html bakes only bare island
+        # paths while a Vite manifest exists.
         run: node scripts/check-hugo-island-fingerprint.cjs --hugo-dir hugo/public
 
       # #1622 — slug-targeted guard. A slug-targeted rebuild publishes tutorial
@@ -592,13 +594,14 @@ jobs:
       # run. The referenced /css hrefs are identical across all tutorial pages
       # (shared head/baseof partials), so one representative page fully covers the
       # failure class; PUBLISH_SLUG scopes it to the changed tutorial (empty →
-      # scans all rendered pages). CSS-only on purpose: JS island bundles use the
-      # Vite + island_manifest mechanism (not rebuilt in slug mode) and are
-      # guarded on the deploy path (deploy-mta.cjs Step 2.5 / #1604). Mirrors that
-      # Step 2.5 belt-and-suspenders. Static /css is public on the approuter, so
+      # scans all rendered pages). Also probes islands (hashed /js/<name>-<hash>.js):
+      # the island manifest is now built in slug-targeted mode (see "Build island
+      # manifest"), so the rendered HTML carries hashed island refs. --check-islands
+      # probes them against the approuter alongside /css; a bare /js/<name>.js
+      # fallback is never probed. Static /css is public on the approuter, so
       # no REBUILD_API_KEY is needed; a fully-gated/unreachable channel (no 200s
       # at all) is treated as inconclusive and does not block.
-      - name: Guard - approuter serves referenced CSS (slug-targeted)
+      - name: Guard - approuter serves referenced CSS + islands (slug-targeted)
         if: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' }}
         env:
           APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
@@ -609,7 +612,8 @@ jobs:
         run: |
           node scripts/check-approuter-assets.cjs \
             --approuter-url "$APPROUTER_URL" \
-            --hugo-dir hugo/public
+            --hugo-dir hugo/public \
+            --check-islands
 
       - name: Publish tutorial content to HANA
         id: publish

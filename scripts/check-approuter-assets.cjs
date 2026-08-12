@@ -25,14 +25,14 @@
 //   run fails loud with instructions to run a full deploy first — so HANA is
 //   never poisoned with HTML the approuter can't dress.
 //
-// LOCAL-HUGO MODE — CSS only, on purpose:
-//   Hugo computes CSS content-hashes deterministically from the committed source
-//   in hugo/assets/css/ on EVERY build regardless of rebuild mode, so the hrefs
-//   the guard sees match what a full build would ship. JS island bundles use a
-//   different mechanism (Vite build + hugo/data/island_manifest.json, which is
-//   NOT git-tracked and is not rebuilt in slug-targeted mode); probing those
-//   against locally-rendered HTML would false-positive here. The deploy path
-//   already guards islands (deploy-mta.cjs Step 2.5 / #1604).
+// LOCAL-HUGO MODE — CSS always; hashed island JS with --check-islands:
+//   Hugo computes CSS content-hashes deterministically from committed source on
+//   EVERY build, so the /css hrefs match what a full build ships. Island JS is
+//   content-hashed via the Vite build + hugo/data/island_manifest.json. As of the
+//   slug-targeted island-build fix (2026-08), that manifest IS rebuilt in every
+//   content-producing mode, so locally-rendered HTML carries hashed island refs
+//   too — pass --check-islands to probe them (the rebuild-content slug guard does).
+//   The unhashed fallback (/js/name.js) is never probed (it can't fingerprint-drift).
 //
 // SERVED-CONTENT MODE (--served-base, #1678) — CSS *and* hashed JS:
 //   Defense-in-depth companion to PR #1677 (the retention root-cause fix). Instead
@@ -103,13 +103,14 @@ function parseArgs(argv) {
     else if (a === '--served-pages') out.servedPages = argv[++i];
     else if (a === '--sample-size') out.sampleSize = argv[++i];
     else if (a === '--advisory') out.advisory = true;
+    else if (a === '--check-islands') out.checkIslands = true;
   }
   return out;
 }
 
 // Collect same-origin asset refs from a rendered HTML string. Always collects
-// `/css/*.css` hrefs. When `includeJs` is set (served-content mode only),
-// ALSO collects HASHED `/js/*-<hash>.js` script src's — the unhashed fallback
+// `/css/*.css` hrefs. When `includeJs` is set — served-content mode, or
+// local-hugo `--check-islands` — ALSO collects HASHED `/js/*-<hash>.js` script src's — the unhashed fallback
 // (`/js/name.js`, e.g. /js/joule.js) is deliberately excluded, mirroring the
 // deploy-mta.cjs Step 2.5 hashed-bundle convention (#1604). Tolerant of Hugo's
 // minified output where attributes are UNQUOTED (href=/css/x.css) as well as
@@ -433,11 +434,11 @@ async function main() {
 
   // Gather the union of /css refs across the pages, remembering which page each
   // came from so a failure can point at the offending tutorial. (Local-hugo mode
-  // is CSS-only — see the SCOPE note in the header.)
-  const refToPages = new Map(); // cssPath -> Set(slug)
+  // probes hashed island /js assets too when --check-islands is passed; else CSS-only.)
+  const refToPages = new Map(); // assetPath -> Set(slug)  (css + optionally hashed island js)
   for (const { slug, file } of pages) {
     const html = fs.readFileSync(file, 'utf8');
-    for (const ref of extractAssetRefs(html)) {
+    for (const ref of extractAssetRefs(html, { includeJs: !!args.checkIslands })) {
       if (!refToPages.has(ref)) refToPages.set(ref, new Set());
       refToPages.get(ref).add(slug);
     }
@@ -445,15 +446,16 @@ async function main() {
 
   const refs = [...refToPages.keys()].sort();
   if (!refs.length) {
+    const kind = args.checkIslands ? '/css or hashed island /js' : '/css';
     die(
-      `the rendered tutorial page(s) reference no /css assets — the head partial changed unexpectedly.\n` +
+      `the rendered tutorial page(s) reference no ${kind} assets — the head partial changed unexpectedly.\n` +
         `             Scanned: ${pages.map((p) => p.slug).join(', ')}`,
     );
   }
 
   console.log(
     C.dim(
-      `[check-approuter-assets] probing ${refs.length} /css asset(s) against ${approuterUrl} ` +
+      `[check-approuter-assets] probing ${refs.length} ${args.checkIslands ? 'css+island-js' : '/css'} asset(s) against ${approuterUrl} ` +
         `(pages: ${pages.length === 1 ? pages[0].slug : pages.length + ' tutorials'})`,
     ),
   );
@@ -485,15 +487,16 @@ async function main() {
   }
 
   if (missing.length) {
-    console.error('\n' + C.red('[check-approuter-assets] the target approuter does NOT serve CSS the rendered HTML references:'));
+    const kind = args.checkIslands ? 'CSS/JS asset(s)' : 'CSS';
+    console.error('\n' + C.red(`[check-approuter-assets] the target approuter does NOT serve ${kind} the rendered HTML references:`));
     for (const m of missing) {
       const where = [...refToPages.get(m.ref)].slice(0, 3).join(', ');
       const detail = m.status ? `HTTP ${m.status}` : `network error${m.error ? ` (${m.error})` : ''}`;
       console.error(C.red(`  MISSING (${detail}): `) + m.ref + C.dim(`  ← referenced by: ${where}`));
     }
     console.error('\n' + C.ylw('  A slug-targeted rebuild publishes HTML but does NOT push approuter static, so'));
-    console.error(C.ylw('  the fingerprinted CSS above will 404 → pages render unstyled. This happens when a'));
-    console.error(C.ylw('  CSS-fingerprinting template change (e.g. #1605) has not been shipped to this'));
+    console.error(C.ylw(`  the fingerprinted ${kind} above will 404${args.checkIslands ? ' → pages render unstyled or island bundles fail to load' : ' → pages render unstyled'}. This happens when a`));
+    console.error(C.ylw(`  ${args.checkIslands ? 'CSS/JS-fingerprinting template change (e.g. #1605/#1604)' : 'CSS-fingerprinting template change (e.g. #1605)'} has not been shipped to this`));
     console.error(C.ylw('  approuter yet.'));
     console.error('\n' + C.ylw('  Fix: run a FULL build + deploy to this env first (ships hugo/public/css/* into'));
     console.error(C.ylw('  the approuter static), THEN re-run the slug rebuild. See'));
@@ -501,7 +504,8 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(C.grn(`  ✓ all ${refs.length} referenced /css asset(s) are served by the approuter`));
+  const kindLabel = args.checkIslands ? 'css+island-js' : '/css';
+  console.log(C.grn(`  ✓ all ${refs.length} referenced ${kindLabel} asset(s) are served by the approuter`));
   process.exit(0);
 }
 
