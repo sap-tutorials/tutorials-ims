@@ -59,7 +59,14 @@ jobs:
         run: curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          # [#1629] hugo-apps deps are NOT installed by the root `npm ci`
+          # (global npmrc has ignore-scripts=true; hugo-apps is not a root
+          # workspace). The "Build hugo-apps islands" step below needs them, so
+          # install explicitly — mirrors rebuild-content.yml. QA always builds
+          # the full site (no slug-targeted skip), so this is unconditional.
+          npm --prefix hugo-apps install
         env:
           NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
