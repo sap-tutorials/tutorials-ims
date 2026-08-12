@@ -175,6 +175,13 @@ export default class DeveloperService extends cds.ApplicationService {
       let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       if (!dbUser) {
         const newUser = {
+          // Explicit UUID key: these writes go straight to cds.db (bare
+          // INSERT.into(dbUsers) on the db-model entity), which does NOT run
+          // the ApplicationService key-generation handler. SQLite fills the
+          // UUID at its db layer so unit tests pass, but HANA leaves ID NULL →
+          // "cannot insert NULL ... ID" (code 287) for any never-migrated user
+          // (issue #1614). cds.utils.uuid() makes the INSERT layer-independent.
+          ID: cds.utils.uuid(),
           uuid: user.id,
           sapId,
           legacyId: await getNextLegacyId('Users', db),
@@ -852,6 +859,7 @@ export default class DeveloperService extends cds.ApplicationService {
       let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       if (!dbUser) {
         const newUser = {
+          ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT, see #1614 note above
           uuid: req.user.id,
           sapId,
           legacyId: await getNextLegacyId('Users', db),
@@ -895,6 +903,7 @@ export default class DeveloperService extends cds.ApplicationService {
       let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       if (!dbUser) {
         const newUser = {
+          ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT, see #1614 note above
           uuid: req.user.id,
           sapId,
           legacyId: await getNextLegacyId('Users', db),
@@ -950,6 +959,7 @@ export default class DeveloperService extends cds.ApplicationService {
         let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
         if (!dbUser) {
           const newUser = {
+            ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT, see #1614 note above
             uuid: req.user.id,
             sapId,
             legacyId: await getNextLegacyId('Users', db),
