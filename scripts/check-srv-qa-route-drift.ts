@@ -75,6 +75,11 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'AI code-check (#171) — gated behind ChatSettings.codeCheckEnabled feature flag; ' +
     'not yet wired for QA author-preview. Re-evaluate when credstore-backed ChatSettings ' +
     'reach QA.',
+  'GET /content/tutorial-model/*slug':
+    'Legacy AEM `.model.json` compat shim for SAP Discovery Center cards (#1685) — a public ' +
+    'prod content surface consumed externally against prod, not tutorial-draft author preview. ' +
+    'Discovery Center has no QA integration and srv-qa does not wire srv/lib/model-json.js. ' +
+    'Same rationale as the concept-page entries below.',
   'GET /content/concepts/:slug':
     'KG concept landing pages (#446, Phase 3 Track 3-A) — a public prod content surface, ' +
     'not tutorial-draft author preview. The QA channel serves in-flight tutorials from ' +
