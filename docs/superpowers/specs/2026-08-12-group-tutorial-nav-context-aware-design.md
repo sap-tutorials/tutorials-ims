@@ -75,24 +75,33 @@ E is the heaviest and may be deferred.
 
 Replace last-writer-wins with a **canonical owner** per slug. Pre-compute, for
 each tutorial slug, the single container (mission-group or standalone group) that
-owns its baked default = the container with the **lowest `legacyId`** (the
-original authoring home; for trial-3 this is group `15066` / mission `15069`, not
-the later TechEd app-space reuses `937/969/979`). Only that container writes the
-tutorial's baked `next`/`prev`/`missionId`/`missionSlug`/`missionTitle`/
+owns its baked default = the container with the **lowest `(missionLegacyId,
+groupLegacyId)`** rank (the original authoring home). Only that container writes
+the tutorial's baked `next`/`prev`/`missionId`/`missionSlug`/`missionTitle`/
 `groupSlug`/`groupTitle`/`missionAltGroups`.
 
-- Ordering key: the navigation container is the **group**, so choose the owner
-  by the container's own `legacyId` ascending — `Group.legacyId` for grouped
-  tutorials (nested or standalone), `CompletionPath.legacyId` for path-level
-  direct tutorials (synthetic groups with no `Group` entity). Deterministic
-  tiebreak by container kind then slug. `legacyId` is unique per entity, so a
+- Ordering key: rank each candidate container by the tuple
+  `[missionLegacyId ?? Number.MAX_SAFE_INTEGER, groupLegacyId]`, ascending;
+  lowest wins. This keys off the **mission** first, not the group — group
+  legacyIds are NOT chronologically ordered relative to the home mission. Worked
+  example: `hana-cloud-mission-trial-3` lives in group `15066` (mission `15069`
+  "Jump Start") and groups `937/969/979` (TechEd missions `24491/24596/24609`).
+  Ranking by group id alone would wrongly pick `937`; ranking by mission id picks
+  mission `15069` → the `set-up-...` group, whose baked Next is correctly
+  `hana-cloud-mission-trial-4`. Standalone groups (no parent mission) rank with
+  `missionLegacyId = Number.MAX_SAFE_INTEGER` (mission-nested homes preferred),
+  tiebroken by `groupLegacyId` then slug. `legacyId` is unique per entity, so a
   given tutorial's candidate set has a single unambiguous minimum.
+- Container metadata built for `missionsMeta` / `allGroupRefs` / `_nav.json`
+  stays unchanged (every container still contributes its full tutorial list) —
+  only the per-tutorial **frontmatter** nav stamping is owner-scoped. Implement
+  as: flatten all containers into a list, sort by the rank tuple, then a single
+  stamping pass with a `stamped` Set (first-writer-wins in ranked order); remove
+  the inline nav-stamping from the existing metadata loops.
 - Do **not** rely on `if (!nav.next)` guards — `null` is a legitimate "no next"
-  (last item in group). Track the chosen owner explicitly and write once.
+  (last item in group). The `stamped` Set is the authority.
 - Result: baked defaults become stable and sensible for direct visits, search,
   bookmarks, breadcrumb, and side-nav, regardless of mission array order.
-- `_nav.json` / navigator emission is unaffected (it already emits per-group
-  rows); only the per-tutorial *frontmatter* default changes.
 
 ### Phase B — Emit entry context
 **File:** `srv/lib/catalog-renderer.js`.
