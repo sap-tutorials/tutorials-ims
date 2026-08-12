@@ -26,7 +26,7 @@ function ensurePill(
     a.className = which === 'next' ? 'nav-pill nav-pill--primary' : 'nav-pill';
     a.textContent = which === 'next' ? 'Next →' : '← Previous';
     if (which === 'next') bottom.appendChild(a);
-    else bottom.insertBefore(a, bottom.firstChild); // before the nav-spacer
+    else bottom.insertBefore(a, bottom.querySelector('.nav-spacer') ?? null); // before spacer (degrades if absent)
   }
   a.setAttribute('href', href(target, from));
 }
