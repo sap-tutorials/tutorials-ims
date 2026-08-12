@@ -13,6 +13,7 @@ import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
 import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { computeRecommendations } from './parsers/recommendations.js'
+import { computeCanonicalNav, type NavContainer } from './parsers/nav-owner.js'
 import { humanizeTag, cleanPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
 import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
@@ -1149,6 +1150,7 @@ async function main() {
   const allGroupRefs: GroupRef[] = []
   let matchedTutorials = 0
   let unmatchedTutorials = 0
+  const navContainers: NavContainer[] = []
 
   for (const mission of missions) {
     const hierarchy = hierarchies.find(h => h.missionImsId === mission.imsId)
@@ -1194,24 +1196,21 @@ async function main() {
 
         matchedTutorials++
         groupRef.tutorials.push(tSlug)
-
-        nav.missionId = mission.imsId
-        nav.missionTitle = mission.title
-        nav.missionSlug = mission.slug
-        if (collectedAltGroups.length) {
-          nav.missionAltGroups = collectedAltGroups
-        }
-        if (!isFlat) {
-          nav.groupId = group.imsId
-          nav.groupTitle = group.title
-          nav.groupSlug = group.slug
-        }
-
-        const prevSlug = i > 0 ? group.tutorialSlugs[i - 1] : null
-        const nextSlug = i < group.tutorialSlugs.length - 1 ? group.tutorialSlugs[i + 1] : null
-        if (prevSlug && navBySlug.has(prevSlug)) nav.prev = prevSlug
-        if (nextSlug && navBySlug.has(nextSlug)) nav.next = nextSlug
       }
+
+      navContainers.push({
+        kind: 'mission',
+        missionLegacyId: mission.imsId,
+        groupLegacyId: group.imsId,
+        slugs: group.tutorialSlugs,
+        stamp: {
+          missionId: mission.imsId,
+          missionTitle: mission.title,
+          missionSlug: mission.slug,
+          ...(collectedAltGroups.length ? { missionAltGroups: collectedAltGroups } : {}),
+          ...(isFlat ? {} : { groupId: group.imsId, groupTitle: group.title, groupSlug: group.slug }),
+        },
+      })
 
       missionGroups.push(groupRef)
       if (!isFlat) {
@@ -1250,18 +1249,36 @@ async function main() {
       }
       matchedTutorials++
       groupRef.tutorials.push(tSlug)
-
-      nav.groupId = sg.imsId
-      nav.groupTitle = sg.title
-      nav.groupSlug = sg.slug
-
-      const prevSlug = i > 0 ? sg.tutorialSlugs[i - 1] : null
-      const nextSlug = i < sg.tutorialSlugs.length - 1 ? sg.tutorialSlugs[i + 1] : null
-      if (prevSlug && navBySlug.has(prevSlug)) nav.prev = prevSlug
-      if (nextSlug && navBySlug.has(nextSlug)) nav.next = nextSlug
     }
 
+    navContainers.push({
+      kind: 'standalone',
+      missionLegacyId: null,
+      groupLegacyId: sg.imsId,
+      slugs: sg.tutorialSlugs,
+      stamp: { groupId: sg.imsId, groupTitle: sg.title, groupSlug: sg.slug },
+    })
+
     allGroupRefs.push(groupRef)
+  }
+
+  const navAssignments = computeCanonicalNav(navContainers, new Set(navBySlug.keys()))
+  for (const [slug, a] of navAssignments) {
+    const nav = navBySlug.get(slug)
+    if (!nav) continue
+    nav.prev = a.prev
+    nav.next = a.next
+    if (a.missionId !== undefined) {
+      nav.missionId = a.missionId
+      nav.missionTitle = a.missionTitle
+      nav.missionSlug = a.missionSlug
+    }
+    if (a.missionAltGroups !== undefined) nav.missionAltGroups = a.missionAltGroups as typeof nav.missionAltGroups
+    if (a.groupId !== undefined) {
+      nav.groupId = a.groupId
+      nav.groupTitle = a.groupTitle
+      nav.groupSlug = a.groupSlug
+    }
   }
 
   const recommendations = computeRecommendations(navEntries, { coCompletions })

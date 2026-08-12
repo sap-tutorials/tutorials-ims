@@ -40,8 +40,8 @@ describe('renderGroupBody', () => {
 
   it('marks recent tutorials with timeline-card--new + NEW badge', () => {
     const html = renderGroupBody(fxGroup, { now: TODAY });
-    const t1Idx = html.indexOf('href="/tutorials/t1"');
-    const t2Idx = html.indexOf('href="/tutorials/t2"');
+    const t1Idx = html.indexOf('href="/tutorials/t1');
+    const t2Idx = html.indexOf('href="/tutorials/t2');
     const newBadgeIdx = html.indexOf('NEW</span>');
     expect(newBadgeIdx).toBeGreaterThan(0);
     // Hugo parity: hugo/layouts/groups/single.html places the NEW badge BEFORE
@@ -152,8 +152,8 @@ describe('renderMissionBody', () => {
   it('emits inner tutorial list with /tutorials/<slug> links', () => {
     const html = renderMissionBody(fxMission);
     expect(html).toContain('class="tutorial-item"');
-    expect(html).toContain('href="/tutorials/t1"');
-    expect(html).toContain('href="/tutorials/t2"');
+    expect(html).toContain('href="/tutorials/t1?from=g-one"');
+    expect(html).toContain('href="/tutorials/t2?from=g-two"');
   });
 
   it('renders Markdown in mission description (issue #121)', () => {

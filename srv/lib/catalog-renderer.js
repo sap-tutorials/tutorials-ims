@@ -77,7 +77,7 @@ export function renderGroupBody(ctx, opts = {}) {
         <div class="timeline-card${newClass}">
           ${newBadge}
           <div class="timeline-card-header">
-            <h3><a href="/tutorials/${escapeHtml(t.slug)}">${escapeHtml(t.title)}</a></h3>
+            <h3><a href="/tutorials/${escapeHtml(t.slug)}?from=${escapeHtml(group.slug)}">${escapeHtml(t.title)}</a></h3>
             <div class="timeline-card-meta">
               <span>${escapeHtml(titleCase(t.level))}</span>
               <span class="meta-sep">&middot;</span>
@@ -89,7 +89,7 @@ export function renderGroupBody(ctx, opts = {}) {
           ${desc}
           <div class="timeline-card-footer">
             ${tagChip}
-            <a href="/tutorials/${escapeHtml(t.slug)}" class="start-btn">Start Tutorial &rarr;</a>
+            <a href="/tutorials/${escapeHtml(t.slug)}?from=${escapeHtml(group.slug)}" class="start-btn">Start Tutorial &rarr;</a>
           </div>
         </div>
       </div>`;
@@ -123,12 +123,24 @@ ${cards}
 export function renderMissionBody(ctx) {
   const { mission, groups, groupCount, tutorialCount, totalTime, level } = ctx;
 
+  // Pre-compute how many synthetic (path-as-group) cards are in this mission.
+  // Navigator sets groupSlug: undefined for flat single-path missions (isFlat = true),
+  // so emitting ?from=<pathSlug> there would produce a param the island can never match.
+  // Non-flat missions (syntheticCount > 1) and real Groups always have a groupSlug on
+  // the navigator side, so ?from= is correct for those.
+  const syntheticCount = groups.filter(g => g.isSynthetic).length;
+
   const cards = groups.map(g => {
+    // Flat single-path mission: navigator has no groupSlug for this entry, so omit
+    // ?from= and let the baked canonical links stand as the fallback.
+    const fromParam = g.isSynthetic && syntheticCount === 1
+      ? ''
+      : `?from=${escapeHtml(g.slug)}`;
     const tuts = g.tutorials.map((t, i) => `
             <li class="tutorial-item">
               <span class="tutorial-number">${i + 1}</span>
               <div class="tutorial-info">
-                <a href="/tutorials/${escapeHtml(t.slug)}" class="tutorial-link">${escapeHtml(t.title)}</a>
+                <a href="/tutorials/${escapeHtml(t.slug)}${fromParam}" class="tutorial-link">${escapeHtml(t.title)}</a>
                 <div class="tutorial-meta-row">
                   <span>${escapeHtml(titleCase(t.level || 'beginner'))}</span>
                   <span class="meta-sep">&middot;</span>
