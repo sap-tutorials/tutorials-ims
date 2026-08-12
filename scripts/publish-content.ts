@@ -468,6 +468,36 @@ export function computePublishPlan(opts: {
 }
 
 /**
+ * #1668 — split the post-commit verify diff into genuine store/verify
+ * mismatches vs. slugs that differ ONLY because the #672 no-revert guard
+ * deliberately kept prior content (so the local revert bytes never landed).
+ *
+ * The auto-verify step compares local hashes against the server AFTER commit.
+ * A slug the guard rejected still carries its prior (non-revert) content on the
+ * server, so its local hash won't match — it lands in `verifyDiff`. Lumping it
+ * into "Verify FAILED" turns a benign, expected outcome into an alarming one
+ * (cost real triage time — see the issue). This partition lets the caller
+ * report rejected reverts as expected and reserve "Verify FAILED" (exit 2) for
+ * true mismatches.
+ *
+ * Pure function: order-preserving over `verifyDiff`. Rejected-revert slugs that
+ * don't appear in `verifyDiff` (their bytes happened to match) are ignored, not
+ * invented into either list.
+ */
+export function partitionVerifyMismatches(opts: {
+  verifyDiff: string[];
+  rejectedReverts?: string[];
+}): { genuine: string[]; expectedReverts: string[] } {
+  const rejected = new Set(opts.rejectedReverts ?? []);
+  const genuine: string[] = [];
+  const expectedReverts: string[] = [];
+  for (const slug of opts.verifyDiff) {
+    (rejected.has(slug) ? expectedReverts : genuine).push(slug);
+  }
+  return { genuine, expectedReverts };
+}
+
+/**
  * #672 short-circuit: drop slugs from `targetSlugs` whose state is already in
  * sync with the server. A slug is in sync when BOTH:
  *   - source-markdown hash matches the server's stored sourceHash, AND
@@ -1279,12 +1309,30 @@ async function main() {
     process.exit(0); // commit was successful; don't punish for a transient verify-fetch error
   }
   const verifyDiff = computeDiff(localHashes, postRemote);
-  if (verifyDiff.length === 0) {
-    console.log(`Verify OK: ${localHashes.size} slugs match server.`);
+  // #1668 — a slug the #672 no-revert guard rejected still carries its prior
+  // content on the server, so its local (revert) hash won't match here. That's
+  // the guard doing its job, NOT a store failure. Split those out so we don't
+  // fold them into an alarming "Verify FAILED" (they were already surfaced
+  // above as a warning), and reserve exit 2 for genuine mismatches.
+  const { genuine: verifyGenuine, expectedReverts: verifyExpectedReverts } =
+    partitionVerifyMismatches({ verifyDiff, rejectedReverts: commit.rejectedReverts });
+  if (verifyExpectedReverts.length) {
+    console.warn(
+      `Verify: ${verifyExpectedReverts.length} slug(s) still differ because the #672 no-revert guard ` +
+      `kept prior content (expected, not a failure): ${verifyExpectedReverts.slice(0, 50).sort().join(', ')}`
+    );
+  }
+  if (verifyGenuine.length === 0) {
+    const matched = localHashes.size - verifyExpectedReverts.length;
+    console.log(
+      `Verify OK: ${matched} slugs match server` +
+      (verifyExpectedReverts.length ? ` (${verifyExpectedReverts.length} intentionally kept by the no-revert guard)` : '') +
+      '.'
+    );
     process.exit(0);
   }
-  console.error(`Verify FAILED: commit reported success but ${verifyDiff.length} slugs still differ:`);
-  for (const s of verifyDiff.slice(0, 50).sort()) console.error(`  - ${s}`);
+  console.error(`Verify FAILED: commit reported success but ${verifyGenuine.length} slugs still differ:`);
+  for (const s of verifyGenuine.slice(0, 50).sort()) console.error(`  - ${s}`);
   process.exit(2);
 }
 
