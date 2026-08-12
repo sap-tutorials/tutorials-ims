@@ -1,5 +1,7 @@
 import cds from '@sap/cds';
 import { logJobItem } from '../lib/pipeline-log.js';
+import * as metrics from '../lib/metrics.js';
+import * as alerting from '../lib/alerting.js';
 
 // Alert-decision policy for a single retry run. Pure — no I/O — so the
 // thresholds and severities are unit-testable in isolation. Thresholds are
@@ -62,7 +64,10 @@ export async function retryNgds(logId) {
     } catch (err) {
       const newCount = msg.retryCount + 1;
       const update = { retryCount: newCount };
-      if (newCount >= msg.maxRetries) update.status = 'FAILED_PERMANENTLY';
+      if (newCount >= msg.maxRetries) {
+        update.status = 'FAILED_PERMANENTLY';
+        exhausted++; // newly exhausted this run — permanently dropped
+      }
       await UPDATE(NGDSFailedMessages, msg.ID).set(update);
       LOG.warn(`NGDS retry failed (${newCount}/${msg.maxRetries}):`, err.message);
       failed++;
@@ -73,6 +78,18 @@ export async function retryNgds(logId) {
         message: `Retry ${newCount}/${msg.maxRetries} failed: ${err.message}`
       });
     }
+  }
+
+  const pendingRemaining = pending.length - retried - exhausted;
+  metrics.gauge('ngds.failed_messages.pending', pendingRemaining);
+  if (failed > 0) metrics.counter('ngds.retry.failed', failed);
+  if (exhausted > 0) metrics.counter('ngds.retry.exhausted', exhausted);
+  for (const alert of buildRetryAlerts({ failed, exhausted, pendingRemaining })) {
+    await alerting.raise({
+      ...alert,
+      category: 'ALERT',
+      resource: { resourceName: 'ngds-retry', resourceType: 'job' },
+    });
   }
 
   return { pending: pending.length, retried, exhausted, failed };
