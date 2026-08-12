@@ -52,6 +52,69 @@ function extractCode(bodyHtml: string): string {
     .replace(/\n$/, '');
 }
 
+/**
+ * Replace each CDS code block (marked `data-lang=cds`) in `html` with the output
+ * of `highlightFn(rawCode)` (Shiki, which returns a bare `<pre>…</pre>` with NO
+ * wrapping div). Pure over its inputs so div-balance is unit-testable.
+ *
+ * The input body is Chroma's `<div class=highlight><pre…>…</pre></div>` inside a
+ * `<div class=code-block-body>`. We discard that whole `<div class=highlight>…`
+ * body and splice Shiki's `<pre>` in its place, so we MUST also consume Chroma's
+ * matching closing `</div>` — otherwise every CDS block leaks one unbalanced
+ * `</div>` (issue #1657 regression: right rail ejected from the two-col grid).
+ */
+export function replaceCdsBlocks(
+  html: string,
+  highlightFn: (rawCode: string) => string,
+  marker = 'data-lang=cds'
+): { result: string; changed: boolean; processedBlocks: number } {
+  let result = '';
+  let cursor = 0;
+  let changed = false;
+  let processedBlocks = 0;
+
+  while (true) {
+    const markerIdx = html.indexOf(marker, cursor);
+    if (markerIdx === -1) break;
+
+    const blockStart = html.lastIndexOf('<div', markerIdx);
+    if (blockStart === -1) { cursor = markerIdx + 1; continue; }
+
+    const bodyStart = html.indexOf('<div class=code-block-body>', markerIdx);
+    if (bodyStart === -1) { cursor = markerIdx + 1; continue; }
+
+    const bodyContentStart = bodyStart + '<div class=code-block-body>'.length;
+
+    // Find the matching </div> — the body ends at the next </div></div> sequence
+    // that closes code-block-body and code-block
+    const bodyEndTag = '</div></div>';
+    const bodyEnd = html.indexOf(bodyEndTag, bodyContentStart);
+    if (bodyEnd === -1) { cursor = markerIdx + 1; continue; }
+
+    const bodyContent = html.substring(bodyContentStart, bodyEnd);
+    const rawCode = extractCode(bodyContent);
+
+    if (!rawCode) { cursor = bodyEnd + bodyEndTag.length; continue; }
+
+    const highlighted = highlightFn(rawCode);
+
+    result += html.substring(cursor, bodyContentStart);
+    result += highlighted;
+    // `bodyEnd` sits at Chroma's `<div class=highlight>` CLOSING </div> (its opening
+    // div lived inside `bodyContent`, which we just discarded and replaced with
+    // Shiki's div-less <pre>). Consume that orphaned </div> so the remaining tail is
+    // `</div></div>` (code-block-body + code-block) — 2 closes matching the 2 opens
+    // we kept. Without this, every CDS block leaks one </div> (#1657 → right rail
+    // ejected from the two-column grid).
+    cursor = bodyEnd + '</div>'.length;
+    changed = true;
+    processedBlocks++;
+  }
+
+  result += html.substring(cursor);
+  return { result, changed, processedBlocks };
+}
+
 async function main() {
   const grammar = JSON.parse(readFileSync(GRAMMAR_PATH, 'utf-8'));
 
@@ -72,47 +135,16 @@ async function main() {
     if (!html.includes(MARKER)) continue;
     filesWithMarker++;
 
-    let changed = false;
-    let result = '';
-    let cursor = 0;
-
-    while (true) {
-      const markerIdx = html.indexOf(MARKER, cursor);
-      if (markerIdx === -1) break;
-
-      const blockStart = html.lastIndexOf('<div', markerIdx);
-      if (blockStart === -1) { cursor = markerIdx + 1; continue; }
-
-      const bodyStart = html.indexOf('<div class=code-block-body>', markerIdx);
-      if (bodyStart === -1) { cursor = markerIdx + 1; continue; }
-
-      const bodyContentStart = bodyStart + '<div class=code-block-body>'.length;
-
-      // Find the matching </div> — the body ends at the next </div></div> sequence
-      // that closes code-block-body and code-block
-      const bodyEndTag = '</div></div>';
-      let bodyEnd = html.indexOf(bodyEndTag, bodyContentStart);
-      if (bodyEnd === -1) { cursor = markerIdx + 1; continue; }
-
-      const bodyContent = html.substring(bodyContentStart, bodyEnd);
-      const rawCode = extractCode(bodyContent);
-
-      if (!rawCode) { cursor = bodyEnd + bodyEndTag.length; continue; }
-
-      const highlighted = highlighter.codeToHtml(rawCode, {
+    const { result, changed, processedBlocks: blocksInFile } = replaceCdsBlocks(
+      html,
+      (rawCode) => highlighter.codeToHtml(rawCode, {
         lang: 'cds',
         themes: { light: 'github-light', dark: 'github-dark' },
         defaultColor: false
-      });
-
-      result += html.substring(cursor, bodyContentStart);
-      result += highlighted;
-      cursor = bodyEnd;
-      changed = true;
-      processedBlocks++;
-    }
-
-    result += html.substring(cursor);
+      }),
+      MARKER
+    );
+    processedBlocks += blocksInFile;
 
     if (changed) {
       writeFileSync(file, result, 'utf-8');
@@ -137,7 +169,13 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('highlight-cds failed:', err);
-  process.exit(1);
-});
+// Only run the file-scanning entry point when executed directly (build:highlight
+// → `tsx scripts/highlight-cds.ts`). When imported by a unit test, skip main()
+// so `replaceCdsBlocks` can be exercised in isolation.
+const isEntry = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isEntry) {
+  main().catch((err) => {
+    console.error('highlight-cds failed:', err);
+    process.exit(1);
+  });
+}
