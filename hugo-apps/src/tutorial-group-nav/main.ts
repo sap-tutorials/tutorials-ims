@@ -47,6 +47,7 @@ async function run(): Promise<void> {
       ensurePill(bottom, 'next', row.next, from);
     }
     const card = document.querySelector<HTMLAnchorElement>('a.next-steps-card');
+    // Best-effort: rewrites or removes an existing next-steps card only — does not create one if absent.
     if (card) {
       if (!row.next) card.remove();
       else card.setAttribute('href', href(row.next, from));

@@ -35,7 +35,7 @@ describe.skipIf(!hasBaseUrl())('e2e: group nav stays in-group', () => {
       await page.locator('main').first().waitFor({ state: 'visible', timeout: 15_000 });
       // Island rewrites the baked Next; poll until the href points in-group.
       await expect
-        .poll(async () => page.locator('.tutorial-nav-bottom a.nav-pill--primary').getAttribute('href'),
+        .poll(async () => page.locator('.tutorial-nav-bottom a.nav-pill--primary').first().getAttribute('href'),
           { timeout: 20_000 })
         .toContain(`/tutorials/${FOURTH}`);
     } finally { await context.close(); }
