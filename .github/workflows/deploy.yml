@@ -845,6 +845,33 @@ jobs:
           SMOKE_QA_SRV_URL: ${{ vars.SRV_URL_QA }}
           SMOKE_QA_TOKEN: ${{ secrets.SMOKE_QA_TOKEN }}
 
+      - name: Guard — HANA content assets resolve on deployed approuter (advisory, #1678)
+        # Defense-in-depth mirror of deploy-mta.cjs Step 4.5. CI prod deploys with
+        # --skip-testing-phase (blue-green auto-swaps, no pause), so there is no
+        # pre-swap window here — instead we probe the LIVE (now-green) approuter
+        # POST-deploy: fetch a sample of HANA-served tutorial + concept pages and
+        # confirm their css AND hashed-js assets resolve on that same approuter.
+        # This catches the 2026-08-12 CSS-404 incident class (a fingerprint deploy
+        # dropping a hash that already-published HANA content still references) if
+        # asset-retention (PR #1677) ever regresses. Non-gating by design (mirrors
+        # the e2e job): continue-on-error means a MISSING is a visible ⚠️ in the
+        # summary but never rolls back the deploy. The guard's own inconclusive
+        # guard fail-opens on a gated/unreachable channel, so it won't false-red.
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "### HANA content asset guard (#1678)" >> "$GITHUB_STEP_SUMMARY"
+          BASE="${{ steps.urls.outputs.base_url }}"
+          if [ -z "$BASE" ]; then
+            echo "- ⏭️ skipped: no approuter URL resolved for ${{ needs.deploy.outputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if node scripts/check-approuter-assets.cjs --served-base "$BASE"; then
+            echo "- ✅ sampled tutorial/concept pages' css+js assets all resolve on $BASE" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- ⚠️ some HANA-served assets do NOT resolve on $BASE — see step log (non-blocking; check PR #1677 retention)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Smoke test summary
         if: always()
         run: |

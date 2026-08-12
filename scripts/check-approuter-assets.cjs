@@ -25,24 +25,59 @@
 //   run fails loud with instructions to run a full deploy first — so HANA is
 //   never poisoned with HTML the approuter can't dress.
 //
-// SCOPE — CSS only, on purpose:
+// LOCAL-HUGO MODE — CSS only, on purpose:
 //   Hugo computes CSS content-hashes deterministically from the committed source
 //   in hugo/assets/css/ on EVERY build regardless of rebuild mode, so the hrefs
 //   the guard sees match what a full build would ship. JS island bundles use a
 //   different mechanism (Vite build + hugo/data/island_manifest.json, which is
 //   NOT git-tracked and is not rebuilt in slug-targeted mode); probing those
-//   would false-positive here. The deploy path already guards islands
-//   (deploy-mta.cjs Step 2.5 / #1604).
+//   against locally-rendered HTML would false-positive here. The deploy path
+//   already guards islands (deploy-mta.cjs Step 2.5 / #1604).
+//
+// SERVED-CONTENT MODE (--served-base, #1678) — CSS *and* hashed JS:
+//   Defense-in-depth companion to PR #1677 (the retention root-cause fix). Instead
+//   of reading local hugo/public, this mode fetches the ACTUAL HANA-served tutorial
+//   AND concept pages from a target approuter (the green/idle app during a
+//   blue-green deploy) and probes both the /css *and* the hashed /js bundles those
+//   live pages reference against that same approuter. This catches the
+//   deploy-vs-shared-content mismatch that broke CSS on 2026-08-12: a fingerprint-
+//   changing deploy whose new approuter dropped a hash that already-published HANA
+//   content still points at. JS is safe to probe here (unlike local-hugo mode)
+//   because the served HTML is ground truth — no Hugo rebuild / stale manifest is
+//   involved; the unhashed fallback (/js/name.js) is always excluded.
 //
 // Usage:
+//   # local-hugo (rebuild-content slug guard, CSS-only):
 //   node scripts/check-approuter-assets.cjs --approuter-url <url> --hugo-dir <dir> [--slug <s>] [--slugs a,b,c]
 //   (PUBLISH_SLUG env is honored as a --slug fallback, matching publish-content.ts.)
 //   With no slug given, ALL rendered tutorial pages are scanned.
 //
-// Exit codes: 0 = every referenced /css asset is served · 1 = missing asset / tooling error.
+//   # served-content (deploy pre-swap guard, CSS + hashed JS):
+//   node scripts/check-approuter-assets.cjs --served-base <url> [--served-pages /a/,/b/] [--sample-size N] [--advisory]
+//   With no --served-pages, sample-size tutorial + concept pages are discovered
+//   from <url>/sitemap.xml. --advisory turns a missing asset into a loud
+//   non-blocking warning (exit 0) — used on the operator-gated deploy path.
+//
+// Exit codes: 0 = every referenced asset is served (or advisory/inconclusive) ·
+//             1 = missing asset (blocking) / tooling error.
 
 const fs = require('node:fs');
 const path = require('node:path');
+
+// Best-effort: shrink undici's keep-alive so sockets close right after each
+// response instead of lingering ~4s. Without this, this script's fetches leave
+// keep-alive sockets open that process.exit() force-closes — which on Windows
+// (Node) can abort the process with exit code 0xC0000409 instead of the intended
+// 0/1, flapping the served-mode HTTP tests. setGlobalDispatcher targets the same
+// Symbol.for('undici.globalDispatcher.1') that native fetch reads, so this tames
+// global fetch too. Wrapped in try/catch: if undici isn't resolvable we simply
+// keep the default behavior (the failure mode is Windows-only and cosmetic).
+try {
+  const { setGlobalDispatcher, Agent } = require('undici');
+  setGlobalDispatcher(new Agent({ pipelining: 0, keepAliveTimeout: 10, keepAliveMaxTimeout: 10 }));
+} catch {
+  /* undici not present — global fetch still works */
+}
 
 const C = {
   red: (s) => `\x1b[31m${s}\x1b[0m`,
@@ -64,22 +99,37 @@ function parseArgs(argv) {
     else if (a === '--hugo-dir') out.hugoDir = argv[++i];
     else if (a === '--slug') out.slug = argv[++i];
     else if (a === '--slugs') out.slugs = argv[++i];
+    else if (a === '--served-base') out.servedBase = argv[++i];
+    else if (a === '--served-pages') out.servedPages = argv[++i];
+    else if (a === '--sample-size') out.sampleSize = argv[++i];
+    else if (a === '--advisory') out.advisory = true;
   }
   return out;
 }
 
-// Collect same-origin `/css/*.css` hrefs from a rendered HTML string. Tolerant
-// of Hugo's minified output where attributes are UNQUOTED (href=/css/x.css) as
-// well as quoted (href="/css/x.css"). Only absolute-path /css/ refs — external
-// (https://…) stylesheets and /js/* are deliberately excluded (see SCOPE above).
-function extractCssRefs(html) {
+// Collect same-origin asset refs from a rendered HTML string. Always collects
+// `/css/*.css` hrefs. When `includeJs` is set (served-content mode only),
+// ALSO collects HASHED `/js/*-<hash>.js` script src's — the unhashed fallback
+// (`/js/name.js`, e.g. /js/joule.js) is deliberately excluded, mirroring the
+// deploy-mta.cjs Step 2.5 hashed-bundle convention (#1604). Tolerant of Hugo's
+// minified output where attributes are UNQUOTED (href=/css/x.css) as well as
+// quoted. External (https://…) refs are excluded (only absolute-path same-origin).
+function extractAssetRefs(html, { includeJs = false } = {}) {
   const refs = new Set();
-  // href, optional = with optional quote, then /css/…​.css up to the closing
-  // quote / whitespace / tag-end. [^"'\s>]+ stops at the attribute boundary in
-  // minified (unquoted) output.
-  const re = /href\s*=\s*["']?(\/css\/[^"'\s>]+\.css)/gi;
+  // href[=][quote?]/css/….css up to the attribute boundary. [^"'\s>]+ stops at
+  // the closing quote / whitespace / tag-end in minified (unquoted) output.
+  const cssRe = /href\s*=\s*["']?(\/css\/[^"'\s>]+\.css)/gi;
   let m;
-  while ((m = re.exec(html)) !== null) refs.add(m[1]);
+  while ((m = cssRe.exec(html)) !== null) refs.add(m[1]);
+  if (includeJs) {
+    // src[=][quote?]/js/….js — then keep only the ones whose basename ends in
+    // `-<8+ hashish chars>.js` (the fingerprinted island bundles). The unhashed
+    // fallback path never fingerprint-drifts, so it must not be probed.
+    const jsRe = /src\s*=\s*["']?(\/js\/[^"'\s>]+\.js)/gi;
+    while ((m = jsRe.exec(html)) !== null) {
+      if (/-[A-Za-z0-9_-]{8,}\.js$/.test(m[1])) refs.add(m[1]);
+    }
+  }
   return refs;
 }
 
@@ -143,13 +193,230 @@ async function probe(url) {
   return { ok: false, status: 0, error: lastErr && (lastErr.message || String(lastErr)) };
 }
 
+// ---------------------------------------------------------------------------
+// Served-content mode helpers (#1678)
+// ---------------------------------------------------------------------------
+
+// GET a URL with the same retry/timeout posture as probe(), returning the body
+// on a 200. redirect:'manual' so an auth-gate 30x is seen as non-200 (→ skipped
+// / inconclusive) rather than silently following a login redirect.
+async function fetchText(url) {
+  const attempts = 3;
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15_000);
+    try {
+      const res = await fetch(url, { method: 'GET', redirect: 'manual', signal: ac.signal });
+      const body = res.status === 200 ? await res.text() : '';
+      clearTimeout(timer);
+      return { ok: res.status === 200, status: res.status, body };
+    } catch (e) {
+      clearTimeout(timer);
+      lastErr = e;
+    }
+  }
+  return { ok: false, status: 0, body: '', error: lastErr && (lastErr.message || String(lastErr)) };
+}
+
+// Normalise a --served-pages entry to an absolute path. A full URL is reduced to
+// its pathname so callers can paste sitemap <loc> values verbatim.
+function normPath(p) {
+  if (/^https?:\/\//i.test(p)) {
+    try {
+      return new URL(p).pathname;
+    } catch {
+      return p;
+    }
+  }
+  return p.startsWith('/') ? p : '/' + p;
+}
+
+function clampSample(v) {
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n) || n < 1) return 3;
+  return Math.min(n, 25);
+}
+
+// Discover a deterministic sample of tutorial AND concept page paths from the
+// target's public sitemap. <loc> values use the CANONICAL host, so we keep only
+// the pathname and re-base onto --served-base at fetch time. Sorted (not random —
+// Math.random is banned here and determinism aids debugging) so the same sample
+// is checked every run.
+async function discoverServedPages(base, sampleSize) {
+  const r = await fetchText(base + '/sitemap.xml');
+  if (!r.ok || !r.body) return [];
+  const locs = [];
+  const re = /<loc>\s*([^<\s]+)\s*<\/loc>/gi;
+  let m;
+  while ((m = re.exec(r.body)) !== null) locs.push(m[1]);
+  const tutorials = [];
+  const concepts = [];
+  for (const loc of locs) {
+    let pth;
+    try {
+      pth = new URL(loc).pathname;
+    } catch {
+      continue;
+    }
+    if (/^\/tutorials\/[^/]+/.test(pth)) tutorials.push(pth);
+    else if (/^\/concepts\/[^/]+/.test(pth)) concepts.push(pth);
+  }
+  tutorials.sort();
+  concepts.sort();
+  return [...tutorials.slice(0, sampleSize), ...concepts.slice(0, sampleSize)];
+}
+
+// Served-content mode entrypoint. Fetches HANA-served tutorial/concept pages
+// from --served-base and probes their css + hashed-js assets against that same
+// base. Fail-open on discovery/reachability faults (never blocks a deploy on an
+// unreachable/gated channel); --advisory further downgrades a genuine MISSING to
+// a loud non-blocking warning for the operator-gated blue-green swap.
+async function runServedMode(args) {
+  const base = (args.servedBase || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(base)) {
+    die(`--served-base must be an absolute http(s) URL, got: ${base || '(empty)'}`);
+  }
+  const advisory = !!args.advisory;
+
+  // Resolve which page paths to check: explicit --served-pages, else discover.
+  let paths;
+  if (args.servedPages) {
+    paths = args.servedPages.split(',').map((s) => s.trim()).filter(Boolean).map(normPath);
+  } else {
+    const sampleSize = clampSample(args.sampleSize);
+    paths = await discoverServedPages(base, sampleSize);
+    if (!paths.length) {
+      console.error(
+        '\n' +
+          C.ylw(`[check-approuter-assets] INCONCLUSIVE (served): could not discover any tutorial/concept `) +
+          C.ylw(`pages from ${base}/sitemap.xml — not blocking.\n`),
+      );
+      return 0;
+    }
+  }
+
+  console.log(C.dim(`[check-approuter-assets] served mode: fetching ${paths.length} page(s) from ${base} …`));
+
+  // Fetch each sample page; collect the union of css + hashed-js refs, tracking
+  // which page each came from so a failure names the offending page.
+  const refToPages = new Map(); // assetPath -> Set(pagePath)
+  let fetched = 0;
+  for (const p of paths) {
+    const r = await fetchText(base + p);
+    if (!r.ok) {
+      console.error(
+        C.ylw(`  ! could not fetch page ${p} (${r.status ? 'HTTP ' + r.status : 'network error'}) — skipping`),
+      );
+      continue;
+    }
+    fetched++;
+    for (const ref of extractAssetRefs(r.body, { includeJs: true })) {
+      if (!refToPages.has(ref)) refToPages.set(ref, new Set());
+      refToPages.get(ref).add(p);
+    }
+  }
+
+  if (fetched === 0) {
+    console.error(
+      '\n' +
+        C.ylw(`[check-approuter-assets] INCONCLUSIVE (served): none of the ${paths.length} sample page(s) `) +
+        C.ylw(`were reachable on ${base} (auth-gated / idle route not up yet / wrong URL) — not blocking.\n`),
+    );
+    return 0;
+  }
+
+  const refs = [...refToPages.keys()].sort();
+  if (!refs.length) {
+    console.error(
+      '\n' +
+        C.ylw(`[check-approuter-assets] INCONCLUSIVE (served): the ${fetched} fetched page(s) reference no `) +
+        C.ylw(`same-origin /css or hashed /js assets — not blocking.\n`),
+    );
+    return 0;
+  }
+
+  console.log(C.dim(`  probing ${refs.length} asset(s) (css + hashed js) against ${base} (${fetched} page(s))`));
+
+  const results = await Promise.all(refs.map(async (ref) => ({ ref, ...(await probe(base + ref)) })));
+  const served = results.filter((r) => r.ok);
+  const missing = results.filter((r) => !r.ok);
+
+  // INCONCLUSIVE guard (mirrors local-hugo mode): no 200 for ANY asset means we
+  // are not looking at the public static tree (auth-gated / idle not up / wrong
+  // URL / down) — NOT the retention-drift signature, which leaves the bare +
+  // prior-hash assets serving 200 while only the drifted hash 404s (a MIX).
+  if (served.length === 0) {
+    const sample = missing.slice(0, 4).map((mm) => `${mm.ref} → ${mm.status ? 'HTTP ' + mm.status : 'network error'}`);
+    console.error(
+      '\n' +
+        C.ylw(`[check-approuter-assets] INCONCLUSIVE (served): ${base} returned no 200 for any of the ${refs.length} asset probes.\n`) +
+        C.ylw('  The static tree is likely auth-gated / unreachable — not the retention-drift signature. Not blocking.\n') +
+        C.dim(`  sample: ${sample.join(' | ')}\n`),
+    );
+    return 0;
+  }
+
+  if (missing.length) {
+    const head = advisory
+      ? C.ylw('[check-approuter-assets] ADVISORY (served, non-blocking): ')
+      : C.red('[check-approuter-assets] BLOCKING (served): ');
+    const tag = advisory ? C.ylw : C.red;
+    console.error('\n' + head + `${base} does NOT serve ${missing.length} asset(s) its HANA-served pages reference:`);
+    for (const mm of missing) {
+      const where = [...refToPages.get(mm.ref)].slice(0, 3).join(', ');
+      const detail = mm.status ? `HTTP ${mm.status}` : `network error${mm.error ? ` (${mm.error})` : ''}`;
+      console.error(tag(`  MISSING (${detail}): `) + mm.ref + C.dim(`  ← referenced by: ${where}`));
+    }
+    console.error('\n' + C.ylw('  HANA-published tutorial/concept HTML points at a fingerprinted asset this approuter'));
+    console.error(C.ylw('  does not serve — the 2026-08-12 CSS-404 incident class (now covering hashed JS too).'));
+    console.error(C.ylw('  Likely asset-retention (PR #1677) failed to carry the prior hash forward, or the content'));
+    console.error(C.ylw('  was published against a newer fingerprint than this approuter shipped.'));
+    if (advisory) {
+      console.error('\n' + C.ylw('  This is ADVISORY (the blue-green swap is operator-gated): weigh it before you resume.'));
+      console.error(C.ylw('  If real, do NOT resume the swap — republish content or redeploy the static first.') + '\n');
+      return 0;
+    }
+    console.error('\n' + C.ylw('  Fix: ship the referenced hashes into approuter static (full build+deploy), or'));
+    console.error(C.ylw('  republish content for the current fingerprints, then re-check.') + '\n');
+    return 1;
+  }
+
+  console.log(C.grn(`  ✓ all ${refs.length} referenced asset(s) are served by ${base} (${fetched} page(s) checked)`));
+  return 0;
+}
+
+// Set the exit code and let the process terminate NATURALLY once the event loop
+// drains, instead of calling process.exit(). On Windows, process.exit() while
+// undici's fetch sockets are still tearing down races libuv's handle cleanup and
+// aborts with "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)" (exit code
+// 0xC0000409) — swallowing the real 0/1 result. With keep-alive shrunk to ~10ms
+// (see the top of this file), the sockets close almost immediately and the loop
+// empties on its own. This is the served-mode path only; the local-hugo path does
+// CSS-only HEAD probes and exits fine with process.exit().
+function finishServed(code) {
+  process.exitCode = code;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+
+  // ---- served-content mode (#1678) -------------------------------------
+  // Fetches HANA-served tutorial/concept pages from a target approuter and
+  // probes their css + hashed-js assets against that same approuter. Distinct
+  // from local-hugo mode (below), which reads local hugo/public and is CSS-only.
+  if (args.servedBase) {
+    finishServed(await runServedMode(args));
+    return;
+  }
+
+  // ---- local-hugo mode (rebuild-content slug guard, #1622) -------------
   const approuterUrl = (args.approuterUrl || '').trim().replace(/\/+$/, '');
   const hugoDir = args.hugoDir || 'hugo/public';
 
   if (!approuterUrl) {
-    die('missing --approuter-url (the target approuter base URL, e.g. https://…cfapps.eu10-005.hana.ondemand.com).');
+    die('missing --approuter-url (the target approuter base URL, e.g. https://…cfapps.eu10-005.hana.ondemand.com).\n' +
+        '             (For the deploy pre-swap guard, use --served-base <url> instead.)');
   }
   if (!/^https?:\/\//.test(approuterUrl)) {
     die(`--approuter-url must be an absolute http(s) URL, got: ${approuterUrl}`);
@@ -165,11 +432,12 @@ async function main() {
   const pages = resolvePages(hugoDir, slugs);
 
   // Gather the union of /css refs across the pages, remembering which page each
-  // came from so a failure can point at the offending tutorial.
+  // came from so a failure can point at the offending tutorial. (Local-hugo mode
+  // is CSS-only — see the SCOPE note in the header.)
   const refToPages = new Map(); // cssPath -> Set(slug)
   for (const { slug, file } of pages) {
     const html = fs.readFileSync(file, 'utf8');
-    for (const ref of extractCssRefs(html)) {
+    for (const ref of extractAssetRefs(html)) {
       if (!refToPages.has(ref)) refToPages.set(ref, new Set());
       refToPages.get(ref).add(slug);
     }

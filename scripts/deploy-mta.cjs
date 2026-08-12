@@ -286,6 +286,25 @@ function abortFailedBlueGreen() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Blue-green idle-route URL for the approuter (#1678). The multiapps blue-green
+// deployer brings the GREEN app up on a `<host>-idle` route while traffic still
+// points at blue (memory: "verify green on -idle"). We probe that route with the
+// served-content asset guard BEFORE the operator swaps. Overridable via
+// IDLE_APPROUTER_URL if the naming convention ever changes. Returns null if the
+// approuter URL can't be parsed (guard then just prints a skip note).
+// ---------------------------------------------------------------------------
+function idleApprouterUrl(cfg) {
+  if (process.env.IDLE_APPROUTER_URL) return process.env.IDLE_APPROUTER_URL.trim().replace(/\/+$/, '');
+  try {
+    const u = new URL(cfg.approuter);
+    u.hostname = u.hostname.replace(/^([^.]+)/, '$1-idle');
+    return u.toString().replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -484,6 +503,34 @@ async function main() {
     }
     if (bg) {
       ok(`blue-green green apps up (${mtar}) — PAUSED before swap.`);
+
+      // ---- Step 4.5: pre-swap asset guard (advisory, #1678) ------------
+      // While green is up but traffic still points at blue, verify that the
+      // HANA-served tutorial + concept pages' css AND hashed-js assets actually
+      // resolve on the GREEN approuter (its -idle route). This catches the
+      // 2026-08-12 CSS-404 incident class — a fingerprint-changing deploy whose
+      // new approuter dropped a hash that already-published HANA content still
+      // references — BEFORE the operator swaps traffic. PR #1677 (retention)
+      // PREVENTS the mismatch; this CATCHES it if retention ever regresses.
+      // Advisory + fail-open by design: the swap is already operator-gated, so
+      // the guard never blocks; --advisory downgrades a real MISSING to a loud
+      // warning, and an unreachable idle route / gated channel is inconclusive.
+      const idle = idleApprouterUrl(cfg);
+      if (idle) {
+        step('4.5', 'Pre-swap asset guard (advisory) — HANA content assets resolve on green');
+        warn(`probing served tutorial/concept assets against the green idle route: ${idle}`);
+        warn('(advisory only — this NEVER blocks; weigh a MISSING report before you resume the swap)');
+        const guardCode = sh('node', ['scripts/check-approuter-assets.cjs', '--served-base', idle, '--advisory']);
+        if (guardCode !== 0) {
+          // --advisory exits 0 on a real MISSING, so a non-zero here is a tooling
+          // fault (bad URL / crash), not a content problem. Surface it, don't block.
+          warn(`asset guard exited ${guardCode} (tooling issue, not a content verdict) — ignoring, advisory only.`);
+        }
+      } else {
+        warn('Step 4.5 skipped: could not derive the green idle-route URL from the approuter host.');
+        warn(`             Run it by hand once green is up: node scripts/check-approuter-assets.cjs --served-base <green-idle-url> --advisory`);
+      }
+
       warn('Verify the idle (green) apps, then swap traffic:');
       warn('             cf mta-ops                    # find the RUNNING op id');
       warn('             cf deploy -i <OP_ID> -a resume   # swap to green + retire blue');
