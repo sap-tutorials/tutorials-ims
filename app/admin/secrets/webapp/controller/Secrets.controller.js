@@ -10,8 +10,9 @@ sap.ui.define([
   "sap/m/Label",
   "sap/m/VBox",
   "sap/m/Text",
-  "sap/m/Link"
-], function (Controller, Fragment, JSONModel, MessageToast, MessageBox, Dialog, Button, Input, Label, VBox, Text, Link) {
+  "sap/m/Link",
+  "sap/tutorials/admin/shell/lib/odata-batch"
+], function (Controller, Fragment, JSONModel, MessageToast, MessageBox, Dialog, Button, Input, Label, VBox, Text, Link, odataBatch) {
   "use strict";
 
   function deriveExpiryState(expiresAt) {
@@ -123,12 +124,16 @@ sap.ui.define([
         onClose: function (sAction) {
           if (sAction !== MessageBox.Action.OK) { return; }
           self._withCsrf(function (token) {
-            return fetch("/admin/Secrets(" + row.ID + ")", {
+            // DELETE via $batch (POST) — a bare DELETE 501s at the Akamai edge on PROD.
+            return odataBatch.batchWrite({
+              fetchFn: fetch,
+              service: "/admin/",
+              url: "Secrets(" + row.ID + ")",
               method: "DELETE",
-              credentials: "include",
               headers: { "x-csrf-token": token }
             });
-          }).then(function () {
+          }).then(function (res) {
+            if (res && res.ok === false) { throw new Error("HTTP " + res.status); }
             MessageToast.show("Deleted");
             self._loadSecrets();
           }).catch(function (err) {
@@ -182,15 +187,18 @@ sap.ui.define([
             body: JSON.stringify(body)
           });
         }
-        return fetch("/admin/Secrets(" + data.ID + ")", {
+        // PATCH via $batch (POST) — a bare PATCH 501s at the Akamai edge on PROD.
+        return odataBatch.batchWrite({
+          fetchFn: fetch,
+          service: "/admin/",
+          url: "Secrets(" + data.ID + ")",
           method: "PATCH",
-          credentials: "include",
           headers: {
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-csrf-token": token
           },
-          body: JSON.stringify(body)
+          body: body
         });
       }).then(function (res) {
         if (!res.ok) { throw new Error("HTTP " + res.status); }
