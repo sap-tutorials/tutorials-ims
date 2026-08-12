@@ -38,7 +38,11 @@ export function formatViewerLocal(instantISO: string, opts?: IntlOpts): string {
     timeZoneName: 'short',
   };
   // timeZone intentionally omitted → browser local zone
-  return new Intl.DateTimeFormat(undefined, { ...defaults, ...opts }).format(d);
+  try {
+    return new Intl.DateTimeFormat(undefined, { ...defaults, ...opts }).format(d);
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -64,7 +68,17 @@ export function formatHomeZone(instantISO: string, ianaZone: string, opts?: Intl
     minute: '2-digit',
     timeZoneName: 'short',
   };
-  return new Intl.DateTimeFormat(undefined, { ...defaults, ...opts, timeZone: zone }).format(d);
+  // Bad data guard: `Intl.DateTimeFormat` throws `RangeError` for any zone it
+  // can't resolve — including non-IANA abbreviations like 'CEST'/'PST' that
+  // sometimes leak into `scheduledTimeZone`. This label is a secondary
+  // "event time" hint, so a bad value must degrade to no label rather than
+  // throw — an unhandled throw here fails the whole Vue render and blanks the
+  // entire Sessions page.
+  try {
+    return new Intl.DateTimeFormat(undefined, { ...defaults, ...opts, timeZone: zone }).format(d);
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -83,11 +97,16 @@ export function viewerDayKey(instantISO: string): string {
   const d = new Date(instantISO);
   if (isNaN(d.getTime())) return '';
   // timeZone intentionally omitted → browser local zone
-  const parts = new Intl.DateTimeFormat(undefined, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(d);
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(d);
+  } catch {
+    return '';
+  }
   const map: Record<string, string> = {};
   for (const p of parts) map[p.type] = p.value;
   const y = map['year'] ?? '';

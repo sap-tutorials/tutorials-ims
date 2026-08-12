@@ -84,6 +84,22 @@ describe('formatHomeZone', () => {
     expect(result).toMatch(/12:00\s?AM|0:00/);
     expect(result).toMatch(/JST|GMT\+9/);
   });
+
+  // Bad data must degrade gracefully, never throw. A non-IANA abbreviation
+  // like 'CEST' makes Intl.DateTimeFormat throw RangeError; one such row must
+  // not take down the whole page render (regression: Devtoberfest Sessions).
+  it('does not throw on a non-IANA zone abbreviation (e.g. CEST)', () => {
+    expect(() => formatHomeZone('2026-10-01T15:00:00Z', 'CEST')).not.toThrow();
+  });
+
+  it('returns empty string for an invalid/unknown zone (CEST)', () => {
+    expect(formatHomeZone('2026-10-01T15:00:00Z', 'CEST')).toBe('');
+  });
+
+  it('returns empty string for other bogus zone strings', () => {
+    expect(formatHomeZone('2026-10-01T15:00:00Z', 'Not/AZone')).toBe('');
+    expect(formatHomeZone('2026-10-01T15:00:00Z', 'Europe/Nowhere')).toBe('');
+  });
 });
 
 // ── formatViewerLocal ────────────────────────────────────────────────────────
