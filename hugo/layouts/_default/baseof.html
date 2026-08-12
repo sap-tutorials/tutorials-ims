@@ -60,6 +60,7 @@
   {{ end }}
   {{ if not site.Params.previewMode }}<script src="{{ partial "island-src.html" "cmd-palette" }}" defer type="module"></script>{{ end }}
   {{ if eq .Type "tutorials" }}{{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-breadcrumbs" }}" defer></script>{{ end }}{{ end }}
+  {{ if eq .Type "tutorials" }}{{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-group-nav" }}" defer></script>{{ end }}{{ end }}
   {{ if eq .Type "tutorials" }}<script type="module" src="{{ partial "island-src.html" "tutorial-referred" }}" defer></script>{{ end }}
   {{ if not site.Params.previewMode }}
   {{ $ui5 := resources.Get "js/ui5-bootstrap.ts" | js.Build (dict "minify" true "format" "esm" "target" "es2020") }}
