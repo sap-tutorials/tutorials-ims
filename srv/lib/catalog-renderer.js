@@ -77,7 +77,7 @@ export function renderGroupBody(ctx, opts = {}) {
         <div class="timeline-card${newClass}">
           ${newBadge}
           <div class="timeline-card-header">
-            <h3><a href="/tutorials/${escapeHtml(t.slug)}">${escapeHtml(t.title)}</a></h3>
+            <h3><a href="/tutorials/${escapeHtml(t.slug)}?from=${escapeHtml(group.slug)}">${escapeHtml(t.title)}</a></h3>
             <div class="timeline-card-meta">
               <span>${escapeHtml(titleCase(t.level))}</span>
               <span class="meta-sep">&middot;</span>
@@ -89,7 +89,7 @@ export function renderGroupBody(ctx, opts = {}) {
           ${desc}
           <div class="timeline-card-footer">
             ${tagChip}
-            <a href="/tutorials/${escapeHtml(t.slug)}" class="start-btn">Start Tutorial &rarr;</a>
+            <a href="/tutorials/${escapeHtml(t.slug)}?from=${escapeHtml(group.slug)}" class="start-btn">Start Tutorial &rarr;</a>
           </div>
         </div>
       </div>`;
@@ -128,7 +128,7 @@ export function renderMissionBody(ctx) {
             <li class="tutorial-item">
               <span class="tutorial-number">${i + 1}</span>
               <div class="tutorial-info">
-                <a href="/tutorials/${escapeHtml(t.slug)}" class="tutorial-link">${escapeHtml(t.title)}</a>
+                <a href="/tutorials/${escapeHtml(t.slug)}?from=${escapeHtml(g.slug)}" class="tutorial-link">${escapeHtml(t.title)}</a>
                 <div class="tutorial-meta-row">
                   <span>${escapeHtml(titleCase(t.level || 'beginner'))}</span>
                   <span class="meta-sep">&middot;</span>
