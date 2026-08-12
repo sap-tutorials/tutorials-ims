@@ -96,6 +96,30 @@ export function qaHomeIndexMarkdown(): string {
   ].join('\n')
 }
 
+/**
+ * Front matter for the QA site's dedicated `/tutorial-navigator/` section
+ * (`content-qa/tutorial-navigator/_index.md`).
+ *
+ * Prod serves its navigator from the committed
+ * `content/tutorial-navigator/_index.md` section, flipped to CAP under the
+ * `page-tutorial-navigator` BLOB key (#1659 Phase 2) and routed at
+ * `/tutorial-navigator/`. The QA channel mirrors that (#1675): this page is
+ * emitted by `build:qa` at `public-qa/tutorial-navigator/index.html`,
+ * discovered by `discoverPageFiles` (page-key-map.js), and uploaded by
+ * `publish-content:qa` as `page-tutorial-navigator` to `tutorials-hana-qa`.
+ * The AppRouter route `^/tutorial-navigator-qa/` → `srv-qa`
+ * `/content/pages/tutorial-navigator/` (xs-app.json) then serves it,
+ * `Tutorial.Author`-scoped.
+ *
+ * Frontmatter is identical to the root (`qaHomeIndexMarkdown`) — same navigator
+ * layout + QA markers. The two coexist: the root renders at `/tutorials-qa/`
+ * (served statically), this section at `/tutorial-navigator-qa/` (served from
+ * srv-qa HANA), just as prod's homepage and navigator are distinct pages.
+ */
+export function qaNavigatorPageMarkdown(): string {
+  return qaHomeIndexMarkdown()
+}
+
 
 /**
  * Prune stale `<slug>.md` files from `cacheDir` — any whose slug is NOT in
@@ -635,6 +659,17 @@ async function main() {
     mkdirSync(qaRoot, { recursive: true })
     writeFileSync(join(qaRoot, '_index.md'), qaHomeIndexMarkdown(), 'utf-8')
     console.log('  [channel] wrote content-qa/_index.md (navigator layout as QA root)\n')
+
+    // #1675: also emit a dedicated `/tutorial-navigator/` section so `build:qa`
+    // produces `public-qa/tutorial-navigator/index.html`, which
+    // `publish-content:qa` uploads as the `page-tutorial-navigator` BLOB to
+    // `tutorials-hana-qa`. The AppRouter route `/tutorial-navigator-qa/` →
+    // srv-qa `/content/pages/tutorial-navigator/` then serves it, mirroring
+    // prod's CAP-served navigator (#1659 Phase 2). See qaNavigatorPageMarkdown.
+    const qaNavDir = join(qaRoot, 'tutorial-navigator')
+    mkdirSync(qaNavDir, { recursive: true })
+    writeFileSync(join(qaNavDir, '_index.md'), qaNavigatorPageMarkdown(), 'utf-8')
+    console.log('  [channel] wrote content-qa/tutorial-navigator/_index.md (page-tutorial-navigator)\n')
   }
 
   let allTutorials: DiscoveredTutorial[]

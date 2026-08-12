@@ -85,9 +85,12 @@ cds.on('bootstrap', (app) => {
   // key, browser-shell callers come in with XSUAA Tutorial.Author scope.
   app.get('/content/source-hashes', hashesAuth, sourceHashesHandler);
   app.get('/content/tutorials/*slug', requireAuthorScope, serveHandler);
-  // #1659 Task 5 — QA-channel content PAGES. Dark launch: no AppRouter route
-  // points here yet. Gated by Tutorial.Author scope — mirrors how serveHandler
-  // is registered on this app (QA content is always author-preview gated).
+  // #1659 Task 5 — QA-channel content PAGES. #1675: the AppRouter route
+  // `^/tutorial-navigator-qa/` → `/content/pages/tutorial-navigator/` now
+  // points here (xs-app.json), serving the QA tutorial navigator from the
+  // `page-tutorial-navigator` BLOB. Other page keys stay dark (no route yet).
+  // Gated by Tutorial.Author scope — mirrors how serveHandler is registered on
+  // this app (QA content is always author-preview gated).
   app.get('/content/pages/*path', requireAuthorScope, pageServeHandler);
   // Legacy single-shot publish (kept for compatibility); CLI now uses the
   // chunked begin/append/commit pipeline by default (publish-content.ts via

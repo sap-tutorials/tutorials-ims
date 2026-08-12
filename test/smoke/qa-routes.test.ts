@@ -28,6 +28,25 @@ describe.skipIf(!process.env.SMOKE_QA_BASE_URL || !process.env.SMOKE_QA_SRV_URL 
     expect(r.status).toBe(200);
   });
 
+  // [#1675] QA tutorial navigator: served from srv-qa's page-tutorial-navigator
+  // BLOB via the AppRouter route /tutorial-navigator-qa/ → /content/pages/...
+  it('GET /tutorial-navigator-qa/ returns 200 with the navigator mount', async () => {
+    const r = await fetchWithRetry(`${QA_BASE}/tutorial-navigator-qa/`, {
+      headers: { authorization: `Bearer ${TOKEN}` }
+    });
+    expect(r.status).toBe(200);
+    const html = await r.text();
+    // The navigator layout mounts #tutorial-navigator with the QA search base.
+    // Quote-agnostic: build:qa runs Hugo --minify, which drops attribute quotes.
+    expect(html).toMatch(/id=["']?tutorial-navigator/);
+    expect(html).toContain('/qa-search');
+  });
+
+  it('GET /tutorial-navigator-qa/ without auth returns 401/302', async () => {
+    const r = await fetchWithRetry(`${QA_BASE}/tutorial-navigator-qa/`);
+    expect([401, 302]).toContain(r.status); // approuter may redirect to login
+  });
+
   it('GET /tutorials-qa/<slug>/admin returns 404 (admin not exposed)', async () => {
     // Direct hit to QA srv, not approuter
     const r = await fetchWithRetry(`${SRV_QA}/admin/Events`, {
@@ -56,6 +75,11 @@ describe.skipIf(!process.env.SMOKE_QA_SRV_URL)('QA srv direct (scope bypass guar
 
   it('GET /content/tutorials/<slug> without auth returns 401', async () => {
     const r = await fetchWithRetry(`${SRV_QA}/content/tutorials/__SMOKE__qa`);
+    expect(r.status).toBe(401);
+  });
+
+  it('GET /content/pages/tutorial-navigator/ without auth returns 401 (#1675)', async () => {
+    const r = await fetchWithRetry(`${SRV_QA}/content/pages/tutorial-navigator/`);
     expect(r.status).toBe(401);
   });
 

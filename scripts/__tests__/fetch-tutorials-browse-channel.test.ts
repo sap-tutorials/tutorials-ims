@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { browseDataFile, buildAllCards, qaHomeIndexMarkdown } from '../fetch-tutorials'
+import { browseDataFile, buildAllCards, qaHomeIndexMarkdown, qaNavigatorPageMarkdown } from '../fetch-tutorials'
 import type {
   TutorialNavEntry,
   Mission,
@@ -33,6 +33,27 @@ describe('qaHomeIndexMarkdown — QA root renders the navigator layout', () => {
   it('is valid front matter (opens and closes with ---)', () => {
     expect(md.startsWith('---\n')).toBe(true)
     expect(md).toMatch(/\n---\n/)
+  })
+})
+
+describe('qaNavigatorPageMarkdown — dedicated /tutorial-navigator/ QA section (#1675)', () => {
+  const md = qaNavigatorPageMarkdown()
+  // This section is emitted at public-qa/tutorial-navigator/index.html, published
+  // as the `page-tutorial-navigator` BLOB to tutorials-hana-qa, and served at
+  // /tutorial-navigator-qa/ by srv-qa. It must resolve the SAME navigator layout
+  // as the root so it carries the QA markers verify-qa-build asserts.
+  it('declares type: tutorial-navigator', () => {
+    expect(md).toMatch(/^type:\s*"tutorial-navigator"/m)
+  })
+  it('declares layout: list', () => {
+    expect(md).toMatch(/^layout:\s*"list"/m)
+  })
+  it('is valid front matter (opens and closes with ---)', () => {
+    expect(md.startsWith('---\n')).toBe(true)
+    expect(md).toMatch(/\n---\n/)
+  })
+  it('is byte-identical to the QA root index (same navigator layout + markers)', () => {
+    expect(md).toBe(qaHomeIndexMarkdown())
   })
 })
 
