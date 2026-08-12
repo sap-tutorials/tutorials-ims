@@ -369,7 +369,11 @@ async function main() {
     // build:explore (Vite + manifest) BEFORE build:hugo, and build:hugo's
     // check-explore-bundle-manifest.cjs hard-fails if the manifest is absent.
     // So a green build:deploy CANNOT reproduce the /explore incident.
-    const code = sh('npm', ['run', 'build:deploy'], { env: { ...process.env, CAP_BASE_URL: cfg.capBaseUrl } });
+    // APPROUTER_URL lets build:all's `retain:assets` carry forward the live
+    // (blue) approuter's prior hashed bundles, so content published against the
+    // old build still resolves after a fingerprint change. CI sets this; without
+    // it here, local/operator deploys retained NOTHING (the CSS-404 incident).
+    const code = sh('npm', ['run', 'build:deploy'], { env: { ...process.env, CAP_BASE_URL: cfg.capBaseUrl, APPROUTER_URL: cfg.approuter } });
     if (code !== 0) die(1, '`npm run build:deploy` failed — fix the build before deploying.');
     ok('build:deploy complete (explore bundle + manifest included via build:all)');
   }
