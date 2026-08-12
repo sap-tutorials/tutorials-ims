@@ -5,8 +5,13 @@
 // pulls the current state from /build/breadcrumb-context and overwrites the
 // <li> text + href if it has changed.
 //
+// When ?from=<groupSlug> is present the navigator mapping is used instead of
+// /build/breadcrumb-context (context-aware breadcrumb, accurate per entry point).
+//
 // Failure mode: silent no-op. The static text from the last build remains —
 // worst case is stale parent text, never a broken page.
+
+import { readFromParam, resolveGroupNav } from '@shared/group-nav-context';
 
 interface BreadcrumbContext {
   missionTitle: string | null;
@@ -35,6 +40,20 @@ async function refreshBreadcrumbs(): Promise<void> {
   if (html.dataset.pageKind !== 'tutorial') return;
   const slug = html.dataset.pageSlug;
   if (!slug) return;
+
+  const from = readFromParam(location.search);
+  if (from) {
+    try {
+      const row = await resolveGroupNav(slug, from);
+      if (row) {
+        refreshBreadcrumbRole('mission', row.missionTitle, row.missionSlug);
+        refreshBreadcrumbRole('group', row.groupTitle, row.groupSlug);
+        return;
+      }
+    } catch {
+      // fall through to breadcrumb-context
+    }
+  }
 
   try {
     const res = await fetch(`/build/breadcrumb-context?tutorial=${encodeURIComponent(slug)}`, {
