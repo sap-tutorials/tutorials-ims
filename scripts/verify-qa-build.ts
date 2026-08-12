@@ -218,6 +218,25 @@ function main() {
     }
   }
 
+  // [#1675] The dedicated `/tutorial-navigator/` section must be emitted so
+  // `publish-content:qa` can upload it as the `page-tutorial-navigator` BLOB
+  // that srv-qa serves at `/tutorial-navigator-qa/`. It reuses the navigator
+  // layout, so it carries the same QA markers as the root (checkQaIndex).
+  const navPath = join(root, 'tutorial-navigator', 'index.html');
+  if (!existsSync(navPath)) {
+    console.error(
+      '[verify-qa-build] tutorial-navigator/index.html is absent — QA navigator page ' +
+        'not generated (content-qa/tutorial-navigator/_index.md missing; #1675)',
+    );
+    bad++;
+  } else {
+    const navHtml = readFileSync(navPath, 'utf-8');
+    for (const problem of checkQaIndex(navHtml)) {
+      console.error(`[verify-qa-build] tutorial-navigator/index.html: ${problem}`);
+      bad++;
+    }
+  }
+
   process.exit(bad ? 1 : 0);
 }
 

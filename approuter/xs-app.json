@@ -467,6 +467,13 @@
       "scope": "$XSAPPNAME.Tutorial.MCP"
     },
     {
+      "source": "^/tutorial-navigator-qa/?(\\?.*)?$",
+      "target": "/content/pages/tutorial-navigator/$1",
+      "destination": "srv-qa-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.Author"
+    },
+    {
       "source": "^/tutorials-qa/_nav\\.json$",
       "target": "/content/nav",
       "destination": "srv-qa-api",
