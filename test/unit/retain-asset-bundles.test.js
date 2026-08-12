@@ -75,8 +75,8 @@ describe('main() network fail-open', () => {
     const manifest = JSON.parse(readFileSync(manifestOut, 'utf8'));
     // Should contain only current files
     expect(manifest).toEqual([
-      { file: 'nav-Ab12Cd34.js', firstSeenMs: 0 },
-      { file: 'style-XyZ9wVu8.css', firstSeenMs: 0 },
+      { file: 'nav-Ab12Cd34.js', firstSeenMs: 0, lastSeenMs: 0 },
+      { file: 'style-XyZ9wVu8.css', firstSeenMs: 0, lastSeenMs: 0 },
     ]);
     expect(manifest.length).toBe(2);
     expect(globalThis.fetch).not.toHaveBeenCalled();
@@ -107,7 +107,7 @@ describe('main() network fail-open', () => {
     });
 
     const manifest = JSON.parse(readFileSync(manifestOut, 'utf8'));
-    expect(manifest).toEqual([{ file: 'app-Qw1Er2Ty.js', firstSeenMs: 0 }]);
+    expect(manifest).toEqual([{ file: 'app-Qw1Er2Ty.js', firstSeenMs: 0, lastSeenMs: 0 }]);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       'https://approuter.example.com/_retained-assets.json',
       expect.any(Object)
@@ -160,8 +160,8 @@ describe('main() network fail-open', () => {
     const manifest = JSON.parse(readFileSync(manifestOut, 'utf8'));
     // Should contain current file + failed prior (still in manifest, just not downloaded)
     expect(manifest).toEqual([
-      { file: 'current-Ab12Cd34.js', firstSeenMs: 0 },
-      { file: 'prior-Xy12Ab34.js', firstSeenMs: 0 },
+      { file: 'current-Ab12Cd34.js', firstSeenMs: 0, lastSeenMs: 0 },
+      { file: 'prior-Xy12Ab34.js', firstSeenMs: 0, lastSeenMs: 0 },
     ]);
 
     // Should warn about the failed download
