@@ -13,7 +13,7 @@
 // invariants stay consistent across paths.
 
 import cds from '@sap/cds';
-import { processUpload } from './advocate-photo-store.js';
+import { processUpload, invalidatePhoto } from './advocate-photo-store.js';
 import { urlForSlug } from '../handlers/advocate-handlers.js';
 
 /**
@@ -44,7 +44,9 @@ export async function uploadAndUpsertAdvocatePhoto({ advocateID, slug, buffer, m
   const db = await cds.connect.to('db');
   const { Advocates, AdvocatePhotos } = cds.entities('com.sap.developers.ims');
   const now = new Date().toISOString();
-  const photoUrl = urlForSlug(slug);
+  // photoUrl carries a ?v=<epoch> cache-buster keyed on this same timestamp so
+  // the admin OP avatar (bound to photoUrl) changes on every upload.
+  const photoUrl = urlForSlug(slug, new Date(now).getTime());
 
   // Upsert the photo row. The composition is 1:1 keyed on the FK, so we
   // explicitly check existence + INSERT or UPDATE rather than rely on a
@@ -85,6 +87,10 @@ export async function uploadAndUpsertAdvocatePhoto({ advocateID, slug, buffer, m
       photoUrl,
     }).where({ ID: advocateID }),
   );
+
+  // Bust the in-process read cache so the very next GET /api/advocates/:slug/photo
+  // serves the freshly-uploaded bytes instead of the previously-cached image.
+  invalidatePhoto(slug);
 
   return {
     sizeBytes: processed.sizeBytes,

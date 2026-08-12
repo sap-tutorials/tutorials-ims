@@ -1,7 +1,7 @@
 // CDS handlers for Advocates entities, registered onto AdminService at init time.
 
 import { deriveSlug, suffixOnCollision } from '../lib/advocate-slug.js';
-import { processUpload, toBuffer } from '../lib/advocate-photo-store.js';
+import { processUpload, toBuffer, invalidatePhoto } from '../lib/advocate-photo-store.js';
 import { uploadAndUpsertAdvocatePhoto } from '../lib/advocate-photo-upsert.js';
 import * as emailHandlers from './advocate-email-handlers.js';
 
@@ -16,10 +16,19 @@ import * as emailHandlers from './advocate-email-handlers.js';
  *
  * Lowercase the slug to match the route's `LOWER(SLUG)` lookup in
  * advocate-photo-store.js (HANA SLUG column preserves case).
+ *
+ * When `version` is supplied (the advocate's photoUpdatedAt epoch), append a
+ * `?v=<version>` cache-busting token so the admin OP HeaderInfo.ImageUrl —
+ * which binds to this persisted column — changes on every upload. Without it
+ * the URL is byte-identical across re-uploads and the browser serves the
+ * stale image from cache (the photo route sets max-age=86400). Mirrors the
+ * `?v=photoUpdatedAt` trick AdvocateCard.vue uses on the public page.
  */
-export function urlForSlug(slug) {
+export function urlForSlug(slug, version) {
   if (!slug) return null;
-  return `/api/advocates/${String(slug).toLowerCase()}/photo`;
+  const base = `/api/advocates/${String(slug).toLowerCase()}/photo`;
+  if (version === undefined || version === null || version === '') return base;
+  return `${base}?v=${encodeURIComponent(version)}`;
 }
 
 /**
@@ -108,11 +117,12 @@ export function register(srv) {
     // Look up slug so we can compute the URL — the photo handler didn't
     // see slug (it only knows the FK).
     const adv = await SELECT.one.from(Advocates).columns('slug').where({ ID: advId });
+    const ts = new Date().toISOString();
     await UPDATE(Advocates)
       .set({
         hasPhoto: true,
-        photoUpdatedAt: new Date().toISOString(),
-        photoUrl: urlForSlug(adv?.slug),
+        photoUpdatedAt: ts,
+        photoUrl: urlForSlug(adv?.slug, new Date(ts).getTime()),
       })
       .where({ ID: advId });
   };
@@ -143,10 +153,14 @@ export function register(srv) {
     const advId = req.data?.ID || req.params?.[0]?.ID || req.params?.[0];
     if (!incomingSlug || !advId) return;
     const current = await SELECT.one.from(Advocates)
-      .columns('hasPhoto', 'photoUrl')
+      .columns('hasPhoto', 'photoUrl', 'photoUpdatedAt')
       .where({ ID: advId });
     if (!current?.hasPhoto) return;
-    const newUrl = urlForSlug(incomingSlug);
+    // Preserve the existing cache-busting token (photoUpdatedAt) — a slug
+    // rename shouldn't change which image version the URL points at, only
+    // the slug segment.
+    const version = current.photoUpdatedAt ? new Date(current.photoUpdatedAt).getTime() : undefined;
+    const newUrl = urlForSlug(incomingSlug, version);
     if (current.photoUrl === newUrl) return; // already in sync
     await UPDATE(Advocates).set({ photoUrl: newUrl }).where({ ID: advId });
   });
@@ -215,6 +229,9 @@ export function register(srv) {
     }
     const db = await cds.connect.to('db');
     const { AdvocatePhotos: AP } = cds.entities('com.sap.developers.ims');
+    // Grab the slug up front so we can bust the read cache below — the raw
+    // db.run DELETE bypasses the after('DELETE') CDS handler.
+    const adv = await SELECT.one.from(Advocates).columns('slug').where({ ID: advocateID });
     await db.run(DELETE.from(AP).where({ advocate_ID: advocateID }));
     await db.run(
       UPDATE(Advocates)
@@ -225,6 +242,8 @@ export function register(srv) {
         })
         .where({ ID: advocateID }),
     );
+    // Bust the in-process read cache so the cleared photo stops being served.
+    invalidatePhoto(adv?.slug);
     return SELECT.one.from(Advocates).where({ ID: advocateID });
   });
 
