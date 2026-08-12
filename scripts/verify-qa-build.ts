@@ -69,6 +69,44 @@ export function findForbiddenMarkers(html: string): string[] {
   return FORBIDDEN.filter(m => markerAppearsAsAttribute(visible, m));
 }
 
+// [#1629] Guard against the QA channel baking UNHASHED island bundle paths.
+//
+// island-src.html resolves an island name to its content-hashed public path
+// via hugo/data/island_manifest.json, falling back to the unhashed
+// "/js/<name>.js" when the manifest lacks the key. The QA build sets
+// `dataDir = "data-qa"` (which replaces Hugo's data root), so unless the
+// manifest is synced into data-qa the fallback fires and QA references
+// "/js/validation.js" — a URL Vite never emits (only the hashed
+// validation-<hash>.js exists), so it 404s and the questions widget never
+// mounts. This guard reads the manifest QA actually used and fails the build
+// if any FINGERPRINTED island is still referenced by its bare, unhashed path
+// in a QA page.
+
+// A "fingerprinted" island is one whose manifest value differs from the bare
+// "/js/<name>.js" fallback (i.e. it carries a content hash). Comparing against
+// the fallback path directly — rather than pattern-matching a hash — correctly
+// leaves the intentionally-unhashed entries (nav-dropdown, concepts-filter,
+// whose manifest value IS "/js/<name>.js") out of the set, and avoids
+// misreading a hyphenated name like "nav-dropdown" as hashed.
+export function fingerprintedIslands(manifest: Record<string, string>): string[] {
+  return Object.entries(manifest)
+    .filter(([name, path]) => typeof path === 'string' && path !== `/js/${name}.js`)
+    .map(([name]) => name);
+}
+
+// Returns the names of fingerprinted islands referenced by their UNHASHED
+// "/js/<name>.js" path as a <script src>. Quote-agnostic: Hugo's --minify
+// drops attribute quotes, so the baked HTML is `src=/js/validation.js` (no
+// quotes) — a quote-requiring regex would silently miss the regression. The
+// trailing boundary (quote, whitespace, '>', or end) prevents matching the
+// hashed "/js/validation-<hash>.js" or a longer filename.
+export function findUnhashedIslandRefs(html: string, islands: string[]): string[] {
+  return islands.filter(name => {
+    const re = new RegExp(`\\bsrc=["']?/js/${escapeRegExp(name)}\\.js(?=["'\\s>]|$)`);
+    return re.test(html);
+  });
+}
+
 // Inspect the QA index.html string for required QA-specific signals.
 // Returns an array of human-readable problem strings; empty means OK.
 // Checks:
@@ -118,12 +156,52 @@ function main() {
     console.error(`[verify-qa-build] directory not found: ${root}`);
     process.exit(1);
   }
+
+  // [#1629] Load the island manifest QA used (synced into data-qa by build:qa,
+  // via scripts/sync-island-manifest-qa.cjs). Its absence means the sync never
+  // ran, so every fingerprinted island fell back to an unhashed 404 path.
+  const manifestPath = join('hugo', 'data-qa', 'island_manifest.json');
+  let fingerprinted: string[] = [];
+  let manifestProblem = '';
+  if (!existsSync(manifestPath)) {
+    manifestProblem =
+      `island manifest not found at ${manifestPath} — QA baked unhashed island paths ` +
+      '(run `npm run build:island-manifest` before `build:qa`; #1629)';
+  } else {
+    try {
+      fingerprinted = fingerprintedIslands(
+        JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<string, string>,
+      );
+    } catch (err) {
+      manifestProblem = `could not parse ${manifestPath}: ${(err as Error).message}`;
+    }
+    if (!manifestProblem && fingerprinted.length === 0) {
+      manifestProblem = `${manifestPath} has no fingerprinted islands — manifest looks empty/stale (#1629)`;
+    }
+  }
+
   let bad = 0;
+  if (manifestProblem) {
+    console.error(`[verify-qa-build] ${manifestProblem}`);
+    bad++;
+  }
   for (const f of walk(root)) {
-    const found = findForbiddenMarkers(readFileSync(f, 'utf8'));
+    const html = readFileSync(f, 'utf8');
+    const found = findForbiddenMarkers(html);
     if (found.length) {
       console.error(`[verify-qa-build] ${f} contains: ${found.join(', ')}`);
       bad++;
+    }
+    if (fingerprinted.length) {
+      const unhashed = findUnhashedIslandRefs(html, fingerprinted);
+      if (unhashed.length) {
+        console.error(
+          `[verify-qa-build] ${f} references unhashed island bundles (404 risk): ${unhashed
+            .map(n => `/js/${n}.js`)
+            .join(', ')} — island manifest not applied to QA build (#1629)`,
+        );
+        bad++;
+      }
     }
   }
   if (bad === 0) {

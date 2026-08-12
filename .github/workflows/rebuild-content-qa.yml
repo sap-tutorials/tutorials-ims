@@ -156,6 +156,21 @@ jobs:
       - name: Check Hugo security annotations
         run: npm run check:security-annotations
 
+      # [#1629] Build the Vite islands + fingerprint manifest BEFORE the QA Hugo
+      # build, mirroring the prod rebuild-content.yml (which runs these two steps
+      # ahead of its Hugo build). Without them, hugo/data/island_manifest.json is
+      # never generated, so island-src.html falls back to the unhashed
+      # "/js/<name>.js" path. Vite emits only content-hashed files for the
+      # fingerprinted islands (validation, navigator, ...), so those unhashed URLs
+      # 404 on the approuter and the island never mounts — for `validation` that
+      # means tutorial questions never render and the Done button stays disabled.
+      # build:qa then copies the manifest into hugo/data-qa/ (dataDir override) so
+      # QA bakes the same hashed paths as prod.
+      - name: Build hugo-apps islands
+        run: npm --prefix hugo-apps run build
+      - name: Build island fingerprint manifest
+        run: npm run build:island-manifest
+
       - name: Build QA Hugo site
         # Hugo was downloaded to /tmp/hugo (line 44). The build:qa npm script
         # invokes 'hugo' (bare binary name) — works locally where hugo is

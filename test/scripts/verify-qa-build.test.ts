@@ -3,6 +3,8 @@ import {
   findForbiddenMarkers,
   stripScripts,
   markerAppearsAsAttribute,
+  fingerprintedIslands,
+  findUnhashedIslandRefs,
 } from '../../scripts/verify-qa-build';
 
 describe('verify-qa-build', () => {
@@ -113,6 +115,58 @@ describe('verify-qa-build', () => {
     it('still flags markers when both visible AND in script', () => {
       const html = '<div id="progress-bar">x</div><script>document.getElementById("progress-bar")</script>';
       expect(findForbiddenMarkers(html)).toContain('progress-bar');
+    });
+  });
+
+  // [#1629] Fingerprinted island bundles must be referenced by their hashed
+  // path, never the bare /js/<name>.js fallback (which Vite never emits and
+  // which 404s on the approuter, breaking the questions widget on QA).
+  describe('fingerprintedIslands', () => {
+    it('selects islands whose manifest path differs from the bare fallback', () => {
+      const manifest = {
+        validation: '/js/validation-K8FRraal.js',
+        navigator: '/js/navigator-COpSY_iS.js',
+        'nav-dropdown': '/js/nav-dropdown.js', // intentionally unhashed
+        'concepts-filter': '/js/concepts-filter.js', // intentionally unhashed
+      };
+      // nav-dropdown is hyphenated but NOT fingerprinted — its manifest value
+      // equals the bare fallback, so it must be excluded.
+      expect(fingerprintedIslands(manifest).sort()).toEqual(['navigator', 'validation']);
+    });
+
+    it('returns empty for an empty manifest', () => {
+      expect(fingerprintedIslands({})).toEqual([]);
+    });
+  });
+
+  describe('findUnhashedIslandRefs', () => {
+    const islands = ['validation', 'navigator'];
+
+    it('flags a fingerprinted island referenced by its bare path', () => {
+      const html = '<script type="module" src="/js/validation.js" defer></script>';
+      expect(findUnhashedIslandRefs(html, islands)).toEqual(['validation']);
+    });
+
+    it('flags the bare path in MINIFIED (unquoted) output', () => {
+      // Hugo --minify drops attribute quotes: src=/js/validation.js
+      const html = '<script type=module src=/js/validation.js defer></script>';
+      expect(findUnhashedIslandRefs(html, islands)).toEqual(['validation']);
+    });
+
+    it('does NOT flag the correctly-hashed reference (quoted)', () => {
+      const html = '<script type="module" src="/js/validation-K8FRraal.js" defer></script>';
+      expect(findUnhashedIslandRefs(html, islands)).toEqual([]);
+    });
+
+    it('does NOT flag the correctly-hashed reference (minified/unquoted)', () => {
+      const html = '<script type=module src=/js/validation-K8FRraal.js defer></script>';
+      expect(findUnhashedIslandRefs(html, islands)).toEqual([]);
+    });
+
+    it('does NOT flag an unhashed reference for a non-fingerprinted island', () => {
+      // nav-dropdown is intentionally unhashed and not in the fingerprinted set.
+      const html = '<script src="/js/nav-dropdown.js"></script>';
+      expect(findUnhashedIslandRefs(html, islands)).toEqual([]);
     });
   });
 });

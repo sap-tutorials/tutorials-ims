@@ -38,7 +38,7 @@
     "check:security-txt-drift": "node scripts/check-security-txt-drift.cjs",
     "prebuild": "npm run prebuild:parsers-bundle && npm run check:security-annotations",
     "fetch-tutorials:qa": "tsx scripts/fetch-tutorials.ts --target hugo --channel qa",
-    "build:qa": "hugo --source hugo --config ../hugo.qa.toml --minify && tsx scripts/verify-qa-build.ts hugo/public-qa",
+    "build:qa": "node scripts/sync-island-manifest-qa.cjs && hugo --source hugo --config ../hugo.qa.toml --minify && tsx scripts/verify-qa-build.ts hugo/public-qa",
     "publish-content:qa": "tsx scripts/publish-content.ts --channel qa",
     "qa:full": "npm run fetch-tutorials:qa && npm run build:qa && npm run publish-content:qa",
     "setup-dev-data": "cds bind --exec -- node scripts/setup-dev-data.cjs",
