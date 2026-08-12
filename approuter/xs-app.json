@@ -1,5 +1,8 @@
 {
   "authenticationMethod": "route",
+  "websockets": {
+    "enabled": true
+  },
   "responseHeaders": [
     {
       "name": "Content-Security-Policy",
