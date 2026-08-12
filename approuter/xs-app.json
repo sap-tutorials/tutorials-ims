@@ -515,6 +515,12 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/tutorials/(.+)\\.model\\.json(\\?.*)?$",
+      "target": "/content/tutorial-model/$1$2",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/concepts/?(\\?.*)?$",
       "target": "/content/concepts-index$1",
       "destination": "srv-api",
