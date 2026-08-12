@@ -2,8 +2,9 @@ sap.ui.define([
   "sap/ui/core/mvc/Controller",
   "sap/ui/model/json/JSONModel",
   "sap/m/MessageToast",
-  "sap/m/MessageBox"
-], function (Controller, JSONModel, MessageToast, MessageBox) {
+  "sap/m/MessageBox",
+  "sap/tutorials/admin/shell/lib/odata-batch"
+], function (Controller, JSONModel, MessageToast, MessageBox, odataBatch) {
   "use strict";
   return Controller.extend("sap.tutorials.admin.joule.controller.Settings", {
     onInit: function () {
@@ -182,15 +183,18 @@ sap.ui.define([
           return res.headers.get("x-csrf-token") || "";
         })
         .then(function (token) {
-          return fetch("/admin/ChatSettings", {
+          // PATCH via $batch (POST) — a bare PATCH 501s at the Akamai edge on PROD.
+          return odataBatch.batchWrite({
+            fetchFn: fetch,
+            service: "/admin/",
+            url: "ChatSettings",
             method: "PATCH",
-            credentials: "include",
             headers: {
               "Content-Type": "application/json",
               "Accept": "application/json",
               "x-csrf-token": token
             },
-            body: JSON.stringify(body)
+            body: body
           });
         })
         .then(function (res) {

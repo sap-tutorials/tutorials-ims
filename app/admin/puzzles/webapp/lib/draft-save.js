@@ -17,7 +17,15 @@ sap.ui.define([], function () {
   // recover by resuming that existing draft — PATCH it with the fresh fields
   // and activate — instead of failing.
   //
-  // `fetchFn` is injected so this is unit-testable without a browser.
+  // Bug fix (issue #1650 reopened): on PROD the draft PATCH was rejected by
+  // Akamai with `501 Unsupported Request` (bare PATCH verb blocked at the edge).
+  // The PATCH is now tunnelled through `POST /admin/$batch` via the shared
+  // `batchWrite` helper (injected as `opts.batchWrite`), exactly as the Fiori
+  // OData V4 model batches all its writes. `draftEdit`/`draftActivate` are POST
+  // actions and pass the edge unchanged, so they stay direct.
+  //
+  // `fetchFn` and `batchWrite` are injected so this is unit-testable without a
+  // browser.
   // ──────────────────────────────────────────────────────────────────────────
 
   function jsonOrThrow(step) {
@@ -33,7 +41,10 @@ sap.ui.define([], function () {
 
   /**
    * @param {object}   opts
-   * @param {function} opts.fetchFn  fetch implementation (window.fetch)
+   * @param {function} opts.fetchFn     fetch implementation (window.fetch)
+   * @param {function} opts.batchWrite  shared odata-batch.batchWrite (tunnels
+   *                                    the draft PATCH through POST /admin/$batch
+   *                                    so it survives the Akamai edge)
    * @param {object}   opts.headers  request headers (incl. x-csrf-token)
    * @param {string}   [opts.editId] active entity ID when updating; falsy = create
    * @param {object}   opts.fields   the puzzle fields to persist
@@ -41,15 +52,21 @@ sap.ui.define([], function () {
    */
   function performPuzzleSave(opts) {
     var fetchFn = opts.fetchFn;
+    var batchWrite = opts.batchWrite;
     var headers = opts.headers;
     var editId = opts.editId;
-    var body = JSON.stringify(opts.fields);
+    var fields = opts.fields;
 
     function patchDraft(draftId) {
-      return fetchFn(
-        "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)",
-        { method: "PATCH", credentials: "include", headers: headers, body: body }
-      ).then(function (r) {
+      // PATCH via $batch (POST) — a bare PATCH 501s at the Akamai edge on PROD.
+      return batchWrite({
+        fetchFn: fetchFn,
+        service: "/admin/",
+        url: "Puzzles(ID=" + draftId + ",IsActiveEntity=false)",
+        method: "PATCH",
+        headers: headers,
+        body: fields
+      }).then(function (r) {
         if (!r.ok) {
           return r.text().then(function (t) { throw new Error("PATCH draft HTTP " + r.status + ": " + t); });
         }
@@ -82,9 +99,10 @@ sap.ui.define([], function () {
       }).then(patchDraft).then(activate);
     }
 
-    // CREATE: POST a draft, then activate it.
+    // CREATE: POST a draft, then activate it. (POST passes the Akamai edge, so
+    // no $batch tunnelling is needed here — only PATCH/DELETE are blocked.)
     return fetchFn("/admin/Puzzles", {
-      method: "POST", credentials: "include", headers: headers, body: body
+      method: "POST", credentials: "include", headers: headers, body: JSON.stringify(fields)
     }).then(jsonOrThrow("POST draft")).then(function (draft) {
       return activate(draft.ID);
     });

@@ -27,6 +27,22 @@ function res(status, body) {
 const HEADERS = { 'x-csrf-token': 't' }
 const FIELDS = { title: 'X', slug: 'x', status: 'ACTIVE', layout: '{}', solution: '{}' }
 
+// The PATCH step is tunnelled through the shared batchWrite helper (issue #1650
+// reopened — a bare PATCH 501s at the Akamai edge). Mock it here: record the
+// call and return a Response-like, mirroring the real helper's contract.
+function makeBatchWrite(calls, statusByUrl) {
+  return function (opts) {
+    calls.push({ via: 'batch', url: opts.url, method: opts.method, body: opts.body })
+    const status = (statusByUrl && statusByUrl[opts.url]) || 200
+    const ok = status >= 200 && status < 300
+    return Promise.resolve({
+      ok, status,
+      json: () => Promise.resolve(ok ? {} : { error: { message: 'boom' } }),
+      text: () => Promise.resolve(ok ? '' : 'boom'),
+    })
+  }
+}
+
 describe('performPuzzleSave — issue #1650 bug 3', () => {
   it('recovers from a 409 DRAFT_ALREADY_EXISTS by resuming the existing draft', async () => {
     const calls = []
@@ -35,32 +51,36 @@ describe('performPuzzleSave — issue #1650 bug 3', () => {
       if (/draftEdit/.test(url)) {
         return res(409, { error: { message: 'A draft for this entity already exists', code: 'DRAFT_ALREADY_EXISTS' } })
       }
-      if (opts.method === 'PATCH') return res(200, {})
       if (/draftActivate/.test(url)) return res(200, { ID: 'p1', IsActiveEntity: true, slug: 'x' })
       throw new Error('unexpected ' + url)
     }
     const { performPuzzleSave } = loadDraftSave()
-    const active = await performPuzzleSave({ fetchFn, headers: HEADERS, editId: 'p1', fields: FIELDS })
+    const batchWrite = makeBatchWrite(calls)
+    const active = await performPuzzleSave({ fetchFn, batchWrite, headers: HEADERS, editId: 'p1', fields: FIELDS })
 
     expect(active.slug).toBe('x')
-    // The draft (keyed on the active ID) was PATCHed and activated despite the 409.
-    expect(calls.some(c => c.method === 'PATCH' && /ID=p1,IsActiveEntity=false/.test(c.url))).toBe(true)
+    // The draft (keyed on the active ID) was PATCHed via $batch and activated despite the 409.
+    expect(calls.some(c => c.via === 'batch' && c.method === 'PATCH' && /ID=p1,IsActiveEntity=false/.test(c.url))).toBe(true)
     expect(calls.some(c => /ID=p1,IsActiveEntity=false\)\/AdminService.draftActivate/.test(c.url))).toBe(true)
   })
 
-  it('happy-path update: draftEdit → PATCH → activate', async () => {
+  it('happy-path update: draftEdit → PATCH(via $batch) → activate', async () => {
     const calls = []
-    const fetchFn = (url, opts) => {
+    const fetchFn = (url) => {
       calls.push(url)
       if (/draftEdit/.test(url)) return res(200, { ID: 'p1', IsActiveEntity: false })
-      if (opts.method === 'PATCH') return res(200, {})
       if (/draftActivate/.test(url)) return res(200, { ID: 'p1', IsActiveEntity: true, slug: 'x' })
       throw new Error('unexpected ' + url)
     }
+    const batchCalls = []
     const { performPuzzleSave } = loadDraftSave()
-    const active = await performPuzzleSave({ fetchFn, headers: HEADERS, editId: 'p1', fields: FIELDS })
+    const batchWrite = makeBatchWrite(batchCalls)
+    const active = await performPuzzleSave({ fetchFn, batchWrite, headers: HEADERS, editId: 'p1', fields: FIELDS })
     expect(active.IsActiveEntity).toBe(true)
     expect(calls.some(u => /draftEdit/.test(u))).toBe(true)
+    // PATCH went through the batch helper, NEVER as a bare fetch PATCH verb.
+    expect(batchCalls.some(c => c.method === 'PATCH')).toBe(true)
+    expect(batchCalls[0].body).toEqual(FIELDS)
   })
 
   it('re-throws a non-409 draftEdit failure', async () => {
@@ -69,7 +89,7 @@ describe('performPuzzleSave — issue #1650 bug 3', () => {
       throw new Error('should not reach ' + url)
     }
     const { performPuzzleSave } = loadDraftSave()
-    await expect(performPuzzleSave({ fetchFn, headers: HEADERS, editId: 'p1', fields: FIELDS }))
+    await expect(performPuzzleSave({ fetchFn, batchWrite: makeBatchWrite([]), headers: HEADERS, editId: 'p1', fields: FIELDS }))
       .rejects.toThrow(/draftEdit HTTP 500/)
   })
 
@@ -79,11 +99,22 @@ describe('performPuzzleSave — issue #1650 bug 3', () => {
       throw new Error('should not reach ' + url)
     }
     const { performPuzzleSave } = loadDraftSave()
-    await expect(performPuzzleSave({ fetchFn, headers: HEADERS, editId: 'p1', fields: FIELDS }))
+    await expect(performPuzzleSave({ fetchFn, batchWrite: makeBatchWrite([]), headers: HEADERS, editId: 'p1', fields: FIELDS }))
       .rejects.toThrow(/draftEdit HTTP 409/)
   })
 
-  it('create-path: POST draft → activate', async () => {
+  it('surfaces a $batch PATCH failure (e.g. Akamai/CSRF) as a PATCH draft error', async () => {
+    const fetchFn = (url) => {
+      if (/draftEdit/.test(url)) return res(200, { ID: 'p1', IsActiveEntity: false })
+      throw new Error('should not reach ' + url)
+    }
+    const { performPuzzleSave } = loadDraftSave()
+    const batchWrite = makeBatchWrite([], { 'Puzzles(ID=p1,IsActiveEntity=false)': 403 })
+    await expect(performPuzzleSave({ fetchFn, batchWrite, headers: HEADERS, editId: 'p1', fields: FIELDS }))
+      .rejects.toThrow(/PATCH draft HTTP 403/)
+  })
+
+  it('create-path: POST draft → activate (no PATCH/$batch)', async () => {
     const calls = []
     const fetchFn = (url, opts) => {
       calls.push({ url, method: opts.method })
@@ -91,9 +122,11 @@ describe('performPuzzleSave — issue #1650 bug 3', () => {
       if (/draftActivate/.test(url)) return res(200, { ID: 'new1', IsActiveEntity: true, slug: 'x' })
       throw new Error('unexpected ' + url)
     }
+    const batchCalls = []
     const { performPuzzleSave } = loadDraftSave()
-    const active = await performPuzzleSave({ fetchFn, headers: HEADERS, editId: null, fields: FIELDS })
+    const active = await performPuzzleSave({ fetchFn, batchWrite: makeBatchWrite(batchCalls), headers: HEADERS, editId: null, fields: FIELDS })
     expect(active.ID).toBe('new1')
     expect(calls[0]).toEqual({ url: '/admin/Puzzles', method: 'POST' })
+    expect(batchCalls).toHaveLength(0)
   })
 })

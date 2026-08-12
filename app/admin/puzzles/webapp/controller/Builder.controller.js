@@ -7,8 +7,9 @@ sap.ui.define([
   "sap/tutorials/admin/puzzles/lib/crossword-geometry",
   "sap/tutorials/admin/puzzles/lib/puzzle-io",
   "sap/tutorials/admin/puzzles/lib/solver-core",
-  "sap/tutorials/admin/puzzles/lib/draft-save"
-], function (Controller, JSONModel, MessageToast, MessageBox, Fragment, geom, io, solver, draftSave) {
+  "sap/tutorials/admin/puzzles/lib/draft-save",
+  "sap/tutorials/admin/shell/lib/odata-batch"
+], function (Controller, JSONModel, MessageToast, MessageBox, Fragment, geom, io, solver, draftSave, odataBatch) {
   "use strict";
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -139,10 +140,15 @@ sap.ui.define([
               return r.json();
             }).then(function (draft) {
               var draftId = draft.ID || id;
-              return fetch(
-                "/admin/Puzzles(ID=" + draftId + ",IsActiveEntity=false)",
-                { method: "PATCH", credentials: "include", headers: headers, body: JSON.stringify({ status: "INACTIVE" }) }
-              ).then(function (r2) {
+              // PATCH via $batch (POST) — a bare PATCH 501s at the Akamai edge on PROD.
+              return odataBatch.batchWrite({
+                fetchFn: fetch,
+                service: "/admin/",
+                url: "Puzzles(ID=" + draftId + ",IsActiveEntity=false)",
+                method: "PATCH",
+                headers: headers,
+                body: { status: "INACTIVE" }
+              }).then(function (r2) {
                 if (!r2.ok) { return r2.text().then(function (t) { throw new Error("PATCH draft HTTP " + r2.status + ": " + t); }); }
                 return draftId;
               });
@@ -529,6 +535,7 @@ sap.ui.define([
         // #1650 bug 3) lives in the unit-tested lib/draft-save module.
         return draftSave.performPuzzleSave({
           fetchFn: fetch,
+          batchWrite: odataBatch.batchWrite,
           headers: headers,
           editId: editId,
           fields: fields
