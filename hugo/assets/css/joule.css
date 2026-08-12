@@ -229,17 +229,12 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, .25), 0 0 0 1px rgba(255, 255, 255, .06);
   transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, bottom 200ms ease;
 }
-/* Issue #102: when the in-flow Previous/Next nav row scrolls into view,
-   joule.js sets data-near-nav-bottom on the FAB. The Next pill is right-
-   aligned (flex spacer) and the FAB is fixed bottom-right, so they share
-   the same horizontal lane — vertical lift is the only escape. The first
-   pass at 5rem still kissed the pill on common viewport sizes; bumping to
-   8rem clears the row's padding + button + a comfortable gap. On <=960px
-   the FAB is display:none (mobile rule below) so this is a no-op there.
-   The transition:bottom on .joule-step-fab makes the slide smooth. */
-.joule-step-fab[data-near-nav-bottom] {
-  bottom: 8rem;
-}
+/* The FAB clears the sticky prev/next bar (.tutorial-stepnav) via a
+   deterministic, scroll-independent rule in ui5-overrides.css
+   (`body:has(.tutorial-stepnav) .joule-step-fab`). The old scroll-driven
+   [data-near-nav-bottom] lift was removed — it observed the in-flow
+   left-column nav, which never overlapped the right-aligned FAB, and it
+   never accounted for the always-present fixed bar. */
 .joule-step-fab[hidden] { display: none; }
 .joule-step-fab:hover {
   transform: translateY(-1px);
