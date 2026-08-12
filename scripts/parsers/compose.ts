@@ -1,4 +1,5 @@
 import { extractFrontmatter } from './frontmatter.js'
+import { normalizeBlockquotedFences } from './blockquote-fence.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
 import { prepPrerequisitesMarkup } from './prerequisites-markup.js'
@@ -67,7 +68,15 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     extractFrontmatter(normalized)
 
   const isV2 = frontmatter.parser === 'v2'
-  let processedBody = resolveImageURLs(body, {
+
+  // [blockquoted-fence] Heal the AEM-legacy pattern where code content lines
+  // inside a `>`-blockquoted fenced code block are missing their `>` marker.
+  // Under Goldmark the un-prefixed line terminates the blockquote and the code
+  // renders as a plain paragraph outside the code window (hana-clients-install
+  // step 2). Run before every downstream transform so both steps and intro get
+  // the healed markdown.
+  const healedBody = normalizeBlockquotedFences(body)
+  let processedBody = resolveImageURLs(healedBody, {
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
   })
