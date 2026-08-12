@@ -252,30 +252,3 @@ export async function sendTaskRecordToNgds(record, db) {
     return { success: false, error: err.message };
   }
 }
-
-export async function retryFailedMessages() {
-  const { NGDSFailedMessages } = cds.entities('com.sap.developers.ims');
-  const LOG = cds.log('ngds');
-
-  const pending = await SELECT.from(NGDSFailedMessages).where({ status: 'PENDING' });
-
-  let retried = 0;
-  for (const msg of pending) {
-    if (msg.retryCount >= msg.maxRetries) {
-      await UPDATE(NGDSFailedMessages, msg.ID).set({ status: 'FAILED_PERMANENTLY' });
-      continue;
-    }
-    try {
-      await postPayload(JSON.parse(msg.payload));
-      await DELETE.from(NGDSFailedMessages, msg.ID);
-      retried++;
-    } catch (err) {
-      const newCount = msg.retryCount + 1;
-      const update = { retryCount: newCount };
-      if (newCount >= msg.maxRetries) update.status = 'FAILED_PERMANENTLY';
-      await UPDATE(NGDSFailedMessages, msg.ID).set(update);
-      LOG.warn(`NGDS retry failed (${newCount}/${msg.maxRetries}):`, err.message);
-    }
-  }
-  return retried;
-}
