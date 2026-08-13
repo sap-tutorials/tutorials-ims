@@ -1,6 +1,9 @@
 export function youtubeId(url: string): string | null {
   if (!url) return null;
-  const m = url.match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([\w-]{6,})/);
+  // Handles watch (?v=), youtu.be/, /embed/, /live/ and /shorts/ URL shapes.
+  // Devtoberfest session recordings are stored as /live/<id> links, so that
+  // form must resolve or thumbnails, the embedded player and transcript all break.
+  const m = url.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/live\/|\/shorts\/)([\w-]{6,})/);
   return m ? m[1] : null;
 }
 
