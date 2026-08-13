@@ -28,7 +28,16 @@ export function _resetMockFetcher() { _fetch = globalThis.fetch; }
  * @returns {Promise<Array<Object>>} — parsed event rows
  */
 export async function fetchKhoros(boardId, typeId, defaultScope, opts = {}) {
-  const query = `SELECT id,subject,view_href,occasion_data.location,occasion_data.start_time,occasion_data.end_time,occasion_data.timezone FROM messages WHERE board.id='${boardId}'`;
+  // #1736 — Without ORDER BY / LIMIT the Khoros search returns its default
+  // ~100-row window, dominated by /ec-p/ occasion-reply rows (which we discard)
+  // and ordered by relevance, not date. On a large board (codejam-events has
+  // 1200+ occasions spanning years) that window never reaches the handful of
+  // genuinely upcoming events, so future CodeJams silently fell out of the band.
+  // Fix: filter to occasion messages only, bound to events starting from now
+  // onward, and order soonest-first so the band always sees the next events.
+  const now = opts.now ?? new Date();
+  const cutoff = now.toISOString();   // e.g. 2026-08-13T00:00:00.000Z — LiQL compares this against occasion_data.start_time
+  const query = `SELECT id,subject,view_href,occasion_data.location,occasion_data.start_time,occasion_data.end_time,occasion_data.timezone FROM messages WHERE board.id='${boardId}' AND conversation.style='occasion' AND occasion_data.start_time > '${cutoff}' ORDER BY occasion_data.start_time ASC LIMIT 100`;
   const url = `${KHOROS_BASE_URL}?q=${encodeURIComponent(query)}`;
   const controller = new AbortController();
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
