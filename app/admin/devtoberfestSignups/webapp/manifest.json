@@ -1,0 +1,97 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.devtoberfestSignups",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appSubtitle}}",
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "DevtoberfestSignups-analyze": {
+          "semanticObject": "DevtoberfestSignups",
+          "action": "analyze",
+          "title": "{{appTitle}}",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.fe.templates": {},
+        "sap.m": {},
+        "sap.ui.core": {}
+      }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "sap.tutorials.admin.devtoberfestSignups.i18n.i18n"
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "DevtoberfestSignupsALP",
+          "target": "DevtoberfestSignupsALP"
+        }
+      ],
+      "targets": {
+        "DevtoberfestSignupsALP": {
+          "type": "Component",
+          "id": "DevtoberfestSignupsALP",
+          "name": "sap.fe.templates.AnalyticalListPage",
+          "options": {
+            "settings": {
+              "contextPath": "/DevtoberfestSignupAnalytics",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "hideVisualFilter": true,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Chart": {
+                  "chartInitiallyExpanded": true
+                },
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "AnalyticalTable"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

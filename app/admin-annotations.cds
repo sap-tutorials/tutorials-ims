@@ -1987,6 +1987,87 @@ annotate AdminService.CompletionAnalytics with {
   };
 };
 
+// --- Devtoberfest Signups (aggregated report — spec 2026-08-13) -----------
+//
+// Analytical List Page over the per-signup fact view. Native OData $apply drives
+// the chart + analytical table + filter bar (group by week / edition / region /
+// role, aggregate signup count, grand total). weekIndex is the real, portable,
+// groupable time dimension; the read handler enriches each returned row with a
+// human-readable weekMonday / weekLabel and — on the pure by-week series — a
+// running cumulativeSignups (a window total $apply cannot compute natively).
+// Those three are display-only enrichment fields, deliberately NOT dimensions or
+// measures, so Fiori never tries to $apply-group or -aggregate the virtual columns.
+annotate AdminService.DevtoberfestSignupAnalytics with @(
+  Aggregation.ApplySupported: {
+    Transformations: ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'],
+    GroupableProperties: [ weekIndex, eventName, eventType, region, role ],
+    AggregatableProperties: [ { Property: signups } ]
+  },
+  Analytics.AggregatedProperty #newSignups: {
+    Name: 'newSignups',
+    AggregationMethod: 'sum',
+    AggregatableProperty: signups,
+    ![@Common.Label]: 'New Signups'
+  },
+  UI.Chart: {
+    ChartType: #Column,
+    Dimensions: [weekIndex],
+    DynamicMeasures: ['@Analytics.AggregatedProperty#newSignups']
+  },
+  UI.PresentationVariant: {
+    Visualizations: ['@UI.Chart', '@UI.LineItem'],
+    SortOrder: [{ Property: weekIndex }]
+  },
+  UI.SelectionFields: [ eventName, region, role ],
+  UI.LineItem: [
+    { Value: weekLabel,         Label: 'Week' },
+    { Value: weekMonday,        Label: 'Week Starting' },
+    { Value: eventName,         Label: 'Edition' },
+    { Value: region,            Label: 'Region' },
+    { Value: role,              Label: 'Role' },
+    { Value: newSignups,        Label: 'New Signups' },
+    { Value: cumulativeSignups, Label: 'Cumulative' }
+  ]
+) {
+  ID            @UI.Hidden;
+  weekIndex     @title: 'Week #'         @Analytics.Dimension;
+  eventName     @title: 'Edition'        @Analytics.Dimension;
+  eventType     @title: 'Event Type'     @Analytics.Dimension;
+  region        @title: 'Region'         @Analytics.Dimension;
+  role          @title: 'Role'           @Analytics.Dimension;
+  signups       @title: 'Signups'        @Analytics.Measure @Aggregation.default: #SUM;
+  weekMonday    @title: 'Week Starting';
+  weekLabel     @title: 'Week';
+  cumulativeSignups @title: 'Cumulative';
+};
+
+// Filter-bar value help. eventName resolves against Events (edition picker);
+// region/role are fixed-value dropdowns mirroring the UserLearningPreferences
+// enums plus the 'Not set' bucket (served from srv/admin-service.js).
+annotate AdminService.DevtoberfestSignupAnalytics with {
+  eventName @Common.ValueList: {
+    CollectionPath: 'Events',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: eventName, ValueListProperty: 'name' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'startDate' }
+    ]
+  };
+  region @Common.ValueListWithFixedValues @Common.ValueList: {
+    CollectionPath: 'SignupRegions',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: region, ValueListProperty: 'code' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'label' }
+    ]
+  };
+  role @Common.ValueListWithFixedValues @Common.ValueList: {
+    CollectionPath: 'SignupRoles',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: role, ValueListProperty: 'code' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'label' }
+    ]
+  };
+};
+
 // --- Joule Chat Settings (singleton) ---
 annotate AdminService.ChatSettings with @(
   UI: {
