@@ -162,6 +162,14 @@ export interface TutorialNavEntry {
   groupTitle?: string
   missionSlug?: string
   groupSlug?: string
+  // Ordering hints for the breadcrumb nav-dropdown (#group-nav-dropdown-order).
+  // groupOrder = this tutorial's 0-based index within its canonical group's
+  // itemOrder sequence. missionGroupSeq = that group's 0-based position within
+  // the canonical mission's ordered group list. The dropdown sorts by
+  // (missionGroupSeq, groupOrder) so groups and tutorials render in real
+  // sequence rather than the alphabetical _nav.json array order.
+  groupOrder?: number
+  missionGroupSeq?: number
   prev: string | null
   next: string | null
   recommendations?: string[]

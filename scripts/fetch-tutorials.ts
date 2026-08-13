@@ -1177,6 +1177,7 @@ async function main() {
         }]
       : hierarchy.groups
 
+    let missionGroupSeq = 0
     for (const group of groupsToProcess) {
       const groupRef: GroupRef = {
         id: group.imsId,
@@ -1202,6 +1203,7 @@ async function main() {
         kind: 'mission',
         missionLegacyId: mission.imsId,
         groupLegacyId: group.imsId,
+        missionGroupSeq: missionGroupSeq++,
         slugs: group.tutorialSlugs,
         stamp: {
           missionId: mission.imsId,
@@ -1255,6 +1257,7 @@ async function main() {
       kind: 'standalone',
       missionLegacyId: null,
       groupLegacyId: sg.imsId,
+      missionGroupSeq: 0,
       slugs: sg.tutorialSlugs,
       stamp: { groupId: sg.imsId, groupTitle: sg.title, groupSlug: sg.slug },
     })
@@ -1268,6 +1271,8 @@ async function main() {
     if (!nav) continue
     nav.prev = a.prev
     nav.next = a.next
+    nav.groupOrder = a.groupOrder
+    nav.missionGroupSeq = a.missionGroupSeq
     if (a.missionId !== undefined) {
       nav.missionId = a.missionId
       nav.missionTitle = a.missionTitle
