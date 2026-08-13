@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { buildOrderedGroups } from './order'
 
 interface NavEntry {
   slug: string
@@ -10,6 +11,9 @@ interface NavEntry {
   groupTitle: string
   prev: string | null
   next: string | null
+  // Ordering hints baked by fetch-tutorials.ts (#group-nav-dropdown-order).
+  missionGroupSeq?: number
+  groupOrder?: number
 }
 
 interface StepEntry {
@@ -32,16 +36,7 @@ const stepEntries = ref<StepEntry[]>([])
 const mode = ref<'mission' | 'steps'>('mission')
 const dropdownEl = ref<HTMLElement | null>(null)
 
-const groups = computed(() => {
-  const map = new Map<number, { title: string; tutorials: NavEntry[] }>()
-  for (const entry of navEntries.value) {
-    if (!map.has(entry.groupId)) {
-      map.set(entry.groupId, { title: entry.groupTitle, tutorials: [] })
-    }
-    map.get(entry.groupId)!.tutorials.push(entry)
-  }
-  return Array.from(map.values())
-})
+const groups = computed(() => buildOrderedGroups(navEntries.value))
 
 const missionTitle = computed(() => navEntries.value[0]?.missionTitle ?? '')
 
@@ -103,7 +98,7 @@ onUnmounted(() => {
           <div class="nav-dropdown-count">{{ navEntries.length }} tutorials</div>
         </div>
       </div>
-      <div v-for="group in groups" :key="group.title" class="nav-dropdown-group">
+      <div v-for="group in groups" :key="group.groupId" class="nav-dropdown-group">
         <div class="nav-dropdown-group-title">{{ group.title }}</div>
         <a
           v-for="tut in group.tutorials"

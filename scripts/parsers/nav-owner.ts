@@ -23,6 +23,10 @@ export interface NavContainer {
   kind: 'mission' | 'standalone';
   missionLegacyId: number | null;   // null for standalone groups
   groupLegacyId: number;
+  // 0-based position of this group within its mission's ordered group list.
+  // Standalone groups use 0. Surfaced to the breadcrumb nav-dropdown so groups
+  // render in mission sequence, not alphabetical/first-seen order.
+  missionGroupSeq: number;
   slugs: string[];                  // ordered tutorial slugs in this container
   stamp: NavStamp;                  // mission/group fields to write for members
 }
@@ -30,6 +34,10 @@ export interface NavContainer {
 export interface NavAssignment extends NavStamp {
   prev: string | null;
   next: string | null;
+  // Ordering hints for the nav-dropdown (see NavContainer.missionGroupSeq).
+  // groupOrder = this slug's 0-based index within the owner container's slugs.
+  groupOrder: number;
+  missionGroupSeq: number;
 }
 
 const MAX = Number.MAX_SAFE_INTEGER;
@@ -61,6 +69,8 @@ export function computeCanonicalNav(
       assigned.set(slug, {
         prev: prevSlug && presentSlugs.has(prevSlug) ? prevSlug : null,
         next: nextSlug && presentSlugs.has(nextSlug) ? nextSlug : null,
+        groupOrder: i,
+        missionGroupSeq: c.missionGroupSeq,
         ...c.stamp,
       });
     }
