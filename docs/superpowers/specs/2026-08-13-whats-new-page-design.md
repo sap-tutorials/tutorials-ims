@@ -157,13 +157,20 @@ Keep JSON integrity and date math in tested code (repo convention: Node under
 
 ### 5. Routing
 
-- Add `/whats-new/` to `IN_SCOPE_PAGES` in `srv/lib/page-key-map.js`
-  (`{ route: '/whats-new/', key: 'page-whats-new', file: 'whats-new/index.html', mimeType: 'text/html' }`)
-  so the page flows through the existing page-fallback snapshot + CAP-BLOB serve
-  path used by `/topics/`, `/browse/`, verb hubs, etc.
-- **Verify** the approuter `xs-app.json` routes `/whats-new/*` (or is covered by
-  an existing catch-all). If not, add the route. This is the single integration
-  risk and is an explicit implementation step, not an assumption.
+- **No routing change needed.** The approuter's route table ends with a static
+  catch-all (`^(.*)$ -> static`), and Hugo pages that are *not* in the explicit
+  `srv-api` list (e.g. `/explore/`, `/cookies/`, `/me/`) are already served
+  through it from the copied `hugo/public`. A static `/whats-new/index.html`
+  rides the same catch-all — no `xs-app.json` and no `IN_SCOPE_PAGES` /
+  `page-key-map.js` change.
+- This is the most infra-free option and matches the "no server infra" goal.
+  (The earlier draft routed the page through CAP `/content/pages/*` like
+  `/topics/`; that was dropped after confirming the static catch-all already
+  serves directory-index Hugo pages.)
+- **Follow-up option:** if live-updatable-without-redeploy is ever wanted, flip
+  `/whats-new/` to the CAP BLOB path like `/topics/` (add to `IN_SCOPE_PAGES`
+  + an `xs-app.json` route). Not needed for v1 — content only changes when the
+  skill is re-run and the repo redeployed anyway.
 
 ### 6. Styling — `hugo/assets/css/whats-new.css`
 
