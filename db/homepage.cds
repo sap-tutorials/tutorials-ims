@@ -57,6 +57,9 @@ entity HomepageShelves : cuid, managed {
   // Admin override for the automated link-health check. When set, the job
   // applies this value to linkStatus without fetching the URL, silencing
   // false-BROKEN alerts on auth-gated, geo-restricted, or bot-detecting URLs.
+  // (#1726) The /build/homepage-shelves feed ALSO coalesces this over
+  // linkStatus at bake time, so an admin-pinned override takes effect on the
+  // catalog rebuild the save triggers — not only after the next nightly run.
   // Clear (set to null) to re-enable automatic detection on the next run.
   linkStatusOverride : HomepageLinkStatus @assert.range;
   // (#759) Explainer content — see spec §2.4. tagline + whyItMatters

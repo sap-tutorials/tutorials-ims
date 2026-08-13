@@ -323,8 +323,18 @@ cds.on('bootstrap', (app) => {
       const rows = await db.run(SELECT.from('com.sap.developers.ims.HomepageShelves')
         .where({ isActive: true })
         .orderBy('verb', 'shelf', 'sortOrder'));
+      // (#1726) Apply the admin link-health override at bake time. The Hugo
+      // verb-page + directory-footer filters hide rows whose baked linkStatus
+      // is BROKEN. linkStatusOverride is normally folded into linkStatus by the
+      // nightly link-health job — but an admin who pins the override to silence
+      // a false-BROKEN also triggers a catalog rebuild immediately, well before
+      // that job runs. Without coalescing here, the rebuild bakes the stale
+      // BROKEN status and the entry stays hidden until the next nightly run +
+      // rebuild. Override wins; a null override leaves linkStatus untouched.
+      const shelves = rows.map((r) =>
+        r.linkStatusOverride ? { ...r, linkStatus: r.linkStatusOverride } : r);
       res.set('Cache-Control', 'public, max-age=60');
-      res.json({ shelves: rows, buildAt: new Date().toISOString() });
+      res.json({ shelves, buildAt: new Date().toISOString() });
     } catch (err) {
       console.error('[build/homepage-shelves]', err.message);
       res.status(500).json({ error: err.message });

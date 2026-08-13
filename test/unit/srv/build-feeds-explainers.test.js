@@ -97,4 +97,38 @@ describe('/build/verb-definitions + /build/shelf-definitions (#759 PR 1)', () =>
       expect(row).toHaveProperty('authoringStatus');
     });
   });
+
+  // (#1726) Link-health override must be effective at BAKE time, not only after
+  // the nightly link-health job runs. An admin who pins linkStatusOverride=OK on
+  // a false-BROKEN entry triggers a catalog rebuild; the baked linkStatus the
+  // Hugo verb-page + directory-footer filters read must already reflect the
+  // override, or the entry stays hidden until the next nightly run + rebuild.
+  describe('/build/homepage-shelves applies linkStatusOverride (#1726)', () => {
+    it('bakes the override into linkStatus so a BROKEN+override=OK row is visible', async () => {
+      const id = cds.utils.uuid();
+      await db.run(INSERT.into('com.sap.developers.ims.HomepageShelves').entries({
+        ID: id, verb: 'BUILD', shelf: 'TOOLS', sortOrder: 1726,
+        title: 'Override BROKEN→OK', url: 'https://override-1726.example',
+        isActive: true, linkStatus: 'BROKEN', linkStatusOverride: 'OK',
+      }));
+      const res = await project.get('/build/homepage-shelves');
+      expect(res.status).toBe(200);
+      const row = res.data.shelves.find(r => r.ID === id);
+      expect(row).toBeTruthy();
+      // Effective status = override, so the Hugo `linkStatus != BROKEN` filter passes.
+      expect(row.linkStatus).toBe('OK');
+    });
+
+    it('leaves linkStatus untouched when no override is set', async () => {
+      const id = cds.utils.uuid();
+      await db.run(INSERT.into('com.sap.developers.ims.HomepageShelves').entries({
+        ID: id, verb: 'BUILD', shelf: 'TOOLS', sortOrder: 1727,
+        title: 'No override', url: 'https://no-override-1726.example',
+        isActive: true, linkStatus: 'BROKEN',
+      }));
+      const res = await project.get('/build/homepage-shelves');
+      const row = res.data.shelves.find(r => r.ID === id);
+      expect(row.linkStatus).toBe('BROKEN');
+    });
+  });
 });
