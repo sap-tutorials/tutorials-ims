@@ -738,12 +738,19 @@ export function registerJobs() {
     fn: async () => {
       // Tutorial review sync — self-healing backfill of missing TutorialMeta.
       // Publish handles the happy path; this catches drift.
+      //
+      // Re-throw on failure (issue #1718): a swallowed error here left the job
+      // silently green — it never reached runWithLock's catch, so it never
+      // wrote a FAILED PipelineLog row and never raised ScheduledJobFailed.
+      // Backfill drift going unnoticed is exactly what this job exists to
+      // catch, so a failure must surface like every other scheduled job.
       try {
         const { backfillMissingTutorialMeta } = await import('../lib/tutorial-meta-init.js');
         const { created } = await backfillMissingTutorialMeta();
         if (created > 0) LOG.info(`tutorial-meta scheduler: backfilled ${created} rows`);
       } catch (e) {
         LOG.error('tutorial-meta scheduler failed:', e);
+        throw e;
       }
     },
   });

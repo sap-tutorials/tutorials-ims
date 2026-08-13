@@ -328,11 +328,15 @@
           "PublishRejected",
           "ScheduledJobFailed",
           "RebuildDispatchFailed",
+          "RebuildPipelineFailed",
           "DeployStarted",
           "DeployFinished",
           "DeployFailed",
           "NgdsSendExhausted",
           "NgdsBacklog",
+          "SecretExpiringSoon",
+          "HomepageLinksBroken",
+          "PublishStuck",
           "AlertingTest"
         ],
         "dedupWindowMs": 300000

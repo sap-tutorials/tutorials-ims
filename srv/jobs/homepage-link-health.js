@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import * as alerting from '../lib/alerting.js';
 
 const TIMEOUT_MS = 5000;
 const CONCURRENCY = 4;
@@ -85,6 +86,28 @@ export function resolveForYouUrl({ kind, targetSlug }) {
   }
 }
 
+// Alert-decision policy for one link-health run. Pure — no I/O — so the
+// threshold is unit-testable in isolation (mirrors buildRetryAlerts in
+// ngds-retry.js). Returns 0 or 1 HomepageLinksBroken alert. WARNING severity
+// (routes to devrel-deploys, not on-call): broken homepage links degrade the
+// landing experience but are not a page-down incident, and admins can pin
+// linkStatusOverride to silence known false-positives.
+export function buildBrokenLinksAlert({ broken = 0, shelves, forYou } = {}) {
+  if (broken <= 0) return null;
+  const breakdown = [];
+  if (shelves) breakdown.push(`shelves: ${shelves.broken}`);
+  if (forYou) breakdown.push(`for-you: ${forYou.broken}`);
+  return {
+    eventType: 'HomepageLinksBroken',
+    severity: 'WARNING',
+    subject: `Homepage link health: ${broken} broken link(s)`,
+    body: `Nightly link-health check found ${broken} BROKEN homepage link(s)`
+        + (breakdown.length ? ` (${breakdown.join(', ')}).` : '.')
+        + ` Review /admin-ui/ HomepageShelves / HomepageForYouCandidates`
+        + ` (linkStatus=BROKEN); pin linkStatusOverride to silence false-positives.`,
+  };
+}
+
 async function runHealthCheckLoop(rows, resolveUrl, updateRow, slowThresholdMs) {
   let cursor = 0;
   let okCount = 0, slowCount = 0, brokenCount = 0, skippedCount = 0;
@@ -162,12 +185,26 @@ export async function runHomepageLinkHealth(opts = {}) {
 
   LOG.info?.(`link-health for-you: ${fyCounts.ok} OK, ${fyCounts.slow} SLOW, ${fyCounts.broken} BROKEN, ${fyCounts.skipped} skipped`);
 
+  const broken = shelfCounts.broken + fyCounts.broken;
+
+  // Push-alert on findings (fail-open, DB-gated, no-op when disabled). Sits
+  // BESIDE the per-row linkStatus writes + PipelineLog summary — never replaces
+  // them.
+  const alert = buildBrokenLinksAlert({ broken, shelves: shelfCounts, forYou: fyCounts });
+  if (alert) {
+    await alerting.raise({
+      ...alert,
+      category: 'ALERT',
+      resource: { resourceName: 'homepage-link-health', resourceType: 'job' },
+    });
+  }
+
   return {
     shelves: shelfCounts,
     forYou: fyCounts,
     // Flat totals for backwards-compat callers that only check ok/slow/broken.
     ok: shelfCounts.ok + fyCounts.ok,
     slow: shelfCounts.slow + fyCounts.slow,
-    broken: shelfCounts.broken + fyCounts.broken,
+    broken,
   };
 }

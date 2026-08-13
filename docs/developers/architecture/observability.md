@@ -127,16 +127,32 @@ call the exported function directly, never `await` from the failure path (use
 
 ## Alerted failure paths
 
-| Hook site | File | `eventType` | When raised |
-|---|---|---|---|
-| Content-publish soft-reject | `srv/lib/content-publish-session.js` `commitSession` | `PublishRejected` | `outcome === 'rejected'` — one or more slug reverts were blocked; content partially published |
-| Scheduled job failure | `srv/jobs/scheduler.js` `runWithLock` catch | `ScheduledJobFailed` | Any scheduled job throws; `resource.resourceName` = job name; deduplicates per job via ANS `dedupWindowMs` |
-| Rebuild dispatch failure | `srv/lib/rebuild-trigger.js` dispatch catch | `RebuildDispatchFailed` | GitHub Actions dispatch throws; admin save already succeeded; next trigger picks up the miss |
+Routing is **by severity only** (`routes[]` in the config): `ERROR`+ →
+`devrel-oncall`, `NOTICE`/`WARNING` → `devrel-deploys`. Per-`eventType` delivery
+is filtered cockpit-side (see the wiring note below).
 
-All three hooks use `severity: 'ERROR'` and `category: 'ALERT'`.
-`ScheduledJobFailed` covers **every** scheduled job (metrics-rollup, KG
-nightly jobs, community-events refresh, etc.) through the single chokepoint in
-`runWithLock`.
+| Hook site | File | `eventType` | Severity | When raised |
+|---|---|---|---|---|
+| Content-publish soft-reject | `srv/lib/content-publish-session.js` `commitSession` | `PublishRejected` | ERROR | `outcome === 'rejected'` — one or more slug reverts were blocked; content partially published |
+| Scheduled job failure | `srv/jobs/scheduler.js` `runWithLock` catch | `ScheduledJobFailed` | ERROR | Any scheduled job throws; `resource.resourceName` = job name; dedup per job via ANS `dedupWindowMs`. Covers **every** job through the single chokepoint |
+| Rebuild dispatch failure | `srv/lib/rebuild-trigger.js` dispatch catch | `RebuildDispatchFailed` | ERROR | The GitHub Actions `workflow_dispatch` POST throws; the admin save already succeeded |
+| Rebuild pipeline run failure | `srv/lib/content-store.js` `pipelineLogFailureHandler` (`POST /content/pipeline-log`) | `RebuildPipelineFailed` | ERROR | A `rebuild-content(-qa).yml` run fails and its `if: failure()` step reports here. ANS parity for the pipeline *run* (complements the workflow's GitHub-issue notifier, #1373). `resource.resourceName` = `rebuild-<env>` |
+| Deploy lifecycle | `srv/routes/deploy-events.js` (`POST /ops/deploy-event`) | `DeployStarted` / `DeployFinished` / `DeployFailed` | NOTICE / NOTICE / ERROR | Pinged by `scripts/deploy-mta.cjs` at each deploy boundary |
+| NGDS send exhausted | `srv/jobs/ngds-retry.js` (`buildRetryAlerts`) | `NgdsSendExhausted` | ERROR | The retry job marked ≥1 message `FAILED_PERMANENTLY` this run — badge events lost |
+| NGDS backlog | `srv/jobs/ngds-retry.js` (`buildRetryAlerts`) | `NgdsBacklog` | WARNING | Retries failed this run, or pending backlog ≥ `BACKLOG_THRESHOLD` (20) — feed unhealthy |
+| Secret expiring / missing | `srv/jobs/secret-expiry-check.js` (`buildSecretExpiryAlerts`) | `SecretExpiringSoon` | ERROR / WARNING | Daily check found ≥1 secret expired or **missing from credstore** (ERROR) or expiring within 7 days (WARNING). Proactive — fires on findings, not on job crash (#1718) |
+| Homepage links broken | `srv/jobs/homepage-link-health.js` (`buildBrokenLinksAlert`) | `HomepageLinksBroken` | WARNING | Nightly link-health check found ≥1 BROKEN homepage link; pin `linkStatusOverride` to silence false-positives (#1718) |
+| Publish manifest stuck | `srv/jobs/cleanup.js` `cleanupStuckPublishing` (`buildPublishStuckAlert`) | `PublishStuck` | WARNING | The watchdog force-FAILED ≥1 wedged `PUBLISHING` manifest and released its lock (#1718) |
+| Admin test button | `srv/admin-service.js` `sendTestAlert` | `AlertingTest` | admin-chosen | On-demand end-to-end path check (see below) |
+
+**Findings vs. crash alerts (#1718).** `ScheduledJobFailed` fires when a job
+*throws*. `SecretExpiringSoon`, `HomepageLinksBroken`, and `PublishStuck` fire
+when a job *completes successfully but returns actionable findings* — the job
+computes a pure `buildXAlert(s)` decision (mirroring `buildRetryAlerts`) and
+hands the envelope(s) to `alerting.raise()` itself, wrapping each with
+`category: 'ALERT'` + `resource: { resourceName: <job>, resourceType: 'job' }`.
+`tutorial-metadata-review` previously swallowed its own errors, hiding failures
+from the crash chokepoint; it now re-throws so backfill drift surfaces (#1718).
 
 ## Testing the alert path (#1469)
 
@@ -178,9 +194,12 @@ In `package.json` `cds.requires.alerts`:
   "[test]":       { "kind": "alert-notification-memory" },
   "[hybrid]":     { "kind": "alert-notification" },
   "[production]": { "kind": "alert-notification" },
-  "channels": ["email:devrel-oncall"],
-  "routes": [{ "minSeverity": "ERROR", "channels": ["email:devrel-oncall"] }],
-  "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed", "DeployStarted", "DeployFinished", "DeployFailed", "NgdsSendExhausted", "NgdsBacklog", "AlertingTest"],
+  "channels": ["email:devrel-oncall", "email:devrel-deploys"],
+  "routes": [
+    { "minSeverity": "ERROR",  "channels": ["email:devrel-oncall"] },
+    { "minSeverity": "NOTICE", "channels": ["email:devrel-deploys"] }
+  ],
+  "eventTypes": ["PublishRejected", "ScheduledJobFailed", "RebuildDispatchFailed", "RebuildPipelineFailed", "DeployStarted", "DeployFinished", "DeployFailed", "NgdsSendExhausted", "NgdsBacklog", "SecretExpiringSoon", "HomepageLinksBroken", "PublishStuck", "AlertingTest"],
   "dedupWindowMs": 300000
 }
 ```
@@ -278,10 +297,17 @@ the instance is bound but no emails are sent.
 > is filtered per-`eventType` in ANS (the plugin only POSTs to the producer
 > API). A working `AlertingTest` email does NOT imply the other eventTypes are
 > wired — that was the 2026-08-12 gap where only the test path delivered. When
-> you add a new `eventType` in `cds.requires.alerts.eventTypes` (e.g.
-> `NgdsSendExhausted` (ERROR) / `NgdsBacklog` (WARNING) from the NGDS retry job),
+> you add a new `eventType` in `cds.requires.alerts.eventTypes`,
 > `cds build` regenerates `gen/alerts/ans-*.json`, but you must also create the
 > matching condition + subscription in the cockpit or that alert stays silent.
+>
+> **The #1718 additions (`RebuildPipelineFailed` ERROR, `SecretExpiringSoon`
+> ERROR/WARNING, `HomepageLinksBroken` WARNING, `PublishStuck` WARNING) each need
+> a cockpit condition + subscription before they deliver.** Route the ERROR-tier
+> ones (`RebuildPipelineFailed`, `SecretExpiringSoon` when critical) to
+> `devrel-oncall`; the WARNING-tier ones to `devrel-deploys`. No new managed
+> service or MTA change is required — they ride the existing
+> `tutorials-alert-notification` instance.
 
 **6. Enable alerting (admin UI — no restart).**
 
