@@ -88,17 +88,21 @@ describe('ngds-client', () => {
 });
 
 // ---------------------------------------------------------------------------
-// postPayload — manual OAuth2 token handling
+// postPayload — manual token handling (Basic-auth → JWT → Bearer)
 // ---------------------------------------------------------------------------
 
-// Fake destination returned by the getDestination mock.
+// Fake destination returned by the getDestination mock. This mirrors the REAL
+// shape `@sap-cloud-sdk/connectivity` getDestination() produces for the
+// BasicAuthentication `ngds-destination`: credentials are top-level
+// username/password (NOT under a `destinationConfiguration` wrapper — that
+// property only exists on the raw destination-service REST response, never on
+// the normalized SDK Destination object). Regressing to a
+// `destinationConfiguration`-shaped mock is what let the prod bug through.
 const FAKE_DEST = {
-  url: 'https://ngds.example.com',
-  destinationConfiguration: {
-    clientId: 'test-client',
-    clientSecret: 'test-secret',
-    tokenServiceURL: 'https://token.example.com/oauth/token',
-  },
+  url: 'https://api2.services.sap.com',
+  authentication: 'BasicAuthentication',
+  username: 'ims-user',
+  password: 'ims-secret',
 };
 
 // Build a minimal fetch Response stub.
@@ -135,24 +139,67 @@ describe('postPayload', () => {
     vi.clearAllMocks();
   });
 
-  it('fetches a token with Basic auth and POSTs the payload with Bearer', async () => {
+  it('Basic-auths username/password to the auth-service, then POSTs with Bearer', async () => {
     fetch
       .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))  // token fetch
       .mockResolvedValueOnce(makeResponse(200));                  // payload POST
 
     await postPayload({ context: {}, imsData: {} });
 
-    // Token fetch must use Authorization: Basic
+    // Token fetch: default auth-service URL on the destination host + Basic auth
+    // built from username/password (matches the working manual curl).
     const [tokenUrl, tokenOpts] = fetch.mock.calls[0];
-    expect(tokenUrl).toContain('grant_type=client_credentials');
-    expect(tokenOpts.headers.Authorization).toMatch(/^Basic /);
+    expect(tokenUrl).toBe(
+      'https://api2.services.sap.com/auth-service/oauth/token?grant_type=client_credentials'
+    );
+    expect(tokenOpts.headers.Authorization).toBe(
+      `Basic ${Buffer.from('ims-user:ims-secret').toString('base64')}`
+    );
 
-    // Payload POST must use Authorization: Bearer
+    // Payload POST must use Authorization: Bearer on the NGDS path
     const [postUrl, postOpts] = fetch.mock.calls[1];
-    expect(postUrl).toContain('/ngds/developers/ims');
+    expect(postUrl).toBe('https://api2.services.sap.com/ngds/developers/ims');
     expect(postOpts.headers.Authorization).toBe('Bearer jwt-abc');
     expect(postOpts.method).toBe('POST');
     expect(JSON.parse(postOpts.body)).toEqual({ context: {}, imsData: {} });
+  });
+
+  it('reads creds from originalProperties when top-level fields are absent', async () => {
+    getDestinationSpy.mockResolvedValue({
+      url: 'https://api2.services.sap.com',
+      originalProperties: { User: 'ims-user', Password: 'ims-secret' },
+    });
+    fetch
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))
+      .mockResolvedValueOnce(makeResponse(200));
+
+    await postPayload({});
+
+    const [, tokenOpts] = fetch.mock.calls[0];
+    expect(tokenOpts.headers.Authorization).toBe(
+      `Basic ${Buffer.from('ims-user:ims-secret').toString('base64')}`
+    );
+  });
+
+  it('falls back to OAuth2 clientId/clientSecret + tokenServiceUrl if reconfigured', async () => {
+    getDestinationSpy.mockResolvedValue({
+      url: 'https://ngds.example.com',
+      authentication: 'OAuth2ClientCredentials',
+      clientId: 'oauth-id',
+      clientSecret: 'oauth-secret',
+      tokenServiceUrl: 'https://token.example.com/oauth/token',
+    });
+    fetch
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))
+      .mockResolvedValueOnce(makeResponse(200));
+
+    await postPayload({});
+
+    const [tokenUrl, tokenOpts] = fetch.mock.calls[0];
+    expect(tokenUrl).toBe('https://token.example.com/oauth/token?grant_type=client_credentials');
+    expect(tokenOpts.headers.Authorization).toBe(
+      `Basic ${Buffer.from('oauth-id:oauth-secret').toString('base64')}`
+    );
   });
 
   it('caches the token — second postPayload call does NOT re-fetch the token', async () => {
@@ -166,7 +213,7 @@ describe('postPayload', () => {
     // fetch called 3 times: 1 token + 2 payload POSTs (no second token fetch)
     expect(fetch).toHaveBeenCalledTimes(3);
     const calls = fetch.mock.calls;
-    expect(calls[0][0]).toContain('token');     // first call = token
+    expect(calls[0][0]).toContain('/auth-service/oauth/token'); // first call = token
     expect(calls[1][0]).toContain('/ngds/');    // second = payload
     expect(calls[2][0]).toContain('/ngds/');    // third = payload (cached token reused)
   });
@@ -209,15 +256,16 @@ describe('postPayload', () => {
     await expect(postPayload({})).rejects.toThrow("Destination 'ngds-destination' not found");
   });
 
-  it('throws when destination is missing OAuth credentials', async () => {
-    getDestinationSpy.mockResolvedValue({
-      url: 'https://ngds.example.com',
-      destinationConfiguration: { clientId: 'only-id' }, // missing secret + tokenServiceURL
-    });
-    await expect(postPayload({})).rejects.toThrow('missing OAuth credentials');
+  it('throws when destination has a URL but no resolvable credentials', async () => {
+    getDestinationSpy.mockResolvedValue({ url: 'https://api2.services.sap.com' }); // no user/pass
+    await expect(postPayload({})).rejects.toThrow('missing token credentials');
   });
 
-  it('appends grant_type to a token URL that lacks it', async () => {
+  it('honors an explicit tokenServiceUrl override and appends grant_type', async () => {
+    getDestinationSpy.mockResolvedValue({
+      ...FAKE_DEST,
+      tokenServiceUrl: 'https://token.example.com/oauth/token',
+    });
     fetch
       .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))
       .mockResolvedValueOnce(makeResponse(200));
@@ -225,16 +273,13 @@ describe('postPayload', () => {
     await postPayload({});
 
     const [tokenUrl] = fetch.mock.calls[0];
-    expect(tokenUrl).toMatch(/[?&]grant_type=client_credentials/);
+    expect(tokenUrl).toBe('https://token.example.com/oauth/token?grant_type=client_credentials');
   });
 
   it('does NOT double-append grant_type when the token URL already has it', async () => {
     getDestinationSpy.mockResolvedValue({
       ...FAKE_DEST,
-      destinationConfiguration: {
-        ...FAKE_DEST.destinationConfiguration,
-        tokenServiceURL: 'https://token.example.com/oauth/token?grant_type=client_credentials',
-      },
+      tokenServiceUrl: 'https://token.example.com/oauth/token?grant_type=client_credentials',
     });
     fetch
       .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))
