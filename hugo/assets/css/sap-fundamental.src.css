@@ -3041,3 +3041,7 @@ a.concept-card:hover .concept-card__title {
 .author-page-avatar { border-radius: 50%; flex: 0 0 auto; }
 .author-page-hero h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
 .author-page-meta { margin: 0; color: var(--sapContent_LabelColor, #556); font-size: .875rem; }
+
+/* More-from-author rail (#1732) */
+.more-from-author { margin: 1.25rem 0 0; }
+.more-from-author-all { display: inline-block; margin-top: .75rem; font-size: .875rem; font-weight: 600; }
