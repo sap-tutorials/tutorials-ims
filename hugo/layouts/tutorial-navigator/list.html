@@ -52,6 +52,12 @@
     </div>
   </section>
 
+  {{- /* #1675: the QA channel (/tutorials-qa/ root + /tutorial-navigator-qa/)
+         exists purely to search & filter tutorials for QA preview, so drop the
+         homepage-style discovery sections below (hero, featured, recent, topics)
+         and render only the navigator island above. Prod /tutorial-navigator/
+         keeps the full page. Mirrors the browse-pill QA gate above. */ -}}
+  {{ if not site.Params.qa }}
   <section class="home-hero">
     <h2>Build on SAP — hands-on tutorials for developers</h2>
     <p class="lede">{{ .Site.Params.heroDescription }}</p>
@@ -120,6 +126,7 @@
     </ul>
     <p class="topic-grid__more"><a href="/tags/">See all topics →</a></p>
   </section>
+  {{ end }}
 </article>
 {{ $css := resources.Get "css/home.css" | fingerprint }}
 <link rel="stylesheet" href="{{ $css.RelPermalink }}">
