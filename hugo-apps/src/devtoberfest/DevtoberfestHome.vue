@@ -2,7 +2,18 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { HomeState, MountConfig, StatusResponse } from './types'
 import { buildTicker } from './ticker'
+import { formatCountdown } from './countdown'
+import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time'
 import TermsDialog from './TermsDialog.vue'
+
+// Legal T&C target — the fixed "THE RULES" rail route (see railItems below).
+const RULES_URL = '/devtoberfest/rules/'
+// Explanatory tooltip text (issue #1725). The banner artwork bakes a date, but
+// the window below is the exact contest instant in the viewer's local zone, so
+// the displayed day can differ from the picture — this explains why.
+const WINDOW_TIP =
+  'These are the technical start and end times of the contest, shown in your ' +
+  'local time zone. Activity completion only earns points during this window.'
 
 const props = defineProps<{ config: MountConfig }>()
 
@@ -94,6 +105,38 @@ const eventWindow = computed<string>(() => {
   return `${s} – ${e}`
 })
 
+// Full viewer-local start/end (date + time + tz abbreviation). Reuses the
+// well-tested shared formatter so the banner window carries the exact contest
+// instant in the visitor's own zone — the fix for issue #1725's date mismatch.
+const startLocal = computed<string>(() =>
+  formatViewerLocal(status.value?.event?.startDate || ''),
+)
+const endLocal = computed<string>(() =>
+  formatViewerLocal(status.value?.event?.endDate || ''),
+)
+
+// Live countdown. `nowMs` ticks once a second (see startCountdown); the pure
+// phase/label logic lives in ./countdown.ts so it is unit-testable off-clock.
+const nowMs = ref<number>(Date.now())
+const countdown = computed(() =>
+  formatCountdown(
+    nowMs.value,
+    status.value?.event?.startDate || '',
+    status.value?.event?.endDate || '',
+  ),
+)
+const countdownText = computed<string>(() => {
+  switch (countdown.value.phase) {
+    case 'before':
+    case 'during':
+      return countdown.value.label
+    case 'ended':
+      return `${eventName.value} has ended`
+    default:
+      return ''
+  }
+})
+
 const ctaLabel = computed<string>(() => {
   switch (state.value) {
     case 'registered':
@@ -172,6 +215,16 @@ function startTicker(): void {
   }, 4500)
 }
 
+let countdownTimer: ReturnType<typeof setInterval> | undefined
+function startCountdown(): void {
+  // The countdown is functional info, not decoration, so it ticks regardless
+  // of reduced-motion. It updates a text node only — no vestibular motion.
+  if (countdownTimer) return
+  countdownTimer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
+}
+
 function onCtaClick(): void {
   if (state.value === 'anonymous') {
     // Tom's spec: auth flows via shellbar user menu; CTA is a no-op with hint.
@@ -197,10 +250,12 @@ function onJoined(): void {
 onMounted(async () => {
   await fetchStatus()
   startTicker()
+  startCountdown()
 })
 
 onUnmounted(() => {
   if (tipTimer) clearInterval(tipTimer)
+  if (countdownTimer) clearInterval(countdownTimer)
 })
 
 defineExpose({ fetchStatus })
@@ -252,6 +307,35 @@ defineExpose({ fetchStatus })
       <span class="dtf-arcade-chunk">READY_PLAYER_1</span>
       <span v-if="eventWindow" class="dtf-arcade-chunk">{{ eventWindow }}</span>
       <span class="dtf-arcade-chunk">INSERT_COIN</span>
+    </div>
+
+    <!-- Authoritative, accessible contest window: exact start/end in the
+         viewer's local zone (date + time + tz), a live countdown, and an
+         info tooltip explaining the mismatch with the banner artwork (#1725). -->
+    <div v-if="startLocal && endLocal" class="dtf-window">
+      <p class="dtf-window-dates">
+        <span class="dtf-window-label">Contest window:</span>
+        <time :datetime="status?.event?.startDate">{{ startLocal }}</time>
+        <span class="dtf-window-sep" aria-hidden="true">&ndash;</span>
+        <time :datetime="status?.event?.endDate">{{ endLocal }}</time>
+        <span class="dtf-window-help">
+          <button
+            type="button"
+            class="dtf-window-info"
+            aria-label="About the contest times"
+            aria-describedby="dtf-window-tip"
+          >i</button>
+          <span id="dtf-window-tip" role="tooltip" class="dtf-window-tip">
+            {{ WINDOW_TIP }}
+            <a class="dtf-window-tip-link" :href="RULES_URL">See Legal Terms &amp; Conditions</a>
+          </span>
+        </span>
+      </p>
+      <p
+        v-if="countdownText"
+        class="dtf-window-countdown"
+        :data-phase="countdown.phase"
+      >{{ countdownText }}</p>
     </div>
 
     <section class="dtf-body">
