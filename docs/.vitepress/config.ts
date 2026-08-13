@@ -220,6 +220,7 @@ export default defineConfig({
           { text: 'Community blog RSS transport', link: '/developers/reference/community-rss-transport' },
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
           { text: 'Design decisions',          link: '/developers/reference/design-decisions' },
+          { text: 'Discovery Center integration', link: '/developers/reference/discovery-center-integration' },
           { text: 'E2E coverage pattern',      link: '/developers/reference/e2e-coverage-pattern' },
           { text: 'External integrations',     link: '/developers/reference/external-integrations' },
           { text: 'GraphQL API',               link: '/developers/reference/graphql-api' },
