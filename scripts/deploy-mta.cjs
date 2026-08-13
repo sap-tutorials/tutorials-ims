@@ -54,6 +54,9 @@ const MTAR_GLOB_DIR = path.join(DEPLOY_DIR, 'mta_archives');
 // per environment". If a URL/region changes, change it HERE and in the doc.
 //   region      — token that MUST appear in `cf target` API endpoint host.
 //   space       — CF space that MUST be the active `cf target` space.
+//   branch      — git branch the deploy MUST run from. DEV/main branching model
+//                 (docs/developers/operations/branching-strategy.md): dev/qa ← DEV,
+//                 prod ← main.
 //   capBaseUrl  — deployed srv; baked into CAP-sourced Hugo pages at build.
 //   approuter   — deployed approuter; SMOKE_BASE_URL for the smoke gate.
 //   srvUrl      — deployed srv external URL; SMOKE_SRV_URL for the smoke gate.
@@ -62,6 +65,7 @@ const ENVS = {
   dev: {
     region: 'eu10-005',
     space: 'dev',
+    branch: 'DEV',
     capBaseUrl: 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com',
     approuter: 'https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com',
     srvUrl: 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com',
@@ -69,6 +73,7 @@ const ENVS = {
   qa: {
     region: 'eu10-005',
     space: 'dev',
+    branch: 'DEV',
     capBaseUrl: 'https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com',
     approuter: 'https://tutorial-system-qa-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com',
     srvUrl: 'https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com',
@@ -76,6 +81,7 @@ const ENVS = {
   prod: {
     region: 'eu10-005',
     space: 'prod',
+    branch: 'main',
     capBaseUrl: 'https://tutorial-system-prod-tutorials-srv.cfapps.eu10-005.hana.ondemand.com',
     approuter: 'https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com',
     srvUrl: 'https://tutorial-system-prod-tutorials-srv.cfapps.eu10-005.hana.ondemand.com',
@@ -153,20 +159,24 @@ async function notifyDeploy(phase, cfg, extra = {}, deps = {}) {
 // ---------------------------------------------------------------------------
 // Step 0: preconditions
 // ---------------------------------------------------------------------------
-function guardPrimaryTreeOnMain() {
-  // Memory rule: "Deploy from primary tree on main, never a worktree." A
-  // worktree base can sit ahead of / behind main and bake the wrong content.
+function guardPrimaryTreeBranch(cfg, envName) {
+  // Memory rule: "Deploy from the primary tree, never a worktree." A worktree
+  // base can sit ahead of / behind the target branch and bake the wrong content.
+  // DEV/main branching model (docs/developers/operations/branching-strategy.md):
+  // dev/qa deploy from the DEV integration branch, prod from the main release
+  // branch. The required branch is cfg.branch (single source of truth: ENVS).
+  const expected = cfg.branch;
   const branch = shCapture('git', ['branch', '--show-current']).stdout.trim();
   const gitDir = shCapture('git', ['rev-parse', '--git-dir']).stdout.trim();
   const inWorktree = /[\\/]worktrees[\\/]/.test(gitDir) || /[\\/]\.claude[\\/]worktrees[\\/]/.test(ROOT);
   if (inWorktree) {
-    die(1, `deploying from a worktree (${ROOT}). Deploy from the primary checkout on main —\n` +
+    die(1, `deploying from a worktree (${ROOT}). Deploy from the primary checkout on "${expected}" —\n` +
            `             mbt only cp's hugo/public and a worktree base can bake stale/ahead content.`);
   }
-  if (branch !== 'main') {
-    die(1, `current branch is "${branch}", not "main". Deploys run from the primary tree on main.`);
+  if (branch !== expected) {
+    die(1, `current branch is "${branch}", not "${expected}". Env "${envName}" deploys run from the primary tree on "${expected}".`);
   }
-  ok(`primary checkout on main (${branch})`);
+  ok(`primary checkout on ${expected} (${branch})`);
 }
 
 function guardCfTarget(cfg, envName) {
@@ -338,7 +348,7 @@ async function main() {
 
   // ---- Step 0: preconditions -------------------------------------------
   step(0, 'Preconditions');
-  guardPrimaryTreeOnMain();
+  guardPrimaryTreeBranch(cfg, envName);
 
   // ---- Step 1: cf target guard -----------------------------------------
   step(1, `cf target must be region "${cfg.region}", space "${cfg.space}"`);
