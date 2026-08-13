@@ -4,7 +4,7 @@
 // Discovers a multi-tutorial author from /data/author_index.json (served statically).
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { hasBaseUrl, BASE_URL } from './e2e.config.js';
+import { hasBaseUrl } from './e2e.config.js';
 import { launchBrowser, newPage } from './_browser.js';
 
 describe.skipIf(!hasBaseUrl())('e2e: other tutorials by author (#1732)', () => {
@@ -16,18 +16,20 @@ describe.skipIf(!hasBaseUrl())('e2e: other tutorials by author (#1732)', () => {
     await browser?.close();
   });
 
-  it('author page lists tutorials', async () => {
+  it('author page lists tutorials', async (ctx) => {
     const { context, page } = await newPage(browser, { authenticated: false });
     try {
       // Discover a login with >= 2 tutorials from the built data file served statically.
       const authorIndexRes = await page.request.get('/data/author_index.json').catch(() => null);
       if (!authorIndexRes || !authorIndexRes.ok()) {
-        throw new Error('author_index.json not served at this host — skipping');
+        ctx.skip();
+        return;
       }
       const idx = await authorIndexRes.json();
       const login = Object.keys(idx).find((k) => !idx[k].advocateSlug && idx[k].tutorials.length >= 2);
       if (!login) {
-        throw new Error('no non-advocate author with >= 2 tutorials — skipping');
+        ctx.skip();
+        return;
       }
 
       const response = await page.goto(`/authors/${login}/`, { waitUntil: 'domcontentloaded' });
@@ -47,18 +49,20 @@ describe.skipIf(!hasBaseUrl())('e2e: other tutorials by author (#1732)', () => {
     }
   });
 
-  it('tutorial page shows the more-from-author rail', async () => {
+  it('tutorial page shows the more-from-author rail', async (ctx) => {
     const { context, page } = await newPage(browser, { authenticated: false });
     try {
       // Discover an author with >= 2 tutorials.
       const authorIndexRes = await page.request.get('/data/author_index.json').catch(() => null);
       if (!authorIndexRes || !authorIndexRes.ok()) {
-        throw new Error('author_index.json not served at this host — skipping');
+        ctx.skip();
+        return;
       }
       const idx = await authorIndexRes.json();
       const login = Object.keys(idx).find((k) => idx[k].tutorials.length >= 2);
       if (!login) {
-        throw new Error('no author with >= 2 tutorials — skipping');
+        ctx.skip();
+        return;
       }
 
       // Navigate to the first tutorial of that author.
