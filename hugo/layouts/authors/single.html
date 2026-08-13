@@ -1,0 +1,36 @@
+{{/* hugo/layouts/authors/single.html — static per-author landing page (#1732).
+     Data source: hugo/data/author_index.json (emitted by fetch-tutorials). */}}
+{{ define "main" }}
+{{ $login := .Params.login }}
+{{ $entry := "" }}
+{{ if and $login site.Data.author_index }}{{ $entry = index site.Data.author_index $login }}{{ end }}
+<section class="author-page" data-login="{{ $login }}">
+  <a class="author-page-back" href="/browse/">&larr; Browse all tutorials</a>
+  {{ with $entry }}
+  <header class="author-page-hero">
+    <img class="author-page-avatar" src="https://github.com/{{ .login }}.png?size=96"
+         width="96" height="96" alt="{{ .displayName }}"
+         onerror="this.style.display='none'" />
+    <div class="author-page-id">
+      <h1>Tutorials by {{ .displayName }}</h1>
+      <p class="author-page-meta">
+        {{ len .tutorials }} tutorial{{ if ne (len .tutorials) 1 }}s{{ end }}
+        &middot; <a href="{{ .githubUrl }}" target="_blank" rel="noopener">GitHub profile</a>
+      </p>
+    </div>
+  </header>
+  <div class="next-steps-rail">
+    <div class="next-steps-grid">
+      {{ range .tutorials }}
+      {{ partial "next-steps-card.html" (dict "slug" .slug "title" .title "time" .time) }}
+      {{ end }}
+    </div>
+  </div>
+  {{ else }}
+  <header class="author-page-hero">
+    <h1>Author not found</h1>
+    <p><a href="/browse/">Browse all tutorials</a></p>
+  </header>
+  {{ end }}
+</section>
+{{ end }}

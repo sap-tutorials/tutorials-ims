@@ -8,6 +8,8 @@ hugo/content/concepts/
 # Generated per-advocate profile pages (issue #601). Only _index.md is tracked.
 hugo/content/developer-advocates/*.md
 !hugo/content/developer-advocates/_index.md
+hugo/content/authors/*.md
+!hugo/content/authors/_index.md
 hugo/static/tutorials/
 hugo/public/
 hugo/public-qa/
