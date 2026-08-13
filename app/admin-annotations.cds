@@ -3010,7 +3010,7 @@ annotate AdminService.Alerts with @(
 
 annotate AdminService.Alerts {
   title       @Common.Label: 'Title';
-  body        @Common.Label: 'Body';
+  body        @Common.Label: 'Body'  @UI.MultiLineText;
   severity    @Common.Label: 'Severity'
               @Common.ValueListWithFixedValues: true
               @Common.ValueList: {
@@ -3189,13 +3189,13 @@ annotate AdminService.HomepageShelves {
   // rendered with the technical element name on the edit detail screen.
   sortOrder    @Common.Label: 'Sort order';
   title        @Common.Label: 'Title';
-  url          @Common.Label: 'URL';
-  description  @Common.Label: 'Description';
+  url          @Common.Label: 'URL'  @UI.MultiLineText;
+  description  @Common.Label: 'Description'  @UI.MultiLineText;
   isExternal   @Common.Label: 'Opens in new tab';
   isActive     @Common.Label: 'Active';
   requiresLogin @Common.Label: 'Sign-in required';
-  tagline      @Common.Label: 'Tagline';
-  whyItMatters @Common.Label: 'Why it matters';
+  tagline      @Common.Label: 'Tagline'  @UI.MultiLineText;
+  whyItMatters @Common.Label: 'Why it matters'  @UI.MultiLineText;
   lastChecked  @Common.Label: 'Last checked';
   // (#763) Persona facet fields
   personaTags   @Common.Label: 'Persona tags (positive)' @Common.ValueList: {
@@ -3255,8 +3255,8 @@ annotate AdminService.LegacyRedirects with @(
 
 annotate AdminService.LegacyRedirects {
   statusCode @Common.Label: 'HTTP status';
-  fromPath   @Common.Label: 'From path';
-  toPath     @Common.Label: 'To path';
+  fromPath   @Common.Label: 'From path'  @UI.MultiLineText;
+  toPath     @Common.Label: 'To path'  @UI.MultiLineText;
   isPattern  @Common.Label: 'Regex pattern?';
   hitCount   @Common.Label: 'Hits';
 };
@@ -3351,8 +3351,8 @@ annotate AdminService.VerbDefinitions {
   label        @Common.Label: 'Label';
   iconName     @Common.Label: 'Icon';
   sortOrder    @Common.Label: 'Sort order';
-  tagline      @Common.Label: 'Tagline';
-  whyItMatters @Common.Label: 'Why it matters';
+  tagline      @Common.Label: 'Tagline'  @UI.MultiLineText;
+  whyItMatters @Common.Label: 'Why it matters'  @UI.MultiLineText;
 };
 
 // (#1552) OP-header explainer action self-refresh — see HomepageShelves above.
@@ -3408,8 +3408,8 @@ annotate AdminService.ShelfDefinitions {
   label        @Common.Label: 'Label';
   iconName     @Common.Label: 'Icon';
   sortOrder    @Common.Label: 'Sort order';
-  tagline      @Common.Label: 'Tagline';
-  whyItMatters @Common.Label: 'Why it matters';
+  tagline      @Common.Label: 'Tagline'  @UI.MultiLineText;
+  whyItMatters @Common.Label: 'Why it matters'  @UI.MultiLineText;
 };
 
 // (#1552) OP-header explainer action self-refresh — see HomepageShelves above.
