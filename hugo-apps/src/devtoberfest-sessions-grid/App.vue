@@ -6,7 +6,7 @@ import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow } from '../devtoberfest-schedule-shared/types';
-import { formatViewerLocal, formatHomeZone } from '../devtoberfest-schedule-shared/format-session-time';
+import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
 
 const loading = ref(true);
 const error = ref('');
@@ -188,7 +188,6 @@ onMounted(() => loadData());
             <!-- date/time -->
             <p v-if="(session as any).scheduledStart" class="sg-datetime">
               {{ formatViewerLocal((session as any).scheduledStart) }}
-              <span v-if="(session as any).scheduledTimeZone" class="sg-time">{{ formatHomeZone((session as any).scheduledStart, (session as any).scheduledTimeZone) }}</span>
             </p>
 
             <!-- links -->
@@ -423,10 +422,6 @@ onMounted(() => loadData());
   font-size: 0.8rem;
   color: var(--sapContent_LabelColor, #6a6d70);
   margin: 0;
-}
-
-.sg-time {
-  margin-left: 0.25rem;
 }
 
 .sg-links {
