@@ -294,6 +294,128 @@
   animation: dtfArcadeBlink 1.2s infinite ease-in-out;
 }
 
+/* ------------------------- Contest window (#1725) ------------------------- */
+
+.dtf-window {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+.dtf-window-dates {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;               /* allow two lines on narrow banners */
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--sapTextColor, #1d2d3e);
+}
+
+.dtf-window-label {
+  font-weight: 700;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+
+.dtf-window-sep {
+  opacity: 0.7;
+}
+
+.dtf-window-countdown {
+  margin: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #A100C2;
+}
+
+.dtf-window-countdown[data-phase="ended"] {
+  color: var(--sapContent_LabelColor, #556b82);
+  font-weight: 500;
+}
+
+/* Info affordance + hover/focus tooltip. */
+.dtf-window-help {
+  position: relative;
+  display: inline-flex;
+}
+
+.dtf-window-info {
+  appearance: none;
+  cursor: help;
+  width: 1.15rem;
+  height: 1.15rem;
+  line-height: 1.05rem;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sapContent_LabelColor, #556b82);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.dtf-window-info:focus-visible {
+  outline: 2px solid #7B42F0;
+  outline-offset: 2px;
+}
+
+.dtf-window-tip {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: max-content;
+  max-width: min(20rem, 80vw);
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: #1d2d3e;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  letter-spacing: normal;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  /* Hidden until hover/focus; visibility:hidden keeps the inner link
+     out of the tab order while collapsed. */
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.dtf-window-help:hover .dtf-window-tip,
+.dtf-window-help:focus-within .dtf-window-tip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.dtf-window-tip-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  color: #f1acff;
+  font-weight: 600;
+}
+
+html[data-theme="sap_horizon_dark"] .dtf-window-countdown { color: #f1acff; }
+@media (prefers-color-scheme: dark) {
+  .dtf-window-countdown { color: #f1acff; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dtf-window-tip { transition: none; }
+}
+
 /* ------------------------------- Body ------------------------------- */
 
 .dtf-body {
