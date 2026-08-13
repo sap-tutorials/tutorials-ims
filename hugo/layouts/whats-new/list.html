@@ -1,0 +1,66 @@
+{{ define "main" }}
+{{- /*
+  whats-new/list.html — public weekly digest (/whats-new/).
+  Renders site.Data.whats_new.entries grouped by ISO week (newest first),
+  then by category in a fixed order. Fully server-rendered; no JS island.
+  Data shape (hugo/data/whats_new.json):
+    { generatedAt, repos:[{key,slug,label}],
+      entries:[{id,repo,label,number,title,summary,category,mergedAt,week,weekStart,url}] }
+*/ -}}
+{{- $css := resources.Get "css/whats-new.css" | fingerprint -}}
+{{ if $css }}<link rel="stylesheet" href="{{ $css.RelPermalink }}">{{ end }}
+{{- $data := site.Data.whats_new -}}
+{{- $entries := default (slice) $data.entries -}}
+{{- $order := slice "Feature" "Fix" "Performance" "Docs" "Maintenance" -}}
+{{- $catLabels := dict
+    "Feature" "New &amp; improved"
+    "Fix" "Fixes"
+    "Performance" "Performance"
+    "Docs" "Documentation"
+    "Maintenance" "Under the hood" -}}
+
+<div class="wn-page">
+  <header class="wn-hero">
+    <h1 class="wn-hero__title">What&rsquo;s New</h1>
+    <p class="wn-hero__intro">A weekly digest of what shipped across the SAP Developer platform &mdash; grouped by week, newest first.</p>
+    {{ with $data.generatedAt }}<p class="wn-hero__meta">Last updated {{ dateFormat "January 2, 2006" . }}</p>{{ end }}
+  </header>
+
+  {{- $weeks := slice -}}
+  {{- range $entries -}}{{- $weeks = $weeks | append .week -}}{{- end -}}
+  {{- $weeks = $weeks | uniq | sort | collections.Reverse -}}
+
+  {{ if not $entries }}
+    <p class="wn-empty">No updates published yet &mdash; check back soon.</p>
+  {{ end }}
+
+  {{ range $wk := $weeks }}
+    {{- $items := where $entries "week" $wk -}}
+    {{- $ws := (index $items 0).weekStart -}}
+    {{- $start := time.AsTime $ws -}}
+    {{- $end := $start.AddDate 0 0 6 -}}
+    <section class="wn-week">
+      <h2 class="wn-week__title">Week of {{ $start.Format "Jan 2" }} &ndash; {{ $end.Format "Jan 2, 2006" }}</h2>
+      {{ range $cat := $order }}
+        {{- $catItems := where $items "category" $cat -}}
+        {{ with $catItems }}
+        <div class="wn-cat wn-cat--{{ $cat | lower }}">
+          <h3 class="wn-cat__title">{{ index $catLabels $cat | safeHTML }}</h3>
+          <ul class="wn-list">
+            {{ range . }}
+            <li class="wn-item">
+              <div class="wn-item__head">
+                <a class="wn-item__link" href="{{ .url }}" target="_blank" rel="noopener">{{ .title }}</a>
+                <span class="wn-chip">{{ .label }}</span>
+              </div>
+              <p class="wn-item__summary">{{ .summary }}</p>
+            </li>
+            {{ end }}
+          </ul>
+        </div>
+        {{ end }}
+      {{ end }}
+    </section>
+  {{ end }}
+</div>
+{{ end }}
