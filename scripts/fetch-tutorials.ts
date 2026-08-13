@@ -21,6 +21,8 @@ import { normalizeVideo } from './parsers/video.js'
 import { extractGithubLoginFromProfile } from './parsers/github-login-from-profile.js'
 import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 import { QUESTION_TYPE_TEXT } from './parsers/types.js'
+import { advocateLoginToSlug, type AuthorTutorialRow } from './parsers/author-index.js'
+import { writeAuthorPages } from './lib/author-pages-writer.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -835,6 +837,7 @@ async function main() {
   mkdirSync(OUTPUT_DIR, { recursive: true })
 
   const navEntries: TutorialNavEntry[] = []
+  const authorRows: AuthorTutorialRow[] = []
   const errors: ErrorEntry[] = []
   const timings: TutorialTiming[] = []
   let successCount = 0
@@ -1044,6 +1047,17 @@ async function main() {
           composed.intro,
           normalizeVideo(frontmatter.video, t.slug),
         )
+        authorRows.push({
+          authorProfile: frontmatter.author_profile ?? '',
+          displayName: frontmatter.author_name ?? 'Unknown',
+          slug: t.slug,
+          title,
+          time: frontmatter.time ?? 15,
+          level,
+          tags: frontmatter.tags ?? [],
+          createdAt: createdAt || undefined,
+          isNew: browseIsWithinNewWindow(createdAt),
+        })
       } else {
         writeVitePressPage(
           t.slug,
@@ -1318,6 +1332,22 @@ async function main() {
     console.log('  [browse] skipped (no missions loaded — ALLOW_EMPTY_CAP path)')
   }
 
+  if (target === 'hugo') {
+    try {
+      const advocates = advocateLoginToSlug(await fetchAdvocateRoster())
+      const dataDir = join(__dirname, '..', 'hugo', channel === 'qa' ? 'data-qa' : 'data')
+      const { pagesWritten } = writeAuthorPages({
+        rows: authorRows,
+        advocates,
+        dataFile: join(dataDir, 'author_index.json'),
+        contentDir: join(getHugoContentDir(channel), 'authors'),
+      })
+      console.log(`  [authors] wrote author_index.json + ${pagesWritten} author page(s)`)
+    } catch (err) {
+      console.warn(`  [authors] emit failed: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+
   // ── Phase 5: Write outputs ──
   navEntries.sort((a, b) => a.slug.localeCompare(b.slug))
 
@@ -1543,6 +1573,19 @@ interface BrowseData {
 
 function browseLowestLevel(levels: string[]): string {
   return levels.sort((a, b) => (BROWSE_LEVEL_ORDER[a] ?? 9) - (BROWSE_LEVEL_ORDER[b] ?? 9))[0] || 'beginner'
+}
+
+async function fetchAdvocateRoster(): Promise<unknown[]> {
+  try {
+    const base = process.env.CAP_BASE_URL || 'http://localhost:4004'
+    const res = await fetch(`${base}/api/advocates`)
+    if (!res.ok) return []
+    const body = await res.json()
+    return Array.isArray((body as any)?.advocates) ? (body as any).advocates : []
+  } catch (err) {
+    console.warn(`  [authors] advocate roster fetch failed (no redirects): ${err instanceof Error ? err.message : err}`)
+    return []
+  }
 }
 
 function browseIsWithinNewWindow(createdAt: string | undefined): boolean {
