@@ -541,6 +541,129 @@ html[data-embed="none"] .embed-escape {
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
+/* ===================================================================
+   #1720 — Embed-mode bottom action bar (Steps / Joule / Next).
+   Rendered by partials/embed-actionbar.html; shown ONLY under
+   html[data-embed] (none|minimal|reader). Replaces the old
+   collapse-to-only-"Steps" behavior in embedded tutorials: all three
+   controls stay present, and shrink to icon-only circles when the embed
+   viewport is too narrow for labels (instead of dropping buttons).
+   =================================================================== */
+
+/* Hidden outside embed; there the normal mobile FAB + sticky stepnav handle
+   navigation. */
+.embed-actionbar { display: none; }
+
+/* In any embed mode the rail supersedes the three separate bottom controls, so
+   hide those to avoid double controls / collisions. (embed=reader already hides
+   .tutorial-stepnav via the focus cascade above; repeating it for none/minimal
+   keeps the intent in one place and is harmless.) */
+html[data-embed] #op-mobile-fab,
+html[data-embed] .joule-step-fab,
+html[data-embed] .tutorial-stepnav {
+  display: none !important;
+}
+
+html[data-embed] .embed-actionbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41; /* above the (now-hidden) legacy z:40 FABs/stepnav */
+  padding: 0.75rem 1rem;
+  pointer-events: none; /* transparent gaps between buttons stay click-through */
+}
+
+/* Reserve space so the last line of content clears the floating rail. Overrides
+   the reader-mode "drop the stepnav padding" rule above (which assumed the only
+   fixed bottom element was the now-hidden .tutorial-stepnav). Equal specificity,
+   declared later → wins. */
+html[data-embed] body:has(.embed-actionbar) {
+  padding-bottom: 4.5rem;
+}
+
+/* embed=none renders its own escape pill at bottom-right (z:9999). Lift it clear
+   of the rail's right-hand Next button so they stack instead of overlap. */
+html[data-embed="none"] .embed-escape {
+  bottom: 4.75rem;
+}
+
+/* --- buttons ------------------------------------------------------- */
+.embed-actionbar__btn {
+  pointer-events: auto;
+  box-sizing: border-box; /* uniform sizing across <button> (Steps/Joule) + <a> (Next) */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .22), 0 0 0 1px rgba(255, 255, 255, .05);
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+.embed-actionbar__btn:hover { transform: translateY(-1px); }
+.embed-actionbar__btn:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0a6ed1);
+  outline-offset: 2px;
+}
+.embed-actionbar__icon { display: inline-flex; align-items: center; }
+.embed-actionbar__icon svg { display: block; }
+.embed-actionbar__label { white-space: nowrap; }
+
+/* Steps + Next: SAP emphasized blue. */
+.embed-actionbar__btn--steps,
+.embed-actionbar__btn--next {
+  background: var(--sapButton_Emphasized_Background, #0070f2);
+  color: var(--sapButton_Emphasized_TextColor, #fff);
+}
+.embed-actionbar__btn--steps:hover,
+.embed-actionbar__btn--next:hover { filter: brightness(1.06); }
+
+/* Joule: the same purple aurora gradient as #joule-step-fab. */
+.embed-actionbar__btn--joule {
+  background: linear-gradient(165deg,
+    var(--joule-purple-1, #5D36FF) 0%,
+    var(--joule-purple-2, #7B42F0) 45%,
+    var(--joule-purple-3, #A100C2) 100%);
+  color: var(--joule-text, #f5f5fb);
+}
+.embed-actionbar__btn--joule .joule-mark { color: var(--joule-text, #f5f5fb); }
+.embed-actionbar__btn--joule:hover { filter: brightness(1.08); }
+
+.embed-actionbar__btn[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .embed-actionbar__btn { transition: none; }
+  .embed-actionbar__btn:hover { transform: none; }
+}
+
+/* --- narrow embed: icon-only circles ------------------------------- */
+/* "When there isn't enough room, shrink to icons instead of removing buttons."
+   Below ~560px the three labelled pills no longer fit an embedded iframe, so
+   drop the labels and render fixed circular icon buttons (#1720 mock). */
+@media (max-width: 560px) {
+  html[data-embed] .embed-actionbar__label { display: none; }
+  html[data-embed] .embed-actionbar__btn {
+    width: 2.75rem;
+    min-width: 2.75rem;
+    height: 2.75rem;
+    min-height: 2.75rem;
+    padding: 0;
+    gap: 0;
+  }
+}
+
 /* Dark-mode fix for shellbar popover items (PR #575 + revised 2026-06-23).
    ORIGINAL approach used `var(--sapList_TextColor)`. That was wrong:
    `--sapList_TextColor` is an INSIDE-the-shadow-DOM UI5 list token, set on

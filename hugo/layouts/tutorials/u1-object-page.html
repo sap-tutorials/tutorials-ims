@@ -433,6 +433,10 @@
 
 {{ partial "joule-step-help.html" . }}
 
+{{/* #1720 — embed-mode bottom action bar (Steps / Joule / Next). Shown only under
+     html[data-embed]; see partials/embed-actionbar.html + ui5-overrides.css. */}}
+{{ partial "embed-actionbar.html" . }}
+
 {{ with .Params.steps }}
 <script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
 {{ end }}
@@ -683,6 +687,12 @@
 
   fab?.addEventListener("click", openSheet);
   closeBtn?.addEventListener("click", closeSheet);
+
+  // #1720 — the embed-mode action bar's "Steps" button opens the same sheet.
+  // Exposed globally so the rail (rendered by partials/embed-actionbar.html)
+  // can trigger it without re-implementing the step navigator.
+  window.opOpenStepSheet = openSheet;
+  document.getElementById("embed-steps-btn")?.addEventListener("click", openSheet);
 
   list?.addEventListener("item-click", (e) => {
     const item = e.detail?.item;

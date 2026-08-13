@@ -68,4 +68,49 @@ describe.skipIf(!hasBaseUrl())('e2e: embed hosted modes (unauthenticated)', () =
       await context.close();
     }
   });
+
+  // #1720 — embed mode shows a dedicated Steps / Joule / Next action bar instead
+  // of collapsing to only the "Steps" FAB. The bar supersedes the three separate
+  // legacy controls, so those must be hidden in embed mode.
+  it('embed mode shows the action bar and hides the legacy stepnav + FAB', async () => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      // Wide viewport → labelled pills.
+      await page.setViewportSize({ width: 1100, height: 900 });
+      await page.goto(`/tutorials/${SLUG}/?embed=minimal`, { waitUntil: 'domcontentloaded' });
+      expect(await page.getAttribute('html', 'data-embed')).toBe('minimal');
+      await page.locator('main').first().waitFor({ state: 'visible', timeout: 15_000 });
+
+      // The rail and its always-present "Steps" control are visible...
+      expect(await page.locator('.embed-actionbar').isVisible()).toBe(true);
+      expect(await page.locator('#embed-steps-btn').isVisible()).toBe(true);
+      // ...with its label shown at wide widths.
+      expect(await page.locator('#embed-steps-btn .embed-actionbar__label').isVisible()).toBe(true);
+
+      // The legacy bottom controls the rail replaces are gone in embed mode.
+      expect(await page.locator('.tutorial-stepnav').isVisible()).toBe(false);
+      expect(await page.locator('#op-mobile-fab').isVisible()).toBe(false);
+      expect(await page.locator('#joule-step-fab').isVisible()).toBe(false);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('embed mode collapses the action bar to icon-only at narrow widths', async () => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      // Narrow embed viewport (e.g. a slim hosting iframe) → icon-only circles.
+      await page.setViewportSize({ width: 380, height: 800 });
+      await page.goto(`/tutorials/${SLUG}/?embed=minimal`, { waitUntil: 'domcontentloaded' });
+      await page.locator('main').first().waitFor({ state: 'visible', timeout: 15_000 });
+
+      // Buttons stay (not removed) but their labels are hidden.
+      expect(await page.locator('#embed-steps-btn').isVisible()).toBe(true);
+      expect(await page.locator('#embed-steps-btn .embed-actionbar__label').isVisible()).toBe(false);
+      // The icon itself remains visible.
+      expect(await page.locator('#embed-steps-btn .embed-actionbar__icon').isVisible()).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
 });
