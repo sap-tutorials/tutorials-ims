@@ -2427,6 +2427,31 @@ html.dark .code-block-toggle {
 html.dark .chroma .gd { background-color: rgba(248, 81, 73, 0.15); }
 html.dark .chroma .gi { background-color: rgba(46, 160, 67, 0.15); }
 
+/* Chroma "error" token neutralization (#1745).
+ * Chroma tags any token its lexer cannot parse with `.err`, which the github
+ * light style paints white-on-dark-red (#82071e) and github-dark paints bright
+ * red (#f85149). On tutorial content this misfires on valid-but-unlexable
+ * syntax and makes whole blocks look broken:
+ *   - VS Code REST Client (.http) files tagged ```HTTP: every line is flagged
+ *     (@variables, {{templates}}, ### separators), so the ENTIRE block renders
+ *     as a solid dark-red blob (issue #1745, hana-cloud-alerts-rest-api).
+ *   - hdbsql interactive commands (\al, \pa, \s, \q, \serverstats) inside
+ *     ```SQL / ```HDBSQL blocks show as ugly red backslashes
+ *     (hana-clients-choose-hana-instance).
+ * GitHub itself renders such tokens as plain text, never a red block. Repaint
+ * `.err` to the normal code foreground with no background so unlexable tokens
+ * read as ordinary monospace text in both themes. Scoped to .code-block-body
+ * and (for dark) prefixed with html.dark so it outranks the generated
+ * chroma-light.css / chroma-dark.css `.err` rules regardless of load order. */
+.code-block-body .chroma .err {
+  color: inherit;
+  background-color: transparent;
+}
+html.dark .code-block-body .chroma .err {
+  color: inherit;
+  background-color: transparent;
+}
+
 /* Chroma readability overrides (dark mode).
  * Hugo's `gen chromastyles --style=github-dark` emits empty rules for
  * unstyled tokens (.p, .n, .nx, .x, .na, .nb, .bp), expecting them to
