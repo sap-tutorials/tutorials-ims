@@ -1,5 +1,55 @@
 /* UI5 Web Components adoption overrides (U3 pilot) */
 
+/* ── Issue #1688: FOUCE cloak (flash of un-upgraded custom elements) ──────────
+   Until the ui5.sap.com bundle runs customElements.define(), every un-upgraded
+   ui5-* element paints its slotted light-DOM as raw text. The big offenders are
+   the popovers in header.html (nav list "Home Learn Build…", the share menu
+   "Facebook LinkedIn Email", the account menu) and the glossary popover + toast
+   in baseof.html — all of which dump their full contents inline, in flow, and
+   push the page down before hydration collapses them into shellbar buttons.
+
+   Cloak un-upgraded chrome, keyed off :defined so the browser lifts each rule
+   automatically the instant that element upgrades — no JS timing. Two techniques
+   by flow behaviour:
+     • Overlays (popover/dialog/toast/menu) are OUT of flow once defined, so
+       display:none matches the hydrated layout → hides the raw dump with ZERO
+       layout shift. (visibility:hidden would reserve the raw content's height
+       then collapse it — a large CLS. Wrong tool here.)
+     • In-flow chrome (shellbar/tabcontainer/wizard/segmented-button) keeps a box
+       once defined, so visibility:hidden reserves space and avoids CLS.
+   No color is painted (we hide, not skeleton), so this is theme-agnostic — dark
+   mode needs nothing extra.
+
+   The readable tutorial body (.op-page sections, .tutorial-steps) is deliberately
+   NOT cloaked: it paints correctly from render-blocking CSS immediately and is
+   the LCP element — hiding it would hurt paint metrics and the no-JS/crawler path.
+
+   Scoped to html[data-ui5-cloak], set pre-paint in head.html ONLY when the UI5
+   bundle will actually load. previewMode skips ui5-bootstrap.ts entirely
+   (baseof.html), so elements never upgrade there — without this gate the cloak
+   would hide the chrome permanently. A DOMContentLoaded+timeout fallback in
+   head.html drops the attribute so a bundle 404 never strands the reader either. */
+html[data-ui5-cloak] ui5-popover:not(:defined),
+html[data-ui5-cloak] ui5-responsive-popover:not(:defined),
+html[data-ui5-cloak] ui5-dialog:not(:defined),
+html[data-ui5-cloak] ui5-toast:not(:defined),
+html[data-ui5-cloak] ui5-menu:not(:defined) {
+  display: none !important;
+}
+html[data-ui5-cloak] ui5-shellbar:not(:defined),
+html[data-ui5-cloak] ui5-tabcontainer:not(:defined),
+html[data-ui5-cloak] ui5-wizard:not(:defined),
+html[data-ui5-cloak] ui5-segmented-button:not(:defined) {
+  visibility: hidden;
+}
+/* Reserve the hydrated shellbar height (Horizon ≈ 2.75rem) while it is cloaked,
+   so the page body below does not jump down when the bar upgrades from its
+   collapsed un-upgraded height (just the logo img) to the full bar. */
+html[data-ui5-cloak] ui5-shellbar:not(:defined) {
+  display: block;
+  min-height: 2.75rem;
+}
+
 /* The ui5-shellbar provides its own layout. */
 ui5-shellbar { display: block; }
 
