@@ -224,37 +224,43 @@ export async function resolveTaskRecordNgdsFields(record, db) {
 }
 
 // ---------------------------------------------------------------------------
-// Manual OAuth2 token handling for NGDS
+// Manual token handling for NGDS
 //
-// BTP's built-in OAuth2ClientCredentials destination type sends client
-// credentials in the request body, but the NGDS token service requires them
-// as an Authorization: Basic header.  We read the raw credentials from the
-// ngds-destination config and perform the two-step (token fetch → payload
-// POST) ourselves.
+// `ngds-destination` is a BasicAuthentication destination (user `ims-user` @
+// https://api2.services.sap.com). NGDS itself requires a two-step call that the
+// BTP destination adapter does not perform: first Basic-auth the destination's
+// username/password against the SAP auth-service to obtain a JWT, then send that
+// JWT as a Bearer token to the NGDS payload endpoint. So we read the resolved
+// credentials off the SDK Destination object and do both steps ourselves.
+//
+// Verified against the working manual curl (Tom, 2026-08-13):
+//   POST {tokenUrl}?grant_type=client_credentials
+//     Authorization: Basic base64(user:pass)   -> { access_token, ... }
+//   POST {baseUrl}/ngds/developers/ims
+//     Authorization: Bearer {access_token}
 // ---------------------------------------------------------------------------
 
 // Module-level token cache — one per process (CF worker).
 let _cachedToken = null;   // { accessToken: string, expiresAt: number } | null
 let _inflightFetch = null; // Promise<{accessToken,expiresAt}> | null — deduplicates concurrent refreshes
 
-async function _fetchToken(destCfg) {
-  const { clientId, clientSecret, tokenServiceURL, tokenServiceUrl } = destCfg;
-  const rawUrl = (tokenServiceURL || tokenServiceUrl || '').trim();
-  if (!rawUrl || !clientId || !clientSecret) {
+async function _fetchToken({ user, pass, tokenUrl } = {}) {
+  const rawUrl = (tokenUrl || '').trim();
+  if (!rawUrl || !user || !pass) {
     throw new Error(
-      "ngds-destination missing OAuth credentials (clientId, clientSecret, tokenServiceURL)"
+      'ngds-destination missing token credentials (username/password) or token URL'
     );
   }
-  // NGDS token endpoint requires grant_type as a query param.
-  const tokenUrl = rawUrl.includes('grant_type')
+  // The auth-service token endpoint requires grant_type as a query param.
+  const url = rawUrl.includes('grant_type')
     ? rawUrl
-    : rawUrl + '?grant_type=client_credentials';
+    : rawUrl + (rawUrl.includes('?') ? '&' : '?') + 'grant_type=client_credentials';
 
-  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const basic = Buffer.from(`${user}:${pass}`).toString('base64');
   const ac = new AbortController();
   const tid = setTimeout(() => ac.abort(), 10_000);
   try {
-    const res = await fetch(tokenUrl, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Basic ${basic}`, Accept: 'application/json' },
       signal: ac.signal,
@@ -273,11 +279,11 @@ async function _fetchToken(destCfg) {
   }
 }
 
-async function _getToken(destCfg) {
+async function _getToken(creds) {
   if (_cachedToken && Date.now() < _cachedToken.expiresAt) return _cachedToken.accessToken;
   // Share a single in-flight request across concurrent callers.
   if (!_inflightFetch) {
-    _inflightFetch = _fetchToken(destCfg)
+    _inflightFetch = _fetchToken(creds)
       .then(t => { _cachedToken = t; return t; })
       .finally(() => { _inflightFetch = null; });
   }
@@ -290,18 +296,30 @@ function _invalidateToken() {
 }
 
 // Send a pre-built payload to NGDS.
-// Reads credentials from the 'ngds-destination' BTP destination, fetches an
-// OAuth2 bearer token with Basic-auth (as NGDS requires), and POSTs the
-// payload.  Retries once on 401 after invalidating the token cache.
-// Exported so ngds-retry.js can call it directly.
+// Resolves the 'ngds-destination' BTP destination, Basic-auths its
+// username/password against the auth-service to fetch a JWT, then POSTs the
+// payload with that JWT as a Bearer token.  Retries once on 401 after
+// invalidating the token cache.  Exported so ngds-retry.js can call it directly.
 export async function postPayload(payload) {
   const dest = await getDestination({ destinationName: 'ngds-destination' });
   if (!dest) throw new Error("Destination 'ngds-destination' not found");
 
-  const cfg = dest.destinationConfiguration ?? {};
-  const baseUrl = (dest.url ?? cfg.URL ?? '').replace(/\/$/, '');
+  // getDestination() returns a normalized SDK Destination — there is NO
+  // `dest.destinationConfiguration` (that shape only exists on the raw
+  // destination-service REST response). For the BasicAuthentication
+  // ngds-destination the creds are dest.username/dest.password. Fall back to
+  // OAuth2* client creds and originalProperties in case it is reconfigured.
+  const op = dest.originalProperties ?? {};
+  const user = dest.username ?? dest.clientId ?? op.User ?? op.clientId;
+  const pass = dest.password ?? dest.clientSecret ?? op.Password ?? op.clientSecret;
+  const baseUrl = (dest.url ?? op.URL ?? '').replace(/\/$/, '');
   if (!baseUrl) throw new Error("ngds-destination has no URL");
+  // Token endpoint: an explicit tokenServiceUrl if the destination carries one,
+  // else the SAP auth-service on the same host (matches the working curl).
+  const tokenUrl = dest.tokenServiceUrl ?? op.tokenServiceURL ?? op.tokenServiceUrl
+    ?? (baseUrl + '/auth-service/oauth/token');
 
+  const creds = { user, pass, tokenUrl };
   const url = baseUrl + NGDS_PATH;
 
   const doPost = async (token) => {
@@ -323,13 +341,13 @@ export async function postPayload(payload) {
     }
   };
 
-  let token = await _getToken(cfg);
+  let token = await _getToken(creds);
   let res = await doPost(token);
 
   if (res.status === 401) {
     // Token may have been revoked or expired slightly early — refresh once.
     _invalidateToken();
-    token = await _getToken(cfg);
+    token = await _getToken(creds);
     res = await doPost(token);
   }
 
