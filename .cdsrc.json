@@ -21,8 +21,8 @@
   "requires": {
     "auth": {
       "kind": "mocked",
-      "[hybrid]": { "kind": "xsuaa" },
-      "[production]": { "kind": "xsuaa" },
+      "[hybrid]": { "kind": "xsuaa", "restrict_all_services": false },
+      "[production]": { "kind": "xsuaa", "restrict_all_services": false },
       "users": {
         "developer": {
           "password": "developer",
