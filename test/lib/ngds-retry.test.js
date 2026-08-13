@@ -40,7 +40,7 @@ describe('buildRetryAlerts', () => {
 const raiseSpy = vi.fn();
 const gaugeSpy = vi.fn();
 const counterSpy = vi.fn();
-const sendSpy = vi.fn();
+const postPayloadSpy = vi.fn();
 
 vi.mock('../../srv/lib/alerting.js', () => ({ raise: (...a) => raiseSpy(...a) }));
 vi.mock('../../srv/lib/metrics.js', () => ({
@@ -48,12 +48,12 @@ vi.mock('../../srv/lib/metrics.js', () => ({
   counter: (...a) => counterSpy(...a),
 }));
 vi.mock('../../srv/lib/pipeline-log.js', () => ({ logJobItem: vi.fn() }));
+vi.mock('../../srv/lib/ngds-client.js', () => ({ postPayload: (...a) => postPayloadSpy(...a) }));
 
 vi.mock('@sap/cds', () => ({
   default: {
     log: () => ({ warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }),
     entities: () => ({ NGDSFailedMessages: { name: 'NGDSFailedMessages' } }),
-    connect: { to: async () => ({ send: (...a) => sendSpy(...a) }) },
   },
 }));
 
@@ -68,7 +68,7 @@ describe('retryNgds wiring (alerts + gauges)', () => {
   let retryNgds;
   beforeEach(async () => {
     vi.resetModules();
-    raiseSpy.mockReset(); gaugeSpy.mockReset(); counterSpy.mockReset(); sendSpy.mockReset();
+    raiseSpy.mockReset(); gaugeSpy.mockReset(); counterSpy.mockReset(); postPayloadSpy.mockReset();
     ({ retryNgds } = await import('../../srv/jobs/ngds-retry.js'));
   });
   afterEach(() => vi.clearAllMocks());
@@ -77,7 +77,7 @@ describe('retryNgds wiring (alerts + gauges)', () => {
     pendingRows = [
       { ID: 'a', payload: '{}', retryCount: 9, maxRetries: 10 }, // will exhaust after this fail
     ];
-    sendSpy.mockRejectedValue(new Error('RBAC: access denied'));
+    postPayloadSpy.mockRejectedValue(new Error('RBAC: access denied'));
     await retryNgds('log-1');
     const events = raiseSpy.mock.calls.map(c => c[0].eventType);
     expect(events).toContain('NgdsSendExhausted');
@@ -90,7 +90,7 @@ describe('retryNgds wiring (alerts + gauges)', () => {
 
   it('raises no alert and gauges 0 pending when all sends succeed', async () => {
     pendingRows = [{ ID: 'b', payload: '{}', retryCount: 0, maxRetries: 10 }];
-    sendSpy.mockResolvedValue(undefined); // 2xx, no throw
+    postPayloadSpy.mockResolvedValue(undefined); // success, no throw
     await retryNgds('log-2');
     expect(raiseSpy).not.toHaveBeenCalled();
     expect(gaugeSpy).toHaveBeenCalledWith('ngds.failed_messages.pending', 0);

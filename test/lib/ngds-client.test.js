@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildNgdsPayload, formatNgdsDate } from '../../srv/lib/ngds-client.js';
 
 // The payload MUST reproduce the legacy Java IMS MessageModel wire shape so the
@@ -84,5 +84,165 @@ describe('ngds-client', () => {
       expect(payload.imsData.IMSName).toBeUndefined();
       expect(payload.interactionData.INTEREST_ITEM).toBeUndefined();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// postPayload — manual OAuth2 token handling
+// ---------------------------------------------------------------------------
+
+// Fake destination returned by the getDestination mock.
+const FAKE_DEST = {
+  url: 'https://ngds.example.com',
+  destinationConfiguration: {
+    clientId: 'test-client',
+    clientSecret: 'test-secret',
+    tokenServiceURL: 'https://token.example.com/oauth/token',
+  },
+};
+
+// Build a minimal fetch Response stub.
+function makeResponse(status, body = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
+  };
+}
+
+const TOKEN_RESPONSE = { access_token: 'jwt-abc', expires_in: 3600 };
+
+const getDestinationSpy = vi.fn();
+vi.mock('@sap-cloud-sdk/connectivity', () => ({
+  getDestination: (...a) => getDestinationSpy(...a),
+}));
+
+describe('postPayload', () => {
+  let postPayload;
+
+  beforeEach(async () => {
+    // Reset module to clear the in-module token cache between tests.
+    vi.resetModules();
+    vi.stubGlobal('fetch', vi.fn());
+    getDestinationSpy.mockReset();
+    getDestinationSpy.mockResolvedValue(FAKE_DEST);
+    ({ postPayload } = await import('../../srv/lib/ngds-client.js'));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it('fetches a token with Basic auth and POSTs the payload with Bearer', async () => {
+    fetch
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))  // token fetch
+      .mockResolvedValueOnce(makeResponse(200));                  // payload POST
+
+    await postPayload({ context: {}, imsData: {} });
+
+    // Token fetch must use Authorization: Basic
+    const [tokenUrl, tokenOpts] = fetch.mock.calls[0];
+    expect(tokenUrl).toContain('grant_type=client_credentials');
+    expect(tokenOpts.headers.Authorization).toMatch(/^Basic /);
+
+    // Payload POST must use Authorization: Bearer
+    const [postUrl, postOpts] = fetch.mock.calls[1];
+    expect(postUrl).toContain('/ngds/developers/ims');
+    expect(postOpts.headers.Authorization).toBe('Bearer jwt-abc');
+    expect(postOpts.method).toBe('POST');
+    expect(JSON.parse(postOpts.body)).toEqual({ context: {}, imsData: {} });
+  });
+
+  it('caches the token — second postPayload call does NOT re-fetch the token', async () => {
+    fetch
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))  // first token fetch
+      .mockResolvedValue(makeResponse(200));                      // all subsequent POSTs
+
+    await postPayload({ context: {} });
+    await postPayload({ context: {} });
+
+    // fetch called 3 times: 1 token + 2 payload POSTs (no second token fetch)
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const calls = fetch.mock.calls;
+    expect(calls[0][0]).toContain('token');     // first call = token
+    expect(calls[1][0]).toContain('/ngds/');    // second = payload
+    expect(calls[2][0]).toContain('/ngds/');    // third = payload (cached token reused)
+  });
+
+  it('on 401, invalidates cache, refreshes token, and retries once', async () => {
+    fetch
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))              // initial token fetch
+      .mockResolvedValueOnce(makeResponse(401))                              // first POST → 401
+      .mockResolvedValueOnce(makeResponse(200, { ...TOKEN_RESPONSE, access_token: 'jwt-fresh' })) // re-fetch token
+      .mockResolvedValueOnce(makeResponse(200));                             // retry POST → success
+
+    await postPayload({ context: {} });
+
+    expect(fetch).toHaveBeenCalledTimes(4);
+    // Retry POST must use the fresh token
+    const retryOpts = fetch.mock.calls[3][1];
+    expect(retryOpts.headers.Authorization).toBe('Bearer jwt-fresh');
+  });
+
+  it('throws with the HTTP status when NGDS returns non-200 after retry', async () => {
+    fetch
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))
+      .mockResolvedValueOnce(makeResponse(500, { message: 'internal error' }));
+
+    await expect(postPayload({})).rejects.toThrow('NGDS POST HTTP 500');
+  });
+
+  it('throws immediately on 401 if the refreshed token also yields 401', async () => {
+    fetch
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))
+      .mockResolvedValueOnce(makeResponse(401))
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))
+      .mockResolvedValueOnce(makeResponse(401));
+
+    await expect(postPayload({})).rejects.toThrow('NGDS POST HTTP 401');
+  });
+
+  it('throws when destination is not found', async () => {
+    getDestinationSpy.mockResolvedValue(null);
+    await expect(postPayload({})).rejects.toThrow("Destination 'ngds-destination' not found");
+  });
+
+  it('throws when destination is missing OAuth credentials', async () => {
+    getDestinationSpy.mockResolvedValue({
+      url: 'https://ngds.example.com',
+      destinationConfiguration: { clientId: 'only-id' }, // missing secret + tokenServiceURL
+    });
+    await expect(postPayload({})).rejects.toThrow('missing OAuth credentials');
+  });
+
+  it('appends grant_type to a token URL that lacks it', async () => {
+    fetch
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))
+      .mockResolvedValueOnce(makeResponse(200));
+
+    await postPayload({});
+
+    const [tokenUrl] = fetch.mock.calls[0];
+    expect(tokenUrl).toMatch(/[?&]grant_type=client_credentials/);
+  });
+
+  it('does NOT double-append grant_type when the token URL already has it', async () => {
+    getDestinationSpy.mockResolvedValue({
+      ...FAKE_DEST,
+      destinationConfiguration: {
+        ...FAKE_DEST.destinationConfiguration,
+        tokenServiceURL: 'https://token.example.com/oauth/token?grant_type=client_credentials',
+      },
+    });
+    fetch
+      .mockResolvedValueOnce(makeResponse(200, TOKEN_RESPONSE))
+      .mockResolvedValueOnce(makeResponse(200));
+
+    await postPayload({});
+
+    const [tokenUrl] = fetch.mock.calls[0];
+    expect((tokenUrl.match(/grant_type/g) ?? []).length).toBe(1);
   });
 });

@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import { postPayload } from '../lib/ngds-client.js';
 import { logJobItem } from '../lib/pipeline-log.js';
 import * as metrics from '../lib/metrics.js';
 import * as alerting from '../lib/alerting.js';
@@ -51,8 +52,7 @@ export async function retryNgds(logId) {
       continue;
     }
     try {
-      const ngds = await cds.connect.to('ngds');
-      await ngds.send('POST', '/ngds/developers/ims', JSON.parse(msg.payload));
+      await postPayload(JSON.parse(msg.payload));
       await DELETE.from(NGDSFailedMessages, msg.ID);
       retried++;
       await logJobItem(logId, {
