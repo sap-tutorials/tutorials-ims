@@ -5557,6 +5557,46 @@ blockquote {
   background: var(--sapPositiveColor, #30914c);
   color: #fff;
 }
+/* Issue #1742: make the CURRENT step unmistakable even once it is also
+   completed. The .completed green fill above wins over .active on the circle
+   (equal specificity, later source order), so previously the current step
+   collapsed to look identical to every other green checkmarked step —
+   distinguished only by bold text, which was hard to spot.
+
+   Fix: ring the active circle with a themed blue halo drawn as box-shadow
+   (a white gap then a blue ring), which layers on top of ANY fill colour, so
+   a current+completed circle still clearly stands out. A subtle expanding
+   pulse (adapted from the devtoberfest CTA's `ctaPulseJoule`) draws the eye
+   without being noisy; the static ring persists in every keyframe and under
+   reduced-motion so the cue never depends on the animation. */
+.step-toc-list li.active .step-toc-circle {
+  box-shadow:
+    0 0 0 2px var(--sapList_Background, var(--sapBackgroundColor, #fff)),
+    0 0 0 4px var(--sapBrandColor, #0070f2);
+  animation: stepTocActivePulse 1.8s ease-out infinite;
+}
+@keyframes stepTocActivePulse {
+  0% {
+    box-shadow:
+      0 0 0 2px var(--sapList_Background, var(--sapBackgroundColor, #fff)),
+      0 0 0 4px var(--sapBrandColor, #0070f2),
+      0 0 0 4px rgba(0, 112, 242, 0.45);
+  }
+  70%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--sapList_Background, var(--sapBackgroundColor, #fff)),
+      0 0 0 4px var(--sapBrandColor, #0070f2),
+      0 0 0 11px rgba(0, 112, 242, 0);
+  }
+}
+/* Reduced-motion: drop the pulse but keep the static ring so the current
+   step is still clearly marked. */
+@media (prefers-reduced-motion: reduce) {
+  .step-toc-list li.active .step-toc-circle {
+    animation: none;
+  }
+}
 /* Issue #568 (extended): step-nav indicator badges. Three slot indicators
    (quiz, codecheck, branch) sharing one visual treatment so a user can scan
    the step TOC and tell at a glance which steps demand which kind of work.
@@ -5572,11 +5612,13 @@ blockquote {
   flex-direction: row-reverse; /* rightmost slot fills first; cluster anchors right edge */
   pointer-events: none;
 }
-/* Desktop right-column TOC: float over the bubble's top-right corner. */
+/* Desktop right-column TOC: float over the bubble's top-right shoulder.
+   Nudged out to -5px (#1742) so the enlarged badge clears the number glyph
+   instead of crowding it. */
 .step-toc-circle .step-badge-row {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -5px;
+  right: -5px;
 }
 /* Mobile step-sheet: sit inline before the step number text. */
 ui5-li .step-badge-row {
@@ -5584,18 +5626,21 @@ ui5-li .step-badge-row {
   margin-right: 6px;
 }
 .step-badge {
-  width: 11px;
-  height: 11px;
+  /* Enlarged (#1742): 13px inner + 2px background-colored ring = 17px outer,
+     so the glyph reads at a glance and the badge sits clearly on the circle's
+     shoulder rather than overlapping the number. */
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
-  border: 1.5px solid var(--sapList_Background, var(--sapBackgroundColor, #fff));
+  border: 2px solid var(--sapList_Background, var(--sapBackgroundColor, #fff));
   background-color: currentColor;
   -webkit-mask-position: center;
           mask-position: center;
   -webkit-mask-repeat: no-repeat;
           mask-repeat: no-repeat;
-  -webkit-mask-size: 9px 9px;
-          mask-size: 9px 9px;
-  margin-left: -3px; /* overlap previous sibling in the row */
+  -webkit-mask-size: 11px 11px;
+          mask-size: 11px 11px;
+  margin-left: -4px; /* overlap previous sibling in the row */
   box-sizing: content-box;
   flex: 0 0 auto;
 }
