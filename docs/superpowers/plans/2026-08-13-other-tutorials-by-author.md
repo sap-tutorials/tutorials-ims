@@ -69,7 +69,9 @@ describe('buildAuthorIndex', () => {
       new Map(),
     )
     expect(Object.keys(idx)).toEqual(['thomas-jung'])
-    expect(idx['thomas-jung'].tutorials.map(t => t.slug)).toEqual(['b', 'a']) // b newer? no — see sort test
+    // Order is covered by the sort test below; here assert the set (both rows
+    // share createdAt+title, so grouping order is incidental).
+    expect(idx['thomas-jung'].tutorials.map(t => t.slug).sort()).toEqual(['a', 'b'])
   })
   it('sorts tutorials most-recent-first, title tiebreak, and dedupes slugs', () => {
     const idx = buildAuthorIndex(
