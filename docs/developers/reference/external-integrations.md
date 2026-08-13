@@ -19,6 +19,7 @@ description: GitHub, XSUAA, NGDS, Adobe Analytics, BTP Mail, AI Core, Audit Log,
 | SAP Audit Log | Outbound | `tutorials-audit-log` (`auditlog/standard`, optional) | `@PersonalData`-driven access/modification events on `Users`/`UserMetaData`/`TaskRecords`; falls back to console sink when unbound |
 | SAP Cloud Logging | Outbound | `tutorials-cloud-logging` (`cloud-logging/standard`, optional, `ingest_otlp.enabled=true`) | OTLP export from `tutorials-srv` backs `cfLogsUrl` virtual on `PipelineLog`/`JobExecutionLog`. Bound to `tutorials-db-deployer`/`tutorials-db-qa-deployer` (#257) so HDI deploy stdout is forwarded by the CF loggregator and persisted ~30 days. No-ops when unbound |
 | SAP Cloud Foundry API | Outbound | `cf` CLI inside `migrate-from-hana.js` | Resolves `cf service-key` for cross-instance HANA migration (cutover only) |
+| SAP Discovery Center | Inbound | Public `GET /tutorials/<slug>.model.json` (no auth; Akamai-allowlisted) | Legacy AEM `.model.json` shim rebuilt from `Tutorials` + `RepoCatalog` so DC can parse the GitHub source repo for tutorial cards. See [discovery-center-integration.md](discovery-center-integration.md) |
 
 #### Identity is JWT-only on CAP
 

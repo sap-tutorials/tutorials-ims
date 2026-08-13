@@ -3,7 +3,7 @@ name: unit tests
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, DEV]
 
 # PR-time gate — `deploy.yml` runs unit tests only after a successful deploy,
 # which is too late for merge protection. This workflow re-runs the same

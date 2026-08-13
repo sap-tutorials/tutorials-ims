@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import { getDestination } from '@sap-cloud-sdk/connectivity';
 
 // NGDS (SAP internal analytics/badging) outbound client.
 //
@@ -222,10 +223,120 @@ export async function resolveTaskRecordNgdsFields(record, db) {
   });
 }
 
-// Send a pre-built payload, queuing it for retry on failure.
-async function postPayload(payload) {
-  const ngds = await cds.connect.to('ngds');
-  await ngds.send('POST', NGDS_PATH, payload);
+// ---------------------------------------------------------------------------
+// Manual OAuth2 token handling for NGDS
+//
+// BTP's built-in OAuth2ClientCredentials destination type sends client
+// credentials in the request body, but the NGDS token service requires them
+// as an Authorization: Basic header.  We read the raw credentials from the
+// ngds-destination config and perform the two-step (token fetch → payload
+// POST) ourselves.
+// ---------------------------------------------------------------------------
+
+// Module-level token cache — one per process (CF worker).
+let _cachedToken = null;   // { accessToken: string, expiresAt: number } | null
+let _inflightFetch = null; // Promise<{accessToken,expiresAt}> | null — deduplicates concurrent refreshes
+
+async function _fetchToken(destCfg) {
+  const { clientId, clientSecret, tokenServiceURL, tokenServiceUrl } = destCfg;
+  const rawUrl = (tokenServiceURL || tokenServiceUrl || '').trim();
+  if (!rawUrl || !clientId || !clientSecret) {
+    throw new Error(
+      "ngds-destination missing OAuth credentials (clientId, clientSecret, tokenServiceURL)"
+    );
+  }
+  // NGDS token endpoint requires grant_type as a query param.
+  const tokenUrl = rawUrl.includes('grant_type')
+    ? rawUrl
+    : rawUrl + '?grant_type=client_credentials';
+
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const ac = new AbortController();
+  const tid = setTimeout(() => ac.abort(), 10_000);
+  try {
+    const res = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${basic}`, Accept: 'application/json' },
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`NGDS token fetch HTTP ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    if (!data.access_token) throw new Error('NGDS token response missing access_token');
+    // Refresh 60 s before nominal expiry to avoid edge-expiry 401s.
+    const expiresAt = Date.now() + ((data.expires_in ?? 3600) - 60) * 1_000;
+    return { accessToken: data.access_token, expiresAt };
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
+async function _getToken(destCfg) {
+  if (_cachedToken && Date.now() < _cachedToken.expiresAt) return _cachedToken.accessToken;
+  // Share a single in-flight request across concurrent callers.
+  if (!_inflightFetch) {
+    _inflightFetch = _fetchToken(destCfg)
+      .then(t => { _cachedToken = t; return t; })
+      .finally(() => { _inflightFetch = null; });
+  }
+  return (await _inflightFetch).accessToken;
+}
+
+function _invalidateToken() {
+  _cachedToken = null;
+  _inflightFetch = null; // abandon any in-flight fetch — next caller starts fresh
+}
+
+// Send a pre-built payload to NGDS.
+// Reads credentials from the 'ngds-destination' BTP destination, fetches an
+// OAuth2 bearer token with Basic-auth (as NGDS requires), and POSTs the
+// payload.  Retries once on 401 after invalidating the token cache.
+// Exported so ngds-retry.js can call it directly.
+export async function postPayload(payload) {
+  const dest = await getDestination({ destinationName: 'ngds-destination' });
+  if (!dest) throw new Error("Destination 'ngds-destination' not found");
+
+  const cfg = dest.destinationConfiguration ?? {};
+  const baseUrl = (dest.url ?? cfg.URL ?? '').replace(/\/$/, '');
+  if (!baseUrl) throw new Error("ngds-destination has no URL");
+
+  const url = baseUrl + NGDS_PATH;
+
+  const doPost = async (token) => {
+    const ac = new AbortController();
+    const tid = setTimeout(() => ac.abort(), 15_000);
+    try {
+      return await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(tid);
+    }
+  };
+
+  let token = await _getToken(cfg);
+  let res = await doPost(token);
+
+  if (res.status === 401) {
+    // Token may have been revoked or expired slightly early — refresh once.
+    _invalidateToken();
+    token = await _getToken(cfg);
+    res = await doPost(token);
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`NGDS POST HTTP ${res.status}: ${body.slice(0, 200)}`);
+  }
 }
 
 /**

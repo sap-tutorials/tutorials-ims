@@ -160,6 +160,7 @@ export default defineConfig({
           { text: 'Advocate export/import',    link: '/developers/operations/advocate-export-import' },
           { text: 'Agent isolation hooks',     link: '/developers/operations/agent-isolation-hooks' },
           { text: 'AI-author CI setup',        link: '/developers/operations/ai-author-ci-setup' },
+          { text: 'Branching strategy',        link: '/developers/operations/branching-strategy' },
           { text: 'BTP destinations (SCI / NGDS)', link: '/developers/operations/btp-destinations' },
           { text: 'BTP role migration',        link: '/developers/operations/btp-role-migration' },
           { text: 'Consent CMP rollback',      link: '/developers/operations/consent-cmp-rollback' },
