@@ -112,6 +112,9 @@ export function findUnhashedIslandRefs(html: string, islands: string[]): string[
 // Checks:
 //   1. #tutorial-navigator carries data-search-base="/qa-search"
 //   2. <script id="browse-data"> exists and its JSON has a non-empty `all` array
+//   3. [#1675] the homepage-style discovery sections are ABSENT — the QA root /
+//      /tutorial-navigator-qa/ exist purely to search & filter tutorials, so the
+//      hero/featured/recent/topics sections must be gated off (site.Params.qa).
 export function checkQaIndex(html: string): string[] {
   const problems: string[] = [];
 
@@ -134,6 +137,22 @@ export function checkQaIndex(html: string): string[] {
     const all = (browseJson as Record<string, unknown>).all;
     if (!Array.isArray(all) || all.length === 0) {
       problems.push('#browse-data grid is empty — data-qa/browse.json was not emitted');
+    }
+  }
+
+  // 3. Homepage-style sections must NOT leak onto the QA navigator (#1675).
+  // Quote-agnostic (Hugo --minify drops attribute quotes). These are the exact
+  // markers of the four sections gated behind `not site.Params.qa` in
+  // layouts/tutorial-navigator/list.html.
+  const FORBIDDEN_HOME_SECTIONS: Array<[RegExp, string]> = [
+    [/class=["']?[^"'>]*\bhome-hero\b/, 'home-hero'],
+    [/id=["']?featured-missions["']?/, 'featured-missions'],
+    [/id=["']?recent-tutorials["']?/, 'recent-tutorials'],
+    [/id=["']?browse-by-topic["']?/, 'browse-by-topic'],
+  ];
+  for (const [re, name] of FORBIDDEN_HOME_SECTIONS) {
+    if (re.test(html)) {
+      problems.push(`homepage section "${name}" is present — QA navigator must be search/filter only (#1675)`);
     }
   }
 

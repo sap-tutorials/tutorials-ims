@@ -5,6 +5,7 @@ import {
   markerAppearsAsAttribute,
   fingerprintedIslands,
   findUnhashedIslandRefs,
+  checkQaIndex,
 } from '../../scripts/verify-qa-build';
 
 describe('verify-qa-build', () => {
@@ -168,5 +169,42 @@ describe('verify-qa-build', () => {
       const html = '<script src="/js/nav-dropdown.js"></script>';
       expect(findUnhashedIslandRefs(html, islands)).toEqual([]);
     });
+  });
+});
+
+describe('checkQaIndex — QA navigator is search/filter only (#1675)', () => {
+  // A minimal but valid QA navigator page: navigator mount with the QA search
+  // base + a populated #browse-data grid, and NONE of the homepage sections.
+  const CLEAN =
+    '<div id="tutorial-navigator" data-search-base="/qa-search" data-nav-base="/tutorials-qa"></div>' +
+    '<script id="browse-data" type="application/json">{"all":[{"id":"t1"}]}</script>';
+
+  it('passes a clean navigator-only page (no problems)', () => {
+    expect(checkQaIndex(CLEAN)).toEqual([]);
+  });
+
+  it('flags a leaked home-hero section', () => {
+    const html = CLEAN + '<section class="home-hero"><h2>Build on SAP</h2></section>';
+    expect(checkQaIndex(html).some((p) => p.includes('home-hero'))).toBe(true);
+  });
+
+  it('flags featured / recent / topic sections (minified, unquoted attrs)', () => {
+    const html =
+      CLEAN +
+      '<section><h2 id=featured-missions>Featured</h2></section>' +
+      '<section><h2 id=recent-tutorials>Recently updated</h2></section>' +
+      '<section><h2 id=browse-by-topic>Browse by topic</h2></section>';
+    const problems = checkQaIndex(html);
+    expect(problems.some((p) => p.includes('featured-missions'))).toBe(true);
+    expect(problems.some((p) => p.includes('recent-tutorials'))).toBe(true);
+    expect(problems.some((p) => p.includes('browse-by-topic'))).toBe(true);
+  });
+
+  it('does NOT flag the navigator island\'s own hero (.navigator-hero) or the SSR preview grid', () => {
+    const html =
+      CLEAN +
+      '<section class="navigator-hero"><h1>SAP Tutorials</h1></section>' +
+      '<section class="navigator-grid navigator-grid--ssr-preview"></section>';
+    expect(checkQaIndex(html)).toEqual([]);
   });
 });
