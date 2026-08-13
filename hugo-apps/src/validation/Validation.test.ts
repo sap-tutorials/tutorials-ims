@@ -49,6 +49,16 @@ const TEXT_AI_2: ValidationQuestion = {
   aiGrading: true
 }
 
+// [#1740] Multi-select MCQ fixture — 3 correct of 4 options.
+const MULTI_MCQ: ValidationQuestion = {
+  id: 'validate-6',
+  question: 'Which statements are true?',
+  type: 'multiple-choice',
+  choiceMode: 'multiple',
+  options: ['Wrong one', 'Right A', 'Right B', 'Right C'],
+  correctAnswers: ['Right A', 'Right B', 'Right C'],
+}
+
 // ── Fetch mock helpers ────────────────────────────────────────────────
 
 let fetchMock: ReturnType<typeof vi.fn>
@@ -142,7 +152,7 @@ interface VmExposed {
   perQuestionResults: Record<string, { verdict: string; hint?: string; summary?: string; errorReason?: string }>
   onSubmit: () => Promise<void>
   onTryAgain: () => void
-  _testSetAnswers: (next: Record<string, string>) => void
+  _testSetAnswers: (next: Record<string, string | string[]>) => void
 }
 
 async function mountValidation(
@@ -164,6 +174,7 @@ async function mountValidation(
       stubs: {
         'ui5-message-strip': true,
         'ui5-radio-button': true,
+        'ui5-checkbox': true,
         'ui5-textarea': true,
         'ui5-button': true,
         'ui5-busy-indicator': true,
@@ -174,7 +185,7 @@ async function mountValidation(
 
 async function submitWithAnswers(
   questions: ValidationQuestion[],
-  answers: Record<string, string>,
+  answers: Record<string, string | string[]>,
   opts: { slug?: string; stepNumber?: number } = {}
 ) {
   const wrapper = await mountValidation(questions, opts)
@@ -616,5 +627,50 @@ describe('Validation.vue — #239 AbortController race-proofing', () => {
     expect(getVm(wrapper).result).toBe('correct')
     // Both fetches got called; only the 2nd's result mattered.
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #1740 Multi-select (checkbox) MCQ
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Validation.vue — #1740 multi-select MCQ', () => {
+  it('renders a checkbox per option (not radios) for choiceMode=multiple', async () => {
+    const wrapper = await mountValidation([MULTI_MCQ])
+    // ui5-checkbox is stubbed → <ui5-checkbox-stub>. One per option (4).
+    expect(wrapper.findAll('ui5-checkbox-stub')).toHaveLength(4)
+    // No radios for a multi-select question.
+    expect(wrapper.findAll('ui5-radio-button-stub')).toHaveLength(0)
+  })
+
+  it('selecting exactly the correct set → correct, no fetch (local grading)', async () => {
+    const wrapper = await submitWithAnswers(
+      [MULTI_MCQ],
+      { 'validate-6': ['Right A', 'Right B', 'Right C'] },
+      { slug: 'multi-test', stepNumber: 6 }
+    )
+    // MCQ is graded locally — the AI grader must not be hit.
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(getVm(wrapper).result).toBe('correct')
+    expect(getVm(wrapper).perQuestionResults['validate-6']?.verdict).toBe('pass')
+  })
+
+  it('partial selection (missing one correct) → incorrect', async () => {
+    const wrapper = await submitWithAnswers(
+      [MULTI_MCQ],
+      { 'validate-6': ['Right A', 'Right B'] },
+      { slug: 'multi-test', stepNumber: 6 }
+    )
+    expect(getVm(wrapper).result).toBe('incorrect')
+    expect(getVm(wrapper).perQuestionResults['validate-6']?.verdict).toBe('fail')
+  })
+
+  it('selecting a wrong option alongside the correct set → incorrect', async () => {
+    const wrapper = await submitWithAnswers(
+      [MULTI_MCQ],
+      { 'validate-6': ['Wrong one', 'Right A', 'Right B', 'Right C'] },
+      { slug: 'multi-test', stepNumber: 6 }
+    )
+    expect(getVm(wrapper).result).toBe('incorrect')
   })
 })
