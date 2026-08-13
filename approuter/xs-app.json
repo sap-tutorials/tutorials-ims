@@ -132,7 +132,13 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/api/devtoberfest/(status|terms|banner|faq|schedule|transcript|my-completions)(\\?.*)?$",
+      "source": "^/api/devtoberfest/session/([^/?]+)(\\?.*)?$",
+      "target": "/api/devtoberfest/session/$1$2",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/api/devtoberfest/(status|terms|banner|faq|schedule|transcript|my-completions|feed\\.ics|feed\\.xml)(\\?.*)?$",
       "target": "/api/devtoberfest/$1$2",
       "destination": "srv-api",
       "authenticationType": "none"

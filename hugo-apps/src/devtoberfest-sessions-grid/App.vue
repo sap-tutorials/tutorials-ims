@@ -221,7 +221,7 @@ onMounted(() => loadData());
       </div>
     </template>
 
-    <DetailPanel :row="selectedRow ?? null" @close="selectedRow = null" />
+    <DetailPanel :row="selectedRow ?? null" :edition-id="editionId" @close="selectedRow = null" />
   </div>
 </template>
 

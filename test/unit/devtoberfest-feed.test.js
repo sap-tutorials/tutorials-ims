@@ -45,6 +45,19 @@ describe('devtoberfest-feed', () => {
     expect(out.sessions[1].id).toBe('s2');
   });
 
+  it('assembleFeed carries sessionLength (raw free-text) onto sessions', () => {
+    const sess = [{ ID: 's1', TITLE: 'Intro', TRACK_ID: 't1', STATUS: 'Confirmed', SESSIONLENGTH: '30 min' }];
+    const out = assembleFeed({ sessions: sess, activities: [], tracks, editions: [], activeEditionId: null });
+    expect(out.sessions[0].sessionLength).toBe('30 min');
+  });
+
+  it('assembleFeed carries communityEventUrl and sessionCode onto sessions', () => {
+    const sess = [{ ID: 's1', TITLE: 'Intro', TRACK_ID: 't1', STATUS: 'Confirmed', SESSIONCODE: 'DEV101', COMMUNITYEVENTURL: 'https://community.sap.com/e/1' }];
+    const out = assembleFeed({ sessions: sess, activities: [], tracks, editions: [], activeEditionId: null });
+    expect(out.sessions[0].communityEventUrl).toBe('https://community.sap.com/e/1');
+    expect(out.sessions[0].sessionCode).toBe('DEV101');
+  });
+
   it('normalizeSlugSet lowercases and dedupes', () => {
     const set = normalizeSlugSet([{ slug: 'Intro-Slug' }, { TASKSLUG: 'PUZ-1' }]);
     expect(set.has('intro-slug')).toBe(true);

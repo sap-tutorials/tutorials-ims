@@ -3,10 +3,12 @@ import type { ScheduleRow } from './types';
 import { youtubeThumb, safeHref, taskHref, taskLinkLabel } from './completion';
 import { youtubeId, youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal, formatHomeZone } from './format-session-time';
+import { sessionIcsHref, sessionCalendarHref } from './calendar-links';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
   row: ScheduleRow | null;
+  editionId?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -79,6 +81,12 @@ const taskLinkLabelTitle = computed(() =>
 
 const isSession = computed(() => props.row?.kind === 'session');
 const isActivity = computed(() => props.row?.kind === 'activity');
+
+// Calendar affordances only make sense for a session that has a start time.
+const showCalendar = computed(() => isSession.value && !!(props.row as any)?.scheduledStart);
+const icsHref = computed(() => (showCalendar.value ? sessionIcsHref(props.row!.id, props.editionId) : ''));
+const googleHref = computed(() => (showCalendar.value ? sessionCalendarHref(props.row!.id, 'google', props.editionId) : ''));
+const outlookHref = computed(() => (showCalendar.value ? sessionCalendarHref(props.row!.id, 'outlook', props.editionId) : ''));
 
 function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.display = 'none'; }
 
@@ -183,6 +191,15 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
             :href="taskUrl"
             class="detail-panel__link detail-panel__link--task"
           >{{ taskLinkLabelTitle }}</a>
+        </div>
+
+        <div v-if="showCalendar" class="detail-panel__calendar">
+          <span class="detail-panel__calendar-label">Add to calendar</span>
+          <div class="detail-panel__calendar-links">
+            <a :href="icsHref" class="detail-panel__link detail-panel__link--ics" download>Download .ics</a>
+            <a :href="googleHref" target="_blank" rel="noopener noreferrer" class="detail-panel__link">Google Calendar</a>
+            <a :href="outlookHref" target="_blank" rel="noopener noreferrer" class="detail-panel__link">Outlook</a>
+          </div>
         </div>
 
         <div v-if="row.complete" class="detail-panel__complete-badge">
@@ -301,6 +318,28 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.detail-panel__calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapList_BorderColor, #e4e5e7);
+}
+
+.detail-panel__calendar-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.detail-panel__calendar-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .detail-panel__link {

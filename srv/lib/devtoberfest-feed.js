@@ -46,10 +46,11 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
     sessions: sessions
       .filter(isVisibleStatus)
       .map((s) => ({
-        id: s.ID, kind: 'session', title: s.TITLE, abstract: s.ABSTRACT,
+        id: s.ID, kind: 'session', title: s.TITLE, abstract: s.ABSTRACT, sessionCode: s.SESSIONCODE || '',
         trackId: s.TRACK_ID, trackName: mapTrack(s.TRACK_ID).NAME || '', trackDay: mapTrack(s.TRACK_ID).DAYOFWEEK || '',
         trackColor: mapTrack(s.TRACK_ID).COLOR || '', trackEmoji: mapTrack(s.TRACK_ID).EMOJI || '',
         week: s.WEEK, scheduledStart: s.SCHEDULEDSTART, scheduledTimeZone: s.SCHEDULEDTIMEZONE, recordingStart: s.RECORDINGSTART,
+        sessionLength: s.SESSIONLENGTH || '',
         youtubeUrl: s.YOUTUBEURL || '', communityEventUrl: s.COMMUNITYEVENTURL || '',
         linkedinUrl: s.LINKEDINURL || '',
         speakers: speakerFor(s.ID),
