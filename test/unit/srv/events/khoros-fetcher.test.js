@@ -126,4 +126,32 @@ describe('khoros-fetcher.fetchKhoros', () => {
     expect(capturedURL).toContain('https://groups.community.sap.com/api/2.0/search');
     expect(capturedURL).toContain(encodeURIComponent("board.id='codejam-events'"));
   });
+
+  // #1736 — the query must scope to occasion messages, bound to upcoming events,
+  // and order soonest-first. Without this, a large board's default ~100-row
+  // relevance window never reaches genuinely-future events (e.g. Sept CodeJams).
+  it('#1736: scopes to occasions, bounds to upcoming, and orders soonest-first', async () => {
+    let capturedURL = null;
+    _setMockFetcher(async (url) => {
+      capturedURL = url;
+      return { ok: true, status: 200, text: async () => fixtureText };
+    });
+    await fetchKhoros('codejam-events', 'codejam', 'local', { now: new Date('2026-12-01T00:00:00Z') });
+    expect(capturedURL).toContain(encodeURIComponent("conversation.style='occasion'"));
+    expect(capturedURL).toContain(encodeURIComponent('ORDER BY occasion_data.start_time ASC'));
+    expect(capturedURL).toContain(encodeURIComponent('LIMIT 100'));
+  });
+
+  it('#1736: derives the start_time cutoff from opts.now', async () => {
+    let capturedURL = null;
+    _setMockFetcher(async (url) => {
+      capturedURL = url;
+      return { ok: true, status: 200, text: async () => fixtureText };
+    });
+    const now = new Date('2026-12-01T00:00:00Z');
+    await fetchKhoros('codejam-events', 'codejam', 'local', { now });
+    expect(capturedURL).toContain(
+      encodeURIComponent(`occasion_data.start_time > '${now.toISOString()}'`),
+    );
+  });
 });
