@@ -24,6 +24,7 @@ import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
 import { cleanupChangeLog, cleanupUnusedTags } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
+import { enrichSignupRows } from './lib/devtoberfest-signup-enrich.js';
 import { getTutorialSource } from './lib/content-store.js';
 import { buildTutorialLinks } from './lib/tutorial-links.js';
 import { buildPreviewLinks } from './lib/preview-links.js';
@@ -332,6 +333,31 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'intermediate', label: 'Intermediate' },
       { code: 'advanced',     label: 'Advanced'     }
     ]);
+    // Devtoberfest Signups report filter DDLBs (spec 2026-08-13). Codes mirror
+    // UserLearningPreferences.preferredEventRegion / role (db/schema.cds:259,270)
+    // plus the 'Not set' sentinel the DevtoberfestSignupAnalytics view coalesces
+    // nulls to, so the filter can isolate users who never set a preference.
+    this.on('READ', 'SignupRegions', () => [
+      { code: 'AMERICAS', label: 'Americas' },
+      { code: 'EMEA',     label: 'EMEA'     },
+      { code: 'APJ',      label: 'APJ'      },
+      { code: 'VIRTUAL',  label: 'Virtual'  },
+      { code: 'Not set',  label: 'Not set'  },
+    ]);
+    this.on('READ', 'SignupRoles', () => [
+      { code: 'developer', label: 'Developer' },
+      { code: 'architect', label: 'Architect' },
+      { code: 'sysadmin',  label: 'System Admin' },
+      { code: 'student',   label: 'Student'   },
+      { code: 'Not set',   label: 'Not set'   },
+    ]);
+    // Devtoberfest Signups analytics — derive human-readable week label + Monday
+    // date from the portable integer weekIndex, and a running cumulative on the
+    // pure by-week series. $apply aggregation cannot produce either natively.
+    // Logic lives in the pure, unit-tested helper srv/lib/devtoberfest-signup-enrich.js.
+    this.after('READ', 'DevtoberfestSignupAnalytics', (rows) => enrichSignupRows(rows));
+
+
     // Pipeline / Job log dropdowns. PipelineTypes excludes SCHEDULED_JOB because
     // the PipelineLog projection (admin-service.cds:115) filters it out — those
     // rows land in JobExecutionLog instead. PipelineStatuses is shared by both

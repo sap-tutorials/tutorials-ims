@@ -69,6 +69,7 @@
       "sap.tutorials.admin.changelog": "./components/changelog",
       "sap.tutorials.admin.privacyAudit": "./components/privacy-audit",
       "sap.tutorials.admin.devtoberfest": "./components/devtoberfest",
+      "sap.tutorials.admin.devtoberfestSignups": "./components/devtoberfestSignups",
       "sap.tutorials.admin.analytics": "./components/analytics",
       "sap.tutorials.admin.joule": "./components/joule",
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
@@ -225,6 +226,12 @@
       },
       "devtoberfest": {
         "name": "sap.tutorials.admin.devtoberfest",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "devtoberfestSignupsComponent": {
+        "name": "sap.tutorials.admin.devtoberfestSignups",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -599,6 +606,16 @@
             {
               "name": "devtoberfestTarget",
               "prefix": "dt"
+            }
+          ]
+        },
+        {
+          "name": "devtoberfestSignups",
+          "pattern": "devtoberfestSignups",
+          "target": [
+            {
+              "name": "devtoberfestSignupsTarget",
+              "prefix": "dsg"
             }
           ]
         },
@@ -1039,6 +1056,13 @@
           "id": "devtoberfestTarget",
           "viewLevel": 1,
           "prefix": "dt"
+        },
+        "devtoberfestSignupsTarget": {
+          "type": "Component",
+          "usage": "devtoberfestSignupsComponent",
+          "id": "devtoberfestSignupsTarget",
+          "viewLevel": 1,
+          "prefix": "dsg"
         },
         "analyticsTarget": {
           "type": "Component",
