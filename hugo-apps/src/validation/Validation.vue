@@ -33,7 +33,10 @@ const props = withDefaults(defineProps<Props>(), {
 // form — the runtime AI behavior can only be exercised after a real publish.
 const rulesBlockText = ref<string>('');
 
-const answers = ref<Record<string, string>>({});
+// [#1740] Answers keyed by question id. A single-select / text answer is a
+// string; a multi-select (choiceMode 'multiple') answer is an array of the
+// selected option strings. grading.gradeAnswers accepts both shapes.
+const answers = ref<Record<string, string | string[]>>({});
 const submitted = ref(false);
 const result = ref<'correct' | 'incorrect' | 'partial' | 'disabled' | null>(null);
 const pending = ref(false);
@@ -152,6 +155,27 @@ function emitStepValidated() {
 
 function onRadioChange(qid: string, value: string) {
   answers.value[qid] = value;
+}
+
+// [#1740] Multi-select: maintain the answer as an array of selected option
+// strings. UI5's ui5-checkbox reflects the new state on its `checked`
+// property, which we read off the event target.
+function onCheckboxChange(qid: string, opt: string, event: Event) {
+  const checked = !!(event.target as (HTMLElement & { checked?: boolean }) | null)?.checked;
+  const current = answers.value[qid];
+  const next = Array.isArray(current) ? [...current] : [];
+  const idx = next.indexOf(opt);
+  if (checked && idx === -1) next.push(opt);
+  else if (!checked && idx !== -1) next.splice(idx, 1);
+  answers.value[qid] = next;
+}
+
+// [#1740] Shared "is this option currently selected?" check used by both the
+// radio (single-select, scalar answer) and checkbox (multi-select, array
+// answer) bindings — keeps the template free of `as` casts.
+function isOptionSelected(qid: string, opt: string): boolean {
+  const current = answers.value[qid];
+  return Array.isArray(current) ? current.includes(opt) : current === opt;
 }
 
 function onTextInput(qid: string, event: Event) {
@@ -371,7 +395,7 @@ function onTryAgain() {
 // Tests that need to write to refs must use the exposed setters below
 // rather than `wrapper.vm.answers = {...}` (which would replace the proxy
 // property, not the underlying ref).
-function _testSetAnswers(next: Record<string, string>) {
+function _testSetAnswers(next: Record<string, string | string[]>) {
   answers.value = { ...next };
 }
 
@@ -466,22 +490,42 @@ defineExpose({
         </legend>
 
         <template v-if="q.type === 'multiple-choice' && q.options">
-          <div v-for="opt in q.options" :key="opt" class="option-row">
-            <!-- Conditional disabled via v-bind because UI5 web components
-                 treat attribute *presence* as truthy regardless of value
-                 (disabled="false" still disables). See
-                 docs/developers/reference/vue-islands-gotchas.md § UI5
-                 boolean attr coercion. Same pattern as the Submit button
-                 and the textarea below. -->
-            <ui5-radio-button
-              :name="`q-${stepNumber}-${qi}`"
-              :value="opt"
-              :text="opt"
-              :checked="answers[q.id] === opt"
-              v-bind="result === 'correct' ? { disabled: true } : {}"
-              @change="onRadioChange(q.id, opt)"
-            />
-          </div>
+          <!-- [#1740] Multi-select (checkbox) — choiceMode 'multiple'. The
+               learner can tick more than one box; grading is exact set match.
+               Restores the legacy AEM `multiple-choice` behaviour that the
+               radio-only widget silently broke. -->
+          <template v-if="q.choiceMode === 'multiple'">
+            <div v-for="opt in q.options" :key="opt" class="option-row">
+              <!-- Conditional disabled via v-bind — UI5 web components treat
+                   attribute *presence* as truthy (disabled="false" still
+                   disables). Same pattern as the radio / textarea / submit. -->
+              <ui5-checkbox
+                :text="opt"
+                :checked="isOptionSelected(q.id, opt)"
+                v-bind="result === 'correct' ? { disabled: true } : {}"
+                @change="onCheckboxChange(q.id, opt, $event)"
+              />
+            </div>
+          </template>
+          <!-- Single-select (radio) — choiceMode 'single' or unset. -->
+          <template v-else>
+            <div v-for="opt in q.options" :key="opt" class="option-row">
+              <!-- Conditional disabled via v-bind because UI5 web components
+                   treat attribute *presence* as truthy regardless of value
+                   (disabled="false" still disables). See
+                   docs/developers/reference/vue-islands-gotchas.md § UI5
+                   boolean attr coercion. Same pattern as the Submit button
+                   and the textarea below. -->
+              <ui5-radio-button
+                :name="`q-${stepNumber}-${qi}`"
+                :value="opt"
+                :text="opt"
+                :checked="isOptionSelected(q.id, opt)"
+                v-bind="result === 'correct' ? { disabled: true } : {}"
+                @change="onRadioChange(q.id, opt)"
+              />
+            </div>
+          </template>
         </template>
 
         <!-- :value binds the in-memory answer back into the textarea so

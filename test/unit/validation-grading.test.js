@@ -80,6 +80,61 @@ describe('validation grading.ts', () => {
     expect(gradeAnswers(questions, { q1: 'A', q2: 'fields' }).correct).toBe(true);
   });
 
+  // ── gradeAnswers multi-select (#1740) ───────────────────────────
+  // multiple-choice with choiceMode:'multiple' grades by EXACT set match:
+  // every correct option must be selected and no incorrect option chosen.
+  // The submitted answer for such a question is an array of selected option
+  // strings (radio/single questions stay plain strings).
+
+  const MULTI_Q = {
+    id: 'validate-6',
+    question: 'Which statements are true?',
+    type: 'multiple-choice',
+    choiceMode: 'multiple',
+    options: ['A', 'B', 'C', 'D'],
+    correctAnswers: ['B', 'C', 'D']
+  };
+
+  it('multi-select: all correct options selected (any order) → correct', () => {
+    expect(gradeAnswers([MULTI_Q], { 'validate-6': ['D', 'B', 'C'] }).correct).toBe(true);
+  });
+
+  it('multi-select: partial selection (missing one) → incorrect', () => {
+    expect(gradeAnswers([MULTI_Q], { 'validate-6': ['B', 'C'] }).correct).toBe(false);
+  });
+
+  it('multi-select: extra (incorrect) option selected → incorrect', () => {
+    expect(gradeAnswers([MULTI_Q], { 'validate-6': ['A', 'B', 'C', 'D'] }).correct).toBe(false);
+  });
+
+  it('multi-select: no selection → incorrect', () => {
+    expect(gradeAnswers([MULTI_Q], { 'validate-6': [] }).correct).toBe(false);
+    expect(gradeAnswers([MULTI_Q], {}).correct).toBe(false);
+  });
+
+  it('multi-select: whitespace around selected values still matches', () => {
+    expect(gradeAnswers([MULTI_Q], { 'validate-6': [' B ', 'C', ' D'] }).correct).toBe(true);
+  });
+
+  it('multi-select: single correct answer set behaves like exact match', () => {
+    const q = {
+      id: 'validate-2', question: 'Q?', type: 'multiple-choice',
+      choiceMode: 'multiple', options: ['A', 'B'], correctAnswers: ['A']
+    };
+    expect(gradeAnswers([q], { 'validate-2': ['A'] }).correct).toBe(true);
+    expect(gradeAnswers([q], { 'validate-2': ['A', 'B'] }).correct).toBe(false);
+    expect(gradeAnswers([q], { 'validate-2': [] }).correct).toBe(false);
+  });
+
+  it('single-choice (choiceMode:single) still grades scalar correctAnswer', () => {
+    const q = {
+      id: 'validate-1', question: 'Q?', type: 'multiple-choice',
+      choiceMode: 'single', options: ['A', 'B'], correctAnswer: 'B'
+    };
+    expect(gradeAnswers([q], { 'validate-1': 'B' }).correct).toBe(true);
+    expect(gradeAnswers([q], { 'validate-1': 'A' }).correct).toBe(false);
+  });
+
   // ── gradeAnswers defensive (#237) ──────────────────────────────
 
   it('text: missing correctAnswer → grades as incorrect (no throw)', () => {

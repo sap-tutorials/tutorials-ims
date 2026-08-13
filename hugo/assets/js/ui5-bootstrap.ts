@@ -26,6 +26,10 @@ import "@ui5/webcomponents/dist/ListItemStandard.js";
 import "@ui5/webcomponents/dist/TabContainer.js";
 import "@ui5/webcomponents/dist/Tab.js";
 import "@ui5/webcomponents/dist/RadioButton.js";
+// [#1740] Multi-select quiz answers render as <ui5-checkbox> in the
+// validation island. Without this registration the element renders as an
+// inert unknown tag and the learner cannot tick any box.
+import "@ui5/webcomponents/dist/CheckBox.js";
 import "@ui5/webcomponents/dist/RatingIndicator.js";
 import "@ui5/webcomponents/dist/ProgressIndicator.js";
 import "@ui5/webcomponents/dist/Dialog.js";
