@@ -6,6 +6,8 @@
 // soft (503 / empty) when the facades are unavailable (e.g. unit SQLite).
 import cds from '@sap/cds';
 import { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow } from '../lib/devtoberfest-feed.js';
+import { buildICS, buildEventICS, addToCalendarLinks } from '../lib/devtoberfest-ical.js';
+import { buildRSS } from '../lib/devtoberfest-rss.js';
 import { resolveUser } from '../lib/resolve-user.js';
 import { resolveUserSapId } from '../lib/resolve-db-user.js';
 import { getMyCompletedTutorials } from '../lib/user-progress.js';
@@ -23,62 +25,150 @@ async function resolveEditionId(ext, requested) {
   } catch { return null; }
 }
 
+// Loads the assembled feed for the resolved edition (query ?edition, else the
+// current one). Returns { ok: true, editionId, feed } on success, or
+// { ok: false, status, error } to be relayed verbatim. Shared by the JSON
+// schedule route and the iCal/RSS feed routes so they present identical data.
+async function loadAssembledFeed(req) {
+  await cds.connect.to('db');
+  let ext;
+  try {
+    ext = cds.entities('external.devtoberfest');
+  } catch { ext = null; }
+  if (!ext?.Session || !ext?.Activity) {
+    return { ok: false, status: 503, error: 'EVENT_NOT_CONFIGURED' };
+  }
+
+  const editionId = await resolveEditionId(ext, req.query.edition);
+  if (!editionId) return { ok: false, status: 503, error: 'EVENT_NOT_CONFIGURED' };
+
+  let tracks = [];
+  let editions = [];
+  let sessions = [];
+  let activities = [];
+  let sessionSpeakers = [];
+  let speakers = [];
+  try {
+    editions = await SELECT.from(ext.Edition);
+    tracks = await SELECT.from(ext.Track).where({ EDITION_ID: editionId });
+    const trackIds = tracks.map((t) => t.ID);
+    sessions = trackIds.length
+      ? await SELECT.from(ext.Session)
+          .columns('ID', 'SESSIONCODE', 'TRACK_ID', 'TITLE', 'ABSTRACT', 'STATUS', 'SESSIONLENGTH', 'WEEK', 'SCHEDULEDSTART', 'SCHEDULEDTIMEZONE', 'YOUTUBEURL', 'COMMUNITYEVENTURL', 'ACTIVITY_ID')
+          .where({ TRACK_ID: { in: trackIds } })
+      : [];
+    activities = trackIds.length
+      ? await SELECT.from(ext.Activity)
+          .columns('ID', 'TITLE', 'TRACK_ID', 'STATUS', 'WEEK', 'POINTS', 'TASKSLUG', 'TASKTITLE', 'TASKTYPE', 'TASK_ID')
+          .where({ TRACK_ID: { in: trackIds } })
+      : [];
+    const sessionIds = sessions.map((s) => s.ID);
+    if (sessionIds.length && ext.Sessionspeaker && ext.Speaker) {
+      sessionSpeakers = await SELECT.from(ext.Sessionspeaker)
+        .columns('SESSION_ID', 'SPEAKER_ID', 'SPEAKERORDER')
+        .where({ SESSION_ID: { in: sessionIds } });
+      const speakerIds = [...new Set(sessionSpeakers.map((l) => l.SPEAKER_ID))];
+      speakers = speakerIds.length
+        ? await SELECT.from(ext.Speaker).columns('ID', 'FIRSTNAME', 'LASTNAME', 'ROLE', 'COMPANY').where({ ID: { in: speakerIds } })
+        : [];
+    }
+  } catch (err) {
+    LOG.warn('schedule facade read failed, returning empty feed:', err.message);
+    return { ok: false, status: 503, error: 'EVENT_NOT_CONFIGURED' };
+  }
+
+  const feed = assembleFeed({ sessions, activities, tracks, editions, activeEditionId: editionId, speakers, sessionSpeakers });
+  return { ok: true, editionId, feed };
+}
+
+// Reconstruct the externally-visible base URL (behind the approuter/CDN the
+// Host header is the internal app; X-Forwarded-* carry the public origin). Only
+// used for the RSS atom:self link, so a miss is cosmetic, not functional.
+function publicBaseUrl(req) {
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  return host ? `${proto}://${host}` : '';
+}
+
 async function scheduleHandler(req, res) {
   try {
-    await cds.connect.to('db');
-    let ext;
-    try {
-      ext = cds.entities('external.devtoberfest');
-    } catch { ext = null; }
-    if (!ext?.Session || !ext?.Activity) {
-      return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
-    }
-
-    const editionId = await resolveEditionId(ext, req.query.edition);
-    if (!editionId) return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
-
-    let tracks = [];
-    let editions = [];
-    let sessions = [];
-    let activities = [];
-    let sessionSpeakers = [];
-    let speakers = [];
-    try {
-      editions = await SELECT.from(ext.Edition);
-      tracks = await SELECT.from(ext.Track).where({ EDITION_ID: editionId });
-      const trackIds = tracks.map((t) => t.ID);
-      sessions = trackIds.length
-        ? await SELECT.from(ext.Session)
-            .columns('ID', 'SESSIONCODE', 'TRACK_ID', 'TITLE', 'ABSTRACT', 'STATUS', 'SESSIONLENGTH', 'WEEK', 'SCHEDULEDSTART', 'SCHEDULEDTIMEZONE', 'YOUTUBEURL', 'COMMUNITYEVENTURL', 'ACTIVITY_ID')
-            .where({ TRACK_ID: { in: trackIds } })
-        : [];
-      activities = trackIds.length
-        ? await SELECT.from(ext.Activity)
-            .columns('ID', 'TITLE', 'TRACK_ID', 'STATUS', 'WEEK', 'POINTS', 'TASKSLUG', 'TASKTITLE', 'TASKTYPE', 'TASK_ID')
-            .where({ TRACK_ID: { in: trackIds } })
-        : [];
-      const sessionIds = sessions.map((s) => s.ID);
-      if (sessionIds.length && ext.Sessionspeaker && ext.Speaker) {
-        sessionSpeakers = await SELECT.from(ext.Sessionspeaker)
-          .columns('SESSION_ID', 'SPEAKER_ID', 'SPEAKERORDER')
-          .where({ SESSION_ID: { in: sessionIds } });
-        const speakerIds = [...new Set(sessionSpeakers.map((l) => l.SPEAKER_ID))];
-        speakers = speakerIds.length
-          ? await SELECT.from(ext.Speaker).columns('ID', 'FIRSTNAME', 'LASTNAME', 'ROLE', 'COMPANY').where({ ID: { in: speakerIds } })
-          : [];
-      }
-    } catch (err) {
-      LOG.warn('schedule facade read failed, returning empty feed:', err.message);
-      return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
-    }
-
+    const loaded = await loadAssembledFeed(req);
+    if (!loaded.ok) return res.status(loaded.status).json({ error: loaded.error });
     // Admin-editable schedule feed (sessions/activities/tracks). Must not be
     // cached at the CDN edge, or admin edits stay invisible until the edge's
     // heuristic TTL lapses.
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json(assembleFeed({ sessions, activities, tracks, editions, activeEditionId: editionId, speakers, sessionSpeakers }));
+    return res.status(200).json(loaded.feed);
   } catch (err) {
     LOG.error('GET /api/devtoberfest/schedule failed:', err);
+    return res.status(500).json({ error: 'INTERNAL' });
+  }
+}
+
+// Anonymous, non-personalized calendar subscription for the whole schedule.
+// Unlike scheduleHandler this is edge-cacheable (public, 5 min) — admin edits
+// take up to the TTL to appear in subscribers' calendars, an acceptable trade
+// for offloading a feed polled by many calendar clients.
+async function icalHandler(req, res) {
+  try {
+    const loaded = await loadAssembledFeed(req);
+    if (!loaded.ok) return res.status(loaded.status).json({ error: loaded.error });
+    const ics = buildICS(loaded.feed);
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', 'inline; filename="devtoberfest.ics"');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    return res.status(200).send(ics);
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/feed.ics failed:', err);
+    return res.status(500).json({ error: 'INTERNAL' });
+  }
+}
+
+async function rssHandler(req, res) {
+  try {
+    const loaded = await loadAssembledFeed(req);
+    if (!loaded.ok) return res.status(loaded.status).json({ error: loaded.error });
+    const rss = buildRSS(loaded.feed, { baseUrl: publicBaseUrl(req) });
+    res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    return res.status(200).send(rss);
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/feed.xml failed:', err);
+    return res.status(500).json({ error: 'INTERNAL' });
+  }
+}
+
+// Single-session .ics download. The :file param carries a trailing ".ics" that
+// we strip to recover the session id. Only visible-status sessions are in the
+// assembled feed, so hidden sessions correctly 404 rather than leak.
+async function sessionIcalHandler(req, res) {
+  try {
+    const loaded = await loadAssembledFeed(req);
+    if (!loaded.ok) return res.status(loaded.status).json({ error: loaded.error });
+    const id = String(req.params.file || '').replace(/\.ics$/i, '');
+    const session = loaded.feed.sessions.find((s) => s.id === id);
+    if (!session) return res.status(404).json({ error: 'SESSION_NOT_FOUND' });
+
+    // ?to=google|outlook → 302 to the provider's "add event" page. Targets are
+    // built server-side from the session (addToCalendarLinks), never from client
+    // input, so there is no open-redirect surface.
+    const to = String(req.query.to || '').toLowerCase();
+    if (to === 'google' || to === 'outlook') {
+      const target = addToCalendarLinks(session)[to];
+      if (!target) return res.status(404).json({ error: 'SESSION_NOT_SCHEDULED' });
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      return res.redirect(302, target);
+    }
+
+    const ics = buildEventICS(session);
+    if (!ics) return res.status(404).json({ error: 'SESSION_NOT_SCHEDULED' });
+    const safe = (session.sessionCode || session.id).replace(/[^A-Za-z0-9_-]/g, '');
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="devtoberfest-${safe}.ics"`);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    return res.status(200).send(ics);
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/session/:file failed:', err);
     return res.status(500).json({ error: 'INTERNAL' });
   }
 }
@@ -252,9 +342,12 @@ export function register(app) {
   const _contextMw = cds.middlewares?.context?.() || ((req, _res, next) => next());
   const _authMw = cds.middlewares?.auth?.() || ((req, _res, next) => next());
   app.get('/api/devtoberfest/schedule', _contextMw, _authMw, scheduleHandler);
+  app.get('/api/devtoberfest/feed.ics', _contextMw, icalHandler);
+  app.get('/api/devtoberfest/feed.xml', _contextMw, rssHandler);
+  app.get('/api/devtoberfest/session/:file', _contextMw, sessionIcalHandler);
   app.get('/api/devtoberfest/my-completions', _contextMw, _authMw, myCompletionsHandler);
   app.get('/api/devtoberfest/speaker/:id/photo', _contextMw, speakerPhotoHandler);
   app.get('/api/devtoberfest/transcript', _contextMw, transcriptHandler);
 }
 
-export { scheduleHandler, myCompletionsHandler, speakerPhotoHandler, transcriptHandler };
+export { scheduleHandler, icalHandler, rssHandler, sessionIcalHandler, myCompletionsHandler, speakerPhotoHandler, transcriptHandler };
