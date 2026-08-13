@@ -99,6 +99,20 @@
   if (document.documentElement.dataset.pageKind === 'tutorial') {
     document.documentElement.dataset.hydrated = 'false';
   }
+  {{ if not site.Params.previewMode }}
+  // Issue #1688: FOUCE cloak. Hide un-upgraded UI5 custom elements (the
+  // html[data-ui5-cloak] rules in ui5-overrides.css) so the shellbar's popovers
+  // (nav/share/account), the glossary popover, the anchor-bar tabs and the
+  // wizard don't paint their raw slotted content before the ui5.sap.com bundle
+  // calls customElements.define(). Set here — before first paint — ONLY on
+  // builds that load ui5-bootstrap.ts. previewMode skips that bundle entirely
+  // (baseof.html), so elements never upgrade in preview and cloaking there would
+  // hide the chrome permanently. Each element un-cloaks itself the instant it
+  // upgrades (:not(:defined) stops matching); the DOMContentLoaded fallback
+  // below is the only thing that removes the attribute, and only if the bundle
+  // never ran.
+  document.documentElement.dataset.ui5Cloak = '';
+  {{ end }}
   document.addEventListener('click', function(e) {
     if (e.target.closest('[data-action="toggle-theme"]')) {
       var html = document.documentElement;
@@ -119,6 +133,17 @@
         document.documentElement.dataset.hydrated = 'true';
       }
     }, 2000);
+    // Issue #1688: FOUCE-cloak bundle-failure escape hatch. In the happy path
+    // every ui5-* element has already un-cloaked itself via :not(:defined) the
+    // moment it upgraded, so removing the attribute is a no-op. If the UI5
+    // bundle never ran (network error, CSP, 404), the un-upgraded elements would
+    // stay cloaked forever — drop the attribute after a generous delay so the
+    // raw (still-readable) chrome appears. 8s is far longer than a normal bundle
+    // load, so a slow-but-successful load still upgrades (and un-cloaks
+    // per-element) well before this fires.
+    setTimeout(function () {
+      document.documentElement.removeAttribute('data-ui5-cloak');
+    }, 8000);
   });
 </script>
 {{ if not (eq .Type "tutorials") }}
