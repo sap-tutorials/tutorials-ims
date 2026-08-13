@@ -133,6 +133,7 @@ sources are from `approuter/xs-app.json`; see [runtime.md](runtime.md) and
 | `/homepage/*` **except** `/homepage/personalized` | `srv → /homepage/*` | short |
 | `/api/advocates` | `srv` | short |
 | `/api/devtoberfest/(status\|terms\|banner\|faq\|schedule\|transcript)` | `srv` | short |
+| `/api/devtoberfest/(feed.ics\|feed.xml\|session/*.ics)` | `srv` (public iCal/RSS calendar feeds) | short (`public, max-age=300`) — non-personalized, so edge-cacheable unlike the `no-store` `schedule` sibling |
 | `/graph/(neighborhood(Full)?\|Concepts\|ConceptEdges\|TutorialConceptLinks\|pathBetween\|conceptsForUser\|explore-data\|path\|searchKG\|PublishedConcepts)` | `srv` (public KG read arm) | short |
 | Hugo static assets (CSS/JS/img/fonts) | dedicated `cacheControl` asset route → `localDir: static` | 1 h (see §"Static assets") |
 

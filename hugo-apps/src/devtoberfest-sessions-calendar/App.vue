@@ -12,6 +12,7 @@ import {
   addMonths, addWeeks, addDays, startOfWeek, groupByDate, unscheduled,
 } from './calendar-core';
 import { viewerDayKey } from '../devtoberfest-schedule-shared/format-session-time';
+import { feedRssHref, subscribeWebcalHref } from '../devtoberfest-schedule-shared/calendar-links';
 import { buildTrackColorMap, legendFor } from './track-colors';
 import MonthGrid from './MonthGrid.vue';
 import WeekAgenda from './WeekAgenda.vue';
@@ -125,6 +126,11 @@ function next() {
 function goToday() { cursor.value = new Date(); }
 function openDay(d: Date) { cursor.value = d; viewMode.value = 'day'; }
 
+// Public feed subscription links, scoped to the active edition. webcal:// makes
+// the browser hand the .ics feed to the OS calendar app as a live subscription.
+const webcalHref = computed(() => subscribeWebcalHref(window.location.host, editionId.value));
+const rssHref = computed(() => feedRssHref(editionId.value));
+
 onMounted(() => loadData());
 </script>
 
@@ -132,7 +138,17 @@ onMounted(() => loadData());
   <div class="sc-wrap">
     <div class="sc-header">
       <h1 class="sc-title">Devtoberfest Calendar</h1>
-      <EditionPicker v-if="feed" :editions="feed.editions" :model-value="editionId" @update:model-value="onEditionChange" />
+      <div class="sc-header-actions">
+        <EditionPicker v-if="feed" :editions="feed.editions" :model-value="editionId" @update:model-value="onEditionChange" />
+        <div v-if="feed" class="sc-subscribe">
+          <a :href="webcalHref" class="sc-subscribe-link" title="Subscribe in your calendar app (live-updating)">
+            <span aria-hidden="true">📅</span> Subscribe
+          </a>
+          <a :href="rssHref" class="sc-subscribe-link" target="_blank" rel="noopener noreferrer" title="RSS feed of sessions">
+            <span aria-hidden="true">🔗</span> RSS
+          </a>
+        </div>
+      </div>
     </div>
 
     <PointsBanner v-if="!loading && !error" :earned-points="earnedPoints" :max-points="maxPoints" :complete-count="completeCount" :is-authenticated="isAuthenticated" :joined="joined" />
@@ -196,13 +212,17 @@ onMounted(() => loadData());
       </div>
     </template>
 
-    <DetailPanel :row="selectedRow ?? null" @close="selectedRow = null" />
+    <DetailPanel :row="selectedRow ?? null" :edition-id="editionId" @close="selectedRow = null" />
   </div>
 </template>
 
 <style scoped>
 .sc-wrap { font-family: var(--sapFontFamily, '72', 'Helvetica Neue', Arial, sans-serif); font-size: var(--sapFontSize, 0.875rem); color: var(--sapTextColor, #32363a); padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
 .sc-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; }
+.sc-header-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.sc-subscribe { display: flex; align-items: center; gap: 0.75rem; }
+.sc-subscribe-link { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8125rem; color: var(--sapLinkColor, #0854a0); text-decoration: none; }
+.sc-subscribe-link:hover { text-decoration: underline; }
 .sc-title { font-size: var(--sapFontHeader2Size, 1.5rem); font-weight: 700; margin: 0; }
 .sc-state { padding: 2rem; text-align: center; color: var(--sapContent_LabelColor, #6a6d70); }
 .sc-state--error { color: var(--sapNegativeColor, #b00020); }

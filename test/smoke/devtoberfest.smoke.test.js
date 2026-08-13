@@ -54,4 +54,29 @@ describe('Devtoberfest smoke', () => {
     });
     expect(res.status).toBe(401);
   });
+
+  it('GET /api/devtoberfest/feed.ics is anonymous and serves text/calendar (or 503)', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/api/devtoberfest/feed.ics`);
+    // Must not redirect to login — the route is authenticationType:none in the approuter.
+    expect([200, 503]).toContain(res.status);
+    if (res.status === 200) {
+      expect(res.headers.get('content-type')).toContain('text/calendar');
+      const body = await res.text();
+      expect(body).toContain('BEGIN:VCALENDAR');
+    } else {
+      expect((await res.json()).error).toBe('EVENT_NOT_CONFIGURED');
+    }
+  });
+
+  it('GET /api/devtoberfest/feed.xml is anonymous and serves RSS (or 503)', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/api/devtoberfest/feed.xml`);
+    expect([200, 503]).toContain(res.status);
+    if (res.status === 200) {
+      expect(res.headers.get('content-type')).toContain('application/rss+xml');
+      const body = await res.text();
+      expect(body).toContain('<rss');
+    } else {
+      expect((await res.json()).error).toBe('EVENT_NOT_CONFIGURED');
+    }
+  });
 });
