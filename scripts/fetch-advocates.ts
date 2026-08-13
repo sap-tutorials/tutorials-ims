@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import MarkdownIt from 'markdown-it';
 import sanitizeHtml from 'sanitize-html';
 import { stringify as yamlStringify } from 'yaml';
+import { normalizeAuthorLogin } from './parsers/author-index';
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
 
@@ -51,6 +52,18 @@ function renderBio(markdown: string): { html: string; text: string } {
   return { html, text: plain };
 }
 
+/** Resolve an advocate's canonical GitHub login (lowercase) or null. */
+export function advocateAuthorLogin(advocate: any): string | null {
+  const fromField = advocate?.githubLogin
+    ? normalizeAuthorLogin(`https://github.com/${advocate.githubLogin}`)
+    : null;
+  if (fromField) return fromField;
+  const links = Array.isArray(advocate?.links) ? advocate.links : [];
+  const gh = links.find((l: any) => String(l?.kind).toLowerCase() === 'github' && l?.url);
+  return gh ? normalizeAuthorLogin(gh.url) : null;
+}
+
+
 function frontmatter(advocate: any): string {
   const { html, text } = renderBio(advocate.bio);
   const fm: Record<string, any> = {
@@ -75,6 +88,8 @@ function frontmatter(advocate: any): string {
       bioText: text,
     },
   };
+  const login = advocateAuthorLogin(advocate);
+  if (login) fm.aliases = [`/authors/${login}/`];
   return yamlStringify(fm);
 }
 
