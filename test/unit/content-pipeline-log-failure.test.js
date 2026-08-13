@@ -11,8 +11,19 @@
 //     initiator, summary, errorDetails, and 201 response.
 //   - an invalid/unknown pipelineType defaults to HUGO_BUILD (enum-safe).
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import cds from '@sap/cds';
+
+// #1718: the handler now also raises a RebuildPipelineFailed ANS alert. Mock
+// the fail-open alerting helper so we can assert the raise without a real ANS
+// binding (the real raise is DB-gated OFF in tests anyway → it would no-op).
+vi.mock('../../srv/lib/alerting.js', () => ({
+  raise: vi.fn().mockResolvedValue(undefined),
+  raiseTest: vi.fn().mockResolvedValue({ outcome: 'disabled' }),
+  _resetForTest: vi.fn(),
+}));
+
+import * as alerting from '../../srv/lib/alerting.js';
 import { createContentHandlers } from '../../srv/lib/content-store.js';
 
 const NS = 'com.sap.developers.ims';
@@ -39,6 +50,7 @@ describe('pipelineLogFailureHandler — CI rebuild-failure reporter', () => {
 
   beforeEach(async () => {
     await DELETE.from(PipelineLog);
+    alerting.raise.mockClear();
   });
 
   it('writes a FAILED row with the supplied fields and returns 201', async () => {
@@ -76,5 +88,38 @@ describe('pipelineLogFailureHandler — CI rebuild-failure reporter', () => {
     const row = await SELECT.one.from(PipelineLog).where({ ID: res.body.id });
     expect(row.pipelineType).toBe('HUGO_BUILD');
     expect(row.status).toBe('FAILED');
+  });
+
+  it('raises a RebuildPipelineFailed ANS alert (ERROR) with the env in the resource (#1718)', async () => {
+    const res = mockRes();
+    await handler({
+      body: {
+        pipelineType: 'HUGO_BUILD',
+        initiator: 'ci',
+        summary: 'rebuild-content failed (env=prod)',
+        errorDetails: 'step X failed',
+        metadata: { env: 'prod', mode: 'full' },
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(201);
+    expect(alerting.raise).toHaveBeenCalledTimes(1);
+    expect(alerting.raise).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'RebuildPipelineFailed',
+      severity: 'ERROR',
+      category: 'ALERT',
+      resource: { resourceName: 'rebuild-prod', resourceType: 'pipeline' },
+    }));
+  });
+
+  it('falls back to resourceName rebuild-unknown when metadata has no env (#1718)', async () => {
+    const res = mockRes();
+    await handler({ body: { pipelineType: 'HUGO_BUILD', initiator: 'ci' } }, res);
+
+    expect(res.statusCode).toBe(201);
+    expect(alerting.raise).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'RebuildPipelineFailed',
+      resource: { resourceName: 'rebuild-unknown', resourceType: 'pipeline' },
+    }));
   });
 });

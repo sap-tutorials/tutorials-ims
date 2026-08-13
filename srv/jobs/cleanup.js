@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import * as alerting from '../lib/alerting.js';
 
 /**
  * HANA prepared-statement parameter buffer is bounded by `communication_max_packet_size`
@@ -130,6 +131,28 @@ export async function cleanupPipelineLog(retentionDays = 30) {
   return result;
 }
 
+/**
+ * Alert-decision policy for one stuck-manifest reap. Pure — no I/O — so it is
+ * unit-testable in isolation (mirrors buildRetryAlerts in ngds-retry.js).
+ * Returns 0 or 1 PublishStuck alert. WARNING severity (routes to
+ * devrel-deploys, not on-call): the watchdog already recovered the wedge by
+ * force-failing the manifest and releasing the lock, so this is a "publish got
+ * stuck and was auto-cleaned" heads-up, not an active outage.
+ */
+export function buildPublishStuckAlert({ reaped = 0, sessionIds = [] } = {}) {
+  if (reaped <= 0) return null;
+  const ids = sessionIds.filter(Boolean).slice(0, 10);
+  return {
+    eventType: 'PublishStuck',
+    severity: 'WARNING',
+    subject: `Content publish stuck: ${reaped} manifest(s) auto-failed`,
+    body: `The stuck-manifest watchdog force-FAILED ${reaped} PUBLISHING manifest(s) `
+        + `that stopped making progress and released their publish lock(s).`
+        + (ids.length ? ` Session(s): ${ids.join(', ')}.` : '')
+        + ` Investigate the interrupted publish in the admin PipelineLog.`,
+  };
+}
+
 export async function cleanupStuckPublishing(olderThanMinutes = 30, legacyOlderThanMinutes = 60) {
   const { ContentManifest } = cds.entities('com.sap.developers.ims');
   const LOG = cds.log('jobs/cleanup');
@@ -175,7 +198,20 @@ export async function cleanupStuckPublishing(olderThanMinutes = 30, legacyOlderT
   const chunked = stuck.filter(r => r.sessionId).length;
   const legacy  = stuck.length - chunked;
   LOG.info(`Marked ${stuck.length} stuck PUBLISHING manifests as FAILED (chunked: ${chunked} > ${olderThanMinutes}m, legacy: ${legacy} > ${legacyOlderThanMinutes}m)`);
-  return { reaped: stuck.length, sessionIds: stuck.filter(r => r.sessionId).map(r => r.sessionId) };
+  const sessionIds = stuck.filter(r => r.sessionId).map(r => r.sessionId);
+
+  // Push-alert on findings (fail-open, DB-gated, no-op when disabled). Sits
+  // BESIDE the FAILED-status write + PipelineLog summary — never replaces them.
+  const alert = buildPublishStuckAlert({ reaped: stuck.length, sessionIds });
+  if (alert) {
+    await alerting.raise({
+      ...alert,
+      category: 'ALERT',
+      resource: { resourceName: 'publish-stuck-manifest-watchdog', resourceType: 'job' },
+    });
+  }
+
+  return { reaped: stuck.length, sessionIds };
 }
 
 export async function pruneOrphanEmbeddings() {

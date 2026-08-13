@@ -15,6 +15,7 @@ import { createSessionHelpers } from './content-publish-session.js';
 import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';
 import { tutorialsTableInfo } from './_tutorials-table.js';
 import * as metrics from './metrics.js';
+import * as alerting from './alerting.js';
 import { resolveSecret } from './secret-resolver.js';
 import { setContentCacheHeaders } from './edge-cache-headers.js';
 import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
@@ -1719,6 +1720,23 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         namespace
       );
       LOG.warn(`[content/pipeline-log] recorded FAILED ${type} row id=${logId} initiator=${initiator || 'ci'}`);
+
+      // #1718: raise an ANS alert for the pipeline RUN failure, giving on-call
+      // parity with the other alerted failure paths. This endpoint is ONLY hit
+      // by rebuild-content(-qa).yml's `if: failure()` step, so every call here
+      // is a genuine CI pipeline failure. Complements (does not replace) the
+      // workflow's own GitHub-issue notifier (#1373). Fire-and-forget, fail-open.
+      const envLabel = (metadata && typeof metadata === 'object' && metadata.env) ? String(metadata.env) : 'unknown';
+      void alerting.raise({
+        eventType: 'RebuildPipelineFailed',
+        severity: 'ERROR',
+        category: 'ALERT',
+        subject: `Rebuild pipeline FAILED — ${type} (${envLabel})`,
+        body: (summary ? String(summary) : `${type} pipeline run failed in CI.`)
+            + (errorDetails ? `\n${String(errorDetails).slice(0, 1000)}` : ''),
+        resource: { resourceName: `rebuild-${envLabel}`, resourceType: 'pipeline' },
+      });
+
       res.status(201).json({ id: logId, status: 'FAILED', pipelineType: type });
     } catch (err) {
       LOG.error(`[content/pipeline-log] ${err.message}`);

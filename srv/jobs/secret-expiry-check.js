@@ -15,6 +15,7 @@
 
 import cds from '@sap/cds';
 import { checkSecretPresence } from '../lib/secret-presence.js';
+import * as alerting from '../lib/alerting.js';
 
 const LOG = cds.log('jobs/secret-expiry-check');
 
@@ -42,6 +43,33 @@ export function classifySeverity(daysRemaining) {
 }
 
 /**
+ * Alert-decision policy for one expiry run. Pure — no I/O — so thresholds and
+ * severities are unit-testable in isolation (mirrors buildRetryAlerts in
+ * ngds-retry.js). Returns 0 or 1 SecretExpiringSoon alert.
+ *
+ * Severity ladder: any CRITICAL (already expired, or value missing from
+ * credstore) is urgent → ERROR (routes to devrel-oncall). Warning-tier only
+ * (expiring within WARNING_THRESHOLD_DAYS) → WARNING (routes to devrel-deploys).
+ * INFO-tier alone is intentionally silent — it already shows in the admin
+ * popover and would only add noise to an on-call channel.
+ */
+export function buildSecretExpiryAlerts({ critical = 0, warning = 0, criticalKeys = [], warningKeys = [] } = {}) {
+  if (critical === 0 && warning === 0) return [];
+  const parts = [];
+  if (critical > 0) parts.push(`${critical} expired or missing`);
+  if (warning > 0) parts.push(`${warning} expiring within ${WARNING_THRESHOLD_DAYS} days`);
+  const bodyLines = [];
+  if (criticalKeys.length) bodyLines.push(`Expired/missing: ${criticalKeys.join(', ')}`);
+  if (warningKeys.length) bodyLines.push(`Expiring soon: ${warningKeys.join(', ')}`);
+  return [{
+    eventType: 'SecretExpiringSoon',
+    severity: critical > 0 ? 'ERROR' : 'WARNING',
+    subject: `Secrets: ${parts.join(', ')}`,
+    body: bodyLines.join('. ') || 'One or more tracked secrets need rotation.',
+  }];
+}
+
+/**
  * Run the daily expiry check. Returns a structured summary for PipelineLog.
  *
  * The cron passes `force: true` to `checkSecretPresence` so the daily
@@ -66,6 +94,7 @@ export async function runSecretExpiryCheck(deps = {}) {
   const now = new Date();
   const counts = { critical: 0, warning: 0, info: 0, missingValues: 0 };
   const criticalKeys = [];
+  const warningKeys = [];
 
   for (const row of rows) {
     // Presence probe first — a missing value trumps expiry classification.
@@ -89,11 +118,29 @@ export async function runSecretExpiryCheck(deps = {}) {
       LOG.warn(`secret ${row.key} expired or expiring today (${days} days)`);
     } else if (severity === 'WARNING') {
       counts.warning += 1;
+      warningKeys.push(row.key);
       LOG.info(`secret ${row.key} expires in ${days} days`);
     } else if (severity === 'INFO') {
       counts.info += 1;
       LOG.info(`secret ${row.key} expires in ${days} days`);
     }
+  }
+
+  // Push-alert on findings (fail-open, DB-gated, no-op when disabled). Sits
+  // BESIDE the popover/PipelineLog signals — never replaces them. Full key
+  // lists (not the summary's truncated criticalKeys) go into the alert body,
+  // themselves capped so a large backlog can't bloat the payload.
+  for (const alert of buildSecretExpiryAlerts({
+    critical: counts.critical,
+    warning: counts.warning,
+    criticalKeys: criticalKeys.slice(0, 10),
+    warningKeys: warningKeys.slice(0, 10),
+  })) {
+    await alerting.raise({
+      ...alert,
+      category: 'ALERT',
+      resource: { resourceName: 'secret-expiry-check', resourceType: 'job' },
+    });
   }
 
   return {
