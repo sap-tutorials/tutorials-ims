@@ -30,6 +30,28 @@ function niceName(name: string | undefined, login: string): string {
   return name && name !== 'Unknown' ? name : login
 }
 
+/** Build login→advocate-slug from the /api/advocates roster (fail-open shape-tolerant). */
+export function advocateLoginToSlug(roster: unknown): Map<string, string> {
+  const map = new Map<string, string>()
+  if (!Array.isArray(roster)) return map
+  for (const a of roster) {
+    if (!a || typeof a !== 'object') continue
+    const slug = (a as any).slug
+    if (!slug) continue
+    let login = (a as any).githubLogin
+      ? normalizeAuthorLogin(`https://github.com/${(a as any).githubLogin}`)
+      : null
+    if (!login && Array.isArray((a as any).links)) {
+      const gh = (a as any).links.find(
+        (l: any) => String(l?.kind).toLowerCase() === 'github' && l?.url,
+      )
+      if (gh) login = normalizeAuthorLogin(gh.url)
+    }
+    if (login && !map.has(login)) map.set(login, slug)
+  }
+  return map
+}
+
 /** Group tutorial rows by normalized author login. */
 export function buildAuthorIndex(
   rows: AuthorTutorialRow[],
