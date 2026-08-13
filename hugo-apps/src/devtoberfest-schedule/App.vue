@@ -6,7 +6,7 @@ import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow } from '../devtoberfest-schedule-shared/types';
-import { formatViewerLocal, formatHomeZone } from '../devtoberfest-schedule-shared/format-session-time';
+import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
 
 const loading = ref(true);
 const error = ref('');
@@ -240,7 +240,6 @@ defineExpose({ filters });
               <td>
                 <template v-if="(row as any).scheduledStart">
                   {{ formatViewerLocal((row as any).scheduledStart) }}
-                  <span v-if="(row as any).scheduledTimeZone" class="sched-time">{{ formatHomeZone((row as any).scheduledStart, (row as any).scheduledTimeZone) }}</span>
                 </template>
                 <template v-else>—</template>
               </td>
@@ -452,11 +451,6 @@ defineExpose({ filters });
 .sched-title-cell {
   font-weight: 500;
   max-width: 28rem;
-}
-
-.sched-time {
-  color: var(--sapContent_LabelColor, #6a6d70);
-  margin-left: 0.25rem;
 }
 
 .sched-links-cell {
