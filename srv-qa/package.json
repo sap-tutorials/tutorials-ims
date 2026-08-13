@@ -20,7 +20,7 @@
     "hugo-extended": "0.147.8",
     "jose": "6.2.3",
     "markdown-it": "^14.3.0",
-    "undici": "8.6.0"
+    "undici": "8.9.0"
   },
   "cds": {
     "requires": {
