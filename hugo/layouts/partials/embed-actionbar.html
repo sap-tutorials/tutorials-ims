@@ -1,0 +1,70 @@
+{{/*
+  Embed-mode bottom action bar (issue #1720).
+
+  Renders three controls — Steps, Help with Joule, Next — as a fixed rail at the
+  bottom of the tutorial, shown ONLY in embed modes (html[data-embed], set by the
+  pre-paint in head.html + hugo-apps/src/embed). Outside embed mode it stays
+  display:none and the normal mobile FAB (#op-mobile-fab) + sticky prev/next bar
+  (.tutorial-stepnav) handle navigation.
+
+  Why a dedicated bar instead of re-using #op-mobile-fab / #joule-step-fab /
+  .tutorial-stepnav: embed mode used to collapse all three down to just the
+  "Steps" FAB (#1720). We want all three present, and — when the embed viewport
+  is narrow — collapsed to icon-only circles rather than removed. #op-mobile-fab
+  is a <ui5-button> whose slotted label can't be reliably hidden with a media
+  query, so the rail renders plain controls we fully own for the label↔icon
+  transition (ui5-overrides.css §embed action bar).
+
+  Wiring (all reused — no new behavior):
+    Steps → window.opOpenStepSheet() (exposed by u1-object-page.html); opens the
+            existing #op-mobile-sheet step navigator.
+    Joule → revealed + click-wired by joule.js when ChatConfig.enabled (mirrors
+            #joule-step-fab). Rendered hidden; absent entirely when chat is
+            disabled, or on QA / preview builds.
+    Next  → baked .Params.next link (same target as the sticky prev/next bar).
+*/}}
+{{- if not site.Params.previewMode -}}
+<div class="embed-actionbar" aria-label="Tutorial actions">
+  {{- if .Params.steps -}}
+  <button
+    type="button"
+    id="embed-steps-btn"
+    class="embed-actionbar__btn embed-actionbar__btn--steps"
+    aria-label="Open step list"
+  >
+    <span class="embed-actionbar__icon" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <span class="embed-actionbar__label">Steps</span>
+  </button>
+  {{- end -}}
+  {{- if not site.Params.qa -}}
+  <button
+    type="button"
+    id="embed-joule-btn"
+    class="embed-actionbar__btn embed-actionbar__btn--joule"
+    hidden
+    aria-label="Get help with this step from Joule"
+  >
+    <span class="embed-actionbar__icon" aria-hidden="true">{{ partial "joule-icon.html" (dict "size" "small") }}</span>
+    <span class="embed-actionbar__label">Help with Joule</span>
+  </button>
+  {{- end -}}
+  {{- with .Params.next -}}
+  <a
+    href="/tutorials/{{ . }}"
+    class="embed-actionbar__btn embed-actionbar__btn--next"
+    aria-label="Next tutorial"
+  >
+    <span class="embed-actionbar__label">Next</span>
+    <span class="embed-actionbar__icon" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 8h9M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+  </a>
+  {{- end -}}
+</div>
+{{- end -}}

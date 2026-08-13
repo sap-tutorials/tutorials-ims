@@ -890,20 +890,29 @@
 
   loadConfig().then(cfg => {
     const stepFab = document.getElementById('joule-step-fab');
+    // #1720 — the embed-mode action bar's Joule button mirrors the step FAB:
+    // same enabled-gating, same step-context open. Removed when chat is off.
+    const embedJouleBtn = document.getElementById('embed-joule-btn');
+    const openJouleForCurrentStep = () => {
+      const ctx = (typeof window.opGetCurrentStep === 'function')
+        ? window.opGetCurrentStep()
+        : { slug: '', n: 1, heading: '' };
+      window.joule.openWithStepContext(ctx);
+    };
     if (!cfg.enabled) {
       if (trigger) trigger.remove();
       if (stepFab) stepFab.remove();
+      if (embedJouleBtn) embedJouleBtn.remove();
       return;
     }
     if (trigger) trigger.hidden = false;
+    if (embedJouleBtn) {
+      embedJouleBtn.hidden = false;
+      embedJouleBtn.addEventListener('click', openJouleForCurrentStep);
+    }
     if (stepFab) {
       stepFab.hidden = false;
-      stepFab.addEventListener('click', () => {
-        const ctx = (typeof window.opGetCurrentStep === 'function')
-          ? window.opGetCurrentStep()
-          : { slug: '', n: 1, heading: '' };
-        window.joule.openWithStepContext(ctx);
-      });
+      stepFab.addEventListener('click', openJouleForCurrentStep);
       // FAB / sticky prev-next-bar overlap (issues #102, #456) is now handled
       // entirely in CSS: `body:has(.tutorial-stepnav) .joule-step-fab` in
       // ui5-overrides.css lifts the FAB above the fixed .tutorial-stepnav bar
