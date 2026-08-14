@@ -672,6 +672,54 @@
 .hp-featured-carousel__dots button[aria-selected="true"] { opacity: 1; }
 .hp-featured-carousel__see-all { color: var(--sapLinkColor, #0070f3); text-decoration: none; }
 .hp-featured-carousel__see-all:hover { text-decoration: underline; }
+/* #1782 — Top Tutorials mode toggle + window selector */
+.hp-featured-carousel__modeswitch {
+  display: inline-flex;
+  gap: 0;
+  margin: 0 0 0.75rem;
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.hp-featured-carousel__mode {
+  appearance: none;
+  border: 0;
+  background: var(--sapField_Background, #fff);
+  color: var(--sapContent_LabelColor, #556b82);
+  padding: 0.375rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hp-featured-carousel__mode.is-active {
+  background: var(--sapButton_Selected_Background, #0064d9);
+  color: var(--sapButton_Selected_TextColor, #fff);
+}
+.hp-featured-carousel__windows {
+  display: inline-flex;
+  gap: 0.375rem;
+  margin: 0 0 0.75rem 0.75rem;
+}
+.hp-featured-carousel__window {
+  appearance: none;
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  background: var(--sapField_Background, #fff);
+  color: var(--sapContent_LabelColor, #556b82);
+  border-radius: 1rem;
+  padding: 0.25rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+}
+.hp-featured-carousel__window.is-active {
+  background: var(--sapButton_Selected_Background, #0064d9);
+  color: var(--sapButton_Selected_TextColor, #fff);
+  border-color: transparent;
+}
+.hp-featured-carousel__empty {
+  color: var(--sapContent_LabelColor, #556b82);
+  padding: 1rem 0;
+  margin: 0;
+}
 @media (prefers-reduced-motion: reduce) {
   .hp-featured-carousel__slide,
   .hp-featured-carousel__slide.is-fading-out,
