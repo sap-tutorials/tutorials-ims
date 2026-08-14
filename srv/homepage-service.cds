@@ -160,4 +160,16 @@ service HomepageService {
   // (#1032) Featured missions carousel snapshot. Public — no auth. 60s cache;
   // ETag so the Vue island can hydrate cheaply.
   function featuredTopics() returns FeaturedTopicsPayload;
+
+  // (#1782) Time-fenced Top Tutorials ranking. Public — no auth. 60s cache; ETag.
+  // Returns all three windows (90/180/360) in one payload so the island's
+  // window selector switches client-side with no refetch.
+  type TopTutorialCard {
+    slug: String; title: String; description: String; level: String;
+    time: Integer; primaryTag: String; href: String; isNew: Boolean;
+  }
+  type TopTutorialItem   { rank: Integer; slug: String; completions: Integer; card: TopTutorialCard; }
+  type TopTutorialsWindow { windowDays: Integer; items: many TopTutorialItem; }
+  type TopTutorialsPayload { computedAt: Timestamp; etag: String; windows: many TopTutorialsWindow; }
+  function topTutorials() returns TopTutorialsPayload;
 }
