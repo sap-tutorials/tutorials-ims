@@ -67,19 +67,15 @@ export async function recomputeSnapshot(tx) {
   return { count: outRows.length, computedAt: new Date(computedAtIso) };
 }
 
-export async function readSnapshotForFeed(_tx) {
-  // Read-only function: use the DB service directly (autocommit per query) to
-  // avoid holding an uncommitted read transaction open on the SQLite connection —
-  // in-memory SQLite has no WAL mode so an open read tx blocks subsequent writes.
-  const db = await cds.connect.to('db');
+export async function readSnapshotForFeed(tx) {
   const { TopTutorialsSnapshot } = cds.entities(NS);
-  const rows = await db.run(SELECT.from(TopTutorialsSnapshot).orderBy('windowDays asc', 'rank asc'));
+  const rows = await tx.run(SELECT.from(TopTutorialsSnapshot).orderBy('windowDays asc', 'rank asc'));
   if (!rows.length) {
     return { computedAt: null, etag: computeTopTutorialsEtag({ computedAt: new Date(0), rows: [] }), windows: [] };
   }
 
   const slugList = [...new Set(rows.map(r => lower(r.slug)))];
-  const cardBySlug = await hydrateTutorialCards(db, slugList);
+  const cardBySlug = await hydrateTutorialCards(tx, slugList);
 
   const byWindow = new Map();
   for (const r of rows) {
@@ -105,17 +101,17 @@ export async function readSnapshotForFeed(_tx) {
 // Tutorial-only card hydration (top tutorials are never missions). LOB-safe
 // description fetch on HANA (separate query) to avoid LOB-locator expiry —
 // mirrors featured-topics-snapshot.readSnapshotForFeed.
-// `db` is the database service (autocommit context), not a tx.
-async function hydrateTutorialCards(db, slugList) {
+async function hydrateTutorialCards(tx, slugList) {
   const { Tutorials } = cds.entities(NS);
   const cardBySlug = new Map();
   if (!slugList.length) return cardBySlug;
 
-  const tRows = await db.run(SELECT.from(Tutorials)
+  const tRows = await tx.run(SELECT.from(Tutorials)
     .columns('slug', 'title', 'experienceTag', 'averageTimeToComplete', 'primaryTag')
     .where({ slug: { in: slugList } })
     .and(`status = 'ACTIVE' or status is null`));
 
+  const db = await cds.connect.to('db');
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
   let descBySlug = new Map();
   if (isHana) {
@@ -126,7 +122,7 @@ async function hydrateTutorialCards(db, slugList) {
     );
     descBySlug = new Map(descRows.map(r => [lower(r.SLUG ?? r.slug), decodeDescription(r.DESCRIPTION ?? r.description)]));
   } else {
-    const descRows = await db.run(SELECT.from(Tutorials).columns('slug', 'description').where({ slug: { in: slugList } }));
+    const descRows = await tx.run(SELECT.from(Tutorials).columns('slug', 'description').where({ slug: { in: slugList } }));
     descBySlug = new Map(descRows.map(r => [lower(r.slug), r.description || '']));
   }
 

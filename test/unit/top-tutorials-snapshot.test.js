@@ -49,7 +49,9 @@ describe('top-tutorials-snapshot', () => {
     expect(WINDOWS).toEqual([90, 180, 360]);
     expect(count).toBeGreaterThan(0);
 
-    const feed = await readSnapshotForFeed(cds.tx({}));
+    const rtx = cds.tx({});
+    const feed = await readSnapshotForFeed(rtx);
+    await rtx.rollback();   // read-only; release the lock before the next write
     const w90 = feed.windows.find(w => w.windowDays === 90).items;
     // t-popular (3) ranks above t-mid (1); t-inactive excluded entirely.
     expect(w90.map(i => i.slug)).toEqual(['t-popular', 't-mid']);
@@ -65,9 +67,13 @@ describe('top-tutorials-snapshot', () => {
 
   it('recompute is idempotent (atomic replace, not append)', async () => {
     const tx1 = cds.tx({}); await recomputeSnapshot(tx1); await tx1.commit();
-    const before = (await readSnapshotForFeed(cds.tx({}))).windows.find(w => w.windowDays === 90).items.length;
+    const rtx1 = cds.tx({});
+    const before = (await readSnapshotForFeed(rtx1)).windows.find(w => w.windowDays === 90).items.length;
+    await rtx1.rollback();   // read-only; release the lock before the next write
     const tx2 = cds.tx({}); await recomputeSnapshot(tx2); await tx2.commit();
-    const after = (await readSnapshotForFeed(cds.tx({}))).windows.find(w => w.windowDays === 90).items.length;
+    const rtx2 = cds.tx({});
+    const after = (await readSnapshotForFeed(rtx2)).windows.find(w => w.windowDays === 90).items.length;
+    await rtx2.rollback();
     expect(after).toBe(before);
     expect(after).toBeLessThanOrEqual(TOP_N);
   });
@@ -75,7 +81,9 @@ describe('top-tutorials-snapshot', () => {
   it('empty table → empty windows + stable etag, no throw', async () => {
     const db = await cds.connect.to('db');
     await db.run(DELETE.from(cds.entities(NS).TopTutorialsSnapshot));
-    const feed = await readSnapshotForFeed(cds.tx({}));
+    const rtx = cds.tx({});
+    const feed = await readSnapshotForFeed(rtx);
+    await rtx.rollback();
     expect(feed.windows).toEqual([]);
     expect(typeof feed.etag).toBe('string');
   });
