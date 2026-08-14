@@ -496,13 +496,20 @@ defineExpose({
                radio-only widget silently broke. -->
           <template v-if="q.choiceMode === 'multiple'">
             <div v-for="opt in q.options" :key="opt" class="option-row">
-              <!-- Conditional disabled via v-bind — UI5 web components treat
-                   attribute *presence* as truthy (disabled="false" still
-                   disables). Same pattern as the radio / textarea / submit. -->
+              <!-- Both `checked` and `disabled` go through v-bind because UI5
+                   web components treat attribute *presence* as truthy
+                   (checked="false" / disabled="false" still apply). A plain
+                   `:checked="isOptionSelected(...)"` emitted checked="" on every
+                   unselected option, so the widget rendered every box already
+                   ticked and the exact-set-match graded "Not quite" (#1774).
+                   Merge both guards into one object so a false value emits no
+                   attribute at all. Same pattern as the Submit button. -->
               <ui5-checkbox
                 :text="opt"
-                :checked="isOptionSelected(q.id, opt)"
-                v-bind="result === 'correct' ? { disabled: true } : {}"
+                v-bind="{
+                  ...(isOptionSelected(q.id, opt) ? { checked: true } : {}),
+                  ...(result === 'correct' ? { disabled: true } : {}),
+                }"
                 @change="onCheckboxChange(q.id, opt, $event)"
               />
             </div>
@@ -510,18 +517,19 @@ defineExpose({
           <!-- Single-select (radio) — choiceMode 'single' or unset. -->
           <template v-else>
             <div v-for="opt in q.options" :key="opt" class="option-row">
-              <!-- Conditional disabled via v-bind because UI5 web components
-                   treat attribute *presence* as truthy regardless of value
-                   (disabled="false" still disables). See
-                   docs/developers/reference/vue-islands-gotchas.md § UI5
-                   boolean attr coercion. Same pattern as the Submit button
-                   and the textarea below. -->
+              <!-- Both `checked` and `disabled` go through v-bind because UI5
+                   web components treat attribute *presence* as truthy
+                   (checked="false" / disabled="false" still apply). See the
+                   checkbox branch above and docs/developers/reference/
+                   vue-islands-gotchas.md § UI5 boolean attr coercion (#1774). -->
               <ui5-radio-button
                 :name="`q-${stepNumber}-${qi}`"
                 :value="opt"
                 :text="opt"
-                :checked="isOptionSelected(q.id, opt)"
-                v-bind="result === 'correct' ? { disabled: true } : {}"
+                v-bind="{
+                  ...(isOptionSelected(q.id, opt) ? { checked: true } : {}),
+                  ...(result === 'correct' ? { disabled: true } : {}),
+                }"
                 @change="onRadioChange(q.id, opt)"
               />
             </div>
