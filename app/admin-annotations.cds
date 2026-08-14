@@ -3263,7 +3263,24 @@ annotate AdminService.HomepageShelves {
                   };
   badge           @Common.ValueListWithFixedValues @Common.Label: 'Badge';
   linkStatus             @Common.ValueListWithFixedValues @Common.Label: 'Link health';
-  linkStatusOverride     @Common.ValueListWithFixedValues @Common.Label: 'Link health override';
+  // linkStatusOverride: a bare String-enum type does not reliably materialise a
+  // Fiori dropdown from @Common.ValueListWithFixedValues alone, so pair it with
+  // an explicit code list (LinkStatusChoices, served in-memory) exactly like
+  // verb/shelf. Blank clears the override → auto-detect resumes next run.
+  linkStatusOverride     @Common.ValueListWithFixedValues @Common.Label: 'Link health override (blank = auto-detect)'
+                  // Opt out of RPT-1: adding a @Common.ValueList.CollectionPath makes the
+                  // field @cap-js/ai-eligible, which auto-hooks AICore and can throw
+                  // "No service definition found for 'AICore'" → Internal Server Error on
+                  // the OP (see personaTags below + memory: cap-ai-plugin-aicore-kind-resolution).
+                  // A 3-value link-health picker has nothing to recommend anyway.
+                  @UI.RecommendationState: 0
+                  @Common.ValueList: {
+                    CollectionPath: 'LinkStatusChoices',
+                    Parameters: [
+                      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: linkStatusOverride, ValueListProperty: 'code'  },
+                      { $Type: 'Common.ValueListParameterDisplayOnly',                                        ValueListProperty: 'label' }
+                    ]
+                  };
   authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
   // (#1552) Labels for the remaining OP form fields. The OP FieldGroup #Main
   // record entries carry no inline `Label:`, so without a @Common.Label these
@@ -3573,7 +3590,15 @@ annotate AdminService.HomepageForYouCandidatesAdmin with {
                   Parameters: [{ $Type: 'Common.ValueListParameterInOut',
                                  LocalDataProperty: personaHidden, ValueListProperty: 'tag' }]
                 };
-  linkStatusOverride @Common.ValueListWithFixedValues @Common.Label: 'Link health override';
+  linkStatusOverride @Common.ValueListWithFixedValues @Common.Label: 'Link health override (blank = auto-detect)'
+                  @UI.RecommendationState: 0  // see HomepageShelves.linkStatusOverride above (RPT-1/AICore opt-out)
+                  @Common.ValueList: {
+                    CollectionPath: 'LinkStatusChoices',
+                    Parameters: [
+                      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: linkStatusOverride, ValueListProperty: 'code'  },
+                      { $Type: 'Common.ValueListParameterDisplayOnly',                                        ValueListProperty: 'label' }
+                    ]
+                  };
 };
 
 // --- KG Communities (#917) ---
