@@ -284,6 +284,14 @@ const STATIC_DIR = join(__dirname, 'static')
 const TEMP_DIR = join(__dirname, 'static-new')
 const OLD_DIR = join(__dirname, 'static-old')
 
+// Static subtrees that are shipped ONLY by the full MTA deploy (root mta.yaml
+// builds hugo/public-qa inline into static/qa) and are NOT part of the
+// content-rebuild tarball. The /admin/rebuild handler replaces the whole
+// static dir atomically, which would otherwise WIPE these; the preserve loop
+// there carries them forward. Keep this list minimal — only deploy-shipped,
+// content-rebuild-independent trees belong here.
+const REBUILD_PRESERVE_DIRS = ['qa']
+
 // Admin shell + feature components served directly by approuter
 const APP_MOUNTS = {
   '/scanner-ui': join(__dirname, '..', 'app', 'scanner', 'webapp'),
@@ -380,6 +388,23 @@ async function rebuildHandler(req, res, next) {
     if (existsSync(OLD_DIR)) rmSync(OLD_DIR, { recursive: true })
     if (existsSync(STATIC_DIR)) renameSync(STATIC_DIR, OLD_DIR)
     renameSync(TEMP_DIR, STATIC_DIR)
+    // Preserve deploy-only static subtrees across the atomic swap. The
+    // content-rebuild tarball (rebuild-content.yml "Assemble static content")
+    // intentionally does NOT carry the QA author-preview navigator (static/qa)
+    // — it is shipped only by the full MTA deploy and is independent of content
+    // rebuilds. Without this, the swap above WIPES static/qa off the running pod
+    // on every full/catalog-only rebuild, so /tutorials-qa/ 404s until the next
+    // deploy (root cause of the recurring "no QA navigator" incidents). Carry
+    // each listed subtree forward from the previous static dir ONLY when the new
+    // tarball didn't ship it, so a future tarball that DOES include it still wins.
+    for (const sub of REBUILD_PRESERVE_DIRS) {
+      const from = join(OLD_DIR, sub)
+      const to = join(STATIC_DIR, sub)
+      if (existsSync(from) && !existsSync(to)) {
+        renameSync(from, to)
+        console.log(`[rebuild] preserved static/${sub} across swap (not in tarball)`)
+      }
+    }
     if (existsSync(OLD_DIR)) rmSync(OLD_DIR, { recursive: true })
 
     const timestamp = new Date().toISOString()
