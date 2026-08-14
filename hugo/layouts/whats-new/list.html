@@ -45,6 +45,7 @@
         {{- $catItems := where $items "category" $cat -}}
         {{ with $catItems }}
         <div class="wn-cat wn-cat--{{ $cat | lower }}">
+          {{/* security-reviewed: $catLabels is a template-defined static dict (top of file); values are trusted literal labels with intended HTML entities (e.g. "New &amp; improved"), not user/runtime input. */ -}}
           <h3 class="wn-cat__title">{{ index $catLabels $cat | safeHTML }}</h3>
           <ul class="wn-list">
             {{ range . }}
