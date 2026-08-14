@@ -11,6 +11,7 @@ import { checkRateLimit } from './lib/per-user-rate-limit.js';
 import * as metrics from './lib/metrics.js';
 import * as mcpDev from './lib/mcp-developer-tools.js';
 import { maybeAutoSendCompletion } from './lib/ngds-autosend.js';
+import { stampSubmissionId } from './lib/task-record-submission-id.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
@@ -218,7 +219,7 @@ export default class DeveloperService extends cds.ApplicationService {
         const attemptNumber = tutorialRow?.attemptNumber ?? 1;
 
         const now = new Date().toISOString();
-        await INSERT.into(dbTaskRecords).entries({
+        await INSERT.into(dbTaskRecords).entries(stampSubmissionId({
           user_ID: dbUser.ID,
           taskLegacyId: step.legacyId,
           taskType: 'STEP',
@@ -228,7 +229,7 @@ export default class DeveloperService extends cds.ApplicationService {
           titleSnapshot: step.title,
           legacyId: await getNextLegacyId('TaskRecords', db),
           attemptNumber,
-        });
+        }));
 
         // Recalculate tutorial progress
         await this._updateTutorialProgress(dbUser, tutorial, db);
@@ -295,7 +296,7 @@ export default class DeveloperService extends cds.ApplicationService {
         .where({ ID: { in: liveRows.map(r => r.ID) } });
 
       // 7. Insert fresh TUTORIAL-level row at attempt+1
-      await INSERT.into(dbTaskRecords).entries({
+      await INSERT.into(dbTaskRecords).entries(stampSubmissionId({
         user_ID: dbUser.ID,
         taskLegacyId: tutorial.legacyId,
         taskType: 'TUTORIAL',
@@ -304,7 +305,7 @@ export default class DeveloperService extends cds.ApplicationService {
         attemptNumber: maxAttempt + 1,
         titleSnapshot: tutorial.title,
         legacyId: newLegacyId,
-      });
+      }));
 
       // 8. Emit audit event for traceability
       await cds.emit('TutorialProgressReset', {
@@ -348,11 +349,11 @@ export default class DeveloperService extends cds.ApplicationService {
       if (existing) {
         const priorStatus = existing.status;
         if (existing.status !== 'COMPLETED') {
-          await UPDATE(dbTaskRecords, existing.ID).set({
+          await UPDATE(dbTaskRecords, existing.ID).set(stampSubmissionId({
             status: 'COMPLETED',
             progress: 100,
             completionDate: new Date().toISOString()
-          });
+          }, existing));
         }
         const [row] = await SELECT.from(dbTaskRecords).where({ ID: existing.ID });
         // Fire only on the edge → COMPLETED (skip when it was already complete).
@@ -371,6 +372,7 @@ export default class DeveloperService extends cds.ApplicationService {
         legacyId: await getNextLegacyId('TaskRecords', db)
       };
 
+      stampSubmissionId(record);
       await INSERT.into(dbTaskRecords).entries(record);
       const [persisted] = await SELECT.from(dbTaskRecords).where({ legacyId: record.legacyId });
       await maybeAutoSendCompletion({ record: persisted, priorStatus: null, db });
@@ -1129,10 +1131,10 @@ export default class DeveloperService extends cds.ApplicationService {
 
     if (existing) {
       const priorStatus = existing.status;
-      await UPDATE(dbTaskRecords, existing.ID).set({
+      await UPDATE(dbTaskRecords, existing.ID).set(stampSubmissionId({
         progress, status,
         completionDate: status === 'COMPLETED' ? new Date().toISOString() : existing.completionDate
-      });
+      }, existing));
       // PROD-only auto-send: fire on the edge → COMPLETED (not on repeat saves
       // of an already-complete tutorial). Re-read to hand the client the
       // persisted row (legacyId etc.). Gated + non-throwing inside the helper.
@@ -1142,7 +1144,7 @@ export default class DeveloperService extends cds.ApplicationService {
       }
     } else {
       const newLegacyId = await getNextLegacyId('TaskRecords', db);
-      await INSERT.into(dbTaskRecords).entries({
+      await INSERT.into(dbTaskRecords).entries(stampSubmissionId({
         user_ID: dbUser.ID,
         taskLegacyId: tutorial.legacyId,
         taskType: 'TUTORIAL',
@@ -1150,7 +1152,7 @@ export default class DeveloperService extends cds.ApplicationService {
         titleSnapshot: tutorial.title,
         legacyId: newLegacyId,
         attemptNumber: currentAttempt,
-      });
+      }));
       // New row that lands directly in COMPLETED (single-step tutorial): treat
       // as a fresh completion (priorStatus null → not previously complete).
       if (status === 'COMPLETED') {
