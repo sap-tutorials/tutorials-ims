@@ -72,7 +72,7 @@ describe('Content Pipeline Lifecycle', () => {
       expect(serveRes.headers['etag']).toBe(`"${hashOf(html)}"`);
       // CDN origin support: split browser/edge TTL + SWR (edge-cache-headers.js).
       expect(serveRes.headers['cache-control']).toBe(
-        'public, max-age=60, s-maxage=86400, stale-while-revalidate=600'
+        'public, max-age=60, s-maxage=600, stale-while-revalidate=600'
       );
       expect(serveRes.headers['x-content-source']).toBe('db');
 
