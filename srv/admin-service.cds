@@ -631,6 +631,15 @@ service AdminService {
   // makes verb/shelf RPT-1-eligible without coupling the picker to content rows.
   @readonly @cds.persistence.skip entity VerbChoices      { key code : String(20); label : String(40); }
   @readonly @cds.persistence.skip entity ShelfChoices     { key code : String(20); label : String(40); }
+  // Value help for HomepageShelves/HomepageForYouCandidates.linkStatusOverride.
+  // A bare `String enum` (HomepageLinkStatus) does NOT reliably materialise a
+  // Fiori dropdown from @Common.ValueListWithFixedValues alone — the field
+  // rendered as free text. This explicit code list (mirrors VerbChoices/
+  // ShelfChoices) drives the picker. Served in-memory by admin-service.js.
+  // Deliberately omits UNKNOWN: it's a job-written sentinel ("not yet checked"),
+  // not a meaningful admin pin — clearing the field (blank) is how you hand the
+  // link back to automatic detection.
+  @readonly @cds.persistence.skip entity LinkStatusChoices { key code : String(20); label : String(40); }
 
   // Code list for AdvocateLinks.kind — mirrors the enum on db/advocates.cds.
   // The two are kept in sync by hand; this list is the source of truth for

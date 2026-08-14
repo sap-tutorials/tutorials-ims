@@ -295,6 +295,14 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'TOOLS',        label: 'Tools'        },
       { code: 'KEEP_CURRENT', label: 'Keep current' },
     ]);
+    // Value help for HomepageShelves/HomepageForYouCandidates.linkStatusOverride.
+    // Only the three deliberate pin targets — UNKNOWN is a job sentinel and blank
+    // (cleared) is the "auto-detect" state, so neither belongs in the picker.
+    this.on('READ', 'LinkStatusChoices', () => [
+      { code: 'OK',     label: 'OK (force healthy)' },
+      { code: 'SLOW',   label: 'Slow'               },
+      { code: 'BROKEN', label: 'Broken'             },
+    ]);
     this.on('READ', 'AdvocateRegions', () => [
       { code: 'AMERICAS', label: 'Americas' },
       { code: 'EMEA',     label: 'EMEA' },
