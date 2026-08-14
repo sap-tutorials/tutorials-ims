@@ -26,6 +26,12 @@ import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/NotificationListItem.js";
 import "@ui5/webcomponents-fiori/dist/illustrations/NoNotifications.js";
+// IllustratedMessage: used by alerts island (every page), navigator (core-only),
+// advocates (core-only), devtoberfest islands (core-only), me/AllCompletions.
+// Must live here because all those pages load only ui5-core (not ui5-tutorial).
+import "@ui5/webcomponents-fiori/dist/IllustratedMessage.js";
+// ProgressIndicator: used by nav-progress.html partial (included in baseof → every page).
+import "@ui5/webcomponents/dist/ProgressIndicator.js";
 // Chrome/nav/verb icons (all icons NOT specific to tutorial lightbox)
 import "@ui5/webcomponents-icons/dist/menu2.js";
 import "@ui5/webcomponents-icons/dist/share-2.js";
