@@ -14,6 +14,11 @@ const str = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1
 
 const db = await cds.connect.to('db');
 
+// Load + compile the model so `cds.entities(...)` resolves under `cds bind --exec`
+// (there is no serving lifecycle here to populate cds.model automatically).
+const csn = await cds.load('*');
+cds.model = cds.compile.for.nodejs(csn);
+
 // Preflight: refuse --execute when eligible completions still lack a stamped
 // submissionIdCompleted — running before the backfill would emit tracking-less
 // payloads that SMC cannot deduplicate.
