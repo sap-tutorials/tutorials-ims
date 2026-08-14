@@ -24,6 +24,7 @@ import { buildEnvelope, hashEnvelope } from './lib/homepage/personalized-envelop
 import { resolveUserSapId } from './lib/resolve-db-user.js';
 import * as metrics from './lib/metrics.js';
 import { readSnapshotForFeed } from './lib/featured-topics-snapshot.js';
+import { readSnapshotForFeed as readTtSnapshotForFeed } from './lib/top-tutorials-snapshot.js';
 
 const log = cds.log('homepage-service');
 
@@ -43,6 +44,8 @@ const _state = (globalThis[STATE_KEY] ??= {
   shelves: new Map(),
   // (#1032) 60s cache for featuredTopics payload
   ft: { at: 0, payload: null },
+  // (#1782) 60s cache for topTutorials payload
+  tt: { at: 0, payload: null },
   // (#1033) 60s cache for the rewritten communityBlogs() endpoint
   communityBlogs: { at: 0, value: null },
   // (#1034) 60s cache for NewsItems-backed news() handler
@@ -54,6 +57,7 @@ export function _resetForTests() {
   _state.events = new Map();
   _state.shelves.clear();
   _state.ft = { at: 0, payload: null };
+  _state.tt = { at: 0, payload: null };
   _state.communityBlogs = { at: 0, value: null };  // #1033
   _state.news = { at: 0, value: null };            // #1034
 }
@@ -62,6 +66,11 @@ export function _resetForTests() {
  *  after recomputeSnapshot so the public endpoint serves fresh data immediately. */
 export function resetFtCache() {
   _state.ft = { at: 0, payload: null };
+}
+
+/** (#1782) Invalidate the topTutorials in-process cache. */
+export function resetTtCache() {
+  _state.tt = { at: 0, payload: null };
 }
 
 /** (#1033) Invalidate the communityBlogs in-process cache. Called by admin-service
@@ -109,6 +118,23 @@ async function _getFeaturedTopicsPayload() {
     const { computedAt, slots, etag } = await readSnapshotForFeed(tx);
     const payload = { computedAt, etag, snapshot: slots };
     _state.ft = { at: now, payload };
+    return payload;
+  } finally {
+    await tx.commit();
+  }
+}
+
+// (#1782) Module-level 60s cache for topTutorials payload.
+const TT_CACHE_MS = 60_000;
+
+async function _getTopTutorialsPayload() {
+  const now = Date.now();
+  if (_state.tt.payload && (now - _state.tt.at) < TT_CACHE_MS) return _state.tt.payload;
+  const tx = cds.tx({});
+  try {
+    const { computedAt, etag, windows } = await readTtSnapshotForFeed(tx);
+    const payload = { computedAt, etag, windows };
+    _state.tt = { at: now, payload };
     return payload;
   } finally {
     await tx.commit();
@@ -796,6 +822,24 @@ export default class HomepageService extends cds.ApplicationService {
           req.res.status(304).end();
           return req.reject(-1);
         }
+      }
+      if (req.res) {
+        req.res.setHeader('ETag', payload.etag);
+        req.res.setHeader('Cache-Control', 'public, max-age=60');
+      }
+      return payload;
+    });
+
+    // (#1782) topTutorials() — unbound function with ETag + 304 support.
+    // Public (inherits service @requires:'any'). 60s in-process cache via _state.tt.
+    this.on('topTutorials', async (req) => {
+      const payload = await _getTopTutorialsPayload();
+      const inm = req.req?.headers?.['if-none-match'];
+      if (inm && inm === payload.etag && req.res) {
+        req.res.setHeader('ETag', payload.etag);
+        req.res.setHeader('Cache-Control', 'public, max-age=60');
+        req.res.status(304).end();
+        return req.reject(-1);
       }
       if (req.res) {
         req.res.setHeader('ETag', payload.etag);
