@@ -56,6 +56,7 @@ export function advocateLoginToSlug(roster: unknown): Map<string, string> {
 export function buildAuthorIndex(
   rows: AuthorTutorialRow[],
   advocates: Map<string, string>,
+  activeSlugs?: Set<string>,
 ): AuthorIndex {
   // Sort once up front: most-recent-first, title A→Z tiebreak. Push order = display order.
   const sorted = [...rows].sort((a, b) => {
@@ -68,6 +69,17 @@ export function buildAuthorIndex(
   for (const row of sorted) {
     const login = normalizeAuthorLogin(row.authorProfile)
     if (!login) continue
+    // Exclude tutorials not in the active/published catalog: INACTIVE /
+    // soft-deleted tutorials, and stale .tutorial-cache entries for slugs
+    // deleted from the source repo. activeSlugs is the ACTIVE-only catalog slug
+    // set (status='ACTIVE' or null — srv/lib/build-catalog.js) that the main
+    // navigator/browse pipeline already uses. Without this the author pages +
+    // "more from author" rail surfaced unpublished/deleted tutorials.
+    // Fail-open: only filter when a non-empty set was provided (degraded /
+    // ALLOW_EMPTY_CAP builds pass empty/undefined → no filtering). Compare
+    // lowercase — row slugs come from mixed-case source dirs, catalog slugs are
+    // lowercase-canonical (see CLAUDE.md slug-casing rule).
+    if (activeSlugs && activeSlugs.size > 0 && !activeSlugs.has(row.slug.toLowerCase())) continue
     if (!index[login]) {
       index[login] = {
         login,

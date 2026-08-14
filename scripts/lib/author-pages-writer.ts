@@ -8,9 +8,12 @@ export function writeAuthorPages(opts: {
   advocates: Map<string, string>
   dataFile: string
   contentDir: string
+  /** ACTIVE/published catalog slug set (lowercase). Rows whose slug isn't in it
+   *  are excluded (unpublished/deleted). Fail-open when empty/undefined. */
+  activeSlugs?: Set<string>
 }): { pagesWritten: number } {
-  const { rows, advocates, dataFile, contentDir } = opts
-  const index = buildAuthorIndex(rows, advocates)
+  const { rows, advocates, dataFile, contentDir, activeSlugs } = opts
+  const index = buildAuthorIndex(rows, advocates, activeSlugs)
 
   mkdirSync(dirname(dataFile), { recursive: true })
   writeFileSync(dataFile, JSON.stringify(index, null, 2), 'utf-8')

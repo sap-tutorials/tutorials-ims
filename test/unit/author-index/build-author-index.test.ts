@@ -45,4 +45,41 @@ describe('buildAuthorIndex', () => {
     const idx = buildAuthorIndex([row({ displayName: 'Unknown' })], new Map())
     expect(idx['thomas-jung'].displayName).toBe('thomas-jung')
   })
+
+  // #1732 follow-up: author pages/rail were surfacing unpublished + deleted
+  // tutorials. buildAuthorIndex now excludes rows whose slug isn't in the
+  // active/published catalog set (status='ACTIVE' or null — same set the
+  // navigator/browse use), fail-open when the set is empty/undefined.
+  it('excludes tutorials whose slug is not in the active catalog set', () => {
+    const idx = buildAuthorIndex(
+      [row({ slug: 'published', title: 'P' }),
+       row({ slug: 'unpublished', title: 'U' })],
+      new Map(),
+      new Set(['published']),
+    )
+    expect(idx['thomas-jung'].tutorials.map(t => t.slug)).toEqual(['published'])
+  })
+  it('matches active slugs case-insensitively (mixed-case source dir vs lowercase catalog)', () => {
+    const idx = buildAuthorIndex(
+      [row({ slug: 'Extend-RAP-App', title: 'R' })],
+      new Map(),
+      new Set(['extend-rap-app']),
+    )
+    expect(idx['thomas-jung']?.tutorials.map(t => t.slug)).toEqual(['Extend-RAP-App'])
+  })
+  it('drops an author entirely when all their tutorials are inactive', () => {
+    const idx = buildAuthorIndex(
+      [row({ slug: 'gone', title: 'G' })],
+      new Map(),
+      new Set(['something-else']),
+    )
+    expect(Object.keys(idx)).toEqual([])
+  })
+  it('fail-open: no filtering when activeSlugs is undefined or empty', () => {
+    const rows = [row({ slug: 'a' }), row({ slug: 'b', title: 'B' })]
+    const undef = buildAuthorIndex(rows, new Map())
+    const empty = buildAuthorIndex(rows, new Map(), new Set())
+    expect(undef['thomas-jung'].tutorials.map(t => t.slug).sort()).toEqual(['a', 'b'])
+    expect(empty['thomas-jung'].tutorials.map(t => t.slug).sort()).toEqual(['a', 'b'])
+  })
 })

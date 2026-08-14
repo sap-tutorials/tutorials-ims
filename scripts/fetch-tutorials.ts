@@ -1336,9 +1336,16 @@ async function main() {
     try {
       const advocates = advocateLoginToSlug(await fetchAdvocateRoster())
       const dataDir = join(__dirname, '..', 'hugo', channel === 'qa' ? 'data-qa' : 'data')
+      // Active/published catalog slugs (lowercase) — same ACTIVE-only set the
+      // navigator/browse use (status='ACTIVE' or null, srv/lib/build-catalog.js).
+      // Excludes INACTIVE/soft-deleted tutorials + stale-cache slugs from the
+      // author pages, "more from author" rail, and byline eligibility. Empty in
+      // degraded/ALLOW_EMPTY_CAP builds → buildAuthorIndex fail-opens (no filter).
+      const activeSlugs = new Set(tutorialMetas.map((m) => m.slug.toLowerCase()))
       const { pagesWritten } = writeAuthorPages({
         rows: authorRows,
         advocates,
+        activeSlugs,
         dataFile: join(dataDir, 'author_index.json'),
         contentDir: join(getHugoContentDir(channel), 'authors'),
       })
