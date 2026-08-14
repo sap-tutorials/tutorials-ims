@@ -99,12 +99,20 @@ npx cds bind --exec -- node scripts/setup-dev-data.cjs
 3. Fill in:
    - **Title** and **Description** — shown on the mission landing page and in the navigator.
    - **Slug** — follows the same conventions as group slugs above.
-   - **Completion Paths** — a mission may have multiple completion paths (e.g., one for Node.js, one for Java). Each path is an ordered list of tutorial slugs. Add paths via the **Completion Paths** sub-section.
+   - **Completion Paths → Path Items** — a mission's tutorials live *two levels down*: a mission has one or more **Completion Paths** (e.g., one for Node.js, one for Java), and each path holds ordered **Path Items**. Every Path Item has a **Type** you must set explicitly — **Tutorial**, **Group**, or **Checkpoint** — followed by a **Task** (the specific tutorial or group, or the checkpoint title). Set the Type *first*, then use the **Task** value-help to pick the target. A Path Item left with no Type is incomplete and blocks publishing (`unknown taskType`), so delete any empty rows before saving.
    - **Tags** — taxonomy tags (same pool as groups).
    - **Accomplishments** — optional: link to an accomplishment record for badge awards on completion.
 
 4. Save. Trigger a full rebuild (leave **slug** blank) so the navigator catalog and mission page are regenerated.
 5. Verify: `GET /build/catalog` returns the mission with the correct slug and all paths populated.
+
+> **Note — "Group" cards vs. real Groups.** A mission page shows its tutorials in cards under "Groups in this Mission". There are **two** ways a card appears, and they look identical to learners:
+>
+> 1. **Synthetic (path-as-group)** — a Completion Path whose Path Items are all **Tutorial**-type renders as a single card *titled with the path's name* (not a `Groups` record). This is the simplest way to bundle tutorials under one heading, and it's why a mission can look correct on the live page even though the admin shows only **Tutorial**-type Path Items. If you named the path like a group ("Use Joule Work to contextualize and reason"), that path name becomes the card title.
+> 2. **Real Group** — a Path Item of Type **Group** points to an existing `Groups` record (create it first under the **Groups** tile). The card uses the group's own title/slug and pulls in the group's tutorials.
+>
+> Choose **path-as-group** when you just want to bundle a few tutorials under a heading unique to this mission. Choose a **real Group** when the same curated collection is reused across missions or needs its own `/group.<slug>` page.
+
 
 **Slug population check:** Same as for groups — run `setup-dev-data.cjs` if slugs are blank after a fresh deploy.
 

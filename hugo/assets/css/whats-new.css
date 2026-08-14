@@ -1,0 +1,67 @@
+/* /whats-new/ — weekly digest. Uses SAP Horizon / Fundamental design tokens
+   already loaded site-wide (sap-theme-vars.css). Scoped under .wn-page. */
+.wn-page {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+.wn-hero { margin-bottom: 2rem; }
+.wn-hero__title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #1d2d3e);
+  margin: 0 0 .5rem;
+}
+.wn-hero__intro {
+  font-size: 1.05rem;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0 0 .25rem;
+}
+.wn-hero__meta { font-size: .85rem; color: var(--sapContent_LabelColor, #556b82); margin: 0; }
+
+.wn-week { margin: 2.5rem 0; }
+.wn-week__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #1d2d3e);
+  padding-bottom: .5rem;
+  border-bottom: 2px solid var(--sapBrandColor, #0a6ed1);
+  margin: 0 0 1rem;
+}
+.wn-cat { margin: 1.25rem 0; }
+.wn-cat__title {
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0 0 .5rem;
+}
+.wn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+.wn-item {
+  background: var(--sapTile_Background, #fff);
+  border: 1px solid var(--sapTile_BorderColor, #e5e5e5);
+  border-radius: .5rem;
+  padding: .85rem 1rem;
+}
+.wn-item__head { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.wn-item__link {
+  font-weight: 600;
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+}
+.wn-item__link:hover { text-decoration: underline; }
+.wn-item__summary { margin: .35rem 0 0; color: var(--sapTextColor, #1d2d3e); line-height: 1.5; }
+.wn-chip {
+  font-size: .7rem;
+  font-weight: 600;
+  padding: .1rem .5rem;
+  border-radius: 1rem;
+  background: var(--sapButton_Lite_Hover_Background, #eef2f6);
+  color: var(--sapContent_LabelColor, #556b82);
+  white-space: nowrap;
+}
+.wn-empty { color: var(--sapContent_LabelColor, #556b82); }
+
+@media (prefers-color-scheme: dark) {
+  .wn-item { background: var(--sapTile_Background, #1d232a); border-color: var(--sapTile_BorderColor, #2b333b); }
+}

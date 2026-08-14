@@ -2,7 +2,7 @@
 import type { ScheduleRow } from './types';
 import { youtubeThumb, safeHref, taskHref, taskLinkLabel } from './completion';
 import { youtubeId, youtubeEmbedUrl } from './youtube';
-import { formatViewerLocal, formatHomeZone } from './format-session-time';
+import { formatViewerLocal } from './format-session-time';
 import { sessionIcsHref, sessionCalendarHref } from './calendar-links';
 import { computed, ref } from 'vue';
 
@@ -151,7 +151,6 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
             <dt>When</dt>
             <dd>
               {{ formatViewerLocal((row as any).scheduledStart) }}
-              <span v-if="(row as any).scheduledTimeZone" class="detail-panel__homezone">{{ formatHomeZone((row as any).scheduledStart, (row as any).scheduledTimeZone) }} · event time</span>
             </dd>
           </template>
           <template v-if="isActivity && (row as any).points">
@@ -369,13 +368,6 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
   font-size: 0.8125rem;
   font-weight: 600;
   align-self: flex-start;
-}
-
-.detail-panel__homezone {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--sapContent_LabelColor, #6a6d70);
-  margin-top: 0.1rem;
 }
 
 .detail-panel__embed-wrap {

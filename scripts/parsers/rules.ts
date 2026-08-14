@@ -189,8 +189,18 @@ function parseBlock(
     : QUESTION_TYPE_TEXT
 
   if (type === QUESTION_TYPE_MCQ) {
-    const { options, correctAnswer } = parseChoiceOptions(matchContent)
-    if (!options.length || !correctAnswer) return []
+    const { options, correctAnswers } = parseChoiceOptions(matchContent)
+    if (!options.length || !correctAnswers.length) return []
+
+    // [#1740] Honor the author-declared cardinality. `single-choice` → radio
+    // (one correct), `multiple-choice` → checkbox (one-or-more correct). This
+    // restores the legacy AEM behaviour; the pre-fix widget rendered every MCQ
+    // as a radio group, so multi-answer `multiple-choice` blocks could not be
+    // completed. Default to 'single' for any unrecognized rule type.
+    const choiceMode: 'single' | 'multiple' = ruleType === 'multiple-choice' ? 'multiple' : 'single'
+    // Single-answer reference. For single-choice we keep the first [X]; the
+    // multi-answer set lives in `correctAnswers` and ships instead of this.
+    const correctAnswer = correctAnswers[0]
 
     // [#238] AI-graded multiple-choice is a footgun: the LLM prompt is
     // structured for free-text answers and option-letter "submissions"
@@ -207,22 +217,33 @@ function parseBlock(
         `Letting it pass parses with aiGrading: true; runtime will reject with errorReason: 'wrong_question_type'.`
       )
     }
-    // ANTI-LEAK: when aiGrading is true, OMIT correctAnswer from the public
-    // shape. The reference answer ships server-side via ValidateAnswerSpecs
-    // and never enters the public Hugo frontmatter / <script id="tutorial-data">.
+    // ANTI-LEAK: when aiGrading is true, OMIT the reference answer(s) from the
+    // public shape. The reference answer ships server-side via
+    // ValidateAnswerSpecs and never enters the public Hugo frontmatter /
+    // <script id="tutorial-data">.
+    // For non-AI questions the correct answer(s) ship publicly (documented
+    // client-side-grading trade-off) — multi-select carries the full set in
+    // `correctAnswers`; single carries the scalar `correctAnswer`.
     const q: ValidationQuestion = {
       id: `validate-${stepNum}`,
       question,
       type,
       options,
-      ...(aiGrading ? { aiGrading: true } : { correctAnswer }),
+      choiceMode,
+      ...(aiGrading
+        ? { aiGrading: true }
+        : choiceMode === 'multiple'
+          ? { correctAnswers }
+          : { correctAnswer }),
     }
     // Populate sibling maps for EVERY emitted question (AI-graded or not),
     // so downstream consumers have a complete index. AI-graded filtering
-    // happens in collectAiGradedSpecs.
+    // happens in collectAiGradedSpecs. For multi-select, the sibling map
+    // stores the joined set (newline-delimited) — it is only consumed by the
+    // AI-graded spec collector, which multiple-choice never reaches normally.
     const key = `${stepNum}:${q.id}`
     if (ruleType) ruleTypeByStepAndId.set(key, ruleType)
-    correctAnswerByStepAndId.set(key, correctAnswer)
+    correctAnswerByStepAndId.set(key, correctAnswers.join('\n'))
     return [q]
   }
 
@@ -239,26 +260,36 @@ function parseBlock(
   return [q]
 }
 
-function parseChoiceOptions(content: string): { options: string[]; correctAnswer: string } {
+function parseChoiceOptions(content: string): { options: string[]; correctAnswers: string[] } {
   const options: string[] = []
-  let correctAnswer = ''
+  // [#1740] Collect EVERY [X] marker, not just the last one. The pre-fix
+  // parser overwrote a single `correctAnswer` on each match, so a
+  // multiple-choice block with N correct answers silently kept only the Nth —
+  // making the question unanswerable in the single-select widget.
+  const correctAnswers: string[] = []
 
   for (const line of content.split('\n')) {
     const trimmed = line.trim()
-    const correctMatch = trimmed.match(/^\[x\]\s*(.+)$/i)
+    // Correct marker: [x] / [X] / [ x ] — tolerate whitespace inside brackets.
+    const correctMatch = trimmed.match(/^\[\s*x\s*\]\s*(.+)$/i)
     if (correctMatch) {
       const opt = correctMatch[1].trim()
       options.push(opt)
-      correctAnswer = opt
+      correctAnswers.push(opt)
       continue
     }
-    const incorrectMatch = trimmed.match(/^\[ \]\s*(.+)$/)
+    // [#1740] Incorrect marker: [ ] AND [] (empty brackets, no space) and any
+    // interior whitespace. The pre-fix regex required a literal single space
+    // (`[ ]`), so distractor options written as `[]` — as in the
+    // hana-clients-choose-hana-instance step-6 quiz — were silently dropped,
+    // hiding the false statement the learner is meant to reject.
+    const incorrectMatch = trimmed.match(/^\[\s*\]\s*(.+)$/)
     if (incorrectMatch) {
       options.push(incorrectMatch[1].trim())
     }
   }
 
-  return { options, correctAnswer }
+  return { options, correctAnswers }
 }
 
 export { parseCodeCheckBlocks } from './codecheck.js'

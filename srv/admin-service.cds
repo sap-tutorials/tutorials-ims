@@ -6,6 +6,7 @@ using from '../db/knowledge-graph-ondemand';
 using from '../db/community-blogs';
 using from '../db/homepage-featured';
 using from '../db/views';
+using from '../db/devtoberfest-analytics';
 using from '../db/mcp-pats';
 using from '../app/admin-annotations';
 using { external.devtoberfest as external_dtf } from '../db/external/devtoberfest';
@@ -565,6 +566,27 @@ service AdminService {
   @readonly
   entity EventRegistrations as projection on ims.EventRegistrations;
 
+  // Devtoberfest signups analytics — per-signup fact feeding the admin
+  // "Devtoberfest Signups" Analytical List Page (spec 2026-08-13). Read-only,
+  // aggregation-enabled (see @Aggregation.ApplySupported in app/admin-annotations.cds).
+  // The virtual elements are populated by the read handler in srv/admin-service.js:
+  //   weekMonday/weekLabel — human-readable derivation of the portable integer
+  //     weekIndex (the DB has no portable ISO-week function; weekIndex buckets by
+  //     Mon–Sun from a 2018-01-01 Monday anchor, and Node derives the calendar
+  //     Monday + 'YYYY-Www' label from it).
+  //   cumulativeSignups — running total, populated ONLY on the pure by-week series
+  //     (grouped by weekIndex alone); left null when the result is sliced by another
+  //     dimension, where a running total would be meaningless.
+  @readonly
+  @cds.redirection.target: false
+  entity DevtoberfestSignupAnalytics as projection on ims.DevtoberfestSignupAnalytics {
+    *,
+    virtual null as weekMonday        : Date,
+    virtual null as weekLabel         : String(10),
+    virtual null as cumulativeSignups : Integer
+  };
+
+
   // PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
   // Read-only projections of validation, code-check, and AI-author
   // entities so the Tutorials admin Object Page can render per-tutorial
@@ -624,6 +646,15 @@ service AdminService {
   // the parent task, not the checkpoint step.
   @readonly @cds.persistence.skip entity AnalyticsTaskTypes { key code : String(20);  label : String(50); }
   @readonly @cds.persistence.skip entity AnalyticsLevels    { key code : String(50);  label : String(50); }
+
+  // Devtoberfest Signups report filter dropdowns (spec 2026-08-13). Region codes
+  // mirror UserLearningPreferences.preferredEventRegion (db/schema.cds:270) plus the
+  // 'Not set' sentinel the view coalesces nulls to; role codes mirror
+  // UserLearningPreferences.role (db/schema.cds:259) plus 'Not set'. Served from
+  // static rows in srv/admin-service.js.
+  @readonly @cds.persistence.skip entity SignupRegions { key code : String(16); label : String(40); }
+  @readonly @cds.persistence.skip entity SignupRoles   { key code : String(20); label : String(40); }
+
 
   // Pipeline / Job log dropdowns. PipelineTypes excludes SCHEDULED_JOB because
   // the Pipeline Log projection already filters that out (scheduled jobs land

@@ -1,5 +1,6 @@
 import { extractFrontmatter } from './frontmatter.js'
 import { normalizeBlockquotedFences } from './blockquote-fence.js'
+import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
 import { prepPrerequisitesMarkup } from './prerequisites-markup.js'
@@ -76,7 +77,14 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // step 2). Run before every downstream transform so both steps and intro get
   // the healed markdown.
   const healedBody = normalizeBlockquotedFences(body)
-  let processedBody = resolveImageURLs(healedBody, {
+  // [#1741] Collapse the AEM-legacy "additional details" note pattern where a
+  // multi-paragraph blockquote is split by blockquoted thematic breaks (`>---`).
+  // CommonMark otherwise renders each `>` block as its own info box with a
+  // visible divider; legacy showed one continuous note. Run after the fence
+  // healer so `>---` lines inside blockquoted code fences are already recognized
+  // as code content and left untouched.
+  const mergedBody = mergeBlockquoteNoteDividers(healedBody)
+  let processedBody = resolveImageURLs(mergedBody, {
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
   })

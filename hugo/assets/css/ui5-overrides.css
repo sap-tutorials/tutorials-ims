@@ -359,9 +359,20 @@ html:not([data-page-kind="tutorial"]) ui5-shellbar-item#sb-reader {
 }
 
 /* Hide chrome that fights focus: side rail, anchor tabs, wizard step indicator,
-   header chips, breadcrumbs, share row, sticky prev/next bar, footer, joule.
+   header chips, breadcrumbs, share row, sticky prev/next bar, footer.
    embed=reader (#1584) aliases the identical hide-list, ungated on page-kind
-   so hosted mission/concept pages strip the same chrome. */
+   so hosted mission/concept pages strip the same chrome.
+
+   #joule-panel is intentionally NOT in this list (#1720 follow-up): the panel
+   defaults to `display:none` when closed (joule.css `#joule-panel` + the
+   `:not([hidden])` open rule), so it never intrudes on the reading view on its
+   own. Force-hiding it with `!important` here ALSO beat the open-state rule, so
+   an explicitly-opened panel stayed invisible — which is exactly how the #1720
+   embed action bar's Joule button (and the on-site reader shellbar/step FAB)
+   "did nothing": the click ran `_openImpl` → `panel.hidden=false`, but this rule
+   kept `display:none`. Leaving the panel out lets the base open/close rules win.
+   #joule-starters is a `<script type="application/json">` data node — hiding it
+   is harmless and it has no opener, so it stays. */
 html[data-reader="on"][data-page-kind="tutorial"] .tutorial-right-col,
 html[data-reader="on"][data-page-kind="tutorial"] .op-anchor,
 html[data-reader="on"][data-page-kind="tutorial"] .op-header__chips,
@@ -371,7 +382,6 @@ html[data-reader="on"][data-page-kind="tutorial"] .feedback-share,
 html[data-reader="on"][data-page-kind="tutorial"] .step-controls,
 html[data-reader="on"][data-page-kind="tutorial"] .tutorial-stepnav,
 html[data-reader="on"][data-page-kind="tutorial"] footer,
-html[data-reader="on"][data-page-kind="tutorial"] #joule-panel,
 html[data-reader="on"][data-page-kind="tutorial"] #joule-starters,
 html[data-embed="reader"] .tutorial-right-col,
 html[data-embed="reader"] .op-anchor,
@@ -382,7 +392,6 @@ html[data-embed="reader"] .feedback-share,
 html[data-embed="reader"] .step-controls,
 html[data-embed="reader"] .tutorial-stepnav,
 html[data-embed="reader"] footer,
-html[data-embed="reader"] #joule-panel,
 html[data-embed="reader"] #joule-starters {
   display: none !important;
 }

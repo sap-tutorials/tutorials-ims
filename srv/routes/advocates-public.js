@@ -48,6 +48,7 @@ export function shapeAdvocateRow(a, ctx) {
     topics: topicsByAdv.get(a.ID) || [],
     links: linksByAdv.get(a.ID) || [],
     ...(linkedUser?.email ? { email: linkedUser.email } : {}),
+    ...(linkedUser?.githubLogin ? { githubLogin: linkedUser.githubLogin } : {}),
     ...(authored?.length
       ? { authoredTutorials: authored.slice().sort((x, y) => x.title.localeCompare(y.title)) }
       : {}),
@@ -99,7 +100,7 @@ async function buildAdvocateLookups(db, advocates) {
       : [],
     // Only fetch Users that an advocate links to.
     userIds.length
-      ? db.run(SELECT.from(Users).columns('ID', 'email').where({ ID: { in: userIds } }))
+      ? db.run(SELECT.from(Users).columns('ID', 'email', 'githubLogin').where({ ID: { in: userIds } }))
       : [],
     // Issue #777: query MyTutorialsView (4-source UNION) instead of
     // Tutorials.author_ID alone, so advocates see all their tutorials

@@ -113,4 +113,36 @@ describe.skipIf(!hasBaseUrl())('e2e: embed hosted modes (unauthenticated)', () =
       await context.close();
     }
   });
+
+  // #1720 follow-up regression: the embed action bar's Joule button was visible
+  // but "did nothing" in embed=reader. The reader focus cascade in
+  // ui5-overrides.css used to force `#joule-panel { display:none !important }`,
+  // which beat the panel's own open-state rule (`#joule-panel:not([hidden])`),
+  // so clicking Joule ran _openImpl → panel.hidden=false but the panel stayed
+  // invisible. This test opens the panel the same way _openImpl does (drop the
+  // `hidden` attribute — no auth/config needed) and asserts it actually renders.
+  // Verified live on PROD (developers.sap.com) before the CSS fix: opened panel
+  // computed `display:none`; after the fix: `display:flex`.
+  it('embed=reader lets the Joule panel show when opened (not force-hidden)', async () => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      await page.goto(`/tutorials/${SLUG}/?embed=reader`, { waitUntil: 'domcontentloaded' });
+      expect(await page.getAttribute('html', 'data-embed')).toBe('reader');
+      await page.locator('main').first().waitFor({ state: 'visible', timeout: 15_000 });
+
+      const panel = page.locator('#joule-panel');
+      // Closed: the panel must stay hidden so it never intrudes on the reading view.
+      expect(await panel.evaluate((el) => getComputedStyle(el).display)).toBe('none');
+
+      // Open it exactly as joule.js#_openImpl does (sets panel.hidden = false).
+      await panel.evaluate((el) => el.removeAttribute('hidden'));
+
+      // Opened: the panel must be laid out, not force-hidden by the focus cascade.
+      const openedDisplay = await panel.evaluate((el) => getComputedStyle(el).display);
+      expect(openedDisplay).not.toBe('none');
+      expect(await panel.isVisible()).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
 });

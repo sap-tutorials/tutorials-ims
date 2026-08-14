@@ -106,6 +106,7 @@
       "icon": "sap-icon://flag",
       "items": [
         { "key": "devtoberfest", "title": "Devtoberfest Event Edit" },
+        { "key": "devtoberfestSignups", "title": "Signups Report" },
         {
           "key": "devtoberfestPlanner",
           "title": "Devtoberfest Planner",
