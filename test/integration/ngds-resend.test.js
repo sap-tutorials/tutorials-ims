@@ -26,6 +26,8 @@ describe('ngds-resend candidate selection + gates', () => {
       { ID: 'rs000005-0000-0000-0000-000000000005', user_ID: 'us000001-0000-0000-0000-000000000001', taskLegacyId: 6105, taskType: 'STEP', status: 'COMPLETED', progress: 100, legacyId: 6105, completionDate: '2026-08-01T00:00:00Z', submissionIdCompleted: 'trk-6105' },
       // ineligible: not completed
       { ID: 'rs000006-0000-0000-0000-000000000006', user_ID: 'us000001-0000-0000-0000-000000000001', taskLegacyId: 6106, taskType: 'TUTORIAL', status: 'IN_PROGRESS', progress: 20, legacyId: 6106, completionDate: null, submissionIdStarted: 'trk-6106' },
+      // ineligible: no submissionIdCompleted (backfill not yet run)
+      { ID: 'rs000007-0000-0000-0000-000000000007', user_ID: 'us000001-0000-0000-0000-000000000001', taskLegacyId: 6107, taskType: 'TUTORIAL', status: 'COMPLETED', progress: 100, legacyId: 6107, completionDate: '2026-08-01T00:00:00Z' },
     ]);
   });
 

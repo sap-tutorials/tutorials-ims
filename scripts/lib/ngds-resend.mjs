@@ -1,9 +1,16 @@
 // scripts/lib/ngds-resend.mjs
+//
+// NOTE — kill-switch intentionally NOT consulted:
+// `ngds.autosend.enabled` (ImsConfig) governs the automatic on-completion path
+// in srv/lib/ngds-autosend.js only. This script is a deliberate operator action
+// invoked via `cds bind --exec` — dry-run by default — so it bypasses the
+// kill-switch by design. SMC deduplicates on `trackingInfo.tracking`, so a
+// double-send for the same submissionId is harmless.
 import cds from '@sap/cds';
 
 const NS = 'com.sap.developers.ims';
 // Legacy NGDS send allowlist (parity with maybeAutoSendCompletion).
-const NGDS_ELIGIBLE = ['TUTORIAL', 'GROUP', 'MISSION'];
+export const NGDS_ELIGIBLE = ['TUTORIAL', 'GROUP', 'MISSION'];
 // context.user_id must be a canonical SCI/IAS uid or the send is unresolvable.
 const CANONICAL_SAP_ID = /^[PSIps]\d{6,}$/;
 
@@ -23,9 +30,17 @@ function chunk(arr, size) {
 // deliberately via `cds bind`).
 export async function selectResendCandidates(db, { epochMs = null, completedBefore = null } = {}) {
   const { TaskRecords, Users } = cds.entities(NS);
-  const rows = await db.run(
-    SELECT.from(TaskRecords).where({ status: 'COMPLETED', taskType: { in: NGDS_ELIGIBLE } })
-  );
+
+  // Push the two hardest constraints into the DB query:
+  //   submissionIdCompleted != null — only re-send rows that were already
+  //     backfilled; guards against emitting tracking-less payloads if run
+  //     out-of-order (before ngds-backfill-submission-ids --execute).
+  //   completionDate >= epochMs   — epoch pushed to WHERE so the DB skips
+  //     pre-cutover rows entirely rather than fetching them into Node.
+  // The remaining in-process gates below are belt-and-suspenders for parity.
+  const where = { status: 'COMPLETED', taskType: { in: NGDS_ELIGIBLE }, submissionIdCompleted: { '!=': null } };
+  if (epochMs != null) where.completionDate = { '>=': new Date(epochMs).toISOString() };
+  const rows = await db.run(SELECT.from(TaskRecords).where(where));
 
   // Pass 1: apply cheap in-process gates (no DB round-trips).
   const survivors = [];
