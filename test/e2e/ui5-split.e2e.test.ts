@@ -5,6 +5,8 @@
 //   2. The SAP Horizon theme is applied (--sapBackgroundColor non-empty).
 //   3. The FOUCE cloak (data-ui5-cloak) is cleared within 12 s.
 //   4. No UI5 / theme / CLDR console errors are emitted.
+//   5. The split IS splitting: page-type entry bundles load only on the right
+//      pages (request-log assertions — mustLoad / mustNotLoad).
 //
 // Self-skips (no output, no browser) when PLAYWRIGHT_BASE_URL / SMOKE_BASE_URL
 // is absent — so `npm test` (unit suite) is never affected.
@@ -27,6 +29,8 @@ import { hasBaseUrl } from './e2e.config.js';
 import { launchBrowser, newPage } from './_browser.js';
 
 // Tutorial slug that contains ui5-wizard + ui5-tabcontainer in its static HTML.
+// If this slug ever loses the wizard/tabcontainer shortcodes, the slugGuardTags
+// assertion below will fail loudly rather than silently weakening the suite.
 const TUTORIAL_SLUG = 'cap-status-transition-flows';
 
 interface PageSpec {
@@ -34,6 +38,22 @@ interface PageSpec {
   url: string;
   /** Custom-element tag names that MUST be :defined after the split entries load. */
   mustUpgrade: string[];
+  /**
+   * Request URL patterns that MUST appear in the network log — confirms the
+   * page-type entry bundle actually loaded (positive split check).
+   */
+  mustLoad?: RegExp[];
+  /**
+   * Request URL patterns that must NOT appear — confirms the split is not
+   * over-loading page-type bundles onto pages that don't need them.
+   */
+  mustNotLoad?: RegExp[];
+  /**
+   * At least one of these tags must be present in the DOM (not count===0).
+   * Guards against the fixture slug drifting: if every tag silently skips
+   * because count===0 the page-specific assertions evaporate.
+   */
+  slugGuardTags?: string[];
 }
 
 const PAGE_SPECS: PageSpec[] = [
@@ -42,6 +62,9 @@ const PAGE_SPECS: PageSpec[] = [
     url: '/',
     // Homepage loads only ui5-core; shellbar must upgrade.
     mustUpgrade: ['ui5-shellbar'],
+    // ui5-core IS expected; page-type bundles must NOT load on the homepage.
+    mustLoad: [/ui5-core-[^/]+\.js/],
+    mustNotLoad: [/ui5-tutorial-[^/]+\.js/, /ui5-me-[^/]+\.js/],
   },
   {
     label: `tutorial page (/tutorials/${TUTORIAL_SLUG}/)`,
@@ -49,12 +72,20 @@ const PAGE_SPECS: PageSpec[] = [
     // Tutorial pages load ui5-core + ui5-tutorial; wizard and tabcontainer
     // are present in cap-status-transition-flows static HTML.
     mustUpgrade: ['ui5-shellbar', 'ui5-wizard', 'ui5-tabcontainer'],
+    // ui5-tutorial MUST load on a tutorial page (positive split confirmation).
+    mustLoad: [/ui5-core-[^/]+\.js/, /ui5-tutorial-[^/]+\.js/],
+    mustNotLoad: [/ui5-me-[^/]+\.js/],
+    // Guard: if neither wizard nor tabcontainer is in the DOM the fixture has
+    // drifted and the page-specific upgrade checks evaporate silently.
+    slugGuardTags: ['ui5-wizard', 'ui5-tabcontainer'],
   },
   {
     label: 'me page (/me/)',
     url: '/me/',
     // /me/ loads ui5-core + ui5-me; shellbar must upgrade.
     mustUpgrade: ['ui5-shellbar'],
+    mustLoad: [/ui5-core-[^/]+\.js/, /ui5-me-[^/]+\.js/],
+    mustNotLoad: [/ui5-tutorial-[^/]+\.js/],
   },
 ];
 
@@ -73,10 +104,13 @@ describe.skipIf(!hasBaseUrl())('e2e: UI5 split — per-page-type upgrade + theme
     it(`${spec.label}: elements upgrade, theme applied, cloak cleared, no UI5 errors`, async () => {
       const { context, page } = await newPage(browser, { authenticated: false });
       const consoleErrors: string[] = [];
+      const requestUrls: string[] = [];
 
       page.on('console', (m: { type(): string; text(): string }) => {
         if (m.type() === 'error') consoleErrors.push(m.text());
       });
+      // Register BEFORE goto so we capture every request from the initial load.
+      page.on('request', (r: { url(): string }) => requestUrls.push(r.url()));
 
       try {
         await page.goto(spec.url, { waitUntil: 'load' });
@@ -109,6 +143,23 @@ describe.skipIf(!hasBaseUrl())('e2e: UI5 split — per-page-type upgrade + theme
           expect(
             isDefined,
             `<${tag}> on ${spec.url} must be :defined after the split bundle loads`,
+          ).toBe(true);
+        }
+
+        // --- 1b. Slug-guard: fixture must not silently evaporate ---
+        // If every tag in slugGuardTags has count===0 the upgrade assertions
+        // above all skipped — the test was only checking ui5-shellbar (same as
+        // homepage) and gave no real tutorial-specific coverage. Fail loudly.
+        if (spec.slugGuardTags && spec.slugGuardTags.length > 0) {
+          const guardCounts = await Promise.all(
+            spec.slugGuardTags.map((t) => page.locator(t).count()),
+          );
+          const anyPresent = guardCounts.some((c) => c > 0);
+          expect(
+            anyPresent,
+            `Fixture drift on ${spec.url}: none of [${spec.slugGuardTags.join(', ')}] ` +
+              `were found in the DOM. Update TUTORIAL_SLUG to a slug that renders ` +
+              `these elements so the tutorial-specific upgrade checks don't silently skip.`,
           ).toBe(true);
         }
 
@@ -146,6 +197,26 @@ describe.skipIf(!hasBaseUrl())('e2e: UI5 split — per-page-type upgrade + theme
           ui5Errors,
           `UI5/theme/CLDR console errors on ${spec.url}:\n${ui5Errors.join('\n')}`,
         ).toHaveLength(0);
+
+        // --- 5. Request-log: the split IS splitting ---
+        // mustLoad: every pattern must match at least one captured request URL.
+        for (const pattern of spec.mustLoad ?? []) {
+          const matched = requestUrls.some((u) => pattern.test(u));
+          expect(
+            matched,
+            `Expected a request matching ${pattern} on ${spec.url} but none found.\n` +
+              `Captured JS requests: ${requestUrls.filter((u) => u.endsWith('.js')).join(', ')}`,
+          ).toBe(true);
+        }
+        // mustNotLoad: no captured request URL may match.
+        for (const pattern of spec.mustNotLoad ?? []) {
+          const offender = requestUrls.find((u) => pattern.test(u));
+          expect(
+            offender,
+            `Unexpected request matching ${pattern} on ${spec.url} — ` +
+              `the split is over-loading a page-type bundle onto this page: ${offender}`,
+          ).toBeUndefined();
+        }
       } finally {
         await context.close();
       }
