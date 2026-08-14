@@ -41,8 +41,19 @@ function fetchRepoPrs(slug, sinceDate) {
 
 function main(argv) {
   const args = {};
-  for (let i = 0; i < argv.length; i += 2) args[argv[i].replace(/^--/, '')] = argv[i + 1];
-  const data = JSON.parse(fs.readFileSync(args.data, 'utf8'));
+  for (let i = 0; i < argv.length; i++) {
+    const tok = argv[i];
+    if (!tok.startsWith('--')) continue;
+    const eq = tok.indexOf('=');
+    if (eq !== -1) { args[tok.slice(2, eq)] = tok.slice(eq + 1); }
+    else { args[tok.slice(2)] = argv[++i]; }
+  }
+  let rawData;
+  try { rawData = fs.readFileSync(args.data, 'utf8'); } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+    rawData = '';
+  }
+  const data = rawData.trim() ? JSON.parse(rawData) : { repos: [], entries: [] };
   const since = resolveSince(args);
   const sinceDate = since.slice(0, 10); // gh search qualifier takes a date
   const existingIds = (data.entries || []).map((e) => e.id);

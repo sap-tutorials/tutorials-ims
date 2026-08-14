@@ -39,7 +39,13 @@ function readJson(p, fallback) {
 
 function main(argv) {
   const args = {};
-  for (let i = 0; i < argv.length; i += 2) args[argv[i].replace(/^--/, '')] = argv[i + 1];
+  for (let i = 0; i < argv.length; i++) {
+    const tok = argv[i];
+    if (!tok.startsWith('--')) continue;
+    const eq = tok.indexOf('=');
+    if (eq !== -1) { args[tok.slice(2, eq)] = tok.slice(eq + 1); }
+    else { args[tok.slice(2)] = argv[++i]; }
+  }
   const data = readJson(args.data, emptyScaffold());
   const pending = readJson(args.pending, []);
   const summaries = readJson(args.summaries, []);
