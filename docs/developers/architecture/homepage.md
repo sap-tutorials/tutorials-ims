@@ -175,6 +175,8 @@ Row 5 of the homepage was previously a static tutorials-catalog teaser. Issue #1
 
 **Kill switch:** revert the Row 5 Hugo partial include (`hugo/layouts/partials/homepage/featured-topics-carousel.html`) to restore the previous teaser — no DB migration needed.
 
+**Freshness floor (#1783):** `loadInputs` (in `srv/lib/featured-topics-snapshot.js`) drops genuinely ancient tutorials from the eligibility set before selection, so they can't be PageRank-ranked onto the carousel. The age signal is `TutorialMeta.reviewedDate` (git last-commit date, monotonic-guarded) — **not** `Tutorials.modifiedAt`, which churns catalog-wide on every `--force` rebuild. NULL `reviewedDate` (or a missing meta row) **keeps** the tutorial (fail-open); missions carry no `reviewedDate` and are always kept. The cutoff is admin-configurable via the `ImsConfig` key **`featured.freshness.maxAgeDays`** (String value = number of days). Missing/blank/non-numeric → generous default **730** (~24 months, chosen so the 344-day-old #1771 tutorial would NOT be dropped); explicit **`0`** (or negative) **disables** the floor. Any read/query fault fails open (no filtering). Tune without a redeploy via `/admin-ui/#config` (edit the `ImsConfig` row); takes effect on the next nightly recompute or a manual `recomputeFeaturedTopics`.
+
 **Spec:** `docs/superpowers/specs/2026-07-06-1032-featured-missions-carousel-design.md`
 **Plan:** `docs/superpowers/plans/2026-07-06-1032-featured-missions-carousel.md`
 
