@@ -169,14 +169,40 @@ function guardPrimaryTreeBranch(cfg, envName) {
   const branch = shCapture('git', ['branch', '--show-current']).stdout.trim();
   const gitDir = shCapture('git', ['rev-parse', '--git-dir']).stdout.trim();
   const inWorktree = /[\\/]worktrees[\\/]/.test(gitDir) || /[\\/]\.claude[\\/]worktrees[\\/]/.test(ROOT);
-  if (inWorktree) {
-    die(1, `deploying from a worktree (${ROOT}). Deploy from the primary checkout on "${expected}" —\n` +
-           `             mbt only cp's hugo/public and a worktree base can bake stale/ahead content.`);
+
+  // PROD stays strict: deploy only from the PRIMARY checkout on the release
+  // branch. A worktree base can sit ahead of / behind the target and bake the
+  // wrong content — unacceptable for prod. (Memory: "Deploy from the primary
+  // tree, never a worktree" — now scoped to prod.)
+  if (envName === 'prod') {
+    if (inWorktree) {
+      die(1, `deploying PROD from a worktree (${ROOT}). Deploy from the primary checkout on "${expected}" —\n` +
+             `             mbt only cp's hugo/public and a worktree base can bake stale/ahead content.`);
+    }
+    if (branch !== expected) {
+      die(1, `current branch is "${branch}", not "${expected}". PROD deploys run from the primary tree on "${expected}".`);
+    }
+    ok(`primary checkout on ${expected} (${branch})`);
+    return;
   }
-  if (branch !== expected) {
-    die(1, `current branch is "${branch}", not "${expected}". Env "${envName}" deploys run from the primary tree on "${expected}".`);
+
+  // DEV/QA: a worktree is fine, but it MUST be a FRESH checkout at the
+  // origin/<branch> tip — never a stale or ahead base — so mbt bakes exactly
+  // the integration-branch content. We fetch, then assert HEAD === origin/DEV.
+  // (Policy: the primary-tree rule now applies only to PROD; DEV/QA deploy from
+  // a fresh DEV checkout, worktree or not.)
+  const fetch = shCapture('git', ['fetch', 'origin', expected]);
+  if (fetch.status !== 0) {
+    die(1, `git fetch origin ${expected} failed — cannot verify a fresh ${expected} base.\n${fetch.stderr}`);
   }
-  ok(`primary checkout on ${expected} (${branch})`);
+  const head = shCapture('git', ['rev-parse', 'HEAD']).stdout.trim();
+  const originTip = shCapture('git', ['rev-parse', `origin/${expected}`]).stdout.trim();
+  if (!head || !originTip || head !== originTip) {
+    die(1, `HEAD (${head.slice(0, 8) || '?'}) is not at origin/${expected} (${originTip.slice(0, 8) || '?'}).\n` +
+           `             Env "${envName}" deploys must run from a FRESH ${expected} checkout (worktree OK, but not stale/ahead).\n` +
+           `             Fix: git fetch origin ${expected} && git reset --hard origin/${expected}`);
+  }
+  ok(`fresh ${expected} checkout @ ${head.slice(0, 8)}${inWorktree ? ' (worktree)' : ''}`);
 }
 
 function guardCfTarget(cfg, envName) {
