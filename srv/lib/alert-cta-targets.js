@@ -15,6 +15,7 @@ export const CTA_TARGETS = Object.freeze([
   Object.freeze({ url: '/browse/',              label: 'Browse' }),
   Object.freeze({ url: '/devtoberfest/',        label: 'Devtoberfest' }),
   Object.freeze({ url: '/developer-advocates/', label: 'Developer Advocates' }),
+  Object.freeze({ url: '/whats-new/',           label: "What's New" }),
   Object.freeze({ url: '/me',                   label: 'My Completions' }),
   Object.freeze({ url: '/app-space',            label: 'App Space' }),
   Object.freeze({ url: '/event-display',        label: 'Event Display' }),

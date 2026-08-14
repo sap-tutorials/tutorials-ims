@@ -3118,6 +3118,16 @@ annotate AdminService.Alerts {
   dismissible @Common.Label: 'Dismissible';
   ctaLabel    @Common.Label: 'CTA label';
   ctaUrl      @Common.Label: 'CTA URL'
+              // @UI.RecommendationState: 0 opts this field out of the @cap-js/ai
+              // RPT-1 recommendation hook (docs/developers/reference/cap-ai-plugin.md).
+              // Alerts is @odata.draft.enabled, so without this the plugin renders
+              // ctaUrl as a recommendation field that validates input against the
+              // AlertCtaTargets value-list and DISCARDS free-typed URLs (e.g.
+              // "/whats-new/") on Enter/commit — even though ValueListWithFixedValues
+              // is false. The value-help below is meant as quick-pick suggestions
+              // only; admins must be able to type any URL. Same escape hatch as
+              // FeaturedTasks.taskLegacyId / HomepageForYouCandidatesAdmin.personaTags.
+              @UI.RecommendationState: 0
               @Common.ValueList: {
                 CollectionPath: 'AlertCtaTargets',
                 SearchSupported: true,
