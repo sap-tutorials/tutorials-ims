@@ -1057,6 +1057,9 @@ async function main() {
           tags: frontmatter.tags ?? [],
           createdAt: createdAt || undefined,
           isNew: browseIsWithinNewWindow(createdAt),
+          // #1758: top git-contributor login — fallback attribution when
+          // author_profile is absent (only attaches to an existing author page).
+          topContributorLogin: contributors[0]?.login ?? '',
         })
       } else {
         writeVitePressPage(

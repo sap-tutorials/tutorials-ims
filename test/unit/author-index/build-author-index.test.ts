@@ -82,4 +82,71 @@ describe('buildAuthorIndex', () => {
     expect(undef['thomas-jung'].tutorials.map(t => t.slug).sort()).toEqual(['a', 'b'])
     expect(empty['thomas-jung'].tutorials.map(t => t.slug).sort()).toEqual(['a', 'b'])
   })
+
+  // #1758 follow-up (conservative code fallback): a tutorial with NO
+  // authorProfile is attributed to its top git-contributor login — but ONLY
+  // when that login already HAS an author page (established via authorProfile
+  // on another tutorial). No new author pages are minted from contributors.
+  describe('#1758 top-contributor fallback (conservative)', () => {
+    it('adds a contributor-only tutorial to an EXISTING author page', () => {
+      const idx = buildAuthorIndex(
+        [row({ slug: 'authored', title: 'Authored' }), // establishes thomas-jung via authorProfile
+         row({ slug: 'contrib-only', title: 'Contrib', authorProfile: '', displayName: 'Unknown',
+               topContributorLogin: 'Thomas-Jung' })],
+        new Map(),
+      )
+      expect(Object.keys(idx)).toEqual(['thomas-jung'])
+      expect(idx['thomas-jung'].tutorials.map(t => t.slug).sort())
+        .toEqual(['authored', 'contrib-only'])
+    })
+    it('does NOT mint a new author page for a contributor who never authored', () => {
+      const idx = buildAuthorIndex(
+        [row({ slug: 'authored', title: 'Authored' }),
+         row({ slug: 'orphan', title: 'Orphan', authorProfile: '', displayName: 'Unknown',
+               topContributorLogin: 'rando-bot' })],
+        new Map(),
+      )
+      expect(Object.keys(idx)).toEqual(['thomas-jung'])
+      expect(idx['thomas-jung'].tutorials.map(t => t.slug)).toEqual(['authored'])
+      expect(idx['rando-bot']).toBeUndefined()
+    })
+    it('keeps the contributor-only tutorial out when it fails the active filter', () => {
+      const idx = buildAuthorIndex(
+        [row({ slug: 'authored', title: 'Authored' }),
+         row({ slug: 'inactive-contrib', title: 'Inactive', authorProfile: '',
+               topContributorLogin: 'thomas-jung' })],
+        new Map(),
+        new Set(['authored']),
+      )
+      expect(idx['thomas-jung'].tutorials.map(t => t.slug)).toEqual(['authored'])
+    })
+    it('preserves most-recent-first ordering across the merged set', () => {
+      const idx = buildAuthorIndex(
+        [row({ slug: 'authored-old', title: 'Old', createdAt: '2025-01-01T00:00:00Z' }),
+         row({ slug: 'contrib-new', title: 'New', createdAt: '2026-06-01T00:00:00Z',
+               authorProfile: '', topContributorLogin: 'thomas-jung' })],
+        new Map(),
+      )
+      expect(idx['thomas-jung'].tutorials.map(t => t.slug)).toEqual(['contrib-new', 'authored-old'])
+    })
+    it('does not attribute when the author page exists only from an INACTIVE authored tutorial', () => {
+      const idx = buildAuthorIndex(
+        [row({ slug: 'authored-inactive', title: 'A' }), // filtered out → thomas-jung never established
+         row({ slug: 'contrib-active', title: 'C', authorProfile: '',
+               topContributorLogin: 'thomas-jung' })],
+        new Map(),
+        new Set(['contrib-active']),
+      )
+      expect(Object.keys(idx)).toEqual([])
+    })
+    it('ignores an empty/missing top-contributor login', () => {
+      const idx = buildAuthorIndex(
+        [row({ slug: 'authored', title: 'Authored' }),
+         row({ slug: 'no-contrib', title: 'N', authorProfile: '', topContributorLogin: '' }),
+         row({ slug: 'undef-contrib', title: 'U', authorProfile: '' })],
+        new Map(),
+      )
+      expect(idx['thomas-jung'].tutorials.map(t => t.slug)).toEqual(['authored'])
+    })
+  })
 })
