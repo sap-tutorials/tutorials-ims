@@ -54,6 +54,7 @@ import { runKgTopicClusters } from './kg-topic-clusters-job.js';
 import { runKgWcc } from './kg-wcc-job.js';
 import { runOnDemandDrain } from './kg-ondemand-job.js';
 import { runKgFeaturedTopics } from './kg-featured-topics-job.js';
+import { runTopTutorials } from './top-tutorials-job.js';
 import { runRetireOrphans } from './kg-retire-orphans-job.js';
 import { runCommunityBlogsFetch } from './community-blogs-fetch-job.js';
 import { runCommunityBlogsClassify } from './community-blogs-classify-job.js';
@@ -714,6 +715,15 @@ export function registerJobs() {
     ttlMs: 600000,
     description: 'Rebuild FeaturedTopicsSnapshot from KG signals + editorial rows',
     fn: (logId) => runKgFeaturedTopics(logId),
+  });
+
+  // Daily at 04:53 UTC — rebuild the Top Tutorials completions ranking sidecar (#1782).
+  registerJob({
+    jobName: 'top-tutorials',
+    schedule: '53 4 * * *',
+    ttlMs: 600000,
+    description: 'Rebuild TopTutorials ranking from windowed completions',
+    fn: (logId) => runTopTutorials(logId),
   });
 
   // Daily 04:37 UTC — retire truly-orphaned concepts (#1115). Runs after
