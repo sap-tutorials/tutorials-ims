@@ -327,6 +327,7 @@ export default defineConfig({
         'devtoberfest-faq': resolve(__dirname, 'src/devtoberfest-faq/main.ts'),
         'ui5-core': resolve(__dirname, 'src/ui5/ui5-core.ts'),
         'ui5-tutorial': resolve(__dirname, 'src/ui5/ui5-tutorial.ts'),
+        'ui5-me': resolve(__dirname, 'src/ui5/ui5-me.ts'),
       },
       output: {
         // Content-hash entry bundles so a changed bundle gets a new URL the
