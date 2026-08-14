@@ -22,8 +22,9 @@ describe('edge-cache-headers (CDN origin support)', () => {
       expect(CONTENT_CACHE_CONTROL).toMatch(/public/);
       // Short browser TTL so a hard refresh picks up a publish quickly.
       expect(CONTENT_CACHE_CONTROL).toMatch(/(?:^|[ ,])max-age=60\b/);
-      // Long shared-edge TTL — publish issues a targeted purge-by-tag.
-      expect(CONTENT_CACHE_CONTROL).toMatch(/s-maxage=86400\b/);
+      // Modest shared-edge TTL — no active purge-by-tag is wired yet, so the
+      // edge TTL is what bounds staleness after a publish (~10 min worst case).
+      expect(CONTENT_CACHE_CONTROL).toMatch(/s-maxage=600\b/);
       // Serve stale instantly while the edge revalidates.
       expect(CONTENT_CACHE_CONTROL).toMatch(/stale-while-revalidate=600\b/);
     });

@@ -70,7 +70,7 @@ describe('pageServeHandler', () => {
     await pageServeHandler(req, res);
     expect(res.statusCode).toBe(200);
     expect(String(res.body)).toContain('Browse');
-    expect(res.headers['cache-control']).toContain('s-maxage=86400');
+    expect(res.headers['cache-control']).toContain('s-maxage=600');
     expect(res.headers['edge-cache-tag']).toContain('page-browse');
   });
 
