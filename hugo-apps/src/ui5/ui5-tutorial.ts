@@ -7,7 +7,7 @@ import "../../../hugo/assets/css/lightbox.css";
 import "@ui5/webcomponents/dist/RadioButton.js";
 import "@ui5/webcomponents/dist/CheckBox.js";
 import "@ui5/webcomponents/dist/RatingIndicator.js";
-import "@ui5/webcomponents/dist/ProgressIndicator.js";
+// ProgressIndicator.js intentionally absent: ui5-core ships it on every page.
 import "@ui5/webcomponents/dist/Dialog.js";
 import "@ui5/webcomponents/dist/BusyIndicator.js";
 import "@ui5/webcomponents/dist/TextArea.js";

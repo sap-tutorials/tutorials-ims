@@ -45,7 +45,11 @@ module.exports = {
       p.includes('hugo-apps/src/tutorial-pip/') ||
       p.includes('hugo-apps/src/tutorial-pip-launcher/') ||
       p.includes('hugo-apps/src/tutorial-rating/') ||
-      p.includes('hugo-apps/src/related-graph/'),
+      p.includes('hugo-apps/src/related-graph/') ||
+      // tutorial-reset and tutorial-prefs mount on tutorial pages; map by intent,
+      // not transitive luck (ui5-dialog is in core but these are tutorial-only islands).
+      p.includes('hugo-apps/src/tutorial-reset/') ||
+      p.includes('hugo-apps/src/tutorial-prefs/'),
 
     // .Type "me" page (/me/): me layout + me Vue islands
     'ui5-me': (p) =>
