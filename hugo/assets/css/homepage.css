@@ -272,6 +272,15 @@
   min-height: 4rem;
 }
 
+/* CLS reservation: the island mount div is empty at SSR; Vue fills it at
+   ~2.5s. Without a min-height the viewport-visible carousel below shifts
+   down ~500px, inflating CLS. Reserve the desktop post-hydration height so
+   the shift is near-zero. On mobile the band is already below-fold at first
+   paint so below-fold shifts do not score against CLS. */
+[data-island="videos"] {
+  min-height: 500px;
+}
+
 /* ===== Tutorials teaser (row 5) ===== */
 .hp-teaser {
   display: flex;
@@ -311,6 +320,12 @@
 /* ===== Community lane (row 6) ===== */
 #hp-community {
   min-height: 4rem;
+}
+
+/* CLS reservation: community columns are empty at SSR; Vue fills them with
+   advocate cards, blog posts, and news items. Reserve the desktop height. */
+[data-island="community"] {
+  min-height: 260px;
 }
 
 .hp-community__cols {
