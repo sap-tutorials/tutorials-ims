@@ -17,7 +17,11 @@ describe('ui5-core Vite entry', () => {
   });
 
   it('emits exactly one shared ui5-vendor chunk', () => {
-    const files = readdirSync(OUT + '/chunks').filter(f => /^ui5-vendor-/.test(f));
-    expect(files.length).toBe(1);
+    // Use the Vite manifest (rewritten atomically each build) instead of
+    // readdirSync so stale chunks left by a prior direct `npm run build`
+    // (under emptyOutDir:false) don't inflate the count and false-fail locally.
+    const manifest = JSON.parse(readFileSync(resolve(OUT, '.vite/manifest.json'), 'utf8'));
+    const vendorChunks = Object.values(manifest).filter((v: any) => v.name === 'ui5-vendor');
+    expect(vendorChunks.length).toBe(1);
   });
 });
