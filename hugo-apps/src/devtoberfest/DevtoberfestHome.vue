@@ -62,7 +62,12 @@ async function fetchStatus(): Promise<void> {
         if (meRes.status === 401 || meRes.status === 403) {
           state.value = 'anonymous'
         } else if (meRes.ok) {
-          state.value = 'unregistered'
+          // A 200 that isn't JSON is the approuter's anonymous login-redirect
+          // HTML page (xsuaa routes answer logged-out AJAX with 200 HTML, not a
+          // clean 401 — #1788). Treat it as anonymous so we never open the Terms
+          // dialog and trip csrfFetch's token handshake.
+          const ct = meRes.headers.get('content-type') || ''
+          state.value = ct.includes('application/json') ? 'unregistered' : 'anonymous'
         } else {
           console.warn('[devtoberfest] /me probe non-ok', meRes.status)
           errorMsg.value = `Couldn't determine your registration state (HTTP ${meRes.status}).`
