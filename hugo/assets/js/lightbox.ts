@@ -6,6 +6,11 @@
 //
 // State is module-scoped. `imgs` is recomputed on every open() so dynamically
 // injected images (e.g., Vue islands) participate.
+//
+// #1785 polish: keyboard-open (Enter/Space on a focused zoomable image),
+// double-click / double-tap zoom toggle, horizontal swipe navigation at 1x,
+// an image counter + figcaption title, a thumbnail filmstrip, and a loading
+// spinner. Pure decision helpers are exported via `__test__` for unit tests.
 
 // UI5 v2.x ui5-dialog: open is a property (not a DOM attribute, not a method).
 // Setting `dlg.open = true` shows the dialog and dispatches `open`/`opened` events.
@@ -22,6 +27,7 @@ type LightboxState = {
   pushedHash: boolean;
   animating: boolean;
   isOpen: boolean;
+  triggerEl: HTMLElement | null;
 };
 
 const state: LightboxState = {
@@ -33,6 +39,7 @@ const state: LightboxState = {
   pushedHash: false,
   animating: false,
   isOpen: false,
+  triggerEl: null,
 };
 
 function dialog(): LightboxDialog | null {
@@ -51,6 +58,18 @@ function titleEl(): HTMLElement | null {
   return document.querySelector(".lightbox-title");
 }
 
+function counterEl(): HTMLElement | null {
+  return document.querySelector(".lightbox-counter");
+}
+
+function spinnerEl(): HTMLElement | null {
+  return document.querySelector(".lightbox-spinner");
+}
+
+function thumbsEl(): HTMLElement | null {
+  return document.querySelector(".lightbox-thumbs");
+}
+
 function collectZoomable(): HTMLImageElement[] {
   return Array.from(
     document.querySelectorAll<HTMLImageElement>('img[data-zoomable="true"]'),
@@ -60,6 +79,99 @@ function collectZoomable(): HTMLImageElement[] {
 function setTitle(text: string) {
   const el = titleEl();
   if (el) el.textContent = text;
+}
+
+/** The lightbox title/caption for an image: the figure's caption when present,
+ * else the alt text (ignoring the "image" placeholder), else empty. */
+function deriveCaption(img: HTMLImageElement): string {
+  const cap = img
+    .closest("figure")
+    ?.querySelector(".tutorial-figcaption")
+    ?.textContent?.trim();
+  if (cap) return cap;
+  const alt = (img.alt || "").trim();
+  return alt && alt !== "image" ? alt : "";
+}
+
+/** 1-based "index / total" label for the counter. */
+function formatCounter(index: number, total: number): string {
+  return `${index + 1} / ${total}`;
+}
+
+function updateCounter() {
+  const el = counterEl();
+  if (!el) return;
+  const total = state.imgs.length;
+  if (total <= 1) {
+    el.setAttribute("hidden", "");
+    el.textContent = "";
+    return;
+  }
+  el.removeAttribute("hidden");
+  el.textContent = formatCounter(state.index, total);
+}
+
+function showSpinner(show: boolean) {
+  const s = spinnerEl();
+  if (!s) return;
+  if (show) s.removeAttribute("hidden");
+  else s.setAttribute("hidden", "");
+}
+
+/** Show the spinner until `img` finishes loading. Handles the already-cached
+ * case (complete + decoded) so it never flashes for instant loads. */
+function bindSpinner(img: HTMLImageElement) {
+  showSpinner(true);
+  const hide = () => showSpinner(false);
+  img.addEventListener("load", hide, { once: true });
+  img.addEventListener("error", hide, { once: true });
+  if (img.complete && img.naturalWidth > 0) hide();
+}
+
+/** Build the thumbnail filmstrip. Hidden for single-image pages. Each thumb is
+ * a real <button> (keyboard-focusable); clicking one calls onSelect(index). */
+function buildThumbs(
+  container: HTMLElement,
+  imgs: HTMLImageElement[],
+  activeIndex: number,
+  onSelect: (index: number) => void,
+) {
+  container.replaceChildren();
+  if (imgs.length <= 1) {
+    container.setAttribute("hidden", "");
+    return;
+  }
+  container.removeAttribute("hidden");
+  imgs.forEach((img, i) => {
+    const t = document.createElement("button");
+    t.type = "button";
+    t.className = "lightbox-thumb" + (i === activeIndex ? " is-active" : "");
+    t.setAttribute("aria-label", `View image ${i + 1}`);
+    if (i === activeIndex) t.setAttribute("aria-current", "true");
+    const im = document.createElement("img");
+    im.src = img.currentSrc || img.src;
+    im.alt = "";
+    im.loading = "lazy";
+    t.appendChild(im);
+    t.addEventListener("click", () => onSelect(i));
+    container.appendChild(t);
+  });
+}
+
+function highlightThumb(index: number) {
+  const c = thumbsEl();
+  if (!c) return;
+  const thumbs = c.querySelectorAll<HTMLElement>(".lightbox-thumb");
+  thumbs.forEach((t, i) => {
+    const active = i === index;
+    t.classList.toggle("is-active", active);
+    if (active) {
+      t.setAttribute("aria-current", "true");
+      t.scrollIntoView({ block: "nearest", inline: "center", behavior: "auto" });
+    } else {
+      t.removeAttribute("aria-current");
+    }
+  });
 }
 
 function open(triggerImg: HTMLImageElement) {
@@ -73,13 +185,22 @@ function open(triggerImg: HTMLImageElement) {
   state.tx = 0;
   state.ty = 0;
   state.animating = false;
+  state.triggerEl = triggerImg;
+  // Set synchronously so wheel/pointer/dblclick handlers (which gate on isOpen)
+  // are live as soon as open() returns; dlg.open is flipped once the custom
+  // element is defined below.
+  state.isOpen = true;
 
   cur.src = triggerImg.currentSrc || triggerImg.src;
   cur.alt = triggerImg.alt || "";
   applyTransform(cur);
-  setTitle(triggerImg.alt && triggerImg.alt !== "image" ? triggerImg.alt : "");
+  bindSpinner(cur);
+  setTitle(deriveCaption(triggerImg));
+  updateCounter();
 
   togglePrevNext();
+  const thumbs = thumbsEl();
+  if (thumbs) buildThumbs(thumbs, state.imgs, state.index, (i) => slideTo(i));
 
   // History deep-link: pushState only when not entering via URL hash.
   // (initFromHash() sets pushedHash = false to suppress this.)
@@ -103,7 +224,6 @@ function open(triggerImg: HTMLImageElement) {
 
   preloadNeighbors();
   customElements.whenDefined("ui5-dialog").then(() => {
-    state.isOpen = true;
     dlg.open = true;
   });
 }
@@ -123,6 +243,15 @@ function close() {
     history.back(); // popstate handler ignores when dialog is already closed
   } else if (location.hash.startsWith("#img-")) {
     history.replaceState(null, "", location.pathname + location.search);
+  }
+
+  // Return focus to the image that opened the lightbox (keyboard users land
+  // back where they were). ui5-dialog also restores focus, but the trigger is
+  // now focusable so this is explicit and covers mouse-opened cases too.
+  const trigger = state.triggerEl;
+  state.triggerEl = null;
+  if (trigger && typeof trigger.focus === "function") {
+    try { trigger.focus(); } catch { /* element gone */ }
   }
 }
 
@@ -152,20 +281,25 @@ function preloadNeighbors() {
   if (next) new Image().src = next.currentSrc || next.src;
 }
 
-function instantSwap(direction: -1 | 1) {
+/** Jump to an arbitrary index with no animation (multi-step thumb jumps,
+ * reduced-motion, and adjacent moves when animation is off). */
+function instantSwapTo(targetIdx: number) {
   const cur = currentImg();
-  const target = state.imgs[state.index + direction];
+  const target = state.imgs[targetIdx];
   if (!cur || !target) return;
   cur.src = target.currentSrc || target.src;
   cur.alt = target.alt || "";
-  state.index += direction;
+  state.index = targetIdx;
   state.scale = 1;
   state.tx = 0;
   state.ty = 0;
   applyTransform(cur);
-  setTitle(target.alt && target.alt !== "image" ? target.alt : "");
+  bindSpinner(cur);
+  setTitle(deriveCaption(target));
   togglePrevNext();
   updateZoomLabel();
+  updateCounter();
+  highlightThumb(state.index);
   history.replaceState({ lightbox: true }, "", `#img-${state.index + 1}`);
   preloadNeighbors();
 }
@@ -176,7 +310,7 @@ function goto(direction: -1 | 1) {
   if (targetIdx < 0 || targetIdx >= state.imgs.length) return;
 
   if (reducedMotion()) {
-    instantSwap(direction);
+    instantSwapTo(targetIdx);
     return;
   }
 
@@ -196,6 +330,7 @@ function goto(direction: -1 | 1) {
   inc.alt = target.alt || "";
   inc.hidden = false;
   inc.style.transform = `translateX(${sign * 100}%)`;
+  bindSpinner(inc);
   // Force layout so the next class addition triggers a transition.
   void inc.offsetWidth;
 
@@ -217,15 +352,29 @@ function goto(direction: -1 | 1) {
     state.index = targetIdx;
     state.animating = false;
     applyTransform(inc);
-    setTitle(target.alt && target.alt !== "image" ? target.alt : "");
+    setTitle(deriveCaption(target));
     togglePrevNext();
     updateZoomLabel();
+    updateCounter();
+    highlightThumb(state.index);
     history.replaceState({ lightbox: true }, "", `#img-${state.index + 1}`);
     preloadNeighbors();
   };
 
   inc.addEventListener("transitionend", finish, { once: true });
   setTimeout(finish, SLIDE_DURATION_MS + 50); // fallback if transitionend is missed
+}
+
+/** Navigate to any index: animate adjacent moves, jump instantly otherwise. */
+function slideTo(targetIdx: number) {
+  if (state.animating) return;
+  if (targetIdx < 0 || targetIdx >= state.imgs.length || targetIdx === state.index) return;
+  const delta = targetIdx - state.index;
+  if (Math.abs(delta) === 1 && !reducedMotion()) {
+    goto(delta as -1 | 1);
+  } else {
+    instantSwapTo(targetIdx);
+  }
 }
 
 function applyTransform(img: HTMLImageElement) {
@@ -246,6 +395,37 @@ function viewport(): HTMLElement | null {
 
 function clampScale(s: number): number {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+}
+
+/** 1x <-> 2x toggle target for double-click / double-tap. */
+function nextZoomToggleScale(scale: number): number {
+  return scale === 1 ? 2 : 1;
+}
+
+/** Decide swipe navigation from a single-pointer gesture. Only navigates at
+ * scale 1 (zoomed-in single-pointer drags pan instead), when the horizontal
+ * delta exceeds `threshold` and dominates the vertical delta. Returns +1 (next,
+ * swiped left), -1 (prev, swiped right), or 0 (no navigation). */
+function resolveSwipe(dx: number, dy: number, scale: number, threshold: number): -1 | 0 | 1 {
+  if (scale !== 1) return 0;
+  if (Math.abs(dx) <= threshold) return 0;
+  if (Math.abs(dx) <= Math.abs(dy)) return 0;
+  return dx < 0 ? 1 : -1;
+}
+
+function resetZoom() {
+  state.scale = 1;
+  state.tx = 0;
+  state.ty = 0;
+  const cur = currentImg();
+  if (cur) applyTransform(cur);
+  updateZoomLabel();
+}
+
+/** Toggle zoom around a screen-space origin (double-click / double-tap). */
+function toggleZoom(originX: number, originY: number) {
+  if (nextZoomToggleScale(state.scale) === 1) resetZoom();
+  else setZoom(2, originX, originY);
 }
 
 function clampPan() {
@@ -311,6 +491,19 @@ export function initLightbox() {
     if (img) open(img);
   });
 
+  // Keyboard open: Enter/Space on a focused zoomable image. Images carry
+  // tabindex/role=button (see render-image.html), so they're reachable by Tab.
+  document.addEventListener("keydown", (e) => {
+    if (state.isOpen) return;
+    if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+    const target = e.target as Element | null;
+    const img = target?.closest?.<HTMLImageElement>('img[data-zoomable="true"]');
+    if (img) {
+      e.preventDefault();
+      open(img);
+    }
+  });
+
   // Close button → set open=false; the close-event handler does teardown.
   document
     .querySelector(".lightbox-close")
@@ -328,6 +521,13 @@ export function initLightbox() {
       const delta = -e.deltaY * 0.003;
       zoomBy(delta, e.clientX, e.clientY);
     }, { passive: false });
+
+    // Double-click toggles 1x <-> 2x centered on the cursor.
+    vp.addEventListener("dblclick", (e) => {
+      if (!state.isOpen) return;
+      e.preventDefault();
+      toggleZoom(e.clientX, e.clientY);
+    });
   }
 
   document.querySelector(".lightbox-zoom-in")
@@ -335,12 +535,7 @@ export function initLightbox() {
   document.querySelector(".lightbox-zoom-out")
     ?.addEventListener("click", () => zoomCenter(-0.5));
   document.querySelector(".lightbox-reset")
-    ?.addEventListener("click", () => {
-      state.scale = 1; state.tx = 0; state.ty = 0;
-      const cur = currentImg();
-      if (cur) applyTransform(cur);
-      updateZoomLabel();
-    });
+    ?.addEventListener("click", () => resetZoom());
 
   document.querySelector(".lightbox-prev")
     ?.addEventListener("click", () => goto(-1));
@@ -394,27 +589,34 @@ export function initLightbox() {
     if (!state.isOpen) return;
     if (e.key === "+" || e.key === "=") { zoomCenter(0.5); e.preventDefault(); }
     else if (e.key === "-") { zoomCenter(-0.5); e.preventDefault(); }
-    else if (e.key === "0") {
-      state.scale = 1; state.tx = 0; state.ty = 0;
-      const cur = currentImg();
-      if (cur) applyTransform(cur);
-      updateZoomLabel();
-      e.preventDefault();
-    }
+    else if (e.key === "0") { resetZoom(); e.preventDefault(); }
     else if (e.key === "ArrowLeft") { goto(-1); e.preventDefault(); }
     else if (e.key === "ArrowRight") { goto(1); e.preventDefault(); }
   }
   document.addEventListener("keydown", onZoomKey);
   dlg.addEventListener("keydown", onZoomKey);
 
-  // Pointer Events: single pointer = pan; two pointers = pinch. We track active
-  // pointers in a Map and route on size.
+  // Pointer Events: single pointer = pan (zoomed) / swipe-or-tap (at 1x); two
+  // pointers = pinch. We track active pointers in a Map and route on size.
   const pointers = new Map<number, { x: number; y: number }>();
   let pinchPrevDist = 0;
   let panStartTx = 0;
   let panStartTy = 0;
   let panStartX = 0;
   let panStartY = 0;
+  // Single-pointer gesture tracking for swipe + double-tap.
+  let downX = 0;
+  let downY = 0;
+  let downTime = 0;
+  let wasSinglePointer = false;
+  let lastTapTime = 0;
+  let lastTapX = 0;
+  let lastTapY = 0;
+  const SWIPE_THRESHOLD = 50; // px horizontal to trigger prev/next at 1x
+  const TAP_MOVE = 10;        // px — max movement to still count as a tap
+  const TAP_MAX_MS = 300;     // ms — max duration to count as a tap
+  const DBLTAP_MS = 300;      // ms — window between taps for a double-tap
+  const DBLTAP_DIST = 40;     // px — max distance between the two taps
 
   function distance(a: {x: number; y: number}, b: {x: number; y: number}): number {
     return Math.hypot(a.x - b.x, a.y - b.y);
@@ -427,13 +629,20 @@ export function initLightbox() {
     vp.addEventListener("pointerdown", (e) => {
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       vp.setPointerCapture(e.pointerId);
-      if (pointers.size === 1 && state.scale > 1) {
-        panStartX = e.clientX;
-        panStartY = e.clientY;
-        panStartTx = state.tx;
-        panStartTy = state.ty;
-        vp.classList.add("is-panning");
+      if (pointers.size === 1) {
+        wasSinglePointer = true;
+        downX = e.clientX;
+        downY = e.clientY;
+        downTime = e.timeStamp;
+        if (state.scale > 1) {
+          panStartX = e.clientX;
+          panStartY = e.clientY;
+          panStartTx = state.tx;
+          panStartTy = state.ty;
+          vp.classList.add("is-panning");
+        }
       } else if (pointers.size === 2) {
+        wasSinglePointer = false;
         const [a, b] = Array.from(pointers.values());
         pinchPrevDist = distance(a, b);
         vp.classList.remove("is-panning");
@@ -467,12 +676,54 @@ export function initLightbox() {
       try { vp.releasePointerCapture(e.pointerId); } catch { /* already released */ }
       if (pointers.size < 2) pinchPrevDist = 0;
       if (pointers.size === 0) vp.classList.remove("is-panning");
+
+      // Single-pointer gesture ended: classify as swipe, double-tap, or nothing.
+      if (e.type === "pointerup" && wasSinglePointer && pointers.size === 0) {
+        const dx = e.clientX - downX;
+        const dy = e.clientY - downY;
+        const dt = e.timeStamp - downTime;
+        const moved = Math.hypot(dx, dy);
+        const dir = resolveSwipe(dx, dy, state.scale, SWIPE_THRESHOLD);
+        if (dir !== 0) {
+          goto(dir);
+        } else if (moved < TAP_MOVE && dt < TAP_MAX_MS) {
+          if (
+            e.timeStamp - lastTapTime < DBLTAP_MS &&
+            Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < DBLTAP_DIST
+          ) {
+            toggleZoom(e.clientX, e.clientY);
+            lastTapTime = 0;
+          } else {
+            lastTapTime = e.timeStamp;
+            lastTapX = e.clientX;
+            lastTapY = e.clientY;
+          }
+        }
+      }
+      wasSinglePointer = false;
     };
     vp.addEventListener("pointerup", endPointer);
     vp.addEventListener("pointercancel", endPointer);
     // Note: NO pointerleave — it fires when the pointer exits the viewport during
     // an active drag, which would prematurely cancel the gesture. pointerup +
     // pointercancel cover legitimate end-of-gesture cases.
+  }
+
+  // Thumbnail keyboard nav: arrow keys move between thumbs, Enter/Space selects.
+  const thumbs = thumbsEl();
+  if (thumbs) {
+    thumbs.addEventListener("keydown", (e) => {
+      const btns = Array.from(thumbs.querySelectorAll<HTMLElement>(".lightbox-thumb"));
+      if (!btns.length) return;
+      const activeIdx = btns.indexOf(document.activeElement as HTMLElement);
+      if (e.key === "ArrowRight" && activeIdx < btns.length - 1) {
+        btns[activeIdx + 1].focus();
+        e.preventDefault();
+      } else if (e.key === "ArrowLeft" && activeIdx > 0) {
+        btns[activeIdx - 1].focus();
+        e.preventDefault();
+      }
+    });
   }
 
   // Browser back closes the dialog. Gate on state.isOpen rather than the dialog's
@@ -509,5 +760,29 @@ export function initLightbox() {
     handleHashOnLoad();
   }
 }
+
+/** Test-only surface. Not used by production wiring. */
+export const __test__ = {
+  formatCounter,
+  resolveSwipe,
+  nextZoomToggleScale,
+  deriveCaption,
+  buildThumbs,
+  open,
+  state,
+  reset() {
+    state.imgs = [];
+    state.index = 0;
+    state.scale = 1;
+    state.tx = 0;
+    state.ty = 0;
+    state.pushedHash = false;
+    state.animating = false;
+    state.isOpen = false;
+    state.triggerEl = null;
+    const cur = currentImg();
+    if (cur) cur.removeAttribute("src");
+  },
+};
 
 initLightbox();
