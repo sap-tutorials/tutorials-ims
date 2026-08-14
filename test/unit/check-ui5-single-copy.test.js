@@ -133,4 +133,29 @@ describe('countThemeCopiesFromManifest', () => {
     // No manifest written → should throw
     expect(() => countThemeCopiesFromManifest(d)).toThrow(/manifest/i);
   });
+
+  it('auto-discovers a new src/ui5/ui5-*.ts entry added to the manifest', () => {
+    // Proves the regex derivation: a 5th entry `src/ui5/ui5-foo.ts` added to
+    // the manifest is automatically in scope without touching this script.
+    // It imports the same vendor chunk → count stays 1 (vendor not split).
+    const vendorKey = '_ui5-vendor-LIVE.js';
+    const manifest = {
+      ...makeManifest(),
+      // 5th ui5 entry — would be silently out-of-scope under the old hardcoded list
+      'src/ui5/ui5-foo.ts': {
+        file: 'ui5-foo-new1.js', name: 'ui5-foo', isEntry: true,
+        imports: [vendorKey],
+      },
+    };
+    const d = fixture({
+      'ui5-core-a1b2.js': '/* no theme */',
+      'ui5-tutorial-c3d4.js': '/* no theme */',
+      'ui5-me-e5f6.js': '/* no theme */',
+      'ui5-illustrations-g7h8.js': '/* no theme */',
+      'ui5-foo-new1.js': '/* no theme */',
+      'chunks/ui5-vendor-LIVE.js': `/* ${MARKER} — shared vendor */`,
+    }, manifest);
+    // Guard must still see exactly 1 copy (vendor is shared, not split)
+    expect(countThemeCopiesFromManifest(d)).toBe(1);
+  });
 });

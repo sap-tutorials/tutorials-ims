@@ -10,9 +10,10 @@
 // races).
 //
 // HOW: Read hugo/static/js/.vite/manifest.json. Walk the import graph reachable
-// from the four ui5-* entries (src/ui5/ui5-core.ts, ui5-tutorial.ts, ui5-me.ts,
-// ui5-illustrations.ts), collect the set of chunk files in that subgraph, then
-// count how many of them contain the Theme marker string. Assert exactly 1.
+// from every manifest key matching ^src/ui5/ui5-.*\.ts$ (dynamically derived —
+// adding a new ui5-* entry is automatically in-scope without editing this script),
+// collect the set of chunk files in that subgraph, then count how many of them
+// contain the Theme marker string. Assert exactly 1.
 //
 // MARKER: "sap-ui-webcomponents-theme" — the DOM attribute literal used by
 // @ui5/webcomponents-base/dist/config/ThemeRoot.js (part of the Theme subsystem).
@@ -39,13 +40,12 @@ const path = require('node:path');
 // Survives minification; absent from non-vendor ui5 chunks (verified).
 const THEME_MARKER = 'sap-ui-webcomponents-theme';
 
-// Source keys of the four ui5 entry points (as they appear as manifest keys).
-const UI5_ENTRY_SRCS = [
-  'src/ui5/ui5-core.ts',
-  'src/ui5/ui5-tutorial.ts',
-  'src/ui5/ui5-me.ts',
-  'src/ui5/ui5-illustrations.ts',
-];
+// Regex that identifies ui5-* entry keys in the Vite manifest.
+// Manifest keys are source-file paths relative to the Vite root.
+// Verified format: "src/ui5/ui5-core.ts", "src/ui5/ui5-tutorial.ts", etc.
+// Using a regex means any future ui5-* entry is automatically in scope —
+// no need to update this script when a new entry is added.
+const UI5_ENTRY_KEY_RE = /^src\/ui5\/ui5-.*\.ts$/;
 
 /**
  * Walk the manifest import graph starting from `key`, collecting all reachable
@@ -79,9 +79,13 @@ function countThemeCopies(chunkTexts) {
 /**
  * Manifest-scoped Theme copy count.
  *
- * Reads `<jsDir>/.vite/manifest.json`, resolves the import subgraph from the
- * four ui5-* entries, reads each reachable chunk file, and counts how many
- * contain THEME_MARKER.
+ * Reads `<jsDir>/.vite/manifest.json`, derives ui5-* entry keys by filtering
+ * manifest keys against UI5_ENTRY_KEY_RE (^src/ui5/ui5-.*\.ts$), resolves the
+ * full import subgraph from those entries, reads each reachable chunk file, and
+ * counts how many contain THEME_MARKER.
+ *
+ * New ui5-* entries added to the manifest are automatically in scope — no
+ * changes to this script required.
  *
  * Stale chunks on disk that are NOT reachable from the current manifest are
  * not read and do not affect the count.
@@ -106,9 +110,13 @@ function countThemeCopiesFromManifest(jsDir) {
     throw new Error(`[check-ui5-single-copy] could not parse manifest at ${manifestPath}: ${err.message}`);
   }
 
-  // Collect all manifest keys reachable from the four ui5-* entries.
+  // Derive ui5-* entry keys from the manifest dynamically — any future
+  // src/ui5/ui5-*.ts entry is picked up automatically.
+  const ui5EntrySrcs = Object.keys(manifest).filter(k => UI5_ENTRY_KEY_RE.test(k));
+
+  // Collect all manifest keys reachable from the ui5-* entries.
   const reachable = new Set();
-  for (const src of UI5_ENTRY_SRCS) {
+  for (const src of ui5EntrySrcs) {
     collectReachable(src, manifest, reachable);
   }
 
