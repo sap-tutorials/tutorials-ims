@@ -105,4 +105,39 @@ describe('tutorial-group-nav island', () => {
     await runIsland();
     expect(document.querySelector('a.next-steps-card')).toBeNull();
   });
+
+  it('carries the neighbour group in ?from= when Next crosses a group boundary (#1775)', async () => {
+    // t4 is last in "set-up"; Next crosses into "first-steps" (nextGroupSlug).
+    stubFetch({ tutorialMappings: [{
+      ...rows[0], slug: 't4', groupSlug: 'set-up', prev: 't3', next: 't5', nextGroupSlug: 'first-steps',
+    }] });
+    setPage('t4', '?from=set-up',
+      '<a href="/tutorials/t3" class="nav-pill">← Previous</a><div class="nav-spacer"></div>'
+      + '<a href="/tutorials/x" class="nav-pill nav-pill--primary">Next</a>',
+      '<a href="/tutorials/old" class="next-steps-card">continue</a>');
+    await runIsland();
+    // Next carries the crossed-into group; Prev (in-group) keeps the current from.
+    expect((document.querySelector('a.nav-pill--primary') as HTMLAnchorElement).getAttribute('href'))
+      .toBe('/tutorials/t5?from=first-steps');
+    expect((document.querySelector('a.nav-pill:not(.nav-pill--primary)') as HTMLAnchorElement).getAttribute('href'))
+      .toBe('/tutorials/t3?from=set-up');
+    expect((document.querySelector('a.next-steps-card') as HTMLAnchorElement).getAttribute('href'))
+      .toBe('/tutorials/t5?from=first-steps');
+  });
+
+  it('carries the neighbour group in ?from= when Prev crosses a group boundary (#1775)', async () => {
+    // t5 is first in "first-steps"; Prev crosses back into "set-up" (prevGroupSlug).
+    stubFetch({ tutorialMappings: [{
+      ...rows[0], slug: 't5', groupSlug: 'first-steps', prev: 't4', prevGroupSlug: 'set-up', next: 't6',
+    }] });
+    setPage('t5', '?from=first-steps',
+      '<a href="/tutorials/x" class="nav-pill">← Previous</a><div class="nav-spacer"></div>'
+      + '<a href="/tutorials/y" class="nav-pill nav-pill--primary">Next</a>');
+    await runIsland();
+    expect((document.querySelector('a.nav-pill:not(.nav-pill--primary)') as HTMLAnchorElement).getAttribute('href'))
+      .toBe('/tutorials/t4?from=set-up');
+    // Next stays in-group → keeps the current from.
+    expect((document.querySelector('a.nav-pill--primary') as HTMLAnchorElement).getAttribute('href'))
+      .toBe('/tutorials/t6?from=first-steps');
+  });
 });

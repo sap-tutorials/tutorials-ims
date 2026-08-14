@@ -10,6 +10,10 @@ import { launchBrowser, newPage } from './_browser.js';
 const GROUP = 'set-up-your-sap-hana-cloud-sap-hana-database-and-understand-the-basics';
 const THIRD = 'hana-cloud-mission-trial-3';
 const FOURTH = 'hana-cloud-mission-trial-4';
+// #1775: FOURTH is the last tutorial of GROUP; FIFTH is the first tutorial of
+// the NEXT group in the same mission ("Jump Start…"). Next must continue there.
+const NEXT_GROUP = 'take-your-first-steps-with-sap-hana-cloud-sap-hana-database';
+const FIFTH = 'hana-cloud-mission-trial-5';
 
 describe.skipIf(!hasBaseUrl())('e2e: group nav stays in-group', () => {
   let browser;
@@ -38,6 +42,30 @@ describe.skipIf(!hasBaseUrl())('e2e: group nav stays in-group', () => {
         .poll(async () => page.locator('.tutorial-nav-bottom a.nav-pill--primary').first().getAttribute('href'),
           { timeout: 20_000 })
         .toContain(`/tutorials/${FOURTH}`);
+    } finally { await context.close(); }
+  });
+
+  it('#1775: Next on the last tutorial of a group continues into the next group of the same mission (baked default, no ?from=)', async () => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      const res = await page.goto(`/tutorials/${FOURTH}`, { waitUntil: 'domcontentloaded' });
+      expect(res.status()).toBe(200);
+      await page.locator('main').first().waitFor({ state: 'visible', timeout: 15_000 });
+      const href = await page.locator('.tutorial-nav-bottom a.nav-pill--primary').first().getAttribute('href');
+      expect(href, 'last-in-group Next must link to the first tutorial of the next group').toContain(`/tutorials/${FIFTH}`);
+    } finally { await context.close(); }
+  });
+
+  it('#1775: Next across the group boundary (entered from the group) lands on the next group and carries its ?from=', async () => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      const res = await page.goto(`/tutorials/${FOURTH}?from=${GROUP}`, { waitUntil: 'domcontentloaded' });
+      expect(res.status()).toBe(200);
+      await page.locator('main').first().waitFor({ state: 'visible', timeout: 15_000 });
+      await expect
+        .poll(async () => page.locator('.tutorial-nav-bottom a.nav-pill--primary').first().getAttribute('href'),
+          { timeout: 20_000 })
+        .toContain(`/tutorials/${FIFTH}?from=${NEXT_GROUP}`);
     } finally { await context.close(); }
   });
 });

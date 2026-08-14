@@ -70,6 +70,20 @@ export async function navigatorCatalogHandler(req, res) {
       pathsMap.get(pathKey).slugs.push(slug);
     }
 
+    // #1775: Next/Prev must flow continuously across group (path) boundaries
+    // WITHIN a mission — the last tutorial of path N links to the first of path
+    // N+1 and vice versa. Build the ordered, non-empty path list per mission.
+    // pathsMap already follows the NavigatorCatalog ORDER BY (missionId, pathId,
+    // itemOrder) = build-catalog.js's legacyId order, so paths within a mission
+    // are already in display sequence.
+    const pathsByMission = new Map();
+    for (const pd of pathsMap.values()) {
+      if (!pd.slugs.length) continue;
+      const arr = pathsByMission.get(pd.missionId);
+      if (arr) arr.push(pd);
+      else pathsByMission.set(pd.missionId, [pd]);
+    }
+
     // Build groups and tutorial mappings
     for (const [, pathData] of pathsMap) {
       const mission = missionsMap.get(pathData.missionId);
@@ -90,8 +104,21 @@ export async function navigatorCatalogHandler(req, res) {
         groupRefs.push({ id: pathData.pathId, title: pathData.pathName, slug: pathData.pathSlug, missionId: pathData.missionId });
       }
 
+      // #1775: resolve this path's neighbours within its mission (empty paths
+      // already excluded). A flat mission has a single non-empty path → no
+      // neighbours → no cross-group chaining.
+      const missionPaths = pathsByMission.get(pathData.missionId) ?? [];
+      const myIdx = missionPaths.indexOf(pathData);
+      const prevPath = myIdx > 0 ? missionPaths[myIdx - 1] : null;
+      const nextPath = myIdx >= 0 && myIdx < missionPaths.length - 1 ? missionPaths[myIdx + 1] : null;
+
       for (let i = 0; i < pathData.slugs.length; i++) {
-        tutorialMappings.push({
+        // At a path boundary, cross into the adjacent path of the same mission
+        // and tell the island which group to carry in ?from= (nextGroupSlug/
+        // prevGroupSlug), so the chain stays coherent across the boundary.
+        const crossPrev = i === 0 && prevPath ? prevPath.slugs[prevPath.slugs.length - 1] : null;
+        const crossNext = i === pathData.slugs.length - 1 && nextPath ? nextPath.slugs[0] : null;
+        const mapping = {
           slug: pathData.slugs[i],
           missionId: pathData.missionId,
           missionTitle: mission.title,
@@ -99,9 +126,12 @@ export async function navigatorCatalogHandler(req, res) {
           groupId: isFlat ? undefined : pathData.pathId,
           groupTitle: isFlat ? undefined : pathData.pathName,
           groupSlug: isFlat ? undefined : pathData.pathSlug,
-          prev: i > 0 ? pathData.slugs[i - 1] : null,
-          next: i < pathData.slugs.length - 1 ? pathData.slugs[i + 1] : null,
-        });
+          prev: i > 0 ? pathData.slugs[i - 1] : crossPrev,
+          next: i < pathData.slugs.length - 1 ? pathData.slugs[i + 1] : crossNext,
+        };
+        if (crossPrev) mapping.prevGroupSlug = prevPath.pathSlug;
+        if (crossNext) mapping.nextGroupSlug = nextPath.pathSlug;
+        tutorialMappings.push(mapping);
       }
     }
 
