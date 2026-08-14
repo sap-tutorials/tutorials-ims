@@ -79,4 +79,38 @@ describe.skipIf(!hasBaseUrl())('e2e: other tutorials by author (#1732)', () => {
       await context.close();
     }
   });
+
+  it('embed mode hides the more-from-author rail', async (ctx) => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      // Discover an author with >= 2 tutorials.
+      const authorIndexRes = await page.request.get('/data/author_index.json').catch(() => null);
+      if (!authorIndexRes || !authorIndexRes.ok()) {
+        ctx.skip();
+        return;
+      }
+      const idx = await authorIndexRes.json();
+      const login = Object.keys(idx).find((k) => idx[k].tutorials.length >= 2);
+      if (!login) {
+        ctx.skip();
+        return;
+      }
+
+      // Same tutorial as the non-embed test, but rendered in embed mode
+      // (?embed=minimal). The rail exists in the DOM but must be hidden
+      // (html[data-embed] .more-from-author { display: none } in ui5-overrides.css).
+      const slug = idx[login].tutorials[0].slug;
+      const response = await page.goto(`/tutorials/${slug}?embed=minimal`, { waitUntil: 'domcontentloaded' });
+      expect(response, 'no response received').not.toBeNull();
+      expect(response.status(), `unexpected status ${response.status()} for /tutorials/${slug}?embed=minimal`).toBe(200);
+
+      // Embed pre-paint should have set html[data-embed].
+      await page.waitForFunction(() => document.documentElement.dataset.embed === 'minimal', null, { timeout: 15_000 });
+
+      const isHidden = await page.locator('.more-from-author').isHidden();
+      expect(isHidden, '.more-from-author rail should be hidden in embed mode').toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
 });
