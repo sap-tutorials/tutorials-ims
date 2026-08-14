@@ -1,19 +1,39 @@
 import { mkdirSync, writeFileSync, readdirSync, unlinkSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { stringify as yamlStringify } from 'yaml'
-import { buildAuthorIndex, type AuthorTutorialRow } from '../parsers/author-index'
+import { buildAuthorIndex, type AuthorTutorialRow, type AuthorIndex } from '../parsers/author-index'
 
-export function writeAuthorPages(opts: {
-  rows: AuthorTutorialRow[]
-  advocates: Map<string, string>
+/**
+ * Write author artifacts from an ALREADY-BUILT index:
+ *   - `dataFile`     — hugo/data/author_index.json, read by authors/single.html
+ *   - `publishFile`  — (optional) a copy served as a static asset so a
+ *     catalog-only rebuild can re-hydrate it from the deployed approuter
+ *     (see scripts/seed-authors-from-deployed.ts — the /authors/* wipe fix).
+ *   - per-login `<login>.md` stubs under `contentDir`, which make Hugo emit
+ *     each /authors/{login}/ page. Advocate logins are skipped (their advocate
+ *     profile alias owns that path). Stubs for logins no longer in the index
+ *     are pruned.
+ *
+ * Split out from writeAuthorPages so both the full-build path (which builds the
+ * index from freshly-fetched rows) and the catalog-only re-hydration path (which
+ * recovers a prebuilt index from the deployed site) share one emitter.
+ */
+export function writeAuthorPagesFromIndex(opts: {
+  index: AuthorIndex
   dataFile: string
   contentDir: string
+  publishFile?: string
 }): { pagesWritten: number } {
-  const { rows, advocates, dataFile, contentDir } = opts
-  const index = buildAuthorIndex(rows, advocates)
+  const { index, dataFile, contentDir, publishFile } = opts
+  const json = JSON.stringify(index, null, 2)
 
   mkdirSync(dirname(dataFile), { recursive: true })
-  writeFileSync(dataFile, JSON.stringify(index, null, 2), 'utf-8')
+  writeFileSync(dataFile, json, 'utf-8')
+
+  if (publishFile) {
+    mkdirSync(dirname(publishFile), { recursive: true })
+    writeFileSync(publishFile, json, 'utf-8')
+  }
 
   mkdirSync(contentDir, { recursive: true })
   const wanted = new Set<string>()
@@ -40,4 +60,20 @@ export function writeAuthorPages(opts: {
     }
   }
   return { pagesWritten }
+}
+
+export function writeAuthorPages(opts: {
+  rows: AuthorTutorialRow[]
+  advocates: Map<string, string>
+  dataFile: string
+  contentDir: string
+  /** Optional static-asset copy of author_index.json (served for re-hydration). */
+  publishFile?: string
+  /** ACTIVE/published catalog slug set (lowercase). Rows whose slug isn't in it
+   *  are excluded (unpublished/deleted). Fail-open when empty/undefined. */
+  activeSlugs?: Set<string>
+}): { pagesWritten: number } {
+  const { rows, advocates, dataFile, contentDir, publishFile, activeSlugs } = opts
+  const index = buildAuthorIndex(rows, advocates, activeSlugs)
+  return writeAuthorPagesFromIndex({ index, dataFile, contentDir, publishFile })
 }

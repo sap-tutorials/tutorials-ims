@@ -17,7 +17,7 @@
   {{ partial "homepage/directory-footer.html" (dict "shelves" $shelves) }}
 </article>
 
-{{ $css := resources.Get "css/homepage.css" | fingerprint }}
+{{ $css := resources.Get "css/homepage.css" | minify | fingerprint }}
 <link rel="stylesheet" href="{{ $css.RelPermalink }}">
 <script type="module" src="{{ partial "island-src.html" "homepage-bands" }}"></script>
 <script type="module" src="{{ partial "island-src.html" "featured-topics-carousel" }}"></script>

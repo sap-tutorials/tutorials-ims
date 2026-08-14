@@ -5,17 +5,25 @@ import cds from '@sap/cds';
 // (Akamai) fronts the public domain — see test/smoke/security-headers.test.js.
 //
 // The value splits the *browser* TTL from the *shared-edge* TTL:
-//   - max-age (browser): short, so a hard refresh picks up a new publish fast.
-//   - s-maxage (edge):   long, because a publish issues a targeted purge-by-tag
-//                        (see docs/developers/architecture/cdn-caching.md), so
-//                        the edge can safely hold content for a day.
+//   - max-age (browser): short (60s), so a hard refresh picks up a new publish fast.
+//   - s-maxage (edge):   modest (600s / 10 min). There is NO active purge-by-tag
+//                        signal wired today — the Akamai Fast-Purge hook is still
+//                        proposed (see docs/developers/architecture/cdn-caching.md,
+//                        "publish-time purge hook remains proposed"). With no
+//                        purge, the edge TTL is the ONLY thing bounding how long a
+//                        content update stays stale at the CDN, so we keep it short
+//                        (worst-case ~10 min stale). When purge-by-tag lands, this
+//                        can safely be raised back toward a day.
 //   - stale-while-revalidate: serve the stale copy instantly while the edge
 //                        revalidates in the background.
+//
+// The Edge-Cache-Tag header below is still emitted so a future purge-by-tag hook
+// works with no further change here.
 //
 // Only call setContentCacheHeaders on 200 content responses — never on
 // redirects, 404s, or the no-cache delta/drift probes.
 const CONTENT_CACHE_CONTROL =
-  'public, max-age=60, s-maxage=86400, stale-while-revalidate=600';
+  'public, max-age=60, s-maxage=600, stale-while-revalidate=600';
 
 const LOG = cds.log('edge-cache');
 

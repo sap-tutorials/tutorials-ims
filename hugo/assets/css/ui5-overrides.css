@@ -563,6 +563,14 @@ html[data-embed="none"] .embed-escape {
    navigation. */
 .embed-actionbar { display: none; }
 
+/* In any embed mode the "More from this author" rail (#1732, partials/
+   more-from-author.html) is cross-tutorial navigation the host page owns — drop
+   it so an embedded tutorial stays focused on its own content. Mirrors the
+   footer / breadcrumbs / feedback-share embed-hide rules above. */
+html[data-embed] .more-from-author {
+  display: none !important;
+}
+
 /* In any embed mode the rail supersedes the three separate bottom controls, so
    hide those to avoid double controls / collisions. (embed=reader already hides
    .tutorial-stepnav via the focus cascade above; repeating it for none/minimal

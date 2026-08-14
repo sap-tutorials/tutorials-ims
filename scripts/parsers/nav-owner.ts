@@ -52,23 +52,78 @@ export function rankContainers(containers: NavContainer[]): NavContainer[] {
   });
 }
 
+// Orders the containers of ONE mission by their display sequence, so Next/Prev
+// can flow across group boundaries in the same order the mission page renders
+// them. Sort key mirrors the build (missionGroupSeq, then groupLegacyId) — see
+// build-catalog.js ordering CompletionPaths by legacyId.
+function orderMissionContainers(cs: NavContainer[]): NavContainer[] {
+  return [...cs].sort((a, b) => {
+    if (a.missionGroupSeq !== b.missionGroupSeq) return a.missionGroupSeq - b.missionGroupSeq;
+    if (a.groupLegacyId !== b.groupLegacyId) return a.groupLegacyId - b.groupLegacyId;
+    return (a.slugs[0] ?? '').localeCompare(b.slugs[0] ?? '');
+  });
+}
+
+// Walks the mission's flattened, ordered slug sequence from a starting position
+// (owner container + index) in `dir` and returns the first *present* slug that
+// isn't the starting slug — crossing group boundaries within the same mission.
+// `seq` is the ordered container list for this mission (or [owner] for a
+// standalone group, which must never chain to a sibling group). #1775.
+function adjacentPresent(
+  seq: NavContainer[],
+  owner: NavContainer,
+  index: number,
+  dir: 1 | -1,
+  presentSlugs: Set<string>,
+  self: string,
+): string | null {
+  const startC = seq.indexOf(owner);
+  if (startC < 0) return null;
+  let ci = startC;
+  let i = index + dir;
+  while (ci >= 0 && ci < seq.length) {
+    const slugs = seq[ci].slugs;
+    while (i >= 0 && i < slugs.length) {
+      const cand = slugs[i];
+      if (cand !== self && presentSlugs.has(cand)) return cand;
+      i += dir;
+    }
+    ci += dir;
+    if (ci >= 0 && ci < seq.length) {
+      i = dir > 0 ? 0 : seq[ci].slugs.length - 1;
+    }
+  }
+  return null;
+}
+
 // presentSlugs = slugs that exist as real Hugo tutorial pages. A neighbour not
-// present cannot be linked (mirrors the old navBySlug.has() guard) → null.
+// present is skipped (a missing page can't be linked); the scan continues to the
+// next present tutorial, across group boundaries within the same mission (#1775).
 export function computeCanonicalNav(
   containers: NavContainer[],
   presentSlugs: Set<string>,
 ): Map<string, NavAssignment> {
+  // Ordered container list per mission (non-standalone only). Standalone groups
+  // stay isolated — each is its own single-container sequence, never chained.
+  const byMission = new Map<number, NavContainer[]>();
+  for (const c of containers) {
+    if (c.missionLegacyId === null) continue;
+    const list = byMission.get(c.missionLegacyId);
+    if (list) list.push(c);
+    else byMission.set(c.missionLegacyId, [c]);
+  }
+  for (const [k, list] of byMission) byMission.set(k, orderMissionContainers(list));
+
   const assigned = new Map<string, NavAssignment>();
   for (const c of rankContainers(containers)) {
+    const seq = c.missionLegacyId !== null ? (byMission.get(c.missionLegacyId) ?? [c]) : [c];
     for (let i = 0; i < c.slugs.length; i++) {
       const slug = c.slugs[i];
       if (!presentSlugs.has(slug)) continue;   // not a real page
       if (assigned.has(slug)) continue;        // lower-rank owner already won
-      const prevSlug = i > 0 ? c.slugs[i - 1] : null;
-      const nextSlug = i < c.slugs.length - 1 ? c.slugs[i + 1] : null;
       assigned.set(slug, {
-        prev: prevSlug && presentSlugs.has(prevSlug) ? prevSlug : null,
-        next: nextSlug && presentSlugs.has(nextSlug) ? nextSlug : null,
+        prev: adjacentPresent(seq, c, i, -1, presentSlugs, slug),
+        next: adjacentPresent(seq, c, i, 1, presentSlugs, slug),
         groupOrder: i,
         missionGroupSeq: c.missionGroupSeq,
         ...c.stamp,

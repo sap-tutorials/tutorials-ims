@@ -2,7 +2,14 @@
      Static, primary-author only. Hidden when no siblings / no resolvable login. */}}
 {{- $profile := .Params.authorProfile -}}
 {{- $login := "" -}}
-{{- if $profile -}}{{- $login = lower (path.Base $profile) -}}{{- end -}}
+{{- if $profile -}}
+  {{- $login = lower (path.Base $profile) -}}
+{{- else -}}
+  {{- with .Params.contributors -}}{{- $login = lower (index . 0).login -}}{{- end -}}
+{{- end -}}
+{{/* #1758: no author_profile → fall back to the top git-contributor login.
+     author_index.json holds only established-author keys, so the rail appears
+     only when that login already has an author page. */}}
 {{- $entry := "" -}}
 {{- if and $login site.Data.author_index -}}{{- $entry = index site.Data.author_index $login -}}{{- end -}}
 {{- with $entry -}}

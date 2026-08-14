@@ -345,6 +345,79 @@ describe('/build/navigator: single-path mission with empty/differing path name (
   });
 });
 
+// Issue #1775: within a mission, Next/Prev must chain continuously across group
+// (CompletionPath) boundaries. The last tutorial of path N links to the first of
+// path N+1 (and back), and the boundary mapping carries nextGroupSlug/
+// prevGroupSlug so the island can update ?from= to the crossed-into group.
+describe('/build/navigator: cross-group Next/Prev within a mission (#1775)', () => {
+  const MG_TAG_ID     = 'aaaaaaaa-9006-0000-0000-000000000001';
+  const MG_MISSION_ID = '11111111-9006-0000-0000-000000000001';
+  const MG_PATH1_ID   = '22222222-9006-0000-0000-000000000001';
+  const MG_PATH2_ID   = '22222222-9006-0000-0000-000000000002';
+  const MG_TUT = n => `cccccccc-9006-0000-0000-00000000001${n}`;
+  const MG_CPI = n => `cccccccc-9006-0000-0000-00000000003${n}`;
+
+  beforeAll(async () => {
+    const { Tags, Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tags).entries({ ID: MG_TAG_ID, legacyId: 99006, name: '__TEST__ MultiGroup Tag' });
+    await INSERT.into(Tutorials).entries([
+      { ID: MG_TUT(1), legacyId: 99081, title: '__TEST__ MG Tut 1', slug: 'test-mg-tut-1', status: 'ACTIVE' },
+      { ID: MG_TUT(2), legacyId: 99082, title: '__TEST__ MG Tut 2', slug: 'test-mg-tut-2', status: 'ACTIVE' },
+      { ID: MG_TUT(3), legacyId: 99083, title: '__TEST__ MG Tut 3', slug: 'test-mg-tut-3', status: 'ACTIVE' },
+      { ID: MG_TUT(4), legacyId: 99084, title: '__TEST__ MG Tut 4', slug: 'test-mg-tut-4', status: 'ACTIVE' },
+    ]);
+    await INSERT.into(Missions).entries({
+      ID: MG_MISSION_ID, legacyId: 99006, title: '__TEST__ MultiGroup Mission',
+      slug: 'test-mg-mission', description: 'desc', experienceTag: 'beginner',
+      primaryTagRef_ID: MG_TAG_ID, published: true, status: 'ACTIVE',
+    });
+    // Two CompletionPaths (= two user-facing groups). legacyId ordering
+    // (99061 < 99062) defines the mission's group sequence.
+    await INSERT.into(CompletionPaths).entries([
+      { ID: MG_PATH1_ID, legacyId: 99061, mission_ID: MG_MISSION_ID, name: '__TEST__ MG Group 1', slug: 'test-mg-group-1' },
+      { ID: MG_PATH2_ID, legacyId: 99062, mission_ID: MG_MISSION_ID, name: '__TEST__ MG Group 2', slug: 'test-mg-group-2' },
+    ]);
+    await INSERT.into(CompletionPathItems).entries([
+      { ID: MG_CPI(1), legacyId: 99091, path_ID: MG_PATH1_ID, taskType: 'TUTORIAL', tutorial_ID: MG_TUT(1), taskLegacyId: 99081, itemOrder: 0 },
+      { ID: MG_CPI(2), legacyId: 99092, path_ID: MG_PATH1_ID, taskType: 'TUTORIAL', tutorial_ID: MG_TUT(2), taskLegacyId: 99082, itemOrder: 1 },
+      { ID: MG_CPI(3), legacyId: 99093, path_ID: MG_PATH2_ID, taskType: 'TUTORIAL', tutorial_ID: MG_TUT(3), taskLegacyId: 99083, itemOrder: 0 },
+      { ID: MG_CPI(4), legacyId: 99094, path_ID: MG_PATH2_ID, taskType: 'TUTORIAL', tutorial_ID: MG_TUT(4), taskLegacyId: 99084, itemOrder: 1 },
+    ]);
+  });
+
+  afterAll(async () => {
+    const { Tags, Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+    await DELETE.from(CompletionPathItems).where({ ID: { in: [MG_CPI(1), MG_CPI(2), MG_CPI(3), MG_CPI(4)] } });
+    await DELETE.from(CompletionPaths).where({ ID: { in: [MG_PATH1_ID, MG_PATH2_ID] } });
+    await DELETE.from(Missions).where({ ID: MG_MISSION_ID });
+    await DELETE.from(Tutorials).where({ ID: { in: [MG_TUT(1), MG_TUT(2), MG_TUT(3), MG_TUT(4)] } });
+    await DELETE.from(Tags).where({ ID: MG_TAG_ID });
+  });
+
+  it('chains the last tutorial of group 1 to the first of group 2 (and back)', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const t2 = data.tutorialMappings.find(t => t.slug === 'test-mg-tut-2'); // last of group 1
+    const t3 = data.tutorialMappings.find(t => t.slug === 'test-mg-tut-3'); // first of group 2
+    expect(t2.next).toBe('test-mg-tut-3');
+    expect(t2.nextGroupSlug).toBe('test-mg-group-2');
+    expect(t3.prev).toBe('test-mg-tut-2');
+    expect(t3.prevGroupSlug).toBe('test-mg-group-1');
+  });
+
+  it('bounds the mission ends and omits boundary group slugs mid-group', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const t1 = data.tutorialMappings.find(t => t.slug === 'test-mg-tut-1'); // first of mission
+    const t4 = data.tutorialMappings.find(t => t.slug === 'test-mg-tut-4'); // last of mission
+    expect(t1.prev).toBeNull();
+    expect(t4.next).toBeNull();
+    // In-group neighbours carry no boundary group slug.
+    expect(t1.nextGroupSlug).toBeUndefined();
+    expect(t4.prevGroupSlug).toBeUndefined();
+  });
+});
+
 describe('/build/navigator: Checkpoint markers', () => {
   const CP_TAG_ID     = 'aaaaaaaa-9003-0000-0000-000000000001';
   const CP_MISSION_ID = '11111111-9003-0000-0000-000000000001';

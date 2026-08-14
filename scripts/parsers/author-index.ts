@@ -10,6 +10,13 @@ export interface AuthorTutorialRow {
   tags: string[]
   createdAt?: string
   isNew: boolean
+  /**
+   * #1758: top git-contributor login for this tutorial (raw GitHub login, any
+   * case). Used only as a fallback when `authorProfile` is absent — and then
+   * only to attach the tutorial to an author page that ALREADY exists (see
+   * buildAuthorIndex). Never mints a new author page.
+   */
+  topContributorLogin?: string
 }
 export interface AuthorIndexTutorial {
   slug: string; title: string; time: number; level: string; tags: string[]; isNew: boolean
@@ -56,6 +63,7 @@ export function advocateLoginToSlug(roster: unknown): Map<string, string> {
 export function buildAuthorIndex(
   rows: AuthorTutorialRow[],
   advocates: Map<string, string>,
+  activeSlugs?: Set<string>,
 ): AuthorIndex {
   // Sort once up front: most-recent-first, title A→Z tiebreak. Push order = display order.
   const sorted = [...rows].sort((a, b) => {
@@ -64,10 +72,48 @@ export function buildAuthorIndex(
     if (cb !== ca) return cb - ca
     return a.title.localeCompare(b.title)
   })
+  // Row passes the active/published filter? Fail-open when no set is provided
+  // (degraded / ALLOW_EMPTY_CAP builds pass empty/undefined → no filtering).
+  const isActive = (row: AuthorTutorialRow) =>
+    !activeSlugs || activeSlugs.size === 0 || activeSlugs.has(row.slug.toLowerCase())
+
+  // #1758 (conservative fallback): logins that HAVE an author page — i.e. that
+  // resolved via `authorProfile` on at least one ACTIVE tutorial. A
+  // contributor-only tutorial is attached to its top-contributor login only
+  // when that login is in this set, so we never mint a page from a git
+  // contributor (bots, typo-fixers, reviewers). Established-only keeps
+  // attribution semantics unchanged for everyone without an existing page.
+  const established = new Set<string>()
+  for (const row of sorted) {
+    if (!isActive(row)) continue
+    const login = normalizeAuthorLogin(row.authorProfile)
+    if (login) established.add(login)
+  }
+
+  // Effective author login for a row: the authorProfile login, else the top
+  // git-contributor login IF that login already has an author page.
+  const effectiveLogin = (row: AuthorTutorialRow): string | null => {
+    const login = normalizeAuthorLogin(row.authorProfile)
+    if (login) return login
+    const contrib = row.topContributorLogin ? row.topContributorLogin.toLowerCase() : ''
+    return contrib && established.has(contrib) ? contrib : null
+  }
+
   const index: AuthorIndex = {}
   for (const row of sorted) {
-    const login = normalizeAuthorLogin(row.authorProfile)
+    const login = effectiveLogin(row)
     if (!login) continue
+    // Exclude tutorials not in the active/published catalog: INACTIVE /
+    // soft-deleted tutorials, and stale .tutorial-cache entries for slugs
+    // deleted from the source repo. activeSlugs is the ACTIVE-only catalog slug
+    // set (status='ACTIVE' or null — srv/lib/build-catalog.js) that the main
+    // navigator/browse pipeline already uses. Without this the author pages +
+    // "more from author" rail surfaced unpublished/deleted tutorials.
+    // Fail-open: only filter when a non-empty set was provided (degraded /
+    // ALLOW_EMPTY_CAP builds pass empty/undefined → no filtering). Compare
+    // lowercase — row slugs come from mixed-case source dirs, catalog slugs are
+    // lowercase-canonical (see CLAUDE.md slug-casing rule).
+    if (!isActive(row)) continue
     if (!index[login]) {
       index[login] = {
         login,

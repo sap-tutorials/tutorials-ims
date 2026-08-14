@@ -144,7 +144,7 @@ describe('content-store', () => {
       // CDN origin support: split browser/edge TTL + SWR + Vary + Edge-Cache-Tag
       // (srv/lib/edge-cache-headers.js). See test/unit/edge-cache-headers.test.js.
       expect(res.headers['cache-control']).toBe(
-        'public, max-age=60, s-maxage=86400, stale-while-revalidate=600'
+        'public, max-age=60, s-maxage=600, stale-while-revalidate=600'
       );
       expect(res.headers['vary']).toContain('Accept-Encoding');
       expect(res.headers['edge-cache-tag']).toContain('content');

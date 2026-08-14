@@ -41,16 +41,21 @@ async function run(): Promise<void> {
   try {
     const row = await resolveGroupNav(slug, from);
     if (!row) return;
+    // #1775: when a neighbour crosses into another group of the same mission,
+    // carry that group in ?from= so the next hop resolves in-context. In-group
+    // neighbours keep the current ?from=.
+    const prevFrom = row.prevGroupSlug ?? from;
+    const nextFrom = row.nextGroupSlug ?? from;
     const bottom = document.querySelector<HTMLElement>('.tutorial-nav-bottom');
     if (bottom) {
-      ensurePill(bottom, 'prev', row.prev, from);
-      ensurePill(bottom, 'next', row.next, from);
+      ensurePill(bottom, 'prev', row.prev, prevFrom);
+      ensurePill(bottom, 'next', row.next, nextFrom);
     }
     const card = document.querySelector<HTMLAnchorElement>('a.next-steps-card');
     // Best-effort: rewrites or removes an existing next-steps card only — does not create one if absent.
     if (card) {
       if (!row.next) card.remove();
-      else card.setAttribute('href', href(row.next, from));
+      else card.setAttribute('href', href(row.next, nextFrom));
     }
   } catch {
     // silent — baked links are the fallback

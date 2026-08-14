@@ -10,10 +10,31 @@ import "../css/skeletons.css";
 // U15: lightbox dialog styles. Scoped to .lightbox-dialog and descendants.
 import "../css/lightbox.css";
 
-// Register theme assets for both light and dark — without this side-effect import,
-// setTheme("sap_horizon_dark") silently falls back to sap_horizon (only the default is registered).
-import "@ui5/webcomponents/dist/Assets.js";
-import "@ui5/webcomponents-fiori/dist/Assets.js";
+// Register THEME assets only (light + dark) — deliberately NOT the blanket
+// `@ui5/webcomponents/dist/Assets.js` / `-fiori/dist/Assets.js`.
+//
+// The blanket Assets.js transitively imports:
+//   - @ui5/webcomponents-localization/dist/Assets.js  → CLDR date/number data
+//     for 76 locales (~11 MB), and
+//   - all-locale i18n message bundles (~2.5 MB, 57 locales).
+// Both loaders are authored to lazy-load one locale at runtime via dynamic
+// import(), but Hugo's js.Build runs esbuild with splitting DISABLED, so every
+// per-locale branch is inlined statically — shipping ~13 MB of locale data on
+// EVERY page. This site imports no date/calendar/number components (no
+// DatePicker/Calendar/DateTimePicker), so CLDR is pure dead weight, and the
+// site is English-first, so the non-English message bundles are unused
+// (components fall back to their compiled English default texts).
+//
+// Importing only the theming json-imports still registers the sap_horizon
+// (light) + sap_horizon_dark theme parameters, so setTheme() below works for
+// both — the original "dark falls back to light" hazard is preserved against.
+// Measured effect: ui5-bootstrap bundle 16.25 MB → 3.48 MB (−79%).
+// If a date/calendar component or non-English UI is ever added, restore the
+// blanket Assets.js import (or, better, move this bootstrap to the Vite
+// pipeline so the per-locale chunks lazy-load as intended).
+import "@ui5/webcomponents-theming/dist/Assets.js";
+import "@ui5/webcomponents/dist/generated/json-imports/Themes.js";
+import "@ui5/webcomponents-fiori/dist/generated/json-imports/Themes.js";
 
 import "@ui5/webcomponents/dist/Avatar.js";
 import "@ui5/webcomponents/dist/MessageStrip.js";

@@ -116,22 +116,20 @@ jobs:
       # #1373 — the failure/recovery notifier opens, comments on, and closes a
       # deduplicated GitHub issue; assignment triggers GitHub's native email.
       issues: write
-    # DEV rebuilds are disabled: the DEV approuter's REBUILD_API_KEY /
-    # CONTENT_API_KEY are not configured, so the "Push content to AppRouter"
-    # step 401s and the run goes red for no operational benefit — DEV content
-    # is refreshed by mta deploys. Only PROD (and QA) need scheduled/dispatch
-    # rebuilds. This job-level gate makes any dev-targeted run resolve to a
-    # clean SKIPPED (never a red failure). Re-enable by deleting this `if:`
-    # once the DEV keys are seeded in the DEV approuter Credential Store.
+    # DEV rebuilds are ENABLED: once the DEV approuter Credential Store is seeded
+    # with REBUILD_API_KEY / CONTENT_API_KEY, `gh workflow run rebuild-content.yml
+    # -f environment=dev` publishes DEV content server-side — no local key paste,
+    # matching the PROD/QA path. The previous job-level `if:` gate that
+    # force-SKIPPED every dev-targeted run has been removed.
     #
-    # Target is knowable at job level without a runtime step: workflow_dispatch
-    # exposes inputs.environment, repository_dispatch exposes
-    # client_payload.environment. An absent/unknown repository_dispatch env
-    # (`'' != 'dev'`) passes the gate and is routed to prod by the fallback in
-    # the "Determine environment" step below — matching that fallback flip.
-    if: >-
-      ${{ (github.event_name == 'workflow_dispatch' && inputs.environment != 'dev')
-          || (github.event_name != 'workflow_dispatch' && github.event.client_payload.environment != 'dev') }}
+    # PREREQUISITE (one-time, MUST be done before this is relied on): seed the DEV
+    # approuter Credential Store with CONTENT_API_KEY + REBUILD_API_KEY (values
+    # matching the GH `CONTENT_API_KEY` / `REBUILD_API_KEY` secrets) via
+    # /admin-ui/#secrets on the DEV approuter. Without it, a dev run 401s at the
+    # "Push content to AppRouter" step and goes red.
+    #
+    # repository_dispatch behaviour is unchanged: the "Determine environment" step
+    # below still defaults an absent/unknown env to prod.
 
     steps:
       - name: Checkout
@@ -537,6 +535,25 @@ jobs:
           APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
           BROWSE_CHANNEL: ${{ steps.env.outputs.target == 'qa' && 'qa' || 'prod' }}
         run: npx tsx scripts/seed-browse-from-deployed.ts
+
+      # Preserve /authors/{login}/ across catalog-only rebuilds (same wipe class
+      # as /browse/ above). catalog-only skips "Fetch tutorials", so
+      # fetch-tutorials.ts never emits the per-login author stubs, author_index.json,
+      # or the served /author_index.json copy → the Hugo build below would render
+      # NO author pages, and the tarball push would atomically clobber the good
+      # /authors/* a prior full rebuild shipped. Author pages CANNOT be rebuilt
+      # here (buildAuthorIndex needs per-tutorial author attribution only the
+      # skipped GitHub fetch provides), so re-hydrate the index from the copy the
+      # approuter is CURRENTLY serving at /author_index.json and regenerate the
+      # stubs + data + served copy. Fails the run (non-zero) rather than ship a
+      # wiped /authors/* if the deployed index can't be read or is empty. Not
+      # needed in `full` (regenerates them) or `slug-targeted` (no tarball push).
+      - name: Preserve author pages for catalog-only rebuild
+        if: ${{ steps.mode.outputs.effective_mode == 'catalog-only' }}
+        env:
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
+          AUTHOR_CHANNEL: ${{ steps.env.outputs.target == 'qa' && 'qa' || 'prod' }}
+        run: npx tsx scripts/seed-authors-from-deployed.ts
 
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify

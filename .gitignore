@@ -11,6 +11,7 @@ hugo/content/developer-advocates/*.md
 hugo/content/authors/*.md
 !hugo/content/authors/_index.md
 hugo/static/tutorials/
+hugo/static/author_index.json
 hugo/public/
 hugo/public-qa/
 hugo/content-qa/

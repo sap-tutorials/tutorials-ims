@@ -8,7 +8,71 @@ const TARGET_COUNT = 8;
 const MISSIONS_PER_SLIDE = 4;
 const LOG = cds.log('featured-topics');
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// #1783 — loose freshness floor for the Featured (PageRank) carousel.
+// Admin-configurable via ImsConfig; the default is deliberately generous
+// (~24 months) so evergreen-but-old tutorials stay eligible — the #1771 case
+// was a 344-day-old tutorial that should NOT be auto-dropped. An explicit
+// value of 0 (or negative) disables the age floor entirely.
+const FRESHNESS_CFG_KEY = 'featured.freshness.maxAgeDays';
+export const DEFAULT_FRESHNESS_MAX_AGE_DAYS = 730;
+
 const lower = (x) => (x == null ? x : String(x).toLowerCase());
+
+/**
+ * Resolve the Featured-carousel freshness cutoff (in days) from ImsConfig.
+ *
+ * - Missing row / blank / non-numeric value → the generous default (issue
+ *   #1783 wants a DB-configurable threshold with a generous fallback).
+ * - An explicit numeric value is honoured verbatim; 0 or negative disables
+ *   the age floor.
+ * - Any read fault fails OPEN (returns 0 → no filtering) rather than risk
+ *   gutting the curated surface on a transient DB hiccup.
+ */
+export async function resolveFreshnessMaxAgeDays(tx) {
+  const { ImsConfig } = cds.entities(NS);
+  try {
+    const row = await tx.run(SELECT.one.from(ImsConfig).columns('value').where({ key: FRESHNESS_CFG_KEY }));
+    const raw = row?.value;
+    if (raw == null || String(raw).trim() === '') return DEFAULT_FRESHNESS_MAX_AGE_DAYS;
+    const n = Number(String(raw).trim());
+    if (!Number.isFinite(n)) {
+      LOG.warn(`featured freshness cutoff "${raw}" is not a number; using default ${DEFAULT_FRESHNESS_MAX_AGE_DAYS}d`);
+      return DEFAULT_FRESHNESS_MAX_AGE_DAYS;
+    }
+    return n;
+  } catch (err) {
+    LOG.warn('featured freshness cutoff read failed; fail-open (no age floor):', err.message);
+    return 0;
+  }
+}
+
+/**
+ * Partition an eligibility slug set by a freshness cutoff. Pure — no DB.
+ *
+ * @param {Set<string>} tutorialsBySlug  lowercased eligible slugs
+ * @param {Map<string,number>} reviewedMsBySlug  slug → most-recent reviewedDate (ms since epoch)
+ * @param {number} maxAgeDays  cutoff in days; <= 0 disables filtering
+ * @param {number} now  reference time (ms), defaults to Date.now()
+ * @returns {{kept: Set<string>, dropped: string[]}}
+ *
+ * A slug with no entry in `reviewedMsBySlug` (no TutorialMeta row or a NULL
+ * reviewedDate) is KEPT — fail-open, consistent with the pipeline. Slugs whose
+ * most-recent reviewedDate is older than the cutoff are dropped.
+ */
+export function applyFreshnessFilter(tutorialsBySlug, reviewedMsBySlug, maxAgeDays, now = Date.now()) {
+  if (!(maxAgeDays > 0)) return { kept: tutorialsBySlug, dropped: [] };
+  const cutoffMs = now - maxAgeDays * DAY_MS;
+  const kept = new Set();
+  const dropped = [];
+  for (const slug of tutorialsBySlug) {
+    const ms = reviewedMsBySlug.get(slug);
+    if (ms == null || ms >= cutoffMs) kept.add(slug);
+    else dropped.push(slug);
+  }
+  return { kept, dropped };
+}
 
 /**
  * Decode a raw description value from a HANA NCLOB column.
@@ -26,7 +90,7 @@ export function decodeDescription(raw) {
 }
 
 async function loadInputs(tx) {
-  const { HomepageFeaturedTopics, Concepts, ConceptRank, TutorialRank, KgCommunity, TutorialConceptLinks, Tutorials, Missions } = cds.entities(NS);
+  const { HomepageFeaturedTopics, Concepts, ConceptRank, TutorialRank, KgCommunity, TutorialConceptLinks, Tutorials, Missions, TutorialMeta } = cds.entities(NS);
 
   const editorialRows = await tx.run(SELECT.from(HomepageFeaturedTopics).columns('ID','concept_ID','displayTitle','sortOrder','validFrom','validUntil','missionSlugs','isActive','createdAt'));
   const editorialConceptIds = [...new Set(editorialRows.map(r => r.concept_ID).filter(Boolean))];
@@ -117,7 +181,43 @@ async function loadInputs(tx) {
     LOG.warn('Missions read failed in loadInputs; slug set will be incomplete:', err.message);
   }
 
-  return { editorial, kgCandidates, communityByConcept, tutorialRanksByConcept, tutorialsBySlug };
+  // #1783 — loose freshness floor: drop genuinely ancient tutorials from the
+  // Featured eligibility set so they can't be PageRank-ranked onto the curated
+  // carousel. Signal is TutorialMeta.reviewedDate (git last-commit date,
+  // monotonic-guarded) — NOT Tutorials.modifiedAt, which churns catalog-wide on
+  // every --force rebuild. reviewedDate is NULL for ~half of rows; a NULL (or a
+  // missing meta row) KEEPS the tutorial (fail-open). Missions carry no
+  // reviewedDate and are therefore always kept. The cutoff is admin-configurable
+  // via ImsConfig with a generous default. This is the sole chokepoint — the
+  // pure selectFeaturedTopics needs no change.
+  let eligibleSlugs = tutorialsBySlug;
+  try {
+    const maxAgeDays = await resolveFreshnessMaxAgeDays(tx);
+    if (maxAgeDays > 0) {
+      // Unbounded read (like the Concepts read above): one row per tutorial, a
+      // handful of short columns — well under HANA's packet ceiling, and no
+      // WHERE slug IN (…) that would blow it.
+      const metaRows = await tx.run(SELECT.from(TutorialMeta).columns('tutorial.slug as slug', 'reviewedDate'));
+      const reviewedMsBySlug = new Map();
+      for (const r of metaRows) {
+        const s = lower(r.slug);
+        if (!s || r.reviewedDate == null) continue; // NULL reviewedDate → keep (never recorded)
+        const ms = new Date(r.reviewedDate).getTime();
+        if (!Number.isFinite(ms)) continue;
+        const prev = reviewedMsBySlug.get(s);
+        if (prev == null || ms > prev) reviewedMsBySlug.set(s, ms); // most-recent wins across dup meta rows
+      }
+      const { kept, dropped } = applyFreshnessFilter(tutorialsBySlug, reviewedMsBySlug, maxAgeDays);
+      eligibleSlugs = kept;
+      if (dropped.length) LOG.info(`featured freshness floor (${maxAgeDays}d) dropped ${dropped.length} stale tutorial(s) from eligibility`);
+    }
+  } catch (err) {
+    // Fail OPEN: a filter fault must never gut the carousel — keep the full set.
+    LOG.warn('featured freshness filter failed; keeping full eligibility set:', err.message);
+    eligibleSlugs = tutorialsBySlug;
+  }
+
+  return { editorial, kgCandidates, communityByConcept, tutorialRanksByConcept, tutorialsBySlug: eligibleSlugs };
 }
 
 export async function recomputeSnapshot(tx) {

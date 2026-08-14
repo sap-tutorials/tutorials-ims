@@ -9,7 +9,13 @@
 {{ partial "head-og.html" . }}
 {{ partial "head-jsonld.html" . }}
 
-<link rel="stylesheet" href="https://unpkg.com/fundamental-styles@0.41.4/dist/icon.css">
+{{/* Self-hosted from fundamental-styles@0.41.7 (the pinned dep) instead of the
+     cross-origin unpkg CDN — removes a render-blocking third-party request +
+     runtime dependency (an unpkg outage would break every sap-icon-- glyph) and
+     fixes the 0.41.4↔dep version drift. Regenerate on dep bump:
+       cp node_modules/fundamental-styles/dist/icon.css hugo/assets/css/fundamental-styles-icon.css */}}
+{{ $fdIcon := resources.Get "css/fundamental-styles-icon.css" | minify | fingerprint }}
+<link rel="stylesheet" href="{{ $fdIcon.RelPermalink }}">
 <style>
 @font-face {
   font-family: "SAP-icons";
@@ -33,13 +39,13 @@
      threaded with the hashed URL first (follow-up). */}}
 {{ $themeVars := resources.Get "css/sap-theme-vars.css" }}
 {{ $darkVars := resources.Get "css/sap-horizon-dark.css" }}
-{{ $chromaLight := resources.Get "css/chroma-light.css" | fingerprint }}
-{{ $chromaDark := resources.Get "css/chroma-dark.css" | fingerprint }}
-{{ $print := resources.Get "css/print.css" | fingerprint }}
-{{ $ui5overrides := resources.Get "css/ui5-overrides.css" | fingerprint }}
-{{ $viewTransitions := resources.Get "css/view-transitions.css" | fingerprint }}
-{{ $scrollAnimations := resources.Get "css/scroll-animations.css" | fingerprint }}
-{{ $osToggle := resources.Get "css/os-toggle.css" | fingerprint }}
+{{ $chromaLight := resources.Get "css/chroma-light.css" | minify | fingerprint }}
+{{ $chromaDark := resources.Get "css/chroma-dark.css" | minify | fingerprint }}
+{{ $print := resources.Get "css/print.css" | minify | fingerprint }}
+{{ $ui5overrides := resources.Get "css/ui5-overrides.css" | minify | fingerprint }}
+{{ $viewTransitions := resources.Get "css/view-transitions.css" | minify | fingerprint }}
+{{ $scrollAnimations := resources.Get "css/scroll-animations.css" | minify | fingerprint }}
+{{ $osToggle := resources.Get "css/os-toggle.css" | minify | fingerprint }}
 <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaLight.RelPermalink }}">
