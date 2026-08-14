@@ -13,6 +13,11 @@ export interface NavMappingRow {
   groupSlug: string;
   prev: string | null;
   next: string | null;
+  // #1775: set only when prev/next crosses into a DIFFERENT group of the same
+  // mission — the group slug to carry in ?from= so the chain stays coherent
+  // across the boundary. Absent for in-group neighbours.
+  prevGroupSlug?: string;
+  nextGroupSlug?: string;
 }
 
 let cache: Promise<NavMappingRow[]> | null = null;
