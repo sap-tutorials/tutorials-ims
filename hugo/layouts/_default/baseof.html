@@ -63,8 +63,19 @@
   {{ if eq .Type "tutorials" }}{{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-group-nav" }}" defer></script>{{ end }}{{ end }}
   {{ if eq .Type "tutorials" }}<script type="module" src="{{ partial "island-src.html" "tutorial-referred" }}" defer></script>{{ end }}
   {{ if not site.Params.previewMode }}
+  {{ if site.Params.ui5Split }}
+  {{- /* ui5Split ON: load the split entries. ui5-core on every page; page-type
+       entries only where their components are needed. Source-of-truth page map:
+       scripts/ui5-entry-page-map.cjs (#1777 Task 6). */ -}}
+  <script type="module" src="{{ partial "island-src.html" "ui5-core" }}"></script>
+  {{ if eq .Type "tutorials" }}<script type="module" src="{{ partial "island-src.html" "ui5-tutorial" }}"></script>{{ end }}
+  {{ if eq .Type "me" }}<script type="module" src="{{ partial "island-src.html" "ui5-me" }}"></script>{{ end }}
+  {{ if eq .Type "browse" }}<script type="module" src="{{ partial "island-src.html" "ui5-illustrations" }}"></script>{{ end }}
+  {{ else }}
+  {{- /* ui5Split OFF (default): monolithic bootstrap — behavior unchanged. */ -}}
   {{ $ui5 := resources.Get "js/ui5-bootstrap.ts" | js.Build (dict "minify" true "format" "esm" "target" "es2020") }}
   <script type="module" src="{{ $ui5.RelPermalink }}"></script>
+  {{ end }}
   {{ end }}
   {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "alerts" }}" defer></script>{{ end }}
   <script type="module" src="{{ partial "island-src.html" "embed" }}" defer></script>

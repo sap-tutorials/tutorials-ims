@@ -55,4 +55,8 @@
     flex-wrap: wrap;
   }
 </style>
+{{- /* ui5Split: illustration assets for <ui5-illustrated-message> on this error page.
+     ui5-core (IllustratedMessage component) is loaded by baseof when the flag is ON.
+     This entry registers the specific illustration SVG bundles. (#1777 Task 7) */}}
+{{ if and (not site.Params.previewMode) site.Params.ui5Split }}<script type="module" src="{{ partial "island-src.html" "ui5-illustrations" }}"></script>{{ end }}
 {{ end }}
