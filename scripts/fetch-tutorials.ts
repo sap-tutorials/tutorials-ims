@@ -1345,10 +1345,19 @@ async function main() {
       // author pages, "more from author" rail, and byline eligibility. Empty in
       // degraded/ALLOW_EMPTY_CAP builds → buildAuthorIndex fail-opens (no filter).
       const activeSlugs = new Set(tutorialMetas.map((m) => m.slug.toLowerCase()))
+      // Publish a served copy of author_index.json (prod channel only) so a
+      // catalog-only rebuild — which skips this GitHub fetch and therefore
+      // cannot rebuild authorRows — can re-hydrate it from the deployed
+      // approuter and avoid wiping /authors/* (scripts/seed-authors-from-deployed.ts).
+      const publishFile =
+        channel === 'qa'
+          ? undefined
+          : join(__dirname, '..', 'hugo', 'static', 'author_index.json')
       const { pagesWritten } = writeAuthorPages({
         rows: authorRows,
         advocates,
         activeSlugs,
+        publishFile,
         dataFile: join(dataDir, 'author_index.json'),
         contentDir: join(getHugoContentDir(channel), 'authors'),
       })

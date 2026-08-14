@@ -538,6 +538,25 @@ jobs:
           BROWSE_CHANNEL: ${{ steps.env.outputs.target == 'qa' && 'qa' || 'prod' }}
         run: npx tsx scripts/seed-browse-from-deployed.ts
 
+      # Preserve /authors/{login}/ across catalog-only rebuilds (same wipe class
+      # as /browse/ above). catalog-only skips "Fetch tutorials", so
+      # fetch-tutorials.ts never emits the per-login author stubs, author_index.json,
+      # or the served /author_index.json copy → the Hugo build below would render
+      # NO author pages, and the tarball push would atomically clobber the good
+      # /authors/* a prior full rebuild shipped. Author pages CANNOT be rebuilt
+      # here (buildAuthorIndex needs per-tutorial author attribution only the
+      # skipped GitHub fetch provides), so re-hydrate the index from the copy the
+      # approuter is CURRENTLY serving at /author_index.json and regenerate the
+      # stubs + data + served copy. Fails the run (non-zero) rather than ship a
+      # wiped /authors/* if the deployed index can't be read or is empty. Not
+      # needed in `full` (regenerates them) or `slug-targeted` (no tarball push).
+      - name: Preserve author pages for catalog-only rebuild
+        if: ${{ steps.mode.outputs.effective_mode == 'catalog-only' }}
+        env:
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
+          AUTHOR_CHANNEL: ${{ steps.env.outputs.target == 'qa' && 'qa' || 'prod' }}
+        run: npx tsx scripts/seed-authors-from-deployed.ts
+
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
