@@ -7,6 +7,10 @@ enableRobotsTXT = false  # we ship our own via the robots output format
   apiBase = '/api'
   capBase = ''
   brand = 'SAP Developer Center'
+  # ui5Split: when true, loads the split UI5 entries (ui5-core, ui5-tutorial, etc.)
+  # instead of the monolithic ui5-bootstrap.ts bundle. Flag OFF by default; flip to
+  # true once the split entries are validated. (#1777 Task 7)
+  ui5Split = false
   defaultDescription = 'Hands-on tutorials for SAP technologies — SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration. Build, learn, and ship on SAP.'
   heroDescription = 'Step-by-step tutorials, multi-tutorial missions, and reference content for every SAP developer technology. Tested, maintained, and free to use.'
   twitterHandle = '@sapdevs'

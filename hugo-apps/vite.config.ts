@@ -325,6 +325,10 @@ export default defineConfig({
         'devtoberfest-sessions-calendar': resolve(__dirname, 'src/devtoberfest-sessions-calendar/main.ts'),
         'devtoberfest-rules': resolve(__dirname, 'src/devtoberfest-rules/main.ts'),
         'devtoberfest-faq': resolve(__dirname, 'src/devtoberfest-faq/main.ts'),
+        'ui5-core': resolve(__dirname, 'src/ui5/ui5-core.ts'),
+        'ui5-tutorial': resolve(__dirname, 'src/ui5/ui5-tutorial.ts'),
+        'ui5-me': resolve(__dirname, 'src/ui5/ui5-me.ts'),
+        'ui5-illustrations': resolve(__dirname, 'src/ui5/ui5-illustrations.ts'),
       },
       output: {
         // Content-hash entry bundles so a changed bundle gets a new URL the
@@ -343,6 +347,13 @@ export default defineConfig({
             ? '[name].js'
             : '[name]-[hash].js',
         chunkFileNames: 'chunks/[name]-[hash].js',
+        manualChunks(id) {
+          // Force the UI5 base (the Theme singleton) into ONE shared chunk so
+          // every ui5-* entry references the same Theme instance. Single-copy
+          // invariant — see spec. Do NOT widen this to all of @ui5 (that would
+          // pull every component into the shared chunk, defeating the split).
+          if (id.includes('@ui5/webcomponents-base')) return 'ui5-vendor';
+        },
       },
     },
   },
