@@ -9,6 +9,15 @@ const CANONICAL_SAP_ID = /^[PSIps]\d{6,}$/;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Chunk an array into sub-arrays of at most `size` elements.
+// Required for HANA packet-cap safety on .in() predicates (known gotcha:
+// cqn-where-in-hana-packet-cap — chunk at 500).
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 // Select the completions that SHOULD have been delivered to NGDS. Mirrors the
 // auto-send gates exactly, minus the CF-space gate (the operator targets PROD
 // deliberately via `cds bind`).
@@ -18,7 +27,8 @@ export async function selectResendCandidates(db, { epochMs = null, completedBefo
     SELECT.from(TaskRecords).where({ status: 'COMPLETED', taskType: { in: NGDS_ELIGIBLE } })
   );
 
-  const out = [];
+  // Pass 1: apply cheap in-process gates (no DB round-trips).
+  const survivors = [];
   for (const r of rows) {
     if (r.createdBy === 'migration') continue;                 // legacy already credited
     const when = r.completionDate || r.modifiedAt;
@@ -26,12 +36,29 @@ export async function selectResendCandidates(db, { epochMs = null, completedBefo
     if (epochMs != null && Number.isFinite(t) && t < epochMs) continue;        // pre-cutover
     if (completedBefore != null && Number.isFinite(t) && t >= completedBefore) continue; // optional ceiling
     if (!r.user_ID) continue;
-    const u = await db.run(SELECT.one.from(Users).columns('sapId').where({ ID: r.user_ID }));
-    const sapId = u?.sapId;
-    if (!(typeof sapId === 'string' && CANONICAL_SAP_ID.test(sapId.trim()))) continue; // identity gate
-    out.push(r);
+    survivors.push(r);
   }
-  return out;
+
+  if (survivors.length === 0) return [];
+
+  // Pass 2: bulk-fetch canonical users. Chunked at 500 to respect the HANA
+  // packet cap on .in() list size (cqn-where-in-hana-packet-cap).
+  const distinctIds = [...new Set(survivors.map(r => r.user_ID))];
+  const canonicalIds = new Set();
+  for (const ids of chunk(distinctIds, 500)) {
+    const users = await db.run(
+      SELECT.from(Users).columns('ID', 'sapId').where({ ID: { in: ids } })
+    );
+    for (const u of users) {
+      const sapId = u?.sapId;
+      if (typeof sapId === 'string' && CANONICAL_SAP_ID.test(sapId.trim())) {
+        canonicalIds.add(u.ID);
+      }
+    }
+  }
+
+  // Pass 3: keep only survivors whose user has a canonical sapId.
+  return survivors.filter(r => canonicalIds.has(r.user_ID));
 }
 
 // Resend eligible completions via the existing send path (queues to
