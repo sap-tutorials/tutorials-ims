@@ -199,23 +199,30 @@ describe.skipIf(!hasBaseUrl())('e2e: UI5 split — per-page-type upgrade + theme
         ).toHaveLength(0);
 
         // --- 5. Request-log: the split IS splitting ---
-        // mustLoad: every pattern must match at least one captured request URL.
-        for (const pattern of spec.mustLoad ?? []) {
-          const matched = requestUrls.some((u) => pattern.test(u));
-          expect(
-            matched,
-            `Expected a request matching ${pattern} on ${spec.url} but none found.\n` +
-              `Captured JS requests: ${requestUrls.filter((u) => u.endsWith('.js')).join(', ')}`,
-          ).toBe(true);
-        }
-        // mustNotLoad: no captured request URL may match.
-        for (const pattern of spec.mustNotLoad ?? []) {
-          const offender = requestUrls.find((u) => pattern.test(u));
-          expect(
-            offender,
-            `Unexpected request matching ${pattern} on ${spec.url} — ` +
-              `the split is over-loading a page-type bundle onto this page: ${offender}`,
-          ).toBeUndefined();
+        // Guard: only enforce when the split flag is ON (ui5-core-*.js loaded).
+        // On flag-OFF envs the page loads the monolith (ui5-bootstrap.js) instead
+        // of the split entries; mustLoad patterns like /ui5-core-*/ would false-fail.
+        // Detect flag state by checking which top-level UI5 bundle was requested.
+        const flagOff = requestUrls.some((u) => /\/js\/ui5-bootstrap\.js/.test(u));
+        if (!flagOff) {
+          // mustLoad: every pattern must match at least one captured request URL.
+          for (const pattern of spec.mustLoad ?? []) {
+            const matched = requestUrls.some((u) => pattern.test(u));
+            expect(
+              matched,
+              `Expected a request matching ${pattern} on ${spec.url} but none found.\n` +
+                `Captured JS requests: ${requestUrls.filter((u) => u.endsWith('.js')).join(', ')}`,
+            ).toBe(true);
+          }
+          // mustNotLoad: no captured request URL may match.
+          for (const pattern of spec.mustNotLoad ?? []) {
+            const offender = requestUrls.find((u) => pattern.test(u));
+            expect(
+              offender,
+              `Unexpected request matching ${pattern} on ${spec.url} — ` +
+                `the split is over-loading a page-type bundle onto this page: ${offender}`,
+            ).toBeUndefined();
+          }
         }
       } finally {
         await context.close();

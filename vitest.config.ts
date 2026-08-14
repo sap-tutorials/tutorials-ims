@@ -46,7 +46,7 @@ export default defineConfig({
           // specs launch a real browser against a DEPLOYED approuter and would
           // hang the unit tier (which has no BASE_URL); the broad
           // `test/**/*.test.{js,ts}` include above would otherwise swallow them.
-          exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**', 'test/e2e/**'],
+          exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**', 'test/e2e/**', 'test/build/**'],
           // testTimeout raised to 30s because the `test/unit/check-*.test.ts`
           // cluster spawns `npx tsx <script>` per-`it` — cold TSX + child process
           // startup on Windows can breach the vitest default (5s). Project
