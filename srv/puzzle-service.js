@@ -7,6 +7,7 @@ import { gradeEntries, deriveSlotIds } from './lib/puzzle-grading.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
+import { stampSubmissionId } from './lib/task-record-submission-id.js';
 
 const RESET_LIMIT_PER_HOUR = 5;
 const RESET_WINDOW_MS = 60 * 60 * 1000;
@@ -205,7 +206,7 @@ export default class PuzzleService extends cds.ApplicationService {
       });
       if (existing) return { recorded: false, alreadyComplete: true };
 
-      await INSERT.into(TaskRecords).entries({
+      await INSERT.into(TaskRecords).entries(stampSubmissionId({
         user_ID: dbUser.ID,
         taskLegacyId: puzzle.legacyId,
         taskType: 'PUZZLE',
@@ -215,7 +216,7 @@ export default class PuzzleService extends cds.ApplicationService {
         titleSnapshot: puzzle.title,
         legacyId: await getNextLegacyId('TaskRecords', db),
         attemptNumber: prog?.attemptNumber ?? 1,
-      });
+      }));
       return { recorded: true, alreadyComplete: false };
     });
 

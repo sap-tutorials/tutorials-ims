@@ -20,6 +20,7 @@ import { resolveSecret } from './secret-resolver.js';
 import { setContentCacheHeaders } from './edge-cache-headers.js';
 import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
+import { stampSubmissionId } from './task-record-submission-id.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -125,6 +126,7 @@ export async function recomputeTutorialProgress(db, namespace, tutorialId, stepC
     if (rec.progress === newProgress && rec.status === newStatus) continue;
     const set = { progress: newProgress, status: newStatus };
     if (newStatus !== 'COMPLETED') set.completionDate = null;
+    stampSubmissionId(set, rec);
     await UPDATE(TaskRecords).where({ ID: rec.ID }).set(set);
     updated += 1;
   }

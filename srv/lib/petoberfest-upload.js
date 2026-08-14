@@ -2,6 +2,7 @@ import cds from '@sap/cds';
 import { processPetUpload, findDuplicate, insertSubmission } from './petoberfest-photo-store.js';
 import { resolveOrCreatePetUser } from '../petoberfest-service.js';
 import { getNextLegacyId } from './legacy-id.js';
+import { stampSubmissionId } from './task-record-submission-id.js';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,254}$/;
 
@@ -36,7 +37,7 @@ export async function uploadPetSubmission(db, { slug, user, buffer, mimeType, pe
   }));
   let awarded = false;
   if (!existing) {
-    await db.run(INSERT.into(TaskRecords).entries({
+    await db.run(INSERT.into(TaskRecords).entries(stampSubmissionId({
       user_ID: dbUser.ID,
       taskLegacyId: contest.legacyId,
       taskType: 'PETOBERFEST',
@@ -46,7 +47,7 @@ export async function uploadPetSubmission(db, { slug, user, buffer, mimeType, pe
       titleSnapshot: contest.title,
       legacyId: await getNextLegacyId('TaskRecords', db),
       attemptNumber: 1,
-    }));
+    })));
     awarded = true;
   }
   return { id, awarded, moderation: 'PENDING', duplicate: false };
