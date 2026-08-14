@@ -18,6 +18,10 @@ import "@ui5/webcomponents/dist/List.js";
 import "@ui5/webcomponents/dist/ListItemStandard.js";
 import "@ui5/webcomponents/dist/Switch.js";
 import "@ui5/webcomponents/dist/Title.js";
+// TabContainer + Tab: also needed on non-tutorial pages (codetabs shortcode used
+// in hugo/content/u8-codetabs-demo.md — non-tutorial type). Ruling 2, task #1777.
+import "@ui5/webcomponents/dist/TabContainer.js";
+import "@ui5/webcomponents/dist/Tab.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/NotificationListItem.js";
