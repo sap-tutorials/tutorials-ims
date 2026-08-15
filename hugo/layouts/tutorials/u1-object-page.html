@@ -155,7 +155,17 @@
      un-sticking it; users get step navigation via the wizard indicator +
      inline accordion + mobile FAB inside the Steps section. */
   @media (max-width: 960px) {
-    .op-twocol { grid-template-columns: 1fr; }
+    /* minmax(0, 1fr) — NOT bare `1fr` — for the same reason the desktop track uses
+       it (line 139): a bare `1fr` resolves to minmax(auto, 1fr), whose automatic
+       minimum is the column's min-content width. A wide, non-shrinking descendant
+       (the touch-mode ui5-wizard step indicator, horizontal card rails) then forces
+       the single content column — and thus the whole page — wider than the viewport.
+       On mobile that expands the layout viewport (device-width → content-width) and
+       everything scrolls sideways: the title clips on the left, body text runs off
+       the right (issue #1803). minmax(0, …) caps the track minimum at 0 so wide
+       children shrink/scroll within the viewport instead. `html { overflow-x: hidden }`
+       masks this on desktop but is unreliable on mobile, so fix it at the source. */
+    .op-twocol { grid-template-columns: minmax(0, 1fr); }
     .op-twocol > .tutorial-right-col { display: none; }
   }
 
