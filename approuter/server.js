@@ -12,13 +12,9 @@ if (!process.env.VCAP_APPLICATION) {
 }
 
 const approuter = require('@sap/approuter')
-const { mkdirSync, rmSync, renameSync, existsSync } = require('fs')
-const { join, resolve, sep } = require('path')
-const { pipeline } = require('stream/promises')
-const { createGunzip } = require('zlib')
-const tar = require('tar')
+const { existsSync } = require('fs')
+const { join } = require('path')
 const serveStatic = require('serve-static')
-const { isAuthorizedBearer } = require('./lib/bearer-auth')
 const { resolveSecret } = require('./lib/credstore-secret')
 const { getIndex, startAutoRefresh } = require('./lib/legacy-redirects-loader')
 const { normalizeLegacyCatalogUrl } = require('./lib/catalog-legacy-redirects')
@@ -281,16 +277,6 @@ async function imgCdnHandler(req, res, next) {
 }
 
 const STATIC_DIR = join(__dirname, 'static')
-const TEMP_DIR = join(__dirname, 'static-new')
-const OLD_DIR = join(__dirname, 'static-old')
-
-// Static subtrees that are shipped ONLY by the full MTA deploy (root mta.yaml
-// builds hugo/public-qa inline into static/qa) and are NOT part of the
-// content-rebuild tarball. The /admin/rebuild handler replaces the whole
-// static dir atomically, which would otherwise WIPE these; the preserve loop
-// there carries them forward. Keep this list minimal — only deploy-shipped,
-// content-rebuild-independent trees belong here.
-const REBUILD_PRESERVE_DIRS = ['qa']
 
 // Admin shell + feature components served directly by approuter
 const APP_MOUNTS = {
@@ -329,102 +315,13 @@ function adminAppsHandler(req, res, next) {
   next()
 }
 
-async function rebuildHandler(req, res, next) {
-  if (req.method !== 'POST') return next()
+// [#1659 Phase C.4] The /admin/rebuild content-push handler has been retired.
+// Content rebuilds now publish HANA-only (rebuild-content.yml no longer pushes a
+// tarball); the approuter serves all static from the droplet the MTA deploy
+// ships. The former handler atomically replaced the whole static dir, which was
+// the root cause of the post-deploy `cf restart` clobber saga.
 
-  // Credstore-first, env fallback — mirrors srv/lib/secret-resolver.js so the
-  // rebuild-content.yml workflow's "Push content to AppRouter" step keeps
-  // working after we removed REBUILD_API_KEY from the envsubst allowlist.
-  // Issue #867. The 5-min TTL cache inside resolveSecret means rebuild bursts
-  // don't hammer the credstore.
-  const apiKey = await resolveSecret('REBUILD_API_KEY', { logTag: '[rebuild]' })
-  if (!apiKey) {
-    res.writeHead(503, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: 'REBUILD_API_KEY not configured' }))
-    return
-  }
 
-  // Constant-time bearer compare (#134). Mirrors the pattern at
-  // srv/lib/content-store.js for the CONTENT_API_KEY check.
-  if (!isAuthorizedBearer(req.headers['authorization'], apiKey)) {
-    res.writeHead(401, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: 'Unauthorized' }))
-    return
-  }
-
-  console.log('[rebuild] Starting content rebuild...')
-
-  try {
-    if (existsSync(TEMP_DIR)) rmSync(TEMP_DIR, { recursive: true })
-    mkdirSync(TEMP_DIR, { recursive: true })
-
-    await pipeline(
-      req,
-      createGunzip(),
-      tar.extract({
-        cwd: TEMP_DIR,
-        // #899: pin defensive extraction flags explicitly, don't rely on
-        // tar v7 defaults staying safe if the dep is ever bumped or forked.
-        strict: true,           // reject entries with unknown/unsupported header types
-        preservePaths: false,   // strip leading '/' and drop '..' segments
-        strip: 0,
-        // filter() receives (path, entry) — reject symlinks and hardlinks
-        // outright (they're never expected in a Hugo static-site tarball)
-        // and re-check the resolved path stays under TEMP_DIR as a
-        // belt-and-suspenders against any escape via tar features we
-        // haven't thought of. Both these classes have caused real CVEs in
-        // the tar package's history — no reason to leave them open.
-        filter: (path, entry) => {
-          if (entry && (entry.type === 'SymbolicLink' || entry.type === 'Link')) {
-            console.warn(`[rebuild] rejecting tar entry (${entry.type}): ${path}`)
-            return false
-          }
-          const resolved = resolve(TEMP_DIR, path)
-          return resolved.startsWith(TEMP_DIR + sep)
-        }
-      })
-    )
-
-    if (existsSync(OLD_DIR)) rmSync(OLD_DIR, { recursive: true })
-    if (existsSync(STATIC_DIR)) renameSync(STATIC_DIR, OLD_DIR)
-    renameSync(TEMP_DIR, STATIC_DIR)
-    // Preserve deploy-only static subtrees across the atomic swap. The
-    // content-rebuild tarball (rebuild-content.yml "Assemble static content")
-    // intentionally does NOT carry the QA author-preview navigator (static/qa)
-    // — it is shipped only by the full MTA deploy and is independent of content
-    // rebuilds. Without this, the swap above WIPES static/qa off the running pod
-    // on every full/catalog-only rebuild, so /tutorials-qa/ 404s until the next
-    // deploy (root cause of the recurring "no QA navigator" incidents). Carry
-    // each listed subtree forward from the previous static dir ONLY when the new
-    // tarball didn't ship it, so a future tarball that DOES include it still wins.
-    for (const sub of REBUILD_PRESERVE_DIRS) {
-      const from = join(OLD_DIR, sub)
-      const to = join(STATIC_DIR, sub)
-      if (existsSync(from) && !existsSync(to)) {
-        renameSync(from, to)
-        console.log(`[rebuild] preserved static/${sub} across swap (not in tarball)`)
-      }
-    }
-    if (existsSync(OLD_DIR)) rmSync(OLD_DIR, { recursive: true })
-
-    const timestamp = new Date().toISOString()
-    console.log(`[rebuild] Content updated at ${timestamp}`)
-
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status: 'ok', timestamp }))
-  } catch (err) {
-    console.error('[rebuild] Failed:', err.message)
-
-    if (existsSync(OLD_DIR) && !existsSync(STATIC_DIR)) {
-      renameSync(OLD_DIR, STATIC_DIR)
-      console.log('[rebuild] Rolled back to previous content')
-    }
-    if (existsSync(TEMP_DIR)) rmSync(TEMP_DIR, { recursive: true })
-
-    res.writeHead(500, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: err.message }))
-  }
-}
 
 // Workaround: @sap/approuter's static-resource-handler uses path.sep to prefix
 // req.url, which produces backslashes on Windows and breaks serve-static lookups.
@@ -608,7 +505,6 @@ ar.start({
           { path: '/', handler: wellKnownOAuthHandler },
           { path: '/', handler: securityTxtHandler },
           { path: '/', handler: devtoberfestCspHandler },
-          { path: '/admin/rebuild', handler: rebuildHandler },
           { path: '/', handler: imgCdnHandler },
           { path: '/', handler: legacyRedirectsHandler },
           { path: '/', handler: adminAppsHandler },
