@@ -83,6 +83,43 @@ export function canonicalUrlFor(meta) {
   }
 }
 
+// #1808: the sliced chrome still carries the _shell page's own BreadcrumbList
+// JSON-LD (a full Home → _shell trail), which leaks into every composed page's
+// structured data. Rebuild it from page-meta, mirroring the trail
+// hugo/layouts/partials/head-jsonld.html emits for real pages: group/mission
+// live under /tutorials/, concepts under /concepts/. Returns a JSON string, or
+// null for an unknown kind (composeShell then leaves the baked block alone,
+// matching the canonical/og:url guard). `<` is escaped to < so a title
+// containing `</script>` can never break out of the ld+json block.
+export function buildBreadcrumbJsonLd(meta, canonicalUrl) {
+  const crumbs = [{ name: 'Home', item: `${CANONICAL_ORIGIN}/` }];
+  const leaf = String(meta.title ?? '');
+  switch (meta.kind) {
+    case 'group':
+    case 'mission':
+      crumbs.push({ name: 'Tutorials', item: `${CANONICAL_ORIGIN}/tutorials/` });
+      crumbs.push({ name: leaf, item: canonicalUrl });
+      break;
+    case 'concept':
+      crumbs.push({ name: 'Concepts', item: `${CANONICAL_ORIGIN}/concepts/` });
+      crumbs.push({ name: leaf, item: canonicalUrl });
+      break;
+    case 'concepts-index':
+      crumbs.push({ name: 'Concepts', item: `${CANONICAL_ORIGIN}/concepts/` });
+      break;
+    default:
+      return null;
+  }
+  const payload = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: crumbs.map((c, i) => ({
+      '@type': 'ListItem', position: i + 1, name: c.name, item: c.item,
+    })),
+  };
+  return JSON.stringify(payload).replace(/</g, '\\u003c');
+}
+
 // Pure: compose full HTML from parsed shell halves + body + page meta.
 // Rewrites the _shell placeholders the sliced chrome carries so each composed
 // page emits its own SEO head: <html data-page-*>, <title>, <meta description>,
@@ -153,6 +190,26 @@ export function composeShell({ before, after }, bodyHtml, meta) {
         `<link rel="canonical" href="${urlAttr}">`,
       )
       .replace(metaTag('property', 'og:url'), `<meta property="og:url" content="${urlAttr}">`);
+  }
+
+  // #1808 residual: rewrite the visible embed-bar title (embed=minimal header)
+  // away from the baked `_shell`. Tolerates quoted/unquoted class + any inner
+  // text; `title` is already HTML-escaped above.
+  patchedBefore = patchedBefore.replace(
+    /<span class=(?:"embed-bar__title"|'embed-bar__title'|embed-bar__title)>[^<]*<\/span>/,
+    `<span class="embed-bar__title">${title}</span>`,
+  );
+
+  // #1808 residual: rebuild the BreadcrumbList JSON-LD so the composed page
+  // carries its own trail, not the _shell page's. Targets only the ld+json
+  // block containing "@type":"BreadcrumbList" — a second (Organization/WebSite)
+  // ld+json block in the shell is left untouched. Skipped for unknown kinds.
+  const breadcrumb = buildBreadcrumbJsonLd(meta, url);
+  if (breadcrumb) {
+    patchedBefore = patchedBefore.replace(
+      /<script type=(?:"application\/ld\+json"|application\/ld\+json)>\{[^<]*"@type":"BreadcrumbList"[^<]*\}<\/script>/,
+      `<script type="application/ld+json">${breadcrumb}</script>`,
+    );
   }
 
   return `${patchedBefore}${bodyHtml}${after}`;
