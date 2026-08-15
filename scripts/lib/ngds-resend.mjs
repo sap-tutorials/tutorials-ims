@@ -40,7 +40,14 @@ export async function selectResendCandidates(db, { epochMs = null, completedBefo
   // The remaining in-process gates below are belt-and-suspenders for parity.
   const where = { status: 'COMPLETED', taskType: { in: NGDS_ELIGIBLE }, submissionIdCompleted: { '!=': null } };
   if (epochMs != null) where.completionDate = { '>=': new Date(epochMs).toISOString() };
-  const rows = await db.run(SELECT.from(TaskRecords).where(where));
+  // Explicit columns: a bare SELECT.from(TaskRecords) ('*') is not inferred under
+  // `cds bind --exec` (no serve lifecycle) and HANA rejects the un-expanded '*'.
+  // List every field the gates below + the send path (srv/lib/ngds-client.js) read.
+  const rows = await db.run(SELECT.from(TaskRecords).columns(
+    'ID', 'createdBy', 'status', 'taskType', 'completionDate', 'modifiedAt',
+    'user_ID', 'submissionIdCompleted', 'submissionIdStarted', 'taskLegacyId',
+    'titleSnapshot', 'contentLanguage', 'siteLanguage'
+  ).where(where));
 
   // Pass 1: apply cheap in-process gates (no DB round-trips).
   const survivors = [];

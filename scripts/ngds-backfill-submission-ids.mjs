@@ -13,6 +13,8 @@ const bi = args.indexOf('--batch-size');
 const batchSize = bi >= 0 ? Number(args[bi + 1]) : 500;
 const si = args.indexOf('--created-since');
 const createdSince = si >= 0 ? args[si + 1] : null;
+const ci = args.indexOf('--completed-since');
+const completedSince = ci >= 0 ? args[ci + 1] : null;
 
 // Load + compile the model so `cds.entities(...)` resolves under `cds bind --exec`
 // (there is no serving lifecycle here to populate cds.model automatically).
@@ -20,7 +22,7 @@ const csn = await cds.load('*');
 cds.model = cds.compile.for.nodejs(csn);
 
 const db = await cds.connect.to('db');
-const result = await backfillSubmissionIds(db, { dryRun, batchSize, createdSince });
+const result = await backfillSubmissionIds(db, { dryRun, batchSize, createdSince, completedSince });
 console.log(JSON.stringify(result, null, 2));
 if (dryRun) console.log('\n(dry-run — pass --execute to write)');
 process.exit(0);
