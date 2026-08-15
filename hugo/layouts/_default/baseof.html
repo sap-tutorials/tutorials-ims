@@ -41,7 +41,11 @@
     <div class="glossary-popover__body">
       <div class="glossary-popover__term"></div>
       <p class="glossary-popover__definition"></p>
-      <a class="glossary-popover__link" target="_blank" rel="noopener">Learn more &rarr;</a>
+      {{/* Hidden until glossary.ts fills the popover for a term that has a
+           "learn more" link (it sets href + a descriptive aria-label then). An
+           always-present hrefless/generic-text anchor tripped Lighthouse SEO
+           (crawlable-anchors + link-text); a hidden, per-term-populated one does not. */}}
+      <a class="glossary-popover__link" target="_blank" rel="noopener" hidden>Learn more &rarr;</a>
     </div>
   </ui5-popover>
   <script>window.__glossary = {{ site.Data.glossary | jsonify | safeJS }};</script>
