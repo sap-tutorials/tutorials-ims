@@ -108,6 +108,12 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'as the concept-page entries above: the QA channel serves in-flight tutorials from ' +
     '-Contribution repos; author profile pages are out of its scope, and srv-qa wires no ' +
     'authorServeHandler / author publish flow.',
+  'GET /content/developer-advocates/:slug':
+    'CAP-served /developer-advocates/{slug}/ detail pages (#1659 Phase C.2a) — a public prod ' +
+    'content surface sourced from the fixed Advocates set, not tutorial-draft author preview. ' +
+    'Same rationale as the authors + concept-page entries above: the QA channel serves in-flight ' +
+    'tutorials from -Contribution repos; advocate detail pages are out of its scope, and srv-qa ' +
+    'wires no advocateServeHandler / advocate publish flow.',
 };
 
 /**
