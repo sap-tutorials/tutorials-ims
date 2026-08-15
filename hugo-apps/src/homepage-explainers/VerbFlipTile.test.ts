@@ -164,4 +164,45 @@ describe('VerbFlipTile', () => {
     expect(root.attributes('role')).toBe('button');
     expect(root.attributes('tabindex')).toBe('0');
   });
+
+  // #1794 — aria-pressed is invalid on role=link (the <a> verb-tile variant),
+  // so it must be absent there; it stays on the shelf-header button.
+  it('verb tile (link) does NOT carry aria-pressed', async () => {
+    const wrapper = mount(VerbFlipTile, {
+      props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
+               tagline: 'T', whyItMatters: 'W', href: '/learn/' },
+    });
+    const a = wrapper.find('a.hp-flip');
+    expect(a.attributes('aria-pressed')).toBeUndefined();
+    // still absent after a flip
+    await a.trigger('keydown', { key: ' ' });
+    await nextTick();
+    expect(a.attributes('aria-pressed')).toBeUndefined();
+  });
+
+  it('shelf-header (button) keeps aria-pressed reflecting flip state', async () => {
+    const wrapper = mount(VerbFlipTile, {
+      props: { shelfKey: 'START_HERE', label: 'Start here', tagline: 'T', whyItMatters: 'W' },
+    });
+    const root = wrapper.find('div.hp-flip');
+    expect(root.attributes('aria-pressed')).toBe('false');
+    await root.trigger('keydown', { key: ' ' });
+    await nextTick();
+    expect(root.attributes('aria-pressed')).toBe('true');
+  });
+
+  // #1794 — the scrollable back face is keyboard-focusable only while flipped
+  // (so a keyboard user can scroll long content) and not a phantom tab stop
+  // when the card shows its front face.
+  it('back face is focusable only while flipped', async () => {
+    const wrapper = mount(VerbFlipTile, {
+      props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
+               tagline: 'T', whyItMatters: 'W', href: '/learn/' },
+    });
+    const back = wrapper.find('.hp-flip__face--back');
+    expect(back.attributes('tabindex')).toBeUndefined();
+    await wrapper.find('.hp-flip').trigger('keydown', { key: ' ' });
+    await nextTick();
+    expect(back.attributes('tabindex')).toBe('0');
+  });
 });
