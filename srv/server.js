@@ -7,7 +7,6 @@ import { stripPrecompiledPluginRoots } from './lib/strip-precompiled-plugin-root
 import { bustPublishedConceptsCache } from './lib/kg-published-concepts-cache.js';
 
 import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
-import { selfHealOnDeploy } from './lib/deploy-self-heal.js';
 import { resolveDeployEnvironment } from './lib/deploy-environment.js';
 import { versionHandler } from './lib/version-handler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
@@ -492,6 +491,10 @@ cds.on('bootstrap', (app) => {
   // #1659 Task 5 — CAP-served content PAGES. Dark launch: no AppRouter route
   // points here yet (the per-page flips land in Phase 2). Public, no auth —
   // like serveHandler.
+  // The bare /content/pages (and trailing-slash form) is the HOMEPAGE: the
+  // `*path` wildcard below does NOT match an empty segment, so register it
+  // explicitly. pageServeHandler resolves the empty remainder to page-index.
+  app.get('/content/pages', pageServeHandler);
   app.get('/content/pages/*path', pageServeHandler);
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/publish/begin',  express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
@@ -1065,33 +1068,16 @@ cds.on('served', async () => {
       });
   }
 
-  // Self-heal CAP-sourced approuter static content after each CF deploy.
-  // A `cf deploy` can ship an empty /concepts/ index (built against a local
-  // CAP with no published concepts) AND resets the approuter's ephemeral disk,
-  // reverting whatever a content-rebuild had pushed. On the first boot under a
-  // NEW deploy version, dispatch a catalog-only rebuild that re-fetches from
-  // THIS backend (which has the data) and re-pushes fresh static content.
-  // Keyed on VCAP_APPLICATION.application_version via a JobLocks sentinel so it
-  // runs exactly once per deploy — crash-restarts of the same droplet reuse
-  // the same version and skip. Fail-open; never crashes boot. See
-  // srv/lib/deploy-self-heal.js and the 2026-07-12 empty-concepts incident.
-  if (!globalThis.__deploySelfHealAttempted) {
-    globalThis.__deploySelfHealAttempted = true;
-    selfHealOnDeploy()
-      .then((res) => {
-        if (res.triggered) {
-          cds.log('deploy-self-heal').info(
-            'Dispatched catalog-only rebuild to refresh approuter static content after deploy',
-          );
-        }
-      })
-      .catch((err) => {
-        cds.log('deploy-self-heal').warn(
-          'Deploy self-heal failed (non-fatal):',
-          err.message ?? err,
-        );
-      });
-  }
+  // #1659: the post-deploy self-heal rebuild was RETIRED. It dispatched a
+  // catalog-only content rebuild on first boot after each deploy to refresh the
+  // approuter's ephemeral static — but that rebuild runs from `main` and pushes
+  // via POST /admin/rebuild, CLOBBERING the freshly-deployed droplet static
+  // (forcing a manual `cf restart` after every DEV deploy). It is now redundant:
+  // content pages are served live from HANA/CAP (incl. the homepage flip in this
+  // change), assets are deploy-shipped + retained (#1658), and the empty-concepts
+  // incident it guarded is moot (concepts serve from HANA; build:deploy fails on
+  // unset/localhost CAP_BASE_URL). Admin-write content refreshes still dispatch
+  // via the rebuild-trigger path (unchanged) — only the deploy-triggered one is gone.
 
   // Bust the /build/navigator in-memory cache when admins write to entities that
   // shape the navigator response. Without this, the 5-minute TTL serves stale
