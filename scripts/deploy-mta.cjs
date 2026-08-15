@@ -68,6 +68,7 @@ const ENVS = {
     branch: 'DEV',
     capBaseUrl: 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com',
     approuter: 'https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com',
+    approuterApp: 'tutorials-dev-approuter',
     srvUrl: 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com',
   },
   qa: {
@@ -76,6 +77,7 @@ const ENVS = {
     branch: 'DEV',
     capBaseUrl: 'https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com',
     approuter: 'https://tutorial-system-qa-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com',
+    approuterApp: 'tutorials-qa-approuter',
     srvUrl: 'https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com',
   },
   prod: {
@@ -84,6 +86,7 @@ const ENVS = {
     branch: 'main',
     capBaseUrl: 'https://tutorial-system-prod-tutorials-srv.cfapps.eu10-005.hana.ondemand.com',
     approuter: 'https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com',
+    approuterApp: 'tutorials-prod-approuter',
     srvUrl: 'https://tutorial-system-prod-tutorials-srv.cfapps.eu10-005.hana.ondemand.com',
   },
 };
@@ -630,6 +633,42 @@ async function main() {
       warn('No automatic "deploy finished" alert will fire for blue-green (paused before swap).');
     } else {
       ok(`cf deploy complete (${mtar})`);
+
+      // ---- Step 4.6: stale-static guard + auto-restart (in-place only) ----
+      // An in-place `cf deploy` re-stages the approuter, but the RUNNING
+      // container has repeatedly kept serving the PREVIOUS build's static
+      // (2026-08-15: alerts.js, then ui5-overrides.<hash>.css 404'd on DEV even
+      // though the droplet shipped them) — so freshly-published content that
+      // references the new fingerprints renders unstyled/broken until a restart.
+      // Verify the JUST-BUILT hugo/public css + hashed-island-js refs are served
+      // by the live approuter (local-hugo mode: the built refs == what the
+      // content publish will bake, so this catches the drift BEFORE publish). If
+      // any 404, `cf restart` (re-extracts the droplet into a fresh container)
+      // and re-verify. Blue-green uses the operator-gated Step 4.5 instead.
+      const assetArgs = ['scripts/check-approuter-assets.cjs', '--approuter-url', cfg.approuter, '--hugo-dir', 'hugo/public', '--check-islands'];
+      if (!fs.existsSync(path.join(ROOT, 'hugo', 'public', 'tutorials'))) {
+        warn('Step 4.6 skipped: hugo/public/tutorials not present — nothing to verify (e.g. --skip-build with no prior build).');
+      } else {
+        step('4.6', 'Verify approuter serves the just-built assets (stale-static guard)');
+        if (sh('node', assetArgs) === 0) {
+          ok('approuter serves the just-built assets');
+        } else {
+          warn(`approuter is serving STALE static (freshly-built assets 404). Restarting ${cfg.approuterApp} and re-verifying…`);
+          if (sh('cf', ['restart', cfg.approuterApp]) !== 0) {
+            die(1, `\`cf restart ${cfg.approuterApp}\` failed — restart it by hand and re-run the asset check:\n` +
+                   `             node ${assetArgs.join(' ')}`);
+          }
+          // Let the fresh container start accepting traffic before re-probing.
+          await new Promise((r) => setTimeout(r, 15000));
+          if (sh('node', assetArgs) === 0) {
+            ok(`restart cleared the stale static — built assets now served by ${cfg.approuterApp}`);
+          } else {
+            die(1, `${cfg.approuterApp} STILL does not serve the just-built assets after a restart.\n` +
+                   `             The mtar/droplet may be missing them (build/retention bug), not just a stale\n` +
+                   `             container — inspect the deployed droplet before publishing content.`);
+          }
+        }
+      }
     }
   }
 
