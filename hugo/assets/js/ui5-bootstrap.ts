@@ -3,12 +3,12 @@
 // See improvements.md "U0" for scope.
 import { setTheme } from "@ui5/webcomponents-base/dist/config/Theme.js";
 
-// U14: shimmer rules for hydration placeholders + nav-progress-bar overrides.
-// Selectors are scoped to attributes that only get set on relevant pages.
-import "../css/skeletons.css";
-
-// U15: lightbox dialog styles. Scoped to .lightbox-dialog and descendants.
-import "../css/lightbox.css";
+// U14/U15/U16: skeletons, lightbox, and mission-side-nav CSS are delivered via
+// fingerprinted <link>s in hugo/layouts/partials/head.html — NOT imported here.
+// This file is built by Hugo's js.Build (esbuild), which has no CSS-injection
+// step (unlike the hugo-apps Vite build's vite-plugin-css-injected-by-js), so a
+// `import "../css/foo.css"` here inlines the CSS as a dead string that never
+// applies. Do not re-add such imports; add a <link> in head.html instead.
 
 // Register THEME assets only (light + dark) — deliberately NOT the blanket
 // `@ui5/webcomponents/dist/Assets.js` / `-fiori/dist/Assets.js`.
@@ -228,7 +228,7 @@ import "./mission-side-nav";
 import "./recommend";
 // View Transitions + scroll-driven animations. Self-bootstraps; safe no-op when APIs missing.
 import "./view-transitions";
-import "../css/mission-side-nav.css";
+// mission-side-nav.css is delivered via a <link> in head.html (see note at top).
 
 const root = document.documentElement;
 
