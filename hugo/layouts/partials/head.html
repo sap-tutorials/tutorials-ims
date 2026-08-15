@@ -50,6 +50,16 @@
 {{ $viewTransitions := resources.Get "css/view-transitions.css" | minify | fingerprint }}
 {{ $scrollAnimations := resources.Get "css/scroll-animations.css" | minify | fingerprint }}
 {{ $osToggle := resources.Get "css/os-toggle.css" | minify | fingerprint }}
+{{/* These three are imported by hugo/assets/js/ui5-bootstrap.ts, but that file
+     is built by Hugo's js.Build (esbuild), which — unlike the hugo-apps Vite
+     build with vite-plugin-css-injected-by-js — inlines the CSS as a dead string
+     and never injects a <style>. So they MUST be linked here to actually apply
+     (same pattern as view-transitions/scroll-animations above). Omitting them
+     shipped an unstyled image lightbox (thumbnails at full size, all images
+     stacked), unstyled skeleton loaders, and an unstyled mission side-nav. */}}
+{{ $lightbox := resources.Get "css/lightbox.css" | minify | fingerprint }}
+{{ $skeletons := resources.Get "css/skeletons.css" | minify | fingerprint }}
+{{ $missionSideNav := resources.Get "css/mission-side-nav.css" | minify | fingerprint }}
 <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaLight.RelPermalink }}">
@@ -60,6 +70,9 @@
 <link rel="stylesheet" href="{{ $viewTransitions.RelPermalink }}">
 <link rel="stylesheet" href="{{ $scrollAnimations.RelPermalink }}">
 <link rel="stylesheet" href="{{ $osToggle.RelPermalink }}">
+<link rel="stylesheet" href="{{ $lightbox.RelPermalink }}">
+<link rel="stylesheet" href="{{ $skeletons.RelPermalink }}">
+<link rel="stylesheet" href="{{ $missionSideNav.RelPermalink }}">
 <script>
   const t = localStorage.getItem('theme') ||
     (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
