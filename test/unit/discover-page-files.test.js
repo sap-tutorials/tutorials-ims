@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { discoverPageFiles, discoverAuthorPages, isAuthorKey, IN_SCOPE_PAGES } from '../../srv/lib/page-key-map.js';
+import { discoverPageFiles, discoverAuthorPages, isAuthorKey, discoverAdvocatePages, isAdvocateKey, IN_SCOPE_PAGES } from '../../srv/lib/page-key-map.js';
 
 let tmpDir;
 
@@ -133,5 +133,39 @@ describe('discoverAuthorPages', () => {
     expect([...result.keys()].some((k) => k.includes('_index'))).toBe(false);
     // Every key is an author key.
     for (const k of result.keys()) expect(isAuthorKey(k)).toBe(true);
+  });
+});
+
+// #1659 Phase C.2a — per-advocate detail discovery (subdirs of
+// developer-advocates/; the top-level index.html is the separate index page).
+describe('discoverAdvocatePages', () => {
+  let advRoot;
+  beforeAll(() => {
+    advRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'discover-adv-'));
+    const mk = (slug) => {
+      const dir = path.join(advRoot, 'developer-advocates', slug);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html>');
+    };
+    mk('dj-adams');
+    mk('antonio-maradiaga');
+    // The index page is a top-level FILE, not a dir → must be ignored.
+    fs.writeFileSync(path.join(advRoot, 'developer-advocates', 'index.html'), '<!doctype html>index');
+  });
+  afterAll(() => fs.rmSync(advRoot, { recursive: true, force: true }));
+
+  it('returns an empty map when there is no developer-advocates dir', () => {
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'no-adv-'));
+    expect(discoverAdvocatePages(empty).size).toBe(0);
+    fs.rmSync(empty, { recursive: true, force: true });
+  });
+
+  it('maps developer-advocates/<slug>/index.html → advocate-<slug>, ignoring the top-level index file', () => {
+    const result = discoverAdvocatePages(advRoot);
+    expect(result.has('advocate-dj-adams')).toBe(true);
+    expect(result.has('advocate-antonio-maradiaga')).toBe(true);
+    expect(result.get('advocate-dj-adams')).toBe(path.join(advRoot, 'developer-advocates', 'dj-adams', 'index.html'));
+    expect(result.size).toBe(2); // top-level index.html (a file) is not counted
+    for (const k of result.keys()) expect(isAdvocateKey(k)).toBe(true);
   });
 });
