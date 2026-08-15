@@ -31,3 +31,36 @@ export function parseLevelParams(searchParams: URLSearchParams): string[] {
     .map((s) => s.toLowerCase())
     .filter((s) => VALID_LEVELS.has(s))
 }
+
+/**
+ * Issue #1804 — split experience-level slugs out of a product-slug list.
+ *
+ * `tutorial>beginner|intermediate|advanced` belong to the Experience facet,
+ * not Software Product. A level slug left in `filters.products` OR-matches
+ * every same-level tutorial (the product filter is a `some()` over
+ * `displayTagSlugs`), so the Software Product filter appears to do nothing —
+ * the reported symptom. Such a slug can arrive via a `?tag=tutorial>beginner`
+ * chip, a stale `?product=…,tutorial>beginner` URL, or poisoned localStorage.
+ *
+ * Other `tutorial>*` slugs (`tutorial>free-tier`, `tutorial>how-to`) are
+ * legitimate Software Product facets and are preserved verbatim. Level values
+ * are lowercased and deduped, matching `parseLevelParams`' canonical form.
+ *
+ * Pure: returns a new `{ products, levels }` pair, mutates nothing.
+ */
+export function extractExperienceLevels(
+  products: string[],
+): { products: string[]; levels: string[] } {
+  const keptProducts: string[] = []
+  const levels: string[] = []
+  for (const slug of products) {
+    const match = /^tutorial>(.+)$/.exec(slug)
+    const level = match ? match[1].toLowerCase() : ''
+    if (match && VALID_LEVELS.has(level)) {
+      if (!levels.includes(level)) levels.push(level)
+    } else {
+      keptProducts.push(slug)
+    }
+  }
+  return { products: keptProducts, levels }
+}
