@@ -149,4 +149,34 @@ describe('VideoBand.vue', () => {
     expect(wrapper.find('.hb-video-band__chip').exists()).toBe(false);
     wrapper.unmount();
   });
+
+  // Issue #1779: right-size the YouTube fallback thumbnails. Recent tiles render
+  // at 96x54, so they must request mqdefault (320x180) not hqdefault (480x360);
+  // the large featured slot keeps hqdefault. All <img> carry explicit width/height
+  // (CLS) and no thumbnail field means the ytimg fallback is exercised.
+  it('sizes fallback thumbnails to the display box (mqdefault recent, hqdefault featured)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      featured: { videoId: 'FEAT', title: 'Featured', publishedAt: '2026-07-02T00:00:00Z' },
+      recent: [
+        { videoId: 'REC1', title: 'Recent one', publishedAt: '2026-06-15T00:00:00Z' },
+      ],
+      error: null,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })));
+
+    const wrapper = mount(VideoBand, { attachTo: document.body });
+    for (let i = 0; i < 6; i++) await flushPromises();
+    await wrapper.vm.$nextTick();
+
+    const featuredImg = wrapper.find('img.hb-video-band__thumb');
+    expect(featuredImg.attributes('src')).toBe('https://i.ytimg.com/vi/FEAT/hqdefault.jpg');
+    expect(featuredImg.attributes('width')).toBe('480');
+    expect(featuredImg.attributes('height')).toBe('270');
+
+    const recentImg = wrapper.find('img.hb-video-band__recent-thumb');
+    expect(recentImg.attributes('src')).toBe('https://i.ytimg.com/vi/REC1/mqdefault.jpg');
+    expect(recentImg.attributes('width')).toBe('96');
+    expect(recentImg.attributes('height')).toBe('54');
+    expect(recentImg.attributes('loading')).toBe('lazy');
+    wrapper.unmount();
+  });
 });
