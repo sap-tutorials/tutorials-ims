@@ -440,72 +440,22 @@ jobs:
         if: ${{ steps.mode.outputs.effective_mode != 'catalog-only' }}
         run: npm run validate-tutorials
 
-      - name: Build Vue apps
-        # Runs in EVERY content-producing mode: the emitted Vite manifest
-        # (hugo/static/js/.vite/manifest.json) is what build:island-manifest turns
-        # into hugo/data/island_manifest.json → hashed island <script src>. Skipping
-        # it in slug-targeted baked bare /js/<name>.js that 404s on the approuter.
-        run: npm --prefix hugo-apps run build
-
-      # [#1604] Bridge Vite's content-hashed island bundles to Hugo BEFORE the
-      # Hugo build below. build-island-manifest.cjs reads the Vite manifest
-      # (hugo/static/js/.vite/manifest.json, emitted by "Build Vue apps" above)
-      # and writes hugo/data/island_manifest.json, which island-src.html reads at
-      # render time to emit hashed <script src>. This workflow invokes /tmp/hugo
-      # directly (not `npm run build:all`, which calls build:island-manifest
-      # explicitly), so — like the vendor/explore/joule retrofits below — nothing
-      # else emits the manifest. Without it, island-src.html falls back to bare
-      # /js/<name>.js; post-#1604 the droplet ships ONLY hashed bundles, so the
-      # tarball pushed to /admin/rebuild atomically renames a bare-path index.html
-      # over the good droplet static and every hashed-only island (embed,
-      # navigator, cmd-palette, topics-map, devtoberfest) 404s until a
-      # `cf restart` re-extracts the droplet (PROD outage 2026-08-10/11). Same
-      # failure class as the retrofits below; guarded on the deploy path by
-      # deploy-mta.cjs Step 2.5.
-      - name: Build island manifest
-        # Runs in EVERY content-producing mode (see "Build Vue apps"). Writes
-        # hugo/data/island_manifest.json, read by island-src.html at render time.
-        run: npm run build:island-manifest
-
-      # Stage the vendored WASM/model bundles into hugo/static/vendor/ BEFORE the
-      # Hugo build below. These dirs (mediapipe, imgly, animegan) are gitignored
-      # (.gitignore) so they are ABSENT on the clean CI runner, and this workflow
-      # runs `npm --prefix hugo-apps run build` (NOT `npm run build:apps`, which
-      # chains vendor:*), so nothing here regenerates them. Without this step the
-      # Hugo build ships a vendor-less static/, the tarball is pushed to
-      # /admin/rebuild, and approuter/server.js atomically renames it over the
-      # previously-good static/ — wiping the /vendor/* that the last mbt deploy
-      # shipped. Symptom: 404 on /vendor/mediapipe/vision_wasm_internal.js when
-      # activating the camera (root-caused 2026-08-09). Same failure class as the
-      # copy-joule-vendor (#350) and build:explore (#726/#744) retrofits below.
-      - name: Build vendor WASM bundles
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
-        run: |
-          npm run vendor:mediapipe
-          npm run vendor:imgly
-          npm run vendor:animegan
-
-      # Build the /explore Vue/Sigma bundle AND emit hugo/data/explore_bundle.json
-      # BEFORE the Hugo build below. Hugo reads site.Data.explore_bundle at
-      # render time (hugo/layouts/explore/single.html); if the manifest is
-      # absent, /explore falls through to the visible "Explore bundle missing"
-      # fallback. This workflow invokes /tmp/hugo directly (not `npm run
-      # build:all`), so — unlike the mta before-all — nothing else emits the
-      # manifest. Mirrors mta.yaml's pre-Hugo explore steps. The dist is copied
-      # into the tarball's static/explore-ui/ in "Assemble static content".
-      # /explore (#726/#744) landed after #350 and was never added here, so
-      # every non-slug-targeted rebuild wiped /explore-ui/ and re-baked the
-      # fallback until the next mta deploy.
-      - name: Build explore bundle + manifest
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
-        run: |
-          npm --prefix app/explore install --no-audit --no-fund
-          npm --prefix app/explore run build
-          npx tsx scripts/build-explore-manifest.ts app/explore/dist hugo/data/explore_bundle.json
-
-      - name: Copy Joule vendor bundles
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
-        run: npm run copy-joule-vendor
+      # [#1659 Phase C.3] Seed the island name→hash manifest from the DEPLOYED
+      # approuter instead of rebuilding the Vite bundles locally. Island JS hashes
+      # are NOT deterministic (they depend on the resolved dep tree/toolchain), so
+      # a content rebuild that rebuilt them would bake hashes the deployed droplet
+      # does not serve. Now that the /admin/rebuild static push is retired (C.4),
+      # rebuilds no longer ship JS at all — they render pages against the hashes
+      # the approuter ALREADY serves at /_island-manifest.json and publish
+      # HANA-only. This replaces the old "Build Vue apps" + "Build island manifest"
+      # pair. Fail-closed: if the deployed manifest can't be fetched / is empty /
+      # invalid, the rebuild ABORTS rather than bake bare unhashed island paths
+      # that 404 on the hashed-only droplet. Runs in ALL modes.
+      - name: Seed island manifest from deployed
+        env:
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
+          ISLAND_MANIFEST_CHANNEL: ${{ steps.env.outputs.target == 'qa' && 'qa' || 'prod' }}
+        run: npx tsx scripts/seed-island-manifest-from-deployed.ts
 
       # [#797] Hugo safeHTML XSS-guard. Sweeps hugo/layouts/**/*.{html,xml,xsl}
       # for unmarked `| safeHTML` / `| safeHTMLAttr` / `printf "<...%s"` usages
@@ -594,32 +544,26 @@ jobs:
         # paths while a Vite manifest exists.
         run: node scripts/check-hugo-island-fingerprint.cjs --hugo-dir hugo/public
 
-      # #1622 — slug-targeted guard. A slug-targeted rebuild publishes tutorial
-      # HTML to HANA but by design SKIPS the approuter static push ("Push content
-      # to AppRouter" is gated to != slug-targeted). Hugo content-hash-
-      # fingerprints its CSS (head.html / baseof.html: `| fingerprint` →
-      # sap-fundamental.<hash>.css, joule.<hash>.css, …). If any CSS-fingerprinting
-      # template change (#1605) landed since the last FULL deploy to this env, the
-      # freshly-rendered HTML references a hash the deployed approuter static
-      # lacks → the stylesheet 404s → pages render unstyled. The failure is silent
-      # (publish + verify-rows still pass; only visible in a browser).
-      #
-      # This guard probes the target approuter for every /css asset the rendered
-      # HTML references and FAILS BEFORE the HANA publish, so the DB is never
-      # poisoned with HTML the approuter can't dress. Only meaningful in
-      # slug-targeted mode — full / catalog-only push the new static in the same
-      # run. The referenced /css hrefs are identical across all tutorial pages
-      # (shared head/baseof partials), so one representative page fully covers the
-      # failure class; PUBLISH_SLUG scopes it to the changed tutorial (empty →
-      # scans all rendered pages). Also probes islands (hashed /js/<name>-<hash>.js):
-      # the island manifest is now built in slug-targeted mode (see "Build island
-      # manifest"), so the rendered HTML carries hashed island refs. --check-islands
-      # probes them against the approuter alongside /css; a bare /js/<name>.js
-      # fallback is never probed. Static /css is public on the approuter, so
-      # no REBUILD_API_KEY is needed; a fully-gated/unreachable channel (no 200s
-      # at all) is treated as inconclusive and does not block.
-      - name: Guard - approuter serves referenced CSS + islands (slug-targeted)
-        if: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' }}
+      # [#1659 Phase C.3] Approuter-asset guard — now runs in ALL modes. Since the
+      # /admin/rebuild static push is retired (C.4), NO rebuild ships CSS or island
+      # JS: every mode renders HTML against the assets the deployed approuter
+      # ALREADY serves and publishes HANA-only. Hugo content-hash-fingerprints its
+      # CSS (head.html / baseof.html: `| fingerprint` → sap-fundamental.<hash>.css,
+      # joule.<hash>.css, …) and island-src.html emits hashed island
+      # /js/<name>-<hash>.js from the seeded manifest. If any referenced hash isn't
+      # served by the target approuter (a CSS-template change #1605 not yet
+      # deployed, or a stale seeded island manifest), the page would 404 its
+      # stylesheet/island silently (publish + verify-rows still pass; only visible
+      # in a browser). This guard probes the approuter for every referenced /css AND
+      # hashed island asset and FAILS BEFORE the HANA publish, so the DB is never
+      # poisoned with HTML the approuter can't dress. The referenced hrefs are
+      # identical across tutorial pages (shared head/baseof partials), so one page
+      # covers the CSS failure class; PUBLISH_SLUG scopes it to the changed tutorial
+      # (empty → scans all rendered pages). A bare /js/<name>.js fallback is never
+      # probed. Static assets are public, so no REBUILD_API_KEY is needed; a
+      # fully-gated/unreachable channel (no 200s at all) is treated as inconclusive
+      # and does not block.
+      - name: Guard - approuter serves referenced CSS + islands
         env:
           APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
           # Pass the (possibly dispatch-influenced) slug via env, NOT the command
@@ -698,92 +642,15 @@ jobs:
           INITIATOR:       "ci/${{ github.run_id }}"
         run: npx tsx scripts/publish-content.ts --purge-orphans
 
-      - name: Build display app
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
-        run: npm run build:display
-
-      - name: Build admin SPAs
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
-        # Issue #350: the rebuild-content tarball must include admin-shell,
-        # analytics-explorer, scanner, explore, and data-inspector. The
-        # approuter's /admin/rebuild handler atomically swaps STATIC_DIR with
-        # the tarball contents, so any directory NOT in the tarball gets wiped
-        # from the deployed pod. Without this step, every successful workflow
-        # run breaks /admin-ui/, /scanner-ui/, /analytics-ui/, /explore-ui/,
-        # and /data-inspector-ui/ until the next mta deploy. The recipe mirrors
-        # .deploy/mta.yaml (approuter module build commands).
-        # (app/explore is built earlier in the "Build explore bundle + manifest"
-        # step — its dist must exist before the Hugo build too — so it is NOT
-        # rebuilt here.)
-        run: |
-          npm --prefix app/admin-shell install
-          npm --prefix app/admin-shell run build
-          npm --prefix app/analytics-explorer install
-          npm --prefix app/analytics-explorer run build
-
-      - name: Assemble static content
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
-        run: |
-          mkdir -p approuter/static
-          cp -r hugo/public/* approuter/static/
-          rm -rf approuter/static/tutorials
-          cp -r app/display-app/dist approuter/static/display-app
-          mkdir -p approuter/static/admin-ui
-          cp -r app/admin-shell/dist/. approuter/static/admin-ui/
-          mkdir -p approuter/static/analytics-ui
-          cp -r app/analytics-explorer/dist/. approuter/static/analytics-ui/
-          cp -r app/scanner/webapp approuter/static/scanner-ui
-          mkdir -p approuter/static/explore-ui
-          cp -r app/explore/dist/. approuter/static/explore-ui/
-          # Data Inspector UI (#999) — bundled inside @cap-js/data-inspector's
-          # node_modules (a production dep, present after `npm ci`). Rewrite the
-          # UI5 bootstrap CDN from sapui5.hana.ondemand.com (plugin default) to
-          # ui5.sap.com — the approuter's CSP script-src only allowlists
-          # ui5.sap.com. Mirrors .deploy/mta.yaml.
-          mkdir -p approuter/static/data-inspector-ui
-          cp -r node_modules/@cap-js/data-inspector/app/data-inspector-ui/webapp/. approuter/static/data-inspector-ui/
-          sed -i 's|https://sapui5.hana.ondemand.com/|https://ui5.sap.com/|g' approuter/static/data-inspector-ui/index.html
-
-      - name: Create content tarball
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
-        run: tar czf content.tar.gz -C approuter/static .
-
-      - name: Upload content artifact
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: content-${{ steps.env.outputs.target }}-${{ github.run_number }}
-          path: content.tar.gz
-          retention-days: 7
-
-      - name: Push content to AppRouter
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
-        # Pass the secret + URL via env, NOT inline ${{ }} interpolation. Inlining
-        # ${{ secrets.REBUILD_API_KEY }} into the script pastes the raw value into
-        # the source before bash runs; because the key contains a '$' followed by
-        # valid variable-name chars (e.g. ...X$ZLg...), bash then expands that as
-        # an undefined shell variable and silently TRUNCATES the token → the
-        # approuter receives a partial bearer → HTTP 401. Routing through env keeps
-        # the value as opaque bytes ("$REBUILD_API_KEY" is not re-parsed). Mirrors
-        # the "Report failure to PipelineLog" step below, which already does this.
-        env:
-          REBUILD_API_KEY: ${{ secrets.REBUILD_API_KEY }}
-          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
-        run: |
-          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
-            -X POST \
-            -H "Authorization: Bearer $REBUILD_API_KEY" \
-            -H "Content-Type: application/gzip" \
-            --data-binary @content.tar.gz \
-            "$APPROUTER_URL/admin/rebuild")
-
-          echo "HTTP Status: $HTTP_STATUS"
-          cat response.json
-
-          if [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "::error::Content rebuild failed with HTTP $HTTP_STATUS"
-            exit 1
-          fi
+      # [#1659 Phase C.4] The /admin/rebuild static push is RETIRED. Content
+      # rebuilds are now HANA-only: pages render against the deployed asset hashes
+      # (island manifest seeded above, all referenced CSS+island assets verified by
+      # the guard before publish) and are written to HANA by the publish step above.
+      # The approuter serves all static (CSS / island JS / vendor / SPAs) from the
+      # droplet the MTA deploy ships — a content rebuild never mutates it, so the
+      # old "Build display app / Build admin SPAs / Assemble / tarball / Push to
+      # AppRouter" steps (which existed only to repopulate the atomically-replaced
+      # droplet static) are gone.
 
       - name: Summary
         run: |
