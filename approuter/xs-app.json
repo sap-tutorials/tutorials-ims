@@ -579,6 +579,7 @@
     { "source": "^/topics/?(\\?.*)?$",              "target": "/content/pages/topics/$1",              "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/tutorial-navigator/?(\\?.*)?$",  "target": "/content/pages/tutorial-navigator/$1",  "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/developer-advocates/?(\\?.*)?$", "target": "/content/pages/developer-advocates/$1", "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/developer-advocates/([^/?]+)/?(\\?.*)?$", "target": "/content/developer-advocates/$1",   "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/ai/?(\\?.*)?$",                  "target": "/content/pages/ai/$1",                  "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/build/?(\\?.*)?$",               "target": "/content/pages/build/$1",               "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/connect/?(\\?.*)?$",             "target": "/content/pages/connect/$1",             "destination": "srv-api", "authenticationType": "none" },

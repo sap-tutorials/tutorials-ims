@@ -26,7 +26,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, pageServeHandler, authorServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
 import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
@@ -492,6 +492,10 @@ cds.on('bootstrap', (app) => {
   // login → author-<login> BLOB). Dark launch: the AppRouter /authors/ flip
   // lands with this change. Public, no auth — like serveHandler.
   app.get('/content/authors/:login', authorServeHandler);
+  // #1659 Phase C.2a — CAP-served per-advocate DETAIL pages
+  // (/developer-advocates/<slug>/, dynamic slug → advocate-<slug> BLOB). The
+  // /developer-advocates/ INDEX is page-developer-advocates (separate route).
+  app.get('/content/developer-advocates/:slug', advocateServeHandler);
   // #1659 Task 5 — CAP-served content PAGES. Dark launch: no AppRouter route
   // points here yet (the per-page flips land in Phase 2). Public, no auth —
   // like serveHandler.

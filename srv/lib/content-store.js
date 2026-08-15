@@ -1799,6 +1799,27 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // #1659 Phase C — CAP-served per-advocate DETAIL pages
+  // (/developer-advocates/<slug>/). Same dynamic-slug model as authors; the
+  // /developer-advocates/ INDEX is the separate `page-developer-advocates` key.
+  async function advocateServeHandler(req, res) {
+    const slug = String(req.params?.slug || '').toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+      return serveNotFound(res, '(invalid-advocate)');
+    }
+    const key = `advocate-${slug}`;
+    try {
+      const result = await serveStoredSlug(req, res, { slug: key, tagSlug: key, mimeType: 'text/html' });
+      if (result === 'served') return;
+      return serveNotFound(res, key);
+    } catch (err) {
+      LOG.warn(`[advocates] serve failed for ${key}:`, err?.message ?? err);
+      res.status(503);
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.end('Service Unavailable');
+    }
+  }
+
   return {
     contentAuthMiddleware,
     publishHandler,
@@ -1815,7 +1836,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     abortHandler,
     pipelineLogFailureHandler,
     pageServeHandler,
-    authorServeHandler
+    authorServeHandler,
+    advocateServeHandler
   };
 }
 
@@ -1840,3 +1862,4 @@ export const abortHandler = _defaults.abortHandler;
 export const pipelineLogFailureHandler = _defaults.pipelineLogFailureHandler;
 export const pageServeHandler = _defaults.pageServeHandler;
 export const authorServeHandler = _defaults.authorServeHandler;
+export const advocateServeHandler = _defaults.advocateServeHandler;

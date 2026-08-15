@@ -114,3 +114,31 @@ export function discoverAuthorPages(hugoDir) {
   }
   return out;
 }
+
+// #1659 Phase C — per-advocate DETAIL pages (/developer-advocates/<slug>/) are
+// likewise unbounded dynamic slugs (one per advocate), NOT in IN_SCOPE_PAGES
+// (only the /developer-advocates/ INDEX is `page-developer-advocates`). Walk the
+// SUBDIRS under developer-advocates/ → `advocate-<slug>`; the top-level
+// index.html (the index page) is a file, so directory iteration skips it.
+export const ADVOCATE_KEY_PREFIX = 'advocate-';
+export function isAdvocateKey(key) {
+  return typeof key === 'string' && key.startsWith(ADVOCATE_KEY_PREFIX);
+}
+export function discoverAdvocatePages(hugoDir) {
+  const out = new Map();
+  const advDir = path.join(hugoDir, 'developer-advocates');
+  let entries;
+  try {
+    entries = fs.readdirSync(advDir, { withFileTypes: true });
+  } catch {
+    return out; // no advocates dir → nothing to publish
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const slug = e.name.toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) continue; // skip _index etc.
+    const abs = path.join(advDir, e.name, 'index.html');
+    if (fs.existsSync(abs)) out.set(`${ADVOCATE_KEY_PREFIX}${slug}`, abs);
+  }
+  return out;
+}
