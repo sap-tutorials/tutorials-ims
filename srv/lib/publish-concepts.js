@@ -37,6 +37,31 @@ function mapConceptForRender(c) {
   };
 }
 
+// #1795: most auto-extracted KG concepts have no `description`, so the composed
+// concept page shipped `<meta name=description content="">` — Lighthouse scored
+// the concept SEO at 46. Synthesize a unique, human meta description from the
+// concept name (and its tutorial count when available) so every concept page
+// gets a non-empty, distinct description. Body copy is unaffected — the detail
+// template only shows a description paragraph when the real one is present, so
+// this boilerplate lives in <head> only and never renders on-page.
+const META_DESC_MAX = 160; // Google truncates around 155–160 chars.
+
+export function conceptMetaDescription(concept) {
+  const real = (concept.description || '').trim();
+  if (real) return truncateDescription(real);
+  const name = concept.name;
+  const n = Array.isArray(concept.teaches) ? concept.teaches.length : 0;
+  const synthesized = n > 0
+    ? `Explore ${name} on SAP Developer Center: ${n} hands-on tutorial${n === 1 ? '' : 's'}, prerequisites, and related concepts.`
+    : `Learn about ${name} on SAP Developer Center — hands-on SAP tutorials, prerequisites, and related concepts.`;
+  return truncateDescription(synthesized);
+}
+
+function truncateDescription(s) {
+  if (s.length <= META_DESC_MAX) return s;
+  return `${s.slice(0, META_DESC_MAX - 1).trimEnd()}…`;
+}
+
 /**
  * Render every published concept into an open publish session.
  *
@@ -74,7 +99,7 @@ export async function renderConceptsIntoSession({ db, sessionId, helpers, priorH
         kind: 'concept',
         slug: raw.slug,
         title: raw.name,
-        description: raw.description || '',
+        description: conceptMetaDescription(raw),
       };
       const fullDoc = composeShell(shell, body, meta);
       const contentHash = createHash('sha256').update(fullDoc, 'utf-8').digest('hex');

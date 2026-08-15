@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
-import { renderConceptsIntoSession } from '../../srv/lib/publish-concepts.js';
+import { renderConceptsIntoSession, conceptMetaDescription } from '../../srv/lib/publish-concepts.js';
 
 // Task 3 of docs/superpowers/plans/2026-07-08-concepts-scale.md (#1327).
 // POST /content/publish/render-concepts orchestration. Renders each concept
@@ -157,5 +157,68 @@ describe('renderConceptsIntoSession', () => {
       db: {}, sessionId: 's7', helpers, priorHashes: {}, shell: SHELL,
       deps: { buildConceptsPayload: async () => ({ concepts }) },
     })).rejects.toThrow(/error rate|too many/i);
+  });
+});
+
+// #1795: concept pages shipped an empty <meta name=description> (SEO 46)
+// because most auto-extracted KG concepts have no description. The publish
+// path now synthesizes a unique, non-empty meta description.
+describe('conceptMetaDescription (#1795)', () => {
+  it('uses the real description when present', () => {
+    expect(conceptMetaDescription({ name: 'CAP', description: 'The Cloud Application Programming Model.' }))
+      .toBe('The Cloud Application Programming Model.');
+  });
+
+  it('synthesizes a non-empty, name-specific description when missing', () => {
+    const d = conceptMetaDescription({ name: 'A2A Agent Protocol', description: '' });
+    expect(d).not.toBe('');
+    expect(d).toContain('A2A Agent Protocol');
+  });
+
+  it('mentions the tutorial count when the concept teaches some', () => {
+    const d = conceptMetaDescription({ name: 'HANA', description: '', teaches: [{}, {}, {}] });
+    expect(d).toContain('3 hands-on tutorials');
+  });
+
+  it('singularizes for exactly one tutorial', () => {
+    const d = conceptMetaDescription({ name: 'HANA', description: '', teaches: [{}] });
+    expect(d).toContain('1 hands-on tutorial,');
+  });
+
+  it('treats whitespace-only descriptions as empty and falls back', () => {
+    const d = conceptMetaDescription({ name: 'ABAP', description: '   ' });
+    expect(d).toContain('ABAP');
+    expect(d.trim()).not.toBe('');
+  });
+
+  it('truncates over-long descriptions to ~160 chars with an ellipsis', () => {
+    const long = 'x'.repeat(400);
+    const d = conceptMetaDescription({ name: 'X', description: long });
+    expect(d.length).toBeLessThanOrEqual(160);
+    expect(d.endsWith('…')).toBe(true);
+  });
+
+  it('flows through the composed BLOB so no concept ships an empty description', async () => {
+    // A shell that carries the <meta description> placeholder, so composeShell
+    // actually stamps the description into the composed full document.
+    const shell = {
+      before: '<html><head><meta name=description content=""></head><body><header>SAP</header><main>',
+      after: '</main></body></html>',
+    };
+    const concepts = [{
+      slug: 'no-desc', name: 'No Desc Concept', description: '',
+      teaches: [], requires: [], requiredBy: [], relatedTo: [],
+      learningJourneys: [], blogPosts: [], discoveryMissions: [], videos: [],
+      apiDocs: [], samples: [], helpDocs: [], communityEvents: [],
+    }];
+    const helpers = captureHelpers();
+    await renderConceptsIntoSession({
+      db: {}, sessionId: 'sd', helpers, priorHashes: {}, shell,
+      deps: { buildConceptsPayload: async () => ({ concepts }) },
+    });
+    const files = Object.assign({}, ...helpers.calls.map(c => c.files));
+    const doc = gunzipSync(Buffer.from(files['concept-no-desc'], 'base64')).toString('utf-8');
+    expect(doc).not.toContain('<meta name="description" content="">');
+    expect(doc).toMatch(/<meta name="description" content="[^"]*No Desc Concept[^"]*">/);
   });
 });
