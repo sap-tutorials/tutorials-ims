@@ -9,7 +9,12 @@
   <ui5-shellbar-item id="sb-help" icon="question-mark" text="Help"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-theme" icon="dark-mode" text="Toggle theme"></ui5-shellbar-item>
 
-  <ui5-avatar slot="profile" id="sb-avatar" icon="person-placeholder" size="XS" interactive></ui5-avatar>
+  <!-- #1794 nested-interactive: `interactive` makes ui5-avatar render its own
+       inner role=button, which the ShellBar then nests inside its own profile
+       button ("User Menu") — two interactive controls, one inside the other.
+       The ShellBar's profile button is present regardless and fires
+       `profile-click` on its own, so the avatar must NOT be interactive. -->
+  <ui5-avatar slot="profile" id="sb-avatar" icon="person-placeholder" size="XS"></ui5-avatar>
 </ui5-shellbar>
 
 <ui5-popover id="sb-nav-popover" placement="Bottom" horizontal-align="End" hide-arrow>

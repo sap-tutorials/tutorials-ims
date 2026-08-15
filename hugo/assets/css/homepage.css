@@ -522,9 +522,13 @@
 }
 
 .badge { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-.badge--new          { background: #16a34a; color: white; }
+/* #1794 — badge fills darkened so white text clears WCAG AA (4.5:1) for the
+ * small (0.7rem bold) label. Prior #16a34a (3.3:1) and #ca8a04 (2.94:1) failed
+ * axe color-contrast; #15803d (5.0:1) and #a16207 (4.9:1) pass. --updated
+ * (#2563eb, 5.1:1) and --third_party (#6b7280, 4.8:1) already passed. */
+.badge--new          { background: #15803d; color: white; }
 .badge--updated      { background: #2563eb; color: white; }
-.badge--hidden_gem   { background: #ca8a04; color: white; }
+.badge--hidden_gem   { background: #a16207; color: white; }
 .badge--third_party  { background: #6b7280; color: white; }
 
 /* ===== Verb extras ===== */

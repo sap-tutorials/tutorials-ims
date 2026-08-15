@@ -23,7 +23,14 @@
       {{- with .rationale }}<p class="hp-topic-clusters__rationale">{{ . }}</p>{{- end }}
       <ul class="hp-topic-clusters__links">
         {{- range .tutorials -}}
-        <li><a href="{{ .url }}">{{ .title }}</a></li>
+        {{- /* #1794 link-name: some tutorials carry an empty title (e.g.
+               abap-environment-create-tile) which renders a link with no
+               discernible name. Fall back to the slug for the visible text;
+               skip the entry entirely if neither title nor slug is present. */ -}}
+        {{- $label := or (trim (.title | default "") " ") (.slug | default "") -}}
+        {{- if $label -}}
+        <li><a href="{{ .url }}">{{ $label }}</a></li>
+        {{- end -}}
         {{- end -}}
       </ul>
     </div>

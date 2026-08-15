@@ -92,6 +92,16 @@ const ariaLabel = computed(() =>
 </script>
 
 <template>
+  <!--
+    #1794 axe (WCAG A/AA) fixes:
+    - aria-pressed is only valid on role=button, NOT on the <a> (role=link)
+      verb-tile variant, so it's bound only in shelf-header (button) mode.
+      The link's flip affordance is conveyed via aria-label instead.
+    - The back face is a scroll container (long whyItMatters prose, #793); it's
+      made keyboard-focusable while flipped so keyboard users can scroll it
+      (scrollable-region-focusable). The matching CSS only turns overflow-y on
+      while flipped, so the hidden default state isn't a phantom tab stop.
+  -->
   <component
     :is="props.href ? 'a' : 'div'"
     ref="cardEl"
@@ -100,7 +110,7 @@ const ariaLabel = computed(() =>
     :href="props.href || undefined"
     :role="props.href ? undefined : 'button'"
     :tabindex="props.href ? undefined : 0"
-    :aria-pressed="flipped"
+    :aria-pressed="props.href ? undefined : flipped"
     :aria-label="ariaLabel"
     :data-flipped="flipped.toString()"
     @click="onClick"
@@ -118,7 +128,10 @@ const ariaLabel = computed(() =>
           <li v-for="(item, i) in previewItems" :key="i">{{ item }}</li>
         </ul>
       </div>
-      <div class="hp-flip__face hp-flip__face--back">
+      <div
+        class="hp-flip__face hp-flip__face--back"
+        :tabindex="flipped ? 0 : undefined"
+      >
         <h3 class="hp-flip__back-label">{{ label }}</h3>
         <p v-if="tagline" class="hp-flip__tagline">{{ tagline }}</p>
         <p v-if="whyItMatters" class="hp-flip__why">{{ whyItMatters }}</p>
