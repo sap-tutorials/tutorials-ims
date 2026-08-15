@@ -86,3 +86,31 @@ export function discoverPageFiles(hugoDir) {
   }
   return out;
 }
+
+// #1659 Phase C — author pages are UNBOUNDED dynamic slugs (one per contributor
+// login), so they are NOT in the fixed IN_SCOPE_PAGES allow-list. Walk
+// hugo/public/authors/<login>/index.html → `author-<login>` (like tutorials/
+// concepts ride the dynamic-slug publish/serve path). `_index` and any
+// non-slug-shaped dir names are skipped (the /authors/ index is render:never).
+export const AUTHOR_KEY_PREFIX = 'author-';
+export function isAuthorKey(key) {
+  return typeof key === 'string' && key.startsWith(AUTHOR_KEY_PREFIX);
+}
+export function discoverAuthorPages(hugoDir) {
+  const out = new Map();
+  const authorsDir = path.join(hugoDir, 'authors');
+  let entries;
+  try {
+    entries = fs.readdirSync(authorsDir, { withFileTypes: true });
+  } catch {
+    return out; // no authors dir → nothing to publish
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const login = e.name.toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(login)) continue; // skip _index etc.
+    const abs = path.join(authorsDir, e.name, 'index.html');
+    if (fs.existsSync(abs)) out.set(`${AUTHOR_KEY_PREFIX}${login}`, abs);
+  }
+  return out;
+}

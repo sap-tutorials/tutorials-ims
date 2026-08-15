@@ -1775,6 +1775,30 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // #1659 Phase C — CAP-served /authors/{login}/ pages. Author logins are
+  // UNBOUNDED (one page per contributor), so — unlike the fixed IN_SCOPE_PAGES
+  // allow-list — this is a dynamic slug like tutorials/concepts: publish each
+  // page as `author-<login>` and serve it directly via serveStoredSlug (skipping
+  // serveHandler's tutorial group/mission redirect + status lookup). No baked
+  // fallback (authors aren't in the page-fallback set) — unpublished → 404.
+  async function authorServeHandler(req, res) {
+    const login = String(req.params?.login || '').toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(login)) {
+      return serveNotFound(res, '(invalid-author)');
+    }
+    const slug = `author-${login}`;
+    try {
+      const result = await serveStoredSlug(req, res, { slug, tagSlug: slug, mimeType: 'text/html' });
+      if (result === 'served') return;
+      return serveNotFound(res, slug);
+    } catch (err) {
+      LOG.warn(`[authors] serve failed for ${slug}:`, err?.message ?? err);
+      res.status(503);
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.end('Service Unavailable');
+    }
+  }
+
   return {
     contentAuthMiddleware,
     publishHandler,
@@ -1790,7 +1814,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     commitHandler,
     abortHandler,
     pipelineLogFailureHandler,
-    pageServeHandler
+    pageServeHandler,
+    authorServeHandler
   };
 }
 
@@ -1814,3 +1839,4 @@ export const commitHandler = _defaults.commitHandler;
 export const abortHandler = _defaults.abortHandler;
 export const pipelineLogFailureHandler = _defaults.pipelineLogFailureHandler;
 export const pageServeHandler = _defaults.pageServeHandler;
+export const authorServeHandler = _defaults.authorServeHandler;
