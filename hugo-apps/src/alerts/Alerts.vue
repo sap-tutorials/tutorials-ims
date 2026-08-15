@@ -39,7 +39,7 @@ function onCta(url: string)  { emit('cta', url); }
       <span v-if="item.body">{{ item.body }}</span>
       <ui5-button
         v-if="item.ctaUrl"
-        slot="footnote"
+        slot="footnotes"
         design="Transparent"
         @click="onCta(item.ctaUrl!)"
       >{{ item.ctaLabel || 'Open' }}</ui5-button>
