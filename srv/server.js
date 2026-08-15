@@ -26,7 +26,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, pageServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, pageServeHandler, authorServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
 import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
@@ -488,6 +488,10 @@ cds.on('bootstrap', (app) => {
   // here yet (the /concepts/?$ flip lands in Task 5). Public, no auth — like
   // serveHandler.
   app.get('/content/concepts-index', conceptsIndexHandler);
+  // #1659 Phase C — CAP-served /authors/{login}/ pages (dynamic slug, unbounded
+  // login → author-<login> BLOB). Dark launch: the AppRouter /authors/ flip
+  // lands with this change. Public, no auth — like serveHandler.
+  app.get('/content/authors/:login', authorServeHandler);
   // #1659 Task 5 — CAP-served content PAGES. Dark launch: no AppRouter route
   // points here yet (the per-page flips land in Phase 2). Public, no auth —
   // like serveHandler.
