@@ -23,6 +23,25 @@
       };
     })();
   </script>
+  {{- /* #1796 CLS fix: pin the blackbar as a position:fixed overlay so its
+     first-visit paint/collapse can never reflow in-flow content (article.
+     developer-homepage). On a cookieless first visit TrustArc injects the
+     banner into #consent_blackbar in normal flow and then collapses it,
+     producing homepage CLS ≈ 1.014. Taking the wrapper out of document flow
+     from the very first paint removes that shift entirely (consented reloads
+     never render the banner, so there is no gap for returning users — unlike
+     reserving a fixed height, which would leave permanent blank space below
+     the footer where this div sits). z-index matches TrustArc CMP intent
+     (banner sits above all site chrome, whose max z-index is 9999). */ -}}
+  <style>
+    #consent_blackbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2147483645;
+    }
+  </style>
   <div id="consent_blackbar"></div>
   {{- /* The footer "Cookie Preferences" button (footer.html) reopens the
      TrustArc manager via window.consent.show() → truste.eu.reopenBanner(),
