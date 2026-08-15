@@ -9,20 +9,23 @@
 //
 // Update slugs if any of these 404 — pick stable, long-lived ones.
 //
-// Local-dev caveat: /missions/, /missions/<slug>/, /groups/<slug>/ are
-// generated at production build time from /build/catalog (see
-// scripts/parsers/cap.ts) — they 404 against `hugo server` locally.
-// Don't drop them on that account; they exist on deployed dev/qa/prod.
+// Prefer STABLE, always-present routes over per-slug catalog pages: the old
+// list pinned /missions/, /missions/<slug>/, /groups/<slug>/, /tutorials/ which
+// (a) rot when a specific mission/group slug is retired and (b) don't serve a
+// 200 anyway on deployed envs — the approuter routes /tutorials/* and the
+// mission/group index paths to CAP, which 404s the bare index (and PROD
+// 301-redirects them). Verified 2026-08-15: all paths below return 200 on DEV
+// (and are the stable, CAP-served content routes present across dev/qa/prod).
 
 export const A11Y_URLS = [
   { path: '/',                                        label: 'Home' },
-  { path: '/missions/',                               label: 'Missions index (Hugo)' },
-  { path: '/missions/abap-dev-get-started/',          label: 'Single mission' },
-  { path: '/groups/abap-dev-get-started/',            label: 'Single group / completion path' },
+  { path: '/browse/',                                 label: 'Browse catalog (CAP-served)' },
+  { path: '/topics/',                                 label: 'Topics gallery (CAP-served)' },
+  { path: '/concepts/cap-cds-domain-modeling/',       label: 'Concept page (CAP-served)' },
   { path: '/tutorials/abap-cloud-ui-from-interface/', label: 'Tutorial (HANA-served)' },
   { path: '/tutorials/abap-create-basic-app/',        label: 'Tutorial (HANA-served)' },
   { path: '/tags/',                                   label: 'Tag taxonomy index' },
-  { path: '/tutorials/',                              label: 'Tutorials list' },
+  { path: '/developer-advocates/',                    label: 'Developer Advocates' },
 ];
 
 export function resolveUrls(baseUrl) {
