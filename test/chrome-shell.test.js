@@ -190,3 +190,96 @@ describe('chrome-shell.composeShell — SEO head rewrite (#1795)', () => {
     expect(html).not.toContain('canonical');
   });
 });
+
+// #1808 residual: the _shell page also leaks into two non-<head> spots the
+// #1795 pass didn't cover — the BreadcrumbList JSON-LD (its own ld+json
+// <script>, carrying the _shell page's own Home→_shell trail) and the visible
+// embed-bar title span (`<span class=embed-bar__title>_shell</span>`, shown in
+// embed=minimal mode). The shell below mirrors the live minified forms verified
+// 2026-08-15: unquoted `type=application/ld+json`, unquoted class, and a SECOND
+// (Organization) ld+json block that must survive the BreadcrumbList rewrite.
+const CRUMB_SHELL_MIN =
+  '<!DOCTYPE html><html lang=en data-page-kind=generic data-page-title=_shell>' +
+  '<head><title>_shell</title>' +
+  '<script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://developers.sap.com/"},{"@type":"ListItem","position":2,"name":"_shell","item":"https://developers.sap.com/_shell/"}]}</script>' +
+  '<script type=application/ld+json>{"@context":"https://schema.org","@type":"Organization","name":"SAP","url":"https://developers.sap.com/"}</script>' +
+  '</head><body>' +
+  '<div class="embed-bar"><span class=embed-bar__title>_shell</span></div>' +
+  '<header>chrome</header><!-- MAIN --><footer>foot</footer></body></html>';
+
+describe('chrome-shell.composeShell — breadcrumb + embed-bar rewrite (#1808)', () => {
+  const parsed = parseShell(CRUMB_SHELL_MIN);
+
+  const bcJson = (html) => {
+    const m = html.match(/<script type="application\/ld\+json">(\{"@context":"https:\/\/schema\.org","@type":"BreadcrumbList".*?\})<\/script>/);
+    return m ? JSON.parse(m[1]) : null;
+  };
+
+  it('rewrites the embed-bar title away from _shell', () => {
+    const html = composeShell(parsed, '<main>B</main>', {
+      kind: 'group', slug: 'group-x', title: 'Spatial Analytics', description: 'd',
+    });
+    expect(html).toContain('<span class="embed-bar__title">Spatial Analytics</span>');
+    expect(html).not.toContain('embed-bar__title>_shell');
+  });
+
+  it('rebuilds the BreadcrumbList as Home → Tutorials → page for a group', () => {
+    const html = composeShell(parsed, '<main>B</main>', {
+      kind: 'group', slug: 'group-x', title: 'Spatial Analytics', description: 'd',
+    });
+    const bc = bcJson(html);
+    expect(bc).not.toBeNull();
+    expect(bc.itemListElement.map(e => e.name)).toEqual(['Home', 'Tutorials', 'Spatial Analytics']);
+    expect(bc.itemListElement.map(e => e.position)).toEqual([1, 2, 3]);
+    expect(bc.itemListElement[2].item).toBe('https://developers.sap.com/tutorials/group-x/');
+    // No _shell crumb survives anywhere.
+    expect(html).not.toContain('/_shell/');
+    expect(html).not.toContain('"name":"_shell"');
+  });
+
+  it('rebuilds the BreadcrumbList as Home → Concepts → name for a concept', () => {
+    const html = composeShell(parsed, '<main>B</main>', {
+      kind: 'concept', slug: 'a2a-agent-protocol', title: 'A2A Protocol', description: 'd',
+    });
+    const bc = bcJson(html);
+    expect(bc.itemListElement.map(e => e.name)).toEqual(['Home', 'Concepts', 'A2A Protocol']);
+    expect(bc.itemListElement[1].item).toBe('https://developers.sap.com/concepts/');
+    expect(bc.itemListElement[2].item).toBe('https://developers.sap.com/concepts/a2a-agent-protocol/');
+  });
+
+  it('builds a Home → Concepts trail for the concepts index (no trailing page crumb)', () => {
+    const html = composeShell(parsed, '<main>B</main>', {
+      kind: 'concepts-index', slug: 'concepts', title: 'Concepts', description: 'd',
+    });
+    const bc = bcJson(html);
+    expect(bc.itemListElement.map(e => e.name)).toEqual(['Home', 'Concepts']);
+    expect(bc.itemListElement[1].item).toBe('https://developers.sap.com/concepts/');
+  });
+
+  it('leaves the second (non-Breadcrumb) ld+json block untouched', () => {
+    const html = composeShell(parsed, '<main>B</main>', {
+      kind: 'group', slug: 'group-x', title: 'G', description: 'd',
+    });
+    expect(html).toContain('<script type=application/ld+json>{"@context":"https://schema.org","@type":"Organization","name":"SAP","url":"https://developers.sap.com/"}</script>');
+  });
+
+  it('escapes </script> and quotes in the title so JSON-LD cannot break out', () => {
+    const html = composeShell(parsed, '<main>B</main>', {
+      kind: 'group', slug: 'group-x', title: 'Evil </script><img> "x"', description: 'd',
+    });
+    // No raw </script> injected inside the rebuilt breadcrumb block.
+    const bcBlock = html.match(/<script type="application\/ld\+json">.*?BreadcrumbList.*?<\/script>/)[0];
+    expect(bcBlock).not.toContain('</script><img>');
+    expect(bcBlock).toContain('\\u003c');
+    // embed-bar text is HTML-escaped.
+    expect(html).toContain('<span class="embed-bar__title">Evil &lt;/script&gt;&lt;img&gt; &quot;x&quot;</span>');
+  });
+
+  it('leaves an unknown kind\'s breadcrumb + embed-bar untouched', () => {
+    const html = composeShell(parsed, '<main>B</main>', {
+      kind: 'unknown', slug: 's', title: 'T', description: 'd',
+    });
+    // Unknown kind → no canonical trail we can trust, so the baked block stays.
+    expect(html).toContain('"name":"_shell"');
+  });
+});

@@ -19,6 +19,19 @@ const escapeHtml = (s) => String(s ?? '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+// #1808: standalone groups/missions have no source description, so their
+// composed catalog pages shipped an empty <meta description>. Synthesize one
+// from the tutorial count, mirroring the concept-page phrasing in
+// srv/lib/publish-concepts.js. Pure — unit-tested via renderCatalogPage.
+export function synthCatalogDescription(kind, title, count) {
+  const n = Number(count) || 0;
+  const tut = `${n} hands-on tutorial${n === 1 ? '' : 's'}`;
+  if (kind === 'mission') {
+    return `Complete the ${title} mission on SAP Developer Center: ${tut} across guided learning paths.`;
+  }
+  return `Follow the ${title} tutorial group on SAP Developer Center: ${tut}.`;
+}
+
 // Group/Mission descriptions are admin-authored Markdown (issue #121).
 // Authors edit them via the admin MarkdownEditor (app/admin/{missions,groups}/
 // webapp/ext/MarkdownEditor.js), so we render with the same flavor here.
@@ -233,7 +246,8 @@ export async function renderCatalogPage(slug, deps) {
         kind: 'group',
         slug,
         title: ctx.group.title,
-        description: ctx.group.description ?? '',
+        description: (ctx.group.description ?? '').trim()
+          || synthCatalogDescription('group', ctx.group.title, ctx.tutorialCount),
       },
     };
   }
@@ -249,7 +263,8 @@ export async function renderCatalogPage(slug, deps) {
         kind: 'mission',
         slug,
         title: ctx.mission.title,
-        description: ctx.mission.description ?? '',
+        description: (ctx.mission.description ?? '').trim()
+          || synthCatalogDescription('mission', ctx.mission.title, ctx.tutorialCount),
       },
     };
   }

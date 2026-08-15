@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderGroupBody, renderMissionBody } from '../catalog-renderer.js';
+import { renderGroupBody, renderMissionBody, renderCatalogPage } from '../catalog-renderer.js';
 
 describe('catalog-renderer ?from= emission', () => {
   it('group cards append ?from=<group.slug> to every tutorial link', () => {
@@ -64,5 +64,70 @@ describe('catalog-renderer ?from= emission', () => {
     const html = renderMissionBody(ctx);
     expect(html).not.toContain('?from=path-99');
     expect(html).toContain('href="/tutorials/tut-c"');
+  });
+});
+
+// #1808 residual: group/mission catalog pages ship an empty <meta description>
+// because their source description is blank. renderCatalogPage must synthesize
+// one (mirroring publish-concepts.js) so the composed page's SEO head is real.
+describe('catalog-renderer pageMeta description synthesis (#1808)', () => {
+  const tut = (slug) => ({ slug, title: slug, level: 'beginner', time: 5, stepCount: 3, createdAt: '2020-01-01' });
+
+  it('synthesizes a group description from the tutorial count when source is empty', async () => {
+    const deps = {
+      loadGroupContext: async () => ({
+        group: { slug: 'spatial', title: 'Spatial Analytics', description: '' },
+        tutorials: [tut('a'), tut('b'), tut('c')],
+        tutorialCount: 3, totalTime: 15, level: 'beginner',
+      }),
+      loadMissionContext: async () => null,
+      shellLoader: null,
+    };
+    const { pageMeta } = await renderCatalogPage('group-spatial', deps);
+    expect(pageMeta.description).toBe(
+      'Follow the Spatial Analytics tutorial group on SAP Developer Center: 3 hands-on tutorials.',
+    );
+  });
+
+  it('singularizes "tutorial" for a one-tutorial group', async () => {
+    const deps = {
+      loadGroupContext: async () => ({
+        group: { slug: 'solo', title: 'Solo', description: '   ' },
+        tutorials: [tut('a')], tutorialCount: 1, totalTime: 5, level: 'beginner',
+      }),
+      loadMissionContext: async () => null, shellLoader: null,
+    };
+    const { pageMeta } = await renderCatalogPage('group-solo', deps);
+    expect(pageMeta.description).toBe(
+      'Follow the Solo tutorial group on SAP Developer Center: 1 hands-on tutorial.',
+    );
+  });
+
+  it('synthesizes a mission description from the tutorial count when source is empty', async () => {
+    const deps = {
+      loadGroupContext: async () => null,
+      loadMissionContext: async () => ({
+        mission: { slug: 'jump-start', title: 'Jump Start', description: '' },
+        groups: [{ slug: 'g', title: 'G', isSynthetic: false, tutorials: [tut('a'), tut('b')] }],
+        groupCount: 1, tutorialCount: 2, totalTime: 10, level: 'beginner',
+      }),
+      shellLoader: null,
+    };
+    const { pageMeta } = await renderCatalogPage('mission-jump-start', deps);
+    expect(pageMeta.description).toBe(
+      'Complete the Jump Start mission on SAP Developer Center: 2 hands-on tutorials across guided learning paths.',
+    );
+  });
+
+  it('preserves a non-empty source description', async () => {
+    const deps = {
+      loadGroupContext: async () => ({
+        group: { slug: 'real', title: 'Real', description: 'A real hand-written description.' },
+        tutorials: [tut('a')], tutorialCount: 1, totalTime: 5, level: 'beginner',
+      }),
+      loadMissionContext: async () => null, shellLoader: null,
+    };
+    const { pageMeta } = await renderCatalogPage('group-real', deps);
+    expect(pageMeta.description).toBe('A real hand-written description.');
   });
 });
