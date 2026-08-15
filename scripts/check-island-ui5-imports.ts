@@ -30,6 +30,11 @@
 // plain custom elements, and Vue passes them through. The problem is only
 // ES-module imports from the entry's main.ts (or .ts files it imports).
 //
+// The dedicated shared-UI5 code-split entries under `src/ui5/` (ui5-core,
+// ui5-tutorial, ui5-me, ui5-illustrations — #1777/#1797) are EXEMPT: they ARE
+// the single shared @ui5/* bundle and import @ui5/* by design. See
+// SHARED_UI5_ENTRY_PREFIX below.
+//
 // Exit codes:
 //   0  no direct UI5 imports found in any island entry's transitive .ts cone.
 //   1  at least one forbidden import found, or parse failure. Stderr lists
@@ -62,6 +67,21 @@ export interface ForbiddenImport {
   line: number;
   specifier: string;
   entry: string;
+}
+
+// The dedicated shared-UI5 code-split entries (#1777 / #1797) live under
+// `src/ui5/` and are EXEMPT from this guard: their entire purpose is to be the
+// single shared @ui5/* bundle that every page/island defers to, so they import
+// @ui5/* directly by design. The single-copy Theme invariant this guard exists
+// to protect is upheld for them by the `ui5-vendor` manualChunk in
+// hugo-apps/vite.config.ts (it forces `@ui5/webcomponents-base` — the Theme
+// singleton — into ONE shared chunk across all ui5-* entries). Islands
+// (`src/<island>/main.ts`) must still NOT import @ui5/* — they use <ui5-*>
+// tags and rely on the shared bundle.
+export const SHARED_UI5_ENTRY_PREFIX = 'src/ui5/';
+
+export function isSharedUi5Entry(entry: ViteEntry): boolean {
+  return entry.src.replace(/\\/g, '/').startsWith(SHARED_UI5_ENTRY_PREFIX);
 }
 
 export function parseViteEntries(content: string): ViteEntry[] {
@@ -141,7 +161,12 @@ export function checkIslandUi5Imports(): {
   const viteContent = readFileSync(VITE_CONFIG_PATH, 'utf8');
   const viteEntries = parseViteEntries(viteContent);
   const findings: ForbiddenImport[] = [];
-  for (const e of viteEntries) findings.push(...walkEntry(e.src));
+  for (const e of viteEntries) {
+    // Skip the sanctioned shared-UI5 code-split entries (src/ui5/*): they are
+    // the single shared @ui5/* bundle, not islands. See SHARED_UI5_ENTRY_PREFIX.
+    if (isSharedUi5Entry(e)) continue;
+    findings.push(...walkEntry(e.src));
+  }
   return { ok: findings.length === 0, findings, viteEntries };
 }
 
