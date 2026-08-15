@@ -41,9 +41,15 @@ describe('topic-clusters-band partial (#1170)', () => {
     expect(tpl).toMatch(/<section\b[^>]*\bhp-topic-clusters\b/)
   })
 
-  it('renders tutorial links with href="{{ .url }}" and {{ .title }}', () => {
+  it('renders tutorial links with href="{{ .url }}" and a title-or-slug label (#1794)', () => {
     expect(tpl).toContain('href="{{ .url }}"')
-    expect(tpl).toContain('{{ .title }}')
+    // #1794: link text is a computed $label that prefers .title but falls back
+    // to .slug for tutorials with an empty title, so the literal `{{ .title }}`
+    // no longer appears. Assert the link renders $label and that $label derives
+    // from .title with a .slug fallback.
+    expect(tpl).toContain('{{ $label }}')
+    expect(tpl).toMatch(/\$label\s*:=\s*or\s+\(trim\s+\(\.title/)
+    expect(tpl).toMatch(/\.slug\s*\|\s*default/)
   })
 
   it('reads from .Site.Data.topic_clusters', () => {
