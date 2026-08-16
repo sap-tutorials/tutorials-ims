@@ -4130,11 +4130,19 @@ blockquote {
   margin-bottom: 1rem;
   font-size: 0.8125rem;
 }
-.step-controls a {
+.step-controls a,
+.step-controls button {
   color: var(--sapLinkColor, #0064d9);
   text-decoration: none;
+  /* button reset so converted <button> elements match link appearance */
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
-.step-controls a:hover {
+.step-controls a:hover,
+.step-controls button:hover {
   text-decoration: underline;
 }
 /* Sidebar step TOC card */
