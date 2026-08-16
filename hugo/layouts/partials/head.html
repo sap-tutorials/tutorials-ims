@@ -4,6 +4,12 @@
 <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://ui5.sap.com" crossorigin>
+{{/* consent.trustarc.com — two async scripts load from here (consent.html, body-end).
+     Preconnect here (head) so the TCP+TLS handshake is done before those scripts are
+     encountered. dns-prefetch is the fallback for browsers that ignore preconnect.
+     No crossorigin attribute: these are plain script fetches, not CORS requests. */}}
+<link rel="preconnect" href="https://consent.trustarc.com">
+<link rel="dns-prefetch" href="https://consent.trustarc.com">
 
 {{ partial "head-meta.html" . }}
 {{ partial "head-og.html" . }}
@@ -67,8 +73,14 @@
 {{ $fundamental := resources.Get "css/sap-fundamental.css" }}{{ $fundamental.Publish }}<link rel="stylesheet" href="{{ ($fundamental | fingerprint).RelPermalink }}">
 <link rel="stylesheet" href="{{ $ui5overrides.RelPermalink }}">
 <link rel="stylesheet" href="{{ $print.RelPermalink }}" media="print">
-<link rel="stylesheet" href="{{ $viewTransitions.RelPermalink }}">
-<link rel="stylesheet" href="{{ $scrollAnimations.RelPermalink }}">
+{{/* view-transitions.css and scroll-animations.css are pure progressive-enhancement
+     (both wrapped entirely in @supports + prefers-reduced-motion: no-preference).
+     They have zero effect on initial layout or LCP. Load them non-blocking via the
+     media-swap pattern so they do not count as render-blocking resources in Lighthouse.
+     noscript fallbacks omitted intentionally — both features are JS-driven anyway
+     (View Transitions API, scroll-driven animations). */}}
+<link rel="stylesheet" href="{{ $viewTransitions.RelPermalink }}" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="{{ $scrollAnimations.RelPermalink }}" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="{{ $osToggle.RelPermalink }}">
 <link rel="stylesheet" href="{{ $lightbox.RelPermalink }}">
 <link rel="stylesheet" href="{{ $skeletons.RelPermalink }}">
