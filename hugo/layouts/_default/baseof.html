@@ -44,8 +44,10 @@
       {{/* Hidden until glossary.ts fills the popover for a term that has a
            "learn more" link (it sets href + a descriptive aria-label then). An
            always-present hrefless/generic-text anchor tripped Lighthouse SEO
-           (crawlable-anchors + link-text); a hidden, per-term-populated one does not. */}}
-      <a class="glossary-popover__link" target="_blank" rel="noopener" hidden>Learn more &rarr;</a>
+           (crawlable-anchors + link-text). A hidden anchor still needs a real
+           href to pass crawlable-anchors in newer Lighthouse versions — the
+           fallback href is overridden by JS for each term's actual link. */}}
+      <a class="glossary-popover__link" href="https://help.sap.com" aria-label="Learn more about this SAP term" target="_blank" rel="noopener" hidden>Learn more &rarr;</a>
     </div>
   </ui5-popover>
   <script>window.__glossary = {{ site.Data.glossary | jsonify | safeJS }};</script>
