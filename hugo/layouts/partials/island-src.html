@@ -1,7 +1,7 @@
 {{- /* island-src.html (#1604) — resolves a Vite island entry name to its
        content-hashed public path (e.g. "navigator" → "/js/navigator-BqX3k_2a.js")
        via hugo/data/island_manifest.json, which scripts/build-island-manifest.cjs
-       builds from Vite's manifest in `postbuild:apps`.
+       builds from Vite's manifest in `build:island-manifest`.
 
        Content hashing means a changed bundle gets a new URL the CDN edge
        (Akamai on PROD) has never cached, so fresh HTML can never pair with a
@@ -12,11 +12,8 @@
        type="module" / defer attributes:
          <script type="module" src="{{ partial "island-src.html" "navigator" }}" defer></script>
 
-       Falls back to /js/<name>.js when the manifest lacks the key:
-         (a) the local `dev` = `hugo server` never runs Vite, and
-         (b) the CAP-stable entries nav-dropdown/concepts-filter are emitted
-             un-hashed (they map to their own bare path in the manifest, but
-             the fallback keeps this robust if the file is stale/absent). */ -}}
+       Falls back to /js/<name>.js when the manifest lacks the key — e.g. the
+       local `dev` = `hugo server` never runs Vite and the manifest is absent. */ -}}
 {{- $name := . -}}
 {{- $fallback := printf "/js/%s.js" $name -}}
 {{- index (site.Data.island_manifest | default dict) $name | default $fallback -}}

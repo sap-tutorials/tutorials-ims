@@ -12,7 +12,27 @@
 // points here yet.
 
 import cds from '@sap/cds';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+
+const _dir = dirname(fileURLToPath(import.meta.url));
+// Lazy-loaded island manifest: maps entry name → content-hashed public path.
+// Written by scripts/build-island-manifest.cjs alongside hugo/data/island_manifest.json.
+// Fail-open: returns the bare /js/<name>.js if the file is absent
+// (e.g. local `cds watch` without running build:apps first).
+let _islandManifest;
+function islandSrc(name) {
+  if (!_islandManifest) {
+    try {
+      _islandManifest = JSON.parse(readFileSync(join(_dir, 'island-manifest.json'), 'utf8'));
+    } catch {
+      _islandManifest = {};
+    }
+  }
+  return _islandManifest[name] ?? `/js/${name}.js`;
+}
 import { createShellLoader, ShellMarkerError, composeShell } from './chrome-shell.js';
 import { buildConceptsPayload as realBuildConceptsPayload } from './published-concepts-query.js';
 import { setContentCacheHeaders } from './edge-cache-headers.js';
@@ -157,7 +177,7 @@ export function renderConceptListBody(model) {
     Developer Advocates from the admin interface.
   </p>
 </article>
-<script type="module" src="/js/concepts-filter.js" defer></script>`;
+<script type="module" src="${islandSrc('concepts-filter')}" defer></script>`;
   }
 
   const items = top.map(c => {
@@ -209,7 +229,7 @@ ${items}
   </noscript>
   <script type="application/json" id="concepts-data">${json}</script>
 </article>
-<script type="module" src="/js/concepts-filter.js" defer></script>`;
+<script type="module" src="${islandSrc('concepts-filter')}" defer></script>`;
 }
 
 /**
