@@ -20,6 +20,7 @@
 {{- $ids := .idList -}}
 {{- $showAll := .showAllHref -}}
 {{- $all := .all -}}
+{{- $categories := .categories | default dict -}}
 {{- $headerId := printf "browse-rail-header-%s" $id -}}
 {{- $contentId := printf "browse-rail-content-%s" $id -}}
 <section class="browse-rail" aria-labelledby="{{ $headerId }}" data-rail data-rail-id="{{ $id }}">
@@ -38,9 +39,9 @@
     {{- range $rid := $ids -}}
       {{- range $item := $all -}}
         {{- if eq $item.id $rid -}}
-          {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
-          {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
-          {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
+          {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" (dict "item" $item "categories" $categories) }}{{- end -}}
+          {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" (dict "item" $item "categories" $categories) }}{{- end -}}
+          {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" (dict "item" $item "categories" $categories) }}{{- end -}}
         {{- end -}}
       {{- end -}}
     {{- end -}}
