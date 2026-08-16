@@ -99,6 +99,21 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     rewriteImages: opts.rewriteImages,
   })
 
+  // [#1637-followup] youWillLearn had the SAME defect prerequisites did: its
+  // bullets are markdownified as-is by the Hugo `you-will-learn` partial, but
+  // they bypassed the body's image-URL rewriter. When an author folds inline
+  // images into that section (against the bullet-list contract), a relative
+  // `![alt](img.png)` survived as a bare src and 404'd on the served page
+  // (the render-image hook only routes `raw.githubusercontent.com` URLs through
+  // /img-cdn/). Resolve each bullet's image URLs so those images serve, exactly
+  // as the body and prerequisites do.
+  const resolvedYouWillLearn = youWillLearn.map(item =>
+    resolveImageURLs(item, {
+      repo: opts.repo, branch: opts.branch, slug: opts.slug,
+      rewriteImages: opts.rewriteImages,
+    })
+  )
+
   const hasOsOptionsFlag = { value: false }
   const resolvedStepSlugs = new Set<string>()
   processedBody = convertOptionBlocks(processedBody, opts.target, {
@@ -187,7 +202,7 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   return {
     title,
     description,
-    youWillLearn,
+    youWillLearn: resolvedYouWillLearn,
     prerequisites: resolvedPrerequisites,
     level,
     frontmatter,
