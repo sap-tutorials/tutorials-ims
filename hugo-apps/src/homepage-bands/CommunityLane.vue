@@ -144,7 +144,7 @@ onMounted(() => {
           <img
             v-if="adv.slug"
             :src="`/api/advocates/${adv.slug}/photo`"
-            :alt="advocateName(adv)"
+            alt=""
             class="hb-community-lane__adv-photo"
             width="36"
             height="36"

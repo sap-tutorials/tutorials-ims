@@ -35,7 +35,7 @@ defineEmits<{
     <ui5-button design="Emphasized" @click="$emit('complete', step.stepIndex)">
       {{ isLast ? 'Finish' : 'Done' }}
     </ui5-button>
-    <button type="button" class="pip-mode-toggle" @click="$emit('toggle-mode')" aria-label="Expand to full mode">⌄</button>
+    <button type="button" class="pip-mode-toggle" @click="$emit('toggle-mode')" aria-label="Expand to full mode"><span aria-hidden="true">⌄</span></button>
   </div>
 </template>
 
