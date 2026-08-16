@@ -126,7 +126,7 @@ jobs:
     # approuter Credential Store with CONTENT_API_KEY + REBUILD_API_KEY (values
     # matching the GH `CONTENT_API_KEY` / `REBUILD_API_KEY` secrets) via
     # /admin-ui/#secrets on the DEV approuter. Without it, a dev run 401s at the
-    # "Push content to AppRouter" step and goes red.
+    # HANA content-publish step (and the PipelineLog failure reporter) and goes red.
     #
     # repository_dispatch behaviour is unchanged: the "Determine environment" step
     # below still defaults an absent/unknown env to prod.
