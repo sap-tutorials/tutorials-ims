@@ -4,13 +4,12 @@
 // DIRECTLY from the approuter, as middleware — NOT as a static file.
 //
 // Why middleware, not a static file:
-//   approuter/static/ is atomically REPLACED on every content publish
-//   (rebuildHandler in approuter/server.js untars a fresh Hugo tree over it).
-//   A file dropped in hugo/static/.well-known/ would only survive the swap by
-//   coincidence and would depend on a content rebuild ever landing. Middleware
-//   in the approuter's insertMiddleware.first chain always answers first and
-//   ships with the approuter module itself, so it can never be wiped by a
-//   content publish. Mirrors approuter/lib/well-known-oauth.js.
+//   Serving from the approuter middleware chain (insertMiddleware.first) makes
+//   this deterministic — it ships with the approuter module and always answers
+//   first, independent of whatever is in approuter/static/. (Historically it also
+//   sidestepped the /admin/rebuild content push that atomically replaced static/;
+//   that push was retired in #1659 C.4, but middleware remains the cleaner choice.)
+//   Mirrors approuter/lib/well-known-oauth.js.
 //
 // Source of truth for the content:
 //   github.tools.sap/sgsc-engineering-and-automation/securitytxt (SAP SGSC

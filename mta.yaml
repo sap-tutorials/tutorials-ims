@@ -223,22 +223,10 @@ modules:
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
       XS_APP_LOG_LEVEL: info
-      # Bearer-token gate for POST /admin/rebuild. Runtime resolution:
-      # approuter/lib/credstore-secret.js reads from the BTP Credential Store
-      # (alias: REBUILD_API_KEY, namespace: tutorials), falling back to this
-      # empty env-var if the credstore is unreachable.
-      #
-      # Rollout history:
-      #   #698  — first added as `REBUILD_API_KEY: ${REBUILD_API_KEY}` per-env
-      #           via envsubst on deploy/{dev,qa,prod}.mtaext.
-      #   #871  — approuter switched to credstore-first resolution
-      #           (env fallback preserved).
-      #   #903  — mtaext + envsubst plumbing stripped. Runtime reads from
-      #           credstore only. Empty base declaration retained so a
-      #           missing credstore binding fails at the 503 branch of
-      #           rebuildHandler (approuter/server.js:236) rather than a
-      #           harder-to-debug undefined-env crash.
-      REBUILD_API_KEY: ""
+      # (#1659 C.4) The approuter's REBUILD_API_KEY env was removed along with the
+      # retired POST /admin/rebuild handler — nothing on the approuter resolves it
+      # anymore. The srv keeps its own REBUILD_API_KEY (credstore) to validate the
+      # /content/pipeline-log failure breadcrumb, which the approuter merely forwards.
       # APPROUTER_URL previously declared here as an empty-string base for
       # deploy.yml's envsubst allowlist. Removed in the finish-credstore-migration
       # PR: no code path reads it at runtime (grep -rn 'process.env.APPROUTER_URL'
@@ -259,11 +247,10 @@ modules:
           gameboard-url: ${gameboard-url}
     requires:
       - name: tutorials-xsuaa
-      # #867 / #871 / #903 — approuter reads REBUILD_API_KEY from credstore
-      # via approuter/lib/credstore-secret.js. Same binding the srv uses;
-      # alias namespace is `tutorials`. Env fallback is a bare "" set on the
-      # module above, so a missing credstore binding surfaces cleanly at the
-      # 503 branch of rebuildHandler.
+      # approuter resolves runtime secrets from the BTP Credential Store via
+      # approuter/lib/credstore-secret.js (same binding the srv uses; alias
+      # namespace `tutorials`). The retired /admin/rebuild handler (#1659 C.4)
+      # no longer reads from it.
       - name: tutorials-credstore
       - name: srv-api
         group: destinations

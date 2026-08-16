@@ -274,8 +274,9 @@ modules:
           gameboard-url: ${gameboard-url}
     requires:
       - name: tutorials-xsuaa
-      # #867 — approuter reads REBUILD_API_KEY from credstore via
-      # approuter/lib/credstore-secret.js. Same binding the srv uses.
+      # approuter resolves runtime secrets from the credstore via
+      # approuter/lib/credstore-secret.js (same binding the srv uses). The retired
+      # /admin/rebuild handler (#1659 C.4) no longer reads from it.
       - name: tutorials-credstore
       - name: srv-api
         group: destinations
