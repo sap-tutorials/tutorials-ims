@@ -56,3 +56,11 @@ export async function resolveGroupNav(slug: string, fromGroupSlug: string): Prom
   const rows = await loadMappings();
   return rows.find((r) => r.slug === slug && r.groupSlug === fromGroupSlug) ?? null;
 }
+
+// #1836: all rows of a group, in feed order (= group display / itemOrder order).
+// Used by the nav-dropdown to render the entry group's ordered siblings.
+export async function resolveGroupMembers(fromGroupSlug: string): Promise<NavMappingRow[]> {
+  if (!fromGroupSlug) return [];
+  const rows = await loadMappings();
+  return rows.filter((r) => r.groupSlug === fromGroupSlug);
+}
