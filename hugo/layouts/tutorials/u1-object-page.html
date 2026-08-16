@@ -325,7 +325,7 @@
                accordion below holds the actual content. step-change scrolls to anchor. */}}
           {{ if and .Params.steps (ge (int .Params.stepCount) 3) }}
           <div class="op-wizard-wrap">
-            <ui5-wizard id="op-step-wizard">
+            <ui5-wizard id="op-step-wizard" accessible-name="Steps">
               {{ range .Params.steps }}
               <ui5-wizard-step
                 data-step-target="step-{{ .number }}"
