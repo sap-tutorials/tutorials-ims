@@ -589,6 +589,7 @@
     { "source": "^/operate/?(\\?.*)?$",             "target": "/content/pages/operate/$1",             "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/sitemap\\.xml(\\?.*)?$",         "target": "/content/pages/sitemap.xml$1",          "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/index\\.xml(\\?.*)?$",           "target": "/content/pages/index.xml$1",            "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/llms\\.txt(\\?.*)?$",            "target": "/content/pages/llms.txt$1",             "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/llms-full\\.txt(\\?.*)?$",       "target": "/content/pages/llms-full.txt$1",        "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/authors/([^/?]+)/?(\\?.*)?$",     "target": "/content/authors/$1",                   "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/(\\?.*)?$",                       "target": "/content/pages/$1",                     "destination": "srv-api", "authenticationType": "none" },
