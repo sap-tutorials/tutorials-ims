@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { buildOrderedGroups } from './order'
+import { resolveGroupMembers } from '@shared/group-nav-context'
 
 interface NavEntry {
   slug: string
@@ -25,6 +26,10 @@ const props = defineProps<{
   currentSlug: string
   isOpen: boolean
   toggleElement?: HTMLElement | null
+  // #1836: the group the reader entered from (?from=<groupSlug>). When set, the
+  // dropdown shows THAT group's ordered siblings instead of the baked missionId
+  // grouping (which can be a junk single-tutorial event mission).
+  fromGroupSlug?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -33,12 +38,13 @@ const emit = defineEmits<{
 
 const navEntries = ref<NavEntry[]>([])
 const stepEntries = ref<StepEntry[]>([])
-const mode = ref<'mission' | 'steps'>('mission')
+const mode = ref<'mission' | 'group' | 'steps'>('mission')
 const dropdownEl = ref<HTMLElement | null>(null)
 
 const groups = computed(() => buildOrderedGroups(navEntries.value))
 
-const missionTitle = computed(() => navEntries.value[0]?.missionTitle ?? '')
+// mission mode → mission name; group mode (#1836) → the entry group's name.
+const headerTitle = computed(() => navEntries.value[0]?.missionTitle ?? '')
 
 function onClickOutside(e: MouseEvent) {
   const target = e.target as Node
@@ -60,8 +66,56 @@ function extractStepsFromDOM(): StepEntry[] {
   return steps
 }
 
+// In group mode, keep the reader in-group by carrying ?from= on sibling links.
+function itemHref(slug: string): string {
+  if (mode.value === 'group' && props.fromGroupSlug) {
+    return `/tutorials/${slug}?from=${encodeURIComponent(props.fromGroupSlug)}`
+  }
+  return `/tutorials/${slug}`
+}
+
+// #1836: build the entry group's ordered sibling list from /build/navigator
+// (member slugs + order + group title) joined with _nav.json (tutorial titles).
+// Returns true when it populated a non-empty group; false → caller falls back.
+async function loadFromGroup(fromGroupSlug: string): Promise<boolean> {
+  const rows = await resolveGroupMembers(fromGroupSlug)
+  if (!rows.length) return false
+  const groupTitle = rows[0].groupTitle
+  const groupId = rows[0].groupId
+  let titleBySlug = new Map<string, string>()
+  try {
+    const res = await fetch('/tutorials/_nav.json')
+    if (res.ok) {
+      const navData = await res.json()
+      const all: NavEntry[] = navData.tutorials ?? navData
+      titleBySlug = new Map(all.map(t => [t.slug, t.title]))
+    }
+  } catch {
+    // titles are best-effort; fall back to the slug below
+  }
+  navEntries.value = rows.map((r, i) => ({
+    slug: r.slug,
+    title: titleBySlug.get(r.slug) ?? r.slug,
+    missionId: 0,
+    missionTitle: groupTitle,   // surfaced in the header
+    groupId,
+    groupTitle,
+    prev: r.prev,
+    next: r.next,
+    missionGroupSeq: 0,
+    groupOrder: i,              // preserve feed (itemOrder) order
+  }))
+  mode.value = 'group'
+  return true
+}
+
 onMounted(async () => {
   try {
+    // #1836: entry-group context wins when present.
+    if (props.fromGroupSlug && await loadFromGroup(props.fromGroupSlug)) {
+      document.addEventListener('click', onClickOutside, true)
+      return
+    }
     const res = await fetch('/tutorials/_nav.json')
     if (res.ok) {
       const navData = await res.json()
@@ -89,21 +143,22 @@ onUnmounted(() => {
 
 <template>
   <div v-if="isOpen" ref="dropdownEl" class="nav-dropdown">
-    <!-- Mission mode: show sibling tutorials grouped by group -->
-    <template v-if="mode === 'mission'">
+    <!-- Mission / group mode: show sibling tutorials grouped by group -->
+    <template v-if="mode === 'mission' || mode === 'group'">
       <div class="nav-dropdown-header">
         <span class="nav-dropdown-icon">&#127919;</span>
         <div>
-          <div class="nav-dropdown-mission">{{ missionTitle }}</div>
+          <div class="nav-dropdown-mission">{{ headerTitle }}</div>
           <div class="nav-dropdown-count">{{ navEntries.length }} tutorials</div>
         </div>
       </div>
       <div v-for="group in groups" :key="group.groupId" class="nav-dropdown-group">
-        <div class="nav-dropdown-group-title">{{ group.title }}</div>
+        <!-- In group mode the single group's name already shows in the header. -->
+        <div v-if="mode === 'mission'" class="nav-dropdown-group-title">{{ group.title }}</div>
         <a
           v-for="tut in group.tutorials"
           :key="tut.slug"
-          :href="`/tutorials/${tut.slug}`"
+          :href="itemHref(tut.slug)"
           class="nav-dropdown-item"
           :class="{ 'is-current': tut.slug === currentSlug }"
         >

@@ -4,9 +4,10 @@
 // slug's baked frontmatter navigation (prev/next + mission/group context).
 //
 // A tutorial can belong to many groups/missions, but baked Hugo frontmatter
-// carries only one prev/next. We pick a deterministic owner = the container
-// with the lowest (missionLegacyId, groupLegacyId) rank (the original authoring
-// home). Runtime `?from=` overrides this per entry-group; this is the default
+// carries only one prev/next. We pick a deterministic owner: single-tutorial
+// "homes" (auto-generated event-mission wrappers) rank last, then the lowest
+// (missionLegacyId, groupLegacyId) among the rest (the original authoring home).
+// Runtime `?from=` overrides this per entry-group; this is the default
 // for direct/search/bookmark entry + breadcrumb/side-nav.
 
 export interface NavStamp {
@@ -42,8 +43,32 @@ export interface NavAssignment extends NavStamp {
 
 const MAX = Number.MAX_SAFE_INTEGER;
 
+// #1836: the total tutorial count of a container's "home" — for a mission,
+// summed across all its group containers; for a standalone group, its own slug
+// count. A single-tutorial home (size <= 1) is almost always an auto-generated
+// wrapper — e.g. a "#XXXXXX - Devtoberfest 2024 - <title>" event mission that
+// wraps one tutorial in a flat, empty-titled path — and must not shadow a real
+// multi-tutorial group/mission as the canonical owner.
+function homeSizeByContainer(containers: NavContainer[]): (c: NavContainer) => number {
+  const missionTotal = new Map<number, number>();
+  for (const c of containers) {
+    if (c.missionLegacyId !== null) {
+      missionTotal.set(c.missionLegacyId, (missionTotal.get(c.missionLegacyId) ?? 0) + c.slugs.length);
+    }
+  }
+  return (c) => (c.missionLegacyId !== null ? (missionTotal.get(c.missionLegacyId) ?? 0) : c.slugs.length);
+}
+
 export function rankContainers(containers: NavContainer[]): NavContainer[] {
+  const homeSize = homeSizeByContainer(containers);
   return [...containers].sort((a, b) => {
+    // #1836: single-tutorial homes rank LAST so a real multi-tutorial group/
+    // mission that also owns the slug wins. Preserves the prior ordering within
+    // each partition (a rich mission's single-slug group keeps its mission size,
+    // so it is NOT demoted).
+    const at = homeSize(a) <= 1 ? 1 : 0;
+    const bt = homeSize(b) <= 1 ? 1 : 0;
+    if (at !== bt) return at - bt;
     const am = a.missionLegacyId ?? MAX;
     const bm = b.missionLegacyId ?? MAX;
     if (am !== bm) return am - bm;
