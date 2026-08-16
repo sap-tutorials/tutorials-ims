@@ -338,7 +338,7 @@
           </div>
           {{ end }}
           {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
-          {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1"></div>{{ end }}
+          {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1" data-pip-src="{{ partial "island-src.html" "tutorial-pip" }}"></div>{{ end }}
           <div class="step-controls">
             <button type="button" onclick="expandAllSteps()">Open all</button>
             <button type="button" onclick="collapseAllSteps()">Close all</button>
@@ -458,7 +458,6 @@
 {{ end }}
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
-{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip" }}"></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-rating" }}" defer></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "code-check" }}" defer></script>{{ end }}
 <script type="module" src="{{ partial "island-src.html" "validation" }}" defer></script>
