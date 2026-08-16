@@ -127,6 +127,32 @@ describe('grant-admin-to-authors', () => {
     expect(assigns[0].join(' ')).toContain('--to-user named@sap.com');
   });
 
+  it('--exclude drops a user from the enumerated grant', () => {
+    const fixture = writeFixture([
+      { match: 'list security/role-collection', response: [
+        { name: 'Tutorials Author' }, { name: 'Tutorials Admin' },
+      ]},
+      { match: 'get security/role-collection Tutorials Author --show-user-assignments', response: {
+        items: [
+          { username: 'author1@sap.com', origin: 'sap.default' },
+          { username: 'group@groups.sap.com', origin: 'sap.default' },
+        ],
+      }},
+      { match: 'get security/role-collection Tutorials Admin --show-user-assignments', response: { items: [] }},
+      { match: 'assign security/role-collection Tutorials Admin', response: '' },
+    ]);
+    const { status, stdout, traceCalls } = run(
+      ['--exclude', 'group@groups.sap.com', '--commit'],
+      { FAKE_BTP_FIXTURE_FILE: fixture },
+    );
+    expect(status).toBe(0);
+    expect(stdout).toContain('Excluded 1 user(s)');
+    const assigns = traceCalls.filter(c => c.includes('assign'));
+    expect(assigns).toHaveLength(1);
+    expect(assigns[0].join(' ')).toContain('--to-user author1@sap.com');
+    expect(traceCalls.some(c => c.join(' ').includes('group@groups.sap.com'))).toBe(false);
+  });
+
   it('--subaccount mismatch refuses to run (exit 1)', () => {
     const fixture = writeFixture(BASE_FIXTURE);
     const { status, stderr } = run(['--subaccount', 'wrong-subdomain'], { FAKE_BTP_FIXTURE_FILE: fixture });
