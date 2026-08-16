@@ -40,4 +40,23 @@ describe('puzzle-io', () => {
     expect(io.importPuzzle({ rows: 2 }).ok).toBe(false)
     expect(io.importPuzzle({ rows: 2, cols: 2, grid: [[{}]] }).ok).toBe(false) // wrong dims
   })
+
+  it('coerces numeric-string rows/cols on import (issue #1834)', () => {
+    // A puzzle exported after a touched Rows/Cols field can carry "2"/"2".
+    const io = loadIo()
+    const res = io.importPuzzle({
+      rows: '2', cols: '2',
+      grid: [[{ black: false }, { black: true }], [{ black: false }, { black: false }]]
+    })
+    expect(res.ok).toBe(true)
+    expect(res.state.rows).toBe(2)
+    expect(res.state.cols).toBe(2)
+  })
+
+  it('export coerces numeric-string rows/cols to numbers (issue #1834)', () => {
+    const io = loadIo()
+    const exported = io.exportPuzzle({ rows: '3', cols: '4', grid: [] })
+    expect(exported.rows).toBe(3)
+    expect(exported.cols).toBe(4)
+  })
 })

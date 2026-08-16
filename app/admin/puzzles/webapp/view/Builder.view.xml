@@ -61,11 +61,11 @@
           </VBox>
           <VBox width="6rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
             <Label text="Rows"/>
-            <Input id="rowsInput" value="{b>/rows}" type="Number"/>
+            <Input id="rowsInput" value="{b>/rows}" type="Number" change=".onGridSizeChange"/>
           </VBox>
           <VBox width="6rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
             <Label text="Cols"/>
-            <Input id="colsInput" value="{b>/cols}" type="Number"/>
+            <Input id="colsInput" value="{b>/cols}" type="Number" change=".onGridSizeChange"/>
           </VBox>
           <VBox width="10rem" class="sapUiSmallMarginBottom">
             <Label text="Sub-mode"/>
