@@ -36,6 +36,21 @@ test('validatePuzzle rejects a white cell with no answer', () => {
   expect(bad.ok).toBe(false);
 });
 
+test('validatePuzzle accepts numeric-string rows/cols (issue #1834)', () => {
+  // The admin builder two-way-binds Rows/Cols Number inputs with no type, so a
+  // touched field serialises rows/cols as strings ("1"/"2"). The grid array
+  // length is still a number, so a strict `grid.length !== rows` would report
+  // "grid row count != rows" even though the puzzle is well-formed. parseLayout
+  // must coerce so a numeric string validates identically to a number.
+  const layout = JSON.stringify({
+    rows: '1', cols: '2',
+    grid: [[{ black: false }, { black: false }]],
+    clues: { '0-0-across': 'x' }
+  });
+  const ok = validatePuzzle({ layout, solution: JSON.stringify({ '0,0': 'A', '0,1': 'B' }) });
+  expect(ok.ok).toBe(true);
+});
+
 test('deriveSlotIds returns correct across and down slot starts', () => {
   // 3-cell across run → one across slot at 0-0-across
   const solAcross = { '0,0':'C','0,1':'A','0,2':'T' };
