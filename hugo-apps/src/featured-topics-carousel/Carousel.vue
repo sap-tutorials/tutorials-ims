@@ -37,12 +37,12 @@
     </div>
 
     <nav class="hp-featured-carousel__controls" aria-label="Carousel controls">
-      <button type="button" @click="prev" aria-label="Previous topic">‹</button>
+      <button type="button" @click="prev" aria-label="Previous topic"><span aria-hidden="true">‹</span></button>
       <button type="button" @click="togglePlay" :aria-pressed="!autoAdvance"
               :aria-label="autoAdvance ? 'Pause auto-advance' : 'Resume auto-advance'">
-        {{ autoAdvance ? '⏸' : '▶' }}
+        <span aria-hidden="true">{{ autoAdvance ? '⏸' : '▶' }}</span>
       </button>
-      <button type="button" @click="next" aria-label="Next topic">›</button>
+      <button type="button" @click="next" aria-label="Next topic"><span aria-hidden="true">›</span></button>
       <ol class="hp-featured-carousel__dots" role="tablist">
         <li v-for="(slide, i) in displaySlides" :key="slide.conceptSlug" role="presentation">
           <button type="button" role="tab"

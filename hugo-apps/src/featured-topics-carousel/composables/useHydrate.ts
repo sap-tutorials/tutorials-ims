@@ -43,11 +43,11 @@ function buildMissionHtml(m: Record<string, any>): string {
   const levelLabel = capFirst(m.level || '');
   // TODO: aggregate time + tutorialCount from completion-path tutorials when data is available
   const timeLabel  = m.time && Number(m.time) > 0 ? formatTime(Number(m.time)) : null;
-  const tutCount   = m.tutorialCount ? `<span class="nav-card__meta-sep">&middot;</span><span class="nav-card__meta-item">${esc(String(m.tutorialCount))} Tutorials</span>` : '';
+  const tutCount   = m.tutorialCount ? `<span class="nav-card__meta-sep" aria-hidden="true">&middot;</span><span class="nav-card__meta-item">${esc(String(m.tutorialCount))} Tutorials</span>` : '';
   const metaItems: string[] = [];
   if (levelLabel) metaItems.push(`<span class="nav-card__meta-item">${FOLDER_SVG} ${esc(levelLabel)}</span>`);
   if (timeLabel) {
-    if (metaItems.length) metaItems.push(`<span class="nav-card__meta-sep">&middot;</span>`);
+    if (metaItems.length) metaItems.push(`<span class="nav-card__meta-sep" aria-hidden="true">&middot;</span>`);
     metaItems.push(`<span class="nav-card__meta-item">${CLOCK_SVG} ${esc(timeLabel)}</span>`);
   }
   const metaLine = (metaItems.length || tutCount)
@@ -74,7 +74,7 @@ ${newBadge}<div class="nav-card__type nav-card__type--tutorial">TUTORIAL</div>
 <p class="nav-card__desc">${esc(m.description || '')}</p>
 <div class="nav-card__meta">
 <span class="nav-card__meta-item">${FOLDER_SVG} ${esc(levelLabel)}</span>
-<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-sep" aria-hidden="true">&middot;</span>
 <span class="nav-card__meta-item">${CLOCK_SVG} ${esc(timeLabel)}</span>
 </div>
 <div class="nav-card__tag">${TAG_SVG} ${esc(m.primaryTag || '')}</div>

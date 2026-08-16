@@ -18,7 +18,7 @@ defineEmits<{
   <div class="pip-full">
     <header class="pip-full__header">
       <h2>{{ step.heading }}</h2>
-      <button type="button" class="pip-mode-toggle" @click="$emit('toggle-mode')" aria-label="Switch to controller mode">⌃</button>
+      <button type="button" class="pip-mode-toggle" @click="$emit('toggle-mode')" aria-label="Switch to controller mode"><span aria-hidden="true">⌃</span></button>
     </header>
     <!-- step.html is sanitized at Hugo build time by scripts/parsers/sanitize-html.ts -->
     <div class="pip-full__body" v-html="step.html" />

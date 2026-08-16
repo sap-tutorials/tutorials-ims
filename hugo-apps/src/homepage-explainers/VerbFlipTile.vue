@@ -132,7 +132,7 @@ const ariaLabel = computed(() =>
         class="hp-flip__face hp-flip__face--back"
         :tabindex="flipped ? 0 : undefined"
       >
-        <h3 class="hp-flip__back-label">{{ label }}</h3>
+        <p class="hp-flip__back-label">{{ label }}</p>
         <p v-if="tagline" class="hp-flip__tagline">{{ tagline }}</p>
         <p v-if="whyItMatters" class="hp-flip__why">{{ whyItMatters }}</p>
         <p v-if="!hasBackContent" class="hp-flip__placeholder">

@@ -129,7 +129,7 @@
 }
 
 .nav-card__meta-sep {
-  color: var(--sapNeutralBorderColor, #d9d9d9);
+  color: var(--sapNeutralTextColor, #6a6d70);
 }
 
 /* ─── Card Tag ─── */

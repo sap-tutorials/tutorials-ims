@@ -36,9 +36,9 @@ function buildTopTutorialCardHtml(it: TopTutorialItem): string {
 <p class="nav-card__desc">${esc(c.description || '')}</p>
 <div class="nav-card__meta">
 <span class="nav-card__meta-item">${FOLDER_SVG} ${esc(levelLabel)}</span>
-<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-sep" aria-hidden="true">&middot;</span>
 <span class="nav-card__meta-item">${CLOCK_SVG} ${esc(timeLabel)}</span>
-<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-sep" aria-hidden="true">&middot;</span>
 <span class="nav-card__meta-item">${esc(count)} completed</span>
 </div>
 <div class="nav-card__tag">${TAG_SVG} ${esc(c.primaryTag || '')}</div>
