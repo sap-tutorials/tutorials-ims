@@ -65,10 +65,6 @@ const primaryCategoryLabel = computed(() => {
       <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"/></svg>
       {{ item.primaryTag }}
     </div>
-    <ui5-tag
-      v-if="primaryCategoryLabel"
-      design="Set2"
-      class="card-category-chip"
-    >{{ primaryCategoryLabel }}</ui5-tag>
+    <span v-if="primaryCategoryLabel" class="card-category-chip">{{ primaryCategoryLabel }}</span>
   </a>
 </template>

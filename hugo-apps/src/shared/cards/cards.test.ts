@@ -204,15 +204,15 @@ describe('<MissionCard> category chip', () => {
     const w = mount(MissionCard, {
       props: { item: { ...base, categorySlugs: ['artificial-intelligence'] }, progress: emptyProgress() },
     })
-    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(true)
-    expect(w.find('ui5-tag.card-category-chip').text()).toContain('Artificial Intelligence')
+    expect(w.find('span.card-category-chip').exists()).toBe(true)
+    expect(w.find('span.card-category-chip').text()).toContain('Artificial Intelligence')
   })
 
   it('renders no chip when categorySlugs is empty', () => {
     const w = mount(MissionCard, {
       props: { item: { ...base, categorySlugs: [] }, progress: emptyProgress() },
     })
-    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(false)
+    expect(w.find('span.card-category-chip').exists()).toBe(false)
   })
 })
 
@@ -228,15 +228,15 @@ describe('<GroupCard> category chip', () => {
     const w = mount(GroupCard, {
       props: { item: { ...base, categorySlugs: ['app-dev-automation'] }, progress: emptyProgress() },
     })
-    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(true)
-    expect(w.find('ui5-tag.card-category-chip').text()).toContain('Application Development & Automation')
+    expect(w.find('span.card-category-chip').exists()).toBe(true)
+    expect(w.find('span.card-category-chip').text()).toContain('Application Development & Automation')
   })
 
   it('renders no chip when categorySlugs is empty', () => {
     const w = mount(GroupCard, {
       props: { item: { ...base, categorySlugs: [] }, progress: emptyProgress() },
     })
-    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(false)
+    expect(w.find('span.card-category-chip').exists()).toBe(false)
   })
 })
 
@@ -253,15 +253,15 @@ describe('<TutorialCard> category chip', () => {
     const w = mount(TutorialCard, {
       props: { item: { ...base, categorySlugs: ['artificial-intelligence'] }, progress: emptyProgress() },
     })
-    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(true)
-    expect(w.find('ui5-tag.card-category-chip').text()).toContain('Artificial Intelligence')
+    expect(w.find('span.card-category-chip').exists()).toBe(true)
+    expect(w.find('span.card-category-chip').text()).toContain('Artificial Intelligence')
   })
 
   it('renders no chip when categorySlugs is empty', () => {
     const w = mount(TutorialCard, {
       props: { item: { ...base, categorySlugs: [] }, progress: emptyProgress() },
     })
-    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(false)
+    expect(w.find('span.card-category-chip').exists()).toBe(false)
   })
 })
 

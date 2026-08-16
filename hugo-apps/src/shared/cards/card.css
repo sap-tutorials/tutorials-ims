@@ -149,6 +149,32 @@
   opacity: 0.7;
 }
 
+/* ─── Category chip (CLS fix: plain <span>, no WC upgrade) ─────────────────
+   Previously <ui5-tag design="Set2">. The web-component upgrade fires
+   asynchronously after bundle load, growing the card height mid-paint and
+   causing CLS (~0.187). A plain <span> renders at its final CSS-driven
+   height immediately — no lifecycle delay, no layout shift.
+   Same element is used in the Hugo SSR partials so SSR and CSR heights
+   are equal before Vue mounts, making the createApp replacement
+   height-neutral.
+*/
+.card-category-chip {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--sapAccentColor5, #507090);
+  background: transparent;
+  color: var(--sapAccentColor5, #507090);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
 /* ─── ProgressOverlay (CSR-only, gated on hydration) ─── */
 /* Selector specificity NOTE (#399 follow-up):
    The element this targets has BOTH classes:

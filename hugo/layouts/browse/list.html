@@ -19,6 +19,14 @@
 {{- $buildAt := $browse.buildAt | default "" -}}
 {{- $pageSize := 24 -}}
 {{- $firstPageItems := first $pageSize $all -}}
+{{- /* Build slug→label map for category chips (CLS fix: chips are now plain
+       <span> elements whose height is CSS-driven; the map lets card partials
+       emit the human-readable label so SSR output byte-matches the Vue island
+       output, keeping the createApp DOM replacement height-neutral). */ -}}
+{{- $categoriesMap := dict -}}
+{{- range ($browse.categories | default slice) -}}
+  {{- $categoriesMap = merge $categoriesMap (dict .slug .label) -}}
+{{- end -}}
 
 <header class="browse-banner" role="banner">
   <h1>Browse SAP developer tutorials</h1>
@@ -48,12 +56,14 @@
                                                     "title" "Featured missions"
                                                     "idList" $featured
                                                     "showAllHref" "/missions/"
-                                                    "all" $all) }}
+                                                    "all" $all
+                                                    "categories" $categoriesMap) }}
       {{ partial "browse/_partials/rail.html" (dict "id" "recent"
                                                     "title" "Recently added"
                                                     "idList" $recent
                                                     "showAllHref" "/?new=1"
-                                                    "all" $all) }}
+                                                    "all" $all
+                                                    "categories" $categoriesMap) }}
     </div>
 
     <section class="browse-grid-section" aria-label="All tutorials">
@@ -82,9 +92,9 @@
 
       <div class="browse-grid" id="browse-root">
         {{- range $item := $firstPageItems -}}
-          {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
-          {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
-          {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
+          {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
+          {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
+          {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
         {{- end -}}
       </div>
 

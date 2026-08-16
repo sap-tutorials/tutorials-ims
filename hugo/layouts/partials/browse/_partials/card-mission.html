@@ -1,8 +1,11 @@
 {{- /* hugo/layouts/browse/_partials/card-mission.html
        Mirror of hugo-apps/src/shared/cards/MissionCard.vue.
        Markup MUST be byte-equivalent — drift fails parity test (Task 2.5).
+
+       Context: a dict { item, categories } passed from list.html / rail.html.
 */ -}}
-{{- $item := . -}}
+{{- $item := .item -}}
+{{- $catMap := .categories | default dict -}}
 {{- $level := $item.level -}}
 {{- $levelLabel := "" -}}
 {{- if $level -}}{{- $levelLabel = printf "%s%s" (upper (substr $level 0 1)) (substr $level 1) -}}{{- end -}}
@@ -19,6 +22,10 @@
     {{- $timeLabel = printf "%d hr." (int $hrs) -}}
   {{- end -}}
 {{- end -}}
+{{- $catSlug := "" -}}
+{{- if $item.categorySlugs -}}{{- $catSlug = index $item.categorySlugs 0 -}}{{- end -}}
+{{- $catLabel := "" -}}
+{{- if $catSlug -}}{{- $catLabel = index $catMap $catSlug -}}{{- end -}}
 <a href="{{ $item.href }}" class="nav-card" data-vt-card="navigator">
 <div class="nav-card__type nav-card__type--mission">MISSION</div>
 <h3 class="nav-card__title">{{ $item.title }}</h3>
@@ -33,4 +40,5 @@
 {{- end }}
 </div>
 <div class="nav-card__tag"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"></path></svg> {{ $item.primaryTag }}</div>
+{{- if $catLabel }}<span class="card-category-chip">{{ $catLabel }}</span>{{ end -}}
 </a>
