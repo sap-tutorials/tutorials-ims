@@ -37,6 +37,7 @@ export const IN_SCOPE_PAGES = [
   { route: '/operate/',   key: 'page-operate',   file: 'operate/index.html',   mimeType: 'text/html' },
   { route: '/sitemap.xml',           key: 'page-sitemap.xml',         file: 'sitemap.xml',               mimeType: 'application/xml' },
   { route: '/index.xml',             key: 'page-index.xml',           file: 'index.xml',                 mimeType: 'application/xml' },
+  { route: '/llms.txt',              key: 'page-llms.txt',            file: 'llms.txt',                  mimeType: 'text/plain' },
   { route: '/llms-full.txt',         key: 'page-llms-full.txt',       file: 'llms-full.txt',             mimeType: 'text/plain' },
 ];
 
