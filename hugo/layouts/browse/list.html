@@ -1,4 +1,13 @@
 {{ define "main" }}
+{{- /* CLS fix: load browse.css HERE (top of main) rather than at the bottom.
+       A <link rel="stylesheet"> in the body is render-blocking for all content
+       that follows it. Placing it before the first browse element ensures the
+       shell grid layout and card sizing are established before first paint,
+       eliminating the .browse-shell (0.30) and .nav-card (0.20) layout shifts
+       that occurred when the stylesheet was at the bottom of this block. */ -}}
+{{ $css := resources.Get "css/browse.css" | fingerprint }}
+{{- if $css -}}<link rel="stylesheet" href="{{ $css.RelPermalink }}">{{- end -}}
+
 {{- /* Defensive default: fetch-tutorials.ts skips writing hugo/data/browse.json
        when the upstream /build/catalog returns no missions (ALLOW_EMPTY_CAP path),
        so .Site.Data.browse can be nil. Treat missing or partial data as "empty
@@ -126,8 +135,4 @@
 <script id="browse-data" type="application/json">{{ $browse | jsonify | safeJS }}</script>
 <script type="module" src="{{ partial "island-src.html" "browse" }}"></script>
 
-{{ $css := resources.Get "css/browse.css" | fingerprint }}
-{{- if $css -}}
-  <link rel="stylesheet" href="{{ $css.RelPermalink }}">
-{{- end -}}
 {{ end }}

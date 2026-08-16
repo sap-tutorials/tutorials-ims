@@ -4,6 +4,24 @@
    (PR 1) and load via the Vue card components.
 */
 
+/* ── CLS guard: nav-card geometry before island CSS injects ──────────────
+   card.css is loaded by the browse island via vite-plugin-css-injected-by-js
+   (CSS injected into <style> tags when the island JS executes). That means
+   .nav-card rules from card.css don't apply until JS runs, AFTER first paint.
+   Without these rules, SSR'd cards render as unsized block elements; when the
+   island JS fires and injects card.css they grow to min-height:200px → CLS.
+
+   Only the geometry properties that establish the card's footprint are
+   duplicated here. Visual polish (colours, shadows, transitions) stays in
+   card.css — it's fine for those to load via JS since they don't affect layout.
+   When card.css later sets the same values, the cascade is a no-op.
+*/
+.nav-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+
 /* ── Desktop layout ──────────────────────────────────────────── */
 
 .browse-shell {
