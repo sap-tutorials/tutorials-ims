@@ -11,6 +11,26 @@
 // them would require parallel CSS work outside this change's scope.
 
 import MarkdownIt from 'markdown-it';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const _dir = dirname(fileURLToPath(import.meta.url));
+// Lazy-loaded island manifest: maps entry name → content-hashed public path.
+// Written by scripts/build-island-manifest.cjs alongside hugo/data/island_manifest.json.
+// Fail-open: returns the bare /js/<name>.js path if the file is absent
+// (e.g. local `cds watch` without running build:apps first).
+let _islandManifest;
+function islandSrc(name) {
+  if (!_islandManifest) {
+    try {
+      _islandManifest = JSON.parse(readFileSync(join(_dir, 'island-manifest.json'), 'utf8'));
+    } catch {
+      _islandManifest = {};
+    }
+  }
+  return _islandManifest[name] ?? `/js/${name}.js`;
+}
 
 const escapeHtml = (s) => String(s ?? '')
   .replace(/&/g, '&amp;')
@@ -130,7 +150,7 @@ ${cards}
     </div>
   </div>
 </div>
-<script type="module" src="/js/nav-dropdown.js"></script>`;
+<script type="module" src="${islandSrc('nav-dropdown')}"></script>`;
 }
 
 export function renderMissionBody(ctx) {
@@ -226,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (firstCard) firstCard.classList.add('expanded');
 });
 </script>
-<script type="module" src="/js/nav-dropdown.js"></script>`;
+<script type="module" src="${islandSrc('nav-dropdown')}"></script>`;
 }
 
 // Composes a full page given a slug + chrome shell + already-loaded body data.

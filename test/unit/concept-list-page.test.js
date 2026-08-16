@@ -149,7 +149,13 @@ describe('renderConceptListBody', () => {
     expect(body).toContain('id="concepts-filter-list"');
     expect(body).toContain('id="concepts-filter-controls"');
     expect(body).toContain('id="concepts-filter-count"');
-    expect(body).toContain('/js/concepts-filter.js');
+    // The island src is now content-hashed when srv/lib/island-manifest.json
+    // exists (written by build:island-manifest after build:apps). The test
+    // matches the prefix to stay valid both when the manifest is present
+    // (hashed: /js/concepts-filter-<hash>.js) and when it's absent
+    // (bare fallback: /js/concepts-filter.js, e.g. in a CI environment that
+    // hasn't run build:apps yet).
+    expect(body).toMatch(/\/js\/concepts-filter[\w-]*\.js/);
   });
 
   it('emits one SSR <li> per top card (min(100,N))', () => {
