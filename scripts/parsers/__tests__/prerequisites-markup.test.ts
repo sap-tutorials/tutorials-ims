@@ -66,6 +66,24 @@ describe('prepPrerequisitesMarkup (#1637)', () => {
   it('returns empty string for empty input', () => {
     expect(prepPrerequisitesMarkup('', OPTS)).toBe('')
   })
+
+  it('emits keyboard-accessible attributes (tabindex/role/aria-label) on the zoomable <img> (#1785)', () => {
+    const input =
+      '<table><tr><td align="center">![Play Store QR Code](img-1.1.1.png)<br>Android</td></tr></table>'
+    const out = prepPrerequisitesMarkup(input, OPTS)
+    // Focusable + announced as an actionable control so keyboard/SR users can
+    // open the lightbox (previously mouse-click only).
+    expect(out).toContain('tabindex="0"')
+    expect(out).toContain('role="button"')
+    // aria-label conveys the action and embeds the alt text.
+    expect(out).toContain('aria-label="View larger image: Play Store QR Code"')
+  })
+
+  it('uses a generic aria-label when the image has no alt text (#1785)', () => {
+    const input = '<table><tr><td>![](img-1.1.1.png)</td></tr></table>'
+    const out = prepPrerequisitesMarkup(input, OPTS)
+    expect(out).toContain('aria-label="View larger image"')
+  })
 })
 
 describe('composeTutorial feeds prerequisites through the markup transform (#1637)', () => {

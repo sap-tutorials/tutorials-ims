@@ -325,6 +325,10 @@ export default defineConfig({
         'devtoberfest-sessions-calendar': resolve(__dirname, 'src/devtoberfest-sessions-calendar/main.ts'),
         'devtoberfest-rules': resolve(__dirname, 'src/devtoberfest-rules/main.ts'),
         'devtoberfest-faq': resolve(__dirname, 'src/devtoberfest-faq/main.ts'),
+        'ui5-core': resolve(__dirname, 'src/ui5/ui5-core.ts'),
+        'ui5-tutorial': resolve(__dirname, 'src/ui5/ui5-tutorial.ts'),
+        'ui5-me': resolve(__dirname, 'src/ui5/ui5-me.ts'),
+        'ui5-illustrations': resolve(__dirname, 'src/ui5/ui5-illustrations.ts'),
       },
       output: {
         // Content-hash entry bundles so a changed bundle gets a new URL the
@@ -332,17 +336,21 @@ export default defineConfig({
         // longer pair with a stale cached bundle (#1604, the JS analog of the
         // 2026-08-10 giant-logo CSS incident, PR #1601/#1603).
         //
-        // Two entries stay at stable, un-hashed filenames because the CAP
-        // runtime renderers hardcode their paths at request time and cannot
-        // read Hugo's build-time manifest:
-        //   - nav-dropdown    → srv/lib/catalog-renderer.js (L120, L204)
-        //   - concepts-filter → srv/lib/concept-list-page.js (L160, L212)
-        // Their CDN cache policy is a separate follow-up (#1604 item 4).
-        entryFileNames: (chunkInfo) =>
-          (chunkInfo.name === 'nav-dropdown' || chunkInfo.name === 'concepts-filter')
-            ? '[name].js'
-            : '[name]-[hash].js',
+        // All entry bundles are content-hashed. The CAP runtime renderers
+        // (srv/lib/catalog-renderer.js, srv/lib/concept-list-page.js) that
+        // inline <script> tags for nav-dropdown and concepts-filter now read
+        // the hashed path from srv/lib/island-manifest.json (written by
+        // scripts/build-island-manifest.cjs alongside hugo/data/island_manifest.json)
+        // with a fail-open fallback to the bare path for local cds watch.
+        entryFileNames: '[name]-[hash].js',
         chunkFileNames: 'chunks/[name]-[hash].js',
+        manualChunks(id) {
+          // Force the UI5 base (the Theme singleton) into ONE shared chunk so
+          // every ui5-* entry references the same Theme instance. Single-copy
+          // invariant — see spec. Do NOT widen this to all of @ui5 (that would
+          // pull every component into the shared chunk, defeating the split).
+          if (id.includes('@ui5/webcomponents-base')) return 'ui5-vendor';
+        },
       },
     },
   },

@@ -3,12 +3,12 @@
 // See improvements.md "U0" for scope.
 import { setTheme } from "@ui5/webcomponents-base/dist/config/Theme.js";
 
-// U14: shimmer rules for hydration placeholders + nav-progress-bar overrides.
-// Selectors are scoped to attributes that only get set on relevant pages.
-import "../css/skeletons.css";
-
-// U15: lightbox dialog styles. Scoped to .lightbox-dialog and descendants.
-import "../css/lightbox.css";
+// U14/U15/U16: skeletons, lightbox, and mission-side-nav CSS are delivered via
+// fingerprinted <link>s in hugo/layouts/partials/head.html — NOT imported here.
+// This file is built by Hugo's js.Build (esbuild), which has no CSS-injection
+// step (unlike the hugo-apps Vite build's vite-plugin-css-injected-by-js), so a
+// `import "../css/foo.css"` here inlines the CSS as a dead string that never
+// applies. Do not re-add such imports; add a <link> in head.html instead.
 
 // Register THEME assets only (light + dark) — deliberately NOT the blanket
 // `@ui5/webcomponents/dist/Assets.js` / `-fiori/dist/Assets.js`.
@@ -25,16 +25,53 @@ import "../css/lightbox.css";
 // site is English-first, so the non-English message bundles are unused
 // (components fall back to their compiled English default texts).
 //
-// Importing only the theming json-imports still registers the sap_horizon
-// (light) + sap_horizon_dark theme parameters, so setTheme() below works for
-// both — the original "dark falls back to light" hazard is preserved against.
-// Measured effect: ui5-bootstrap bundle 16.25 MB → 3.48 MB (−79%).
-// If a date/calendar component or non-English UI is ever added, restore the
-// blanket Assets.js import (or, better, move this bootstrap to the Vite
-// pipeline so the per-locale chunks lazy-load as intended).
-import "@ui5/webcomponents-theming/dist/Assets.js";
-import "@ui5/webcomponents/dist/generated/json-imports/Themes.js";
-import "@ui5/webcomponents-fiori/dist/generated/json-imports/Themes.js";
+// U17: Instead of the stock Themes.js files (which register all 10 themes via
+// dynamic import() in a switch — sap_fiori_3*, sap_horizon_auto/hcb/hcw/hc_auto
+// in addition to the two we need), we register only sap_horizon and
+// sap_horizon_dark directly. Since esbuild (Hugo js.Build) has splitting
+// DISABLED, all dynamic import() branches in Themes.js are inlined statically,
+// pulling in all 10 theme JSON files across 3 packages (~1.8 MB raw) even
+// though setTheme() here only ever passes "sap_horizon" or "sap_horizon_dark".
+// This site's head.html script resolves OS dark/light preference synchronously
+// before this module evaluates, so the two-value domain is the full domain.
+//
+// Measured reduction: ~1.4 MB fewer theme JSON bytes inlined per page.
+// Measured bundle: 16.25 MB → 3.48 MB (locale removal, U0) → ~2.1 MB (U17).
+//
+// If HCB/HCW or sap_fiori_3 are ever needed, add their entries here — the
+// pattern is: registerThemePropertiesLoader(pkg, name, () => import(jsonPath)).
+import { registerThemePropertiesLoader } from "@ui5/webcomponents-base/dist/asset-registries/Themes.js";
+// @ui5/webcomponents-theming — base CSS custom properties (SAP Horizon palette).
+registerThemePropertiesLoader(
+  "@ui5/webcomponents-theming", "sap_horizon",
+  async () => (await import("@ui5/webcomponents-theming/dist/generated/assets/themes/sap_horizon/parameters-bundle.css.json")).default
+);
+registerThemePropertiesLoader(
+  "@ui5/webcomponents-theming", "sap_horizon_dark",
+  async () => (await import("@ui5/webcomponents-theming/dist/generated/assets/themes/sap_horizon_dark/parameters-bundle.css.json")).default
+);
+// @ui5/webcomponents — component-level design tokens ("host" target = shadow DOM :host).
+registerThemePropertiesLoader(
+  "@ui5/webcomponents", "sap_horizon",
+  async () => (await import("@ui5/webcomponents/dist/generated/assets/themes/sap_horizon/parameters-bundle.css.json")).default,
+  "host"
+);
+registerThemePropertiesLoader(
+  "@ui5/webcomponents", "sap_horizon_dark",
+  async () => (await import("@ui5/webcomponents/dist/generated/assets/themes/sap_horizon_dark/parameters-bundle.css.json")).default,
+  "host"
+);
+// @ui5/webcomponents-fiori — Fiori-specific design tokens ("host" target).
+registerThemePropertiesLoader(
+  "@ui5/webcomponents-fiori", "sap_horizon",
+  async () => (await import("@ui5/webcomponents-fiori/dist/generated/assets/themes/sap_horizon/parameters-bundle.css.json")).default,
+  "host"
+);
+registerThemePropertiesLoader(
+  "@ui5/webcomponents-fiori", "sap_horizon_dark",
+  async () => (await import("@ui5/webcomponents-fiori/dist/generated/assets/themes/sap_horizon_dark/parameters-bundle.css.json")).default,
+  "host"
+);
 
 import "@ui5/webcomponents/dist/Avatar.js";
 import "@ui5/webcomponents/dist/MessageStrip.js";
@@ -228,7 +265,7 @@ import "./mission-side-nav";
 import "./recommend";
 // View Transitions + scroll-driven animations. Self-bootstraps; safe no-op when APIs missing.
 import "./view-transitions";
-import "../css/mission-side-nav.css";
+// mission-side-nav.css is delivered via a <link> in head.html (see note at top).
 
 const root = document.documentElement;
 

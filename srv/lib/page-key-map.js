@@ -37,6 +37,7 @@ export const IN_SCOPE_PAGES = [
   { route: '/operate/',   key: 'page-operate',   file: 'operate/index.html',   mimeType: 'text/html' },
   { route: '/sitemap.xml',           key: 'page-sitemap.xml',         file: 'sitemap.xml',               mimeType: 'application/xml' },
   { route: '/index.xml',             key: 'page-index.xml',           file: 'index.xml',                 mimeType: 'application/xml' },
+  { route: '/llms.txt',              key: 'page-llms.txt',            file: 'llms.txt',                  mimeType: 'text/plain' },
   { route: '/llms-full.txt',         key: 'page-llms-full.txt',       file: 'llms-full.txt',             mimeType: 'text/plain' },
 ];
 
@@ -83,6 +84,62 @@ export function discoverPageFiles(hugoDir) {
   for (const p of IN_SCOPE_PAGES) {
     const abs = path.join(hugoDir, p.file);
     if (fs.existsSync(abs)) out.set(p.key, abs);
+  }
+  return out;
+}
+
+// #1659 Phase C — author pages are UNBOUNDED dynamic slugs (one per contributor
+// login), so they are NOT in the fixed IN_SCOPE_PAGES allow-list. Walk
+// hugo/public/authors/<login>/index.html → `author-<login>` (like tutorials/
+// concepts ride the dynamic-slug publish/serve path). `_index` and any
+// non-slug-shaped dir names are skipped (the /authors/ index is render:never).
+export const AUTHOR_KEY_PREFIX = 'author-';
+export function isAuthorKey(key) {
+  return typeof key === 'string' && key.startsWith(AUTHOR_KEY_PREFIX);
+}
+export function discoverAuthorPages(hugoDir) {
+  const out = new Map();
+  const authorsDir = path.join(hugoDir, 'authors');
+  let entries;
+  try {
+    entries = fs.readdirSync(authorsDir, { withFileTypes: true });
+  } catch {
+    return out; // no authors dir → nothing to publish
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const login = e.name.toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(login)) continue; // skip _index etc.
+    const abs = path.join(authorsDir, e.name, 'index.html');
+    if (fs.existsSync(abs)) out.set(`${AUTHOR_KEY_PREFIX}${login}`, abs);
+  }
+  return out;
+}
+
+// #1659 Phase C — per-advocate DETAIL pages (/developer-advocates/<slug>/) are
+// likewise unbounded dynamic slugs (one per advocate), NOT in IN_SCOPE_PAGES
+// (only the /developer-advocates/ INDEX is `page-developer-advocates`). Walk the
+// SUBDIRS under developer-advocates/ → `advocate-<slug>`; the top-level
+// index.html (the index page) is a file, so directory iteration skips it.
+export const ADVOCATE_KEY_PREFIX = 'advocate-';
+export function isAdvocateKey(key) {
+  return typeof key === 'string' && key.startsWith(ADVOCATE_KEY_PREFIX);
+}
+export function discoverAdvocatePages(hugoDir) {
+  const out = new Map();
+  const advDir = path.join(hugoDir, 'developer-advocates');
+  let entries;
+  try {
+    entries = fs.readdirSync(advDir, { withFileTypes: true });
+  } catch {
+    return out; // no advocates dir → nothing to publish
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const slug = e.name.toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) continue; // skip _index etc.
+    const abs = path.join(advDir, e.name, 'index.html');
+    if (fs.existsSync(abs)) out.set(`${ADVOCATE_KEY_PREFIX}${slug}`, abs);
   }
   return out;
 }

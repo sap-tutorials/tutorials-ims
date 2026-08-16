@@ -21,11 +21,11 @@
     {{ partial "tutorial-prerequisites.html" . }}
 
     {{ if not site.Params.qa }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
-    {{ if not site.Params.qa }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1"></div>{{ end }}
+    {{ if not site.Params.qa }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1" data-pip-src="{{ partial "island-src.html" "tutorial-pip" }}"></div>{{ end }}
 
     <div class="step-controls">
-      <a href="#" onclick="expandAllSteps(); return false">Open all</a>
-      <a href="#" onclick="collapseAllSteps(); return false">Close all</a>
+      <button type="button" onclick="expandAllSteps()">Open all</button>
+      <button type="button" onclick="collapseAllSteps()">Close all</button>
     </div>
 
     {{ partial "tutorial-video.html" . }}
@@ -48,5 +48,4 @@
 <script src="{{ $js.RelPermalink }}" defer></script>
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
-{{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip" }}"></script>{{ end }}
 {{ end }}

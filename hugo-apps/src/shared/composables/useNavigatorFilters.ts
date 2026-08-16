@@ -17,7 +17,7 @@ import { useSearch } from '../../navigator/useSearch'
 import {
   parseNavState, writeNavStateToWindow, EMPTY_STATE, type NavState,
 } from '../../navigator/urlSync'
-import { parseTagParams, parseLevelParams } from '../../navigator/url-params'
+import { parseTagParams, parseLevelParams, extractExperienceLevels } from '../../navigator/url-params'
 import { isWithinNewWindow } from '../freshness'
 import { requiresLicense, LICENSE_SLUG } from '../license'
 import type { CardItem, TutorialEntry } from '@shared/types'
@@ -365,6 +365,23 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
         if (!filters.products.includes(slug)) filters.products.push(slug)
       }
       for (const lvl of parseLevelParams(params)) {
+        if (!filters.levels.includes(lvl)) filters.levels.push(lvl)
+      }
+
+      // Issue #1804 — experience-level slugs (`tutorial>beginner|intermediate|
+      // advanced`) belong to the Experience facet, never Software Product. They
+      // can arrive here three ways: a `?tag=tutorial>beginner` chip (seeded
+      // above), a stale `?product=…,tutorial>beginner` URL, or poisoned
+      // localStorage from before this fix. Left in filters.products they
+      // OR-match every same-level tutorial (the product predicate is a some()
+      // over displayTagSlugs), so the Software Product filter appears to do
+      // nothing. Route them to filters.levels here — the single choke point
+      // after every product source has merged. The urlSync watcher then writes
+      // a clean `?product=` / `?level=` URL and re-persists, self-healing the
+      // stale localStorage on the next tick.
+      const routed = extractExperienceLevels(filters.products)
+      filters.products = routed.products
+      for (const lvl of routed.levels) {
         if (!filters.levels.includes(lvl)) filters.levels.push(lvl)
       }
 

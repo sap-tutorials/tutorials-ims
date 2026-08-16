@@ -4,6 +4,7 @@
 {{ if not site.Params.previewMode }}
 <ui5-dialog id="image-lightbox" accessible-name="Image viewer" class="lightbox-dialog">
   <div slot="header" class="lightbox-header">
+    <span class="lightbox-counter" aria-live="polite" hidden></span>
     <ui5-title level="H4" class="lightbox-title"></ui5-title>
     <ui5-button icon="decline" design="Transparent" class="lightbox-close" tooltip="Close"></ui5-button>
   </div>
@@ -12,7 +13,9 @@
       <img class="lightbox-img lightbox-img--current" alt="">
       <img class="lightbox-img lightbox-img--incoming" alt="" hidden>
     </div>
+    <div class="lightbox-spinner" hidden aria-hidden="true"></div>
   </div>
+  <div class="lightbox-thumbs" role="group" aria-label="Image thumbnails" hidden></div>
   <div slot="footer" class="lightbox-footer">
     <ui5-button icon="navigation-left-arrow" design="Transparent" class="lightbox-prev" tooltip="Previous"></ui5-button>
     <ui5-button icon="zoom-out" design="Transparent" class="lightbox-zoom-out" tooltip="Zoom out"></ui5-button>

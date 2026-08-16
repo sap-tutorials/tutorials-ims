@@ -72,7 +72,13 @@ function renderImgTag(alt: string, url: string): string {
   const src = url.startsWith(`${RAW_BASE_URL}/`)
     ? `/img-cdn/?u=${encodeURIComponent(url)}&w=1440`
     : url
-  return `<img src="${src}" alt="${escapeAttr(alt)}" loading="lazy" data-zoomable="true">`
+  // #1785: tabindex/role/aria-label make the image keyboard-reachable and
+  // announce it as an actionable control (the lightbox previously opened on
+  // mouse click only). aria-* / data-* pass the prerequisites sanitizer;
+  // tabindex/role are best-effort (stripped by the shared sanitizer's img
+  // allowlist on that path — the image still opens via click delegation).
+  const label = alt ? `View larger image: ${escapeAttr(alt)}` : 'View larger image'
+  return `<img src="${src}" alt="${escapeAttr(alt)}" loading="lazy" data-zoomable="true" tabindex="0" role="button" aria-label="${label}">`
 }
 
 /** Escape a string for safe use inside a double-quoted HTML attribute. */

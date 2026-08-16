@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { discoverPageFiles, IN_SCOPE_PAGES } from '../../srv/lib/page-key-map.js';
+import { discoverPageFiles, discoverAuthorPages, isAuthorKey, discoverAdvocatePages, isAdvocateKey, IN_SCOPE_PAGES } from '../../srv/lib/page-key-map.js';
 
 let tmpDir;
 
@@ -93,5 +93,79 @@ describe('discoverPageFiles', () => {
       expect(result.has(p.key)).toBe(true);
       expect(result.get(p.key)).toBe(path.join(tmpDir, p.file));
     }
+  });
+});
+
+// #1659 Phase C — dynamic author-page discovery (unbounded logins, NOT the
+// fixed allow-list).
+describe('discoverAuthorPages', () => {
+  let authorsRoot;
+  beforeAll(() => {
+    authorsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'discover-authors-'));
+    const mk = (login) => {
+      const dir = path.join(authorsRoot, 'authors', login);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html>');
+    };
+    mk('mervey45');
+    mk('sap-hoangvu');
+    // A mixed-case dir name (some filesystems allow it) → key lowercased.
+    mk('CamelUser');
+    // Non-slug dirs that must be skipped.
+    fs.mkdirSync(path.join(authorsRoot, 'authors', '_index'), { recursive: true });
+    fs.writeFileSync(path.join(authorsRoot, 'authors', '_index', 'index.html'), '');
+  });
+  afterAll(() => fs.rmSync(authorsRoot, { recursive: true, force: true }));
+
+  it('returns an empty map when there is no authors dir', () => {
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'no-authors-'));
+    expect(discoverAuthorPages(empty).size).toBe(0);
+    fs.rmSync(empty, { recursive: true, force: true });
+  });
+
+  it('maps authors/<login>/index.html → author-<login> (lowercased), skipping non-slug dirs', () => {
+    const result = discoverAuthorPages(authorsRoot);
+    expect(result.has('author-mervey45')).toBe(true);
+    expect(result.has('author-sap-hoangvu')).toBe(true);
+    expect(result.has('author-cameluser')).toBe(true); // lowercased
+    expect(result.get('author-mervey45')).toBe(path.join(authorsRoot, 'authors', 'mervey45', 'index.html'));
+    // _index (underscore) is not slug-shaped → skipped.
+    expect([...result.keys()].some((k) => k.includes('_index'))).toBe(false);
+    // Every key is an author key.
+    for (const k of result.keys()) expect(isAuthorKey(k)).toBe(true);
+  });
+});
+
+// #1659 Phase C.2a — per-advocate detail discovery (subdirs of
+// developer-advocates/; the top-level index.html is the separate index page).
+describe('discoverAdvocatePages', () => {
+  let advRoot;
+  beforeAll(() => {
+    advRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'discover-adv-'));
+    const mk = (slug) => {
+      const dir = path.join(advRoot, 'developer-advocates', slug);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html>');
+    };
+    mk('dj-adams');
+    mk('antonio-maradiaga');
+    // The index page is a top-level FILE, not a dir → must be ignored.
+    fs.writeFileSync(path.join(advRoot, 'developer-advocates', 'index.html'), '<!doctype html>index');
+  });
+  afterAll(() => fs.rmSync(advRoot, { recursive: true, force: true }));
+
+  it('returns an empty map when there is no developer-advocates dir', () => {
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'no-adv-'));
+    expect(discoverAdvocatePages(empty).size).toBe(0);
+    fs.rmSync(empty, { recursive: true, force: true });
+  });
+
+  it('maps developer-advocates/<slug>/index.html → advocate-<slug>, ignoring the top-level index file', () => {
+    const result = discoverAdvocatePages(advRoot);
+    expect(result.has('advocate-dj-adams')).toBe(true);
+    expect(result.has('advocate-antonio-maradiaga')).toBe(true);
+    expect(result.get('advocate-dj-adams')).toBe(path.join(advRoot, 'developer-advocates', 'dj-adams', 'index.html'));
+    expect(result.size).toBe(2); // top-level index.html (a file) is not counted
+    for (const k of result.keys()) expect(isAdvocateKey(k)).toBe(true);
   });
 });

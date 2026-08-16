@@ -119,9 +119,17 @@ function wirePopover(glossary: GlossaryMap): void {
     defEl!.textContent = entry.definition;
     if (entry.link) {
       linkEl!.href = entry.link;
+      // Descriptive accessible name so the generic "Learn more" text passes the
+      // Lighthouse SEO link-text audit.
+      linkEl!.setAttribute("aria-label", `Learn more about ${entry.term}`);
+      linkEl!.hidden = false;
       linkEl!.style.display = "";
     } else {
       linkEl!.removeAttribute("href");
+      linkEl!.removeAttribute("aria-label");
+      // Hidden (not just display:none) so an hrefless anchor is never presented
+      // to crawlers — the SEO crawlable-anchors audit skips non-rendered anchors.
+      linkEl!.hidden = true;
       linkEl!.style.display = "none";
     }
     return true;

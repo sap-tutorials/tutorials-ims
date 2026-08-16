@@ -11,7 +11,7 @@ import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
 import { publishValidateAnswerSpecs } from './lib/publish-validate-answer.js';
 import { computeOrphans, enforceCap, formatStepSummary } from './lib/purge-orphans.js';
-import { discoverPageFiles } from '../srv/lib/page-key-map.js';
+import { discoverPageFiles, discoverAuthorPages, discoverAdvocatePages } from '../srv/lib/page-key-map.js';
 
 export type { Channel };
 
@@ -104,6 +104,20 @@ export function discoverTutorials(hugoDir: string): Map<string, string> {
 // tables).
 export function isConceptSlug(slug: string): boolean {
   return typeof slug === 'string' && slug.startsWith('concept-');
+}
+
+// #1659 Phase C — author page predicate. Author pages (`author-<login>`) are
+// pre-rendered Hugo HTML like concept/page BLOBs; they must be excluded from
+// Tutorials-only metadata/bodyText/branchSpec/source extraction (same reason as
+// concept slugs) so they never orphan rows in those tutorial-keyed tables.
+export function isAuthorSlug(slug: string): boolean {
+  return typeof slug === 'string' && slug.startsWith('author-');
+}
+
+// #1659 Phase C.2a — per-advocate detail page predicate (same rationale as
+// concept/author slugs: exclude from Tutorials-only extraction).
+export function isAdvocateSlug(slug: string): boolean {
+  return typeof slug === 'string' && slug.startsWith('advocate-');
 }
 
 // A slug points at a runtime-SSR'd catalog page (groups/missions) since PR
@@ -1036,6 +1050,17 @@ async function main() {
     const pages = discoverPageFiles(opts.hugoDir);
     for (const [key, absPath] of pages) tutorials.set(key, absPath);
     log(`[pages] merged ${pages.size} content page(s) into publish set`);
+
+    // #1659 Phase C — author pages (author-<login>) ride the same delta
+    // pipeline as pages/tutorials. Unbounded dynamic slugs, published as BLOBs.
+    const authors = discoverAuthorPages(opts.hugoDir);
+    for (const [key, absPath] of authors) tutorials.set(key, absPath);
+    log(`[authors] merged ${authors.size} author page(s) into publish set`);
+
+    // #1659 Phase C.2a — per-advocate detail pages (advocate-<slug>), same path.
+    const advocates = discoverAdvocatePages(opts.hugoDir);
+    for (const [key, absPath] of advocates) tutorials.set(key, absPath);
+    log(`[advocates] merged ${advocates.size} advocate detail page(s) into publish set`);
   }
 
   log('Computing local hashes...');
@@ -1114,7 +1139,7 @@ async function main() {
   // metadata entries (no .md in hugo/content/tutorials/) but extractAllBodyTexts
   // would happily emit a body-text row keyed `concept-<name>`, orphaning it in
   // TutorialBodyText. Filter them out explicitly so the contract is clear.
-  const tutorialOnlySlugs = targetSlugs.filter(s => !isConceptSlug(s));
+  const tutorialOnlySlugs = targetSlugs.filter(s => !isConceptSlug(s) && !isAuthorSlug(s) && !isAdvocateSlug(s));
   const metadataAll = extractMetadata(hugoContentDir, tutorialOnlySlugs);
   const bodyTextsAll = extractAllBodyTexts(tutorials, tutorialOnlySlugs);
   const branchSpecsAll = extractAllBranchSpecs(hugoContentDir, tutorialOnlySlugs);

@@ -144,9 +144,12 @@ onMounted(() => {
           <img
             v-if="adv.slug"
             :src="`/api/advocates/${adv.slug}/photo`"
-            :alt="advocateName(adv)"
+            alt=""
             class="hb-community-lane__adv-photo"
+            width="36"
+            height="36"
             loading="lazy"
+            decoding="async"
             @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
           />
           <div v-else class="hb-community-lane__adv-avatar" aria-hidden="true">

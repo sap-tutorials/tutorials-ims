@@ -21,9 +21,14 @@ const recent = ref<VideoItem[]>([]);
 const loading = ref(true);
 const error = ref<string | null>(null);
 
-function thumbUrl(item: VideoItem): string {
+// YouTube thumbnail sizes: mqdefault=320x180 (clean 16:9), hqdefault=480x360
+// (4:3, letterboxed). Request the size that matches the display box so we don't
+// ship 480x360 for a 96x54 tile (issue #1779 uses-responsive-images). The large
+// featured slot (up to ~690px wide) keeps hqdefault; the small recent tiles use
+// mqdefault. A server-provided item.thumbnail (if any) always wins.
+function thumbUrl(item: VideoItem, quality: 'hqdefault' | 'mqdefault' = 'hqdefault'): string {
   if (item.thumbnail) return item.thumbnail;
-  return `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`;
+  return `https://i.ytimg.com/vi/${item.videoId}/${quality}.jpg`;
 }
 
 function watchUrl(videoId: string): string {
@@ -110,7 +115,10 @@ onMounted(async () => {
                 :src="thumbUrl(featured)"
                 :alt="featured.title"
                 class="hb-video-band__thumb"
+                width="480"
+                height="270"
                 loading="lazy"
+                decoding="async"
               />
               <div class="hb-video-band__play-overlay" aria-hidden="true">&#9654;</div>
             </div>
@@ -148,10 +156,13 @@ onMounted(async () => {
             aria-label="Popular video"
           >Popular</span>
           <img
-            :src="thumbUrl(vid)"
+            :src="thumbUrl(vid, 'mqdefault')"
             :alt="vid.title"
             class="hb-video-band__recent-thumb"
+            width="96"
+            height="54"
             loading="lazy"
+            decoding="async"
           />
           <p class="hb-video-band__recent-title">{{ vid.title }}</p>
         </a>

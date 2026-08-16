@@ -6,8 +6,18 @@
 export function parseLayout(json) {
   const o = typeof json === 'string' ? JSON.parse(json) : json;
   if (!o || !Array.isArray(o.grid)) throw new Error('missing grid');
-  const rows = o.rows ?? o.grid.length;
-  const cols = o.cols ?? (o.grid[0] ? o.grid[0].length : 0);
+  // Coerce rows/cols to numbers: the admin builder two-way-binds the Rows/Cols
+  // Number inputs with no type, so a touched field serialises them as strings
+  // (e.g. "5"). The grid array length is always a number, so a strict
+  // `grid.length !== rows` comparison would spuriously report
+  // "grid row count != rows" for a well-formed puzzle (issue #1834).
+  const toDim = (v, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const rows = o.rows != null ? toDim(o.rows, o.grid.length) : o.grid.length;
+  const cols = o.cols != null ? toDim(o.cols, o.grid[0] ? o.grid[0].length : 0)
+                              : (o.grid[0] ? o.grid[0].length : 0);
   return { rows, cols, grid: o.grid, clues: o.clues || {}, wordLengths: o.wordLengths || {} };
 }
 

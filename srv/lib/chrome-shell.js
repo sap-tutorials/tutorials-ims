@@ -50,9 +50,81 @@ const escapeAttr = (s) => String(s ?? '')
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
 
+// Public origin every composed page canonicalises to. The _shell BLOB bakes
+// canonical/og:url pointing at /_shell/ (the utility Hugo page the chrome is
+// sliced from), so composeShell must rewrite them per page. Matches the
+// baseURL Hugo uses for real pages' canonical hrefs and the head-jsonld base.
+const CANONICAL_ORIGIN = 'https://developers.sap.com';
+
+// Every composeShell-rendered page (concept, concepts-index, group, mission)
+// is public, indexable content — but the _shell page is `robotsNoIndex: true`,
+// so its baked `<meta name=robots content="noindex, nofollow">` leaks onto all
+// of them (verified live 2026-08-14, #1795). Force the indexable directive,
+// byte-identical to hugo/layouts/partials/head-meta.html so composed pages
+// match Hugo-baked ones.
+const INDEXABLE_ROBOTS =
+  'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1';
+
+// Derive the public canonical URL for a composed page from its page-meta.
+// `meta.canonicalUrl` overrides; otherwise keyed on `meta.kind` (the four
+// composeShell call sites). Unknown kinds return null so the shell's baked
+// value is left untouched rather than replaced with a wrong URL.
+// group/mission slugs are already prefixed (`group-…`/`mission-…`) and served
+// under /tutorials/; concept slugs are bare and served under /concepts/.
+export function canonicalUrlFor(meta) {
+  if (meta.canonicalUrl) return meta.canonicalUrl;
+  const slug = String(meta.slug ?? '');
+  switch (meta.kind) {
+    case 'concept':        return `${CANONICAL_ORIGIN}/concepts/${slug}/`;
+    case 'concepts-index': return `${CANONICAL_ORIGIN}/concepts/`;
+    case 'group':
+    case 'mission':        return `${CANONICAL_ORIGIN}/tutorials/${slug}/`;
+    default:               return null;
+  }
+}
+
+// #1808: the sliced chrome still carries the _shell page's own BreadcrumbList
+// JSON-LD (a full Home → _shell trail), which leaks into every composed page's
+// structured data. Rebuild it from page-meta, mirroring the trail
+// hugo/layouts/partials/head-jsonld.html emits for real pages: group/mission
+// live under /tutorials/, concepts under /concepts/. Returns a JSON string, or
+// null for an unknown kind (composeShell then leaves the baked block alone,
+// matching the canonical/og:url guard). `<` is escaped to < so a title
+// containing `</script>` can never break out of the ld+json block.
+export function buildBreadcrumbJsonLd(meta, canonicalUrl) {
+  const crumbs = [{ name: 'Home', item: `${CANONICAL_ORIGIN}/` }];
+  const leaf = String(meta.title ?? '');
+  switch (meta.kind) {
+    case 'group':
+    case 'mission':
+      crumbs.push({ name: 'Tutorials', item: `${CANONICAL_ORIGIN}/tutorials/` });
+      crumbs.push({ name: leaf, item: canonicalUrl });
+      break;
+    case 'concept':
+      crumbs.push({ name: 'Concepts', item: `${CANONICAL_ORIGIN}/concepts/` });
+      crumbs.push({ name: leaf, item: canonicalUrl });
+      break;
+    case 'concepts-index':
+      crumbs.push({ name: 'Concepts', item: `${CANONICAL_ORIGIN}/concepts/` });
+      break;
+    default:
+      return null;
+  }
+  const payload = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: crumbs.map((c, i) => ({
+      '@type': 'ListItem', position: i + 1, name: c.name, item: c.item,
+    })),
+  };
+  return JSON.stringify(payload).replace(/</g, '\\u003c');
+}
+
 // Pure: compose full HTML from parsed shell halves + body + page meta.
-// Substitutes <html data-page-* attributes, <title>, and <meta description>
-// for the placeholders the _shell layout emits.
+// Rewrites the _shell placeholders the sliced chrome carries so each composed
+// page emits its own SEO head: <html data-page-*>, <title>, <meta description>,
+// <meta robots>, <link canonical>, and the og:/twitter: title/description/url
+// tags. Everything else in the chrome is preserved verbatim.
 //
 // The published _shell BLOB is produced by Hugo's production minifier, which
 // strips quotes around single-token attribute values (data-page-kind="generic"
@@ -60,12 +132,16 @@ const escapeAttr = (s) => String(s ?? '')
 // data-page-slug). The substitution patterns below therefore tolerate quoted,
 // single-quoted, and unquoted/empty forms — matching on quoted-only silently
 // no-ops on the minified shell, leaving group/mission pages stamped with the
-// placeholder kind 'generic' and title '_shell' (#1291).
+// placeholder kind 'generic' and title '_shell' (#1291). A non-matching
+// .replace() is a harmless no-op, so shells lacking a given tag (e.g. the
+// minimal test shell) pass through unchanged.
 export function composeShell({ before, after }, bodyHtml, meta) {
   const kind  = escapeAttr(meta.kind);
   const slug  = escapeAttr(meta.slug);
   const title = escapeAttr(meta.title);
   const desc  = escapeAttr(meta.description ?? '');
+  const url   = canonicalUrlFor(meta);
+  const urlAttr = url ? escapeAttr(url) : null;
 
   // Matches `name="v"`, `name='v'`, `name=v`, or bare `name` (empty minified
   // value). The value alternation is ordered longest-first so the unquoted
@@ -73,15 +149,68 @@ export function composeShell({ before, after }, bodyHtml, meta) {
   const attr = (name) =>
     new RegExp(`${name}(?:="[^"]*"|='[^']*'|=[^\\s>]*)?`);
 
-  const patchedBefore = before
+  // A `<meta {attr}={target} content="…">` tag whose {attr} value may be
+  // quoted, single-quoted, or unquoted (minified). `content` is always quoted
+  // in the shell (its values carry spaces/punctuation the minifier can't strip).
+  const metaTag = (attrName, target) =>
+    new RegExp(`<meta ${attrName}=(?:"${target}"|'${target}'|${target}) content="[^"]*">`);
+
+  let patchedBefore = before
     .replace(attr('data-page-kind'), `data-page-kind="${kind}"`)
     .replace(attr('data-page-slug'), `data-page-slug="${slug}"`)
     .replace(attr('data-page-title'), `data-page-title="${title}"`)
     .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
     .replace(
-      /<meta name=(?:"description"|'description'|description) content="[^"]*">/,
+      metaTag('name', 'description'),
       `<meta name="description" content="${desc}">`,
+    )
+    // Utility-page noindex → indexable (#1795).
+    .replace(
+      metaTag('name', 'robots'),
+      `<meta name="robots" content="${INDEXABLE_ROBOTS}">`,
+    )
+    // Social-card title/description leak `_shell` / the site-default text.
+    .replace(metaTag('property', 'og:title'), `<meta property="og:title" content="${title}">`)
+    .replace(metaTag('name', 'twitter:title'), `<meta name="twitter:title" content="${title}">`);
+
+  // og:/twitter: description only when we have a real one — otherwise leave the
+  // baked site-default description (better than an empty social card).
+  if (desc) {
+    patchedBefore = patchedBefore
+      .replace(metaTag('property', 'og:description'), `<meta property="og:description" content="${desc}">`)
+      .replace(metaTag('name', 'twitter:description'), `<meta name="twitter:description" content="${desc}">`);
+  }
+
+  // canonical + og:url — only when we can derive the real URL, so an unknown
+  // page kind never gets stamped with a wrong canonical.
+  if (urlAttr) {
+    patchedBefore = patchedBefore
+      .replace(
+        /<link rel=(?:"canonical"|'canonical'|canonical) href=(?:"[^"]*"|'[^']*'|[^\s>]*)\s*\/?>/,
+        `<link rel="canonical" href="${urlAttr}">`,
+      )
+      .replace(metaTag('property', 'og:url'), `<meta property="og:url" content="${urlAttr}">`);
+  }
+
+  // #1808 residual: rewrite the visible embed-bar title (embed=minimal header)
+  // away from the baked `_shell`. Tolerates quoted/unquoted class + any inner
+  // text; `title` is already HTML-escaped above.
+  patchedBefore = patchedBefore.replace(
+    /<span class=(?:"embed-bar__title"|'embed-bar__title'|embed-bar__title)>[^<]*<\/span>/,
+    `<span class="embed-bar__title">${title}</span>`,
+  );
+
+  // #1808 residual: rebuild the BreadcrumbList JSON-LD so the composed page
+  // carries its own trail, not the _shell page's. Targets only the ld+json
+  // block containing "@type":"BreadcrumbList" — a second (Organization/WebSite)
+  // ld+json block in the shell is left untouched. Skipped for unknown kinds.
+  const breadcrumb = buildBreadcrumbJsonLd(meta, url);
+  if (breadcrumb) {
+    patchedBefore = patchedBefore.replace(
+      /<script type=(?:"application\/ld\+json"|application\/ld\+json)>\{[^<]*"@type":"BreadcrumbList"[^<]*\}<\/script>/,
+      `<script type="application/ld+json">${breadcrumb}</script>`,
     );
+  }
 
   return `${patchedBefore}${bodyHtml}${after}`;
 }

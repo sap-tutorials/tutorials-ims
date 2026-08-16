@@ -49,9 +49,9 @@
     {{- end -}}
   </div>
   <nav class="hp-featured-carousel__controls" aria-label="Carousel controls">
-    <button type="button" data-action="prev" aria-label="Previous topic">&#x2039;</button>
-    <button type="button" data-action="play-pause" aria-label="Pause auto-advance" aria-pressed="false">&#x23F8;</button>
-    <button type="button" data-action="next" aria-label="Next topic">&#x203A;</button>
+    <button type="button" data-action="prev" aria-label="Previous topic"><span aria-hidden="true">&#x2039;</span></button>
+    <button type="button" data-action="play-pause" aria-label="Pause auto-advance" aria-pressed="false"><span aria-hidden="true">&#x23F8;</span></button>
+    <button type="button" data-action="next" aria-label="Next topic"><span aria-hidden="true">&#x203A;</span></button>
     <ol class="hp-featured-carousel__dots" role="tablist">
       {{- range $i, $slide := $slides -}}
       <li role="presentation">

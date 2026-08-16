@@ -155,7 +155,17 @@
      un-sticking it; users get step navigation via the wizard indicator +
      inline accordion + mobile FAB inside the Steps section. */
   @media (max-width: 960px) {
-    .op-twocol { grid-template-columns: 1fr; }
+    /* minmax(0, 1fr) — NOT bare `1fr` — for the same reason the desktop track uses
+       it (line 139): a bare `1fr` resolves to minmax(auto, 1fr), whose automatic
+       minimum is the column's min-content width. A wide, non-shrinking descendant
+       (the touch-mode ui5-wizard step indicator, horizontal card rails) then forces
+       the single content column — and thus the whole page — wider than the viewport.
+       On mobile that expands the layout viewport (device-width → content-width) and
+       everything scrolls sideways: the title clips on the left, body text runs off
+       the right (issue #1803). minmax(0, …) caps the track minimum at 0 so wide
+       children shrink/scroll within the viewport instead. `html { overflow-x: hidden }`
+       masks this on desktop but is unreliable on mobile, so fix it at the source. */
+    .op-twocol { grid-template-columns: minmax(0, 1fr); }
     .op-twocol > .tutorial-right-col { display: none; }
   }
 
@@ -315,7 +325,7 @@
                accordion below holds the actual content. step-change scrolls to anchor. */}}
           {{ if and .Params.steps (ge (int .Params.stepCount) 3) }}
           <div class="op-wizard-wrap">
-            <ui5-wizard id="op-step-wizard">
+            <ui5-wizard id="op-step-wizard" accessible-name="Steps">
               {{ range .Params.steps }}
               <ui5-wizard-step
                 data-step-target="step-{{ .number }}"
@@ -328,10 +338,10 @@
           </div>
           {{ end }}
           {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
-          {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1"></div>{{ end }}
+          {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1" data-pip-src="{{ partial "island-src.html" "tutorial-pip" }}"></div>{{ end }}
           <div class="step-controls">
-            <a href="#" onclick="expandAllSteps(); return false">Open all</a>
-            <a href="#" onclick="collapseAllSteps(); return false">Close all</a>
+            <button type="button" onclick="expandAllSteps()">Open all</button>
+            <button type="button" onclick="collapseAllSteps()">Close all</button>
           </div>
           {{ partial "tutorial-video.html" . }}
           <div class="tutorial-steps">{{ .Content }}</div>
@@ -410,7 +420,7 @@
   </div>
 </div>
 
-<ui5-button id="op-mobile-fab" design="Emphasized" icon="menu2" accessible-name="Open step list">Steps</ui5-button>
+<ui5-button id="op-mobile-fab" design="Emphasized" icon="menu2">Steps</ui5-button>
 {{ if .Params.steps }}
 <ui5-dialog id="op-mobile-sheet" accessible-name="Tutorial step navigator">
   <div slot="header" class="op-sheet__header">
@@ -448,7 +458,6 @@
 {{ end }}
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
-{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip" }}"></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-rating" }}" defer></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "code-check" }}" defer></script>{{ end }}
 <script type="module" src="{{ partial "island-src.html" "validation" }}" defer></script>

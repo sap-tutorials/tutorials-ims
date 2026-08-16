@@ -180,8 +180,8 @@ sap.ui.define([
       try { if (row.layout) { layout = JSON.parse(row.layout); } } catch (e) { /* ignore */ }
       try { if (row.solution) { solution = JSON.parse(row.solution); } } catch (e) { /* ignore */ }
 
-      var rows = row.rows || (layout.rows) || 15;
-      var cols = row.cols || (layout.cols) || 15;
+      var rows = Number(row.rows || layout.rows) || 15;
+      var cols = Number(row.cols || layout.cols) || 15;
 
       // Rebuild grid from layout.grid or make empty
       var grid;
@@ -485,8 +485,12 @@ sap.ui.define([
       }
 
       var grid = b.getProperty("/grid");
-      var rows = b.getProperty("/rows");
-      var cols = b.getProperty("/cols");
+      // Derive rows/cols from the grid itself (ground truth) rather than the
+      // model props: the Rows/Cols Number inputs are two-way bound with no type,
+      // so a touched field leaves a string in the model. Serialising that string
+      // made the server report "grid row count != rows" (issue #1834).
+      var rows = grid.length;
+      var cols = grid[0] ? grid[0].length : 0;
       var clues = b.getProperty("/clues") || {};
       var hints = b.getProperty("/hints") || {};
       var answers = b.getProperty("/answers") || {};
@@ -580,6 +584,24 @@ sap.ui.define([
       this._renderGrid();
     },
 
+    // Resize the grid when the Rows/Cols inputs change. Without this the fields
+    // were two-way bound with no type, so editing them left a string in the
+    // model, did not rebuild the grid, and corrupted the saved layout
+    // (issue #1834). Rebuild a fresh empty grid and keep the model props numeric.
+    onGridSizeChange: function () {
+      var b = this.getView().getModel("b");
+      var rows = parseInt(b.getProperty("/rows"), 10);
+      var cols = parseInt(b.getProperty("/cols"), 10);
+      if (!(rows >= 1)) { rows = 1; } else if (rows > 30) { rows = 30; }
+      if (!(cols >= 1)) { cols = 1; } else if (cols > 30) { cols = 30; }
+      b.setProperty("/rows", rows);
+      b.setProperty("/cols", cols);
+      b.setProperty("/grid", geom.numberGrid(geom.makeEmptyGrid(rows, cols)));
+      b.setProperty("/answers", {});
+      this._recomputeSlots();
+      this._renderGrid();
+    },
+
     onClearWords: function () {
       var b = this.getView().getModel("b");
       b.setProperty("/answers", {});
@@ -608,9 +630,21 @@ sap.ui.define([
     },
 
     onImportPress: function () {
-      var dom = this.byId("importFileInput").getDomRef();
-      var input = dom && dom.querySelector("input");
+      var input = this._importInput();
       if (input) { input.value = ""; input.click(); }
+    },
+
+    // Resolve the hidden native <input type=file> behind the core:HTML control.
+    // sap.ui.core.HTML with a single root element assigns the control id to that
+    // element, so getDomRef() returns the <input> itself — a querySelector("input")
+    // on it finds nothing and the Import button did nothing (issue #1834). Handle
+    // both shapes (input is the root, or a descendant) so wiring is robust.
+    _importInput: function () {
+      var host = this.byId("importFileInput");
+      var dom = host && host.getDomRef();
+      if (!dom) { return null; }
+      if (dom.tagName === "INPUT") { return dom; }
+      return dom.querySelector("input");
     },
 
     onImportFile: function (oEvent) {
@@ -655,9 +689,7 @@ sap.ui.define([
 
     onAfterRendering: function () {
       var self = this;
-      var host = this.byId("importFileInput");
-      var dom = host && host.getDomRef();
-      var input = dom && dom.querySelector("input");
+      var input = this._importInput();
       if (input && !input._wired) {
         input._wired = true;
         input.addEventListener("change", function (e) { self.onImportFile(e); });

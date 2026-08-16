@@ -3,5 +3,5 @@
      hugo/assets/css/skeletons.css for the display:block override.
      QA preview strips this — read-only preview has no navigation hydration phase. */}}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}
-<ui5-progress-indicator id="nav-progress" hide-value value="0" class="nav-progress-bar" hidden></ui5-progress-indicator>
+<ui5-progress-indicator id="nav-progress" hide-value value="0" class="nav-progress-bar" hidden accessible-name="Page loading progress"></ui5-progress-indicator>
 {{ end }}

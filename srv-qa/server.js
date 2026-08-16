@@ -92,6 +92,11 @@ cds.on('bootstrap', (app) => {
   // Gated by Tutorial.Author scope — mirrors how serveHandler is registered on
   // this app (QA content is always author-preview gated).
   app.get('/content/pages/*path', requireAuthorScope, pageServeHandler);
+  // #1659 — bare /content/pages (homepage / empty remainder → page-index),
+  // the empty-segment companion to the `*path` route above (the wildcard does
+  // NOT match an empty segment, so it must be registered explicitly — same as
+  // srv/server.js). Same handler, same Tutorial.Author gate.
+  app.get('/content/pages', requireAuthorScope, pageServeHandler);
   // Legacy single-shot publish (kept for compatibility); CLI now uses the
   // chunked begin/append/commit pipeline by default (publish-content.ts via
   // scripts/lib/publish-client.ts). Spec: 2026-05-29-publish-content-hardening-design.md.

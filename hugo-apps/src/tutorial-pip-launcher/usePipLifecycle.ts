@@ -8,22 +8,17 @@ export function isPipSupported(): boolean {
   return typeof window !== 'undefined' && 'documentPictureInPicture' in window;
 }
 
-// Locate the tutorial-pip bundle's <script> tag on the page so we can clone it
-// into the PiP window. #1604: the bundle filename is content-hashed
-// (/js/tutorial-pip-<hash>.js), so match on the `/js/tutorial-pip` prefix and
-// then confirm the basename is `tutorial-pip(-<hash>)?.js` — explicitly
-// EXCLUDING `tutorial-pip-launcher(-<hash>)?.js` (this very bundle), which
-// shares the prefix. Returns null when no matching tag is present.
-export function findPipScriptTag(doc: Document): HTMLScriptElement | null {
-  const candidates = Array.from(
-    doc.querySelectorAll<HTMLScriptElement>('script[src*="/js/tutorial-pip"]'),
-  );
-  return (
-    candidates.find((s) => {
-      const base = (s.getAttribute('src') || '').split('/').pop()?.split('?')[0] || '';
-      return /^tutorial-pip(?:-[\w-]+)?\.js$/.test(base) && !base.startsWith('tutorial-pip-launcher');
-    }) || null
-  );
+// Read the tutorial-pip bundle URL from the data-pip-src attribute on
+// #tutorial-pip-launcher. The URL is baked in by Hugo at build time using
+// the same island-src.html partial that produces content-hashed paths
+// (e.g. /js/tutorial-pip-Bz4vSMUV.js). This replaces the former DOM <script>
+// scan (findPipScriptTag) — the main tab no longer loads the pip bundle
+// eagerly, so there is no <script> tag to scan. Returns null when the element
+// or attribute is absent (QA, previewMode, or very old cached HTML).
+export function findPipSrc(doc: Document): string | null {
+  const src = (doc.getElementById('tutorial-pip-launcher') as HTMLElement | null)
+    ?.dataset?.pipSrc?.trim();
+  return src || null;
 }
 
 export function cloneStylesIntoDocument(src: Document, dest: Document): void {
@@ -91,19 +86,20 @@ export function usePipLifecycle(ctx: LauncherCtx) {
       mount.id = 'tutorial-pip-mount';
       win.document.body.appendChild(mount);
 
-      // Inject the bundle into the PiP window. We piggy-back on the same
-      // tutorial-pip bundle that was loaded into the main tab — but only the
-      // PiP window's `globalThis` will have `__mountTutorialPip` if we load
-      // the script there. Easiest path: copy the <script> tag the main page
-      // already includes (see findPipScriptTag for the #1604 hashed-name match).
-      const scriptTag = findPipScriptTag(document);
-      if (!scriptTag) {
+      // Inject the bundle into the PiP window. The main tab no longer loads
+      // tutorial-pip eagerly — instead the hashed bundle URL is stored in the
+      // data-pip-src attribute on #tutorial-pip-launcher (baked by Hugo). We
+      // create a fresh <script type="module"> inside the PiP window so the
+      // bundle's globalThis is the PiP window, giving it its own
+      // __mountTutorialPip. See findPipSrc for the attribute-based lookup.
+      const pipSrc = findPipSrc(document);
+      if (!pipSrc) {
         win.close();
         return false;
       }
       const cloned = win.document.createElement('script');
-      cloned.src = scriptTag.src;
-      cloned.type = scriptTag.type || 'module';
+      cloned.src = pipSrc;
+      cloned.type = 'module';
       cloned.onload = () => {
         const mountFn = (win as any).__mountTutorialPip;
         if (mountFn) {

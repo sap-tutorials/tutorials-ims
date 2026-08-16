@@ -18,7 +18,7 @@ sap.ui.define([], function () {
     });
     return {
       formatVersion: 1,
-      rows: state.rows, cols: state.cols, grid: grid,
+      rows: Number(state.rows), cols: Number(state.cols), grid: grid,
       wordText: state.wordText || "",
       clues: state.clues || {}, hints: state.hints || {},
       wordLengths: state.wordLengths || {}, answers: state.answers || {},
@@ -28,7 +28,9 @@ sap.ui.define([], function () {
 
   function importPuzzle(obj) {
     if (!obj || typeof obj !== "object") { return { ok: false, error: "Not an object" }; }
-    var rows = obj.rows, cols = obj.cols;
+    // Coerce numeric strings — a puzzle exported after a touched Rows/Cols field
+    // can carry "5" instead of 5 (issue #1834).
+    var rows = Number(obj.rows), cols = Number(obj.cols);
     if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || cols < 1) {
       return { ok: false, error: "rows/cols must be positive integers" };
     }

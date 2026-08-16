@@ -522,9 +522,13 @@
 }
 
 .badge { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-.badge--new          { background: #16a34a; color: white; }
+/* #1794 — badge fills darkened so white text clears WCAG AA (4.5:1) for the
+ * small (0.7rem bold) label. Prior #16a34a (3.3:1) and #ca8a04 (2.94:1) failed
+ * axe color-contrast; #15803d (5.0:1) and #a16207 (4.9:1) pass. --updated
+ * (#2563eb, 5.1:1) and --third_party (#6b7280, 4.8:1) already passed. */
+.badge--new          { background: #15803d; color: white; }
 .badge--updated      { background: #2563eb; color: white; }
-.badge--hidden_gem   { background: #ca8a04; color: white; }
+.badge--hidden_gem   { background: #a16207; color: white; }
 .badge--third_party  { background: #6b7280; color: white; }
 
 /* ===== Verb extras ===== */
@@ -672,6 +676,54 @@
 .hp-featured-carousel__dots button[aria-selected="true"] { opacity: 1; }
 .hp-featured-carousel__see-all { color: var(--sapLinkColor, #0070f3); text-decoration: none; }
 .hp-featured-carousel__see-all:hover { text-decoration: underline; }
+/* #1782 — Top Tutorials mode toggle + window selector */
+.hp-featured-carousel__modeswitch {
+  display: inline-flex;
+  gap: 0;
+  margin: 0 0 0.75rem;
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.hp-featured-carousel__mode {
+  appearance: none;
+  border: 0;
+  background: var(--sapField_Background, #fff);
+  color: var(--sapContent_LabelColor, #556b82);
+  padding: 0.375rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hp-featured-carousel__mode.is-active {
+  background: var(--sapButton_Selected_Background, #0064d9);
+  color: var(--sapButton_Selected_TextColor, #fff);
+}
+.hp-featured-carousel__windows {
+  display: inline-flex;
+  gap: 0.375rem;
+  margin: 0 0 0.75rem 0.75rem;
+}
+.hp-featured-carousel__window {
+  appearance: none;
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  background: var(--sapField_Background, #fff);
+  color: var(--sapContent_LabelColor, #556b82);
+  border-radius: 1rem;
+  padding: 0.25rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+}
+.hp-featured-carousel__window.is-active {
+  background: var(--sapButton_Selected_Background, #0064d9);
+  color: var(--sapButton_Selected_TextColor, #fff);
+  border-color: transparent;
+}
+.hp-featured-carousel__empty {
+  color: var(--sapContent_LabelColor, #556b82);
+  padding: 1rem 0;
+  margin: 0;
+}
 @media (prefers-reduced-motion: reduce) {
   .hp-featured-carousel__slide,
   .hp-featured-carousel__slide.is-fading-out,

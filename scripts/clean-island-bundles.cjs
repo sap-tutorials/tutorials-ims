@@ -36,10 +36,11 @@ if (!existsSync(JS_DIR)) {
 
 // Build the preserve-set from git-tracked files (basename only, top level).
 const preserve = new Set([
-  // CAP-stable entries: emitted un-hashed because srv/lib renderers hardcode
-  // their paths at request time (see vite.config.ts entryFileNames).
-  'nav-dropdown.js',
-  'concepts-filter.js',
+  // All Vite islands are now content-hashed (see vite.config.ts entryFileNames).
+  // nav-dropdown and concepts-filter were previously listed here as "CAP-stable
+  // entries" but are now hashed; the CAP renderers read srv/lib/island-manifest.json
+  // at runtime to get the hashed path. Nothing to preserve here beyond git-tracked
+  // committed files (populated in the try-block below).
 ]);
 try {
   const tracked = execFileSync('git', ['ls-files', 'hugo/static/js'], {

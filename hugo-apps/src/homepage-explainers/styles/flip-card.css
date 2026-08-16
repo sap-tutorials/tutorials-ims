@@ -102,10 +102,19 @@
   background: var(--sapTile_Background, #fff);
   padding: 12px;
   text-align: left;
-  /* #793 — long whyItMatters prose now scrolls inside the card instead of
-   * spilling out onto sibling content. `overscroll-behavior: contain` keeps
-   * the page from scrolling when the user reaches the scroll-end inside
-   * the back face. */
+  /* #793 — long whyItMatters prose scrolls inside the card instead of spilling
+   * out onto sibling content. #1794 — but only turn the scroll container on
+   * while the card is flipped (below): in the default (front-showing) state the
+   * back face is hidden yet still in the DOM, and a permanently-scrollable
+   * region would be flagged by axe (scrollable-region-focusable) and, once made
+   * focusable, would become a phantom keyboard tab stop into hidden content. */
+  overflow: hidden;
+}
+
+/* #793 / #1794 — scroll containment active only on the visible (flipped) face.
+ * Paired with the `:tabindex="flipped ? 0 : undefined"` in VerbFlipTile.vue so
+ * the region is keyboard-focusable exactly when it can actually be scrolled. */
+.hp-flip[data-flipped="true"] .hp-flip__face--back {
   overflow-y: auto;
   overscroll-behavior: contain;
 }

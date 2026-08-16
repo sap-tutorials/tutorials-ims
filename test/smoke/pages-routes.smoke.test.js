@@ -92,7 +92,16 @@ function assertContainsMarker(html, marker, path) {
 function assertHashedIslands(html, path) {
   const srcs = collectIslandSrcs(html);
   if (srcs.length === 0) return; // page has no /js/*.js islands — skip hash check
-  const unhashed = srcs.filter(s => !/-[A-Za-z0-9_]{6,}\.js$/.test(s));
+  // Vite content hashes are base64url ([A-Za-z0-9_-]) and always contain at
+  // least one uppercase letter or digit (the entropy discriminator).  Bare
+  // island names are all-lowercase kebab-case, so they never satisfy that
+  // requirement.  The lookahead is scoped to the TRAILING segment after the
+  // last name-separating hyphen, so a digit embedded in the island NAME itself
+  // (e.g. `oauth2-client.js` → trailing segment `client`) does not falsely
+  // pass. This also correctly handles hashes that themselves contain hyphens
+  // (e.g. `homepage-explainers-Cy2N-GCe.js`), which the previous char-class
+  // `[A-Za-z0-9_]` (missing `-`) false-flagged as unhashed.
+  const unhashed = srcs.filter(s => !/-(?=[A-Za-z0-9_-]*[A-Z0-9])[A-Za-z0-9_-]{6,}\.js$/.test(s));
   expect(
     unhashed,
     `unhashed island srcs on ${path}: ${unhashed.join(', ')}`

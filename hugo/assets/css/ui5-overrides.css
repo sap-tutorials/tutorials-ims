@@ -235,6 +235,16 @@ body:has(.tutorial-stepnav) .joule-step-fab {
   bottom: 4.75rem;
 }
 
+/* The mobile "Steps" FAB (#op-mobile-fab, shown only ≤960px) is likewise
+   position:fixed at the bottom-right (bottom:1rem), landing right on top of the
+   sticky prev/next bar's right-aligned "Next" pill — two buttons overlapping
+   (issue #1803). The Joule FAB above is hidden ≤960px, so on mobile nothing was
+   lifting this one. Reuse the same 4.75rem clearance. Scroll-independent; the
+   :has() gate means it only applies when the fixed bar is actually present. */
+body:has(.tutorial-stepnav) #op-mobile-fab {
+  bottom: 4.75rem;
+}
+
 /* U8: codetabs — render the syntax-highlighted block flush against the tab
    header so the code reads as the primary content, not a card-in-a-card. */
 ui5-tabcontainer.codetabs {

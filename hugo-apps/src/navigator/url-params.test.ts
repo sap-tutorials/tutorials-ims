@@ -7,7 +7,7 @@
 // the smoke test in test/smoke/clickable-chips.smoke.test.ts.
 
 import { describe, it, expect } from 'vitest'
-import { parseTagParams, parseLevelParams } from './url-params'
+import { parseTagParams, parseLevelParams, extractExperienceLevels } from './url-params'
 
 describe('parseTagParams', () => {
   it('returns [] when no tag param is present', () => {
@@ -68,5 +68,55 @@ describe('parseLevelParams', () => {
   it('drops empty string values', () => {
     const sp = new URLSearchParams('level=&level=advanced')
     expect(parseLevelParams(sp)).toEqual(['advanced'])
+  })
+})
+
+describe('extractExperienceLevels', () => {
+  // Issue #1804 — experience-level slugs must never live in the Software
+  // Product facet. Left in filters.products they OR-match every same-level
+  // tutorial (the product filter is a some() over displayTagSlugs), so the
+  // filter appears to do nothing.
+  it('routes tutorial>beginner|intermediate|advanced into levels, out of products', () => {
+    const r = extractExperienceLevels([
+      'software-product-function>sap-cloud-application-programming-model',
+      'tutorial>beginner',
+      'tutorial>advanced',
+    ])
+    expect(r.products).toEqual(['software-product-function>sap-cloud-application-programming-model'])
+    expect(r.levels).toEqual(['beginner', 'advanced'])
+  })
+
+  it('reproduces the issue #1804 URL token set (CAP + beginner)', () => {
+    // ?product=software-product-function>…,tutorial>beginner
+    const r = extractExperienceLevels([
+      'software-product-function>sap-cloud-application-programming-model',
+      'tutorial>beginner',
+    ])
+    expect(r.products).toEqual(['software-product-function>sap-cloud-application-programming-model'])
+    expect(r.levels).toEqual(['beginner'])
+  })
+
+  it('preserves legitimate tutorial> product slugs (free-tier, how-to)', () => {
+    const r = extractExperienceLevels(['tutorial>free-tier', 'tutorial>how-to', 'software-product>sap-hana'])
+    expect(r.products).toEqual(['tutorial>free-tier', 'tutorial>how-to', 'software-product>sap-hana'])
+    expect(r.levels).toEqual([])
+  })
+
+  it('leaves a pure product list untouched', () => {
+    const r = extractExperienceLevels(['software-product>sap-hana', 'topic>cloud'])
+    expect(r.products).toEqual(['software-product>sap-hana', 'topic>cloud'])
+    expect(r.levels).toEqual([])
+  })
+
+  it('is case-insensitive on the level value and dedups', () => {
+    const r = extractExperienceLevels(['tutorial>Beginner', 'tutorial>beginner', 'software-product>x'])
+    expect(r.products).toEqual(['software-product>x'])
+    expect(r.levels).toEqual(['beginner'])
+  })
+
+  it('returns empty arrays for empty input', () => {
+    const r = extractExperienceLevels([])
+    expect(r.products).toEqual([])
+    expect(r.levels).toEqual([])
   })
 })

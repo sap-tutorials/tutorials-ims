@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import Carousel from './Carousel.vue';
 
 const slides = [
@@ -77,5 +77,70 @@ describe('Carousel', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(w.find('.is-active .hp-featured-carousel__topic').text()).toBe('HANA');
     vi.useRealTimers();
+  });
+});
+
+const TOP_PAYLOAD = { windows: [
+  { windowDays: 90,  items: [{ rank: 1, slug: 'x', completions: 3, card: { slug: 'x', title: 'X90', description: '', level: 'beginner', time: 10, primaryTag: 'T', href: '/tutorials/x', isNew: false } }] },
+  { windowDays: 180, items: [{ rank: 1, slug: 'y', completions: 7, card: { slug: 'y', title: 'Y180', description: '', level: 'beginner', time: 10, primaryTag: 'T', href: '/tutorials/y', isNew: false } }] },
+  { windowDays: 360, items: [{ rank: 1, slug: 'z', completions: 9, card: { slug: 'z', title: 'Z360', description: '', level: 'beginner', time: 10, primaryTag: 'T', href: '/tutorials/z', isNew: false } }] },
+] };
+
+function mountCarousel() {
+  const root = document.createElement('section');
+  return mount(Carousel, { props: {
+    root, initialEtag: '',
+    initialSlides: [{ conceptSlug: 'feat-1', displayTitle: 'Featured Topic', missionsHtml: '<a class="nav-card">F</a>' }],
+  } });
+}
+
+describe('Carousel — Top Tutorials mode (#1782)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    // Featured hydrate + top-tutorials both go through fetch; return the top payload
+    // for the topTutorials() call and a 304-ish empty for featured hydrate.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('topTutorials')) {
+        return { ok: true, status: 200, json: async () => TOP_PAYLOAD } as any;
+      }
+      return { ok: false, status: 304, json: async () => ({}) } as any;
+    }));
+  });
+
+  it('defaults to Featured mode showing the SSR slide', () => {
+    const wrapper = mountCarousel();
+    expect(wrapper.vm.mode).toBe('featured');
+    expect(wrapper.text()).toContain('Featured Topic');
+  });
+
+  it('flips to Top Tutorials, fetches once, defaults to the 180-day window', async () => {
+    const wrapper = mountCarousel();
+    await wrapper.vm.switchMode('top');
+    await flushPromises();
+    expect(wrapper.vm.windowDays).toBe(180);
+    expect(wrapper.text()).toContain('Top Tutorials · Last 180 days');
+    expect(wrapper.text()).toContain('Y180');
+  });
+
+  it('switching windows re-renders from cached data with no refetch', async () => {
+    const wrapper = mountCarousel();
+    await wrapper.vm.switchMode('top');
+    await flushPromises();
+    const calls = (globalThis.fetch as any).mock.calls.filter((c: any[]) => String(c[0]).includes('topTutorials')).length;
+    await wrapper.vm.setWindow(360);
+    await flushPromises();
+    expect(wrapper.text()).toContain('Z360');
+    const after = (globalThis.fetch as any).mock.calls.filter((c: any[]) => String(c[0]).includes('topTutorials')).length;
+    expect(after).toBe(calls); // no second topTutorials fetch
+    expect(localStorage.getItem('sap-devs-homepage-top-tutorials-window')).toBe('360');
+  });
+
+  it('honors a persisted window on first flip', async () => {
+    localStorage.setItem('sap-devs-homepage-top-tutorials-window', '90');
+    const wrapper = mountCarousel();
+    await wrapper.vm.switchMode('top');
+    await flushPromises();
+    expect(wrapper.vm.windowDays).toBe(90);
+    expect(wrapper.text()).toContain('X90');
   });
 });

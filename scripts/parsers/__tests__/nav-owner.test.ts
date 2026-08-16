@@ -62,6 +62,72 @@ describe('computeCanonicalNav', () => {
   });
 });
 
+// Issue #1836: a single-tutorial "home" (e.g. an auto-generated single-tutorial
+// Devtoberfest/event mission wrapping one tutorial in a flat path) must NOT win
+// canonical ownership over a real multi-tutorial group/mission that also owns the
+// slug — otherwise the tutorial's breadcrumb + nav-dropdown show that junk event
+// mission instead of the group the reader browses. "Size" is the mission's TOTAL
+// tutorial count (sum across its group containers), not a single container's
+// length, so a rich mission's single-slug group is never wrongly demoted.
+describe('computeCanonicalNav — single-tutorial home demotion (#1836)', () => {
+  const eventMission: NavContainer = {
+    kind: 'mission', missionLegacyId: 23105, groupLegacyId: 816, missionGroupSeq: 0,
+    slugs: ['cli'],
+    stamp: { missionId: 23105, missionTitle: '#A1532C - Devtoberfest 2024', missionSlug: 'a1532c-devtoberfest' },
+  };
+  const realGroup: NavContainer = {
+    kind: 'standalone', missionLegacyId: null, groupLegacyId: 21221, missionGroupSeq: 0,
+    slugs: ['data-lake', 'scheduling', 'cli', 'pilot', 'rest', 'terraform'],
+    stamp: { groupId: 21221, groupTitle: 'Automating SAP HANA Cloud Tasks', groupSlug: 'automating-sap-hana-cloud-tasks' },
+  };
+  const present = new Set(['cli', 'data-lake', 'scheduling', 'pilot', 'rest', 'terraform']);
+
+  it('multi-tutorial group wins over a single-tutorial event mission', () => {
+    const a = computeCanonicalNav([eventMission, realGroup], present);
+    expect(a.get('cli')?.groupSlug).toBe('automating-sap-hana-cloud-tasks');
+    expect(a.get('cli')?.missionSlug).toBeUndefined();
+    expect(a.get('cli')?.prev).toBe('scheduling');   // in-group neighbours
+    expect(a.get('cli')?.next).toBe('pilot');
+  });
+
+  it('is order-independent', () => {
+    const a1 = computeCanonicalNav([eventMission, realGroup], present);
+    const a2 = computeCanonicalNav([realGroup, eventMission], present);
+    expect(a2.get('cli')).toEqual(a1.get('cli'));
+  });
+
+  it('a lone single-tutorial mission still owns its tutorial when nothing richer exists', () => {
+    const a = computeCanonicalNav([eventMission], new Set(['cli']));
+    expect(a.get('cli')?.missionSlug).toBe('a1532c-devtoberfest');
+  });
+
+  it('does NOT demote a single-slug group of a RICH mission (size = mission total, not container length)', () => {
+    const richA: NavContainer = {
+      kind: 'mission', missionLegacyId: 500, groupLegacyId: 10, missionGroupSeq: 0,
+      slugs: ['x'],
+      stamp: { missionId: 500, missionTitle: 'Rich', missionSlug: 'rich', groupId: 10, groupTitle: 'GA', groupSlug: 'ga' },
+    };
+    const richB: NavContainer = {
+      kind: 'mission', missionLegacyId: 500, groupLegacyId: 11, missionGroupSeq: 1,
+      slugs: ['y', 'z'],
+      stamp: { missionId: 500, missionTitle: 'Rich', missionSlug: 'rich', groupId: 11, groupTitle: 'GB', groupSlug: 'gb' },
+    };
+    const standalone: NavContainer = {
+      kind: 'standalone', missionLegacyId: null, groupLegacyId: 999, missionGroupSeq: 0,
+      slugs: ['x', 'w'], stamp: { groupId: 999, groupTitle: 'Standalone', groupSlug: 'standalone' },
+    };
+    const a = computeCanonicalNav([standalone, richA, richB], new Set(['x', 'y', 'z', 'w']));
+    // mission 500 total = 3 tutorials (>1) → rich → still wins 'x' over the standalone.
+    expect(a.get('x')?.missionSlug).toBe('rich');
+    expect(a.get('x')?.groupSlug).toBe('ga');
+  });
+
+  it('rankContainers demotes a single-tutorial home below a multi-tutorial one', () => {
+    const ranked = rankContainers([eventMission, realGroup]);
+    expect(ranked[0]).toBe(realGroup);   // 6-tutorial group outranks the 1-tutorial mission
+  });
+});
+
 // Issue #1775: Next/Prev must flow continuously across groups WITHIN a mission.
 // The last tutorial of group N links to the first tutorial of group N+1 (and
 // symmetrically for Prev), using the mission's group order (missionGroupSeq).

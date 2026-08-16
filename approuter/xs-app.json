@@ -138,14 +138,14 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/api/devtoberfest/(status|terms|banner|faq|schedule|transcript|my-completions|feed\\.ics|feed\\.xml)(\\?.*)?$",
+      "source": "^/api/devtoberfest/(status|terms|banner|faq|schedule|transcript|my-completions|me|feed\\.ics|feed\\.xml)(\\?.*)?$",
       "target": "/api/devtoberfest/$1$2",
       "destination": "srv-api",
       "authenticationType": "none"
     },
     {
-      "source": "^/api/devtoberfest/(join|me)(\\?.*)?$",
-      "target": "/api/devtoberfest/$1$2",
+      "source": "^/api/devtoberfest/join(\\?.*)?$",
+      "target": "/api/devtoberfest/join$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa"
     },
@@ -579,6 +579,7 @@
     { "source": "^/topics/?(\\?.*)?$",              "target": "/content/pages/topics/$1",              "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/tutorial-navigator/?(\\?.*)?$",  "target": "/content/pages/tutorial-navigator/$1",  "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/developer-advocates/?(\\?.*)?$", "target": "/content/pages/developer-advocates/$1", "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/developer-advocates/([^/?]+)/?(\\?.*)?$", "target": "/content/developer-advocates/$1",   "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/ai/?(\\?.*)?$",                  "target": "/content/pages/ai/$1",                  "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/build/?(\\?.*)?$",               "target": "/content/pages/build/$1",               "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/connect/?(\\?.*)?$",             "target": "/content/pages/connect/$1",             "destination": "srv-api", "authenticationType": "none" },
@@ -588,7 +589,10 @@
     { "source": "^/operate/?(\\?.*)?$",             "target": "/content/pages/operate/$1",             "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/sitemap\\.xml(\\?.*)?$",         "target": "/content/pages/sitemap.xml$1",          "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/index\\.xml(\\?.*)?$",           "target": "/content/pages/index.xml$1",            "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/llms\\.txt(\\?.*)?$",            "target": "/content/pages/llms.txt$1",             "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/llms-full\\.txt(\\?.*)?$",       "target": "/content/pages/llms-full.txt$1",        "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/authors/([^/?]+)/?(\\?.*)?$",     "target": "/content/authors/$1",                   "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/(\\?.*)?$",                       "target": "/content/pages/$1",                     "destination": "srv-api", "authenticationType": "none" },
     {
       "source": "^(.*)$",
       "localDir": "static",

@@ -11,6 +11,26 @@
 // them would require parallel CSS work outside this change's scope.
 
 import MarkdownIt from 'markdown-it';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const _dir = dirname(fileURLToPath(import.meta.url));
+// Lazy-loaded island manifest: maps entry name → content-hashed public path.
+// Written by scripts/build-island-manifest.cjs alongside hugo/data/island_manifest.json.
+// Fail-open: returns the bare /js/<name>.js path if the file is absent
+// (e.g. local `cds watch` without running build:apps first).
+let _islandManifest;
+function islandSrc(name) {
+  if (!_islandManifest) {
+    try {
+      _islandManifest = JSON.parse(readFileSync(join(_dir, 'island-manifest.json'), 'utf8'));
+    } catch {
+      _islandManifest = {};
+    }
+  }
+  return _islandManifest[name] ?? `/js/${name}.js`;
+}
 
 const escapeHtml = (s) => String(s ?? '')
   .replace(/&/g, '&amp;')
@@ -18,6 +38,19 @@ const escapeHtml = (s) => String(s ?? '')
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
+
+// #1808: standalone groups/missions have no source description, so their
+// composed catalog pages shipped an empty <meta description>. Synthesize one
+// from the tutorial count, mirroring the concept-page phrasing in
+// srv/lib/publish-concepts.js. Pure — unit-tested via renderCatalogPage.
+export function synthCatalogDescription(kind, title, count) {
+  const n = Number(count) || 0;
+  const tut = `${n} hands-on tutorial${n === 1 ? '' : 's'}`;
+  if (kind === 'mission') {
+    return `Complete the ${title} mission on SAP Developer Center: ${tut} across guided learning paths.`;
+  }
+  return `Follow the ${title} tutorial group on SAP Developer Center: ${tut}.`;
+}
 
 // Group/Mission descriptions are admin-authored Markdown (issue #121).
 // Authors edit them via the admin MarkdownEditor (app/admin/{missions,groups}/
@@ -117,7 +150,7 @@ ${cards}
     </div>
   </div>
 </div>
-<script type="module" src="/js/nav-dropdown.js"></script>`;
+<script type="module" src="${islandSrc('nav-dropdown')}"></script>`;
 }
 
 export function renderMissionBody(ctx) {
@@ -213,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (firstCard) firstCard.classList.add('expanded');
 });
 </script>
-<script type="module" src="/js/nav-dropdown.js"></script>`;
+<script type="module" src="${islandSrc('nav-dropdown')}"></script>`;
 }
 
 // Composes a full page given a slug + chrome shell + already-loaded body data.
@@ -233,7 +266,8 @@ export async function renderCatalogPage(slug, deps) {
         kind: 'group',
         slug,
         title: ctx.group.title,
-        description: ctx.group.description ?? '',
+        description: (ctx.group.description ?? '').trim()
+          || synthCatalogDescription('group', ctx.group.title, ctx.tutorialCount),
       },
     };
   }
@@ -249,7 +283,8 @@ export async function renderCatalogPage(slug, deps) {
         kind: 'mission',
         slug,
         title: ctx.mission.title,
-        description: ctx.mission.description ?? '',
+        description: (ctx.mission.description ?? '').trim()
+          || synthCatalogDescription('mission', ctx.mission.title, ctx.tutorialCount),
       },
     };
   }

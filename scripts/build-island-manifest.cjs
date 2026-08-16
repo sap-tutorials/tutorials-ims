@@ -4,16 +4,23 @@
 // hugo-apps/ are emitted with content-hashed filenames (e.g.
 // navigator-BqX3k_2a.js) so a changed bundle gets a new URL the CDN edge
 // (Akamai on PROD) has never cached. Hugo templates can't know the hash,
-// so this script reads Vite's manifest and writes a flat Hugo data file
+// so this script reads Vite's manifest and writes a flat data file
 // mapping each entry name to its hashed public path:
 //
 //   { "navigator": "/js/navigator-BqX3k_2a.js", ... }
 //
-// hugo/layouts/partials/island-src.html reads it via
+// TWO output files are written:
+//   hugo/data/island_manifest.json  — consumed by Hugo via site.Data.island_manifest
+//   srv/lib/island-manifest.json    — consumed by CAP renderers at runtime so that
+//                                     catalog-renderer.js and concept-list-page.js
+//                                     can inline hashed <script> paths for
+//                                     nav-dropdown and concepts-filter respectively.
+//                                     Gitignored; fails open to bare /js/<name>.js
+//                                     when absent (e.g. local `cds watch`).
+//
+// hugo/layouts/partials/island-src.html reads the Hugo file via
 // `site.Data.island_manifest`, falling back to /js/<name>.js when a key is
-// absent (the local `dev` = `hugo server` never runs Vite; the two
-// CAP-stable entries nav-dropdown/concepts-filter are emitted un-hashed and
-// resolve to their bare path either way).
+// absent (the local `dev` = `hugo server` never runs Vite).
 //
 // Runs in `build:all` (package.json), right after `build:apps` (`vite build`)
 // and well before `build:hugo`, so the data file exists when Hugo builds. It
@@ -24,7 +31,7 @@
 // is instead guarded by `scripts/deploy-mta.cjs` Step 2.5.
 //
 // Exit codes:
-//   0  wrote the data file with >= 1 entry.
+//   0  wrote both data files with >= 1 entry.
 //   1  Vite manifest missing, unparseable, or contained zero entries.
 
 const { readFileSync, writeFileSync, existsSync } = require('node:fs');
@@ -36,6 +43,13 @@ const REPO_ROOT = process.env.BUILD_ISLAND_MANIFEST_ROOT
 
 const VITE_MANIFEST = join(REPO_ROOT, 'hugo', 'static', 'js', '.vite', 'manifest.json');
 const OUT = join(REPO_ROOT, 'hugo', 'data', 'island_manifest.json');
+// Second copy: consumed by srv/lib/catalog-renderer.js and
+// srv/lib/concept-list-page.js at CAP runtime to resolve the hashed
+// paths for nav-dropdown and concepts-filter (instead of hardcoding bare
+// paths). Fail-open: these renderers fall back to /js/<name>.js when the
+// file is absent (e.g. local `cds watch` without running build:apps).
+// Gitignored (see srv/lib/explore-bundle-manifest.json precedent).
+const SRV_OUT = join(REPO_ROOT, 'srv', 'lib', 'island-manifest.json');
 
 function fail(msg) {
   console.error(`[build-island-manifest] ${msg}`);
@@ -72,5 +86,6 @@ if (count === 0) {
 const sorted = {};
 for (const k of Object.keys(out).sort()) sorted[k] = out[k];
 writeFileSync(OUT, JSON.stringify(sorted, null, 2) + '\n', 'utf8');
+writeFileSync(SRV_OUT, JSON.stringify(sorted, null, 2) + '\n', 'utf8');
 
-console.log(`[build-island-manifest] wrote ${count} entries to hugo/data/island_manifest.json`);
+console.log(`[build-island-manifest] wrote ${count} entries to hugo/data/island_manifest.json and srv/lib/island-manifest.json`);

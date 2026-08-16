@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, defineComponent, h } from 'vue'
+import { mount } from '@vue/test-utils'
 import { useNavigatorFilters } from './useNavigatorFilters'
 import * as useSearchModule from '../../navigator/useSearch'
 import type { CardItem, TutorialEntry } from '@shared/types'
@@ -312,5 +313,82 @@ describe('endpoint base forwarding', () => {
     )
 
     useSearchSpy.mockRestore()
+  })
+})
+
+describe('useNavigatorFilters — #1804: experience-level slugs never filter as products', () => {
+  // Repro cards: two beginner tutorials (one CAP, one not) + one advanced CAP.
+  // The CAP slug is the software-product-FUNCTION form from the issue URL, and
+  // every beginner tutorial carries `tutorial>beginner` in displayTagSlugs.
+  const capBeginner: CardItem = {
+    type: 'tutorial', id: 'cap-beginner', title: 'CAP Beginner', description: '', time: 30,
+    level: 'beginner', tutorialCount: 1, primaryTag: '', displayTags: ['CAP', 'Beginner'],
+    displayTagSlugs: ['software-product-function>sap-cloud-application-programming-model', 'tutorial>beginner'],
+    href: '/x', stepCount: 3,
+  }
+  const otherBeginner: CardItem = {
+    type: 'tutorial', id: 'other-beginner', title: 'HANA Beginner', description: '', time: 30,
+    level: 'beginner', tutorialCount: 1, primaryTag: '', displayTags: ['SAP HANA', 'Beginner'],
+    displayTagSlugs: ['software-product>sap-hana', 'tutorial>beginner'],
+    href: '/x', stepCount: 3,
+  }
+  const capAdvanced: CardItem = {
+    type: 'tutorial', id: 'cap-advanced', title: 'CAP Advanced', description: '', time: 30,
+    level: 'advanced', tutorialCount: 1, primaryTag: '', displayTags: ['CAP', 'Advanced'],
+    displayTagSlugs: ['software-product-function>sap-cloud-application-programming-model', 'tutorial>advanced'],
+    href: '/x', stepCount: 3,
+  }
+  const cards: CardItem[] = [capBeginner, otherBeginner, capAdvanced]
+
+  type Api = ReturnType<typeof useNavigatorFilters>
+
+  beforeEach(() => {
+    try { localStorage.clear() } catch { /* happy-dom always has it */ }
+    window.history.replaceState({}, '', '/')
+  })
+
+  async function mountNavigator(url: string): Promise<Api> {
+    window.history.replaceState({}, '', url)
+    let api!: Api
+    const Harness = defineComponent({
+      setup() {
+        const allCards = ref(cards)
+        api = useNavigatorFilters({ allCards, syncURL: true })
+        return () => h('div')
+      },
+    })
+    mount(Harness)
+    // onMounted seeds + routes synchronously, then awaits nextTick before
+    // restoring the page. Flush two ticks so all reactive writes settle.
+    await nextTick()
+    await nextTick()
+    return api
+  }
+
+  it('routes ?product=…,tutorial>beginner into Experience so only CAP-beginner shows', async () => {
+    const api = await mountNavigator(
+      '/tutorial-navigator/?product=software-product-function%3Esap-cloud-application-programming-model%2Ctutorial%3Ebeginner',
+    )
+    expect(api.filters.products).toEqual(['software-product-function>sap-cloud-application-programming-model'])
+    expect(api.filters.levels).toContain('beginner')
+    // Without the fix, `tutorial>beginner` OR-matches otherBeginner too → the
+    // list balloons to every beginner tutorial ("nothing filtered").
+    expect(api.displayedItems.value.map(c => c.id)).toEqual(['cap-beginner'])
+  })
+
+  it('routes a ?tag=tutorial>beginner chip into Experience, not Software Product', async () => {
+    const api = await mountNavigator(
+      '/tutorial-navigator/?tag=software-product-function%3Esap-cloud-application-programming-model&tag=tutorial%3Ebeginner',
+    )
+    expect(api.filters.products).toEqual(['software-product-function>sap-cloud-application-programming-model'])
+    expect(api.filters.levels).toContain('beginner')
+    expect(api.displayedItems.value.map(c => c.id)).toEqual(['cap-beginner'])
+  })
+
+  it('heals poisoned localStorage (tutorial>beginner persisted under products)', async () => {
+    localStorage.setItem('navigator.filters.v1', JSON.stringify({ products: ['tutorial>beginner'] }))
+    const api = await mountNavigator('/tutorial-navigator/')
+    expect(api.filters.products).toEqual([])
+    expect(api.filters.levels).toContain('beginner')
   })
 })
