@@ -57,6 +57,8 @@
  *   --user <email>         Cherry-pick: grant Admin to just this user (skips
  *                          enumeration). Repeatable. Origin from --of-idp.
  *   --of-idp <origin>      IdP origin for --user grants (default sap.default).
+ *   --exclude <email>      Omit this user from the enumerated grant (repeatable;
+ *                          e.g. a group account). Applies to enumeration mode.
  *   --subaccount <subdom>  Assert the live btp target subdomain matches.
  *   --author-rc <name>     Override the Author role-collection name.
  *   --admin-rc <name>      Override the Admin role-collection name.
@@ -78,6 +80,7 @@ function parseArgs(argv) {
     prod: false,
     commit: false,
     users: [],
+    excludes: [],
     ofIdp: 'sap.default',
     subaccount: null,
     authorRc: null,
@@ -89,6 +92,7 @@ function parseArgs(argv) {
       case '--prod':    flags.prod = true; break;
       case '--commit':  flags.commit = true; break;
       case '--user':    flags.users.push(requireValue(argv, ++i, a)); break;
+      case '--exclude': flags.excludes.push(requireValue(argv, ++i, a)); break;
       case '--of-idp':  flags.ofIdp = requireValue(argv, ++i, a); break;
       case '--subaccount': flags.subaccount = requireValue(argv, ++i, a); break;
       case '--author-rc': flags.authorRc = requireValue(argv, ++i, a); break;
@@ -175,8 +179,21 @@ async function main() {
     const adminKeys = new Set(admins.map(userKey));
     toGrant = authors.filter(a => !adminKeys.has(userKey(a)));
 
+    // Drop explicitly excluded users (e.g. group accounts you don't want to
+    // hand Admin to). Case-insensitive match on the email.
+    if (flags.excludes.length > 0) {
+      const excl = new Set(flags.excludes.map(e => e.toLowerCase()));
+      const before = toGrant.length;
+      const dropped = toGrant.filter(a => excl.has(a.user.toLowerCase()));
+      toGrant = toGrant.filter(a => !excl.has(a.user.toLowerCase()));
+      if (dropped.length > 0) {
+        console.log(`Excluded ${before - toGrant.length} user(s) via --exclude: ` +
+                    dropped.map(u => u.user).join(', '));
+      }
+    }
+
     console.log(`Authors: ${authors.length}   Admins: ${admins.length}   ` +
-                `Authors WITHOUT Admin: ${toGrant.length}\n`);
+                `Authors WITHOUT Admin${flags.excludes.length ? ' (post-exclude)' : ''}: ${toGrant.length}\n`);
     if (toGrant.length === 0) {
       console.log('Nothing to do — every author already holds Admin.');
       process.exit(0);
