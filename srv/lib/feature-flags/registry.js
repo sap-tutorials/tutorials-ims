@@ -165,6 +165,13 @@ export const FEATURE_FLAGS = [
     description: 'findRelatedContent Joule tool. Default ON (cache-reused).',
     howToChange: adminTile('joule', '#joule'),
   },
+  {
+    key: 'ChatSettings.whatsNewEnabled', label: 'What\'s New Joule tool', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'whatsNewEnabled', resolver: 'chat',
+    valueType: 'boolean', default: true, issue: '#1859', status: 'ga',
+    description: 'getWhatsNew Joule tool + learner-path What\'s New guidance (chat-context.js). Default ON.',
+    howToChange: adminTile('joule', '#joule'),
+  },
   // ---- A2A (Agent-to-Agent) ----
   {
     key: 'ChatSettings.a2aEnabled', label: 'A2A agent endpoint', category: 'A2A',
