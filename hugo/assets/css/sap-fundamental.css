@@ -6135,6 +6135,34 @@ a.concept-card:hover .concept-card__title {
 .author-page-avatar { border-radius: 50%; flex: 0 0 auto; }
 .author-page-hero h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
 .author-page-meta { margin: 0; color: var(--sapContent_LabelColor, #556); font-size: .875rem; }
-/* More-from-author rail (#1732) */
+/* More-from-author rail (#1732) — collapsible via native <details>, closed by default */
 .more-from-author { margin: 1.25rem 0 0; }
+.more-from-author-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  list-style: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.more-from-author-summary::-webkit-details-marker { display: none; }
+.more-from-author-summary::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0.3rem 0 0.3rem 0.45rem;
+  border-color: transparent transparent transparent currentColor;
+  transition: transform 0.15s ease;
+}
+.more-from-author[open] .more-from-author-summary::before { transform: rotate(90deg); }
+.more-from-author-summary .next-steps-rail-heading { margin: 0; }
+.more-from-author-summary:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0854a0);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.more-from-author[open] .next-steps-grid { margin-top: 0.75rem; }
 .more-from-author-all { display: inline-block; margin-top: .75rem; font-size: .875rem; font-weight: 600; }

@@ -18,14 +18,17 @@
 {{- if gt (len $others) 0 -}}
 {{- $target := printf "/authors/%s/" .login -}}
 {{- with .advocateSlug -}}{{- $target = printf "/developer-advocates/%s/" . -}}{{- end -}}
-<div class="more-from-author next-steps-rail">
-  <h4 class="next-steps-rail-heading">More from {{ .displayName }}</h4>
+{{/* #1732: collapsible rail — native <details>, closed by default, JS-free.
+     Summary wraps the heading so screen readers announce both the heading and
+     the disclosure toggle; grid + "see all" reveal on expand. */}}
+<details class="more-from-author next-steps-rail">
+  <summary class="more-from-author-summary"><h4 class="next-steps-rail-heading">More from {{ .displayName }}</h4></summary>
   <div class="next-steps-grid">
     {{- range first 4 $others -}}
     {{ partial "next-steps-card.html" (dict "slug" .slug "title" .title "time" .time) }}
     {{- end -}}
   </div>
   <a class="more-from-author-all" href="{{ $target }}">See all {{ len .tutorials }} tutorials by {{ .displayName }} &rarr;</a>
-</div>
+</details>
 {{- end -}}
 {{- end -}}

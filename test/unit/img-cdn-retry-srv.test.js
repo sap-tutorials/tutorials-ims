@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const { isRetryableStatus, backoffMs, parseRetryAfterMs } = require('../../approuter/lib/img-cdn-retry')
+const { isRetryableStatus, backoffMs, parseRetryAfterMs } = require('../../srv/lib/img-cdn-retry.cjs')
 
 // Guards the retry policy added to fix mobile /img-cdn 429s: bursts of tutorial
 // screenshot fetches from the shared CF egress IP trip GitHub's rate limiter,

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const { fetchImageResponse } = require('../../approuter/lib/img-cdn-fetch')
+const { fetchImageResponse } = require('../../srv/lib/img-cdn-fetch.cjs')
 
 // End-to-end guard for the mobile /img-cdn 429 fix: anonymous-first token
 // policy + retry-on-429. Uses fake safeFetch/resolveSecret/sleep so no network

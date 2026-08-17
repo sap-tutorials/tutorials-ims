@@ -77,7 +77,17 @@ export async function buildCatalogHandler(req, res) {
         items,
         groupById,
         groupPathItems,
-        resolveTutorialIdentity: i => slugByLegacyId.get(i.taskLegacyId),
+        // #1866: resolve the direct-path TUTORIAL identity via tutorial_ID
+        // (UUID) FIRST, falling back to taskLegacyId. Manually-authored content
+        // (the high-ID prod batch, e.g. mission 10000001 "Learn about the SAP
+        // Business AI Platform") populates the FK but leaves taskLegacyId null,
+        // so the legacyId-only lookup dropped the tutorial from the hierarchy —
+        // making the mission's path-group empty (tasksCount=0) and stripping the
+        // Mission crumb from the baked tutorial breadcrumb. catalog-data.js (the
+        // mission SSR page) already resolves via tutorial_ID and rendered it
+        // fine; this aligns the two. Legacy content, where the FK may be sparse
+        // but taskLegacyId is reliable, still resolves through the fallback.
+        resolveTutorialIdentity: i => tutorialByUuid.get(i.tutorial_ID) || slugByLegacyId.get(i.taskLegacyId),
       });
 
       // Project canonical hierarchy → build-catalog.js's external shape

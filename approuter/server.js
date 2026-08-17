@@ -25,6 +25,8 @@ const { securityTxtHandler } = require('./lib/security-txt')
 const { sitemapIndexRedirectHandler } = require('./lib/sitemap-index-redirect')
 const shouldProcessImage = require('./lib/img-cdn-should-process')
 const { buildImageOriginUrl } = require('./lib/img-cdn-origin')
+const { ImgCache } = require('./lib/img-cdn-cache')
+const { fetchImageResponse } = require('./lib/img-cdn-fetch')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
 // array) injected by the approuter framework when mta.yaml declares
@@ -159,6 +161,106 @@ const IMG_CDN_TIMEOUT_MS = 12000
 // Set IMG_CDN_SOURCE=github to disable the store path and always fetch from GitHub.
 const IMG_CDN_SOURCE = process.env.IMG_CDN_SOURCE || 'store'
 
+// Upstream 429/5xx are ridden out with a short jittered backoff before we
+// relay a broken image. Total attempts = 1 + IMG_CDN_MAX_RETRIES. 429s from
+// GitHub return immediately, so worst-case added latency is ~backoff sum (< 3s).
+const IMG_CDN_MAX_RETRIES = 2
+
+// In-process caches keyed by (upstream url, width, accepts-webp). See
+// img-cdn-cache.js for the eviction/TTL rationale. The in-flight map does
+// single-flight coalescing: concurrent requests for the same variant share one
+// upstream fetch, so a burst of cold viewers (or a page referencing the same
+// screenshot twice) hits GitHub once — the origin-protecting "negative cache"
+// without ever persisting a broken image at the CDN.
+const _imgCache = new ImgCache()
+const _imgInFlight = new Map()
+function imgCacheKey(u, wantWidth, acceptsWebp) {
+  return `${u} w=${wantWidth} webp=${acceptsWebp ? 1 : 0}`
+}
+
+/**
+ * Fetch an upstream image (anonymous-first, token-on-404, retry on 429/5xx —
+ * see img-cdn-fetch.js) and process it (resize + optional WebP), returning the
+ * final bytes.
+ *
+ * @returns {Promise<{ status: 200, contentType: string, buffer: Buffer, xImgCdn: string }>}
+ * @throws  Error with `.upstreamStatus` set on a non-ok upstream, or safeFetch's
+ *          `.code === 'SSRF_BLOCKED'` / timeout errors.
+ */
+// Fetch the ORIGINAL image bytes, store-first with fail-open to GitHub. The
+// CAP /content/image-source endpoint returns the persisted original (self-
+// healing from GitHub on a miss); on any non-ok/error we fall back to the
+// anonymous-first GitHub fetch. Returns { buffer, contentType, imgSrc }.
+async function loadOriginalBytes(u, target) {
+  if (IMG_CDN_SOURCE !== 'github') {
+    try {
+      const storeRes = await fetch(buildImageOriginUrl(u, SRV_URL), {
+        signal: AbortSignal.timeout(IMG_CDN_TIMEOUT_MS),
+      })
+      if (storeRes.ok) {
+        return {
+          buffer: Buffer.from(await storeRes.arrayBuffer()),
+          contentType: storeRes.headers.get('content-type') || 'application/octet-stream',
+          imgSrc: 'store',
+        }
+      }
+      console.warn(`[img-cdn] store ${storeRes.status} for ${u} — falling back to GitHub`)
+    } catch (storeErr) {
+      console.warn('[img-cdn] store fetch error:', storeErr.message, '— falling back to GitHub')
+    }
+  }
+  // GitHub fallback (anonymous-first, token-on-404, retry on 429/5xx — see img-cdn-fetch.js)
+  const upstream = await fetchImageResponse(u, {
+    safeFetch,
+    resolveSecret,
+    host: target.hostname,
+    allowedHosts: IMG_CDN_HOSTS,
+    timeoutMs: IMG_CDN_TIMEOUT_MS,
+    maxRetries: IMG_CDN_MAX_RETRIES,
+  })
+  if (!upstream.ok) {
+    const err = new Error(`upstream ${upstream.status}`)
+    err.upstreamStatus = upstream.status
+    throw err
+  }
+  return {
+    buffer: Buffer.from(await upstream.arrayBuffer()),
+    contentType: upstream.headers.get('content-type') || 'application/octet-stream',
+    imgSrc: 'github',
+  }
+}
+
+async function loadProcessedImage(u, target, wantWidth, acceptsWebp) {
+  const { buffer: inputBuf, contentType, imgSrc } = await loadOriginalBytes(u, target)
+  const sharp = getSharp()
+  // #1640: animated GIFs are deliberately NOT processed — sharp would flatten
+  // them to a single frame (static WebP for WebP-capable clients).
+  const shouldProcess = shouldProcessImage(contentType, { hasSharp: !!sharp, wantWidth, acceptsWebp })
+
+  if (!shouldProcess) {
+    return { status: 200, contentType, buffer: inputBuf, xImgCdn: `passthrough;src=${imgSrc}` }
+  }
+
+  let chain = sharp(inputBuf, { failOn: 'none' })
+  if (wantWidth > 0) chain = chain.resize({ width: wantWidth, withoutEnlargement: true, kernel: 'lanczos3' })
+  const outFormat = acceptsWebp ? 'webp' : null
+  if (outFormat === 'webp') {
+    // Screenshots dominate tutorial content — readability beats bandwidth.
+    // PNG sources get nearLossless so text stays crisp; JPEG photos get q=92.
+    const isPng = /^image\/png/.test(contentType)
+    chain = chain.webp(isPng
+      ? { nearLossless: true, quality: 90, effort: 4 }
+      : { quality: 92, effort: 4, smartSubsample: true })
+  }
+  const buffer = await chain.toBuffer()
+  return {
+    status: 200,
+    contentType: outFormat === 'webp' ? 'image/webp' : contentType,
+    buffer,
+    xImgCdn: `${outFormat || 'orig'}${wantWidth ? '/w=' + wantWidth : ''};src=${imgSrc}`,
+  }
+}
+
 async function imgCdnHandler(req, res, next) {
   if (!req.url.startsWith('/img-cdn/') && !req.url.startsWith('/img-cdn?')) return next()
   if (req.method !== 'GET') return next()
@@ -189,115 +291,58 @@ async function imgCdnHandler(req, res, next) {
   const wantWidth = Math.min(parseInt(parsed.searchParams.get('w') || '0', 10) || 0, IMG_CDN_MAX_WIDTH)
   const acceptsWebp = /image\/webp/.test(req.headers.accept || '')
 
-  try {
-    let inputBuf, contentType, imgSrc = 'github'
-
-    // --- Store path (default, fail-open) ---
-    // Fetch the original from the CAP image-source endpoint. On any non-ok
-    // response or network error, fall through to the GitHub path below.
-    if (IMG_CDN_SOURCE !== 'github') {
-      try {
-        const storeRes = await fetch(buildImageOriginUrl(u, SRV_URL), {
-          signal: AbortSignal.timeout(IMG_CDN_TIMEOUT_MS)
-        })
-        if (storeRes.ok) {
-          inputBuf = Buffer.from(await storeRes.arrayBuffer())
-          contentType = storeRes.headers.get('content-type') || 'application/octet-stream'
-          imgSrc = 'store'
-        } else {
-          console.warn(`[img-cdn] store ${storeRes.status} for ${u} — falling back to GitHub`)
-        }
-      } catch (storeErr) {
-        console.warn('[img-cdn] store fetch error:', storeErr.message, '— falling back to GitHub')
-      }
-    }
-
-    // --- GitHub fallback ---
-    // QA tutorials live in PRIVATE `-Contribution` repos, so their screenshot
-    // sources on raw.githubusercontent.com 404 to an anonymous fetch. Attach a
-    // GitHub token (credstore alias TUTORIALS_GITHUB_TOKEN, 5-min TTL cached) so
-    // private raw content resolves. Public-repo (prod) images are unaffected —
-    // the token is simply ignored for public paths. The token is only sent to
-    // raw.githubusercontent.com (the sole IMG_CDN_HOSTS entry); these image
-    // fetches return 200 inline (no redirect to objects.githubusercontent.com),
-    // so the credential is never forwarded off-host.
-    if (!inputBuf) {
-      const imgFetchHeaders = { 'User-Agent': 'tutorials-imgcdn' }
-      if (target.hostname === 'raw.githubusercontent.com') {
-        const ghToken = await resolveSecret('TUTORIALS_GITHUB_TOKEN', { logTag: '[img-cdn]' })
-        if (ghToken) imgFetchHeaders['Authorization'] = `Bearer ${ghToken}`
-      }
-      // #888: safeFetch validates hostname + private-IP + protocol on every hop.
-      // Without redirect: 'manual' here, a controlled 302 from
-      // raw.githubusercontent.com to 169.254.169.254 would leak metadata creds.
-      const upstream = await safeFetch(u, {
-        allowedHosts: IMG_CDN_HOSTS,
-        allowedProtocols: ['https:', 'http:'],
-        timeoutMs: IMG_CDN_TIMEOUT_MS,
-        maxRedirects: 3,
-        fetchInit: { headers: imgFetchHeaders },
-      })
-      if (!upstream.ok) {
-        res.writeHead(upstream.status, { 'Content-Type': 'text/plain' })
-        res.end(`Upstream ${upstream.status}`)
-        return
-      }
-      inputBuf = Buffer.from(await upstream.arrayBuffer())
-      contentType = upstream.headers.get('content-type') || 'application/octet-stream'
-    }
-
-    const sharp = getSharp()
-    // #1640: animated GIFs are deliberately NOT processed — sharp would flatten
-    // them to a single frame (static WebP for WebP-capable clients). They fall
-    // through to the passthrough branch below and are served verbatim.
-    const shouldProcess = shouldProcessImage(contentType, {
-      hasSharp: !!sharp,
-      wantWidth,
-      acceptsWebp,
-    })
-
-    if (!shouldProcess) {
-      res.writeHead(200, {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable',
-        'X-Img-Cdn': `passthrough;src=${imgSrc}`
-      })
-      res.end(inputBuf)
-      return
-    }
-
-    let chain = sharp(inputBuf, { failOn: 'none' })
-    if (wantWidth > 0) chain = chain.resize({ width: wantWidth, withoutEnlargement: true, kernel: 'lanczos3' })
-    const outFormat = acceptsWebp ? 'webp' : null
-    if (outFormat === 'webp') {
-      // Screenshots dominate tutorial content — readability beats bandwidth.
-      // PNG sources (typical for screenshots) get nearLossless so text stays
-      // crisp; JPEG photos get q=92 + smart subsampling. q=80 was washing out
-      // UI line art and small text.
-      const isPng = /^image\/png/.test(contentType)
-      chain = chain.webp(isPng
-        ? { nearLossless: true, quality: 90, effort: 4 }
-        : { quality: 92, effort: 4, smartSubsample: true })
-    }
-    const out = await chain.toBuffer()
+  // 200 responses stay cacheable; Vary: Accept is set on ALL of them (not just
+  // the re-encoded branch) so the CDN keys webp and non-webp variants apart.
+  const sendOk = (result, cacheHit) => {
     res.writeHead(200, {
-      'Content-Type': outFormat === 'webp' ? 'image/webp' : contentType,
+      'Content-Type': result.contentType,
       'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable',
       'Vary': 'Accept',
-      'X-Img-Cdn': `${outFormat || 'orig'}${wantWidth ? '/w=' + wantWidth : ''};src=${imgSrc}`
+      'X-Img-Cdn': result.xImgCdn + (cacheHit ? ';cache=hit' : ''),
     })
-    res.end(out)
+    res.end(result.buffer)
+  }
+
+  const key = imgCacheKey(u, wantWidth, acceptsWebp)
+  const cached = _imgCache.get(key)
+  if (cached) {
+    sendOk(cached, true)
+    return
+  }
+
+  try {
+    // Single-flight: coalesce concurrent requests for the same variant onto one
+    // upstream fetch, and cache the 200 result once. Errors are never cached
+    // (see the catch) and never stored in _imgCache.
+    let inflight = _imgInFlight.get(key)
+    if (!inflight) {
+      inflight = loadProcessedImage(u, target, wantWidth, acceptsWebp)
+        .then((result) => {
+          _imgCache.set(key, result, result.buffer.length)
+          return result
+        })
+        .finally(() => { _imgInFlight.delete(key) })
+      _imgInFlight.set(key, inflight)
+    }
+    const result = await inflight
+    sendOk(result, false)
   } catch (err) {
-    console.error('[img-cdn]', err.code || 'ERR', err.message)
+    console.error('[img-cdn]', err.code || (err.upstreamStatus && `UP${err.upstreamStatus}`) || 'ERR', err.message)
     if (!res.headersSent) {
-      // #888: SSRF_BLOCKED means the URL (or a redirect target) resolved to
-      // a private/internal address. Return 403 not 502 so probes can be
-      // distinguished from upstream flakes in logs.
-      if (err.code === 'SSRF_BLOCKED') {
-        res.writeHead(403, { 'Content-Type': 'text/plain' })
+      // A broken image is NEVER cached — no-store on every error path so a
+      // transient upstream 429/5xx can't be pinned at the CDN or browser.
+      const errHeaders = { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }
+      if (err.upstreamStatus) {
+        res.writeHead(err.upstreamStatus, errHeaders)
+        res.end(`Upstream ${err.upstreamStatus}`)
+      } else if (err.code === 'SSRF_BLOCKED') {
+        // #888: SSRF_BLOCKED means the URL (or a redirect target) resolved to
+        // a private/internal address. Return 403 not 502 so probes can be
+        // distinguished from upstream flakes in logs.
+        res.writeHead(403, errHeaders)
         res.end('Forbidden')
       } else {
-        res.writeHead(502, { 'Content-Type': 'text/plain' })
+        res.writeHead(502, errHeaders)
         res.end('Upstream error')
       }
     }
