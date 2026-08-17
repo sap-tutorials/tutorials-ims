@@ -27,6 +27,7 @@ import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
+import { imageSourceHandler } from './lib/image-source-handler.js';
 import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
@@ -504,6 +505,9 @@ cds.on('bootstrap', (app) => {
   // explicitly. pageServeHandler resolves the empty remainder to page-index.
   app.get('/content/pages', pageServeHandler);
   app.get('/content/pages/*path', pageServeHandler);
+  // Task 5: persist-tutorial-images — stream stored originals for the approuter.
+  // Anonymous (no auth) like /content/tutorials/:slug.
+  app.get('/content/image-source', imageSourceHandler);
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/publish/begin',  express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
   app.post('/content/publish/append', express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);
