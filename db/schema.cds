@@ -754,6 +754,15 @@ entity ChatSettings : cuid, managed {
   // srv/lib/alerting.js). Admin-editable via /admin-ui/#joule; DB-backed (NOT an
   // env var) so ops can toggle live without a restart. Default false = dark.
   alertsEnabled     : Boolean default false;
+
+  // What's New Joule tool (#1859). When true, the getWhatsNew tool is registered
+  // on the learner path and the WHATS_NEW_GUIDANCE prompt layer is injected, so
+  // Joule answers "what's new on the platform?" from the baked whats_new.json
+  // digest instead of the tutorials-only refusal. Default true (unlike the
+  // AI-quota-heavy flags) because the tool is cheap: it reads a build-time JSON
+  // snapshot, with no AI Core call and no DB read. Admin kill-switch via
+  // /admin-ui/#joule.
+  whatsNewEnabled   : Boolean default true;
 }
 
 // Phase 2-A foundation (#463). Mirrors the ChatSettings singleton pattern.
