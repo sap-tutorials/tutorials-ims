@@ -18,6 +18,10 @@ import cds from '@sap/cds'
 import { createRequire } from 'node:module'
 import { safeFetch } from './safe-fetch.js'
 import { resolveSecret } from './secret-resolver.js'
+import { channelFor, warmImages } from './image-warm-utils.js'
+
+export { channelFor } from './image-warm-utils.js'
+export { extractImgCdnUrls } from './image-warm-utils.js'
 
 const require = createRequire(import.meta.url)
 const imageStore = require('./image-store.cjs')
@@ -30,12 +34,26 @@ const LOG = cds.log('image-source')
 const _inflight = new Map()
 
 /**
- * Derive storage channel from the source URL.
- * `-Contribution/` repos are private QA-preview (qa channel).
- * All public prod repos map to the prod channel.
+ * Warm the image store for `urls` referenced by tutorial `slug`.
+ * Assembles the real ingestImage deps at module scope (imageStore,
+ * fetchImageResponse, safeFetch, resolveSecret) and delegates to the
+ * pure warmImages orchestrator from image-warm-utils.js.
+ *
+ * Non-fatal per URL: warmImages catches any throw or `failed` result and
+ * logs it; this function always resolves.
+ *
+ * @param {string[]} urls
+ * @param {{ slug: string }} opts
+ * @returns {Promise<void>}
  */
-function channelFor(u) {
-  return /-Contribution\//i.test(u) ? 'qa' : 'prod'
+export function warmImagesLive(urls, { slug }) {
+  const ingestFn = (url, { slug: s, channel }) =>
+    ingestImage(url, {
+      slug: s,
+      channel,
+      deps: { fetchImageResponse, safeFetch, resolveSecret, store: imageStore },
+    })
+  return warmImages(urls, { slug, ingestFn })
 }
 
 /**
