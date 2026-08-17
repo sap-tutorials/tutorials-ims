@@ -24,6 +24,7 @@ const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
 const { securityTxtHandler } = require('./lib/security-txt')
 const { sitemapIndexRedirectHandler } = require('./lib/sitemap-index-redirect')
 const shouldProcessImage = require('./lib/img-cdn-should-process')
+const { buildImageOriginUrl } = require('./lib/img-cdn-origin')
 const { ImgCache } = require('./lib/img-cdn-cache')
 const { fetchImageResponse } = require('./lib/img-cdn-fetch')
 
@@ -157,6 +158,9 @@ function getSharp() {
 const IMG_CDN_HOSTS = new Set(['raw.githubusercontent.com'])
 const IMG_CDN_MAX_WIDTH = 2400
 const IMG_CDN_TIMEOUT_MS = 12000
+// Set IMG_CDN_SOURCE=github to disable the store path and always fetch from GitHub.
+const IMG_CDN_SOURCE = process.env.IMG_CDN_SOURCE || 'store'
+
 // Upstream 429/5xx are ridden out with a short jittered backoff before we
 // relay a broken image. Total attempts = 1 + IMG_CDN_MAX_RETRIES. 429s from
 // GitHub return immediately, so worst-case added latency is ~backoff sum (< 3s).
@@ -183,7 +187,29 @@ function imgCacheKey(u, wantWidth, acceptsWebp) {
  * @throws  Error with `.upstreamStatus` set on a non-ok upstream, or safeFetch's
  *          `.code === 'SSRF_BLOCKED'` / timeout errors.
  */
-async function loadProcessedImage(u, target, wantWidth, acceptsWebp) {
+// Fetch the ORIGINAL image bytes, store-first with fail-open to GitHub. The
+// CAP /content/image-source endpoint returns the persisted original (self-
+// healing from GitHub on a miss); on any non-ok/error we fall back to the
+// anonymous-first GitHub fetch. Returns { buffer, contentType, imgSrc }.
+async function loadOriginalBytes(u, target) {
+  if (IMG_CDN_SOURCE !== 'github') {
+    try {
+      const storeRes = await fetch(buildImageOriginUrl(u, SRV_URL), {
+        signal: AbortSignal.timeout(IMG_CDN_TIMEOUT_MS),
+      })
+      if (storeRes.ok) {
+        return {
+          buffer: Buffer.from(await storeRes.arrayBuffer()),
+          contentType: storeRes.headers.get('content-type') || 'application/octet-stream',
+          imgSrc: 'store',
+        }
+      }
+      console.warn(`[img-cdn] store ${storeRes.status} for ${u} — falling back to GitHub`)
+    } catch (storeErr) {
+      console.warn('[img-cdn] store fetch error:', storeErr.message, '— falling back to GitHub')
+    }
+  }
+  // GitHub fallback (anonymous-first, token-on-404, retry on 429/5xx — see img-cdn-fetch.js)
   const upstream = await fetchImageResponse(u, {
     safeFetch,
     resolveSecret,
@@ -197,19 +223,24 @@ async function loadProcessedImage(u, target, wantWidth, acceptsWebp) {
     err.upstreamStatus = upstream.status
     throw err
   }
+  return {
+    buffer: Buffer.from(await upstream.arrayBuffer()),
+    contentType: upstream.headers.get('content-type') || 'application/octet-stream',
+    imgSrc: 'github',
+  }
+}
 
-  const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+async function loadProcessedImage(u, target, wantWidth, acceptsWebp) {
+  const { buffer: inputBuf, contentType, imgSrc } = await loadOriginalBytes(u, target)
   const sharp = getSharp()
   // #1640: animated GIFs are deliberately NOT processed — sharp would flatten
   // them to a single frame (static WebP for WebP-capable clients).
   const shouldProcess = shouldProcessImage(contentType, { hasSharp: !!sharp, wantWidth, acceptsWebp })
 
   if (!shouldProcess) {
-    const buffer = Buffer.from(await upstream.arrayBuffer())
-    return { status: 200, contentType, buffer, xImgCdn: 'passthrough' }
+    return { status: 200, contentType, buffer: inputBuf, xImgCdn: `passthrough;src=${imgSrc}` }
   }
 
-  const inputBuf = Buffer.from(await upstream.arrayBuffer())
   let chain = sharp(inputBuf, { failOn: 'none' })
   if (wantWidth > 0) chain = chain.resize({ width: wantWidth, withoutEnlargement: true, kernel: 'lanczos3' })
   const outFormat = acceptsWebp ? 'webp' : null
@@ -226,7 +257,7 @@ async function loadProcessedImage(u, target, wantWidth, acceptsWebp) {
     status: 200,
     contentType: outFormat === 'webp' ? 'image/webp' : contentType,
     buffer,
-    xImgCdn: `${outFormat || 'orig'}${wantWidth ? '/w=' + wantWidth : ''}`,
+    xImgCdn: `${outFormat || 'orig'}${wantWidth ? '/w=' + wantWidth : ''};src=${imgSrc}`,
   }
 }
 
