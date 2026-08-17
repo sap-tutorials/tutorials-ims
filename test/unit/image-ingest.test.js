@@ -40,4 +40,30 @@ describe('ingestImage', () => {
     }})
     expect(r.action).toBe('failed'); expect(r.status).toBe(429); expect(store.state.puts).toBe(0)
   })
+  it('returns 413 and skips put when content-length header exceeds cap', async () => {
+    const store = fakeStore(null)
+    const oversize = 25 * 1024 * 1024 + 1
+    const r = await ingestImage(`https://${RAW}/o/r/main/big.png`, { ...base, deps: {
+      fetchImageResponse: async () => ({
+        ok: true, status: 200,
+        headers: { get: (h) => h === 'content-length' ? String(oversize) : 'image/png' },
+        arrayBuffer: async () => { throw new Error('should not buffer') },
+      }),
+      safeFetch: {}, resolveSecret: async () => null, store,
+    }})
+    expect(r.action).toBe('failed'); expect(r.status).toBe(413); expect(store.state.puts).toBe(0)
+  })
+  it('returns 413 and skips put when buffer exceeds cap despite absent content-length', async () => {
+    const store = fakeStore(null)
+    const oversize = Buffer.alloc(25 * 1024 * 1024 + 1)
+    const r = await ingestImage(`https://${RAW}/o/r/main/big2.png`, { ...base, deps: {
+      fetchImageResponse: async () => ({
+        ok: true, status: 200,
+        headers: { get: (h) => h === 'content-length' ? null : 'image/png' },
+        arrayBuffer: async () => oversize,
+      }),
+      safeFetch: {}, resolveSecret: async () => null, store,
+    }})
+    expect(r.action).toBe('failed'); expect(r.status).toBe(413); expect(store.state.puts).toBe(0)
+  })
 })

@@ -6,7 +6,7 @@ namespace com.sap.developers.ims;
 
 entity TutorialImages {
   key ID        : UUID;
-      sourceUrl   : String(1024) @assert.unique.sourceUrl;  // raw.githubusercontent.com URL (business key)
+      sourceUrl   : String(1024);  // raw.githubusercontent.com URL; one-row-per-sourceUrl invariant maintained by image-store put() (delete-then-insert), NOT a DB constraint
       tutorial    : Association to Tutorials on tutorial.slug = slug;
       slug        : String(255);             // lowercase canonical
       channel     : String(8);               // 'prod' | 'qa'

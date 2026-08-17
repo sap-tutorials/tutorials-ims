@@ -1,6 +1,7 @@
 'use strict'
 const crypto = require('node:crypto')
 const IMG_CDN_HOSTS = new Set(['raw.githubusercontent.com'])
+const MAX_IMAGE_BYTES = Number(process.env.IMG_MAX_BYTES) || 25 * 1024 * 1024  // 25 MB default
 
 async function ingestImage(sourceUrl, { slug, channel, deps }) {
   const { fetchImageResponse, safeFetch, resolveSecret, store,
@@ -14,7 +15,19 @@ async function ingestImage(sourceUrl, { slug, channel, deps }) {
   })
   if (!res.ok) return { action: 'failed', status: res.status }
 
+  // Reject oversized responses before buffering (content-length fast-path)
+  const contentLength = Number(res.headers.get('content-length'))
+  if (!Number.isNaN(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+    return { action: 'failed', status: 413 }
+  }
+
   const buffer = Buffer.from(await res.arrayBuffer())
+
+  // Defensive check for chunked/absent content-length
+  if (buffer.length > MAX_IMAGE_BYTES) {
+    return { action: 'failed', status: 413 }
+  }
+
   const contentHash = hash(buffer)
   const existing = await store.head(sourceUrl)
   if (existing.exists && existing.contentHash === contentHash) {
