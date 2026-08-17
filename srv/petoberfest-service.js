@@ -14,7 +14,7 @@ export async function resolveOrCreatePetUser(db, user) {
     const ID = cds.utils.uuid();
     await db.run(INSERT.into(Users).entries({
       ID,
-      uuid: user.id,
+      uuid: cds.utils.uuid(),  // String(36): user.id is email under XSUAA → overflows on long addresses (#1614)
       sapId,
       legacyId: await getNextLegacyId('Users', db),
       email: user.attr?.email || '',
