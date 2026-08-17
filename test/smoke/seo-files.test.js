@@ -21,6 +21,17 @@ describe('SEO files', () => {
     expect(text).toMatch(/<lastmod>/);
   });
 
+  it('301-redirects legacy AEM sitemap URLs to /sitemap.xml', async () => {
+    // Intelligent Search's crawler was pinned to the legacy AEM /sitemap_index.xml
+    // (+ /sitemap_<n>.xml shards); the platform now serves a single /sitemap.xml.
+    // The approuter middleware keeps those legacy URLs alive via a 301.
+    for (const legacy of ['/sitemap_index.xml', '/sitemap_1.xml']) {
+      const res = await fetchWithRetry(`${BASE_URL}${legacy}`); // redirect: 'manual'
+      expect(res.status, `${legacy} should 301`).toBe(301);
+      expect(res.headers.get('location')).toMatch(/\/sitemap\.xml$/);
+    }
+  });
+
   it('serves llms.txt with brand header and citation policy', async () => {
     const res = await fetchWithRetry(`${BASE_URL}/llms.txt`);
     expect(res.status).toBe(200);

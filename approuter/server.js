@@ -22,6 +22,7 @@ const { bump, startAutoFlush } = require('./lib/hit-counter')
 const { safeFetch } = require('./lib/safe-fetch')
 const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
 const { securityTxtHandler } = require('./lib/security-txt')
+const { sitemapIndexRedirectHandler } = require('./lib/sitemap-index-redirect')
 const shouldProcessImage = require('./lib/img-cdn-should-process')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
@@ -504,6 +505,7 @@ ar.start({
         first: [
           { path: '/', handler: wellKnownOAuthHandler },
           { path: '/', handler: securityTxtHandler },
+          { path: '/', handler: sitemapIndexRedirectHandler },
           { path: '/', handler: devtoberfestCspHandler },
           { path: '/', handler: imgCdnHandler },
           { path: '/', handler: legacyRedirectsHandler },
