@@ -24,6 +24,7 @@ const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
 const { securityTxtHandler } = require('./lib/security-txt')
 const { sitemapIndexRedirectHandler } = require('./lib/sitemap-index-redirect')
 const shouldProcessImage = require('./lib/img-cdn-should-process')
+const { buildImageOriginUrl } = require('./lib/img-cdn-origin')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
 // array) injected by the approuter framework when mta.yaml declares
@@ -155,6 +156,8 @@ function getSharp() {
 const IMG_CDN_HOSTS = new Set(['raw.githubusercontent.com'])
 const IMG_CDN_MAX_WIDTH = 2400
 const IMG_CDN_TIMEOUT_MS = 12000
+// Set IMG_CDN_SOURCE=github to disable the store path and always fetch from GitHub.
+const IMG_CDN_SOURCE = process.env.IMG_CDN_SOURCE || 'store'
 
 async function imgCdnHandler(req, res, next) {
   if (!req.url.startsWith('/img-cdn/') && !req.url.startsWith('/img-cdn?')) return next()
@@ -186,37 +189,63 @@ async function imgCdnHandler(req, res, next) {
   const wantWidth = Math.min(parseInt(parsed.searchParams.get('w') || '0', 10) || 0, IMG_CDN_MAX_WIDTH)
   const acceptsWebp = /image\/webp/.test(req.headers.accept || '')
 
-  // QA tutorials live in PRIVATE `-Contribution` repos, so their screenshot
-  // sources on raw.githubusercontent.com 404 to an anonymous fetch. Attach a
-  // GitHub token (credstore alias TUTORIALS_GITHUB_TOKEN, 5-min TTL cached) so
-  // private raw content resolves. Public-repo (prod) images are unaffected —
-  // the token is simply ignored for public paths. The token is only sent to
-  // raw.githubusercontent.com (the sole IMG_CDN_HOSTS entry); these image
-  // fetches return 200 inline (no redirect to objects.githubusercontent.com),
-  // so the credential is never forwarded off-host.
-  const imgFetchHeaders = { 'User-Agent': 'tutorials-imgcdn' }
-  if (target.hostname === 'raw.githubusercontent.com') {
-    const ghToken = await resolveSecret('TUTORIALS_GITHUB_TOKEN', { logTag: '[img-cdn]' })
-    if (ghToken) imgFetchHeaders['Authorization'] = `Bearer ${ghToken}`
-  }
-
   try {
-    // #888: safeFetch validates hostname + private-IP + protocol on every hop.
-    // Without redirect: 'manual' here, a controlled 302 from
-    // raw.githubusercontent.com to 169.254.169.254 would leak metadata creds.
-    const upstream = await safeFetch(u, {
-      allowedHosts: IMG_CDN_HOSTS,
-      allowedProtocols: ['https:', 'http:'],
-      timeoutMs: IMG_CDN_TIMEOUT_MS,
-      maxRedirects: 3,
-      fetchInit: { headers: imgFetchHeaders },
-    })
-    if (!upstream.ok) {
-      res.writeHead(upstream.status, { 'Content-Type': 'text/plain' })
-      res.end(`Upstream ${upstream.status}`)
-      return
+    let inputBuf, contentType, imgSrc = 'github'
+
+    // --- Store path (default, fail-open) ---
+    // Fetch the original from the CAP image-source endpoint. On any non-ok
+    // response or network error, fall through to the GitHub path below.
+    if (IMG_CDN_SOURCE !== 'github') {
+      try {
+        const storeRes = await fetch(buildImageOriginUrl(u, SRV_URL), {
+          signal: AbortSignal.timeout(IMG_CDN_TIMEOUT_MS)
+        })
+        if (storeRes.ok) {
+          inputBuf = Buffer.from(await storeRes.arrayBuffer())
+          contentType = storeRes.headers.get('content-type') || 'application/octet-stream'
+          imgSrc = 'store'
+        } else {
+          console.warn(`[img-cdn] store ${storeRes.status} for ${u} — falling back to GitHub`)
+        }
+      } catch (storeErr) {
+        console.warn('[img-cdn] store fetch error:', storeErr.message, '— falling back to GitHub')
+      }
     }
-    const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+
+    // --- GitHub fallback ---
+    // QA tutorials live in PRIVATE `-Contribution` repos, so their screenshot
+    // sources on raw.githubusercontent.com 404 to an anonymous fetch. Attach a
+    // GitHub token (credstore alias TUTORIALS_GITHUB_TOKEN, 5-min TTL cached) so
+    // private raw content resolves. Public-repo (prod) images are unaffected —
+    // the token is simply ignored for public paths. The token is only sent to
+    // raw.githubusercontent.com (the sole IMG_CDN_HOSTS entry); these image
+    // fetches return 200 inline (no redirect to objects.githubusercontent.com),
+    // so the credential is never forwarded off-host.
+    if (!inputBuf) {
+      const imgFetchHeaders = { 'User-Agent': 'tutorials-imgcdn' }
+      if (target.hostname === 'raw.githubusercontent.com') {
+        const ghToken = await resolveSecret('TUTORIALS_GITHUB_TOKEN', { logTag: '[img-cdn]' })
+        if (ghToken) imgFetchHeaders['Authorization'] = `Bearer ${ghToken}`
+      }
+      // #888: safeFetch validates hostname + private-IP + protocol on every hop.
+      // Without redirect: 'manual' here, a controlled 302 from
+      // raw.githubusercontent.com to 169.254.169.254 would leak metadata creds.
+      const upstream = await safeFetch(u, {
+        allowedHosts: IMG_CDN_HOSTS,
+        allowedProtocols: ['https:', 'http:'],
+        timeoutMs: IMG_CDN_TIMEOUT_MS,
+        maxRedirects: 3,
+        fetchInit: { headers: imgFetchHeaders },
+      })
+      if (!upstream.ok) {
+        res.writeHead(upstream.status, { 'Content-Type': 'text/plain' })
+        res.end(`Upstream ${upstream.status}`)
+        return
+      }
+      inputBuf = Buffer.from(await upstream.arrayBuffer())
+      contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+    }
+
     const sharp = getSharp()
     // #1640: animated GIFs are deliberately NOT processed — sharp would flatten
     // them to a single frame (static WebP for WebP-capable clients). They fall
@@ -231,14 +260,12 @@ async function imgCdnHandler(req, res, next) {
       res.writeHead(200, {
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable',
-        'X-Img-Cdn': 'passthrough'
+        'X-Img-Cdn': `passthrough;src=${imgSrc}`
       })
-      const buf = Buffer.from(await upstream.arrayBuffer())
-      res.end(buf)
+      res.end(inputBuf)
       return
     }
 
-    const inputBuf = Buffer.from(await upstream.arrayBuffer())
     let chain = sharp(inputBuf, { failOn: 'none' })
     if (wantWidth > 0) chain = chain.resize({ width: wantWidth, withoutEnlargement: true, kernel: 'lanczos3' })
     const outFormat = acceptsWebp ? 'webp' : null
@@ -257,7 +284,7 @@ async function imgCdnHandler(req, res, next) {
       'Content-Type': outFormat === 'webp' ? 'image/webp' : contentType,
       'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable',
       'Vary': 'Accept',
-      'X-Img-Cdn': `${outFormat || 'orig'}${wantWidth ? '/w=' + wantWidth : ''}`
+      'X-Img-Cdn': `${outFormat || 'orig'}${wantWidth ? '/w=' + wantWidth : ''};src=${imgSrc}`
     })
     res.end(out)
   } catch (err) {
