@@ -41,8 +41,8 @@
       <h3 class="hp-featured-carousel__topic">{{ $slide.displayTitle }}</h3>
       <div class="hp-featured-carousel__grid cards">
         {{- range $slide.missions -}}
-          {{- if eq .kind "mission" -}}{{ partial "browse/_partials/card-mission.html" . }}{{- end -}}
-          {{- if eq .kind "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" . }}{{- end -}}
+          {{- if eq .kind "mission" -}}{{ partial "browse/_partials/card-mission.html" (dict "item" . "categories" dict) }}{{- end -}}
+          {{- if eq .kind "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" (dict "item" . "categories" dict) }}{{- end -}}
         {{- end -}}
       </div>
     </div>
