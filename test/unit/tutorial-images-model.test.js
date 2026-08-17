@@ -3,7 +3,7 @@ import cds from '@sap/cds'
 describe('TutorialImages model', () => {
   it('defines TutorialImages with an Attachments composition, UUID key, unique sourceUrl', async () => {
     const m = await cds.load(['db/tutorial-images.cds', 'db/schema.cds'])
-    const e = m.definitions['sap.tutorials.TutorialImages']
+    const e = m.definitions['com.sap.developers.ims.TutorialImages']
     expect(e).toBeTruthy()
     expect(e.elements.ID.key).toBe(true)
     expect(e.elements.sourceUrl).toBeTruthy()          // unique business key

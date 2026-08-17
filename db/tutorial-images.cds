@@ -1,9 +1,8 @@
 using { Attachments } from '@cap-js/attachments';
-// Adaptation: the main schema uses namespace com.sap.developers.ims, not sap.tutorials.
-// We import Tutorials under its actual fully-qualified name.
+// Import schema.cds so the compiler resolves Tutorials (same namespace).
 using { com.sap.developers.ims.Tutorials } from './schema';
 
-namespace sap.tutorials;
+namespace com.sap.developers.ims;
 
 entity TutorialImages {
   key ID        : UUID;
