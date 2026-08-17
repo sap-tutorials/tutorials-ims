@@ -251,6 +251,49 @@ describe('useNavigatorFilters — product facet merge (#1594)', () => {
   })
 })
 
+describe('useNavigatorFilters — #1804: product deep-link matches the full label union', () => {
+  // A tutorial-page chip emits ONE raw slug (e.g. ?tag=products>…), so a
+  // deep-link seeds only that single variant into filters.products. The
+  // manual facet, by contrast, merges by label (#1594) and filters on the
+  // UNION of every variant slug. Before this fix the deep-link exact-matched
+  // only its own variant — so clicking the "Mobile Development Kit Client"
+  // chip on a tutorial tagged `products>…` showed only that tutorial and hid
+  // the 34 tagged `software-product>…` ("product not filtering correctly",
+  // #1804). Filtering must resolve product slugs by label so a deep-link
+  // matches the same union the facet does.
+  it('a single member slug (deep-link) matches every tutorial sharing its product label', async () => {
+    const allCards = ref(dupLabelCards)
+    const tutorials = ref(dupLabelTutorials)
+    const f = useNavigatorFilters({ allCards, tutorials, syncURL: false })
+    f.filters.products = ['products>mobile-development-kit-client']
+    await nextTick()
+    // Both MDK tutorials show — the one tagged products> AND the one tagged
+    // software-product> — matching the manual-facet union, NOT just mdk-b.
+    expect(f.displayedItems.value.map(c => c.id).sort()).toEqual(['mdk-a', 'mdk-b'])
+  })
+
+  it('does not widen matches to unrelated products sharing no label', async () => {
+    const allCards = ref(dupLabelCards)
+    const tutorials = ref(dupLabelTutorials)
+    const f = useNavigatorFilters({ allCards, tutorials, syncURL: false })
+    f.filters.products = ['products>mobile-development-kit-client']
+    await nextTick()
+    // The HANA-only tutorial must NOT appear — its label ("SAP HANA") differs.
+    expect(f.displayedItems.value.map(c => c.id)).not.toContain('hana-only')
+  })
+
+  it('falls back to exact-slug match when no tutorials list is supplied', async () => {
+    // /browse/ mounts may not pass `tutorials`; with no label map the product
+    // filter must degrade to the pre-fix exact-slug behaviour (no crash, no
+    // over-broad match).
+    const allCards = ref(cards)
+    const f = useNavigatorFilters({ allCards, syncURL: false })
+    f.filters.products = ['software-product>sap-cloud-application-programming-model']
+    await nextTick()
+    expect(f.displayedItems.value.map(c => c.id)).toEqual(['t1'])
+  })
+})
+
 describe('endpoint base forwarding', () => {
   it('defaults navBase to /tutorials when not supplied', () => {
     const r = useNavigatorFilters({ allCards: ref([]) })
