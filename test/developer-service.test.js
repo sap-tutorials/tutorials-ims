@@ -105,7 +105,10 @@ describe('DeveloperService', () => {
         { auth: { username: 'developer', password: 'developer' } });
       expect(res.status).toBe(200);
 
-      const user = await SELECT.one.from(Users).where({ uuid: 'developer' });
+      // Resolve the provisioned user by sapId (the app's actual key — see
+      // resolve-db-user.js / #343), NOT uuid: #1614 sets uuid to a random
+      // cds.utils.uuid() on auto-provision, so uuid no longer equals the login.
+      const user = await SELECT.one.from(Users).where({ sapId: 'developer' });
       const records = await SELECT.from(AccomplishmentRecords).where({ user_ID: user.ID });
       expect(records.some(r => r.accomplishment_ID === 'test-acc-1')).toBe(true);
     });
@@ -117,7 +120,8 @@ describe('DeveloperService', () => {
       expect(res.status).toBe(200);
 
       const { AccomplishmentRecords, Users } = cds.entities('com.sap.developers.ims');
-      const user = await SELECT.one.from(Users).where({ uuid: 'developer' });
+      // sapId, not uuid — see note in the sibling test (#1614).
+      const user = await SELECT.one.from(Users).where({ sapId: 'developer' });
       const records = await SELECT.from(AccomplishmentRecords).where({
         user_ID: user.ID,
         accomplishment_ID: 'test-acc-1'
