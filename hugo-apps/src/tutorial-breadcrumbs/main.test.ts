@@ -47,6 +47,18 @@ function roles() {
   }));
 }
 
+// Sequence of top-level breadcrumb <li>s as 'sep' | 'nav' | role | 'current'.
+// Lets tests assert separators sit between every item — the run-together bug
+// (#1836 follow-up) was a missing separator before the current-page item that
+// role/text assertions couldn't catch.
+function sequence() {
+  return [...document.querySelectorAll('.fd-breadcrumb > li')].map(li => {
+    if (li.classList.contains('fd-breadcrumb__separator')) return 'sep';
+    if (li.classList.contains('fd-breadcrumb__item--current')) return 'current';
+    return li.getAttribute('data-bc-role') ?? 'nav';
+  });
+}
+
 beforeEach(() => { _resetCacheForTest(); document.body.innerHTML = ''; delete document.documentElement.dataset.pageKind; });
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -63,6 +75,7 @@ describe('tutorial-breadcrumbs context-aware', () => {
       { role: 'mission', text: 'Jump Start', href: '/tutorials/mission-jump-start' },
       { role: 'group', text: 'Set Up', href: '/tutorials/group-set-up' },
     ]);
+    expect(sequence()).toEqual(['nav', 'sep', 'mission', 'sep', 'group', 'sep', 'current']);
   });
 
   // #1836: baked breadcrumb is a single junk event MISSION; the reader entered
@@ -82,6 +95,8 @@ describe('tutorial-breadcrumbs context-aware', () => {
     // and the current-page item is still last
     const items = [...document.querySelectorAll('.fd-breadcrumb > li')];
     expect(items[items.length - 1].classList.contains('fd-breadcrumb__item--current')).toBe(true);
+    // separators interleave every item — no run-together, no doubled separator
+    expect(sequence()).toEqual(['nav', 'sep', 'group', 'sep', 'current']);
   });
 
   it('with ?from= adds a mission <li> when the row has a mission but baked had group-only', async () => {
