@@ -1,13 +1,21 @@
 <ui5-shellbar id="app-shellbar" primary-title="Developer Center" show-notifications notifications-count="">
   <img slot="logo" src="/img/sap-logo.svg" alt="SAP" height="24">
 
-  <ui5-shellbar-item id="sb-search" icon="search" text="Search ⌘K"></ui5-shellbar-item>
-  {{ if not site.Params.qa }}<ui5-shellbar-item id="joule-trigger" icon="da" text="Joule" hidden></ui5-shellbar-item>{{ end }}
-  <ui5-shellbar-item id="sb-nav" icon="menu2" text="Navigate"></ui5-shellbar-item>
-  <ui5-shellbar-item id="sb-share" icon="share-2" text="Share link"></ui5-shellbar-item>
-  {{ if not site.Params.qa }}<ui5-shellbar-item id="sb-prefs" icon="action-settings" text="Tutorial preferences"></ui5-shellbar-item>{{ end }}
-  <ui5-shellbar-item id="sb-help" icon="question-mark" text="Help"></ui5-shellbar-item>
-  <ui5-shellbar-item id="sb-theme" icon="dark-mode" text="Toggle theme"></ui5-shellbar-item>
+  {{/* #1858: ui5-shellbar-item derives its hover tooltip only from the icon's
+       registered accessible name (getIconAccessibleName). Most of our icons
+       (da, menu2, share-2, question-mark, dark-mode) ship accData=null, so they
+       rendered no tooltip at all — "half the top-right items have no tooltip".
+       An explicit `title` on the host surfaces as the tooltip for those icons
+       (their inner button renders no title, so the browser walks up to the
+       host); for icons that DO carry an accessible name (search, action-settings)
+       UI5's own button title wins, and this attribute is a harmless fallback. */}}
+  <ui5-shellbar-item id="sb-search" icon="search" text="Search ⌘K" title="Search ⌘K"></ui5-shellbar-item>
+  {{ if not site.Params.qa }}<ui5-shellbar-item id="joule-trigger" icon="da" text="Joule" title="Joule" hidden></ui5-shellbar-item>{{ end }}
+  <ui5-shellbar-item id="sb-nav" icon="menu2" text="Navigate" title="Navigate"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-share" icon="share-2" text="Share link" title="Share link"></ui5-shellbar-item>
+  {{ if not site.Params.qa }}<ui5-shellbar-item id="sb-prefs" icon="action-settings" text="Tutorial preferences" title="Tutorial preferences"></ui5-shellbar-item>{{ end }}
+  <ui5-shellbar-item id="sb-help" icon="question-mark" text="Help" title="Help"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-theme" icon="dark-mode" text="Toggle theme" title="Toggle theme"></ui5-shellbar-item>
 
   <!-- #1794 nested-interactive: `interactive` makes ui5-avatar render its own
        inner role=button, which the ShellBar then nests inside its own profile
