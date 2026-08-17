@@ -453,6 +453,37 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     return availableTopics.value.filter(t => t.toLowerCase().includes(q))
   })
 
+  // ─── Product slug → label map (#1804) ───
+  // The Software Product facet merges slugs by label (#1594) and filters on
+  // the UNION of a label's slugs. A deep-link from a tutorial-page chip, by
+  // contrast, seeds a SINGLE raw slug (`?tag=products>…`) — so an exact-slug
+  // product predicate matched only that one variant and hid the rest of the
+  // product's tutorials (e.g. BTP showed 117/547 of 677; #1804). Resolving
+  // each product slug to its human label lets the predicate below match the
+  // same union the facet does, regardless of which variant the chip emitted.
+  // Built from `tutorials` (the same source as availableProducts); when no
+  // tutorials list is supplied (`/browse/` mounts) the map is empty and the
+  // predicate degrades to exact-slug matching — the pre-fix behaviour.
+  const productSlugToLabel = computed(() => {
+    const m = new Map<string, string>()
+    const tuts = tutorials?.value ?? []
+    for (const t of tuts) {
+      for (let i = 0; i < t.displayTagSlugs.length; i++) {
+        const slug = t.displayTagSlugs[i]
+        if (!m.has(slug)) m.set(slug, t.displayTags[i] ?? slug)
+      }
+    }
+    return m
+  })
+
+  // The set of product LABELS the user is filtering by, resolved from the raw
+  // slugs in filters.products. A slug absent from the map (no tutorials loaded
+  // yet, or an unknown slug) resolves to itself — so matching stays exact.
+  const selectedProductLabels = computed(() => {
+    const map = productSlugToLabel.value
+    return new Set(filters.products.map(s => map.get(s) ?? s))
+  })
+
   // ─── Client-side filtering pipeline ───
   const filteredItems = computed(() => {
     return allCards.value.filter(item => {
@@ -473,7 +504,14 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       }
 
       if (filters.products.length > 0) {
-        const hasProduct = item.displayTagSlugs.some(s => filters.products.includes(s))
+        // Match by product LABEL, not raw slug (#1804). A card matches if any
+        // of its slugs resolves to a selected product's label — so a deep-link
+        // that seeded one variant slug matches every variant of that product,
+        // exactly like the merged facet. Falls back to slug equality when the
+        // label map is empty (no `tutorials` supplied).
+        const wantedLabels = selectedProductLabels.value
+        const map = productSlugToLabel.value
+        const hasProduct = item.displayTagSlugs.some(s => wantedLabels.has(map.get(s) ?? s))
         if (!hasProduct) return false
       }
 
