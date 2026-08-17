@@ -179,6 +179,36 @@ describe('DeveloperService — Khoros endpoints', () => {
     }
   });
 
+  it('setKhorosLink → auto-provisioned uuid never stores the email (issue #1614 uuid overflow)', async () => {
+    // Regression guard for the 3rd #1614 defect: XSUAA sets req.user.id to the
+    // user's EMAIL, and the auto-provision INSERT used to write `uuid: req.user.id`.
+    // Users.uuid is String(36); a long email overflows NVARCHAR(36) on HANA
+    // ("inserted value too large for column ... UUID", rc=6959) — but SQLite does
+    // NOT enforce length, so the old unit tests (short usernames) passed while
+    // PROD failed with status:'persist-failed'. This test uses a >36-char email
+    // as the identity and asserts uuid is a generated UUID, not the email.
+    const { Users } = cds.entities('com.sap.developers.ims');
+    const LONG_EMAIL = 'long.example.user.address.for.tests@example.com'; // 48 chars > 36
+    expect(LONG_EMAIL.length).toBeGreaterThan(36);
+    await DELETE.from(Users).where({ sapId: LONG_EMAIL });
+    _fetchHandler = async () => khorosOkResponse(THOMAS_JUNG);
+    try {
+      const { data } = await project.post(
+        '/api/setKhorosLink', { input: 'thomas_jung' },
+        { auth: { username: LONG_EMAIL } }
+      );
+      expect(data.status).toBe('ok'); // was 'persist-failed' on HANA before fix
+      const row = await SELECT.one.from(Users).where({ sapId: LONG_EMAIL });
+      expect(row).toBeTruthy();
+      expect(row.khorosId).toBe('12345');
+      // The core fix: uuid must be a generated id, never the (long) email.
+      expect(row.uuid).not.toBe(LONG_EMAIL);
+      expect(row.uuid.length).toBeLessThanOrEqual(36);
+    } finally {
+      await DELETE.from(Users).where({ sapId: LONG_EMAIL });
+    }
+  });
+
   it('clearKhorosLink → ok nulls all 4 columns', async () => {
     // Seed via setKhorosLink so the khorosId is in DB (beforeEach starts clean).
     _fetchHandler = async () => khorosOkResponse(THOMAS_JUNG);

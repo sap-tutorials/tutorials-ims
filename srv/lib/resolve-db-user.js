@@ -226,7 +226,7 @@ export async function provisionDbUser(user, columns) {
   const db = await cds.connect.to('db');
   try {
     await INSERT.into(Users).entries({
-      uuid: user.id,
+      uuid: cds.utils.uuid(),  // String(36): user.id is email under XSUAA → overflows on long addresses (#1614)
       sapId,
       legacyId: await getNextLegacyId('Users', db),
       email: claimEmail || '',
