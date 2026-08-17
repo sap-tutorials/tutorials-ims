@@ -142,6 +142,7 @@ modules:
       - name: tutorials-aicore
       - name: tutorials-credstore
       - name: tutorials-alert-notification
+      - name: tutorials-objectstore   # @cap-js/attachments S3 store for durable tutorial images (#1869/#1870)
 
   - name: tutorials-srv-qa
     type: nodejs
@@ -449,3 +450,13 @@ resources:
     parameters:
       service: alert-notification
       service-plan: standard
+
+  # Object Store (S3) for @cap-js/attachments — durable tutorial image
+  # originals (#1869/#1870). Single-tenant "shared" store; bound to
+  # tutorials-srv. Plan is s3-standard (per `cf marketplace`).
+  - name: tutorials-objectstore
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: objectstore
+      service-plan: s3-standard
+      service-name: tutorials-objectstore

@@ -163,6 +163,8 @@
     "yauzl": "3.4.0"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.645.0",
+    "@aws-sdk/lib-storage": "^3.645.0",
     "@cap-js-community/websocket": "^1.10.5",
     "@cap-js/ai": "~1.0.1",
     "@cap-js/attachments": "4.0.0",
@@ -224,6 +226,26 @@
         },
         "[production]": {
           "kind": "AICore-btp"
+        }
+      },
+      "attachments": {
+        "scan": false,
+        "[development]": {
+          "kind": "db"
+        },
+        "[hybrid]": {
+          "kind": "s3",
+          "scan": false,
+          "objectStore": {
+            "kind": "shared"
+          }
+        },
+        "[production]": {
+          "kind": "s3",
+          "scan": false,
+          "objectStore": {
+            "kind": "shared"
+          }
         }
       },
       "caching": {
