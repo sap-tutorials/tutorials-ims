@@ -91,7 +91,7 @@ git commit -m "refactor(img-cdn): move shared fetch/retry to srv/lib for ingest 
 - Test: `test/unit/tutorial-images-model.test.js`
 
 **Interfaces:**
-- Produces: entity `sap.tutorials.TutorialImages` with `key ID: UUID`, `sourceUrl: String(1024) @assert.unique.sourceUrl`, `tutorial: Association to Tutorials`, `slug: String`, `channel: String`, `contentHash: String`, `mimeType: String`, `content: Composition of many Attachments`. (Key is a UUID, NOT the URL — a 1024-char string PK is poor for HANA indexing and the attachments parent conventionally keys on `ID`; `sourceUrl` is the unique business key looked up by the store.)
+- Produces: entity `com.sap.developers.ims.TutorialImages` with `key ID: UUID`, `sourceUrl: String(1024) @assert.unique.sourceUrl`, `tutorial: Association to Tutorials`, `slug: String`, `channel: String`, `contentHash: String`, `mimeType: String`, `content: Composition of many Attachments`. (Key is a UUID, NOT the URL — a 1024-char string PK is poor for HANA indexing and the attachments parent conventionally keys on `ID`; `sourceUrl` is the unique business key looked up by the store.)
 
 - [ ] **Step 1: Write the failing test** (model compiles and exposes the fields + composition)
 
@@ -101,7 +101,7 @@ import cds from '@sap/cds'
 describe('TutorialImages model', () => {
   it('defines TutorialImages with an Attachments composition, UUID key, unique sourceUrl', async () => {
     const m = await cds.load(['db/tutorial-images.cds', 'db/schema.cds'])
-    const e = m.definitions['sap.tutorials.TutorialImages']
+    const e = m.definitions['com.sap.developers.ims.TutorialImages']
     expect(e).toBeTruthy()
     expect(e.elements.ID.key).toBe(true)
     expect(e.elements.sourceUrl).toBeTruthy()          // unique business key
@@ -121,9 +121,9 @@ Expected: FAIL (definition not found)
 
 ```cds
 using { Attachments } from '@cap-js/attachments';
-using { sap.tutorials.Tutorials } from './schema';
+using { com.sap.developers.ims.Tutorials } from './schema';
 
-namespace sap.tutorials;
+namespace com.sap.developers.ims;
 
 entity TutorialImages {
   key ID        : UUID;
@@ -208,11 +208,11 @@ const { Readable } = require('node:stream')
 // Metadata on TutorialImages; original bytes in its Attachments composition
 // (HANA for Plan 1, Object Store in Plan 2 — transparent here).
 function linkedContent() {
-  return cds.linked(cds.model).definitions['sap.tutorials.TutorialImages.content']
+  return cds.linked(cds.model).definitions['com.sap.developers.ims.TutorialImages.content']
 }
 
 async function head(sourceUrl) {
-  const { TutorialImages } = cds.entities('sap.tutorials')
+  const { TutorialImages } = cds.entities('com.sap.developers.ims')
   const row = await SELECT.one.from(TutorialImages)
     .columns('ID', 'contentHash', 'mimeType').where({ sourceUrl })
   return row ? { exists: true, ID: row.ID, contentHash: row.contentHash, mimeType: row.mimeType }
@@ -220,7 +220,7 @@ async function head(sourceUrl) {
 }
 
 async function put(sourceUrl, { buffer, mimeType, contentHash, slug, channel }) {
-  const { TutorialImages } = cds.entities('sap.tutorials')
+  const { TutorialImages } = cds.entities('com.sap.developers.ims')
   await remove(sourceUrl)                          // R5: delete-then-insert avoids the
                                                    // NonUpdatableProperties:[content] 409 on overwrite
   const parentID = cds.utils.uuid()
@@ -245,7 +245,7 @@ async function getStream(sourceUrl) {
 }
 
 async function remove(sourceUrl) {
-  const { TutorialImages } = cds.entities('sap.tutorials')
+  const { TutorialImages } = cds.entities('com.sap.developers.ims')
   await DELETE.from(TutorialImages).where({ sourceUrl }) // composition cascades content delete
 }
 
