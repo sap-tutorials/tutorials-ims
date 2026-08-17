@@ -52,7 +52,9 @@ describe('Issue #89: tutorial progress denominator', () => {
     }
 
     const { Users, TaskRecords } = cds.entities(NS);
-    const user = await SELECT.one.from(Users).where({ uuid: 'tom89' });
+    // Look up the auto-provisioned user by sapId (the app's key — resolve-db-user.js),
+    // NOT uuid: #1614 sets uuid to a random cds.utils.uuid() on provision.
+    const user = await SELECT.one.from(Users).where({ sapId: 'tom89' });
     expect(user).toBeDefined();
     const tutRec = await SELECT.one.from(TaskRecords).where({
       user_ID: user.ID,
