@@ -228,7 +228,8 @@
       "https://developers.sap.com/",
       "https://developers-qa.sap.com/**",
       "http://localhost:*/callback",
-      "http://localhost:*/oauth/callback"
+      "http://localhost:*/oauth/callback",
+      "http://localhost:*/mcp-callback"
     ]
   }
 }
