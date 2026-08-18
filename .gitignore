@@ -89,6 +89,9 @@ cookies.txt
 # Page-fallback snapshots (written at build time by scripts/build-page-fallback.cjs)
 srv/page-fallback/*
 !srv/page-fallback/.gitkeep
+# What's New digest snapshot (written at build time by scripts/build-whats-new-snapshot.cjs)
+srv/whats-new-data/*
+!srv/whats-new-data/.gitkeep
 mta_archives/
 saptutorialsadminshell-*/
 app/admin-shell/deploy/

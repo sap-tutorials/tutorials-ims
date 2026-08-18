@@ -220,6 +220,37 @@ const GET_DEVTOBERFEST_INFO_TOOL = {
   }
 };
 
+const GET_WHATS_NEW_TOOL = {
+  type: 'function',
+  function: {
+    name: 'getWhatsNew',
+    description: [
+      "Fetch the platform's \"What's New\" digest — recently shipped features,",
+      'fixes, docs, and maintenance updates to the SAP Developer tutorial platform',
+      'itself (NOT tutorial content). Call this whenever the user asks what is new,',
+      "what changed/shipped recently, what's on the What's New page, or for a",
+      'changelog / release notes. Summarize the returned entries grouped by',
+      'category, newest first, and link the user to the What\'s New page at the',
+      'returned pageUrl. Do not invent entries; if entries is empty, say so and',
+      'point to the page.',
+    ].join('\n'),
+    parameters: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'integer',
+          description: 'Max entries to return (1-50). Default 25 (roughly the last few weeks).',
+        },
+        category: {
+          type: 'string',
+          enum: ['Feature', 'Fix', 'Docs', 'Maintenance'],
+          description: 'Optional filter to a single update category. Omit for all categories.',
+        },
+      },
+    },
+  },
+};
+
 const FIND_RELATED_CONTENT_TOOL = {
   type: 'function',
   function: {
@@ -306,6 +337,13 @@ export function buildToolRegistry({ settings, pageContext, isAdmin = false } = {
     // Learner-side only — admins are running the platform, not consuming
     // tutorials, so progress lookup is irrelevant in the admin persona.
     tools.push(GET_USER_PROGRESS_TOOL);
+    // What's New digest (#1859) — learner-side, so Joule answers "what's new on
+    // the platform?" instead of the tutorials-only refusal. Default ON (cheap:
+    // reads a baked JSON snapshot, no AI quota, no DB). Paired with the
+    // whatsNewLayer prompt block in chat-context.js (same flag gate).
+    if (settings?.whatsNewEnabled) {
+      tools.push(GET_WHATS_NEW_TOOL);
+    }
   }
   if (settings?.ragEnabled) {
     tools.push(GET_RELEVANT_STEPS_TOOL);
@@ -640,6 +678,16 @@ export async function dispatchTool(name, args, user) {
     }
   }
 
+  if (name === 'getWhatsNew') {
+    try {
+      const { getWhatsNew } = await import('./whats-new-joule-tool.js');
+      return await getWhatsNew(args, user);
+    } catch (err) {
+      LOG.warn('getWhatsNew dispatch failed', err.message);
+      return { error: 'whats_new_unavailable' };
+    }
+  }
+
   if (name === 'checkCode') {
     try {
       const { dispatchCheckCode } = await import('./code-check-tool.js');
@@ -917,4 +965,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, EXPAND_SEARCH_CONCEPTS_TOOL, FIND_RELATED_CONTENT_TOOL, FIND_COMMUNITY_PEERS_TOOL, DESCRIBE_COMMUNITY_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_WHATS_NEW_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, EXPAND_SEARCH_CONCEPTS_TOOL, FIND_RELATED_CONTENT_TOOL, FIND_COMMUNITY_PEERS_TOOL, DESCRIBE_COMMUNITY_TOOL, toolsForContext };

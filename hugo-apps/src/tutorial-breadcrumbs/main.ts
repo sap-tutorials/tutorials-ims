@@ -42,9 +42,7 @@ function refreshBreadcrumbRole(role: 'mission' | 'group', title: string | null, 
 
 // Builds a separator + parent-crumb <li> pair for the given role.
 function makeCrumb(role: 'mission' | 'group', title: string, slug: string): [HTMLLIElement, HTMLLIElement] {
-  const sep = document.createElement('li');
-  sep.className = 'fd-breadcrumb__separator';
-  sep.setAttribute('aria-hidden', 'true');
+  const sep = makeSeparator();
   const li = document.createElement('li');
   li.className = 'fd-breadcrumb__item';
   li.setAttribute('data-bc-role', role);
@@ -57,23 +55,33 @@ function makeCrumb(role: 'mission' | 'group', title: string, slug: string): [HTM
   return [sep, li];
 }
 
+function makeSeparator(): HTMLLIElement {
+  const sep = document.createElement('li');
+  sep.className = 'fd-breadcrumb__separator';
+  sep.setAttribute('aria-hidden', 'true');
+  return sep;
+}
+
 // Fully reshapes the mission + group parent crumbs to `ctx`: removes the existing
-// parent crumbs (and their leading separators), then rebuilds mission-then-group
-// (only those present in `ctx`) immediately before the current-page item. This
-// switches a mission-shaped breadcrumb to a group-shaped one and vice versa.
-// Returns false (so the caller can fall back to update-in-place) if the expected
-// structure isn't found.
+// parent crumbs AND every separator between "Tutorial Navigator" and the current
+// item, then rebuilds mission-then-group (only those present in `ctx`) immediately
+// before the current-page item, with exactly one separator preceding each crumb
+// and one preceding the current item. This switches a mission-shaped breadcrumb to
+// a group-shaped one and vice versa. Returns false (so the caller can fall back to
+// update-in-place) if the expected structure isn't found.
+//
+// We clear ALL separators rather than just each crumb's leading one: the previous
+// approach stranded the separator that had preceded `current`, leaving a doubled
+// separator after "Navigator" and — worse — no separator between the last parent
+// crumb and the current title (they rendered run-together).
 function reshapeParentCrumbs(ctx: BreadcrumbContext): boolean {
   const ul = document.querySelector('nav.tutorial-breadcrumbs ul.fd-breadcrumb') as HTMLElement | null;
   if (!ul) return false;
   const current = ul.querySelector('.fd-breadcrumb__item--current');
   if (!current) return false;
 
-  for (const li of Array.from(ul.querySelectorAll('li[data-bc-role]'))) {
-    const prev = li.previousElementSibling;
-    if (prev && prev.classList.contains('fd-breadcrumb__separator')) prev.remove();
-    li.remove();
-  }
+  for (const li of Array.from(ul.querySelectorAll('li[data-bc-role]'))) li.remove();
+  for (const sep of Array.from(ul.querySelectorAll('li.fd-breadcrumb__separator'))) sep.remove();
 
   const insert = (role: 'mission' | 'group', title: string | null | undefined, slug: string | null | undefined) => {
     if (!title || !slug) return;
@@ -83,6 +91,8 @@ function reshapeParentCrumbs(ctx: BreadcrumbContext): boolean {
   };
   insert('mission', ctx.missionTitle, ctx.missionSlug);
   insert('group', ctx.groupTitle, ctx.groupSlug);
+  // Separator between the last crumb (or "Navigator", if no parents) and current.
+  ul.insertBefore(makeSeparator(), current);
   return true;
 }
 

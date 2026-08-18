@@ -182,8 +182,10 @@ export default class DeveloperService extends cds.ApplicationService {
           // UUID at its db layer so unit tests pass, but HANA leaves ID NULL →
           // "cannot insert NULL ... ID" (code 287) for any never-migrated user
           // (issue #1614). cds.utils.uuid() makes the INSERT layer-independent.
+          // uuid is also String(36) — req.user.id is the user's email under
+          // XSUAA tokens and overflows that column for long addresses (#1614).
           ID: cds.utils.uuid(),
-          uuid: user.id,
+          uuid: cds.utils.uuid(),
           sapId,
           legacyId: await getNextLegacyId('Users', db),
           email: user.attr?.email || '',
@@ -862,7 +864,7 @@ export default class DeveloperService extends cds.ApplicationService {
       if (!dbUser) {
         const newUser = {
           ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT, see #1614 note above
-          uuid: req.user.id,
+          uuid: cds.utils.uuid(),  // String(36): req.user.id is email under XSUAA → overflows on long addresses (#1614)
           sapId,
           legacyId: await getNextLegacyId('Users', db),
           email: req.user.attr?.email || '',
@@ -906,7 +908,7 @@ export default class DeveloperService extends cds.ApplicationService {
       if (!dbUser) {
         const newUser = {
           ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT, see #1614 note above
-          uuid: req.user.id,
+          uuid: cds.utils.uuid(),  // String(36): req.user.id is email under XSUAA → overflows on long addresses (#1614)
           sapId,
           legacyId: await getNextLegacyId('Users', db),
           email: req.user.attr?.email || '',
@@ -962,7 +964,7 @@ export default class DeveloperService extends cds.ApplicationService {
         if (!dbUser) {
           const newUser = {
             ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT, see #1614 note above
-            uuid: req.user.id,
+            uuid: cds.utils.uuid(),  // String(36): req.user.id is email under XSUAA → overflows on long addresses (#1614)
             sapId,
             legacyId: await getNextLegacyId('Users', db),
             email: req.user.attr?.email || '',

@@ -8,19 +8,98 @@
    card.css is loaded by the browse island via vite-plugin-css-injected-by-js
    (CSS injected into <style> tags when the island JS executes). That means
    .nav-card rules from card.css don't apply until JS runs, AFTER first paint.
-   Without these rules, SSR'd cards render as unsized block elements; when the
-   island JS fires and injects card.css they grow to min-height:200px → CLS.
+   Without these rules, SSR'd cards render at one height and reflow when the
+   island JS fires and injects card.css → CLS.
 
-   Only the geometry properties that establish the card's footprint are
-   duplicated here. Visual polish (colours, shadows, transitions) stays in
-   card.css — it's fine for those to load via JS since they don't affect layout.
-   When card.css later sets the same values, the cascade is a no-op.
+   #1842 duplicated ONLY `min-height:200px` + flex here. That floored short
+   cards (0.503→0.187) but left every card taller than the floor to grow or
+   shrink on injection — because card.css ALSO sets `padding:1.5rem`, the desc
+   `-webkit-line-clamp:3`, and text metrics/margins/borders, none of which were
+   mirrored. The residual 0.187 (#1854) was those late-arriving declarations,
+   not the createApp DOM replacement (card markup is already byte-parity — see
+   card-template-parity.test.ts; even createSSRApp wouldn't help because the
+   CSS still injects after paint).
+
+   Fix (#1854): mirror EVERY layout-affecting declaration from card.css here so
+   SSR and post-mount card heights are byte-equal and the fresh render is
+   height-neutral. Cosmetics (colour, background, box-shadow, border-radius,
+   transition) stay in card.css — they don't affect layout, and when card.css
+   loads it re-sets these same layout values (cascade no-op) plus the polish.
+
+   DRIFT GUARD: the region between the @card-geometry-guard markers below is
+   asserted to stay in sync with card.css by
+   hugo-apps/src/browse/__tests__/card-geometry-parity.test.ts. If you change a
+   layout property in card.css, update the mirror here or the test fails.
 */
+/* @card-geometry-guard:start */
 .nav-card {
   display: flex;
   flex-direction: column;
+  padding: 1.5rem;
   min-height: 200px;
+  position: relative;
 }
+.nav-card__type {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.nav-card__title {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0 0 0.5rem;
+}
+.nav-card__desc {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  margin: 0;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.nav-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  flex-wrap: wrap;
+}
+.nav-card__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.nav-card__tag {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.card-category-chip {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--sapAccentColor5, #507090);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+/* @card-geometry-guard:end */
 
 /* ── Desktop layout ──────────────────────────────────────────── */
 

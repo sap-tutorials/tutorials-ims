@@ -1,7 +1,7 @@
 import { sliceStep } from './tutorial-step-slicer.js';
 import cds from '@sap/cds';
 
-const PERSONA = `You are Joule, an AI assistant embedded in the SAP Tutorial Platform. You ONLY answer questions about SAP tutorials and directly related topics (SAP technologies, the tutorial content, how to complete a step). If asked about anything else, politely redirect: "I can only help with SAP tutorials. Want me to find one about <topic>?". Never invent tutorial slugs, step numbers, or URLs. If you don't know, call the searchTutorials tool or say so.`;
+const PERSONA = `You are Joule, an AI assistant embedded in the SAP Tutorial Platform. You answer questions about SAP tutorials and directly related topics (SAP technologies, the tutorial content, how to complete a step), and about what's new or recently changed on this tutorial platform. If asked about something unrelated to SAP or this platform, politely redirect: "I can only help with SAP tutorials. Want me to find one about <topic>?". Never invent tutorial slugs, step numbers, URLs, or platform updates. If you don't know, call the searchTutorials tool or say so.`;
 
 const ADMIN_PERSONA = `You are Joule, an AI assistant embedded in the SAP
 Tutorial Platform Admin Console. Your audience is tutorial AUTHORS and
@@ -39,6 +39,12 @@ Never include credentials, API keys, or production URLs in responses.`;
 const RAG_GUIDANCE = `When the getRelevantSteps tool returns step excerpts, treat them as authoritative ground truth for the question. Quote them naturally and cite each step inline using the form [tutorial-slug #stepNumber]. If no relevant steps come back (empty hits or all below the threshold), say so explicitly rather than guessing — invite the user to refine the question or use the searchTutorials tool to discover candidates.`;
 
 const BRANCHING_GUIDANCE = "When the user asks about branch choices, recommendations, or 'why this branch', call `getBranchRecommendation` rather than guessing — it returns the engine's recommendation with reason. Cite the recommended branch's label (not its key).";
+
+// What's New guidance (#1859). Appended on the learner path only when
+// ChatSettings.whatsNewEnabled is true — the flag also gates the getWhatsNew
+// tool in buildToolRegistry, so the two stay in lockstep (guidance never
+// dangles pointing at an unregistered tool).
+const WHATS_NEW_GUIDANCE = `When the user asks what's new, what changed or shipped recently, for a changelog / release notes, or to "show me the What's New page", call the getWhatsNew tool and answer from what it returns — this IS in scope, do NOT refuse or redirect. Summarize the entries newest-first, grouped by category (Feature, Fix, Docs, Maintenance), and link the user to the What's New page at the returned pageUrl. If the tool returns no entries, say updates aren't available right now and point them to the page. Never invent updates that the tool did not return.`;
 
 const PROGRESS_GUIDANCE = `The signed-in user has tutorial-progress state available via the getUserProgress tool. Call it whenever:
 - the user asks to resume, "where did I leave off", "continue", "what was I working on"
@@ -433,6 +439,11 @@ export async function buildSystemPrompt(pageContext, user, settings = null) {
   const layers = [persona];
   if (!isDevtoberfest && !isAdvocates && !isPuzzle) layers.push(RAG_GUIDANCE);
   if (!isAdmin && !isDevtoberfest && !isAdvocates && !isPuzzle) layers.push(PROGRESS_GUIDANCE);
+  // What's New guidance (#1859): learner path only, gated on whatsNewEnabled —
+  // matches the getWhatsNew tool gate in buildToolRegistry.
+  if (!isAdmin && !isDevtoberfest && !isAdvocates && !isPuzzle && settings?.whatsNewEnabled) {
+    layers.push(WHATS_NEW_GUIDANCE);
+  }
   if (!isAdmin && !isDevtoberfest && !isAdvocates && !isPuzzle) {
     const catalog = await communityCatalogLayer(settings);
     if (catalog) layers.push(catalog);

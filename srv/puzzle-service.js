@@ -88,7 +88,8 @@ export default class PuzzleService extends cds.ApplicationService {
       let dbUser = await SELECT.one.from(Users).where({ sapId });
       if (!dbUser) {
         await INSERT.into(Users).entries({
-          uuid: user.id,
+          ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT (#1614)
+          uuid: cds.utils.uuid(),  // String(36): user.id is email under XSUAA → overflows on long addresses (#1614)
           sapId,
           legacyId: await getNextLegacyId('Users', db),
           email: user.attr?.email || '',

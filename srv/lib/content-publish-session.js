@@ -122,10 +122,16 @@ export function createSessionHelpers({ namespace }) {
     const entries = [];
     let totalSizeBytes = 0;
     const batchHasher = createHash('sha256');
+    // Collect decoded HTML per slug for publish-time image warming (see
+    // setImmediate below). Captured here because gunzipSync runs anyway;
+    // no extra decompression cost.
+    const slugHtmlMap = new Map();
 
     for (const slug of slugs) {
       const compressed = Buffer.from(files[slug], 'base64');
       const decompressed = gunzipSync(compressed);
+      // Capture HTML for image warming (fire-and-forget after INSERTs).
+      slugHtmlMap.set(slug, decompressed.toString('utf8'));
       const contentHash = createHash('sha256').update(decompressed).digest('hex');
       batchHasher.update(slug).update(contentHash);
 
@@ -232,6 +238,26 @@ export function createSessionHelpers({ namespace }) {
       await UPDATE(ContentManifest).where({ sessionId }).set(setClause);
     } catch (err) {
       LOG.warn(`[content/publish/append] timing update failed (non-fatal): ${err.message}`);
+    }
+
+    // Fire-and-forget: warm the image store for every image referenced in this
+    // append batch. Uses setImmediate (same pattern as the post-publish
+    // embeddings trigger in commitSession) so the append response returns
+    // immediately and warming runs in the background. Failures are caught
+    // inside warmImages — a warm failure NEVER fails the publish.
+    if (slugHtmlMap.size > 0) {
+      setImmediate(async () => {
+        try {
+          const { extractImgCdnUrls } = await import('./image-warm-utils.js');
+          const { warmImagesLive } = await import('./image-source-handler.js');
+          for (const [slug, html] of slugHtmlMap) {
+            const urls = extractImgCdnUrls(html);
+            if (urls.length > 0) await warmImagesLive(urls, { slug });
+          }
+        } catch (err) {
+          LOG.warn(`[image-warm] post-publish warm failed (non-fatal): ${err.message}`);
+        }
+      });
     }
 
     return {
