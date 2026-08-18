@@ -62,6 +62,18 @@ describe('POST /content/image (bytes-in ingest)', () => {
     expect(second.data.action).toBe('unchanged')
   })
 
+  it('force=1 re-stores identical bytes (bypasses dedup, heals orphans)', async () => {
+    const url = 'https://raw.githubusercontent.com/o/r/main/ingest-force.png'
+    const bytes = Buffer.from([5, 5, 5])
+    // Native fetch to send raw bytes (axios re-encodes a Buffer body).
+    const first = await fetch(`${project.url}${base}?u=${encodeURIComponent(url)}`, { method: 'POST', headers: authHeaders, body: bytes })
+    expect((await first.json()).action).toBe('stored')
+    // Without force this would be 'unchanged'; with force it re-stores.
+    const forced = await fetch(`${project.url}${base}?u=${encodeURIComponent(url)}&force=1`, { method: 'POST', headers: authHeaders, body: bytes })
+    expect(forced.status).toBe(200)
+    expect((await forced.json()).action).toBe('stored')
+  })
+
   it('rejects an unauthenticated post', async () => {
     const url = 'https://raw.githubusercontent.com/o/r/main/ingest-noauth.png'
     await expect(
