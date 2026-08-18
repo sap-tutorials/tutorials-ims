@@ -249,6 +249,14 @@
           }
         }
       },
+      "malwareScanner": {
+        "[hybrid]": {
+          "kind": "malwareScanner-mocked"
+        },
+        "[production]": {
+          "kind": "malwareScanner-mocked"
+        }
+      },
       "caching": {
         "impl": "cds-caching",
         "namespace": "kg",
