@@ -4,6 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { stripPrecompiledPluginRoots } from './lib/strip-precompiled-plugin-roots.js';
+import { resolveSecret } from './lib/secret-resolver.js';
 import { bustPublishedConceptsCache } from './lib/kg-published-concepts-cache.js';
 
 import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
@@ -562,7 +563,12 @@ cds.on('bootstrap', (app) => {
   // validates action arguments and rejects unknown properties, so _clientIp
   // cannot ride on the action payload itself.
   app.post('/feedback/submit', express.json({ limit: '8kb' }), async (req, res) => {
-    if (!process.env.SUBMISSION_SALT_SECRET) {
+    // Resolve credstore-first (env fallback), NOT process.env directly — the
+    // hashing path (srv/lib/feedback-salt.js) reads the same alias via
+    // resolveSecret(), so admin-UI rotations at /admin-ui/#secrets-display take
+    // effect here without a `cf set-env … && cf restart`. Reading process.env
+    // here defeated that: a credstore-only secret still 503'd the whole form (#1889).
+    if (!(await resolveSecret('SUBMISSION_SALT_SECRET', { logTag: '[feedback-submit]' }))) {
       return res.status(503).json({ error: 'feedback service unavailable' });
     }
     // X-Forwarded-For is `<original-client>, <proxy1>, <proxy2>` per RFC 7239:

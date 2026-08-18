@@ -114,6 +114,21 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'author-page and concept-page entries: the QA channel serves in-flight tutorials from ' +
     '-Contribution repos; advocate pages are out of its scope, and srv-qa wires no ' +
     'advocateServeHandler / advocate publish flow.',
+  'GET /content/image-source':
+    'Persist-tutorial-images (#1868/#1869/#1870) — streams stored image originals so the ' +
+    'approuter can proxy raw-GitHub image URLs. DARK-LAUNCHED: no approuter route points at ' +
+    'this endpoint on EITHER channel yet (served HTML still emits raw.githubusercontent.com ' +
+    'URLs via scripts/parsers/images.ts), and the QA approuter wires no image-proxy route. ' +
+    'Mirroring now would pull image-store/image-ingest deps into the srv-qa cp list for an ' +
+    'unreachable surface. Re-evaluate QA parity when the image proxy goes live and gains an ' +
+    'approuter route.',
+  'POST /content/image':
+    'Persist-tutorial-images bytes-in ingest (#1884) — the backfill script (scripts/' +
+    'backfill-images.ts) and CI POST raw image bytes here so the srv never fetches GitHub ' +
+    'itself. CI-only prod content maintenance, same rationale as POST /content/orphan-purge: ' +
+    'not an author-preview endpoint. The QA publish flow (publish-content.ts --channel qa) ' +
+    'never POSTs images, and srv-qa GET image-source self-heals via ingestImage directly ' +
+    'without this route. Re-evaluate if QA gains an image backfill flow.',
 };
 
 /**

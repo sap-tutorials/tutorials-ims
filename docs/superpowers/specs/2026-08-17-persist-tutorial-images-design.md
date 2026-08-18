@@ -74,6 +74,22 @@ SERVE
 - **Fail-open:** if the CAP endpoint / store is unavailable, the proxy falls back
   to PR #1868's direct-GitHub fetch-with-retry. The durable path is an upgrade,
   never a new single point of failure. Gated by a per-env feature flag.
+- **Heal-on-request (#1882):** the fetch-based self-heal drawn in the diagram
+  above (`store miss → ingest()` inside CAP) is **dead in practice** — the
+  tutorials-srv CF egress IP is anon-404'd by GitHub's raw CDN and no runtime
+  token is provisioned, so the srv can never fetch the bytes itself. The heal
+  therefore runs **approuter-side**: on a store-miss fail-open the approuter
+  already holds the original bytes it just fetched from GitHub (its egress is not
+  flagged → anon 200), and it **fire-and-forgets** them back to the srv's
+  bytes-in `POST /content/image` (`CONTENT_API_KEY`, credstore) so the store
+  self-populates on first view. Non-blocking (never awaited, never throws — the
+  image response is already sent), deduped by a small in-memory TTL map keyed on
+  the source url (one heal attempt per url per window, success or fail), and
+  self-disabling when `IMG_CDN_SOURCE=github`, `IMG_CDN_HEAL=0`, or the API key
+  can't be resolved. Backfill (publish-step, `scripts/backfill-images.ts`) still
+  covers the bulk; this closes the gap between full backfills. Impl:
+  `approuter/lib/img-cdn-heal.js`, wired in `approuter/server.js`
+  `loadOriginalBytes`.
 
 **Rejected alternative (S2a):** approuter routes `/img-cdn` to CAP and CAP does
 resolve + resize + stream (moves `sharp` into `srv`). Cleaner single-owner and

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
-import { mergeCompletion, youtubeThumb, safeHref } from '../devtoberfest-schedule-shared/completion';
+import { mergeCompletion, youtubeThumb, safeHref, sessionMatchesQuery } from '../devtoberfest-schedule-shared/completion';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
@@ -16,8 +16,10 @@ const sessions = ref<ScheduleRow[]>([]);
 const earnedPoints = ref(0);
 const maxPoints = ref(0);
 const isAuthenticated = ref(false);
+const joined = ref(false);
 const selectedRow = ref<ScheduleRow | null>(null);
 
+const filterQuery = ref('');
 const filterWeek = ref('');
 const filterTrack = ref('');
 
@@ -33,6 +35,7 @@ async function loadData(edition?: string) {
     editionId.value = edition ?? feedData.activeEditionId;
     isAuthenticated.value = myData.authenticated;
     const merged = mergeCompletion(feedData, myData);
+    joined.value = merged.joined;
     // Sessions grid: only session rows
     sessions.value = merged.rows.filter((r) => r.kind === 'session');
     earnedPoints.value = merged.earnedPoints;
@@ -67,11 +70,13 @@ const filtered = computed(() => {
   return sessions.value.filter((r) => {
     if (filterWeek.value && r.week !== filterWeek.value) return false;
     if (filterTrack.value && (r as any).trackName !== filterTrack.value) return false;
+    if (!sessionMatchesQuery(r, filterQuery.value)) return false;
     return true;
   });
 });
 
 function clearFilters() {
+  filterQuery.value = '';
   filterWeek.value = '';
   filterTrack.value = '';
 }
@@ -105,6 +110,7 @@ onMounted(() => loadData());
       :max-points="maxPoints"
       :complete-count="completeCount"
       :is-authenticated="isAuthenticated"
+      :joined="joined"
     />
 
     <!-- loading -->
@@ -120,6 +126,15 @@ onMounted(() => loadData());
     <template v-else>
       <!-- filters -->
       <div class="sg-toolbar" role="search">
+        <label class="sg-field sg-field--search">
+          <span>Search</span>
+          <input
+            type="search"
+            v-model="filterQuery"
+            placeholder="Title, abstract, speaker, bio…"
+            aria-label="Search sessions by keyword"
+          />
+        </label>
         <label class="sg-field">
           <span>Week</span>
           <select v-model="filterWeek">
@@ -135,7 +150,7 @@ onMounted(() => loadData());
           </select>
         </label>
         <button
-          v-if="filterWeek || filterTrack"
+          v-if="filterQuery || filterWeek || filterTrack"
           class="sg-btn sg-btn-ghost"
           @click="clearFilters"
         >Clear</button>
@@ -290,6 +305,24 @@ onMounted(() => loadData());
   background: var(--sapField_Background, #fff);
   color: inherit;
   font: inherit;
+}
+
+.sg-field input[type="search"] {
+  min-width: 16rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  border-radius: var(--sapField_BorderCornerRadius, 0.25rem);
+  background: var(--sapField_Background, #fff);
+  color: inherit;
+  font: inherit;
+}
+
+.sg-field--search {
+  flex: 1 1 16rem;
+}
+
+.sg-field--search input[type="search"] {
+  width: 100%;
 }
 
 .sg-btn {

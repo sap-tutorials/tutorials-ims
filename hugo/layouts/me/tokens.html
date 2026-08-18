@@ -1,0 +1,13 @@
+{{ define "main" }}
+{{/* /me/tokens — self-service Personal Access Token management for the hosted
+     MCP server (issue #1897). Hosts the `tokens` Vue island, which talks to the
+     authenticated-user PatService at /pats/*. QA preview omits per-user data,
+     mirroring /me (hugo/layouts/me/list.html). */}}
+{{ if not site.Params.qa }}
+<div class="me-page-wrap">
+  <div id="api-tokens"></div>
+</div>
+
+<script type="module" src="{{ partial "island-src.html" "tokens" }}"></script>
+{{ end }}
+{{ end }}

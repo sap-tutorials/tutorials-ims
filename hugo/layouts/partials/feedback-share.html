@@ -35,7 +35,12 @@ window.openTutorialFeedbackPopup = function(slug) {
   }
   const s = document.createElement('script');
   s.type = 'module';
-  s.src = {{ partial "island-src.html" "tutorial-feedback" | jsonify }};
+  // island-src.html returns the bare URL string; place it INSIDE quotes (its
+  // documented contract). Do NOT pipe through `| jsonify` — in a <script> JS
+  // context Hugo re-escapes the already-quoted jsonify output, embedding literal
+  // quote chars into the value (src='"/js/…"'), which 404s the island and leaves
+  // an empty feedback popup (#1890).
+  s.src = "{{ partial "island-src.html" "tutorial-feedback" }}";
   s.onload = () => window.mountTutorialFeedback(slug, 'tutorial-feedback-popup');
   document.head.appendChild(s);
 };
