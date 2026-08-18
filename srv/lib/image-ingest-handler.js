@@ -59,11 +59,20 @@ export async function imageIngestHandler(req, res) {
     : channelFor(u)
   const mimeType = req.get('content-type') || 'application/octet-stream'
   const contentHash = crypto.createHash('sha256').update(buffer).digest('hex')
+  // force=1 bypasses the hash dedup and always re-stores. Needed to heal
+  // "orphaned" rows — metadata + matching hash present but content missing/
+  // unretrievable (e.g. from an earlier put that inserted metadata then threw
+  // before the object persisted). Without force those never re-store because
+  // the unchanged short-circuit trusts the hash match. put() removes-then-
+  // inserts, so a forced re-store cleans the orphan.
+  const force = req.query.force === '1' || req.query.force === 'true'
 
   try {
-    const existing = await imageStore.head(u)
-    if (existing.exists && existing.contentHash === contentHash) {
-      return res.status(200).json({ action: 'unchanged', contentHash })
+    if (!force) {
+      const existing = await imageStore.head(u)
+      if (existing.exists && existing.contentHash === contentHash) {
+        return res.status(200).json({ action: 'unchanged', contentHash })
+      }
     }
     await imageStore.put(u, { buffer, mimeType, contentHash, slug, channel })
     return res.status(200).json({ action: 'stored', contentHash })

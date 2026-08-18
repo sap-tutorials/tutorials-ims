@@ -23,7 +23,7 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { extractImgCdnUrls, channelFor } from '../srv/lib/image-warm-utils.js';
 
-interface Args { limit: number; concurrency: number; dryRun: boolean; }
+interface Args { limit: number; concurrency: number; dryRun: boolean; force: boolean; }
 
 function parseArgs(argv: string[]): Args {
   const get = (flag: string): string | undefined => {
@@ -34,6 +34,7 @@ function parseArgs(argv: string[]): Args {
     limit: Number(get('--limit')) || 0,
     concurrency: Number(get('--concurrency')) || 12,
     dryRun: argv.includes('--dry-run'),
+    force: argv.includes('--force'),
   };
 }
 
@@ -74,8 +75,8 @@ async function fetchImage(u: string, token: string | undefined): Promise<{ ok: b
 }
 
 /** POST bytes to the srv ingest endpoint. Returns the server's action. */
-async function pushImage(baseUrl: string, apiKey: string, u: string, slug: string, buffer: Buffer, mimeType: string): Promise<{ ok: boolean; status: number; action?: string }> {
-  const url = `${baseUrl}/content/image?u=${encodeURIComponent(u)}&slug=${encodeURIComponent(slug)}`;
+async function pushImage(baseUrl: string, apiKey: string, u: string, slug: string, buffer: Buffer, mimeType: string, force: boolean): Promise<{ ok: boolean; status: number; action?: string }> {
+  const url = `${baseUrl}/content/image?u=${encodeURIComponent(u)}&slug=${encodeURIComponent(slug)}${force ? '&force=1' : ''}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': mimeType },
@@ -123,7 +124,7 @@ async function main() {
         if (!got.ok) {
           stats.fetchFailed++;
         } else {
-          const pushed = await pushImage(baseUrl, apiKey, u, slug, got.buffer!, got.mimeType!);
+          const pushed = await pushImage(baseUrl, apiKey, u, slug, got.buffer!, got.mimeType!, args.force);
           if (!pushed.ok) stats.pushFailed++;
           else if (pushed.action === 'unchanged') stats.unchanged++;
           else stats.stored++;
