@@ -51,10 +51,14 @@ module.exports = {
       p.includes('hugo-apps/src/tutorial-reset/') ||
       p.includes('hugo-apps/src/tutorial-prefs/'),
 
-    // .Type "me" page (/me/): me layout + me Vue islands
+    // .Type "me" page (/me/): me layout + me Vue islands.
+    // The /me/tokens PAT page (#1897) is part of the "me" area but its island
+    // lives in hugo-apps/src/tokens/; map it here so ui5-me (which registers
+    // Text.js) covers its <ui5-text> usage.
     'ui5-me': (p) =>
       p.includes('/layouts/me/') ||
-      p.includes('hugo-apps/src/me/'),
+      p.includes('hugo-apps/src/me/') ||
+      p.includes('hugo-apps/src/tokens/'),
 
     // Error templates (403/404/502) + browse list (.Type "browse"):
     // also the browse Vue island
