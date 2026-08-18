@@ -39,6 +39,27 @@ export function taskLinkLabel(row: { taskType?: string | null } | null): string 
   }
 }
 
+/**
+ * Case-insensitive keyword match over a session's searchable text: title,
+ * abstract, and each speaker's name, role, company and bio. An empty/blank
+ * query matches everything (so callers can pass it unconditionally). Fields
+ * are joined with a newline so a query token never bridges two adjacent fields.
+ */
+export function sessionMatchesQuery(row: ScheduleRow, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  const s = row as any;
+  const parts: string[] = [row.title || ''];
+  if (s.abstract) parts.push(s.abstract);
+  for (const sp of (s.speakers || [])) {
+    if (sp?.name) parts.push(sp.name);
+    if (sp?.role) parts.push(sp.role);
+    if (sp?.company) parts.push(sp.company);
+    if (sp?.bio) parts.push(sp.bio);
+  }
+  return parts.join('\n').toLowerCase().includes(needle);
+}
+
 export function mergeCompletion(feed: Feed, my: MyCompletions) {
   const completedActivityIds = new Set<string>(my?.authenticated ? my.completedActivityIds || [] : []);
   const completedSlugs = new Set<string>((my?.authenticated ? my.completedSlugs || [] : []).map((s) => s.toLowerCase()));

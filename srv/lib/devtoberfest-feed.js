@@ -36,7 +36,7 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
     .map((link) => {
       const sp = speakerById.get(link.SPEAKER_ID) || {};
       const name = `${sp.FIRSTNAME || ''} ${sp.LASTNAME || ''}`.trim();
-      return { id: link.SPEAKER_ID, name, role: sp.ROLE || '', company: sp.COMPANY || '', photoUrl: `/api/devtoberfest/speaker/${link.SPEAKER_ID}/photo` };
+      return { id: link.SPEAKER_ID, name, role: sp.ROLE || '', company: sp.COMPANY || '', bio: sp.BIO || '', photoUrl: `/api/devtoberfest/speaker/${link.SPEAKER_ID}/photo` };
     });
   return {
     activeEditionId,

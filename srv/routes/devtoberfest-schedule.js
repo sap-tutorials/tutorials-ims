@@ -69,7 +69,7 @@ async function loadAssembledFeed(req) {
         .where({ SESSION_ID: { in: sessionIds } });
       const speakerIds = [...new Set(sessionSpeakers.map((l) => l.SPEAKER_ID))];
       speakers = speakerIds.length
-        ? await SELECT.from(ext.Speaker).columns('ID', 'FIRSTNAME', 'LASTNAME', 'ROLE', 'COMPANY').where({ ID: { in: speakerIds } })
+        ? await SELECT.from(ext.Speaker).columns('ID', 'FIRSTNAME', 'LASTNAME', 'ROLE', 'COMPANY', 'BIO').where({ ID: { in: speakerIds } })
         : [];
     }
   } catch (err) {
