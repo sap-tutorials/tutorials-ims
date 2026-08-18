@@ -161,7 +161,7 @@ On first connection `mcp-remote` opens a browser tab for consent (PKCE, no clien
 | `get_my_recommended_tutorials` | Persona-ranked tutorial recommendations |
 | `get_my_recommended_missions` | Persona-ranked mission recommendations |
 
-> **Mint a PAT:** open [`/admin-ui/#pats`](../developers/reference/mcp-server.md) and use the **Mint** action, or call the mint endpoint documented in [mcp-server.md](../developers/reference/mcp-server.md). The token is shown once at mint time — copy it immediately.
+> **Mint a PAT:** open [`/me/tokens/`](/me/tokens/) (self-service — any signed-in user with the **Tutorials MCP Users** role collection) and use **Create token**. The token is shown once at mint time — copy it immediately.
 
 ## Sign in with Claude Code (OAuth via mcp-remote)
 
@@ -220,7 +220,7 @@ For CI pipelines, scripts, and headless agents that cannot complete an interacti
 
 **Mint a PAT:**
 
-1. Sign in to `<base>/admin-ui/#pats` as a user with the `Tutorials MCP Users` role collection.
+1. Sign in to `<base>/me/tokens/` as a user with the `Tutorials MCP Users` role collection.
 2. Click **New token**, give it a name, select scopes (`read` for read-only tools; `read write` to allow `complete_step` and `reset_tutorial_progress`), set a TTL.
 3. Copy the displayed token — it is shown once only. The server stores only a SHA-256 hash.
 
