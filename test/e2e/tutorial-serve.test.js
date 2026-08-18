@@ -36,4 +36,41 @@ describe.skipIf(!hasBaseUrl())('e2e: tutorial serve (unauthenticated)', () => {
       await context.close();
     }
   });
+
+  // Regression guard for #1890: the "Submit detailed feedback" button lazy-loads
+  // the tutorial-feedback island via feedback-share.html. A double-quote bug
+  // (`| jsonify` in a <script> JS context) produced a src with embedded quote
+  // chars → /tutorials/%22/js/…%22 404 → island never mounted → EMPTY popup.
+  // This asserts the island script loads (no 404) and the form actually renders.
+  it('the "Submit detailed feedback" popup mounts the feedback form', async () => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      const islandFailures = [];
+      page.on('response', (r) => {
+        const u = r.url();
+        if (u.includes('tutorial-feedback') && u.endsWith('.js') && r.status() >= 400) {
+          islandFailures.push(`${r.status()} ${u}`);
+        }
+      });
+
+      await page.goto(`/tutorials/${SLUG}`, { waitUntil: 'domcontentloaded' });
+      const btn = page.locator('ui5-button:has-text("Submit detailed feedback")').first();
+      await btn.waitFor({ state: 'visible', timeout: 15_000 });
+      await btn.click();
+
+      // The detailed form has a row unique to it (the inline rating widget does
+      // not) — its presence proves the island mounted into #tutorial-feedback-mount.
+      await page
+        .locator('#tutorial-feedback-popup', { hasText: 'Likely to recommend to a colleague' })
+        .waitFor({ state: 'visible', timeout: 15_000 });
+
+      expect(islandFailures, `tutorial-feedback island 404'd: ${islandFailures.join(', ')}`).toHaveLength(0);
+      expect(
+        await page.locator('#tutorial-feedback-popup .feedback-btn').count(),
+        'detailed feedback form did not render a submit button'
+      ).toBeGreaterThan(0);
+    } finally {
+      await context.close();
+    }
+  });
 });
