@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { SRV_URL, fetchWithRetry } from './smoke.config.js';
 
-// Sweeps all 17 app.post() routes in srv/server.js:
-//   - 10 bearer-required (contentAuthMiddleware) reject unauth + wrong bearer
+// Sweeps all 18 app.post() routes in srv/server.js:
+//   - 11 bearer-required (contentAuthMiddleware) reject unauth + wrong bearer
 //   - 5 XSUAA-required reject unauth (401/403)
 //   - 3 public-POST hardening checks: malformed JSON, empty body, 5MB payload
 // Any 500 is a real DoS/logic surface — file a follow-up and .skip the case.
@@ -12,6 +12,7 @@ describe.skipIf(!SRV_URL || SRV_URL.startsWith('http://localhost'))(
     describe('bearer-token-required routes', () => {
       const bearerRoutes = [
         { path: '/content/publish', method: 'POST' },
+        { path: '/content/image', method: 'POST' },
         { path: '/content/publish/begin', method: 'POST' },
         { path: '/content/publish/append', method: 'POST' },
         { path: '/content/publish/commit', method: 'POST' },
