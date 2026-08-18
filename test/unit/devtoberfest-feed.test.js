@@ -76,7 +76,7 @@ describe('devtoberfest-feed', () => {
     const sess = [{ ID: 's1', TITLE: 'Intro', TRACK_ID: 't1', STATUS: 'Confirmed', WEEK: '1', LINKEDINURL: 'https://linkedin.com/in/x' }];
     const speakers = [
       { ID: 'sp2', FIRSTNAME: 'Bea', LASTNAME: 'Two', ROLE: 'Dev', COMPANY: 'SAP' },
-      { ID: 'sp1', FIRSTNAME: 'Al', LASTNAME: 'One', ROLE: 'PM', COMPANY: 'SAP' },
+      { ID: 'sp1', FIRSTNAME: 'Al', LASTNAME: 'One', ROLE: 'PM', COMPANY: 'SAP', BIO: 'Loves HANA graph workloads.' },
     ];
     const sessionSpeakers = [
       { SESSION_ID: 's1', SPEAKER_ID: 'sp2', SPEAKERORDER: 2 },
@@ -86,7 +86,9 @@ describe('devtoberfest-feed', () => {
     const s = out.sessions[0];
     expect(s.linkedinUrl).toBe('https://linkedin.com/in/x');
     expect(s.speakers.map((sp) => sp.id)).toEqual(['sp1', 'sp2']); // ordered
-    expect(s.speakers[0]).toEqual({ id: 'sp1', name: 'Al One', role: 'PM', company: 'SAP', photoUrl: '/api/devtoberfest/speaker/sp1/photo' });
+    expect(s.speakers[0]).toEqual({ id: 'sp1', name: 'Al One', role: 'PM', company: 'SAP', bio: 'Loves HANA graph workloads.', photoUrl: '/api/devtoberfest/speaker/sp1/photo' });
+    // Missing BIO defaults to '' so the client can search it unconditionally.
+    expect(s.speakers[1].bio).toBe('');
   });
 
   it('assembleFeed defaults speakers to [] and linkedinUrl to empty when none', () => {
