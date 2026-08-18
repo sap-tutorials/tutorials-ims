@@ -27,6 +27,7 @@ const shouldProcessImage = require('./lib/img-cdn-should-process')
 const { buildImageOriginUrl } = require('./lib/img-cdn-origin')
 const { ImgCache } = require('./lib/img-cdn-cache')
 const { fetchImageResponse } = require('./lib/img-cdn-fetch')
+const { createHealer } = require('./lib/img-cdn-heal')
 
 // srv-api URL: in CF it's provided via the `destinations` env var (JSON
 // array) injected by the approuter framework when mta.yaml declares
@@ -178,6 +179,15 @@ function imgCacheKey(u, wantWidth, acceptsWebp) {
   return `${u} w=${wantWidth} webp=${acceptsWebp ? 1 : 0}`
 }
 
+// Heal-on-request (#1882): when a store miss fail-opens to GitHub, fire-and-
+// forget the fetched ORIGINAL bytes back to the srv's POST /content/image so
+// the store self-populates between full backfills. Disabled when the store
+// path itself is off (IMG_CDN_SOURCE=github → nothing to populate) or via
+// IMG_CDN_HEAL=0. The healer self-disables further if CONTENT_API_KEY can't be
+// resolved from the credstore. See approuter/lib/img-cdn-heal.js.
+const IMG_CDN_HEAL = (process.env.IMG_CDN_HEAL || '1') !== '0' && IMG_CDN_SOURCE !== 'github'
+const _imgHealer = createHealer({ srvUrl: SRV_URL, resolveSecret })
+
 /**
  * Fetch an upstream image (anonymous-first, token-on-404, retry on 429/5xx —
  * see img-cdn-fetch.js) and process it (resize + optional WebP), returning the
@@ -223,9 +233,15 @@ async function loadOriginalBytes(u, target) {
     err.upstreamStatus = upstream.status
     throw err
   }
+  const buffer = Buffer.from(await upstream.arrayBuffer())
+  const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+  // Heal-on-request: we're on the store-miss fail-open path and hold the
+  // ORIGINAL bytes GitHub returned — the exact thing the store wants. Fire it
+  // back (non-blocking, never awaited, never throws). #1882.
+  if (IMG_CDN_HEAL) _imgHealer.heal(u, buffer, contentType)
   return {
-    buffer: Buffer.from(await upstream.arrayBuffer()),
-    contentType: upstream.headers.get('content-type') || 'application/octet-stream',
+    buffer,
+    contentType,
     imgSrc: 'github',
   }
 }
