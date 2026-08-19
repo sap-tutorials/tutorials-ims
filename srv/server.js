@@ -70,7 +70,7 @@ import { provisionDbUser, resolveDbUser } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import multer from 'multer';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
-import { uploadPetSubmission } from './lib/petoberfest-upload.js';
+import { uploadPetSubmission, decodePhotoUpload } from './lib/petoberfest-upload.js';
 import { fetchPetPhoto } from './lib/petoberfest-photo-store.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
 import './graphql-config.js';
@@ -909,39 +909,39 @@ cds.on('bootstrap', (app) => {
       }
     });
 
-  // ── Petoberfest: multipart upload (authenticated) + photo serve (public/admin) ──
+  // ── Petoberfest: JSON base64 upload (authenticated) + photo serve (public/admin) ──
   // Reserved BEFORE CAP mounts PetoberfestService at /petoberfest-api and
   // AdminService at /admin — same rationale as the advocate photo route above.
+  //
+  // Transport is JSON (NOT multipart/form-data): the multipart binary POST was silently
+  // stalled/blocked by the Akamai edge on developers.sap.com while working fine on the raw
+  // cfapps approuter URL. JSON rides the same xsuaa + CSRF path that /chat/stream and the
+  // /api/* islands use successfully through the CDN. base64 of a 10 MB image ≈ 13.3 MB, so
+  // the parser limit is 16 MB; decodePhotoUpload re-enforces the 10 MB decoded-byte cap.
   const _petCtxMw  = cds.middlewares?.context?.() || ((req, res, next) => next());
   const _petAuthMw = cds.middlewares?.auth?.()    || ((req, res, next) => next());
-  const _petUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
   app.post('/petoberfest-api/:slug/upload',
-    _petCtxMw, _petAuthMw, captureUserMiddleware(cds),
-    (req, res, next) => {
-      _petUpload.single('photo')(req, res, (err) => {
-        if (err) return res.status(400).json({ error: err.code || 'UPLOAD_ERROR', message: err.message });
-        next();
-      });
-    },
+    _petCtxMw, _petAuthMw, captureUserMiddleware(cds), express.json({ limit: '16mb' }),
     async (req, res) => {
       try {
         const user = resolveUser(req, cds);
         if (!user) return res.status(401).json({ error: 'UNAUTHENTICATED', message: 'Sign in to upload' });
-        if (!req.file) return res.status(400).json({ error: 'MISSING_FIELD', message: "missing 'photo' field" });
+        const { buffer, mimeType } = decodePhotoUpload(req.body);
         const db = await cds.connect.to('db');
         const out = await uploadPetSubmission(db, {
-          slug: req.params.slug, user, buffer: req.file.buffer,
-          mimeType: req.file.mimetype, petName: req.body?.petName,
+          slug: req.params.slug, user, buffer,
+          mimeType: mimeType || 'application/octet-stream', petName: req.body?.petName,
         });
         if (out.duplicate) return res.status(409).json({ error: 'DUPLICATE', message: 'You already uploaded this photo' });
         return res.json({ id: out.id, awarded: out.awarded, moderation: out.moderation });
       } catch (e) {
         const code = e.code === 'NOT_FOUND' ? 'NOT_FOUND'
+                   : e.code === 'MISSING_FIELD' ? 'MISSING_FIELD'
+                   : e.code === 'TOO_LARGE' || /too large/i.test(e.message) ? 'TOO_LARGE'
                    : /unsupported MIME/i.test(e.message) ? 'BAD_MIME'
-                   : /too large/i.test(e.message) ? 'TOO_LARGE'
                    : /animated/i.test(e.message) ? 'ANIMATED'
-                   : /invalid image/i.test(e.message) ? 'BAD_IMAGE'
+                   : e.code === 'BAD_IMAGE' || /invalid image/i.test(e.message) ? 'BAD_IMAGE'
                    : 'UPLOAD_FAILED';
         const status = code === 'NOT_FOUND' ? 404 : e.code === 'UNAUTHENTICATED' ? 401 : 400;
         return res.status(status).json({ error: code, message: e.message });

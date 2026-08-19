@@ -230,30 +230,30 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
     it('authenticated upload lands a PENDING submission', async () => {
       const { context } = await newPage(browser, { authenticated: true });
       try {
-        // Use the Playwright APIRequestContext for multipart — it honours the
-        // Basic Authorization header baked into the browser context by newPage().
+        // Use the Playwright APIRequestContext — it honours the Basic Authorization
+        // header baked into the browser context by newPage(). Transport is JSON base64
+        // (the upload moved off multipart to survive the Akamai edge on developers.sap.com).
+        // 1×1 white PNG — smallest valid image that passes sharp's header check (68 bytes).
+        const pngBytes = Buffer.from([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,  // PNG signature
+          0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,  // IHDR chunk len + type
+          0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  // 1 wide, 1 tall
+          0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0xc3,  // 8-bit RGB, no interlace + CRC
+          0xd0, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,  // IDAT chunk
+          0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+          0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,  // IDAT data + CRC
+          0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,  // IEND
+          0x44, 0xae, 0x42, 0x60, 0x82,                    // IEND CRC
+        ]);
         const result = await context.request.fetch('/petoberfest-api/petoberfest-2026/upload', {
           method: 'POST',
-          multipart: {
-            // 1×1 white PNG — smallest valid image that passes sharp's header check.
-            photo: {
-              name: 'test-pet.png',
-              mimeType: 'image/png',
-              // A valid minimal 1×1 RGB PNG (68 bytes). Built from well-known bytes.
-              buffer: Buffer.from([
-                0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,  // PNG signature
-                0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,  // IHDR chunk len + type
-                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  // 1 wide, 1 tall
-                0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0xc3,  // 8-bit RGB, no interlace + CRC
-                0xd0, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,  // IDAT chunk
-                0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
-                0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,  // IDAT data + CRC
-                0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,  // IEND
-                0x44, 0xae, 0x42, 0x60, 0x82,                    // IEND CRC
-              ]),
-            },
+          headers: { 'content-type': 'application/json' },
+          data: JSON.stringify({
+            filename: 'test-pet.png',
+            mimeType: 'image/png',
+            photoBase64: pngBytes.toString('base64'),
             petName: 'e2e Test Pet',
-          },
+          }),
         });
 
         const status = result.status();

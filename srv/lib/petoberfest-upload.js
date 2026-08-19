@@ -6,6 +6,34 @@ import { stampSubmissionId } from './task-record-submission-id.js';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,254}$/;
 
+/** Decoded-image size cap (mirrors the former multer limit). */
+export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Decode a JSON upload payload into a raw image Buffer.
+ * Accepts a bare base64 string or a `data:<mime>;base64,<...>` URL.
+ * Throws typed errors (`MISSING_FIELD` / `BAD_IMAGE` / `TOO_LARGE`) so the route can
+ * map them to the same 400 codes the multipart path used. Image content itself is
+ * validated downstream by `processPetUpload` (MIME, animated, dimensions, real image).
+ */
+export function decodePhotoUpload(body) {
+  const { photoBase64, mimeType } = body || {};
+  if (!photoBase64 || typeof photoBase64 !== 'string') {
+    const e = new Error("missing 'photoBase64' field"); e.code = 'MISSING_FIELD'; throw e;
+  }
+  const b64 = photoBase64.startsWith('data:')
+    ? photoBase64.slice(photoBase64.indexOf(',') + 1)
+    : photoBase64;
+  const buffer = Buffer.from(b64, 'base64');
+  if (buffer.length === 0) {
+    const e = new Error('empty or invalid base64 photo'); e.code = 'BAD_IMAGE'; throw e;
+  }
+  if (buffer.length > MAX_PHOTO_BYTES) {
+    const e = new Error('photo too large (max 10 MB)'); e.code = 'TOO_LARGE'; throw e;
+  }
+  return { buffer, mimeType: typeof mimeType === 'string' ? mimeType : undefined };
+}
+
 export async function uploadPetSubmission(db, { slug, user, buffer, mimeType, petName }) {
   const s = String(slug || '').toLowerCase();
   if (!SLUG_RE.test(s)) throw new Error('uploadPetSubmission: bad slug');
