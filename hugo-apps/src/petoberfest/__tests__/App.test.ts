@@ -16,6 +16,30 @@ vi.mock('../lib/server', () => ({
 }));
 
 import App from '../App.vue';
+import { probeAuth } from '../lib/server';
+
+describe('petoberfest login gate', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it('shows the sign-in prompt and hides the upload form when not logged in', async () => {
+    vi.mocked(probeAuth).mockResolvedValueOnce(false);
+    const w = mount(App, { props: { slug: 'petoberfest-2026' } });
+    await flushPromises();
+    expect(w.text()).toContain('Sign in to add your pet');
+    expect(w.find('input[type="file"]').exists()).toBe(false);
+    expect(w.findAll('button').some((b) => b.text() === 'Upload')).toBe(false);
+  });
+
+  it('shows the upload form and hides the sign-in prompt when logged in', async () => {
+    vi.mocked(probeAuth).mockResolvedValueOnce(true);
+    const w = mount(App, { props: { slug: 'petoberfest-2026' } });
+    await flushPromises();
+    expect(w.text()).not.toContain('Sign in to add your pet');
+    expect(w.find('input[type="file"]').exists()).toBe(true);
+    expect(w.findAll('button').some((b) => b.text() === 'Upload')).toBe(true);
+  });
+});
 
 describe('petoberfest slideshow controls', () => {
   beforeEach(() => vi.useFakeTimers());
