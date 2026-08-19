@@ -43,3 +43,20 @@ export async function uploadPet(slug: string, file: File, petName: string): Prom
   }
   return r.json();
 }
+
+export interface WithdrawResult { withdrawn: boolean; creditRevoked: boolean; }
+
+// Owner-scoped takedown. POST (not DELETE) so it survives Akamai's bare-verb block in PROD.
+export async function withdrawPet(slug: string, id: string): Promise<WithdrawResult> {
+  const r = await csrfFetch(`${API}/withdraw`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug, id }),
+    credentials: 'include',
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw Object.assign(new Error(err.error?.message || err.message || 'withdraw failed'), { status: r.status });
+  }
+  return r.json();
+}
