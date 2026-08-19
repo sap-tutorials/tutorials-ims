@@ -631,7 +631,16 @@ sap.ui.define([
 
     onImportPress: function () {
       var input = this._importInput();
-      if (input) { input.value = ""; input.click(); }
+      if (!input) { return; }
+      // Wire the change listener here, not just in onAfterRendering. The file
+      // input lives inside the edit-mode VBox (visible bound to mode==='edit'),
+      // so on the list→edit transition UI5 re-renders only that subtree by
+      // invalidation and the view's onAfterRendering does NOT re-fire — leaving
+      // the freshly materialized <input> without a change listener. Selecting a
+      // file then did nothing (issue #1909). By the time this press handler runs
+      // the input is guaranteed present, so wire it now.
+      this._wireImportInput(input);
+      input.value = ""; input.click();
     },
 
     // Resolve the hidden native <input type=file> behind the core:HTML control.
@@ -645,6 +654,17 @@ sap.ui.define([
       if (!dom) { return null; }
       if (dom.tagName === "INPUT") { return dom; }
       return dom.querySelector("input");
+    },
+
+    // Attach the native `change` listener to the file <input> exactly once
+    // (guarded by a flag stamped on the element). Called from both
+    // onAfterRendering and onImportPress so the listener is present regardless of
+    // whether the input's DOM existed at the last view render (issue #1909).
+    _wireImportInput: function (input) {
+      if (!input || input._wired) { return; }
+      input._wired = true;
+      var self = this;
+      input.addEventListener("change", function (e) { self.onImportFile(e); });
     },
 
     onImportFile: function (oEvent) {
@@ -688,12 +708,7 @@ sap.ui.define([
     },
 
     onAfterRendering: function () {
-      var self = this;
-      var input = this._importInput();
-      if (input && !input._wired) {
-        input._wired = true;
-        input.addEventListener("change", function (e) { self.onImportFile(e); });
-      }
+      this._wireImportInput(this._importInput());
     },
 
     // ── Internal helpers ──────────────────────────────────────────────────────
