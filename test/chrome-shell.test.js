@@ -181,6 +181,11 @@ describe('chrome-shell.composeShell — SEO head rewrite (#1795)', () => {
     expect(canonicalUrlFor({ kind: 'unknown', slug: 's' })).toBeNull();
   });
 
+  it('derives the /puzzles/<slug>/ canonical for kind "puzzle" (#1914)', () => {
+    expect(canonicalUrlFor({ kind: 'puzzle', slug: 'devtoberfest-2026-warmup' }))
+      .toBe('https://developers.sap.com/puzzles/devtoberfest-2026-warmup/');
+  });
+
   it('leaves canonical + robots untouched on a shell that lacks those tags', () => {
     const bare = parseShell('<html><head><title></title></head><body><header>h</header><!-- MAIN --><footer>f</footer></body></html>');
     const html = composeShell(bare, '<main>B</main>', { kind: 'concept', slug: 's', title: 'T', description: 'd' });
