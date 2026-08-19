@@ -58,6 +58,7 @@ sap.ui.define([
         subMode: "design",   // "design" | "fill"
         title: "",
         slug: "",
+        intro: "",           // author-facing solving instructions (Markdown) — issue #1911
         savedSlug: "",
         editId: null,        // OData ID when editing existing puzzle (null = new)
         wordText: "",
@@ -81,6 +82,7 @@ sap.ui.define([
       b.setProperty("/cols", cols);
       b.setProperty("/title", "");
       b.setProperty("/slug", "");
+      b.setProperty("/intro", "");
       b.setProperty("/savedSlug", "");
       b.setProperty("/editId", null);
       b.setProperty("/clues", {});
@@ -104,10 +106,11 @@ sap.ui.define([
       // requestProperty() DOES fetch un-cached properties from the back end;
       // merge them onto the cached row before rebuilding the grid.
       var row = oCtx.getObject() || {};
-      oCtx.requestProperty(["layout", "solution"]).then(function (values) {
+      oCtx.requestProperty(["layout", "solution", "intro"]).then(function (values) {
         self._loadPuzzleForEdit(Object.assign({}, row, {
           layout: values[0],
-          solution: values[1]
+          solution: values[1],
+          intro: values[2]
         }));
       }).catch(function (err) {
         MessageBox.error("Could not open puzzle: " + (err && err.message || err));
@@ -206,6 +209,7 @@ sap.ui.define([
       b.setProperty("/editId", row.ID || null);
       b.setProperty("/title", row.title || "");
       b.setProperty("/slug", row.slug || "");
+      b.setProperty("/intro", row.intro || "");
       b.setProperty("/savedSlug", row.slug || "");
       b.setProperty("/rows", rows);
       b.setProperty("/cols", cols);
@@ -479,6 +483,7 @@ sap.ui.define([
       var b = this.getView().getModel("b");
       var title = b.getProperty("/title");
       var slug = (b.getProperty("/slug") || "").toLowerCase().replace(/\s+/g, "-");
+      var intro = b.getProperty("/intro") || "";
       if (!title || !slug) {
         MessageBox.error("Title and Slug are required.");
         return;
@@ -521,6 +526,7 @@ sap.ui.define([
       var fields = {
         title: title,
         slug: slug,
+        intro: intro,
         status: "ACTIVE",
         layout: layout,
         solution: solution
@@ -631,7 +637,16 @@ sap.ui.define([
 
     onImportPress: function () {
       var input = this._importInput();
-      if (input) { input.value = ""; input.click(); }
+      if (!input) { return; }
+      // Wire the change listener here, not just in onAfterRendering. The file
+      // input lives inside the edit-mode VBox (visible bound to mode==='edit'),
+      // so on the list→edit transition UI5 re-renders only that subtree by
+      // invalidation and the view's onAfterRendering does NOT re-fire — leaving
+      // the freshly materialized <input> without a change listener. Selecting a
+      // file then did nothing (issue #1909). By the time this press handler runs
+      // the input is guaranteed present, so wire it now.
+      this._wireImportInput(input);
+      input.value = ""; input.click();
     },
 
     // Resolve the hidden native <input type=file> behind the core:HTML control.
@@ -645,6 +660,17 @@ sap.ui.define([
       if (!dom) { return null; }
       if (dom.tagName === "INPUT") { return dom; }
       return dom.querySelector("input");
+    },
+
+    // Attach the native `change` listener to the file <input> exactly once
+    // (guarded by a flag stamped on the element). Called from both
+    // onAfterRendering and onImportPress so the listener is present regardless of
+    // whether the input's DOM existed at the last view render (issue #1909).
+    _wireImportInput: function (input) {
+      if (!input || input._wired) { return; }
+      input._wired = true;
+      var self = this;
+      input.addEventListener("change", function (e) { self.onImportFile(e); });
     },
 
     onImportFile: function (oEvent) {
@@ -688,12 +714,7 @@ sap.ui.define([
     },
 
     onAfterRendering: function () {
-      var self = this;
-      var input = this._importInput();
-      if (input && !input._wired) {
-        input._wired = true;
-        input.addEventListener("change", function (e) { self.onImportFile(e); });
-      }
+      this._wireImportInput(this._importInput());
     },
 
     // ── Internal helpers ──────────────────────────────────────────────────────

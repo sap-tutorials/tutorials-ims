@@ -15,6 +15,7 @@ One happy-path smoke assertion per surface. Intentionally narrow — load-proves
 | `display-app.test.js` | `/display-app/` (XSUAA scope `DisplayApp`) → Socket.IO `/ws/display` | Basic |
 | `petoberfest.test.js` | `/petoberfest/:slug/` → upload → `/admin` approve → `/petoberfest-api/photo/:id` | anonymous + Basic |
 | `admin-tutorials-owner-search.test.js` | `/admin-ui/#tutorials` (XSUAA) → FE List Report → Owner/Owner Email columns + `/admin/Tutorials?$search=` | Basic |
+| `scavenger-hunt.test.js` | `/`, `/ai/`, `/api-docs/` → Devtoberfest clue overlays + `/api/advocates/:slug/photo` (#1908) | anonymous |
 
 All specs self-skip with no output when `SMOKE_BASE_URL`/`PLAYWRIGHT_BASE_URL` is absent — `npm test` (unit tier) is unaffected.
 

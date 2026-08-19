@@ -1,0 +1,24 @@
+{
+  "moreInfoUrl": "https://url.sap/7afji2",
+  "clues": {
+    "homepage": {
+      "slug": "ajay-soreng",
+      "name": "Ajay Soreng",
+      "caption": "1st letter of first name",
+      "showMoreInfo": true
+    },
+    "api-docs": {
+      "slug": "shilpa-shankar",
+      "name": "Shilpa Shankar",
+      "heading": "Devtoberfest Scavenger Hunt",
+      "caption": "4th letter of first name",
+      "showMoreInfo": true
+    },
+    "ai": {
+      "slug": "dj-adams",
+      "name": "DJ Adams",
+      "caption": "Congrats! We hope finding DJ was its own reward. Ignore this clue: we will not add a letter for this one.",
+      "showMoreInfo": false
+    }
+  }
+}

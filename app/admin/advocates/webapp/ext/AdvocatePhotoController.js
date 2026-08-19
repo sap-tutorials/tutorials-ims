@@ -44,14 +44,15 @@ sap.ui.define([
   return {
 
     /**
-     * Header action: prompt for a file, POST it via multipart/form-data
+     * Header action: prompt for a file and POST it as a JSON base64 body
      * to POST /admin/advocates/:slug/photo (issue #417). The server runs
      * the sharp pipeline (256/64 WebP), upserts AdvocatePhotos, flips
      * Advocates.hasPhoto + photoUrl + photoUpdatedAt.
      *
-     * Replaces the prior base64-over-OData $batch shape that required
-     * an inflated body_parser limit on AdminService. Cleaner contract,
-     * ~25% smaller request body, no FileReader round-trip.
+     * Transport is JSON base64 (not multipart/form-data): the Akamai edge
+     * on developers.sap.com silently stalls/blocks multipart binary uploads
+     * while passing JSON on the same /admin/* xsuaa + CSRF path. base64
+     * inflates the body ~33%, well within the server's 8 MB parser limit.
      *
      * Draft mode is gated OUT in the manifest (`enabled` expression
      * checks IsActiveEntity === true). The defensive check below guards
@@ -104,35 +105,45 @@ sap.ui.define([
             return;
           }
           MessageToast.show("Uploading…");
-          // FormData carries the file as a binary part — no base64 inflation,
-          // no FileReader. The approuter forwards XSUAA session cookies
-          // to /admin/* so credentials: 'same-origin' is sufficient.
-          // CSRF: fetch a token first (approuter enforces on non-GET POSTs
-          // to /admin/*). Same pattern as verb-definitions/ActionsController.
+          // Read the file as base64 (data: URL, strip the prefix). JSON base64
+          // survives the Akamai edge where multipart/form-data was silently
+          // stalled/blocked. The approuter forwards XSUAA session cookies to
+          // /admin/* so credentials: 'same-origin' is sufficient. CSRF: fetch a
+          // token first (approuter enforces on non-GET POSTs to /admin/*).
+          const photoBase64 = await new Promise(function (resolve, reject) {
+            const reader = new FileReader();
+            reader.onload = function () { resolve(String(reader.result).split(",")[1] || ""); };
+            reader.onerror = function () { reject(reader.error || new Error("could not read the selected file")); };
+            reader.readAsDataURL(file);
+          });
           const csrfResp = await fetch("/admin/", { headers: { "x-csrf-token": "fetch" }, credentials: "same-origin" });
           const csrf = csrfResp.headers.get("x-csrf-token");
-          const formData = new FormData();
-          formData.append("photo", file);
           const resp = await fetch(
             "/admin/advocates/" + encodeURIComponent(slug) + "/photo",
             {
               method: "POST",
-              body: formData,
               credentials: "same-origin",
               headers: {
                 "Accept": "application/json",
+                "Content-Type": "application/json",
                 "x-csrf-token": csrf || "fetch"
-              }
+              },
+              body: JSON.stringify({ filename: file.name, mimeType: file.type, photoBase64: photoBase64 })
             }
           );
           if (!resp.ok) {
-            // Server returns { error: CODE, message: human-readable }.
-            // Parse defensively — a 502 from approuter would be HTML.
+            // Server returns { error: CODE, message }. A CDN/edge rejection is
+            // HTML, not JSON — surface the status + any Akamai "Reference #…"
+            // so the failure is never silent.
             let detail = "HTTP " + resp.status;
+            const text = await resp.text().catch(function () { return ""; });
             try {
-              const body = await resp.json();
-              if (body && body.message) detail = body.message;
-            } catch (e) { /* ignore — keep HTTP code */ }
+              const body = JSON.parse(text);
+              if (body && body.message) { detail = body.message; }
+            } catch (e) {
+              const ref = text.match(/#\s*(\d+\.[\w.\-]+)/);
+              if (ref) { detail = "HTTP " + resp.status + " (reference " + ref[1] + ") — possible network/CDN issue"; }
+            }
             throw new Error(detail);
           }
           MessageToast.show("Photo uploaded.");

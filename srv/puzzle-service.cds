@@ -9,7 +9,7 @@ service PuzzleService {
 
   @readonly
   entity Puzzles as projection on ims.Puzzles {
-    ID, slug, title, description, primaryTag, experienceTag, averageTimeToComplete, layout
+    ID, slug, title, intro, description, primaryTag, experienceTag, averageTimeToComplete, layout
   };
 
   // Grade whole-word submissions server-side. Anonymous allowed.

@@ -101,5 +101,68 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
         await context.close();
       }
     });
+
+    // Regression for issue #1909 ("Puzzle is not importing"). Create New enters
+    // edit mode (list→edit visibility transition), then Import a JSON file. Before
+    // the fix the file <input>'s change listener was only wired in the view's
+    // onAfterRendering, which does not re-fire on that transition, so selecting a
+    // file was a silent no-op. This drives the real file chooser and asserts the
+    // builder was populated from the imported JSON.
+    it('Create New → Import JSON populates the builder (issue #1909)', async () => {
+      const { context, page } = await newPage(browser);
+      try {
+        await page.goto('/admin-ui/#puzzles', { waitUntil: 'domcontentloaded' });
+
+        await page
+          .locator('[role="button"]')
+          .filter({ hasText: 'Create New' })
+          .waitFor({ state: 'visible', timeout: 30_000 });
+        await page.locator('[role="button"]').filter({ hasText: 'Create New' }).click();
+
+        // Wait until edit mode is active (Title input present).
+        await page
+          .locator('input[placeholder="e.g. SAP BTP Basics"]')
+          .waitFor({ state: 'visible', timeout: 10_000 });
+
+        // A well-formed 5x5 puzzle in the exact shape attached to #1909: numeric
+        // STRING rows/cols and {black, number} grid cells.
+        const puzzle = {
+          formatVersion: 1,
+          rows: '5',
+          cols: '5',
+          grid: Array.from({ length: 5 }, () =>
+            Array.from({ length: 5 }, () => ({ black: false, number: null }))),
+          clues: { '0-0-across': 'Atop' },
+          hints: {},
+          answers: { '0,0': 'A' },
+          title: 'Imported Warmup Puzzle',
+          slug: 'e2e-imported-warmup-1909'
+        };
+
+        // Clicking Import calls input.click(), opening the native file chooser.
+        const [chooser] = await Promise.all([
+          page.waitForEvent('filechooser'),
+          page.locator('[role="button"]').filter({ hasText: 'Import' }).click()
+        ]);
+        await chooser.setFiles({
+          name: 'warmup-devtoberfest-2026.json',
+          mimeType: 'application/json',
+          buffer: Buffer.from(JSON.stringify(puzzle))
+        });
+
+        // The success toast confirms onImportFile actually ran.
+        await expect(page.locator('text=/Puzzle imported/')).toBeVisible({ timeout: 10_000 });
+
+        // The builder model was populated from the file (two-way bound inputs).
+        await expect(
+          page.locator('input[placeholder="e.g. btp-basics"]')
+        ).toHaveValue('e2e-imported-warmup-1909', { timeout: 5_000 });
+        await expect(
+          page.locator('input[placeholder="e.g. SAP BTP Basics"]')
+        ).toHaveValue('Imported Warmup Puzzle');
+      } finally {
+        await context.close();
+      }
+    });
   }
 );

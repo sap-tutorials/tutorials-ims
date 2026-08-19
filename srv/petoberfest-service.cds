@@ -16,4 +16,12 @@ service PetoberfestService {
   function myUploads(slug: String) returns array of {
     id: String; petName: String; moderation: String; uploadedAt: Timestamp;
   };
+
+  // User-initiated takedown of their own submission. Hard-deletes the row (and its
+  // inline image blobs); if it was the user's last entry for the contest, their
+  // PETOBERFEST completion is superseded (revoked). See design 2026-08-19.
+  @(requires: 'authenticated-user')
+  action withdraw(slug: String, id: String) returns {
+    withdrawn: Boolean; creditRevoked: Boolean;
+  };
 }

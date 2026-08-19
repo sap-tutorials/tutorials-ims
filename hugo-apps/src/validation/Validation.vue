@@ -721,6 +721,11 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* [#1905] Badge lives in an inline-flex legend; without min-width +
+     flex-shrink:0 a long question squeezes the fixed-width circle into a
+     squished vertical oval. Pin the size so it always stays a 1.5rem circle. */
+  flex-shrink: 0;
+  min-width: 1.5rem;
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 50%;

@@ -29,6 +29,13 @@
  *         with a capital R in some versions, so we normalise case), the
  *         cached token was stale. Clear cache, refetch once, retry the
  *         original request exactly once, and return that response.
+ *  - Stale-session re-auth (issue #1904): if the token handshake or the
+ *    mutating request itself comes back as AppRouter's XSUAA login
+ *    interstitial (a followed redirect, or a 200 with an HTML body where
+ *    JSON was expected), csrfFetch forces a top-level navigation to
+ *    `/login?returnTo=<current path>` and throws `CsrfFetchError`. This turns
+ *    the previously-swallowed "logged out while the page still looks logged
+ *    in" case into a proper re-authentication redirect.
  *  - `credentials: 'include'` is added when missing. Vue islands hit the
  *    approuter on the same origin so it's usually redundant, but for
  *    hybrid-dev port hopping (approuter on 5000, hugo on 1313) it
@@ -71,12 +78,53 @@ function isSafeMethod(init?: RequestInit): boolean {
   return SAFE_METHODS.has(m);
 }
 
+/**
+ * Detects AppRouter's XSUAA login interstitial (issue #1904). When the session
+ * has expired (or was never established), AppRouter answers API and /auth/user
+ * requests with HTTP 200 and an HTML body whose inline <script> navigates the
+ * *top-level document* to /oauth/authorize. Consumed through fetch() that
+ * script never runs, so the re-auth is silently swallowed and a mutating action
+ * (e.g. the tutorial "Done" button) appears to soft-fail. The reliable
+ * client-side tells are: the response was redirected, or its body is HTML where
+ * the API would return JSON (204/JSON responses are never flagged).
+ */
+function isSessionExpiredResponse(res: Response): boolean {
+  if (res.redirected) return true;
+  // Optional chaining: some callers/tests pass minimal Response-like stubs
+  // without a `headers` bag. A real fetch Response always has one.
+  const ct = (res.headers?.get?.('content-type') ?? '').toLowerCase();
+  return ct.includes('text/html');
+}
+
+/**
+ * Force a real top-level navigation to the login flow so AppRouter's OAuth
+ * redirect actually executes and the learner lands back on this page once
+ * re-authenticated. Mirrors the /login?returnTo pattern used by header.html's
+ * checkAuth/maybeAutoLogin. Guarded for non-browser (test/SSR) contexts where
+ * location.replace is unavailable.
+ */
+function redirectToReauth(): void {
+  const loc = (globalThis as { location?: Location }).location;
+  if (!loc || typeof loc.replace !== 'function') return;
+  const returnTo = (loc.pathname ?? '') + (loc.search ?? '');
+  loc.replace('/login?returnTo=' + encodeURIComponent(returnTo));
+}
+
 async function fetchToken(fetchImpl: typeof fetch): Promise<string> {
   const res = await fetchImpl('/auth/user', {
     method: 'GET',
     credentials: 'include',
     headers: { 'x-csrf-token': 'fetch' },
   });
+  // Expired/absent session: bounce through a real login navigation rather than
+  // swallowing the interstitial and reporting a generic token failure (#1904).
+  if (isSessionExpiredResponse(res)) {
+    redirectToReauth();
+    throw new CsrfFetchError(
+      `csrfFetch: session expired during token handshake (status=${res.status}) — redirecting to re-authenticate`,
+      res,
+    );
+  }
   const token = res.headers.get('x-csrf-token');
   if (!res.ok || !token) {
     throw new CsrfFetchError(
@@ -125,6 +173,18 @@ export async function csrfFetch(url: string, init: RequestInit = {}): Promise<Re
 
   const firstResp = await fetchImpl(url, firstInit);
 
+  // A stale session can also surface on the mutating request itself: AppRouter
+  // intercepts the POST with the login interstitial (200 text/html) instead of
+  // the API's JSON. Redirect to re-authenticate rather than let the caller
+  // treat 200-HTML as a soft failure or (worse) success (#1904).
+  if (isSessionExpiredResponse(firstResp)) {
+    redirectToReauth();
+    throw new CsrfFetchError(
+      'csrfFetch: session expired on mutating request — redirecting to re-authenticate',
+      firstResp,
+    );
+  }
+
   if (firstResp.status !== 403) return firstResp;
 
   const required = (firstResp.headers.get('x-csrf-token') ?? '').toLowerCase();
@@ -139,5 +199,13 @@ export async function csrfFetch(url: string, init: RequestInit = {}): Promise<Re
     headers: mergeHeaders(init.headers, { 'x-csrf-token': cachedToken }),
   });
 
-  return fetchImpl(url, retryInit);
+  const retryResp = await fetchImpl(url, retryInit);
+  if (isSessionExpiredResponse(retryResp)) {
+    redirectToReauth();
+    throw new CsrfFetchError(
+      'csrfFetch: session expired on mutating retry — redirecting to re-authenticate',
+      retryResp,
+    );
+  }
+  return retryResp;
 }

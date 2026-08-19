@@ -78,6 +78,14 @@
           </VBox>
         </FlexBox>
 
+        <!-- Introduction: author-facing solving instructions shown on the public
+             puzzle page (issue #1911). Markdown — basic formatting + links. -->
+        <VBox class="sapUiSmallMarginBottom">
+          <Label text="Introduction (Markdown)"/>
+          <TextArea id="introInput" value="{b>/intro}" rows="4" width="100%" growing="true"
+                    placeholder="Optional solving instructions shown to players. Supports Markdown — basic formatting and links, e.g. see [how to solve](https://example.com)."/>
+        </VBox>
+
         <OverflowToolbar class="sapUiSmallMarginBottom">
           <Button text="Clear Grid" icon="sap-icon://clear-all" press=".onClearGrid"/>
           <Button text="Clear Words" icon="sap-icon://eraser" press=".onClearWords"/>

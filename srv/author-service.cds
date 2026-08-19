@@ -89,17 +89,33 @@ service AuthorService {
     projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority = 1;
 
   // #862 reopen — MyOwnedTutorials is Sage's "My Tutorials" panel.
-  // Sources from MyTutorialsView filtered to bestPriority IN (3, 4):
+  // Sources from MyTutorialsView filtered to bestPriority IN (1, 3, 4):
+  //   - Priority 1: strict author FK (Tutorials.author_ID = Users.ID)
   //   - Priority 3: TutorialMeta.ownerEmail = Users.email
   //   - Priority 4: TutorialMeta.owner (free-text) = Users.firstName || ' ' || lastName
   //
-  // Both signals come from IMS_TUTORIAL_AUTHOR — one row's EMAIL and NAME
+  // The 3/4 signals come from IMS_TUTORIAL_AUTHOR — one row's EMAIL and NAME
   // columns respectively. Legacy Java IMS's admin UI renders the NAME
   // ("Riley Rainey") on the tutorial's "Owner" column; when a user's
   // OWNER row uses a GitHub `<userid>+<login>@users.noreply.github.com`
   // placeholder as EMAIL, priority-3 misses but priority-4 fires via the
   // display-name join. The resync script (scripts/resync-tutorial-meta-
   // from-ims.cjs) preserves both signals so this join can hit.
+  //
+  // WHY priority 1 is INCLUDED (SAGE author-owner overlap fix):
+  // bestPriority = MIN(priority) per (tutorial, user). A user who is the
+  // declared author AND matches ownerEmail/owner collapses to bestPriority=1,
+  // so the original `IN (3, 4)` filter SILENTLY HID every author who also
+  // owns their own tutorial — the best-linked authors. Observed live:
+  // Peter Persiel (sapId D062570) authored + owned 9 tutorials, all at
+  // bestPriority=1, so his SAGE "My Tutorials" panel was empty while the
+  // Admin UI (which reads the raw owner/ownerEmail strings, no priority
+  // filter) correctly showed 9. A DEV probe found 229 (tutorial, user)
+  // pairs across 13 users hidden this way. A "My Tutorials" panel means
+  // "tutorials I authored OR own"; the only signal deliberately EXCLUDED
+  // is priority 2 (pure contributor). MyAuthoredTutorials (bestPriority=1
+  // only) remains the strict-authorship surface for advocate/admin.
+  // See ADR 0006 §2026-08-19.
   //
   // #923 briefly re-pointed this at MyMonitoredTutorialsView (personal
   // watch list from IMS_DASHBOARD_MONITOR_RECORD); live-probing IMS
@@ -109,7 +125,7 @@ service AuthorService {
   // ADR 0006 §2026-07-02b for the full semantic map.
   @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity MyOwnedTutorials as
-    projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority in (3, 4);
+    projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority in (1, 3, 4);
 
   // #923 — Sage's "watch this tutorial" toggle. Mirrors Java IMS's
   // POST /tutorialMeta/setMonitoredStatus?status=<bool> with body [<id>].

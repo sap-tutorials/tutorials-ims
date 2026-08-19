@@ -1,12 +1,14 @@
 <!-- hugo-apps/src/petoberfest/App.vue -->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import { fetchSlideshow, fetchMyUploads, uploadPet, probeAuth, photoUrl,
+import { fetchSlideshow, fetchMyUploads, fetchIntro, uploadPet, withdrawPet, probeAuth, photoUrl,
          type SlideEntry, type MyUpload } from './lib/server';
+import { renderMarkdown } from '../devtoberfest-shared/render-markdown';
 
 const props = defineProps<{ slug: string }>();
 const slides = ref<SlideEntry[]>([]);
 const mine = ref<MyUpload[]>([]);
+const introHtml = ref<string>('');
 const loggedIn = ref(false);
 const idx = ref(0);
 const petName = ref('');
@@ -15,8 +17,20 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const status = ref<string>('');
 const busy = ref(false);
 const paused = ref(false);
+const withdrawingId = ref<string | null>(null);
 
 let timer: number | undefined;
+
+// Fisher–Yates shuffle (returns a new array). The slideshow order is randomized
+// on each mount so visitors don't always see the newest uploads first.
+function shuffle<T>(arr: readonly T[]): T[] {
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
 function startTimer() {
   if (timer !== undefined) { clearInterval(timer); timer = undefined; }
@@ -43,7 +57,8 @@ function goTo(i: number) {
 function togglePlay() { paused.value = !paused.value; }
 
 onMounted(async () => {
-  slides.value = await fetchSlideshow(props.slug);
+  introHtml.value = renderMarkdown(await fetchIntro(props.slug));
+  slides.value = shuffle(await fetchSlideshow(props.slug));
   startTimer();
   loggedIn.value = await probeAuth();
   if (loggedIn.value) mine.value = await fetchMyUploads(props.slug);
@@ -78,10 +93,32 @@ async function submit() {
   } finally { busy.value = false; }
 }
 
+async function withdraw(m: MyUpload) {
+  if (withdrawingId.value) return;
+  const label = m.petName || 'this pet';
+  if (!window.confirm(`Remove ${label}? This permanently deletes your photo and can't be undone.`)) return;
+  withdrawingId.value = m.id;
+  status.value = '';
+  try {
+    await withdrawPet(props.slug, m.id);
+    mine.value = mine.value.filter(x => x.id !== m.id);
+    slides.value = await fetchSlideshow(props.slug);
+    if (idx.value >= slides.value.length) idx.value = 0;
+    startTimer();
+    status.value = 'Your photo has been withdrawn.';
+  } catch (e: any) {
+    status.value = e.message || 'Withdraw failed.';
+  } finally { withdrawingId.value = null; }
+}
+
 defineExpose({ idx, paused, next, prev, goTo, togglePlay });
 </script>
 
 <template>
+  <!-- Author-maintained intro/instructions (Markdown → sanitized HTML), issue #1911 -->
+  <!-- eslint-disable-next-line vue/no-v-html -- sanitized via DOMPurify in renderMarkdown -->
+  <section v-if="introHtml" class="pet-intro" v-html="introHtml"></section>
+
   <section class="pet-slideshow" v-if="slides.length">
     <div class="pet-titleband">🐾 Petoberfest 🐾</div>
     <div class="pet-frame">
@@ -118,7 +155,15 @@ defineExpose({ idx, paused, next, prev, goTo, togglePlay });
       <p class="pet-status" v-if="status">{{ status }}</p>
       <div v-if="mine.length" class="pet-mine">
         <h3>Your pets</h3>
-        <ul><li v-for="m in mine" :key="m.id">{{ m.petName || 'Pet' }} — {{ m.moderation === 'APPROVED' ? 'live' : 'pending approval' }}</li></ul>
+        <ul>
+          <li v-for="m in mine" :key="m.id">
+            <span class="pet-mine-label">{{ m.petName || 'Pet' }} — {{ m.moderation === 'APPROVED' ? 'live' : 'pending approval' }}</span>
+            <button class="pet-withdraw" @click="withdraw(m)" :disabled="withdrawingId === m.id"
+                    :aria-label="`Withdraw ${m.petName || 'pet'}`">
+              {{ withdrawingId === m.id ? 'Withdrawing…' : 'Withdraw' }}
+            </button>
+          </li>
+        </ul>
       </div>
     </template>
     <template v-else>
@@ -128,6 +173,19 @@ defineExpose({ idx, paused, next, prev, goTo, togglePlay });
 </template>
 
 <style scoped>
+.pet-intro {
+  max-width: 720px;
+  margin: 1.5rem auto 0;
+  padding: 1rem 1.25rem;
+  background: #fff8f0;
+  border: 1px solid #e8d3b8;
+  border-radius: 12px;
+  color: #5a4632;
+  line-height: 1.6;
+}
+.pet-intro :first-child { margin-top: 0; }
+.pet-intro :last-child { margin-bottom: 0; }
+.pet-intro a { color: #b45309; font-weight: 600; }
 .pet-slideshow { max-width: 720px; margin: 1.5rem auto; text-align: center; }
 .pet-titleband {
   font-size: 1.4rem; font-weight: 700; letter-spacing: .02em;
@@ -175,4 +233,16 @@ defineExpose({ idx, paused, next, prev, goTo, togglePlay });
 }
 .pet-dot--active { background: #d97706; }
 .pet-empty { text-align: center; color: #7a3e00; margin: 2rem 0; font-size: 1.1rem; }
+.pet-mine ul { list-style: none; padding: 0; margin: .5rem 0 0; }
+.pet-mine li {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .75rem; padding: .35rem 0; border-bottom: 1px solid #f0e2cf;
+}
+.pet-mine-label { color: #5a4632; }
+.pet-withdraw {
+  border: 1px solid #c47d5a; background: #fff; color: #a23b1e;
+  border-radius: 8px; padding: .25rem .7rem; font-size: .85rem; cursor: pointer;
+}
+.pet-withdraw:hover:not(:disabled) { background: #fbeae3; }
+.pet-withdraw:disabled { opacity: .6; cursor: default; }
 </style>

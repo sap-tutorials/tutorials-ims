@@ -32,6 +32,7 @@ import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
 import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
+import { puzzlePageHandler, puzzleIndexHandler } from './lib/puzzle-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { modelJsonHandler } from './lib/model-json-handler.js';
@@ -68,9 +69,9 @@ import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TA
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
 import { provisionDbUser, resolveDbUser } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
-import multer from 'multer';
+import { decodeBase64Upload } from './lib/decode-base64-upload.js';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
-import { uploadPetSubmission } from './lib/petoberfest-upload.js';
+import { uploadPetSubmission, decodePhotoUpload } from './lib/petoberfest-upload.js';
 import { fetchPetPhoto } from './lib/petoberfest-photo-store.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
 import './graphql-config.js';
@@ -491,6 +492,16 @@ cds.on('bootstrap', (app) => {
   // here yet (the /concepts/?$ flip lands in Task 5). Public, no auth — like
   // serveHandler.
   app.get('/content/concepts-index', conceptsIndexHandler);
+  // #1914 — CAP-served puzzle solver pages (/puzzles/<slug>/, dynamic slug).
+  // The page is a thin island shell composed into the __shell__ chrome; the
+  // `puzzle` island fetches grid/clue data from /puzzle-api at runtime. Serving
+  // dynamically (vs the old one-.md-per-puzzle Hugo static path) means an
+  // admin-created puzzle works immediately with no rebuild. Unknown slug → 404.
+  // Public, no auth — like serveHandler. AppRouter maps /puzzles/<slug> here.
+  app.get('/content/puzzles/:slug', puzzlePageHandler);
+  // #1914 follow-up — CAP-served /puzzles/ SECTION INDEX (SSR card list of all
+  // puzzles). Public, no auth. AppRouter maps bare /puzzles/ here.
+  app.get('/content/puzzles-index', puzzleIndexHandler);
   // #1659 Phase C — CAP-served /authors/{login}/ pages (dynamic slug, unbounded
   // login → author-<login> BLOB). Dark launch: the AppRouter /authors/ flip
   // lands with this change. Public, no auth — like serveHandler.
@@ -810,42 +821,21 @@ cds.on('bootstrap', (app) => {
   // req.user.is('Admin') must be true. cds.middlewares.context() populates
   // req.user with the authenticated identity.
   //
-  // Multer config: 5 MB hard limit on the file size matches the existing
-  // client-side cap in AdvocatePhotoController.js. memoryStorage keeps the
-  // bytes in a Buffer for direct hand-off to the sharp pipeline — no
-  // /tmp/ files. Single 'photo' field.
+  // Body: JSON base64 (NOT multipart/form-data). The multipart binary POST was
+  // silently stalled/blocked by the Akamai edge on developers.sap.com while working
+  // on the raw cfapps approuter URL; JSON rides the same xsuaa + CSRF path the admin
+  // OData $batch uses through the CDN. base64 of a 5 MB image ≈ 6.7 MB → 8 MB parser
+  // limit; decodeBase64Upload re-enforces the 5 MB decoded-byte cap. The photo now
+  // arrives as the JSON field `photoBase64`.
   const _photoContextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
   const _photoAuthMw    = cds.middlewares?.auth?.()    || ((req, res, next) => next());
-  const _photoUpload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
-  });
   app.post('/admin/advocates/:slug/photo',
     _photoContextMw, _photoAuthMw,
-    // Capture the authenticated user onto req._capturedUser BEFORE multer
-    // runs. Tom hit a 401 "Authentication required" 2026-06-22 even with
-    // PR #535 in place — multer's busboy-based stream parser can drop the
-    // AsyncLocalStorage scope that cds.middlewares.context() establishes,
-    // so cds.context.user reads as null/anonymous AFTER multer fires its
-    // callback. Capturing here preserves the user across the stream parse.
-    // See srv/lib/resolve-user.js header for the full rationale.
+    // Capture the authenticated user onto req._capturedUser before the body parser
+    // runs (see srv/lib/resolve-user.js) — retained from the multipart era so the
+    // auth resolution order below is unaffected by any stream/body middleware.
     captureUserMiddleware(cds),
-    (req, res, next) => {
-      // Surface multer errors (oversize, bad MIME, missing field) as 400
-      // with the error.code visible so the client can distinguish 'too
-      // large' from 'no field'. Without this wrapper multer's MulterError
-      // bubbles to the global error handler and the response shape varies
-      // between CAP versions.
-      _photoUpload.single('photo')(req, res, (err) => {
-        if (err) {
-          // multer.MulterError has .code (e.g. 'LIMIT_FILE_SIZE'); plain
-          // Error doesn't. Both get message text echoed in the response.
-          const code = err.code || 'UPLOAD_ERROR';
-          return res.status(400).json({ error: code, message: err.message });
-        }
-        next();
-      });
-    },
+    express.json({ limit: '8mb' }),
     async (req, res) => {
       try {
         // Admin scope check. AdminService.@requires('Admin') applies to
@@ -853,11 +843,8 @@ cds.on('bootstrap', (app) => {
         // CAP's service-layer gate so we enforce here.
         //
         // Resolution order (see srv/lib/resolve-user.js):
-        //   1. req._capturedUser — stashed by captureUserMiddleware BEFORE
-        //      multer ran. Survives the AsyncLocalStorage scope drop that
-        //      busboy can cause.
-        //   2. cds.context.user — canonical CAP source, may have been lost
-        //      after multer fired its callback.
+        //   1. req._capturedUser — stashed by captureUserMiddleware.
+        //   2. cds.context.user — canonical CAP source.
         //   3. req.user — legacy fallback for mocked-auth / basic-auth.
         // First candidate with a real (non-anonymous) id wins.
         const user = resolveUser(req, cds);
@@ -867,16 +854,14 @@ cds.on('bootstrap', (app) => {
         if (typeof user.is === 'function' && !user.is('Admin')) {
           return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin scope required' });
         }
-        if (!req.file) {
-          return res.status(400).json({ error: 'MISSING_FIELD', message: "missing 'photo' field in multipart body" });
-        }
         const { slug } = req.params;
         if (!slug || typeof slug !== 'string') {
           return res.status(400).json({ error: 'BAD_SLUG', message: 'slug path param required' });
         }
-        // Resolve slug → advocate ID. Service-level uniqueness is enforced
-        // elsewhere (see scripts/dedupe checks); we just need the FK to
-        // upsert against.
+        // JSON base64 → Buffer (5 MB decoded cap). Downstream processUpload does the
+        // real image validation (MIME allow-list, dimensions, animated-GIF reject).
+        const { buffer, mimeType } = decodeBase64Upload(req.body, { maxBytes: 5 * 1024 * 1024 });
+        // Resolve slug → advocate ID (FK to upsert against).
         const db = await cds.connect.to('db');
         const { Advocates } = cds.entities('com.sap.developers.ims');
         const adv = await db.run(
@@ -888,8 +873,8 @@ cds.on('bootstrap', (app) => {
         const result = await uploadAndUpsertAdvocatePhoto({
           advocateID: adv.ID,
           slug: adv.slug,
-          buffer: req.file.buffer,
-          mimeType: req.file.mimetype,
+          buffer,
+          mimeType: mimeType || 'image/jpeg',
         });
         return res.json({
           slug: adv.slug,
@@ -898,50 +883,53 @@ cds.on('bootstrap', (app) => {
           photoUrl: result.photoUrl,
         });
       } catch (e) {
-        // processUpload throws on invalid MIME, oversize (extra defense
-        // beyond multer's limit), animated GIFs, unparseable bytes.
-        const code = /unsupported MIME/i.test(e.message) ? 'BAD_MIME'
-                   : /too large/i.test(e.message) ? 'TOO_LARGE'
+        // decodeBase64Upload + processUpload throw typed/message errors: missing
+        // field, invalid MIME, oversize, animated GIFs, unparseable bytes.
+        const code = e.code === 'NOT_FOUND' ? 'NOT_FOUND'
+                   : e.code === 'MISSING_FIELD' ? 'MISSING_FIELD'
+                   : e.code === 'TOO_LARGE' || /too large/i.test(e.message) ? 'TOO_LARGE'
+                   : /unsupported MIME/i.test(e.message) ? 'BAD_MIME'
                    : /animated/i.test(e.message) ? 'ANIMATED'
-                   : /invalid image/i.test(e.message) ? 'BAD_IMAGE'
+                   : e.code === 'BAD_IMAGE' || /invalid image/i.test(e.message) ? 'BAD_IMAGE'
                    : 'UPLOAD_FAILED';
-        return res.status(400).json({ error: code, message: e.message });
+        const status = code === 'NOT_FOUND' ? 404 : 400;
+        return res.status(status).json({ error: code, message: e.message });
       }
     });
 
-  // ── Petoberfest: multipart upload (authenticated) + photo serve (public/admin) ──
+  // ── Petoberfest: JSON base64 upload (authenticated) + photo serve (public/admin) ──
   // Reserved BEFORE CAP mounts PetoberfestService at /petoberfest-api and
   // AdminService at /admin — same rationale as the advocate photo route above.
+  //
+  // Transport is JSON (NOT multipart/form-data): the multipart binary POST was silently
+  // stalled/blocked by the Akamai edge on developers.sap.com while working fine on the raw
+  // cfapps approuter URL. JSON rides the same xsuaa + CSRF path that /chat/stream and the
+  // /api/* islands use successfully through the CDN. base64 of a 10 MB image ≈ 13.3 MB, so
+  // the parser limit is 16 MB; decodePhotoUpload re-enforces the 10 MB decoded-byte cap.
   const _petCtxMw  = cds.middlewares?.context?.() || ((req, res, next) => next());
   const _petAuthMw = cds.middlewares?.auth?.()    || ((req, res, next) => next());
-  const _petUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
   app.post('/petoberfest-api/:slug/upload',
-    _petCtxMw, _petAuthMw, captureUserMiddleware(cds),
-    (req, res, next) => {
-      _petUpload.single('photo')(req, res, (err) => {
-        if (err) return res.status(400).json({ error: err.code || 'UPLOAD_ERROR', message: err.message });
-        next();
-      });
-    },
+    _petCtxMw, _petAuthMw, captureUserMiddleware(cds), express.json({ limit: '16mb' }),
     async (req, res) => {
       try {
         const user = resolveUser(req, cds);
         if (!user) return res.status(401).json({ error: 'UNAUTHENTICATED', message: 'Sign in to upload' });
-        if (!req.file) return res.status(400).json({ error: 'MISSING_FIELD', message: "missing 'photo' field" });
+        const { buffer, mimeType } = decodePhotoUpload(req.body);
         const db = await cds.connect.to('db');
         const out = await uploadPetSubmission(db, {
-          slug: req.params.slug, user, buffer: req.file.buffer,
-          mimeType: req.file.mimetype, petName: req.body?.petName,
+          slug: req.params.slug, user, buffer,
+          mimeType: mimeType || 'application/octet-stream', petName: req.body?.petName,
         });
         if (out.duplicate) return res.status(409).json({ error: 'DUPLICATE', message: 'You already uploaded this photo' });
         return res.json({ id: out.id, awarded: out.awarded, moderation: out.moderation });
       } catch (e) {
         const code = e.code === 'NOT_FOUND' ? 'NOT_FOUND'
+                   : e.code === 'MISSING_FIELD' ? 'MISSING_FIELD'
+                   : e.code === 'TOO_LARGE' || /too large/i.test(e.message) ? 'TOO_LARGE'
                    : /unsupported MIME/i.test(e.message) ? 'BAD_MIME'
-                   : /too large/i.test(e.message) ? 'TOO_LARGE'
                    : /animated/i.test(e.message) ? 'ANIMATED'
-                   : /invalid image/i.test(e.message) ? 'BAD_IMAGE'
+                   : e.code === 'BAD_IMAGE' || /invalid image/i.test(e.message) ? 'BAD_IMAGE'
                    : 'UPLOAD_FAILED';
         const status = code === 'NOT_FOUND' ? 404 : e.code === 'UNAUTHENTICATED' ? 401 : 400;
         return res.status(status).json({ error: code, message: e.message });

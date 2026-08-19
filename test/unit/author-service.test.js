@@ -281,13 +281,21 @@ describe('AuthorService.MyAuthoredTutorials filtering (#862)', () => {
   });
 });
 
-// #862 reopen — MyOwnedTutorials returns rows where the caller matches
-// TutorialMeta on EITHER ownerEmail (priority 3) OR owner-free-text-name
-// (priority 4). This is the legacy-IMS "My Tutorials" semantics: Java
-// IMS renders IMS_TUTORIAL_AUTHOR.NAME on its "Owner" column, and Sage's
-// panel needs to match users whose owner-record has a noreply email
-// (priority 3 misses) but the display name matches the SAP corporate
-// user (priority 4 hits via `u.firstName || ' ' || u.lastName`).
+// #862 reopen — MyOwnedTutorials returns rows where the caller is the
+// declared author (priority 1) OR matches TutorialMeta on EITHER ownerEmail
+// (priority 3) OR owner-free-text-name (priority 4). This is the legacy-IMS
+// "My Tutorials" semantics: Java IMS renders IMS_TUTORIAL_AUTHOR.NAME on its
+// "Owner" column, and Sage's panel needs to match users whose owner-record
+// has a noreply email (priority 3 misses) but the display name matches the
+// SAP corporate user (priority 4 hits via `u.firstName || ' ' || u.lastName`).
+//
+// SAGE author-owner overlap fix (2026-08-19): priority 1 is now INCLUDED.
+// bestPriority = MIN(priority) per (tutorial, user), so an author who ALSO
+// matches ownerEmail/owner collapses to bestPriority=1 — the old `IN (3, 4)`
+// filter silently hid every author who owns their own tutorial (the best-
+// linked authors). Observed live: Peter Persiel authored + owned 9 tutorials,
+// all bestPriority=1, so his SAGE panel was empty while the Admin UI showed 9.
+// Only priority 2 (pure contributor) stays excluded. See ADR 0006 §2026-08-19.
 //
 // A brief #923 detour re-pointed this at MyMonitoredTutorialsView; live-
 // probing IMS afterwards showed that was the eye-icon watch filter, not
@@ -296,38 +304,44 @@ describe('AuthorService.MyAuthoredTutorials filtering (#862)', () => {
 //
 // Fixture: for alice (uuid-A, email=alice@example.com, firstName=Alice, lastName=A):
 //   - tut-1  (owner='Alice A', ownerEmail=alice@example.com) → priority 3 (ownerEmail wins over name)
-//   - tut-A1 (author_ID=u-A + owner='Alice A' + ownerEmail=alice) → priority 1 (author wins)
+//   - tut-A1 (author_ID=u-A + owner='Alice A' + ownerEmail=alice) → priority 1 (author wins) — the author-owner overlap
 //   - tut-A2 (owner='Alice A', ownerEmail=alice@example.com) → priority 3
-// So MyOwnedTutorials for Alice returns tut-1 and tut-A2 (priority 3 hits).
-// tut-A1 is excluded because bestPriority=1 (strict author).
+// So MyOwnedTutorials for Alice returns tut-1, tut-A1, and tut-A2. tut-A1 is
+// INCLUDED (the SAGE fix) even though bestPriority=1; tut-B1 (Bob's authored)
+// is excluded because it belongs to another user, not because of its priority.
 describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
   it('exposes MyOwnedTutorials as a readable entity', async () => {
     const srv = await cds.connect.to('AuthorService');
     expect(srv.entities.MyOwnedTutorials).toBeDefined();
   });
 
-  it('returns rows with bestPriority IN (3, 4) — ownerEmail OR owner-name match', async () => {
+  it('returns rows with bestPriority IN (1, 3, 4) — author OR ownerEmail OR owner-name match', async () => {
     const srv = await cds.connect.to('AuthorService');
     const rows = await srv.tx(
       { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
       (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
     );
     const slugs = rows.map((r) => r.slug).sort();
-    expect(slugs).toEqual(['tut-1', 'tut-A2']);
+    expect(slugs).toEqual(['tut-1', 'tut-A1', 'tut-A2']);
     for (const r of rows) {
-      expect([3, 4]).toContain(r.bestPriority);
+      expect([1, 3, 4]).toContain(r.bestPriority);
     }
   });
 
-  it('does NOT return rows where the caller is strict author (bestPriority=1)', async () => {
+  it('INCLUDES author-owned rows (bestPriority=1) — the SAGE author-owner overlap fix', async () => {
     const srv = await cds.connect.to('AuthorService');
     const rows = await srv.tx(
       { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
       (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
     );
-    // tut-A1: alice is BOTH author and ownerEmail — bestPriority=1 wins, so it
-    // appears on MyAuthoredTutorials but NOT here.
-    expect(rows.map((r) => r.slug)).not.toContain('tut-A1');
+    // tut-A1: alice is BOTH author and ownerEmail — bestPriority=1 collapses
+    // the owner signals, but the panel must STILL surface it (this is Peter
+    // Persiel's real-world shape). Regression guard against a revert to IN (3,4).
+    const authorOwned = rows.find((r) => r.slug === 'tut-A1');
+    expect(authorOwned).toBeDefined();
+    expect(authorOwned.bestPriority).toBe(1);
+    // tut-B1 (Bob's authored tutorial) must NOT leak into Alice's panel —
+    // excluded by user-scoping, not by priority.
     expect(rows.map((r) => r.slug)).not.toContain('tut-B1');
   });
 

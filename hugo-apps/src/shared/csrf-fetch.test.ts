@@ -184,6 +184,99 @@ describe('csrfFetch', () => {
     await csrfFetch('/api/x', { method: 'POST', credentials: 'same-origin' })
   })
 
+  // --- Stale-session re-authentication (issue #1904) ---
+  // AppRouter answers API + /auth/user calls in an expired/absent session with
+  // the XSUAA login interstitial: HTTP 200, Content-Type text/html, body a
+  // <script> that navigates the top-level document to /oauth/authorize. Consumed
+  // via fetch() that script never runs, so before this fix the re-auth was
+  // silently swallowed and the caller (e.g. the tutorial "Done" button) reported
+  // a soft failure. csrfFetch must instead force a top-level login navigation.
+  // The suite runs in the `node` environment (no DOM), so csrfFetch reads
+  // `globalThis.location`. Install a mock with a spied `replace`.
+  function stubLocation(pathname: string, search = '') {
+    const replace = vi.fn()
+    const g = globalThis as Record<string, unknown>
+    const had = 'location' in g
+    const original = g.location
+    Object.defineProperty(g, 'location', {
+      configurable: true,
+      writable: true,
+      value: { pathname, search, replace },
+    })
+    return {
+      replace,
+      restore: () => {
+        if (had) {
+          Object.defineProperty(g, 'location', { configurable: true, writable: true, value: original })
+        } else {
+          delete g.location
+        }
+      },
+    }
+  }
+
+  it('redirects to /login when the token handshake hits the login interstitial (stale session)', async () => {
+    const { replace, restore } = stubLocation('/tutorials/abap-env-trial-onboarding', '?foo=1')
+    const fetchMock = vi.fn(async () =>
+      makeResponse(
+        200,
+        { 'content-type': 'text/html; charset=utf-8' },
+        '<html><head><script>location = "https://tenant.authentication.eu10.hana.ondemand.com/oauth/authorize?..."</script></head></html>',
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(csrfFetch('/api/completeStep', { method: 'POST' })).rejects.toBeInstanceOf(
+        CsrfFetchError,
+      )
+      expect(replace).toHaveBeenCalledTimes(1)
+      expect(replace).toHaveBeenCalledWith(
+        '/login?returnTo=' + encodeURIComponent('/tutorials/abap-env-trial-onboarding?foo=1'),
+      )
+      // The bad session was caught at the handshake — no mutating POST was sent.
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      restore()
+    }
+  })
+
+  it('redirects to /login when the mutating response itself is the login interstitial', async () => {
+    const { replace, restore } = stubLocation('/tutorials/x')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/auth/user') {
+        return makeResponse(200, { 'x-csrf-token': 'T', 'content-type': 'application/json' }, '{"authenticated":true}')
+      }
+      // Session expired between the handshake and the POST: AppRouter intercepts
+      // the mutating request with the login page instead of the API's JSON.
+      return makeResponse(200, { 'content-type': 'text/html' }, '<html>login</html>')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(csrfFetch('/api/completeStep', { method: 'POST' })).rejects.toBeInstanceOf(
+        CsrfFetchError,
+      )
+      expect(replace).toHaveBeenCalledWith('/login?returnTo=' + encodeURIComponent('/tutorials/x'))
+    } finally {
+      restore()
+    }
+  })
+
+  it('does NOT treat a 204 success (no content-type) as a login interstitial', async () => {
+    const { replace, restore } = stubLocation('/tutorials/x')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/auth/user') return makeResponse(200, { 'x-csrf-token': 'T' })
+      return makeResponse(204)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const res = await csrfFetch('/api/completeStep', { method: 'POST' })
+      expect(res.status).toBe(204)
+      expect(replace).not.toHaveBeenCalled()
+    } finally {
+      restore()
+    }
+  })
+
   it('treats `x-csrf-token: Required` (case variance) the same as `required`', async () => {
     let tokenCall = 0
     const fetchMock = vi.fn(async (url: string) => {

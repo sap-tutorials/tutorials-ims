@@ -140,3 +140,5 @@ Curated pointers into the developer docs that a curious integrator might find us
 ## Feedback & contributions
 
 Bug or gap? Open an issue on the [tutorials-ims repo](https://github.com/sap-tutorials/tutorials-ims/issues). PRs welcome.
+
+{{< scavenger-hunt >}}
