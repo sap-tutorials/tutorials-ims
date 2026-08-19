@@ -41,6 +41,25 @@ export async function fetchMyUploads(slug: string): Promise<MyUpload[]> {
   return (data.value ?? data) as MyUpload[];
 }
 
+// Author-maintained intro/instructions for the contest (issue #1911). Stored as
+// Markdown on Petoberfests.intro; rendered to sanitized HTML client-side.
+// Returns '' on any miss so the page degrades gracefully.
+export async function fetchIntro(slug: string): Promise<string> {
+  try {
+    const r = await fetch(
+      `${API}/Petoberfests?$filter=slug eq '${encodeURIComponent(slug)}'&$select=intro`,
+      { credentials: 'include' },
+    );
+    if (!r.ok) return '';
+    const data = await r.json();
+    const rows = (data.value ?? data) as Array<{ intro?: string }>;
+    const row = Array.isArray(rows) ? rows[0] : (rows as { intro?: string });
+    return (row && row.intro) || '';
+  } catch {
+    return '';
+  }
+}
+
 export interface UploadResult { id: string; awarded: boolean; moderation: string; }
 
 const UPLOAD_TIMEOUT_MS = 60_000;

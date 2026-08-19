@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchSlideshow, photoUrl, probeAuth, uploadPet } from '../lib/server';
+import { fetchSlideshow, fetchIntro, photoUrl, probeAuth, uploadPet } from '../lib/server';
 
 const { csrfFetchMock } = vi.hoisted(() => ({ csrfFetchMock: vi.fn() }));
 vi.mock('@shared/csrf-fetch', () => ({ csrfFetch: csrfFetchMock }));
@@ -70,6 +70,27 @@ describe('petoberfest server lib', () => {
       vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }) as any);
       expect(await probeAuth()).toBe(false);
     });
+  });
+
+  it('fetchIntro returns the intro for the matching slug', async () => {
+    const spy = vi.fn(async () => ({
+      ok: true, json: async () => ({ value: [{ intro: 'Snap a **pet** photo!' }] }),
+    }));
+    vi.stubGlobal('fetch', spy as any);
+    const intro = await fetchIntro('petoberfest-2026');
+    expect(intro).toBe('Snap a **pet** photo!');
+    // queries the Petoberfests entity, selecting only intro, filtered by slug
+    const url = String(spy.mock.calls[0][0]);
+    expect(url).toContain('/petoberfest-api/Petoberfests');
+    expect(url).toContain('$select=intro');
+    expect(url).toContain("slug eq 'petoberfest-2026'");
+  });
+
+  it('fetchIntro returns empty string when no row / not ok', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ value: [] }) })) as any);
+    expect(await fetchIntro('missing')).toBe('');
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })) as any);
+    expect(await fetchIntro('boom')).toBe('');
   });
 });
 

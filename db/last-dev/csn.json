@@ -1538,6 +1538,10 @@
           "length": 255,
           "@cds.persistence.name": "SLUG"
         },
+        "intro": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "INTRO"
+        },
         "layout": {
           "type": "cds.LargeString",
           "@cds.persistence.name": "LAYOUT"

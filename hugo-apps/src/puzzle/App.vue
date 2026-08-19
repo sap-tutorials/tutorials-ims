@@ -28,6 +28,7 @@ import {
   postResetProgress,
 } from './lib/server';
 import { emptyWhiteCells, mergeProgress } from './lib/progress';
+import { renderMarkdown } from '../devtoberfest-shared/render-markdown';
 
 const props = defineProps<{ slug: string; apiUrl: string }>();
 
@@ -35,6 +36,8 @@ const props = defineProps<{ slug: string; apiUrl: string }>();
 const loading = ref(true);
 const error   = ref<string | null>(null);
 const title   = ref('');
+/** Author-maintained solving instructions (Markdown → sanitized HTML), issue #1911 */
+const introHtml = ref<string>('');
 const grid    = ref<Cell[][]>([]);
 const clues   = ref<Record<string, string>>({});
 
@@ -110,14 +113,15 @@ async function loadPuzzle() {
   loading.value = true;
   error.value   = null;
   try {
-    // OData filter: /puzzle-api/Puzzles?$filter=slug eq '<slug>'&$select=layout,title
-    const url = `${props.apiUrl}/Puzzles?$filter=slug eq '${encodeURIComponent(props.slug)}'&$select=layout,title`;
+    // OData filter: /puzzle-api/Puzzles?$filter=slug eq '<slug>'&$select=layout,title,intro
+    const url = `${props.apiUrl}/Puzzles?$filter=slug eq '${encodeURIComponent(props.slug)}'&$select=layout,title,intro`;
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     const row  = Array.isArray(body.value) ? body.value[0] : null;
     if (!row) throw new Error('Puzzle not found');
     title.value = row.title ?? '';
+    introHtml.value = renderMarkdown(row.intro ?? '');
     const layout = typeof row.layout === 'string' ? JSON.parse(row.layout) : row.layout;
     grid.value  = layout.grid ?? [];
     clues.value = layout.clues ?? {};
@@ -458,6 +462,10 @@ async function resetProgress() {
         {{ title }}
       </h2>
 
+      <!-- Author-maintained solving instructions (Markdown → sanitized HTML), issue #1911 -->
+      <!-- eslint-disable-next-line vue/no-v-html -- sanitized via DOMPurify in renderMarkdown -->
+      <div v-if="introHtml" class="puzzle-intro" v-html="introHtml"></div>
+
       <!-- Solved banner (above the 3-column row) -->
       <div v-if="solved" class="solved-banner">
         Puzzle complete! 🎉
@@ -609,6 +617,20 @@ async function resetProgress() {
   max-width: 70rem;
   margin-inline: auto;
 }
+
+/* Author intro / solving instructions. Theme-token based (unlike the grid,
+   which is deliberately theme-independent). */
+.puzzle-intro {
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem;
+  line-height: 1.6;
+  background: var(--sapInformationBackground, #f5f6f7);
+  border-left: 3px solid var(--sapInformativeColor, #0a6ed1);
+  border-radius: 0 6px 6px 0;
+}
+.puzzle-intro :first-child { margin-top: 0; }
+.puzzle-intro :last-child { margin-bottom: 0; }
+.puzzle-intro a { color: var(--sapLinkColor, #0a6ed1); }
 
 /* ── 3-column layout row ──────────────────────────────────────────────────── */
 .puzzle-layout {

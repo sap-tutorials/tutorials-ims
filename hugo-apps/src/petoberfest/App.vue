@@ -1,12 +1,14 @@
 <!-- hugo-apps/src/petoberfest/App.vue -->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import { fetchSlideshow, fetchMyUploads, uploadPet, withdrawPet, probeAuth, photoUrl,
+import { fetchSlideshow, fetchMyUploads, fetchIntro, uploadPet, withdrawPet, probeAuth, photoUrl,
          type SlideEntry, type MyUpload } from './lib/server';
+import { renderMarkdown } from '../devtoberfest-shared/render-markdown';
 
 const props = defineProps<{ slug: string }>();
 const slides = ref<SlideEntry[]>([]);
 const mine = ref<MyUpload[]>([]);
+const introHtml = ref<string>('');
 const loggedIn = ref(false);
 const idx = ref(0);
 const petName = ref('');
@@ -55,6 +57,7 @@ function goTo(i: number) {
 function togglePlay() { paused.value = !paused.value; }
 
 onMounted(async () => {
+  introHtml.value = renderMarkdown(await fetchIntro(props.slug));
   slides.value = shuffle(await fetchSlideshow(props.slug));
   startTimer();
   loggedIn.value = await probeAuth();
@@ -112,6 +115,10 @@ defineExpose({ idx, paused, next, prev, goTo, togglePlay });
 </script>
 
 <template>
+  <!-- Author-maintained intro/instructions (Markdown → sanitized HTML), issue #1911 -->
+  <!-- eslint-disable-next-line vue/no-v-html -- sanitized via DOMPurify in renderMarkdown -->
+  <section v-if="introHtml" class="pet-intro" v-html="introHtml"></section>
+
   <section class="pet-slideshow" v-if="slides.length">
     <div class="pet-titleband">🐾 Petoberfest 🐾</div>
     <div class="pet-frame">
@@ -166,6 +173,19 @@ defineExpose({ idx, paused, next, prev, goTo, togglePlay });
 </template>
 
 <style scoped>
+.pet-intro {
+  max-width: 720px;
+  margin: 1.5rem auto 0;
+  padding: 1rem 1.25rem;
+  background: #fff8f0;
+  border: 1px solid #e8d3b8;
+  border-radius: 12px;
+  color: #5a4632;
+  line-height: 1.6;
+}
+.pet-intro :first-child { margin-top: 0; }
+.pet-intro :last-child { margin-bottom: 0; }
+.pet-intro a { color: #b45309; font-weight: 600; }
 .pet-slideshow { max-width: 720px; margin: 1.5rem auto; text-align: center; }
 .pet-titleband {
   font-size: 1.4rem; font-weight: 700; letter-spacing: .02em;
