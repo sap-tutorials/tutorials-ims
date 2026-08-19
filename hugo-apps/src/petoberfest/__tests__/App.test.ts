@@ -10,6 +10,7 @@ vi.mock('../lib/server', () => ({
     { id: 'c', petName: 'Kit', uploaderName: 'Lee', uploadedAt: '' },
   ]),
   fetchMyUploads: vi.fn().mockResolvedValue([]),
+  fetchIntro: vi.fn().mockResolvedValue('Upload your best pet photo!'),
   uploadPet: vi.fn(),
   probeAuth: vi.fn().mockResolvedValue(false),
   photoUrl: (id: string) => `/petoberfest-api/photo/${id}?size=display`,
@@ -85,5 +86,13 @@ describe('petoberfest slideshow controls', () => {
     const w = mount(App, { props: { slug: 'petoberfest-2026' } });
     await flushPromises();
     expect(w.find('.pet-caption strong').text()).toBe('Milo');
+  });
+
+  it('renders the author-maintained intro text (issue #1911)', async () => {
+    const w = mount(App, { props: { slug: 'petoberfest-2026' } });
+    await flushPromises();
+    const intro = w.find('.pet-intro');
+    expect(intro.exists()).toBe(true);
+    expect(intro.text()).toContain('Upload your best pet photo!');
   });
 });

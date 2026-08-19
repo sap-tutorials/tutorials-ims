@@ -13,6 +13,7 @@ annotate AdminService.Puzzles with @odata.draft.enabled;
 annotate AdminService.Puzzles with {
   slug     @Common.Label: 'Slug' @mandatory;
   title    @Common.Label: 'Title' @mandatory;
+  intro    @Common.Label: 'Introduction (Markdown)' @UI.MultiLineText;
   layout   @Common.Label: 'Layout JSON';
   solution @Common.Label: 'Solution JSON';
 };
@@ -4156,12 +4157,20 @@ annotate AdminService.Petoberfests with @(
     { Value: title,  Label: 'Title' },
     { Value: slug,   Label: 'Slug' },
     { Value: status, Label: 'Status' },
-    { Value: intro,  Label: 'Introduction' }
+    { Value: intro,  Label: 'Introduction (Markdown)' }
   ]},
   UI.Facets: [
     { $Type: 'UI.ReferenceFacet', Label: 'General', Target: '@UI.FieldGroup#General' }
   ]
 );
+
+// intro is author-facing solving/instruction text rendered as Markdown on the
+// public page (issue #1911). @UI.MultiLineText makes the Object Page field a
+// multi-line text area instead of a single-line input, so authors can write a
+// short paragraph with a link.
+annotate AdminService.Petoberfests with {
+  intro @UI.MultiLineText @Common.Label: 'Introduction (Markdown)';
+};
 
 // --- Topic Clusters (#topics-discovery) ---
 // LR/OP annotations for the topic-cluster curation tile.

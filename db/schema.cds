@@ -131,6 +131,11 @@ entity Checkpoints : TaskBase { }
 @assert.unique.slug: [slug]
 entity Puzzles : TaskBase {
   slug     : String(255);
+  // Author-maintained solving instructions shown on the public puzzle page
+  // (issue #1911). Markdown — rendered client-side to sanitized HTML via the
+  // shared renderMarkdown helper (markdown-it + DOMPurify). Distinct from the
+  // TaskBase `description` (card/listing text): `intro` is on-page guidance.
+  intro    : LargeString;
   layout   : LargeString;   // JSON {rows,cols,grid,clues,wordLengths,enumeration,hints}
   solution : LargeString;   // JSON {"r,c":"LETTER"} — SERVER ONLY
 }

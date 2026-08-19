@@ -58,6 +58,7 @@ sap.ui.define([
         subMode: "design",   // "design" | "fill"
         title: "",
         slug: "",
+        intro: "",           // author-facing solving instructions (Markdown) — issue #1911
         savedSlug: "",
         editId: null,        // OData ID when editing existing puzzle (null = new)
         wordText: "",
@@ -81,6 +82,7 @@ sap.ui.define([
       b.setProperty("/cols", cols);
       b.setProperty("/title", "");
       b.setProperty("/slug", "");
+      b.setProperty("/intro", "");
       b.setProperty("/savedSlug", "");
       b.setProperty("/editId", null);
       b.setProperty("/clues", {});
@@ -104,10 +106,11 @@ sap.ui.define([
       // requestProperty() DOES fetch un-cached properties from the back end;
       // merge them onto the cached row before rebuilding the grid.
       var row = oCtx.getObject() || {};
-      oCtx.requestProperty(["layout", "solution"]).then(function (values) {
+      oCtx.requestProperty(["layout", "solution", "intro"]).then(function (values) {
         self._loadPuzzleForEdit(Object.assign({}, row, {
           layout: values[0],
-          solution: values[1]
+          solution: values[1],
+          intro: values[2]
         }));
       }).catch(function (err) {
         MessageBox.error("Could not open puzzle: " + (err && err.message || err));
@@ -206,6 +209,7 @@ sap.ui.define([
       b.setProperty("/editId", row.ID || null);
       b.setProperty("/title", row.title || "");
       b.setProperty("/slug", row.slug || "");
+      b.setProperty("/intro", row.intro || "");
       b.setProperty("/savedSlug", row.slug || "");
       b.setProperty("/rows", rows);
       b.setProperty("/cols", cols);
@@ -479,6 +483,7 @@ sap.ui.define([
       var b = this.getView().getModel("b");
       var title = b.getProperty("/title");
       var slug = (b.getProperty("/slug") || "").toLowerCase().replace(/\s+/g, "-");
+      var intro = b.getProperty("/intro") || "";
       if (!title || !slug) {
         MessageBox.error("Title and Slug are required.");
         return;
@@ -521,6 +526,7 @@ sap.ui.define([
       var fields = {
         title: title,
         slug: slug,
+        intro: intro,
         status: "ACTIVE",
         layout: layout,
         solution: solution
