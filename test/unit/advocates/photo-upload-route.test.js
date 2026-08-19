@@ -61,14 +61,10 @@ describe('POST /admin/advocates/:slug/photo — auth integration (#417 regressio
   });
 
   it('returns 200 when an authenticated admin uploads a valid image', async () => {
-    const fd = new FormData();
-    // Wrap the Buffer in a Blob for FormData compatibility.
-    fd.append('photo', new Blob([portraitBytes], { type: 'image/jpeg' }), 'portrait.jpg');
-
     const res = await fetch(`${baseUrl}/admin/advocates/${SLUG}/photo`, {
       method: 'POST',
-      body: fd,
-      headers: { Authorization: ADMIN_BASIC },
+      headers: { Authorization: ADMIN_BASIC, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'portrait.jpg', mimeType: 'image/jpeg', photoBase64: portraitBytes.toString('base64') }),
     });
 
     // BEFORE FIX: this would fail with 403 'Admin scope required' because
@@ -84,11 +80,10 @@ describe('POST /admin/advocates/:slug/photo — auth integration (#417 regressio
   });
 
   it('returns 401 for anonymous callers (no Authorization header)', async () => {
-    const fd = new FormData();
-    fd.append('photo', new Blob([portraitBytes], { type: 'image/jpeg' }), 'portrait.jpg');
     const res = await fetch(`${baseUrl}/admin/advocates/${SLUG}/photo`, {
       method: 'POST',
-      body: fd,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'portrait.jpg', mimeType: 'image/jpeg', photoBase64: portraitBytes.toString('base64') }),
     });
     // Anonymous: should be rejected (401 preferred over 403 for unauthenticated).
     expect([401, 403]).toContain(res.status);
@@ -96,12 +91,10 @@ describe('POST /admin/advocates/:slug/photo — auth integration (#417 regressio
 
   it('returns 403 when a non-admin authenticated user attempts to upload', async () => {
     const devAuth = 'Basic ' + Buffer.from('developer:developer').toString('base64');
-    const fd = new FormData();
-    fd.append('photo', new Blob([portraitBytes], { type: 'image/jpeg' }), 'portrait.jpg');
     const res = await fetch(`${baseUrl}/admin/advocates/${SLUG}/photo`, {
       method: 'POST',
-      body: fd,
-      headers: { Authorization: devAuth },
+      headers: { Authorization: devAuth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'portrait.jpg', mimeType: 'image/jpeg', photoBase64: portraitBytes.toString('base64') }),
     });
     expect(res.status).toBe(403);
   });
