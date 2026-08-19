@@ -114,6 +114,18 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'author-page and concept-page entries: the QA channel serves in-flight tutorials from ' +
     '-Contribution repos; advocate pages are out of its scope, and srv-qa wires no ' +
     'advocateServeHandler / advocate publish flow.',
+  'GET /content/puzzles/:slug':
+    'CAP-served puzzle solver pages (/puzzles/<slug>/, #1914) — a public prod content surface ' +
+    'served dynamically from HANA, not tutorial-draft author preview. Puzzles are admin-created ' +
+    '(no -Contribution repo / rebuild flow), so they are out of the QA channel scope. Same ' +
+    'rationale as the concept-, author-, and advocate-page entries above: srv-qa wires no ' +
+    'puzzlePageHandler (imported from srv/lib/puzzle-page.js, not createContentHandlers) and ' +
+    'has no puzzle publish flow.',
+  'GET /content/puzzles-index':
+    'CAP-served /puzzles/ section index (#1914 follow-up) — the index companion to ' +
+    'GET /content/puzzles/:slug above, same public prod content surface (admin-created puzzles), ' +
+    'not tutorial-draft author preview. The QA channel serves in-flight tutorials; puzzle pages ' +
+    'are out of its scope and srv-qa wires no puzzleIndexHandler.',
   'GET /content/image-source':
     'Persist-tutorial-images (#1868/#1869/#1870) — streams stored image originals so the ' +
     'approuter can proxy raw-GitHub image URLs. DARK-LAUNCHED: no approuter route points at ' +
