@@ -43,16 +43,74 @@ export async function fetchMyUploads(slug: string): Promise<MyUpload[]> {
 
 export interface UploadResult { id: string; awarded: boolean; moderation: string; }
 
-export async function uploadPet(slug: string, file: File, petName: string): Promise<UploadResult> {
-  const fd = new FormData();
-  fd.append('photo', file);
-  fd.append('petName', petName);
-  // Authenticated route → csrfFetch. Do NOT set Content-Type; the browser sets the multipart boundary.
-  const r = await csrfFetch(`${API}/${encodeURIComponent(slug)}/upload`, { method: 'POST', body: fd, credentials: 'include' });
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({}));
-    throw Object.assign(new Error(err.message || 'upload failed'), { code: err.error, status: r.status });
+const UPLOAD_TIMEOUT_MS = 60_000;
+
+/** Base64-encode bytes in chunks (avoids btoa call-stack blowups on large images). */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
   }
+  return btoa(binary);
+}
+
+/**
+ * Build an Error that always carries the HTTP status — and, for a non-JSON edge/CDN
+ * response, any reference id from the error page — so an Akamai block is never silent.
+ */
+async function buildUploadError(r: Response): Promise<Error> {
+  let text = '';
+  try { text = await r.text(); } catch { /* body unreadable */ }
+
+  let json: any = null;
+  if (text) { try { json = JSON.parse(text); } catch { /* not JSON — likely a CDN HTML error page */ } }
+  if (json && (json.message || json.error)) {
+    return Object.assign(new Error(json.message || 'Upload failed.'), { code: json.error, status: r.status });
+  }
+
+  // Non-JSON body ⇒ the request was rejected by the edge before it reached our server.
+  // Match the Akamai "Reference #<n>.<hex>.<ts>.<hex>" token; the leading \d+\. skips the
+  // "&#32;" HTML entity that precedes it in the raw markup.
+  const ref = text.match(/#\s*(\d+\.[\w.\-]+)/)?.[1];
+  const detail = ref ? ` (reference ${ref})` : '';
+  return Object.assign(
+    new Error(`Upload failed (HTTP ${r.status})${detail}. This may be a network or CDN issue — please try again.`),
+    { code: 'EDGE_ERROR', status: r.status },
+  );
+}
+
+export async function uploadPet(slug: string, file: File, petName: string): Promise<UploadResult> {
+  // JSON transport (not multipart/form-data): the same xsuaa + csrfFetch path used by
+  // /chat/stream and /api/* islands, which survive the Akamai edge. Multipart binary
+  // uploads were stalling/blocked at the CDN (issue: works on cfapps, silent on developers.sap.com).
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const photoBase64 = bytesToBase64(bytes);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  let r: Response;
+  try {
+    r = await csrfFetch(`${API}/${encodeURIComponent(slug)}/upload`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ petName, filename: file.name, mimeType: file.type, photoBase64 }),
+      signal: controller.signal,
+    });
+  } catch (e: any) {
+    if (e?.name === 'AbortError') {
+      throw Object.assign(
+        new Error('Upload timed out — the network or CDN did not respond. Please try again.'),
+        { code: 'TIMEOUT' },
+      );
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!r.ok) throw await buildUploadError(r);
   return r.json();
 }
 
