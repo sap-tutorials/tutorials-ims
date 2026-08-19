@@ -18,6 +18,17 @@ const paused = ref(false);
 
 let timer: number | undefined;
 
+// Fisher–Yates shuffle (returns a new array). The slideshow order is randomized
+// on each mount so visitors don't always see the newest uploads first.
+function shuffle<T>(arr: readonly T[]): T[] {
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 function startTimer() {
   if (timer !== undefined) { clearInterval(timer); timer = undefined; }
   if (slides.value.length > 1) {
@@ -43,7 +54,7 @@ function goTo(i: number) {
 function togglePlay() { paused.value = !paused.value; }
 
 onMounted(async () => {
-  slides.value = await fetchSlideshow(props.slug);
+  slides.value = shuffle(await fetchSlideshow(props.slug));
   startTimer();
   loggedIn.value = await probeAuth();
   if (loggedIn.value) mine.value = await fetchMyUploads(props.slug);

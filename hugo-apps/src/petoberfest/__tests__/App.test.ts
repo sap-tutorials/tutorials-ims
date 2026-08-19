@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { nextTick } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 
 vi.mock('../lib/server', () => ({
@@ -40,5 +41,25 @@ describe('petoberfest slideshow controls', () => {
     w.vm.next(); expect(w.vm.idx).toBe(0);   // wraps
     w.vm.prev(); expect(w.vm.idx).toBe(2);   // wraps back
     w.vm.goTo(1); expect(w.vm.idx).toBe(1);
+  });
+
+  it('randomizes slide order on mount, preserving every entry (no drops/dupes)', async () => {
+    const w = mount(App, { props: { slug: 'petoberfest-2026' } });
+    await flushPromises();
+    w.vm.togglePlay();                    // pause so next() steps deterministically
+    const seen: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      seen.push(w.find('.pet-caption strong').text());
+      w.vm.next();
+      await nextTick();
+    }
+    expect(seen.slice().sort()).toEqual(['Kit', 'Milo', 'Rex']);
+  });
+
+  it('applies the Fisher–Yates shuffle (deterministic with mocked RNG)', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);   // forces [b,c,a] → Milo first
+    const w = mount(App, { props: { slug: 'petoberfest-2026' } });
+    await flushPromises();
+    expect(w.find('.pet-caption strong').text()).toBe('Milo');
   });
 });
