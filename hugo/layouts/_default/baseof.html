@@ -13,6 +13,8 @@
   {{ end }}
   {{ partial "head.html" . }}
   {{ if not site.Params.qa }}{{ $joule := resources.Get "css/joule.css" }}{{ $joule.Publish }}<link rel="stylesheet" href="{{ ($joule | fingerprint).RelPermalink }}">{{ end }}
+  {{/* #1908 Devtoberfest scavenger hunt — clue styles, only on the three hunt pages. */}}
+  {{ if or .IsHome (eq .RelPermalink "/ai/") (eq .RelPermalink "/api-docs/") }}{{ $sh := resources.Get "css/scavenger-hunt.css" | minify | fingerprint }}<link rel="stylesheet" href="{{ $sh.RelPermalink }}">{{ end }}
   {{ partial "site-jsonld.html" . }}
 </head>
 <body{{ if site.Params.previewMode }} data-has-ai="{{ if .Params.hasAi }}true{{ else }}false{{ end }}"{{ end }}>
@@ -58,6 +60,8 @@
 
   {{ partial "lightbox-dialog.html" . }}
   {{ partial "consent.html" . }}
+  {{/* #1908 Devtoberfest scavenger hunt — self-gating body-level overlays (home + /ai/). */}}
+  {{ partial "scavenger-hunt.html" . }}
   <script defer src="/js/vendor/markdown-it.min.js"></script>
   <script defer src="/js/vendor/purify.min.js"></script>
   {{ if not site.Params.qa }}

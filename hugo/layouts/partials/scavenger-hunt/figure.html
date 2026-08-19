@@ -1,0 +1,21 @@
+{{- /* scavenger-hunt/figure.html (#1908) — shared clue figure.
+       Renders the advocate hero image (transparent-background WebP served from
+       /api/advocates/<slug>/photo) plus the clue caption and optional More Info
+       link. Called by both the body-level overlay partial (scavenger-hunt.html)
+       and the embedded shortcode (shortcodes/scavenger-hunt.html).
+
+       Expects a dict context:
+         .clue        — one entry from hugo/data/scavenger_hunt.json clues.*
+         .moreInfoUrl — the shared More Info URL
+         .apiBase     — site.Params.apiBase (e.g. "/api")                    */ -}}
+{{- $c := .clue -}}
+<figure class="sh-figure">
+  <img class="sh-img" src="{{ .apiBase }}/advocates/{{ $c.slug }}/photo" alt="{{ $c.name }}"
+       width="256" height="256" loading="lazy" decoding="async">
+  <figcaption class="sh-caption">
+    <span class="sh-clue-text">{{ $c.caption }}</span>
+    {{- if $c.showMoreInfo }}
+    <span class="sh-moreinfo">More Info: <a href="{{ .moreInfoUrl }}" target="_blank" rel="noopener">{{ .moreInfoUrl }}</a></span>
+    {{- end }}
+  </figcaption>
+</figure>
