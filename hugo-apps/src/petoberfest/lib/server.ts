@@ -10,9 +10,21 @@ export function photoUrl(id: string, size: 'display' | 'thumb' = 'display'): str
   return `${API}/photo/${encodeURIComponent(id)}?size=${size}`;
 }
 
+// `/auth/user` is the XSUAA-gated JSON identity endpoint (see xs-app.json).
+// An `r.ok` check alone is NOT sufficient: for an anonymous browser the
+// approuter answers the XSUAA route with HTTP 200 + an HTML login-redirect
+// page (not a 401), so a bare `return r.ok` reports every anon visitor as
+// signed in — which unhid the upload form for logged-out users. Mirror the
+// canonical robust probe from homepage-personalizer/coordinator.ts: require a
+// JSON content-type AND a truthy `authenticated` flag in the body.
 export async function probeAuth(): Promise<boolean> {
-  try { const r = await fetch('/auth/user', { credentials: 'include' }); return r.ok; }
-  catch (e) { console.warn('probeAuth: unexpected network error', e); return false; }
+  try {
+    const r = await fetch('/auth/user', { credentials: 'include' });
+    if (!r.ok) return false;
+    if (!(r.headers.get('content-type') || '').includes('json')) return false;
+    const body = await r.json();
+    return !!body?.authenticated;
+  } catch (e) { console.warn('probeAuth: unexpected network error', e); return false; }
 }
 
 export async function fetchSlideshow(slug: string): Promise<SlideEntry[]> {
