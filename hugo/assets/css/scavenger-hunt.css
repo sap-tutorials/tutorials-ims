@@ -25,6 +25,21 @@
 }
 .sh-moreinfo { display: block; font-weight: 400; word-break: break-word; }
 
+/* ---- readability panel behind the clue text on the floating overlays ----
+   The homepage (Ajay) and /ai/ (DJ) clues pop over live page content, so the
+   transparent-background caption was unreadable (#1908 follow-up). Sit the
+   caption on a solid, theme-aware panel that blocks the content beneath it.
+   The embedded /api-docs/ (Shilpa) clue is inline and needs no panel. */
+.sh--home .sh-caption,
+.sh--ai .sh-caption {
+  background: var(--sapGroup_ContentBackground, #fff);
+  color: var(--sapTextColor, #32363a);
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--sapList_BorderColor, rgba(0, 0, 0, 0.12));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+
 /* ---- homepage: right-gutter hotspot ----------------------------------- */
 .sh--home {
   position: fixed;
