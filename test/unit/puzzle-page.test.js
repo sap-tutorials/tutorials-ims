@@ -4,6 +4,8 @@ import {
   renderPuzzleBody,
   renderPuzzleNotFoundBody,
   createPuzzlePage,
+  renderPuzzleIndexBody,
+  createPuzzleIndex,
 } from '../../srv/lib/puzzle-page.js';
 import { parseShell } from '../../srv/lib/chrome-shell.js';
 
@@ -123,3 +125,55 @@ describe('createPuzzlePage handler', () => {
     expect(seen).toBe('devtoberfest-2026-warmup');
   });
 });
+
+// Follow-up (#1914): the /puzzles/ section index was 404. Serve it from CAP as
+// a simple SSR card list of all puzzles, mirroring the concepts-index pattern.
+describe('renderPuzzleIndexBody', () => {
+  const PUZZLES = [
+    { slug: 'devtoberfest-2026-warmup', title: 'Devtoberfest Warmup', description: 'Warm up for the fest.' },
+    { slug: 'devtoberfest-cryptic-crossword', title: 'Cryptic Crossword', description: '' },
+  ];
+
+  it('renders a card per puzzle linking to /puzzles/<slug>/', () => {
+    const body = renderPuzzleIndexBody(PUZZLES);
+    expect(body).toContain('href="/puzzles/devtoberfest-2026-warmup/"');
+    expect(body).toContain('Devtoberfest Warmup');
+    expect(body).toContain('href="/puzzles/devtoberfest-cryptic-crossword/"');
+    expect(body).toContain('Cryptic Crossword');
+  });
+
+  it('escapes puzzle titles/descriptions', () => {
+    const body = renderPuzzleIndexBody([{ slug: 's', title: '<script>x</script>', description: '"q"' }]);
+    expect(body).not.toContain('<script>x</script>');
+    expect(body).toContain('&lt;script&gt;');
+    expect(body).toContain('&quot;q&quot;');
+  });
+
+  it('renders an empty state when there are no puzzles', () => {
+    const body = renderPuzzleIndexBody([]);
+    expect(body.toLowerCase()).toContain('no puzzles');
+    expect(body).not.toContain('href="/puzzles/');
+  });
+});
+
+describe('createPuzzleIndex handler', () => {
+  const okDeps = (puzzles) => ({
+    fetchPuzzles: async () => puzzles,
+    getActiveVersion: async () => 1,
+    shellLoader: { get: async () => ({ ...parseShell(SAMPLE_SHELL), version: 1 }), invalidate() {} },
+  });
+
+  it('serves 200 with the composed shell listing puzzles', async () => {
+    const { puzzleIndexHandler } = createPuzzleIndex({
+      deps: okDeps([{ slug: 'a-puzzle', title: 'A Puzzle', description: 'd', modifiedAt: 'x' }]),
+    });
+    const res = fakeRes();
+    await puzzleIndexHandler({ headers: {} }, res);
+    expect(res.statusCode).toBe(200);
+    const html = decode(res);
+    expect(html).toContain('href="/puzzles/a-puzzle/"');
+    expect(html).toContain('<title>Puzzles</title>');
+    expect(html).toContain('<header>chrome</header>');
+  });
+});
+
