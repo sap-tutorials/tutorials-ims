@@ -1,0 +1,47 @@
+{{- /* scavenger-hunt.html (#1908) — Devtoberfest scavenger-hunt overlays.
+       Body-level partial included from baseof.html. Renders a page-specific
+       hidden clue on the homepage and the /ai/ verb page. The /api-docs/ clue
+       is embedded inline in page content via the matching shortcode, so it is
+       intentionally NOT handled here.
+
+       - Homepage: a small, easily-overlooked hotspot pinned to the right gutter.
+         Hovering / focusing it pops the advocate hero + clue out from behind the
+         content frame. The More Info link lives OUTSIDE the hotspot button so we
+         never nest an anchor inside a button.
+       - /ai/: the hero peeks up from the bottom edge and pops fully up on
+         hover / focus. It carries no More Info link, so the whole peek is a
+         single focusable button.
+
+       All motion is pure CSS (:hover / :focus-within) and respects
+       prefers-reduced-motion — no JavaScript, no island, CSP-clean.          */ -}}
+{{- $data := site.Data.scavenger_hunt -}}
+{{- if $data -}}
+{{- $api := site.Params.apiBase -}}
+{{- $mode := "" -}}
+{{- if .IsHome -}}
+  {{- $mode = "homepage" -}}
+{{- else if eq .RelPermalink "/ai/" -}}
+  {{- $mode = "ai" -}}
+{{- end -}}
+{{- with (and $mode (index $data.clues $mode)) -}}
+{{- $fig := dict "clue" . "moreInfoUrl" $data.moreInfoUrl "apiBase" $api -}}
+{{- if eq $mode "homepage" -}}
+<aside class="sh sh--home" aria-label="Devtoberfest scavenger hunt clue">
+  <button type="button" class="sh-hotspot" aria-label="Reveal a hidden Devtoberfest scavenger hunt clue">
+    <span class="sh-dot" aria-hidden="true"></span>
+  </button>
+  <div class="sh-reveal">
+    {{ partial "scavenger-hunt/figure.html" $fig }}
+  </div>
+</aside>
+{{- else if eq $mode "ai" -}}
+<aside class="sh sh--ai" aria-label="Devtoberfest scavenger hunt clue">
+  <button type="button" class="sh-hotspot sh-hotspot--ai" aria-label="Reveal a hidden Devtoberfest scavenger hunt clue">
+    <span class="sh-reveal">
+      {{ partial "scavenger-hunt/figure.html" $fig }}
+    </span>
+  </button>
+</aside>
+{{- end -}}
+{{- end -}}
+{{- end -}}

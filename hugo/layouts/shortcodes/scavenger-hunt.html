@@ -1,0 +1,15 @@
+{{- /* scavenger-hunt.html shortcode (#1908) — embedded Devtoberfest clue.
+       Renders the Shilpa Shankar clue inline at the bottom of the /api-docs/
+       page content (not an overlay — it is part of the article flow). Reads the
+       same hugo/data/scavenger_hunt.json config as the overlay partial and
+       reuses the shared figure partial so markup stays in lockstep.          */ -}}
+{{- $data := site.Data.scavenger_hunt -}}
+{{- with (and $data (index $data.clues "api-docs")) -}}
+{{- $fig := dict "clue" . "moreInfoUrl" $data.moreInfoUrl "apiBase" site.Params.apiBase -}}
+<section class="sh sh--embed">
+  {{- with .heading }}
+  <h2 class="sh-heading">{{ . }}</h2>
+  {{- end }}
+  {{ partial "scavenger-hunt/figure.html" $fig }}
+</section>
+{{- end -}}
