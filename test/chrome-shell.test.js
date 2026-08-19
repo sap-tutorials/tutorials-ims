@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseShell, composeShell, canonicalUrlFor, ShellMarkerError } from '../srv/lib/chrome-shell.js';
+import { parseShell, composeShell, canonicalUrlFor, buildBreadcrumbJsonLd, ShellMarkerError } from '../srv/lib/chrome-shell.js';
 
 const SAMPLE_SHELL = `<!DOCTYPE html>
 <html lang="en" data-page-kind="generic" data-page-slug="" data-page-title="">
@@ -186,6 +186,11 @@ describe('chrome-shell.composeShell — SEO head rewrite (#1795)', () => {
       .toBe('https://developers.sap.com/puzzles/devtoberfest-2026-warmup/');
   });
 
+  it('derives the /puzzles/ canonical for kind "puzzles-index" (#1914 index)', () => {
+    expect(canonicalUrlFor({ kind: 'puzzles-index', slug: 'puzzles' }))
+      .toBe('https://developers.sap.com/puzzles/');
+  });
+
   it('leaves canonical + robots untouched on a shell that lacks those tags', () => {
     const bare = parseShell('<html><head><title></title></head><body><header>h</header><!-- MAIN --><footer>f</footer></body></html>');
     const html = composeShell(bare, '<main>B</main>', { kind: 'concept', slug: 's', title: 'T', description: 'd' });
@@ -286,5 +291,23 @@ describe('chrome-shell.composeShell — breadcrumb + embed-bar rewrite (#1808)',
     });
     // Unknown kind → no canonical trail we can trust, so the baked block stays.
     expect(html).toContain('"name":"_shell"');
+  });
+});
+
+describe('chrome-shell.buildBreadcrumbJsonLd — puzzles (#1914 index)', () => {
+  it('puzzle detail trail is Home → Puzzles → <title>', () => {
+    const url = canonicalUrlFor({ kind: 'puzzle', slug: 'my-puzzle' });
+    const json = buildBreadcrumbJsonLd({ kind: 'puzzle', slug: 'my-puzzle', title: 'My Puzzle' }, url);
+    const bc = JSON.parse(json.replace(/\\u003c/g, '<'));
+    const names = bc.itemListElement.map((e) => e.name);
+    expect(names).toEqual(['Home', 'Puzzles', 'My Puzzle']);
+    const puzzlesCrumb = bc.itemListElement.find((e) => e.name === 'Puzzles');
+    expect(puzzlesCrumb.item).toBe('https://developers.sap.com/puzzles/');
+  });
+
+  it('puzzles-index trail is Home → Puzzles', () => {
+    const json = buildBreadcrumbJsonLd({ kind: 'puzzles-index', slug: 'puzzles' }, 'https://developers.sap.com/puzzles/');
+    const bc = JSON.parse(json.replace(/\\u003c/g, '<'));
+    expect(bc.itemListElement.map((e) => e.name)).toEqual(['Home', 'Puzzles']);
   });
 });

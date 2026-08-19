@@ -241,3 +241,190 @@ export function createPuzzlePage({ namespace = DEFAULT_NAMESPACE, deps = {} } = 
 
 const _default = createPuzzlePage();
 export const puzzlePageHandler = _default.puzzlePageHandler;
+
+// ---------------------------------------------------------------------------
+// #1914 follow-up — the /puzzles/ SECTION INDEX.
+//
+// Was 404 (no Hugo list page shipped). Serve it from CAP as a simple SSR card
+// list of all puzzles, mirroring concept-list-page.js. Low traffic + a handful
+// of puzzles, so no filter island — just server-rendered <li> cards. Composed
+// into the __shell__ chrome via composeShell, same as the detail page.
+// ---------------------------------------------------------------------------
+
+// Card styling ported inline (never shipped in a global sheet), theme-aware via
+// SAP Horizon CSS variables with a light-mode hex fallback. Mirrors the
+// concepts-index approach in concept-list-page.js.
+const PUZZLE_INDEX_STYLE = `<style>
+.puzzles-index { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+.puzzles-index__breadcrumb { font-size: 0.875rem; color: var(--sapContent_LabelColor, #515559); margin-bottom: 1rem; }
+.puzzles-index__breadcrumb a { color: var(--sapLinkColor, #0070f2); text-decoration: none; }
+.puzzles-index__breadcrumb a:hover { text-decoration: underline; }
+.puzzles-index__title { font-size: 2rem; margin: 0 0 0.75rem; color: var(--sapTextColor, #1d2d3e); }
+.puzzles-index__intro { color: var(--sapTextColor, #515559); margin: 0 0 1.5rem; max-width: 60ch; }
+.puzzles-index__list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; }
+.puzzles-index__item { border: 1px solid var(--sapList_BorderColor, #d5dadc); border-radius: 6px; background: var(--sapTile_Background, #fff); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.puzzles-index__item:hover { border-color: var(--sapLinkColor, #0070f2); box-shadow: var(--sapContent_Shadow0, 0 2px 8px rgba(0, 0, 0, 0.06)); }
+.puzzles-index__link { display: flex; flex-direction: column; gap: 0.35rem; padding: 1rem; text-decoration: none; color: inherit; }
+.puzzles-index__name { font-weight: 600; color: var(--sapLinkColor, #0070f2); }
+.puzzles-index__description { font-size: 0.875rem; color: var(--sapTextColor, #515559); }
+.puzzles-index__empty { color: var(--sapContent_LabelColor, #515559); padding: 2rem; text-align: center; background: var(--sapNeutralBackground, #f5f6f7); border-radius: 6px; }
+</style>`;
+
+/**
+ * Renders the /puzzles/ index BODY — the breadcrumb + heading + a card per
+ * puzzle. NOT a full document; the handler composes it into __shell__.
+ */
+export function renderPuzzleIndexBody(puzzles) {
+  const list = Array.isArray(puzzles) ? puzzles : [];
+  const header = `${PUZZLE_INDEX_STYLE}
+<article class="puzzles-index">
+  <header class="puzzles-index__header">
+    <nav class="puzzles-index__breadcrumb" aria-label="breadcrumb"><a href="/">Home</a> &rsaquo; <span>Puzzles</span></nav>
+    <h1 class="puzzles-index__title">Puzzles</h1>
+    <p class="puzzles-index__intro">Interactive crossword-style puzzles from the SAP Developer community. Pick one to play.</p>
+  </header>`;
+
+  if (!list.length) {
+    return `${header}
+  <p class="puzzles-index__empty">No puzzles are available right now. Check back soon.</p>
+</article>`;
+  }
+
+  const cards = list.map((p) => {
+    const slug = escapeHtml(p.slug);
+    const title = escapeHtml(p.title || p.slug);
+    const desc = p.description
+      ? `<span class="puzzles-index__description">${escapeHtml(p.description)}</span>`
+      : '';
+    return `    <li class="puzzles-index__item">
+      <a class="puzzles-index__link" href="/puzzles/${slug}/">
+        <span class="puzzles-index__name">${title}</span>
+        ${desc}
+      </a>
+    </li>`;
+  }).join('\n');
+
+  return `${header}
+  <ul class="puzzles-index__list">
+${cards}
+  </ul>
+</article>`;
+}
+
+// Real puzzle-list fetch — scalar columns only (no LOBs). Injectable for tests.
+function defaultFetchPuzzles(namespace) {
+  return async () => {
+    const { Puzzles } = cds.entities(namespace);
+    return SELECT.from(Puzzles)
+      .columns('slug', 'title', 'description', 'modifiedAt')
+      .orderBy('title');
+  };
+}
+
+/**
+ * Factory for the GET /content/puzzles-index handler. Single-page gzip cache
+ * keyed on active manifest version + a signature of the puzzle set (count +
+ * max modifiedAt) so an admin CREATE/UPDATE (which is NOT a content publish, so
+ * doesn't bump the manifest version) still refreshes the list at origin.
+ */
+export function createPuzzleIndex({ namespace = DEFAULT_NAMESPACE, deps = {} } = {}) {
+  const hanaTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTFILES`;
+
+  const getActiveVersion = deps.getActiveVersion || (async () => {
+    const { ContentManifest } = cds.entities(namespace);
+    const [row] = await SELECT.from(ContentManifest)
+      .where({ status: 'ACTIVE' })
+      .columns('version');
+    return row?.version ?? null;
+  });
+
+  const shellLoader = deps.shellLoader
+    || createShellLoader({ namespace, hanaTableName, getActiveVersion });
+  const fetchPuzzles = deps.fetchPuzzles || defaultFetchPuzzles(namespace);
+
+  let cache = null; // { key, gzip, etag }
+
+  function fallbackShellCompose(body, meta) {
+    const s = escapeHtml;
+    return `<!DOCTYPE html><html lang="en" data-page-kind="${s(meta.kind)}" ` +
+      `data-page-slug="${s(meta.slug)}" data-page-title="${s(meta.title)}">` +
+      `<head><meta charset="utf-8"><title>${s(meta.title)}</title>` +
+      `<link rel="stylesheet" href="/css/sap-theme-vars.css">` +
+      `<link rel="stylesheet" href="/css/sap-fundamental.css">` +
+      `</head><body><main>${body}</main></body></html>`;
+  }
+
+  async function compose(body, meta) {
+    try {
+      const shell = await shellLoader.get();
+      if (!shell) throw new ShellMarkerError('shell unavailable');
+      return composeShell(shell, body, meta);
+    } catch (err) {
+      console.warn('[content/puzzles-index] chrome shell missing — degraded rendering:', err.message);
+      return fallbackShellCompose(body, meta);
+    }
+  }
+
+  async function puzzleIndexHandler(req, res) {
+    const started = Date.now();
+    try {
+      const version = await getActiveVersion();
+      const puzzles = (await fetchPuzzles()) || [];
+      const maxMod = puzzles.reduce(
+        (m, p) => (p.modifiedAt && String(p.modifiedAt) > m ? String(p.modifiedAt) : m), '');
+      const cacheKey = `${version ?? 'none'}:${puzzles.length}:${maxMod}`;
+      const ifNoneMatch = req.headers?.['if-none-match'];
+
+      if (cache && cache.key === cacheKey) {
+        metrics.counter('puzzle_index_cache_hits');
+        if (ifNoneMatch && ifNoneMatch === cache.etag) return res.status(304).end();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Content-Encoding', 'gzip');
+        setContentCacheHeaders(res, { slug: 'puzzles' });
+        res.setHeader('ETag', cache.etag);
+        res.setHeader('X-Content-Source', 'memcache');
+        return res.status(200).send(cache.gzip);
+      }
+      metrics.counter('puzzle_index_cache_misses');
+
+      const body = renderPuzzleIndexBody(puzzles);
+      const meta = {
+        kind: 'puzzles-index',
+        slug: 'puzzles',
+        title: 'Puzzles',
+        description: 'Interactive puzzles from the SAP Developer community.',
+      };
+      const html = await compose(body, meta);
+      const gzip = gzipSync(Buffer.from(html, 'utf-8'));
+      const etag = `"${cacheKey}"`;
+      cache = { key: cacheKey, gzip, etag };
+
+      metrics.observe('puzzle_index_render_ms', Date.now() - started);
+      if (ifNoneMatch && ifNoneMatch === etag) return res.status(304).end();
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Encoding', 'gzip');
+      setContentCacheHeaders(res, { slug: 'puzzles' });
+      res.setHeader('ETag', etag);
+      res.setHeader('X-Content-Source', 'fresh');
+      return res.status(200).send(gzip);
+    } catch (err) {
+      metrics.counter('puzzle_index_query_failure');
+      console.error('[content/puzzles-index] build failed:', err?.message);
+      if (cache) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Content-Encoding', 'gzip');
+        res.setHeader('Cache-Control', 'public, max-age=60');
+        res.setHeader('ETag', cache.etag);
+        res.setHeader('X-Content-Source', 'stale');
+        return res.status(200).send(cache.gzip);
+      }
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(503).send('<!DOCTYPE html><html><body><main><h1>Puzzles temporarily unavailable</h1><p>Please try again shortly.</p></main></body></html>');
+    }
+  }
+
+  return { puzzleIndexHandler, _invalidate() { cache = null; shellLoader.invalidate?.(); } };
+}
+
+const _defaultIndex = createPuzzleIndex();
+export const puzzleIndexHandler = _defaultIndex.puzzleIndexHandler;

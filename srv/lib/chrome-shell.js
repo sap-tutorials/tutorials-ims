@@ -81,6 +81,8 @@ export function canonicalUrlFor(meta) {
     case 'mission':        return `${CANONICAL_ORIGIN}/tutorials/${slug}/`;
     // #1914: puzzle solver pages served dynamically from CAP at /puzzles/<slug>/.
     case 'puzzle':         return `${CANONICAL_ORIGIN}/puzzles/${slug}/`;
+    // #1914 follow-up: the /puzzles/ section index (also CAP-served).
+    case 'puzzles-index':  return `${CANONICAL_ORIGIN}/puzzles/`;
     default:               return null;
   }
 }
@@ -109,13 +111,16 @@ export function buildBreadcrumbJsonLd(meta, canonicalUrl) {
     case 'concepts-index':
       crumbs.push({ name: 'Concepts', item: `${CANONICAL_ORIGIN}/concepts/` });
       break;
-    // #1914: puzzle pages. Trail is Home → <puzzle title> only — the /puzzles/
-    // section index is not (yet) a served page, so we deliberately do NOT emit
-    // a "Puzzles" crumb that would link a 404. The leaf links to the puzzle's
-    // own canonical (valid). Returning a trail here (rather than null) also
-    // prevents the baked _shell breadcrumb from leaking onto the page.
+    // #1914: puzzle pages. Now that the /puzzles/ section index is a served
+    // page (CAP-rendered), the trail is Home → Puzzles → <puzzle title>,
+    // mirroring the concepts trail. Returning a trail here (rather than null)
+    // also prevents the baked _shell breadcrumb from leaking onto the page.
     case 'puzzle':
+      crumbs.push({ name: 'Puzzles', item: `${CANONICAL_ORIGIN}/puzzles/` });
       crumbs.push({ name: leaf, item: canonicalUrl });
+      break;
+    case 'puzzles-index':
+      crumbs.push({ name: 'Puzzles', item: `${CANONICAL_ORIGIN}/puzzles/` });
       break;
     default:
       return null;

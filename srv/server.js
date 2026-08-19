@@ -32,7 +32,7 @@ import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
 import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
-import { puzzlePageHandler } from './lib/puzzle-page.js';
+import { puzzlePageHandler, puzzleIndexHandler } from './lib/puzzle-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { modelJsonHandler } from './lib/model-json-handler.js';
@@ -499,6 +499,9 @@ cds.on('bootstrap', (app) => {
   // admin-created puzzle works immediately with no rebuild. Unknown slug → 404.
   // Public, no auth — like serveHandler. AppRouter maps /puzzles/<slug> here.
   app.get('/content/puzzles/:slug', puzzlePageHandler);
+  // #1914 follow-up — CAP-served /puzzles/ SECTION INDEX (SSR card list of all
+  // puzzles). Public, no auth. AppRouter maps bare /puzzles/ here.
+  app.get('/content/puzzles-index', puzzleIndexHandler);
   // #1659 Phase C — CAP-served /authors/{login}/ pages (dynamic slug, unbounded
   // login → author-<login> BLOB). Dark launch: the AppRouter /authors/ flip
   // lands with this change. Public, no auth — like serveHandler.
