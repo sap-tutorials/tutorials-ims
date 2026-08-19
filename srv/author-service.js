@@ -156,12 +156,17 @@ export default cds.service.impl(async function () {
   });
 
   // #862 reopen — MyOwnedTutorials is Sage's "My Tutorials" panel. The
-  // projection sources from MyTutorialsView.bestPriority IN (3, 4) —
-  // either ownerEmail match OR owner-display-name match. provisionDbUser
-  // stamps a caller-scoped userId AND ensures the row exists so both joins
-  // can hit. #923's MyMonitoredTutorialsView repoint was reverted; see
-  // srv/author-service.cds for the rationale. TutorialMonitors +
-  // toggleMonitor from #923 remain for the eye-icon watch feature.
+  // projection sources from MyTutorialsView.bestPriority IN (1, 3, 4) —
+  // strict-author FK OR ownerEmail match OR owner-display-name match
+  // (priority 2, pure contributor, is the only signal excluded). Priority 1
+  // was added by the SAGE author-owner overlap fix: bestPriority=MIN(priority)
+  // collapses author-owners to 1, so the old IN (3,4) filter hid every author
+  // who also owns their tutorial (observed: Peter Persiel, 9 tutorials, all
+  // bestPriority=1 → empty panel). See srv/author-service.cds + ADR 0006
+  // §2026-08-19. provisionDbUser stamps a caller-scoped userId AND ensures the
+  // row exists so all joins can hit. #923's MyMonitoredTutorialsView repoint
+  // was reverted; TutorialMonitors + toggleMonitor from #923 remain for the
+  // eye-icon watch feature.
   this.before('READ', MyOwnedTutorials, async (req) => {
     if (!req.user?.id || req.user.id === 'anonymous') {
       return req.reject(401, 'Authentication required');
