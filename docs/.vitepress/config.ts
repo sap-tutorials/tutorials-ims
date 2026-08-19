@@ -41,6 +41,9 @@ export default defineConfig({
     // TODO(#258 follow-up): docs/developers/architecture/analytics-builder.md
     // is referenced from free-text-grader.md but doesn't exist yet.
     /\.\/analytics-builder/,
+    // /me/tokens/ is a live app runtime route (PAT self-service page), not a
+    // VitePress doc page, so it's intentionally unresolvable at build time.
+    /^\/me\/tokens/,
   ],
 
   srcExclude: ['improvements.md', 'TODO.md', 'pilot-status.md', 'superpowers/**', 'decisions/_template.md'],
