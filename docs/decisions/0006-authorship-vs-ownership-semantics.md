@@ -98,6 +98,31 @@ While iterating on this fix, PR #923 briefly re-pointed `MyOwnedTutorials` at a 
 | Union of 1–4 | `GET /author/MyTutorials` | Legacy compat, ad-hoc admin queries |
 | `TutorialMonitors.user = caller` | *(no endpoint yet)* | Eye-icon watch feature (deferred Sage adoption) |
 
+## 2026-08-19 update — MyOwnedTutorials includes priority 1 (author-owner overlap)
+
+A SAGE user report (Peter Persiel, sapId `D062570`) surfaced a defect in the priority split above: his SAGE "My Tutorials" panel was **empty**, while the browser Admin UI correctly showed him as owner of **9** tutorials.
+
+**Root cause.** `bestPriority = MIN(priority)` per (tutorial, user). Peter is the *declared author* of all 9 (frontmatter `authorProfile` → `Tutorials.author_ID = Users.ID`, priority 1) **and** matches `ownerEmail` (priority 3) and `owner` free-text name (priority 4). `MIN(1, 3, 4) = 1`, so every row collapsed to `bestPriority = 1` — which the old `MyOwnedTutorials` filter `bestPriority IN (3, 4)` **excludes**. The Admin UI reads the raw `owner`/`ownerEmail` strings directly (no `bestPriority` filter), which is why the two surfaces disagreed.
+
+This is not Peter-specific: a DEV probe found **229 (tutorial, user) pairs across 13 users** hidden this way. Ironically it penalises the *best-linked* authors — the ones whose `authorProfile` correctly resolved to a `Users` row.
+
+The 2026-07-01 decision treated "author" (pri 1) and "owner" (pri 3/4) as disjoint endpoints, but they overlap in reality, and `MIN()`-collapse lets the stronger author signal mask the included owner signals. A "My Tutorials" panel means **"tutorials I authored OR own."**
+
+**Decision.** `MyOwnedTutorials` now filters `bestPriority IN (1, 3, 4)` — author OR ownerEmail OR owner-name. The **only** signal deliberately excluded is priority 2 (pure contributor: someone who touched a tutorial they neither authored nor own). `MyAuthoredTutorials` (`bestPriority = 1` only) is unchanged and remains the strict-authorship surface for the Advocate object page and admin Tutorial Health.
+
+**One-line change** — [srv/author-service.cds](../../srv/author-service.cds), `MyOwnedTutorials` projection `where bestPriority in (1, 3, 4)`.
+
+**Regression guard** — [test/unit/author-service.test.js](../../test/unit/author-service.test.js): the `MyOwnedTutorials` suite's `tut-A1` fixture (Alice as author **and** ownerEmail — Peter's exact shape) is now asserted to be **present** at `bestPriority = 1`, and the broad-return test expects `bestPriority IN (1, 3, 4)`. The prior "does NOT return strict-author rows" assertion was inverted (it encoded the bug). User-scoping is still guarded: another user's authored tutorial (`tut-B1`) must not leak into Alice's panel.
+
+**Endpoint map after this fix:**
+
+| Signal | Endpoint | Consumer |
+|---|---|---|
+| Priority 1 — author FK (strict) | `GET /author/MyAuthoredTutorials` | Advocate object page, admin Tutorial Health |
+| Priority 1 (author) OR 3 (ownerEmail = Users.email) OR 4 (owner = firstName + ' ' + lastName) | `GET /author/MyOwnedTutorials` | Sage VS Code extension "My Tutorials" panel |
+| Union of 1–4 | `GET /author/MyTutorials` | Legacy compat, ad-hoc admin queries |
+| `TutorialMonitors.user = caller` | *(no endpoint yet)* | Eye-icon watch feature (deferred Sage adoption) |
+
 ## Alternatives Considered
 
 - **Overload `MyAuthoredTutorials` to mean priority ≤ 3 (author OR contributor OR owner).** Rejected — the name would misdescribe the row set, and the Advocate/admin consumers explicitly need priority-1-only. Adding "Authored" behavior to it would drop rows they depend on.
