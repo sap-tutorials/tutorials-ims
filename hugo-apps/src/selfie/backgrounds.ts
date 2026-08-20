@@ -10,11 +10,11 @@ export interface BackgroundDef {
 }
 
 export const BACKGROUNDS: BackgroundDef[] = [
-  { id: 'pumpkin-patch',   label: 'Pumpkin patch', file: 'pumpkin-patch' },
-  { id: 'teched-stage',    label: 'On stage',      file: 'teched-stage' },
+  { id: 'key-visual-josh',      label: 'Key visual (Josh)',  file: 'key-visual-option-josh-16-9' },
+  { id: 'key-visual-nora',      label: 'Key visual (Nora)',  file: 'key-visual-option-nora-16-9' },
   { id: 'terminal',        label: 'Terminal',      file: 'terminal' },
-  { id: 'autumn-gradient', label: 'Autumn',        file: 'autumn-gradient' },
-  { id: 'starfield',       label: 'Starfield',     file: 'starfield' },
+  { id: 'speaker-backdrop-1',   label: 'Speaker backdrop 1', file: 'speaker-backdrop-option1-16-9' },
+  { id: 'speaker-backdrop-2',   label: 'Speaker backdrop 2', file: 'speaker-backdrop-option2-16-9' },
 ]
 
 // Picker order — 'none' (no themed background) first, then each scene.

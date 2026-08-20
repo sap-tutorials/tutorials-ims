@@ -187,6 +187,30 @@ describe('hugo homepage partials render against normalized browse.json', () => {
     expect(html).toContain('hp-featured-carousel');
   });
 
+  it('renders non-blank curated Featured cards on the tutorial navigator (regression #1941)', () => {
+    // The card-{mission,group,tutorial}.html partials expect a
+    // { item, categories } dict (introduced by 0d202e3f). tutorial-navigator/
+    // list.html passed the bare card object instead, so `.item` was nil and
+    // every field (title/description/href/meta) rendered blank — the curated
+    // "Featured" rail showed empty MISSION cards on DEV+PROD (#1941).
+    const navHtml = join(PUBLIC_DIR, 'tutorial-navigator', 'index.html');
+    expect(existsSync(navHtml), `expected ${navHtml} to exist`).toBe(true);
+    const html = readFileSync(navHtml, 'utf8');
+    const start = html.indexOf('featured-rail');
+    expect(start, 'featured-rail present in navigator HTML').toBeGreaterThan(-1);
+    // Scope STRICTLY to the Featured rail's own section. The page inlines the
+    // full browse.json in a <script id="browse-data"> at the bottom, so a loose
+    // slice would false-positive on the JSON copy of the title/description.
+    // The rail's <section> ends where the next section (recent tutorials) opens.
+    const end = html.indexOf('recent-tutorials', start);
+    expect(end, 'recent-tutorials section follows featured rail').toBeGreaterThan(start);
+    const rail = html.slice(start, end);
+    expect(rail, 'featured card title must render inside the rail').toContain('Test Mission');
+    expect(rail, 'featured card description must render inside the rail').toContain(
+      '3 tutorials across 1 group.',
+    );
+  });
+
   it('renders the curated-paths section on /learn/', () => {
     const learnHtml = join(PUBLIC_DIR, 'learn', 'index.html');
     expect(existsSync(learnHtml), `expected ${learnHtml} to exist`).toBe(true);

@@ -17,6 +17,14 @@
 {{- $all := $browse.all | default slice -}}
 {{- $buildAt := $browse.buildAt | default "" -}}
 {{- $firstPageItems := first 24 $all -}}
+{{- /* Category slug→label map for the card partials. The
+       browse/_partials/card-*.html partials expect a { item, categories }
+       dict; passing a bare item leaves .item nil and renders blank cards
+       (regression #1941). Mirror browse/list.html's construction. */ -}}
+{{- $categoriesMap := dict -}}
+{{- range ($browse.categories | default slice) -}}
+  {{- $categoriesMap = merge $categoriesMap (dict .slug .label) -}}
+{{- end -}}
 
 <article class="home">
   {{ if not site.Params.qa }}
@@ -30,7 +38,7 @@
 
   <section aria-labelledby="search-tutorials" id="navigator-section" class="home-navigator">
     <h1 id="search-tutorials" class="visually-hidden">Search and filter SAP developer tutorials</h1>
-    <div id="tutorial-navigator"{{ if site.Params.qa }} data-search-base="/qa-search" data-nav-base="/tutorials-qa" data-href-base="/tutorials-qa"{{ end }}>
+    <div id="tutorial-navigator"{{ if site.Params.qa }} data-search-base="/qa-search" data-nav-base="/tutorials-qa" data-href-base="/tutorials-qa" data-client-search="true"{{ end }}>
       {{- /* SSR initial card grid. TutorialNavigator.vue mounts on
              #tutorial-navigator (the outer container) and re-renders its full
              template tree on mount, replacing this preview. The static markup
@@ -40,9 +48,9 @@
       {{- if gt (len $firstPageItems) 0 -}}
         <section class="navigator-grid navigator-grid--ssr-preview" aria-label="Initial tutorial preview">
           {{- range $item := $firstPageItems -}}
-            {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
-            {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
-            {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
+            {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
+            {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
+            {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
           {{- end -}}
         </section>
       {{- end -}}
@@ -84,9 +92,9 @@
         {{- range $rid := $ids -}}
           {{- range $item := $all -}}
             {{- if eq $item.id $rid -}}
-              {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
-              {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
-              {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
+              {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
+              {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
+              {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
             {{- end -}}
           {{- end -}}
         {{- end -}}

@@ -8,6 +8,7 @@ import { getNextLegacyId } from './lib/legacy-id.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
 import { stampSubmissionId } from './lib/task-record-submission-id.js';
+import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 
 const RESET_LIMIT_PER_HOUR = 5;
 const RESET_WINDOW_MS = 60 * 60 * 1000;
@@ -218,6 +219,8 @@ export default class PuzzleService extends cds.ApplicationService {
         legacyId: await getNextLegacyId('TaskRecords', db),
         attemptNumber: prog?.attemptNumber ?? 1,
       }));
+      // Recompute parent missions (a puzzle can be a mission item). Never throws.
+      await rollUpParentsForCompletion({ dbUser, task: { taskType: 'PUZZLE', taskLegacyId: puzzle.legacyId }, db });
       return { recorded: true, alreadyComplete: false };
     });
 

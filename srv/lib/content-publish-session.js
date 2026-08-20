@@ -1190,94 +1190,107 @@ async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getAc
     return { carriedForward: 0, carriedSize: 0 };
   }
 
+  const db = await cds.connect.to('db');
+  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
   // Discover the set of slugs already appended for `newVersion`. These are the
   // "fresh" slugs we must NOT carry forward (they would duplicate-key on insert).
   const freshRows = await SELECT.from(ContentFiles)
     .columns('slug')
     .where({ version: newVersion });
-  const slugs = freshRows.map(r => r.slug);
+  const freshSlugSet = new Set(freshRows.map(r => r.slug));
 
-  const db = await cds.connect.to('db');
-  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+  // #1932 — slug-list-first carry forward. Read ONLY the slug column for the
+  // previously-ACTIVE version to decide what actually needs carrying forward,
+  // then pull the BLOB columns (CONTENT + SOURCECONTENT) for that set in small
+  // chunks. This bounds commit memory to one chunk of BLOBs regardless of
+  // catalog size.
+  //
+  // The prior implementation materialized the ENTIRE prev-version catalog —
+  // every CONTENT + SOURCECONTENT BLOB — into one in-memory array (raw
+  // `WHERE VERSION = ?` with no slug filter) and then discarded the fresh
+  // slugs in Node. On a full/force rebuild every slug is fresh, so nothing was
+  // carried forward, yet the whole catalog's BLOBs were still loaded first. As
+  // the catalog grew (~2,200 tutorials) that peak tripped V8's heap limit
+  // (SIGABRT / exit 134) on the memory-constrained srv-qa instance, crashing
+  // the /content/publish commit with 502/503. See #1932.
+  const prevSlugRows = await SELECT.from(ContentFiles)
+    .columns('slug')
+    .where({ version: prevVersion });
+  const carrySlugs = prevSlugRows.map(r => r.slug).filter(s => !freshSlugSet.has(s));
 
-  let carryRows;
-  if (isHana) {
-    // On HANA, BLOBs come back as locator-bound streams when mixed with
-    // metadata. Use raw SQL to materialize content as a buffer up front,
-    // matching the same pattern used in the serve handler.
-    //
-    // Packet-size guard (memory: cqn-where-in-hana-packet-cap.md; same
-    // class as #1103 and PR #1108): a raw `SLUG NOT IN (?, ?, …)` with
-    // one placeholder per fresh slug (~7,315 on a full publish) blows
-    // HANA's parameter batch. Fetch ALL prev-version rows unbounded
-    // and filter freshly-written slugs in Node — `NOT IN` chunking is
-    // wrong (`NOT IN (chunk1)` still returns rows in chunk2/3/…), and
-    // the row-count at a single manifest version is bounded by the
-    // tutorial catalog (~7,315), well under the 5 MB budget once BLOBs
-    // are pulled row-at-a-time by iterating in Node.
-    //
-    // NOTE: This DOES materialize all BLOBs for the previously-ACTIVE
-    // version in memory. Content is gzip-compressed; catalog worst
-    // case ~200 MB. If that becomes a memory pressure issue, split by
-    // slug prefix or version-range instead.
-    const freshSlugSet = new Set(slugs);
-    const allPrev = await db.run(
-      `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
-         FROM "${hanaTableName()}"
-        WHERE "VERSION" = ?`,
-      [prevVersion]
-    );
-    carryRows = allPrev.filter((r) => !freshSlugSet.has(r.SLUG)).map((r) => ({
-      slug: r.SLUG,
-      content: r.CONTENT,
-      contentHash: r.CONTENTHASH,
-      sizeBytes: r.SIZEBYTES,
-      compressedBytes: r.COMPRESSEDBYTES,
-      mimeType: r.MIMETYPE,
-      sourceContent: r.SOURCECONTENT,
-      sourceHash: r.SOURCEHASH,
-    }));
-  } else {
-    const sel = slugs.length
-      ? SELECT.from(ContentFiles)
-          .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
-          .where`version = ${prevVersion} and slug not in ${slugs}`
-      : SELECT.from(ContentFiles)
-          .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
-          .where({ version: prevVersion });
-    carryRows = await sel;
+  // Fast path — force/full rebuild re-appended every slug, so nothing carries
+  // forward and, crucially, we read ZERO content BLOBs.
+  if (carrySlugs.length === 0) {
+    return { carriedForward: 0, carriedSize: 0 };
   }
 
-  const carryEntries = [];
+  // Chunk size stays well under HANA's parameter-batch ceiling (packet-cap
+  // guard: cqn-where-in-hana-packet-cap.md; same class as #1103) AND bounds the
+  // peak BLOB footprint. 50 matches the append/insert batch size used elsewhere.
+  const CHUNK = 50;
+  let carriedForward = 0;
   let carriedSize = 0;
-  for (const row of carryRows) {
-    const buf = Buffer.isBuffer(row.content) ? row.content : await toBuffer(row.content);
-    // PR #591: bring sourceContent forward too. Pre-PR-#591 rows have null
-    // sourceContent/sourceHash; we preserve those nulls unchanged. New rows
-    // carry forward intact so a 'no-op republish' keeps source hashes
-    // available for the drift workflow without re-uploading the markdown.
-    let srcBuf = null;
-    if (row.sourceContent != null) {
-      srcBuf = Buffer.isBuffer(row.sourceContent) ? row.sourceContent : await toBuffer(row.sourceContent);
-    }
-    carryEntries.push({
-      slug: row.slug,
-      version: newVersion,
-      content: buf,
-      contentHash: row.contentHash,
-      sizeBytes: row.sizeBytes,
-      compressedBytes: row.compressedBytes,
-      mimeType: row.mimeType,
-      sourceContent: srcBuf,
-      sourceHash: row.sourceHash ?? null,
-    });
-    carriedSize += Number(row.sizeBytes) || 0;
-  }
-  const carriedForward = carryEntries.length;
 
-  for (let i = 0; i < carryEntries.length; i += 50) {
-    const batch = carryEntries.slice(i, i + 50);
-    await INSERT.into(ContentFiles).entries(batch);
+  for (let i = 0; i < carrySlugs.length; i += CHUNK) {
+    const chunk = carrySlugs.slice(i, i + CHUNK);
+
+    let carryRows;
+    if (isHana) {
+      // On HANA, BLOBs come back as locator-bound streams when mixed with
+      // metadata in CQL. Use raw SQL to materialize content as buffers up front
+      // (same pattern as the serve handler). One chunk at a time keeps the
+      // in-memory BLOB footprint bounded — this is the #1932 fix.
+      const placeholders = chunk.map(() => '?').join(', ');
+      const rows = await db.run(
+        `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
+           FROM "${hanaTableName()}"
+          WHERE "VERSION" = ? AND "SLUG" IN (${placeholders})`,
+        [prevVersion, ...chunk]
+      );
+      carryRows = rows.map((r) => ({
+        slug: r.SLUG,
+        content: r.CONTENT,
+        contentHash: r.CONTENTHASH,
+        sizeBytes: r.SIZEBYTES,
+        compressedBytes: r.COMPRESSEDBYTES,
+        mimeType: r.MIMETYPE,
+        sourceContent: r.SOURCECONTENT,
+        sourceHash: r.SOURCEHASH,
+      }));
+    } else {
+      carryRows = await SELECT.from(ContentFiles)
+        .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
+        .where({ version: prevVersion, slug: { in: chunk } });
+    }
+
+    const carryEntries = [];
+    for (const row of carryRows) {
+      const buf = Buffer.isBuffer(row.content) ? row.content : await toBuffer(row.content);
+      // PR #591: bring sourceContent forward too. Pre-PR-#591 rows have null
+      // sourceContent/sourceHash; we preserve those nulls unchanged. New rows
+      // carry forward intact so a 'no-op republish' keeps source hashes
+      // available for the drift workflow without re-uploading the markdown.
+      let srcBuf = null;
+      if (row.sourceContent != null) {
+        srcBuf = Buffer.isBuffer(row.sourceContent) ? row.sourceContent : await toBuffer(row.sourceContent);
+      }
+      carryEntries.push({
+        slug: row.slug,
+        version: newVersion,
+        content: buf,
+        contentHash: row.contentHash,
+        sizeBytes: row.sizeBytes,
+        compressedBytes: row.compressedBytes,
+        mimeType: row.mimeType,
+        sourceContent: srcBuf,
+        sourceHash: row.sourceHash ?? null,
+      });
+      carriedSize += Number(row.sizeBytes) || 0;
+    }
+
+    await INSERT.into(ContentFiles).entries(carryEntries);
+    carriedForward += carryEntries.length;
   }
 
   return { carriedForward, carriedSize };

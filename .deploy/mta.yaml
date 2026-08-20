@@ -10,7 +10,7 @@ ID: tutorials-ims
 # Bump this on each release you deploy — it's the version shown by `cf mtas`
 # and in the mtar filename (tutorials-ims_<version>.mtar). Deploy is manual:
 # `cd .deploy && mbt build && cf deploy mta_archives/tutorials-ims_<version>.mtar -e ../deploy/<env>.mtaext -f`.
-version: 1.18.0
+version: 1.18.1
 
 # Top-level parameters (overridable per-env via deploy/<env>.mtaext).
 parameters:
@@ -148,13 +148,16 @@ modules:
     type: nodejs
     path: ../gen/srv-qa
     parameters:
-      # 1536M (not 768M): a full QA content publish peaks ~883M of RSS during the
-      # append-batch BLOB uploads; at 768M the single srv-qa instance OOM-crashes
-      # (exit 134 / 502-503 "no available endpoints"), orphaning the publish JobLock
-      # and forcing every re-run to 409 "Another publish in progress" until the 30-min
-      # TTL. Manual `cf scale -m 1536M` reverted on each MTA deploy, so it must be
-      # pinned here. See #1893 (recurred after the 1.16.0 PROD deploy).
-      memory: 1536M
+      # 2048M (was 1536M, was 768M): parity with tutorials-srv. A full QA content
+      # publish's COMMIT phase OOM-crashed the single srv-qa instance again at
+      # 1536M (exit 134 / 502-503 "no available endpoints"), orphaning the publish
+      # JobLock and forcing every re-run to 409 "Another publish in progress" until
+      # the 30-min TTL. Root cause of the OOM class was carryForwardUnchanged
+      # materializing the entire prev-version BLOB catalog in memory — fixed in
+      # #1932 (slug-list-first + chunked BLOB read); this bump is headroom/parity,
+      # not the fix. Manual `cf scale` reverts on each MTA deploy, so pin it here.
+      # See #1893 (1536M bump) and #1932 (2048M + carry-forward memory fix).
+      memory: 2048M
       disk-quota: 1024M
       buildpack: nodejs_buildpack
       instances: 1

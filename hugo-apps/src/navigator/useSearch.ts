@@ -13,6 +13,12 @@ interface UseSearchOptions {
   tutorials?: Ref<TutorialEntry[]>
   searchBase?: string
   hrefBase?: string
+  // When false, the server $search fetch is suppressed entirely (no request
+  // fires on query changes). Used by the QA channel (#1939): srv-qa's
+  // SearchService exposes neither SearchableItems nor getFacets, so the two
+  // fetches below would 404. QA filters client-side instead (see
+  // useNavigatorFilters `clientSearch`). Defaults to enabled.
+  enabled?: Ref<boolean>
 }
 
 export function mapToCardItem(item: SearchableItem, tutorialsBySlug?: Map<string, TutorialEntry>, hrefBase = '/tutorials'): CardItem {
@@ -137,7 +143,9 @@ export function postFilterNoLicense(items: CardItem[], noLicense: boolean): Card
 
 export function useSearch(options: UseSearchOptions) {
   const { searchTerm, filterTypes, filterLevels, filterProducts, filterIsNew, filterNoLicense, tutorials,
-          searchBase = '/search', hrefBase = '/tutorials' } = options
+          searchBase = '/search', hrefBase = '/tutorials', enabled } = options
+
+  const isEnabled = () => enabled?.value ?? true
 
   const searchResults = ref<CardItem[]>([])
   const searchFacets = ref<SearchFacets | null>(null)
@@ -159,6 +167,8 @@ export function useSearch(options: UseSearchOptions) {
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   async function executeSearch(page = 0, pageSize = 48) {
+    // Server search disabled (e.g. QA channel, #1939) — never fetch.
+    if (!isEnabled()) return
     const term = searchTerm.value
     if (term.length < MIN_SEARCH_CHARS) return
 
@@ -231,7 +241,7 @@ export function useSearch(options: UseSearchOptions) {
      computed(() => filterIsNew?.value ?? false),
      computed(() => filterNoLicense?.value ?? false)],
     () => {
-    if (searchMode.value) {
+    if (searchMode.value && isEnabled()) {
       debouncedSearch()
     } else {
       searchResults.value = []

@@ -33,6 +33,10 @@ export interface UseNavigatorFiltersOptions {
   searchBase?: string
   hrefBase?: string
   navBase?: string
+  // When true, search runs entirely client-side over `allCards` (the existing
+  // filteredItems pipeline) and the server $search fetch is suppressed. Used by
+  // the QA channel (#1939) where srv-qa exposes no SearchableItems/getFacets.
+  clientSearch?: boolean
 }
 
 const SORT_COMPARATORS: Record<Sort, (a: CardItem, b: CardItem) => number> = {
@@ -254,6 +258,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     searchBase = '/search',
     hrefBase = '/tutorials',
     navBase = '/tutorials',
+    clientSearch = false,
   } = opts
 
   // ─── Reactive filter state ───
@@ -327,6 +332,9 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     tutorials,
     searchBase,
     hrefBase,
+    // #1939: on the QA channel we filter client-side, so suppress the server
+    // $search fetch entirely (srv-qa has no SearchableItems/getFacets).
+    enabled: computed(() => !clientSearch),
   })
 
   // ─── URL state read on mount (gated by syncURL) ───
@@ -607,7 +615,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // fall through to the client path even in searchMode — server search would
   // crash on the slug→createdAt enrichment.
   const displayedItems = computed(() => {
-    if (searchMode.value && tutorials) {
+    if (searchMode.value && tutorials && !clientSearch) {
       const bySlug = new Map(tutorials.value.map(t => [t.slug, t.createdAt]))
       return searchResults.value.map(item => {
         if (item.type !== 'tutorial') return item
@@ -626,12 +634,12 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   })
 
   const displayedTotalCount = computed(() => {
-    if (searchMode.value && tutorials) return searchTotalCount.value
+    if (searchMode.value && tutorials && !clientSearch) return searchTotalCount.value
     return filteredItems.value.length
   })
 
   const displayedCounts = computed(() => {
-    if (searchMode.value && tutorials && searchFacets.value) {
+    if (searchMode.value && tutorials && !clientSearch && searchFacets.value) {
       const facets = searchFacets.value
       return {
         missions: facets.typeCounts.find(t => t.name === 'MISSION')?.count ?? 0,

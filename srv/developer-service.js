@@ -12,6 +12,7 @@ import * as metrics from './lib/metrics.js';
 import * as mcpDev from './lib/mcp-developer-tools.js';
 import { maybeAutoSendCompletion } from './lib/ngds-autosend.js';
 import { stampSubmissionId } from './lib/task-record-submission-id.js';
+import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
@@ -319,6 +320,14 @@ export default class DeveloperService extends cds.ApplicationService {
         tokenSource: req.user?.tokenSource ?? null,
       });
 
+      // A reset supersedes the TUTORIAL record → recompute parent group/mission
+      // so a COMPLETED rollup drops back to IN_PROGRESS. Never throws.
+      await rollUpParentsForCompletion({
+        dbUser,
+        task: { taskType: 'TUTORIAL', taskLegacyId: tutorial.legacyId, tutorialId: tutorial.ID },
+        db,
+      });
+
       return {
         newAttemptNumber: maxAttempt + 1,
         previousAttemptCompletedAt,
@@ -360,6 +369,9 @@ export default class DeveloperService extends cds.ApplicationService {
         const [row] = await SELECT.from(dbTaskRecords).where({ ID: existing.ID });
         // Fire only on the edge → COMPLETED (skip when it was already complete).
         await maybeAutoSendCompletion({ record: row, priorStatus, db });
+        if (taskType === 'CHECKPOINT') {
+          await rollUpParentsForCompletion({ dbUser, task: { taskType, taskLegacyId }, db });
+        }
         return row;
       }
 
@@ -378,6 +390,9 @@ export default class DeveloperService extends cds.ApplicationService {
       await INSERT.into(dbTaskRecords).entries(record);
       const [persisted] = await SELECT.from(dbTaskRecords).where({ legacyId: record.legacyId });
       await maybeAutoSendCompletion({ record: persisted, priorStatus: null, db });
+      if (taskType === 'CHECKPOINT') {
+        await rollUpParentsForCompletion({ dbUser, task: { taskType, taskLegacyId }, db });
+      }
       return persisted;
     });
 
@@ -1162,6 +1177,14 @@ export default class DeveloperService extends cds.ApplicationService {
         await maybeAutoSendCompletion({ record: completed, priorStatus: null, db });
       }
     }
+
+    // Recompute parent group(s)/mission(s) from the user's completion state.
+    // Never throws (wrapped internally); covers completion AND regression.
+    await rollUpParentsForCompletion({
+      dbUser,
+      task: { taskType: 'TUTORIAL', taskLegacyId: tutorial.legacyId, tutorialId: tutorial.ID },
+      db,
+    });
   }
 
   async _getProgressForTutorial(dbUser, tutorial, db) {

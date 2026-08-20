@@ -85,11 +85,23 @@ function isSafeMethod(init?: RequestInit): boolean {
  * *top-level document* to /oauth/authorize. Consumed through fetch() that
  * script never runs, so the re-auth is silently swallowed and a mutating action
  * (e.g. the tutorial "Done" button) appears to soft-fail. The reliable
- * client-side tells are: the response was redirected, or its body is HTML where
- * the API would return JSON (204/JSON responses are never flagged).
+ * client-side tells are: the response was redirected, or a *successful* (2xx)
+ * response carries an HTML body where the API would return JSON (204/JSON
+ * responses are never flagged).
+ *
+ * The 2xx guard is load-bearing (Petoberfest upload, 2026-08): an HTML body on
+ * an ERROR status is NOT the interstitial — it's an edge/CDN block (e.g. Akamai
+ * returns `403 Server: AkamaiGHost, Content-Type: text/html` "Access Denied"
+ * for POST bodies over its ~16KB cap on developers.sap.com) or an origin 5xx.
+ * Treating those as session-expiry wrongly forced a top-level /login navigation
+ * that reloaded the page and hid the real error. Error responses must fall
+ * through to the caller's error handler instead.
  */
 function isSessionExpiredResponse(res: Response): boolean {
   if (res.redirected) return true;
+  // Only a successful response can be the login interstitial. A 4xx/5xx HTML
+  // body is an edge/CDN or origin error page — surface it, don't re-auth.
+  if (!res.ok) return false;
   // Optional chaining: some callers/tests pass minimal Response-like stubs
   // without a `headers` bag. A real fetch Response always has one.
   const ct = (res.headers?.get?.('content-type') ?? '').toLowerCase();

@@ -46,6 +46,14 @@ describe('crossword-geometry (AMD module)', () => {
     expect(g[2][2].black).toBe(true);
   });
 
+  it('setBlack toggles a black cell back to white (regression #1930)', () => {
+    // Clicking a black square must turn it white again, un-mirroring too.
+    const g1 = geom.setBlack(geom.makeEmptyGrid(3, 3), 0, 0);
+    const g2 = geom.setBlack(g1, 0, 0);
+    expect(g2[0][0].black).toBe(false);
+    expect(g2[2][2].black).toBe(false);
+  });
+
   it('numberGrid numbers word-start cells', () => {
     const g = geom.numberGrid(geom.makeEmptyGrid(1, 3));
     expect(g[0][0].number).toBe(1);

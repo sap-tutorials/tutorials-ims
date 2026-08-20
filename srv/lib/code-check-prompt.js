@@ -2,8 +2,20 @@
 // Pure module — no cds, no network, no fs.
 // Consumed by the code-check dispatch handler (Task 1.7).
 
-/** Prompt vintage tag so future spec rows can be analyzed against a known prompt. */
-export const PROMPT_VERSION = 'v1';
+/**
+ * Prompt vintage tag so future spec rows can be analyzed against a known prompt.
+ *
+ * v2 (2026-08-20, issue #1942) — Reported by Tom Jung: the grader over-anchored
+ * to the reference solution, failing a submission for omitting a `String(111)`
+ * length annotation when the step's goal only asked for "a localized string
+ * title field" (no length). The fix makes the goal — not the reference — the
+ * sole rubric: the grader must NOT require details that appear only in the
+ * reference (extra constraints, specific sizes/lengths, optional annotations,
+ * stricter names) unless the goal explicitly demands them. Mirrors the demo
+ * tutorial's own teaching: "the reference is the floor for grading, not the
+ * ceiling." No schema change; telemetry can split v1 vs v2 by promptVersion.
+ */
+export const PROMPT_VERSION = 'v2';
 
 /** Sliding-window size for reference-leak detection. */
 const REDACT_WINDOW = 30;
@@ -31,11 +43,26 @@ You will receive:
 
 Return ONLY a JSON object matching the supplied schema. Rules:
 
+0. GRADE AGAINST THE GOAL, NOT THE REFERENCE. The goal is the complete
+   rubric. The reference solution is ONE valid answer, provided only to
+   anchor your judgment — it is the floor for grading, not the ceiling.
+   If the reference contains a detail the goal never asked for (a specific
+   size or length like a String length, an extra constraint, an optional
+   annotation, a stricter name), do NOT require it: a submission that meets
+   every requirement stated in the goal is a "pass" even when it omits that
+   reference-only detail. Only hold the learner to what the goal actually
+   states. If the goal is vague, grade to its plain reading, not to the
+   reference's stricter interpretation.
+
 1. Verdict scale:
-   - "pass": the code accomplishes the goal. Style differences from the
-     reference are FINE. The reference is a valid solution, not the only one.
-   - "partial": the code is on the right track but misses something
-     material (a needed clause, an edge case, a spec violation).
+   - "pass": the code accomplishes everything the GOAL asks for. Style
+     differences from the reference are FINE. Details present only in the
+     reference but not required by the goal are NOT grounds to withhold a
+     pass.
+   - "partial": the code is on the right track but misses something the
+     GOAL requires (a needed clause the goal named, an edge case the goal
+     called out, a spec violation). Do not mark partial merely for
+     diverging from the reference on a point the goal left open.
    - "fail": the code does not address the goal, OR addresses a different
      problem, OR has a syntax/runtime error that would prevent it from
      running at all.
