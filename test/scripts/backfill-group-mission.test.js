@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 import { runBackfill } from '../../scripts/backfill-group-mission-completions.mjs';
+import { runNgdsSend } from '../../scripts/backfill-ngds-send.mjs';
 
 cds.test('serve', '--project', '.', '--in-memory');
 
@@ -36,5 +37,32 @@ describe('runBackfill', () => {
     expect(grpRows).toHaveLength(1);
     expect(grpRows[0].status).toBe('COMPLETED');
     expect(mis.status).toBe('COMPLETED');
+  });
+});
+
+describe('runNgdsSend', () => {
+  const U = 'nu000000-0000-0000-0000-000000000001';
+  beforeAll(async () => {
+    const e = cds.entities('com.sap.developers.ims');
+    await INSERT.into(e.Users).entries({ ID: U, sapId: 'P000777', legacyId: 7777 });
+    await INSERT.into(e.TaskRecords).entries([
+      { user_ID: U, taskLegacyId: 12000, taskType: 'MISSION', status: 'COMPLETED', progress: 100, completionDate: '2026-08-15T09:00:00.000Z', submissionIdCompleted: '11111111-1111-1111-1111-111111111111', legacyId: 120001 },
+      { user_ID: U, taskLegacyId: 12001, taskType: 'GROUP', status: 'COMPLETED', progress: 100, completionDate: '2026-07-01T09:00:00.000Z', legacyId: 120002 }, // pre-epoch → skipped
+    ]);
+    await INSERT.into(e.ImsConfig).entries({ key: 'ngds.autosend.epoch', value: '2026-08-10T00:00:00Z' });
+  });
+
+  it('selects only post-epoch eligible rows and advances the cursor (fake sender)', async () => {
+    const sent = [];
+    const r = await runNgdsSend({
+      dryRun: false, rate: 0, db: cds.db, forceActive: true,
+      sendFn: async (rec) => { sent.push(rec.taskLegacyId); return { success: true }; },
+    });
+    expect(sent).toContain(12000);      // post-epoch → sent
+    expect(sent).not.toContain(12001);  // pre-epoch → skipped
+    expect(r.sent).toBeGreaterThanOrEqual(1);
+    const { ImsConfig } = cds.entities('com.sap.developers.ims');
+    const cur = await SELECT.one.from(ImsConfig).where({ key: 'ngds.backfill.cursor' });
+    expect(cur?.value).toBeTruthy();
   });
 });
