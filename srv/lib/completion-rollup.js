@@ -172,3 +172,147 @@ export async function findParents({ taskType, taskLegacyId, tutorialId }, db) {
   }
   return { groupLegacyIds: [...new Set(groupLegacyIds)], missionIds };
 }
+
+// --- Completed-record lookup + upsert + orchestrator -----------------------
+
+/**
+ * The user's COMPLETED (non-SUPERSEDED) records among `taskLegacyIds`, as a
+ * token set plus a token→completionDate map (for stamping the rollup date).
+ */
+export async function getUserCompletedMap(dbUser, taskLegacyIds, db) {
+  const { TaskRecords } = cds.entities(NS);
+  const tokenSet = new Set();
+  const dateByToken = new Map();
+  const uniq = [...new Set(taskLegacyIds)].filter(v => v != null);
+  for (let i = 0; i < uniq.length; i += IN_CHUNK) {
+    const rows = await db.run(
+      SELECT.from(TaskRecords)
+        .columns('taskType', 'taskLegacyId', 'completionDate')
+        .where({ user_ID: dbUser.ID, status: 'COMPLETED', taskLegacyId: { in: uniq.slice(i, i + IN_CHUNK) } })
+    );
+    for (const r of rows) {
+      const t = tokenFor(r.taskType, r.taskLegacyId);
+      tokenSet.add(t);
+      if (r.completionDate) dateByToken.set(t, r.completionDate);
+    }
+  }
+  return { tokenSet, dateByToken };
+}
+
+/** SELECT-then-UPDATE-or-INSERT a GROUP/MISSION record; fire NGDS on the → COMPLETED edge. */
+export async function upsertRollupRecord({ dbUser, taskType, legacyId, title, progress, status, completionDate, db, send }) {
+  const { TaskRecords } = cds.entities(NS);
+  const existing = await db.run(SELECT.one.from(TaskRecords).where({
+    user_ID: dbUser.ID, taskLegacyId: legacyId, taskType, status: { '!=': 'SUPERSEDED' },
+  }));
+  if (existing) {
+    if (existing.progress === progress && existing.status === status) return; // no-op, avoids churn
+    const priorStatus = existing.status;
+    await db.run(UPDATE(TaskRecords, existing.ID).set(stampSubmissionId({
+      progress, status,
+      completionDate: status === 'COMPLETED'
+        ? (completionDate || existing.completionDate || new Date().toISOString())
+        : null,
+    }, existing)));
+    if (send && status === 'COMPLETED' && priorStatus !== 'COMPLETED') {
+      const [row] = await db.run(SELECT.from(TaskRecords).where({ ID: existing.ID }));
+      await maybeAutoSendCompletion({ record: row, priorStatus, db });
+    }
+    metrics.counter(`rollup.${taskType.toLowerCase()}.${status === 'COMPLETED' ? 'completed' : 'progress'}`);
+    return;
+  }
+  const newLegacyId = await getNextLegacyId('TaskRecords', db);
+  await db.run(INSERT.into(TaskRecords).entries(stampSubmissionId({
+    user_ID: dbUser.ID, taskLegacyId: legacyId, taskType, status, progress,
+    completionDate: status === 'COMPLETED' ? (completionDate || new Date().toISOString()) : null,
+    titleSnapshot: title, legacyId: newLegacyId, attemptNumber: 1,
+  })));
+  if (send && status === 'COMPLETED') {
+    const [row] = await db.run(SELECT.from(TaskRecords).where({ legacyId: newLegacyId }));
+    await maybeAutoSendCompletion({ record: row, priorStatus: null, db });
+  }
+  metrics.counter(`rollup.${taskType.toLowerCase()}.${status === 'COMPLETED' ? 'completed' : 'progress'}`);
+}
+
+/**
+ * Recompute + upsert the parent group(s)/mission(s) of a just-completed task.
+ * Never throws into the caller's transaction (wrapped; logs + metrics on fault).
+ * @param {{dbUser:{ID:string}, task:{taskType,taskLegacyId,tutorialId?}, db, send?:boolean}} opts
+ */
+export async function rollUpParentsForCompletion({ dbUser, task, db, send = true }) {
+  try {
+    const { Groups, Missions } = cds.entities(NS);
+    const { groupLegacyIds, missionIds } = await findParents(task, db);
+    if (groupLegacyIds.length === 0 && missionIds.length === 0) return;
+
+    // Resolve every group we may need (direct parents + nested-in-mission) → slots.
+    const groupByLegacy = new Map();
+    const groupSlotCache = new Map();
+    const resolveGroup = (legacyId) => groupSlotCache.get(legacyId) || [];
+    async function ensureGroup(legacyId) {
+      if (groupSlotCache.has(legacyId)) return;
+      const [g] = await chunkedIn(Groups, 'legacyId', [legacyId], db, ['ID', 'legacyId', 'title']);
+      if (!g) { groupSlotCache.set(legacyId, []); return; }
+      groupByLegacy.set(legacyId, g);
+      groupSlotCache.set(legacyId, await loadGroupSlots(g.ID, db));
+    }
+    for (const legacyId of groupLegacyIds) await ensureGroup(legacyId);
+
+    const missionRows = missionIds.length
+      ? await chunkedIn(Missions, 'ID', missionIds, db, ['ID', 'legacyId', 'title'])
+      : [];
+    const missionSlots = new Map();
+    for (const m of missionRows) {
+      const slots = await loadMissionSlots(m.ID, db);
+      missionSlots.set(m.ID, slots);
+      for (const s of slots) if (s.groupId != null) await ensureGroup(s.groupId);
+    }
+
+    // One completed-records fetch covering every token referenced anywhere.
+    const allLegacyIds = new Set();
+    const addTokens = (slots) => slots.forEach(s => {
+      if (s.groupId != null) addTokens(resolveGroup(s.groupId));
+      else s.tokens.forEach(t => allLegacyIds.add(Number(t.split(':')[1])));
+    });
+    for (const slots of groupSlotCache.values()) addTokens(slots);
+    for (const slots of missionSlots.values()) addTokens(slots);
+    const { tokenSet, dateByToken } = await getUserCompletedMap(dbUser, [...allLegacyIds], db);
+
+    const latestDate = (slots) => {
+      let max = null;
+      const walk = (ss) => ss.forEach(s => {
+        if (s.groupId != null) walk(resolveGroup(s.groupId));
+        else for (const t of s.tokens) { const d = dateByToken.get(t); if (d && (!max || d > max)) max = d; }
+      });
+      walk(slots);
+      return max;
+    };
+
+    // Groups first (they are mission slots), then missions.
+    for (const legacyId of groupLegacyIds) {
+      const g = groupByLegacy.get(legacyId);
+      if (!g) continue;
+      const slots = resolveGroup(legacyId);
+      if (slots.length === 0) continue;
+      const { satisfied, total } = evaluateSlots(slots, tokenSet, resolveGroup);
+      const { progress, status } = calculateMissionProgress(satisfied, total);
+      await upsertRollupRecord({
+        dbUser, taskType: 'GROUP', legacyId, title: g.title,
+        progress, status, completionDate: latestDate(slots), db, send,
+      });
+    }
+    for (const m of missionRows) {
+      const slots = missionSlots.get(m.ID);
+      if (!slots || slots.length === 0) continue;
+      const { satisfied, total } = evaluateSlots(slots, tokenSet, resolveGroup);
+      const { progress, status } = calculateMissionProgress(satisfied, total);
+      await upsertRollupRecord({
+        dbUser, taskType: 'MISSION', legacyId: m.legacyId, title: m.title,
+        progress, status, completionDate: latestDate(slots), db, send,
+      });
+    }
+  } catch (err) {
+    cds.log('rollup').error('rollUpParentsForCompletion failed (non-fatal):', err.message);
+    metrics.counter('rollup.failures');
+  }
+}

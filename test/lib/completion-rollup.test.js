@@ -3,7 +3,10 @@ import cds from '@sap/cds';
 import {
   collapseSlots, evaluateSlots, tokenFor,
   loadGroupSlots, loadMissionSlots, findParents,
+  rollUpParentsForCompletion,
 } from '../../srv/lib/completion-rollup.js';
+
+cds.test('serve', '--project', '.', '--in-memory');
 
 describe('collapseSlots', () => {
   it('makes one slot per linear item', () => {
@@ -51,7 +54,6 @@ describe('evaluateSlots', () => {
 });
 
 describe('completion-rollup DB membership', () => {
-  cds.test('serve', '--project', '.', '--in-memory');
   const G = 'gggggggg-0000-0000-0000-000000000001';
   const M = 'mmmmmmmm-0000-0000-0000-000000000001';
   const P = 'pppppppp-0000-0000-0000-000000000001';
@@ -92,5 +94,62 @@ describe('completion-rollup DB membership', () => {
       { taskType: 'TUTORIAL', taskLegacyId: 5101, tutorialId: T1 }, cds.db);
     expect(groupLegacyIds).toContain(5200);
     expect(missionIds).toContain(M);
+  });
+});
+
+describe('rollUpParentsForCompletion', () => {
+  const U = 'uuuuuuuu-0000-0000-0000-000000000001';
+  const G = 'gg111111-0000-0000-0000-000000000001';
+  const M = 'mm111111-0000-0000-0000-000000000001';
+  const P = 'pp111111-0000-0000-0000-000000000001';
+  const T1 = 'tt111111-0000-0000-0000-000000000001';
+  const T2 = 'tt111111-0000-0000-0000-000000000002';
+
+  beforeAll(async () => {
+    const e = cds.entities('com.sap.developers.ims');
+    await INSERT.into(e.Users).entries({ ID: U, sapId: 'P000123', legacyId: 9001 });
+    await INSERT.into(e.Tutorials).entries([
+      { ID: T1, slug: 'r3-t1', title: 'T1', legacyId: 6101, status: 'ACTIVE' },
+      { ID: T2, slug: 'r3-t2', title: 'T2', legacyId: 6102, status: 'ACTIVE' },
+    ]);
+    await INSERT.into(e.Groups).entries({ ID: G, slug: 'r3-g', title: 'G', legacyId: 6200, status: 'ACTIVE' });
+    await INSERT.into(e.GroupPathItems).entries([
+      { group_ID: G, tutorial_ID: T1, itemOrder: 1, legacyId: 6301 },
+      { group_ID: G, tutorial_ID: T2, itemOrder: 2, legacyId: 6302 },
+    ]);
+    await INSERT.into(e.Missions).entries({ ID: M, slug: 'r3-m', title: 'M', legacyId: 6400, status: 'ACTIVE' });
+    await INSERT.into(e.CompletionPaths).entries({ ID: P, mission_ID: M, name: 'P', legacyId: 6500 });
+    await INSERT.into(e.CompletionPathItems).entries({ path_ID: P, taskType: 'GROUP', group_ID: G, taskLegacyId: 6200, itemOrder: 1, legacyId: 6601 });
+  });
+
+  async function completeTut(legacyId) {
+    const { TaskRecords } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(TaskRecords).entries({
+      user_ID: U, taskLegacyId: legacyId, taskType: 'TUTORIAL', status: 'COMPLETED',
+      progress: 100, completionDate: new Date().toISOString(), legacyId: 70000 + legacyId,
+    });
+  }
+
+  it('partial tutorial completion writes IN_PROGRESS group + mission', async () => {
+    await completeTut(6101);
+    await rollUpParentsForCompletion({ dbUser: { ID: U }, task: { taskType: 'TUTORIAL', taskLegacyId: 6101, tutorialId: T1 }, db: cds.db, send: false });
+    const { TaskRecords } = cds.entities('com.sap.developers.ims');
+    const grp = await SELECT.one.from(TaskRecords).where({ user_ID: U, taskLegacyId: 6200, taskType: 'GROUP' });
+    const mis = await SELECT.one.from(TaskRecords).where({ user_ID: U, taskLegacyId: 6400, taskType: 'MISSION' });
+    expect(grp.status).toBe('IN_PROGRESS');
+    expect(grp.progress).toBe(50);
+    expect(mis.status).toBe('IN_PROGRESS');
+  });
+
+  it('final tutorial completion flips group + mission to COMPLETED (idempotent)', async () => {
+    await completeTut(6102);
+    await rollUpParentsForCompletion({ dbUser: { ID: U }, task: { taskType: 'TUTORIAL', taskLegacyId: 6102, tutorialId: T2 }, db: cds.db, send: false });
+    await rollUpParentsForCompletion({ dbUser: { ID: U }, task: { taskType: 'TUTORIAL', taskLegacyId: 6102, tutorialId: T2 }, db: cds.db, send: false });
+    const { TaskRecords } = cds.entities('com.sap.developers.ims');
+    const grpRows = await SELECT.from(TaskRecords).where({ user_ID: U, taskLegacyId: 6200, taskType: 'GROUP', status: { '!=': 'SUPERSEDED' } });
+    const mis = await SELECT.one.from(TaskRecords).where({ user_ID: U, taskLegacyId: 6400, taskType: 'MISSION' });
+    expect(grpRows).toHaveLength(1);
+    expect(grpRows[0].status).toBe('COMPLETED');
+    expect(mis.status).toBe('COMPLETED');
   });
 });
