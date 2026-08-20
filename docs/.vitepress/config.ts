@@ -173,6 +173,7 @@ export default defineConfig({
           { text: 'Migration from IMS',        link: '/developers/operations/migration-from-ims' },
           { text: 'Deploy checklist',          link: '/developers/operations/deploy-checklist' },
           { text: 'Deployment',                link: '/developers/operations/deployment' },
+          { text: 'Devtoberfest selfie art',   link: '/developers/operations/devtoberfest-selfie-assets' },
           { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
           { text: 'GitHub dispatch PAT rotation', link: '/developers/operations/github-dispatch-pat-rotation' },
           { text: 'HDI deploy checklist',      link: '/developers/operations/hdi-deploy-checklist' },
