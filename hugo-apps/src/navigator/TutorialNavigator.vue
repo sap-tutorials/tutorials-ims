@@ -21,6 +21,9 @@ const navEl = typeof document !== 'undefined' ? document.getElementById('tutoria
 const searchBase = navEl?.dataset.searchBase || '/search'
 const navBase = navEl?.dataset.navBase || '/tutorials'
 const hrefBase = navEl?.dataset.hrefBase || '/tutorials'
+// #1939: QA sets data-client-search so search runs client-side over allCards
+// (srv-qa exposes no SearchableItems/getFacets). Prod leaves it unset → server search.
+const clientSearch = navEl?.dataset.clientSearch === 'true'
 
 // `/`-specific data shapes — fetched in onMounted below.
 const tutorials = ref<TutorialEntry[]>([])
@@ -197,6 +200,7 @@ const {
   searchBase,
   hrefBase,
   navBase,
+  clientSearch,
 })
 
 // Sort UI (#199): reuse /browse/'s ?sort= URL contract via browseUrl.ts —
