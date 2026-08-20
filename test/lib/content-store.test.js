@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import cds from '@sap/cds';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { createContentHandlers } from '../../srv/lib/content-store.js';
+import * as catalogRenderer from '../../srv/lib/catalog-renderer.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -820,5 +822,59 @@ describe('content-store', () => {
       expect(res.status).toBe(200);
       expect(res.data).toBe('<p>active</p>');
     });
+  });
+});
+
+// #1938: A genuine catalog render failure (loader/render throw) must be caught
+// by the nice published __404__ error page instead of the raw JSON 500.
+describe('content-store catalog render failure → nice error page (#1938)', () => {
+  const API_KEY = 'test-content-key-12345';
+  const notFoundHtml = '<!doctype html><html><body><h1>Tutorial not found</h1></body></html>';
+
+  beforeAll(() => {
+    process.env.CONTENT_API_KEY = API_KEY;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeServeRes() {
+    return {
+      _status: null,
+      _headers: {},
+      _body: null,
+      status(code) { this._status = code; return this; },
+      setHeader(k, v) { this._headers[k] = v; },
+      json(b) { this._body = b; return this; },
+      send(b) { this._body = b; return this; },
+      end() { return this; },
+    };
+  }
+
+  it('serves the styled __404__ page (status 500) when the catalog render throws', async () => {
+    // Publish a __404__ page so the nice-error handler has content to serve.
+    const payload = makePayload({ 'some-tut': '<p>x</p>' });
+    payload['__404__'] = gzipSync(Buffer.from(notFoundHtml, 'utf-8')).toString('base64');
+    await project.axios.post('/content/publish', {
+      trigger: 'render-fail-404',
+      files: payload,
+    }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+    // Force the catalog render to throw (mimics QA-namespace-style loader crash
+    // or any genuine render fault on a channel that DOES have catalog entities).
+    vi.spyOn(catalogRenderer, 'renderCatalogPage').mockRejectedValue(new Error('boom'));
+
+    const { serveHandler } = createContentHandlers(); // default prod namespace (has Groups)
+    const res = makeServeRes();
+    await serveHandler(
+      { params: { slug: 'group-anything' }, url: '/content/tutorials/group-anything', headers: {} },
+      res,
+    );
+
+    expect(res._status).toBe(500);
+    expect(res._headers['X-Content-Source']).toBe('db');
+    expect(Buffer.isBuffer(res._body)).toBe(true);
+    expect(res._body.toString('utf-8')).toContain('Tutorial not found');
   });
 });

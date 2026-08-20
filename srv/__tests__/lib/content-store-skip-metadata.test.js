@@ -235,3 +235,63 @@ describe('content-store skipMetadataUpsert option', () => {
     expect(defaultH.publishHandler).not.toBe(explicitH.publishHandler);
   });
 });
+
+// #1938: QA channel has no Groups/Missions entities (db-qa/schema.cds). A
+// group-/mission- prefixed slug must 302-redirect to the production-served
+// /tutorials/<slug> URL instead of throwing into the ugly 500 catch.
+describe('content-store QA catalog redirect (#1938)', () => {
+  beforeEach(async () => {
+    await cds.deploy(QA_SCHEMA).to('sqlite::memory:');
+  });
+
+  function makeServeReq(slug, { query = '' } = {}) {
+    return {
+      params: { slug },
+      url: `/content/tutorials/${slug}${query}`,
+      headers: {},
+    };
+  }
+
+  function makeServeRes() {
+    return {
+      _status: null,
+      _headers: {},
+      _body: null,
+      _ended: false,
+      status(code) { this._status = code; return this; },
+      setHeader(k, v) { this._headers[k] = v; },
+      json(b) { this._body = b; return this; },
+      send(b) { this._body = b; return this; },
+      end() { this._ended = true; return this; },
+    };
+  }
+
+  it('redirects a QA group slug to the production /tutorials/<slug> URL (302)', async () => {
+    const { serveHandler } = createContentHandlers({
+      namespace: QA_NS,
+      apiKeyEnv: 'CONTENT_API_KEY_QA',
+      skipMetadataUpsert: true,
+    });
+
+    const res = makeServeRes();
+    await serveHandler(makeServeReq('group-getting-started'), res);
+
+    expect(res._status).toBe(302);
+    expect(res._headers.Location).toBe('/tutorials/group-getting-started');
+    expect(res._body).toBeNull(); // not the ugly JSON 500
+  });
+
+  it('redirects a QA mission slug and preserves the query string', async () => {
+    const { serveHandler } = createContentHandlers({
+      namespace: QA_NS,
+      apiKeyEnv: 'CONTENT_API_KEY_QA',
+      skipMetadataUpsert: true,
+    });
+
+    const res = makeServeRes();
+    await serveHandler(makeServeReq('mission-learn-cap', { query: '?from=x' }), res);
+
+    expect(res._status).toBe(302);
+    expect(res._headers.Location).toBe('/tutorials/mission-learn-cap?from=x');
+  });
+});
