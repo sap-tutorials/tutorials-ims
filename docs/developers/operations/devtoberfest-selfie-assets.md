@@ -23,11 +23,18 @@ The island resolves everything from a base path (`imgBase`, default `/images/dev
 
 | Family | Enumerated in | Asset directory | URL pattern | Format |
 | --- | --- | --- | --- | --- |
-| Backgrounds | `hugo-apps/src/selfie/backgrounds.ts` (`BACKGROUNDS` array) | `.../selfie/backgrounds/` | `{base}/backgrounds/{file}.png` | 1080×1080 opaque PNG |
-| Stickers | `hugo/layouts/devtoberfest/selfie.html` (`data-stickers` CSV) | `.../selfie/stickers/` | `{base}/stickers/{file}.png` | 512×512 transparent PNG |
+| Backgrounds | `hugo-apps/src/selfie/backgrounds.ts` (`BACKGROUNDS` array) | `.../selfie/backgrounds/` | `{base}/backgrounds/{file}.png` | square opaque PNG, ≥1080×1080 recommended |
+| Stickers | `hugo/layouts/devtoberfest/selfie.html` (`data-stickers` CSV) | `.../selfie/stickers/` | `{base}/stickers/{file}.png` | transparent PNG, ~512×512 |
 | Frames | `hugo/layouts/devtoberfest/selfie.html` (`data-frames` CSV) | `.../selfie/frames/` + `.../thumbnails/` | `{base}/frames/{name}.png`, `{base}/thumbnails/{name}.png` | PNG |
 
 > **The two families are configured in different places.** Backgrounds are declared in a TypeScript array in the island source; stickers and frames are declared as comma-separated `data-*` attributes in the Hugo layout. Editing the wrong one is the most common mistake.
+
+### About image dimensions
+
+Exact pixel dimensions are **not** required — every image is resampled by the Konva compositor at render time. The conventions above are about aspect ratio and sharpness, not hard limits:
+
+- **Backgrounds are stretched to fill the stage box** (`setBackground` in `compose.ts` draws them at `width: stageW, height: stageH` — source aspect is *not* preserved). The export canvas is **1080×1080 square** (`STAGE_WIDTH`/`STAGE_HEIGHT` in `constants.ts`), so use a **square (1:1) source** to avoid distortion. Supply **≥1080×1080** so the image is downscaled (crisp) rather than upscaled (soft). A smaller or non-square PNG still works — it just looks softer or distorted.
+- **Stickers and frames** are placed as draggable/resizable nodes and scaled to fit, so their pixel size is irrelevant. What matters is a **transparent background** (stickers) and matching the intended frame shape (frames). Larger sources downscale cleanly.
 
 ## Backgrounds
 
