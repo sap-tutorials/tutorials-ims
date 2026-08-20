@@ -164,5 +164,52 @@ describe.skipIf(!hasBaseUrl() || !hasCredentials())(
         await context.close();
       }
     });
+    // Regression for issue #1930 ("Toggle of grid squares not working"). In
+    // design mode, clicking a white cell turns it black; clicking a black cell
+    // must turn it back to white. Before the fix, geom.setBlack forced black:true
+    // so the second click was a no-op.
+    it('design mode toggles a grid square black then back to white (issue #1930)', async () => {
+      const { context, page } = await newPage(browser);
+      try {
+        await page.goto('/admin-ui/#puzzles', { waitUntil: 'domcontentloaded' });
+
+        await page
+          .locator('[role="button"]')
+          .filter({ hasText: 'Create New' })
+          .waitFor({ state: 'visible', timeout: 30_000 });
+        await page.locator('[role="button"]').filter({ hasText: 'Create New' }).click();
+
+        // Apply a grid template (leaves the builder in "design" sub-mode).
+        await page.locator('[role="button"]').filter({ hasText: 'Select Grid' }).click();
+        const firstTemplate = page
+          .locator('[id*="gridPickerDialog"]')
+          .locator('[role="listitem"], li')
+          .first();
+        await firstTemplate.waitFor({ state: 'visible', timeout: 10_000 });
+        await firstTemplate.click();
+
+        // Pick a non-black, off-mirror-axis cell so the first click definitely
+        // turns it black regardless of the template's symmetry.
+        const cell = page.locator('table[role="grid"] td[data-r="0"][data-c="1"]');
+        await cell.waitFor({ state: 'visible', timeout: 10_000 });
+        const bg = () => cell.evaluate((el) => getComputedStyle(el).backgroundColor);
+
+        const before = await bg();
+        // First click → black (#222 → rgb(34, 34, 34)).
+        await cell.click();
+        await expect
+          .poll(bg, { timeout: 5_000 })
+          .toBe('rgb(34, 34, 34)');
+
+        // Second click → back to white (no longer black).
+        await cell.click();
+        await expect
+          .poll(bg, { timeout: 5_000 })
+          .not.toBe('rgb(34, 34, 34)');
+        expect(await bg()).toBe(before);
+      } finally {
+        await context.close();
+      }
+    });
   }
 );

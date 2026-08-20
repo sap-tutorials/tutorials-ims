@@ -26,15 +26,16 @@ sap.ui.define([], function () {
   }
 
   /**
-   * Set cell (r, c) to black and mirror 180° (rows-1-r, cols-1-c).
-   * Returns a new grid (immutable).
+   * Toggle cell (r, c) black/white and mirror the same state 180°
+   * (rows-1-r, cols-1-c). Returns a new grid (immutable).
    */
   function setBlack(grid, r, c) {
     var rows = grid.length;
     var cols = grid[0] ? grid[0].length : 0;
     var g = grid.map(function (row) { return row.map(function (cell) { return Object.assign({}, cell); }); });
-    g[r][c].black = true;
-    g[rows - 1 - r][cols - 1 - c].black = true;
+    var next = !g[r][c].black;
+    g[r][c].black = next;
+    g[rows - 1 - r][cols - 1 - c].black = next;
     return g;
   }
 
