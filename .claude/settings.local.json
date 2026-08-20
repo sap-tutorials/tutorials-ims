@@ -27,9 +27,10 @@
       "mcp__sap-devs-server__search_events"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "sap-devs-server",
     "sap-developers-auth"
   ],
-  "enableAllProjectMcpServers": true
+  "outputStyle": "Concise"
 }

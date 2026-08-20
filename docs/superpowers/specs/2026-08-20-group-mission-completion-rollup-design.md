@@ -51,18 +51,23 @@ Non-goals / deferred: IN_PROGRESS progress bars for groups/missions in the
   `title`. GROUP/MISSION `TaskRecords` key by `taskLegacyId = <entity>.legacyId`,
   `titleSnapshot = <entity>.title`.
 
-### Slot model (alt-group "any branch satisfies")
+### Slot model (all item types; alt-group "any branch satisfies")
 
-A **slot** is one required position in a group/mission. Items sharing the same
-`(itemOrder, altGroupKey)` with a non-null `altGroupKey` collapse into ONE slot
-(pick-one branch); linear items are their own slot. A slot is **satisfied** when
-**any** of its tutorials has a COMPLETED (non-SUPERSEDED) TUTORIAL record for the
-user. Progress = `round(satisfiedSlots / totalSlots * 100)`; status COMPLETED at
-100%, else IN_PROGRESS. (Reuses `calculateMissionProgress(satisfied, total)`.)
+A **slot** is one required position in a group/mission, represented by a set of
+`(taskType, taskLegacyId)` **tokens**. Items sharing the same `(itemOrder,
+altGroupKey)` with a non-null `altGroupKey` collapse into ONE slot (pick-one
+branch, tokens unioned); linear items are their own single-token slot. A slot is
+**satisfied** when the user has a COMPLETED (non-SUPERSEDED) `TaskRecord`
+matching **any** of the slot's tokens. Progress =
+`round(satisfiedSlots / totalSlots * 100)`; status COMPLETED at 100%, else
+IN_PROGRESS. (Reuses `calculateMissionProgress(satisfied, total)`.)
 
-For a mission, a nested `GROUP` item is one slot that is satisfied when that
-group is itself complete (all the group's slots satisfied). Direct tutorial /
-alt-group slots count as above.
+Item types covered (Tom's decision — include all now): `TUTORIAL`, `PUZZLE`,
+`CHECKPOINT`, `PETOBERFEST` are direct slot tokens; a nested `GROUP` item is one
+slot satisfied when that group is itself complete (recursively — groups contain
+only `TUTORIAL` tutorials per `GroupPathItems`). The user's completed-token set
+for a mission is fetched once: COMPLETED non-SUPERSEDED `TaskRecords` whose
+`(taskType, taskLegacyId)` fall in the mission's full token set.
 
 ## Architecture
 
@@ -76,32 +81,43 @@ Pure-ish (does its own SELECTs via passed `db`); no service coupling. Exports:
   | { kind:'group', groupId }]`.
 - `computeStatus(slots, completedTutorialLegacyIdSet, db)` → `{ progress,
   status, latestCompletionDate }` (recursively resolves nested-group slots).
-- `findParents(tutorialId, tutorialLegacyId, db)` → `{ groupIds:Set,
-  missionIds:Set }` (groups via `GroupPathItems.tutorial`; missions directly via
-  `CompletionPathItems{taskType:'TUTORIAL', tutorial}` → path → mission, and via
-  `CompletionPathItems{taskType:'GROUP', group ∈ groupIds}` → path → mission).
+- `findParents(task, db)` where `task = { taskType, taskLegacyId, tutorialId? }`
+  → `{ groupIds:Set, missionIds:Set }`. Groups apply only to `TUTORIAL` tasks
+  (via `GroupPathItems.tutorial`). Missions found directly via
+  `CompletionPathItems{taskType, taskLegacyId}` → path → mission, plus (for
+  TUTORIALs) via `CompletionPathItems{taskType:'GROUP', group ∈ groupIds}` →
+  path → mission.
 - `upsertRollupRecord({ dbUser, kind, entity, progress, status,
   completionDate, db, send })` → SELECT-then-UPDATE-or-INSERT on
   `(user_ID, taskLegacyId, taskType, status != 'SUPERSEDED')`, mirroring
   `_updateTutorialProgress`. Uses `stampSubmissionId` (stable tracking id),
   `getNextLegacyId('TaskRecords', db)`, `attemptNumber: 1`. When `send` and the
   row transitioned → COMPLETED, calls `maybeAutoSendCompletion`.
-- `rollUpParents({ dbUser, tutorial, db })` — orchestrator: resolve the user's
-  completed tutorial legacyId set once, `findParents`, recompute each affected
-  group then each affected mission, upsert. This is the single entry point the
-  live path calls.
+- `rollUpParentsForCompletion({ dbUser, task, db, send=true })` — orchestrator:
+  `findParents`, recompute each affected group then each affected mission
+  (missions computed recursively from raw records, independent of whether the
+  GROUP row is written yet), upsert. Single entry point for all callers.
 
-### Live wiring (`srv/developer-service.js`)
+### Live wiring
 
-Call `await rollUpParents(...)` after tutorial status settles:
+Call `rollUpParentsForCompletion` after the relevant record settles:
 
-- In `_updateTutorialProgress`, after the TUTORIAL upsert (both branches),
-  regardless of edge — recompute handles both completion and regression.
-- In `resetTutorialProgress`, after superseding rows (a reset can drop a
-  group/mission from COMPLETED back to IN_PROGRESS).
+- `srv/developer-service.js` `_updateTutorialProgress` — after the TUTORIAL
+  upsert (both branches), `task={TUTORIAL, tutorial.legacyId, tutorialId:
+  tutorial.ID}`. Recompute always (handles completion + regression).
+- `srv/developer-service.js` `resetTutorialProgress` — after superseding, same
+  task shape (a reset can drop a group/mission from COMPLETED → IN_PROGRESS).
+- `srv/puzzle-service.js` (~:221) — after a `recorded:true` PUZZLE insert,
+  `task={PUZZLE, puzzle.legacyId}`.
+- `srv/lib/petoberfest-upload.js` (~:79) — after an `awarded:true` insert,
+  `task={PETOBERFEST, contest.legacyId}`.
+- `srv/developer-service.js` `createTaskRecord` — on the edge→COMPLETED for
+  `taskType==='CHECKPOINT'`, `task={CHECKPOINT, taskLegacyId}`. (GROUP/MISSION
+  direct writes there are left as legacy no-ops for the rollup — the next
+  tutorial completion recomputes authoritatively.)
 
-`rollUpParents` never throws into the completion tx (wrapped; logs + metrics on
-fault) — a rollup fault must not roll back a step/tutorial completion.
+`rollUpParentsForCompletion` never throws into the completion tx (wrapped; logs
++ metrics on fault).
 
 ### NGDS live flow-through
 
@@ -156,21 +172,21 @@ env=prod + kill-switch + epoch + identity guards apply unchanged.
 - Full `npm test` green; `npx cds deploy --to sqlite::memory:` clean (no schema
   change expected — reusing existing entities/enums).
 
-## Open scope decisions (flag for spec review)
+## Resolved scope decisions
 
-1. **Non-tutorial mission items (CHECKPOINT/PUZZLE/PETOBERFEST).** v1 counts
-   **TUTORIAL slots only** for the denominator; missions/groups also containing
-   puzzle/checkpoint/petoberfest items will mark complete on tutorials alone
-   (slight over-credit) and are not re-triggered by those item types. Rationale:
-   matches the flatlined signal, keeps the change isolated to the tutorial path.
-   Alternative (follow-up): include those item types in the denominator and add
-   rollup triggers to `puzzle-service` / `petoberfest-upload` / the CHECKPOINT
-   branch of `createTaskRecord`.
-2. **`createTaskRecord` GROUP/MISSION path.** Left intact (legacy compat) but no
-   longer the primary source. If a client still calls it, the next tutorial
-   completion recomputes/overwrites — the rollup is authoritative.
-3. **No schema migration.** All fields (`taskType` GROUP/MISSION, `status`
-   enum, `progress`, `completionDate`, `attemptNumber`) already exist.
+1. **Rollup rows:** full progress (IN_PROGRESS + COMPLETED).
+2. **Backfill scope:** tutorial (and other item) completions dated on/after the
+   cutover (Aug 10).
+3. **Alt-groups:** any branch satisfies the slot.
+4. **Non-tutorial mission items:** included now — `TUTORIAL`, `PUZZLE`,
+   `CHECKPOINT`, `PETOBERFEST` all count toward mission/group completion, with
+   rollup triggers added at each completion point (see Live wiring).
+5. **`createTaskRecord` GROUP/MISSION path:** left intact (legacy compat) but no
+   longer authoritative; the next item completion recomputes/overwrites.
+6. **No schema migration** — all fields/enums already exist.
+
+The backfill NGDS-send step (goal 4) is **operator-run**: this work builds the
+mechanism; Tom triggers the prod run and enables the kill-switch.
 
 ## Rollout
 
