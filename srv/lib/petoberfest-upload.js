@@ -3,6 +3,7 @@ import { processPetUpload, findDuplicate, insertSubmission } from './petoberfest
 import { resolveOrCreatePetUser } from '../petoberfest-service.js';
 import { getNextLegacyId } from './legacy-id.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
+import { rollUpParentsForCompletion } from './completion-rollup.js';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,254}$/;
 
@@ -77,6 +78,8 @@ export async function uploadPetSubmission(db, { slug, user, buffer, mimeType, pe
       attemptNumber: 1,
     })));
     awarded = true;
+    // Recompute parent missions (a petoberfest can be a mission item). Never throws.
+    await rollUpParentsForCompletion({ dbUser, task: { taskType: 'PETOBERFEST', taskLegacyId: contest.legacyId }, db });
   }
   return { id, awarded, moderation: 'PENDING', duplicate: false };
 }

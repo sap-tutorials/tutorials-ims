@@ -397,3 +397,28 @@ describe('getEventProgress event association', () => {
     expect(data.paths[0].title).toBe('Published Path');
   });
 });
+
+describe('group/mission rollup (via completeStep)', () => {
+  beforeAll(async () => {
+    const e = cds.entities('com.sap.developers.ims');
+    // A 1-step tutorial that is the sole item of a group that is the sole item of a mission.
+    await INSERT.into(e.Tutorials).entries({ ID: 'rt000000-0000-0000-0000-000000000010', slug: 'rollup-tut', title: 'Rollup Tut', legacyId: 8101, status: 'ACTIVE', stepCount: 1 });
+    await INSERT.into(e.Steps).entries({ ID: 'rs000000-0000-0000-0000-000000000010', tutorial_ID: 'rt000000-0000-0000-0000-000000000010', stepOrder: 1, title: 'S1', legacyId: 8201 });
+    await INSERT.into(e.Groups).entries({ ID: 'rg000000-0000-0000-0000-000000000010', slug: 'rollup-grp', title: 'Rollup Grp', legacyId: 8300, status: 'ACTIVE' });
+    await INSERT.into(e.GroupPathItems).entries({ group_ID: 'rg000000-0000-0000-0000-000000000010', tutorial_ID: 'rt000000-0000-0000-0000-000000000010', itemOrder: 1, legacyId: 8401 });
+    await INSERT.into(e.Missions).entries({ ID: 'rm000000-0000-0000-0000-000000000010', slug: 'rollup-mis', title: 'Rollup Mis', legacyId: 8500, status: 'ACTIVE' });
+    await INSERT.into(e.CompletionPaths).entries({ ID: 'rp000000-0000-0000-0000-000000000010', mission_ID: 'rm000000-0000-0000-0000-000000000010', name: 'P', legacyId: 8600 });
+    await INSERT.into(e.CompletionPathItems).entries({ path_ID: 'rp000000-0000-0000-0000-000000000010', taskType: 'GROUP', group_ID: 'rg000000-0000-0000-0000-000000000010', taskLegacyId: 8300, itemOrder: 1, legacyId: 8700 });
+  });
+
+  it('completing the only step flips GROUP and MISSION to COMPLETED', async () => {
+    await project.post('/api/completeStep', { slug: 'rollup-tut', stepNumber: 1 },
+      { auth: { username: 'developer', password: 'developer' } });
+    const { TaskRecords, Users } = cds.entities('com.sap.developers.ims');
+    const u = await SELECT.one.from(Users).where({ sapId: 'developer' });
+    const grp = await SELECT.one.from(TaskRecords).where({ user_ID: u.ID, taskLegacyId: 8300, taskType: 'GROUP' });
+    const mis = await SELECT.one.from(TaskRecords).where({ user_ID: u.ID, taskLegacyId: 8500, taskType: 'MISSION' });
+    expect(grp?.status).toBe('COMPLETED');
+    expect(mis?.status).toBe('COMPLETED');
+  });
+});
