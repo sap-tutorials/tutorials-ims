@@ -1,5 +1,6 @@
 import { extractFrontmatter } from './frontmatter.js'
 import { normalizeBlockquotedFences } from './blockquote-fence.js'
+import { normalizeListContinuationFences } from './list-continuation-fence.js'
 import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
@@ -77,13 +78,23 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // step 2). Run before every downstream transform so both steps and intro get
   // the healed markdown.
   const healedBody = normalizeBlockquotedFences(body)
+  // [#1931] Heal fenced code blocks indented with exactly 4 spaces (common in
+  // ABAP tutorials that use `  2. ` list items with 4-space continuation
+  // content). Under CommonMark/Goldmark, a 4-space-indented line is treated as
+  // an indented code block rather than a fenced code block — the render-
+  // codeblock hook never fires and the raw ``` delimiters appear as literal
+  // text. Strip 1 leading space from 4-space fence delimiters (and their
+  // content) so Goldmark recognises them as valid fenced code blocks (≤ 3-
+  // space indent). Run after blockquote-fence healing so both can see clean
+  // input.
+  const listFenceHealedBody = normalizeListContinuationFences(healedBody)
   // [#1741] Collapse the AEM-legacy "additional details" note pattern where a
   // multi-paragraph blockquote is split by blockquoted thematic breaks (`>---`).
   // CommonMark otherwise renders each `>` block as its own info box with a
   // visible divider; legacy showed one continuous note. Run after the fence
   // healer so `>---` lines inside blockquoted code fences are already recognized
   // as code content and left untouched.
-  const mergedBody = mergeBlockquoteNoteDividers(healedBody)
+  const mergedBody = mergeBlockquoteNoteDividers(listFenceHealedBody)
   let processedBody = resolveImageURLs(mergedBody, {
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
