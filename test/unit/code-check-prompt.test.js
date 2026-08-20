@@ -3,7 +3,8 @@ import {
   buildSystemPrompt,
   buildUserMessage,
   CHECK_CODE_OUTPUT_SCHEMA,
-  redactReferenceLeaks
+  redactReferenceLeaks,
+  PROMPT_VERSION
 } from '../../srv/lib/code-check-prompt.js';
 
 describe('code-check prompt builder', () => {
@@ -14,6 +15,16 @@ describe('code-check prompt builder', () => {
     expect(sys).toMatch(/\bfail\b/i);
     expect(sys).toMatch(/NEVER QUOTE/i);
     expect(sys).toMatch(/JSON/i);
+  });
+
+  it('grades against the goal, not the reference (issue #1942)', () => {
+    const sys = buildSystemPrompt();
+    // The grader must not over-anchor to reference-only details the goal
+    // never asked for (e.g. a String length annotation).
+    expect(sys).toMatch(/GRADE AGAINST THE GOAL/i);
+    expect(sys).toMatch(/floor for grading, not the ceiling/i);
+    // v2 prompt vintage so telemetry can split before/after the fix.
+    expect(PROMPT_VERSION).toBe('v2');
   });
 
   it('user message orders sections deterministically', () => {
