@@ -903,25 +903,57 @@ function fallback(): GitHubMeta {
 
 export async function fetchRulesVr(slug: string, repo: string, branch: string): Promise<string | null> {
   const cacheFile = join(dirname(CACHE_FILE), `${slug}.rules.vr`)
-  if (existsSync(cacheFile)) {
-    return readFileSync(cacheFile, 'utf-8')
-  }
+  // Sidecar holding the ETag of the last-fetched rules.vr blob (issue #1940).
+  const etagFile = join(dirname(CACHE_FILE), `${slug}.rules.vr.etag`)
 
   const contribRepo = repo.endsWith('-Contribution') ? repo : `${repo}-Contribution`
   const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
-  if (!token) return null
+  // Without a token we cannot revalidate against GitHub (the -Contribution
+  // repos are private). Fall back to a cached copy if one exists (offline/dev),
+  // otherwise report absence.
+  if (!token) return existsSync(cacheFile) ? readFileSync(cacheFile, 'utf-8') : null
 
   const url = `https://raw.githubusercontent.com/${ORG}/${contribRepo}/${branch}/tutorials/${slug}/rules.vr`
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'User-Agent': 'tutorials-ims-build',
+  }
+
+  // [#1940] Revalidate the cache instead of trusting it blindly. The previous
+  // implementation returned the cached `${slug}.rules.vr` whenever the file
+  // existed and NEVER re-checked GitHub — unlike fetchMarkdown, which is
+  // SHA-gated. Because the build cache (`.tutorial-cache/`) is restored across
+  // CI runs, once a slug's rules.vr was cached holding a placeholder answer,
+  // an author's later edit to the puzzle answer/question was never picked up
+  // (the tutorial markdown refreshed; the validation answer did not). Keying on
+  // fetchMarkdown's `lastCommitSha` would not fix it: that SHA tracks the .md
+  // path in the *content* repo, whereas rules.vr lives in the *-Contribution*
+  // repo — a rules-only edit wouldn't bump it. A conditional GET keyed on the
+  // blob's own ETag is content-accurate: any change to rules.vr changes the
+  // ETag, forcing a re-fetch; an unchanged blob returns 304 and reuses cache.
+  const cachedEtag =
+    existsSync(cacheFile) && existsSync(etagFile) ? readFileSync(etagFile, 'utf-8').trim() : ''
+  if (cachedEtag) headers['If-None-Match'] = cachedEtag
+
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'tutorials-ims-build' },
-    })
-    if (!res.ok) return null
+    const res = await fetch(url, { headers })
+    // Source unchanged — cached copy is authoritative.
+    if (res.status === 304 && existsSync(cacheFile)) {
+      return readFileSync(cacheFile, 'utf-8')
+    }
+    // rules.vr removed at source — stop serving stale validation.
+    if (res.status === 404) return null
+    // Transient/other error — prefer the cached copy over dropping validation.
+    if (!res.ok) return existsSync(cacheFile) ? readFileSync(cacheFile, 'utf-8') : null
+
     const content = await res.text()
     mkdirSync(dirname(cacheFile), { recursive: true })
     writeFileSync(cacheFile, content, 'utf-8')
+    const etag = res.headers.get('etag')
+    if (etag) writeFileSync(etagFile, etag, 'utf-8')
     return content
   } catch {
-    return null
+    // Network failure — fall back to a cached copy if we have one.
+    return existsSync(cacheFile) ? readFileSync(cacheFile, 'utf-8') : null
   }
 }
