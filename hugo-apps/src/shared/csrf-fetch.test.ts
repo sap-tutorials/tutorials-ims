@@ -277,6 +277,73 @@ describe('csrfFetch', () => {
     }
   })
 
+  // --- Edge/CDN HTML error pages are NOT the login interstitial ---
+  // The XSUAA login interstitial is a *2xx* HTML body (or a followed redirect).
+  // An HTML body on an ERROR status is an edge/CDN block (e.g. Akamai's
+  // "Access Denied" 403, Server: AkamaiGHost — the ~16KB POST-body cap on
+  // developers.sap.com) or an origin 5xx. Before this fix csrfFetch treated any
+  // text/html as session-expiry and forced location.replace('/login'), which
+  // reloaded the page and hid the real error (Petoberfest upload, 2026-08).
+  // Such responses must propagate to the caller so its error handler runs.
+  it('does NOT treat a 403 text/html edge error (Akamai "Access Denied") as a login interstitial', async () => {
+    const { replace, restore } = stubLocation('/petoberfest/petoberfest-2026/')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/auth/user') {
+        return makeResponse(200, { 'x-csrf-token': 'T', 'content-type': 'application/json' }, '{"authenticated":true}')
+      }
+      return makeResponse(
+        403,
+        { 'content-type': 'text/html' },
+        '<HTML><HEAD><TITLE>Access Denied</TITLE></HEAD><BODY>Reference #18.abc</BODY></HTML>',
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const res = await csrfFetch('/petoberfest-api/petoberfest-2026/upload', { method: 'POST' })
+      expect(res.status).toBe(403)
+      expect(replace).not.toHaveBeenCalled()
+    } finally {
+      restore()
+    }
+  })
+
+  it('does NOT treat a 502 text/html gateway error as a login interstitial', async () => {
+    const { replace, restore } = stubLocation('/petoberfest/petoberfest-2026/')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/auth/user') {
+        return makeResponse(200, { 'x-csrf-token': 'T', 'content-type': 'application/json' }, '{"authenticated":true}')
+      }
+      return makeResponse(502, { 'content-type': 'text/html' }, '<html>Bad Gateway</html>')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const res = await csrfFetch('/api/x', { method: 'POST' })
+      expect(res.status).toBe(502)
+      expect(replace).not.toHaveBeenCalled()
+    } finally {
+      restore()
+    }
+  })
+
+  it('does NOT treat a 403 text/html token-handshake response as session-expiry (surfaces token failure)', async () => {
+    const { replace, restore } = stubLocation('/petoberfest/petoberfest-2026/')
+    // The token handshake itself is edge-blocked with a 403 HTML page. This is
+    // not the interstitial: no /login redirect; a CsrfFetchError (token failure)
+    // is thrown so the caller sees a real error instead of a silent reload.
+    const fetchMock = vi.fn(async () =>
+      makeResponse(403, { 'content-type': 'text/html' }, '<HTML>Access Denied</HTML>'),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(csrfFetch('/petoberfest-api/x/upload', { method: 'POST' })).rejects.toBeInstanceOf(
+        CsrfFetchError,
+      )
+      expect(replace).not.toHaveBeenCalled()
+    } finally {
+      restore()
+    }
+  })
+
   it('treats `x-csrf-token: Required` (case variance) the same as `required`', async () => {
     let tokenCall = 0
     const fetchMock = vi.fn(async (url: string) => {
