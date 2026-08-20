@@ -799,12 +799,14 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   const VALID_SLUG = /^[a-z0-9][a-z0-9-]*$/;
 
   // Render the published __404__ HTML page (or fall back to JSON if not published yet).
-  async function serveNotFound(res, slug) {
+  // `status` lets callers reuse the styled page for other error classes — e.g. a
+  // genuine catalog render failure serves it with 500 rather than the ugly JSON. (#1938)
+  async function serveNotFound(res, slug, status = 404) {
     try {
       const { ContentFiles } = cds.entities(namespace);
       const activeVersion = await getActiveVersion();
       if (activeVersion === null) {
-        return res.status(404).json({ error: `Tutorial not found: ${slug}` });
+        return res.status(status).json({ error: `Tutorial not found: ${slug}` });
       }
 
       const [meta] = await SELECT.from(ContentFiles)
@@ -812,7 +814,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .columns('contentHash', 'mimeType', 'version');
 
       if (!meta) {
-        return res.status(404).json({ error: `Tutorial not found: ${slug}` });
+        return res.status(status).json({ error: `Tutorial not found: ${slug}` });
       }
 
       const db = await cds.connect.to('db');
@@ -831,14 +833,14 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       }
       const decompressed = gunzipSync(contentBuf);
 
-      res.status(404);
+      res.status(status);
       res.setHeader('Content-Type', `${meta.mimeType}; charset=utf-8`);
       res.setHeader('Cache-Control', 'public, max-age=60');
       res.setHeader('X-Content-Source', 'db');
       return res.send(decompressed);
     } catch (err) {
       console.error('[content/serve:404]', err instanceof Error ? err.message : String(err));
-      return res.status(404).json({ error: `Tutorial not found: ${slug}` });
+      return res.status(status).json({ error: `Tutorial not found: ${slug}` });
     }
   }
 
@@ -1021,6 +1023,19 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // (no ContentFiles row exists for them after the #91 migration). Falls
     // through to the regular ContentFiles path for any non-prefixed slug.
     if (slug.startsWith('group-') || slug.startsWith('mission-')) {
+      // #1938: Some channels (QA author-preview) don't maintain Groups/Missions
+      // — those entities aren't in the QA CDS model. Rather than crash the
+      // catalog render loaders (which query the prod namespace) and surface the
+      // ugly 500, 302-redirect to the production-served /tutorials/<slug> URL.
+      const CatalogEntity = cds.entities(namespace)[slug.startsWith('group-') ? 'Groups' : 'Missions'];
+      if (!CatalogEntity) {
+        const qIdx = req.url.indexOf('?');
+        const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+        res.setHeader('Location', `/tutorials/${slug}${query}`);
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(302).end();
+      }
+
       // #1592/#1621: before trusting our local render cache, TTL-gated check of
       // the shared generation — if a peer instance changed catalog data or
       // published, this drops our now-stale entries. Fail-open (never throws).
@@ -1085,7 +1100,10 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       } catch (err) {
         console.error('[content/serve:catalog]',
           err instanceof Error ? err.message : String(err));
-        return res.status(500).json({ error: 'Catalog page render failed' });
+        metrics.counter('render.error');  // #1938
+        // #1938: surface the styled __404__ page (with 500 status for monitoring)
+        // instead of the ugly raw JSON error.
+        return serveNotFound(res, slug, 500);
       }
     }
 
