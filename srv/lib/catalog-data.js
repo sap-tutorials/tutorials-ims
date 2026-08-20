@@ -10,8 +10,13 @@
 
 import cds from '@sap/cds';
 import { assembleMissionHierarchy } from './catalog-mission-hierarchy.js';
+import { getTagLabelMap } from './tag-label-map.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
+
+// Acronyms promoted to all-caps by the heuristic fallback. Kept in sync with
+// scripts/parsers/frontmatter-utils.ts (build-time) and srv/lib/content-store.js.
+const TAG_ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP']);
 
 // Mirrors fetch-tutorials.ts level-aggregation: any 'advanced' wins, else any
 // 'intermediate', else 'beginner'. Keeps the displayed level bound to the
@@ -22,16 +27,32 @@ function aggregateLevel(levels) {
   return 'beginner';
 }
 
-// Humanize a primary tag for the timeline-card-tag chip. Matches what
-// fetch-tutorials.ts > humanizeTag does at build time, simplified to the
-// shapes the data actually has after the tag importer runs.
-function humanizeTag(raw) {
+// Humanize a primary tag for the timeline-card-tag chip. Full parity with the
+// build-time path (scripts/parsers/frontmatter-utils.ts > humanizeTag): a
+// Tags.label registry hit (keyed by titlePath, which IS the primaryTag string)
+// wins verbatim — it's the only way to recover capitalization the slug threw
+// away. Otherwise fall back to an acronym-aware heuristic. The previous local
+// copy dropped BOTH the registry lookup and the acronym set, which mis-cased
+// "SAP BTP Cockpit" → "Sap Btp Cockpit" on group pages (#1937).
+function humanizeTag(raw, registry = {}) {
   if (!raw) return '';
-  const last = raw.split('>').pop();
-  return last.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  if (registry[raw]) return registry[raw];
+  const value = raw.includes('>') ? raw.split('>').pop() : raw;
+  return value
+    .replace(/\\/g, '')
+    .replace(/[-_]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => {
+      const upper = word.toUpperCase();
+      if (TAG_ACRONYMS.has(upper)) return upper;
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
 }
 
-function projectTutorial(t) {
+function projectTutorial(t, tagLabelMap = {}) {
   return {
     ID: t.ID,
     slug: t.slug,
@@ -40,7 +61,7 @@ function projectTutorial(t) {
     level: t.experienceTag ?? 'beginner',
     time: t.averageTimeToComplete ?? 0,
     stepCount: t.stepCount ?? 0,
-    primaryTag: humanizeTag(t.primaryTag ?? ''),
+    primaryTag: humanizeTag(t.primaryTag ?? '', tagLabelMap),
     createdAt: t.createdAt ?? null,
   };
 }
@@ -76,10 +97,11 @@ export async function loadGroupContext(slug) {
     : [];
   const tutById = new Map(tutorials.map(t => [t.ID, t]));
 
+  const tagLabelMap = await getTagLabelMap();
   const orderedTutorials = items
     .map(i => tutById.get(i.tutorial_ID))
     .filter(Boolean)
-    .map(projectTutorial);
+    .map(t => projectTutorial(t, tagLabelMap));
 
   const totalTime = orderedTutorials.reduce((s, t) => s + (t.time || 0), 0);
   const level = aggregateLevel(orderedTutorials.map(t => t.level));
@@ -159,6 +181,7 @@ export async function loadMissionContext(slug) {
                  'averageTimeToComplete', 'stepCount', 'primaryTag', 'createdAt')
     : [];
   const tutById = new Map(tutorials.map(t => [t.ID, t]));
+  const tagLabelMap = await getTagLabelMap();
 
   // Delegate the path → group → tutorial walk to the shared helper. We pass
   // the per-mission row subset we just loaded (the helper filters per-path
@@ -196,7 +219,7 @@ export async function loadMissionContext(slug) {
     const pathDirect = pathDirectIds
       .map(id => tutById.get(id))
       .filter(Boolean)
-      .map(projectTutorial);
+      .map(t => projectTutorial(t, tagLabelMap));
     if (pathDirect.length > 0) {
       cards.push({
         ID: p.ID,
@@ -215,7 +238,7 @@ export async function loadMissionContext(slug) {
       const groupTuts = nestedIds
         .map(id => tutById.get(id))
         .filter(Boolean)
-        .map(projectTutorial);
+        .map(t => projectTutorial(t, tagLabelMap));
       cards.push({ ...g, tutorials: groupTuts });
     }
 

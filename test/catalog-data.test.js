@@ -102,6 +102,59 @@ describe('catalog-data', () => {
   });
 });
 
+// #1937 — primaryTag chip humanization. The timeline-card-tag chip on group
+// pages was rendering "Sap Btp Cockpit" instead of "SAP BTP Cockpit" because
+// catalog-data.js's local humanizer was acronym-blind AND ignored the
+// Tags.label registry. Parity fix: resolve primaryTag (a titlePath string)
+// via Tags.label, falling back to an acronym-aware heuristic — matching the
+// build-time path (scripts/parsers/frontmatter-utils.ts) and content-store.js.
+describe('catalog-data — primaryTag humanization (#1937)', () => {
+  const NS = 'com.sap.developers.ims';
+  const TAG_LABELED_ID   = 'aaaaaaaa-cd37-0000-0000-000000000001';
+  const TUT_LABELED_ID   = 'cccccccc-cd37-0000-0000-000000000001';
+  const TUT_FALLBACK_ID  = 'cccccccc-cd37-0000-0000-000000000002';
+  const GROUP_ID         = 'bbbbbbbb-cd37-0000-0000-000000000001';
+
+  beforeAll(async () => {
+    const { Tags, Tutorials, Groups, GroupPathItems } = cds.entities(NS);
+    // A Tag with a proper, capitalization-preserving label keyed by titlePath.
+    await INSERT.into(Tags).entries({
+      ID: TAG_LABELED_ID, legacyId: 99371, name: '__TEST__ btp cockpit',
+      titlePath: 'software-product>sap-btp-cockpit', label: 'SAP BTP Cockpit',
+    });
+    await INSERT.into(Tutorials).entries([
+      // primaryTag matches a Tags.titlePath → registry label wins verbatim.
+      { ID: TUT_LABELED_ID, slug: '__test__-cd37-labeled', title: '__TEST__ Labeled',
+        description: 'l', experienceTag: 'beginner', averageTimeToComplete: 5,
+        primaryTag: 'software-product>sap-btp-cockpit', status: 'ACTIVE', stepCount: 1 },
+      // primaryTag has NO matching Tag label → acronym-aware heuristic fallback.
+      { ID: TUT_FALLBACK_ID, slug: '__test__-cd37-fallback', title: '__TEST__ Fallback',
+        description: 'f', experienceTag: 'beginner', averageTimeToComplete: 5,
+        primaryTag: 'software-product>sap-hana-cloud', status: 'ACTIVE', stepCount: 1 },
+    ]);
+    await INSERT.into(Groups).entries({
+      ID: GROUP_ID, legacyId: 99372, slug: '__test__-cd37-group',
+      title: '__TEST__ Tag Group', description: 'g',
+      published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(GroupPathItems).entries([
+      { group_ID: GROUP_ID, tutorial_ID: TUT_LABELED_ID, itemOrder: 1 },
+      { group_ID: GROUP_ID, tutorial_ID: TUT_FALLBACK_ID, itemOrder: 2 },
+    ]);
+  });
+
+  it('uses the Tags.label registry for a known titlePath (SAP BTP Cockpit)', async () => {
+    const ctx = await loadGroupContext('__test__-cd37-group');
+    expect(ctx.tutorials[0].primaryTag).toBe('SAP BTP Cockpit');
+  });
+
+  it('promotes acronyms in the heuristic fallback for an unknown titlePath', async () => {
+    const ctx = await loadGroupContext('__test__-cd37-group');
+    // No Tag row for software-product>sap-hana-cloud → SAP + HANA promoted.
+    expect(ctx.tutorials[1].primaryTag).toBe('SAP HANA Cloud');
+  });
+});
+
 // #382 phase F1 — Mission renderer support for direct-TUTORIAL CompletionPathItems.
 // Some missions point at tutorials directly via CompletionPathItems(taskType='TUTORIAL'),
 // without an intermediate Group wrapper. Mirrors the pattern in
