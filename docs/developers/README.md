@@ -48,6 +48,7 @@ Topics that aren't on a critical path but matter when you go looking.
 - [HANA / HDI / SQL Gotchas](reference/hana-hdi-gotchas.md) — discovered failure modes in HANA SQL, HDI deploy artifacts, SPARQL, hdbgrants
 - [Vue Islands / Hugo / Vite Gotchas](reference/vue-islands-gotchas.md) — discovered failure modes in the frontend pipeline
 - [Theme Variants](reference/theme-variants.md) — building event themes on Fiori Horizon
+- [AI Skills Catalog](reference/ai-skills-catalog.md) — index of every internal AI capability: what each does, its external data, and how to maintain it
 - [AI Consumption](reference/ai-consumption.md) — making developers.sap.com AI-friendly
 - [Cookie & Storage Analysis](reference/cookie-and-storage-analysis.md) — auditor's reference
 - [Sage Extension Migration](reference/sage-extension-migration.md) — VS Code extension coupling
