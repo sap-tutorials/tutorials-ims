@@ -78,3 +78,97 @@ export function evaluateSlots(slots, completedTokenSet, resolveGroup) {
   }
   return { satisfied, total: slots.length };
 }
+
+// --- DB membership queries -------------------------------------------------
+
+// Chunked `.in()` fetch — respects the HANA packet cap (cqn-where-in-hana-packet-cap).
+async function chunkedIn(entity, column, values, db, columns) {
+  const out = [];
+  const uniq = [...new Set(values)].filter(v => v != null);
+  for (let i = 0; i < uniq.length; i += IN_CHUNK) {
+    const slice = uniq.slice(i, i + IN_CHUNK);
+    let q = SELECT.from(entity).where({ [column]: { in: slice } });
+    if (columns) q = q.columns(...columns);
+    out.push(...await db.run(q));
+  }
+  return out;
+}
+
+/** Group's slots (tutorials only), keyed by TUTORIAL:<tutorial.legacyId>. */
+export async function loadGroupSlots(groupUuid, db) {
+  const { GroupPathItems, Tutorials } = cds.entities(NS);
+  const gpItems = await db.run(
+    SELECT.from(GroupPathItems).where({ group_ID: groupUuid }).orderBy('itemOrder')
+  );
+  if (gpItems.length === 0) return [];
+  const tuts = await chunkedIn(Tutorials, 'ID', gpItems.map(i => i.tutorial_ID), db, ['ID', 'legacyId']);
+  const legacyById = new Map(tuts.map(t => [t.ID, t.legacyId]));
+  const items = gpItems
+    .filter(i => legacyById.get(i.tutorial_ID) != null)
+    .map(i => ({
+      taskType: 'TUTORIAL',
+      taskLegacyId: legacyById.get(i.tutorial_ID),
+      itemOrder: i.itemOrder,
+      altGroupKey: i.altGroupKey,
+      groupId: null,
+    }));
+  return collapseSlots(items);
+}
+
+/** Mission's slots. Non-GROUP items → tokens; GROUP items → { groupId: <group.legacyId> }. */
+export async function loadMissionSlots(missionUuid, db) {
+  const { CompletionPaths, CompletionPathItems, Groups } = cds.entities(NS);
+  const paths = await db.run(
+    SELECT.from(CompletionPaths).where({ mission_ID: missionUuid }).orderBy('legacyId')
+  );
+  if (paths.length === 0) return [];
+  const items = (await chunkedIn(CompletionPathItems, 'path_ID', paths.map(p => p.ID), db))
+    .sort((a, b) => (a.itemOrder ?? 0) - (b.itemOrder ?? 0));
+  const groupUuids = items.filter(i => i.taskType === 'GROUP' && i.group_ID).map(i => i.group_ID);
+  const groups = await chunkedIn(Groups, 'ID', groupUuids, db, ['ID', 'legacyId']);
+  const groupLegacyByUuid = new Map(groups.map(g => [g.ID, g.legacyId]));
+  const norm = items.map(i => ({
+    taskType: i.taskType,
+    taskLegacyId: i.taskType === 'GROUP' ? null : i.taskLegacyId,
+    itemOrder: i.itemOrder,
+    altGroupKey: i.altGroupKey,
+    groupId: i.taskType === 'GROUP' ? (groupLegacyByUuid.get(i.group_ID) ?? null) : null,
+  })).filter(i => i.groupId != null || i.taskLegacyId != null);
+  return collapseSlots(norm);
+}
+
+/**
+ * Parent group(legacyId)s and mission(UUID)s of a completed task.
+ * @param {{taskType,taskLegacyId,tutorialId?}} task
+ * @returns {Promise<{groupLegacyIds:number[], missionIds:string[]}>}
+ */
+export async function findParents({ taskType, taskLegacyId, tutorialId }, db) {
+  const { GroupPathItems, Groups, CompletionPathItems, CompletionPaths } = cds.entities(NS);
+  const groupLegacyIds = [];
+  let groupUuids = [];
+  if (taskType === 'TUTORIAL' && tutorialId) {
+    const gpi = await db.run(
+      SELECT.from(GroupPathItems).columns('group_ID').where({ tutorial_ID: tutorialId })
+    );
+    groupUuids = [...new Set(gpi.map(r => r.group_ID).filter(Boolean))];
+    if (groupUuids.length) {
+      const groups = await chunkedIn(Groups, 'ID', groupUuids, db, ['ID', 'legacyId']);
+      groupLegacyIds.push(...groups.map(g => g.legacyId).filter(v => v != null));
+    }
+  }
+  const directItems = await db.run(
+    SELECT.from(CompletionPathItems).columns('path_ID').where({ taskType, taskLegacyId })
+  );
+  let viaGroupItems = [];
+  if (groupUuids.length) {
+    const rows = await chunkedIn(CompletionPathItems, 'group_ID', groupUuids, db, ['path_ID', 'taskType']);
+    viaGroupItems = rows.filter(r => r.taskType === 'GROUP');
+  }
+  const pathIds = [...new Set([...directItems, ...viaGroupItems].map(r => r.path_ID).filter(Boolean))];
+  let missionIds = [];
+  if (pathIds.length) {
+    const parents = await chunkedIn(CompletionPaths, 'ID', pathIds, db, ['ID', 'mission_ID']);
+    missionIds = [...new Set(parents.map(p => p.mission_ID).filter(Boolean))];
+  }
+  return { groupLegacyIds: [...new Set(groupLegacyIds)], missionIds };
+}

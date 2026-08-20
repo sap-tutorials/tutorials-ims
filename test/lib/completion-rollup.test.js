@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { collapseSlots, evaluateSlots, tokenFor } from '../../srv/lib/completion-rollup.js';
+import { describe, it, expect, beforeAll } from 'vitest';
+import cds from '@sap/cds';
+import {
+  collapseSlots, evaluateSlots, tokenFor,
+  loadGroupSlots, loadMissionSlots, findParents,
+} from '../../srv/lib/completion-rollup.js';
 
 describe('collapseSlots', () => {
   it('makes one slot per linear item', () => {
@@ -43,5 +47,50 @@ describe('evaluateSlots', () => {
   });
   it('tokenFor builds the composite key', () => {
     expect(tokenFor('MISSION', 7)).toBe('MISSION:7');
+  });
+});
+
+describe('completion-rollup DB membership', () => {
+  cds.test('serve', '--project', '.', '--in-memory');
+  const G = 'gggggggg-0000-0000-0000-000000000001';
+  const M = 'mmmmmmmm-0000-0000-0000-000000000001';
+  const P = 'pppppppp-0000-0000-0000-000000000001';
+  const T1 = 'ta000000-0000-0000-0000-000000000001';
+  const T2 = 'ta000000-0000-0000-0000-000000000002';
+
+  beforeAll(async () => {
+    const { Tutorials, Groups, GroupPathItems, Missions, CompletionPaths, CompletionPathItems } =
+      cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tutorials).entries([
+      { ID: T1, slug: 'roll-t1', title: 'T1', legacyId: 5101, status: 'ACTIVE' },
+      { ID: T2, slug: 'roll-t2', title: 'T2', legacyId: 5102, status: 'ACTIVE' },
+    ]);
+    await INSERT.into(Groups).entries({ ID: G, slug: 'roll-g', title: 'G', legacyId: 5200, status: 'ACTIVE' });
+    await INSERT.into(GroupPathItems).entries([
+      { group_ID: G, tutorial_ID: T1, itemOrder: 1, legacyId: 5301 },
+      { group_ID: G, tutorial_ID: T2, itemOrder: 2, legacyId: 5302 },
+    ]);
+    await INSERT.into(Missions).entries({ ID: M, slug: 'roll-m', title: 'M', legacyId: 5400, status: 'ACTIVE' });
+    await INSERT.into(CompletionPaths).entries({ ID: P, mission_ID: M, name: 'P', legacyId: 5500 });
+    await INSERT.into(CompletionPathItems).entries([
+      { path_ID: P, taskType: 'GROUP', group_ID: G, taskLegacyId: 5200, itemOrder: 1, legacyId: 5601 },
+    ]);
+  });
+
+  it('loadGroupSlots resolves tutorial legacyIds', async () => {
+    const slots = await loadGroupSlots(G, cds.db);
+    expect(slots).toEqual([{ tokens: ['TUTORIAL:5101'] }, { tokens: ['TUTORIAL:5102'] }]);
+  });
+
+  it('loadMissionSlots emits a group slot keyed by group legacyId', async () => {
+    const slots = await loadMissionSlots(M, cds.db);
+    expect(slots).toEqual([{ groupId: 5200 }]);
+  });
+
+  it('findParents finds the group and the mission for a tutorial', async () => {
+    const { groupLegacyIds, missionIds } = await findParents(
+      { taskType: 'TUTORIAL', taskLegacyId: 5101, tutorialId: T1 }, cds.db);
+    expect(groupLegacyIds).toContain(5200);
+    expect(missionIds).toContain(M);
   });
 });
