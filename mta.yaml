@@ -168,7 +168,10 @@ modules:
     type: nodejs
     path: gen/srv-qa
     parameters:
-      memory: 512M
+      # 2048M: parity with tutorials-srv and with .deploy/mta.yaml. See #1932 /
+      # #1893 — the QA content-publish commit OOM-crashed srv-qa (exit 134) at
+      # lower ceilings. Keep this in sync with .deploy/mta.yaml (deploy-authoritative).
+      memory: 2048M
       disk-quota: 1024M
       buildpack: nodejs_buildpack
       instances: 1
