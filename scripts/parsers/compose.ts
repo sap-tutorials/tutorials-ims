@@ -1,6 +1,7 @@
 import { extractFrontmatter } from './frontmatter.js'
 import { normalizeBlockquotedFences } from './blockquote-fence.js'
 import { normalizeListContinuationFences } from './list-continuation-fence.js'
+import { dedentListContinuationProse } from './list-continuation-prose.js'
 import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
@@ -88,13 +89,22 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // space indent). Run after blockquote-fence healing so both can see clean
   // input.
   const listFenceHealedBody = normalizeListContinuationFences(healedBody)
+  // [#1931 follow-up] The fence normalizer above only de-indents the fence
+  // delimiters. The non-fence continuation of the same `  N. ` list items —
+  // the "Your source code should look like this:" prose and the screenshot
+  // image after a code block — is still indented ≥ 4 spaces, so Goldmark renders
+  // it as an indented code block (the image markdown appears verbatim inside
+  // <pre><code>). De-indent those orphaned continuation runs so they render as
+  // paragraphs/images. Runs after the fence normalizer so the fences are already
+  // valid ≤ 3-space fenced code blocks and the fence tracker recognises them.
+  const listProseHealedBody = dedentListContinuationProse(listFenceHealedBody)
   // [#1741] Collapse the AEM-legacy "additional details" note pattern where a
   // multi-paragraph blockquote is split by blockquoted thematic breaks (`>---`).
   // CommonMark otherwise renders each `>` block as its own info box with a
   // visible divider; legacy showed one continuous note. Run after the fence
   // healer so `>---` lines inside blockquoted code fences are already recognized
   // as code content and left untouched.
-  const mergedBody = mergeBlockquoteNoteDividers(listFenceHealedBody)
+  const mergedBody = mergeBlockquoteNoteDividers(listProseHealedBody)
   let processedBody = resolveImageURLs(mergedBody, {
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
