@@ -219,6 +219,7 @@ export default defineConfig({
           { text: '@cap-js/ai plugin',         link: '/developers/reference/cap-ai-plugin' },
           { text: 'Adding a verb (checklist)', link: '/developers/reference/adding-a-verb' },
           { text: 'A2A agent consumption guide', link: '/developers/reference/a2a-instructions' },
+          { text: 'AI Skills Catalog',          link: '/developers/reference/ai-skills-catalog' },
           { text: 'CAP / CDS gotchas',         link: '/developers/reference/cap-cds-gotchas' },
           { text: 'cds-caching CDS-DB store',  link: '/developers/reference/cds-caching-store' },
           { text: 'Community blog RSS transport', link: '/developers/reference/community-rss-transport' },
