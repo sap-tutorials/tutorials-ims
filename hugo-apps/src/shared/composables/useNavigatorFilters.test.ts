@@ -359,6 +359,84 @@ describe('endpoint base forwarding', () => {
   })
 })
 
+describe('useNavigatorFilters — clientSearch (#1939, QA channel)', () => {
+  // A sentinel that only the SERVER path would surface — it is NOT in allCards,
+  // so its presence/absence proves which path displayedItems took.
+  const serverSentinel: CardItem = {
+    type: 'tutorial', id: 'server-only', title: 'ServerOnly', description: '',
+    time: 0, level: 'beginner', tutorialCount: 1, primaryTag: '',
+    displayTags: [], displayTagSlugs: [], href: '/tutorials/server-only', stepCount: 0,
+  }
+  const tutorials = ref<TutorialEntry[]>([
+    { slug: 't1', title: 'T1 cap', description: '', time: 30, level: 'beginner', stepCount: 3,
+      primaryTag: '', displayTags: ['CAP'], displayTagSlugs: ['software-product>sap-cloud-application-programming-model'], prev: null, next: null },
+  ])
+
+  function mockServerSearch() {
+    return vi.spyOn(useSearchModule, 'useSearch').mockReturnValue({
+      searchMode: ref(true),
+      isSubThreshold: ref(false),
+      searchResults: ref([serverSentinel]),
+      searchFacets: ref({ totalCount: 1, typeCounts: [{ name: 'TUTORIAL', count: 999 }], experienceCounts: [], tagCounts: [] }),
+      searchTotalCount: ref(999),
+      isSearching: ref(false),
+      searchError: ref(null),
+    } as unknown as ReturnType<typeof useSearchModule.useSearch>)
+  }
+
+  it('clientSearch=true uses client-filtered allCards, NOT server results', async () => {
+    const spy = mockServerSearch()
+    try {
+      const allCards = ref(cards)
+      const f = useNavigatorFilters({ allCards, tutorials, syncURL: false, clientSearch: true })
+      f.searchQuery.value = 'cap'
+      await nextTick()
+      // 'cap' matches T1's title client-side; the server sentinel is absent.
+      expect(f.displayedItems.value.map(c => c.id)).toEqual(['t1'])
+      // Counts come from the client filter, not the server facet (999).
+      expect(f.displayedCounts.value.tutorials).toBe(1)
+      expect(f.displayedTotalCount.value).toBe(1)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('clientSearch=false (default) uses server results when tutorials provided', async () => {
+    const spy = mockServerSearch()
+    try {
+      const allCards = ref(cards)
+      const f = useNavigatorFilters({ allCards, tutorials, syncURL: false })
+      f.searchQuery.value = 'cap'
+      await nextTick()
+      // Server path wins: the sentinel is surfaced and counts are the facet's.
+      expect(f.displayedItems.value.map(c => c.id)).toEqual(['server-only'])
+      expect(f.displayedCounts.value.tutorials).toBe(999)
+      expect(f.displayedTotalCount.value).toBe(999)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('forwards enabled=!clientSearch to useSearch', () => {
+    const spy = vi.spyOn(useSearchModule, 'useSearch').mockReturnValue({
+      searchMode: ref(false), isSubThreshold: ref(false), searchResults: ref([]),
+      searchFacets: ref(null), searchTotalCount: ref(0), isSearching: ref(false), searchError: ref(null),
+    } as unknown as ReturnType<typeof useSearchModule.useSearch>)
+    try {
+      useNavigatorFilters({ allCards: ref([]), syncURL: false, clientSearch: true })
+      const arg = spy.mock.calls[0][0] as { enabled: { value: boolean } }
+      expect(arg.enabled.value).toBe(false)
+
+      spy.mockClear()
+      useNavigatorFilters({ allCards: ref([]), syncURL: false })
+      const arg2 = spy.mock.calls[0][0] as { enabled: { value: boolean } }
+      expect(arg2.enabled.value).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
 describe('useNavigatorFilters — #1804: experience-level slugs never filter as products', () => {
   // Repro cards: two beginner tutorials (one CAP, one not) + one advanced CAP.
   // The CAP slug is the software-product-FUNCTION form from the issue URL, and

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { mapToCardItem } from './useSearch'
+import { describe, it, expect, vi } from 'vitest'
+import { ref } from 'vue'
+import { mapToCardItem, useSearch } from './useSearch'
 import type { SearchableItem, TutorialEntry, CardItem } from '@shared/types'
 
 const baseItem: SearchableItem = {
@@ -263,5 +264,60 @@ describe('mapToCardItem — catalog type prefixes (#1305)', () => {
 
   it('never emits an empty href for a group with a slug', () => {
     expect(mapToCardItem(groupItem).href).not.toBe('')
+  })
+})
+
+// #1939: the QA channel filters client-side because srv-qa's SearchService
+// exposes neither SearchableItems nor getFacets. The `enabled` option lets the
+// consumer suppress the server $search fetch entirely so those doomed requests
+// never fire (they would 404 and surface as "Search request failed").
+describe('useSearch — enabled gate (#1939)', () => {
+  const opts = () => ({
+    searchTerm: ref('cap handler'),
+    filterTypes: ref<string[]>([]),
+    filterLevels: ref<string[]>([]),
+    filterProducts: ref<string[]>([]),
+  })
+
+  it('does not fetch when enabled is false', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const { executeSearch } = useSearch({ ...opts(), enabled: ref(false) })
+      await executeSearch()
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('fetches when enabled is true', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ value: [], '@odata.count': 0 }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const { executeSearch } = useSearch({ ...opts(), enabled: ref(true) })
+      await executeSearch()
+      expect(fetchSpy).toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('fetches when enabled is unset (prod default, byte-identical)', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ value: [], '@odata.count': 0 }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const { executeSearch } = useSearch(opts())
+      await executeSearch()
+      expect(fetchSpy).toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
