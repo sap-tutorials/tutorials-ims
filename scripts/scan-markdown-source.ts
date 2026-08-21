@@ -305,6 +305,10 @@ function parseArgs(argv: string[]) {
     fix: has('--fix') || has('--open-prs'),
     openPrs: has('--open-prs'),
     retirementStatus: has('--retirement-status'),
+    // Clone each fixed repo (+ Contribution pair) and re-scan its LIVE content,
+    // read-only — the authoritative post-merge check for the retirement gate
+    // (the local cache goes stale the moment source PRs merge).
+    verifyRemote: has('--verify-remote'),
     // Contribution repos (<repo>-Contribution) are the upstream where edits are
     // authored before being copied to the published repo, so a fix applied only
     // to the published repo is at risk of being overwritten on the next copy.
@@ -389,6 +393,15 @@ async function run() {
 
   if (args.retirementStatus) printRetirement(retirement)
 
+  // Read-only post-merge verification against live GitHub content.
+  if (args.verifyRemote) {
+    const pt = new Map<string, string>()
+    for (const s of scanned) if (s.scan.fixedBody) pt.set(s.meta.repo, s.meta.branch)
+    await verifyRemote([...pt].map(([repo, branch]) => ({ repo, branch })),
+      { includeContribution: args.includeContribution, slug: args.filters.slug })
+    return
+  }
+
   if (!args.fix) {
     console.log('\nDry-run (default). Pass --fix to stage corrected files, --open-prs to open PRs.')
     return
@@ -469,6 +482,82 @@ export function chunk<T>(arr: T[], size: number): T[][] {
   return out
 }
 
+/** A published target plus its `<repo>-Contribution` upstream pair. */
+function expandTargets(publishedTargets: RepoTarget[], includeContribution: boolean): RepoTarget[] {
+  const targets: RepoTarget[] = []
+  for (const t of publishedTargets) {
+    targets.push(t)
+    if (includeContribution && !t.repo.endsWith('-Contribution')) targets.push({ repo: `${t.repo}-Contribution` })
+  }
+  return targets
+}
+
+/**
+ * Clone `<repo>` (default or discovered branch) into a temp dir and return the
+ * base branch, or null if the clone failed. Caller owns cleanup of `tmp`.
+ */
+function cloneRepo(target: RepoTarget, tmp: string): string | null {
+  rmSync(tmp, { recursive: true, force: true })
+  const cloneArgs = ['repo', 'clone', `${ORG}/${target.repo}`, tmp, '--']
+  if (target.branch) cloneArgs.push('--branch', target.branch)
+  cloneArgs.push('--depth', '1')
+  try {
+    execFileSync('gh', cloneArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
+  } catch {
+    return null
+  }
+  return target.branch ?? git(tmp, 'rev-parse', '--abbrev-ref', 'HEAD').trim()
+}
+
+/**
+ * Read-only post-merge check: clone each fixed repo (+ Contribution pair) and
+ * re-scan its LIVE content, tallying remaining source-fixable findings per
+ * class. Zero across every repo → that class's pre-processor is safe to retire.
+ */
+async function verifyRemote(publishedTargets: RepoTarget[], opts: { includeContribution: boolean; slug?: string }) {
+  const targets = expandTargets(publishedTargets, opts.includeContribution)
+  console.log(`\nVerifying ${targets.length} repo(s) against live GitHub content` +
+    `${opts.includeContribution ? ' (incl. Contribution pairs)' : ''}...`)
+  const byClass: Record<string, number> = {}
+  let cleanRepos = 0
+  for (const target of targets) {
+    const tmp = join(tmpdir(), `md-src-verify-${target.repo}-${process.pid}`)
+    try {
+      const base = cloneRepo(target, tmp)
+      if (base === null) { console.log(`  ${target.repo}: clone failed — skipped.`); continue }
+      const tutDir = join(tmp, 'tutorials')
+      if (!existsSync(tutDir)) { console.log(`  ${target.repo}: no tutorials/ — skipped.`); continue }
+      let repoRemaining = 0
+      for (const slug of readdirSync(tutDir)) {
+        if (opts.slug && slug !== opts.slug) continue
+        const fp = join(tutDir, slug, `${slug}.md`)
+        if (!existsSync(fp)) continue
+        const fresh = readFileSync(fp, 'utf-8')
+        let scan: FileScan
+        try { scan = scanSource(fresh, { slug, repo: target.repo, branch: base }) } catch { continue }
+        for (const f of scan.findings) {
+          if (f.classification !== 'source-fixable') continue
+          byClass[f.class] = (byClass[f.class] ?? 0) + 1
+          repoRemaining++
+        }
+      }
+      if (repoRemaining === 0) { cleanRepos++; console.log(`  ✅ ${target.repo}: clean`) }
+      else console.log(`  ⚠ ${target.repo}: ${repoRemaining} source-fixable finding(s) remain`)
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  }
+  const total = Object.values(byClass).reduce((a, b) => a + b, 0)
+  console.log(`\n── Remote verification: ${cleanRepos}/${targets.length} repo(s) clean, ${total} source-fixable finding(s) remain ──`)
+  for (const fixer of SOURCE_FIXABLE) {
+    const n = byClass[fixer.id] ?? 0
+    console.log(n === 0
+      ? `  ✅ ${fixer.id}: 0 remaining across all repos — READY TO RETIRE`
+      : `  ⏳ ${fixer.id}: ${n} remaining — keep pre-processor`)
+  }
+  if (total === 0) console.log('\nAll fixed repos are clean at source. Pre-processors listed above can be retired (see --retirement-status).')
+}
+
 /**
  * A source PR touches the PUBLISHED repo AND its `<repo>-Contribution` upstream,
  * so a fix cannot be silently reverted the next time Contribution is copied
@@ -482,13 +571,7 @@ async function openPullRequests(
   opts: { batchSize: number; includeContribution: boolean; slug?: string },
 ) {
   // Expand to include each published repo's Contribution pair.
-  const targets: RepoTarget[] = []
-  for (const t of publishedTargets) {
-    targets.push(t)
-    if (opts.includeContribution && !t.repo.endsWith('-Contribution')) {
-      targets.push({ repo: `${t.repo}-Contribution` })  // detect its default branch
-    }
-  }
+  const targets = expandTargets(publishedTargets, opts.includeContribution)
   console.log(`\nOpening PRs for ${targets.length} repo(s) (batch size ${opts.batchSize}` +
     `${opts.includeContribution ? ', incl. Contribution pairs' : ''})...`)
 
@@ -500,18 +583,9 @@ async function openPullRequests(
 async function prForRepo(target: RepoTarget, opts: { batchSize: number; slug?: string }) {
   const { repo } = target
   const tmp = join(tmpdir(), `md-src-fix-${repo}-${process.pid}`)
-  rmSync(tmp, { recursive: true, force: true })
   try {
-    const cloneArgs = ['repo', 'clone', `${ORG}/${repo}`, tmp, '--']
-    if (target.branch) cloneArgs.push('--branch', target.branch)
-    cloneArgs.push('--depth', '1')
-    try {
-      execFileSync('gh', cloneArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
-    } catch (err) {
-      console.log(`  ${repo}: clone failed (repo/branch missing?) — skipped.`)
-      return
-    }
-    const base = target.branch ?? git(tmp, 'rev-parse', '--abbrev-ref', 'HEAD').trim()
+    const base = cloneRepo(target, tmp)
+    if (base === null) { console.log(`  ${repo}: clone failed (repo/branch missing?) — skipped.`); return }
 
     // Enumerate tutorials/<slug>/<slug>.md in the clone and compute fixes.
     const tutDir = join(tmp, 'tutorials')
