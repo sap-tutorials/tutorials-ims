@@ -1,0 +1,18 @@
+{{- /* Render hook for links (issue #1931).
+       Default behavior for all links is Hugo's standard <a> emission. Attachment
+       links whose destination is a raw.githubusercontent.com URL with an
+       allowlisted extension (rewritten by scripts/parsers/attachment-links.ts)
+       are routed through the CAP attachment store and get a download sibling.
+       KEEP the extension list in sync with attachment-links.ts / attachment-mime.cjs. */ -}}
+{{- $dest := .Destination -}}
+{{- $exts := slice "txt" "csv" "json" "md" "sql" "abap" "properties" "yaml" "yml" "xml" "html" "zip" "pdf" "war" "jar" "zargo" "har" -}}
+{{- $ext := lower (path.Ext $dest | strings.TrimPrefix ".") -}}
+{{- $isAttachment := and (hasPrefix $dest "https://raw.githubusercontent.com/") (in $exts $ext) -}}
+{{- if $isAttachment -}}
+{{- $enc := $dest | urlquery -}}
+{{- $view := printf "/content/attachment-source?u=%s" $enc -}}
+{{- $dl := printf "/content/attachment-source?u=%s&dl=1" $enc -}}
+<a href="{{ $view | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }} class="tutorial-attachment-link">{{ .Text | safeHTML }}</a><a href="{{ $dl | safeURL }}" class="tutorial-attachment-download" aria-label="Download {{ .PlainText | default .Text }}" download>&#8595;</a>
+{{- else -}}
+<a href="{{ .Destination | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}{{ if strings.HasPrefix $dest "http" }} rel="noopener"{{ end }}>{{ .Text | safeHTML }}</a>
+{{- end -}}

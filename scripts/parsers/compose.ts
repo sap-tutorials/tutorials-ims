@@ -5,6 +5,7 @@ import { dedentListContinuationProse } from './list-continuation-prose.js'
 import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
+import { resolveAttachmentLinks } from './attachment-links.js'
 import { prepPrerequisitesMarkup } from './prerequisites-markup.js'
 import { convertOptionBlocks } from './options.js'
 import { parseV1Steps } from './v1.js'
@@ -108,6 +109,13 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   let processedBody = resolveImageURLs(mergedBody, {
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
+  })
+  // [#1931] Rewrite relative attachment links (.txt/.zip/.pdf/...) to raw-GitHub
+  // URLs so the render-link hook can route them through /content/attachment-source.
+  // Gated by rewriteImages (same "resolve relative repo paths" switch as images).
+  processedBody = resolveAttachmentLinks(processedBody, {
+    repo: opts.repo, branch: opts.branch, slug: opts.slug,
+    rewrite: opts.rewriteImages,
   })
 
   // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because

@@ -254,6 +254,12 @@ export function createSessionHelpers({ namespace }) {
             const urls = extractImgCdnUrls(html);
             if (urls.length > 0) await warmImagesLive(urls, { slug });
           }
+          const { extractAttachmentUrls } = await import('./attachment-warm-utils.js');
+          const { warmAttachmentsLive } = await import('./attachment-source-handler.js');
+          for (const [slug, html] of slugHtmlMap) {
+            const aUrls = extractAttachmentUrls(html);
+            if (aUrls.length > 0) await warmAttachmentsLive(aUrls, { slug });
+          }
         } catch (err) {
           LOG.warn(`[image-warm] post-publish warm failed (non-fatal): ${err.message}`);
         }
