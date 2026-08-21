@@ -23,8 +23,8 @@ describe('BackgroundPicker.vue', () => {
 
   it('emits update:background with the scene id on click', async () => {
     const w = mount(BackgroundPicker, { props: base })
-    await w.find('[data-testid="bg-pumpkin-patch"]').trigger('click')
-    expect(w.emitted('update:background')?.[0]?.[0]).toBe('pumpkin-patch')
+    await w.find('[data-testid="bg-key-visual-josh"]').trigger('click')
+    expect(w.emitted('update:background')?.[0]?.[0]).toBe('key-visual-josh')
   })
 
   it('emits none when the None option is clicked', async () => {
