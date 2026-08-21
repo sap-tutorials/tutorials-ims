@@ -30,6 +30,7 @@
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",
     "lint:tutorial-markdown": "tsx scripts/lint-tutorial-markdown.ts",
+    "scan-tutorial-markdown": "tsx scripts/scan-markdown-source.ts",
     "publish-content": "tsx scripts/publish-content.ts",
     "backfill-images": "tsx scripts/backfill-images.ts",
     "preflight:ai-quiz-smoke": "tsx scripts/preflight-ai-quiz-smoke.ts",
