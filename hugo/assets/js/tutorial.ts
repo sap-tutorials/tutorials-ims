@@ -34,7 +34,7 @@ document.addEventListener('click', (e) => {
   const codeToggle = target.closest('[data-action="toggle-code"]')
   if (codeToggle) { toggleCodeBlock(codeToggle as HTMLButtonElement); return }
   const printBtn = target.closest('[data-action="print-tutorial"]')
-  if (printBtn) { window.print(); return }
+  if (printBtn) { void printTutorial(); return }
 })
 
 function toggleCodeBlock(btn: HTMLButtonElement) {
@@ -480,14 +480,58 @@ function initCodeCheckDoneGate() {
   })
 }
 
+// --- Print / Save-as-PDF (#1943) ---
+// Every tutorial <img> is rendered loading="lazy" (render-image.html). Browsers
+// do NOT force off-screen lazy images to load before printing, and images that
+// never entered the viewport never fire `load` — so calling window.print()
+// directly leaves most step images blank in the printed output (#1943 bug).
+// Before printing we flip every not-yet-loaded lazy image to eager so the fetch
+// kicks off (an eager <img> loads even inside a display:none/hidden step body,
+// which the collapsed steps are on screen), then await them all with a hard
+// timeout so a slow/broken image (broken source refs 404 on GitHub) can't wedge
+// the print dialog forever.
+function preparePrintImages(timeoutMs = 5000): Promise<void> {
+  const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('.op-page img'))
+  const pending: Promise<void>[] = []
+  for (const img of imgs) {
+    // Flip lazy → eager to trigger the fetch for images the reader never
+    // scrolled to. Assigning `loading` re-evaluates the load for a not-yet
+    // loaded lazy image in Chrome/Firefox.
+    if (img.loading === 'lazy') img.loading = 'eager'
+    if (img.complete && img.naturalWidth > 0) continue
+    pending.push(new Promise<void>((resolve) => {
+      const done = () => {
+        img.removeEventListener('load', done)
+        img.removeEventListener('error', done)
+        resolve()
+      }
+      img.addEventListener('load', done, { once: true })
+      // Resolve (don't reject) on error so a broken image never blocks print.
+      img.addEventListener('error', done, { once: true })
+    }))
+  }
+  if (pending.length === 0) return Promise.resolve()
+  return Promise.race([
+    Promise.all(pending).then(() => undefined),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ])
+}
+
+async function printTutorial(): Promise<void> {
+  await preparePrintImages()
+  window.print()
+}
+
 // --- Printable deep link (?print=1) ---
 // Opens the browser print dialog once the page has fully loaded (images/fonts
 // settled) so a shared /tutorials/<slug>/?print=1 link lands the reader
 // straight in Print / Save-as-PDF. print.css (media="print") forces the light
 // theme and expands all collapsed steps, so no on-screen expansion is needed.
+// printTutorial() force-loads lazy images first (see above) so the printed page
+// isn't missing its below-the-fold screenshots.
 function initPrintDeepLink() {
   if (!new URLSearchParams(location.search).has('print')) return
-  const fire = () => window.print()
+  const fire = () => { void printTutorial() }
   if (document.readyState === 'complete') {
     setTimeout(fire, 300)
   } else {

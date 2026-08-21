@@ -46,4 +46,21 @@ describe('tutorial Print / Save-as-PDF button (#1943)', () => {
     expect(tutorialJs).toMatch(/URLSearchParams\(location\.search\)\.has\('print'\)/)
     expect(tutorialJs).toMatch(/initPrintDeepLink\(\)/)
   })
+
+  it('print force-loads lazy images before printing (#1943 blank-image fix)', () => {
+    // Images render loading="lazy" (render-image.html); printing directly leaves
+    // off-screen step images blank. Both print entry points must route through
+    // printTutorial(), which flips lazy → eager and awaits the images.
+    expect(tutorialJs).toMatch(/function preparePrintImages/)
+    expect(tutorialJs).toMatch(/async function printTutorial/)
+    // lazy → eager flip is the mechanism that triggers the fetch.
+    expect(tutorialJs).toMatch(/img\.loading = 'eager'/)
+    // Neither entry point may call window.print() without preparing images.
+    expect(tutorialJs, 'click handler must route through printTutorial()')
+      .toMatch(/print-tutorial"[\s\S]*?void printTutorial\(\)/)
+    // window.print() should only be *called* from inside printTutorial()
+    // (match statement lines, not the comment that mentions it).
+    const printCalls = tutorialJs.match(/^\s*window\.print\(\)/gm) || []
+    expect(printCalls.length, 'window.print() should be called exactly once (inside printTutorial)').toBe(1)
+  })
 })
