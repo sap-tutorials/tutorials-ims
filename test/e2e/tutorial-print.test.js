@@ -71,4 +71,31 @@ describe.skipIf(!hasBaseUrl())('e2e: tutorial print / save-as-pdf (#1943)', () =
       await context.close();
     }
   });
+
+  it('force-loads lazy images before printing (#1943 blank-image fix)', async () => {
+    // Images render loading="lazy"; a direct window.print() left off-screen step
+    // images blank. printTutorial() flips every lazy img to eager and awaits
+    // them before calling print — so at print time no image is still lazy.
+    expect(slug, 'no published tutorial slug available').toBeTruthy();
+    const context = await browser.newContext({ baseURL: BASE_URL });
+    await context.addInitScript(STUB_PRINT);
+    const page = await context.newPage();
+    try {
+      const response = await page.goto(`/tutorials/${slug}`, { waitUntil: 'domcontentloaded' });
+      expect(response.status()).toBe(200);
+      const btn = page.locator('[data-action="print-tutorial"]');
+      await btn.waitFor({ state: 'visible', timeout: 20_000 });
+      // Skip if this tutorial happens to have no images — nothing to assert.
+      const imgCount = await page.evaluate(() => document.querySelectorAll('.op-page img').length);
+      if (imgCount === 0) return;
+      await btn.click();
+      await page.waitForFunction(() => window.__printCalls > 0, { timeout: 10_000 });
+      const stillLazy = await page.evaluate(
+        () => document.querySelectorAll('.op-page img[loading="lazy"]').length,
+      );
+      expect(stillLazy, 'lazy images were not flipped to eager before print').toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
 });
