@@ -58,6 +58,11 @@ export function collectAttachmentUrls(publicDir: string): Map<string, string> {
   return urlToSlug;
 }
 
+/** True only when u's hostname is exactly raw.githubusercontent.com — prevents token leakage to lookalike hosts. */
+export function isRawGithubHost(u: string): boolean {
+  try { return new URL(u).hostname.toLowerCase() === 'raw.githubusercontent.com'; } catch { return false; }
+}
+
 /** Fetch an attachment: anonymous-first, Bearer-token fallback on 404. */
 async function fetchAttachment(u: string, token: string | undefined): Promise<{ ok: boolean; status: number; buffer?: Buffer; mimeType?: string }> {
   const doFetch = (authToken?: string) => {
@@ -66,7 +71,7 @@ async function fetchAttachment(u: string, token: string | undefined): Promise<{ 
     return fetch(u, { headers, signal: AbortSignal.timeout(20000) });
   };
   let res = await doFetch();
-  if (res.status === 404 && token && /raw\.githubusercontent\.com/.test(u)) {
+  if (res.status === 404 && token && isRawGithubHost(u)) {
     res = await doFetch(token);
   }
   if (!res.ok) return { ok: false, status: res.status };
