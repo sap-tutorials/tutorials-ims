@@ -33,6 +33,8 @@ document.addEventListener('click', (e) => {
   if (tabBtn) { switchTab(tabBtn as HTMLButtonElement); return }
   const codeToggle = target.closest('[data-action="toggle-code"]')
   if (codeToggle) { toggleCodeBlock(codeToggle as HTMLButtonElement); return }
+  const printBtn = target.closest('[data-action="print-tutorial"]')
+  if (printBtn) { window.print(); return }
 })
 
 function toggleCodeBlock(btn: HTMLButtonElement) {
@@ -478,6 +480,21 @@ function initCodeCheckDoneGate() {
   })
 }
 
+// --- Printable deep link (?print=1) ---
+// Opens the browser print dialog once the page has fully loaded (images/fonts
+// settled) so a shared /tutorials/<slug>/?print=1 link lands the reader
+// straight in Print / Save-as-PDF. print.css (media="print") forces the light
+// theme and expands all collapsed steps, so no on-screen expansion is needed.
+function initPrintDeepLink() {
+  if (!new URLSearchParams(location.search).has('print')) return
+  const fire = () => window.print()
+  if (document.readyState === 'complete') {
+    setTimeout(fire, 300)
+  } else {
+    window.addEventListener('load', () => setTimeout(fire, 300), { once: true })
+  }
+}
+
 // --- Init on DOMContentLoaded ---
 document.addEventListener('DOMContentLoaded', () => {
   initProgressBar()
@@ -493,5 +510,6 @@ document.addEventListener('DOMContentLoaded', () => {
   updateActiveTocItem()
   initAuthAwareButtons()
   initStepHashNavigation()
+  initPrintDeepLink()
   initMermaid()
 })
