@@ -11,6 +11,40 @@
 
       <template v-if="onTutorialPage">
         <hr class="tut-prefs__sep" />
+        <p class="tut-prefs__group-label">Display</p>
+
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Header</span></label>
+          <ui5-segmented-button @selection-change="onHeaderSelect">
+            <ui5-segmented-button-item :pressed="headerMode === 'locked' || undefined" data-mode="locked">Locked</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="headerMode === 'thinbar' || undefined" data-mode="thinbar">Compact</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="headerMode === 'autohide' || undefined" data-mode="autohide">Auto-hide</ui5-segmented-button-item>
+          </ui5-segmented-button>
+          <p class="tut-prefs__desc">Reduce the space the sticky title bar uses while you read.</p>
+        </section>
+
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label">
+            <span>Auto-hide footer</span>
+            <ui5-switch :checked="footerAutohide || undefined" @change="$emit('toggle-footer')"></ui5-switch>
+          </label>
+        </section>
+
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label">
+            <span>Show breadcrumbs</span>
+            <ui5-switch data-testid="tut-prefs-breadcrumbs-switch" :checked="breadcrumbsOn || undefined" @change="$emit('toggle-breadcrumbs')"></ui5-switch>
+          </label>
+        </section>
+
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label">
+            <span>Show discussion section</span>
+            <ui5-switch data-testid="tut-prefs-discussion-switch" :checked="feedbackOn || undefined" @change="$emit('toggle-feedback')"></ui5-switch>
+          </label>
+        </section>
+
+        <hr class="tut-prefs__sep" />
         <p class="tut-prefs__group-label">Experimental</p>
 
         <section class="tut-prefs__row">
@@ -81,7 +115,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { FeatureId } from './constants';
+import type { FeatureId, HeaderMode } from './constants';
 
 defineProps<{
   readerOn: boolean;
@@ -96,13 +130,27 @@ defineProps<{
   handFirstRun: boolean;
   eyeError: string;
   handError: string;
+  headerMode: HeaderMode;
+  footerAutohide: boolean;
+  breadcrumbsOn: boolean;
+  feedbackOn: boolean;
 }>();
-defineEmits<{
+const emit = defineEmits<{
   (e: 'toggle-reader'): void;
   (e: 'toggle-pref', f: FeatureId): void;
   (e: 'start', f: FeatureId): void;
   (e: 'stop', f: FeatureId): void;
+  (e: 'set-header', mode: HeaderMode): void;
+  (e: 'toggle-footer'): void;
+  (e: 'toggle-breadcrumbs'): void;
+  (e: 'toggle-feedback'): void;
 }>();
+
+function onHeaderSelect(e: any) {
+  const mode = e.detail?.selectedItems?.[0]?.dataset?.mode
+    ?? e.target?.querySelector('[pressed]')?.dataset?.mode;
+  if (mode) emit('set-header', mode as HeaderMode);
+}
 
 const popoverRef = ref<HTMLElement | null>(null);
 defineExpose({

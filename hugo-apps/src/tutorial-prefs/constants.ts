@@ -46,3 +46,19 @@ export const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
 export const PAGE_KIND_TUTORIAL = 'tutorial';
 
 export type FeatureId = 'eye' | 'hand';
+
+// Display-chrome preferences (#1966). Individual keys mirror the tut.pref.* convention.
+export const KEY_PREF_HEADER = 'tut.pref.header';
+export const KEY_PREF_FOOTER = 'tut.pref.footer';
+export const KEY_PREF_BREADCRUMBS = 'tut.pref.breadcrumbs';
+export const KEY_PREF_FEEDBACK = 'tut.pref.feedback';
+
+// Below this CSS-px viewport height, header→thinbar + footer→autohide by default
+// (unless the user set an explicit pref). CSS px shrink under OS scaling / browser
+// zoom, so high-DPI laptops cross this automatically. Mirrored (with a comment) in
+// the head.html pre-paint snippet, which cannot import this module.
+export const SHORT_VIEWPORT_MAX_HEIGHT = 900;
+
+export type HeaderMode = 'locked' | 'thinbar' | 'autohide';
+export type FooterMode = 'shown' | 'autohide';
+export type OnOff = 'on' | 'off';

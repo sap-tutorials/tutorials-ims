@@ -3,10 +3,14 @@ import TutorialPrefsPopover from './TutorialPrefsPopover.vue';
 import CameraBadge from './CameraBadge.vue';
 import {
   getPref, setPref, getSession, removeSession,
-  isFirstRun, consumeFirstRun
+  isFirstRun, consumeFirstRun,
+  setHeaderPref, setFooterPref, setBreadcrumbsPref, setFeedbackPref
 } from './prefs-store';
+import { readPrefs, computeEffective, isShortViewport, applyDisplayChrome, installAutoHide } from './display-chrome';
 import { detectSupport } from './browser-support';
-import { PAGE_KIND_TUTORIAL, KEY_READER, type FeatureId } from './constants';
+import { PAGE_KIND_TUTORIAL, KEY_READER, type FeatureId, type HeaderMode } from './constants';
+import '@ui5/webcomponents/dist/SegmentedButton.js';
+import '@ui5/webcomponents/dist/SegmentedButtonItem.js';
 
 interface Runtime { stop: () => void; }
 
@@ -19,6 +23,10 @@ interface State {
   eyeError: string;
   handError: string;
   slow: boolean;
+  headerMode: HeaderMode;
+  footerAutohide: boolean;
+  breadcrumbsOn: boolean;
+  feedbackOn: boolean;
 }
 
 // Lazy-loaded overlay handle (only when ?debug-cam is present). Held at
@@ -129,11 +137,37 @@ function togglePref(state: State, f: FeatureId) {
   }
 }
 
+function setHeader(state: State, mode: HeaderMode) {
+  setHeaderPref(mode);
+  state.headerMode = mode;
+  applyDisplayChrome();
+}
+function toggleFooter(state: State) {
+  const next = state.footerAutohide ? 'shown' : 'autohide';
+  setFooterPref(next);
+  state.footerAutohide = next === 'autohide';
+  applyDisplayChrome();
+}
+function toggleBreadcrumbs(state: State) {
+  const next = state.breadcrumbsOn ? 'off' : 'on';
+  setBreadcrumbsPref(next);
+  state.breadcrumbsOn = next === 'on';
+  applyDisplayChrome();
+}
+function toggleFeedback(state: State) {
+  const next = state.feedbackOn ? 'off' : 'on';
+  setFeedbackPref(next);
+  state.feedbackOn = next === 'on';
+  applyDisplayChrome();
+}
+
 function init() {
   const trigger = document.getElementById('sb-prefs');
   if (!trigger) return;
   const support = detectSupport();
   const onTutorial = document.documentElement.dataset.pageKind === PAGE_KIND_TUTORIAL;
+
+  const eff0 = computeEffective(readPrefs(), isShortViewport());
 
   const state = reactive<State>({
     readerOn: document.documentElement.dataset.reader === 'on',
@@ -143,7 +177,11 @@ function init() {
     handRuntime: null,
     eyeError: '',
     handError: '',
-    slow: false
+    slow: false,
+    headerMode: eff0.header,
+    footerAutohide: eff0.footer === 'autohide',
+    breadcrumbsOn: eff0.breadcrumbs === 'on',
+    feedbackOn: eff0.feedback === 'on'
   });
 
   const popoverHost = document.createElement('div');
@@ -171,10 +209,18 @@ function init() {
       handFirstRun: isFirstRun('hand'),
       eyeError: state.eyeError,
       handError: state.handError,
+      headerMode: state.headerMode,
+      footerAutohide: state.footerAutohide,
+      breadcrumbsOn: state.breadcrumbsOn,
+      feedbackOn: state.feedbackOn,
       'onToggle-reader': () => toggleReader(state),
       'onToggle-pref': (f: FeatureId) => togglePref(state, f),
       onStart: (f: FeatureId) => f === 'eye' ? startEye(state) : startHand(state),
-      onStop: (f: FeatureId) => f === 'eye' ? stopEye(state) : stopHand(state)
+      onStop: (f: FeatureId) => f === 'eye' ? stopEye(state) : stopHand(state),
+      'onSet-header': (m: HeaderMode) => setHeader(state, m),
+      'onToggle-footer': () => toggleFooter(state),
+      'onToggle-breadcrumbs': () => toggleBreadcrumbs(state),
+      'onToggle-feedback': () => toggleFeedback(state)
     })
   }).mount(popoverHost);
 
@@ -195,6 +241,11 @@ function init() {
     const session = getSession();
     if (state.eyePref === 'on' && session.includes('eye')) startEye(state);
     if (state.handPref === 'on' && session.includes('hand')) startHand(state);
+  }
+
+  if (onTutorial) {
+    applyDisplayChrome();
+    installAutoHide();
   }
 }
 

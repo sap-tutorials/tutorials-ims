@@ -2,7 +2,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   getPref, setPref, getSession, addSession, removeSession,
-  consumeFirstRun, isFirstRun
+  consumeFirstRun, isFirstRun,
+  getHeaderPref, setHeaderPref, getFooterPref, setFooterPref,
+  getBreadcrumbsPref, setBreadcrumbsPref, getFeedbackPref, setFeedbackPref
 } from './prefs-store';
 
 describe('prefs-store', () => {
@@ -44,5 +46,32 @@ describe('prefs-store', () => {
     Storage.prototype.setItem = () => { throw new Error('quota'); };
     expect(() => setPref('eye', 'on')).not.toThrow();
     Storage.prototype.setItem = orig;
+  });
+});
+
+describe('prefs-store — display prefs (#1966)', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('header/footer default to null (unset) and round-trip', () => {
+    expect(getHeaderPref()).toBeNull();
+    expect(getFooterPref()).toBeNull();
+    setHeaderPref('thinbar');
+    setFooterPref('autohide');
+    expect(getHeaderPref()).toBe('thinbar');
+    expect(getFooterPref()).toBe('autohide');
+  });
+
+  it('header ignores invalid stored values', () => {
+    localStorage.setItem('tut.pref.header', 'bogus');
+    expect(getHeaderPref()).toBeNull();
+  });
+
+  it('breadcrumbs/feedback default to "on" and round-trip', () => {
+    expect(getBreadcrumbsPref()).toBe('on');
+    expect(getFeedbackPref()).toBe('on');
+    setBreadcrumbsPref('off');
+    setFeedbackPref('off');
+    expect(getBreadcrumbsPref()).toBe('off');
+    expect(getFeedbackPref()).toBe('off');
   });
 });

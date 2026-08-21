@@ -718,3 +718,52 @@ html[data-embed="none"] .embed-escape {
   border-top: 1px solid var(--sapGroup_TitleBorderColor);
   margin: 0.25rem 0;
 }
+
+/* #1966 — tutorial display preferences. Attribute-driven; the effective values
+   are computed in display-chrome.ts / head.html pre-paint (JS owns the height
+   threshold, so there is no @media query here). Scoped to tutorial pages. */
+
+/* Compact header: keep it sticky but drop description + chip row, tighten padding. */
+html[data-tut-header="thinbar"][data-page-kind="tutorial"] .op-header__description,
+html[data-tut-header="thinbar"][data-page-kind="tutorial"] .op-header__chips {
+  display: none;
+}
+html[data-tut-header="thinbar"][data-page-kind="tutorial"] .op-header {
+  padding-top: 0.5rem;
+  padding-bottom: 0.25rem;
+}
+
+/* Auto-hide header: stays sticky, slides out of the way when data-tut-header-hidden is set. */
+html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header {
+  transition: transform 200ms ease;
+  will-change: transform;
+}
+html[data-tut-header="autohide"][data-tut-header-hidden][data-page-kind="tutorial"] .op-header {
+  transform: translateY(-100%);
+}
+html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header:focus-within {
+  transform: translateY(0);
+}
+
+/* Auto-hide footer: park it off the bottom edge; reveal on hover. Taskbar-style —
+   content is not padded for it; it overlays on reveal. */
+html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  transform: translateY(calc(100% - 8px)); /* 8px reveal strip keeps footer hover-reachable */
+  transition: transform 200ms ease;
+  z-index: 25;
+}
+html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer:hover,
+html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer:focus-within {
+  transform: translateY(0);
+}
+
+/* Hide breadcrumbs / feedback bar when turned off. */
+html[data-tut-breadcrumbs="off"][data-page-kind="tutorial"] .tutorial-breadcrumbs { display: none; }
+html[data-tut-feedback="off"][data-page-kind="tutorial"] #op-discussion { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header,
+  html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer { transition: none; }
+}
