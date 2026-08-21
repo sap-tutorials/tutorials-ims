@@ -20,3 +20,10 @@ describe('warmAttachments', () => {
     expect(ingestFn).toHaveBeenCalledTimes(2)
   })
 })
+
+import { readFileSync } from 'node:fs'
+it('content-publish-session wires attachment warm', () => {
+  const src = readFileSync('srv/lib/content-publish-session.js', 'utf8')
+  expect(src).toContain('extractAttachmentUrls')
+  expect(src).toContain('warmAttachmentsLive')
+})
