@@ -21,8 +21,9 @@ export interface AttachmentResolveOpts {
 }
 
 // Matches a markdown link `[text](dest)` NOT preceded by `!` (which would be an image).
-// Destination captured up to whitespace or `)`; an optional `"title"` is preserved.
-const LINK_RE = /(^|[^!])(\[[^\]]*\]\()([^)\s]+)((?:\s+"[^"]*")?\))/g
+// Uses negative lookbehind (?<!) to guard; destination captured up to whitespace or `)`.
+// Optional `"title"` after destination is preserved.
+const LINK_RE = /(?<!\!)(\[[^\]]*\]\()([^)\s]+)((?:\s+"[^"]*")?\))/g
 
 export function resolveAttachmentLinks(content: string, opts: AttachmentResolveOpts): string {
   const { repo, branch, slug, rewrite = true } = opts
@@ -33,12 +34,12 @@ export function resolveAttachmentLinks(content: string, opts: AttachmentResolveO
     .split('\n')
     .map((line) => {
       if (fence(line)) return line // inside a code fence — leave verbatim
-      return line.replace(LINK_RE, (m, pre, open, dest, tail) => {
+      return line.replace(LINK_RE, (m, open, dest, tail) => {
         if (/^(https?:\/\/|#|mailto:|\/)/i.test(dest)) return m
         if (dest.includes('../')) return m
         if (!isAttachmentPath(dest)) return m
         const clean = dest.replace(/^\.?\//, '')
-        return `${pre}${open}${base}/${clean}${tail}`
+        return `${open}${base}/${clean}${tail}`
       })
     })
     .join('\n')

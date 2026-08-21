@@ -12,8 +12,8 @@ describe('resolveAttachmentLinks', () => {
   it('rewrites ./-prefixed links and strips the ./', () => {
     expect(resolveAttachmentLinks('[d](./a.csv)', opts)).toBe(`[d](${base}/a.csv)`)
   })
-  it('leaves images (![]) untouched', () => {
-    expect(resolveAttachmentLinks('![alt](img.png)', opts)).toBe('![alt](img.png)')
+  it('leaves images (![]) untouched, including allowlisted extensions', () => {
+    expect(resolveAttachmentLinks('![alt](guide.txt)', opts)).toBe('![alt](guide.txt)')
   })
   it('leaves absolute, anchor, mailto, root-relative, and ../ links untouched', () => {
     for (const s of ['[a](https://x.com/f.txt)', '[a](#sec)', '[a](mailto:x@y.z)', '[a](/other/f.txt)', '[a](../sib/f.txt)']) {
@@ -37,5 +37,10 @@ describe('resolveAttachmentLinks', () => {
   it('isAttachmentPath matches allowlist case-insensitively', () => {
     expect(isAttachmentPath('X.TXT')).toBe(true)
     expect(isAttachmentPath('x.png')).toBe(false)
+  })
+  it('rewrites both links in consecutive attachment links on one line', () => {
+    const input = '[a](x.txt)[b](y.txt)'
+    const expected = `[a](${base}/x.txt)[b](${base}/y.txt)`
+    expect(resolveAttachmentLinks(input, opts)).toBe(expected)
   })
 })
