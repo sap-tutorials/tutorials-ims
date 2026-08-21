@@ -25,14 +25,12 @@ const INLINE = new Set(['text/plain', 'text/csv', 'text/markdown', 'application/
 function baseType(mime) { return String(mime).split(';')[0].trim().toLowerCase() }
 
 function dispositionFor(mimeType, { download = false, filename = 'file' } = {}) {
-  const safeName = String(filename).replace(/"/g, '')
-  // text/html is neutered: serve as text/plain, inline, never executed.
-  if (baseType(mimeType) === 'text/html' && !download) {
-    return { contentType: 'text/plain; charset=utf-8', disposition: `inline; filename="${safeName}"` }
-  }
-  if (download) return { contentType: mimeType, disposition: `attachment; filename="${safeName}"` }
-  const inline = INLINE.has(baseType(mimeType))
-  return { contentType: mimeType, disposition: `${inline ? 'inline' : 'attachment'}; filename="${safeName}"` }
+  const safeName = String(filename).replace(/["\r\n]/g, '')
+  // text/html is neutered UNCONDITIONALLY: serve as text/plain, never executed.
+  const contentType = baseType(mimeType) === 'text/html' ? 'text/plain; charset=utf-8' : mimeType
+  if (download) return { contentType, disposition: `attachment; filename="${safeName}"` }
+  const inline = INLINE.has(baseType(contentType))
+  return { contentType, disposition: `${inline ? 'inline' : 'attachment'}; filename="${safeName}"` }
 }
 
 module.exports = { extToMime, dispositionFor }
