@@ -37,29 +37,36 @@ the header, ideally auto-applied on smaller/short screens.
 - No `devicePixelRatio` / OS detection — the CSS-pixel `max-height` query captures scaled laptops
   intrinsically (see "Short-viewport auto-apply").
 
+## Integration point (post-grounding)
+
+There is already a **Tutorial preferences popover** wired to the `sb-prefs` shellbar item: the
+`tutorial-prefs` Vue island (`hugo-apps/src/tutorial-prefs/`) — `TutorialPrefsPopover.vue` +
+`main.ts` + `prefs-store.ts` + `constants.ts`. It currently hosts a Reader-mode switch and two
+experimental camera-nav toggles (eye-tracking, hand-gesture), the latter gated on
+`onTutorialPage`. This feature **extends that island** — a new "Display" section in the popover and
+new prefs in the existing store — rather than adding a parallel popover. The `sb-prefs` item and the
+island already render on all non-QA pages; the Display section (like Experimental) gates on
+`onTutorialPage`.
+
+The island has an **8 KB gzip budget** (`MAX_TUTORIAL_PREFS_GZIP` in `hugo-apps/vite.config.ts`);
+new code must stay under it or be lazy-imported (the camera modules already are).
+
 ## Preference Model
 
-A single localStorage key `tut-chrome` holds a small JSON object. A pre-paint snippet in
-`head.html` reads it and sets `data-*` attributes on `<html>` **before first paint** — the same
-no-flash pattern already used for `theme`, `reader`, and `embed`. Only keys the user has explicitly
-set are written; absence means "no explicit preference" (which is what the auto path keys off).
+Following the store's existing convention, each preference is its own localStorage key
+(`tut.pref.*`), read/written through `prefs-store.ts` helpers — **not** a single JSON blob. A
+pre-paint snippet in `head.html` reads these keys and sets **effective** `data-*` attributes on
+`<html>` **before first paint** (same no-flash pattern as `theme`/`reader`/`embed`).
 
-```jsonc
-// localStorage["tut-chrome"] example
-{ "header": "thinbar", "footer": "autohide", "breadcrumbs": false, "feedback": true }
-```
+| localStorage key         | `data-*` attribute     | Values                            | Default |
+|--------------------------|------------------------|-----------------------------------|---------|
+| `tut.pref.header`        | `data-tut-header`      | `locked` · `thinbar` · `autohide` | unset → effective `locked` |
+| `tut.pref.footer`        | `data-tut-footer`      | `shown` · `autohide`              | unset → effective `shown`  |
+| `tut.pref.breadcrumbs`   | `data-tut-breadcrumbs` | `on` · `off`                      | `on`    |
+| `tut.pref.feedback`      | `data-tut-feedback`    | `on` · `off`                      | `on`    |
 
-Mapping to attributes on `<html>` (only present when explicitly set):
-
-| JSON key      | `data-*` attribute       | Values                              | Default (unset) |
-|---------------|--------------------------|-------------------------------------|-----------------|
-| `header`      | `data-tut-header`        | `locked` · `thinbar` · `autohide`   | `locked`        |
-| `footer`      | `data-tut-footer`        | `shown` · `autohide`                | `shown`         |
-| `breadcrumbs` | `data-tut-breadcrumbs`   | `on` · `off`                        | `on`            |
-| `feedback`    | `data-tut-feedback`      | `on` · `off`                        | `on`            |
-
-Rationale for one JSON key over four localStorage keys: a single parse in the pre-paint snippet,
-one write path, and the "no explicit pref" test is simply "attribute absent."
+"Effective" (header/footer): when the user has **not** set an explicit value, the attribute is
+computed from the viewport — see "Short-viewport auto-apply". Explicit values are written verbatim.
 
 ## Behaviors (CSS + JS), all scoped to `[data-page-kind="tutorial"]`
 
@@ -84,57 +91,63 @@ the footer in normal document flow.
 by the tutorial layout via `partial "breadcrumbs.html"` and `partial "feedback-share.html"`).
 
 ### Short-viewport auto-apply
-A `@media (max-height: 900px)` block applies the compact defaults — `thinbar` header +
-`autohide` footer — **only when the user has set no explicit preference for that widget**, e.g.:
+When the user has set no explicit `header`/`footer` pref, the **effective** attribute is derived
+from viewport height: below the threshold the header becomes `thinbar` and the footer `autohide`;
+at or above it, `locked` / `shown`. Because auto-hide requires a JS scroll/hover handler regardless,
+JS (and the pre-paint snippet) — not a CSS media query — owns the threshold and writes the effective
+`data-tut-header` / `data-tut-footer`. CSS then keys purely off those attributes (single source of
+truth; no CSS `:not()` + `@media` interaction to reason about). The threshold is re-evaluated live
+via `matchMedia('(max-height: 900px)')` `change` events (rotation, resize, zoom).
 
-```css
-@media (max-height: 900px) {
-  html:not([data-tut-header])[data-page-kind="tutorial"] .op-header { /* thinbar rules */ }
-  html:not([data-tut-footer])[data-page-kind="tutorial"] footer     { /* autohide rules */ }
-}
-```
-
-Because CSS `max-height` is evaluated in **CSS pixels**, OS display scaling and browser zoom both
-shrink the reported viewport height, so high-scale laptops trip the query automatically — no DPR or
+Because CSS/`matchMedia` height is measured in **CSS pixels**, OS display scaling and browser zoom
+shrink the reported viewport, so high-scale laptops cross the threshold automatically — no DPR or
 platform detection. Threshold mapping (maximized browser, CSS-px inner height):
 
-| Device / scale              | ~CSS-px height | Tripped at 900? |
-|-----------------------------|----------------|-----------------|
-| 1080p @100% (desktop)       | ~1040          | No (correct)    |
-| 1080p @125%                 | ~865           | Yes             |
-| 1080p @150%                 | ~720           | Yes             |
-| 1366×768 laptop @100%       | ~700           | Yes             |
+| Device / scale              | ~CSS-px height | Below 900? |
+|-----------------------------|----------------|------------|
+| 1080p @100% (desktop)       | ~1040          | No (correct)|
+| 1080p @125%                 | ~865           | Yes        |
+| 1080p @150%                 | ~720           | Yes        |
+| 1366×768 laptop @100%       | ~700           | Yes        |
 
-900px is the initial threshold and is tunable in one place.
+900px is the initial threshold, defined once in `constants.ts` (and mirrored, with a comment, in the
+inline pre-paint snippet, which cannot import it — same documented duplication as the embed
+allowlist).
 
 ## Settings Surface
 
-A new **"Display settings"** control (gear icon) in the shellbar opens a `ui5-popover` containing:
-- Header: segmented / select — Locked · Compact (thin bar) · Auto-hide
-- Footer: `ui5-switch` — Auto-hide on/off
-- Breadcrumbs: `ui5-switch`
-- Feedback bar: `ui5-switch`
+Extend the existing `TutorialPrefsPopover.vue` with a new **"Display"** section, gated on
+`onTutorialPage` (same gate as the Experimental section), placed above Experimental. Rows:
+- **Header** — a 3-way control (Locked · Compact · Auto-hide), as three `ui5-segmented-button-item`s in a `ui5-segmented-button`, or a `ui5-select` — matching the popover's existing UI5 idiom.
+- **Footer auto-hide** — `ui5-switch`
+- **Show breadcrumbs** — `ui5-switch`
+- **Show feedback bar** — `ui5-switch`
 
-A popover (not extra items in the existing shellbar overflow menu) is chosen because there are 4+
-grouped toggles; a menu row per option would be cramped and hard to group. The popover is only wired
-on tutorial pages.
+State + emit handlers are added to `main.ts` alongside the existing reader/camera wiring; toggling a
+pref writes it via `prefs-store.ts` and calls the apply function to update `data-tut-*` immediately.
 
 ## Code Layout
 
-- **`hugo/layouts/partials/head.html`** — extend the existing pre-paint `<script>` with a small
-  block: parse `tut-chrome`, set the four `data-*` attributes. Guarded by `previewMode` like the
-  reader/embed pre-paint already is.
-- **`hugo/assets/css/ui5-overrides.css`** — new tutorial-scoped block for the four behaviors +
-  the `@media (max-height: 900px)` auto block. Independent of the reader-mode cascade.
-- **`hugo/assets/js/chrome-prefs.ts`** — new module (loaded on tutorial pages only): read/write
-  `tut-chrome`, apply attributes at runtime on toggle, the scroll + top-edge-hover handler for
-  `autohide` header, the bottom-edge-hover / scroll-to-bottom handler for `autohide` footer, and
-  popover wiring. Respects `prefers-reduced-motion` (no transition) like the reader block does.
-- **`hugo/layouts/partials/header.html`** — add the gear button + popover markup to the shellbar,
-  rendered only for `data-page-kind="tutorial"`.
+- **`hugo-apps/src/tutorial-prefs/constants.ts`** — add `KEY_PREF_HEADER`, `KEY_PREF_FOOTER`,
+  `KEY_PREF_BREADCRUMBS`, `KEY_PREF_FEEDBACK`, `SHORT_VIEWPORT_MAX_HEIGHT = 900`, and
+  `HeaderMode` / `FooterMode` / `OnOff` types.
+- **`hugo-apps/src/tutorial-prefs/prefs-store.ts`** — add typed get/set for the four display prefs
+  (header/footer getters return `HeaderMode | null` / `FooterMode | null` so explicit-vs-unset is
+  distinguishable; breadcrumbs/feedback default `on`).
+- **`hugo-apps/src/tutorial-prefs/display-chrome.ts`** *(new)* — `computeEffective(prefs, short)`
+  (pure) → effective header/footer modes; `applyDisplayChrome()` sets the `data-tut-*` attributes;
+  `installAutoHide()` wires the header scroll-direction handler + footer bottom-edge hover /
+  scroll-to-bottom reveal and a `matchMedia` listener that re-applies on threshold change. Respects
+  `prefers-reduced-motion`.
+- **`hugo-apps/src/tutorial-prefs/main.ts`** — add reactive display state, pass to popover, handle
+  new emits, and call `applyDisplayChrome()` + `installAutoHide()` in `init()` when `onTutorial`.
+- **`hugo-apps/src/tutorial-prefs/TutorialPrefsPopover.vue`** — add the Display section + props/emits.
+- **`hugo/layouts/partials/head.html`** — extend the existing pre-paint `<script>` with a block that
+  reads the four keys and sets effective `data-tut-*` (guarded by `previewMode` like reader/embed).
+- **`hugo/assets/css/ui5-overrides.css`** — new tutorial-scoped block keyed off `data-tut-*`
+  (thinbar collapse, autohide transforms, breadcrumbs/feedback hide). No `@media` height query.
 
-The scroll/hover behaviors are tutorial-detail-specific, so they belong in a dedicated module rather
-than the shared `tutorial.ts` or inline `header.html` script.
+The scroll/hover behaviors live in `display-chrome.ts` (island-local), not the shared `tutorial.ts`.
 
 ## Interaction Notes / Edge Cases
 
@@ -159,8 +172,8 @@ than the shared `tutorial.ts` or inline `header.html` script.
   popover and assert the DOM/attribute + a visible effect; drive the viewport to `height < 900` and
   assert the auto compact treatment applies when no explicit pref is set, and that an explicit pref
   overrides it.
-- Both the pre-paint duplication (head.html snippet mirrors chrome-prefs.ts allowlist) and the
-  tutorial-only scoping are the fragile seams — cover them explicitly.
+- Both the pre-paint duplication (head.html snippet mirrors the `constants.ts` keys + threshold) and
+  the tutorial-only scoping are the fragile seams — cover them explicitly.
 
 ## Rollback
 
