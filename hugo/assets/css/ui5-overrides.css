@@ -741,13 +741,16 @@ html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header {
 html[data-tut-header="autohide"][data-tut-header-hidden][data-page-kind="tutorial"] .op-header {
   transform: translateY(-100%);
 }
+html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header:focus-within {
+  transform: translateY(0);
+}
 
 /* Auto-hide footer: park it off the bottom edge; reveal on hover. Taskbar-style —
    content is not padded for it; it overlays on reveal. */
 html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer {
   position: fixed;
   left: 0; right: 0; bottom: 0;
-  transform: translateY(100%);
+  transform: translateY(calc(100% - 8px)); /* 8px reveal strip keeps footer hover-reachable */
   transition: transform 200ms ease;
   z-index: 25;
 }
@@ -757,8 +760,8 @@ html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer:focus-within 
 }
 
 /* Hide breadcrumbs / feedback bar when turned off. */
-html[data-tut-breadcrumbs="off"][data-page-kind="tutorial"] .breadcrumbs { display: none; }
-html[data-tut-feedback="off"][data-page-kind="tutorial"] .feedback-share { display: none; }
+html[data-tut-breadcrumbs="off"][data-page-kind="tutorial"] .tutorial-breadcrumbs { display: none; }
+html[data-tut-feedback="off"][data-page-kind="tutorial"] #op-discussion { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header,

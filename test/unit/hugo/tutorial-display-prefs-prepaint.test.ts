@@ -10,6 +10,8 @@ const root = path.resolve(import.meta.dirname, '../../..');
 const head = readFileSync(path.join(root, 'hugo/layouts/partials/head.html'), 'utf8');
 const css = readFileSync(path.join(root, 'hugo/assets/css/ui5-overrides.css'), 'utf8');
 const constants = readFileSync(path.join(root, 'hugo-apps/src/tutorial-prefs/constants.ts'), 'utf8');
+const breadcrumbsPartial = readFileSync(path.join(root, 'hugo/layouts/partials/breadcrumbs.html'), 'utf8');
+const tutorialLayout = readFileSync(path.join(root, 'hugo/layouts/tutorials/u1-object-page.html'), 'utf8');
 
 describe('tutorial display-prefs pre-paint (#1966)', () => {
   it('pre-paint sets all four data-tut-* attributes', () => {
@@ -43,5 +45,19 @@ describe('tutorial display-prefs pre-paint (#1966)', () => {
         expect(l, l).toContain('[data-page-kind="tutorial"]');
       }
     }
+  });
+
+  it('breadcrumbs partial uses the .tutorial-breadcrumbs class that CSS targets', () => {
+    expect(breadcrumbsPartial).toContain('tutorial-breadcrumbs');
+    // CSS must target .tutorial-breadcrumbs, NOT the stale .breadcrumbs selector
+    expect(css).toContain('data-tut-breadcrumbs="off"][data-page-kind="tutorial"] .tutorial-breadcrumbs');
+    expect(css).not.toContain('data-tut-breadcrumbs="off"][data-page-kind="tutorial"] .breadcrumbs');
+  });
+
+  it('tutorial layout has #op-discussion that CSS targets for feedback toggle', () => {
+    expect(tutorialLayout).toContain('id="op-discussion"');
+    // CSS must target #op-discussion, NOT the stale .feedback-share selector
+    expect(css).toContain('data-tut-feedback="off"][data-page-kind="tutorial"] #op-discussion');
+    expect(css).not.toContain('data-tut-feedback="off"][data-page-kind="tutorial"] .feedback-share');
   });
 });

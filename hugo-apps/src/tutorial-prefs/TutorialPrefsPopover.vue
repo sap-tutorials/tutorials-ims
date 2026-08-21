@@ -33,14 +33,14 @@
         <section class="tut-prefs__row">
           <label class="tut-prefs__label">
             <span>Show breadcrumbs</span>
-            <ui5-switch :checked="breadcrumbsOn || undefined" @change="$emit('toggle-breadcrumbs')"></ui5-switch>
+            <ui5-switch data-testid="tut-prefs-breadcrumbs-switch" :checked="breadcrumbsOn || undefined" @change="$emit('toggle-breadcrumbs')"></ui5-switch>
           </label>
         </section>
 
         <section class="tut-prefs__row">
           <label class="tut-prefs__label">
-            <span>Show feedback bar</span>
-            <ui5-switch :checked="feedbackOn || undefined" @change="$emit('toggle-feedback')"></ui5-switch>
+            <span>Show discussion section</span>
+            <ui5-switch data-testid="tut-prefs-discussion-switch" :checked="feedbackOn || undefined" @change="$emit('toggle-feedback')"></ui5-switch>
           </label>
         </section>
 

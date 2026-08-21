@@ -89,4 +89,46 @@ describe.skipIf(!hasBaseUrl())('e2e: tutorial display prefs (#1966)', () => {
       await context.close();
     }
   });
+
+  it('toggling breadcrumbs off hides .tutorial-breadcrumbs', async () => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      await page.setViewportSize({ width: 1400, height: 1000 });
+      await page.addInitScript(() => localStorage.clear());
+      await page.goto(TUTORIAL_PATH, { waitUntil: 'domcontentloaded' });
+
+      await page.click('#sb-prefs');
+      // Target the switch by its data-testid
+      await page.click('[data-testid="tut-prefs-breadcrumbs-switch"]');
+
+      const hidden = await page.evaluate(() => {
+        const el = document.querySelector('.tutorial-breadcrumbs');
+        return !el || getComputedStyle(el).display === 'none';
+      });
+      expect(hidden, '.tutorial-breadcrumbs should be hidden when breadcrumbs toggled off').toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('toggling discussion section off hides #op-discussion', async () => {
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      await page.setViewportSize({ width: 1400, height: 1000 });
+      await page.addInitScript(() => localStorage.clear());
+      await page.goto(TUTORIAL_PATH, { waitUntil: 'domcontentloaded' });
+
+      await page.click('#sb-prefs');
+      // Target the switch by its data-testid
+      await page.click('[data-testid="tut-prefs-discussion-switch"]');
+
+      const hidden = await page.evaluate(() => {
+        const el = document.querySelector('#op-discussion');
+        return !el || getComputedStyle(el).display === 'none';
+      });
+      expect(hidden, '#op-discussion should be hidden when discussion section toggled off').toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
 });
