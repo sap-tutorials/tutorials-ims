@@ -1,7 +1,8 @@
 import {
   KEY_PREF_EYE, KEY_PREF_HAND, KEY_SESSION_CAM,
   KEY_FIRSTRUN_EYE, KEY_FIRSTRUN_HAND,
-  type FeatureId
+  KEY_PREF_HEADER, KEY_PREF_FOOTER, KEY_PREF_BREADCRUMBS, KEY_PREF_FEEDBACK,
+  type FeatureId, type HeaderMode, type FooterMode, type OnOff
 } from './constants';
 
 type Toggle = 'on' | 'off';
@@ -43,3 +44,24 @@ function writeSession(features: FeatureId[]): void {
 export function getSession(): FeatureId[] { return readSession(); }
 export function addSession(f: FeatureId): void { writeSession([...readSession(), f]); }
 export function removeSession(f: FeatureId): void { writeSession(readSession().filter((x) => x !== f)); }
+
+const HEADER_MODES: HeaderMode[] = ['locked', 'thinbar', 'autohide'];
+const FOOTER_MODES: FooterMode[] = ['shown', 'autohide'];
+
+export function getHeaderPref(): HeaderMode | null {
+  const v = safeLocal()?.getItem(KEY_PREF_HEADER);
+  return (v && (HEADER_MODES as string[]).includes(v)) ? (v as HeaderMode) : null;
+}
+export function setHeaderPref(v: HeaderMode): void { safeSet(safeLocal(), KEY_PREF_HEADER, v); }
+
+export function getFooterPref(): FooterMode | null {
+  const v = safeLocal()?.getItem(KEY_PREF_FOOTER);
+  return (v && (FOOTER_MODES as string[]).includes(v)) ? (v as FooterMode) : null;
+}
+export function setFooterPref(v: FooterMode): void { safeSet(safeLocal(), KEY_PREF_FOOTER, v); }
+
+export function getBreadcrumbsPref(): OnOff { return safeLocal()?.getItem(KEY_PREF_BREADCRUMBS) === 'off' ? 'off' : 'on'; }
+export function setBreadcrumbsPref(v: OnOff): void { safeSet(safeLocal(), KEY_PREF_BREADCRUMBS, v); }
+
+export function getFeedbackPref(): OnOff { return safeLocal()?.getItem(KEY_PREF_FEEDBACK) === 'off' ? 'off' : 'on'; }
+export function setFeedbackPref(v: OnOff): void { safeSet(safeLocal(), KEY_PREF_FEEDBACK, v); }
