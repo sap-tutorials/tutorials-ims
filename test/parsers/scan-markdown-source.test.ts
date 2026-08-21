@@ -3,6 +3,7 @@ import {
   scanSource,
   rebuildSource,
   goldenRenderEqual,
+  chunk,
 } from '../../scripts/scan-markdown-source.js'
 import { stripImageDirectiveComments } from '../../scripts/parsers/images.js'
 
@@ -175,6 +176,20 @@ describe('scan-markdown-source', () => {
       const { fixedBody } = scanSource(original, META)
       const fixed = rebuildSource(original, fixedBody!)
       expect(fixed.includes('\r\n')).toBe(false)
+    })
+  })
+
+  describe('chunk (≤N tutorials per PR)', () => {
+    it('splits into fixed-size batches, last may be short', () => {
+      const items = Array.from({ length: 23 }, (_, i) => i)
+      const batches = chunk(items, 10)
+      expect(batches.map(b => b.length)).toEqual([10, 10, 3])
+    })
+    it('one batch when under the limit', () => {
+      expect(chunk([1, 2], 10)).toHaveLength(1)
+    })
+    it('empty input → no batches', () => {
+      expect(chunk([], 10)).toEqual([])
     })
   })
 })

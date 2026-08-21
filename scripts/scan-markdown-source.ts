@@ -39,7 +39,7 @@
  *   filters: --class <id>  --repo <name>  --slug <slug>  --limit <N>
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
@@ -305,6 +305,13 @@ function parseArgs(argv: string[]) {
     fix: has('--fix') || has('--open-prs'),
     openPrs: has('--open-prs'),
     retirementStatus: has('--retirement-status'),
+    // Contribution repos (<repo>-Contribution) are the upstream where edits are
+    // authored before being copied to the published repo, so a fix applied only
+    // to the published repo is at risk of being overwritten on the next copy.
+    // Default ON: for every published target we also PR its Contribution pair.
+    includeContribution: !has('--no-contribution'),
+    // Keep PRs reviewable: at most N tutorials per PR (large repos → many PRs).
+    batchSize: val('--batch-size') ? Math.max(1, parseInt(val('--batch-size')!, 10)) : 10,
     filters: {
       repo: val('--repo'),
       slug: val('--slug'),
@@ -410,10 +417,20 @@ async function run() {
   }
 
   if (!args.openPrs) {
-    console.log('\nStaged only. Pass --open-prs to open one PR per source repo.')
+    console.log('\nStaged only. Pass --open-prs to open PRs (≤10 tutorials each, incl. each repo\'s -Contribution pair).')
     return
   }
-  await openPullRequests(staged)
+
+  // Published targets = repos with ≥1 source-fixable finding, keyed to their
+  // discovered branch. Contribution pairs are added inside openPullRequests.
+  const publishedTargets = new Map<string, string>()
+  for (const s of staged) publishedTargets.set(s.meta.repo, s.meta.branch)
+  const targets: RepoTarget[] = [...publishedTargets].map(([repo, branch]) => ({ repo, branch }))
+  await openPullRequests(targets, {
+    batchSize: args.batchSize,
+    includeContribution: args.includeContribution,
+    slug: args.filters.slug,
+  })
 }
 
 function printRetirement(retirement: Record<string, { remaining: number; readyToRetire: boolean }>) {
@@ -436,78 +453,135 @@ function printRetirement(retirement: Record<string, { remaining: number; readyTo
   console.log('  (Deletion is gated on MERGED source PRs; this session does not delete.)')
 }
 
-// ── PR delivery (one per source repo) ──────────────────────────────────────────
+// ── PR delivery (clone-driven, batched, Contribution-aware) ────────────────────
 
 function git(cwd: string, ...cmd: string[]) {
   return execFileSync('git', cmd, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] })
 }
 
-async function openPullRequests(staged: Scanned[]) {
-  const byRepo = new Map<string, Scanned[]>()
-  for (const s of staged) {
-    const list = byRepo.get(s.meta.repo) ?? []
-    list.push(s)
-    byRepo.set(s.meta.repo, list)
+interface RepoTarget { repo: string; branch?: string }  // branch undefined → detect default
+interface RepoFix { slug: string; relPath: string; fixed: string; classes: string[] }
+
+/** Split into fixed-size chunks (one PR per chunk). */
+export function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+/**
+ * A source PR touches the PUBLISHED repo AND its `<repo>-Contribution` upstream,
+ * so a fix cannot be silently reverted the next time Contribution is copied
+ * forward. Each repo is CLONED and re-scanned against its own current content
+ * (never the possibly-stale local cache), golden-gated, then its fixable
+ * tutorials are split into batches of `batchSize` — one branch + PR per batch so
+ * large repos (e.g. Tutorials, 375 files) stay reviewable.
+ */
+async function openPullRequests(
+  publishedTargets: RepoTarget[],
+  opts: { batchSize: number; includeContribution: boolean; slug?: string },
+) {
+  // Expand to include each published repo's Contribution pair.
+  const targets: RepoTarget[] = []
+  for (const t of publishedTargets) {
+    targets.push(t)
+    if (opts.includeContribution && !t.repo.endsWith('-Contribution')) {
+      targets.push({ repo: `${t.repo}-Contribution` })  // detect its default branch
+    }
   }
-  console.log(`\nOpening PRs for ${byRepo.size} repo(s)...`)
+  console.log(`\nOpening PRs for ${targets.length} repo(s) (batch size ${opts.batchSize}` +
+    `${opts.includeContribution ? ', incl. Contribution pairs' : ''})...`)
 
-  for (const [repo, items] of byRepo) {
-    const branch = items[0].meta.branch
-    const tmp = join(tmpdir(), `md-src-fix-${repo}-${process.pid}`)
-    rmSync(tmp, { recursive: true, force: true })
+  for (const t of targets) {
+    await prForRepo(t, opts)
+  }
+}
+
+async function prForRepo(target: RepoTarget, opts: { batchSize: number; slug?: string }) {
+  const { repo } = target
+  const tmp = join(tmpdir(), `md-src-fix-${repo}-${process.pid}`)
+  rmSync(tmp, { recursive: true, force: true })
+  try {
+    const cloneArgs = ['repo', 'clone', `${ORG}/${repo}`, tmp, '--']
+    if (target.branch) cloneArgs.push('--branch', target.branch)
+    cloneArgs.push('--depth', '1')
     try {
-      execFileSync('gh', ['repo', 'clone', `${ORG}/${repo}`, tmp, '--', '--branch', branch, '--depth', '1'],
-        { stdio: ['ignore', 'pipe', 'pipe'] })
+      execFileSync('gh', cloneArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
+    } catch (err) {
+      console.log(`  ${repo}: clone failed (repo/branch missing?) — skipped.`)
+      return
+    }
+    const base = target.branch ?? git(tmp, 'rev-parse', '--abbrev-ref', 'HEAD').trim()
 
-      // Re-apply against freshly-cloned content + re-gate (avoid stale-cache drift).
-      const applied: Scanned[] = []
-      const skipped: string[] = []
-      for (const s of items) {
-        const filePath = join(tmp, 'tutorials', s.meta.slug, `${s.meta.slug}.md`)
-        if (!existsSync(filePath)) { skipped.push(`${s.meta.slug} (missing on ${branch})`); continue }
-        const fresh = readFileSync(filePath, 'utf-8')
-        const { fixedBody } = scanSource(fresh, s.meta)
-        if (!fixedBody) { skipped.push(`${s.meta.slug} (already clean at source)`); continue }
-        const fixedSrc = rebuildSource(fresh, fixedBody)
-        if (!goldenRenderEqual(fresh, fixedSrc, s.meta)) { skipped.push(`${s.meta.slug} (golden-gate)`); continue }
-        writeFileSync(filePath, fixedSrc, 'utf-8')
-        applied.push(s)
-      }
-      if (!applied.length) {
-        console.log(`  ${repo}: nothing to fix after fresh re-gate (${skipped.length} skipped). No PR.`)
-        continue
-      }
+    // Enumerate tutorials/<slug>/<slug>.md in the clone and compute fixes.
+    const tutDir = join(tmp, 'tutorials')
+    if (!existsSync(tutDir)) { console.log(`  ${repo}: no tutorials/ dir — skipped.`); return }
+    const fixes: RepoFix[] = []
+    for (const slug of readdirSync(tutDir)) {
+      if (opts.slug && slug !== opts.slug) continue
+      const filePath = join(tutDir, slug, `${slug}.md`)
+      if (!existsSync(filePath)) continue
+      const fresh = readFileSync(filePath, 'utf-8')
+      const meta = { slug, repo, branch: base }
+      let scan: FileScan
+      try { scan = scanSource(fresh, meta) } catch { continue }
+      if (!scan.fixedBody) continue
+      const fixedSrc = rebuildSource(fresh, scan.fixedBody)
+      if (!goldenRenderEqual(fresh, fixedSrc, meta)) continue  // NEEDS-MANUAL-REVIEW → skip
+      const classes = [...new Set(scan.findings.filter(f => f.classification === 'source-fixable').map(f => f.class))]
+      fixes.push({ slug, relPath: `tutorials/${slug}/${slug}.md`, fixed: fixedSrc, classes })
+    }
+    if (!fixes.length) { console.log(`  ${repo}: nothing to fix at source — no PR.`); return }
 
-      const fixBranch = `fix/md-source-1963`
-      git(tmp, 'checkout', '-b', fixBranch)
+    // Split into ≤batchSize-tutorial batches → one branch + PR each.
+    const batches = chunk(fixes, opts.batchSize)
+    const multi = batches.length > 1
+    console.log(`  ${repo}: ${fixes.length} tutorial(s) → ${batches.length} PR(s) (base ${base})`)
+
+    for (let bi = 0; bi < batches.length; bi++) {
+      const batch = batches[bi]
+      const branch = multi ? `fix/md-source-1963-batch-${bi + 1}` : `fix/md-source-1963`
+      // Idempotency: skip if a PR already exists for this head branch.
+      try {
+        const existing = execFileSync('gh', ['pr', 'list', '--repo', `${ORG}/${repo}`, '--head', branch,
+          '--state', 'all', '--json', 'number'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] })
+        if (JSON.parse(existing).length) { console.log(`    batch ${bi + 1}/${batches.length}: PR for ${branch} exists — skipped.`); continue }
+      } catch { /* gh pr list failure is non-fatal; attempt creation */ }
+
+      git(tmp, 'checkout', '-B', branch, base)  // fresh branch at base (discards prior batch)
+      for (const f of batch) writeFileSync(join(tmp, f.relPath), f.fixed, 'utf-8')
       git(tmp, 'add', '-A')
-      const classes = [...new Set(applied.flatMap(s => s.scan.findings.filter(f => f.classification === 'source-fixable').map(f => f.class)))]
-      const title = `Fix malformed markdown at source (#1963): ${classes.join(', ')}`
-      const bodyLines = [
+      const classes = [...new Set(batch.flatMap(f => f.classes))]
+      const suffix = multi ? ` (batch ${bi + 1}/${batches.length})` : ''
+      const title = `Fix malformed markdown at source (#1963)${suffix}`
+      const body = [
         'Automated conservative, idempotent fixes for malformed-markdown patterns that the',
-        'tutorials-ims render pipeline currently patches in flight (issue sap-tutorials/tutorials-ims#1963).',
+        'tutorials-ims render pipeline currently patches in flight (sap-tutorials/tutorials-ims#1963).',
+        repo.endsWith('-Contribution')
+          ? '\nApplied to the **Contribution** (upstream) repo so the fix survives the next copy-forward to the published repo.'
+          : '',
+        `\nClasses fixed: ${classes.join(', ')}`,
+        `\nTutorials (${batch.length}):`,
+        ...batch.map(f => `- \`${f.relPath}\``),
         '',
-        `Classes fixed: ${classes.join(', ')}`,
-        '',
-        'Files:',
-        ...applied.map(s => `- \`tutorials/${s.meta.slug}/${s.meta.slug}.md\``),
-        '',
-        'Each change is idempotent and was verified with a golden-render gate: composing the',
-        'original vs. fixed source through the pipeline produces byte-identical output.',
+        'Each change is idempotent and verified by a golden-render gate: composing the original',
+        'vs. fixed source through the pipeline yields byte-identical steps/body/intro.',
         '',
         '🤖 Generated with Claude Code',
-      ]
-      git(tmp, 'commit', '-m', title, '-m', bodyLines.join('\n'))
-      git(tmp, 'push', '-u', 'origin', fixBranch)
-      const pr = execFileSync('gh', ['pr', 'create', '--repo', `${ORG}/${repo}`, '--base', branch,
-        '--head', fixBranch, '--title', title, '--body', bodyLines.join('\n')],
-        { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] })
-      console.log(`  ✅ ${repo}: PR opened → ${pr.trim()} (${applied.length} file(s)${skipped.length ? `, ${skipped.length} skipped` : ''})`)
-    } catch (err) {
-      console.error(`  ❌ ${repo}: PR failed —`, err instanceof Error ? err.message : err)
-    } finally {
-      rmSync(tmp, { recursive: true, force: true })
+      ].join('\n')
+      try {
+        git(tmp, 'commit', '-m', title, '-m', body)
+        git(tmp, 'push', '-u', 'origin', branch)
+        const pr = execFileSync('gh', ['pr', 'create', '--repo', `${ORG}/${repo}`, '--base', base,
+          '--head', branch, '--title', title, '--body', body],
+          { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] })
+        console.log(`    ✅ batch ${bi + 1}/${batches.length} (${batch.length} file(s)) → ${pr.trim()}`)
+      } catch (err) {
+        console.error(`    ❌ batch ${bi + 1}/${batches.length} failed —`, err instanceof Error ? err.message : err)
+      }
     }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
   }
 }
 
