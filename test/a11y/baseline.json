@@ -1,0 +1,49 @@
+{
+  "_comment": "Committed a11y regression baseline for the post-deploy axe-core scan (test/a11y/axe.test.js).",
+  "_howItGates": "Per page: the scan FAILS if a NEW rule id appears (not in this page's 'rules'), or if the 'critical'/'serious' violation count rises above the value here. Moderate/minor churn on already-known rules is reported but does NOT fail. A page not listed here defaults to zero-tolerance (any violation fails).",
+  "_howToUpdate": "After intentionally fixing (or knowingly changing) a page, rewrite this file: A11Y_UPDATE_BASELINE=1 SMOKE_BASE_URL=<dev-approuter> npm run test:a11y. Ratchet the numbers DOWN; never raise them without review.",
+  "_capturedAgainst": "dev approuter, WCAG 2.1 AA + best-practice tags",
+  "_capturedOn": "2026-08-22",
+  "pages": {
+    "/": {
+      "critical": 1,
+      "serious": 0,
+      "rules": ["aria-valid-attr", "image-redundant-alt", "region"]
+    },
+    "/browse/": {
+      "critical": 1,
+      "serious": 0,
+      "rules": ["aria-valid-attr", "landmark-banner-is-top-level", "landmark-main-is-top-level", "landmark-no-duplicate-banner", "landmark-no-duplicate-main", "landmark-unique", "region"]
+    },
+    "/topics/": {
+      "critical": 1,
+      "serious": 0,
+      "rules": ["aria-valid-attr", "region"]
+    },
+    "/concepts/cap-cds-domain-modeling/": {
+      "critical": 1,
+      "serious": 0,
+      "rules": ["aria-valid-attr", "region"]
+    },
+    "/tutorials/abap-cloud-ui-from-interface/": {
+      "critical": 1,
+      "serious": 1,
+      "rules": ["aria-valid-attr", "color-contrast", "landmark-main-is-top-level", "landmark-no-duplicate-main", "landmark-unique", "region"]
+    },
+    "/tutorials/abap-create-basic-app/": {
+      "critical": 1,
+      "serious": 0,
+      "rules": ["aria-valid-attr", "landmark-main-is-top-level", "landmark-no-duplicate-main", "landmark-unique", "region"]
+    },
+    "/tags/": {
+      "critical": 1,
+      "serious": 0,
+      "rules": ["aria-valid-attr", "region"]
+    },
+    "/developer-advocates/": {
+      "critical": 1,
+      "serious": 2,
+      "rules": ["aria-valid-attr", "heading-order", "landmark-main-is-top-level", "landmark-no-duplicate-main", "landmark-unique", "nested-interactive", "region", "scrollable-region-focusable"]
+    }
+  }
+}
