@@ -127,7 +127,8 @@ service AdminService {
   entity Steps as projection on ims.Steps;
   // Freshness detector (spec 2026-08-22)
   entity FreshnessReport  as projection on ims.FreshnessReport;
-  entity FreshnessFinding as projection on ims.FreshnessFinding;
+  // Task 8: virtual confidenceCriticality populated in after('READ','FreshnessFinding')
+  entity FreshnessFinding as projection on ims.FreshnessFinding { *, virtual confidenceCriticality : Integer };
   // Issue #644 — Puzzles is a TaskBase peer of Tutorials/Missions/Groups,
   // exposed for admin CRUD so puzzles can be authored and curated.
   entity Puzzles as projection on ims.Puzzles { *, cast(legacyId as String) as legacyIdStr : String };

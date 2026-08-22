@@ -2030,6 +2030,35 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // Task 8: freshness worklist virtuals — openHighCount, freshnessStatus, freshnessCriticality.
+    // Batch-look up the latest FreshnessReport per tutorial and stamp the virtual columns.
+    // Fail-quiet (try/catch + warn-log) so a lookup error never 500s the read.
+    // Criticality: 1=Negative(red), 2=Critical(yellow), 3=Positive(green), 0=Neutral.
+    this.after('READ', 'Tutorials', async (rows) => {
+      const list = Array.isArray(rows) ? rows : [rows];
+      const ids = list.map(r => r?.ID).filter(Boolean);
+      if (!ids.length) return;
+      try {
+        const { FreshnessReport } = cds.entities('com.sap.developers.ims');
+        const reports = await SELECT.from(FreshnessReport).columns('tutorial_ID', 'status', 'openHighCount').where({ tutorial_ID: { in: ids } });
+        const byT = new Map(reports.map(r => [r.tutorial_ID, r]));
+        for (const row of list) {
+          const rep = byT.get(row.ID);
+          row.openHighCount = rep?.openHighCount ?? 0;
+          row.freshnessStatus = rep?.status ?? null;
+          row.freshnessCriticality = (rep?.openHighCount > 0) ? 1 : (rep?.status === 'DONE' ? 3 : 0);
+        }
+      } catch (err) { cds.log('freshness').warn('Tutorials freshness decorate failed', err); }
+    });
+
+    // Task 8: confidence → criticality badge for the FreshnessFinding worklist.
+    // High-confidence findings are red (1=Negative) — highest visual weight.
+    this.after('READ', 'FreshnessFinding', (rows) => {
+      const list = Array.isArray(rows) ? rows : [rows];
+      const map = { High: 1, Medium: 2, Low: 0 };
+      for (const row of list) if (row) row.confidenceCriticality = map[row.confidence] ?? 0;
+    });
+
     // Guard: only SuperAdmin can change the published flag in either direction
     // (publish OR unpublish). The CREATE exemption permits the runtime's
     // draft-activation flow, where the activation payload echoes published=false
