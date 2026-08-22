@@ -1,7 +1,11 @@
 {{/* U14: full-page navigation progress bar. Driven by hugo/assets/js/nav-progress.ts.
      `hidden` is repurposed as a fade flag — see .nav-progress-bar[hidden] in
      hugo/assets/css/skeletons.css for the display:block override.
-     QA preview strips this — read-only preview has no navigation hydration phase. */}}
+     QA preview strips this — read-only preview has no navigation hydration phase.
+     aria-hidden: this is a purely decorative, transient loading hint (like its
+     sibling #reading-progress). Exposing it as a standalone progressbar put it
+     outside every landmark (axe `region`) and added AT-nav clutter for a bar
+     that is hidden ~99% of the time. Decorative is the honest treatment. */}}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}
-<ui5-progress-indicator id="nav-progress" hide-value value="0" class="nav-progress-bar" hidden accessible-name="Page loading progress"></ui5-progress-indicator>
+<ui5-progress-indicator id="nav-progress" hide-value value="0" class="nav-progress-bar" hidden aria-hidden="true"></ui5-progress-indicator>
 {{ end }}
