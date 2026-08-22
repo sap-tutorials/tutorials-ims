@@ -1,8 +1,9 @@
 import {
-  getHeaderPref, getFooterPref, getBreadcrumbsPref, getFeedbackPref
+  getHeaderPref, getFooterPref, getBreadcrumbsPref, getFeedbackPref,
+  getTextSize, getReadWidth, getCodeSize, getCodeWrap, getImgSize, getImgCollapse, getReduceMotion, getReadableFont
 } from './prefs-store';
 import {
-  SHORT_VIEWPORT_MAX_HEIGHT, type HeaderMode, type FooterMode, type OnOff
+  SHORT_VIEWPORT_MAX_HEIGHT, type HeaderMode, type FooterMode, type OnOff, type SizeStep, type ReadWidth
 } from './constants';
 
 export interface DisplayPrefs {
@@ -10,12 +11,28 @@ export interface DisplayPrefs {
   footer: FooterMode | null;
   breadcrumbs: OnOff;
   feedback: OnOff;
+  textSize: SizeStep;
+  readWidth: ReadWidth;
+  codeSize: SizeStep;
+  codeWrap: OnOff;
+  imgSize: SizeStep;
+  imgCollapse: OnOff;
+  reduceMotion: OnOff;
+  readableFont: OnOff;
 }
 export interface Effective {
   header: HeaderMode;
   footer: FooterMode;
   breadcrumbs: OnOff;
   feedback: OnOff;
+  textSize: SizeStep;
+  readWidth: ReadWidth;
+  codeSize: SizeStep;
+  codeWrap: OnOff;
+  imgSize: SizeStep;
+  imgCollapse: OnOff;
+  reduceMotion: OnOff;
+  readableFont: OnOff;
 }
 
 export function computeEffective(prefs: DisplayPrefs, shortViewport: boolean): Effective {
@@ -23,7 +40,15 @@ export function computeEffective(prefs: DisplayPrefs, shortViewport: boolean): E
     header: prefs.header ?? (shortViewport ? 'thinbar' : 'locked'),
     footer: prefs.footer ?? (shortViewport ? 'autohide' : 'shown'),
     breadcrumbs: prefs.breadcrumbs,
-    feedback: prefs.feedback
+    feedback: prefs.feedback,
+    textSize: prefs.textSize,
+    readWidth: prefs.readWidth,
+    codeSize: prefs.codeSize,
+    codeWrap: prefs.codeWrap,
+    imgSize: prefs.imgSize,
+    imgCollapse: prefs.imgCollapse,
+    reduceMotion: prefs.reduceMotion,
+    readableFont: prefs.readableFont
   };
 }
 
@@ -32,7 +57,15 @@ export function readPrefs(): DisplayPrefs {
     header: getHeaderPref(),
     footer: getFooterPref(),
     breadcrumbs: getBreadcrumbsPref(),
-    feedback: getFeedbackPref()
+    feedback: getFeedbackPref(),
+    textSize: getTextSize(),
+    readWidth: getReadWidth(),
+    codeSize: getCodeSize(),
+    codeWrap: getCodeWrap(),
+    imgSize: getImgSize(),
+    imgCollapse: getImgCollapse(),
+    reduceMotion: getReduceMotion(),
+    readableFont: getReadableFont()
   };
 }
 
@@ -50,6 +83,14 @@ export function applyDisplayChrome(doc: Document = document): void {
   html.setAttribute('data-tut-footer', eff.footer);
   html.setAttribute('data-tut-breadcrumbs', eff.breadcrumbs);
   html.setAttribute('data-tut-feedback', eff.feedback);
+  html.setAttribute('data-tut-text-size', eff.textSize);
+  html.setAttribute('data-tut-read-width', eff.readWidth);
+  html.setAttribute('data-tut-code-size', eff.codeSize);
+  html.setAttribute('data-tut-code-wrap', eff.codeWrap);
+  html.setAttribute('data-tut-img-size', eff.imgSize);
+  html.setAttribute('data-tut-img-collapse', eff.imgCollapse);
+  html.setAttribute('data-tut-reduce-motion', eff.reduceMotion);
+  html.setAttribute('data-tut-readable-font', eff.readableFont);
 }
 
 export function installAutoHide(doc: Document = document): () => void {
