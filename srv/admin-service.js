@@ -2030,6 +2030,35 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // Task 8: freshness worklist virtuals — openHighCount, freshnessStatus, freshnessCriticality.
+    // Batch-look up the latest FreshnessReport per tutorial and stamp the virtual columns.
+    // Fail-quiet (try/catch + warn-log) so a lookup error never 500s the read.
+    // Criticality: 1=Negative(red), 2=Critical(yellow), 3=Positive(green), 0=Neutral.
+    this.after('READ', 'Tutorials', async (rows) => {
+      const list = Array.isArray(rows) ? rows : [rows];
+      const ids = list.map(r => r?.ID).filter(Boolean);
+      if (!ids.length) return;
+      try {
+        const { FreshnessReport } = cds.entities('com.sap.developers.ims');
+        const reports = await SELECT.from(FreshnessReport).columns('tutorial_ID', 'status', 'openHighCount').where({ tutorial_ID: { in: ids } });
+        const byT = new Map(reports.map(r => [r.tutorial_ID, r]));
+        for (const row of list) {
+          const rep = byT.get(row.ID);
+          row.openHighCount = rep?.openHighCount ?? 0;
+          row.freshnessStatus = rep?.status ?? null;
+          row.freshnessCriticality = (rep?.openHighCount > 0) ? 1 : (rep?.status === 'DONE' ? 3 : 0);
+        }
+      } catch (err) { cds.log('freshness').warn('Tutorials freshness decorate failed', err); }
+    });
+
+    // Task 8: confidence → criticality badge for the FreshnessFinding worklist.
+    // High-confidence findings are red (1=Negative) — highest visual weight.
+    this.after('READ', 'FreshnessFinding', (rows) => {
+      const list = Array.isArray(rows) ? rows : [rows];
+      const map = { High: 1, Medium: 2, Low: 0 };
+      for (const row of list) if (row) row.confidenceCriticality = map[row.confidence] ?? 0;
+    });
+
     // Guard: only SuperAdmin can change the published flag in either direction
     // (publish OR unpublish). The CREATE exemption permits the runtime's
     // draft-activation flow, where the activation payload echoes published=false
@@ -3609,6 +3638,54 @@ export default class AdminService extends cds.ApplicationService {
     this.on('promote_community_to_mission', mcpAdmin.handlePromoteCommunity);
     this.on('trigger_rebuild', mcpAdmin.handleTriggerRebuild);
     this.on('publish_content', mcpAdmin.handlePublishContent);
+
+    // ── Freshness detector actions (task-7) ──────────────────────────────────
+    // checkFreshness: per-tutorial trigger — runs detection+persist INLINE (v1).
+    // Returns {status:'DONE'|'FAILED', reportId}. Never throws a 500.
+    // NON-DESTRUCTIVE on fault: when detectFreshness signals ok:false (AI Core
+    // down, parse/grounding throw) we do NOT persist — the prior report + author
+    // dispositions are left intact, and we report FAILED without writing any row.
+    this.on('checkFreshness', 'Tutorials', async (req) => {
+      const tutorialId = req.params?.[0]?.ID;
+      if (!tutorialId) return req.reject(400, 'tutorialId required');
+      const { detectFreshness } = await import('./lib/freshness-detector.js');
+      const { persistReport } = await import('./lib/freshness-persist.js');
+      const db = await cds.connect.to('db');
+      try {
+        const r = await detectFreshness({ db, tutorialId });
+        // Real fault: do NOT call persistReport, do NOT write any report row,
+        // leave the prior report + dispositions untouched.
+        if (!r.ok) return { status: 'FAILED', reportId: null };
+        const { reportId } = await persistReport({
+          db, tutorialId, model: r.model, costCents: r.costCents, findings: r.findings,
+        });
+        return { status: 'DONE', reportId };
+      } catch (err) {
+        // Top-level guard so the action never 500s. The fault is normally
+        // signaled by ok:false above; this only catches truly unexpected throws.
+        cds.log('freshness').error('checkFreshness failed', err);
+        return { status: 'FAILED', reportId: null };
+      }
+    });
+
+    // setDisposition: per-finding disposition setter — validates enum, updates
+    // the row with dispositionBy = req.user?.id, returns {status:'ok'}.
+    this.on('setDisposition', 'FreshnessFinding', async (req) => {
+      const id = req.params?.[0]?.ID;
+      if (!id) return req.reject(400, 'finding id required');
+      const { disposition, note } = req.data;
+      if (!['OPEN', 'ACCEPTED', 'DISMISSED', 'FIXED'].includes(disposition)) {
+        return req.reject(400, 'invalid disposition');
+      }
+      const { FreshnessFinding } = cds.entities('com.sap.developers.ims');
+      await UPDATE(FreshnessFinding).set({
+        disposition,
+        dispositionNote: note || null,
+        dispositionBy: req.user?.id || 'unknown',
+        dispositionAt: new Date().toISOString(),
+      }).where({ ID: id });
+      return { status: 'ok' };
+    });
 
     await super.init();
 

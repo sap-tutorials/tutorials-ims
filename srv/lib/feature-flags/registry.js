@@ -268,4 +268,12 @@ export const FEATURE_FLAGS = [
     description: 'AI-based relevance scoring for homepage news items. Kill switch — set false to fall back to chronological ordering.',
     howToChange: cfEnv('HOMEPAGE_NEWS_RELEVANCE_ENABLED', 'false'),
   },
+  // ---- Freshness detector ----
+  {
+    key: 'FRESHNESS_SCAN_ENABLED', label: 'Tutorial freshness bulk scan', category: 'Content',
+    kind: 'env', envVar: 'FRESHNESS_SCAN_ENABLED', envRule: 'true-enables',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, the nightly freshness-scan job runs the detector across the tutorial catalog. Default OFF.',
+    howToChange: cfEnv('FRESHNESS_SCAN_ENABLED', 'true'),
+  },
 ];
