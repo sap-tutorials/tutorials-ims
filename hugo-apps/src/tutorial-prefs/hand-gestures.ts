@@ -2,7 +2,7 @@ import {
   SWIPE_MIN_DX_FRACTION, SWIPE_MIN_VELOCITY,
   SWIPE_COOLDOWN_MS, PALM_LOST_RESET_MS,
   FRAME_INTERVAL_MS, MEDIAPIPE_WASM_BASE, MODEL_HAND,
-  SLOW_FRAME_MS, SLOW_FRAME_RUN
+  SLOW_FRAME_MS, SLOW_FRAME_RUN, PALM_MIN_FINGERS
 } from './constants';
 import { acquire, release } from './camera-session';
 import { dispatchNav } from './nav-dispatch';
@@ -142,11 +142,18 @@ export async function runHandGestures(opts: RunOpts): Promise<HandRuntime> {
   return { stop };
 }
 
-// Open palm: index/middle/ring/pinky tips above their MCP knuckles.
-// Tips 8/12/16/20; MCPs 5/9/13/17. Lower y == higher on screen.
-function computeHandFrame(lm: Array<{ x: number; y: number; z: number }>): HandFrame {
-  const tips = [8, 12, 16, 20], mcps = [5, 9, 13, 17];
-  const palmOpen = tips.every((tip, i) => lm[tip].y < lm[mcps[i]].y);
-  const palmCenter = (lm[0].x + lm[9].x) / 2;
-  return { palmOpen, x: palmCenter };
+// Radial open-palm test: a finger is "extended" when its tip is farther from the
+// wrist (0) than its PIP joint. This is tilt-invariant — unlike a strict
+// tip.y < mcp.y comparison it survives a hand held at any angle. Tips 8/12/16/20,
+// PIPs 6/10/14/18. Palm x is mirrored (1 − center) so a rightward sweep (to the
+// user's right) produces increasing x → 'right' → Next.
+export function computeHandFrame(lm: Array<{ x: number; y: number; z: number }>): HandFrame {
+  const wrist = lm[0];
+  const tips = [8, 12, 16, 20], pips = [6, 10, 14, 18];
+  const dist = (a: { x: number; y: number }) => Math.hypot(a.x - wrist.x, a.y - wrist.y);
+  let extended = 0;
+  for (let i = 0; i < 4; i++) if (dist(lm[tips[i]]) > dist(lm[pips[i]])) extended++;
+  const palmOpen = extended >= PALM_MIN_FINGERS;
+  const palmCenterX = (lm[0].x + lm[9].x) / 2;
+  return { palmOpen, x: 1 - palmCenterX };
 }
