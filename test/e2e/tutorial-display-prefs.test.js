@@ -90,6 +90,31 @@ describe.skipIf(!hasBaseUrl())('e2e: tutorial display prefs (#1966)', () => {
     }
   });
 
+  it('segmented button reflects the stored header pref on fresh load (#1966 regression)', async () => {
+    // Regression: on a fresh page load with a stored header pref, the UI5
+    // segmented button initialises its internal selection before Vue's :pressed
+    // bindings land, defaulting to the first item ("Locked"). Opening the popover
+    // must show the STORED value selected, not "Locked".
+    const { context, page } = await newPage(browser, { authenticated: false });
+    try {
+      await page.setViewportSize({ width: 1400, height: 1000 });
+      await page.addInitScript(() => localStorage.setItem('tut.pref.header', 'autohide'));
+      await page.goto(TUTORIAL_PATH, { waitUntil: 'domcontentloaded' });
+
+      await page.click('#sb-prefs');
+
+      // Read UI5's real internal selection (selectedItems), not the light-DOM
+      // pressed attribute — they can disagree, which is the bug.
+      const selected = await page.evaluate(() => {
+        const seg = document.querySelector('ui5-segmented-button');
+        return seg?.selectedItems?.[0]?.dataset?.mode ?? null;
+      });
+      expect(selected, 'segmented button should show the stored "autohide" pref, not default Locked').toBe('autohide');
+    } finally {
+      await context.close();
+    }
+  });
+
   it('toggling breadcrumbs off hides .tutorial-breadcrumbs', async () => {
     const { context, page } = await newPage(browser, { authenticated: false });
     try {

@@ -15,7 +15,7 @@
 
         <section class="tut-prefs__row">
           <label class="tut-prefs__label"><span>Header</span></label>
-          <ui5-segmented-button @selection-change="onHeaderSelect">
+          <ui5-segmented-button ref="segBtnRef" @selection-change="onHeaderSelect">
             <ui5-segmented-button-item :pressed="headerMode === 'locked' || undefined" data-mode="locked">Locked</ui5-segmented-button-item>
             <ui5-segmented-button-item :pressed="headerMode === 'thinbar' || undefined" data-mode="thinbar">Compact</ui5-segmented-button-item>
             <ui5-segmented-button-item :pressed="headerMode === 'autohide' || undefined" data-mode="autohide">Auto-hide</ui5-segmented-button-item>
@@ -114,10 +114,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, watch, nextTick } from 'vue';
 import type { FeatureId, HeaderMode } from './constants';
 
-defineProps<{
+const props = defineProps<{
   readerOn: boolean;
   onTutorialPage: boolean;
   supported: boolean;
@@ -149,8 +149,30 @@ const emit = defineEmits<{
 function onHeaderSelect(e: any) {
   const mode = e.detail?.selectedItems?.[0]?.dataset?.mode
     ?? e.target?.querySelector('[pressed]')?.dataset?.mode;
-  if (mode) emit('set-header', mode as HeaderMode);
+  // Guard: skip emit when mode matches current pref (e.g. sync click on mount)
+  if (mode && mode !== props.headerMode) emit('set-header', mode as HeaderMode);
 }
+
+// ui5-segmented-button manages selection internally and ignores attribute/property
+// mutations on child items after its initial upgrade. The only reliable way to
+// correct the highlighted item is to programmatically .click() the target item,
+// which triggers UI5's own selection-change path. Read the button's real selection
+// via `selectedItems` (NOT a child's `pressed` property — that mirrors Vue's
+// declarative binding and can disagree with UI5's internal state). Runs on mount +
+// on prop change so the correct item is highlighted whenever the popover (re)opens.
+const segBtnRef = ref<any>(null);
+function syncHeaderPressed() {
+  const seg = segBtnRef.value;
+  if (!seg) return;
+  const current = seg.selectedItems?.[0]?.dataset?.mode;
+  if (current === props.headerMode) return; // already correct — no redundant click
+  const target = Array.from(
+    seg.querySelectorAll('[data-mode]') as NodeListOf<HTMLElement>
+  ).find(item => item.dataset.mode === props.headerMode);
+  target?.click();
+}
+onMounted(() => nextTick(syncHeaderPressed));
+watch(() => props.headerMode, () => nextTick(syncHeaderPressed));
 
 const popoverRef = ref<HTMLElement | null>(null);
 defineExpose({
