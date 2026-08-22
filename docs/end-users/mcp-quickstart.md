@@ -15,8 +15,8 @@ Three CDS services are mounted under `/mcp/*` using `@cap-js/mcp@1.1.1` over the
 
 | Service | Mount | Curated tools |
 | --- | --- | --- |
-| SearchService | `/mcp/search` | `search_tutorials`, `list_missions`, `get_mission`, `get_tutorial` |
-| HomepageService | `/mcp/homepage` | `get_recent_news`, `get_recent_videos` |
+| SearchService | `/mcp/search` | `search_tutorials`, `list_missions`, `get_mission`, `get_tutorial`, `search_events` |
+| HomepageService | `/mcp/homepage` | `get_recent_news`, `get_recent_videos`, `get_news_detail` |
 | KnowledgeGraphService | `/mcp/graph` | `kg_prerequisites`, `kg_what_to_learn_next` |
 
 One-liners:
@@ -25,8 +25,10 @@ One-liners:
 - **`list_missions`** — enumerate curated learning missions.
 - **`get_mission`** — fetch a mission's ordered tutorial list by slug.
 - **`get_tutorial`** — fetch a single tutorial's metadata and rendered steps.
+- **`search_events`** — search the public SAP community events catalog (CodeJams, Devtoberfest, TechEd, user groups) by text, type, and region.
 - **`get_recent_news`** — recent SAP Developer News episodes shown on the homepage.
 - **`get_recent_videos`** — recent SAP Developers YouTube videos shown on the homepage.
+- **`get_news_detail`** — full article body for one news item, fetched by its URL (complements `get_recent_news`).
 - **`kg_prerequisites`** — concepts you should already know before this tutorial.
 - **`kg_what_to_learn_next`** — recommended follow-on tutorials from the knowledge graph.
 

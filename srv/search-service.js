@@ -2,6 +2,7 @@ import cds from '@sap/cds';
 import { computeKgSignal, buildKgRankFragment, buildCommunityRankFragment, KG_COMMUNITY_WEIGHT } from './lib/search-kg-signal.js';
 import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 import { handleGetTutorialStep } from './lib/mcp-developer-tools.js';
+import { handleSearchEvents } from './lib/mcp-events-search.js';
 
 const LOG = cds.log('search-service');
 
@@ -531,6 +532,10 @@ export default class SearchService extends cds.ApplicationService {
     // handler symbol. Published tutorial HTML is public; no auth required
     // (@requires:'any' on the CDS declaration in search-service-mcp.cds).
     this.on('get_tutorial_step', handleGetTutorialStep);
+
+    // Tier 2 MCP tool — anonymous public search over the CommunityEvents
+    // catalog (@requires:'any' in search-service-mcp.cds).
+    this.on('search_events', handleSearchEvents);
 
     return super.init();
   }
