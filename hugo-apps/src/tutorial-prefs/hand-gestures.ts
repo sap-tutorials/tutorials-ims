@@ -1,63 +1,80 @@
 import {
-  SWIPE_MIN_DX_FRACTION, SWIPE_MIN_VELOCITY,
-  SWIPE_COOLDOWN_MS, PALM_LOST_RESET_MS,
-  FRAME_INTERVAL_MS, MEDIAPIPE_WASM_BASE, MODEL_HAND,
-  SLOW_FRAME_MS, SLOW_FRAME_RUN, PALM_MIN_FINGERS
+  SWIPE_MIN_DX_FRACTION, SWIPE_MIN_VELOCITY, SWIPE_COOLDOWN_MS, PALM_LOST_RESET_MS,
+  SWIPE_WINDOW_MS, PALM_MIN_FINGERS,
+  FRAME_INTERVAL_MS, MEDIAPIPE_WASM_BASE, MODEL_HAND, SLOW_FRAME_MS, SLOW_FRAME_RUN
 } from './constants';
 import { acquire, release } from './camera-session';
 import { dispatchNav } from './nav-dispatch';
+import { getCal } from './prefs-store';
 import type { CamReport } from './cam-debug';
+import type { HandProfile } from './constants';
 
 export interface HandFrame { palmOpen: boolean; x: number; }
 export type SwipeDir = 'left' | 'right';
 
 export interface SwipeDetectorOpts {
   now: () => number;
-  frameWidth: number;
   onSwipe: (dir: SwipeDir) => void;
+  dxFraction?: number;    // default SWIPE_MIN_DX_FRACTION; overridden by calibration
+  minVelocity?: number;   // default SWIPE_MIN_VELOCITY; overridden by calibration
 }
 
 type State = 'IDLE' | 'ARMED' | 'COOLDOWN';
 
 export class SwipeDetector {
   private state: State = 'IDLE';
-  private startX = 0;
-  private startT = 0;
   private lastSeen = 0;
   private cooldownUntil = 0;
+  private buf: Array<{ t: number; x: number }> = [];
+  private readonly dxFraction: number;
+  private readonly minVelocity: number;
 
-  constructor(private opts: SwipeDetectorOpts) {}
+  constructor(private opts: SwipeDetectorOpts) {
+    this.dxFraction = opts.dxFraction ?? SWIPE_MIN_DX_FRACTION;
+    this.minVelocity = opts.minVelocity ?? SWIPE_MIN_VELOCITY;
+  }
 
   observe(f: HandFrame): void {
     const t = this.opts.now();
     if (t < this.cooldownUntil) { this.state = 'COOLDOWN'; return; }
-    if (this.state === 'COOLDOWN') this.state = 'IDLE';
+    if (this.state === 'COOLDOWN') { this.state = 'IDLE'; this.buf = []; }
 
     if (!f.palmOpen) {
-      if (t - this.lastSeen > PALM_LOST_RESET_MS) this.state = 'IDLE';
+      if (t - this.lastSeen > PALM_LOST_RESET_MS) { this.state = 'IDLE'; this.buf = []; }
       return;
     }
     this.lastSeen = t;
 
-    if (this.state === 'IDLE') {
-      this.state = 'ARMED'; this.startX = f.x; this.startT = t; return;
-    }
-    const dx = f.x - this.startX;
-    const dt = (t - this.startT) / 1000;
-    if (dt <= 0) return;
-    const absDx = Math.abs(dx);
-    const v = absDx / dt;
-    if (absDx >= SWIPE_MIN_DX_FRACTION * this.opts.frameWidth && v >= SWIPE_MIN_VELOCITY) {
-      this.opts.onSwipe(dx > 0 ? 'right' : 'left');
+    if (this.state === 'IDLE') { this.state = 'ARMED'; this.buf = [{ t, x: f.x }]; return; }
+
+    // ARMED: maintain a trailing window and evaluate net displacement + peak velocity.
+    this.buf.push({ t, x: f.x });
+    const cutoff = t - SWIPE_WINDOW_MS;
+    while (this.buf.length > 1 && this.buf[0].t < cutoff) this.buf.shift();
+
+    const net = f.x - this.buf[0].x;
+    const peakV = this.peakVelocity();
+    if (Math.abs(net) >= this.dxFraction && peakV >= this.minVelocity) {
+      this.opts.onSwipe(net > 0 ? 'right' : 'left');
       this.cooldownUntil = t + SWIPE_COOLDOWN_MS;
       this.state = 'COOLDOWN';
+      this.buf = [];
     }
   }
 
-  // Read-only state for the debug overlay — no behaviour change.
-  // Caller computes dx/velocity by combining startX/startT with the live frame.
-  inspect(): { state: State; startX: number; startT: number } {
-    return { state: this.state, startX: this.startX, startT: this.startT };
+  private peakVelocity(): number {
+    let peak = 0;
+    for (let i = 1; i < this.buf.length; i++) {
+      const dt = (this.buf[i].t - this.buf[i - 1].t) / 1000;
+      if (dt > 0) peak = Math.max(peak, Math.abs(this.buf[i].x - this.buf[i - 1].x) / dt);
+    }
+    return peak;
+  }
+
+  // Read-only snapshot for the debug overlay.
+  inspect(): { state: State; dx: number; velocity: number } {
+    const dx = this.buf.length > 1 ? this.buf[this.buf.length - 1].x - this.buf[0].x : 0;
+    return { state: this.state, dx, velocity: this.peakVelocity() };
   }
 }
 
@@ -86,9 +103,11 @@ export async function runHandGestures(opts: RunOpts): Promise<HandRuntime> {
   let slowStreak = 0;
   let stopped = false;
 
+  const cal = getCal('hand') as HandProfile | null;
   const det = new SwipeDetector({
     now: () => performance.now(),
-    frameWidth: 1,
+    dxFraction: cal?.dxFraction,
+    minVelocity: cal?.minVelocity,
     onSwipe: (dir) => dispatchNav(dir === 'right' ? 'next' : 'prev')
   });
 
@@ -105,20 +124,15 @@ export async function runHandGestures(opts: RunOpts): Promise<HandRuntime> {
       else { frame = computeHandFrame(lm); det.observe(frame); }
 
       if (opts.onDebug) {
-        const now = performance.now();
         const insp = det.inspect();
-        const armed = insp.state === 'ARMED';
-        const dx = armed ? frame.x - insp.startX : 0;
-        const dtMs = armed ? Math.max(0, now - insp.startT) : 0;
-        const velocity = armed && dtMs > 0 ? Math.abs(dx) / (dtMs / 1000) : 0;
         opts.onDebug({
           kind: 'hand',
           palmSeen: !!lm,
           palmOpen: frame.palmOpen,
           x: frame.x,
-          dxFromArmed: dx,
-          dtMs,
-          velocity,
+          dxFromArmed: insp.dx,
+          dtMs: 0,               // window-based now; kept for CamReport shape compatibility
+          velocity: insp.velocity,
           state: insp.state
         });
       }
