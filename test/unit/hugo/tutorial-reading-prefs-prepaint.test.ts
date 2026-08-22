@@ -30,3 +30,12 @@ describe('reading-prefs batch 2 CSS text hooks', () => {
     }
   });
 });
+
+describe('reading-prefs batch 2 CSS code hooks', () => {
+  it('defines code-size and code-wrap hooks targeting .code-block-body', () => {
+    for (const hook of ['data-tut-code-size="s"', 'data-tut-code-size="l"', 'data-tut-code-wrap="on"']) {
+      expect(css, hook).toContain(hook);
+    }
+    expect(css).toContain('.code-block-body');
+  });
+});
