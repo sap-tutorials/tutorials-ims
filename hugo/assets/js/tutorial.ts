@@ -1,5 +1,6 @@
 import { initMermaid } from './mermaid-bootstrap'
 import { csrfFetch } from './csrf-fetch'
+import { stripPrompts } from './copy-clean'
 
 // --- Copy code block ---
 ;(window as any).copyCodeBlock = function(btn: HTMLButtonElement) {
@@ -7,7 +8,8 @@ import { csrfFetch } from './csrf-fetch'
   if (!block) return
   const code = block.querySelector('.code-block-body code, .code-block-body pre')
   if (!code) return
-  const text = code.textContent || ''
+  let text = code.textContent || ''
+  try { if (localStorage.getItem('tut.pref.copyClean') === 'on') text = stripPrompts(text) } catch {}
   navigator.clipboard.writeText(text).then(() => {
     const label = btn.querySelector('.copy-label')
     if (label) {
