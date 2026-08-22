@@ -11,6 +11,8 @@
 // backend hiccup never 500s a build.
 
 import cds from '@sap/cds';
+import { resolveClusterContent } from './build-topic-cluster-content.js';
+import { rankAndCap, PER_TYPE_CAPS, TOTAL_ITEMS_PER_CARD } from './topic-cluster-content.js';
 
 const log = cds.log('build-topic-clusters');
 
@@ -21,6 +23,15 @@ const NS = 'com.sap.developers.ims';
 
 export async function buildTopicClustersPayload(db) {
   const buildAt = new Date().toISOString();
+  const nowMs = Date.now();
+  let rankMaps = null;
+  try {
+    // loadRankMaps() takes no db arg — it resolves its own db connection.
+    // Returns { tutorialRank, conceptRank, _normalizeTut }; computeRank uses
+    // only tutorialRank + conceptRank so the extra field is harmless.
+    const { loadRankMaps } = await import('../knowledge-graph-service.js');
+    rankMaps = await loadRankMaps(); // fail-open: EMPTY_RANK_MAPS on KG error
+  } catch { rankMaps = null; }
   try {
     const { KgCommunityLabel, KgCommunitySummaryV, KgCommunity, Tutorials } = cds.entities(NS);
 
@@ -76,6 +87,14 @@ export async function buildTopicClustersPayload(db) {
 
       // 6. Re-gate on resolved live count; cap per-card; build url.
       if (live.length < MIN_TUTORIALS) continue;
+
+      // 7. Resolve mixed-source stable items (fail-open: [] on any error).
+      const rawItems = await resolveClusterContent(db, cluster.communityFingerprint, {
+        tiers: ['stable'], rankMaps, nowMs,
+      });
+      const items = rankAndCap(rawItems, { perType: PER_TYPE_CAPS, total: TOTAL_ITEMS_PER_CARD })
+        .map(({ rank, ...wire }) => wire); // strip rank from the wire
+
       clusters.push({
         label: cluster.label,
         rationale: cluster.rationale,
@@ -86,6 +105,7 @@ export async function buildTopicClustersPayload(db) {
           title: t.title,
           url: `/tutorials/${t.slug}`,
         })),
+        items,
       });
     }
 

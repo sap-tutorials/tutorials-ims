@@ -4,6 +4,7 @@ import cds from '@sap/cds';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 const NS = 'com.sap.developers.ims';
+const EXT = 'com.sap.developers.ims.external';
 
 // Seed a controlled fixture graph: 8 labeled communities of varying sizes,
 // one unlabeled community, one mixed-case member slug, one INACTIVE tutorial,
@@ -11,7 +12,8 @@ const NS = 'com.sap.developers.ims';
 beforeAll(async () => {
   await project; // ensure server up
   const db = await cds.connect.to('db');
-  const { KgCommunity, KgCommunityLabel, Tutorials } = cds.entities(NS);
+  const { KgCommunity, KgCommunityLabel, Tutorials, Concepts } = cds.entities(NS);
+  const { BlogPosts, BlogPostConceptLinks } = cds.entities(EXT);
 
   // Helper: create a community fingerprint with `n` tutorial members
   // slugged clu<c>-t<i>, plus matching ACTIVE Tutorials rows.
@@ -62,9 +64,21 @@ beforeAll(async () => {
   communities.push({ communityId: 92, vertexKey: 't:edge-ghost', vertexType: 'tutorial', slug: 'edge-ghost', communityFingerprint: fpEdge, detectedAt: new Date().toISOString() });
   // no Tutorials row for edge-ghost
 
+  // Mixed-source enrichment on cluster 0 (fp-00000): a concept member + a blog post.
+  // (blog-post is volatile tier — not surfaced with tiers:['stable'] — but the concept
+  // member is here to exercise concept-id resolution in resolveClusterContent.)
+  const cId = cds.utils.uuid();
+  const pId = cds.utils.uuid();
+  communities.push({ communityId: 0, vertexKey: 'concept:c0', vertexType: 'concept', slug: 'c0', communityFingerprint: 'fp-00000', detectedAt: new Date().toISOString() });
+
   await db.run(INSERT.into(Tutorials).entries(tutorials));
   await db.run(INSERT.into(KgCommunity).entries(communities));
   await db.run(INSERT.into(KgCommunityLabel).entries(labels));
+
+  // Extra seed: Concepts + BlogPosts + link (inserted after the three main inserts).
+  await db.run(INSERT.into(Concepts).entries([{ ID: cId, slug: 'c0', name: 'C0', status: 'ACTIVE' }]));
+  await db.run(INSERT.into(BlogPosts).entries([{ ID: pId, slug: 'bp0', title: 'BP0', url: 'https://x/bp0', postedAt: new Date().toISOString() }]));
+  await db.run(INSERT.into(BlogPostConceptLinks).entries([{ ID: cds.utils.uuid(), post_ID: pId, concept_ID: cId, confidence: 0.9 }]));
 });
 
 describe('build-topic-clusters read model (#1170)', () => {
@@ -134,5 +148,20 @@ describe('build-topic-clusters read model (#1170)', () => {
     expect(payload.error).toBe('topic_clusters_build_failed');
     expect(payload.error).not.toContain(secret);
     expect(payload).toHaveProperty('buildAt');
+  });
+});
+
+describe('build-topic-clusters items[] (#1170 multi-source)', () => {
+  it('emits a mixed-source items[] array alongside tutorials[] (back-compat)', async () => {
+    const { buildTopicClustersPayload } = await import('../../../srv/lib/build-topic-clusters.js');
+    const db = await cds.connect.to('db');
+    const { clusters } = await buildTopicClustersPayload(db);
+    const c = clusters.find(x => x.communityFingerprint.startsWith('fp-0'));
+    expect(Array.isArray(c.items)).toBe(true);
+    expect(Array.isArray(c.tutorials)).toBe(true);           // back-compat kept
+    expect(c.items.every(i => i.kind && i.href && ('isNew' in i))).toBe(true);
+    expect(c.items.some(i => i.kind === 'tutorial')).toBe(true);
+    // no rank on the wire
+    expect(c.items.every(i => !('rank' in i))).toBe(true);
   });
 });
