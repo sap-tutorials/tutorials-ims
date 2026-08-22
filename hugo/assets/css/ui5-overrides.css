@@ -790,3 +790,10 @@ html[data-tut-img-collapse="on"][data-page-kind="tutorial"] .op-body img[data-zo
 }
 html[data-tut-img-collapse="on"][data-page-kind="tutorial"] .op-body img[data-zoomable]:hover,
 html[data-tut-img-collapse="on"][data-page-kind="tutorial"] .op-body img[data-zoomable]:focus { opacity: 1; }
+html[data-tut-reduce-motion="on"][data-page-kind="tutorial"] .op-header,
+html[data-tut-reduce-motion="on"][data-page-kind="tutorial"] footer,
+html[data-tut-reduce-motion="on"][data-page-kind="tutorial"] .op-body img[data-zoomable] { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-page-kind="tutorial"] .op-header,
+  html[data-page-kind="tutorial"] footer { transition: none; }
+}

@@ -58,3 +58,10 @@ describe('reading-prefs batch 2 CSS screenshot hooks', () => {
     }
   });
 });
+
+describe('reading-prefs batch 2 reduce-motion', () => {
+  it('defines an explicit reduce-motion hook and honors prefers-reduced-motion', () => {
+    expect(css).toContain('data-tut-reduce-motion="on"');
+    expect(css).toContain('prefers-reduced-motion: reduce');
+  });
+});
