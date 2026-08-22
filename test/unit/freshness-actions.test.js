@@ -66,6 +66,47 @@ describe('freshness service actions', () => {
     expect(findings).toHaveLength(1);
   });
 
+  it('checkFreshness on a detection FAULT returns FAILED and does NOT wipe the prior report/dispositions', async () => {
+    const { POST } = project;
+    const { Tutorials, FreshnessReport, FreshnessFinding } = cds.entities('com.sap.developers.ims');
+    const tid = cds.utils.uuid();
+    const rid = cds.utils.uuid();
+    const fid = cds.utils.uuid();
+
+    await INSERT.into(Tutorials).entries({ ID: tid, slug: 'freshfault', title: 'F', legacyId: 9903 });
+    // Seed a prior DONE report + a triaged (DISMISSED) finding.
+    await INSERT.into(FreshnessReport).entries({ ID: rid, tutorial_ID: tid, status: 'DONE', openHighCount: 0 });
+    await INSERT.into(FreshnessFinding).entries({
+      ID: fid, report_ID: rid, tutorial_ID: tid,
+      fingerprint: 'fp9903', category: 'obsolete-dep',
+      severity: 'High', confidence: 'High',
+      disposition: 'DISMISSED', dispositionBy: 'tom', dispositionNote: 'not applicable',
+    });
+
+    // Force a fault: the detect hook THROWS → detectFreshness returns ok:false.
+    globalThis.__FRESHNESS_DETECT_IMPL__ = async () => { throw new Error('AI Core down'); };
+
+    const res = await POST(
+      `/admin/Tutorials(${tid})/AdminService.checkFreshness`,
+      {},
+      { auth: { username: 'admin', password: 'admin' } },
+    );
+    expect(res.status).toBe(200);
+    expect(res.data.value?.status ?? res.data.status).toBe('FAILED');
+
+    // Prior report untouched — no competing FAILED row written.
+    const reports = await SELECT.from(FreshnessReport).where({ tutorial_ID: tid });
+    expect(reports).toHaveLength(1);
+    expect(reports[0].ID).toBe(rid);
+    expect(reports[0].status).toBe('DONE');
+
+    // Prior finding + its disposition still intact.
+    const f = await SELECT.one.from(FreshnessFinding).where({ ID: fid });
+    expect(f).toBeTruthy();
+    expect(f.disposition).toBe('DISMISSED');
+    expect(f.dispositionBy).toBe('tom');
+  });
+
   it('setDisposition updates a finding', async () => {
     const { POST } = project;
     const { Tutorials, FreshnessReport, FreshnessFinding } = cds.entities('com.sap.developers.ims');

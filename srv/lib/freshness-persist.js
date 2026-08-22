@@ -19,12 +19,14 @@ export async function persistReport({ db, tutorialId, model, costCents, findings
     .where({ tutorial_ID: tutorialId });
   const priorByFp = new Map(prior.map(p => [p.fingerprint, p]));
 
+  const RANK = { High: 3, Medium: 2, Low: 1 };
   const stamped = (findings || []).map(f => {
     const fp = fingerprintFinding(f);
     const carry = priorByFp.get(fp);
     return {
       ID: cds.utils.uuid(), tutorial_ID: tutorialId, fingerprint: fp,
       category: f.category, severity: f.severity, confidence: f.confidence,
+      confidenceRank: RANK[f.confidence] ?? 0, severityRank: RANK[f.severity] ?? 0,
       stepRef: f.stepRef, codeBlockIndex: f.codeBlockIndex, lang: f.lang,
       evidence: f.evidence, summary: f.summary, suggestedFix: f.suggestedFix, groundingSource: f.groundingSource,
       disposition: carry?.disposition || 'OPEN',

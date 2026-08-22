@@ -4287,9 +4287,12 @@ annotate AdminService.FreshnessFinding with @UI: {
     { $Type: 'UI.DataFieldForAction', Action: 'AdminService.setDisposition', Label: 'Set disposition' }
   ],
   PresentationVariant: {
+    // Sort on the persisted numeric ranks (High=3..Low=1) so High-confidence
+    // findings sort FIRST. A descending sort on the confidence/severity STRING
+    // columns is OData-lexical (High < Low < Medium), which sorts High last.
     SortOrder: [
-      { Property: confidence, Descending: true },
-      { Property: severity,   Descending: true }
+      { Property: confidenceRank, Descending: true },
+      { Property: severityRank,   Descending: true }
     ]
   }
 };

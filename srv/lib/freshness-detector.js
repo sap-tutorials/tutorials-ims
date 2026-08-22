@@ -12,7 +12,11 @@
 // to bypass the live AI Core call in unit tests (vi.mock cannot intercept SDK
 // modules loaded before vitest resolves under cds.test('serve')).
 //
-// Fail-open: any error in the detection flow returns { model:null, costCents:0, findings:[] }.
+// Fail-open (NON-DESTRUCTIVE): a real fault (catch block, or the LLM/grounding
+// path throwing) returns { ok:false, model:null, costCents:0, findings:[] } so
+// callers can skip persistReport and leave the prior report + author
+// dispositions intact. A completed pass — INCLUDING the legitimate empty cases
+// (tutorial not found, no code blocks, null legacy markdown) — returns ok:true.
 
 import cds from '@sap/cds';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
@@ -156,33 +160,52 @@ async function callLlm({ blocks, userMessage }) {
  * Detect staleness findings for a single tutorial.
  *
  * @param {{ db: object, tutorialId: string }} args
- * @returns {Promise<{ model: string|null, costCents: number, findings: Array }>}
- *   Always resolves (never throws). On any error returns empty findings.
+ * @returns {Promise<{ ok: boolean, model: string|null, costCents: number, findings: Array }>}
+ *   Always resolves (never throws). `ok:false` signals a real fault (LLM/grounding
+ *   throw or unexpected error) — callers MUST NOT persist (would wipe prior report +
+ *   dispositions). `ok:true` marks a completed pass, including legitimate empty cases.
  */
 export async function detectFreshness({ db, tutorialId }) {
   // Top-level test hook — bypasses ALL network calls (grounding + LLM) so unit
-  // tests never hit AI Core. When set, the hook MUST return { model, costCents, findings }.
-  // Mirrors the __FRESHNESS_TEST_IMPL__ pattern in callLlm but fires before any I/O.
+  // tests never hit AI Core. When set, the hook return is normalized to the
+  // { ok, model, costCents, findings } shape (ok defaults true unless the hook
+  // explicitly returns ok:false); a THROW is treated as a fault → ok:false.
   const detectHook = globalThis.__FRESHNESS_DETECT_IMPL__;
-  if (typeof detectHook === 'function') return detectHook({ db, tutorialId });
+  if (typeof detectHook === 'function') {
+    try {
+      const res = await detectHook({ db, tutorialId });
+      return {
+        ok: res?.ok !== false,
+        model: res?.model ?? null,
+        costCents: res?.costCents ?? 0,
+        findings: res?.findings ?? [],
+      };
+    } catch (err) {
+      LOG.error('detection hook failed — failing open (non-destructive)', err);
+      return { ok: false, model: null, costCents: 0, findings: [] };
+    }
+  }
 
   db = db || (await cds.connect.to('db'));
   try {
     // Resolve slug — needed by getTutorialSource.
     const { Tutorials } = cds.entities('com.sap.developers.ims');
     const t = await SELECT.one.from(Tutorials).columns('slug').where({ ID: tutorialId });
-    if (!t) return { model: null, costCents: 0, findings: [] };
+    // Not found — NOT a fault (nothing to analyze) → ok:true, empty findings.
+    if (!t) return { ok: true, model: null, costCents: 0, findings: [] };
 
     // Source markdown from ContentFiles.sourceContent (gzip) via the existing
-    // handler. Pre-#591 rows have null sourceContent — fail-open for those.
+    // handler. Pre-#591 rows have null sourceContent — legitimate legacy empty,
+    // NOT a fault → ok:true.
     const { getTutorialSource } = await import('./content-store.js');
     const src = await getTutorialSource(t.slug);
-    if (!src || !src.markdown) return { model: null, costCents: 0, findings: [] };
+    if (!src || !src.markdown) return { ok: true, model: null, costCents: 0, findings: [] };
 
     // Feed whole-tutorial markdown as ONE pseudo-step so extractCodeBlocks
     // yields a global codeBlockIndex (0..N). Per-step attribution deferred.
+    // No code blocks — genuine clean run, NOT a fault → ok:true.
     const blocks = extractCodeBlocks([{ number: 1, content: src.markdown }]);
-    if (!blocks.length) return { model: null, costCents: 0, findings: [] };
+    if (!blocks.length) return { ok: true, model: null, costCents: 0, findings: [] };
 
     const groundingByBlock = await Promise.all(
       blocks.map(b => groundCodeBlock({ db, code: b.code }).catch(() => []))
@@ -211,9 +234,9 @@ export async function detectFreshness({ db, tutorialId }) {
       // Enforce: a finding with empty groundingSource must be confidence:Low.
       .map(f => (f.groundingSource ? f : { ...f, confidence: 'Low' }));
 
-    return { model: r.modelName, costCents, findings };
+    return { ok: true, model: r.modelName, costCents, findings };
   } catch (err) {
-    LOG.error('detection failed — failing open', err);
-    return { model: null, costCents: 0, findings: [] };
+    LOG.error('detection failed — failing open (non-destructive)', err);
+    return { ok: false, model: null, costCents: 0, findings: [] };
   }
 }

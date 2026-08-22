@@ -41,9 +41,12 @@ export async function runFreshnessScan(_logId, opts = {}) {
   let scanned = 0;
   for (const t of tutorials) {
     try {
+      const r = await detectFreshness({ db, tutorialId: t.ID });
+      // NON-DESTRUCTIVE fail-open: on a real fault skip persist entirely so the
+      // prior report + author dispositions are left intact (never wiped).
+      if (!r.ok) { LOG.warn(`detection faulted for ${t.ID} — skipping persist (prior report kept)`); continue; }
       await cds.tx(async () => {
-        const r = await detectFreshness({ db, tutorialId: t.ID });
-        await persistReport({ db, tutorialId: t.ID, ...r });
+        await persistReport({ db, tutorialId: t.ID, model: r.model, costCents: r.costCents, findings: r.findings });
       });
       scanned++;
     } catch (err) {

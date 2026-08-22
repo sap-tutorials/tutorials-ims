@@ -24,6 +24,12 @@ describe('persistReport', () => {
     const { FreshnessFinding } = cds.entities('com.sap.developers.ims');
     const persisted = await SELECT.from(FreshnessFinding).where({ tutorial_ID: tid });
     expect(persisted).toHaveLength(2);
+    // I1: numeric sort ranks stamped (High=3, Medium=2, Low=1, unknown=0).
+    const high = persisted.find(f => f.confidence === 'High');
+    const low = persisted.find(f => f.confidence === 'Low');
+    expect(high.confidenceRank).toBe(3);
+    expect(high.severityRank).toBe(3);   // finding() severity is High
+    expect(low.confidenceRank).toBe(1);
   });
 
   it('carries forward disposition on a fingerprint match across re-runs', async () => {

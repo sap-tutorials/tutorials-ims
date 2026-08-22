@@ -3641,8 +3641,10 @@ export default class AdminService extends cds.ApplicationService {
 
     // ── Freshness detector actions (task-7) ──────────────────────────────────
     // checkFreshness: per-tutorial trigger — runs detection+persist INLINE (v1).
-    // Returns {status:'DONE'|'FAILED', reportId}. Never throws a 500; on error
-    // writes a FAILED FreshnessReport row so the UI shows the failure state.
+    // Returns {status:'DONE'|'FAILED', reportId}. Never throws a 500.
+    // NON-DESTRUCTIVE on fault: when detectFreshness signals ok:false (AI Core
+    // down, parse/grounding throw) we do NOT persist — the prior report + author
+    // dispositions are left intact, and we report FAILED without writing any row.
     this.on('checkFreshness', 'Tutorials', async (req) => {
       const tutorialId = req.params?.[0]?.ID;
       if (!tutorialId) return req.reject(400, 'tutorialId required');
@@ -3650,19 +3652,19 @@ export default class AdminService extends cds.ApplicationService {
       const { persistReport } = await import('./lib/freshness-persist.js');
       const db = await cds.connect.to('db');
       try {
-        const { model, costCents, findings } = await detectFreshness({ db, tutorialId });
-        const { reportId } = await persistReport({ db, tutorialId, model, costCents, findings });
+        const r = await detectFreshness({ db, tutorialId });
+        // Real fault: do NOT call persistReport, do NOT write any report row,
+        // leave the prior report + dispositions untouched.
+        if (!r.ok) return { status: 'FAILED', reportId: null };
+        const { reportId } = await persistReport({
+          db, tutorialId, model: r.model, costCents: r.costCents, findings: r.findings,
+        });
         return { status: 'DONE', reportId };
       } catch (err) {
+        // Top-level guard so the action never 500s. The fault is normally
+        // signaled by ok:false above; this only catches truly unexpected throws.
         cds.log('freshness').error('checkFreshness failed', err);
-        // record a FAILED report so the UI shows the failure state, never a 500
-        const { FreshnessReport } = cds.entities('com.sap.developers.ims');
-        const reportId = cds.utils.uuid();
-        await db.run(INSERT.into(FreshnessReport).entries({
-          ID: reportId, tutorial_ID: tutorialId, status: 'FAILED',
-          error: String(err.message || err).slice(0, 1000),
-        }));
-        return { status: 'FAILED', reportId };
+        return { status: 'FAILED', reportId: null };
       }
     });
 

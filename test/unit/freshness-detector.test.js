@@ -39,22 +39,24 @@ describe('detectFreshness', () => {
 
     const { detectFreshness } = await import('../../srv/lib/freshness-detector.js');
     const res = await detectFreshness({ db, tutorialId: tid });
+    expect(res.ok).toBe(true);
     expect(res.findings).toHaveLength(1);
     expect(res.findings[0].category).toBe('obsolete-dep');
     expect(res.costCents).toBeGreaterThan(0);
   });
 
-  it('fails open (returns empty findings) when the impl throws', async () => {
+  it('fails open (ok:false, empty findings) when the impl throws', async () => {
     const { Tutorials } = cds.entities('com.sap.developers.ims');
     const tid = cds.utils.uuid();
     await INSERT.into(Tutorials).entries({ ID: tid, slug: 'demo2', title: 'D2', legacyId: 2 });
     globalThis.__FRESHNESS_TEST_IMPL__ = async () => { throw new Error('LLM down'); };
     const { detectFreshness } = await import('../../srv/lib/freshness-detector.js');
     const res = await detectFreshness({ db, tutorialId: tid });
+    expect(res.ok).toBe(false);
     expect(res.findings).toEqual([]);
   });
 
-  it('returns empty findings when getTutorialSource returns null markdown', async () => {
+  it('returns ok:true with empty findings when getTutorialSource returns null markdown', async () => {
     const { getTutorialSource } = await import('../../srv/lib/content-store.js');
     getTutorialSource.mockResolvedValueOnce({ markdown: null, sourceHash: null, contentHash: null });
 
@@ -63,6 +65,8 @@ describe('detectFreshness', () => {
     await INSERT.into(Tutorials).entries({ ID: tid, slug: 'demo3', title: 'D3', legacyId: 3 });
     const { detectFreshness } = await import('../../srv/lib/freshness-detector.js');
     const res = await detectFreshness({ db, tutorialId: tid });
+    // Legacy null markdown is a legitimate empty run, NOT a fault.
+    expect(res.ok).toBe(true);
     expect(res.findings).toEqual([]);
     expect(res.model).toBeNull();
   });

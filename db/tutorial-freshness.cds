@@ -31,6 +31,11 @@ entity FreshnessFinding : cuid {
   category        : String(30);                      // obsolete-dep | deprecated-api | dated-style | hardcoded-secret | broken-flow
   severity        : String(10);                      // High | Medium | Low
   confidence      : String(10);                      // High | Medium | Low  (primary visual weight)
+  // Numeric sort ranks (High=3, Medium=2, Low=1, unknown=0) — stamped in
+  // freshness-persist.js. Fiori PresentationVariant sorts on these so High sorts
+  // FIRST (OData descending on the String columns is lexical → High sorts last).
+  confidenceRank  : Integer;
+  severityRank    : Integer;
   stepRef         : Integer;
   codeBlockIndex  : Integer;
   lang            : String(40);
