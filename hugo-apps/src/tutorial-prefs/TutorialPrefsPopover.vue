@@ -56,7 +56,7 @@
         </section>
         <section class="tut-prefs__row">
           <label class="tut-prefs__label"><span>Reading width</span></label>
-          <ui5-segmented-button @selection-change="onWidthSelect">
+          <ui5-segmented-button data-testid="tut-prefs-read-width" @selection-change="onWidthSelect">
             <ui5-segmented-button-item :pressed="readWidth === 'full' || undefined" data-width="full">Full</ui5-segmented-button-item>
             <ui5-segmented-button-item :pressed="readWidth === 'narrow' || undefined" data-width="narrow">Narrow</ui5-segmented-button-item>
           </ui5-segmented-button>

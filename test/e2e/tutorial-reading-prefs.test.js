@@ -88,9 +88,7 @@ describe.skipIf(!hasBaseUrl())('e2e: tutorial reading prefs (#1966)', () => {
 
       // Capture a visible image's rendered height BEFORE collapse is enabled.
       const heightBefore = await page.evaluate(() => {
-        const img = document.querySelector(
-          '.tutorial-content img, article img, .step-content img',
-        );
+        const img = document.querySelector('.op-body img[data-zoomable]');
         return img ? img.getBoundingClientRect().height : null;
       });
 
@@ -106,9 +104,7 @@ describe.skipIf(!hasBaseUrl())('e2e: tutorial reading prefs (#1966)', () => {
       // collapsed to 0).  Skip the size assertion when no image was visible.
       if (heightBefore !== null && heightBefore > 0) {
         const heightAfter = await page.evaluate(() => {
-          const img = document.querySelector(
-            '.tutorial-content img, article img, .step-content img',
-          );
+          const img = document.querySelector('.op-body img[data-zoomable]');
           return img ? img.getBoundingClientRect().height : 0;
         });
         expect(
@@ -209,12 +205,7 @@ describe.skipIf(!hasBaseUrl())('e2e: tutorial reading prefs (#1966)', () => {
         for (const block of blocks) {
           const firstLine = (block.textContent || '').trimStart();
           if (firstLine.startsWith('$ ')) {
-            const container = block.closest('pre')?.parentElement || block.parentElement;
-            return (
-              container?.querySelector(
-                'button[data-testid="code-copy-btn"], button.copy-btn, .code-block__copy',
-              ) || null
-            );
+            return block.closest('.code-block')?.querySelector('.code-block-copy') || null;
           }
         }
         return null;
