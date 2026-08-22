@@ -7,7 +7,7 @@ export const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
 // natural reading + a controlled wave never crossed either. See cam-debug
 // overlay (?debug-cam) to revisit if behaviour drifts.
 export const GAZE_BOTTOM_THRESHOLD = 0.55;   // iris in bottom ~45% of eye opening (was 0.7)
-export const GAZE_HEAD_PITCH_MAX = 0.12;     // head roughly level — slight tilt OK (was 0.06)
+export const GAZE_HEAD_PITCH_MAX = 0.55;     // normalized by inter-ocular distance (was 0.12 raw)
 export const GAZE_DWELL_MS = 600;
 export const GAZE_FIRE_COOLDOWN_MS = 1200;
 export const NO_FACE_TIMEOUT_MS = 1000;

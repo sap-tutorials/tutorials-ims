@@ -89,6 +89,9 @@ export default defineConfig({
             // @shared/ProgressRing.vue, etc. The unit project doesn't load
             // hugo-apps/vite.config.ts so the alias is redeclared here.
             '@shared': fileURLToPath(new URL('./hugo-apps/src/shared', import.meta.url)),
+            // Mock @mediapipe/tasks-vision for unit tests (avoid resolution errors in
+            // tests that import computeGazeFrame from eye-tracking.ts)
+            '@mediapipe/tasks-vision': fileURLToPath(new URL('./hugo-apps/src/tutorial-prefs/__mocks__/mediapipe.ts', import.meta.url)),
           },
         },
       },

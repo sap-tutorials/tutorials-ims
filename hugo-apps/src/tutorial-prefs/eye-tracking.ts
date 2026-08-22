@@ -121,18 +121,26 @@ export async function runEyeTracking(opts: RunOpts): Promise<EyeRuntime> {
   return { stop };
 }
 
-// Iris centers: 468 (right), 473 (left); right-eye top/bottom 159/145;
-// left-eye top/bottom 386/374. Documented in MediaPipe Face Landmarker model card.
-function computeGazeFrame(lm: Array<{ x: number; y: number; z: number }>): GazeFrame {
+// Iris centers 468 (right) / 473 (left). Eye corners (canthi) are stable through
+// blinks and lid movement, so we anchor vertical gaze to the corner line rather
+// than the eyelid aperture. Right corners 33 (outer) / 133 (inner); left corners
+// 263 (outer) / 362 (inner). Normalizing by eye width makes it distance-invariant.
+export function computeGazeFrame(lm: Array<{ x: number; y: number; z: number }>): GazeFrame {
   const irisR = lm[468], irisL = lm[473];
-  const rTop = lm[159], rBot = lm[145], lTop = lm[386], lBot = lm[374];
-  const yR = (irisR.y - rTop.y) / Math.max(rBot.y - rTop.y, 1e-6);
-  const yL = (irisL.y - lTop.y) / Math.max(lBot.y - lTop.y, 1e-6);
-  const gazeY = Math.min(1, Math.max(0, (yR + yL) / 2));
+  const rOut = lm[33], rIn = lm[133], lIn = lm[362], lOut = lm[263];
+
+  const rMidX = (rOut.x + rIn.x) / 2, rMidY = (rOut.y + rIn.y) / 2;
+  const lMidX = (lOut.x + lIn.x) / 2, lMidY = (lOut.y + lIn.y) / 2;
+  const rW = Math.abs(rOut.x - rIn.x), lW = Math.abs(lOut.x - lIn.x);
+
+  const offR = (irisR.y - rMidY) / Math.max(rW, 1e-6);
+  const offL = (irisL.y - lMidY) / Math.max(lW, 1e-6);
+  const gazeY = (offR + offL) / 2;  // signed: >0 iris below corner line ≈ looking down
 
   const nose = lm[1];
-  const eyeMidY = (lm[33].y + lm[263].y) / 2;
-  const pitch = nose.y - eyeMidY;
+  const eyeMidY = (rMidY + lMidY) / 2;
+  const interOcular = Math.hypot(lMidX - rMidX, lMidY - rMidY);
+  const pitch = (nose.y - eyeMidY) / Math.max(interOcular, 1e-6);
   const headForward = pitch < GAZE_HEAD_PITCH_MAX;
 
   return { gazeY, headForward, pitch };
