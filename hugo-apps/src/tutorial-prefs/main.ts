@@ -4,11 +4,16 @@ import CameraBadge from './CameraBadge.vue';
 import {
   getPref, setPref, getSession, removeSession,
   isFirstRun, consumeFirstRun,
-  setHeaderPref, setFooterPref, setBreadcrumbsPref, setFeedbackPref
+  setHeaderPref, setFooterPref, setBreadcrumbsPref, setFeedbackPref,
+  setTextSize as setTextSizePref, setReadWidth as setReadWidthPref,
+  setCodeSize as setCodeSizePref, setCodeWrap as setCodeWrapPref,
+  setCopyClean as setCopyCleanPref, setImgSize as setImgSizePref,
+  setImgCollapse as setImgCollapsePref, setReduceMotion as setReduceMotionPref,
+  setReadableFont as setReadableFontPref
 } from './prefs-store';
 import { readPrefs, computeEffective, isShortViewport, applyDisplayChrome, installAutoHide } from './display-chrome';
 import { detectSupport } from './browser-support';
-import { PAGE_KIND_TUTORIAL, KEY_READER, type FeatureId, type HeaderMode } from './constants';
+import { PAGE_KIND_TUTORIAL, KEY_READER, type FeatureId, type HeaderMode, type SizeStep, type ReadWidth } from './constants';
 import '@ui5/webcomponents/dist/SegmentedButton.js';
 import '@ui5/webcomponents/dist/SegmentedButtonItem.js';
 
@@ -27,6 +32,9 @@ interface State {
   footerAutohide: boolean;
   breadcrumbsOn: boolean;
   feedbackOn: boolean;
+  textSize: SizeStep; readWidth: ReadWidth; codeSize: SizeStep;
+  codeWrap: boolean; copyClean: boolean; imgSize: SizeStep;
+  imgCollapse: boolean; reduceMotion: boolean; readableFont: boolean;
 }
 
 // Lazy-loaded overlay handle (only when ?debug-cam is present). Held at
@@ -161,6 +169,16 @@ function toggleFeedback(state: State) {
   applyDisplayChrome();
 }
 
+function setTextSize(state: State, v: SizeStep) { setTextSizePref(v); state.textSize = v; applyDisplayChrome(); }
+function setReadWidth(state: State, v: ReadWidth) { setReadWidthPref(v); state.readWidth = v; applyDisplayChrome(); }
+function setCodeSize(state: State, v: SizeStep) { setCodeSizePref(v); state.codeSize = v; applyDisplayChrome(); }
+function toggleCodeWrap(state: State) { const n = state.codeWrap ? 'off' : 'on'; setCodeWrapPref(n); state.codeWrap = n === 'on'; applyDisplayChrome(); }
+function toggleCopyClean(state: State) { const n = state.copyClean ? 'off' : 'on'; setCopyCleanPref(n); state.copyClean = n === 'on'; /* no attr — read at copy time */ }
+function setImgSize(state: State, v: SizeStep) { setImgSizePref(v); state.imgSize = v; applyDisplayChrome(); }
+function toggleImgCollapse(state: State) { const n = state.imgCollapse ? 'off' : 'on'; setImgCollapsePref(n); state.imgCollapse = n === 'on'; applyDisplayChrome(); }
+function toggleReduceMotion(state: State) { const n = state.reduceMotion ? 'off' : 'on'; setReduceMotionPref(n); state.reduceMotion = n === 'on'; applyDisplayChrome(); }
+function toggleReadableFont(state: State) { const n = state.readableFont ? 'off' : 'on'; setReadableFontPref(n); state.readableFont = n === 'on'; applyDisplayChrome(); }
+
 function init() {
   const trigger = document.getElementById('sb-prefs');
   if (!trigger) return;
@@ -181,7 +199,11 @@ function init() {
     headerMode: eff0.header,
     footerAutohide: eff0.footer === 'autohide',
     breadcrumbsOn: eff0.breadcrumbs === 'on',
-    feedbackOn: eff0.feedback === 'on'
+    feedbackOn: eff0.feedback === 'on',
+    textSize: eff0.textSize, readWidth: eff0.readWidth, codeSize: eff0.codeSize,
+    codeWrap: eff0.codeWrap === 'on', copyClean: eff0.copyClean === 'on',
+    imgSize: eff0.imgSize, imgCollapse: eff0.imgCollapse === 'on',
+    reduceMotion: eff0.reduceMotion === 'on', readableFont: eff0.readableFont === 'on'
   });
 
   const popoverHost = document.createElement('div');
@@ -213,6 +235,15 @@ function init() {
       footerAutohide: state.footerAutohide,
       breadcrumbsOn: state.breadcrumbsOn,
       feedbackOn: state.feedbackOn,
+      textSize: state.textSize,
+      readWidth: state.readWidth,
+      codeSize: state.codeSize,
+      codeWrap: state.codeWrap,
+      copyClean: state.copyClean,
+      imgSize: state.imgSize,
+      imgCollapse: state.imgCollapse,
+      reduceMotion: state.reduceMotion,
+      readableFont: state.readableFont,
       'onToggle-reader': () => toggleReader(state),
       'onToggle-pref': (f: FeatureId) => togglePref(state, f),
       onStart: (f: FeatureId) => f === 'eye' ? startEye(state) : startHand(state),
@@ -220,7 +251,16 @@ function init() {
       'onSet-header': (m: HeaderMode) => setHeader(state, m),
       'onToggle-footer': () => toggleFooter(state),
       'onToggle-breadcrumbs': () => toggleBreadcrumbs(state),
-      'onToggle-feedback': () => toggleFeedback(state)
+      'onToggle-feedback': () => toggleFeedback(state),
+      'onSet-text-size': (v: SizeStep) => setTextSize(state, v),
+      'onSet-read-width': (v: ReadWidth) => setReadWidth(state, v),
+      'onSet-code-size': (v: SizeStep) => setCodeSize(state, v),
+      'onToggle-code-wrap': () => toggleCodeWrap(state),
+      'onToggle-copy-clean': () => toggleCopyClean(state),
+      'onSet-img-size': (v: SizeStep) => setImgSize(state, v),
+      'onToggle-img-collapse': () => toggleImgCollapse(state),
+      'onToggle-reduce-motion': () => toggleReduceMotion(state),
+      'onToggle-readable-font': () => toggleReadableFont(state)
     })
   }).mount(popoverHost);
 
