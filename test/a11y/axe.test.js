@@ -70,7 +70,15 @@ describe.skipIf(!BASE_URL)('axe-core a11y regression gate', () => {
           scanResult.error = `HTTP ${scanResult.status}`;
         } else {
           await page.waitForTimeout(SETTLE_MS);
-          const axe = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+          const axe = await new AxeBuilder({ page })
+            // #consent_blackbar is the TrustArc consent banner — third-party
+            // injected markup we do not own or control. It ships an invalid ARIA
+            // attribute (aria-model, a typo for aria-modal) that axe flags as a
+            // critical on EVERY page. Excluding it keeps the gate measuring OUR
+            // code; the vendor defect is theirs to fix.
+            .exclude('#consent_blackbar')
+            .withTags(AXE_TAGS)
+            .analyze();
           scanResult.violations = axe.violations;
           scanResult.passes = axe.passes.length;
         }

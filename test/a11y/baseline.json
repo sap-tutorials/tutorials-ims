@@ -6,44 +6,79 @@
   "_capturedOn": "2026-08-22",
   "pages": {
     "/": {
-      "critical": 1,
+      "critical": 0,
       "serious": 0,
-      "rules": ["aria-valid-attr", "image-redundant-alt", "region"]
+      "rules": [
+        "image-redundant-alt",
+        "region"
+      ]
     },
     "/browse/": {
-      "critical": 1,
+      "critical": 0,
       "serious": 0,
-      "rules": ["aria-valid-attr", "landmark-banner-is-top-level", "landmark-main-is-top-level", "landmark-no-duplicate-banner", "landmark-no-duplicate-main", "landmark-unique", "region"]
+      "rules": [
+        "landmark-banner-is-top-level",
+        "landmark-main-is-top-level",
+        "landmark-no-duplicate-banner",
+        "landmark-no-duplicate-main",
+        "landmark-unique",
+        "region"
+      ]
     },
     "/topics/": {
-      "critical": 1,
+      "critical": 0,
       "serious": 0,
-      "rules": ["aria-valid-attr", "region"]
+      "rules": [
+        "region"
+      ]
     },
     "/concepts/cap-cds-domain-modeling/": {
-      "critical": 1,
+      "critical": 0,
       "serious": 0,
-      "rules": ["aria-valid-attr", "region"]
+      "rules": [
+        "region"
+      ]
     },
     "/tutorials/abap-cloud-ui-from-interface/": {
-      "critical": 1,
+      "critical": 0,
       "serious": 1,
-      "rules": ["aria-valid-attr", "color-contrast", "landmark-main-is-top-level", "landmark-no-duplicate-main", "landmark-unique", "region"]
+      "rules": [
+        "color-contrast",
+        "landmark-main-is-top-level",
+        "landmark-no-duplicate-main",
+        "landmark-unique",
+        "region"
+      ]
     },
     "/tutorials/abap-create-basic-app/": {
-      "critical": 1,
+      "critical": 0,
       "serious": 0,
-      "rules": ["aria-valid-attr", "landmark-main-is-top-level", "landmark-no-duplicate-main", "landmark-unique", "region"]
+      "rules": [
+        "landmark-main-is-top-level",
+        "landmark-no-duplicate-main",
+        "landmark-unique",
+        "region"
+      ]
     },
     "/tags/": {
-      "critical": 1,
+      "critical": 0,
       "serious": 0,
-      "rules": ["aria-valid-attr", "region"]
+      "rules": [
+        "region"
+      ]
     },
     "/developer-advocates/": {
-      "critical": 1,
+      "critical": 0,
       "serious": 2,
-      "rules": ["aria-valid-attr", "heading-order", "landmark-main-is-top-level", "landmark-no-duplicate-main", "landmark-unique", "nested-interactive", "region", "scrollable-region-focusable"]
+      "rules": [
+        "heading-order",
+        "landmark-main-is-top-level",
+        "landmark-no-duplicate-main",
+        "landmark-unique",
+        "nested-interactive",
+        "region",
+        "scrollable-region-focusable"
+      ]
     }
   }
 }
