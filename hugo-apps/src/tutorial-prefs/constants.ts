@@ -45,4 +45,38 @@ export const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
 
 export const PAGE_KIND_TUTORIAL = 'tutorial';
 
+// --- Calibration (2026-08-22) -------------------------------------------
+export const CAL_PROFILE_VERSION = 1;
+export const CAL_DURATION_MS = 5000;
+export const CAL_MIN_SAMPLES = 20;
+
+// Eye: threshold sits this far into the captured [p5, p95] gaze envelope.
+export const CAL_EYE_TRIGGER_FRACTION = 0.7;
+export const CAL_EYE_MIN_SPREAD = 0.05;      // min p95-p5 gaze spread to accept (new gaze units)
+
+// Hand: derived thresholds = factor * observed, clamped to sane bounds.
+export const CAL_HAND_DX_FACTOR = 0.6;
+export const CAL_HAND_V_FACTOR = 0.5;
+export const CAL_HAND_MIN_REVERSALS = 2;
+export const CAL_HAND_MIN_AMPLITUDE = 0.10;  // min p95-p5 palm-x swing to accept
+export const CAL_HAND_DX_MIN = 0.12;
+export const CAL_HAND_DX_MAX = 0.45;
+export const CAL_HAND_V_MIN = 0.20;
+export const CAL_HAND_V_MAX = 1.50;
+
+// Detection-quality knobs (workstreams A/B).
+export const GAZE_EMA_ALPHA = 0.4;
+export const GAZE_DWELL_GRACE_MS = 150;
+export const PALM_MIN_FINGERS = 3;           // of 4
+export const SWIPE_WINDOW_MS = 250;
+
+export const KEY_CAL_EYE = 'tut.pref.eyeTrack.cal';
+export const KEY_CAL_HAND = 'tut.pref.handGest.cal';
+export const KEY_CAL_PROMPTED_EYE = 'tut.pref.eyeTrack.cal.prompted';
+export const KEY_CAL_PROMPTED_HAND = 'tut.pref.handGest.cal.prompted';
+
+export interface EyeProfile { v: number; gazeMin: number; gazeMax: number; }
+export interface HandProfile { v: number; dxFraction: number; minVelocity: number; }
+export type CalProfile = EyeProfile | HandProfile;
+
 export type FeatureId = 'eye' | 'hand';
