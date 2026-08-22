@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripPrompts } from './copy-clean';
+import { stripPrompts } from '../../hugo/assets/js/copy-clean';
 
 describe('stripPrompts', () => {
   it('strips a single leading $ prompt', () => {
