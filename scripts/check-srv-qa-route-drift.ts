@@ -141,6 +141,20 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'not an author-preview endpoint. The QA publish flow (publish-content.ts --channel qa) ' +
     'never POSTs images, and srv-qa GET image-source self-heals via ingestImage directly ' +
     'without this route. Re-evaluate if QA gains an image backfill flow.',
+  'GET /content/attachment-source':
+    'Attachment object-store pipeline (#1931) — streams stored tutorial attachments so the ' +
+    'approuter can proxy attachment download links. DARK-LAUNCHED: no approuter route points ' +
+    'at this endpoint on either channel yet (served HTML still emits relative attachment URLs), ' +
+    'and the QA approuter wires no attachment-proxy route. Mirroring now would pull ' +
+    'attachment-store/attachment-source-handler deps into the srv-qa cp list for an ' +
+    'unreachable surface. Re-evaluate QA parity when the attachment proxy goes live and ' +
+    'gains an approuter route.',
+  'POST /content/attachment':
+    'Attachment object-store bytes-in ingest (#1931) — CI and backfill POST raw attachment ' +
+    'bytes here during publish so the srv stores originals in BTP Object Store. CI-only prod ' +
+    'content maintenance, same rationale as POST /content/image: not an author-preview ' +
+    'endpoint. The QA publish flow never POSTs attachments, and srv-qa has no attachment ' +
+    'backfill flow. Re-evaluate if QA gains an attachment ingest path.',
 };
 
 /**

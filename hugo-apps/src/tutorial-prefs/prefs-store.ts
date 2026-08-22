@@ -3,8 +3,11 @@ import {
   KEY_FIRSTRUN_EYE, KEY_FIRSTRUN_HAND,
   KEY_CAL_EYE, KEY_CAL_HAND, KEY_CAL_PROMPTED_EYE, KEY_CAL_PROMPTED_HAND,
   CAL_PROFILE_VERSION,
-  type FeatureId,
-  type CalProfile
+  KEY_PREF_HEADER, KEY_PREF_FOOTER, KEY_PREF_BREADCRUMBS, KEY_PREF_FEEDBACK,
+  KEY_PREF_TEXT_SIZE, KEY_PREF_READ_WIDTH, KEY_PREF_CODE_SIZE, KEY_PREF_CODE_WRAP,
+  KEY_PREF_COPY_CLEAN, KEY_PREF_IMG_SIZE, KEY_PREF_IMG_COLLAPSE, KEY_PREF_REDUCE_MOTION, KEY_PREF_READABLE_FONT,
+  type FeatureId, type CalProfile,
+  type HeaderMode, type FooterMode, type OnOff, type SizeStep, type ReadWidth
 } from './constants';
 
 type Toggle = 'on' | 'off';
@@ -76,3 +79,64 @@ export function isCalPrompted(f: FeatureId): boolean {
 export function markCalPrompted(f: FeatureId): void {
   safeSet(safeLocal(), CAL_PROMPTED_KEY[f], '1');
 }
+
+const HEADER_MODES: HeaderMode[] = ['locked', 'thinbar', 'autohide'];
+const FOOTER_MODES: FooterMode[] = ['shown', 'autohide'];
+
+export function getHeaderPref(): HeaderMode | null {
+  const v = safeLocal()?.getItem(KEY_PREF_HEADER);
+  return (v && (HEADER_MODES as string[]).includes(v)) ? (v as HeaderMode) : null;
+}
+export function setHeaderPref(v: HeaderMode): void { safeSet(safeLocal(), KEY_PREF_HEADER, v); }
+
+export function getFooterPref(): FooterMode | null {
+  const v = safeLocal()?.getItem(KEY_PREF_FOOTER);
+  return (v && (FOOTER_MODES as string[]).includes(v)) ? (v as FooterMode) : null;
+}
+export function setFooterPref(v: FooterMode): void { safeSet(safeLocal(), KEY_PREF_FOOTER, v); }
+
+export function getBreadcrumbsPref(): OnOff { return safeLocal()?.getItem(KEY_PREF_BREADCRUMBS) === 'off' ? 'off' : 'on'; }
+export function setBreadcrumbsPref(v: OnOff): void { safeSet(safeLocal(), KEY_PREF_BREADCRUMBS, v); }
+
+export function getFeedbackPref(): OnOff { return safeLocal()?.getItem(KEY_PREF_FEEDBACK) === 'off' ? 'off' : 'on'; }
+export function setFeedbackPref(v: OnOff): void { safeSet(safeLocal(), KEY_PREF_FEEDBACK, v); }
+
+const SIZE_STEPS: SizeStep[] = ['s', 'm', 'l'];
+function readSize(key: string): SizeStep {
+  const v = safeLocal()?.getItem(key);
+  return (v && (SIZE_STEPS as string[]).includes(v)) ? (v as SizeStep) : 'm';
+}
+function readOnOff(key: string): OnOff { return safeLocal()?.getItem(key) === 'on' ? 'on' : 'off'; }
+
+export function getTextSize(): SizeStep { return readSize(KEY_PREF_TEXT_SIZE); }
+export function setTextSize(v: SizeStep): void { safeSet(safeLocal(), KEY_PREF_TEXT_SIZE, v); }
+
+export function getReadWidth(): ReadWidth {
+  return safeLocal()?.getItem(KEY_PREF_READ_WIDTH) === 'narrow' ? 'narrow' : 'full';
+}
+export function setReadWidth(v: ReadWidth): void { safeSet(safeLocal(), KEY_PREF_READ_WIDTH, v); }
+
+export function getCodeSize(): SizeStep { return readSize(KEY_PREF_CODE_SIZE); }
+export function setCodeSize(v: SizeStep): void { safeSet(safeLocal(), KEY_PREF_CODE_SIZE, v); }
+
+export function getCodeWrap(): OnOff { return readOnOff(KEY_PREF_CODE_WRAP); }
+export function setCodeWrap(v: OnOff): void { safeSet(safeLocal(), KEY_PREF_CODE_WRAP, v); }
+
+export function getCopyClean(): OnOff { return readOnOff(KEY_PREF_COPY_CLEAN); }
+export function setCopyClean(v: OnOff): void { safeSet(safeLocal(), KEY_PREF_COPY_CLEAN, v); }
+
+// imgSize defaults to 'l' (natural), so default rendering is unchanged.
+export function getImgSize(): SizeStep {
+  const v = safeLocal()?.getItem(KEY_PREF_IMG_SIZE);
+  return (v === 's' || v === 'm' || v === 'l') ? v : 'l';
+}
+export function setImgSize(v: SizeStep): void { safeSet(safeLocal(), KEY_PREF_IMG_SIZE, v); }
+
+export function getImgCollapse(): OnOff { return readOnOff(KEY_PREF_IMG_COLLAPSE); }
+export function setImgCollapse(v: OnOff): void { safeSet(safeLocal(), KEY_PREF_IMG_COLLAPSE, v); }
+
+export function getReduceMotion(): OnOff { return readOnOff(KEY_PREF_REDUCE_MOTION); }
+export function setReduceMotion(v: OnOff): void { safeSet(safeLocal(), KEY_PREF_REDUCE_MOTION, v); }
+
+export function getReadableFont(): OnOff { return readOnOff(KEY_PREF_READABLE_FONT); }
+export function setReadableFont(v: OnOff): void { safeSet(safeLocal(), KEY_PREF_READABLE_FONT, v); }

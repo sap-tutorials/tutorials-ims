@@ -17,12 +17,12 @@ describe('backgrounds module', () => {
 
   it('ships the five themed scenes', () => {
     expect(BACKGROUNDS.map((b) => b.id)).toEqual([
-      'pumpkin-patch', 'teched-stage', 'terminal', 'autumn-gradient', 'starfield',
+      'key-visual-josh', 'key-visual-nora', 'terminal', 'speaker-backdrop-1', 'speaker-backdrop-2',
     ])
   })
 
   it('builds a per-scene PNG url under the backgrounds/ folder', () => {
-    expect(backgroundUrl('/images/devtoberfest/selfie', 'pumpkin-patch'))
-      .toBe('/images/devtoberfest/selfie/backgrounds/pumpkin-patch.png')
+    expect(backgroundUrl('/images/devtoberfest/selfie', 'key-visual-option-josh-16-9'))
+      .toBe('/images/devtoberfest/selfie/backgrounds/key-visual-option-josh-16-9.png')
   })
 })

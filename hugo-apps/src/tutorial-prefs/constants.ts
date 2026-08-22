@@ -80,3 +80,33 @@ export interface HandProfile { v: number; dxFraction: number; minVelocity: numbe
 export type CalProfile = EyeProfile | HandProfile;
 
 export type FeatureId = 'eye' | 'hand';
+
+// Display-chrome preferences (#1966). Individual keys mirror the tut.pref.* convention.
+export const KEY_PREF_HEADER = 'tut.pref.header';
+export const KEY_PREF_FOOTER = 'tut.pref.footer';
+export const KEY_PREF_BREADCRUMBS = 'tut.pref.breadcrumbs';
+export const KEY_PREF_FEEDBACK = 'tut.pref.feedback';
+
+// Below this CSS-px viewport height, header→thinbar + footer→autohide by default
+// (unless the user set an explicit pref). CSS px shrink under OS scaling / browser
+// zoom, so high-DPI laptops cross this automatically. Mirrored (with a comment) in
+// the head.html pre-paint snippet, which cannot import this module.
+export const SHORT_VIEWPORT_MAX_HEIGHT = 900;
+
+export type HeaderMode = 'locked' | 'thinbar' | 'autohide';
+export type FooterMode = 'shown' | 'autohide';
+export type OnOff = 'on' | 'off';
+
+// Reading preferences batch 2 (#1966 follow-up). Same tut.pref.* convention.
+export const KEY_PREF_TEXT_SIZE = 'tut.pref.textSize';
+export const KEY_PREF_READ_WIDTH = 'tut.pref.readWidth';
+export const KEY_PREF_CODE_SIZE = 'tut.pref.codeSize';
+export const KEY_PREF_CODE_WRAP = 'tut.pref.codeWrap';
+export const KEY_PREF_COPY_CLEAN = 'tut.pref.copyClean';
+export const KEY_PREF_IMG_SIZE = 'tut.pref.imgSize';
+export const KEY_PREF_IMG_COLLAPSE = 'tut.pref.imgCollapse';
+export const KEY_PREF_REDUCE_MOTION = 'tut.pref.reduceMotion';
+export const KEY_PREF_READABLE_FONT = 'tut.pref.readableFont';
+
+export type SizeStep = 's' | 'm' | 'l';
+export type ReadWidth = 'full' | 'narrow';

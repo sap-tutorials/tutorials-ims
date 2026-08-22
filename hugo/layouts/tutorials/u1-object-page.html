@@ -21,6 +21,15 @@
     color: var(--sapObjectHeader_TitleTextColor, var(--sapTextColor));
     line-height: 1.25;
   }
+  /* Title + Print action on one row; Print sits top-right of the header. */
+  .op-header__titlerow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .op-header__titlerow .op-header__title { flex: 1 1 auto; }
+  .op-header__titlerow .tutorial-print-btn { flex: 0 0 auto; }
   .op-header__description {
     margin: 0 0 0.75rem;
     color: var(--sapObjectHeader_TextColor, var(--sapContent_LabelColor));
@@ -230,7 +239,13 @@
 
 <div class="op-page">
   <header class="op-header">
-    <h1 class="op-header__title tutorial-hero-title">{{ .Title }}{{ if in .Params.tags "tutorial>license" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
+    <div class="op-header__titlerow">
+      <h1 class="op-header__title tutorial-hero-title">{{ .Title }}{{ if in .Params.tags "tutorial>license" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
+      <button type="button" class="tutorial-print-btn" data-action="print-tutorial" aria-label="Print this tutorial" title="Print / Save as PDF">
+        <svg class="tutorial-print-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 1h8v3h1.5A1.5 1.5 0 0 1 15 5.5V11h-3v4H4v-4H1V5.5A1.5 1.5 0 0 1 2.5 4H4V1zm1 3h6V2H5v2zm0 7v3h6v-3H5zm7.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" fill="currentColor"/></svg>
+        <span>Print</span>
+      </button>
+    </div>
     {{ with .Params.description }}<p class="op-header__description">{{ . }}</p>{{ end }}
     <div class="op-header__chips">
       {{ with .Params.level }}<a class="op-chip op-chip--link" href="{{ "/tutorials/" | relURL }}?level={{ . | lower | urlquery }}" aria-label="Filter tutorials by experience: {{ . }}"><span class="op-chip__icon">🎓</span>{{ . }}</a>{{ end }}

@@ -46,6 +46,23 @@ type FeaturedTopicsPayload {
   snapshot   : many FeaturedTopicSlide;
 }
 
+type TopicClusterVolatileItem {
+  kind  : String;
+  slug  : String;
+  title : String;
+  href  : String;
+  isNew : Boolean;
+}
+type TopicClusterVolatileCluster {
+  communityFingerprint : String;
+  items                : many TopicClusterVolatileItem;
+}
+type TopicClusterVolatilePayload {
+  computedAt : Timestamp;
+  etag       : String;
+  clusters   : many TopicClusterVolatileCluster;
+}
+
 @requires: 'any'
 // #1105 fix: object-form @protocol so ONLY OData inherits `/homepage`. A
 // top-level `@path` + array `@protocol` collapsed all adapters onto `/homepage`
@@ -160,6 +177,10 @@ service HomepageService {
   // (#1032) Featured missions carousel snapshot. Public — no auth. 60s cache;
   // ETag so the Vue island can hydrate cheaply.
   function featuredTopics() returns FeaturedTopicsPayload;
+
+  // Volatile tier (blogs/videos/events) for the homepage topic-cluster band.
+  // Public — no auth. 60s cache; ETag so the island hydrates cheaply.
+  function topicClusterVolatile() returns TopicClusterVolatilePayload;
 
   // (#1782) Time-fenced Top Tutorials ranking. Public — no auth. 60s cache; ETag.
   // Returns all three windows (90/180/360) in one payload so the island's

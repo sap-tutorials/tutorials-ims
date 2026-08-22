@@ -39,21 +39,132 @@
   <section aria-labelledby="search-tutorials" id="navigator-section" class="home-navigator">
     <h1 id="search-tutorials" class="visually-hidden">Search and filter SAP developer tutorials</h1>
     <div id="tutorial-navigator"{{ if site.Params.qa }} data-search-base="/qa-search" data-nav-base="/tutorials-qa" data-href-base="/tutorials-qa" data-client-search="true"{{ end }}>
-      {{- /* SSR initial card grid. TutorialNavigator.vue mounts on
-             #tutorial-navigator (the outer container) and re-renders its full
-             template tree on mount, replacing this preview. The static markup
-             here exists only to eliminate the flash-of-empty-grid before the
-             Vue island bootstraps. Reuses the same partials as /browse/ to keep
-             card markup in lockstep across both surfaces. */ -}}
-      {{- if gt (len $firstPageItems) 0 -}}
-        <section class="navigator-grid navigator-grid--ssr-preview" aria-label="Initial tutorial preview">
-          {{- range $item := $firstPageItems -}}
-            {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
-            {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
-            {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
-          {{- end -}}
+      {{- /* SSR chrome + card grid (option 1a). TutorialNavigator.vue mounts on
+             #tutorial-navigator and re-renders its full template tree on mount,
+             REPLACING everything below. Previously only the card grid was SSR'd,
+             so the hero + search + open filter panel + toolbar that Vue draws
+             ABOVE the grid popped in on mount and shoved the first card down
+             672px (desktop) / 1434px (mobile) — a visible flash. We now SSR that
+             same chrome, mirroring TutorialNavigator.vue's markup + class names,
+             styled by the render-blocking @navigator-chrome block in home.css
+             (the component's scoped CSS only loads when the island JS runs). So
+             the grid sits at its final offset from first paint and the mounted
+             Vue tree lands in the same place — no shift.
+
+             The chrome here is inert static markup (Vue owns interactivity on
+             mount). Topic/Software Product lists are populated at runtime from
+             /build/navigator, so they render empty here; home.css reserves their
+             capped height (min-height) so the empty SSR panel matches the full
+             mounted panel. Experience/Type are static → real values. Counts are
+             computed from browse.json so crawlers see real totals. */ -}}
+      <div class="tutorial-navigator">
+        <section class="navigator-hero">
+          <div class="hero-inner">
+            <div class="hero-text">
+              <h1>SAP Tutorials</h1>
+              <p>
+                Get hands-on experience with SAP HANA Cloud, ABAP, CAP, SAP Business AI Platform, and so much more.
+                Follow step-by-step tutorials, earn badges, and build real-world applications.
+              </p>
+            </div>
+            <div class="hero-promo">
+              <div class="hero-promo-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--sapBrandColor, #0070f2)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="6"/><path d="M9 14l-2 8 5-3 5 3-2-8"/></svg>
+              </div>
+              <div class="hero-promo-text">
+                <strong>Earn badges as you learn!</strong>
+                <span>Complete a tutorial mission, mark your progress, answer all the questions and earn badges.</span>
+              </div>
+            </div>
+          </div>
         </section>
-      {{- end -}}
+
+        <div class="navigator-body">
+          <section class="navigator-search">
+            <div class="fd-input-group">
+              <input type="text" placeholder="Search for a tutorial" class="fd-input fd-input-group__input" aria-label="Search for a tutorial" />
+              <span class="fd-input-group__addon">
+                <button type="button" class="fd-button fd-button--transparent joule-search-btn" aria-label="Ask Joule about tutorials">
+                  <i class="sap-icon--ai" aria-hidden="true"></i>
+                </button>
+              </span>
+              <span class="fd-input-group__addon fd-input-group__addon--button">
+                <button class="fd-button fd-button--emphasized fd-input-group__button" aria-label="Search">Search</button>
+              </span>
+            </div>
+            <button class="fd-button fd-button--toggled filter-toggle-btn" title="Hide filters" aria-label="Toggle filters">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2h14l-5 6v5l-4 2V8z"/></svg>
+            </button>
+          </section>
+
+          <section class="navigator-filters">
+            <h2 class="filters-heading">Filter Your Search</h2>
+            <div class="filters-grid">
+              <div class="filter-column">
+                <h3 class="filter-title">Topic</h3>
+                <div class="fd-input-group filter-tag-search">
+                  <input type="text" placeholder="Search for a topic" class="fd-input fd-input-group__input" aria-label="Search for a topic" />
+                </div>
+                <div class="filter-list"></div>
+              </div>
+              <div class="filter-column">
+                <h3 class="filter-title">Software Product</h3>
+                <div class="fd-input-group filter-tag-search">
+                  <input type="text" placeholder="Search for a product" class="fd-input fd-input-group__input" aria-label="Search for a product" />
+                </div>
+                <div class="filter-list"></div>
+              </div>
+              <div class="filter-column">
+                <h3 class="filter-title">Experience</h3>
+                <div class="filter-list filter-list--static">
+                  <label class="filter-option"><input type="checkbox" class="filter-checkbox" /><span class="filter-label">Beginner</span></label>
+                  <label class="filter-option"><input type="checkbox" class="filter-checkbox" /><span class="filter-label">Intermediate</span></label>
+                  <label class="filter-option"><input type="checkbox" class="filter-checkbox" /><span class="filter-label">Advanced</span></label>
+                </div>
+              </div>
+              <div class="filter-column">
+                <h3 class="filter-title">Type</h3>
+                <div class="filter-list filter-list--static">
+                  <label class="filter-option"><input type="checkbox" class="filter-checkbox" /><span class="filter-label">Mission</span></label>
+                  <label class="filter-option"><input type="checkbox" class="filter-checkbox" /><span class="filter-label">Group</span></label>
+                  <label class="filter-option"><input type="checkbox" class="filter-checkbox" /><span class="filter-label">Tutorial</span></label>
+                  <hr class="filter-divider" aria-hidden="true" />
+                  <label class="filter-option"><input type="checkbox" class="filter-checkbox" /><span class="filter-label">New tutorials</span></label>
+                  <label class="filter-option"><input type="checkbox" class="filter-checkbox" /><span class="filter-label">No license</span></label>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="navigator-toolbar">
+            <div class="toolbar-counts">
+              <button class="toolbar-count"><span class="toolbar-count-num count-mission">{{ len (where $all "type" "mission") }}</span> Mission</button>
+              <span class="toolbar-sep">&middot;</span>
+              <button class="toolbar-count"><span class="toolbar-count-num count-group">{{ len (where $all "type" "group") }}</span> Group</button>
+              <span class="toolbar-sep">&middot;</span>
+              <button class="toolbar-count"><span class="toolbar-count-num count-tutorial">{{ len (where $all "type" "tutorial") }}</span> Tutorial</button>
+            </div>
+            <label class="navigator-sort browse-sort">
+              Sort:
+              <select name="sort" class="browse-sort__select" aria-label="Sort tutorials">
+                <option value="relevance">Relevance</option>
+              </select>
+            </label>
+          </section>
+
+          {{- /* SSR initial card grid. Reuses the same partials as /browse/ to
+                 keep card markup in lockstep across both surfaces. */ -}}
+          {{- if gt (len $firstPageItems) 0 -}}
+            <section class="navigator-grid navigator-grid--ssr-preview" aria-label="Initial tutorial preview">
+              {{- range $item := $firstPageItems -}}
+                {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
+                {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
+                {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" (dict "item" $item "categories" $categoriesMap) }}{{- end -}}
+              {{- end -}}
+            </section>
+          {{- end -}}
+        </div>
+      </div>
       <noscript>
         <p><a href="/missions/">Browse missions →</a></p>
       </noscript>

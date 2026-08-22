@@ -171,12 +171,16 @@ describe('VideoBand.vue', () => {
     expect(featuredImg.attributes('src')).toBe('https://i.ytimg.com/vi/FEAT/hqdefault.jpg');
     expect(featuredImg.attributes('width')).toBe('480');
     expect(featuredImg.attributes('height')).toBe('270');
+    // Decorative: the link has aria-label + a visible title, so a titled alt
+    // here is redundant (axe image-redundant-alt).
+    expect(featuredImg.attributes('alt')).toBe('');
 
     const recentImg = wrapper.find('img.hb-video-band__recent-thumb');
     expect(recentImg.attributes('src')).toBe('https://i.ytimg.com/vi/REC1/mqdefault.jpg');
     expect(recentImg.attributes('width')).toBe('96');
     expect(recentImg.attributes('height')).toBe('54');
     expect(recentImg.attributes('loading')).toBe('lazy');
+    expect(recentImg.attributes('alt')).toBe('');
     wrapper.unmount();
   });
 });

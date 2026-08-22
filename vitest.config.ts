@@ -167,7 +167,10 @@ export default defineConfig({
         test: {
           name: 'a11y',
           include: ['test/a11y/**/*.test.{js,ts}'],
-          testTimeout: 60000
+          testTimeout: 60000,
+          // afterAll closes the browser + writes the baseline; the default 10s
+          // hookTimeout was tripping and failing the suite (dropping results).
+          hookTimeout: 30000
         }
       },
       {

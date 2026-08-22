@@ -2,6 +2,7 @@
 // Selective imports keep the bundle tight; the Hugo js.Build pipeline tree-shakes the rest.
 // See improvements.md "U0" for scope.
 import { setTheme } from "@ui5/webcomponents-base/dist/config/Theme.js";
+import { attachBoot } from "@ui5/webcomponents-base/dist/Boot.js";
 
 // U14/U15/U16: skeletons, lightbox, and mission-side-nav CSS are delivered via
 // fingerprinted <link>s in hugo/layouts/partials/head.html — NOT imported here.
@@ -299,3 +300,83 @@ if (document.readyState === "loading") {
 
 const observer = new MutationObserver(() => setTheme(currentTheme()));
 observer.observe(root, { attributes: true, attributeFilter: ["data-theme", "class"] });
+
+// ---------------------------------------------------------------------------
+// Boot-order theme heal (dark-mode regression, 2026-08-21).
+//
+// A UI5-using island (e.g. tutorial-prefs, which mounts a Vue popover rendering
+// <ui5-switch>/<ui5-button>/…) can boot UI5 Web Components with the DEFAULT
+// light "sap_horizon" theme BEFORE this bootstrap's setTheme('sap_horizon_dark')
+// above runs. UI5's setTheme then no-ops on its internal `curTheme === theme`
+// guard, so the light base palette stays applied (UI5 injects it into
+// document.adoptedStyleSheets, which outranks our static dark <link> CSS for any
+// token sap-horizon-dark.css does not override) → dark mode renders with light
+// tokens ("off / hard to read") until a manual light→dark toggle forces a real
+// re-application. The setTheme() retries above cannot fix it: once curTheme is
+// the desired value the guard blocks every subsequent same-value call.
+//
+// Whichever island wins the boot race, UI5 boots exactly once. After boot, read
+// the theme UI5 ACTUALLY applied and, if it disagrees with the desired theme,
+// force one real re-application by flipping through the other theme and back
+// (a same-value setTheme is a no-op, so we must go via the other value). The
+// intermediate theme equals the already-wrong applied theme, so this adds no
+// visible flash; in the healthy (correctly-applied) case the check is a no-op.
+
+// Relative luminance of a #hex / rgb() color, 0..1. Theme-agnostic so it
+// survives UI5 palette hex changes across versions (dark bg → low luminance).
+function colorLuminance(c: string): number | null {
+  c = c.trim();
+  let r: number, g: number, b: number;
+  const hex = c.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    r = parseInt(h.slice(0, 2), 16);
+    g = parseInt(h.slice(2, 4), 16);
+    b = parseInt(h.slice(4, 6), 16);
+  } else {
+    const m = c.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+    if (!m) return null;
+    r = +m[1]; g = +m[2]; b = +m[3];
+  }
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
+// Read --sapBackgroundColor from UI5's runtime-injected base-theme stylesheet in
+// document.adoptedStyleSheets. NOT the static <link> CSS — that always reflects
+// the desired theme (via html.dark) and would mask the bug.
+function appliedBaseBackground(): string | null {
+  for (const sheet of (document.adoptedStyleSheets || [])) {
+    try {
+      for (const rule of sheet.cssRules) {
+        const m = rule.cssText.match(/--sapBackgroundColor:\s*([^;]+)/);
+        if (m) return m[1];
+      }
+    } catch {
+      /* constructed/cross-origin sheet — skip */
+    }
+  }
+  return null;
+}
+
+function healThemeIfMisapplied(): void {
+  const desired = currentTheme();
+  const bg = appliedBaseBackground();
+  if (bg === null) return;
+  const lum = colorLuminance(bg);
+  if (lum === null) return;
+  const appliedIsDark = lum < 0.5;
+  const desiredIsDark = desired === "sap_horizon_dark";
+  if (appliedIsDark === desiredIsDark) return; // already correct — no-op, no flash
+  const other = desired === "sap_horizon_dark" ? "sap_horizon" : "sap_horizon_dark";
+  // Chain (not fire-and-forget) so the desired theme's applyTheme runs LAST and
+  // deterministically wins the async property injection.
+  Promise.resolve(setTheme(other)).then(() => setTheme(desired));
+}
+
+attachBoot(() => {
+  healThemeIfMisapplied();
+  // An island may mount + boot-apply a frame or two after boot resolves; re-check.
+  requestAnimationFrame(healThemeIfMisapplied);
+  setTimeout(healThemeIfMisapplied, 250);
+});

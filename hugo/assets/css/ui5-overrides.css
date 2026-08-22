@@ -718,3 +718,96 @@ html[data-embed="none"] .embed-escape {
   border-top: 1px solid var(--sapGroup_TitleBorderColor);
   margin: 0.25rem 0;
 }
+
+/* #1966 — tutorial display preferences. Attribute-driven; the effective values
+   are computed in display-chrome.ts / head.html pre-paint (JS owns the height
+   threshold, so there is no @media query here). Scoped to tutorial pages. */
+
+/* Compact header: keep it sticky but drop description + chip row, tighten padding. */
+html[data-tut-header="thinbar"][data-page-kind="tutorial"] .op-header__description,
+html[data-tut-header="thinbar"][data-page-kind="tutorial"] .op-header__chips {
+  display: none;
+}
+html[data-tut-header="thinbar"][data-page-kind="tutorial"] .op-header {
+  padding-top: 0.5rem;
+  padding-bottom: 0.25rem;
+}
+
+/* Auto-hide header: stays sticky, slides out of the way when data-tut-header-hidden is set. */
+html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header {
+  transition: transform 200ms ease;
+  will-change: transform;
+}
+html[data-tut-header="autohide"][data-tut-header-hidden][data-page-kind="tutorial"] .op-header {
+  transform: translateY(-100%);
+}
+html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header:focus-within {
+  transform: translateY(0);
+}
+
+/* Auto-hide footer: park it off the bottom edge; reveal on hover. Taskbar-style —
+   content is not padded for it; it overlays on reveal. */
+html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  transform: translateY(calc(100% - 8px)); /* 8px reveal strip keeps footer hover-reachable */
+  transition: transform 200ms ease;
+  z-index: 25;
+}
+html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer:hover,
+html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer:focus-within {
+  transform: translateY(0);
+}
+
+/* Hide breadcrumbs / feedback bar when turned off. */
+html[data-tut-breadcrumbs="off"][data-page-kind="tutorial"] .tutorial-breadcrumbs { display: none; }
+html[data-tut-feedback="off"][data-page-kind="tutorial"] #op-discussion { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header,
+  html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer { transition: none; }
+}
+
+/* #1966 batch 2 — reading preferences. All rules tutorial-scoped. */
+html[data-tut-text-size="s"][data-page-kind="tutorial"] .op-body { font-size: 0.9rem; }
+html[data-tut-text-size="l"][data-page-kind="tutorial"] .op-body { font-size: 1.15rem; }
+html[data-tut-read-width="narrow"][data-page-kind="tutorial"] .op-body { max-width: 46rem; margin-inline: auto; }
+html[data-tut-code-size="s"][data-page-kind="tutorial"] .code-block-body code,
+html[data-tut-code-size="s"][data-page-kind="tutorial"] .code-block-body pre { font-size: 0.8rem; }
+html[data-tut-code-size="l"][data-page-kind="tutorial"] .code-block-body code,
+html[data-tut-code-size="l"][data-page-kind="tutorial"] .code-block-body pre { font-size: 1.05rem; }
+html[data-tut-code-wrap="on"][data-page-kind="tutorial"] .code-block-body code,
+html[data-tut-code-wrap="on"][data-page-kind="tutorial"] .code-block-body pre {
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+/* Screenshot inline size cap — aspect ratio preserved by the browser. Lightbox unchanged. */
+html[data-tut-img-size="s"][data-page-kind="tutorial"] .op-body img[data-zoomable] { max-height: 240px; width: auto; }
+html[data-tut-img-size="m"][data-page-kind="tutorial"] .op-body img[data-zoomable] { max-height: 420px; width: auto; }
+/* Collapse-all: slim dimmed strip; still click/keyboard-openable into the lightbox. */
+html[data-tut-img-collapse="on"][data-page-kind="tutorial"] .op-body img[data-zoomable] {
+  max-height: 2.5rem; width: auto; opacity: 0.55; cursor: zoom-in;
+  outline: 1px dashed var(--sapList_BorderColor, #ccc); outline-offset: 2px;
+}
+html[data-tut-img-collapse="on"][data-page-kind="tutorial"] .op-body img[data-zoomable]:hover,
+html[data-tut-img-collapse="on"][data-page-kind="tutorial"] .op-body img[data-zoomable]:focus { opacity: 1; }
+html[data-tut-reduce-motion="on"][data-page-kind="tutorial"] .op-header,
+html[data-tut-reduce-motion="on"][data-page-kind="tutorial"] footer,
+html[data-tut-reduce-motion="on"][data-page-kind="tutorial"] .op-body img[data-zoomable] { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-page-kind="tutorial"] .op-header,
+  html[data-page-kind="tutorial"] footer { transition: none; }
+}
+/* OpenDyslexic (SIL OFL). @font-face alone does NOT fetch the file; the browser
+   downloads it only when the family is matched to rendered text — which happens
+   solely under the readable-font toggle below. Zero cost on the default path. */
+@font-face {
+  font-family: "OpenDyslexic"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/fonts/OpenDyslexic-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "OpenDyslexic"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("/fonts/OpenDyslexic-Bold.woff2") format("woff2");
+}
+html[data-tut-readable-font="on"][data-page-kind="tutorial"] .op-body {
+  font-family: "OpenDyslexic", var(--sapFontFamily, sans-serif);
+}

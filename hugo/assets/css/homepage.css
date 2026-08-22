@@ -774,3 +774,22 @@
 .hp-topic-clusters__links a:hover {
   text-decoration: underline;
 }
+
+/* Per-kind badges on cluster items (#KG multi-source) */
+.hp-tc-badge {
+  display: inline-block;
+  margin-left: .4rem;
+  padding: 0 .4rem;
+  font-size: .7rem;
+  line-height: 1.4;
+  border-radius: .25rem;
+  background: var(--sapNeutralBackground, #eaecee);
+  color: var(--sapContent_LabelColor, #556);
+  vertical-align: middle;
+}
+.hp-tc-badge--tutorial        { background: #e3f0ff; }
+.hp-tc-badge--blog-post       { background: #fde7d6; }
+.hp-tc-badge--video           { background: #fde3e3; }
+.hp-tc-badge--mission,
+.hp-tc-badge--group           { background: #e6f6ea; }
+.hp-tc-badge--community-event { background: #f0e6fb; }
