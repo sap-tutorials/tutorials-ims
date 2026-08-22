@@ -23,6 +23,7 @@
   -webkit-transform-style: preserve-3d; transform-style: preserve-3d; cursor: pointer;
 }
 .adv-flipwrap:hover .adv-card-inner,
+.adv-flipwrap:focus-within .adv-card-inner,
 .adv-flipwrap.is-flipped .adv-card-inner { transform: rotateY(180deg); }
 .adv-face {
   position: absolute; inset: 0;
@@ -125,9 +126,12 @@
 @media (prefers-reduced-motion: reduce) {
   .adv-card-inner { transition: opacity .25s ease; }
   .adv-flipwrap:hover .adv-card-inner,
+  .adv-flipwrap:focus-within .adv-card-inner,
   .adv-flipwrap.is-flipped .adv-card-inner { transform: none; }
   .adv-flipwrap:hover .adv-front,
+  .adv-flipwrap:focus-within .adv-front,
   .adv-flipwrap.is-flipped .adv-front { opacity: 0; pointer-events: none; }
   .adv-flipwrap:hover .adv-back,
+  .adv-flipwrap:focus-within .adv-back,
   .adv-flipwrap.is-flipped .adv-back { opacity: 1; transform: none; }
 }

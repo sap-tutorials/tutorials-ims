@@ -28,14 +28,15 @@ const LABEL: Record<string, string> = {
 </script>
 
 <template>
+  <!-- Not role="button": a button must not contain interactive descendants,
+       and the back face has email/social/profile links (axe nested-interactive).
+       The card flips on hover (pointer) and on click (touch); keyboard users tab
+       straight into the back-face links, and .adv-flipwrap:focus-within reveals
+       the back so focus is never on an invisible control. -->
   <div
     ref="cardEl"
     class="adv-flipwrap"
     :class="{ 'is-flipped': flipped }"
-    role="button"
-    :tabindex="0"
-    :aria-pressed="flipped"
-    :aria-label="`Toggle details for ${advocate.firstName} ${advocate.lastName}`"
     @click="toggle"
   >
     <div class="adv-card-inner">
@@ -47,10 +48,10 @@ const LABEL: Record<string, string> = {
           <InitialsAvatar v-else :first-name="advocate.firstName" :last-name="advocate.lastName" />
         </div>
         <div class="adv-body">
-          <h3 class="adv-name">
+          <h2 class="adv-name">
             {{ advocate.firstName }} {{ advocate.lastName }}
             <span v-if="advocate.pronouns" class="adv-pron">({{ advocate.pronouns }})</span>
-          </h3>
+          </h2>
           <div class="adv-role" v-if="advocate.title">{{ advocate.title }}</div>
           <div class="adv-loc" v-if="advocate.location">{{ advocate.location }} · {{ advocate.region }}</div>
           <div class="adv-chips" v-if="advocate.topics.length">
@@ -60,9 +61,11 @@ const LABEL: Record<string, string> = {
         </div>
       </div>
       <div class="adv-face adv-back">
-        <h3 class="adv-name">{{ advocate.firstName }} {{ advocate.lastName }}</h3>
+        <!-- Not a heading: repeats the front-face h2, so it would add a
+             redundant per-card heading to the document outline. -->
+        <div class="adv-name">{{ advocate.firstName }} {{ advocate.lastName }}</div>
         <div class="adv-role">{{ advocate.title }} · {{ advocate.region }}</div>
-        <div class="adv-bio">{{ advocate.bio || '' }}</div>
+        <div class="adv-bio" tabindex="0">{{ advocate.bio || '' }}</div>
         <!-- Spec 2026-06-25-advocate-user-link-design §3: mailto and
              tutorial-count pill, both gated on the optional fields the
              public /api/advocates emits only when the advocate is linked
