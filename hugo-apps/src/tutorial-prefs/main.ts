@@ -21,7 +21,7 @@ interface State {
   eyeError: string;
   handError: string;
   slow: boolean;
-  cal: { open: boolean; feature: FeatureId; phase: 'intro' | 'capturing' | 'invalid'; progress: number };
+  cal: { open: boolean; feature: FeatureId; phase: 'intro' | 'capturing' | 'invalid'; progress: number; cancelled: boolean };
 }
 
 // Lazy-loaded overlay handle (only when ?debug-cam is present). Held at
@@ -40,7 +40,7 @@ async function ensureDebugReporter(): Promise<((r: any) => void) | null> {
 }
 
 function openCalibration(state: State, f: FeatureId): void {
-  state.cal = { open: true, feature: f, phase: 'intro', progress: 0 };
+  state.cal = { open: true, feature: f, phase: 'intro', progress: 0, cancelled: false };
 }
 
 async function runCalibration(state: State): Promise<void> {
@@ -48,8 +48,11 @@ async function runCalibration(state: State): Promise<void> {
   state.cal.phase = 'capturing'; state.cal.progress = 0;
   try {
     const { runCalibrationCapture } = await import('./calibration');
-    const profile = await runCalibrationCapture(f, { onProgress: (p) => { state.cal.progress = p; } });
-    if (!profile) { state.cal.phase = 'invalid'; return; }
+    const profile = await runCalibrationCapture(f, {
+      onProgress: (p) => { state.cal.progress = p; },
+      isCancelled: () => state.cal.cancelled
+    });
+    if (!profile) { if (!state.cal.cancelled) state.cal.phase = 'invalid'; return; }
     state.cal.open = false;
     if (f === 'eye' && state.eyeRuntime) { stopEye(state); await startEye(state); }
     if (f === 'hand' && state.handRuntime) { stopHand(state); await startHand(state); }
@@ -169,7 +172,7 @@ function init() {
     eyeError: '',
     handError: '',
     slow: false,
-    cal: { open: false, feature: 'eye', phase: 'intro', progress: 0 }
+    cal: { open: false, feature: 'eye', phase: 'intro', progress: 0, cancelled: false }
   });
 
   const popoverHost = document.createElement('div');
@@ -228,7 +231,7 @@ function init() {
           feature: state.cal.feature, phase: state.cal.phase, progress: state.cal.progress,
           onStart: () => runCalibration(state),
           onRetry: () => runCalibration(state),
-          onCancel: () => { state.cal.open = false; }
+          onCancel: () => { state.cal.cancelled = true; state.cal.open = false; }
         })
       : null
   }).mount(calHost);

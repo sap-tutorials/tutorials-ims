@@ -86,4 +86,25 @@ describe('captureSamples', () => {
     expect(out.length).toBeGreaterThan(0);
     expect(progress[progress.length - 1]).toBe(1);        // reached 100%
   });
+
+  it('stops early when isCancelled returns true', async () => {
+    let clock = 0;
+    const now = () => clock;
+    let cancelled = false;
+    const p = captureSamples({
+      now, durationMs: 600, intervalMs: 66,
+      sample: () => 0.5,
+      isCancelled: () => cancelled
+    });
+    // Run 2 normal ticks (samples collected)
+    for (let step = 0; step < 2; step++) { clock += 66; await vi.advanceTimersByTimeAsync(66); }
+    // Cancel before the 3rd tick fires
+    cancelled = true;
+    clock += 66; await vi.advanceTimersByTimeAsync(66);
+    const out = await p;
+    // Tick 3 bailed at the top (before sampling), so only 2 samples
+    expect(out.length).toBe(2);
+    // A full 600ms run would yield ~9 ticks — we stopped far short
+    expect(out.length).toBeLessThan(9);
+  });
 });

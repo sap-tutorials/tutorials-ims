@@ -65,11 +65,13 @@ export async function captureSamples(opts: {
   intervalMs: number;
   sample: () => number | null;
   onProgress?: (fraction: number) => void;
+  isCancelled?: () => boolean;
 }): Promise<Sample[]> {
   return new Promise((resolve) => {
     const start = opts.now();
     const out: Sample[] = [];
     const id = setInterval(() => {
+      if (opts.isCancelled?.()) { clearInterval(id); resolve(out); return; }
       const t = opts.now();
       const elapsed = t - start;
       const v = opts.sample();
@@ -86,7 +88,7 @@ export async function captureSamples(opts: {
 // ?debug-cam; captureSamples + the reducers carry the unit coverage.
 export async function runCalibrationCapture(
   feature: FeatureId,
-  opts: { onProgress?: (f: number) => void } = {}
+  opts: { onProgress?: (f: number) => void; isCancelled?: () => boolean } = {}
 ): Promise<EyeProfile | HandProfile | null> {
   const { FaceLandmarker, HandLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
   const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE);
@@ -122,8 +124,10 @@ export async function runCalibrationCapture(
 
     const samples = await captureSamples({
       now: () => performance.now(), durationMs: CAL_DURATION_MS,
-      intervalMs: FRAME_INTERVAL_MS, sample, onProgress: opts.onProgress
+      intervalMs: FRAME_INTERVAL_MS, sample, onProgress: opts.onProgress,
+      isCancelled: opts.isCancelled
     });
+    if (opts.isCancelled?.()) return null;
     const profile = feature === 'eye' ? computeEyeProfile(samples) : computeHandProfile(samples);
     if (profile) setCal(feature, profile);
     return profile;
