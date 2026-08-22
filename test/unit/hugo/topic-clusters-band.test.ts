@@ -41,12 +41,12 @@ describe('topic-clusters-band partial (#1170)', () => {
     expect(tpl).toMatch(/<section\b[^>]*\bhp-topic-clusters\b/)
   })
 
-  it('renders tutorial links with href="{{ .url }}" and a title-or-slug label (#1794)', () => {
-    expect(tpl).toContain('href="{{ .url }}"')
+  it('renders item links with href="{{ .href }}" and a title-or-slug label (#1794, #KG)', () => {
+    // #KG: items[] use .href (unified field). Back-compat fallback maps .url→.href
+    // when building items from legacy .tutorials. The anchor uses .href throughout.
+    expect(tpl).toContain('href="{{ .href }}"')
     // #1794: link text is a computed $label that prefers .title but falls back
-    // to .slug for tutorials with an empty title, so the literal `{{ .title }}`
-    // no longer appears. Assert the link renders $label and that $label derives
-    // from .title with a .slug fallback.
+    // to .slug for items with an empty title.
     expect(tpl).toContain('{{ $label }}')
     expect(tpl).toMatch(/\$label\s*:=\s*or\s+\(trim\s+\(\.title/)
     expect(tpl).toMatch(/\.slug\s*\|\s*default/)
@@ -59,5 +59,36 @@ describe('topic-clusters-band partial (#1170)', () => {
   it('links to the full /topics/ front door', () => {
     expect(tpl).toContain('/topics/')
     expect(tpl).toMatch(/See all topics|Explore all topics|View all/i)
+  })
+
+  // --- #KG multi-source expansion (Task 6) ---
+
+  it('emits data-app="topic-clusters-band" and data-etag on the section for island hydration (#KG)', () => {
+    expect(tpl).toContain('data-app="topic-clusters-band"')
+    expect(tpl).toContain('data-etag=')
+  })
+
+  it('renders per-kind badge chips with hp-tc-badge class on each item (#KG)', () => {
+    // Template emits `hp-tc-badge hp-tc-badge--{{ .kind }}` — the literal prefix
+    // is static; the kind suffix is injected at render time.
+    expect(tpl).toContain('hp-tc-badge hp-tc-badge--')
+  })
+
+  it('emits data-kind and data-slug attributes on each <li> for island targeting (#KG)', () => {
+    expect(tpl).toContain('data-kind="{{ .kind }}"')
+    expect(tpl).toContain('data-slug="{{ .slug }}"')
+  })
+
+  it('emits data-fp on each cluster card for island targeting (#KG)', () => {
+    expect(tpl).toContain('data-fp="{{ .communityFingerprint }}"')
+  })
+
+  it('still emits zero DOM when clusters is empty — guard preserved with no items fallback (#KG)', () => {
+    // Back-compat: when items[] is absent, fall back to .tutorials list.
+    // Verify the guard is still present (all content inside it) and items fallback exists.
+    expect(tpl).toMatch(/\{\{-?\s*if\s+gt\s+\(len\s+\$clusters\)\s+0\s*-?\}\}/)
+    expect(tpl).toContain('.tutorials')
+    // items fallback uses .items | default slice
+    expect(tpl).toContain('.items | default slice')
   })
 })
