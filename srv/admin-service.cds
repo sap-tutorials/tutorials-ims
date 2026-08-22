@@ -1,5 +1,6 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 using { com.sap.developers.ims.external as external } from '../db/external-content';
+using from '../db/tutorial-freshness';
 using from '../db/knowledge-graph-communities';
 using from '../db/knowledge-graph-topic-clusters';
 using from '../db/knowledge-graph-ondemand';
@@ -101,7 +102,12 @@ service AdminService {
     virtual qaPreviewUrl     : String,
     virtual qaPreviewLabel   : String,
     virtual mainPreviewUrl   : String,
-    virtual mainPreviewLabel : String
+    virtual mainPreviewLabel : String,
+    // Freshness detector (spec 2026-08-22)
+    freshnessFindings      : Association to many FreshnessFinding on freshnessFindings.tutorial.ID = ID,
+    virtual openHighCount      : Integer,   // populated in after('READ','Tutorials') — Task 8
+    virtual freshnessStatus    : String,
+    virtual freshnessCriticality : Integer,
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
@@ -119,6 +125,9 @@ service AdminService {
   entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String,
     virtual qaPreviewUrl : String, virtual qaPreviewLabel : String, virtual mainPreviewUrl : String, virtual mainPreviewLabel : String };
   entity Steps as projection on ims.Steps;
+  // Freshness detector (spec 2026-08-22)
+  entity FreshnessReport  as projection on ims.FreshnessReport;
+  entity FreshnessFinding as projection on ims.FreshnessFinding;
   // Issue #644 — Puzzles is a TaskBase peer of Tutorials/Missions/Groups,
   // exposed for admin CRUD so puzzles can be authored and curated.
   entity Puzzles as projection on ims.Puzzles { *, cast(legacyId as String) as legacyIdStr : String };
