@@ -16,6 +16,7 @@
 // Spec: docs/superpowers/specs/2026-06-27-639-developer-homepage-design.md
 
 import cds from '@sap/cds';
+import { createHash } from 'node:crypto';
 import { fetchSapDevsVideos } from './lib/youtube-fetcher.js';
 import { fetchRssItems } from './lib/homepage-rss-fetcher.js';
 import { resolveSecret } from './lib/secret-resolver.js';
@@ -25,6 +26,9 @@ import { resolveUserSapId } from './lib/resolve-db-user.js';
 import * as metrics from './lib/metrics.js';
 import { readSnapshotForFeed } from './lib/featured-topics-snapshot.js';
 import { readSnapshotForFeed as readTtSnapshotForFeed } from './lib/top-tutorials-snapshot.js';
+import { buildTopicClustersPayload } from './lib/build-topic-clusters.js';
+import { resolveClusterContent } from './lib/build-topic-cluster-content.js';
+import { rankAndCap, PER_TYPE_CAPS, TOTAL_ITEMS_PER_CARD } from './lib/topic-cluster-content.js';
 
 const log = cds.log('homepage-service');
 
@@ -46,6 +50,8 @@ const _state = (globalThis[STATE_KEY] ??= {
   ft: { at: 0, payload: null },
   // (#1782) 60s cache for topTutorials payload
   tt: { at: 0, payload: null },
+  // Volatile topic-cluster tier cache (mirrors ft).
+  tcv: { at: 0, payload: null },
   // (#1033) 60s cache for the rewritten communityBlogs() endpoint
   communityBlogs: { at: 0, value: null },
   // (#1034) 60s cache for NewsItems-backed news() handler
@@ -58,6 +64,7 @@ export function _resetForTests() {
   _state.shelves.clear();
   _state.ft = { at: 0, payload: null };
   _state.tt = { at: 0, payload: null };
+  _state.tcv = { at: 0, payload: null };
   _state.communityBlogs = { at: 0, value: null };  // #1033
   _state.news = { at: 0, value: null };            // #1034
 }
@@ -72,6 +79,9 @@ export function resetFtCache() {
 export function resetTtCache() {
   _state.tt = { at: 0, payload: null };
 }
+
+/** Invalidate the topicClusterVolatile in-process cache. */
+export function resetTcvCache() { _state.tcv = { at: 0, payload: null }; }
 
 /** (#1033) Invalidate the communityBlogs in-process cache. Called by admin-service
  *  after any UPDATE on CommunityBlogPosts or CommunityBlogSources so admin
@@ -139,6 +149,33 @@ async function _getTopTutorialsPayload() {
   } finally {
     await tx.commit();
   }
+}
+
+// Module-level 60s cache for topicClusterVolatile payload.
+const TCV_CACHE_MS = 60_000;
+
+async function _getTopicClusterVolatilePayload() {
+  const now = Date.now();
+  if (_state.tcv.payload && (now - _state.tcv.at) < TCV_CACHE_MS) return _state.tcv.payload;
+  const computedAt = new Date().toISOString();
+  let clusters = [];
+  try {
+    const db = await cds.connect.to('db');
+    const stable = await buildTopicClustersPayload(db);          // same clusters the band shows
+    for (const c of stable.clusters || []) {
+      const raw = await resolveClusterContent(db, c.communityFingerprint, { tiers: ['volatile'], nowMs: now });
+      const items = rankAndCap(raw, { perType: PER_TYPE_CAPS, total: TOTAL_ITEMS_PER_CARD })
+        .map(({ rank, ...wire }) => wire);
+      if (items.length) clusters.push({ communityFingerprint: c.communityFingerprint, items });
+    }
+  } catch (err) {
+    cds.log('homepage').warn('topicClusterVolatile build failed; serving empty', err);
+    clusters = [];
+  }
+  const etag = '"' + createHash('sha1').update(JSON.stringify(clusters)).digest('hex') + '"';
+  const payload = { computedAt, etag, clusters };
+  _state.tcv = { at: now, payload };
+  return payload;
 }
 
 // (#639, #703) SAP Community RSS — blog posts feed. The Khoros endpoint
@@ -834,6 +871,24 @@ export default class HomepageService extends cds.ApplicationService {
     // Public (inherits service @requires:'any'). 60s in-process cache via _state.tt.
     this.on('topTutorials', async (req) => {
       const payload = await _getTopTutorialsPayload();
+      const inm = req.req?.headers?.['if-none-match'];
+      if (inm && inm === payload.etag && req.res) {
+        req.res.setHeader('ETag', payload.etag);
+        req.res.setHeader('Cache-Control', 'public, max-age=60');
+        req.res.status(304).end();
+        return req.reject(-1);
+      }
+      if (req.res) {
+        req.res.setHeader('ETag', payload.etag);
+        req.res.setHeader('Cache-Control', 'public, max-age=60');
+      }
+      return payload;
+    });
+
+    // topicClusterVolatile() — volatile tier (blogs/videos/events) per fingerprint.
+    // Public (inherits service @requires:'any'). 60s in-process cache via _state.tcv.
+    this.on('topicClusterVolatile', async (req) => {
+      const payload = await _getTopicClusterVolatilePayload();
       const inm = req.req?.headers?.['if-none-match'];
       if (inm && inm === payload.etag && req.res) {
         req.res.setHeader('ETag', payload.etag);
