@@ -1,28 +1,47 @@
 import {
   GAZE_BOTTOM_THRESHOLD, GAZE_HEAD_PITCH_MAX, GAZE_DWELL_MS, GAZE_FIRE_COOLDOWN_MS,
+  GAZE_DWELL_GRACE_MS, GAZE_EMA_ALPHA, CAL_EYE_TRIGGER_FRACTION,
   FRAME_INTERVAL_MS, NO_FACE_TIMEOUT_MS, SCROLL_VIEWPORT_FRACTION,
   MEDIAPIPE_WASM_BASE, MODEL_FACE, SLOW_FRAME_MS, SLOW_FRAME_RUN
 } from './constants';
 import { acquire, release } from './camera-session';
+import { getCal } from './prefs-store';
+import type { EyeProfile } from './constants';
 import type { CamReport } from './cam-debug';
 
 export interface GazeFrame { gazeY: number; headForward: boolean; pitch?: number; }
 
+export function emaStep(prev: number | null, sample: number, alpha: number): number {
+  return prev === null ? sample : alpha * sample + (1 - alpha) * prev;
+}
+
 export interface GazeDetectorOpts {
   now: () => number;
   onGazeLow: () => void;
+  threshold?: number;   // default GAZE_BOTTOM_THRESHOLD; overridden by calibration
 }
 
 export class GazeDetector {
   private dwellStart: number | null = null;
+  private lastEligible = 0;
   private cooldownUntil = 0;
-  constructor(private opts: GazeDetectorOpts) {}
+  private readonly threshold: number;
+  constructor(private opts: GazeDetectorOpts) {
+    this.threshold = opts.threshold ?? GAZE_BOTTOM_THRESHOLD;
+  }
 
   observe(f: GazeFrame): void {
     const t = this.opts.now();
     if (t < this.cooldownUntil) return;
-    const eligible = f.gazeY > GAZE_BOTTOM_THRESHOLD && f.headForward;
-    if (!eligible) { this.dwellStart = null; return; }
+    const eligible = f.gazeY > this.threshold && f.headForward;
+    if (!eligible) {
+      // One dropout inside the grace window does not reset the dwell.
+      if (this.dwellStart !== null && t - this.lastEligible > GAZE_DWELL_GRACE_MS) {
+        this.dwellStart = null;
+      }
+      return;
+    }
+    this.lastEligible = t;
     if (this.dwellStart === null) this.dwellStart = t;
     if (t - this.dwellStart >= GAZE_DWELL_MS) {
       this.opts.onGazeLow();
@@ -66,8 +85,13 @@ export async function runEyeTracking(opts: RunOpts): Promise<EyeRuntime> {
   let slowStreak = 0;
   let stopped = false;
 
+  const cal = getCal('eye') as EyeProfile | null;
+  const threshold = cal ? cal.gazeMin + CAL_EYE_TRIGGER_FRACTION * (cal.gazeMax - cal.gazeMin) : undefined;
+  let gazeEma: number | null = null;
+
   const det = new GazeDetector({
     now: () => performance.now(),
+    threshold,
     onGazeLow: () => {
       const max = (document.scrollingElement?.scrollHeight ?? 0) - window.innerHeight - 4;
       if (window.scrollY >= max) return;
@@ -90,15 +114,18 @@ export async function runEyeTracking(opts: RunOpts): Promise<EyeRuntime> {
         if (performance.now() - lastFace > NO_FACE_TIMEOUT_MS) det.observeNoFace();
         if (opts.onDebug) opts.onDebug({
           kind: 'eye', gazeY: 0, pitch: 0, headForward: false,
-          dwellMs: det.dwellMs(), faceSeen: false
+          dwellMs: det.dwellMs(), faceSeen: false,
+          threshold: threshold ?? GAZE_BOTTOM_THRESHOLD, calibrated: !!cal
         });
       } else {
         lastFace = performance.now();
         const frame = computeGazeFrame(lm);
-        det.observe(frame);
+        gazeEma = emaStep(gazeEma, frame.gazeY, GAZE_EMA_ALPHA);
+        det.observe({ ...frame, gazeY: gazeEma });
         if (opts.onDebug) opts.onDebug({
-          kind: 'eye', gazeY: frame.gazeY, pitch: frame.pitch ?? 0,
-          headForward: frame.headForward, dwellMs: det.dwellMs(), faceSeen: true
+          kind: 'eye', gazeY: gazeEma, pitch: frame.pitch ?? 0,
+          headForward: frame.headForward, dwellMs: det.dwellMs(), faceSeen: true,
+          threshold: threshold ?? GAZE_BOTTOM_THRESHOLD, calibrated: !!cal
         });
       }
     } catch (err) {
@@ -121,18 +148,26 @@ export async function runEyeTracking(opts: RunOpts): Promise<EyeRuntime> {
   return { stop };
 }
 
-// Iris centers: 468 (right), 473 (left); right-eye top/bottom 159/145;
-// left-eye top/bottom 386/374. Documented in MediaPipe Face Landmarker model card.
-function computeGazeFrame(lm: Array<{ x: number; y: number; z: number }>): GazeFrame {
+// Iris centers 468 (right) / 473 (left). Eye corners (canthi) are stable through
+// blinks and lid movement, so we anchor vertical gaze to the corner line rather
+// than the eyelid aperture. Right corners 33 (outer) / 133 (inner); left corners
+// 263 (outer) / 362 (inner). Normalizing by eye width makes it distance-invariant.
+export function computeGazeFrame(lm: Array<{ x: number; y: number; z: number }>): GazeFrame {
   const irisR = lm[468], irisL = lm[473];
-  const rTop = lm[159], rBot = lm[145], lTop = lm[386], lBot = lm[374];
-  const yR = (irisR.y - rTop.y) / Math.max(rBot.y - rTop.y, 1e-6);
-  const yL = (irisL.y - lTop.y) / Math.max(lBot.y - lTop.y, 1e-6);
-  const gazeY = Math.min(1, Math.max(0, (yR + yL) / 2));
+  const rOut = lm[33], rIn = lm[133], lIn = lm[362], lOut = lm[263];
+
+  const rMidX = (rOut.x + rIn.x) / 2, rMidY = (rOut.y + rIn.y) / 2;
+  const lMidX = (lOut.x + lIn.x) / 2, lMidY = (lOut.y + lIn.y) / 2;
+  const rW = Math.abs(rOut.x - rIn.x), lW = Math.abs(lOut.x - lIn.x);
+
+  const offR = (irisR.y - rMidY) / Math.max(rW, 1e-6);
+  const offL = (irisL.y - lMidY) / Math.max(lW, 1e-6);
+  const gazeY = (offR + offL) / 2;  // signed: >0 iris below corner line ≈ looking down
 
   const nose = lm[1];
-  const eyeMidY = (lm[33].y + lm[263].y) / 2;
-  const pitch = nose.y - eyeMidY;
+  const eyeMidY = (rMidY + lMidY) / 2;
+  const interOcular = Math.hypot(lMidX - rMidX, lMidY - rMidY);
+  const pitch = (nose.y - eyeMidY) / Math.max(interOcular, 1e-6);
   const headForward = pitch < GAZE_HEAD_PITCH_MAX;
 
   return { gazeY, headForward, pitch };

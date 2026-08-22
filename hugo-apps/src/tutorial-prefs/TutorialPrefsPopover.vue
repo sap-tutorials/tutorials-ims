@@ -138,6 +138,8 @@
               Press <strong>Start camera</strong> to try it.
             </p>
             <p v-if="eyeError" class="tut-prefs__error">{{ eyeError }}</p>
+            <ui5-button design="Transparent" @click="$emit('calibrate', 'eye')">Calibrate</ui5-button>
+            <p class="tut-prefs__cal">{{ eyeCalibrated ? 'Calibrated' : 'Not calibrated — using defaults' }}</p>
           </template>
         </section>
 
@@ -165,6 +167,8 @@
               Press <strong>Start camera</strong> to try it.
             </p>
             <p v-if="handError" class="tut-prefs__error">{{ handError }}</p>
+            <ui5-button design="Transparent" @click="$emit('calibrate', 'hand')">Calibrate</ui5-button>
+            <p class="tut-prefs__cal">{{ handCalibrated ? 'Calibrated' : 'Not calibrated — using defaults' }}</p>
           </template>
         </section>
 
@@ -199,6 +203,8 @@ const props = defineProps<{
   handFirstRun: boolean;
   eyeError: string;
   handError: string;
+  eyeCalibrated: boolean;
+  handCalibrated: boolean;
   headerMode: HeaderMode;
   footerAutohide: boolean;
   breadcrumbsOn: boolean;
@@ -218,6 +224,7 @@ const emit = defineEmits<{
   (e: 'toggle-pref', f: FeatureId): void;
   (e: 'start', f: FeatureId): void;
   (e: 'stop', f: FeatureId): void;
+  (e: 'calibrate', f: FeatureId): void;
   (e: 'set-header', mode: HeaderMode): void;
   (e: 'toggle-footer'): void;
   (e: 'toggle-breadcrumbs'): void;
@@ -293,4 +300,5 @@ defineExpose({
 .tut-prefs__error { font-size: 0.85em; color: var(--sapNegativeTextColor, #b00); margin: 0.5rem 0 0; }
 .tut-prefs__unsupported { font-size: 0.85em; opacity: 0.7; margin: 0.5rem 0 0; }
 .tut-prefs__footer { font-size: 0.8em; opacity: 0.7; margin: 0.5rem 0 0; }
+.tut-prefs__cal { font-size: 0.8em; opacity: 0.7; margin: 0.25rem 0 0; }
 </style>

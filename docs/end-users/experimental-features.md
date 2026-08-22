@@ -23,6 +23,22 @@ Hand-gesture navigation looks for an open palm and tracks its horizontal motion 
 - Your preference (the toggle position) is stored in `localStorage`. The active-camera state is stored in `sessionStorage` and dies with the tab.
 - Disable a feature by toggling it off in the Tutorial preferences popover.
 
+## Calibrate for best results
+
+Both camera features work out of the box, but a quick one-time calibration makes
+them noticeably more reliable for your camera, seating position, and screen. When
+you first start a feature you'll be offered a short calibration; you can also run
+it anytime from the **Calibrate** button in Tutorial preferences.
+
+- **Eye-tracking:** press Begin, then slowly scan your eyes over the whole page,
+  top to bottom, for about five seconds.
+- **Hand gestures:** press Begin, then hold an open palm up and sweep it left and
+  right a few times for about five seconds.
+
+Calibration is optional — without it the features fall back to sensible defaults.
+Your calibration is stored only in this browser and is never sent anywhere. These
+remain experimental, hands-free conveniences, not assistive technologies.
+
 ## Not assistive technology
 
 These are experimental input demos, not accessibility tools. People who rely on hands-free input every day have purpose-built options that work better and run system-wide:

@@ -26,7 +26,7 @@ describe('createDebugOverlay', () => {
     const handle = createDebugOverlay(true)!;
     handle.report({
       kind: 'eye', faceSeen: true, gazeY: 0.85, pitch: 0.04,
-      headForward: true, dwellMs: 300
+      headForward: true, dwellMs: 300, threshold: 0.55, calibrated: false
     });
     const block = document.querySelector<HTMLElement>('[data-kind="eye"]')!;
     const text = block.textContent ?? '';
@@ -42,24 +42,50 @@ describe('createDebugOverlay', () => {
     const handle = createDebugOverlay(true)!;
     handle.report({
       kind: 'eye', faceSeen: true, gazeY: 0.4, pitch: 0.04,
-      headForward: true, dwellMs: 0
+      headForward: true, dwellMs: 0, threshold: 0.55, calibrated: false
     });
     const block = document.querySelector<HTMLElement>('[data-kind="eye"]')!;
     expect(block.textContent).toContain('eligible   ✗');
+  });
+
+  it('renders eye fields with the ACTIVE threshold and cal flag', () => {
+    const handle = createDebugOverlay(true)!;
+    handle.report({
+      kind: 'eye', faceSeen: true, gazeY: 0.85, pitch: 0.30,
+      headForward: true, dwellMs: 300, threshold: 0.42, calibrated: true
+    });
+    const text = document.querySelector<HTMLElement>('[data-kind="eye"]')!.textContent ?? '';
+    expect(text).toContain('gazeY      0.85  > 0.42');   // shows injected threshold, not the constant
+    expect(text).toContain('cal        ✓');
+    expect(text).toContain('eligible   ✓');
   });
 
   it('renders hand fields with state and dx/v ticks', () => {
     const handle = createDebugOverlay(true)!;
     handle.report({
       kind: 'hand', palmSeen: true, palmOpen: true, x: 0.5,
-      dxFromArmed: 0.4, dtMs: 150, velocity: 2.0, state: 'ARMED'
+      dxFromArmed: 0.4, dtMs: 150, velocity: 2.0, state: 'ARMED',
+      dxThreshold: 0.3, vThreshold: 0.4, calibrated: false
     });
     const block = document.querySelector<HTMLElement>('[data-kind="hand"]')!;
     const text = block.textContent ?? '';
     expect(text).toContain('HAND');
     expect(text).toContain('state      ARMED');
-    expect(text).toContain('dx         0.40  >= 0.3  ✓');
-    expect(text).toContain('v          2.00  >= 0.4  ✓');
+    expect(text).toContain('dx         0.40  >= 0.30  ✓');
+    expect(text).toContain('v          2.00  >= 0.40  ✓');
+  });
+
+  it('renders hand fields with active dx/v thresholds and cal flag', () => {
+    const handle = createDebugOverlay(true)!;
+    handle.report({
+      kind: 'hand', palmSeen: true, palmOpen: true, x: 0.5,
+      dxFromArmed: 0.4, dtMs: 0, velocity: 2.0, state: 'ARMED',
+      dxThreshold: 0.3, vThreshold: 0.4, calibrated: false
+    });
+    const text = document.querySelector<HTMLElement>('[data-kind="hand"]')!.textContent ?? '';
+    expect(text).toContain('dx         0.40  >= 0.30  ✓');
+    expect(text).toContain('v          2.00  >= 0.40  ✓');
+    expect(text).toContain('cal        ✗');
   });
 
   it('destroy() removes the overlay node', () => {
