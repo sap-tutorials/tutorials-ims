@@ -15,30 +15,30 @@ export const PER_TYPE_CAPS = {
 // source:'direct'  → member of KgCommunity with matching vertexType; resolve by slug.
 // source:'concept' → reached via concept-hop through linkEntity.contentFk.
 export const CONTENT_TYPES = [
-  { kind: 'tutorial', tier: 'stable', source: 'direct', vertexType: 'tutorial',
-    contentEntity: 'Tutorials', titleField: 'title', statusFilter: 'tutorial' },
-  { kind: 'mission', tier: 'stable', source: 'direct', vertexType: 'mission',
-    contentEntity: 'Missions', titleField: 'title', statusFilter: 'published' },
-  { kind: 'group', tier: 'stable', source: 'direct', vertexType: 'group',
-    contentEntity: 'Groups', titleField: 'title', statusFilter: 'published' },
+  { kind: 'tutorial', tier: 'stable', source: 'direct', cap: 3, vertexType: 'tutorial',
+    contentEntity: 'Tutorials', titleField: 'title', statusFilter: 'tutorial', linkEntity: null, contentFk: null, urlField: null, dateField: null },
+  { kind: 'mission', tier: 'stable', source: 'direct', cap: 2, vertexType: 'mission',
+    contentEntity: 'Missions', titleField: 'title', statusFilter: 'published', linkEntity: null, contentFk: null, urlField: null, dateField: null },
+  { kind: 'group', tier: 'stable', source: 'direct', cap: 1, vertexType: 'group',
+    contentEntity: 'Groups', titleField: 'title', statusFilter: 'published', linkEntity: null, contentFk: null, urlField: null, dateField: null },
 
-  { kind: 'learning-journey', tier: 'stable', source: 'concept', linkEntity: 'LearningJourneyConceptLinks',
+  { kind: 'learning-journey', tier: 'stable', source: 'concept', cap: 1, linkEntity: 'LearningJourneyConceptLinks',
     contentFk: 'journey_ID', contentEntity: 'LearningJourneys', titleField: 'title', urlField: 'url', dateField: null },
-  { kind: 'discovery-mission', tier: 'stable', source: 'concept', linkEntity: 'DiscoveryMissionConceptLinks',
+  { kind: 'discovery-mission', tier: 'stable', source: 'concept', cap: 1, linkEntity: 'DiscoveryMissionConceptLinks',
     contentFk: 'mission_ID', contentEntity: 'DiscoveryMissions', titleField: 'title', urlField: 'url', dateField: null },
-  { kind: 'api-doc', tier: 'stable', source: 'concept', linkEntity: 'ApiDocConceptLinks',
+  { kind: 'api-doc', tier: 'stable', source: 'concept', cap: 1, linkEntity: 'ApiDocConceptLinks',
     contentFk: 'apiDoc_ID', contentEntity: 'ApiDocs', titleField: 'title', urlField: 'url', dateField: null },
-  { kind: 'sample', tier: 'stable', source: 'concept', linkEntity: 'SampleConceptLinks',
+  { kind: 'sample', tier: 'stable', source: 'concept', cap: 1, linkEntity: 'SampleConceptLinks',
     contentFk: 'sample_ID', contentEntity: 'Samples', titleField: 'title', urlField: 'url', dateField: 'lastCommitAt' },
-  { kind: 'help-doc', tier: 'stable', source: 'concept', linkEntity: 'HelpDocConceptLinks',
+  { kind: 'help-doc', tier: 'stable', source: 'concept', cap: 1, linkEntity: 'HelpDocConceptLinks',
     contentFk: 'helpDoc_ID', contentEntity: 'HelpDocs', titleField: 'title', urlField: 'url', dateField: null },
 
-  { kind: 'blog-post', tier: 'volatile', source: 'concept', linkEntity: 'BlogPostConceptLinks',
+  { kind: 'blog-post', tier: 'volatile', source: 'concept', cap: 2, linkEntity: 'BlogPostConceptLinks',
     contentFk: 'post_ID', contentEntity: 'BlogPosts', titleField: 'title', urlField: 'url', dateField: 'postedAt' },
-  { kind: 'video', tier: 'volatile', source: 'concept', linkEntity: 'VideoConceptLinks',
+  { kind: 'video', tier: 'volatile', source: 'concept', cap: 2, linkEntity: 'VideoConceptLinks',
     contentFk: 'video_ID', contentEntity: 'Videos', titleField: 'title', urlField: 'url', dateField: 'publishedAt',
-    statusFilter: 'video' },
-  { kind: 'community-event', tier: 'volatile', source: 'concept', linkEntity: 'CommunityEventConceptLinks',
+    statusFilter: 'video' }, // statusFilter honored by the concept-hop resolver
+  { kind: 'community-event', tier: 'volatile', source: 'concept', cap: 1, linkEntity: 'CommunityEventConceptLinks',
     contentFk: 'event_ID', contentEntity: 'CommunityEvents', titleField: 'title', urlField: 'url', dateField: 'startDate' },
 ];
 
@@ -61,7 +61,7 @@ export function computeRank(item, rankMaps) {
   const conf = typeof item.confidence === 'number' ? item.confidence : 1;
   let recency = 0;
   if (item.dateMs) {
-    const ageDays = (item._nowMs ?? Date.parse('2026-08-22Z')) - item.dateMs;
+    const ageDays = (item._nowMs ?? Date.now()) - item.dateMs;
     const days = ageDays / 86_400_000;
     recency = days <= 30 ? 0.5 : days <= 90 ? 0.25 : days <= 365 ? 0.1 : 0;
   }

@@ -35,12 +35,12 @@ describe('topic-cluster-content helpers', () => {
 
   it('computeRank blends confidence, recency and optional pagerank', () => {
     const now = Date.parse('2026-08-22T00:00:00Z');
-    const base = { kind: 'blog-post', slug: 's', confidence: 0.8, dateMs: now };
-    const old = { kind: 'blog-post', slug: 's', confidence: 0.8, dateMs: Date.parse('2020-01-01Z') };
+    const base = { kind: 'blog-post', slug: 's', confidence: 0.8, dateMs: now, _nowMs: now };
+    const old = { kind: 'blog-post', slug: 's', confidence: 0.8, dateMs: Date.parse('2020-01-01Z'), _nowMs: now };
     expect(computeRank(base, null)).toBeGreaterThan(computeRank(old, null));
-    const withPR = computeRank({ kind: 'tutorial', slug: 't', confidence: 1, dateMs: null },
+    const withPR = computeRank({ kind: 'tutorial', slug: 't', confidence: 1, dateMs: null, _nowMs: now },
       { tutorialRank: new Map([['t', 1.0]]), conceptRank: new Map() });
-    const noPR = computeRank({ kind: 'tutorial', slug: 't', confidence: 1, dateMs: null }, null);
+    const noPR = computeRank({ kind: 'tutorial', slug: 't', confidence: 1, dateMs: null, _nowMs: now }, null);
     expect(withPR).toBeGreaterThan(noPR);
   });
 
