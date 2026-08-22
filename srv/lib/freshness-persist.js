@@ -37,16 +37,19 @@ export async function persistReport({ db, tutorialId, model, costCents, findings
   const openHighCount = stamped.filter(f => f.confidence === 'High' && f.disposition === 'OPEN').length;
   const reportId = cds.utils.uuid();
 
-  await db.tx(async (tx) => {
-    // replace: delete prior report(s) + findings for this tutorial, then insert the current one
-    await tx.run(DELETE.from(FreshnessFinding).where({ tutorial_ID: tutorialId }));
-    await tx.run(DELETE.from(FreshnessReport).where({ tutorial_ID: tutorialId }));
-    await tx.run(INSERT.into(FreshnessReport).entries({
-      ID: reportId, tutorial_ID: tutorialId, status: 'DONE', model,
-      cost: centsToUsdString(costCents || 0), openHighCount, runAt: new Date().toISOString(),
-    }));
-    if (stamped.length) await tx.run(INSERT.into(FreshnessFinding).entries(stamped.map(s => ({ ...s, report_ID: reportId }))));
+  // Use global CQL (current-context writes) rather than db.tx() so that when
+  // persistReport is called from inside an HTTP request handler the writes join
+  // the handler's bounded transaction instead of trying to start a second one.
+  // db.tx() on SQLite's single-connection in-memory pool deadlocks in that case
+  // because the pool is already held by the request's implicit transaction.
+  // When called directly from tests (no request context) each statement auto-commits.
+  await DELETE.from(FreshnessFinding).where({ tutorial_ID: tutorialId });
+  await DELETE.from(FreshnessReport).where({ tutorial_ID: tutorialId });
+  await INSERT.into(FreshnessReport).entries({
+    ID: reportId, tutorial_ID: tutorialId, status: 'DONE', model,
+    cost: centsToUsdString(costCents || 0), openHighCount, runAt: new Date().toISOString(),
   });
+  if (stamped.length) await INSERT.into(FreshnessFinding).entries(stamped.map(s => ({ ...s, report_ID: reportId })));
 
   return { reportId, openHighCount };
 }

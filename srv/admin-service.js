@@ -3610,6 +3610,52 @@ export default class AdminService extends cds.ApplicationService {
     this.on('trigger_rebuild', mcpAdmin.handleTriggerRebuild);
     this.on('publish_content', mcpAdmin.handlePublishContent);
 
+    // ── Freshness detector actions (task-7) ──────────────────────────────────
+    // checkFreshness: per-tutorial trigger — runs detection+persist INLINE (v1).
+    // Returns {status:'DONE'|'FAILED', reportId}. Never throws a 500; on error
+    // writes a FAILED FreshnessReport row so the UI shows the failure state.
+    this.on('checkFreshness', 'Tutorials', async (req) => {
+      const tutorialId = req.params?.[0]?.ID;
+      if (!tutorialId) return req.reject(400, 'tutorialId required');
+      const { detectFreshness } = await import('./lib/freshness-detector.js');
+      const { persistReport } = await import('./lib/freshness-persist.js');
+      const db = await cds.connect.to('db');
+      try {
+        const { model, costCents, findings } = await detectFreshness({ db, tutorialId });
+        const { reportId } = await persistReport({ db, tutorialId, model, costCents, findings });
+        return { status: 'DONE', reportId };
+      } catch (err) {
+        cds.log('freshness').error('checkFreshness failed', err);
+        // record a FAILED report so the UI shows the failure state, never a 500
+        const { FreshnessReport } = cds.entities('com.sap.developers.ims');
+        const reportId = cds.utils.uuid();
+        await db.run(INSERT.into(FreshnessReport).entries({
+          ID: reportId, tutorial_ID: tutorialId, status: 'FAILED',
+          error: String(err.message || err).slice(0, 1000),
+        }));
+        return { status: 'FAILED', reportId };
+      }
+    });
+
+    // setDisposition: per-finding disposition setter — validates enum, updates
+    // the row with dispositionBy = req.user?.id, returns {status:'ok'}.
+    this.on('setDisposition', 'FreshnessFinding', async (req) => {
+      const id = req.params?.[0]?.ID;
+      if (!id) return req.reject(400, 'finding id required');
+      const { disposition, note } = req.data;
+      if (!['OPEN', 'ACCEPTED', 'DISMISSED', 'FIXED'].includes(disposition)) {
+        return req.reject(400, 'invalid disposition');
+      }
+      const { FreshnessFinding } = cds.entities('com.sap.developers.ims');
+      await UPDATE(FreshnessFinding).set({
+        disposition,
+        dispositionNote: note || null,
+        dispositionBy: req.user?.id || 'unknown',
+        dispositionAt: new Date().toISOString(),
+      }).where({ ID: id });
+      return { status: 'ok' };
+    });
+
     await super.init();
 
     // Allow standalone read access to ChangeView (plugin sets Readable:false by default)

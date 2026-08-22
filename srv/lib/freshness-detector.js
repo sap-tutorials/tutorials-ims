@@ -160,6 +160,12 @@ async function callLlm({ blocks, userMessage }) {
  *   Always resolves (never throws). On any error returns empty findings.
  */
 export async function detectFreshness({ db, tutorialId }) {
+  // Top-level test hook — bypasses ALL network calls (grounding + LLM) so unit
+  // tests never hit AI Core. When set, the hook MUST return { model, costCents, findings }.
+  // Mirrors the __FRESHNESS_TEST_IMPL__ pattern in callLlm but fires before any I/O.
+  const detectHook = globalThis.__FRESHNESS_DETECT_IMPL__;
+  if (typeof detectHook === 'function') return detectHook({ db, tutorialId });
+
   db = db || (await cds.connect.to('db'));
   try {
     // Resolve slug — needed by getTutorialSource.

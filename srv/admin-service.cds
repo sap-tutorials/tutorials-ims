@@ -1320,3 +1320,19 @@ extend service AdminService with {
     createdAt, expiresAt, lastUsedAt, revokedAt, createdFromIP
   };
 }
+
+// Freshness detector actions (task-7).
+// checkFreshness: per-tutorial trigger — runs detection+persist inline and
+// returns {status:'DONE'|'FAILED', reportId}. Never throws a 500; on error
+// writes a FAILED FreshnessReport row.
+// setDisposition: per-finding disposition setter — validates enum, updates the
+// row, returns {status:'ok'}.
+// Handler implementations: srv/admin-service.js (near clearKhorosLink).
+extend entity AdminService.Tutorials with actions {
+  @(requires: 'Tutorial.Author')
+  action checkFreshness() returns { status: String; reportId: String };
+};
+extend entity AdminService.FreshnessFinding with actions {
+  @(requires: 'Tutorial.Author')
+  action setDisposition(disposition: String, note: String) returns { status: String };
+};
