@@ -797,3 +797,17 @@ html[data-tut-reduce-motion="on"][data-page-kind="tutorial"] .op-body img[data-z
   html[data-page-kind="tutorial"] .op-header,
   html[data-page-kind="tutorial"] footer { transition: none; }
 }
+/* OpenDyslexic (SIL OFL). @font-face alone does NOT fetch the file; the browser
+   downloads it only when the family is matched to rendered text — which happens
+   solely under the readable-font toggle below. Zero cost on the default path. */
+@font-face {
+  font-family: "OpenDyslexic"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/fonts/OpenDyslexic-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "OpenDyslexic"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("/fonts/OpenDyslexic-Bold.woff2") format("woff2");
+}
+html[data-tut-readable-font="on"][data-page-kind="tutorial"] .op-body {
+  font-family: "OpenDyslexic", var(--sapFontFamily, sans-serif);
+}

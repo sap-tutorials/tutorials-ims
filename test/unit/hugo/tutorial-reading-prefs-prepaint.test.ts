@@ -65,3 +65,17 @@ describe('reading-prefs batch 2 reduce-motion', () => {
     expect(css).toContain('prefers-reduced-motion: reduce');
   });
 });
+
+describe('reading-prefs batch 2 OpenDyslexic (lazy)', () => {
+  it('declares an @font-face for OpenDyslexic pointing at /fonts/', () => {
+    expect(css).toMatch(/@font-face\s*\{[^}]*OpenDyslexic[^}]*\/fonts\/OpenDyslexic-Regular\.woff2/s);
+    expect(css).toContain('font-display: swap');
+  });
+  it('the OpenDyslexic family is applied ONLY under data-tut-readable-font="on"', () => {
+    // Every rule whose declaration block sets font-family to OpenDyslexic must be
+    // gated by the readable-font attr — otherwise the font loads on the default path.
+    const applyRules = css.split('}').filter(b => /font-family:[^;]*OpenDyslexic/i.test(b) && !/@font-face/i.test(b));
+    expect(applyRules.length).toBeGreaterThan(0);
+    for (const r of applyRules) expect(r, r).toContain('data-tut-readable-font="on"');
+  });
+});
