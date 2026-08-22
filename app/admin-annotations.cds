@@ -653,7 +653,8 @@ annotate AdminService.Tutorials with @UI: {
       Value: isolated,
       Label: 'Isolated',
       Criticality: { $edmJson: { $If: [ { $Path: 'isolated' }, 1, 0 ] } }
-    }
+    },
+    { Value: openHighCount, Label: 'Stale flags', Criticality: freshnessCriticality }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
@@ -688,7 +689,8 @@ annotate AdminService.Tutorials with @UI: {
       Label            : 'Rebuild this tutorial',
       Action           : 'AdminService.rebuildContent',
       ![@UI.Importance]: #High,
-    }
+    },
+    { $Type: 'UI.DataFieldForAction', Label: 'Check freshness', Action: 'AdminService.checkFreshness', ![@UI.Importance]: #High }
   ]
 };
 
@@ -941,6 +943,8 @@ annotate AdminService.AuthorAiRequests with @UI: {
 // SourceMarkdownFacet from PR-2, Feedback) is preserved verbatim, with
 // the four new ones tacked on between Contributors and Feedback so
 // the Source Markdown section from PR-2 still sits next to Feedback.
+// FreshnessFacet (spec 2026-08-22-tutorial-freshness-detector) is appended
+// in the same block further below.
 annotate AdminService.Tutorials with @UI: {
   Facets: [
     { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
@@ -956,6 +960,8 @@ annotate AdminService.Tutorials with @UI: {
       Target: 'codeCheckSpecs/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'AI-Author Requests', ID: 'AiRequestsFacet',
       Target: 'aiRequests/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', ID: 'FreshnessFacet', Label: 'Freshness',
+      Target: 'freshnessFindings/@UI.LineItem' },
     { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
       { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
         Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',
@@ -4261,3 +4267,33 @@ annotate AdminService.TopicClustersAdmin with @(
   Capabilities.UpdateRestrictions.Updatable : false,
   Capabilities.DeleteRestrictions.Deletable : false
 );
+
+// --- Tutorial Freshness Detector (spec 2026-08-22-tutorial-freshness-detector) ---
+// Surfaces per-finding analysis rows on the Tutorials Object Page and wires the
+// Set Disposition action. Criticality paths delegate to the virtual
+// `confidenceCriticality` field (computed by after('READ','FreshnessFinding')
+// in admin-service.js).
+annotate AdminService.FreshnessFinding with @UI: {
+  LineItem: [
+    { Value: confidence, Criticality: confidenceCriticality, ![@UI.Importance]: #High },
+    { Value: severity },
+    { Value: category },
+    { Value: stepRef, Label: 'Step' },
+    { Value: codeBlockIndex, Label: 'Block' },
+    { Value: summary },
+    { Value: suggestedFix },
+    { Value: groundingSource, Label: 'Source' },
+    { Value: disposition, Criticality: confidenceCriticality },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.setDisposition', Label: 'Set disposition' }
+  ],
+  PresentationVariant: {
+    SortOrder: [
+      { Property: confidence, Descending: true },
+      { Property: severity,   Descending: true }
+    ]
+  }
+};
+annotate AdminService.FreshnessFinding with {
+  suggestedFix @UI.MultiLineText;
+  evidence     @UI.MultiLineText;
+};
