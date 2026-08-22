@@ -1092,6 +1092,31 @@ export function registerJobs() {
     fn: runCommunityBlogsClassify,
   });
 
+  // Task 9 (spec 2026-08-22): nightly freshness corpus embedding backfill.
+  // Runs at 03:17 UTC — off-minute, no collision with existing :17 slots which
+  // are hourly (embedding-reconciliation, concept-embedding-backfill). On hour 3
+  // the daily gc (03:00), pipeline-log-gc (03:15), and change-log-gc (03:23 Sun)
+  // are the neighbours; :17 is free on weekdays.
+  registerJob({
+    jobName: 'freshness-corpus-embedding',
+    schedule: '17 3 * * *',
+    ttlMs: 1800000,
+    description: 'Backfill ApiDocs/Samples embeddings for freshness grounding',
+    fn: (logId) => import('./freshness-corpus-embedding-job.js').then(m => m.runFreshnessCorpusEmbedding(logId)),
+  });
+
+  // Task 9 (spec 2026-08-22): nightly bulk tutorial freshness scan.
+  // Default OFF — gated by FRESHNESS_SCAN_ENABLED env var; self-skips when unset.
+  // 04:23 UTC is already used by fetch-blog-posts (daily) and publish-timings-
+  // retention — schedulers allow schedule sharing; jobName uniqueness is enforced.
+  registerJob({
+    jobName: 'freshness-scan',
+    schedule: '23 4 * * *',
+    ttlMs: 1800000,
+    description: 'Bulk tutorial freshness scan (gated by FRESHNESS_SCAN_ENABLED, default OFF)',
+    fn: (logId) => import('./freshness-scan-job.js').then(m => m.runFreshnessScan(logId)),
+  });
+
   LOG.info('All scheduled jobs registered');
 
   // #756 (Task 1): pre-seed JobLastRun so the admin Cron health tile shows
