@@ -12,6 +12,7 @@ import {
   type FeatureId
 } from './constants';
 
+
 interface EyeReport {
   kind: 'eye';
   gazeY: number;
@@ -115,8 +116,8 @@ export function createDebugOverlay(enabled: boolean): OverlayHandle | null {
       `palm       ${tick(r.palmSeen)} seen / ${tick(r.palmOpen)} open`,
       `x          ${fmt(r.x)}`,
       `state      ${r.state}`,
-      `dx         ${fmt(r.dxFromArmed)}  >= ${r.dxThreshold}  ${tick(dxOk)}`,
-      `v          ${fmt(r.velocity)}  >= ${r.vThreshold}  ${tick(vOk)}`,
+      `dx         ${fmt(r.dxFromArmed)}  >= ${fmt(r.dxThreshold)}  ${tick(dxOk)}`,
+      `v          ${fmt(r.velocity)}  >= ${fmt(r.vThreshold)}  ${tick(vOk)}`,
       `cal        ${tick(r.calibrated)}`
     ];
     handBlock.textContent = lines.join('\n');

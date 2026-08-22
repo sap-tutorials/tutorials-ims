@@ -71,8 +71,8 @@ describe('createDebugOverlay', () => {
     const text = block.textContent ?? '';
     expect(text).toContain('HAND');
     expect(text).toContain('state      ARMED');
-    expect(text).toContain('dx         0.40  >= 0.3  ✓');
-    expect(text).toContain('v          2.00  >= 0.4  ✓');
+    expect(text).toContain('dx         0.40  >= 0.30  ✓');
+    expect(text).toContain('v          2.00  >= 0.40  ✓');
   });
 
   it('renders hand fields with active dx/v thresholds and cal flag', () => {
@@ -83,8 +83,8 @@ describe('createDebugOverlay', () => {
       dxThreshold: 0.3, vThreshold: 0.4, calibrated: false
     });
     const text = document.querySelector<HTMLElement>('[data-kind="hand"]')!.textContent ?? '';
-    expect(text).toContain('dx         0.40  >= 0.3  ✓');
-    expect(text).toContain('v          2.00  >= 0.4  ✓');
+    expect(text).toContain('dx         0.40  >= 0.30  ✓');
+    expect(text).toContain('v          2.00  >= 0.40  ✓');
     expect(text).toContain('cal        ✗');
   });
 
