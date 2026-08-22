@@ -35,4 +35,20 @@ describe('mergeVolatile', () => {
     expect(out.find(i => i.slug === 'v1')).toBeUndefined();
     expect(out.find(i => i.slug === 'v2')).toBeDefined();
   });
+  it('volatile surfaces despite a full SSR list (starvation fix)', () => {
+    const ssr8 = Array.from({ length: 8 }, (_, i) => ({
+      kind: 'tutorial', slug: `t${i}`, title: `T${i}`, href: `/tutorials/t${i}`,
+    }));
+    const vol5 = [
+      { kind: 'blog-post', slug: 'b0', title: 'B0', href: 'https://x/b0' },
+      { kind: 'blog-post', slug: 'b1', title: 'B1', href: 'https://x/b1' },
+      { kind: 'video',     slug: 'v0', title: 'V0', href: 'https://x/v0' },
+      { kind: 'video',     slug: 'v1', title: 'V1', href: 'https://x/v1' },
+      { kind: 'blog-post', slug: 'b2', title: 'B2', href: 'https://x/b2' },
+    ];
+    const volatileKinds = new Set(['blog-post', 'video']);
+    const out = mergeVolatile(ssr8, vol5, 8);
+    expect(out.length).toBe(8);
+    expect(out.filter(i => volatileKinds.has(i.kind)).length).toBeGreaterThanOrEqual(3);
+  });
 });

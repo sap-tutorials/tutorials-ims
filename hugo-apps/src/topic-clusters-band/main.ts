@@ -17,7 +17,7 @@ function renderItems(ul: HTMLElement, items: ClusterItem[]): void {
     li.setAttribute('data-kind', i.kind);
     li.setAttribute('data-slug', i.slug);
     const a = document.createElement('a');
-    a.href = i.href;                    // DOM property assignment sanitizes javascript: URIs
+    a.href = i.href;
     a.textContent = i.title || i.slug;  // textContent never parses HTML
     const span = document.createElement('span');
     span.className = `hp-tc-badge hp-tc-badge--${i.kind}`;
