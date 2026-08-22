@@ -91,33 +91,35 @@ export async function runCalibrationCapture(
   const { FaceLandmarker, HandLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
   const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE);
 
-  const stream = await acquire(feature);
-  const video = document.createElement('video');
-  video.srcObject = stream; video.muted = true; video.playsInline = true;
-  await video.play();
-
-  let landmarker: any;
-  let sample: () => number | null;
-  if (feature === 'eye') {
-    landmarker = await FaceLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODEL_FACE }, runningMode: 'VIDEO', numFaces: 1
-    });
-    sample = () => {
-      const lm = landmarker.detectForVideo(video, performance.now()).faceLandmarks?.[0];
-      return lm ? computeGazeFrame(lm).gazeY : null;
-    };
-  } else {
-    landmarker = await HandLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODEL_HAND }, runningMode: 'VIDEO', numHands: 1
-    });
-    sample = () => {
-      const lm = landmarker.detectForVideo(video, performance.now()).landmarks?.[0];
-      const f = lm ? computeHandFrame(lm) : null;
-      return f && f.palmOpen ? f.x : null;   // only sample while the palm gate passes
-    };
-  }
-
+  let stream: MediaStream | null = null;
+  let video: HTMLVideoElement | null = null;
+  let landmarker: any = null;
   try {
+    stream = await acquire(feature);
+    video = document.createElement('video');
+    video.srcObject = stream; video.muted = true; video.playsInline = true;
+    await video.play();
+
+    let sample: () => number | null;
+    if (feature === 'eye') {
+      landmarker = await FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: MODEL_FACE }, runningMode: 'VIDEO', numFaces: 1
+      });
+      sample = () => {
+        const lm = landmarker.detectForVideo(video, performance.now()).faceLandmarks?.[0];
+        return lm ? computeGazeFrame(lm).gazeY : null;
+      };
+    } else {
+      landmarker = await HandLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: MODEL_HAND }, runningMode: 'VIDEO', numHands: 1
+      });
+      sample = () => {
+        const lm = landmarker.detectForVideo(video, performance.now()).landmarks?.[0];
+        const f = lm ? computeHandFrame(lm) : null;
+        return f && f.palmOpen ? f.x : null;   // only sample while the palm gate passes
+      };
+    }
+
     const samples = await captureSamples({
       now: () => performance.now(), durationMs: CAL_DURATION_MS,
       intervalMs: FRAME_INTERVAL_MS, sample, onProgress: opts.onProgress
@@ -126,8 +128,8 @@ export async function runCalibrationCapture(
     if (profile) setCal(feature, profile);
     return profile;
   } finally {
-    try { landmarker.close(); } catch {}
-    video.pause(); video.srcObject = null;
-    release(feature);
+    try { landmarker?.close(); } catch {}
+    if (video) { video.pause(); video.srcObject = null; }
+    if (stream) release(feature);
   }
 }
