@@ -8,10 +8,10 @@
 // the model is producing values the detectors would ever fire on.
 
 import {
-  GAZE_BOTTOM_THRESHOLD, GAZE_HEAD_PITCH_MAX, GAZE_DWELL_MS,
-  SWIPE_MIN_DX_FRACTION, SWIPE_MIN_VELOCITY,
+  GAZE_HEAD_PITCH_MAX, GAZE_DWELL_MS,
   type FeatureId
 } from './constants';
+
 
 interface EyeReport {
   kind: 'eye';
@@ -20,6 +20,8 @@ interface EyeReport {
   headForward: boolean;
   dwellMs: number;      // 0 if not currently dwelling
   faceSeen: boolean;
+  threshold: number;    // active (possibly calibrated) gaze threshold
+  calibrated: boolean;  // whether a calibration profile is active
 }
 
 interface HandReport {
@@ -31,6 +33,9 @@ interface HandReport {
   dtMs: number;         // 0 if not armed
   velocity: number;     // 0 if not armed or dt==0
   state: 'IDLE' | 'ARMED' | 'COOLDOWN';
+  dxThreshold: number;  // active (possibly calibrated) swipe dx threshold
+  vThreshold: number;   // active (possibly calibrated) velocity threshold
+  calibrated: boolean;  // whether a calibration profile is active
 }
 
 export type CamReport = EyeReport | HandReport;
@@ -90,28 +95,30 @@ export function createDebugOverlay(enabled: boolean): OverlayHandle | null {
   function tick(ok: boolean): string { return ok ? '✓' : '✗'; }
 
   function renderEye(r: EyeReport): void {
-    const eligible = r.gazeY > GAZE_BOTTOM_THRESHOLD && r.headForward;
+    const eligible = r.gazeY > r.threshold && r.headForward;
     const lines = [
       'EYE',
       `face       ${tick(r.faceSeen)}`,
-      `gazeY      ${fmt(r.gazeY)}  > ${GAZE_BOTTOM_THRESHOLD}  ${tick(r.gazeY > GAZE_BOTTOM_THRESHOLD)}`,
+      `gazeY      ${fmt(r.gazeY)}  > ${fmt(r.threshold)}  ${tick(r.gazeY > r.threshold)}`,
       `pitch      ${fmt(r.pitch, 3)}  < ${GAZE_HEAD_PITCH_MAX}  ${tick(r.headForward)}`,
       `dwell      ${r.dwellMs} / ${GAZE_DWELL_MS} ms`,
+      `cal        ${tick(r.calibrated)}`,
       `eligible   ${tick(eligible)}`
     ];
     eyeBlock.textContent = lines.join('\n');
   }
 
   function renderHand(r: HandReport): void {
-    const dxOk = Math.abs(r.dxFromArmed) >= SWIPE_MIN_DX_FRACTION;
-    const vOk = r.velocity >= SWIPE_MIN_VELOCITY;
+    const dxOk = Math.abs(r.dxFromArmed) >= r.dxThreshold;
+    const vOk = r.velocity >= r.vThreshold;
     const lines = [
       'HAND',
       `palm       ${tick(r.palmSeen)} seen / ${tick(r.palmOpen)} open`,
       `x          ${fmt(r.x)}`,
       `state      ${r.state}`,
-      `dx         ${fmt(r.dxFromArmed)}  >= ${SWIPE_MIN_DX_FRACTION}  ${tick(dxOk)}`,
-      `v          ${fmt(r.velocity)}  >= ${SWIPE_MIN_VELOCITY}  ${tick(vOk)}`
+      `dx         ${fmt(r.dxFromArmed)}  >= ${fmt(r.dxThreshold)}  ${tick(dxOk)}`,
+      `v          ${fmt(r.velocity)}  >= ${fmt(r.vThreshold)}  ${tick(vOk)}`,
+      `cal        ${tick(r.calibrated)}`
     ];
     handBlock.textContent = lines.join('\n');
   }
@@ -141,12 +148,6 @@ export function isCamDebugEnabled(): boolean {
 // Re-exported so eye-tracking/hand-gestures can build their reports without
 // pulling the constants file again at the call site.
 export type { EyeReport, HandReport };
-export const _CONSTS_FOR_TEST = {
-  GAZE_BOTTOM_THRESHOLD, GAZE_DWELL_MS,
-  SWIPE_MIN_DX_FRACTION, SWIPE_MIN_VELOCITY
-};
-// Used only by overlay tests; stripped from the bundle by Rollup tree-shaking
-// because nothing in production code reads it.
 
 // keep FeatureId import warning-clean if anyone re-exports kind tagging later
 export type _FeatureId = FeatureId;

@@ -1,9 +1,9 @@
-import { createApp, h, reactive, ref } from 'vue';
+import { createApp, defineAsyncComponent, h, reactive, ref } from 'vue';
 import TutorialPrefsPopover from './TutorialPrefsPopover.vue';
 import CameraBadge from './CameraBadge.vue';
 import {
   getPref, setPref, getSession, removeSession,
-  isFirstRun, consumeFirstRun,
+  isFirstRun, consumeFirstRun, getCal, isCalPrompted, markCalPrompted,
   setHeaderPref, setFooterPref, setBreadcrumbsPref, setFeedbackPref,
   setTextSize as setTextSizePref, setReadWidth as setReadWidthPref,
   setCodeSize as setCodeSizePref, setCodeWrap as setCodeWrapPref,
@@ -19,6 +19,8 @@ import { PAGE_KIND_TUTORIAL, KEY_READER, type FeatureId, type HeaderMode, type S
 // state that setTheme() can't reach (dark-on-dark bug). The <ui5-segmented-button> tags in
 // the .vue template are handled by the bootstrap copy. Guarded by check-island-ui5-imports.ts.
 
+const CalibrationOverlay = defineAsyncComponent(() => import('./CalibrationOverlay.vue'));
+
 interface Runtime { stop: () => void; }
 
 interface State {
@@ -30,6 +32,7 @@ interface State {
   eyeError: string;
   handError: string;
   slow: boolean;
+  cal: { open: boolean; feature: FeatureId; phase: 'intro' | 'capturing' | 'invalid'; progress: number; cancelled: boolean };
   headerMode: HeaderMode;
   footerAutohide: boolean;
   breadcrumbsOn: boolean;
@@ -52,6 +55,29 @@ async function ensureDebugReporter(): Promise<((r: any) => void) | null> {
   if (!overlay) return null;
   debugReporter = overlay.report.bind(overlay);
   return debugReporter;
+}
+
+function openCalibration(state: State, f: FeatureId): void {
+  state.cal = { open: true, feature: f, phase: 'intro', progress: 0, cancelled: false };
+}
+
+async function runCalibration(state: State): Promise<void> {
+  const f = state.cal.feature;
+  state.cal.phase = 'capturing'; state.cal.progress = 0;
+  try {
+    const { runCalibrationCapture } = await import('./calibration');
+    const profile = await runCalibrationCapture(f, {
+      onProgress: (p) => { state.cal.progress = p; },
+      isCancelled: () => state.cal.cancelled
+    });
+    if (!profile) { if (!state.cal.cancelled) state.cal.phase = 'invalid'; return; }
+    state.cal.open = false;
+    if (f === 'eye' && state.eyeRuntime) { stopEye(state); await startEye(state); }
+    if (f === 'hand' && state.handRuntime) { stopHand(state); await startHand(state); }
+  } catch (e) {
+    console.error('[tutorial-prefs] calibrate', f, e);
+    state.cal.phase = 'invalid';
+  }
 }
 
 function unsupportedText(reasons: string[]): string {
@@ -77,6 +103,7 @@ async function startEye(state: State): Promise<void> {
     });
     consumeFirstRun('eye');
     setPref('eye', 'on');
+    if (!getCal('eye') && !isCalPrompted('eye')) { markCalPrompted('eye'); openCalibration(state, 'eye'); }
   } catch (err: any) {
     handleStartError(state, 'eye', err);
   }
@@ -104,6 +131,7 @@ async function startHand(state: State): Promise<void> {
     });
     consumeFirstRun('hand');
     setPref('hand', 'on');
+    if (!getCal('hand') && !isCalPrompted('hand')) { markCalPrompted('hand'); openCalibration(state, 'hand'); }
   } catch (err: any) {
     handleStartError(state, 'hand', err);
   }
@@ -198,6 +226,7 @@ function init() {
     eyeError: '',
     handError: '',
     slow: false,
+    cal: { open: false, feature: 'eye', phase: 'intro', progress: 0, cancelled: false },
     headerMode: eff0.header,
     footerAutohide: eff0.footer === 'autohide',
     breadcrumbsOn: eff0.breadcrumbs === 'on',
@@ -233,6 +262,8 @@ function init() {
       handFirstRun: isFirstRun('hand'),
       eyeError: state.eyeError,
       handError: state.handError,
+      eyeCalibrated: !!getCal('eye'),
+      handCalibrated: !!getCal('hand'),
       headerMode: state.headerMode,
       footerAutohide: state.footerAutohide,
       breadcrumbsOn: state.breadcrumbsOn,
@@ -250,6 +281,7 @@ function init() {
       'onToggle-pref': (f: FeatureId) => togglePref(state, f),
       onStart: (f: FeatureId) => f === 'eye' ? startEye(state) : startHand(state),
       onStop: (f: FeatureId) => f === 'eye' ? stopEye(state) : stopHand(state),
+      'onCalibrate': (f: FeatureId) => openCalibration(state, f),
       'onSet-header': (m: HeaderMode) => setHeader(state, m),
       'onToggle-footer': () => toggleFooter(state),
       'onToggle-breadcrumbs': () => toggleBreadcrumbs(state),
@@ -276,6 +308,21 @@ function init() {
       onStop: () => { stopEye(state); stopHand(state); state.slow = false; }
     })
   }).mount(badgeHost);
+
+  const calHost = document.createElement('div');
+  calHost.id = 'tut-prefs-cal-host';
+  document.body.appendChild(calHost);
+
+  createApp({
+    render: () => state.cal.open
+      ? h(CalibrationOverlay, {
+          feature: state.cal.feature, phase: state.cal.phase, progress: state.cal.progress,
+          onStart: () => runCalibration(state),
+          onRetry: () => runCalibration(state),
+          onCancel: () => { state.cal.cancelled = true; state.cal.open = false; }
+        })
+      : null
+  }).mount(calHost);
 
   trigger.addEventListener('click', () => popoverRef.value?.open(trigger));
 
