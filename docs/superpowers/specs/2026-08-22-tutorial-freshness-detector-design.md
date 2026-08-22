@@ -39,9 +39,9 @@ Author (Admin UI, Tutorials Object Page)
   → checkFreshness() bound action        [srv/admin-service]
     → enqueue via job chassis            [srv/jobs + CronService pattern]
       → freshness engine                 [srv/lib/freshness-detector.js]
-          1. extract code blocks from stored tutorial markdown/HTML
-          2. ground: embed code → cosine-search ApiDocs/Samples  [embedding-query.js]
-          3. one schema-constrained LLM call via @cap-js/ai / AI Core
+          1. extract code blocks from persisted Steps.content (ported fence logic)
+          2. ground: embed code → direct cosine over ApiDocs/Samples embeddings
+          3. one forced-tool-call LLM request via @sap-ai-sdk/orchestration
           4. persist FreshnessReport (+ FreshnessFindings)
              migrating dispositions forward by finding fingerprint
   → Object Page "Freshness" facet renders findings (confidence-first)
@@ -99,20 +99,35 @@ behavior). Not a history table.
 
 ## Detection engine (`srv/lib/freshness-detector.js` + helpers)
 
-1. **Extract code blocks.** Read the tutorial's stored content and pull fenced
-   code blocks with their `lang`, step number, and in-step index. Reuse the
-   existing step/code parsing (`scripts/parsers/`) rather than re-implementing.
-2. **Ground.** For each code block, compute an embedding and cosine-search
-   `ApiDocs` + `Samples` for the nearest N chunks (reuse `embedding-query.js`;
-   respect the HANA BLOB-vs-metadata and packet-cap gotchas). Concatenate the
-   retrieved chunks as grounding context.
-3. **Detect.** One schema-constrained LLM call via `@cap-js/ai` / AI Core.
-   Input: the code blocks + grounding context + a fixed rubric. Output: a JSON
-   array of findings matching the `FreshnessFinding` shape. **Hard prompt
-   rules:** every finding must carry a `confidence` tier; an API-obsolescence
-   claim not supported by the provided grounding context MUST be `confidence:
-   Low` and MAY carry an empty `groundingSource`. The model returns location
-   anchors (step + block index) it was given, not invented ones.
+1. **Extract code blocks.** Read the tutorial's persisted `Steps` rows
+   (`step.content` holds raw markdown incl. fences) and pull fenced code blocks
+   with their `lang`, step number (`step.number`), and in-step index. The
+   `scripts/parsers/*` code is build-time TypeScript run via `tsx` and is **not
+   importable** into the `cds-serve` runtime; port the small CommonMark
+   fence-tracking logic (`scripts/parsers/fence-tracker.ts`) into a plain-JS
+   `srv/lib/freshness-extract.js`, extended to capture the info-string language
+   and accumulate code lines per block.
+2. **Ground.** ApiDocs/Samples do not carry embeddings today, so v1 **adds an
+   embedding vector column** to both and a backfill job (reusing
+   `srv/lib/embedding-client.js#embed` and the `concept-embedding-backfill.js`
+   pattern: store raw `EMBEDDING` BLOB + `EMBEDDINGVEC = TO_REAL_VECTOR(?)` via
+   raw SQL). At detection time, embed each code block and do a direct cosine
+   search (mirror `srv/lib/kg/concept-embedding-query.js#topConceptsByCosine`,
+   `COSINE_SIMILARITY(EMBEDDINGVEC, TO_REAL_VECTOR(?))`) to retrieve the nearest
+   ApiDocs/Samples chunks. Respect the HANA BLOB-vs-metadata and packet-cap
+   gotchas. Concatenate retrieved chunks as grounding context.
+3. **Detect.** One forced-tool-call LLM request via
+   `@sap-ai-sdk/orchestration`'s `OrchestrationClient.chatCompletion` — the
+   same pattern as `srv/lib/explainer-generator.js` / `code-check-llm.js`:
+   `resolveChatLlmSettings()` supplies `{modelName, deploymentId}`;
+   `tool_choice` inside `model.params` forces structured output; the tool's
+   `parameters` JSON schema IS the findings contract; read results via
+   `response.getToolCalls()` and usage via `response.getTokenUsage()`. Input:
+   the code blocks + grounding context + a fixed rubric. **Hard prompt rules:**
+   every finding carries a `confidence` tier; an API-obsolescence claim not
+   supported by the provided grounding context MUST be `confidence: Low` with
+   an empty `groundingSource`. The model echoes the location anchors (step +
+   block index) it was given, never invented ones.
 4. **Persist + migrate dispositions.** Compute each finding's `fingerprint`.
    Before replacing the current report, read the prior report's findings; for
    any new finding whose fingerprint matches a prior one, **carry forward** the
@@ -125,9 +140,16 @@ behavior). Not a history table.
 
 ### Model / binding
 
-Local `cds watch` + unit tests use `AICore-mocked` (canned findings JSON, zero
-quota). Hybrid/production use the `aicore` VCAP binding, mirroring the existing
-`@cap-js/ai` wiring. Concrete model id chosen at implementation time.
+Runtime LLM calls use the SAP AI SDK directly (`@sap-ai-sdk/orchestration`),
+**not** the `@cap-js/ai` `AICore` service (that plugin is only wired for the
+Fiori `@Common.ValueList` recommendation feature). Model + deployment resolve
+via `resolveChatLlmSettings()` (`ChatSettings` → `CHAT_MODEL_NAME`/
+`CHAT_DEPLOYMENT_ID` env → default `anthropic--claude-4.6-sonnet`). Because
+`cds.test('serve')` pre-resolves modules before `vi.mock` can intercept the
+SDK, the detector module MUST expose a `globalThis.__FRESHNESS_TEST_IMPL__`
+injection hook (mirroring `explainer-generator.js`) so unit tests supply canned
+findings without a live AI Core. Token cost via `srv/lib/_token-cost.js`
+(`tokensToCents`/`centsToUsdString`); the model rate already exists there.
 
 ## Trigger + flow
 
@@ -175,14 +197,17 @@ quota). Hybrid/production use the `aicore` VCAP binding, mirroring the existing
 
 ## Testing
 
-- **Unit (in-memory SQLite, `AICore-mocked`):** fixture tutorial + canned
-  findings JSON → assert findings persist, `openHighCount` derivation,
-  disposition migration across a re-run (dismissed finding stays dismissed;
-  new finding appears OPEN), and fail-open on malformed LLM output.
-- **Prompt guard test:** asserts the detection prompt requires confidence tiers
-  and citation, and forces Low confidence on ungrounded API claims.
-- **Hybrid (real HANA):** grounding smoke — cosine search against seeded
-  `ApiDocs`/`Samples` returns chunks; BLOB/packet-cap gotchas respected.
+- **Unit (in-memory SQLite, SDK mocked via `globalThis.__FRESHNESS_TEST_IMPL__`):**
+  fixture tutorial + canned findings JSON → assert findings persist,
+  `openHighCount` derivation, disposition migration across a re-run (dismissed
+  finding stays dismissed; new finding appears OPEN), and fail-open on
+  malformed LLM output.
+- **Prompt guard test:** asserts the detection tool's JSON schema requires a
+  confidence tier and citation field, and that the rubric forces Low confidence
+  on ungrounded API claims.
+- **Hybrid (real HANA):** grounding smoke — the ApiDocs/Samples embedding
+  backfill populates vectors; a code-block cosine search returns chunks;
+  BLOB/packet-cap gotchas respected.
 - No live AI Core in the unit suite.
 
 ## Rollout
