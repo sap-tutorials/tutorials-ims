@@ -12,7 +12,7 @@ const EXT = 'com.sap.developers.ims.external';
 beforeAll(async () => {
   await project; // ensure server up
   const db = await cds.connect.to('db');
-  const { KgCommunity, KgCommunityLabel, Tutorials, Concepts } = cds.entities(NS);
+  const { KgCommunity, KgCommunityLabel, Tutorials, Concepts, Missions } = cds.entities(NS);
   const { BlogPosts, BlogPostConceptLinks } = cds.entities(EXT);
 
   // Helper: create a community fingerprint with `n` tutorial members
@@ -64,21 +64,22 @@ beforeAll(async () => {
   communities.push({ communityId: 92, vertexKey: 't:edge-ghost', vertexType: 'tutorial', slug: 'edge-ghost', communityFingerprint: fpEdge, detectedAt: new Date().toISOString() });
   // no Tutorials row for edge-ghost
 
-  // Mixed-source enrichment on cluster 0 (fp-00000): a concept member + a blog post.
-  // (blog-post is volatile tier — not surfaced with tiers:['stable'] — but the concept
-  // member is here to exercise concept-id resolution in resolveClusterContent.)
+  // Mixed-source enrichment on cluster 0 (fp-00000): a concept member + a blog post
+  // (volatile, exercises concept-hop path) + a mission member (stable, proves multi-source).
   const cId = cds.utils.uuid();
   const pId = cds.utils.uuid();
   communities.push({ communityId: 0, vertexKey: 'concept:c0', vertexType: 'concept', slug: 'c0', communityFingerprint: 'fp-00000', detectedAt: new Date().toISOString() });
+  communities.push({ communityId: 0, vertexKey: 'mission:mis-tc0', vertexType: 'mission', slug: 'mis-tc0', communityFingerprint: 'fp-00000', detectedAt: new Date().toISOString() });
 
   await db.run(INSERT.into(Tutorials).entries(tutorials));
   await db.run(INSERT.into(KgCommunity).entries(communities));
   await db.run(INSERT.into(KgCommunityLabel).entries(labels));
 
-  // Extra seed: Concepts + BlogPosts + link (inserted after the three main inserts).
+  // Extra seed: Concepts + BlogPosts + link (volatile, exercises concept-hop path) + Missions (stable).
   await db.run(INSERT.into(Concepts).entries([{ ID: cId, slug: 'c0', name: 'C0', status: 'ACTIVE' }]));
   await db.run(INSERT.into(BlogPosts).entries([{ ID: pId, slug: 'bp0', title: 'BP0', url: 'https://x/bp0', postedAt: new Date().toISOString() }]));
   await db.run(INSERT.into(BlogPostConceptLinks).entries([{ ID: cds.utils.uuid(), post_ID: pId, concept_ID: cId, confidence: 0.9 }]));
+  await db.run(INSERT.into(Missions).entries([{ ID: cds.utils.uuid(), slug: 'mis-tc0', title: 'TC0 Mission', published: true }]));
 });
 
 describe('build-topic-clusters read model (#1170)', () => {
@@ -161,6 +162,9 @@ describe('build-topic-clusters items[] (#1170 multi-source)', () => {
     expect(Array.isArray(c.tutorials)).toBe(true);           // back-compat kept
     expect(c.items.every(i => i.kind && i.href && ('isNew' in i))).toBe(true);
     expect(c.items.some(i => i.kind === 'tutorial')).toBe(true);
+    expect(c.items.some(i => i.kind === 'mission')).toBe(true);
+    const missionItem = c.items.find(i => i.kind === 'mission' && i.slug === 'mis-tc0');
+    expect(missionItem.href).toBe('/tutorials/mission-mis-tc0');
     // no rank on the wire
     expect(c.items.every(i => !('rank' in i))).toBe(true);
   });

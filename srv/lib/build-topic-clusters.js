@@ -88,12 +88,17 @@ export async function buildTopicClustersPayload(db) {
       // 6. Re-gate on resolved live count; cap per-card; build url.
       if (live.length < MIN_TUTORIALS) continue;
 
-      // 7. Resolve mixed-source stable items (fail-open: [] on any error).
-      const rawItems = await resolveClusterContent(db, cluster.communityFingerprint, {
-        tiers: ['stable'], rankMaps, nowMs,
-      });
-      const items = rankAndCap(rawItems, { perType: PER_TYPE_CAPS, total: TOTAL_ITEMS_PER_CARD })
-        .map(({ rank, ...wire }) => wire); // strip rank from the wire
+      // 7. Resolve mixed-source stable items (fail-open per card: [] on any error).
+      let items = [];
+      try {
+        const rawItems = await resolveClusterContent(db, cluster.communityFingerprint, {
+          tiers: ['stable'], rankMaps, nowMs,
+        });
+        items = rankAndCap(rawItems, { perType: PER_TYPE_CAPS, total: TOTAL_ITEMS_PER_CARD })
+          .map(({ rank, ...wire }) => wire); // strip rank from the wire
+      } catch (e) {
+        items = [];
+      }
 
       clusters.push({
         label: cluster.label,
