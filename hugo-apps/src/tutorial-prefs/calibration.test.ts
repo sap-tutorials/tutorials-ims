@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { computeEyeProfile, computeHandProfile, deriveEyeThreshold, percentile } from './calibration';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { computeEyeProfile, computeHandProfile, deriveEyeThreshold, percentile, captureSamples } from './calibration';
 import { CAL_PROFILE_VERSION, CAL_EYE_TRIGGER_FRACTION } from './constants';
 
 const eyeSamples = (vals: number[]) => vals.map((v, i) => ({ t: i * 66, v }));
@@ -61,5 +61,29 @@ describe('computeHandProfile', () => {
   it('returns null when the hand never reverses direction', () => {
     const samples = Array.from({ length: 60 }, (_, i) => ({ t: i * 66, v: 0.2 + i * 0.005 }));
     expect(computeHandProfile(samples)).toBeNull();
+  });
+});
+
+describe('captureSamples', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('collects non-null samples until the duration elapses and reports progress', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const script = [0.1, null, 0.3, 0.4, 0.5, 0.6];  // one dropped frame
+    let i = 0;
+    const progress: number[] = [];
+    const p = captureSamples({
+      now, durationMs: 300, intervalMs: 66,
+      sample: () => script[Math.min(i++, script.length - 1)],
+      onProgress: (f) => progress.push(f)
+    });
+    // Advance fake time + the interval callback in lockstep.
+    for (let step = 0; step < 6; step++) { clock += 66; await vi.advanceTimersByTimeAsync(66); }
+    const out = await p;
+    expect(out.every((s) => s.v !== null)).toBe(true);   // nulls dropped
+    expect(out.length).toBeGreaterThan(0);
+    expect(progress[progress.length - 1]).toBe(1);        // reached 100%
   });
 });

@@ -3,8 +3,13 @@ import {
   CAL_EYE_TRIGGER_FRACTION, CAL_EYE_MIN_SPREAD,
   CAL_HAND_DX_FACTOR, CAL_HAND_V_FACTOR, CAL_HAND_MIN_REVERSALS, CAL_HAND_MIN_AMPLITUDE,
   CAL_HAND_DX_MIN, CAL_HAND_DX_MAX, CAL_HAND_V_MIN, CAL_HAND_V_MAX,
-  type EyeProfile, type HandProfile
+  FRAME_INTERVAL_MS, CAL_DURATION_MS, MEDIAPIPE_WASM_BASE, MODEL_FACE, MODEL_HAND,
+  type EyeProfile, type HandProfile, type FeatureId
 } from './constants';
+import { acquire, release } from './camera-session';
+import { setCal } from './prefs-store';
+import { computeGazeFrame } from './eye-tracking';
+import { computeHandFrame } from './hand-gestures';
 
 export interface Sample { t: number; v: number; }
 
@@ -52,4 +57,77 @@ export function computeHandProfile(samples: Sample[]): HandProfile | null {
     dxFraction: clamp(CAL_HAND_DX_FACTOR * amplitude, CAL_HAND_DX_MIN, CAL_HAND_DX_MAX),
     minVelocity: clamp(CAL_HAND_V_FACTOR * peakV, CAL_HAND_V_MIN, CAL_HAND_V_MAX)
   };
+}
+
+export async function captureSamples(opts: {
+  now: () => number;
+  durationMs: number;
+  intervalMs: number;
+  sample: () => number | null;
+  onProgress?: (fraction: number) => void;
+}): Promise<Sample[]> {
+  return new Promise((resolve) => {
+    const start = opts.now();
+    const out: Sample[] = [];
+    const id = setInterval(() => {
+      const t = opts.now();
+      const elapsed = t - start;
+      const v = opts.sample();
+      if (v !== null && Number.isFinite(v)) out.push({ t, v });
+      opts.onProgress?.(Math.min(1, elapsed / opts.durationMs));
+      if (elapsed >= opts.durationMs) { clearInterval(id); resolve(out); }
+    }, opts.intervalMs);
+  });
+}
+
+// Production glue: sets up the feature's landmarker over the shared stream, runs
+// the capture, reduces to a profile, persists on success, always releases.
+// MediaPipe cannot run under happy-dom, so this function is verified live via
+// ?debug-cam; captureSamples + the reducers carry the unit coverage.
+export async function runCalibrationCapture(
+  feature: FeatureId,
+  opts: { onProgress?: (f: number) => void } = {}
+): Promise<EyeProfile | HandProfile | null> {
+  const { FaceLandmarker, HandLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
+  const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE);
+
+  const stream = await acquire(feature);
+  const video = document.createElement('video');
+  video.srcObject = stream; video.muted = true; video.playsInline = true;
+  await video.play();
+
+  let landmarker: any;
+  let sample: () => number | null;
+  if (feature === 'eye') {
+    landmarker = await FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: MODEL_FACE }, runningMode: 'VIDEO', numFaces: 1
+    });
+    sample = () => {
+      const lm = landmarker.detectForVideo(video, performance.now()).faceLandmarks?.[0];
+      return lm ? computeGazeFrame(lm).gazeY : null;
+    };
+  } else {
+    landmarker = await HandLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: MODEL_HAND }, runningMode: 'VIDEO', numHands: 1
+    });
+    sample = () => {
+      const lm = landmarker.detectForVideo(video, performance.now()).landmarks?.[0];
+      const f = lm ? computeHandFrame(lm) : null;
+      return f && f.palmOpen ? f.x : null;   // only sample while the palm gate passes
+    };
+  }
+
+  try {
+    const samples = await captureSamples({
+      now: () => performance.now(), durationMs: CAL_DURATION_MS,
+      intervalMs: FRAME_INTERVAL_MS, sample, onProgress: opts.onProgress
+    });
+    const profile = feature === 'eye' ? computeEyeProfile(samples) : computeHandProfile(samples);
+    if (profile) setCal(feature, profile);
+    return profile;
+  } finally {
+    try { landmarker.close(); } catch {}
+    video.pause(); video.srcObject = null;
+    release(feature);
+  }
 }
