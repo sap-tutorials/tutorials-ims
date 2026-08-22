@@ -114,7 +114,8 @@ export async function runEyeTracking(opts: RunOpts): Promise<EyeRuntime> {
         if (performance.now() - lastFace > NO_FACE_TIMEOUT_MS) det.observeNoFace();
         if (opts.onDebug) opts.onDebug({
           kind: 'eye', gazeY: 0, pitch: 0, headForward: false,
-          dwellMs: det.dwellMs(), faceSeen: false
+          dwellMs: det.dwellMs(), faceSeen: false,
+          threshold: threshold ?? GAZE_BOTTOM_THRESHOLD, calibrated: !!cal
         });
       } else {
         lastFace = performance.now();
@@ -123,7 +124,8 @@ export async function runEyeTracking(opts: RunOpts): Promise<EyeRuntime> {
         det.observe({ ...frame, gazeY: gazeEma });
         if (opts.onDebug) opts.onDebug({
           kind: 'eye', gazeY: gazeEma, pitch: frame.pitch ?? 0,
-          headForward: frame.headForward, dwellMs: det.dwellMs(), faceSeen: true
+          headForward: frame.headForward, dwellMs: det.dwellMs(), faceSeen: true,
+          threshold: threshold ?? GAZE_BOTTOM_THRESHOLD, calibrated: !!cal
         });
       }
     } catch (err) {

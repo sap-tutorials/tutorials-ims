@@ -104,6 +104,8 @@ export async function runHandGestures(opts: RunOpts): Promise<HandRuntime> {
   let stopped = false;
 
   const cal = getCal('hand') as HandProfile | null;
+  const dxThreshold = cal?.dxFraction ?? SWIPE_MIN_DX_FRACTION;
+  const vThreshold = cal?.minVelocity ?? SWIPE_MIN_VELOCITY;
   const det = new SwipeDetector({
     now: () => performance.now(),
     dxFraction: cal?.dxFraction,
@@ -133,7 +135,10 @@ export async function runHandGestures(opts: RunOpts): Promise<HandRuntime> {
           dxFromArmed: insp.dx,
           dtMs: 0,               // window-based now; kept for CamReport shape compatibility
           velocity: insp.velocity,
-          state: insp.state
+          state: insp.state,
+          dxThreshold,
+          vThreshold,
+          calibrated: !!cal
         });
       }
     } catch (err) {
