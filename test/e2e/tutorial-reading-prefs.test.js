@@ -198,11 +198,10 @@ describe.skipIf(!hasBaseUrl())('e2e: tutorial reading prefs (#1966)', () => {
       await page.click('#sb-prefs');
       await page.click('[data-testid="tut-prefs-copy-clean"]');
 
-      // Binding assertion — the attr must be present regardless of clipboard access.
-      const attrVal = await page.evaluate(
-        () => document.documentElement.getAttribute('data-tut-copy-clean'),
-      );
-      expect(attrVal, 'html[data-tut-copy-clean] should be "on" after toggle').toBe('on');
+      // copy-clean does NOT set an HTML attribute — it persists to localStorage and
+      // is read at copy time.  Assert the stored value instead.
+      const storedVal = await page.evaluate(() => localStorage.getItem('tut.pref.copyClean'));
+      expect(storedVal, 'tut.pref.copyClean should be "on" in localStorage after toggle').toBe('on');
 
       // Locate the copy button for a code block whose first non-empty line begins "$ ".
       const copyBtnHandle = await page.evaluateHandle(() => {
