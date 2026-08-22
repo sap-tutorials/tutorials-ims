@@ -57,8 +57,8 @@ import cds from '@sap/cds';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CURATED_TOOLS = {
-  SearchService: ['search_tutorials', 'list_missions', 'get_mission', 'get_tutorial'],
-  HomepageService: ['get_recent_news', 'get_recent_videos'],
+  SearchService: ['search_tutorials', 'list_missions', 'get_mission', 'get_tutorial', 'search_events'],
+  HomepageService: ['get_recent_news', 'get_recent_videos', 'get_news_detail'],
   KnowledgeGraphService: [
     'kg_prerequisites', 'kg_what_to_learn_next',
     'kg_shared_concepts', 'kg_neighborhood', 'kg_search_concepts', 'kg_community', // Phase 3
@@ -74,6 +74,8 @@ const EXPECTED_PARAMS = {
   get_tutorial:          ['slug'],
   get_recent_news:       ['limit'],
   get_recent_videos:     ['limit'],
+  get_news_detail:       ['url'],
+  search_events:         ['query', 'eventType', 'region', 'upcomingOnly', 'limit'],
   kg_prerequisites:      ['tutorial_slug', 'depth'],
   kg_what_to_learn_next: ['tutorial_slug', 'limit'],
   kg_shared_concepts:    ['slug_a', 'slug_b'],

@@ -18,6 +18,7 @@
 import cds from '@sap/cds';
 import { fetchSapDevsVideos } from './lib/youtube-fetcher.js';
 import { fetchRssItems } from './lib/homepage-rss-fetcher.js';
+import { handleGetNewsDetail } from './lib/mcp-news-detail.js';
 import { resolveSecret } from './lib/secret-resolver.js';
 import * as mcpHp from './lib/mcp-homepage-tools.js';
 import { buildEnvelope, hashEnvelope } from './lib/homepage/personalized-envelope.js';
@@ -873,6 +874,11 @@ export default class HomepageService extends cds.ApplicationService {
       const limit = Math.min(Math.max(req.data?.limit ?? 10, 1), 50);
       return fetchRssItems(SAP_NEWS_RSS_URL, { limit });
     });
+
+    // Tier 2 MCP tool — get_news_detail: server-fetch the full article body
+    // for one news item by URL (@requires:'any' in homepage-service-mcp.cds).
+    // SSRF-guarded to SAP news hosts; 1h read-through cache.
+    this.on('get_news_detail', handleGetNewsDetail);
 
     // (#912) get_recent_videos — MCP curated tool.
     // Reads ext.Videos directly (skip live YouTube fetch — it caps at 3 and

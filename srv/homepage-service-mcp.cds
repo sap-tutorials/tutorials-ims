@@ -27,4 +27,20 @@ extend service HomepageService {
     title       : String;
     description : String;
   };
+
+  /** Fetch the full article body of one SAP Developer News item by URL.
+      Complements get_recent_news (which returns only title/link/summary):
+      given a news item's `link`, this server-fetches the article and returns
+      its readable text plus metadata. Only SAP news hosts are permitted
+      (news.sap.com, community.sap.com, blogs.sap.com); other hosts are rejected.
+      @param url  The article link from get_recent_news (must be an SAP news host). */
+  @(requires: 'any')
+  function get_news_detail(url: String) returns {
+    title       : String;
+    url         : String;
+    publishedAt : Timestamp;
+    summary     : String;
+    content     : String;
+    fetchedAt   : Timestamp;
+  };
 }
