@@ -147,6 +147,16 @@
       el.dataset.tutFooter = footer;
       el.dataset.tutBreadcrumbs = crumbs;
       el.dataset.tutFeedback = fb;
+      var sizeOf = function (k, d) { var v = localStorage.getItem(k); return (v === 's' || v === 'm' || v === 'l') ? v : d; };
+      var onoff = function (k) { return localStorage.getItem(k) === 'on' ? 'on' : 'off'; };
+      el.dataset.tutTextSize = sizeOf('tut.pref.textSize', 'm');
+      el.dataset.tutReadWidth = localStorage.getItem('tut.pref.readWidth') === 'narrow' ? 'narrow' : 'full';
+      el.dataset.tutCodeSize = sizeOf('tut.pref.codeSize', 'm');
+      el.dataset.tutCodeWrap = onoff('tut.pref.codeWrap');
+      el.dataset.tutImgSize = sizeOf('tut.pref.imgSize', 'l');
+      el.dataset.tutImgCollapse = onoff('tut.pref.imgCollapse');
+      el.dataset.tutReduceMotion = onoff('tut.pref.reduceMotion');
+      el.dataset.tutReadableFont = onoff('tut.pref.readableFont');
     } catch (e) {}
   }
   {{ end }}
