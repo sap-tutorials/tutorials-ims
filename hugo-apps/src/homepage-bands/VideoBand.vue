@@ -111,9 +111,12 @@ onMounted(async () => {
             :aria-label="'Watch: ' + featured.title"
           >
             <div class="hb-video-band__thumb-wrap">
+              <!-- alt="" — decorative. The link carries aria-label "Watch: {title}"
+                   and the visible title below; a titled alt here is redundant (axe
+                   image-redundant-alt). -->
               <img
                 :src="thumbUrl(featured)"
-                :alt="featured.title"
+                alt=""
                 class="hb-video-band__thumb"
                 width="480"
                 height="270"
@@ -157,7 +160,7 @@ onMounted(async () => {
           >Popular</span>
           <img
             :src="thumbUrl(vid, 'mqdefault')"
-            :alt="vid.title"
+            alt=""
             class="hb-video-band__recent-thumb"
             width="96"
             height="54"
