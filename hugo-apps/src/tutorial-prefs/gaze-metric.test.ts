@@ -1,9 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi } from 'vitest';
-
-// Mock @mediapipe/tasks-vision before importing eye-tracking to avoid resolution errors
-vi.mock('@mediapipe/tasks-vision', () => ({}));
-
+import { describe, it, expect } from 'vitest';
 import { computeGazeFrame } from './eye-tracking';
 
 // Build a landmark array with only the indices computeGazeFrame reads.
