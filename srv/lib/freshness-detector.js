@@ -161,18 +161,21 @@ async function callLlm({ blocks, userMessage }) {
  */
 export async function detectFreshness({ db, tutorialId }) {
   db = db || (await cds.connect.to('db'));
-  const { Steps } = cds.entities('com.sap.developers.ims');
   try {
-    // Steps entity uses stepOrder (not number) and description (not content).
-    // Map to { number, content } so extractCodeBlocks works as designed.
-    const stepRows = await SELECT
-      .from(Steps)
-      .columns('stepOrder', 'description')
-      .where({ tutorial_ID: tutorialId })
-      .orderBy('stepOrder');
-    const steps = stepRows.map(r => ({ number: r.stepOrder, content: r.description }));
+    // Resolve slug — needed by getTutorialSource.
+    const { Tutorials } = cds.entities('com.sap.developers.ims');
+    const t = await SELECT.one.from(Tutorials).columns('slug').where({ ID: tutorialId });
+    if (!t) return { model: null, costCents: 0, findings: [] };
 
-    const blocks = extractCodeBlocks(steps);
+    // Source markdown from ContentFiles.sourceContent (gzip) via the existing
+    // handler. Pre-#591 rows have null sourceContent — fail-open for those.
+    const { getTutorialSource } = await import('./content-store.js');
+    const src = await getTutorialSource(t.slug);
+    if (!src || !src.markdown) return { model: null, costCents: 0, findings: [] };
+
+    // Feed whole-tutorial markdown as ONE pseudo-step so extractCodeBlocks
+    // yields a global codeBlockIndex (0..N). Per-step attribution deferred.
+    const blocks = extractCodeBlocks([{ number: 1, content: src.markdown }]);
     if (!blocks.length) return { model: null, costCents: 0, findings: [] };
 
     const groundingByBlock = await Promise.all(
