@@ -767,3 +767,8 @@ html[data-tut-feedback="off"][data-page-kind="tutorial"] #op-discussion { displa
   html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header,
   html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer { transition: none; }
 }
+
+/* #1966 batch 2 — reading preferences. All rules tutorial-scoped. */
+html[data-tut-text-size="s"][data-page-kind="tutorial"] .op-body { font-size: 0.9rem; }
+html[data-tut-text-size="l"][data-page-kind="tutorial"] .op-body { font-size: 1.15rem; }
+html[data-tut-read-width="narrow"][data-page-kind="tutorial"] .op-body { max-width: 46rem; margin-inline: auto; }
