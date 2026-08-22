@@ -14,8 +14,10 @@ import {
 import { readPrefs, computeEffective, isShortViewport, applyDisplayChrome, installAutoHide } from './display-chrome';
 import { detectSupport } from './browser-support';
 import { PAGE_KIND_TUTORIAL, KEY_READER, type FeatureId, type HeaderMode, type SizeStep, type ReadWidth } from './constants';
-import '@ui5/webcomponents/dist/SegmentedButton.js';
-import '@ui5/webcomponents/dist/SegmentedButtonItem.js';
+// SegmentedButton / SegmentedButtonItem are registered in hugo/assets/js/ui5-bootstrap.ts.
+// Importing @ui5/webcomponents/dist/* here would bundle a second copy with its own Theme
+// state that setTheme() can't reach (dark-on-dark bug). The <ui5-segmented-button> tags in
+// the .vue template are handled by the bootstrap copy. Guarded by check-island-ui5-imports.ts.
 
 interface Runtime { stop: () => void; }
 

@@ -318,6 +318,7 @@ export default defineConfig({
         'homepage-explainers': resolve(__dirname, 'src/homepage-explainers/index.ts'),
         'homepage-personalizer': resolve(__dirname, 'src/homepage-personalizer/index.ts'),
         'featured-topics-carousel': resolve(__dirname, 'src/featured-topics-carousel/main.ts'),
+        'topic-clusters-band': resolve(__dirname, 'src/topic-clusters-band/main.ts'),
         'homepage-events-band': resolve(__dirname, 'src/homepage-events-band/main.ts'),
         puzzle: resolve(__dirname, 'src/puzzle/main.ts'),
         petoberfest: resolve(__dirname, 'src/petoberfest/main.ts'),

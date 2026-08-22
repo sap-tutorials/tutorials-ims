@@ -83,7 +83,7 @@ Standard JSON-RPC codes: `-32700` parse error, `-32600` invalid request, `-32601
 
 ## Curated tools
 
-Eight tools are curated in the CDS surfaces (four in `SearchService`, two in `HomepageService`, two in `KnowledgeGraphService`). Each also appears as an OData function at the same URL — the MCP wrapper reuses the CDS handler verbatim.
+Ten tools are curated in the CDS surfaces (five in `SearchService`, three in `HomepageService`, two in `KnowledgeGraphService`). Each also appears as an OData function at the same URL — the MCP wrapper reuses the CDS handler verbatim.
 
 ### 1. `search_tutorials`
 
@@ -399,6 +399,102 @@ Handler at `srv/knowledge-graph-service.js:1376` also re-uses `neighborhood()` a
   "params": {
     "name": "kg_what_to_learn_next",
     "arguments": { "tutorial_slug": "hana-cloud-mission-3-modelling", "limit": 10 }
+  }
+}
+```
+
+---
+
+## Tier 2 curated tools
+
+Two additional anonymous tools extend the public MCP surface with the community-events catalog and full news-article bodies. Both are `@requires: 'any'`.
+
+### `search_events`
+
+**Purpose.** Search the public SAP community events catalog — CodeJams, Devtoberfest, TechEd, and user-group events. The same events shown on the homepage events band, but fully searchable and filterable. Ordered by start date (soonest first).
+
+**Endpoint.** `/mcp/search`
+
+| Argument       | Type      | Required | Notes |
+| ---            | ---       | ---      | --- |
+| `query`        | `String`  | no       | Case-insensitive substring match on event `title` and `description`. |
+| `eventType`    | `String`  | no       | One of `'codejam'`, `'teched'`, `'devtoberfest'`, `'usergroup'`. Unknown values are ignored (no filter). |
+| `region`       | `String`  | no       | `'AMERICAS'`, `'EMEA'`, `'APJ'`, `'VIRTUAL'`, or `'ALL'` (default). `'VIRTUAL'` matches `virtualOrInPerson='virtual'`. |
+| `upcomingOnly` | `Boolean` | no       | Default `true` — only events not yet ended (in-progress multi-day events are kept). `false` includes past events. |
+| `limit`        | `Integer` | no       | Default 20, hard max 50. |
+
+**Return shape** (handler `srv/lib/mcp-events-search.js`, backed by `CommunityEvents` in `db/external-content.cds`):
+
+```jsonc
+[
+  {
+    "slug":        "string",
+    "title":       "string",
+    "eventType":   "string",
+    "description": "string",
+    "location":    "string",
+    "region":      "AMERICAS | EMEA | APJ | UNKNOWN",
+    "isVirtual":   false,
+    "startDate":   "2026-10-01",
+    "endDate":     "2026-10-02",
+    "url":         "string"
+  }
+]
+```
+
+Fails open — returns `[]` on any DB error, never a 500.
+
+**Example.**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "method": "tools/call",
+  "params": {
+    "name": "search_events",
+    "arguments": { "query": "CAP", "eventType": "codejam", "region": "EMEA", "limit": 10 }
+  }
+}
+```
+
+---
+
+### `get_news_detail`
+
+**Purpose.** Fetch the full article body of one SAP Developer News item by URL. Complements `get_recent_news` (which returns only title/link/summary): pass a news item's `link` and this server-fetches the article, strips it to readable text, and returns it with metadata.
+
+**Endpoint.** `/mcp/homepage`
+
+| Argument | Type     | Required | Notes |
+| ---      | ---      | ---      | --- |
+| `url`    | `String` | yes      | The article `link` from `get_recent_news`. **Must** be an SAP news host (`news.sap.com`, `community.sap.com`, `blogs.sap.com`) or subdomain — other hosts are rejected with a JSON-RPC error (SSRF guard). |
+
+**Return shape** (handler `srv/lib/mcp-news-detail.js`):
+
+```jsonc
+{
+  "title":       "string",
+  "url":         "string",
+  "publishedAt": "2026-08-01T09:00:00Z",   // from article:published_time meta, may be null
+  "summary":     "string",                  // og:description / meta description
+  "content":     "string (readable body text, capped at 20k chars)",
+  "fetchedAt":   "2026-08-22T10:00:00.000Z"
+}
+```
+
+Server-fetches with an 8s timeout and a 1-hour read-through cache keyed by URL. A disallowed host returns a `400`-class error; an upstream failure returns `502`.
+
+**Example.**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "tools/call",
+  "params": {
+    "name": "get_news_detail",
+    "arguments": { "url": "https://news.sap.com/2026/08/some-episode/" }
   }
 }
 ```

@@ -1,35 +1,39 @@
-{{- /* topic-clusters-band.html — issue #1170.
-       Reads .Site.Data.topic_clusters (populated by scripts/fetch-topic-clusters.ts
-       calling GET /build/topic-clusters). SSR-only — no Vue island, no hydration.
+{{- /* topic-clusters-band.html — #1170, expanded to multi-source (KG).
+       Reads .Site.Data.topic_clusters. Each cluster now carries an `items`
+       array of mixed-source content ({kind,slug,title,href,isNew}); falls
+       back to `tutorials` for older baked payloads.
 
-       Payload shape:
-         { clusters: [{ label, rationale, communityFingerprint, tutorialCount,
-           tutorials: [{ slug, title, url }] }], buildAt, error }
-
-       EMPTY-SAFE BY OMISSION: unlike featured-topics (which always emits a shell
-       for its island to hydrate), this band has no island. When clusters is empty
-       or absent we render ZERO DOM — no <section>, no header — so an empty band
-       is truly hidden, never an empty box. */ -}}
+       HYBRID: we emit a data-app shell + data-etag so the topic-clusters-band
+       island can merge the volatile tier (blogs/videos/events) on hydrate.
+       Still EMPTY-SAFE BY OMISSION at the band level: zero clusters → zero DOM. */ -}}
 {{- $tc := .Site.Data.topic_clusters | default (dict "clusters" slice) -}}
 {{- $clusters := $tc.clusters | default slice -}}
 {{- if gt (len $clusters) 0 -}}
-<section class="hp-band hp-topic-clusters" aria-labelledby="hp-topic-clusters-title">
+<section class="hp-band hp-topic-clusters"
+         data-app="topic-clusters-band"
+         data-etag=""
+         aria-labelledby="hp-topic-clusters-title">
   <h2 id="hp-topic-clusters-title" class="hp-band__title">Explore topic clusters</h2>
   <a class="hp-topic-clusters__see-all" href="/topics/">See all topics &rarr;</a>
   <div class="hp-topic-clusters__grid">
     {{- range $clusters -}}
-    <div class="hp-topic-clusters__cluster" id="cluster-{{ .communityFingerprint }}">
+    <div class="hp-topic-clusters__cluster" data-fp="{{ .communityFingerprint }}" id="cluster-{{ .communityFingerprint }}">
       <h3 class="hp-topic-clusters__label">{{ .label }}</h3>
       {{- with .rationale }}<p class="hp-topic-clusters__rationale">{{ . }}</p>{{- end }}
+      {{- $items := .items | default slice -}}
+      {{- if eq (len $items) 0 -}}
+        {{- /* back-compat: older payload without items[] — build from .tutorials */ -}}
+        {{- $items = slice -}}
+        {{- range .tutorials -}}{{- $items = $items | append (dict "kind" "tutorial" "slug" .slug "title" .title "href" .url "isNew" false) -}}{{- end -}}
+      {{- end -}}
       <ul class="hp-topic-clusters__links">
-        {{- range .tutorials -}}
-        {{- /* #1794 link-name: some tutorials carry an empty title (e.g.
-               abap-environment-create-tile) which renders a link with no
-               discernible name. Fall back to the slug for the visible text;
-               skip the entry entirely if neither title nor slug is present. */ -}}
+        {{- range $items -}}
         {{- $label := or (trim (.title | default "") " ") (.slug | default "") -}}
-        {{- if $label -}}
-        <li><a href="{{ .url }}">{{ $label }}</a></li>
+        {{- if and $label .href -}}
+        <li data-kind="{{ .kind }}" data-slug="{{ .slug }}">
+          <a href="{{ .href }}">{{ $label }}</a>
+          <span class="hp-tc-badge hp-tc-badge--{{ .kind }}">{{ .kind }}</span>
+        </li>
         {{- end -}}
         {{- end -}}
       </ul>
