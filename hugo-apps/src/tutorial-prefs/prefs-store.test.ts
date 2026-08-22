@@ -4,7 +4,12 @@ import {
   getPref, setPref, getSession, addSession, removeSession,
   consumeFirstRun, isFirstRun,
   getHeaderPref, setHeaderPref, getFooterPref, setFooterPref,
-  getBreadcrumbsPref, setBreadcrumbsPref, getFeedbackPref, setFeedbackPref
+  getBreadcrumbsPref, setBreadcrumbsPref, getFeedbackPref, setFeedbackPref,
+  getTextSize, setTextSize, getReadWidth, setReadWidth,
+  getCodeSize, setCodeSize, getCodeWrap, setCodeWrap,
+  getCopyClean, setCopyClean, getImgSize, setImgSize,
+  getImgCollapse, setImgCollapse, getReduceMotion, setReduceMotion,
+  getReadableFont, setReadableFont
 } from './prefs-store';
 
 describe('prefs-store', () => {
@@ -73,5 +78,43 @@ describe('prefs-store — display prefs (#1966)', () => {
     setFeedbackPref('off');
     expect(getBreadcrumbsPref()).toBe('off');
     expect(getFeedbackPref()).toBe('off');
+  });
+});
+
+describe('reading-prefs batch 2 store', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('size prefs default correctly and round-trip', () => {
+    expect(getTextSize()).toBe('m');
+    expect(getCodeSize()).toBe('m');
+    expect(getImgSize()).toBe('l'); // natural by default
+    setTextSize('l'); setCodeSize('s'); setImgSize('s');
+    expect(getTextSize()).toBe('l');
+    expect(getCodeSize()).toBe('s');
+    expect(getImgSize()).toBe('s');
+  });
+
+  it('invalid stored size falls back to default', () => {
+    localStorage.setItem('tut.pref.textSize', 'xl');
+    expect(getTextSize()).toBe('m');
+  });
+
+  it('readWidth defaults full and round-trips', () => {
+    expect(getReadWidth()).toBe('full');
+    setReadWidth('narrow');
+    expect(getReadWidth()).toBe('narrow');
+  });
+
+  it('OnOff toggles default off and round-trip', () => {
+    for (const [get, set] of [
+      [getCodeWrap, setCodeWrap], [getCopyClean, setCopyClean],
+      [getImgCollapse, setImgCollapse], [getReduceMotion, setReduceMotion],
+      [getReadableFont, setReadableFont]
+    ] as const) {
+      expect(get()).toBe('off');
+      set('on');
+      expect(get()).toBe('on');
+      localStorage.clear();
+    }
   });
 });

@@ -45,6 +45,75 @@
         </section>
 
         <hr class="tut-prefs__sep" />
+        <p class="tut-prefs__group-label">Text</p>
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Text size</span></label>
+          <ui5-segmented-button data-testid="tut-prefs-text-size" @selection-change="onSizeSelect('set-text-size', $event)">
+            <ui5-segmented-button-item :pressed="textSize === 's' || undefined" data-size="s">Small</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="textSize === 'm' || undefined" data-size="m">Medium</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="textSize === 'l' || undefined" data-size="l">Large</ui5-segmented-button-item>
+          </ui5-segmented-button>
+        </section>
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Reading width</span></label>
+          <ui5-segmented-button data-testid="tut-prefs-read-width" @selection-change="onWidthSelect">
+            <ui5-segmented-button-item :pressed="readWidth === 'full' || undefined" data-width="full">Full</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="readWidth === 'narrow' || undefined" data-width="narrow">Narrow</ui5-segmented-button-item>
+          </ui5-segmented-button>
+        </section>
+
+        <hr class="tut-prefs__sep" />
+        <p class="tut-prefs__group-label">Code</p>
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Code size</span></label>
+          <ui5-segmented-button data-testid="tut-prefs-code-size" @selection-change="onSizeSelect('set-code-size', $event)">
+            <ui5-segmented-button-item :pressed="codeSize === 's' || undefined" data-size="s">Small</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="codeSize === 'm' || undefined" data-size="m">Medium</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="codeSize === 'l' || undefined" data-size="l">Large</ui5-segmented-button-item>
+          </ui5-segmented-button>
+        </section>
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Wrap long lines</span>
+            <ui5-switch data-testid="tut-prefs-code-wrap" :checked="codeWrap || undefined" @change="$emit('toggle-code-wrap')"></ui5-switch>
+          </label>
+        </section>
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Copy without prompt ($, &gt;)</span>
+            <ui5-switch data-testid="tut-prefs-copy-clean" :checked="copyClean || undefined" @change="$emit('toggle-copy-clean')"></ui5-switch>
+          </label>
+        </section>
+
+        <hr class="tut-prefs__sep" />
+        <p class="tut-prefs__group-label">Screenshots</p>
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Screenshot size</span></label>
+          <ui5-segmented-button data-testid="tut-prefs-img-size" @selection-change="onSizeSelect('set-img-size', $event)">
+            <ui5-segmented-button-item :pressed="imgSize === 's' || undefined" data-size="s">Small</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="imgSize === 'm' || undefined" data-size="m">Medium</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="imgSize === 'l' || undefined" data-size="l">Large</ui5-segmented-button-item>
+          </ui5-segmented-button>
+          <p class="tut-prefs__desc">Click any screenshot to open it full-size.</p>
+        </section>
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Collapse screenshots</span>
+            <ui5-switch data-testid="tut-prefs-img-collapse" :checked="imgCollapse || undefined" @change="$emit('toggle-img-collapse')"></ui5-switch>
+          </label>
+        </section>
+
+        <hr class="tut-prefs__sep" />
+        <p class="tut-prefs__group-label">Accessibility</p>
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Reduce motion</span>
+            <ui5-switch data-testid="tut-prefs-reduce-motion" :checked="reduceMotion || undefined" @change="$emit('toggle-reduce-motion')"></ui5-switch>
+          </label>
+        </section>
+        <section class="tut-prefs__row">
+          <label class="tut-prefs__label"><span>Easier-to-read font</span>
+            <ui5-switch data-testid="tut-prefs-readable-font" :checked="readableFont || undefined" @change="$emit('toggle-readable-font')"></ui5-switch>
+          </label>
+        </section>
+
+        <hr class="tut-prefs__sep" />
         <p class="tut-prefs__group-label">Experimental</p>
 
         <section class="tut-prefs__row">
@@ -115,7 +184,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue';
-import type { FeatureId, HeaderMode } from './constants';
+import type { FeatureId, HeaderMode, SizeStep, ReadWidth } from './constants';
 
 const props = defineProps<{
   readerOn: boolean;
@@ -134,6 +203,15 @@ const props = defineProps<{
   footerAutohide: boolean;
   breadcrumbsOn: boolean;
   feedbackOn: boolean;
+  textSize: SizeStep;
+  readWidth: ReadWidth;
+  codeSize: SizeStep;
+  codeWrap: boolean;
+  copyClean: boolean;
+  imgSize: SizeStep;
+  imgCollapse: boolean;
+  reduceMotion: boolean;
+  readableFont: boolean;
 }>();
 const emit = defineEmits<{
   (e: 'toggle-reader'): void;
@@ -144,6 +222,15 @@ const emit = defineEmits<{
   (e: 'toggle-footer'): void;
   (e: 'toggle-breadcrumbs'): void;
   (e: 'toggle-feedback'): void;
+  (e: 'set-text-size', size: SizeStep): void;
+  (e: 'set-read-width', width: ReadWidth): void;
+  (e: 'set-code-size', size: SizeStep): void;
+  (e: 'toggle-code-wrap'): void;
+  (e: 'toggle-copy-clean'): void;
+  (e: 'set-img-size', size: SizeStep): void;
+  (e: 'toggle-img-collapse'): void;
+  (e: 'toggle-reduce-motion'): void;
+  (e: 'toggle-readable-font'): void;
 }>();
 
 function onHeaderSelect(e: any) {
@@ -151,6 +238,15 @@ function onHeaderSelect(e: any) {
     ?? e.target?.querySelector('[pressed]')?.dataset?.mode;
   // Guard: skip emit when mode matches current pref (e.g. sync click on mount)
   if (mode && mode !== props.headerMode) emit('set-header', mode as HeaderMode);
+}
+
+function onSizeSelect(event: 'set-text-size' | 'set-code-size' | 'set-img-size', e: any) {
+  const size = e.detail?.selectedItems?.[0]?.dataset?.size;
+  if (size === 's' || size === 'm' || size === 'l') emit(event, size as SizeStep);
+}
+function onWidthSelect(e: any) {
+  const w = e.detail?.selectedItems?.[0]?.dataset?.width;
+  if (w === 'full' || w === 'narrow') emit('set-read-width', w as ReadWidth);
 }
 
 // ui5-segmented-button manages selection internally and ignores attribute/property

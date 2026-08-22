@@ -71,3 +71,48 @@ describe('installAutoHide (#1966)', () => {
     teardown();
   });
 });
+
+describe('reading-prefs attrs (#1966 batch 2)', () => {
+  beforeEach(() => {
+    window.matchMedia = () => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} } as any);
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-tut-text-size');
+    document.documentElement.removeAttribute('data-tut-read-width');
+    document.documentElement.removeAttribute('data-tut-code-size');
+    document.documentElement.removeAttribute('data-tut-code-wrap');
+    document.documentElement.removeAttribute('data-tut-img-size');
+    document.documentElement.removeAttribute('data-tut-img-collapse');
+    document.documentElement.removeAttribute('data-tut-reduce-motion');
+    document.documentElement.removeAttribute('data-tut-readable-font');
+  });
+
+  it('applies reading-prefs attrs from storage (pass-through, no short-viewport effect)', () => {
+    localStorage.setItem('tut.pref.textSize', 'l');
+    localStorage.setItem('tut.pref.readWidth', 'narrow');
+    localStorage.setItem('tut.pref.codeSize', 's');
+    localStorage.setItem('tut.pref.codeWrap', 'on');
+    localStorage.setItem('tut.pref.imgSize', 's');
+    localStorage.setItem('tut.pref.imgCollapse', 'on');
+    localStorage.setItem('tut.pref.reduceMotion', 'on');
+    localStorage.setItem('tut.pref.readableFont', 'on');
+    applyDisplayChrome(document);
+    const el = document.documentElement;
+    expect(el.getAttribute('data-tut-text-size')).toBe('l');
+    expect(el.getAttribute('data-tut-read-width')).toBe('narrow');
+    expect(el.getAttribute('data-tut-code-size')).toBe('s');
+    expect(el.getAttribute('data-tut-code-wrap')).toBe('on');
+    expect(el.getAttribute('data-tut-img-size')).toBe('s');
+    expect(el.getAttribute('data-tut-img-collapse')).toBe('on');
+    expect(el.getAttribute('data-tut-reduce-motion')).toBe('on');
+    expect(el.getAttribute('data-tut-readable-font')).toBe('on');
+  });
+
+  it('reading-prefs use defaults when unset', () => {
+    applyDisplayChrome(document);
+    const el = document.documentElement;
+    expect(el.getAttribute('data-tut-text-size')).toBe('m');
+    expect(el.getAttribute('data-tut-img-size')).toBe('l');
+    expect(el.getAttribute('data-tut-read-width')).toBe('full');
+    expect(el.getAttribute('data-tut-code-wrap')).toBe('off');
+  });
+});

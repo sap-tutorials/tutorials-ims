@@ -62,3 +62,17 @@ export const SHORT_VIEWPORT_MAX_HEIGHT = 900;
 export type HeaderMode = 'locked' | 'thinbar' | 'autohide';
 export type FooterMode = 'shown' | 'autohide';
 export type OnOff = 'on' | 'off';
+
+// Reading preferences batch 2 (#1966 follow-up). Same tut.pref.* convention.
+export const KEY_PREF_TEXT_SIZE = 'tut.pref.textSize';
+export const KEY_PREF_READ_WIDTH = 'tut.pref.readWidth';
+export const KEY_PREF_CODE_SIZE = 'tut.pref.codeSize';
+export const KEY_PREF_CODE_WRAP = 'tut.pref.codeWrap';
+export const KEY_PREF_COPY_CLEAN = 'tut.pref.copyClean';
+export const KEY_PREF_IMG_SIZE = 'tut.pref.imgSize';
+export const KEY_PREF_IMG_COLLAPSE = 'tut.pref.imgCollapse';
+export const KEY_PREF_REDUCE_MOTION = 'tut.pref.reduceMotion';
+export const KEY_PREF_READABLE_FONT = 'tut.pref.readableFont';
+
+export type SizeStep = 's' | 'm' | 'l';
+export type ReadWidth = 'full' | 'narrow';
