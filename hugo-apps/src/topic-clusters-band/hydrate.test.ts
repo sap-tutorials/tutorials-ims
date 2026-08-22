@@ -19,4 +19,20 @@ describe('mergeVolatile', () => {
   it('returns SSR unchanged when volatile is empty', () => {
     expect(mergeVolatile(ssr, [], 8)).toEqual(ssr);
   });
+  it('caps result at exactly the cap boundary', () => {
+    const vol = Array.from({ length: 8 }, (_, i) => ({
+      kind: 'blog-post', slug: `b${i}`, title: `B${i}`, href: `https://x/b${i}`,
+    }));
+    const out = mergeVolatile(ssr, vol, 8);
+    expect(out.length).toBe(8);
+  });
+  it('drops volatile items with no href', () => {
+    const vol = [
+      { kind: 'video', slug: 'v1', title: 'V1', href: '' },
+      { kind: 'video', slug: 'v2', title: 'V2', href: 'https://x/v2' },
+    ];
+    const out = mergeVolatile(ssr, vol, 8);
+    expect(out.find(i => i.slug === 'v1')).toBeUndefined();
+    expect(out.find(i => i.slug === 'v2')).toBeDefined();
+  });
 });

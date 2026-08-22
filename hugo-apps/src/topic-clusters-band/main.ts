@@ -12,11 +12,19 @@ function readCardItems(ul: HTMLElement): ClusterItem[] {
 }
 
 function renderItems(ul: HTMLElement, items: ClusterItem[]): void {
-  ul.innerHTML = items.map(i => {
-    const label = i.title || i.slug;
-    return `<li data-kind="${i.kind}" data-slug="${i.slug}"><a href="${i.href}">${label}</a>`
-      + `<span class="hp-tc-badge hp-tc-badge--${i.kind}">${i.kind}</span></li>`;
-  }).join('');
+  ul.replaceChildren(...items.map(i => {
+    const li = document.createElement('li');
+    li.setAttribute('data-kind', i.kind);
+    li.setAttribute('data-slug', i.slug);
+    const a = document.createElement('a');
+    a.href = i.href;                    // DOM property assignment sanitizes javascript: URIs
+    a.textContent = i.title || i.slug;  // textContent never parses HTML
+    const span = document.createElement('span');
+    span.className = `hp-tc-badge hp-tc-badge--${i.kind}`;
+    span.textContent = i.kind;
+    li.append(a, span);
+    return li;
+  }));
 }
 
 async function hydrate(root: HTMLElement): Promise<void> {
