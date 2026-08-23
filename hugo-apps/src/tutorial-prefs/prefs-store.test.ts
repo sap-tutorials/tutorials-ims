@@ -99,10 +99,19 @@ describe('reading-prefs batch 2 store', () => {
     expect(getTextSize()).toBe('m');
   });
 
-  it('readWidth defaults full and round-trips', () => {
+  it('readWidth defaults full and round-trips full/narrow/wide', () => {
     expect(getReadWidth()).toBe('full');
     setReadWidth('narrow');
     expect(getReadWidth()).toBe('narrow');
+    setReadWidth('wide');
+    expect(getReadWidth()).toBe('wide');
+    setReadWidth('full');
+    expect(getReadWidth()).toBe('full');
+  });
+
+  it('invalid stored readWidth falls back to full', () => {
+    localStorage.setItem('tut.pref.readWidth', 'ultra');
+    expect(getReadWidth()).toBe('full');
   });
 
   it('OnOff toggles default off and round-trip', () => {

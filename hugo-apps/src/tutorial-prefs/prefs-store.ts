@@ -112,7 +112,8 @@ export function getTextSize(): SizeStep { return readSize(KEY_PREF_TEXT_SIZE); }
 export function setTextSize(v: SizeStep): void { safeSet(safeLocal(), KEY_PREF_TEXT_SIZE, v); }
 
 export function getReadWidth(): ReadWidth {
-  return safeLocal()?.getItem(KEY_PREF_READ_WIDTH) === 'narrow' ? 'narrow' : 'full';
+  const v = safeLocal()?.getItem(KEY_PREF_READ_WIDTH);
+  return v === 'narrow' || v === 'wide' ? v : 'full';
 }
 export function setReadWidth(v: ReadWidth): void { safeSet(safeLocal(), KEY_PREF_READ_WIDTH, v); }
 

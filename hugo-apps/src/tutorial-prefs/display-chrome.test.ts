@@ -115,4 +115,10 @@ describe('reading-prefs attrs (#1966 batch 2)', () => {
     expect(el.getAttribute('data-tut-read-width')).toBe('full');
     expect(el.getAttribute('data-tut-code-wrap')).toBe('off');
   });
+
+  it('applies super-wide read width from storage', () => {
+    localStorage.setItem('tut.pref.readWidth', 'wide');
+    applyDisplayChrome(document);
+    expect(document.documentElement.getAttribute('data-tut-read-width')).toBe('wide');
+  });
 });

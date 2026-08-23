@@ -772,6 +772,12 @@ html[data-tut-feedback="off"][data-page-kind="tutorial"] #op-discussion { displa
 html[data-tut-text-size="s"][data-page-kind="tutorial"] .op-body { font-size: 0.9rem; }
 html[data-tut-text-size="l"][data-page-kind="tutorial"] .op-body { font-size: 1.15rem; }
 html[data-tut-read-width="narrow"][data-page-kind="tutorial"] .op-body { max-width: 46rem; margin-inline: auto; }
+/* Super wide: uncap the centered .op-page so tutorial content uses the full
+   browser width. The .op-twocol grid (content + 320px sticky TOC) is left
+   intact, so the TOC stays and the content column soaks up the freed space.
+   Inline padding keeps prose off the viewport edge. Opt-in; default stays full. */
+html[data-tut-read-width="wide"][data-page-kind="tutorial"] .op-page { max-width: none; }
+html[data-tut-read-width="wide"][data-page-kind="tutorial"] .op-body { padding-inline: 1.5rem; }
 html[data-tut-code-size="s"][data-page-kind="tutorial"] .code-block-body code,
 html[data-tut-code-size="s"][data-page-kind="tutorial"] .code-block-body pre { font-size: 0.8rem; }
 html[data-tut-code-size="l"][data-page-kind="tutorial"] .code-block-body code,
