@@ -59,6 +59,7 @@
           <ui5-segmented-button data-testid="tut-prefs-read-width" @selection-change="onWidthSelect">
             <ui5-segmented-button-item :pressed="readWidth === 'full' || undefined" data-width="full">Full</ui5-segmented-button-item>
             <ui5-segmented-button-item :pressed="readWidth === 'narrow' || undefined" data-width="narrow">Narrow</ui5-segmented-button-item>
+            <ui5-segmented-button-item :pressed="readWidth === 'wide' || undefined" data-width="wide">Super wide</ui5-segmented-button-item>
           </ui5-segmented-button>
         </section>
 
@@ -253,7 +254,7 @@ function onSizeSelect(event: 'set-text-size' | 'set-code-size' | 'set-img-size',
 }
 function onWidthSelect(e: any) {
   const w = e.detail?.selectedItems?.[0]?.dataset?.width;
-  if (w === 'full' || w === 'narrow') emit('set-read-width', w as ReadWidth);
+  if (w === 'full' || w === 'narrow' || w === 'wide') emit('set-read-width', w as ReadWidth);
 }
 
 // ui5-segmented-button manages selection internally and ignores attribute/property

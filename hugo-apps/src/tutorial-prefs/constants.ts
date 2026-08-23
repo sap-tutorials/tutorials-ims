@@ -109,4 +109,4 @@ export const KEY_PREF_REDUCE_MOTION = 'tut.pref.reduceMotion';
 export const KEY_PREF_READABLE_FONT = 'tut.pref.readableFont';
 
 export type SizeStep = 's' | 'm' | 'l';
-export type ReadWidth = 'full' | 'narrow';
+export type ReadWidth = 'full' | 'narrow' | 'wide';

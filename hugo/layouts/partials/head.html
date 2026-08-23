@@ -150,7 +150,7 @@
       var sizeOf = function (k, d) { var v = localStorage.getItem(k); return (v === 's' || v === 'm' || v === 'l') ? v : d; };
       var onoff = function (k) { return localStorage.getItem(k) === 'on' ? 'on' : 'off'; };
       el.dataset.tutTextSize = sizeOf('tut.pref.textSize', 'm');
-      el.dataset.tutReadWidth = localStorage.getItem('tut.pref.readWidth') === 'narrow' ? 'narrow' : 'full';
+      el.dataset.tutReadWidth = (function () { var v = localStorage.getItem('tut.pref.readWidth'); return (v === 'narrow' || v === 'wide') ? v : 'full'; })();
       el.dataset.tutCodeSize = sizeOf('tut.pref.codeSize', 'm');
       el.dataset.tutCodeWrap = onoff('tut.pref.codeWrap');
       el.dataset.tutImgSize = sizeOf('tut.pref.imgSize', 'l');
