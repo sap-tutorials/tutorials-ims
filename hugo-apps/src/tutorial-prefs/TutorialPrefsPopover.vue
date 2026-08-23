@@ -250,11 +250,20 @@ function onHeaderSelect(e: any) {
 
 function onSizeSelect(event: 'set-text-size' | 'set-code-size' | 'set-img-size', e: any) {
   const size = e.detail?.selectedItems?.[0]?.dataset?.size;
-  if (size === 's' || size === 'm' || size === 'l') emit(event, size as SizeStep);
+  if (size !== 's' && size !== 'm' && size !== 'l') return;
+  // Guard: skip emit when the value matches the current pref (e.g. UI5's
+  // selection-change fire for the already-pressed item on mount). onSizeSelect is
+  // shared across text/code/img, so pick the matching prop per event.
+  const current = event === 'set-text-size' ? props.textSize
+    : event === 'set-code-size' ? props.codeSize
+    : props.imgSize;
+  if (size !== current) emit(event, size as SizeStep);
 }
 function onWidthSelect(e: any) {
   const w = e.detail?.selectedItems?.[0]?.dataset?.width;
-  if (w === 'full' || w === 'narrow' || w === 'wide') emit('set-read-width', w as ReadWidth);
+  if (w !== 'full' && w !== 'narrow' && w !== 'wide') return;
+  // Guard: skip emit when width matches current pref (mount-time sync fire).
+  if (w !== props.readWidth) emit('set-read-width', w as ReadWidth);
 }
 
 // ui5-segmented-button manages selection internally and ignores attribute/property
