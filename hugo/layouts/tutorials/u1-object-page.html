@@ -747,6 +747,25 @@
     }
   });
 
+  // Experimental hand-gesture input (tutorial-prefs island) advances/rewinds a
+  // single step. Same scroll + resync as the mobile sheet's prev/next buttons,
+  // but exposed globally so the island drives step nav without re-implementing
+  // step math or clicking the (mobile-only) sheet buttons. `total` is derived
+  // from the .tutorial-step sections directly — getStepCount() reads the mobile
+  // sheet's ui5-li list, which may be empty on desktop. Returns true only when
+  // a step actually changed (false at first/last step) so the caller can no-op.
+  window.opStepNav = function (dir) {
+    const total = document.querySelectorAll(".tutorial-step").length;
+    if (!total) return false;
+    const current = getCurrentStep();
+    const target = dir === "next" ? current + 1 : current - 1;
+    if (target < 1 || target > total) return false;
+    if (!scrollToStep(target)) return false;
+    requestAnimationFrame(() => requestAnimationFrame(syncListFromDom));
+    return true;
+  };
+
+
   markBtn?.addEventListener("click", () => {
     const current = getCurrentStep();
     if (typeof window.completeStep === "function" && tutorialSlug) {

@@ -28,11 +28,8 @@ export const KEY_FIRSTRUN_EYE = 'tut.pref.eyeTrack.firstRun';
 export const KEY_FIRSTRUN_HAND = 'tut.pref.handGest.firstRun';
 export const KEY_READER = 'reader';
 
-// Stable selectors used by nav-dispatch. nav-dispatch.test.ts exercises
-// these against a fixture, so a future U2 refactor that renames classes
-// fails the test before gestures silently break.
-export const SEL_NAV_NEXT = '.tutorial-stepnav__slot--next .nav-pill';
-export const SEL_NAV_PREV = '.tutorial-stepnav__slot--prev .nav-pill';
+// Hand gestures navigate between steps via the layout's window.opStepNav hook
+// (see nav-dispatch.ts) — no DOM selectors are needed here anymore.
 
 export const MEDIAPIPE_WASM_BASE = '/vendor/mediapipe';
 export const MODEL_FACE = '/vendor/mediapipe/face_landmarker.task';
