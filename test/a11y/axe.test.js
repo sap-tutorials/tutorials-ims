@@ -42,6 +42,18 @@ const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'];
 // axe samples a pre-theme transient colour and false-flags color-contrast.
 const SETTLE_MS = 4000;
 
+// Neutralise CSS animations/transitions so fade-ins render at their rest state
+// before axe samples colour. Tutorial figures fade opacity 0→1 (.tutorial-figure);
+// caught mid-fade, axe composites the caption colour toward the white background
+// and reports a transient color-contrast failure (~4.3:1) even though the settled
+// caption is 6.4:1. Zeroing durations collapses every fade to its end state.
+async function settleAnimations(page) {
+  await page.addStyleTag({
+    content: '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important}',
+  });
+  await page.waitForTimeout(300);
+}
+
 const baseline = loadBaseline();
 
 describe.skipIf(!BASE_URL)('axe-core a11y regression gate', () => {
@@ -72,6 +84,7 @@ describe.skipIf(!BASE_URL)('axe-core a11y regression gate', () => {
           scanResult.error = `HTTP ${scanResult.status}`;
         } else {
           await page.waitForTimeout(SETTLE_MS);
+          await settleAnimations(page);
           const axe = await new AxeBuilder({ page })
             // #consent_blackbar is the TrustArc consent banner — third-party
             // injected markup we do not own or control. It ships an invalid ARIA

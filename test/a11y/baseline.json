@@ -13,13 +13,7 @@
     "/browse/": {
       "critical": 0,
       "serious": 0,
-      "rules": [
-        "landmark-banner-is-top-level",
-        "landmark-main-is-top-level",
-        "landmark-no-duplicate-banner",
-        "landmark-no-duplicate-main",
-        "landmark-unique"
-      ]
+      "rules": []
     },
     "/topics/": {
       "critical": 0,
@@ -29,27 +23,20 @@
     "/concepts/cap-cds-domain-modeling/": {
       "critical": 0,
       "serious": 0,
-      "rules": [
-        "region"
-      ]
+      "rules": []
     },
     "/tutorials/abap-cloud-ui-from-interface/": {
       "critical": 0,
-      "serious": 1,
+      "serious": 0,
       "rules": [
-        "color-contrast",
-        "landmark-main-is-top-level",
-        "landmark-no-duplicate-main",
-        "landmark-unique"
+        "region"
       ]
     },
     "/tutorials/abap-create-basic-app/": {
       "critical": 0,
       "serious": 0,
       "rules": [
-        "landmark-main-is-top-level",
-        "landmark-no-duplicate-main",
-        "landmark-unique"
+        "region"
       ]
     },
     "/tags/": {
@@ -60,11 +47,7 @@
     "/developer-advocates/": {
       "critical": 0,
       "serious": 0,
-      "rules": [
-        "landmark-main-is-top-level",
-        "landmark-no-duplicate-main",
-        "landmark-unique"
-      ]
+      "rules": []
     }
   }
 }
