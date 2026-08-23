@@ -1,13 +1,13 @@
 export const TARGET_FPS = 15;
 export const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
 
-// Tuned 2026-05-29 against live cam-debug telemetry. The original synthetic-
-// frame defaults (gazeY > 0.7, pitch < 0.06, swipe v >= 1.5) required an
-// exaggerated chin-up + iris-hard-down posture and a TikTok-speed flick;
-// natural reading + a controlled wave never crossed either. See cam-debug
-// overlay (?debug-cam) to revisit if behaviour drifts.
-export const GAZE_BOTTOM_THRESHOLD = 0.55;   // iris in bottom ~45% of eye opening (was 0.7)
-export const GAZE_HEAD_PITCH_MAX = 0.55;     // normalized by inter-ocular distance (was 0.12 raw)
+// Eye auto-scroll fires on HEAD PITCH relative to a per-user CALIBRATED envelope
+// (see calibration.ts), NOT the iris gazeY — which read ~0 and inverted on real
+// cameras (2026-08 telemetry), while pitch tracks vertical gaze monotonically.
+// Calibration captures the pitch range as the user scans the page top→bottom;
+// the runtime scrolls DOWN when pitch climbs into the bottom of that range and
+// UP when it drops into the top. gazeY is still computed for the ?debug-cam
+// overlay only. Swipe defaults tuned 2026-05-29 against live telemetry.
 export const GAZE_DWELL_MS = 600;
 export const GAZE_FIRE_COOLDOWN_MS = 1200;
 export const NO_FACE_TIMEOUT_MS = 1000;
@@ -43,13 +43,16 @@ export const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
 export const PAGE_KIND_TUTORIAL = 'tutorial';
 
 // --- Calibration (2026-08-22) -------------------------------------------
-export const CAL_PROFILE_VERSION = 1;
+export const CAL_PROFILE_VERSION = 2;   // v2: eye profile stores pitch envelope (was gaze)
 export const CAL_DURATION_MS = 5000;
 export const CAL_MIN_SAMPLES = 20;
 
-// Eye: threshold sits this far into the captured [p5, p95] gaze envelope.
-export const CAL_EYE_TRIGGER_FRACTION = 0.7;
-export const CAL_EYE_MIN_SPREAD = 0.05;      // min p95-p5 gaze spread to accept (new gaze units)
+// Eye: scroll triggers sit this far into the captured [p5, p95] PITCH envelope.
+// Down fires high in the range (looking down), up fires low (looking up); the
+// gap between leaves a resting-center deadband so neutral posture never scrolls.
+export const CAL_EYE_DOWN_FRACTION = 0.75;
+export const CAL_EYE_UP_FRACTION = 0.25;
+export const CAL_EYE_MIN_SPREAD = 0.05;      // min p95-p5 pitch spread to accept
 
 // Hand: derived thresholds = factor * observed, clamped to sane bounds.
 export const CAL_HAND_DX_FACTOR = 0.6;
@@ -72,7 +75,7 @@ export const KEY_CAL_HAND = 'tut.pref.handGest.cal';
 export const KEY_CAL_PROMPTED_EYE = 'tut.pref.eyeTrack.cal.prompted';
 export const KEY_CAL_PROMPTED_HAND = 'tut.pref.handGest.cal.prompted';
 
-export interface EyeProfile { v: number; gazeMin: number; gazeMax: number; }
+export interface EyeProfile { v: number; pitchMin: number; pitchMax: number; }
 export interface HandProfile { v: number; dxFraction: number; minVelocity: number; }
 export type CalProfile = EyeProfile | HandProfile;
 

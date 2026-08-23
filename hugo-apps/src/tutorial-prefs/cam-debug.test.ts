@@ -22,42 +22,29 @@ describe('createDebugOverlay', () => {
     expect(root!.getAttribute('role')).toBe('status');
   });
 
-  it('renders eye fields with threshold ticks', () => {
+  it('renders eye pitch vs calibrated down/up thresholds with ticks', () => {
     const handle = createDebugOverlay(true)!;
     handle.report({
-      kind: 'eye', faceSeen: true, gazeY: 0.85, pitch: 0.04,
-      headForward: true, dwellMs: 300, threshold: 0.55, calibrated: false
+      kind: 'eye', faceSeen: true, pitch: 1.05, gazeY: 0.1,
+      downThreshold: 1.0, upThreshold: 0.6, calibrated: true, dwellMs: 300, dir: 'down'
     });
     const block = document.querySelector<HTMLElement>('[data-kind="eye"]')!;
     const text = block.textContent ?? '';
     expect(text).toContain('EYE');
-    expect(text).toContain('gazeY      0.85');
-    expect(text).toContain('pitch      0.040');
+    expect(text).toContain('pitch      1.050');
+    expect(text).toContain('down >=    1.000  ✓');   // 1.05 >= 1.0
+    expect(text).toContain('up   <=    0.600  ✗');   // 1.05 not <= 0.6
     expect(text).toContain('dwell      300');
-    // gazeY 0.85 > 0.55 and headForward true → eligible should be ✓
-    expect(text).toContain('eligible   ✓');
   });
 
-  it('marks eye eligible ✗ when gaze is high', () => {
+  it('shows a not-calibrated notice when no profile is active', () => {
     const handle = createDebugOverlay(true)!;
     handle.report({
-      kind: 'eye', faceSeen: true, gazeY: 0.4, pitch: 0.04,
-      headForward: true, dwellMs: 0, threshold: 0.55, calibrated: false
+      kind: 'eye', faceSeen: true, pitch: 0.8, gazeY: 0.1,
+      downThreshold: null, upThreshold: null, calibrated: false, dwellMs: 0, dir: null
     });
     const block = document.querySelector<HTMLElement>('[data-kind="eye"]')!;
-    expect(block.textContent).toContain('eligible   ✗');
-  });
-
-  it('renders eye fields with the ACTIVE threshold and cal flag', () => {
-    const handle = createDebugOverlay(true)!;
-    handle.report({
-      kind: 'eye', faceSeen: true, gazeY: 0.85, pitch: 0.30,
-      headForward: true, dwellMs: 300, threshold: 0.42, calibrated: true
-    });
-    const text = document.querySelector<HTMLElement>('[data-kind="eye"]')!.textContent ?? '';
-    expect(text).toContain('gazeY      0.85  > 0.42');   // shows injected threshold, not the constant
-    expect(text).toContain('cal        ✓');
-    expect(text).toContain('eligible   ✓');
+    expect(block.textContent).toContain('not calibrated');
   });
 
   it('renders hand fields with state and dx/v ticks', () => {

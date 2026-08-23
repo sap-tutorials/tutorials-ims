@@ -1,84 +1,91 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GazeDetector, emaStep } from './eye-tracking';
+import { GazeDetector, emaStep, type ScrollDir } from './eye-tracking';
 import { GAZE_DWELL_MS, GAZE_FIRE_COOLDOWN_MS, NO_FACE_TIMEOUT_MS, GAZE_DWELL_GRACE_MS } from './constants';
+
+// Calibrated pitch envelope for these tests: down fires at >= 1.0, up at <= 0.6,
+// with a resting deadband around 0.8 (matches observed live telemetry).
+const DOWN_TH = 1.0, UP_TH = 0.6;
+const DOWN = 1.1, UP = 0.5, DEAD = 0.8;
 
 describe('GazeDetector', () => {
   let now = 0; const tick = (ms: number) => { now += ms; };
-  let onFire: ReturnType<typeof vi.fn>;
+  let onScroll: ReturnType<typeof vi.fn>;
   let det: GazeDetector;
 
+  const feed = (pitch: number, ms: number) => {
+    for (let t = 0; t <= ms; t += 50) { det.observe({ pitch }); tick(50); }
+  };
+
   beforeEach(() => {
-    now = 0; onFire = vi.fn();
-    det = new GazeDetector({ now: () => now, onGazeLow: onFire });
+    now = 0; onScroll = vi.fn();
+    det = new GazeDetector({
+      now: () => now, onScroll: onScroll as (d: ScrollDir) => void,
+      downThreshold: DOWN_TH, upThreshold: UP_TH
+    });
   });
 
-  it('does not fire on a single low frame', () => {
-    det.observe({ gazeY: 0.9, headForward: true });
-    expect(onFire).not.toHaveBeenCalled();
+  it('does not fire on a single frame past threshold', () => {
+    det.observe({ pitch: DOWN });
+    expect(onScroll).not.toHaveBeenCalled();
   });
 
-  it('fires after sustained low gaze for DWELL ms', () => {
-    for (let t = 0; t <= GAZE_DWELL_MS + 50; t += 50) {
-      det.observe({ gazeY: 0.9, headForward: true });
-      tick(50);
-    }
-    expect(onFire).toHaveBeenCalledTimes(1);
+  it('fires "down" after sustained downward pitch for DWELL ms', () => {
+    feed(DOWN, GAZE_DWELL_MS + 50);
+    expect(onScroll).toHaveBeenCalledTimes(1);
+    expect(onScroll).toHaveBeenCalledWith('down');
   });
 
-  it('does not fire if head is tilted down', () => {
-    for (let t = 0; t <= GAZE_DWELL_MS + 50; t += 50) {
-      det.observe({ gazeY: 0.9, headForward: false });
-      tick(50);
-    }
-    expect(onFire).not.toHaveBeenCalled();
+  it('fires "up" after sustained upward pitch for DWELL ms', () => {
+    feed(UP, GAZE_DWELL_MS + 50);
+    expect(onScroll).toHaveBeenCalledTimes(1);
+    expect(onScroll).toHaveBeenCalledWith('up');
+  });
+
+  it('does not fire while pitch stays in the resting deadband', () => {
+    feed(DEAD, GAZE_DWELL_MS + 200);
+    expect(onScroll).not.toHaveBeenCalled();
   });
 
   it('respects fire cooldown', () => {
-    for (let t = 0; t <= GAZE_DWELL_MS + 50; t += 50) {
-      det.observe({ gazeY: 0.9, headForward: true });
-      tick(50);
-    }
-    expect(onFire).toHaveBeenCalledTimes(1);
-    for (let t = 0; t < GAZE_FIRE_COOLDOWN_MS - 100; t += 50) {
-      det.observe({ gazeY: 0.9, headForward: true });
-      tick(50);
-    }
-    expect(onFire).toHaveBeenCalledTimes(1);
+    feed(DOWN, GAZE_DWELL_MS + 50);
+    expect(onScroll).toHaveBeenCalledTimes(1);
+    feed(DOWN, GAZE_FIRE_COOLDOWN_MS - 200);
+    expect(onScroll).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT break dwell on a single ineligible frame (grace window)', () => {
-    for (let t = 0; t < GAZE_DWELL_MS - 200; t += 50) { det.observe({ gazeY: 0.9, headForward: true }); tick(50); }
-    det.observe({ gazeY: 0.1, headForward: true }); tick(50);   // one blink-like dropout, inside grace
-    for (let t = 0; t < 200; t += 50) { det.observe({ gazeY: 0.9, headForward: true }); tick(50); }
-    expect(onFire).toHaveBeenCalledTimes(1);
+  it('does NOT break dwell on a single deadband frame (grace window)', () => {
+    feed(DOWN, GAZE_DWELL_MS - 200);
+    det.observe({ pitch: DEAD }); tick(50);   // one dropout, inside grace
+    feed(DOWN, 200);
+    expect(onScroll).toHaveBeenCalledTimes(1);
   });
 
-  it('breaks dwell when gaze stays high past the grace window', () => {
-    for (let t = 0; t < GAZE_DWELL_MS - 100; t += 50) { det.observe({ gazeY: 0.9, headForward: true }); tick(50); }
-    for (let t = 0; t <= GAZE_DWELL_GRACE_MS + 100; t += 50) { det.observe({ gazeY: 0.1, headForward: true }); tick(50); }
-    det.observe({ gazeY: 0.9, headForward: true }); tick(50);   // dwell restarted; not enough to fire
-    expect(onFire).not.toHaveBeenCalled();
+  it('breaks dwell when pitch stays in the deadband past the grace window', () => {
+    feed(DOWN, GAZE_DWELL_MS - 100);
+    feed(DEAD, GAZE_DWELL_GRACE_MS + 100);
+    det.observe({ pitch: DOWN }); tick(50);   // dwell restarted; not enough to fire
+    expect(onScroll).not.toHaveBeenCalled();
   });
 
-  it('honours an injected threshold', () => {
-    const d = new GazeDetector({ now: () => now, onGazeLow: onFire, threshold: 0.8 });
-    for (let t = 0; t <= GAZE_DWELL_MS + 50; t += 50) { d.observe({ gazeY: 0.7, headForward: true }); tick(50); }
-    expect(onFire).not.toHaveBeenCalled();  // 0.7 < 0.8 injected → never eligible
+  it('restarts the dwell clock when direction flips', () => {
+    feed(DOWN, GAZE_DWELL_MS - 150);   // almost fires down
+    feed(UP, GAZE_DWELL_MS - 150);     // switch before either completes
+    expect(onScroll).not.toHaveBeenCalled();
+  });
+
+  it('never fires when uncalibrated (no thresholds)', () => {
+    const d = new GazeDetector({ now: () => now, onScroll: onScroll as (d: ScrollDir) => void });
+    for (let t = 0; t <= GAZE_DWELL_MS + 50; t += 50) { d.observe({ pitch: DOWN }); tick(50); }
+    expect(onScroll).not.toHaveBeenCalled();
   });
 
   it('observeNoFace clears the dwell window', () => {
-    for (let t = 0; t < GAZE_DWELL_MS / 2; t += 50) {
-      det.observe({ gazeY: 0.9, headForward: true });
-      tick(50);
-    }
+    feed(DOWN, GAZE_DWELL_MS / 2);
     det.observeNoFace();
     tick(NO_FACE_TIMEOUT_MS + 50);
-    for (let t = 0; t < GAZE_DWELL_MS / 2; t += 50) {
-      det.observe({ gazeY: 0.9, headForward: true });
-      tick(50);
-    }
-    expect(onFire).not.toHaveBeenCalled();
+    feed(DOWN, GAZE_DWELL_MS / 2);
+    expect(onScroll).not.toHaveBeenCalled();
   });
 });
 

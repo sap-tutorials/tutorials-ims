@@ -43,9 +43,10 @@ describe('computeGazeFrame', () => {
     expect(computeGazeFrame(far).gazeY).toBeCloseTo(computeGazeFrame(near).gazeY, 4);
   });
 
-  it('headForward is false when the nose drops far below the eye line', () => {
+  it('pitch rises as the head/nose drops below the eye line', () => {
+    const level = computeGazeFrame(neutralFace(0.52));
     const head = neutralFace(0.52);
     head[1] = { x: 0.5, y: 0.95, z: 0 };  // nose way down → head tilted down
-    expect(computeGazeFrame(head).headForward).toBe(false);
+    expect(computeGazeFrame(head).pitch).toBeGreaterThan(level.pitch);
   });
 });
