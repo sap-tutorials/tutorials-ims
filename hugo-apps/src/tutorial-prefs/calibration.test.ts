@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { computeEyeProfile, computeHandProfile, deriveEyeThreshold, percentile, captureSamples } from './calibration';
-import { CAL_PROFILE_VERSION, CAL_EYE_TRIGGER_FRACTION } from './constants';
+import { computeEyeProfile, computeHandProfile, deriveEyeThresholds, percentile, captureSamples } from './calibration';
+import { CAL_PROFILE_VERSION, CAL_EYE_DOWN_FRACTION, CAL_EYE_UP_FRACTION } from './constants';
 
 const eyeSamples = (vals: number[]) => vals.map((v, i) => ({ t: i * 66, v }));
 
@@ -11,19 +11,19 @@ describe('percentile', () => {
 });
 
 describe('computeEyeProfile', () => {
-  it('returns a p5/p95 envelope from a wide scan', () => {
+  it('returns a p5/p95 pitch envelope from a wide scan', () => {
     const vals = Array.from({ length: 50 }, (_, i) => i / 49); // 0..1 spread
     const p = computeEyeProfile(eyeSamples(vals))!;
     expect(p.v).toBe(CAL_PROFILE_VERSION);
-    expect(p.gazeMin).toBeLessThan(0.1);
-    expect(p.gazeMax).toBeGreaterThan(0.9);
+    expect(p.pitchMin).toBeLessThan(0.1);
+    expect(p.pitchMax).toBeGreaterThan(0.9);
   });
 
   it('rejects blink outliers via percentiles', () => {
     const vals = [...Array.from({ length: 48 }, (_, i) => 0.4 + (i / 48) * 0.2), 99, -99]; // sweep 0.4→0.6 + spikes
     const p = computeEyeProfile(eyeSamples(vals))!;
-    expect(p.gazeMin).toBeGreaterThan(-1);   // −99 outlier excluded by p5
-    expect(p.gazeMax).toBeLessThan(2);       // 99 outlier excluded by p95
+    expect(p.pitchMin).toBeGreaterThan(-1);   // −99 outlier excluded by p5
+    expect(p.pitchMax).toBeLessThan(2);       // 99 outlier excluded by p95
   });
 
   it('returns null when too few samples', () => {
@@ -36,10 +36,12 @@ describe('computeEyeProfile', () => {
   });
 });
 
-describe('deriveEyeThreshold', () => {
-  it('sits CAL_EYE_TRIGGER_FRACTION into the envelope', () => {
-    const th = deriveEyeThreshold({ v: CAL_PROFILE_VERSION, gazeMin: 0, gazeMax: 1 });
-    expect(th).toBeCloseTo(CAL_EYE_TRIGGER_FRACTION, 6);
+describe('deriveEyeThresholds', () => {
+  it('places down/up at the configured fractions of the envelope', () => {
+    const { down, up } = deriveEyeThresholds({ v: CAL_PROFILE_VERSION, pitchMin: 0, pitchMax: 1 });
+    expect(down).toBeCloseTo(CAL_EYE_DOWN_FRACTION, 6);
+    expect(up).toBeCloseTo(CAL_EYE_UP_FRACTION, 6);
+    expect(down).toBeGreaterThan(up);   // deadband between up and down
   });
 });
 

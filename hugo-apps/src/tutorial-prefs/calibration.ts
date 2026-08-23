@@ -1,6 +1,6 @@
 import {
   CAL_PROFILE_VERSION, CAL_MIN_SAMPLES,
-  CAL_EYE_TRIGGER_FRACTION, CAL_EYE_MIN_SPREAD,
+  CAL_EYE_DOWN_FRACTION, CAL_EYE_UP_FRACTION, CAL_EYE_MIN_SPREAD,
   CAL_HAND_DX_FACTOR, CAL_HAND_V_FACTOR, CAL_HAND_MIN_REVERSALS, CAL_HAND_MIN_AMPLITUDE,
   CAL_HAND_DX_MIN, CAL_HAND_DX_MAX, CAL_HAND_V_MIN, CAL_HAND_V_MAX,
   FRAME_INTERVAL_MS, CAL_DURATION_MS, MEDIAPIPE_WASM_BASE, MODEL_FACE, MODEL_HAND,
@@ -24,17 +24,25 @@ export function percentile(sorted: number[], p: number): number {
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
+// Eye samples are head-PITCH values captured while the user scans the page
+// top→bottom. The [p5, p95] envelope becomes the per-user scroll range.
 export function computeEyeProfile(samples: Sample[]): EyeProfile | null {
   if (samples.length < CAL_MIN_SAMPLES) return null;
   const sorted = samples.map((s) => s.v).sort((a, b) => a - b);
-  const gazeMin = percentile(sorted, 5);
-  const gazeMax = percentile(sorted, 95);
-  if (gazeMax - gazeMin < CAL_EYE_MIN_SPREAD) return null;
-  return { v: CAL_PROFILE_VERSION, gazeMin, gazeMax };
+  const pitchMin = percentile(sorted, 5);
+  const pitchMax = percentile(sorted, 95);
+  if (pitchMax - pitchMin < CAL_EYE_MIN_SPREAD) return null;
+  return { v: CAL_PROFILE_VERSION, pitchMin, pitchMax };
 }
 
-export function deriveEyeThreshold(p: EyeProfile): number {
-  return p.gazeMin + CAL_EYE_TRIGGER_FRACTION * (p.gazeMax - p.gazeMin);
+// Down fires high in the pitch range (looking down), up fires low (looking up);
+// the gap leaves a resting-center deadband.
+export function deriveEyeThresholds(p: EyeProfile): { down: number; up: number } {
+  const range = p.pitchMax - p.pitchMin;
+  return {
+    down: p.pitchMin + CAL_EYE_DOWN_FRACTION * range,
+    up: p.pitchMin + CAL_EYE_UP_FRACTION * range
+  };
 }
 
 export function computeHandProfile(samples: Sample[]): HandProfile | null {
@@ -109,7 +117,7 @@ export async function runCalibrationCapture(
       });
       sample = () => {
         const lm = landmarker.detectForVideo(video, performance.now()).faceLandmarks?.[0];
-        return lm ? computeGazeFrame(lm).gazeY : null;
+        return lm ? computeGazeFrame(lm).pitch : null;   // pitch drives eye calibration
       };
     } else {
       landmarker = await HandLandmarker.createFromOptions(fileset, {

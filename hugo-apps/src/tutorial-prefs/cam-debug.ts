@@ -3,25 +3,27 @@
 // Off unless `?debug-cam` is in the URL — gated in main.ts so this module
 // is dead code in normal sessions and tree-shakes when not imported.
 //
-// The overlay shows live frame-derived values (gazeY, headForward pitch,
-// palmOpen, dx/dt) next to the firing thresholds, so we can see whether
-// the model is producing values the detectors would ever fire on.
+// The overlay shows live frame-derived values (head pitch vs the calibrated
+// up/down scroll thresholds, gazeY for diagnostics, palmOpen, dx/dt) next to the
+// firing thresholds, so we can see whether the model is producing values the
+// detectors would ever fire on.
 
 import {
-  GAZE_HEAD_PITCH_MAX, GAZE_DWELL_MS,
+  GAZE_DWELL_MS,
   type FeatureId
 } from './constants';
 
 
 interface EyeReport {
   kind: 'eye';
-  gazeY: number;
-  pitch: number;        // raw pitch value (headForward = pitch < GAZE_HEAD_PITCH_MAX)
-  headForward: boolean;
-  dwellMs: number;      // 0 if not currently dwelling
   faceSeen: boolean;
-  threshold: number;    // active (possibly calibrated) gaze threshold
-  calibrated: boolean;  // whether a calibration profile is active
+  pitch: number;                 // EMA-smoothed head pitch (drives the trigger)
+  gazeY: number;                 // diagnostic only — no longer drives the trigger
+  downThreshold: number | null;  // pitch >= this → scroll down (null = uncalibrated)
+  upThreshold: number | null;    // pitch <= this → scroll up (null = uncalibrated)
+  calibrated: boolean;           // whether a calibration profile is active
+  dwellMs: number;               // 0 if not currently dwelling
+  dir: 'up' | 'down' | null;     // direction currently arming a scroll
 }
 
 interface HandReport {
@@ -95,16 +97,17 @@ export function createDebugOverlay(enabled: boolean): OverlayHandle | null {
   function tick(ok: boolean): string { return ok ? '✓' : '✗'; }
 
   function renderEye(r: EyeReport): void {
-    const eligible = r.gazeY > r.threshold && r.headForward;
-    const lines = [
-      'EYE',
-      `face       ${tick(r.faceSeen)}`,
-      `gazeY      ${fmt(r.gazeY)}  > ${fmt(r.threshold)}  ${tick(r.gazeY > r.threshold)}`,
-      `pitch      ${fmt(r.pitch, 3)}  < ${GAZE_HEAD_PITCH_MAX}  ${tick(r.headForward)}`,
-      `dwell      ${r.dwellMs} / ${GAZE_DWELL_MS} ms`,
-      `cal        ${tick(r.calibrated)}`,
-      `eligible   ${tick(eligible)}`
-    ];
+    const lines = ['EYE', `face       ${tick(r.faceSeen)}`];
+    if (!r.calibrated || r.downThreshold === null || r.upThreshold === null) {
+      lines.push(`pitch      ${fmt(r.pitch, 3)}`);
+      lines.push('not calibrated — run eye calibration');
+    } else {
+      lines.push(`pitch      ${fmt(r.pitch, 3)}`);
+      lines.push(`down >=    ${fmt(r.downThreshold, 3)}  ${tick(r.pitch >= r.downThreshold)}`);
+      lines.push(`up   <=    ${fmt(r.upThreshold, 3)}  ${tick(r.pitch <= r.upThreshold)}`);
+      lines.push(`gazeY      ${fmt(r.gazeY)}  (info only)`);
+      lines.push(`dwell      ${r.dwellMs} / ${GAZE_DWELL_MS} ms  ${r.dir ?? '–'}`);
+    }
     eyeBlock.textContent = lines.join('\n');
   }
 

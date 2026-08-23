@@ -7,7 +7,7 @@ describe('calibration store', () => {
   beforeEach(() => localStorage.clear());
 
   it('round-trips an eye profile', () => {
-    const p: EyeProfile = { v: CAL_PROFILE_VERSION, gazeMin: 0.1, gazeMax: 0.6 };
+    const p: EyeProfile = { v: CAL_PROFILE_VERSION, pitchMin: 0.1, pitchMax: 0.6 };
     setCal('eye', p);
     expect(getCal('eye')).toEqual(p);
   });
@@ -22,12 +22,12 @@ describe('calibration store', () => {
   });
 
   it('returns null on version mismatch', () => {
-    localStorage.setItem(KEY_CAL_EYE, JSON.stringify({ v: 99, gazeMin: 0, gazeMax: 1 }));
+    localStorage.setItem(KEY_CAL_EYE, JSON.stringify({ v: 99, pitchMin: 0, pitchMax: 1 }));
     expect(getCal('eye')).toBeNull();
   });
 
   it('clearCal removes the profile', () => {
-    setCal('eye', { v: CAL_PROFILE_VERSION, gazeMin: 0, gazeMax: 1 });
+    setCal('eye', { v: CAL_PROFILE_VERSION, pitchMin: 0, pitchMax: 1 });
     clearCal('eye');
     expect(getCal('eye')).toBeNull();
   });
