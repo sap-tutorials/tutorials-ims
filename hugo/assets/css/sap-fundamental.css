@@ -3629,7 +3629,7 @@ body {
   display: flex;
   flex-direction: column;
 }
-body > main { flex: 1 0 auto; }
+body > main, body > .site-main { flex: 1 0 auto; }
 /* Breadcrumb dropdown toggle */
 .breadcrumb-dropdown-toggle {
   background: none;
@@ -4889,7 +4889,10 @@ html.dark .tutorial-main img:hover {
 .tutorial-figcaption {
   margin-top: 0.5rem;
   font-size: 0.875rem;
-  color: var(--sapContent_LabelColor, #6a6d70);
+  /* Not --sapContent_LabelColor: Horizon resolves it to #556B82 ≈ 4.1:1 on
+     white, which fails WCAG AA (4.5:1) for this small italic caption text
+     (axe color-contrast). #47566a ≈ 6.4:1 gives headroom. */
+  color: #47566a;
   font-style: italic;
   text-align: center;
   max-width: 90%;

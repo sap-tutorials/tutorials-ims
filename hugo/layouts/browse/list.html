@@ -28,7 +28,7 @@
   {{- $categoriesMap = merge $categoriesMap (dict .slug .label) -}}
 {{- end -}}
 
-<header class="browse-banner" role="banner">
+<header class="browse-banner">
   <h1>Browse SAP developer tutorials</h1>
   <input class="browse-banner__search" type="search"
          placeholder="Search tutorials, missions, and groups…"
@@ -40,7 +40,7 @@
 <div class="browse-shell">
   {{ partial "browse/_partials/filter-rail.html" . }}
 
-  <main id="browse-results" tabindex="-1">
+  <div id="browse-results" tabindex="-1">
     {{- if eq (len $all) 0 -}}
       {{- /* Empty-state: no catalog data on this server. Page-chrome stays so users
              can still reach the search box and filter rail; the rails+grid+pagination
@@ -106,7 +106,7 @@
       </nav>
     </section>
     {{- end -}}
-  </main>
+  </div>
 </div>
 
 {{- /* Mobile filter drawer (#216). The dialog stays empty on desktop;
