@@ -71,7 +71,12 @@ export function renderConceptDetail(concept, phase4) {
     communityEvents: p4.communityEvents || [],
     escapeHtml,
   };
-  const body = TEMPLATE(ctx);
+  // Wrap in <main> so the served concept page has a top-level landmark. The
+  // __shell__ chrome only provides a <!-- MAIN --> marker (its own <main> was
+  // substituted at publish time), so — like the browse/topics bodies
+  // (content-store.js) — the body must supply its own <main>. Without it the
+  // concept page had zero landmarks (axe region: title/sections outside main).
+  const body = `<main>${TEMPLATE(ctx)}</main>`;
   const contentHash = createHash('sha256').update(body, 'utf-8').digest('hex');
   return { body, contentHash };
 }
