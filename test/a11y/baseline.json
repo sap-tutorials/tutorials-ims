@@ -8,10 +8,7 @@
     "/": {
       "critical": 0,
       "serious": 0,
-      "rules": [
-        "image-redundant-alt",
-        "region"
-      ]
+      "rules": []
     },
     "/browse/": {
       "critical": 0,
@@ -21,16 +18,13 @@
         "landmark-main-is-top-level",
         "landmark-no-duplicate-banner",
         "landmark-no-duplicate-main",
-        "landmark-unique",
-        "region"
+        "landmark-unique"
       ]
     },
     "/topics/": {
       "critical": 0,
       "serious": 0,
-      "rules": [
-        "region"
-      ]
+      "rules": []
     },
     "/concepts/cap-cds-domain-modeling/": {
       "critical": 0,
@@ -46,8 +40,7 @@
         "color-contrast",
         "landmark-main-is-top-level",
         "landmark-no-duplicate-main",
-        "landmark-unique",
-        "region"
+        "landmark-unique"
       ]
     },
     "/tutorials/abap-create-basic-app/": {
@@ -56,28 +49,21 @@
       "rules": [
         "landmark-main-is-top-level",
         "landmark-no-duplicate-main",
-        "landmark-unique",
-        "region"
+        "landmark-unique"
       ]
     },
     "/tags/": {
       "critical": 0,
       "serious": 0,
-      "rules": [
-        "region"
-      ]
+      "rules": []
     },
     "/developer-advocates/": {
       "critical": 0,
-      "serious": 2,
+      "serious": 0,
       "rules": [
-        "heading-order",
         "landmark-main-is-top-level",
         "landmark-no-duplicate-main",
-        "landmark-unique",
-        "nested-interactive",
-        "region",
-        "scrollable-region-focusable"
+        "landmark-unique"
       ]
     }
   }
