@@ -128,6 +128,38 @@
     } catch (e) {}
   })();
   {{ end }}
+  {{ if not site.Params.previewMode }}
+  // #1966 display-chrome pre-paint. Mirrors display-chrome.ts computeEffective()
+  // so the compact/auto-hide chrome never flashes. Threshold 900 duplicates
+  // SHORT_VIEWPORT_MAX_HEIGHT in tutorial-prefs/constants.ts (this inline script
+  // cannot import). Tutorial pages only.
+  if (document.documentElement.dataset.pageKind === 'tutorial') {
+    try {
+      var short = matchMedia('(max-height: 900px)').matches;
+      var hp = localStorage.getItem('tut.pref.header');
+      var fp = localStorage.getItem('tut.pref.footer');
+      var header = (hp === 'locked' || hp === 'thinbar' || hp === 'autohide') ? hp : (short ? 'thinbar' : 'locked');
+      var footer = (fp === 'shown' || fp === 'autohide') ? fp : (short ? 'autohide' : 'shown');
+      var crumbs = localStorage.getItem('tut.pref.breadcrumbs') === 'off' ? 'off' : 'on';
+      var fb = localStorage.getItem('tut.pref.feedback') === 'off' ? 'off' : 'on';
+      var el = document.documentElement;
+      el.dataset.tutHeader = header;
+      el.dataset.tutFooter = footer;
+      el.dataset.tutBreadcrumbs = crumbs;
+      el.dataset.tutFeedback = fb;
+      var sizeOf = function (k, d) { var v = localStorage.getItem(k); return (v === 's' || v === 'm' || v === 'l') ? v : d; };
+      var onoff = function (k) { return localStorage.getItem(k) === 'on' ? 'on' : 'off'; };
+      el.dataset.tutTextSize = sizeOf('tut.pref.textSize', 'm');
+      el.dataset.tutReadWidth = (function () { var v = localStorage.getItem('tut.pref.readWidth'); return (v === 'narrow' || v === 'wide') ? v : 'full'; })();
+      el.dataset.tutCodeSize = sizeOf('tut.pref.codeSize', 'm');
+      el.dataset.tutCodeWrap = onoff('tut.pref.codeWrap');
+      el.dataset.tutImgSize = sizeOf('tut.pref.imgSize', 'l');
+      el.dataset.tutImgCollapse = onoff('tut.pref.imgCollapse');
+      el.dataset.tutReduceMotion = onoff('tut.pref.reduceMotion');
+      el.dataset.tutReadableFont = onoff('tut.pref.readableFont');
+    } catch (e) {}
+  }
+  {{ end }}
   // U14: hydration shimmer pre-paint. Only tutorial layouts mark themselves
   // unhydrated; loadProgress() in tutorial.ts flips this to "true" after
   // /getProgress resolves (or 1.5s race timeout, or catch).

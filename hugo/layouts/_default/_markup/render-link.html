@@ -1,0 +1,25 @@
+{{- /* Render hook for links (issue #1931).
+       Default behavior for all links is Hugo's standard <a> emission. Attachment
+       links whose destination is a raw.githubusercontent.com URL with an
+       allowlisted extension (rewritten by scripts/parsers/attachment-links.ts)
+       are routed through the CAP attachment store and get a download sibling.
+       KEEP the extension list in sync with attachment-links.ts / attachment-mime.cjs. */ -}}
+{{- $dest := .Destination -}}
+{{- $exts := slice "txt" "csv" "json" "md" "sql" "abap" "properties" "yaml" "yml" "xml" "html" "zip" "pdf" "war" "jar" "zargo" "har" -}}
+{{- $ext := lower (path.Ext $dest | strings.TrimPrefix ".") -}}
+{{- $isAttachment := and (hasPrefix $dest "https://raw.githubusercontent.com/") (in $exts $ext) -}}
+{{- if $isAttachment -}}
+{{- $enc := $dest | urlquery -}}
+{{- $view := printf "/content/attachment-source?u=%s" $enc -}}
+{{- $dl := printf "/content/attachment-source?u=%s&dl=1" $enc -}}
+{{- /* $view/$dl are server-constructed, server-relative /content/attachment-source paths whose only
+       variable is $enc = $dest | urlquery (URL-query-encoded), so safeURL cannot introduce a foreign
+       scheme/host. .Text is Hugo's already-rendered, escaped link inner-markup (standard render-hook
+       safeHTML). security-reviewed: attachment link emission is trusted. #1931 */ -}}
+<a href="{{ $view | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }} class="tutorial-attachment-link">{{ .Text | safeHTML }}</a><a href="{{ $dl | safeURL }}" class="tutorial-attachment-download" aria-label="Download {{ .PlainText | default .Text }}" download>&#8595;</a>
+{{- else -}}
+{{- /* security-reviewed: default link emission — .Destination | safeURL + .Text | safeHTML is Hugo's
+       documented link render-hook pattern; .Text is the pre-rendered (already-escaped) markdown link
+       text, and safeURL preserves the author's destination exactly as the built-in <a> would. #1931 */ -}}
+<a href="{{ .Destination | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}{{ if strings.HasPrefix $dest "http" }} rel="noopener"{{ end }}>{{ .Text | safeHTML }}</a>
+{{- end -}}

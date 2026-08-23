@@ -27,7 +27,9 @@ describe('renderConceptDetail', () => {
       ...EMPTY_REL,
     };
     const result = renderConceptDetail(concept, EMPTY_PHASE4);
-    // body fragment — the article, NOT a full document
+    // body fragment — the article wrapped in a <main> landmark, NOT a full document
+    expect(result.body.startsWith('<main>')).toBe(true);
+    expect(result.body.endsWith('</main>')).toBe(true);
     expect(result.body).toContain('<article class="concept-page"');
     expect(result.body).not.toContain('<!DOCTYPE html>');
     expect(result.body).not.toContain('<head>');

@@ -1,28 +1,62 @@
-// Post-deploy axe-core a11y scan (warn-only).
+// Post-deploy axe-core a11y regression gate.
 //
 // Walks each URL in test/a11y/urls.js with Playwright + @axe-core/playwright,
-// writes a markdown summary to test/a11y/axe-results.md, and ALWAYS passes
-// the Vitest assertion. Scoring/gating is intentionally deferred — the goal
-// of the first iteration is baseline data, not a release block.
+// compares the result against the committed baseline (test/a11y/baseline.json),
+// and FAILS the test (→ the deploy.yml `a11y-scan` job goes red) when a page
+// regresses. A page regresses when a NEW axe rule id appears, or its
+// critical / serious violation count rises above baseline. Moderate/minor
+// churn on already-known rules is reported but never fails — it keeps the gate
+// from flapping on cosmetic DOM shifts (region/landmark node counts, etc.).
 //
-// To turn this into a hard gate later, change the `expect(0)` line to
-// assert violation counts directly.
+// A markdown summary is written to test/a11y/axe-results.md AFTER EACH PAGE
+// (not only in afterAll) so a slow browser teardown can't drop the data — the
+// previous version wrote only in afterAll and lost every result when the hook
+// timed out.
+//
+// Update the baseline after intentionally fixing/changing a page:
+//   A11Y_UPDATE_BASELINE=1 SMOKE_BASE_URL=<dev-approuter> npm run test:a11y
+// This rewrites baseline.json (ratchet DOWN; never raise without review) and
+// skips the gate for that run.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright-core';
 import AxeBuilder from '@axe-core/playwright';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveUrls } from './urls.js';
 
 const BASE_URL = process.env.SMOKE_BASE_URL || process.env.A11Y_BASE_URL;
-const OUTPUT_FILE = join(dirname(fileURLToPath(import.meta.url)), 'axe-results.md');
+const UPDATE_BASELINE = process.env.A11Y_UPDATE_BASELINE === '1';
+const HERE = dirname(fileURLToPath(import.meta.url));
+const OUTPUT_FILE = join(HERE, 'axe-results.md');
+const BASELINE_FILE = join(HERE, 'baseline.json');
 
 // WCAG 2.1 AA + best-practice — matches what Siteimprove flags.
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'];
 
-describe.skipIf(!BASE_URL)('axe-core a11y scan', () => {
+// Persistent WebSocket (/ws/event-stream) + analytics beacons mean these pages
+// NEVER reach 'networkidle'. Wait for 'load' + a short settle instead, or every
+// goto times out and the scan collects errors rather than data. The settle must
+// also outlast UI5 theme application on heavy pages (tutorials) — too short and
+// axe samples a pre-theme transient colour and false-flags color-contrast.
+const SETTLE_MS = 4000;
+
+// Neutralise CSS animations/transitions so fade-ins render at their rest state
+// before axe samples colour. Tutorial figures fade opacity 0→1 (.tutorial-figure);
+// caught mid-fade, axe composites the caption colour toward the white background
+// and reports a transient color-contrast failure (~4.3:1) even though the settled
+// caption is 6.4:1. Zeroing durations collapses every fade to its end state.
+async function settleAnimations(page) {
+  await page.addStyleTag({
+    content: '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important}',
+  });
+  await page.waitForTimeout(300);
+}
+
+const baseline = loadBaseline();
+
+describe.skipIf(!BASE_URL)('axe-core a11y regression gate', () => {
   let browser;
   const results = [];
 
@@ -33,22 +67,33 @@ describe.skipIf(!BASE_URL)('axe-core a11y scan', () => {
   afterAll(async () => {
     await browser?.close();
     writeMarkdown(results);
+    if (UPDATE_BASELINE) writeBaseline(results);
   });
 
   for (const target of resolveUrls(BASE_URL)) {
     it(`scans ${target.label} (${target.path})`, async () => {
       const context = await browser.newContext();
       const page = await context.newPage();
-      let scanResult = { url: target.url, label: target.label, path: target.path };
+      const scanResult = { url: target.url, label: target.label, path: target.path };
 
       try {
-        const response = await page.goto(target.url, { waitUntil: 'networkidle', timeout: 25000 });
+        const response = await page.goto(target.url, { waitUntil: 'load', timeout: 30000 });
         scanResult.status = response?.status() ?? 0;
 
         if (!response || !response.ok()) {
           scanResult.error = `HTTP ${scanResult.status}`;
         } else {
-          const axe = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+          await page.waitForTimeout(SETTLE_MS);
+          await settleAnimations(page);
+          const axe = await new AxeBuilder({ page })
+            // #consent_blackbar is the TrustArc consent banner — third-party
+            // injected markup we do not own or control. It ships an invalid ARIA
+            // attribute (aria-model, a typo for aria-modal) that axe flags as a
+            // critical on EVERY page. Excluding it keeps the gate measuring OUR
+            // code; the vendor defect is theirs to fix.
+            .exclude('#consent_blackbar')
+            .withTags(AXE_TAGS)
+            .analyze();
           scanResult.violations = axe.violations;
           scanResult.passes = axe.passes.length;
         }
@@ -57,36 +102,119 @@ describe.skipIf(!BASE_URL)('axe-core a11y scan', () => {
       } finally {
         await context.close();
         results.push(scanResult);
+        // Write after every page so a slow teardown can't lose the summary.
+        writeMarkdown(results);
       }
 
-      // Warn-only: never fail the test on a11y violations or HTTP errors.
-      expect(true).toBe(true);
-    }, 45000);
+      if (scanResult.error) {
+        // A scan that couldn't run is a scan failure, not an a11y pass. Fail so
+        // a broken/404 page or timeout is visible rather than silently green.
+        throw new Error(`Could not scan ${target.path}: ${scanResult.error}`);
+      }
+
+      if (UPDATE_BASELINE) return; // capture-only run, no gating
+
+      const regressions = diffAgainstBaseline(scanResult);
+      expect(regressions, formatRegressions(target, regressions)).toEqual([]);
+    }, 60000);
   }
 });
+
+// --- baseline helpers ------------------------------------------------------
+
+function loadBaseline() {
+  try {
+    return JSON.parse(readFileSync(BASELINE_FILE, 'utf8'));
+  } catch {
+    return { pages: {} };
+  }
+}
+
+function pageBaseline(path) {
+  return (baseline.pages && baseline.pages[path]) || { critical: 0, serious: 0, rules: [] };
+}
+
+function summarize(scanResult) {
+  const counts = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+  const rules = new Set();
+  for (const v of scanResult.violations || []) {
+    counts[v.impact] = (counts[v.impact] || 0) + 1;
+    rules.add(v.id);
+  }
+  return { counts, rules: [...rules].sort() };
+}
+
+function diffAgainstBaseline(scanResult) {
+  const base = pageBaseline(scanResult.path);
+  const { counts, rules } = summarize(scanResult);
+  const regressions = [];
+
+  const known = new Set(base.rules || []);
+  for (const id of rules) {
+    if (!known.has(id)) regressions.push(`new rule: ${id}`);
+  }
+  if (counts.critical > (base.critical || 0)) {
+    regressions.push(`critical ${base.critical || 0} → ${counts.critical}`);
+  }
+  if (counts.serious > (base.serious || 0)) {
+    regressions.push(`serious ${base.serious || 0} → ${counts.serious}`);
+  }
+  return regressions;
+}
+
+function formatRegressions(target, regressions) {
+  if (regressions.length === 0) return '';
+  return [
+    `a11y regression on ${target.path} (${target.label}):`,
+    ...regressions.map(r => `  - ${r}`),
+    `If intentional, refresh the baseline: A11Y_UPDATE_BASELINE=1 npm run test:a11y`,
+  ].join('\n');
+}
+
+function writeBaseline(results) {
+  const pages = {};
+  for (const r of results) {
+    if (r.error) continue; // don't bake an error page into the baseline
+    const { counts, rules } = summarize(r);
+    pages[r.path] = { critical: counts.critical, serious: counts.serious, rules };
+  }
+  const next = {
+    _comment: baseline._comment,
+    _howItGates: baseline._howItGates,
+    _howToUpdate: baseline._howToUpdate,
+    _capturedAgainst: 'dev approuter, WCAG 2.1 AA + best-practice tags',
+    _capturedOn: baseline._capturedOn,
+    pages,
+  };
+  writeFileSync(BASELINE_FILE, JSON.stringify(next, null, 2) + '\n');
+  console.log(`baseline updated: ${BASELINE_FILE}`);
+}
+
+// --- markdown summary ------------------------------------------------------
 
 function writeMarkdown(results) {
   mkdirSync(dirname(OUTPUT_FILE), { recursive: true });
 
   const lines = ['# axe-core a11y scan', ''];
   if (BASE_URL) lines.push(`**Base URL:** ${BASE_URL}`, '');
+  if (UPDATE_BASELINE) lines.push('_Baseline-update run — gating skipped._', '');
 
   let totalViolations = 0;
   let totalCritical = 0;
 
-  lines.push('| Page | HTTP | Violations | Critical | Serious | Mod. | Minor |');
-  lines.push('|------|------|------------|----------|---------|------|-------|');
+  lines.push('| Page | HTTP | Violations | Critical | Serious | Mod. | Minor | Regressed |');
+  lines.push('|------|------|------------|----------|---------|------|-------|-----------|');
 
   for (const r of results) {
     if (r.error && !r.violations) {
-      lines.push(`| ${r.label} (${r.path}) | ${r.status ?? '—'} | error: ${r.error} | | | | |`);
+      lines.push(`| ${r.label} (${r.path}) | ${r.status ?? '—'} | error: ${r.error} | | | | | ⚠️ |`);
       continue;
     }
-    const counts = { critical: 0, serious: 0, moderate: 0, minor: 0 };
-    for (const v of r.violations || []) counts[v.impact] = (counts[v.impact] || 0) + 1;
+    const { counts } = summarize(r);
     totalViolations += (r.violations || []).length;
     totalCritical += counts.critical;
-    lines.push(`| ${r.label} (${r.path}) | ${r.status} | ${(r.violations || []).length} | ${counts.critical} | ${counts.serious} | ${counts.moderate} | ${counts.minor} |`);
+    const regressed = UPDATE_BASELINE ? '—' : (diffAgainstBaseline(r).length ? '❌' : '✅');
+    lines.push(`| ${r.label} (${r.path}) | ${r.status} | ${(r.violations || []).length} | ${counts.critical} | ${counts.serious} | ${counts.moderate} | ${counts.minor} | ${regressed} |`);
   }
 
   lines.push('', `**Total violations:** ${totalViolations} (${totalCritical} critical)`, '');
@@ -105,5 +233,4 @@ function writeMarkdown(results) {
   }
 
   writeFileSync(OUTPUT_FILE, lines.join('\n'));
-  console.log(`axe results written to ${OUTPUT_FILE}`);
 }

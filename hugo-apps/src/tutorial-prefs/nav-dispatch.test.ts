@@ -1,74 +1,39 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { dispatchNav, hasNext, hasPrev } from './nav-dispatch';
-import { SEL_NAV_NEXT, SEL_NAV_PREV } from './constants';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { dispatchNav } from './nav-dispatch';
 
-function setupStepNav({ next, prev }: { next: boolean; prev: boolean }) {
-  while (document.body.firstChild) document.body.removeChild(document.body.firstChild);
-
-  const wrap = document.createElement('div');
-  wrap.className = 'tutorial-stepnav';
-  wrap.setAttribute('role', 'navigation');
-
-  const inner = document.createElement('div');
-  inner.className = 'tutorial-stepnav__inner';
-  wrap.appendChild(inner);
-
-  const prevSlot = document.createElement('div');
-  prevSlot.className = 'tutorial-stepnav__slot tutorial-stepnav__slot--prev';
-  if (prev) {
-    const a = document.createElement('a');
-    a.className = 'nav-pill';
-    a.setAttribute('href', '/tutorials/prev');
-    a.appendChild(document.createTextNode('Previous'));
-    prevSlot.appendChild(a);
-  }
-  inner.appendChild(prevSlot);
-
-  const nextSlot = document.createElement('div');
-  nextSlot.className = 'tutorial-stepnav__slot tutorial-stepnav__slot--next';
-  if (next) {
-    const a = document.createElement('a');
-    a.className = 'nav-pill nav-pill--primary';
-    a.setAttribute('href', '/tutorials/next');
-    a.appendChild(document.createTextNode('Next'));
-    nextSlot.appendChild(a);
-  }
-  inner.appendChild(nextSlot);
-
-  document.body.appendChild(wrap);
+// Hand gestures drive intra-tutorial step navigation via the layout-provided
+// window.opStepNav(dir) hook. These tests pin that contract so a future rename
+// fails here before gestures silently break (the old fixture clicked the
+// tutorial Prev/Next pills, which was the wrong target — gestures moved
+// between tutorials instead of between steps).
+declare global {
+  // eslint-disable-next-line no-var
+  var opStepNav: ((dir: 'next' | 'prev') => boolean) | undefined;
 }
 
-describe('nav-dispatch', () => {
-  beforeEach(() => {
-    while (document.body.firstChild) document.body.removeChild(document.body.firstChild);
-  });
+describe('nav-dispatch (intra-tutorial step navigation)', () => {
+  afterEach(() => { delete (globalThis as { opStepNav?: unknown }).opStepNav; });
 
-  it('hasNext / hasPrev reflect DOM state', () => {
-    setupStepNav({ next: true, prev: false });
-    expect(hasNext()).toBe(true);
-    expect(hasPrev()).toBe(false);
-  });
+  it('delegates to window.opStepNav with the requested direction', () => {
+    const spy = vi.fn().mockReturnValue(true);
+    globalThis.opStepNav = spy;
 
-  it('dispatchNav("next") clicks the next pill', () => {
-    setupStepNav({ next: true, prev: true });
-    const next = document.querySelector(SEL_NAV_NEXT) as HTMLAnchorElement;
-    const click = vi.spyOn(next, 'click').mockImplementation(() => {});
-    dispatchNav('next');
-    expect(click).toHaveBeenCalledOnce();
-  });
+    expect(dispatchNav('next')).toBe(true);
+    expect(spy).toHaveBeenCalledWith('next');
 
-  it('dispatchNav("prev") clicks the prev pill', () => {
-    setupStepNav({ next: true, prev: true });
-    const prev = document.querySelector(SEL_NAV_PREV) as HTMLAnchorElement;
-    const click = vi.spyOn(prev, 'click').mockImplementation(() => {});
     dispatchNav('prev');
-    expect(click).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenLastCalledWith('prev');
   });
 
-  it('dispatchNav is a no-op when target is missing', () => {
-    setupStepNav({ next: false, prev: false });
+  it('returns false at a boundary (opStepNav reports no move)', () => {
+    globalThis.opStepNav = vi.fn().mockReturnValue(false);
+    expect(dispatchNav('next')).toBe(false);
+  });
+
+  it('is a safe no-op when the layout hook is absent', () => {
+    delete (globalThis as { opStepNav?: unknown }).opStepNav;
     expect(() => dispatchNav('next')).not.toThrow();
-    expect(() => dispatchNav('prev')).not.toThrow();
+    expect(dispatchNav('next')).toBe(false);
   });
 });

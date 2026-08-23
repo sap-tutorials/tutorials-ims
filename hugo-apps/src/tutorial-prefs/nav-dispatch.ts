@@ -1,12 +1,13 @@
-import { SEL_NAV_NEXT, SEL_NAV_PREV } from './constants';
-
 export type NavDir = 'next' | 'prev';
-const SEL: Record<NavDir, string> = { next: SEL_NAV_NEXT, prev: SEL_NAV_PREV };
 
-export function hasNext(): boolean { return !!document.querySelector(SEL_NAV_NEXT); }
-export function hasPrev(): boolean { return !!document.querySelector(SEL_NAV_PREV); }
+type StepNavFn = (dir: NavDir) => boolean;
 
-export function dispatchNav(dir: NavDir): void {
-  const a = document.querySelector(SEL[dir]) as HTMLAnchorElement | null;
-  if (a) a.click();
+// Hand-gesture navigation moves between STEPS within a tutorial — NOT between
+// tutorials. The u1-object-page layout exposes `window.opStepNav(dir)`, which
+// scrolls to the current ± 1 step and returns true when it actually moved.
+// A missing hook (page without the object-page step machinery) or a boundary
+// (first/last step, where opStepNav returns false) is a silent no-op.
+export function dispatchNav(dir: NavDir): boolean {
+  const fn = (globalThis as { opStepNav?: StepNavFn }).opStepNav;
+  return typeof fn === 'function' ? fn(dir) === true : false;
 }

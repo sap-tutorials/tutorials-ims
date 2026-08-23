@@ -30,6 +30,8 @@ import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
 import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
+import { attachmentSourceHandler } from './lib/attachment-source-handler.js';
+import { attachmentIngestHandler } from './lib/attachment-ingest-handler.js';
 import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { puzzlePageHandler, puzzleIndexHandler } from './lib/puzzle-page.js';
@@ -525,6 +527,8 @@ cds.on('bootstrap', (app) => {
   // POSTs raw image bytes here so the srv never has to fetch GitHub itself
   // (its egress IP is anon-404'd by GitHub's raw CDN). Auth = CONTENT_API_KEY.
   app.post('/content/image', contentAuthMiddleware, express.raw({ type: '*/*', limit: '25mb' }), imageIngestHandler);
+  app.get('/content/attachment-source', attachmentSourceHandler);
+  app.post('/content/attachment', contentAuthMiddleware, express.raw({ type: '*/*', limit: '25mb' }), attachmentIngestHandler);
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/publish/begin',  express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
   app.post('/content/publish/append', express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);

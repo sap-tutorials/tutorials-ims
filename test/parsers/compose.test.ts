@@ -53,4 +53,42 @@ parser: v2
     expect(result.steps[0].content).toContain('./images/foo.png');
     expect(result.steps[0].content).not.toContain('raw.githubusercontent.com');
   });
+
+  // [#1931] Attachment-link resolver wired into compose
+  it('rewrites relative attachment links to raw-GitHub URLs when rewriteImages: true', () => {
+    const raw = `---
+title: T
+description: x
+parser: v2
+---
+
+### Step One
+See [doc](EX2.txt) below.
+`;
+    const result = composeTutorial(raw, {
+      repo: 'abap-core-development', branch: 'main', slug: 'rap100',
+      target: 'hugo', rewriteImages: true,
+    });
+    expect(result.body).toContain(
+      'https://raw.githubusercontent.com/sap-tutorials/abap-core-development/main/tutorials/rap100/EX2.txt'
+    );
+  });
+
+  it('leaves attachment links untouched when rewriteImages: false', () => {
+    const raw = `---
+title: T
+description: x
+parser: v2
+---
+
+### Step One
+See [doc](EX2.txt) below.
+`;
+    const result = composeTutorial(raw, {
+      repo: 'abap-core-development', branch: 'main', slug: 'rap100',
+      target: 'hugo', rewriteImages: false,
+    });
+    expect(result.body).toContain('[doc](EX2.txt)');
+    expect(result.body).not.toContain('raw.githubusercontent.com');
+  });
 });

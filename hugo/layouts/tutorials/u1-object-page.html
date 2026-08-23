@@ -21,6 +21,15 @@
     color: var(--sapObjectHeader_TitleTextColor, var(--sapTextColor));
     line-height: 1.25;
   }
+  /* Title + Print action on one row; Print sits top-right of the header. */
+  .op-header__titlerow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .op-header__titlerow .op-header__title { flex: 1 1 auto; }
+  .op-header__titlerow .tutorial-print-btn { flex: 0 0 auto; }
   .op-header__description {
     margin: 0 0 0.75rem;
     color: var(--sapObjectHeader_TextColor, var(--sapContent_LabelColor));
@@ -229,8 +238,18 @@
 </style>
 
 <div class="op-page">
-  <header class="op-header">
-    <h1 class="op-header__title tutorial-hero-title">{{ .Title }}{{ if in .Params.tags "tutorial>license" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
+  <!-- Not <header>: this sits outside the page's <main> (its sibling is
+       .op-body > main.tutorial-main), so a <header> here resolves to a second
+       banner landmark, colliding with the shellbar (axe landmark-no-duplicate-
+       banner). A <div> carries the same class-based styling/JS with no landmark. -->
+  <div class="op-header">
+    <div class="op-header__titlerow">
+      <h1 class="op-header__title tutorial-hero-title">{{ .Title }}{{ if in .Params.tags "tutorial>license" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
+      <button type="button" class="tutorial-print-btn" data-action="print-tutorial" aria-label="Print this tutorial" title="Print / Save as PDF">
+        <svg class="tutorial-print-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 1h8v3h1.5A1.5 1.5 0 0 1 15 5.5V11h-3v4H4v-4H1V5.5A1.5 1.5 0 0 1 2.5 4H4V1zm1 3h6V2H5v2zm0 7v3h6v-3H5zm7.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" fill="currentColor"/></svg>
+        <span>Print</span>
+      </button>
+    </div>
     {{ with .Params.description }}<p class="op-header__description">{{ . }}</p>{{ end }}
     <div class="op-header__chips">
       {{ with .Params.level }}<a class="op-chip op-chip--link" href="{{ "/tutorials/" | relURL }}?level={{ . | lower | urlquery }}" aria-label="Filter tutorials by experience: {{ . }}"><span class="op-chip__icon">🎓</span>{{ . }}</a>{{ end }}
@@ -272,7 +291,7 @@
         <ui5-tab data-section="discussion" text="Discussion"></ui5-tab>
       </ui5-tabcontainer>
     </div>
-  </header>
+  </div>
 
   <div class="op-body">
     <main class="tutorial-main op-twocol">
@@ -731,6 +750,25 @@
       requestAnimationFrame(() => requestAnimationFrame(syncListFromDom));
     }
   });
+
+  // Experimental hand-gesture input (tutorial-prefs island) advances/rewinds a
+  // single step. Same scroll + resync as the mobile sheet's prev/next buttons,
+  // but exposed globally so the island drives step nav without re-implementing
+  // step math or clicking the (mobile-only) sheet buttons. `total` is derived
+  // from the .tutorial-step sections directly — getStepCount() reads the mobile
+  // sheet's ui5-li list, which may be empty on desktop. Returns true only when
+  // a step actually changed (false at first/last step) so the caller can no-op.
+  window.opStepNav = function (dir) {
+    const total = document.querySelectorAll(".tutorial-step").length;
+    if (!total) return false;
+    const current = getCurrentStep();
+    const target = dir === "next" ? current + 1 : current - 1;
+    if (target < 1 || target > total) return false;
+    if (!scrollToStep(target)) return false;
+    requestAnimationFrame(() => requestAnimationFrame(syncListFromDom));
+    return true;
+  };
+
 
   markBtn?.addEventListener("click", () => {
     const current = getCurrentStep();

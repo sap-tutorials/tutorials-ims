@@ -1,0 +1,53 @@
+{
+  "_comment": "Committed a11y regression baseline for the post-deploy axe-core scan (test/a11y/axe.test.js).",
+  "_howItGates": "Per page: the scan FAILS if a NEW rule id appears (not in this page's 'rules'), or if the 'critical'/'serious' violation count rises above the value here. Moderate/minor churn on already-known rules is reported but does NOT fail. A page not listed here defaults to zero-tolerance (any violation fails).",
+  "_howToUpdate": "After intentionally fixing (or knowingly changing) a page, rewrite this file: A11Y_UPDATE_BASELINE=1 SMOKE_BASE_URL=<dev-approuter> npm run test:a11y. Ratchet the numbers DOWN; never raise them without review.",
+  "_capturedAgainst": "dev approuter, WCAG 2.1 AA + best-practice tags",
+  "_capturedOn": "2026-08-22",
+  "pages": {
+    "/": {
+      "critical": 0,
+      "serious": 0,
+      "rules": []
+    },
+    "/browse/": {
+      "critical": 0,
+      "serious": 0,
+      "rules": []
+    },
+    "/topics/": {
+      "critical": 0,
+      "serious": 0,
+      "rules": []
+    },
+    "/concepts/cap-cds-domain-modeling/": {
+      "critical": 0,
+      "serious": 0,
+      "rules": []
+    },
+    "/tutorials/abap-cloud-ui-from-interface/": {
+      "critical": 0,
+      "serious": 0,
+      "rules": [
+        "region"
+      ]
+    },
+    "/tutorials/abap-create-basic-app/": {
+      "critical": 0,
+      "serious": 0,
+      "rules": [
+        "region"
+      ]
+    },
+    "/tags/": {
+      "critical": 0,
+      "serious": 0,
+      "rules": []
+    },
+    "/developer-advocates/": {
+      "critical": 0,
+      "serious": 0,
+      "rules": []
+    }
+  }
+}

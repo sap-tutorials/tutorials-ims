@@ -1,12 +1,25 @@
-import { createApp, h, reactive, ref } from 'vue';
+import { createApp, defineAsyncComponent, h, reactive, ref } from 'vue';
 import TutorialPrefsPopover from './TutorialPrefsPopover.vue';
 import CameraBadge from './CameraBadge.vue';
 import {
   getPref, setPref, getSession, removeSession,
-  isFirstRun, consumeFirstRun
+  isFirstRun, consumeFirstRun, getCal, isCalPrompted, markCalPrompted,
+  setHeaderPref, setFooterPref, setBreadcrumbsPref, setFeedbackPref,
+  setTextSize as setTextSizePref, setReadWidth as setReadWidthPref,
+  setCodeSize as setCodeSizePref, setCodeWrap as setCodeWrapPref,
+  setCopyClean as setCopyCleanPref, setImgSize as setImgSizePref,
+  setImgCollapse as setImgCollapsePref, setReduceMotion as setReduceMotionPref,
+  setReadableFont as setReadableFontPref
 } from './prefs-store';
+import { readPrefs, computeEffective, isShortViewport, applyDisplayChrome, installAutoHide } from './display-chrome';
 import { detectSupport } from './browser-support';
-import { PAGE_KIND_TUTORIAL, KEY_READER, type FeatureId } from './constants';
+import { PAGE_KIND_TUTORIAL, KEY_READER, type FeatureId, type HeaderMode, type SizeStep, type ReadWidth } from './constants';
+// SegmentedButton / SegmentedButtonItem are registered in hugo/assets/js/ui5-bootstrap.ts.
+// Importing @ui5/webcomponents/dist/* here would bundle a second copy with its own Theme
+// state that setTheme() can't reach (dark-on-dark bug). The <ui5-segmented-button> tags in
+// the .vue template are handled by the bootstrap copy. Guarded by check-island-ui5-imports.ts.
+
+const CalibrationOverlay = defineAsyncComponent(() => import('./CalibrationOverlay.vue'));
 
 interface Runtime { stop: () => void; }
 
@@ -19,6 +32,14 @@ interface State {
   eyeError: string;
   handError: string;
   slow: boolean;
+  cal: { open: boolean; feature: FeatureId; phase: 'intro' | 'capturing' | 'invalid'; progress: number; cancelled: boolean };
+  headerMode: HeaderMode;
+  footerAutohide: boolean;
+  breadcrumbsOn: boolean;
+  feedbackOn: boolean;
+  textSize: SizeStep; readWidth: ReadWidth; codeSize: SizeStep;
+  codeWrap: boolean; copyClean: boolean; imgSize: SizeStep;
+  imgCollapse: boolean; reduceMotion: boolean; readableFont: boolean;
 }
 
 // Lazy-loaded overlay handle (only when ?debug-cam is present). Held at
@@ -34,6 +55,29 @@ async function ensureDebugReporter(): Promise<((r: any) => void) | null> {
   if (!overlay) return null;
   debugReporter = overlay.report.bind(overlay);
   return debugReporter;
+}
+
+function openCalibration(state: State, f: FeatureId): void {
+  state.cal = { open: true, feature: f, phase: 'intro', progress: 0, cancelled: false };
+}
+
+async function runCalibration(state: State): Promise<void> {
+  const f = state.cal.feature;
+  state.cal.phase = 'capturing'; state.cal.progress = 0;
+  try {
+    const { runCalibrationCapture } = await import('./calibration');
+    const profile = await runCalibrationCapture(f, {
+      onProgress: (p) => { state.cal.progress = p; },
+      isCancelled: () => state.cal.cancelled
+    });
+    if (!profile) { if (!state.cal.cancelled) state.cal.phase = 'invalid'; return; }
+    state.cal.open = false;
+    if (f === 'eye' && state.eyeRuntime) { stopEye(state); await startEye(state); }
+    if (f === 'hand' && state.handRuntime) { stopHand(state); await startHand(state); }
+  } catch (e) {
+    console.error('[tutorial-prefs] calibrate', f, e);
+    state.cal.phase = 'invalid';
+  }
 }
 
 function unsupportedText(reasons: string[]): string {
@@ -59,6 +103,7 @@ async function startEye(state: State): Promise<void> {
     });
     consumeFirstRun('eye');
     setPref('eye', 'on');
+    if (!getCal('eye') && !isCalPrompted('eye')) { markCalPrompted('eye'); openCalibration(state, 'eye'); }
   } catch (err: any) {
     handleStartError(state, 'eye', err);
   }
@@ -86,6 +131,7 @@ async function startHand(state: State): Promise<void> {
     });
     consumeFirstRun('hand');
     setPref('hand', 'on');
+    if (!getCal('hand') && !isCalPrompted('hand')) { markCalPrompted('hand'); openCalibration(state, 'hand'); }
   } catch (err: any) {
     handleStartError(state, 'hand', err);
   }
@@ -129,11 +175,47 @@ function togglePref(state: State, f: FeatureId) {
   }
 }
 
+function setHeader(state: State, mode: HeaderMode) {
+  setHeaderPref(mode);
+  state.headerMode = mode;
+  applyDisplayChrome();
+}
+function toggleFooter(state: State) {
+  const next = state.footerAutohide ? 'shown' : 'autohide';
+  setFooterPref(next);
+  state.footerAutohide = next === 'autohide';
+  applyDisplayChrome();
+}
+function toggleBreadcrumbs(state: State) {
+  const next = state.breadcrumbsOn ? 'off' : 'on';
+  setBreadcrumbsPref(next);
+  state.breadcrumbsOn = next === 'on';
+  applyDisplayChrome();
+}
+function toggleFeedback(state: State) {
+  const next = state.feedbackOn ? 'off' : 'on';
+  setFeedbackPref(next);
+  state.feedbackOn = next === 'on';
+  applyDisplayChrome();
+}
+
+function setTextSize(state: State, v: SizeStep) { setTextSizePref(v); state.textSize = v; applyDisplayChrome(); }
+function setReadWidth(state: State, v: ReadWidth) { setReadWidthPref(v); state.readWidth = v; applyDisplayChrome(); }
+function setCodeSize(state: State, v: SizeStep) { setCodeSizePref(v); state.codeSize = v; applyDisplayChrome(); }
+function toggleCodeWrap(state: State) { const n = state.codeWrap ? 'off' : 'on'; setCodeWrapPref(n); state.codeWrap = n === 'on'; applyDisplayChrome(); }
+function toggleCopyClean(state: State) { const n = state.copyClean ? 'off' : 'on'; setCopyCleanPref(n); state.copyClean = n === 'on'; /* no attr — read at copy time */ }
+function setImgSize(state: State, v: SizeStep) { setImgSizePref(v); state.imgSize = v; applyDisplayChrome(); }
+function toggleImgCollapse(state: State) { const n = state.imgCollapse ? 'off' : 'on'; setImgCollapsePref(n); state.imgCollapse = n === 'on'; applyDisplayChrome(); }
+function toggleReduceMotion(state: State) { const n = state.reduceMotion ? 'off' : 'on'; setReduceMotionPref(n); state.reduceMotion = n === 'on'; applyDisplayChrome(); }
+function toggleReadableFont(state: State) { const n = state.readableFont ? 'off' : 'on'; setReadableFontPref(n); state.readableFont = n === 'on'; applyDisplayChrome(); }
+
 function init() {
   const trigger = document.getElementById('sb-prefs');
   if (!trigger) return;
   const support = detectSupport();
   const onTutorial = document.documentElement.dataset.pageKind === PAGE_KIND_TUTORIAL;
+
+  const eff0 = computeEffective(readPrefs(), isShortViewport());
 
   const state = reactive<State>({
     readerOn: document.documentElement.dataset.reader === 'on',
@@ -143,7 +225,16 @@ function init() {
     handRuntime: null,
     eyeError: '',
     handError: '',
-    slow: false
+    slow: false,
+    cal: { open: false, feature: 'eye', phase: 'intro', progress: 0, cancelled: false },
+    headerMode: eff0.header,
+    footerAutohide: eff0.footer === 'autohide',
+    breadcrumbsOn: eff0.breadcrumbs === 'on',
+    feedbackOn: eff0.feedback === 'on',
+    textSize: eff0.textSize, readWidth: eff0.readWidth, codeSize: eff0.codeSize,
+    codeWrap: eff0.codeWrap === 'on', copyClean: eff0.copyClean === 'on',
+    imgSize: eff0.imgSize, imgCollapse: eff0.imgCollapse === 'on',
+    reduceMotion: eff0.reduceMotion === 'on', readableFont: eff0.readableFont === 'on'
   });
 
   const popoverHost = document.createElement('div');
@@ -171,10 +262,39 @@ function init() {
       handFirstRun: isFirstRun('hand'),
       eyeError: state.eyeError,
       handError: state.handError,
+      eyeCalibrated: !!getCal('eye'),
+      handCalibrated: !!getCal('hand'),
+      headerMode: state.headerMode,
+      footerAutohide: state.footerAutohide,
+      breadcrumbsOn: state.breadcrumbsOn,
+      feedbackOn: state.feedbackOn,
+      textSize: state.textSize,
+      readWidth: state.readWidth,
+      codeSize: state.codeSize,
+      codeWrap: state.codeWrap,
+      copyClean: state.copyClean,
+      imgSize: state.imgSize,
+      imgCollapse: state.imgCollapse,
+      reduceMotion: state.reduceMotion,
+      readableFont: state.readableFont,
       'onToggle-reader': () => toggleReader(state),
       'onToggle-pref': (f: FeatureId) => togglePref(state, f),
       onStart: (f: FeatureId) => f === 'eye' ? startEye(state) : startHand(state),
-      onStop: (f: FeatureId) => f === 'eye' ? stopEye(state) : stopHand(state)
+      onStop: (f: FeatureId) => f === 'eye' ? stopEye(state) : stopHand(state),
+      'onCalibrate': (f: FeatureId) => openCalibration(state, f),
+      'onSet-header': (m: HeaderMode) => setHeader(state, m),
+      'onToggle-footer': () => toggleFooter(state),
+      'onToggle-breadcrumbs': () => toggleBreadcrumbs(state),
+      'onToggle-feedback': () => toggleFeedback(state),
+      'onSet-text-size': (v: SizeStep) => setTextSize(state, v),
+      'onSet-read-width': (v: ReadWidth) => setReadWidth(state, v),
+      'onSet-code-size': (v: SizeStep) => setCodeSize(state, v),
+      'onToggle-code-wrap': () => toggleCodeWrap(state),
+      'onToggle-copy-clean': () => toggleCopyClean(state),
+      'onSet-img-size': (v: SizeStep) => setImgSize(state, v),
+      'onToggle-img-collapse': () => toggleImgCollapse(state),
+      'onToggle-reduce-motion': () => toggleReduceMotion(state),
+      'onToggle-readable-font': () => toggleReadableFont(state)
     })
   }).mount(popoverHost);
 
@@ -189,12 +309,32 @@ function init() {
     })
   }).mount(badgeHost);
 
+  const calHost = document.createElement('div');
+  calHost.id = 'tut-prefs-cal-host';
+  document.body.appendChild(calHost);
+
+  createApp({
+    render: () => state.cal.open
+      ? h(CalibrationOverlay, {
+          feature: state.cal.feature, phase: state.cal.phase, progress: state.cal.progress,
+          onStart: () => runCalibration(state),
+          onRetry: () => runCalibration(state),
+          onCancel: () => { state.cal.cancelled = true; state.cal.open = false; }
+        })
+      : null
+  }).mount(calHost);
+
   trigger.addEventListener('click', () => popoverRef.value?.open(trigger));
 
   if (onTutorial && support.supported) {
     const session = getSession();
     if (state.eyePref === 'on' && session.includes('eye')) startEye(state);
     if (state.handPref === 'on' && session.includes('hand')) startHand(state);
+  }
+
+  if (onTutorial) {
+    applyDisplayChrome();
+    installAutoHide();
   }
 }
 

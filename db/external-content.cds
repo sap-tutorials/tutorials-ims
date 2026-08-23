@@ -505,3 +505,17 @@ entity RelevanceSeedExemplars : cuid, managed {
   active    : Boolean default true;
   note      : String(500);
 }
+
+// ============================================================================
+// Task 2 (spec 2026-08-22): Vector columns for direct code→doc grounding
+// cosine search. Raw BLOB path for SQLite unit tests; HANA uses embeddingVec.
+// Task 3 backfills both columns; they are nullable until then.
+// ============================================================================
+extend entity ApiDocs with {
+  embedding    : LargeBinary;        // raw Float32 BLOB (SQLite unit-test path)
+  embeddingVec : Vector(1536);       // HANA REAL_VECTOR (COSINE_SIMILARITY path)
+}
+extend entity Samples with {
+  embedding    : LargeBinary;
+  embeddingVec : Vector(1536);
+}
