@@ -238,7 +238,11 @@
 </style>
 
 <div class="op-page">
-  <header class="op-header">
+  <!-- Not <header>: this sits outside the page's <main> (its sibling is
+       .op-body > main.tutorial-main), so a <header> here resolves to a second
+       banner landmark, colliding with the shellbar (axe landmark-no-duplicate-
+       banner). A <div> carries the same class-based styling/JS with no landmark. -->
+  <div class="op-header">
     <div class="op-header__titlerow">
       <h1 class="op-header__title tutorial-hero-title">{{ .Title }}{{ if in .Params.tags "tutorial>license" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
       <button type="button" class="tutorial-print-btn" data-action="print-tutorial" aria-label="Print this tutorial" title="Print / Save as PDF">
@@ -287,7 +291,7 @@
         <ui5-tab data-section="discussion" text="Discussion"></ui5-tab>
       </ui5-tabcontainer>
     </div>
-  </header>
+  </div>
 
   <div class="op-body">
     <main class="tutorial-main op-twocol">

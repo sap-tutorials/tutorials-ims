@@ -37,8 +37,10 @@ const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'];
 
 // Persistent WebSocket (/ws/event-stream) + analytics beacons mean these pages
 // NEVER reach 'networkidle'. Wait for 'load' + a short settle instead, or every
-// goto times out and the scan collects errors rather than data.
-const SETTLE_MS = 2500;
+// goto times out and the scan collects errors rather than data. The settle must
+// also outlast UI5 theme application on heavy pages (tutorials) — too short and
+// axe samples a pre-theme transient colour and false-flags color-contrast.
+const SETTLE_MS = 4000;
 
 const baseline = loadBaseline();
 
