@@ -4,6 +4,7 @@ import { youtubeThumb, safeHref, taskHref, taskLinkLabel } from './completion';
 import { youtubeId, youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal } from './format-session-time';
 import { sessionIcsHref, sessionCalendarHref } from './calendar-links';
+import { renderMarkdown } from '../devtoberfest-shared/render-markdown';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -90,6 +91,15 @@ const outlookHref = computed(() => (showCalendar.value ? sessionCalendarHref(pro
 
 function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.display = 'none'; }
 
+// Abstracts are authored in Markdown; render to sanitized HTML (same
+// markdown-it + DOMPurify pipeline as the FAQ/rules islands) so authored
+// paragraphs, lists, emphasis and links display instead of collapsing to
+// a single run of plain text.
+const abstractHtml = computed(() => {
+  const raw = (props.row as any)?.abstract;
+  return raw ? renderMarkdown(raw) : '';
+});
+
 </script>
 
 <template>
@@ -136,7 +146,8 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
           </div>
         </div>
 
-        <p v-if="(row as any).abstract" class="detail-panel__abstract">{{ (row as any).abstract }}</p>
+        <!-- eslint-disable-next-line vue/no-v-html -- sanitized via DOMPurify in renderMarkdown -->
+        <div v-if="abstractHtml" class="detail-panel__abstract" v-html="abstractHtml"></div>
 
         <dl class="detail-panel__meta">
           <template v-if="(row as any).trackName">
@@ -293,6 +304,31 @@ function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.
   color: var(--sapTextColor, #32363a);
   line-height: 1.5;
   margin: 0;
+}
+
+/* Rendered-markdown children: give paragraphs and lists breathing room so
+   authored formatting reads like the source, not one collapsed block. */
+.detail-panel__abstract :deep(> :first-child) { margin-top: 0; }
+.detail-panel__abstract :deep(> :last-child) { margin-bottom: 0; }
+.detail-panel__abstract :deep(p) { margin: 0 0 0.75rem; }
+.detail-panel__abstract :deep(ul),
+.detail-panel__abstract :deep(ol) { margin: 0 0 0.75rem; padding-left: 1.25rem; }
+.detail-panel__abstract :deep(li) { margin: 0.15rem 0; }
+.detail-panel__abstract :deep(a) { color: var(--sapLinkColor, #0854a0); }
+.detail-panel__abstract :deep(h1),
+.detail-panel__abstract :deep(h2),
+.detail-panel__abstract :deep(h3),
+.detail-panel__abstract :deep(h4) {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0.75rem 0 0.35rem;
+}
+.detail-panel__abstract :deep(code) {
+  font-family: var(--sapContent_MonospaceFontFamily, monospace);
+  font-size: 0.85em;
+  background: var(--sapList_Hover_Background, #f5f6f7);
+  padding: 0.05rem 0.25rem;
+  border-radius: 3px;
 }
 
 .detail-panel__meta {
