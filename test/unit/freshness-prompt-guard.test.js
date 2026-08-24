@@ -3,7 +3,7 @@
 // Confidence enum and groundingSource must be present on every finding item.
 
 import { describe, it, expect } from 'vitest';
-import { FRESHNESS_TOOL_SPEC } from '../../srv/lib/freshness-detector.js';
+import { FRESHNESS_TOOL_SPEC, SYSTEM_PROMPT, buildUserMessage } from '../../srv/lib/freshness-detector.js';
 
 describe('FRESHNESS_TOOL_SPEC', () => {
   it('requires confidence and groundingSource on every finding', () => {
@@ -12,3 +12,76 @@ describe('FRESHNESS_TOOL_SPEC', () => {
     expect(item.properties.confidence.enum).toEqual(['High', 'Medium', 'Low']);
   });
 });
+
+describe('SYSTEM_PROMPT context + SAP guidance', () => {
+  it('tells the model to judge blocks in context, not isolation', () => {
+    expect(SYSTEM_PROMPT).toMatch(/in the context|in isolation/i);
+    expect(SYSTEM_PROMPT).toMatch(/prerequisites/i);
+    expect(SYSTEM_PROMPT).toMatch(/GitHub Codespaces|dev container/i);
+  });
+
+  it('tells the model to respect intentional teaching artifacts', () => {
+    expect(SYSTEM_PROMPT).toMatch(/intentional|on purpose|deliberately/i);
+    expect(SYSTEM_PROMPT).toMatch(/base64|demo|illustrative|placeholder/i);
+  });
+
+  it('forbids anti-CAP advice such as pinning @sap package versions', () => {
+    expect(SYSTEM_PROMPT).toMatch(/@sap/);
+    expect(SYSTEM_PROMPT).toMatch(/pin/i);
+  });
+
+  it('biases toward precision: omit speculative findings, report each issue once', () => {
+    expect(SYSTEM_PROMPT).toMatch(/prefer reporting nothing|omit it/i);
+    expect(SYSTEM_PROMPT).toMatch(/once/i);
+    expect(SYSTEM_PROMPT).toMatch(/author/i);
+  });
+
+  it('distinguishes illustrative output blocks from code', () => {
+    expect(SYSTEM_PROMPT).toMatch(/output/i);
+    expect(SYSTEM_PROMPT).toMatch(/terminal|log|directory tree|HTTP/i);
+  });
+
+  it('defines severity by reader impact', () => {
+    expect(SYSTEM_PROMPT).toMatch(/severity/i);
+    expect(SYSTEM_PROMPT).toMatch(/removed API|retired service|broken install/i);
+    expect(SYSTEM_PROMPT).toMatch(/deprecated path/i);
+  });
+
+  it('scopes out prose, screenshots, and deliberate simplifications', () => {
+    expect(SYSTEM_PROMPT).toMatch(/scope/i);
+    expect(SYSTEM_PROMPT).toMatch(/screenshots|prose|external links/i);
+    expect(SYSTEM_PROMPT).toMatch(/simplification|your-subaccount|brevity/i);
+  });
+
+  it('requires quoting the offending token and flagging training-data inferences', () => {
+    expect(SYSTEM_PROMPT).toMatch(/exact offending token/i);
+    expect(SYSTEM_PROMPT).toMatch(/training data/i);
+  });
+});
+
+describe('buildUserMessage', () => {
+  const blocks = [
+    { stepRef: 1, codeBlockIndex: 0, lang: 'bash', code: 'cds watch',
+      contextBefore: 'Run the command:', contextAfter: 'You will see the error on purpose.' },
+  ];
+
+  it('prepends tutorial context and inlines adjacent prose', () => {
+    const msg = buildUserMessage(blocks, [[]], {
+      frontmatter: 'title: Demo',
+      prerequisites: '- A dev container in GitHub Codespaces',
+    });
+    expect(msg).toContain('## Tutorial context');
+    expect(msg).toContain('title: Demo');
+    expect(msg).toContain('dev container in GitHub Codespaces');
+    expect(msg).toContain('Text before this block:\nRun the command:');
+    expect(msg).toContain('Text after this block:\nYou will see the error on purpose.');
+    expect(msg).toContain('cds watch');
+  });
+
+  it('omits the context preamble when no frontmatter/prerequisites exist', () => {
+    const msg = buildUserMessage(blocks, [[]], {});
+    expect(msg).not.toContain('## Tutorial context');
+    expect(msg).toContain('cds watch');
+  });
+});
+
