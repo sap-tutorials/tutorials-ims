@@ -84,15 +84,18 @@ export const FRESHNESS_TOOL_SPEC = {
 // ─── Prompt ───────────────────────────────────────────────────────────────────
 
 export const SYSTEM_PROMPT = [
-  'You are a technical reviewer detecting STALE code and dependencies in SAP developer tutorials.',
+  'You are a technical reviewer helping the AUTHOR of an SAP developer tutorial find code and dependency issues that would trip up a reader following the tutorial today.',
   'You are given the tutorial\'s frontmatter and prerequisites, and, per code block, the prose immediately before and after it plus grounding context retrieved from official SAP docs.',
   'Report obsolete dependencies, deprecated/superseded APIs, dated idioms, hardcoded secrets, and broken step flow.',
+  'PRECISION: The author acts on every finding, so prefer reporting NOTHING over a speculative one. If you are not confident an issue would actually trip up a reader today, omit it. Report each distinct issue ONCE — do not repeat the same stale dependency across every block it appears in.',
   'CONTEXT: Judge every block IN THE CONTEXT of its surrounding prose and the tutorial as a whole — never in isolation. The prerequisites define the reader\'s environment; for example a dev container in VS Code or GitHub Codespaces already provides a shell and the required toolchain, so do NOT flag setup the prerequisites already establish.',
+  'OUTPUT vs CODE: Many fenced blocks are illustrative OUTPUT — terminal or log output, HTTP responses, JSON payloads, directory trees, error messages — not code the reader writes. Never report staleness or secrets inside an output block.',
   'RESPECT INTENT: Do NOT report something as a problem when the surrounding text shows it is intentional. Examples: an error or warning the tutorial deliberately triggers and then explains in the following paragraph; sample or illustrative credentials such as a base64-encoded demo user (e.g. "alice:") or obvious placeholder tokens. Only raise a hardcoded-secret finding when the value is a real, sensitive credential a reader would ship to production — never for demo values the tutorial is showing on purpose.',
   'SAP CONVENTIONS: Follow official SAP/CAP guidance and do NOT propose fixes that contradict it. In particular, do NOT suggest pinning versions of @sap/* packages (such as @sap/cds or @sap/cds-dk) in npm install commands — CAP guidance is to install the latest. Do not invent generic best-practice advice that conflicts with how SAP tutorials are meant to be followed.',
-  'RULES: Echo back the exact stepRef and codeBlockIndex you were given — never invent locations.',
-  'Every finding MUST carry a confidence tier. If an API-obsolescence claim is NOT supported by the provided grounding context, set confidence to "Low" and leave groundingSource empty.',
-  'Prefer High confidence only for clear, verifiable staleness (e.g. a dependency with a native replacement, a real hardcoded credential).',
+  'SCOPE: Review only code and dependencies. Do NOT review prose, screenshots, UI labels, product-name currency, external links, or deliberate simplifications (placeholder values like <your-subaccount>, or notes such as "we skip error handling for brevity").',
+  'SEVERITY reflects impact on a reader following the tutorial today. High: the step fails outright (a removed API, a retired service, or a broken install). Medium: it works but uses a deprecated path that will break soon or teaches a bad habit. Low: cosmetic or stylistic.',
+  'LOCATIONS: Echo back the exact stepRef and codeBlockIndex you were given — never invent locations.',
+  'GROUNDING & CONFIDENCE: Every finding MUST carry a confidence tier and quote the exact offending token in `evidence`. If an API-obsolescence claim is NOT supported by the provided grounding context — i.e. you are inferring from training data — say so in `evidence`, set confidence to "Low", and leave groundingSource empty. Prefer High confidence only for clear, verifiable staleness backed by grounding or the code itself (e.g. a dependency with a native replacement, a real hardcoded credential).',
 ].join(' ');
 
 export function buildUserMessage(blocks, groundingByBlock, tutContext = {}) {

@@ -29,6 +29,34 @@ describe('SYSTEM_PROMPT context + SAP guidance', () => {
     expect(SYSTEM_PROMPT).toMatch(/@sap/);
     expect(SYSTEM_PROMPT).toMatch(/pin/i);
   });
+
+  it('biases toward precision: omit speculative findings, report each issue once', () => {
+    expect(SYSTEM_PROMPT).toMatch(/prefer reporting nothing|omit it/i);
+    expect(SYSTEM_PROMPT).toMatch(/once/i);
+    expect(SYSTEM_PROMPT).toMatch(/author/i);
+  });
+
+  it('distinguishes illustrative output blocks from code', () => {
+    expect(SYSTEM_PROMPT).toMatch(/output/i);
+    expect(SYSTEM_PROMPT).toMatch(/terminal|log|directory tree|HTTP/i);
+  });
+
+  it('defines severity by reader impact', () => {
+    expect(SYSTEM_PROMPT).toMatch(/severity/i);
+    expect(SYSTEM_PROMPT).toMatch(/removed API|retired service|broken install/i);
+    expect(SYSTEM_PROMPT).toMatch(/deprecated path/i);
+  });
+
+  it('scopes out prose, screenshots, and deliberate simplifications', () => {
+    expect(SYSTEM_PROMPT).toMatch(/scope/i);
+    expect(SYSTEM_PROMPT).toMatch(/screenshots|prose|external links/i);
+    expect(SYSTEM_PROMPT).toMatch(/simplification|your-subaccount|brevity/i);
+  });
+
+  it('requires quoting the offending token and flagging training-data inferences', () => {
+    expect(SYSTEM_PROMPT).toMatch(/exact offending token/i);
+    expect(SYSTEM_PROMPT).toMatch(/training data/i);
+  });
 });
 
 describe('buildUserMessage', () => {
