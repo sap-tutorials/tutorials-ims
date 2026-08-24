@@ -1,6 +1,6 @@
 <!-- hugo-apps/src/devtoberfest-sessions-calendar/App.vue -->
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
 import { mergeCompletion } from '../devtoberfest-schedule-shared/completion';
 import { useAuth } from '../devtoberfest-schedule-shared/useAuth';
@@ -9,10 +9,11 @@ import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow, Session } from '../devtoberfest-schedule-shared/types';
 import {
-  addMonths, addWeeks, addDays, startOfWeek, groupByDate, unscheduled,
+  addMonths, addWeeks, addDays, startOfWeek, groupByDate, unscheduled, iso, parseISO,
 } from './calendar-core';
 import { viewerDayKey } from '../devtoberfest-schedule-shared/format-session-time';
 import { feedRssHref, subscribeWebcalHref } from '../devtoberfest-schedule-shared/calendar-links';
+import { parseCalendarUrl, toCalendarQuery, type CalendarUrlState } from './url-state';
 import { buildTrackColorMap, legendFor } from './track-colors';
 import MonthGrid from './MonthGrid.vue';
 import WeekAgenda from './WeekAgenda.vue';
@@ -35,6 +36,24 @@ const filterTrack = ref('');
 const viewMode = ref<ViewMode>('month');
 const cursor = ref<Date>(new Date());
 
+// --- Deep-linking (issue #2006) -------------------------------------------
+// The page URL is the source of truth on first load. We parse it once, apply
+// the feed-independent bits (view, track) synchronously, and defer the bits
+// that need the loaded feed (date anchor, session lookup, edition) to loadData.
+const initialUrl = parseCalendarUrl(typeof window !== 'undefined' ? window.location.search : '');
+// iso() of the data-derived initial cursor; `date` is only written to the URL
+// when the user has navigated away from it, keeping the default URL clean.
+const initialCursorIso = ref<string | null>(null);
+// One-shots consumed on the FIRST load only, so a later edition change via the
+// picker reverts to the natural initial cursor / no selection.
+let pendingDate: string | null = initialUrl.date;
+let pendingSession: string | null = initialUrl.session;
+// Gate: suppress URL writes until the incoming link has been fully applied.
+let applied = false;
+
+if (initialUrl.view) viewMode.value = initialUrl.view;
+if (initialUrl.track) filterTrack.value = initialUrl.track;
+
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 async function loadData(edition?: string) {
@@ -49,7 +68,31 @@ async function loadData(edition?: string) {
     joined.value = merged.joined;
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
-    cursor.value = initialCursor();
+    initialCursorIso.value = iso(initialCursor());
+
+    // Cursor: a URL `date` wins over the data-derived default (first load only).
+    let anchored = false;
+    if (pendingDate) {
+      cursor.value = parseISO(pendingDate) ?? initialCursor();
+      anchored = true;
+    } else {
+      cursor.value = initialCursor();
+    }
+
+    // Session deep-link: open its detail panel and, absent an explicit date,
+    // anchor the calendar to the viewer-local day it's grouped under.
+    if (pendingSession) {
+      const row = sessions.value.find((r) => r.id === pendingSession);
+      if (row) {
+        selectedRow.value = row as any;
+        if (!anchored) {
+          const key = viewerDayKey((row as any).scheduledStart ?? '');
+          if (key) cursor.value = parseISO(key) ?? cursor.value;
+        }
+      }
+    }
+    pendingDate = null;
+    pendingSession = null;
   } catch (e: any) {
     error.value = e?.message ?? 'Failed to load sessions.';
   } finally {
@@ -131,7 +174,64 @@ function openDay(d: Date) { cursor.value = d; viewMode.value = 'day'; }
 const webcalHref = computed(() => subscribeWebcalHref(window.location.host, editionId.value));
 const rssHref = computed(() => feedRssHref(editionId.value));
 
-onMounted(() => loadData());
+// --- URL sync (issue #2006) -----------------------------------------------
+/** Current shareable state, derived from the live refs. */
+function currentUrlState(): CalendarUrlState {
+  const cur = iso(cursor.value);
+  return {
+    view: viewMode.value,
+    // Only pin a date once the user has left the data-derived initial cursor,
+    // so the plain calendar URL stays clean.
+    date: cur !== initialCursorIso.value ? cur : null,
+    session: selectedRow.value?.id ?? null,
+    track: filterTrack.value || null,
+    // Omit edition when it's just the active default — the ?edition param is
+    // for explicitly viewing a non-active edition.
+    edition: editionId.value && editionId.value !== feed.value?.activeEditionId
+      ? editionId.value
+      : null,
+  };
+}
+
+function writeUrl() {
+  if (!applied || typeof window === 'undefined') return;
+  const qs = toCalendarQuery(currentUrlState());
+  window.history.replaceState({}, '', `${window.location.pathname}${qs}${window.location.hash}`);
+}
+
+/** Re-apply in-memory state (view/track/date/session) from the URL on back/forward. */
+function applyFromUrl(st: CalendarUrlState) {
+  viewMode.value = st.view ?? 'month';
+  filterTrack.value = st.track ?? '';
+  let anchored = false;
+  if (st.session) {
+    const row = sessions.value.find((r) => r.id === st.session);
+    selectedRow.value = (row ?? null) as any;
+    if (row && !st.date) {
+      const key = viewerDayKey((row as any).scheduledStart ?? '');
+      if (key) { cursor.value = parseISO(key) ?? cursor.value; anchored = true; }
+    }
+  } else {
+    selectedRow.value = null;
+  }
+  if (st.date) cursor.value = parseISO(st.date) ?? cursor.value;
+  else if (!anchored) cursor.value = initialCursor();
+}
+
+// Edition changes require a reload (different feed), so they're handled here
+// rather than in applyFromUrl.
+function onPopState() { applyFromUrl(parseCalendarUrl(window.location.search)); }
+
+onMounted(async () => {
+  window.addEventListener('popstate', onPopState);
+  await loadData(initialUrl.edition ?? undefined);
+  applied = true;      // start reflecting user interactions into the URL
+  writeUrl();          // canonicalise the URL after the incoming link is applied
+});
+
+onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
+
+watch([viewMode, cursor, filterTrack, editionId, selectedRow], writeUrl);
 </script>
 
 <template>
