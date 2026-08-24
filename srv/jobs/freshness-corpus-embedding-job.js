@@ -10,6 +10,7 @@
 
 import cds from '@sap/cds';
 import { embed } from '../lib/embedding-client.js';
+import { resolveEmbeddingSettings } from '../lib/chat-settings-resolver.js';
 
 const LOG = cds.log('freshness-corpus-embedding');
 const BATCH = 100;
@@ -26,14 +27,14 @@ function encodeBlob(vec) {
   return buf;
 }
 
-async function embedEntity(db, entity, tableName) {
+async function embedEntity(db, entity, tableName, model) {
   // Select only rows whose embedding BLOB is null (SQLite-safe CDS QL).
   const rows = await SELECT.from(entity).columns('ID', 'title', 'description').where('embedding is null');
   let n = 0;
   for (let i = 0; i < rows.length; i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
     const texts = chunk.map(r => `${r.title || ''}\n${r.description || ''}`.trim());
-    const vectors = await embed(texts);
+    const vectors = await embed(texts, model);
     for (let j = 0; j < chunk.length; j++) {
       const vec = vectors[j];
       if (!vec || vec.length !== DIMS) {
@@ -68,10 +69,11 @@ async function embedEntity(db, entity, tableName) {
  */
 export async function runFreshnessCorpusEmbedding(_logId, _opts) {
   const db = await cds.connect.to('db');
+  const { model } = await resolveEmbeddingSettings();
   const { ApiDocs, Samples } = cds.entities('com.sap.developers.ims.external');
   try {
-    const apiDocs = await embedEntity(db, ApiDocs, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_APIDOCS');
-    const samples = await embedEntity(db, Samples, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_SAMPLES');
+    const apiDocs = await embedEntity(db, ApiDocs, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_APIDOCS', model);
+    const samples = await embedEntity(db, Samples, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_SAMPLES', model);
     LOG.info(`[freshness-corpus] embedded apiDocs=${apiDocs} samples=${samples}`);
     return { apiDocs, samples };
   } catch (err) {

@@ -214,6 +214,34 @@ npx cds bind --exec -- node scripts/setup-dev-data.cjs
 
 > **Bulk seeding from AEM:** at cutover, `npm run seed-tag-labels` harvests `(slug → label)` pairs from the legacy developers.sap.com AEM Solr endpoint and PATCHes them into `Tags.label` in HANA. Re-run only if AEM ships new tags before going dark; for tags AEM doesn't know about, edit the Display Label column manually here.
 
+#### Legacy origin: Semaphore → IMS/AEM (Riley's documented process)
+
+Historical reference for how a brand-new product tag entered the tag catalog before the CAP Admin UI Tags app replaced the AEM/IMS tooling. Recorded from Riley Rainey's guidance on the thread *"Re: Request to Contribute CAP Operator Tutorials to SAP Tutorials Repository"* — kept because tag IDs still originate in Semaphore and the same registration dependency applies today.
+
+**Where a tag comes from — it must be registered in Semaphore first.** If a tutorial references a *new* product tag, the product (or related tag) must first be registered in Semaphore, typically via the SAP Metadata team. Riley's worked example named **DUFY, Frederique** as the contact for getting a product registered.
+
+**The Semaphore process, as Riley described it:**
+
+1. **Register the product/tag in Semaphore** (SAP Metadata team; e.g., contact Frederique DUFY). Nothing can be imported until this exists.
+2. **Obtain the Semaphore tag ID.** Riley's request was explicit: *"would you have the ID of the tag in Semaphore? With that, I can manually import the tag into IMS."* In the worked example the ID supplied was `73554900106100266475`.
+3. **Import the tag into IMS.** Riley: *"Our team can then import it for use in the Tutorial system."* He referenced manually importing the tag into IMS after obtaining the Semaphore ID.
+4. **Verify the tag appears in the IMS tag catalog.**
+5. **If it does not appear, check the scheduled import/update job** — or trigger the update manually (see propagation notes below).
+
+**AEM / tag-maintenance synchronization.** When troubleshooting an import that hadn't shown up, Riley referenced a **tag maintenance page** and a tag path, and believed the import should be performed from that page:
+
+- Tag path: `/content/cq:tags/197f4ec4-6c14-5b5e-9fb3-058e21403d41/tech`
+
+**Propagation timing** (per the EPAM response copied into the same thread):
+
+- Tags are imported into **production IMS first**.
+- **QA Blue** receives new tags via a **periodic import process**.
+- A missed environment refresh once prevented the scheduled tag update; **manually triggering the update** caused the tag to appear in both AEM and IMS.
+
+**Architecture note.** A later tutorial-system architecture document by Riley Rainey states: *"IMS also imports tag metadata on demand from Semaphore. This is implemented via an AEM page in 'Tools'."*
+
+> **Today's equivalent:** the AEM/IMS import tooling is decommissioned (see [historic/decommissioned-tasks.md](../historic/decommissioned-tasks.md)). Tag IDs still originate in Semaphore, but registration into the platform is now done through the Admin UI **Tags** app above. The Semaphore-first dependency in step 1 is unchanged — a tag the SAP Metadata team hasn't registered still can't be resolved.
+
 **Related:**
 
 - [writing-tutorials.md](writing-tutorials.md) — frontmatter field reference for `primary_tag` and `tags`

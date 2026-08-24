@@ -5,6 +5,7 @@ import { monthGridCells, iso } from './calendar-core';
 import type { TrackColor } from './track-colors';
 import type { Session } from '../devtoberfest-schedule-shared/types';
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
+import { speakerNames } from '../devtoberfest-schedule-shared/completion';
 
 const props = withDefaults(defineProps<{
   cursor: Date;
@@ -58,10 +59,11 @@ function chipStyle(s: Session) {
             :class="{ 'mg-chip--complete': isAuthenticated && (s as any).complete }"
             :style="chipStyle(s)"
             @click="emit('select', s)"
-            :title="s.title"
+            :title="speakerNames(s) ? `${s.title} — ${speakerNames(s)}` : s.title"
           >
             <span v-if="s.scheduledStart" class="mg-chip-t">{{ formatViewerLocal(s.scheduledStart) }}</span>
             <span class="mg-chip-n">{{ s.title }}</span>
+            <span v-if="speakerNames(s)" class="mg-chip-sp"> · {{ speakerNames(s) }}</span>
           </button>
         </template>
         <button
@@ -99,6 +101,7 @@ function chipStyle(s: Session) {
 }
 .mg-chip--complete { outline: 1px solid var(--sapSuccessBorderColor, #107e3e); }
 .mg-chip-t { font-variant-numeric: tabular-nums; opacity: 0.75; margin-right: 0.25rem; }
+.mg-chip-sp { opacity: 0.7; font-weight: 400; }
 .mg-more { align-self: flex-start; border: none; background: transparent; cursor: pointer; font: inherit;
   font-size: 0.72rem; font-weight: 600; color: var(--sapLinkColor, #0a6ed1); padding: 0.1rem 0.25rem; }
 </style>

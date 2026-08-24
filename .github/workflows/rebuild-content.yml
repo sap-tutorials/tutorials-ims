@@ -382,33 +382,52 @@ jobs:
       # templates (hugo/layouts/partials/homepage/verb-spine.html,
       # directory-footer.html, verb/list.html).
       #
-      # MUST run on `full` AND `catalog-only` — homepage content is what
-      # both surfaces are FOR. The verb-spine template's fallback at
-      # verb-spine.html:14-22 only carries label/icon/href, NOT tagline or
-      # whyItMatters, so omitting these fetchers produces a visibly-broken
-      # homepage with empty flip-card back faces (caught after a clean
-      # post-merge rebuild on 2026-06-30 wiped the homepage's explainer
-      # content even though the DB was intact). The fix is to mirror
-      # `npm run build:all`'s fetcher chain (package.json line 65) which
-      # always runs all three before Hugo. Slug-targeted skips them
-      # because a single-tutorial rebuild doesn't touch the homepage.
+      # MUST run in EVERY content-producing mode (full, catalog-only AND
+      # slug-targeted). The "Build Hugo site" step below rebuilds the WHOLE
+      # site unconditionally, and since #1659 Phase 2 flipped the verb hub
+      # pages (/build/, /learn/, …) and the homepage into the published HANA
+      # `page-*` store, the "Publish tutorial content to HANA" step now
+      # republishes those page BLOBs on every run. The three data files are
+      # gitignored, so skipping these fetchers leaves site.Data.* empty →
+      # verb/list.html bakes hero-only pages (zero shelves) → publish
+      # overwrites the good page-* BLOBs in HANA with empty ones.
+      #
+      # This previously skipped slug-targeted ("a single-tutorial rebuild
+      # doesn't touch the homepage") — an assumption that was TRUE only while
+      # the verb/homepage pages were served as approuter static (never
+      # published). It became false at #1659 Phase 2 and wiped the live verb/
+      # shelf pages on the next `tutorial-updated` dispatch (2026-08-24). The
+      # same failure class hit `full`/`catalog-only` on 2026-06-30 (empty
+      # flip-card back faces even though the DB was intact); the fetchers
+      # mirror `npm run build:all`'s chain (package.json) and must run before
+      # Hugo in all modes. The check-verb-shelves guard below is the
+      # fail-closed net that stops an empty bake from ever publishing again.
       - name: Fetch homepage shelves
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm run fetch-homepage-shelves
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
 
       - name: Fetch verb definitions
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm run fetch-verb-definitions
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
 
       - name: Fetch shelf definitions
-        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm run fetch-shelf-definitions
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
+      # Fail-closed guard (scripts/check-verb-shelves.cjs): fails the run if
+      # any homepage verb baked with ZERO active shelf rows, or ALL verbs
+      # baked with empty tagline+whyItMatters (the empty-feed signature). This
+      # workflow drives /tmp/hugo directly rather than `npm run build:hugo`
+      # (where this guard is chained), so it must be an explicit step here —
+      # exactly like the security-annotations / island-fingerprint retrofits.
+      # Positioned AFTER the feed fetchers and BEFORE the Hugo build + publish
+      # so an empty bake can never reach HANA (the 2026-08-24 verb/shelf-page
+      # wipe root cause). Runs in all modes.
+      - name: Guard - verb pages have shelf content
+        run: npm run check-verb-shelves
 
       # Author-side smell detector. Runs against raw tutorial markdown in
       # .tutorial-cache/ and warns on patterns that produce malformed DOM

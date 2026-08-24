@@ -60,6 +60,18 @@ export function sessionMatchesQuery(row: ScheduleRow, query: string): boolean {
   return parts.join('\n').toLowerCase().includes(needle);
 }
 
+/**
+ * Comma-joined speaker names for a session, for display on compact calendar
+ * items (chips/cards) that can't afford the full speaker cards the DetailPanel
+ * shows. Empty string when the row has no speakers, so callers can `v-if` on it.
+ */
+export function speakerNames(row: { speakers?: { name?: string }[] } | null): string {
+  return ((row?.speakers) || [])
+    .map((sp) => (sp?.name || '').trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
 export function mergeCompletion(feed: Feed, my: MyCompletions) {
   const completedActivityIds = new Set<string>(my?.authenticated ? my.completedActivityIds || [] : []);
   const completedSlugs = new Set<string>((my?.authenticated ? my.completedSlugs || [] : []).map((s) => s.toLowerCase()));
