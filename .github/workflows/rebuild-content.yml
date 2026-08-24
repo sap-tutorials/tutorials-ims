@@ -273,7 +273,31 @@ jobs:
             prod) echo "srv_url=${{ secrets.CAP_SRV_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      # Cache the *materialized* node_modules (root + hugo-apps), not just the
+      # npm download cache. `setup-node` `cache: npm` already warms ~/.npm, but
+      # `npm ci` still spends ~48s extracting/linking 1680 packages + running
+      # native builds (better-sqlite3) into node_modules on every run. An
+      # exact-key cache (keyed on both lockfiles + OS + Node major) lets us skip
+      # the install entirely when the lockfiles are unchanged.
+      #
+      # EXACT match only — NO restore-keys. A node_modules restored for a
+      # different lockfile would be silently wrong because we skip `npm ci`
+      # (which would otherwise reconcile). On any lockfile change the cache
+      # misses, the install below runs clean, and the new tree is re-cached.
+      # Safe to skip install on hit: neither package.json has install/prepare/
+      # postinstall lifecycle scripts, so nothing outside node_modules is
+      # produced at install time.
+      - name: Cache node_modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            hugo-apps/node_modules
+          key: node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json', 'hugo-apps/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
