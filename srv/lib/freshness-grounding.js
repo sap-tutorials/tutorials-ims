@@ -12,6 +12,7 @@
 
 import cds from '@sap/cds';
 import { embed } from './embedding-client.js';
+import { resolveEmbeddingSettings } from './chat-settings-resolver.js';
 
 function isHana(db) { return (db.kind || db.options?.kind) === 'hana'; }
 function cosine(a, b) {
@@ -72,7 +73,8 @@ async function searchEntity(db, tableName, source, qVec, limit, minScore) {
  */
 export async function groundCodeBlock({ db, code, limit = 4, minScore = 0.25 }) {
   if (!code || !code.trim()) return [];
-  const [qVec] = await embed([code]);
+  const { model } = await resolveEmbeddingSettings();
+  const [qVec] = await embed([code], model);
   if (!qVec) return [];
   const [a, s] = await Promise.all([
     searchEntity(db, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_APIDOCS', 'apidoc', qVec, limit, minScore),
