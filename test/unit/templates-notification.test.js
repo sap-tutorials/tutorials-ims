@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveTemplate } from '../../srv/lib/mail-client.js';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
 const TEMPLATE_DIR = join(REPO_ROOT, 'srv/templates/notification');
@@ -78,4 +79,59 @@ describe('notification templates — signature', () => {
       expect(content).toContain('SAP Developers Tutorials Team');
     });
   }
+});
+
+// Guards the count/plural rendering. ${tutorialPlural} is used in the templates
+// as the whole noun ("the following N ${tutorialPlural}"), NOT a suffix — so a
+// producer emitting the bare "s"/"" suffix renders "the following 3 s you"
+// (the bug that shipped from scheduler.js:376). See admin-service.js last-chance
+// path for the correct full-word form.
+const PLURAL_FILES = [
+  'digest-level-0.html', 'digest-level-1.html', 'digest-level-2.html',
+  'digest-level-3.html', 'last-chance.html',
+];
+const pluralNoun = (count) => (count === 1 ? 'tutorial' : 'tutorials');
+
+describe('notification templates — count/plural rendering', () => {
+  for (const file of PLURAL_FILES) {
+    it(`${file} renders "N tutorials" (plural), never "N s"`, () => {
+      const html = readFileSync(join(TEMPLATE_DIR, file), 'utf8');
+      const out = resolveTemplate(html, {
+        authorName: 'Tester',
+        tutorialCount: 3,
+        tutorialPlural: pluralNoun(3),
+        tutorialListHtml: '<ul></ul>',
+        dashboardUrl: 'https://example.com/dash',
+        staleDaysThreshold: 90,
+      });
+      expect(out).toContain('3 tutorials');
+      expect(out).not.toMatch(/\b3 s\b/);
+      expect(out).not.toMatch(/\b3 {2,}/); // no dangling count from empty plural
+    });
+
+    it(`${file} renders "1 tutorial" (singular)`, () => {
+      const html = readFileSync(join(TEMPLATE_DIR, file), 'utf8');
+      const out = resolveTemplate(html, {
+        authorName: 'Tester',
+        tutorialCount: 1,
+        tutorialPlural: pluralNoun(1),
+        tutorialListHtml: '<ul></ul>',
+        dashboardUrl: 'https://example.com/dash',
+        staleDaysThreshold: 90,
+      });
+      expect(out).toContain('1 tutorial');
+      expect(out).not.toMatch(/\b1 {2,}/);
+    });
+  }
+});
+
+// Source guard: the scheduler digest path must emit the full-word noun for
+// ${tutorialPlural}, not the bare suffix that produced "the following 3 s you".
+describe('scheduler — tutorialPlural is the full noun', () => {
+  it('scheduler.js does not assign the bare "s"/"" suffix to tutorialPlural', () => {
+    const REPO_ROOT_SRC = join(import.meta.dirname, '..', '..');
+    const src = readFileSync(join(REPO_ROOT_SRC, 'srv/jobs/scheduler.js'), 'utf8');
+    expect(src).not.toMatch(/tutorialPlural\s*=\s*[^;]*\?\s*''\s*:\s*'s'/);
+    expect(src).toMatch(/tutorialPlural\s*=\s*[^;]*\?\s*'tutorial'\s*:\s*'tutorials'/);
+  });
 });

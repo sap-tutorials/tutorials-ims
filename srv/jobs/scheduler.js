@@ -373,7 +373,9 @@ async function runDigestCycle({ logId, knobs, adminEmails, notifications, dashbo
     }
 
     const tutorialCount = d.tutorials.length;
-    const tutorialPlural = tutorialCount === 1 ? '' : 's';
+    // Templates use ${tutorialPlural} as the whole noun ("the following N ${tutorialPlural}"),
+    // not a suffix — so it must be the full word, matching admin-service.js's last-chance path.
+    const tutorialPlural = tutorialCount === 1 ? 'tutorial' : 'tutorials';
     const result = await sendNotificationEmail({
       to, cc,
       subject: digestSubject(d),
