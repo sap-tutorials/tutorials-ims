@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import { iso } from './calendar-core';
 import type { TrackColor } from './track-colors';
 import type { Session } from '../devtoberfest-schedule-shared/types';
-import { youtubeThumb } from '../devtoberfest-schedule-shared/completion';
+import { youtubeThumb, speakerNames } from '../devtoberfest-schedule-shared/completion';
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
 
 const props = defineProps<{
@@ -49,6 +49,7 @@ function onThumbError(ev: Event) {
       <div class="da-meta">
         <span v-if="s.scheduledStart" class="da-time">{{ formatViewerLocal(s.scheduledStart) }}</span>
         <span class="da-title">{{ s.title }}</span>
+        <span v-if="speakerNames(s)" class="da-speakers">{{ speakerNames(s) }}</span>
         <span v-if="s.trackName" class="da-track">{{ s.trackName }}</span>
         <span v-if="isAuthenticated && (s as any).complete" class="da-done" aria-label="Completed">✓ Completed</span>
       </div>
@@ -72,6 +73,7 @@ function onThumbError(ev: Event) {
 .da-meta { display: flex; flex-direction: column; gap: 0.15rem; }
 .da-time { font-size: 0.72rem; color: var(--sapContent_LabelColor, #6a6d70); font-variant-numeric: tabular-nums; }
 .da-title { font-size: 1rem; font-weight: 600; }
+.da-speakers { font-size: 0.78rem; color: var(--sapContent_LabelColor, #6a6d70); }
 .da-track { font-size: 0.72rem; color: var(--sapContent_LabelColor, #6a6d70); }
 .da-done { font-size: 0.72rem; color: var(--sapPositiveColor, #107e3e); font-weight: 700; }
 </style>

@@ -5,6 +5,7 @@ import { weekDays, iso } from './calendar-core';
 import type { TrackColor } from './track-colors';
 import type { Session } from '../devtoberfest-schedule-shared/types';
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
+import { speakerNames } from '../devtoberfest-schedule-shared/completion';
 
 const props = defineProps<{
   cursor: Date;
@@ -42,6 +43,7 @@ function borderColor(s: Session): string {
         >
           <span v-if="s.scheduledStart" class="wk-t">{{ formatViewerLocal(s.scheduledStart) }}</span>
           <span class="wk-n">{{ s.title }}</span>
+          <span v-if="speakerNames(s)" class="wk-sp">{{ speakerNames(s) }}</span>
           <span v-if="isAuthenticated && (s as any).complete" class="wk-done" aria-label="Completed">✓</span>
         </button>
         <div v-if="sessionsFor(d).length === 0" class="wk-empty" aria-label="No sessions">—</div>
@@ -66,6 +68,7 @@ function borderColor(s: Session): string {
 .wk-card--complete { background: var(--sapSuccessBackground, #f1fdf6); }
 .wk-t { display: block; font-size: 0.65rem; color: var(--sapContent_LabelColor, #6a6d70); font-variant-numeric: tabular-nums; }
 .wk-n { display: block; font-size: 0.75rem; font-weight: 600; line-height: 1.25; }
+.wk-sp { display: block; font-size: 0.7rem; color: var(--sapContent_LabelColor, #6a6d70); line-height: 1.2; margin-top: 0.1rem; }
 .wk-done { color: var(--sapPositiveColor, #107e3e); font-size: 0.7rem; font-weight: 700; }
 .wk-empty { color: var(--sapContent_DisabledTextColor, #b0b0b0); font-size: 0.75rem; text-align: center; padding: 0.75rem 0; }
 </style>
