@@ -207,7 +207,42 @@ interface GraphqlRequestOptions {
   failFastOn5xx?: boolean
 }
 
-async function graphqlRequest(query: string, opts: GraphqlRequestOptions = {}): Promise<any> {
+interface GraphqlErrorEntry {
+  type?: string
+  message: string
+}
+
+// Thrown when GitHub returns a 200 with a GraphQL-level `errors` array or a null
+// `data` field. Previously graphqlRequest warn-logged and returned the null
+// `data`, so callers dereferenced `data.organization`/`data.repository` and blew
+// up with an opaque "Cannot read properties of undefined" TypeError — which the
+// outer catch handlers then mistook for a generic outage and silently degraded
+// to the slow REST fallback. Surfacing the real GraphQL error (with its `type`)
+// lets the fallback log the true cause and lets us tell an auth/permission gap
+// (App-token missing org-level GraphQL) apart from a transient blip. (#slug-
+// targeted-delta-rebuild / tutorial-discovery)
+export class GraphqlError extends Error {
+  readonly errors: GraphqlErrorEntry[]
+  constructor(errors: GraphqlErrorEntry[]) {
+    const summary = errors.map(e => (e.type ? `${e.type}: ${e.message}` : e.message)).join('; ')
+    super(`GraphQL error: ${summary || 'response contained no data'}`)
+    this.name = 'GraphqlError'
+    this.errors = errors
+  }
+  // Permission/scope failures are actionable (fix the token), not transient — so
+  // the fallback logs them at error level. A missing org-read on an App
+  // installation token surfaces as FORBIDDEN / INSUFFICIENT_SCOPES or a
+  // "not accessible by integration" message.
+  get isAuthError(): boolean {
+    return this.errors.some(e => {
+      const type = (e.type ?? '').toUpperCase()
+      if (type === 'FORBIDDEN' || type === 'INSUFFICIENT_SCOPES') return true
+      return /not accessible by integration|permission|forbidden|scope|must have/i.test(e.message ?? '')
+    })
+  }
+}
+
+export async function graphqlRequest(query: string, opts: GraphqlRequestOptions = {}): Promise<any> {
   const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
   if (!token) throw new Error('GITHUB_TOKEN or TUTORIALS_GITHUB_TOKEN is required for GraphQL API')
 
@@ -228,11 +263,18 @@ async function graphqlRequest(query: string, opts: GraphqlRequestOptions = {}): 
 
   const json = await res.json()
   if (json.errors?.length) {
-    const msgs = json.errors.map((e: any) => e.message).join('; ')
-    console.warn(`  [graphql-warn] ${msgs}`)
+    throw new GraphqlError(json.errors as GraphqlErrorEntry[])
+  }
+  if (json.data == null) {
+    throw new GraphqlError([{ message: 'GraphQL response contained null data' }])
   }
   return json.data
 }
+
+// One loud error per run is enough — the batch loop fires the catch ~once per
+// 20-slug batch (~71× for the Tutorials repo), so gate the error-level line so
+// it isn't buried under repetition.
+let graphqlAuthFallbackWarned = false
 
 function restAuthHeaders(): Record<string, string> {
   const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
@@ -459,7 +501,14 @@ export async function discoverAllTutorials(): Promise<DiscoveryResult> {
     return { tutorials, source: 'github' }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.warn(`\n  [graphql] Discovery failed (${message})`)
+    // Loud, not silent: a permission/scope GraphQL failure means discovery is
+    // running on the slow REST path every rebuild until a human fixes the token
+    // scope — surface it at error level so it's not hidden as mere latency.
+    if (err instanceof GraphqlError && err.isAuthError) {
+      console.error(`  [graphql] ERROR: primary discovery degraded to REST due to a GraphQL permission/auth error (${message}). The fetch token cannot resolve the org-level GraphQL node — fix the token scope (see tutorial-discovery spec).`)
+    } else {
+      console.warn(`\n  [graphql] Discovery failed (${message})`)
+    }
 
     try {
       console.warn(`  [rest] Attempting REST API discovery fallback...`)
@@ -866,6 +915,10 @@ export async function fetchGitHubMetaBatch(
         cache[slug] = meta
       }
     } catch (err) {
+      if (err instanceof GraphqlError && err.isAuthError && !graphqlAuthFallbackWarned) {
+        graphqlAuthFallbackWarned = true
+        console.error(`  [graphql] ERROR: metadata fetch degraded to per-slug REST due to a GraphQL permission/auth error (${err.message}). This adds ~1 REST call per slug and risks secondary rate limits — fix the token scope (see tutorial-discovery spec).`)
+      }
       console.warn(`  [warn] GraphQL batch failed for ${repo} batch ${Math.floor(i / BATCH_SIZE) + 1}: ${err instanceof Error ? err.message : err}; trying REST per-slug...`)
       for (const slug of batch) {
         if (results.has(slug)) continue
