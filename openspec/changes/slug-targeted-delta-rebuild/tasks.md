@@ -1,9 +1,9 @@
 ## 1. Workstream A — GraphQL discovery unmask + loud fallback (ship first)
 
-- [ ] 1.1 In `scripts/parsers/github.ts` `graphqlRequest` (:229-234), throw on `json.errors?.length` or null/undefined `data`, including GraphQL error `type`/`message` in the thrown error.
-- [ ] 1.2 Update callers (discovery :513-549, batch :763-777 / :826-840) so the thrown error is caught by their existing handlers and logged with cause.
-- [ ] 1.3 Emit a single ERROR-level log line in `discoverAllTutorials` / `fetchGitHubMetaBatch` when degrading to REST due to a GraphQL auth/permission error (not just `[graphql-warn]`).
-- [ ] 1.4 Unit test: a mocked GraphQL error/null-data response raises with the cause and does NOT produce an opaque TypeError.
+- [x] 1.1 In `scripts/parsers/github.ts` `graphqlRequest` (:229-234), throw on `json.errors?.length` or null/undefined `data`, including GraphQL error `type`/`message` in the thrown error.
+- [x] 1.2 Update callers (discovery :513-549, batch :763-777 / :826-840) so the thrown error is caught by their existing handlers and logged with cause.
+- [x] 1.3 Emit a single ERROR-level log line in `discoverAllTutorials` / `fetchGitHubMetaBatch` when degrading to REST due to a GraphQL auth/permission error (not just `[graphql-warn]`).
+- [x] 1.4 Unit test: a mocked GraphQL error/null-data response raises with the cause and does NOT produce an opaque TypeError.
 - [ ] 1.5 Ship to DEV; run a rebuild and capture the real Phase-1/Phase-2 GraphQL error from logs to decide 2.x.
 
 ## 2. Workstream B — GraphQL discovery auth fix
