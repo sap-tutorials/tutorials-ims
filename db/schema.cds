@@ -598,6 +598,13 @@ entity ContentFiles : shared.ContentFilesAspect {}
 
 entity ContentManifest : shared.ContentManifestAspect {}
 
+// Option B (slug-targeted-delta-rebuild): mutable current-content table +
+// append-only history. Coexist with ContentFiles/ContentManifest during the
+// flag-gated dual-write migration; ContentFiles is retired one release after cutover.
+entity ContentCurrent : shared.ContentCurrentAspect {}
+
+entity ContentHistory : shared.ContentHistoryAspect {}
+
 // Plain-text projection of published Hugo HTML, indexed for full-text search.
 // Replaced (not versioned) on every publish so search reflects current content.
 @cds.autoexpose: false

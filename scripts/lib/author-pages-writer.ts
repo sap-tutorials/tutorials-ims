@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync, readdirSync, unlinkSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { stringify as yamlStringify } from 'yaml'
+import { hugoFrontmatterStringify as yamlStringify } from './hugo-yaml.js'
 import { buildAuthorIndex, type AuthorTutorialRow, type AuthorIndex } from '../parsers/author-index'
 
 /**

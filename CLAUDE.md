@@ -130,6 +130,8 @@ Subsystem one-liners:
 
 - **`CONTENT_API_KEY` env var required** for `POST /content/publish` and `/content/rollback`. Missing → 401. Set locally when testing publish.
 
+- **Content served from mutable `ContentCurrent` (Option B, #2017 / Workstream D), not the old `ContentFiles` snapshot-per-version** — three env flags gate the migration, all default OFF, flip in order: `CONTENT_DELTA_WRITE_ENABLED` (publish dual-writes changed slugs → `ContentCurrent` + append-only `ContentHistory`, fail-safe) → **seed** via a full force rebuild (`-f mode=full -f force-publish=true` dual-writes all slugs; no separate migration) → `CONTENT_DELTA_READ_ENABLED` (serve/readers hit `ContentCurrent`, per-slug fallback to `ContentFiles`) → `CONTENT_DELTA_SKIP_CARRYFORWARD` (publish skips `carryForwardUnchanged` → **O(changed) publish**; rollback then **replays `ContentHistory`** into `ContentCurrent`, not clear+fallback). Measured DEV: publish commit ~62s→973ms (PROD carry-forward was ~95s @ 11k files). Serve source header `X-Content-Source: db-current` (ContentCurrent) vs `db` (legacy). Revert = flip `SKIP_CARRYFORWARD` off + `cf restart`. Flags in `srv/lib/feature-flags/registry.js`; readers via `resolveContentBlob` (`srv/lib/content-store.js`). LOB reads stay raw `db.run()`. Cutover cleanup (delete `carryForwardUnchanged` + `ContentFiles`) deferred to a release after PROD soak.
+
 - **GitHub Actions secret is `DISPATCH_TOKEN`, not `GITHUB_DISPATCH_TOKEN`** — GH reserves the `GITHUB_` prefix. The runtime env var is `GITHUB_DISPATCH_TOKEN`, read by `srv/lib/rebuild-trigger.js`.
 
 - **`rebuild-content.yml` auto-infers `mode=slug-targeted`** when a `slug` input is set — don't pass `-f mode=slug-targeted`. Wall-clock: catalog-only ~5min, slug-targeted ~2min, full ~10min.

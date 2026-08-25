@@ -24,7 +24,7 @@ export async function reconcileAll({ activeSlugs, slugsWithStaleHashes, slugsWit
 }
 
 export async function runReconciliationJob(logId) {
-  const { ChatSettings, ContentManifest, ContentFiles, Steps, TutorialEmbedding, Tutorials } =
+  const { ChatSettings, ContentManifest, ContentFiles, ContentCurrent, Steps, TutorialEmbedding, Tutorials } =
     cds.entities('com.sap.developers.ims');
 
   const settings = await SELECT.one.from(ChatSettings);
@@ -39,7 +39,9 @@ export async function runReconciliationJob(logId) {
     return { skipped: true, reason: 'no active manifest' };
   }
 
-  const activeFiles = await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
+  const activeFiles = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+    ? await SELECT.from(ContentCurrent).columns('slug')
+    : await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
   const activeSlugs = activeFiles.map((f) => f.slug);
   const activeSet = new Set(activeSlugs);
 

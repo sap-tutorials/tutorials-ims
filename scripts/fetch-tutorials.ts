@@ -2,11 +2,19 @@ import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync, unlink
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
-import { stringify as yamlStringify } from 'yaml'
+import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
+import {
+  computeFeedFingerprint,
+  readSidecar,
+  writeSidecar,
+  decideFastPath,
+  navEntriesBySlug,
+  SIDECAR_VERSION,
+} from './lib/content-cache.js'
 import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
 import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
@@ -834,6 +842,49 @@ async function main() {
   // An empty map is returned on failure; all tags fall back to the heuristic.
   const tagRegistry = await fetchTagLabelRegistry()
 
+  // ── Content-cache fast path (Workstream C, flag-gated: CONTENT_CACHE_FAST_PATH) ──
+  // On a slug-targeted run, reuse the previously-generated content for non-target
+  // slugs instead of recomposing all ~1400 (the bulk of Phase 3's cost). TWO gates,
+  // both must hold or we full-regenerate:
+  //   1. The CI actions/cache KEY (parser-source hash) governs whether the generated
+  //      tree + sidecar were even restored — a parser change misses the cache.
+  //   2. A runtime feed fingerprint over the CAP catalog + tag-labels — the
+  //      deterministic drivers of non-target frontmatter (prev/next/mission/
+  //      displayTags). Co-completions are excluded: they are empty on warm-CAP-cache
+  //      runs (fetched only on a cold cache in Phase 4) and their recommendations are
+  //      client-hydrated, so they can't make a cached page's static output wrong.
+  // Fail-open everywhere: no sidecar / fingerprint mismatch / missing file → full regen.
+  const CONTENT_CACHE_FAST_PATH = process.env.CONTENT_CACHE_FAST_PATH === 'true'
+  // Sidecar lives in a dedicated dir cached by the SAME parser-source-hashed
+  // actions/cache key as hugo/content/tutorials, so a parser change busts both
+  // together (the generated .md files vanish → the per-slug existsSync guard
+  // falls through to recompose). Kept OUT of .tutorial-cache (whose key has no
+  // parser hash) and OUT of hugo/data (Hugo would load it as site.Data).
+  const contentSidecarPath = join(__dirname, '..', '.content-cache', 'content-cache-sidecar.json')
+  const decisionFingerprint = computeFeedFingerprint({ catalog: loadCapCache(), tagLabels: tagRegistry })
+  const restoredSidecar = CONTENT_CACHE_FAST_PATH ? readSidecar(contentSidecarPath) : null
+  const fastPath = decideFastPath({
+    flagEnabled: CONTENT_CACHE_FAST_PATH,
+    isSlugTargeted: !!tutorialSlugFilter,
+    sidecar: restoredSidecar,
+    currentFingerprint: decisionFingerprint,
+  })
+  const reuseNavBySlug = restoredSidecar ? navEntriesBySlug(restoredSidecar) : new Map<string, Record<string, unknown>>()
+  const reuseAuthorRowsBySlug = new Map<string, AuthorTutorialRow[]>()
+  if (restoredSidecar?.authorRows) {
+    for (const row of restoredSidecar.authorRows as unknown as AuthorTutorialRow[]) {
+      const s = (row?.slug ?? '').toLowerCase()
+      if (!s) continue
+      const arr = reuseAuthorRowsBySlug.get(s) ?? []
+      arr.push(row)
+      reuseAuthorRowsBySlug.set(s, arr)
+    }
+  }
+  let reusedCount = 0
+  if (CONTENT_CACHE_FAST_PATH) {
+    console.log(`[content-cache] fast path ${fastPath.eligible ? 'ENABLED' : 'disabled'} — ${fastPath.reason}`)
+  }
+
   mkdirSync(OUTPUT_DIR, { recursive: true })
 
   const navEntries: TutorialNavEntry[] = []
@@ -849,6 +900,24 @@ async function main() {
     const tutStart = performance.now()
     const label = `[${idx + 1}/${allTutorials.length}] ${t.repo}/${t.slug}`
     try {
+      // Fast-path reuse: for a non-target slug on an eligible run, reuse the
+      // cached generated page + sidecar nav/author rows and skip compose /
+      // fetchRulesVr / AI-quiz / writeHugoPage entirely. Fail-open: if the
+      // generated file or the sidecar entry is missing, fall through to a
+      // normal (re)generation for this slug.
+      if (fastPath.eligible && tutorialSlugFilter && !tutorialSlugFilter.has(t.slug)) {
+        const cachedNav = reuseNavBySlug.get(t.slug.toLowerCase())
+        const generatedFile = join(OUTPUT_DIR, `${t.slug}.md`)
+        if (cachedNav && existsSync(generatedFile)) {
+          navEntries.push(cachedNav as unknown as TutorialNavEntry)
+          for (const row of reuseAuthorRowsBySlug.get(t.slug.toLowerCase()) ?? []) authorRows.push(row)
+          reusedCount++
+          cacheHits++
+          console.log(`${label} [reused]`)
+          timings.push({ slug: t.slug, repo: t.repo, durationMs: performance.now() - tutStart })
+          return
+        }
+      }
       let rawMd: string
       let lastUpdated = ''
       let createdAt = ''
@@ -1380,6 +1449,32 @@ async function main() {
   mkdirSync(navJsonDir, { recursive: true })
   const navPath = join(navJsonDir, '_nav.json')
   writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
+
+  // ── Content-cache sidecar (Workstream C) ──
+  // Persist the full post-Phase-4 navEntries + author rows + the feed fingerprint
+  // so the NEXT slug-targeted run can reuse non-target content (see the fast-path
+  // block above). Written on every content-producing run (full or slug-targeted)
+  // when the flag is on, so the sidecar always reflects the latest complete set.
+  // Guarded on a resolvable catalog; fail-open (never blocks the build).
+  if (CONTENT_CACHE_FAST_PATH) {
+    try {
+      const writeCatalog = loadCapCache()
+      if (writeCatalog) {
+        mkdirSync(dirname(contentSidecarPath), { recursive: true })
+        writeSidecar(contentSidecarPath, {
+          version: SIDECAR_VERSION,
+          feedFingerprint: computeFeedFingerprint({ catalog: writeCatalog, tagLabels: tagRegistry }),
+          navEntries: navEntries as unknown as Record<string, unknown>[],
+          authorRows: authorRows as unknown as Record<string, unknown>[],
+        })
+        console.log(`[content-cache] wrote sidecar: ${navEntries.length} nav entries, ${authorRows.length} author rows (${reusedCount} slug(s) reused this run)`)
+      } else {
+        console.log('[content-cache] sidecar not written (no CAP catalog available to fingerprint)')
+      }
+    } catch (err) {
+      console.warn(`[content-cache] sidecar write failed: ${err instanceof Error ? err.message : err}`)
+    }
+  }
 
   if (target === 'vitepress') {
     // Also write to public/ so VitePress copies it to dist as a static asset

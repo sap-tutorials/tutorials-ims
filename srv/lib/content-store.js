@@ -215,6 +215,13 @@ export function invalidateRenderCache() {
   return cache.invalidateByPrefix('render:');
 }
 
+// Full content-cache flush. In production the cache-generation token busts this
+// automatically on publish (onCacheGenerationChange above); exported for ops +
+// tests that drive the publish path directly without bumping the token.
+export function invalidateContentCache() {
+  return cache.invalidate();
+}
+
 // --- Factory ---
 // Creates a set of content handlers bound to a specific CDS namespace and API key env var.
 // Default invocation (no args) reproduces the original prod-namespace behaviour.
@@ -225,6 +232,130 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // "COM_SAP_DEVELOPERS_IMS_CONTENTFILES").  Keep this lazy so it is only computed
   // when handlers are first called, not at import/module-load time.
   const hanaTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTFILES`;
+  // Option B (slug-targeted-delta-rebuild): the mutable current-content table.
+  const hanaCurrentTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTCURRENT`;
+  // Option B: append-only history table (for rollback replay + drift).
+  const hanaHistoryTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTHISTORY`;
+
+  // Option B rollback replay (Workstream D 8.4). Restore ContentCurrent to its
+  // exact state as of `targetVersion` from the append-only ContentHistory:
+  // for each slug, the latest history row with version <= targetVersion decides
+  // its state (WRITTEN → present with that row's blob; DELETED / no row → absent).
+  // Needed once carryForwardUnchanged is removed and ContentFiles(V) is no longer
+  // a complete snapshot to fall back to. Chunked per source-version so the
+  // raw-SQL LOB read (HANA locator gotcha) stays bounded. Returns the row count
+  // written. Caller runs this inside the rollback lock.
+  async function replayContentCurrentFromHistory(targetVersion) {
+    const { ContentHistory, ContentCurrent } = cds.entities(namespace);
+    if (!ContentHistory || !ContentCurrent) return { replayed: 0 };
+    const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
+    // Latest history row per slug at or before the target version (metadata only).
+    const hist = await SELECT.from(ContentHistory)
+      .where({ version: { '<=': targetVersion } })
+      .columns('slug', 'version', 'action');
+    const latest = new Map();
+    for (const r of hist) {
+      const prev = latest.get(r.slug);
+      if (!prev || r.version > prev.version) latest.set(r.slug, r);
+    }
+
+    // Rebuild ContentCurrent: drop all, then re-insert the WRITTEN slugs from
+    // their deciding version. Grouped by version so each chunked read targets a
+    // single (version, slug-set).
+    await DELETE.from(ContentCurrent);
+    const byVersion = new Map();
+    for (const [slug, r] of latest) {
+      if (r.action !== 'WRITTEN') continue; // DELETED / tombstoned → stays absent
+      if (!byVersion.has(r.version)) byVersion.set(r.version, []);
+      byVersion.get(r.version).push(slug);
+    }
+
+    let replayed = 0;
+    const CHUNK = 50;
+    for (const [version, slugs] of byVersion) {
+      for (let i = 0; i < slugs.length; i += CHUNK) {
+        const chunk = slugs.slice(i, i + CHUNK);
+        let rows;
+        if (isHana) {
+          const ph = chunk.map(() => '?').join(', ');
+          const raw = await db.run(
+            `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
+               FROM "${hanaHistoryTableName()}" WHERE "VERSION" = ? AND "SLUG" IN (${ph})`,
+            [version, ...chunk]
+          );
+          rows = raw.map((r) => ({
+            slug: r.SLUG, content: r.CONTENT, contentHash: r.CONTENTHASH,
+            sizeBytes: r.SIZEBYTES, compressedBytes: r.COMPRESSEDBYTES,
+            mimeType: r.MIMETYPE, sourceContent: r.SOURCECONTENT, sourceHash: r.SOURCEHASH,
+          }));
+        } else {
+          rows = await SELECT.from(ContentHistory)
+            .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
+            .where({ version, slug: { in: chunk } });
+        }
+        const entries = [];
+        for (const row of rows) {
+          const buf = Buffer.isBuffer(row.content) ? row.content : await toBuffer(row.content);
+          let srcBuf = null;
+          if (row.sourceContent != null) srcBuf = Buffer.isBuffer(row.sourceContent) ? row.sourceContent : await toBuffer(row.sourceContent);
+          entries.push({
+            slug: row.slug, content: buf, contentHash: row.contentHash,
+            sizeBytes: row.sizeBytes, compressedBytes: row.compressedBytes,
+            mimeType: row.mimeType, sourceContent: srcBuf, sourceHash: row.sourceHash ?? null,
+            sourceVersion: version,
+          });
+        }
+        if (entries.length) { await INSERT.into(ContentCurrent).entries(entries); replayed += entries.length; }
+      }
+    }
+    return { replayed };
+  }
+
+  // Option B shared single-slug read. Resolves meta + a decompressible BLOB
+  // buffer from the mutable ContentCurrent when CONTENT_DELTA_READ_ENABLED is on
+  // AND the slug is present, else the legacy version-pinned ContentFiles active
+  // snapshot (per-slug fallback → safe on a partially-seeded ContentCurrent).
+  // Returns null when the slug is in neither. LOB read stays raw db.run on HANA
+  // (locators expire when mixed with metadata in CQL). Used by the special-slug
+  // readers (__nav__, __404__) so they migrate identically to serveStoredSlug.
+  async function resolveContentBlob(slug) {
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+    const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+    if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+      // slug-canonical: caller-canonicalizes
+      const [cur] = await SELECT.from(ContentCurrent).where({ slug }).columns('contentHash', 'mimeType', 'sourceVersion');
+      if (cur) {
+        let buffer;
+        if (isHana) {
+          const [b] = await db.run(`SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`, [slug]);
+          buffer = b?.CONTENT;
+        } else {
+          // slug-canonical: caller-canonicalizes
+          const b = await SELECT.one.from(ContentCurrent).where({ slug }).columns('content');
+          buffer = b ? await toBuffer(b.content) : null;
+        }
+        return { contentHash: cur.contentHash, mimeType: cur.mimeType, version: cur.sourceVersion, buffer, source: 'current' };
+      }
+    }
+    const activeVersion = await getActiveVersion();
+    if (activeVersion === null) return null;
+    // slug-canonical: caller-canonicalizes
+    const [meta] = await SELECT.from(ContentFiles).where({ slug, version: activeVersion }).columns('contentHash', 'mimeType', 'version');
+    if (!meta) return null;
+    let buffer;
+    if (isHana) {
+      const [b] = await db.run(`SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`, [slug, meta.version]);
+      buffer = b?.CONTENT;
+    } else {
+      // slug-canonical: caller-canonicalizes
+      const b = await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content');
+      buffer = b ? await toBuffer(b.content) : null;
+    }
+    return { contentHash: meta.contentHash, mimeType: meta.mimeType, version: meta.version, buffer, source: 'files' };
+  }
 
   // --- Auth Middleware ---
 
@@ -270,7 +401,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     return row?.version ?? null;
   }
 
-  const shellLoader = createShellLoader({ namespace, hanaTableName, getActiveVersion });
+  const shellLoader = createShellLoader({ namespace, hanaTableName, hanaCurrentTableName, getActiveVersion });
 
   async function getNextVersion() {
     const { ContentManifest } = cds.entities(namespace);
@@ -803,40 +934,16 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // genuine catalog render failure serves it with 500 rather than the ugly JSON. (#1938)
   async function serveNotFound(res, slug, status = 404) {
     try {
-      const { ContentFiles } = cds.entities(namespace);
-      const activeVersion = await getActiveVersion();
-      if (activeVersion === null) {
+      const resolved = await resolveContentBlob('__404__');
+      if (!resolved) {
         return res.status(status).json({ error: `Tutorial not found: ${slug}` });
       }
-
-      const [meta] = await SELECT.from(ContentFiles)
-        .where({ slug: '__404__', version: activeVersion })
-        .columns('contentHash', 'mimeType', 'version');
-
-      if (!meta) {
-        return res.status(status).json({ error: `Tutorial not found: ${slug}` });
-      }
-
-      const db = await cds.connect.to('db');
-      let contentBuf;
-      if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
-        const [blobRow] = await db.run(
-          `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = '__404__' AND "VERSION" = ?`,
-          [meta.version]
-        );
-        contentBuf = blobRow.CONTENT;
-      } else {
-        const blobRow = await SELECT.one.from(ContentFiles)
-          .where({ slug: '__404__', version: meta.version })
-          .columns('content');
-        contentBuf = await toBuffer(blobRow.content);
-      }
-      const decompressed = gunzipSync(contentBuf);
+      const decompressed = gunzipSync(resolved.buffer);
 
       res.status(status);
-      res.setHeader('Content-Type', `${meta.mimeType}; charset=utf-8`);
+      res.setHeader('Content-Type', `${resolved.mimeType}; charset=utf-8`);
       res.setHeader('Cache-Control', 'public, max-age=60');
-      res.setHeader('X-Content-Source', 'db');
+      res.setHeader('X-Content-Source', resolved.source === 'current' ? 'db-current' : 'db');
       return res.send(decompressed);
     } catch (err) {
       console.error('[content/serve:404]', err instanceof Error ? err.message : String(err));
@@ -892,17 +999,38 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
     metrics.counter('content.cache.miss');  // #805
 
-    const { ContentFiles } = cds.entities(namespace);
-    const activeVersion = await getActiveVersion();
-    if (activeVersion === null) return 'no-version';
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+    const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
 
-    // Serve only from the active version — each publish is a full snapshot.
-    const [meta] = await SELECT.from(ContentFiles)
-      // slug-canonical: callers canonicalize before calling.
-      .where({ slug, version: activeVersion })
-      .columns('contentHash', 'mimeType', 'version');
-
-    if (!meta) return 'not-found';
+    // Option B read cutover (slug-targeted-delta-rebuild), flag-gated + fail-safe.
+    // When CONTENT_DELTA_READ_ENABLED=true, serve from the mutable ContentCurrent
+    // (WHERE slug=?, no version join). Fall back to the legacy version-pinned
+    // ContentFiles snapshot when the flag is off OR the slug isn't in
+    // ContentCurrent yet (mid-migration, before the full seed) — so a partially-
+    // populated ContentCurrent never 404s a slug that still lives in ContentFiles.
+    const READ_DELTA = process.env.CONTENT_DELTA_READ_ENABLED === 'true';
+    let meta;
+    let source = 'files';
+    if (READ_DELTA && ContentCurrent) {
+      const [cur] = await SELECT.from(ContentCurrent)
+        // slug-canonical: caller-canonicalizes
+        .where({ slug })
+        .columns('contentHash', 'mimeType');
+      if (cur) { meta = cur; source = 'current'; }
+    }
+    if (!meta) {
+      const activeVersion = await getActiveVersion();
+      if (activeVersion === null) return 'no-version';
+      // Serve only from the active version — legacy full-snapshot path.
+      const [legacy] = await SELECT.from(ContentFiles)
+        // slug-canonical: callers canonicalize before calling.
+        .where({ slug, version: activeVersion })
+        .columns('contentHash', 'mimeType', 'version');
+      if (!legacy) return 'not-found';
+      meta = legacy;
+      source = 'files';
+    }
 
     const ifNoneMatch = req.headers['if-none-match'];
     if (ifNoneMatch && ifNoneMatch === `"${meta.contentHash}"`) {
@@ -913,19 +1041,22 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // Read BLOB separately — CDS QL returns HANA BLOBs as streams with locators
     // that expire before consumption. Raw SQL returns a Buffer directly.
     // For SQLite (tests), CDS QL works fine since there's no LOB streaming.
-    const db = await cds.connect.to('db');
     let contentBuf;
-    if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
-      const [blobRow] = await db.run(
-        `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
-        [slug, meta.version]
-      );
+    if (isHana) {
+      const [blobRow] = source === 'current'
+        ? await db.run(
+            `SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`,
+            [slug]
+          )
+        : await db.run(
+            `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
+            [slug, meta.version]
+          );
       contentBuf = blobRow.CONTENT;
     } else {
-      const blobRow = await SELECT.one.from(ContentFiles)
-        // slug-canonical: callers canonicalize before calling.
-        .where({ slug, version: meta.version })
-        .columns('content');
+      const blobRow = source === 'current'
+        ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content') // slug-canonical: caller-canonicalizes
+        : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content'); // slug-canonical: caller-canonicalizes
       contentBuf = await toBuffer(blobRow.content);
     }
     const decompressed = gunzipSync(contentBuf);
@@ -934,7 +1065,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     res.setHeader('Content-Type', `${mimeType || meta.mimeType}; charset=utf-8`);
     res.setHeader('ETag', `"${meta.contentHash}"`);
     setContentCacheHeaders(res, { slug: tagSlug });
-    res.setHeader('X-Content-Source', 'db');
+    res.setHeader('X-Content-Source', source === 'current' ? 'db-current' : 'db');
     res.send(decompressed);
     return 'served';
   }
@@ -1160,18 +1291,24 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // --- GET /content/hashes ---
 
   async function hashesHandler(req, res) {
-    const { ContentFiles } = cds.entities(namespace);
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
 
     try {
-      const activeVersion = await getActiveVersion();
-      if (activeVersion === null) {
-        return res.json({});
+      // Option B: enumerate ContentCurrent (no version) when the read flag is on
+      // — correct once ContentCurrent is fully seeded (task 4.3). Metadata-only,
+      // so plain CQL is fine on HANA + SQLite (no LOB). Else legacy active snapshot.
+      let rows;
+      if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+        rows = await SELECT.from(ContentCurrent).columns('slug', 'contentHash');
+      } else {
+        const activeVersion = await getActiveVersion();
+        if (activeVersion === null) {
+          return res.json({});
+        }
+        rows = await SELECT.from(ContentFiles)
+          .where({ version: activeVersion })
+          .columns('slug', 'contentHash');
       }
-
-      // Only include slugs from the active version (full snapshot per publish)
-      const rows = await SELECT.from(ContentFiles)
-        .where({ version: activeVersion })
-        .columns('slug', 'contentHash');
 
       const map = {};
       for (const row of rows) {
@@ -1204,9 +1341,16 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   async function sourceHashesHandler(req, res) {
     try {
-      const activeVersion = await getActiveVersion();
-      if (activeVersion === null) {
-        return res.json({});
+      const useCurrent = process.env.CONTENT_DELTA_READ_ENABLED === 'true';
+      const db = await cds.connect.to('db');
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
+      let activeVersion = null;
+      if (!useCurrent) {
+        activeVersion = await getActiveVersion();
+        if (activeVersion === null) {
+          return res.json({});
+        }
       }
 
       // Exclude soft-deleted tutorials so the daily drift workflow stops re-
@@ -1218,27 +1362,46 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       // LOWER() on both sides because Tutorials.slug may be mixed-case in
       // legacy rows even though new slugs are lowercase canonical
       // (CLAUDE.md > "Tutorial slugs are lowercase canonical").
-      const db = await cds.connect.to('db');
-      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-      const rows = isHana
-        ? (await db.run(
-            `SELECT cf."SLUG" AS "slug", cf."SOURCEHASH" AS "sourceHash"
-               FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" AS cf
-               LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
-                 ON LOWER(cf."SLUG") = LOWER(t."SLUG")
-              WHERE cf."VERSION" = ?
-                AND (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`,
-            [activeVersion]
-          ))
-        : (await db.run(
-            `SELECT cf.slug AS slug, cf.sourceHash AS sourceHash
-               FROM com_sap_developers_ims_contentfiles AS cf
-               LEFT JOIN com_sap_developers_ims_tutorials AS t
-                 ON LOWER(cf.slug) = LOWER(t.slug)
-              WHERE cf.version = ?
-                AND (t.status IS NULL OR t.status != 'INACTIVE')`,
-            [activeVersion]
-          ));
+      //
+      // Option B: enumerate ContentCurrent (no version) when the read flag is on.
+      let rows;
+      if (useCurrent) {
+        rows = isHana
+          ? (await db.run(
+              `SELECT cc."SLUG" AS "slug", cc."SOURCEHASH" AS "sourceHash"
+                 FROM "${hanaCurrentTableName()}" AS cc
+                 LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
+                   ON LOWER(cc."SLUG") = LOWER(t."SLUG")
+                WHERE (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`
+            ))
+          : (await db.run(
+              `SELECT cc.slug AS slug, cc.sourceHash AS sourceHash
+                 FROM com_sap_developers_ims_contentcurrent AS cc
+                 LEFT JOIN com_sap_developers_ims_tutorials AS t
+                   ON LOWER(cc.slug) = LOWER(t.slug)
+                WHERE (t.status IS NULL OR t.status != 'INACTIVE')`
+            ));
+      } else {
+        rows = isHana
+          ? (await db.run(
+              `SELECT cf."SLUG" AS "slug", cf."SOURCEHASH" AS "sourceHash"
+                 FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" AS cf
+                 LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
+                   ON LOWER(cf."SLUG") = LOWER(t."SLUG")
+                WHERE cf."VERSION" = ?
+                  AND (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`,
+              [activeVersion]
+            ))
+          : (await db.run(
+              `SELECT cf.slug AS slug, cf.sourceHash AS sourceHash
+                 FROM com_sap_developers_ims_contentfiles AS cf
+                 LEFT JOIN com_sap_developers_ims_tutorials AS t
+                   ON LOWER(cf.slug) = LOWER(t.slug)
+                WHERE cf.version = ?
+                  AND (t.status IS NULL OR t.status != 'INACTIVE')`,
+              [activeVersion]
+            ));
+      }
 
       const map = {};
       for (const row of rows) {
@@ -1279,31 +1442,43 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       return { markdown: null, sourceHash: null, contentHash: null };
     }
     const lcSlug = slug.toLowerCase();
-    const activeVersion = await getActiveVersion();
-    if (activeVersion === null) {
-      return { markdown: null, sourceHash: null, contentHash: null };
-    }
-
     const db = await cds.connect.to('db');
     const isHana = db.kind === 'hana';
-    let row;
-    if (isHana) {
-      const rows = await db.run(
-        `SELECT TOP 1 "SOURCECONTENT", "SOURCEHASH", "CONTENTHASH"
-           FROM "${hanaTableName()}"
-          WHERE LOWER("SLUG") = ? AND "VERSION" = ?`,
-        [lcSlug, activeVersion]
-      );
-      row = rows && rows[0] ? {
-        sourceContent: rows[0].SOURCECONTENT,
-        sourceHash:    rows[0].SOURCEHASH,
-        contentHash:   rows[0].CONTENTHASH,
-      } : null;
-    } else {
-      const { ContentFiles } = cds.entities(namespace);
-      row = await SELECT.one.from(ContentFiles)
-        .where`LOWER(slug) = ${lcSlug} and version = ${activeVersion}`
-        .columns('sourceContent', 'sourceHash', 'contentHash');
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+
+    // Option B: read source columns from ContentCurrent (read flag on) with a
+    // fallback to the legacy active-version snapshot.
+    let row = null;
+    if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+      if (isHana) {
+        const rows = await db.run(
+          `SELECT TOP 1 "SOURCECONTENT", "SOURCEHASH", "CONTENTHASH" FROM "${hanaCurrentTableName()}" WHERE LOWER("SLUG") = ?`,
+          [lcSlug]
+        );
+        row = rows && rows[0] ? { sourceContent: rows[0].SOURCECONTENT, sourceHash: rows[0].SOURCEHASH, contentHash: rows[0].CONTENTHASH } : null;
+      } else {
+        row = await SELECT.one.from(ContentCurrent)
+          .where`LOWER(slug) = ${lcSlug}`
+          .columns('sourceContent', 'sourceHash', 'contentHash');
+      }
+    }
+    if (!row) {
+      const activeVersion = await getActiveVersion();
+      if (activeVersion !== null) {
+        if (isHana) {
+          const rows = await db.run(
+            `SELECT TOP 1 "SOURCECONTENT", "SOURCEHASH", "CONTENTHASH"
+               FROM "${hanaTableName()}"
+              WHERE LOWER("SLUG") = ? AND "VERSION" = ?`,
+            [lcSlug, activeVersion]
+          );
+          row = rows && rows[0] ? { sourceContent: rows[0].SOURCECONTENT, sourceHash: rows[0].SOURCEHASH, contentHash: rows[0].CONTENTHASH } : null;
+        } else {
+          row = await SELECT.one.from(ContentFiles)
+            .where`LOWER(slug) = ${lcSlug} and version = ${activeVersion}`
+            .columns('sourceContent', 'sourceHash', 'contentHash');
+        }
+      }
     }
 
     if (!row) {
@@ -1332,11 +1507,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // --- GET /content/nav ---
 
   async function navHandlerFallback(req, res, activeVersion) {
-    const { ContentFiles, Tutorials, Steps, TutorialTags, Tags } = cds.entities(namespace);
+    const { ContentFiles, ContentCurrent, Tutorials, Steps, TutorialTags, Tags } = cds.entities(namespace);
 
-    const contentRows = await SELECT.from(ContentFiles)
-      .where({ version: activeVersion })
-      .columns('slug', 'sizeBytes');
+    // Option B: enumerate ContentCurrent (no version) when the read flag is on —
+    // correct once fully seeded (task 4.3). Metadata-only, plain CQL on both DBs.
+    const contentRows = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+      ? await SELECT.from(ContentCurrent).columns('slug', 'sizeBytes')
+      : await SELECT.from(ContentFiles).where({ version: activeVersion }).columns('slug', 'sizeBytes');
 
     const slugs = contentRows.filter(r =>
       r.slug !== '__nav__' && r.slug !== '__404__' && r.slug !== '__shell__'
@@ -1451,31 +1628,15 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         return res.json({ version: null, tutorials: [] });
       }
 
-      // Prefer stored nav metadata (published alongside content)
-      const [navMeta] = await SELECT.from(ContentFiles)
-        .where({ slug: '__nav__', version: activeVersion })
-        .columns('contentHash');
-
-      if (navMeta) {
-        const db = await cds.connect.to('db');
-        let contentBuf;
-        if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
-          const [blobRow] = await db.run(
-            `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = '__nav__' AND "VERSION" = ?`,
-            [activeVersion]
-          );
-          contentBuf = blobRow.CONTENT;
-        } else {
-          const blobRow = await SELECT.one.from(ContentFiles)
-            .where({ slug: '__nav__', version: activeVersion })
-            .columns('content');
-          contentBuf = await toBuffer(blobRow.content);
-        }
-        const decompressed = gunzipSync(contentBuf);
+      // Prefer stored nav metadata (published alongside content) — resolved from
+      // ContentCurrent (read flag on) or legacy ContentFiles via resolveContentBlob.
+      const navResolved = await resolveContentBlob('__nav__');
+      if (navResolved && navResolved.buffer) {
+        const decompressed = gunzipSync(navResolved.buffer);
         const navData = JSON.parse(decompressed.toString('utf-8'));
 
         res.setHeader('Cache-Control', 'public, max-age=60');
-        return res.json({ version: activeVersion, count: navData.tutorials.length, tutorials: navData.tutorials });
+        return res.json({ version: navResolved.version, count: navData.tutorials.length, tutorials: navData.tutorials });
       }
 
       // Fallback: build nav from Tutorials table (legacy path)
@@ -1525,6 +1686,30 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       await UPDATE(ContentManifest)
         .where({ version: target.version })
         .set({ status: 'ACTIVE' });
+
+      // Option B rollback (Workstream D), flag-gated + fail-safe.
+      if (process.env.CONTENT_DELTA_SKIP_CARRYFORWARD === 'true') {
+        // Steady state: carry-forward is off, so ContentFiles(target.version) is
+        // NOT a complete snapshot to fall back to — replay ContentCurrent from
+        // ContentHistory to restore the exact state as of target.version.
+        try {
+          const { replayed } = await replayContentCurrentFromHistory(target.version);
+          console.log(`[content/rollback] Option B replayed ${replayed} slug(s) into ContentCurrent from ContentHistory @v${target.version}`);
+        } catch (e) {
+          console.error('[content/rollback] Option B replay FAILED — ContentCurrent may be inconsistent, re-run rollback:', e.message);
+        }
+      } else if (process.env.CONTENT_DELTA_WRITE_ENABLED === 'true') {
+        // Dual-write migration window: ContentFiles is still the full, authoritative
+        // snapshot, so the flip above already restored content as of target.version.
+        // Clearing ContentCurrent makes every read fall back to that restored
+        // ContentFiles(target.version). ContentHistory is retained for the replay above.
+        try {
+          const { ContentCurrent } = cds.entities(namespace);
+          if (ContentCurrent) await DELETE.from(ContentCurrent);
+        } catch (e) {
+          console.warn('[content/rollback] Option B ContentCurrent clear failed (non-fatal; ContentFiles fallback active):', e.message);
+        }
+      }
 
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances

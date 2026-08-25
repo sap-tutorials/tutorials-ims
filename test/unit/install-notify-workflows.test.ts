@@ -4,6 +4,12 @@
 // (classification + action decision) is unit-tested directly; the GitHub
 // REST calls are exercised via fetch mocks.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
 import {
   classifyRepos,
   decideAction,
@@ -365,5 +371,24 @@ describe('reporting (tally + log line + summary, #1333 follow-up)', () => {
 describe('encodeContent', () => {
   it('base64-encodes UTF-8 content', () => {
     expect(Buffer.from(encodeContent('héllo'), 'base64').toString('utf8')).toBe('héllo')
+  })
+})
+
+describe('PROD notify template branch trigger (regression guard)', () => {
+  // Source repos are a mixture of `main`- and `master`-default branches. The
+  // canonical template MUST trigger on both, or the installer would (re-)push
+  // a `main`-only trigger onto `master`-default repos like sap-tutorials/
+  // Tutorials — silently disabling auto-publish and reverting fix #24184.
+  const template = readFileSync(
+    join(__dirname, '..', '..', 'docs', 'authors', 'tutorial-repo-dispatch.yml'),
+    'utf8',
+  )
+
+  it('fires on both master and main', () => {
+    expect(template).toMatch(/branches:\s*\[\s*master\s*,\s*main\s*\]/)
+  })
+
+  it('does not ship a main-only trigger', () => {
+    expect(template).not.toMatch(/branches:\s*\[\s*main\s*\]/)
   })
 })
