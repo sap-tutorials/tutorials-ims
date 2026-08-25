@@ -230,6 +230,14 @@ modules:
         - mkdir -p static/explore-ui
         - cp -r ../app/explore/dist/. static/explore-ui/
         - cp -r ../app/scanner/webapp static/scanner-ui
+        # Display App (event-monitor dashboard) — Vue 3 + Vite, base '/display-app/'.
+        # Served from static/display-app via the /display-app/ approuter route. This
+        # file (NOT the root mta.yaml) is what `mbt build` uses, so the build+copy
+        # must live here or /display-app/ 404s.
+        - npm --prefix ../app/display-app install
+        - npm --prefix ../app/display-app run build
+        - mkdir -p static/display-app
+        - cp -r ../app/display-app/dist/. static/display-app/
         # Data Inspector UI (#999) — bundled inside @cap-js/data-inspector's
         # node_modules. Rewrite the UI5 bootstrap CDN in index.html from
         # sapui5.hana.ondemand.com (plugin default) to ui5.sap.com — the
