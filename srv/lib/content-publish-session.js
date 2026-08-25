@@ -459,7 +459,19 @@ export function createSessionHelpers({ namespace }) {
     // Carry forward unchanged slugs from the previously-ACTIVE manifest.
     // This logic is lifted verbatim from the legacy publishHandler at
     // srv/lib/content-store.js:320-378 so prod/SQLite parity is preserved.
-    const { carriedForward, carriedSize } = await carryForwardUnchanged(namespace, newVersion, hanaTableName, getActiveVersion);
+    // Carry forward unchanged slugs from the previously-ACTIVE manifest — UNLESS
+    // Option B steady state (CONTENT_DELTA_SKIP_CARRYFORWARD) is on. Skipping it
+    // makes the publish O(changed slugs): ContentFiles(newVersion) then holds only
+    // the freshly-appended slugs; ALL reads serve from ContentCurrent (read flag)
+    // and rollback replays from ContentHistory. Only enable once the read cutover
+    // is complete AND ContentCurrent is fully seeded — else serving breaks.
+    let carriedForward = 0;
+    let carriedSize = 0;
+    if (process.env.CONTENT_DELTA_SKIP_CARRYFORWARD !== 'true') {
+      ({ carriedForward, carriedSize } = await carryForwardUnchanged(namespace, newVersion, hanaTableName, getActiveVersion));
+    } else {
+      LOG.info('[content/publish/commit] Option B: carry-forward SKIPPED (O(changed) publish)');
+    }
 
     // Option B dual-write (Workstream D, flag-gated, fail-safe). Mirror the
     // freshly-published slugs into the mutable ContentCurrent + append-only

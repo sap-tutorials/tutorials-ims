@@ -215,6 +215,13 @@ export function invalidateRenderCache() {
   return cache.invalidateByPrefix('render:');
 }
 
+// Full content-cache flush. In production the cache-generation token busts this
+// automatically on publish (onCacheGenerationChange above); exported for ops +
+// tests that drive the publish path directly without bumping the token.
+export function invalidateContentCache() {
+  return cache.invalidate();
+}
+
 // --- Factory ---
 // Creates a set of content handlers bound to a specific CDS namespace and API key env var.
 // Default invocation (no args) reproduces the original prod-namespace behaviour.
@@ -227,6 +234,84 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   const hanaTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTFILES`;
   // Option B (slug-targeted-delta-rebuild): the mutable current-content table.
   const hanaCurrentTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTCURRENT`;
+  // Option B: append-only history table (for rollback replay + drift).
+  const hanaHistoryTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTHISTORY`;
+
+  // Option B rollback replay (Workstream D 8.4). Restore ContentCurrent to its
+  // exact state as of `targetVersion` from the append-only ContentHistory:
+  // for each slug, the latest history row with version <= targetVersion decides
+  // its state (WRITTEN → present with that row's blob; DELETED / no row → absent).
+  // Needed once carryForwardUnchanged is removed and ContentFiles(V) is no longer
+  // a complete snapshot to fall back to. Chunked per source-version so the
+  // raw-SQL LOB read (HANA locator gotcha) stays bounded. Returns the row count
+  // written. Caller runs this inside the rollback lock.
+  async function replayContentCurrentFromHistory(targetVersion) {
+    const { ContentHistory, ContentCurrent } = cds.entities(namespace);
+    if (!ContentHistory || !ContentCurrent) return { replayed: 0 };
+    const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
+    // Latest history row per slug at or before the target version (metadata only).
+    const hist = await SELECT.from(ContentHistory)
+      .where({ version: { '<=': targetVersion } })
+      .columns('slug', 'version', 'action');
+    const latest = new Map();
+    for (const r of hist) {
+      const prev = latest.get(r.slug);
+      if (!prev || r.version > prev.version) latest.set(r.slug, r);
+    }
+
+    // Rebuild ContentCurrent: drop all, then re-insert the WRITTEN slugs from
+    // their deciding version. Grouped by version so each chunked read targets a
+    // single (version, slug-set).
+    await DELETE.from(ContentCurrent);
+    const byVersion = new Map();
+    for (const [slug, r] of latest) {
+      if (r.action !== 'WRITTEN') continue; // DELETED / tombstoned → stays absent
+      if (!byVersion.has(r.version)) byVersion.set(r.version, []);
+      byVersion.get(r.version).push(slug);
+    }
+
+    let replayed = 0;
+    const CHUNK = 50;
+    for (const [version, slugs] of byVersion) {
+      for (let i = 0; i < slugs.length; i += CHUNK) {
+        const chunk = slugs.slice(i, i + CHUNK);
+        let rows;
+        if (isHana) {
+          const ph = chunk.map(() => '?').join(', ');
+          const raw = await db.run(
+            `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
+               FROM "${hanaHistoryTableName()}" WHERE "VERSION" = ? AND "SLUG" IN (${ph})`,
+            [version, ...chunk]
+          );
+          rows = raw.map((r) => ({
+            slug: r.SLUG, content: r.CONTENT, contentHash: r.CONTENTHASH,
+            sizeBytes: r.SIZEBYTES, compressedBytes: r.COMPRESSEDBYTES,
+            mimeType: r.MIMETYPE, sourceContent: r.SOURCECONTENT, sourceHash: r.SOURCEHASH,
+          }));
+        } else {
+          rows = await SELECT.from(ContentHistory)
+            .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
+            .where({ version, slug: { in: chunk } });
+        }
+        const entries = [];
+        for (const row of rows) {
+          const buf = Buffer.isBuffer(row.content) ? row.content : await toBuffer(row.content);
+          let srcBuf = null;
+          if (row.sourceContent != null) srcBuf = Buffer.isBuffer(row.sourceContent) ? row.sourceContent : await toBuffer(row.sourceContent);
+          entries.push({
+            slug: row.slug, content: buf, contentHash: row.contentHash,
+            sizeBytes: row.sizeBytes, compressedBytes: row.compressedBytes,
+            mimeType: row.mimeType, sourceContent: srcBuf, sourceHash: row.sourceHash ?? null,
+            sourceVersion: version,
+          });
+        }
+        if (entries.length) { await INSERT.into(ContentCurrent).entries(entries); replayed += entries.length; }
+      }
+    }
+    return { replayed };
+  }
 
   // Option B shared single-slug read. Resolves meta + a decompressible BLOB
   // buffer from the mutable ContentCurrent when CONTENT_DELTA_READ_ENABLED is on
@@ -1597,14 +1682,22 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .where({ version: target.version })
         .set({ status: 'ACTIVE' });
 
-      // Option B rollback (Workstream D), flag-gated + fail-safe. During the
-      // dual-write migration window ContentFiles is still the full, authoritative
-      // snapshot, so restoring it (the flip above) already restores content as of
-      // target.version. Clearing ContentCurrent makes every read fall back to that
-      // restored ContentFiles(target.version) — correct-by-fallback without a
-      // per-slug BLOB replay. ContentHistory is append-only and retained for the
-      // post-ContentFiles-retirement full history-replay rollback (task 8.4).
-      if (process.env.CONTENT_DELTA_WRITE_ENABLED === 'true') {
+      // Option B rollback (Workstream D), flag-gated + fail-safe.
+      if (process.env.CONTENT_DELTA_SKIP_CARRYFORWARD === 'true') {
+        // Steady state: carry-forward is off, so ContentFiles(target.version) is
+        // NOT a complete snapshot to fall back to — replay ContentCurrent from
+        // ContentHistory to restore the exact state as of target.version.
+        try {
+          const { replayed } = await replayContentCurrentFromHistory(target.version);
+          console.log(`[content/rollback] Option B replayed ${replayed} slug(s) into ContentCurrent from ContentHistory @v${target.version}`);
+        } catch (e) {
+          console.error('[content/rollback] Option B replay FAILED — ContentCurrent may be inconsistent, re-run rollback:', e.message);
+        }
+      } else if (process.env.CONTENT_DELTA_WRITE_ENABLED === 'true') {
+        // Dual-write migration window: ContentFiles is still the full, authoritative
+        // snapshot, so the flip above already restored content as of target.version.
+        // Clearing ContentCurrent makes every read fall back to that restored
+        // ContentFiles(target.version). ContentHistory is retained for the replay above.
         try {
           const { ContentCurrent } = cds.entities(namespace);
           if (ContentCurrent) await DELETE.from(ContentCurrent);
