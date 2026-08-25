@@ -312,7 +312,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     return row?.version ?? null;
   }
 
-  const shellLoader = createShellLoader({ namespace, hanaTableName, getActiveVersion });
+  const shellLoader = createShellLoader({ namespace, hanaTableName, hanaCurrentTableName, getActiveVersion });
 
   async function getNextVersion() {
     const { ContentManifest } = cds.entities(namespace);
@@ -1251,9 +1251,16 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   async function sourceHashesHandler(req, res) {
     try {
-      const activeVersion = await getActiveVersion();
-      if (activeVersion === null) {
-        return res.json({});
+      const useCurrent = process.env.CONTENT_DELTA_READ_ENABLED === 'true';
+      const db = await cds.connect.to('db');
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
+      let activeVersion = null;
+      if (!useCurrent) {
+        activeVersion = await getActiveVersion();
+        if (activeVersion === null) {
+          return res.json({});
+        }
       }
 
       // Exclude soft-deleted tutorials so the daily drift workflow stops re-
@@ -1265,27 +1272,46 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       // LOWER() on both sides because Tutorials.slug may be mixed-case in
       // legacy rows even though new slugs are lowercase canonical
       // (CLAUDE.md > "Tutorial slugs are lowercase canonical").
-      const db = await cds.connect.to('db');
-      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-      const rows = isHana
-        ? (await db.run(
-            `SELECT cf."SLUG" AS "slug", cf."SOURCEHASH" AS "sourceHash"
-               FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" AS cf
-               LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
-                 ON LOWER(cf."SLUG") = LOWER(t."SLUG")
-              WHERE cf."VERSION" = ?
-                AND (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`,
-            [activeVersion]
-          ))
-        : (await db.run(
-            `SELECT cf.slug AS slug, cf.sourceHash AS sourceHash
-               FROM com_sap_developers_ims_contentfiles AS cf
-               LEFT JOIN com_sap_developers_ims_tutorials AS t
-                 ON LOWER(cf.slug) = LOWER(t.slug)
-              WHERE cf.version = ?
-                AND (t.status IS NULL OR t.status != 'INACTIVE')`,
-            [activeVersion]
-          ));
+      //
+      // Option B: enumerate ContentCurrent (no version) when the read flag is on.
+      let rows;
+      if (useCurrent) {
+        rows = isHana
+          ? (await db.run(
+              `SELECT cc."SLUG" AS "slug", cc."SOURCEHASH" AS "sourceHash"
+                 FROM "${hanaCurrentTableName()}" AS cc
+                 LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
+                   ON LOWER(cc."SLUG") = LOWER(t."SLUG")
+                WHERE (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`
+            ))
+          : (await db.run(
+              `SELECT cc.slug AS slug, cc.sourceHash AS sourceHash
+                 FROM com_sap_developers_ims_contentcurrent AS cc
+                 LEFT JOIN com_sap_developers_ims_tutorials AS t
+                   ON LOWER(cc.slug) = LOWER(t.slug)
+                WHERE (t.status IS NULL OR t.status != 'INACTIVE')`
+            ));
+      } else {
+        rows = isHana
+          ? (await db.run(
+              `SELECT cf."SLUG" AS "slug", cf."SOURCEHASH" AS "sourceHash"
+                 FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" AS cf
+                 LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
+                   ON LOWER(cf."SLUG") = LOWER(t."SLUG")
+                WHERE cf."VERSION" = ?
+                  AND (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`,
+              [activeVersion]
+            ))
+          : (await db.run(
+              `SELECT cf.slug AS slug, cf.sourceHash AS sourceHash
+                 FROM com_sap_developers_ims_contentfiles AS cf
+                 LEFT JOIN com_sap_developers_ims_tutorials AS t
+                   ON LOWER(cf.slug) = LOWER(t.slug)
+                WHERE cf.version = ?
+                  AND (t.status IS NULL OR t.status != 'INACTIVE')`,
+              [activeVersion]
+            ));
+      }
 
       const map = {};
       for (const row of rows) {
@@ -1326,31 +1352,43 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       return { markdown: null, sourceHash: null, contentHash: null };
     }
     const lcSlug = slug.toLowerCase();
-    const activeVersion = await getActiveVersion();
-    if (activeVersion === null) {
-      return { markdown: null, sourceHash: null, contentHash: null };
-    }
-
     const db = await cds.connect.to('db');
     const isHana = db.kind === 'hana';
-    let row;
-    if (isHana) {
-      const rows = await db.run(
-        `SELECT TOP 1 "SOURCECONTENT", "SOURCEHASH", "CONTENTHASH"
-           FROM "${hanaTableName()}"
-          WHERE LOWER("SLUG") = ? AND "VERSION" = ?`,
-        [lcSlug, activeVersion]
-      );
-      row = rows && rows[0] ? {
-        sourceContent: rows[0].SOURCECONTENT,
-        sourceHash:    rows[0].SOURCEHASH,
-        contentHash:   rows[0].CONTENTHASH,
-      } : null;
-    } else {
-      const { ContentFiles } = cds.entities(namespace);
-      row = await SELECT.one.from(ContentFiles)
-        .where`LOWER(slug) = ${lcSlug} and version = ${activeVersion}`
-        .columns('sourceContent', 'sourceHash', 'contentHash');
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+
+    // Option B: read source columns from ContentCurrent (read flag on) with a
+    // fallback to the legacy active-version snapshot.
+    let row = null;
+    if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+      if (isHana) {
+        const rows = await db.run(
+          `SELECT TOP 1 "SOURCECONTENT", "SOURCEHASH", "CONTENTHASH" FROM "${hanaCurrentTableName()}" WHERE LOWER("SLUG") = ?`,
+          [lcSlug]
+        );
+        row = rows && rows[0] ? { sourceContent: rows[0].SOURCECONTENT, sourceHash: rows[0].SOURCEHASH, contentHash: rows[0].CONTENTHASH } : null;
+      } else {
+        row = await SELECT.one.from(ContentCurrent)
+          .where`LOWER(slug) = ${lcSlug}`
+          .columns('sourceContent', 'sourceHash', 'contentHash');
+      }
+    }
+    if (!row) {
+      const activeVersion = await getActiveVersion();
+      if (activeVersion !== null) {
+        if (isHana) {
+          const rows = await db.run(
+            `SELECT TOP 1 "SOURCECONTENT", "SOURCEHASH", "CONTENTHASH"
+               FROM "${hanaTableName()}"
+              WHERE LOWER("SLUG") = ? AND "VERSION" = ?`,
+            [lcSlug, activeVersion]
+          );
+          row = rows && rows[0] ? { sourceContent: rows[0].SOURCECONTENT, sourceHash: rows[0].SOURCEHASH, contentHash: rows[0].CONTENTHASH } : null;
+        } else {
+          row = await SELECT.one.from(ContentFiles)
+            .where`LOWER(slug) = ${lcSlug} and version = ${activeVersion}`
+            .columns('sourceContent', 'sourceHash', 'contentHash');
+        }
+      }
     }
 
     if (!row) {

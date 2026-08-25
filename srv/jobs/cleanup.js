@@ -215,7 +215,7 @@ export async function cleanupStuckPublishing(olderThanMinutes = 30, legacyOlderT
 }
 
 export async function pruneOrphanEmbeddings() {
-  const { ContentManifest, ContentFiles, Tutorials, TutorialEmbedding } =
+  const { ContentManifest, ContentFiles, ContentCurrent, Tutorials, TutorialEmbedding } =
     cds.entities('com.sap.developers.ims');
   const LOG = cds.log('jobs/cleanup');
 
@@ -225,7 +225,13 @@ export async function pruneOrphanEmbeddings() {
     return 0;
   }
 
-  const files = await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
+  // Active slug set — from ContentCurrent when the read flag is on (Option B;
+  // ContentCurrent must be fully seeded), else the legacy manifest snapshot.
+  // Prunes embeddings for slugs NOT in this set, so an incomplete source would
+  // over-prune — the read flag is only enabled once ContentCurrent is seeded.
+  const files = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+    ? await SELECT.from(ContentCurrent).columns('slug')
+    : await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
   const activeSlugs = new Set(files.map(f => f.slug));
 
   const tutorials = await SELECT.from(Tutorials).columns('ID', 'slug');
