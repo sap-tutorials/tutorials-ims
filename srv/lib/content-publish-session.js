@@ -461,6 +461,21 @@ export function createSessionHelpers({ namespace }) {
     // srv/lib/content-store.js:320-378 so prod/SQLite parity is preserved.
     const { carriedForward, carriedSize } = await carryForwardUnchanged(namespace, newVersion, hanaTableName, getActiveVersion);
 
+    // Option B dual-write (Workstream D, flag-gated, fail-safe). Mirror the
+    // freshly-published slugs into the mutable ContentCurrent + append-only
+    // ContentHistory alongside the legacy ContentFiles write, so readers can be
+    // cut over behind a separate read flag with a safe fallback. Never throws
+    // into the commit tx — the legacy write remains the source of truth until
+    // the read cutover.
+    if (process.env.CONTENT_DELTA_WRITE_ENABLED === 'true') {
+      try {
+        const { written } = await dualWriteCurrentAndHistory(namespace, newVersion, freshSlugs, hanaTableName);
+        LOG.info(`[content/publish/commit] Option B dual-write: ${written} slug(s) → ContentCurrent/ContentHistory`);
+      } catch (err) {
+        LOG.error('[content/publish/commit] Option B dual-write failed (non-fatal; legacy ContentFiles write is source of truth):', err.message);
+      }
+    }
+
     // Compute aggregated size after carry-forward for the manifest stats.
     const freshAgg = await SELECT.one.from(ContentFiles)
       .columns('count(*) as c', 'sum(sizeBytes) as s')
@@ -1303,7 +1318,93 @@ async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getAc
 }
 
 // ---------------------------------------------------------------------------
-// Recompute TUTORIAL TaskRecords progress for any tutorial whose body content
+// Option B dual-write (Workstream D, slug-targeted-delta-rebuild). When the
+// CONTENT_DELTA_WRITE_ENABLED flag is on, mirror the freshly-published slugs
+// into the mutable ContentCurrent table (UPSERT — one row per slug, no version)
+// and append a WRITTEN row per (version, slug) to the append-only ContentHistory.
+// This runs ALONGSIDE the legacy ContentFiles write during the migration window
+// (dual-write), so readers can be cut over behind a separate read flag with a
+// safe rollback to ContentFiles. Fail-SAFE: any fault here is logged and
+// swallowed — it must never break the legacy commit (which remains the source
+// of truth until the read cutover).
+//
+// BLOB handling mirrors carryForwardUnchanged: chunked, raw db.run on HANA to
+// materialize LOBs as buffers (LOB-locator gotcha), CQL on SQLite.
+async function dualWriteCurrentAndHistory(namespace, newVersion, freshSlugs, hanaTableName) {
+  if (!freshSlugs || freshSlugs.length === 0) return { written: 0 };
+  const ents = cds.entities(namespace);
+  const { ContentFiles, ContentCurrent, ContentHistory } = ents;
+  if (!ContentCurrent || !ContentHistory) {
+    LOG.warn('[content/publish/commit] dual-write skipped — ContentCurrent/ContentHistory not in model');
+    return { written: 0 };
+  }
+
+  const db = await cds.connect.to('db');
+  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+  const CHUNK = 50;
+  let written = 0;
+
+  for (let i = 0; i < freshSlugs.length; i += CHUNK) {
+    const chunk = freshSlugs.slice(i, i + CHUNK);
+
+    let rows;
+    if (isHana) {
+      const placeholders = chunk.map(() => '?').join(', ');
+      const raw = await db.run(
+        `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
+           FROM "${hanaTableName()}"
+          WHERE "VERSION" = ? AND "SLUG" IN (${placeholders})`,
+        [newVersion, ...chunk]
+      );
+      rows = raw.map((r) => ({
+        slug: r.SLUG, content: r.CONTENT, contentHash: r.CONTENTHASH,
+        sizeBytes: r.SIZEBYTES, compressedBytes: r.COMPRESSEDBYTES,
+        mimeType: r.MIMETYPE, sourceContent: r.SOURCECONTENT, sourceHash: r.SOURCEHASH,
+      }));
+    } else {
+      rows = await SELECT.from(ContentFiles)
+        .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
+        .where({ version: newVersion, slug: { in: chunk } });
+    }
+
+    const currentEntries = [];
+    const historyEntries = [];
+    for (const row of rows) {
+      const buf = Buffer.isBuffer(row.content) ? row.content : await toBuffer(row.content);
+      let srcBuf = null;
+      if (row.sourceContent != null) {
+        srcBuf = Buffer.isBuffer(row.sourceContent) ? row.sourceContent : await toBuffer(row.sourceContent);
+      }
+      currentEntries.push({
+        slug: row.slug, content: buf, contentHash: row.contentHash,
+        sizeBytes: row.sizeBytes, compressedBytes: row.compressedBytes,
+        mimeType: row.mimeType, sourceContent: srcBuf, sourceHash: row.sourceHash ?? null,
+        sourceVersion: newVersion,
+      });
+      historyEntries.push({
+        version: newVersion, slug: row.slug, action: 'WRITTEN', content: buf,
+        contentHash: row.contentHash, sizeBytes: row.sizeBytes, compressedBytes: row.compressedBytes,
+        mimeType: row.mimeType, sourceContent: srcBuf, sourceHash: row.sourceHash ?? null,
+      });
+    }
+
+    // UPSERT ContentCurrent by replace (DELETE-then-INSERT keyed on slug) —
+    // portable across SQLite + HANA and avoids relying on native UPSERT.
+    const chunkSlugs = currentEntries.map((e) => e.slug);
+    if (chunkSlugs.length) {
+      await DELETE.from(ContentCurrent).where({ slug: { in: chunkSlugs } });
+      await INSERT.into(ContentCurrent).entries(currentEntries);
+      // History is append-only keyed on (version, slug); a re-commit of the same
+      // version (idempotent retry) would duplicate-key, so clear this version's
+      // rows for the chunk first.
+      await DELETE.from(ContentHistory).where({ version: newVersion, slug: { in: chunkSlugs } });
+      await INSERT.into(ContentHistory).entries(historyEntries);
+      written += currentEntries.length;
+    }
+  }
+
+  return { written };
+}
 // was published in this version. appendToSession already calls the bulk
 // recompute when metadata is provided, but if a chunk arrived with body text
 // only (no metadata payload), the recompute would be skipped. Re-running here
