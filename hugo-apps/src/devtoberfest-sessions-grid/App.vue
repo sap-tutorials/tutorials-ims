@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
 import { mergeCompletion, youtubeThumb, safeHref, sessionMatchesQuery } from '../devtoberfest-schedule-shared/completion';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
@@ -7,6 +7,7 @@ import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow } from '../devtoberfest-schedule-shared/types';
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
+import { parseSessionsUrl, toSessionsQuery, type SessionsUrlState } from './url-state';
 
 const loading = ref(true);
 const error = ref('');
@@ -22,6 +23,21 @@ const selectedRow = ref<ScheduleRow | null>(null);
 const filterQuery = ref('');
 const filterWeek = ref('');
 const filterTrack = ref('');
+
+// --- Deep-linking (issue #2030) -------------------------------------------
+// The page URL is the source of truth on first load. We parse it once, apply
+// the feed-independent filters (q, week, track) synchronously, and defer the
+// bits that need the loaded feed (session lookup, edition) to loadData.
+const initialUrl = parseSessionsUrl(typeof window !== 'undefined' ? window.location.search : '');
+// One-shot consumed on the FIRST load only, so a later edition change via the
+// picker doesn't re-open a stale session panel.
+let pendingSession: string | null = initialUrl.session;
+// Gate: suppress URL writes until the incoming link has been fully applied.
+let applied = false;
+
+if (initialUrl.q) filterQuery.value = initialUrl.q;
+if (initialUrl.week) filterWeek.value = initialUrl.week;
+if (initialUrl.track) filterTrack.value = initialUrl.track;
 
 async function loadData(edition?: string) {
   loading.value = true;
@@ -40,6 +56,13 @@ async function loadData(edition?: string) {
     sessions.value = merged.rows.filter((r) => r.kind === 'session');
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
+
+    // Session deep-link: open its detail panel (first load only).
+    if (pendingSession) {
+      const row = sessions.value.find((r) => r.id === pendingSession);
+      if (row) selectedRow.value = row;
+      pendingSession = null;
+    }
   } catch (e: any) {
     error.value = e?.message ?? 'Failed to load sessions.';
   } finally {
@@ -88,7 +111,55 @@ function onThumbError(ev: Event) {
   if (placeholder) placeholder.style.display = 'flex';
 }
 
-onMounted(() => loadData());
+// --- URL sync (issue #2030) -----------------------------------------------
+/** Current shareable state, derived from the live refs. */
+function currentUrlState(): SessionsUrlState {
+  return {
+    q: filterQuery.value || null,
+    week: filterWeek.value || null,
+    track: filterTrack.value || null,
+    // Omit edition when it's just the active default — the ?edition param is
+    // for explicitly viewing a non-active edition.
+    edition: editionId.value && editionId.value !== feed.value?.activeEditionId
+      ? editionId.value
+      : null,
+    session: selectedRow.value?.id ?? null,
+  };
+}
+
+function writeUrl() {
+  if (!applied || typeof window === 'undefined') return;
+  const qs = toSessionsQuery(currentUrlState());
+  window.history.replaceState({}, '', `${window.location.pathname}${qs}${window.location.hash}`);
+}
+
+/** Re-apply in-memory filter/session state from the URL on back/forward. */
+function applyFromUrl(st: SessionsUrlState) {
+  filterQuery.value = st.q ?? '';
+  filterWeek.value = st.week ?? '';
+  filterTrack.value = st.track ?? '';
+  if (st.session) {
+    const row = sessions.value.find((r) => r.id === st.session);
+    selectedRow.value = row ?? null;
+  } else {
+    selectedRow.value = null;
+  }
+}
+
+// Edition changes require a reload (different feed), so they're handled by
+// onEditionChange rather than applyFromUrl.
+function onPopState() { applyFromUrl(parseSessionsUrl(window.location.search)); }
+
+onMounted(async () => {
+  window.addEventListener('popstate', onPopState);
+  await loadData(initialUrl.edition ?? undefined);
+  applied = true;      // start reflecting user interactions into the URL
+  writeUrl();          // canonicalise the URL after the incoming link is applied
+});
+
+onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
+
+watch([filterQuery, filterWeek, filterTrack, editionId, selectedRow], writeUrl);
 </script>
 
 <template>
