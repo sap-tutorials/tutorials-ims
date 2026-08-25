@@ -38,12 +38,18 @@ export interface ContentCacheSidecar {
   // Per-slug nav entries (the same objects written to _nav.json) so non-target
   // slugs can contribute to nav / browse.json without being recomposed.
   navEntries: Record<string, unknown>[]
+  // Per-slug author rows (one per tutorial) so reused slugs still contribute to
+  // author pages / "more from this author" without recomposition.
+  authorRows?: Record<string, unknown>[]
 }
 
 export interface FeedPayloads {
   catalog: unknown
-  coCompletions: unknown
   tagLabels: unknown
+  // Optional: co-completions drive recommendations, which are empty on warm-CAP-
+  // cache runs and client-hydrated at render time, so they are excluded from the
+  // fingerprint by callers on the fast path. Kept optional for completeness/tests.
+  coCompletions?: unknown
 }
 
 // Stable JSON stringify (sorted keys) so semantically-identical feeds always
@@ -62,7 +68,7 @@ function stableStringify(value: unknown): string {
 export function computeFeedFingerprint(feeds: FeedPayloads): string {
   const h = createHash('sha256')
   h.update('catalog\0'); h.update(stableStringify(feeds.catalog))
-  h.update('\0coCompletions\0'); h.update(stableStringify(feeds.coCompletions))
+  h.update('\0coCompletions\0'); h.update(stableStringify(feeds.coCompletions ?? null))
   h.update('\0tagLabels\0'); h.update(stableStringify(feeds.tagLabels))
   return h.digest('hex')
 }

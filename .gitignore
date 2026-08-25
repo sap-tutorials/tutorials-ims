@@ -23,6 +23,7 @@ approuter/static/*
 !approuter/static/.well-known/*.template
 .tutorial-cache/
 .tutorial-cache-qa/
+.content-cache/
 hugo/data/image_dimensions.json
 hugo/data/homepage_shelves.json
 hugo/data/verb_definitions.json
