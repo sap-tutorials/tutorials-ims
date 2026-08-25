@@ -35,7 +35,8 @@ async function publish(helpers, slug, body, { dualWrite }) {
   try {
     const s = await helpers.beginPublishSession({ trigger: 'ci/test', expectedSlugCount: 1, initiator: 'test' });
     await helpers.appendToSession({ sessionId: s.sessionId, files: { [slug]: html(body) }, sources: { [slug]: source(body) } });
-    await helpers.commitSession({ sessionId: s.sessionId });
+    const res = await helpers.commitSession({ sessionId: s.sessionId });
+    return res.version;
   } finally {
     if (prev === undefined) delete process.env.CONTENT_DELTA_WRITE_ENABLED;
     else process.env.CONTENT_DELTA_WRITE_ENABLED = prev;
@@ -43,13 +44,13 @@ async function publish(helpers, slug, body, { dualWrite }) {
 }
 
 describe('Option B read cutover (Workstream D)', () => {
-  let helpers, serveHandler;
+  let helpers, serveHandler, rollbackHandler;
   let ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks;
   const prevRead = process.env.CONTENT_DELTA_READ_ENABLED;
 
   beforeAll(() => {
     helpers = createSessionHelpers({ namespace: NS });
-    ({ serveHandler } = createContentHandlers());
+    ({ serveHandler, rollbackHandler } = createContentHandlers());
     ({ ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks } = cds.entities(NS));
   });
   afterAll(() => {
@@ -90,6 +91,24 @@ describe('Option B read cutover (Workstream D)', () => {
     const res = await serve('gamma');
     expect(res._headers['X-Content-Source']).toBe('db');
     expect(gunzipOrText(res._body)).toContain('G');
+  });
+
+  it('rollback clears ContentCurrent so reads fall back to the restored ContentFiles(V)', async () => {
+    process.env.CONTENT_DELTA_WRITE_ENABLED = 'true';
+    const v1 = await publish(helpers, 'delta', 'D1', { dualWrite: true }); // version 1
+    await publish(helpers, 'delta', 'D2', { dualWrite: true });            // version 2 (active)
+    expect((await SELECT.from(ContentCurrent).where({ slug: 'delta' })).length).toBe(1);
+
+    const rb = makeRes();
+    await rollbackHandler({ body: { targetVersion: v1 } }, rb);
+    expect(rb._body.rolledBackTo).toBe(v1);
+    // ContentCurrent cleared → reads fall back to ContentFiles(active=v1)=D1.
+    expect((await SELECT.from(ContentCurrent)).length).toBe(0);
+
+    process.env.CONTENT_DELTA_READ_ENABLED = 'true';
+    const s = await serve('delta');
+    expect(s._headers['X-Content-Source']).toBe('db');
+    expect(gunzipOrText(s._body)).toContain('D1');
   });
 });
 

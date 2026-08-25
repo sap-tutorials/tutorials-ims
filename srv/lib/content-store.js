@@ -1551,6 +1551,22 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .where({ version: target.version })
         .set({ status: 'ACTIVE' });
 
+      // Option B rollback (Workstream D), flag-gated + fail-safe. During the
+      // dual-write migration window ContentFiles is still the full, authoritative
+      // snapshot, so restoring it (the flip above) already restores content as of
+      // target.version. Clearing ContentCurrent makes every read fall back to that
+      // restored ContentFiles(target.version) — correct-by-fallback without a
+      // per-slug BLOB replay. ContentHistory is append-only and retained for the
+      // post-ContentFiles-retirement full history-replay rollback (task 8.4).
+      if (process.env.CONTENT_DELTA_WRITE_ENABLED === 'true') {
+        try {
+          const { ContentCurrent } = cds.entities(namespace);
+          if (ContentCurrent) await DELETE.from(ContentCurrent);
+        } catch (e) {
+          console.warn('[content/rollback] Option B ContentCurrent clear failed (non-fatal; ContentFiles fallback active):', e.message);
+        }
+      }
+
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
 
