@@ -1,4 +1,4 @@
-import { stringify as yamlStringify } from 'yaml'
+import { hugoFrontmatterStringify as yamlStringify } from '../lib/hugo-yaml.js'
 import { humanizeTag, cleanPrerequisites } from './frontmatter-utils.js'
 import type { TagLabelRegistry } from './frontmatter-utils.js'
 import { escapeHugoDelimiters } from './hugo-delimiters.js'
