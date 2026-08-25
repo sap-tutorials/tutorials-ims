@@ -225,6 +225,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // "COM_SAP_DEVELOPERS_IMS_CONTENTFILES").  Keep this lazy so it is only computed
   // when handlers are first called, not at import/module-load time.
   const hanaTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTFILES`;
+  // Option B (slug-targeted-delta-rebuild): the mutable current-content table.
+  const hanaCurrentTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTCURRENT`;
 
   // --- Auth Middleware ---
 
@@ -892,17 +894,37 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
     metrics.counter('content.cache.miss');  // #805
 
-    const { ContentFiles } = cds.entities(namespace);
-    const activeVersion = await getActiveVersion();
-    if (activeVersion === null) return 'no-version';
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+    const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
 
-    // Serve only from the active version — each publish is a full snapshot.
-    const [meta] = await SELECT.from(ContentFiles)
-      // slug-canonical: callers canonicalize before calling.
-      .where({ slug, version: activeVersion })
-      .columns('contentHash', 'mimeType', 'version');
-
-    if (!meta) return 'not-found';
+    // Option B read cutover (slug-targeted-delta-rebuild), flag-gated + fail-safe.
+    // When CONTENT_DELTA_READ_ENABLED=true, serve from the mutable ContentCurrent
+    // (WHERE slug=?, no version join). Fall back to the legacy version-pinned
+    // ContentFiles snapshot when the flag is off OR the slug isn't in
+    // ContentCurrent yet (mid-migration, before the full seed) — so a partially-
+    // populated ContentCurrent never 404s a slug that still lives in ContentFiles.
+    const READ_DELTA = process.env.CONTENT_DELTA_READ_ENABLED === 'true';
+    let meta;
+    let source = 'files';
+    if (READ_DELTA && ContentCurrent) {
+      const [cur] = await SELECT.from(ContentCurrent)
+        .where({ slug })
+        .columns('contentHash', 'mimeType');
+      if (cur) { meta = cur; source = 'current'; }
+    }
+    if (!meta) {
+      const activeVersion = await getActiveVersion();
+      if (activeVersion === null) return 'no-version';
+      // Serve only from the active version — legacy full-snapshot path.
+      const [legacy] = await SELECT.from(ContentFiles)
+        // slug-canonical: callers canonicalize before calling.
+        .where({ slug, version: activeVersion })
+        .columns('contentHash', 'mimeType', 'version');
+      if (!legacy) return 'not-found';
+      meta = legacy;
+      source = 'files';
+    }
 
     const ifNoneMatch = req.headers['if-none-match'];
     if (ifNoneMatch && ifNoneMatch === `"${meta.contentHash}"`) {
@@ -913,19 +935,22 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // Read BLOB separately — CDS QL returns HANA BLOBs as streams with locators
     // that expire before consumption. Raw SQL returns a Buffer directly.
     // For SQLite (tests), CDS QL works fine since there's no LOB streaming.
-    const db = await cds.connect.to('db');
     let contentBuf;
-    if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
-      const [blobRow] = await db.run(
-        `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
-        [slug, meta.version]
-      );
+    if (isHana) {
+      const [blobRow] = source === 'current'
+        ? await db.run(
+            `SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`,
+            [slug]
+          )
+        : await db.run(
+            `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
+            [slug, meta.version]
+          );
       contentBuf = blobRow.CONTENT;
     } else {
-      const blobRow = await SELECT.one.from(ContentFiles)
-        // slug-canonical: callers canonicalize before calling.
-        .where({ slug, version: meta.version })
-        .columns('content');
+      const blobRow = source === 'current'
+        ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content')
+        : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content');
       contentBuf = await toBuffer(blobRow.content);
     }
     const decompressed = gunzipSync(contentBuf);
@@ -934,7 +959,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     res.setHeader('Content-Type', `${mimeType || meta.mimeType}; charset=utf-8`);
     res.setHeader('ETag', `"${meta.contentHash}"`);
     setContentCacheHeaders(res, { slug: tagSlug });
-    res.setHeader('X-Content-Source', 'db');
+    res.setHeader('X-Content-Source', source === 'current' ? 'db-current' : 'db');
     res.send(decompressed);
     return 'served';
   }
@@ -1525,6 +1550,22 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       await UPDATE(ContentManifest)
         .where({ version: target.version })
         .set({ status: 'ACTIVE' });
+
+      // Option B rollback (Workstream D), flag-gated + fail-safe. During the
+      // dual-write migration window ContentFiles is still the full, authoritative
+      // snapshot, so restoring it (the flip above) already restores content as of
+      // target.version. Clearing ContentCurrent makes every read fall back to that
+      // restored ContentFiles(target.version) — correct-by-fallback without a
+      // per-slug BLOB replay. ContentHistory is append-only and retained for the
+      // post-ContentFiles-retirement full history-replay rollback (task 8.4).
+      if (process.env.CONTENT_DELTA_WRITE_ENABLED === 'true') {
+        try {
+          const { ContentCurrent } = cds.entities(namespace);
+          if (ContentCurrent) await DELETE.from(ContentCurrent);
+        } catch (e) {
+          console.warn('[content/rollback] Option B ContentCurrent clear failed (non-fatal; ContentFiles fallback active):', e.message);
+        }
+      }
 
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
