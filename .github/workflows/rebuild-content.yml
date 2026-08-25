@@ -83,6 +83,11 @@ on:
         required: false
         type: boolean
         default: false
+      content-cache:
+        description: 'EXPERIMENTAL (Workstream C / slug-targeted-delta-rebuild): on a slug-targeted run, reuse the generated-content cache to skip regenerating unchanged tutorials (the bulk of the Fetch step). Fail-open; default OFF. Enable to A/B the fast path on DEV before flipping it on by default.'
+        required: false
+        type: boolean
+        default: false
 
 env:
   NODE_VERSION: '22'
@@ -360,6 +365,27 @@ jobs:
           echo "::add-mask::${VCAP}"
           echo "VCAP_SERVICES=${VCAP}" >> "$GITHUB_ENV"
 
+      # EXPERIMENTAL (Workstream C): restore the previously-generated content
+      # tree so a slug-targeted run can reuse it and skip regenerating unchanged
+      # tutorials. Keyed on the parser/generator SOURCE hash — a parser change
+      # misses the key, nothing is restored, and fetch-tutorials full-regenerates
+      # (the per-slug existsSync guard falls through). The run_id suffix + prefix
+      # restore-keys let each run save its updated tree/sidecar while restoring
+      # the most recent matching one (same pattern as the tutorial cache). The
+      # runtime feed-fingerprint gate (in fetch-tutorials) covers catalog/tag
+      # changes. Only runs when the flag is on; fail-open otherwise.
+      - name: Restore generated-content cache
+        if: ${{ inputs.content-cache == true && steps.mode.outputs.effective_mode != 'catalog-only' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            hugo/content/tutorials
+            hugo/data/image_dimensions.json
+            .content-cache
+          key: content-tree-v1-${{ hashFiles('scripts/parsers/**', 'scripts/fetch-tutorials.ts', 'scripts/lib/content-cache.ts', 'scripts/lib/expand-ai-authored.ts') }}-${{ github.run_id }}
+          restore-keys: |
+            content-tree-v1-${{ hashFiles('scripts/parsers/**', 'scripts/fetch-tutorials.ts', 'scripts/lib/content-cache.ts', 'scripts/lib/expand-ai-authored.ts') }}-
+
       - name: Fetch tutorials
         if: ${{ steps.mode.outputs.effective_mode != 'catalog-only' }}
         # [#357 followup] When force-cap-refetch is true, pass --force-cap so
@@ -387,6 +413,10 @@ jobs:
           # telemetry line so the CI invariant regex keeps matching.
           AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
           CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
+          # EXPERIMENTAL (Workstream C): enable the generated-content fast path.
+          # fetch-tutorials reuses cached non-target content when this is 'true'
+          # AND the run is slug-targeted AND the feed fingerprint matches.
+          CONTENT_CACHE_FAST_PATH: ${{ inputs.content-cache == true }}
 
       # [#601] Generate per-advocate profile-page markdown into
       # hugo/content/developer-advocates/ from /api/advocates. Runs on ALL
