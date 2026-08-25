@@ -31,6 +31,7 @@ async function readContentBuffer(db, slug) {
     } else {
       const { ContentCurrent } = cds.entities('com.sap.developers.ims');
       if (ContentCurrent) {
+        // slug-canonical: caller-canonicalizes
         const r = await SELECT.one.from(ContentCurrent).where({ slug }).columns('content');
         if (r) return await toBuffer(r.content);
       }
