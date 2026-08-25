@@ -4,14 +4,15 @@
 - [x] 1.2 Update callers (discovery :513-549, batch :763-777 / :826-840) so the thrown error is caught by their existing handlers and logged with cause.
 - [x] 1.3 Emit a single ERROR-level log line in `discoverAllTutorials` / `fetchGitHubMetaBatch` when degrading to REST due to a GraphQL auth/permission error (not just `[graphql-warn]`).
 - [x] 1.4 Unit test: a mocked GraphQL error/null-data response raises with the cause and does NOT produce an opaque TypeError.
-- [ ] 1.5 Ship to DEV; run a rebuild and capture the real Phase-1/Phase-2 GraphQL error from logs to decide 2.x.
+- [x] 1.5 Ship to DEV; run a rebuild and capture the real Phase-1/Phase-2 GraphQL error from logs to decide 2.x. **FINDING (DEV run 32791397662, 2026-08-24):** with the GitHub **App installation token**, org-node GraphQL discovery SUCCEEDED — `[graphql] page 1 cost=1 remaining=8781/12500`, `Discovered 1403 tutorials (6.7s)`, zero REST fallback, no error. This REFUTES R3's inference that the App token can't resolve the org node. The earlier PROD failure was a **transient** GraphQL error (errors+null data) that the old masking bug turned into the opaque TypeError → silent REST degrade — exactly what #2018 now handles.
 
-## 2. Workstream B — GraphQL discovery auth fix
+## 2. Workstream B — GraphQL discovery auth fix (NOT NEEDED — see 1.5)
 
-- [ ] 2.1 Decide (from 1.5 evidence) between: repo-oriented discovery (drop `organization(login:)`, enumerate via REST `GET /orgs/{org}/repos`, GraphQL only per-`repository()`) vs. route classic PAT to the fetch step vs. grant the App Org:Read. Record the decision in design.md Open Questions.
-- [ ] 2.2 Implement the chosen fix in `github.ts` and/or `.github/workflows/rebuild-content.yml` (:303-310 token step, :348 token routing).
-- [ ] 2.3 Verify a DEV rebuild completes discovery on the primary path (no per-batch REST fallback) via log assertion.
-- [ ] 2.4 Confirm discovered tutorial set + per-slug metadata are equivalent to the REST fallback (no divergence in contributors/createdAt).
+- [x] 2.1 Decide (from 1.5 evidence): **repo-oriented discovery is NOT warranted.** DEV evidence shows the App token resolves the org-level GraphQL node fine, so there is no permanent auth gap to fix. #2018 (Workstream A) already converts a transient GraphQL error into a loud, clean REST fallback instead of a silent opaque crash — which is the correct handling for an intermittent blip. Revisit ONLY if #2018's error-level logging shows a *recurring* genuine auth/permission error on a real run.
+- [ ] 2.2 ~~Implement the chosen fix~~ — superseded; no change needed beyond #2018.
+- [ ] 2.3 ~~Verify primary path~~ — already verified green on DEV run 32791397662.
+- [ ] 2.4 ~~Confirm equivalence~~ — n/a; primary GraphQL path is healthy.
+
 
 ## 3. Workstream C — Generated-content cache + scoped render (CI-only, fail-open)
 
