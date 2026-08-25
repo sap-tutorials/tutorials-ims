@@ -325,6 +325,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     const db = await cds.connect.to('db');
     const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
     if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+      // slug-canonical: caller-canonicalizes
       const [cur] = await SELECT.from(ContentCurrent).where({ slug }).columns('contentHash', 'mimeType', 'sourceVersion');
       if (cur) {
         let buffer;
@@ -332,6 +333,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
           const [b] = await db.run(`SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`, [slug]);
           buffer = b?.CONTENT;
         } else {
+          // slug-canonical: caller-canonicalizes
           const b = await SELECT.one.from(ContentCurrent).where({ slug }).columns('content');
           buffer = b ? await toBuffer(b.content) : null;
         }
@@ -340,6 +342,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
     const activeVersion = await getActiveVersion();
     if (activeVersion === null) return null;
+    // slug-canonical: caller-canonicalizes
     const [meta] = await SELECT.from(ContentFiles).where({ slug, version: activeVersion }).columns('contentHash', 'mimeType', 'version');
     if (!meta) return null;
     let buffer;
@@ -347,6 +350,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       const [b] = await db.run(`SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`, [slug, meta.version]);
       buffer = b?.CONTENT;
     } else {
+      // slug-canonical: caller-canonicalizes
       const b = await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content');
       buffer = b ? await toBuffer(b.content) : null;
     }
@@ -1010,6 +1014,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     let source = 'files';
     if (READ_DELTA && ContentCurrent) {
       const [cur] = await SELECT.from(ContentCurrent)
+        // slug-canonical: caller-canonicalizes
         .where({ slug })
         .columns('contentHash', 'mimeType');
       if (cur) { meta = cur; source = 'current'; }
@@ -1050,8 +1055,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       contentBuf = blobRow.CONTENT;
     } else {
       const blobRow = source === 'current'
-        ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content')
-        : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content');
+        ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content') // slug-canonical: caller-canonicalizes
+        : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content'); // slug-canonical: caller-canonicalizes
       contentBuf = await toBuffer(blobRow.content);
     }
     const decompressed = gunzipSync(contentBuf);
