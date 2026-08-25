@@ -29,18 +29,20 @@ DEV-verified on `feat/content-cache-wiring` (PR #2020): priming run 32797769853 
 
 ## 4. Workstream D — Publish scoping (Option B): schema + migration
 
-- [ ] 4.1 Add `ContentCurrent` and `ContentHistory` aspects to `db/_content-shape.cds` (per design.md D1/D2); mirror into the QA namespace (`db-qa/`).
-- [ ] 4.2 Run `cds build --production` to generate `.hdbmigrationtable` artifacts for the new tables (no hand-authored ALTERs).
-- [ ] 4.3 Write the seed migration: `INSERT INTO ContentCurrent SELECT ... FROM ContentFiles WHERE version = <ACTIVE>` (one row per slug); optional `ContentHistory` backfill from retained versions.
-- [ ] 4.4 `npx cds deploy --to sqlite::memory:` sanity + hybrid deploy check before commit.
+Schema + write-path on `feat/content-delta-publish-schema` (draft PR #2021).
+
+- [x] 4.1 `ContentCurrent` + `ContentHistory` aspects in `db/_content-shape.cds`; entities in `db/schema.cds` + `db-qa/schema.cds` (QA parity). ContentHistory carries the BLOB for self-contained rollback replay.
+- [ ] 4.2 Generate `.hdbmigrationtable` for the two new tables — **GATED: needs a full (non-worktree) checkout.** The worktree's junctioned node_modules can't run `check-cds-build-staging.ts` (hard-coded cds-dk path) and local `cds build --production` writes only to `gen/`, never staging into `db/src/`/`db/last-dev/`. Run in the primary tree per the HANA-schema-deploy rule.
+- [ ] 4.3 Seed migration (`INSERT INTO ContentCurrent SELECT ... FROM ContentFiles WHERE version=<ACTIVE>`) — after 4.2.
+- [x] 4.4 `npx cds deploy --to sqlite::memory:` sanity — **PASSES** (full model compiles + deploys; new entities present). Hybrid deploy check is part of 4.2's full-env step.
 
 ## 5. Workstream D — Publish scoping: write path
 
-- [ ] 5.1 Rewrite `appendToSession`/`commitSession` (`content-publish-session.js`) to UPSERT changed slugs into `ContentCurrent` and append `ContentHistory` rows; delete `carryForwardUnchanged` (:1192-1303).
-- [ ] 5.2 Migrate the legacy single-shot `publishHandler` (`content-store.js:286-795`) and concept render (`publish-concepts.js`) to the delta write path.
-- [ ] 5.3 Bump a monotonic generation token inside the commit transaction (source for cache re-keying in 6.x).
-- [ ] 5.4 Gate the new write path behind a **write flag** with dual-write to legacy tables for one release.
-- [ ] 5.5 Hybrid test: single-slug publish writes exactly one `ContentCurrent` row and appends history; N-slug publish writes N.
+- [x] 5.1 `commitSession` dual-writes fresh slugs → `ContentCurrent` (UPSERT) + `ContentHistory` (WRITTEN), via `dualWriteCurrentAndHistory` (chunked; raw `db.run` on HANA for LOB, CQL on SQLite). `carryForwardUnchanged` NOT yet deleted — retained during dual-write (removed at cutover, task 8.4).
+- [ ] 5.2 Legacy single-shot `publishHandler` + concept render dual-write — FOLLOW-UP (chunked session path is the primary; legacy path lower-traffic).
+- [ ] 5.3 Monotonic generation token in the commit tx (for cache re-keying 6.5) — FOLLOW-UP.
+- [x] 5.4 Gated behind `CONTENT_DELTA_WRITE_ENABLED` (env), fail-SAFE (never throws into commit), dual-write alongside legacy ContentFiles.
+- [x] 5.5 SQLite unit test (`test/unit/content-delta-dualwrite.test.js`, 4): one-row-per-slug, UPSERT on republish, history append per version, flag-off writes neither; existing commit tests still green (12). **HANA hybrid test (LOB path) GATED on 4.2 deploy + `cf login`.**
 
 ## 6. Workstream D — Publish scoping: readers + caches
 
