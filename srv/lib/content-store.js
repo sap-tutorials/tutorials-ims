@@ -1201,18 +1201,24 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // --- GET /content/hashes ---
 
   async function hashesHandler(req, res) {
-    const { ContentFiles } = cds.entities(namespace);
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
 
     try {
-      const activeVersion = await getActiveVersion();
-      if (activeVersion === null) {
-        return res.json({});
+      // Option B: enumerate ContentCurrent (no version) when the read flag is on
+      // — correct once ContentCurrent is fully seeded (task 4.3). Metadata-only,
+      // so plain CQL is fine on HANA + SQLite (no LOB). Else legacy active snapshot.
+      let rows;
+      if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+        rows = await SELECT.from(ContentCurrent).columns('slug', 'contentHash');
+      } else {
+        const activeVersion = await getActiveVersion();
+        if (activeVersion === null) {
+          return res.json({});
+        }
+        rows = await SELECT.from(ContentFiles)
+          .where({ version: activeVersion })
+          .columns('slug', 'contentHash');
       }
-
-      // Only include slugs from the active version (full snapshot per publish)
-      const rows = await SELECT.from(ContentFiles)
-        .where({ version: activeVersion })
-        .columns('slug', 'contentHash');
 
       const map = {};
       for (const row of rows) {
@@ -1373,11 +1379,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // --- GET /content/nav ---
 
   async function navHandlerFallback(req, res, activeVersion) {
-    const { ContentFiles, Tutorials, Steps, TutorialTags, Tags } = cds.entities(namespace);
+    const { ContentFiles, ContentCurrent, Tutorials, Steps, TutorialTags, Tags } = cds.entities(namespace);
 
-    const contentRows = await SELECT.from(ContentFiles)
-      .where({ version: activeVersion })
-      .columns('slug', 'sizeBytes');
+    // Option B: enumerate ContentCurrent (no version) when the read flag is on —
+    // correct once fully seeded (task 4.3). Metadata-only, plain CQL on both DBs.
+    const contentRows = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+      ? await SELECT.from(ContentCurrent).columns('slug', 'sizeBytes')
+      : await SELECT.from(ContentFiles).where({ version: activeVersion }).columns('slug', 'sizeBytes');
 
     const slugs = contentRows.filter(r =>
       r.slug !== '__nav__' && r.slug !== '__404__' && r.slug !== '__shell__'
