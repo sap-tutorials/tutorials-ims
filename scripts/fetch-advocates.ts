@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import MarkdownIt from 'markdown-it';
 import sanitizeHtml from 'sanitize-html';
-import { stringify as yamlStringify } from 'yaml';
+import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js';
 import { normalizeAuthorLogin } from './parsers/author-index';
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false });

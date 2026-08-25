@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync, unlink
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
-import { stringify as yamlStringify } from 'yaml'
+import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
