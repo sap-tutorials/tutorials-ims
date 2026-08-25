@@ -275,7 +275,20 @@ export const FEATURE_FLAGS = [
     description: 'Workstream D Option B: on publish, mirror freshly-published slugs into ContentCurrent + ContentHistory alongside the legacy ContentFiles write. Fail-safe (never throws into the commit tx); legacy ContentFiles remains the source of truth until the read cutover. Default OFF.',
     howToChange: cfEnv('CONTENT_DELTA_WRITE_ENABLED', 'true'),
   },
-  // ---- Freshness detector ----
+  {
+    key: 'CONTENT_DELTA_READ_ENABLED', label: 'Content Option-B read from ContentCurrent', category: 'Content',
+    kind: 'env', envVar: 'CONTENT_DELTA_READ_ENABLED', envRule: 'true-enables',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'Workstream D Option B: serve + readers source from the mutable ContentCurrent (per-slug fallback to legacy ContentFiles). Enable after ContentCurrent is fully seeded. Default OFF.',
+    howToChange: cfEnv('CONTENT_DELTA_READ_ENABLED', 'true'),
+  },
+  {
+    key: 'CONTENT_DELTA_SKIP_CARRYFORWARD', label: 'Content Option-B skip carry-forward (O(changed) publish)', category: 'Content',
+    kind: 'env', envVar: 'CONTENT_DELTA_SKIP_CARRYFORWARD', envRule: 'true-enables',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'Workstream D Option B: publish writes ONLY changed slugs (no carry-forward); rollback replays ContentHistory into ContentCurrent. Enable ONLY after the read cutover is live AND ContentCurrent is fully seeded. Default OFF.',
+    howToChange: cfEnv('CONTENT_DELTA_SKIP_CARRYFORWARD', 'true'),
+  },
   {
     key: 'FRESHNESS_SCAN_ENABLED', label: 'Tutorial freshness bulk scan', category: 'Content',
     kind: 'env', envVar: 'FRESHNESS_SCAN_ENABLED', envRule: 'true-enables',

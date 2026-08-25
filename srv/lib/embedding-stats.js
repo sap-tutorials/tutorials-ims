@@ -45,7 +45,7 @@ const LOG = cds.log('rag-stats');
  * }>}
  */
 export async function computeEmbeddingStats() {
-  const { ContentManifest, ContentFiles, Tutorials, Steps, TutorialEmbedding, PipelineLog } =
+  const { ContentManifest, ContentFiles, ContentCurrent, Tutorials, Steps, TutorialEmbedding, PipelineLog } =
     cds.entities('com.sap.developers.ims');
 
   const manifest = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
@@ -62,8 +62,11 @@ export async function computeEmbeddingStats() {
     };
   }
 
-  // Active slugs from the current manifest version
-  const files = await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
+  // Active slugs — from ContentCurrent when the read flag is on (Option B), else
+  // the legacy manifest-version snapshot.
+  const files = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+    ? await SELECT.from(ContentCurrent).columns('slug')
+    : await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
   const slugs = files.map((f) => f.slug);
   const activeSlugSet = new Set(slugs);
 

@@ -21,6 +21,21 @@ function hashChunk(text) {
  */
 async function readContentBuffer(db, slug) {
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+  // Option B: prefer the mutable ContentCurrent (read flag on), fall back to the
+  // legacy active-manifest snapshot on a miss.
+  if (process.env.CONTENT_DELTA_READ_ENABLED === 'true') {
+    if (isHana) {
+      const [row] = await db.run(
+        `SELECT TOP 1 "CONTENT" FROM "COM_SAP_DEVELOPERS_IMS_CONTENTCURRENT" WHERE "SLUG" = ?`, [slug]);
+      if (row?.CONTENT) return row.CONTENT;
+    } else {
+      const { ContentCurrent } = cds.entities('com.sap.developers.ims');
+      if (ContentCurrent) {
+        const r = await SELECT.one.from(ContentCurrent).where({ slug }).columns('content');
+        if (r) return await toBuffer(r.content);
+      }
+    }
+  }
   if (isHana) {
     const [row] = await db.run(
       `SELECT TOP 1 "CONTENT" FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" cf

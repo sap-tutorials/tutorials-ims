@@ -233,40 +233,47 @@ export function composeShell({ before, after }, bodyHtml, meta) {
 // Stateful loader. Reads the active shell from ContentFiles once per
 // manifest version and caches the parsed halves. Exported as a factory so
 // content-store.js can pass in its already-bound namespace + getActiveVersion.
-export function createShellLoader({ namespace, hanaTableName, getActiveVersion }) {
+export function createShellLoader({ namespace, hanaTableName, hanaCurrentTableName, getActiveVersion }) {
   let cached = null;  // { version, parsed }
 
   async function loadShellBlob(version) {
-    const { ContentFiles } = cds.entities(namespace);
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
     const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+    // Option B: prefer the mutable ContentCurrent when the read flag is on, with
+    // a per-slug fallback to the legacy version-pinned ContentFiles snapshot.
+    const useCurrent = process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent && typeof hanaCurrentTableName === 'function';
 
-    let buf;
-    if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
-      const [row] = await db.run(
-        `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
-        [SHELL_SLUG, version],
-      );
-      buf = row?.CONTENT;
-    } else {
-      const row = await SELECT.one.from(ContentFiles)
-        .where({ slug: SHELL_SLUG, version })
-        .columns('content');
+    async function readBuf(fromCurrent) {
+      let b;
+      if (isHana) {
+        const [row] = fromCurrent
+          ? await db.run(`SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`, [SHELL_SLUG])
+          : await db.run(`SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`, [SHELL_SLUG, version]);
+        return row?.CONTENT ?? null;
+      }
+      const row = fromCurrent
+        ? await SELECT.one.from(ContentCurrent).where({ slug: SHELL_SLUG }).columns('content')
+        : await SELECT.one.from(ContentFiles).where({ slug: SHELL_SLUG, version }).columns('content');
       if (!row) return null;
-      buf = row.content;
-      if (buf instanceof Readable) {
+      b = row.content;
+      if (b instanceof Readable) {
         const chunks = [];
-        for await (const c of buf) chunks.push(c);
-        buf = Buffer.concat(chunks);
-      } else if (buf && typeof buf.read === 'function') {
-        // Some adapters return a hybrid stream — fall back to read().
-        buf = await new Promise((resolve, reject) => {
+        for await (const c of b) chunks.push(c);
+        b = Buffer.concat(chunks);
+      } else if (b && typeof b.read === 'function') {
+        b = await new Promise((resolve, reject) => {
           const chunks = [];
-          buf.on('data', c => chunks.push(c));
-          buf.on('end', () => resolve(Buffer.concat(chunks)));
-          buf.on('error', reject);
+          b.on('data', c => chunks.push(c));
+          b.on('end', () => resolve(Buffer.concat(chunks)));
+          b.on('error', reject);
         });
       }
+      return b;
     }
+
+    let buf = useCurrent ? await readBuf(true) : null;
+    if (!buf) buf = await readBuf(false);
     if (!buf) return null;
     return gunzipSync(buf).toString('utf-8');
   }

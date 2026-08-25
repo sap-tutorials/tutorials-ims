@@ -1638,7 +1638,11 @@ export default class AdminService extends cds.ApplicationService {
         .orderBy({ version: 'desc' });
       if (!manifest) return req.error(409, 'no active content manifest');
 
-      const files = await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
+      // Option B: active slug set from ContentCurrent when the read flag is on.
+      const ContentCurrent = cds.entities('com.sap.developers.ims').ContentCurrent;
+      const files = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+        ? await SELECT.from(ContentCurrent).columns('slug')
+        : await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
       const slugs = files.map(f => f.slug);
 
       setImmediate(() => embedSlugs(slugs, settings).catch(err => {
