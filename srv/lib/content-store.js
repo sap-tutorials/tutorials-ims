@@ -228,6 +228,46 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // Option B (slug-targeted-delta-rebuild): the mutable current-content table.
   const hanaCurrentTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTCURRENT`;
 
+  // Option B shared single-slug read. Resolves meta + a decompressible BLOB
+  // buffer from the mutable ContentCurrent when CONTENT_DELTA_READ_ENABLED is on
+  // AND the slug is present, else the legacy version-pinned ContentFiles active
+  // snapshot (per-slug fallback → safe on a partially-seeded ContentCurrent).
+  // Returns null when the slug is in neither. LOB read stays raw db.run on HANA
+  // (locators expire when mixed with metadata in CQL). Used by the special-slug
+  // readers (__nav__, __404__) so they migrate identically to serveStoredSlug.
+  async function resolveContentBlob(slug) {
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+    const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+    if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+      const [cur] = await SELECT.from(ContentCurrent).where({ slug }).columns('contentHash', 'mimeType', 'sourceVersion');
+      if (cur) {
+        let buffer;
+        if (isHana) {
+          const [b] = await db.run(`SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`, [slug]);
+          buffer = b?.CONTENT;
+        } else {
+          const b = await SELECT.one.from(ContentCurrent).where({ slug }).columns('content');
+          buffer = b ? await toBuffer(b.content) : null;
+        }
+        return { contentHash: cur.contentHash, mimeType: cur.mimeType, version: cur.sourceVersion, buffer, source: 'current' };
+      }
+    }
+    const activeVersion = await getActiveVersion();
+    if (activeVersion === null) return null;
+    const [meta] = await SELECT.from(ContentFiles).where({ slug, version: activeVersion }).columns('contentHash', 'mimeType', 'version');
+    if (!meta) return null;
+    let buffer;
+    if (isHana) {
+      const [b] = await db.run(`SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`, [slug, meta.version]);
+      buffer = b?.CONTENT;
+    } else {
+      const b = await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content');
+      buffer = b ? await toBuffer(b.content) : null;
+    }
+    return { contentHash: meta.contentHash, mimeType: meta.mimeType, version: meta.version, buffer, source: 'files' };
+  }
+
   // --- Auth Middleware ---
 
   // Async middleware: the bearer token is sourced via the shared
@@ -805,40 +845,16 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // genuine catalog render failure serves it with 500 rather than the ugly JSON. (#1938)
   async function serveNotFound(res, slug, status = 404) {
     try {
-      const { ContentFiles } = cds.entities(namespace);
-      const activeVersion = await getActiveVersion();
-      if (activeVersion === null) {
+      const resolved = await resolveContentBlob('__404__');
+      if (!resolved) {
         return res.status(status).json({ error: `Tutorial not found: ${slug}` });
       }
-
-      const [meta] = await SELECT.from(ContentFiles)
-        .where({ slug: '__404__', version: activeVersion })
-        .columns('contentHash', 'mimeType', 'version');
-
-      if (!meta) {
-        return res.status(status).json({ error: `Tutorial not found: ${slug}` });
-      }
-
-      const db = await cds.connect.to('db');
-      let contentBuf;
-      if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
-        const [blobRow] = await db.run(
-          `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = '__404__' AND "VERSION" = ?`,
-          [meta.version]
-        );
-        contentBuf = blobRow.CONTENT;
-      } else {
-        const blobRow = await SELECT.one.from(ContentFiles)
-          .where({ slug: '__404__', version: meta.version })
-          .columns('content');
-        contentBuf = await toBuffer(blobRow.content);
-      }
-      const decompressed = gunzipSync(contentBuf);
+      const decompressed = gunzipSync(resolved.buffer);
 
       res.status(status);
-      res.setHeader('Content-Type', `${meta.mimeType}; charset=utf-8`);
+      res.setHeader('Content-Type', `${resolved.mimeType}; charset=utf-8`);
       res.setHeader('Cache-Control', 'public, max-age=60');
-      res.setHeader('X-Content-Source', 'db');
+      res.setHeader('X-Content-Source', resolved.source === 'current' ? 'db-current' : 'db');
       return res.send(decompressed);
     } catch (err) {
       console.error('[content/serve:404]', err instanceof Error ? err.message : String(err));
@@ -1476,31 +1492,15 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         return res.json({ version: null, tutorials: [] });
       }
 
-      // Prefer stored nav metadata (published alongside content)
-      const [navMeta] = await SELECT.from(ContentFiles)
-        .where({ slug: '__nav__', version: activeVersion })
-        .columns('contentHash');
-
-      if (navMeta) {
-        const db = await cds.connect.to('db');
-        let contentBuf;
-        if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
-          const [blobRow] = await db.run(
-            `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = '__nav__' AND "VERSION" = ?`,
-            [activeVersion]
-          );
-          contentBuf = blobRow.CONTENT;
-        } else {
-          const blobRow = await SELECT.one.from(ContentFiles)
-            .where({ slug: '__nav__', version: activeVersion })
-            .columns('content');
-          contentBuf = await toBuffer(blobRow.content);
-        }
-        const decompressed = gunzipSync(contentBuf);
+      // Prefer stored nav metadata (published alongside content) — resolved from
+      // ContentCurrent (read flag on) or legacy ContentFiles via resolveContentBlob.
+      const navResolved = await resolveContentBlob('__nav__');
+      if (navResolved && navResolved.buffer) {
+        const decompressed = gunzipSync(navResolved.buffer);
         const navData = JSON.parse(decompressed.toString('utf-8'));
 
         res.setHeader('Cache-Control', 'public, max-age=60');
-        return res.json({ version: activeVersion, count: navData.tutorials.length, tutorials: navData.tutorials });
+        return res.json({ version: navResolved.version, count: navData.tutorials.length, tutorials: navData.tutorials });
       }
 
       // Fallback: build nav from Tutorials table (legacy path)
