@@ -41,12 +41,14 @@ being decommissioned.
   `repository-template`) all carry the CircleCI orb wiring; new repos inherit
   CircleCI, not Actions.
 
-### Security finding (out of scope, tracked separately)
+### Security finding
 
-`tutorial-checker-orb/src/scripts/prepare.sh` contains a **hardcoded, live-looking
-GitHub PAT** committed in source. It must be revoked/rotated and removed regardless
-of this work. Tracked as a separate item; the new pipeline uses the job's
-`GITHUB_TOKEN` and stores no PAT.
+`tutorial-checker-orb/src/scripts/prepare.sh` contains a hardcoded GitHub PAT
+committed in source. **The leaked token has been confirmed invalid** (already
+revoked), so no rotation is required — the only remaining action is deleting the
+dead credential from source as hygiene when the orb repo is retired. The new
+pipeline stores no PAT and uses either the job `GITHUB_TOKEN` or the existing
+`sap-tutorials` GitHub App (below).
 
 ## 3. Decisions (from brainstorming)
 
@@ -58,8 +60,10 @@ of this work. Tracked as a separate item; the new pipeline uses the job's
 | Repo scope | All content repos (source + `*-Contribution`) |
 | Host repo | **New `sap-tutorials/tutorial-ci`** (recommendation; alt: `.github`) |
 | Repo enumeration | **Auto-detect by orb reference** in `.circleci/config.yml` (recommendation) |
+| Cross-repo comment auth | **Reuse existing `sap-tutorials` GitHub App** (`TUTORIALS_APP_ID` / `TUTORIALS_APP_PRIVATE_KEY` via `actions/create-github-app-token@v1`) |
 
-The last two are recommendations, open for Tom to flip at spec review.
+The host-repo and enumeration choices are recommendations, open for Tom to flip at
+spec review.
 
 ## 4. Architecture
 
@@ -109,12 +113,19 @@ The caller is intentionally trivial and stable; all behavior changes happen
 centrally. Standardizing on `pull_request` for **all** repos removes the legacy
 source-vs-Contribution (`build-pull-request` vs `build-last-commit`) split.
 
-### 4.3 Fork-safe two-workflow notification
+### 4.3 Notification: token model and fork handling
 
-Contribution-repo PRs typically originate from **forks**, where the
-`pull_request` `GITHUB_TOKEN` is **read-only and cannot post comments**. To get
-both inline annotations and a summary comment without ever running untrusted PR
-code with write permissions:
+Contribution PRs are **usually same-repo branches** (contributors are collaborators),
+but **forks still occur**. This matters only for token permissions:
+
+- **Branch PR** → `pull_request` `GITHUB_TOKEN` has **write** scope; a comment can be
+  posted from the same run.
+- **Fork PR** → `GITHUB_TOKEN` is **read-only** *and* org/repo secrets (including the
+  App key) are **not exposed** to the fork run. A comment cannot be posted from that
+  run; only inline annotations work.
+
+To give **every** author the same comment + annotations regardless of branch vs fork,
+use the two-workflow pattern with the **existing GitHub App** as the write credential:
 
 1. **`tutorial-pr-checks.yml`** (reusable, triggered via the caller on
    `pull_request`, read-only token):
@@ -123,21 +134,25 @@ code with write permissions:
    - Runs markdownlint, lychee, gitleaks, and the SAP checker over the changed
      `.md` files.
    - Emits **inline annotations** via `::warning file=…,line=…::` (annotations do
-     not require write scope).
+     not require write scope and work even on fork runs).
    - Writes a normalized findings JSON and uploads it as an **artifact**.
    - Always exits 0.
 2. **`post-results.yml`** (trusted, in `tutorial-ci`, triggered on
-   `workflow_run: completed` with write scope on the base repo):
+   `workflow_run: completed`, runs in the base-repo context with secret access):
+   - Mints a token from the existing App via
+     `actions/create-github-app-token@v1` (`TUTORIALS_APP_ID` /
+     `TUTORIALS_APP_PRIVATE_KEY`), scoped to the content repos.
    - Downloads the findings artifact from the triggering run.
    - Renders/updates a **sticky PR comment** (single comment, rewritten each push;
      e.g. `marocchino/sticky-pull-request-comment`), grouped by category
      (Markdown / Content / Links / Secrets), with counts and per-file detail.
    - Never fails the PR.
 
-> Note: `post-results.yml` lives centrally and must be able to comment on PRs in
-> the content repos. On GHE this needs org-level permission for the workflow to
-> act cross-repo (GitHub App installation token or an org PAT stored as an org
-> secret). Selecting that credential mechanism is a §8 open item.
+> **Simpler alternative (rejected):** a single `pull_request` workflow that comments
+> inline. It works for branch PRs but silently drops the sticky comment on fork PRs
+> (annotations only). Because community authors are the ones most likely to fork —
+> and are exactly who we most want to notify — we keep the two-workflow pattern for
+> uniform coverage. Flip to single-workflow only if fork PRs are ruled out entirely.
 
 ### 4.4 Notify-not-block guarantee
 
@@ -223,13 +238,16 @@ kept-and-verified rules only.
 
 1. **Host repo:** confirm new `sap-tutorials/tutorial-ci` vs hosting reusable
    workflows in `.github`.
-2. **Cross-repo comment credential:** GitHub App installation token vs org PAT in
-   an org secret for `post-results.yml` to comment on content-repo PRs.
-3. **Fork PR model confirmation:** verify Contribution PRs actually come from forks
-   (drives whether the two-workflow pattern is strictly required or a simpler
-   single `pull_request` workflow with a write token suffices for branch PRs).
-4. **Repo enumeration source:** orb-reference auto-detect vs an explicit maintained
+2. **Repo enumeration source:** orb-reference auto-detect vs an explicit maintained
    list vs a repo topic/label.
+
+**Resolved during review:**
+- *Cross-repo comment credential* → reuse the existing `sap-tutorials` GitHub App
+  (`TUTORIALS_APP_ID` / `TUTORIALS_APP_PRIVATE_KEY`); its installation must cover
+  the target content repos.
+- *Fork model* → PRs are usually branches but forks occur; the two-workflow
+  App-token pattern (§4.3) covers both uniformly.
+- *Leaked PAT* → confirmed already invalid; no rotation needed (§2).
 
 ## 9. Phasing
 
@@ -256,9 +274,9 @@ kept-and-verified rules only.
 
 ## 11. Out of Scope
 
-- Decommissioning the CircleCI orb *infrastructure* itself (registry cleanup) —
-  only the per-repo `.circleci/` wiring is removed here.
-- Rotating the leaked orb PAT (separate security item, must still be done).
+- Decommissioning the CircleCI orb *infrastructure* itself (registry cleanup, and
+  deleting the dead PAT from the orb source) — only the per-repo `.circleci/`
+  wiring is removed here.
 - Enabling GHAS non-provider pattern scanning org-wide (complementary; gitleaks
   covers the PR-time author-feedback need).
 - Any change to the notification/issue-automation Actions already in the repos.
@@ -267,8 +285,10 @@ kept-and-verified rules only.
 
 - **Comment noise** → sticky single comment, warn-level severities, tuned lint
   config, link-check allowlist.
-- **Fork token limits** → two-workflow `workflow_run` pattern (§4.3).
-- **Cross-repo auth for commenting** → App token / org secret (§8.2), least-privilege.
+- **Fork token limits** → two-workflow `workflow_run` pattern with the existing
+  GitHub App token (§4.3) gives uniform comment coverage on branch and fork PRs.
+- **Cross-repo auth for commenting** → existing `sap-tutorials` App, least-privilege
+  installation limited to the content repos (§4.3).
 - **Rollout drift / local edits** → `@v1`-pinned caller keeps logic central;
   weekly drift check repairs callers.
 - **Legacy rule false positives** → modernization triages against real parsers
