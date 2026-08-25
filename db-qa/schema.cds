@@ -7,6 +7,11 @@ entity ContentFiles : shared.ContentFilesAspect {}
 
 entity ContentManifest : shared.ContentManifestAspect {}
 
+// Option B (slug-targeted-delta-rebuild) — QA-channel parity with prod.
+entity ContentCurrent : shared.ContentCurrentAspect {}
+
+entity ContentHistory : shared.ContentHistoryAspect {}
+
 // Plain-text projection of published Hugo HTML, indexed for full-text search.
 // Replaced (not versioned) on every publish so search reflects current content.
 @cds.autoexpose: false

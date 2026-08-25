@@ -64,6 +64,41 @@ aspect ContentManifestAspect : managed {
   firstAppendAt             : Timestamp;
 }
 
+// Option B (slug-targeted-delta-rebuild): the MUTABLE current-content table —
+// one row per slug, NO version column. Readers hit this directly (WHERE slug=?)
+// instead of joining on the active manifest version, so a publish writes ONLY
+// the changed slugs (no O(corpus) carry-forward). `sourceVersion` records the
+// manifest version that last wrote this slug (audit + cache-generation token).
+aspect ContentCurrentAspect : managed {
+  key slug                  : String(255);
+  content                   : LargeBinary;
+  contentHash               : Sha256;
+  sizeBytes                 : Integer;
+  compressedBytes           : Integer;
+  mimeType                  : String(100) default 'text/html';
+  sourceContent             : LargeBinary;
+  sourceHash                : Sha256;
+  sourceVersion             : Integer;
+}
+
+// Option B: append-only per-(version, slug) history for drift-detection
+// (detectReverts) + rollback replay. Carries the BLOB (`content`/`sourceContent`)
+// so rollback is a self-contained replay into ContentCurrent (design.md D2);
+// GC'd by the repurposed cleanupContentVersions. `action=DELETED` tombstones a
+// slug removed at that version so rollback can re-add/remove correctly.
+aspect ContentHistoryAspect : managed {
+  key version               : Integer;
+  key slug                  : String(255);
+  action                    : String(10) enum { WRITTEN; DELETED; };
+  content                   : LargeBinary;
+  contentHash               : Sha256;
+  sizeBytes                 : Integer;
+  compressedBytes           : Integer;
+  mimeType                  : String(100) default 'text/html';
+  sourceContent             : LargeBinary;
+  sourceHash                : Sha256;
+}
+
 aspect TutorialBodyTextAspect : managed {
   key slug                  : String(255);
   bodyText                  : LargeString;
