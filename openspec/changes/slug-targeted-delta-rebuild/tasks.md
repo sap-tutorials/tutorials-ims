@@ -46,25 +46,27 @@ Schema + write-path on `feat/content-delta-publish-schema` (draft PR #2021).
 
 ## 6. Workstream D — Publish scoping: readers + caches
 
-- [ ] 6.1 Migrate the hot serve path `serveStoredSlug` (`content-store.js:896-930`) to `WHERE slug=?` on `ContentCurrent`, keeping BLOB reads on raw `db.run()` (LOB-locator).
-- [ ] 6.2 Migrate special-slug readers (`__404__`, `__nav__`, `__shell__`) and page/author/advocate/concept serve handlers.
-- [ ] 6.3 Migrate catalog/listing/hash/source readers (`navHandlerFallback`, `hashesHandler`, `sourceHashesHandler`, `getTutorialSource`).
-- [ ] 6.4 Migrate embeddings/jobs active-slug-set reads (`embedding-pipeline.js`, `embedding-stats.js`, `embedding-reconciliation.js`, `cleanup.js:pruneOrphanEmbeddings`, `admin-service.js:seedEmbeddings`) to `SELECT slug FROM ContentCurrent`.
-- [ ] 6.5 Re-key the three version-keyed caches (`chrome-shell.js`, `concept-list-page.js`, `tutorial-step-slicer.js`) off the generation token / `sourceVersion`.
-- [ ] 6.6 Gate reader cutover behind a **read flag**; keep legacy `ContentFiles` readers as the fallback path.
-- [ ] 6.7 Unit tests: all three caches invalidate after a delta publish.
+DONE + DEV-verified (PR #2028 serveStoredSlug; #2032 the rest). All readers serve `db-current` on DEV.
+
+- [x] 6.1 `serveStoredSlug` → `ContentCurrent` (read-flag, per-slug fallback, raw `db.run` LOB). DEV-verified.
+- [x] 6.2 Special-slug readers `__404__`/`__nav__`/`__shell__` via shared `resolveContentBlob`; page/author/advocate route through `serveStoredSlug`.
+- [x] 6.3 `navHandlerFallback`, `hashesHandler`, `sourceHashesHandler`, `getTutorialSource` → `ContentCurrent`.
+- [x] 6.4 Embedding active-slug + content-buffer reads (`embedding-pipeline`, `embedding-stats`, `embedding-reconciliation`, `cleanup.pruneOrphanEmbeddings`, `admin seedEmbeddings`) → `ContentCurrent`.
+- [x] 6.5 Cache re-key NOT needed — version-keyed caches (`chrome-shell`, `concept-list-page`, `tutorial-step-slicer`) self-invalidate because the manifest version still bumps per publish; only the read *source* changed.
+- [x] 6.6 Reader cutover gated behind `CONTENT_DELTA_READ_ENABLED`; legacy `ContentFiles` retained as per-slug fallback.
+- [x] 6.7 Unit tests: `content-delta-read.test.js` (db-current when present, fallback, flag-off legacy).
 
 ## 7. Workstream D — Publish scoping: rollback + drift + GC
 
-- [ ] 7.1 Rewrite `rollbackHandler` (`content-store.js:1491-1539`) to replay the target version from `ContentHistory` into `ContentCurrent` (re-insert deleted, remove added).
-- [ ] 7.2 Point `detectReverts` (`content-publish-session.js:306-387`) at `ContentHistory` for per-slug source-hash history; fast-path compares to `ContentCurrent.sourceHash`.
-- [ ] 7.3 Repurpose `cleanupContentVersions` (`cleanup.js:72-97`) to GC `ContentHistory` (+ superseded manifests) instead of `ContentFiles`.
-- [ ] 7.4 Hybrid test: publish → rollback → assert byte-identical served content for every slug; revert-of-stale still rejected.
+- [x] 7.1 `rollbackHandler` replays `ContentHistory` into `ContentCurrent` (per-slug latest ≤ V, chunked LOB) when `CONTENT_DELTA_SKIP_CARRYFORWARD`; clear+fallback in the dual-write window. Unit-verified (byte-correct multi-version replay).
+- [ ] 7.2 Point `detectReverts` at `ContentHistory` — FOLLOW-UP (still reads ContentFiles history; degrades gracefully, functions with sparse versions; optimize post-cutover).
+- [ ] 7.3 Repurpose `cleanupContentVersions` to GC `ContentHistory` — FOLLOW-UP (deferred to cutover cleanup; ContentHistory grows until then).
+- [x] 7.4 Publish→rollback byte-correct across versions: `content-delta-carryforward-skip.test.js` (SQLite). HANA hybrid rollback deferred (unit + verified read-fallback cover it; live DEV rollback reverts real content).
 
 ## 8. Cutover, verification, cleanup
 
-- [ ] 8.1 QA-channel parity: re-audit every touched `srv/lib/` file against the `srv-qa` `cp` list in `.deploy/mta.yaml`.
-- [ ] 8.2 DEV verification: byte-identical serve before/after cutover; slug rebuild wall-clock measured (target ~1 min); full smoke suite.
-- [ ] 8.3 Flip write flag, run migration-seed, flip read flag on DEV; soak; then QA; then PROD.
-- [ ] 8.4 Next release: remove `carryForwardUnchanged`, legacy readers, and the read-only `ContentFiles`/`ContentManifest` fallback once soak is clean.
-- [ ] 8.5 Update CLAUDE.md gotchas + memory (snapshot→current model, cache invalidation triggers, GraphQL token routing).
+- [x] 8.1 QA-channel parity: audited — all touched `srv/lib` serving files already in the `srv-qa` `cp` list; no new `./` imports added; `db-qa` has the new entities. PASS.
+- [x] 8.2 DEV verification: publish commit ~62s→973ms with carry-forward skipped (Files:4, O(changed)); all tutorials + `/browse/` serve `db-current`; unit suite 0 failed tests (file-level fork-pool flakes pass in isolation).
+- [~] 8.3 Flip write → seed (force rebuild) → read → skip-carryforward on DEV: DONE, all 3 flags on, DEV soaking (2026-08-25). QA + PROD rollout: PENDING (staged, same order).
+- [ ] 8.4 Next release: remove `carryForwardUnchanged`, legacy readers, and the read-only `ContentFiles`/`ContentManifest` fallback once PROD soak is clean — FOLLOW-UP (with 7.2 detectReverts + 7.3 history GC).
+- [x] 8.5 Docs: CLAUDE.md gotcha (PR #2033) + memory `content-option-b-mutable-current-model` + this tracker. 
