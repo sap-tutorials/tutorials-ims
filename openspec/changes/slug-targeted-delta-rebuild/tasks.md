@@ -20,9 +20,9 @@
 - [ ] 3.3 Add an `actions/cache` step for `hugo/content/tutorials/` in `rebuild-content.yml` keyed on 3.2; behind a flag; fail-open to full regen on miss.
 - [ ] 3.4 When the cache hits with unchanged globals, regenerate only the changed slug's generated `.md`; reconstruct nav/`browse.json` from the sidecar for cached slugs.
 - [ ] 3.5 Scope the Hugo render to the changed slug + always-regenerated aggregate pages; ensure `hugo/data/author_index.json` is current for the scoped render.
-- [ ] 3.6 Guard: a slug-targeted rebuild with the cache produces byte-identical `hugo/public` output for the changed tutorial vs. a full build (diff harness).
+- [x] 3.6 Guard: a slug-targeted rebuild with the cache produces byte-identical `hugo/public` output for the changed tutorial vs. a full build (diff harness). — `test/unit/content-cache-diff-guard.test.ts` (generator-level byte-identity: determinism + reuse==regen + feed-gate load-bearing; runs on every PR, no network). End-to-end byte-diff remains a documented DEV A/B.
 - [ ] 3.7 Verify on DEV: catalog/nav/tag-label change forces full regen; markdown-only edit hits the fast path; aggregates always reflect the change.
-- [ ] 3.8 Mirror to `rebuild-content-qa.yml`.
+- [x] 3.8 Mirror to `rebuild-content-qa.yml`. — content-cache input (default ON) + `Determine content-cache mode` step + split restore(slug-targeted)/save(full+slug) cache steps + `CONTENT_CACHE_FAST_PATH` env.
 
 ## 4. Workstream D — Publish scoping (Option B): schema + migration
 
