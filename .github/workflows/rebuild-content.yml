@@ -84,10 +84,10 @@ on:
         type: boolean
         default: false
       content-cache:
-        description: 'EXPERIMENTAL (Workstream C / slug-targeted-delta-rebuild): on a slug-targeted run, reuse the generated-content cache to skip regenerating unchanged tutorials (the bulk of the Fetch step). Fail-open; default OFF. Enable to A/B the fast path on DEV before flipping it on by default.'
+        description: 'Workstream C (slug-targeted-delta-rebuild): on a slug-targeted run, reuse the generated-content cache to skip regenerating unchanged tutorials (the bulk of the Fetch step). Fail-open; ON by default (PROD-proven ~56s→~11s). Pass -f content-cache=false to force a full regen for this run.'
         required: false
         type: boolean
-        default: false
+        default: true
 
 env:
   NODE_VERSION: '22'
@@ -214,6 +214,10 @@ jobs:
           INPUT_SLUGS: ${{ inputs.slugs }}
           INPUT_PURGE_ORPHANS: ${{ inputs.purge-orphans }}
           EVENT: ${{ github.event_name }}
+          # Content-cache fast path opt-out. Only workflow_dispatch carries this
+          # input; repository_dispatch (the real author hotfix trigger) has no
+          # inputs, so it arrives as '' → treated as "not opted out" → ON.
+          INPUT_CONTENT_CACHE: ${{ inputs.content-cache }}
           # repository_dispatch (source-repo push) may carry the single changed
           # tutorial slug (#1154 follow-up). Untrusted payload — validated below
           # against a strict slug charset before use.
@@ -258,6 +262,24 @@ jobs:
 
           echo "effective_mode=$EFFECTIVE" >> "$GITHUB_OUTPUT"
           echo "effective_reason=$REASON" >> "$GITHUB_OUTPUT"
+
+          # Content-cache master switch (Workstream C, default ON). Enabled unless
+          # explicitly opted out with -f content-cache=false. Computed HERE (not
+          # from inputs.* at the consuming step) so repository_dispatch runs — the
+          # real author hotfix trigger, which has no workflow inputs — also get it.
+          # Drives BOTH the actions/cache steps and CONTENT_CACHE_FAST_PATH env.
+          CC_ENABLED=true
+          if [ "$INPUT_CONTENT_CACHE" = "false" ]; then CC_ENABLED=false; fi
+          echo "content_cache_enabled=$CC_ENABLED" >> "$GITHUB_OUTPUT"
+
+          # fast_path = the cache is USED to reuse content (slug-targeted only).
+          # On a full run the flag is still enabled (CC_ENABLED) to PRIME the
+          # sidecar, but fetch-tutorials' decideFastPath restricts reuse to
+          # slug-targeted, so full always regenerates. Emitted for telemetry /
+          # the summary; the env var below uses CC_ENABLED (prime-or-reuse).
+          FAST_PATH=false
+          if [ "$EFFECTIVE" = "slug-targeted" ] && [ "$CC_ENABLED" = "true" ]; then FAST_PATH=true; fi
+          echo "fast_path=$FAST_PATH" >> "$GITHUB_OUTPUT"
           echo "::notice title=Rebuild mode::$EFFECTIVE ($REASON)"
 
       - name: Set approuter URL
@@ -365,18 +387,22 @@ jobs:
           echo "::add-mask::${VCAP}"
           echo "VCAP_SERVICES=${VCAP}" >> "$GITHUB_ENV"
 
-      # EXPERIMENTAL (Workstream C): restore the previously-generated content
-      # tree so a slug-targeted run can reuse it and skip regenerating unchanged
-      # tutorials. Keyed on the parser/generator SOURCE hash — a parser change
-      # misses the key, nothing is restored, and fetch-tutorials full-regenerates
-      # (the per-slug existsSync guard falls through). The run_id suffix + prefix
-      # restore-keys let each run save its updated tree/sidecar while restoring
-      # the most recent matching one (same pattern as the tutorial cache). The
-      # runtime feed-fingerprint gate (in fetch-tutorials) covers catalog/tag
-      # changes. Only runs when the flag is on; fail-open otherwise.
+      # Workstream C: RESTORE the previously-generated content tree so a
+      # slug-targeted run can reuse it and skip regenerating unchanged tutorials.
+      # Keyed on the parser/generator SOURCE hash — a parser change misses the
+      # key, nothing is restored, and fetch-tutorials full-regenerates (the
+      # per-slug existsSync guard falls through). The runtime feed-fingerprint
+      # gate (in fetch-tutorials) covers catalog/tag changes.
+      #
+      # RESTORE IS SLUG-TARGETED ONLY. A full rebuild must start from an EMPTY
+      # generated tree so tutorials deleted upstream don't linger as orphan
+      # `<slug>.md` (the prune at fetch-tutorials.ts end only reconciles
+      # .tutorial-cache, NOT hugo/content/tutorials). Full still PRIMES the cache
+      # via the SAVE step below. Split restore/save (vs a combined actions/cache)
+      # is what lets full save-without-restoring.
       - name: Restore generated-content cache
-        if: ${{ inputs.content-cache == true && steps.mode.outputs.effective_mode != 'catalog-only' }}
-        uses: actions/cache@v4
+        if: ${{ steps.mode.outputs.fast_path == 'true' }}
+        uses: actions/cache/restore@v4
         with:
           path: |
             hugo/content/tutorials
@@ -413,10 +439,31 @@ jobs:
           # telemetry line so the CI invariant regex keeps matching.
           AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
           CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
-          # EXPERIMENTAL (Workstream C): enable the generated-content fast path.
-          # fetch-tutorials reuses cached non-target content when this is 'true'
-          # AND the run is slug-targeted AND the feed fingerprint matches.
-          CONTENT_CACHE_FAST_PATH: ${{ inputs.content-cache == true }}
+          # Workstream C: enable the generated-content fast path. Uses the
+          # content_cache_enabled output computed in the mode step (covers
+          # repository_dispatch, which has no workflow inputs). When 'true':
+          #  - slug-targeted → reuse cached non-target content (feed-fingerprint
+          #    gated inside fetch-tutorials' decideFastPath), and write the sidecar;
+          #  - full → PRIME only: decideFastPath refuses reuse on non-slug-targeted
+          #    runs, but the sidecar is still written so the SAVE step warms it.
+          CONTENT_CACHE_FAST_PATH: ${{ steps.mode.outputs.content_cache_enabled }}
+
+      # Workstream C: SAVE the generated content tree + sidecar so the NEXT
+      # slug-targeted hotfix can restore and reuse it. Runs on full (to PRIME a
+      # clean freshly-regenerated tree) AND slug-targeted (to persist the tree
+      # with the target's new bytes) — never catalog-only (no fetch runs).
+      # Placed right after Fetch tutorials so it captures the tutorials tree
+      # before later steps touch other content dirs. Split from the restore step
+      # so full can save without restoring (see the restore step's rationale).
+      - name: Save generated-content cache
+        if: ${{ steps.mode.outputs.content_cache_enabled == 'true' && steps.mode.outputs.effective_mode != 'catalog-only' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            hugo/content/tutorials
+            hugo/data/image_dimensions.json
+            .content-cache
+          key: content-tree-v1-${{ hashFiles('scripts/parsers/**', 'scripts/fetch-tutorials.ts', 'scripts/lib/content-cache.ts', 'scripts/lib/expand-ai-authored.ts') }}-${{ github.run_id }}
 
       # [#601] Generate per-advocate profile-page markdown into
       # hugo/content/developer-advocates/ from /api/advocates. Runs on ALL
@@ -732,6 +779,7 @@ jobs:
           echo "- **Environment:** ${{ steps.env.outputs.target }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Trigger:** ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Effective mode:** \`${{ steps.mode.outputs.effective_mode }}\` — ${{ steps.mode.outputs.effective_reason }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Content-cache fast path:** \`${{ steps.mode.outputs.fast_path == 'true' && 'ENABLED (reusing unchanged tutorials)' || (steps.mode.outputs.content_cache_enabled == 'true' && 'priming only (full/catalog run)' || 'disabled (-f content-cache=false)') }}\`" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "${{ inputs.slug }}" ] || [ -n "${{ inputs.slugs }}" ]; then
             FILTER="${{ inputs.slug }}"
             if [ -n "${{ inputs.slugs }}" ]; then

@@ -14,6 +14,11 @@ on:
         required: false
         default: '200'
         type: string
+      content-cache:
+        description: 'Workstream C (slug-targeted-delta-rebuild): on a slug-targeted QA run, reuse the generated-content cache to skip regenerating unchanged tutorials. Fail-open; ON by default. Pass -f content-cache=false to force a full regen for this run.'
+        required: false
+        type: boolean
+        default: true
 
 env:
   NODE_VERSION: '22'
@@ -79,6 +84,45 @@ jobs:
             tutorial-cache-qa-${{ hashFiles('.github/workflows/rebuild-content-qa.yml') }}-
             tutorial-cache-qa-
 
+      # Workstream C: content-cache fast-path flags for the QA channel. Mirrors
+      # the "Determine effective rebuild mode" step of rebuild-content.yml, but
+      # QA has no explicit mode — slug-targeted is inferred from a non-empty
+      # effective slug (repository_dispatch client_payload.slug OR the workflow_
+      # dispatch slug input). Computed HERE (not from inputs.* at the consuming
+      # step) so repository_dispatch runs — the real author hotfix trigger — also
+      # get the fast path.
+      - name: Determine content-cache mode
+        id: cc
+        env:
+          INPUT_CONTENT_CACHE: ${{ inputs.content-cache }}
+          EFFECTIVE_SLUG: ${{ github.event.client_payload.slug || inputs.slug }}
+        run: |
+          CC_ENABLED=true
+          if [ "$INPUT_CONTENT_CACHE" = "false" ]; then CC_ENABLED=false; fi
+          echo "content_cache_enabled=$CC_ENABLED" >> "$GITHUB_OUTPUT"
+
+          # slug-targeted iff a non-empty slug was supplied; else full QA rebuild.
+          FAST_PATH=false
+          if [ -n "$EFFECTIVE_SLUG" ] && [ "$CC_ENABLED" = "true" ]; then FAST_PATH=true; fi
+          echo "fast_path=$FAST_PATH" >> "$GITHUB_OUTPUT"
+
+      # Workstream C: RESTORE the previously-generated QA content tree so a
+      # slug-targeted QA run can reuse unchanged tutorials. SLUG-TARGETED ONLY —
+      # a full QA rebuild starts from an empty tree so deleted-upstream tutorials
+      # don't linger as orphan pages (the prune reconciles only .tutorial-cache-qa,
+      # not hugo/content-qa/tutorials). Full still primes via the SAVE step below.
+      - name: Restore generated-content cache (QA)
+        if: ${{ steps.cc.outputs.fast_path == 'true' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            hugo/content-qa/tutorials
+            hugo/data-qa/image_dimensions.json
+            .content-cache
+          key: content-tree-qa-v1-${{ hashFiles('scripts/parsers/**', 'scripts/fetch-tutorials.ts', 'scripts/lib/content-cache.ts', 'scripts/lib/expand-ai-authored.ts') }}-${{ github.run_id }}
+          restore-keys: |
+            content-tree-qa-v1-${{ hashFiles('scripts/parsers/**', 'scripts/fetch-tutorials.ts', 'scripts/lib/content-cache.ts', 'scripts/lib/expand-ai-authored.ts') }}-
+
       # GitHub App token (preferred). Activates when repo variable
       # USE_GITHUB_APP=true and the TUTORIALS_APP_* secrets are populated.
       # While the variable is unset/false this step is skipped and the fetch
@@ -131,6 +175,26 @@ jobs:
           # (presence of [AUTOAUTHOR_*] directives) plus AI_AUTHOR_BUILD_CAP.
           AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
           CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
+          # Workstream C: enable the generated-content fast path on QA. When
+          # 'true': slug-targeted → reuse cached non-target content (feed-
+          # fingerprint gated inside decideFastPath) + write sidecar; full → PRIME
+          # only (decideFastPath refuses reuse off slug-targeted; sidecar still
+          # written so the SAVE step warms it).
+          CONTENT_CACHE_FAST_PATH: ${{ steps.cc.outputs.content_cache_enabled }}
+
+      # Workstream C: SAVE the generated QA content tree + sidecar so the next
+      # slug-targeted QA hotfix can restore and reuse it. Runs on full (PRIME a
+      # clean tree) AND slug-targeted (persist the tree with the target's new
+      # bytes). Split from restore so full saves without restoring.
+      - name: Save generated-content cache (QA)
+        if: ${{ steps.cc.outputs.content_cache_enabled == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            hugo/content-qa/tutorials
+            hugo/data-qa/image_dimensions.json
+            .content-cache
+          key: content-tree-qa-v1-${{ hashFiles('scripts/parsers/**', 'scripts/fetch-tutorials.ts', 'scripts/lib/content-cache.ts', 'scripts/lib/expand-ai-authored.ts') }}-${{ github.run_id }}
 
       # Author-side smell detector. See rebuild-content.yml for rationale.
       # Runs against the QA cache (-Contribution repos) where author-side
