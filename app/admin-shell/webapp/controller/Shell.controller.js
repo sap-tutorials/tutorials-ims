@@ -135,6 +135,17 @@ sap.ui.define([
       this._attachHashChangeDetection();
       this._loadUserProfile();
       this._loadVersion();
+
+      // #2041 — Ctrl+K / Cmd+K opens the page-search palette globally.
+      this._fnGlobalKeydown = this._onGlobalKeydown.bind(this);
+      document.addEventListener("keydown", this._fnGlobalKeydown);
+    },
+
+    onExit: function () {
+      if (this._fnGlobalKeydown) {
+        document.removeEventListener("keydown", this._fnGlobalKeydown);
+        this._fnGlobalKeydown = null;
+      }
     },
 
     onNavBack: function () {
@@ -149,39 +160,179 @@ sap.ui.define([
     },
 
     onNavItemSelect: function (oEvent) {
-      var sKey = oEvent.getParameter("item").getKey();
+      var oItem = oEvent.getParameter("item");
+      // Items carrying an href navigate natively via the rendered anchor; do
+      // NOT also dispatch in JS or external target="_blank" links open twice.
+      // (The search palette has no anchors, so it routes href items itself.)
+      if (oItem.getHref()) return;
+      this._navigateToNavItem({ key: oItem.getKey() });
+    },
+
+    // Shared navigation dispatch used by both the side navigation
+    // (onNavItemSelect) and the page-search palette (onSearchResultSelect),
+    // so external links, keyed routes, and the special deep-link hashes stay
+    // in exactly one place. `oItem`: { key, href, target }.
+    _navigateToNavItem: function (oItem) {
+      if (!oItem) return;
+
+      // External links (Analytics, Data Inspector, BAIP, Devtoberfest Planner)
+      // carry an href but no route — navigate the browser directly. The side
+      // nav renders these as native anchors; the palette has to do it by hand.
+      if (oItem.href) {
+        if (oItem.target === "_blank") {
+          window.open(oItem.href, "_blank", "noopener");
+        } else {
+          window.location.assign(oItem.href);
+        }
+        return;
+      }
+
+      var sKey = oItem.key;
       if (!sKey) return;
 
       var sRoute = NAV_KEY_TO_ROUTE[sKey];
-      if (sRoute) {
-        this.getOwnerComponent().getRouter().navTo(sRoute);
-        if (sKey === "pipelinelog") {
-          HashChanger.getInstance().setHash("pipelinelog&/op/PipelineLog");
+      if (!sRoute) return;
+
+      this.getOwnerComponent().getRouter().navTo(sRoute);
+      if (sKey === "pipelinelog") {
+        HashChanger.getInstance().setHash("pipelinelog&/op/PipelineLog");
+      }
+      if (sKey === "joblog") {
+        HashChanger.getInstance().setHash("joblog&/op/JobExecutionLog");
+      }
+      if (sKey === "homepageRedirects") {
+        HashChanger.getInstance().setHash("homepageRedirects&/hp/Redirects");
+      }
+      if (sKey === "homepageConfig") {
+        // Fixed singleton UUID; matches auto-init handler at
+        // srv/admin-service.js:601 (HOMEPAGE_CONFIG_SINGLETON_ID).
+        // HomepageConfig used to be @odata.singleton but that combo is
+        // incompatible with @odata.draft.enabled (draftActivate requires
+        // the ID key), so it was demoted to a keyed collection with a
+        // single well-known row. See srv/admin-service.cds header comment.
+        HashChanger.getInstance().setHash("homepageConfig&/hp/HomepageConfig(00000000-0000-0000-0000-00000000c8ae)");
+      }
+      if (sKey === "petoberfestContests") {
+        // Deep-link into the petoberfest componentUsage's inner "Petoberfests"
+        // List Report route (contest maintenance). The bare "petoberfest" route
+        // lands on the PetSubmissions moderation queue; this second outer route
+        // shares the same componentUsage target (prefix "pb") and drives the
+        // inner hash to the contest LR — mirrors the pipelinelog/joblog pattern
+        // above that reuses the operations target. (#1449)
+        HashChanger.getInstance().setHash("petoberfestContests&/pb/Petoberfests");
+      }
+    },
+
+    // ---- Page search palette (#2041) -------------------------------------
+    // A command-palette style popover for jumping to any admin page. Flattens
+    // the (already role-filtered) nav model into a searchable flat list, so an
+    // author never sees admin-only pages in results.
+
+    onOpenPageSearch: function (oEvent) {
+      this._openPageSearch(oEvent.getSource());
+    },
+
+    _openPageSearch: function (oOpenerControl) {
+      var oPopover = this.byId("pageSearchPopover");
+      if (!oPopover) return;
+      // Rebuild the flat catalog every open — role filtering may have applied
+      // after the previous open, and it is cheap (~55 rows).
+      var oSearchModel = this._getSearchModel();
+      oSearchModel.setProperty("/all", this._flattenNav());
+      oSearchModel.setProperty("/query", "");
+      this._applySearchFilter("");
+      if (oPopover.isOpen()) return;
+      oPopover.openBy(oOpenerControl || this.byId("pageSearchBtn"));
+    },
+
+    onPageSearchAfterOpen: function () {
+      var oField = this.byId("pageSearchField");
+      if (oField) oField.focus();
+    },
+
+    onPageSearchLiveChange: function (oEvent) {
+      this._applySearchFilter(oEvent.getParameter("newValue") || "");
+    },
+
+    // Enter in the SearchField activates the first (top) result.
+    onPageSearchGo: function () {
+      var aResults = this._getSearchModel().getProperty("/results") || [];
+      if (aResults.length) {
+        this._selectSearchResult(aResults[0]);
+      }
+    },
+
+    onSearchResultSelect: function (oEvent) {
+      var oCtx = oEvent.getSource().getBindingContext("search");
+      if (!oCtx) return;
+      this._selectSearchResult(oCtx.getObject());
+    },
+
+    _selectSearchResult: function (oResult) {
+      var oPopover = this.byId("pageSearchPopover");
+      if (oPopover && oPopover.isOpen()) oPopover.close();
+      this._navigateToNavItem(oResult);
+    },
+
+    _getSearchModel: function () {
+      var oModel = this.getView().getModel("search");
+      if (!oModel) {
+        oModel = new JSONModel({ query: "", all: [], results: [] });
+        this.getView().setModel(oModel, "search");
+      }
+      return oModel;
+    },
+
+    // Flatten the role-filtered nav tree into { key, title, groupTitle, icon,
+    // href, target }. Container groups contribute their leaves; a top-level
+    // leaf (e.g. Dashboard) contributes itself.
+    _flattenNav: function () {
+      var oNavModel = this.getOwnerComponent().getModel("nav");
+      var aGroups = (oNavModel && oNavModel.getData().groups) || [];
+      var aFlat = [];
+      aGroups.forEach(function (g) {
+        if (g.items && g.items.length) {
+          g.items.forEach(function (leaf) {
+            aFlat.push({
+              key: leaf.key,
+              title: leaf.title,
+              groupTitle: g.title,
+              icon: g.icon,
+              href: leaf.href,
+              target: leaf.target
+            });
+          });
+        } else {
+          aFlat.push({
+            key: g.key,
+            title: g.title,
+            groupTitle: g.title,
+            icon: g.icon,
+            href: g.href,
+            target: g.target
+          });
         }
-        if (sKey === "joblog") {
-          HashChanger.getInstance().setHash("joblog&/op/JobExecutionLog");
-        }
-        if (sKey === "homepageRedirects") {
-          HashChanger.getInstance().setHash("homepageRedirects&/hp/Redirects");
-        }
-        if (sKey === "homepageConfig") {
-          // Fixed singleton UUID; matches auto-init handler at
-          // srv/admin-service.js:601 (HOMEPAGE_CONFIG_SINGLETON_ID).
-          // HomepageConfig used to be @odata.singleton but that combo is
-          // incompatible with @odata.draft.enabled (draftActivate requires
-          // the ID key), so it was demoted to a keyed collection with a
-          // single well-known row. See srv/admin-service.cds header comment.
-          HashChanger.getInstance().setHash("homepageConfig&/hp/HomepageConfig(00000000-0000-0000-0000-00000000c8ae)");
-        }
-        if (sKey === "petoberfestContests") {
-          // Deep-link into the petoberfest componentUsage's inner "Petoberfests"
-          // List Report route (contest maintenance). The bare "petoberfest" route
-          // lands on the PetSubmissions moderation queue; this second outer route
-          // shares the same componentUsage target (prefix "pb") and drives the
-          // inner hash to the contest LR — mirrors the pipelinelog/joblog pattern
-          // above that reuses the operations target. (#1449)
-          HashChanger.getInstance().setHash("petoberfestContests&/pb/Petoberfests");
-        }
+      });
+      return aFlat;
+    },
+
+    _applySearchFilter: function (sQuery) {
+      var oModel = this._getSearchModel();
+      var aAll = oModel.getProperty("/all") || [];
+      var q = (sQuery || "").trim().toLowerCase();
+      var aResults = !q ? aAll : aAll.filter(function (item) {
+        return (item.title || "").toLowerCase().indexOf(q) !== -1
+            || (item.groupTitle || "").toLowerCase().indexOf(q) !== -1;
+      });
+      oModel.setProperty("/query", sQuery);
+      oModel.setProperty("/results", aResults);
+    },
+
+    _onGlobalKeydown: function (e) {
+      // Ctrl+K / Cmd+K opens the page search from anywhere in the shell.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        this._openPageSearch(this.byId("pageSearchBtn"));
       }
     },
 
