@@ -33,7 +33,7 @@ export function eventIsLive(event, now = new Date()) {
 }
 
 const isUniqueViolation = (err) =>
-  /unique|duplicate|primary key|assert_unique|constraint/i.test(String(err?.message ?? err));
+  /unique|duplicate|primary key/i.test(String(err?.message ?? err));
 
 /**
  * Award (or decline) today's cat-game points for a user in a given event.

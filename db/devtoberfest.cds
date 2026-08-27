@@ -81,7 +81,7 @@ entity EventRegistrations : cuid, managed, ims.LegacyKeyed {
  *
  * One row = one calendar day on which a signed-in player earned the daily
  * cat-game award during a given Devtoberfest event. The award endpoint
- * (POST /devtoberfest-api/cat-game/award) writes exactly one row per
+ * (POST /api/devtoberfest/cat-game/award) writes exactly one row per
  * (user, event, day): 5 points per day, once per day, capped at 100 points
  * total per event, and only while that event is active.
  *

@@ -14,7 +14,7 @@ vi.mock('@shared/csrf-fetch', () => ({
   csrfFetch: vi.fn(),
 }))
 
-const AWARD_URL = '/devtoberfest-api/cat-game/award'
+const AWARD_URL = '/api/devtoberfest/cat-game/award'
 const PROPS = { awardUrl: AWARD_URL, imgCatGame: '/images/devtoberfest/kasimir-types.png' }
 
 // /auth/user probe: JSON body with a truthy (or falsy) `authenticated` flag.

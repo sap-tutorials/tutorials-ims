@@ -47,7 +47,7 @@ export interface MountConfig {
 }
 
 /**
- * Response shape of `POST /devtoberfest-api/cat-game/award` (server-authoritative
+ * Response shape of `POST /api/devtoberfest/cat-game/award` (server-authoritative
  * scoring: 5 pts/day, once per day, max 100, contest-active only). Backend built
  * in parallel — client codes to this contract. Anonymous callers get HTTP 401.
  */
