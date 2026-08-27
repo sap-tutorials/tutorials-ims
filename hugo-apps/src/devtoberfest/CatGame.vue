@@ -209,7 +209,7 @@ defineExpose({ onHit })
 
 <template>
   <section class="dtf-catgame" aria-labelledby="dtf-catgame-title">
-    <h2 id="dtf-catgame-title" class="dtf-catgame-title">Hit the Cat</h2>
+    <h2 id="dtf-catgame-title" class="dtf-catgame-title">Tag the Cat</h2>
     <p class="dtf-catgame-lead">
       Kasimir won't sit still. Catch him for a meow &mdash; and, while
       Devtoberfest is running, sign in to earn 5 points a day (up to 100).
@@ -224,7 +224,7 @@ defineExpose({ onHit })
         class="dtf-catgame-cat"
         :class="{ 'is-reacting': reacting }"
         :style="{ left: catX + '%', top: catY + '%' }"
-        aria-label="Hit the cat"
+        aria-label="Tag the cat"
         @click="onHit"
       >
         <img :src="imgCatGame" alt="" aria-hidden="true" class="dtf-catgame-cat-img" />
