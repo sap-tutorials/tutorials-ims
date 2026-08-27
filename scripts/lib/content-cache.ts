@@ -99,16 +99,30 @@ export interface FastPathDecision {
 // Decide whether the slug-targeted fast path may reuse cached generated content.
 // Eligible only when: the flag is on, this is a slug-targeted run, a valid
 // sidecar was restored, and its feed fingerprint matches the current feeds.
+//
+// `allowFeedDrift` (QA preview channel only): reuse cached non-target content
+// even when the feed fingerprint changed. QA rebuilds run rarely while prod
+// republishes on every merge, so by each QA run the catalog/tag-labels have
+// drifted and the fingerprint almost always mismatches — forcing a ~10-min full
+// regen of every tutorial for what is a single-slug author preview. Relaxing
+// the check trades slightly-stale nav/tags on the OTHER (non-target) preview
+// pages (corrected on the next full QA rebuild) for a ~90s targeted preview.
+// The target slug is always regenerated regardless (its cache is busted
+// upstream). Prod never sets this — prod keeps strict feed-freshness.
 export function decideFastPath(args: {
   flagEnabled: boolean
   isSlugTargeted: boolean
   sidecar: ContentCacheSidecar | null
   currentFingerprint: string
+  allowFeedDrift?: boolean
 }): FastPathDecision {
   if (!args.flagEnabled) return { eligible: false, reason: 'flag off (CONTENT_CACHE_FAST_PATH)' }
   if (!args.isSlugTargeted) return { eligible: false, reason: 'not a slug-targeted run' }
   if (!args.sidecar) return { eligible: false, reason: 'no valid sidecar restored (cache miss / first run)' }
   if (args.sidecar.feedFingerprint !== args.currentFingerprint) {
+    if (args.allowFeedDrift) {
+      return { eligible: true, reason: 'QA slug-targeted — reusing cached non-target content despite feed drift (nav/tags may lag until next full QA rebuild)' }
+    }
     return { eligible: false, reason: 'feed fingerprint changed (catalog/co-completions/tag-labels differ) — full regen' }
   }
   return { eligible: true, reason: 'parser source (cache key) + feeds unchanged — reusing cached non-target content' }
