@@ -20,5 +20,12 @@
 using { com.sap.developers.ims.DevtoberfestSignupAnalytics } from '../devtoberfest-analytics';
 
 extend projection DevtoberfestSignupAnalytics with {
-  strftime('%Y-%m-%d', '2018-01-01', cast(floor(days_between(date'2018-01-01', joinedDate) / 7) * 7 as Integer) || ' days') as weekMonday : Date
+  strftime('%Y-%m-%d', '2018-01-01', cast(floor(days_between(date'2018-01-01', joinedDate) / 7) * 7 as Integer) || ' days') as weekMonday : Date,
+  // Display label for the week axis (issue #2047, "readable week" rework). SQLite
+  // has no month/weekday-name formatter (strftime supports only numeric codes), so
+  // the local/test label is the ISO Monday date; the HANA twin renders
+  // "Mon 07 Sep 2026". It is text-arranged onto weekMonday (@UI.TextArrangement:
+  // #TextOnly) so the chart/table show this string while grouping+sorting on the
+  // real Date — see app/admin-annotations.cds.
+  strftime('%Y-%m-%d', '2018-01-01', cast(floor(days_between(date'2018-01-01', joinedDate) / 7) * 7 as Integer) || ' days') as weekStartText : String(24)
 }

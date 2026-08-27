@@ -104,6 +104,29 @@ describe('DevtoberfestSignupAnalytics', () => {
     expect(rows[4].weekMonday).toBe('2026-09-21');
   });
 
+  it('exposes a groupable weekStartText display label on every fact row (issue #2047)', async () => {
+    const rows = await SELECT.from(DevtoberfestSignupAnalytics)
+      .columns('weekMonday', 'weekStartText', 'joinedDate').orderBy('joinedDate');
+    // SQLite has no month/weekday-name formatter, so the local/test label is the
+    // ISO Monday date; production (HANA) renders "Mon 07 Sep 2026" (guarded in the
+    // hybrid suite). Either way it is 1:1 with weekMonday and non-null.
+    expect(rows.every((r) => typeof r.weekStartText === 'string' && r.weekStartText.length > 0)).toBe(true);
+    expect(rows[0].weekStartText).toBe('2026-09-07');
+    expect(rows[3].weekStartText).toBe('2026-09-14');
+  });
+
+  it('chart path: grouping by weekMonday carries the weekStartText text-arrangement label', async () => {
+    const srv = await cds.connect.to('AdminService');
+    const rows = await srv.tx({ user: ADMIN }, (tx) => tx.run(
+      SELECT.from('DevtoberfestSignupAnalytics')
+        .columns('weekMonday', 'weekStartText', { func: 'sum', args: [{ ref: ['signups'] }], as: 'newSignups' })
+        .groupBy('weekMonday', 'weekStartText')
+        .orderBy('weekMonday')
+    ));
+    expect(rows.map((r) => r.weekStartText)).toEqual(['2026-09-07', '2026-09-14', '2026-09-21']);
+    expect(rows.map((r) => r.newSignups)).toEqual([3, 1, 2]);
+  });
+
   it('chart path: aggregated read grouped by the real weekMonday returns readable dates + enrichment', async () => {
     const srv = await cds.connect.to('AdminService');
     const rows = await srv.tx({ user: ADMIN }, (tx) => tx.run(

@@ -12,5 +12,11 @@
 using { com.sap.developers.ims.DevtoberfestSignupAnalytics } from '../devtoberfest-analytics';
 
 extend projection DevtoberfestSignupAnalytics with {
-  ADD_DAYS(date'2018-01-01', cast(floor(days_between(date'2018-01-01', joinedDate) / 7) * 7 as Integer)) as weekMonday : Date
+  ADD_DAYS(date'2018-01-01', cast(floor(days_between(date'2018-01-01', joinedDate) / 7) * 7 as Integer)) as weekMonday : Date,
+  // Readable week-axis label (issue #2047, "readable week" rework). HANA can format
+  // month/weekday names, so this renders e.g. "Mon 07 Sep 2026". It is text-arranged
+  // onto weekMonday (@UI.TextArrangement: #TextOnly) so the chart/table show this
+  // string while grouping+sorting on the real Date. The SQLite twin falls back to the
+  // ISO Monday date (no name formatter). See app/admin-annotations.cds.
+  TO_VARCHAR(ADD_DAYS(date'2018-01-01', cast(floor(days_between(date'2018-01-01', joinedDate) / 7) * 7 as Integer)), 'DY DD MON YYYY') as weekStartText : String(24)
 }
