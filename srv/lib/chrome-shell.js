@@ -16,6 +16,7 @@
 import cds from '@sap/cds';
 import { gunzipSync } from 'node:zlib';
 import { Readable } from 'node:stream';
+import { isDeltaRead } from './content-delta-flags.js';
 
 const SHELL_SLUG = '__shell__';
 const MARKER = '<!-- MAIN -->';
@@ -242,7 +243,7 @@ export function createShellLoader({ namespace, hanaTableName, hanaCurrentTableNa
     const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
     // Option B: prefer the mutable ContentCurrent when the read flag is on, with
     // a per-slug fallback to the legacy version-pinned ContentFiles snapshot.
-    const useCurrent = process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent && typeof hanaCurrentTableName === 'function';
+    const useCurrent = isDeltaRead() && ContentCurrent && typeof hanaCurrentTableName === 'function';
 
     async function readBuf(fromCurrent) {
       let b;

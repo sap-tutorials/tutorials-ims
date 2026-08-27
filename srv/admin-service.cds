@@ -777,6 +777,14 @@ service AdminService {
   // (legacy IMS already credited them). Empty/null clears it. See ngds-autosend.js.
   action setNgdsAutoSendEpoch(epoch : String) returns { epoch : String };
   function getNgdsAutoSendConfig() returns { enabled : Boolean; environment : String; epoch : String; effective : Boolean };
+  // Content Option-B delta flags (ImsConfig-backed). Moved from env vars to
+  // DB config so an admin can flip the ContentFiles→ContentCurrent migration
+  // gates without a redeploy. Omitted fields are left unchanged. Setter busts
+  // the 60s server-side cache so a flip is effective at once.
+  action setContentDeltaFlags(write : Boolean, read : Boolean, skipCarryForward : Boolean)
+    returns { write : Boolean; read : Boolean; skipCarryForward : Boolean };
+  function getContentDeltaFlags()
+    returns { write : Boolean; read : Boolean; skipCarryForward : Boolean };
   action testNotificationEmail(to: String, level: Integer) returns {
     success : Boolean;
     error   : String;

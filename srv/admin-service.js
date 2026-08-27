@@ -26,6 +26,7 @@ import { cleanupChangeLog, cleanupUnusedTags } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { enrichSignupRows } from './lib/devtoberfest-signup-enrich.js';
 import { getTutorialSource } from './lib/content-store.js';
+import { isDeltaRead, bustContentDeltaFlagsCache } from './lib/content-delta-flags.js';
 import { buildTutorialLinks } from './lib/tutorial-links.js';
 import { buildPreviewLinks } from './lib/preview-links.js';
 import { runSeedApiDocs } from './lib/seed-api-docs.js';
@@ -1640,7 +1641,7 @@ export default class AdminService extends cds.ApplicationService {
 
       // Option B: active slug set from ContentCurrent when the read flag is on.
       const ContentCurrent = cds.entities('com.sap.developers.ims').ContentCurrent;
-      const files = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+      const files = (isDeltaRead() && ContentCurrent)
         ? await SELECT.from(ContentCurrent).columns('slug')
         : await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
       const slugs = files.map(f => f.slug);
@@ -1945,6 +1946,56 @@ export default class AdminService extends cds.ApplicationService {
         effective: enabled && env.id === 'prod'
       };
     });
+
+    // ---- Content Option-B delta flags (ImsConfig-backed, DB-driven config) ----
+    // Three flags gate the migration off the legacy ContentFiles snapshot model
+    // onto the mutable ContentCurrent model. Moved from env vars to ImsConfig so
+    // an admin can flip them without a redeploy. Cache lives in
+    // srv/lib/content-delta-flags.js (60s TTL); we bust it on write so a toggle
+    // takes effect immediately. Values stored as 'true'/'false' strings.
+    this.on('setContentDeltaFlags', async (req) => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const { DELTA_WRITE_KEY, DELTA_READ_KEY, DELTA_SKIP_CARRYFORWARD_KEY } =
+        await import('./lib/content-delta-flags.js');
+      const { write, read, skipCarryForward } = req.data;
+      // Only upsert the flags actually supplied (undefined → leave unchanged),
+      // so a caller can flip one flag without clobbering the other two.
+      const upserts = [
+        [DELTA_WRITE_KEY, write],
+        [DELTA_READ_KEY, read],
+        [DELTA_SKIP_CARRYFORWARD_KEY, skipCarryForward],
+      ];
+      for (const [key, val] of upserts) {
+        if (val === undefined || val === null) continue;
+        const value = String(Boolean(val));
+        const existing = await SELECT.one.from(ImsConfig).where({ key });
+        if (existing) {
+          await UPDATE(ImsConfig, existing.ID).set({ value });
+        } else {
+          await INSERT.into(ImsConfig).entries({ key, value });
+        }
+      }
+      // Flush the 60s cache so the flip is effective at once.
+      bustContentDeltaFlagsCache();
+      return getContentDeltaFlags();
+    });
+
+    this.on('getContentDeltaFlags', async () => getContentDeltaFlags());
+
+    async function getContentDeltaFlags() {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const { DELTA_WRITE_KEY, DELTA_READ_KEY, DELTA_SKIP_CARRYFORWARD_KEY } =
+        await import('./lib/content-delta-flags.js');
+      const readKey = async (key) => {
+        const row = await SELECT.one.from(ImsConfig).where({ key });
+        return String(row?.value).toLowerCase() === 'true';
+      };
+      return {
+        write: await readKey(DELTA_WRITE_KEY),
+        read: await readKey(DELTA_READ_KEY),
+        skipCarryForward: await readKey(DELTA_SKIP_CARRYFORWARD_KEY),
+      };
+    }
 
     this.on('findMissingSlugs', async () => {
       const { findMissingSlugs } = await import('./lib/slug-mapping.js');

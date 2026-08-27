@@ -1092,6 +1092,19 @@ cds.on('served', async () => {
     globalThis.__feedbackBeforeHookRegistered = true;
   }
 
+  // Warm the Content Option-B delta flags (ImsConfig-backed) once at boot so the
+  // synchronous hot-path getters (isDeltaRead/isDeltaWrite/isDeltaSkipCarryForward
+  // in content-store.js et al.) return the real DB values before the first
+  // request rather than the cold-cache fail-safe default. Fail-open: any read
+  // fault leaves the safe defaults (all false → legacy ContentFiles path) and
+  // MUST NOT crash boot.
+  try {
+    const { refreshContentDeltaFlags } = await import('./lib/content-delta-flags.js');
+    await refreshContentDeltaFlags();
+  } catch (err) {
+    cds.log('content-delta-flags').warn('boot warm-up failed (non-fatal):', err.message);
+  }
+
   // #658 — one-shot purge of accumulated noise rows in sap.changelog.Changes
   // for entities whose @changelog annotation was retroactively dropped. Held
   // behind a JobLocks sentinel so it runs exactly once per CF deploy across

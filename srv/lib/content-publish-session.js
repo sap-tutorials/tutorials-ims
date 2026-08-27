@@ -10,6 +10,7 @@ import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-
 import { tutorialsTableInfo } from './_tutorials-table.js';
 import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
 import { resolveTutorialAuthor } from './resolve-tutorial-author.js';
+import { isDeltaWrite, isDeltaSkipCarryForward } from './content-delta-flags.js';
 
 const LOG = cds.log('content-publish');
 const LOCK_NAME = 'content-publish';
@@ -467,7 +468,7 @@ export function createSessionHelpers({ namespace }) {
     // is complete AND ContentCurrent is fully seeded — else serving breaks.
     let carriedForward = 0;
     let carriedSize = 0;
-    if (process.env.CONTENT_DELTA_SKIP_CARRYFORWARD !== 'true') {
+    if (!isDeltaSkipCarryForward()) {
       ({ carriedForward, carriedSize } = await carryForwardUnchanged(namespace, newVersion, hanaTableName, getActiveVersion));
     } else {
       LOG.info('[content/publish/commit] Option B: carry-forward SKIPPED (O(changed) publish)');
@@ -479,7 +480,7 @@ export function createSessionHelpers({ namespace }) {
     // cut over behind a separate read flag with a safe fallback. Never throws
     // into the commit tx — the legacy write remains the source of truth until
     // the read cutover.
-    if (process.env.CONTENT_DELTA_WRITE_ENABLED === 'true') {
+    if (isDeltaWrite()) {
       try {
         const { written } = await dualWriteCurrentAndHistory(namespace, newVersion, freshSlugs, hanaTableName);
         LOG.info(`[content/publish/commit] Option B dual-write: ${written} slug(s) → ContentCurrent/ContentHistory`);
