@@ -277,11 +277,22 @@
         }
       },
       "db": {
+        "[development]": {
+          "model": [
+            "db/sqlite"
+          ]
+        },
         "[hybrid]": {
-          "kind": "hana"
+          "kind": "hana",
+          "model": [
+            "db/hana"
+          ]
         },
         "[production]": {
-          "kind": "hana"
+          "kind": "hana",
+          "model": [
+            "db/hana"
+          ]
         }
       },
       "audit-log": {

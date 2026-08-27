@@ -51,6 +51,27 @@ describe('enrichSignupRows', () => {
     expect(byWeek[455].cumulativeSignups).toBe(6);
   });
 
+  it('keys off a real weekMonday when weekIndex is absent (chart grouped by weekMonday)', () => {
+    // deliberately unordered; no weekIndex (chart groups on the real weekMonday Date)
+    const rows = [
+      { weekMonday: '2026-09-21', newSignups: 2 },
+      { weekMonday: '2026-09-07', newSignups: 3 },
+      { weekMonday: '2026-09-14', newSignups: 1 },
+    ];
+    enrichSignupRows(rows);
+    const byMon = Object.fromEntries(rows.map((r) => [r.weekMonday, r]));
+    expect(byMon['2026-09-07']).toMatchObject({ weekLabel: '2026-W37', cumulativeSignups: 3 });
+    expect(byMon['2026-09-14'].cumulativeSignups).toBe(4);
+    expect(byMon['2026-09-21'].cumulativeSignups).toBe(6);
+  });
+
+  it('accepts a Date instance for weekMonday (HANA may return a Date, not a string)', () => {
+    const rows = [{ weekMonday: new Date(Date.UTC(2026, 8, 7)), newSignups: 5 }];
+    enrichSignupRows(rows);
+    expect(rows[0].weekMonday).toBe('2026-09-07');
+    expect(rows[0].weekLabel).toBe('2026-W37');
+  });
+
   it('does NOT compute cumulative when a second dimension makes weeks repeat', () => {
     const rows = [
       { weekIndex: 453, region: 'EMEA', newSignups: 2 },

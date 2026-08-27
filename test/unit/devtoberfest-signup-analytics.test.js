@@ -95,6 +95,30 @@ describe('DevtoberfestSignupAnalytics', () => {
     expect(rows[0].weekLabel).toBe('2026-W37');
   });
 
+  it('exposes a real, groupable weekMonday Date on every fact row (issue #2047)', async () => {
+    const rows = await SELECT.from(DevtoberfestSignupAnalytics).columns('weekMonday', 'joinedDate').orderBy('joinedDate');
+    // Every signup maps to its Mon–Sun week's Monday date.
+    expect(rows[0].weekMonday).toBe('2026-09-07'); // 2026-09-07 signup
+    expect(rows[2].weekMonday).toBe('2026-09-07'); // 2026-09-13 (Sun) still in that week
+    expect(rows[3].weekMonday).toBe('2026-09-14');
+    expect(rows[4].weekMonday).toBe('2026-09-21');
+  });
+
+  it('chart path: aggregated read grouped by the real weekMonday returns readable dates + enrichment', async () => {
+    const srv = await cds.connect.to('AdminService');
+    const rows = await srv.tx({ user: ADMIN }, (tx) => tx.run(
+      SELECT.from('DevtoberfestSignupAnalytics')
+        .columns('weekMonday', { func: 'sum', args: [{ ref: ['signups'] }], as: 'newSignups' })
+        .groupBy('weekMonday')
+        .orderBy('weekMonday')
+    ));
+    expect(rows.map((r) => r.weekMonday)).toEqual(['2026-09-07', '2026-09-14', '2026-09-21']);
+    expect(rows.map((r) => r.newSignups)).toEqual([3, 1, 2]);
+    // enrichment keys off weekMonday even though weekIndex was not grouped
+    expect(rows.map((r) => r.weekLabel)).toEqual(['2026-W37', '2026-W38', '2026-W39']);
+    expect(rows.map((r) => r.cumulativeSignups)).toEqual([3, 4, 6]);
+  });
+
   it('grand total aggregates all Devtoberfest signups', async () => {
     const srv = await cds.connect.to('AdminService');
     const rows = await srv.tx({ user: ADMIN }, (tx) => tx.run(
