@@ -12,6 +12,17 @@ vi.mock('../../srv/lib/credstore.js', () => ({
   readSecret: vi.fn().mockResolvedValue(null),  // default: credstore has no value
 }));
 
+// Isolate the dispatch path from real DB work. scheduleRebuild's debounced
+// callback calls resolveTenantSettings(), which otherwise triggers a cold
+// cds.connect.to('db') + full dev-model compile the first time it runs in a
+// worker with no booted server. That compile time makes the fixed post-debounce
+// waits below racy (surfaced by #2047, which enlarged the dev model with a
+// per-dialect weekMonday). The mode-merge logic under test doesn't depend on
+// tenant settings, so stub it to a constant.
+vi.mock('../../srv/lib/runtime-config/tenant-settings.js', () => ({
+  resolveTenantSettings: vi.fn().mockResolvedValue({ rebuildTargetEnv: 'dev' }),
+}));
+
 // Flag-on path: rebuild-trigger should dispatch using the App installation token.
 vi.mock('../../srv/lib/github-app-token.js', async (importOriginal) => {
   const actual = await importOriginal();

@@ -2007,7 +2007,7 @@ annotate AdminService.CompletionAnalytics with {
 annotate AdminService.DevtoberfestSignupAnalytics with @(
   Aggregation.ApplySupported: {
     Transformations: ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'],
-    GroupableProperties: [ weekIndex, eventName, eventType, region, role ],
+    GroupableProperties: [ weekMonday, weekIndex, eventName, eventType, region, role ],
     AggregatableProperties: [ { Property: signups } ]
   },
   Analytics.AggregatedProperty #newSignups: {
@@ -2016,14 +2016,53 @@ annotate AdminService.DevtoberfestSignupAnalytics with @(
     AggregatableProperty: signups,
     ![@Common.Label]: 'New Signups'
   },
+  // Overall total registrations as a prominent KPI header card (issue #2047).
+  // SUM(signups) with no filter → grand total across all Devtoberfest signups.
+  // The AnalyticalTable additionally renders its own grand-total row for the
+  // measure, so the total is visible in both places.
+  UI.DataPoint #totalSignups: {
+    Value: signups,
+    Title: 'Total Registrations'
+  },
+  UI.PresentationVariant #totalSignups: {
+    Visualizations: ['@UI.DataPoint#totalSignups']
+  },
+  UI.SelectionVariant #totalSignups: {
+    SelectOptions: []
+  },
+  UI.KPI #totalSignups: {
+    SelectionVariant           : ![@UI.SelectionVariant#totalSignups],
+    DataPoint                  : ![@UI.DataPoint#totalSignups],
+    ![@UI.PresentationVariant] : ![@UI.PresentationVariant#totalSignups]
+  },
+  // Default breakdown: signups per calendar week. The chart groups on the real
+  // Date column weekMonday (issue #2047) so the X-axis shows the week's Monday
+  // date (e.g. "Sep 7, 2026") instead of the meaningless internal weekIndex.
   UI.Chart: {
     ChartType: #Column,
-    Dimensions: [weekIndex],
+    Dimensions: [weekMonday],
     DynamicMeasures: ['@Analytics.AggregatedProperty#newSignups']
   },
   UI.PresentationVariant: {
     Visualizations: ['@UI.Chart', '@UI.LineItem'],
-    SortOrder: [{ Property: weekIndex }]
+    SortOrder: [{ Property: weekMonday }]
+  },
+  // Alternate breakdown by region, one click away via Page variant management.
+  // (Every GroupableProperty — region, role, edition — is also reachable through
+  // the chart's built-in dimension drill-down.)
+  UI.Chart #byRegion: {
+    ChartType: #Column,
+    Dimensions: [region],
+    DynamicMeasures: ['@Analytics.AggregatedProperty#newSignups']
+  },
+  UI.PresentationVariant #byRegion: {
+    Visualizations: ['@UI.Chart#byRegion', '@UI.LineItem'],
+    SortOrder: [{ Property: newSignups, Descending: true }]
+  },
+  UI.SelectionPresentationVariant #byRegion: {
+    Text                : 'By Region',
+    SelectionVariant    : { SelectOptions: [] },
+    PresentationVariant : ![@UI.PresentationVariant#byRegion]
   },
   UI.SelectionFields: [ eventName, region, role ],
   UI.LineItem: [
@@ -2037,13 +2076,13 @@ annotate AdminService.DevtoberfestSignupAnalytics with @(
   ]
 ) {
   ID            @UI.Hidden;
+  weekMonday    @title: 'Week Starting'  @Analytics.Dimension;
   weekIndex     @title: 'Week #'         @Analytics.Dimension;
   eventName     @title: 'Edition'        @Analytics.Dimension;
   eventType     @title: 'Event Type'     @Analytics.Dimension;
   region        @title: 'Region'         @Analytics.Dimension;
   role          @title: 'Role'           @Analytics.Dimension;
   signups       @title: 'Signups'        @Analytics.Measure @Aggregation.default: #SUM;
-  weekMonday    @title: 'Week Starting';
   weekLabel     @title: 'Week';
   cumulativeSignups @title: 'Cumulative';
 };

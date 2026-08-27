@@ -70,4 +70,20 @@ describe('DevtoberfestSignupAnalytics — real HANA', () => {
     expect(rows[0].weekMonday).toBe('2026-09-07');
     expect(rows[0].weekLabel).toBe('2026-W37');
   });
+
+  it('groups on the real weekMonday Date (ADD_DAYS) with readable dates on HANA (#2047)', async () => {
+    const srv = await cds.connect.to('AdminService');
+    const rows = await srv.tx({ user: ADMIN }, (tx) => tx.run(
+      SELECT.from('DevtoberfestSignupAnalytics')
+        .columns('weekMonday', { func: 'sum', args: [{ ref: ['signups'] }], as: 'newSignups' })
+        .where({ event_ID: testEventId })
+        .groupBy('weekMonday')
+        .orderBy('weekMonday')
+    ));
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => String(r.weekMonday).slice(0, 10))).toEqual(['2026-09-07', '2026-09-14']);
+    expect(rows.map((r) => Number(r.newSignups))).toEqual([3, 1]);
+    expect(rows.map((r) => r.weekLabel)).toEqual(['2026-W37', '2026-W38']);
+    expect(rows.map((r) => r.cumulativeSignups)).toEqual([3, 4]);
+  });
 });
