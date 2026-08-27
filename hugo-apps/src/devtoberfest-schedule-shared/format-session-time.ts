@@ -46,6 +46,26 @@ export function formatViewerLocal(instantISO: string, opts?: IntlOpts): string {
 }
 
 /**
+ * Format an instant as a compact VIEWER-local time only (e.g. `5:00 AM`).
+ * No date, no timezone-name — used for the dense month-grid chips where the
+ * containing day cell already conveys the date and horizontal space is scarce.
+ * Returns `''` for falsy or unparseable input.
+ *
+ * @param instantISO - ISO-8601 UTC string (e.g. `'2026-10-01T15:00:00Z'`)
+ */
+export function formatViewerTimeShort(instantISO: string): string {
+  if (!instantISO) return '';
+  const d = new Date(instantISO);
+  if (isNaN(d.getTime())) return '';
+  // timeZone intentionally omitted → browser local zone
+  try {
+    return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(d);
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Format an instant in the event's home IANA timezone.
  * Used only for the secondary "event time" label — NOT for bucketing.
  * Returns `''` for falsy or unparseable input.

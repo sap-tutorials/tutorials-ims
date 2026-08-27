@@ -2,9 +2,10 @@
 //
 // @vitest-environment happy-dom
 //
-// Regression guard for issue #2007: speaker names must appear on the
-// individual session items in every calendar view (month / week / day),
-// not only in the DetailPanel popup.
+// Regression guard for issue #2007: speaker names must stay discoverable on
+// session items across the calendar views. Week/Day show them as a visible
+// line; the dense Month grid (compacted in #2046) surfaces them via the chip
+// tooltip instead of eating horizontal grid space.
 //
 // TZ-pinning: set BEFORE any import so Intl resolves viewer-local zone to UTC.
 process.env.TZ = 'UTC';
@@ -49,11 +50,21 @@ async function mountAt(view: 'Month' | 'Week' | 'Day') {
 describe('calendar session items show speakers (#2007)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('renders speaker names in the month view chips', async () => {
+  it('keeps month-chip speakers in the tooltip, not the visible chip text (#2046 compaction)', async () => {
+    // #2007 required speakers to be discoverable in every view. #2046 compacts
+    // the dense month chips to time + title only, moving speakers into the chip
+    // tooltip (title attribute) — still discoverable, but not eating grid width.
     const wrapper = await mountAt('Month');
-    const html = wrapper.html();
-    expect(html).toContain('Christian Hoffman');
-    expect(html).toContain('Ada Lovelace, Alan Turing');
+    const chips = wrapper.findAll('.mg-chip');
+    const joule = chips.find((c) => c.attributes('title')?.includes('Joule Work'));
+    const duet = chips.find((c) => c.attributes('title')?.includes('Duet Talk'));
+    expect(joule?.attributes('title')).toContain('Christian Hoffman');
+    expect(duet?.attributes('title')).toContain('Ada Lovelace, Alan Turing');
+    // Visible chip text is terse: title present, speaker names absent.
+    expect(joule?.text()).toContain('Joule Work');
+    expect(joule?.text()).not.toContain('Christian Hoffman');
+    // The old inline speaker span is gone from the month grid entirely.
+    expect(wrapper.find('.mg-chip-sp').exists()).toBe(false);
   });
 
   it('renders a speaker line in the week view cards', async () => {

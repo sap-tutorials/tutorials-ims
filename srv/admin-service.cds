@@ -580,18 +580,19 @@ service AdminService {
   // "Devtoberfest Signups" Analytical List Page (spec 2026-08-13). Read-only,
   // aggregation-enabled (see @Aggregation.ApplySupported in app/admin-annotations.cds).
   // The virtual elements are populated by the read handler in srv/admin-service.js:
-  //   weekMonday/weekLabel — human-readable derivation of the portable integer
-  //     weekIndex (the DB has no portable ISO-week function; weekIndex buckets by
-  //     Mon–Sun from a 2018-01-01 Monday anchor, and Node derives the calendar
-  //     Monday + 'YYYY-Www' label from it).
+  //   weekMonday — real, GROUPABLE Mon-anchored week-start Date supplied per
+  //     dialect (db/sqlite/native.cds via strftime, db/hana/native.cds via
+  //     ADD_DAYS; issue #2047) so the analytical chart has a human-readable time
+  //     axis instead of the raw integer weekIndex.
+  //   weekLabel — 'YYYY-Www' ISO label; the DB has no portable ISO-week function,
+  //     so Node derives it from weekMonday (see srv/lib/devtoberfest-signup-enrich.js).
   //   cumulativeSignups — running total, populated ONLY on the pure by-week series
-  //     (grouped by weekIndex alone); left null when the result is sliced by another
+  //     (one row per week); left null when the result is sliced by another
   //     dimension, where a running total would be meaningless.
   @readonly
   @cds.redirection.target: false
   entity DevtoberfestSignupAnalytics as projection on ims.DevtoberfestSignupAnalytics {
     *,
-    virtual null as weekMonday        : Date,
     virtual null as weekLabel         : String(10),
     virtual null as cumulativeSignups : Integer
   };

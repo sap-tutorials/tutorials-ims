@@ -53,8 +53,10 @@ function borderColor(s: Session): string {
 </template>
 
 <style scoped>
-.wk { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid var(--sapList_BorderColor, #e4e7ed); border-radius: 6px; overflow: hidden; }
-.wk-col { border-left: 1px solid var(--sapList_BorderColor, #e4e7ed); min-height: 12rem; }
+/* minmax(0, 1fr) — see MonthGrid note: bare 1fr lets a long unbreakable card
+   word blow the column past the container and clip later days (#2046). */
+.wk { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--sapList_BorderColor, #e4e7ed); border-radius: 6px; overflow: hidden; }
+.wk-col { min-width: 0; border-left: 1px solid var(--sapList_BorderColor, #e4e7ed); min-height: 12rem; }
 .wk-col:first-child { border-left: none; }
 .wk-head { padding: 0.35rem; text-align: center; border-bottom: 1px solid var(--sapList_BorderColor, #e4e7ed); background: var(--sapList_HeaderBackground, #f5f6f7); }
 .wk-head--today .wk-dnum { color: var(--sapButton_Emphasized_Background, #0a6ed1); }
@@ -64,6 +66,7 @@ function borderColor(s: Session): string {
 .wk-card {
   border: 1px solid var(--sapList_BorderColor, #e4e7ed); border-left: 4px solid transparent; border-radius: 6px;
   padding: 0.35rem 0.4rem; cursor: pointer; font: inherit; text-align: left; background: var(--sapBaseColor, #fff);
+  min-width: 0; overflow-wrap: anywhere;
 }
 .wk-card--complete { background: var(--sapSuccessBackground, #f1fdf6); }
 .wk-t { display: block; font-size: 0.65rem; color: var(--sapContent_LabelColor, #6a6d70); font-variant-numeric: tabular-nums; }

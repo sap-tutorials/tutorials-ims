@@ -4,28 +4,37 @@ using { com.sap.developers.ims as ims } from './schema';
 
 // --- Devtoberfest signups analytics -------------------------------------
 //
-// Per-signup fact view feeding the admin "Devtoberfest Signups" Analytical
-// List Page (spec 2026-08-13). One row per EventRegistrations row (i.e. one
-// row per (user, event) signup), flattened into groupable scalar dimensions
-// so Fiori Elements can drive native OData V4 $apply aggregation over it
-// (group by week / edition / region / role, aggregate $count) without any
-// association navigation.
+// Two-layer view feeding the admin "Devtoberfest Signups" Analytical List Page
+// (spec 2026-08-13; readable-week axis added for issue #2047).
 //
-// Scope: eventType = 'DEVTOBERFEST' only — captures signups across ALL
-// Devtoberfest editions. The ALP filter bar defaults the edition to the
-// active event (resolved server-side in the read handler).
+//  1. DevtoberfestSignupFacts — the per-signup fact view (one row per
+//     EventRegistrations row) with the association joins, flattened into
+//     groupable scalar dimensions so Fiori Elements can drive native OData V4
+//     $apply aggregation (group by week / edition / region / role, aggregate
+//     $count) without any association navigation. Scope: eventType =
+//     'DEVTOBERFEST' only — signups across ALL Devtoberfest editions.
+//
+//  2. DevtoberfestSignupAnalytics — the public analytical view the service
+//     projects on. It is a plain, JOIN-free projection of the facts so the
+//     per-dialect models (db/sqlite/native.cds, db/hana/native.cds) can
+//     `extend projection` it with a real, GROUPABLE `weekMonday : Date` — the
+//     CDS compiler refuses to extend a view that contains a JOIN, hence the
+//     split. A real weekMonday is needed because the analytical chart's X-axis
+//     must group on a real column; a read-time virtual cannot sit on a $apply
+//     axis, which is why the raw integer weekIndex used to leak through (#2047).
 //
 // weekIndex: portable ISO-aligned week bucket. 2018-01-01 is a Monday, so
 //   floor(days_between(anchorMonday, joinedDate) / 7)
 // numbers each Mon–Sun week from that anchor. Uses only the portable
-// days_between / floor functions (CAP "Standard Functions" — translate to
-// both HANA and SQLite), so it groups identically in prod (HANA) and unit
-// tests (in-memory SQLite). The Monday date + 'YYYY-Www' label for each
-// bucket is derived from weekIndex in the read handler (srv/admin-service.js)
-// — see weekIndexToMonday(). region/role come from the optional
+// days_between / floor functions (CAP "Standard Functions" — translate to both
+// HANA and SQLite), so it groups identically in prod (HANA) and unit tests
+// (in-memory SQLite). weekMonday (the calendar Monday date) is derived per
+// dialect from weekIndex's inputs; the 'YYYY-Www' weekLabel is derived in the
+// read handler (srv/lib/devtoberfest-signup-enrich.js) because no portable
+// ISO-week function exists. region/role come from the optional
 // UserLearningPreferences (left join): null for most users, surfaced as a
 // "Not set" bucket in the UI, by design.
-view DevtoberfestSignupAnalytics as
+view DevtoberfestSignupFacts as
   select from ims.EventRegistrations as reg
     inner join ims.Events                   as evt  on evt.ID  = reg.event.ID
     left  join ims.UserLearningPreferences  as pref on pref.user.ID = reg.user.ID
@@ -43,3 +52,6 @@ view DevtoberfestSignupAnalytics as
         1                                                 as signups         : Integer
   }
   where evt.eventType = 'DEVTOBERFEST';
+
+// JOIN-free public projection (see header) — extended per dialect with weekMonday.
+view DevtoberfestSignupAnalytics as select from DevtoberfestSignupFacts { * };

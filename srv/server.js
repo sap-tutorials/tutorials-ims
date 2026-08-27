@@ -16,6 +16,7 @@ import { buildConceptsHandler } from './lib/build-concepts.js';
 import { buildTopicClustersHandler } from './lib/build-topic-clusters.js';
 import { buildTopicsGalleryHandler } from './lib/build-topics-gallery.js';
 import { exploreDataHandler } from './lib/build-explore-data.js';
+import { titlePathToMdFormat } from './lib/tag-md-format.js';
 import { clustersDataHandler } from './lib/build-clusters-data.js';
 import { graphPathHandler } from './lib/graph-path-route.js';
 import { coCompletionsHandler } from './lib/co-completion.js';
@@ -43,6 +44,7 @@ import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
+import * as devtoberfestCatGame from './routes/devtoberfest-cat-game.js';
 import * as alertsPublic from './routes/alerts-public.js';
 import * as deployEvents from './routes/deploy-events.js';
 import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
@@ -372,6 +374,37 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // Build-time tag taxonomy feed — consumed by scripts/fetch-tags.ts at build
+  // time so a downstream CI checker (tutorial-ci frontmatter-unknown-tag rule)
+  // can validate tutorial frontmatter tags against the canonical taxonomy.
+  // Mirrors /build/verb-definitions above: anonymous route (registered before
+  // CDS auth), reads direct from the raw Tags entity (NOT through AdminService,
+  // whose @requires chain would 403 an unauthenticated request), 60s
+  // Cache-Control, 500s on error.
+  //
+  // Frontmatter tags use the IMS `category>value` slug (e.g.
+  // "software-product>sap-hana-cloud"), which is the `mdFormat` virtual
+  // derived from `titlePath` via titlePathToMdFormat (parity with TagUtil).
+  // `ims.Tags.name` is the human display label — NOT the frontmatter key.
+  // We SELECT titlePath, convert to mdFormat in JS, and emit a sorted,
+  // deduplicated set of non-empty mdFormat strings.
+  app.get('/build/tags', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.Tags').columns('titlePath')
+      );
+      const tags = [...new Set(
+        rows.map((r) => titlePathToMdFormat(r.titlePath)).filter(Boolean)
+      )].sort();
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ tags, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/tags]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // (#1032) Build-time data for Hugo featured topics carousel — consumed by
   // scripts/fetch-tutorials.ts at build time. Public, unauthenticated.
   // Cache-Control 60s (Hugo fetches once per build, not per request).
@@ -432,6 +465,7 @@ cds.on('bootstrap', (app) => {
   devtoberfestPublic.register(app);
   devtoberfestSchedule.register(app);
   devtoberfestAuth.register(app);
+  devtoberfestCatGame.register(app);
 
   // /api/alerts (anonymous) + /api/alerts/me (authenticated).
   // Spec: docs/superpowers/specs/2026-06-26-548-alert-system-design.md

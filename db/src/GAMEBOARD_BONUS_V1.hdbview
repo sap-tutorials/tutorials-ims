@@ -1,0 +1,13 @@
+-- Per-user "Hit the Cat" mini-game bonus points (issue #2042), published to the
+-- gameboard container via the gameboard_reader role. One row per daily award.
+-- AWARD_DATE is the actual award instant (CatGameAwards.createdAt) — always within
+-- the event window, since the award endpoint only ever inserts while the active
+-- Devtoberfest event is live — so the gameboard's window filter never drops a row.
+-- The award endpoint already caps each user at 100 points/event; the gameboard
+-- re-caps defensively.
+VIEW "GAMEBOARD_BONUS_V1" AS
+  SELECT c."USER_ID"    AS "USER_ID",
+         c."POINTS"     AS "POINTS",
+         c."CREATEDAT"  AS "AWARD_DATE",
+         c."EVENT_ID"   AS "EVENT_ID"
+  FROM "COM_SAP_DEVELOPERS_IMS_CATGAMEAWARDS" c

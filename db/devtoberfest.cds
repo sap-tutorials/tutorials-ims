@@ -75,3 +75,30 @@ entity EventRegistrations : cuid, managed, ims.LegacyKeyed {
   termsVersion     : Integer;
   termsAcceptedAt  : Timestamp;
 }
+
+/**
+ * "Hit the Cat" mini-game daily point ledger (issue #2042).
+ *
+ * One row = one calendar day on which a signed-in player earned the daily
+ * cat-game award during a given Devtoberfest event. The award endpoint
+ * (POST /api/devtoberfest/cat-game/award) writes exactly one row per
+ * (user, event, day): 5 points per day, once per day, capped at 100 points
+ * total per event, and only while that event is active.
+ *
+ * The natural (user, event, awardDate) tuple is the PRIMARY KEY — no surrogate
+ * ID — so HANA enforces the once-per-day rule at the DB layer: a second insert
+ * for the same day collides on the PK and the handler maps it to
+ * "already-today" (race-safe, unlike a CAP-only @assert.unique which this
+ * repo's raw db.run() inserts bypass — see srv/lib/resolve-db-user.js).
+ *
+ * `createdAt` (from `managed`) is the actual award instant and is what the
+ * cross-container GAMEBOARD_BONUS_V1 view exposes as AWARD_DATE, so the
+ * gameboard's event-window filter always sees an in-window timestamp (the
+ * endpoint only ever inserts while the event is live).
+ */
+entity CatGameAwards : managed {
+  key user      : Association to ims.Users @mandatory;
+  key event     : Association to ims.Events @mandatory;
+  key awardDate : Date;                    // UTC calendar day the award was granted
+  points        : Integer default 5;
+}

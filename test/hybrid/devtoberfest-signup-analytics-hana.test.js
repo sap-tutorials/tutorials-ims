@@ -70,4 +70,39 @@ describe('DevtoberfestSignupAnalytics — real HANA', () => {
     expect(rows[0].weekMonday).toBe('2026-09-07');
     expect(rows[0].weekLabel).toBe('2026-W37');
   });
+
+  it('groups on the real weekMonday Date (ADD_DAYS) with readable dates on HANA (#2047)', async () => {
+    const srv = await cds.connect.to('AdminService');
+    const rows = await srv.tx({ user: ADMIN }, (tx) => tx.run(
+      SELECT.from('DevtoberfestSignupAnalytics')
+        .columns('weekMonday', { func: 'sum', args: [{ ref: ['signups'] }], as: 'newSignups' })
+        .where({ event_ID: testEventId })
+        .groupBy('weekMonday')
+        .orderBy('weekMonday')
+    ));
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => String(r.weekMonday).slice(0, 10))).toEqual(['2026-09-07', '2026-09-14']);
+    expect(rows.map((r) => Number(r.newSignups))).toEqual([3, 1]);
+    expect(rows.map((r) => r.weekLabel)).toEqual(['2026-W37', '2026-W38']);
+    expect(rows.map((r) => r.cumulativeSignups)).toEqual([3, 4]);
+  });
+
+  it('renders a readable weekStartText label on HANA (TO_VARCHAR, #2047)', async () => {
+    const srv = await cds.connect.to('AdminService');
+    const rows = await srv.tx({ user: ADMIN }, (tx) => tx.run(
+      SELECT.from('DevtoberfestSignupAnalytics')
+        .columns('weekMonday', 'weekStartText', { func: 'sum', args: [{ ref: ['signups'] }], as: 'newSignups' })
+        .where({ event_ID: testEventId })
+        .groupBy('weekMonday', 'weekStartText')
+        .orderBy('weekMonday')
+    ));
+    expect(rows.length).toBe(2);
+    // HANA formats "DY DD MON YYYY" → contains the day-of-month, month name, and year
+    // for the 2026-09-07 Monday. Case/locale of the names is HANA-controlled; assert
+    // structurally rather than on an exact literal.
+    expect(rows[0].weekStartText).toBeTruthy();
+    expect(String(rows[0].weekStartText)).toMatch(/07/);
+    expect(String(rows[0].weekStartText).toUpperCase()).toMatch(/SEP/);
+    expect(String(rows[0].weekStartText)).toMatch(/2026/);
+  });
 });

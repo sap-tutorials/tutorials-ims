@@ -39,6 +39,12 @@
           </layoutData>
         </ObjectStatus>
         <ToolbarSpacer />
+        <Button
+          id="pageSearchBtn"
+          icon="sap-icon://search"
+          type="Transparent"
+          tooltip="{i18n>pageSearch.tooltip}"
+          press=".onOpenPageSearch" />
         <SegmentedButton
           id="themeSwitch"
           selectedKey="{theme>/themeMode}"
@@ -107,6 +113,36 @@
     </tnt:mainContents>
 
     <tnt:dependents>
+      <ResponsivePopover
+        id="pageSearchPopover"
+        placement="Bottom"
+        showHeader="false"
+        contentWidth="26rem"
+        contentHeight="30rem"
+        afterOpen=".onPageSearchAfterOpen"
+        class="sapUiNoContentPadding">
+        <customHeader>
+          <Toolbar>
+            <SearchField
+              id="pageSearchField"
+              width="100%"
+              placeholder="{i18n>pageSearch.placeholder}"
+              liveChange=".onPageSearchLiveChange"
+              search=".onPageSearchGo" />
+          </Toolbar>
+        </customHeader>
+        <List
+          id="pageSearchList"
+          items="{search>/results}"
+          noDataText="{i18n>pageSearch.noResults}">
+          <StandardListItem
+            title="{search>title}"
+            info="{search>groupTitle}"
+            icon="{search>icon}"
+            type="Active"
+            press=".onSearchResultSelect" />
+        </List>
+      </ResponsivePopover>
       <Popover
         id="userPopover"
         placement="Bottom"

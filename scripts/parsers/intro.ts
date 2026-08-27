@@ -1,4 +1,5 @@
 import { createFenceTracker } from './fence-tracker.js'
+import { commentLineFlags } from './html-comment-lines.js'
 
 const V1_STEP = /\[ACCORDION-BEGIN \[Step \d+:\s*\]\(.+?\)\]/
 
@@ -24,12 +25,25 @@ export function extractIntro(body: string, isV2: boolean): string {
 
   const pre = lines.slice(0, firstStep)
 
+  // Flag lines inside multi-line HTML comments (fence-aware). A commented-out
+  // `## You will learn` / `## Prerequisites` must NOT be treated as a section
+  // heading here — otherwise its opening `<!--` is stranded into the intro as
+  // an unterminated comment that swallows every following step at render time
+  // (root cause of the codejam-events-process-1-bah break). Such lines are
+  // pushed verbatim so the comment stays balanced and renders invisibly.
+  const commented = commentLineFlags(pre)
+
   // 2. Remove recognized blocks. A "section" runs from its `## Heading` up to
   //    the next `## `/`### ` heading (or end of pre-step region).
   const out: string[] = []
   let skipSectionUntilHeading = false
   for (let i = 0; i < pre.length; i++) {
     const line = pre[i]
+    // Drop lines inside a multi-line HTML comment entirely — the author
+    // disabled that block, so it belongs in neither the intro nor a lifted
+    // section. Dropping the whole (balanced) block also guarantees no stranded
+    // `<!--`/`-->` survives into the intro.
+    if (commented[i]) continue
     const isHeading = /^#{2,3} /.test(line)
     if (skipSectionUntilHeading) {
       if (isHeading) skipSectionUntilHeading = false

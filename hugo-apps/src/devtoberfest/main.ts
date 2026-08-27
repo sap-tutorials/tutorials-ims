@@ -10,9 +10,11 @@ if (mount) {
     apiTerms:         mount.dataset.apiTerms         || '/api/devtoberfest/terms',
     apiJoin:          mount.dataset.apiJoin          || '/api/devtoberfest/join',
     apiMe:            mount.dataset.apiMe            || '/api/devtoberfest/me',
-    imgKasimir:       mount.dataset.imgKasimir       || '/images/devtoberfest/kasimir.svg',
+    imgKasimir:       mount.dataset.imgKasimir       || '/images/devtoberfest/kasimir-types.png',
     imgTeched:        mount.dataset.imgTeched        || '/images/devtoberfest/teched-logo.svg',
     imgDevtoberfest:  mount.dataset.imgDevtoberfest  || '/images/devtoberfest/devtoberfest-logo.svg',
+    imgCatGame:       mount.dataset.imgCatGame       || '/images/devtoberfest/kasimir-types.png',
+    catGameAwardUrl:  mount.dataset.catGameAwardUrl  || '/api/devtoberfest/cat-game/award',
   }
   createApp(DevtoberfestHome, { config }).mount(mount)
 }

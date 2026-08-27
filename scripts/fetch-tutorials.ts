@@ -868,6 +868,12 @@ async function main() {
     isSlugTargeted: !!tutorialSlugFilter,
     sidecar: restoredSidecar,
     currentFingerprint: decisionFingerprint,
+    // QA is an author-preview channel that rebuilds rarely, so its cached feed
+    // fingerprint is almost always stale vs prod's frequently-republished
+    // catalog — which would force a ~10-min full regen for a single-slug
+    // preview. Allow reuse of cached non-target pages despite feed drift on QA
+    // (the target slug is always regenerated). Prod keeps strict freshness.
+    allowFeedDrift: channel === 'qa',
   })
   const reuseNavBySlug = restoredSidecar ? navEntriesBySlug(restoredSidecar) : new Map<string, Record<string, unknown>>()
   const reuseAuthorRowsBySlug = new Map<string, AuthorTutorialRow[]>()

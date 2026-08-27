@@ -1,5 +1,6 @@
 import matter from 'gray-matter'
 import type { TutorialFrontmatter } from './types.js'
+import { commentLineFlags } from './html-comment-lines.js'
 
 export interface FrontmatterResult {
   frontmatter: TutorialFrontmatter
@@ -61,8 +62,19 @@ export function extractFrontmatter(md: string): FrontmatterResult {
   const descMatch = content.match(/<!--\s*description\s*-->\s*(.+)$/m)
   const description = fm.description ?? descMatch?.[1]?.trim() ?? ''
 
-  const youWillLearn = extractBulletList(content, 'You will learn')
-  const prerequisites = extractSection(content, 'Prerequisites')
+  // Mask lines inside multi-line HTML comments so a commented-out
+  // `## You will learn` / `## Prerequisites` is NOT lifted out as a real
+  // section (and its closing `-->` never leaks into the field). Regexes below
+  // run against the masked copy; line count/offsets are preserved so the
+  // `\n## `/`\n### ` section-boundary lookaheads still align.
+  const contentLines = content.split('\n')
+  const commented = commentLineFlags(contentLines)
+  const maskedContent = contentLines
+    .map((line, i) => (commented[i] ? '' : line))
+    .join('\n')
+
+  const youWillLearn = extractBulletList(maskedContent, 'You will learn')
+  const prerequisites = extractSection(maskedContent, 'Prerequisites')
   const level = normalizeLevel(fm.tags ?? [])
 
   return { frontmatter: fm, title, description, youWillLearn, prerequisites, level, body: content }
