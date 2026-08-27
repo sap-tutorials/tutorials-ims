@@ -373,6 +373,28 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // Build-time tag taxonomy feed — consumed by scripts/fetch-tags.ts at build
+  // time so a downstream CI checker can validate tutorial frontmatter tags
+  // against the canonical taxonomy. Mirrors /build/verb-definitions above:
+  // anonymous route (registered before CDS auth), reads direct from the raw
+  // Tags entity (NOT through AdminService, whose @requires chain would 403 an
+  // unauthenticated request), 60s Cache-Control, 500s on error. Returns just
+  // the array of `name` strings (the full `category>value` tag) — all the
+  // membership check needs.
+  app.get('/build/tags', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.Tags').columns('name', 'label').orderBy('name')
+      );
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ tags: rows.map((r) => r.name), buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/tags]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // (#1032) Build-time data for Hugo featured topics carousel — consumed by
   // scripts/fetch-tutorials.ts at build time. Public, unauthenticated.
   // Cache-Control 60s (Hugo fetches once per build, not per request).
