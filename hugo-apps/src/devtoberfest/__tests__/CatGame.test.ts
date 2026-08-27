@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// #2042 — the "Hit the Cat" mini-game. Points are awarded SERVER-SIDE; the
+// #2042 — the "Tag the Cat" mini-game. Points are awarded SERVER-SIDE; the
 // client only relays the reason the award endpoint returns. These tests mock
 // the csrfFetch POST and the /auth/user probe and assert the feedback the
 // component surfaces for each reason plus the anonymous path.
