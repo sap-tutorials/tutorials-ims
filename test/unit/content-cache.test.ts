@@ -78,6 +78,17 @@ describe('decideFastPath', () => {
   it('eligible when flag on, slug-targeted, sidecar valid, fingerprint matches', () => {
     expect(decideFastPath({ flagEnabled: true, isSlugTargeted: true, sidecar, currentFingerprint: 'fp' }).eligible).toBe(true)
   })
+  it('allowFeedDrift (QA): eligible despite a changed fingerprint', () => {
+    const d = decideFastPath({ flagEnabled: true, isSlugTargeted: true, sidecar, currentFingerprint: 'DIFFERENT', allowFeedDrift: true })
+    expect(d.eligible).toBe(true)
+    expect(d.reason).toMatch(/feed drift/i)
+  })
+  it('allowFeedDrift still requires a sidecar (cache miss is never eligible)', () => {
+    expect(decideFastPath({ flagEnabled: true, isSlugTargeted: true, sidecar: null, currentFingerprint: 'fp', allowFeedDrift: true }).eligible).toBe(false)
+  })
+  it('allowFeedDrift still requires a slug-targeted run', () => {
+    expect(decideFastPath({ flagEnabled: true, isSlugTargeted: false, sidecar, currentFingerprint: 'DIFFERENT', allowFeedDrift: true }).eligible).toBe(false)
+  })
 })
 
 describe('navEntriesBySlug', () => {
