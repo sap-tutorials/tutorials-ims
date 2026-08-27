@@ -3262,6 +3262,58 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_UIEVENT"
     },
+    "com.sap.developers.ims.CatGameAwards": {
+      "kind": "entity",
+      "doc": "\"Hit the Cat\" mini-game daily point ledger (issue #2042).\n\nOne row = one calendar day on which a signed-in player earned the daily\ncat-game award during a given Devtoberfest event. The award endpoint\n(POST /devtoberfest-api/cat-game/award) writes exactly one row per\n(user, event, day): 5 points per day, once per day, capped at 100 points\ntotal per event, and only while that event is active.\n\nThe natural (user, event, awardDate) tuple is the PRIMARY KEY — no surrogate\nID — so HANA enforces the once-per-day rule at the DB layer: a second insert\nfor the same day collides on the PK and the handler maps it to\n\"already-today\" (race-safe, unlike a CAP-only @assert.unique which this\nrepo's raw db.run() inserts bypass — see srv/lib/resolve-db-user.js).\n\n`createdAt` (from `managed`) is the actual award instant and is what the\ncross-container GAMEBOARD_BONUS_V1 view exposes as AWARD_DATE, so the\ngameboard's event-window filter always sees an in-window timestamp (the\nendpoint only ever inserts while the event is live).",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "user_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "user",
+          "key": true,
+          "@cds.persistence.name": "USER_ID"
+        },
+        "event_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "event",
+          "key": true,
+          "@cds.persistence.name": "EVENT_ID"
+        },
+        "awardDate": {
+          "key": true,
+          "type": "cds.Date",
+          "@cds.persistence.name": "AWARDDATE"
+        },
+        "points": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 5
+          },
+          "@cds.persistence.name": "POINTS"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CATGAMEAWARDS"
+    },
     "com.sap.developers.ims.GroupSlugRedirects": {
       "kind": "entity",
       "@cds.persistence.journal": true,

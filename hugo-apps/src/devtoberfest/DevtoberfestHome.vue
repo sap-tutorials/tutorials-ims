@@ -5,6 +5,7 @@ import { buildTicker } from './ticker'
 import { formatCountdown } from './countdown'
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time'
 import TermsDialog from './TermsDialog.vue'
+import CatGame from './CatGame.vue'
 
 // Legal T&C target — the fixed "THE RULES" rail route (see railItems below).
 const RULES_URL = '/devtoberfest/rules/'
@@ -415,6 +416,12 @@ defineExpose({ fetchStatus })
         </a>
       </aside>
     </section>
+
+    <!-- Mini-game Easter egg (issue #2042): below the info section. -->
+    <CatGame
+      :award-url="config.catGameAwardUrl"
+      :img-cat-game="config.imgCatGame"
+    />
 
     <TermsDialog
       :open="dialogOpen"

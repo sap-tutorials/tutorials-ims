@@ -849,3 +849,159 @@ html[data-theme="sap_horizon_dark"] .dtf-dialog-cancel {
     animation: none;
   }
 }
+
+/* ============================== Cat game (#2042) ============================== */
+
+.dtf-catgame {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.5rem;
+  border-radius: 10px;
+  background: var(--sapBackgroundColor, #fff);
+  border: 1px solid var(--sapTile_BorderColor, #e4e7ea);
+  isolation: isolate;
+}
+
+.dtf-catgame-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.dtf-catgame-lead {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--sapTextColor, #1d2d3e);
+}
+
+/* Bounded arena the cat wanders inside. */
+.dtf-catgame-arena {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  margin-top: 0.25rem;
+  border-radius: 10px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(241, 172, 255, 0.25), transparent 55%),
+    linear-gradient(165deg, #2a1a5e 0%, #3a1f7a 55%, #5a1670 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* CRT scanlines to echo the header's arcade vibe. */
+.dtf-catgame-arena::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.05) 0,
+    rgba(255, 255, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  z-index: 1;
+}
+
+.dtf-catgame-cat {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: 50%;
+  /* Smoothly glide to each new wander position. */
+  transition: left 1.05s ease-in-out, top 1.05s ease-in-out, transform 140ms ease;
+}
+
+.dtf-catgame-cat:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.dtf-catgame-cat-img {
+  width: 84px;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+}
+
+/* Brief squash-and-wiggle on a hit. */
+@keyframes dtfCatHit {
+  0%   { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+  30%  { transform: translate(-50%, -50%) scale(1.18) rotate(-8deg); }
+  60%  { transform: translate(-50%, -50%) scale(0.92) rotate(6deg); }
+  100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+}
+.dtf-catgame-cat.is-reacting {
+  animation: dtfCatHit 0.38s ease-in-out;
+}
+
+.dtf-catgame-hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  min-height: 1.4rem;
+}
+
+.dtf-catgame-score {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dtf-catgame-score-label {
+  font-weight: 700;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+
+.dtf-catgame-badge {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  color: #fff;
+  background: #1ea672;
+}
+
+.dtf-catgame-feedback {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #A100C2;
+  min-height: 1.2rem;
+}
+
+html[data-theme="sap_horizon_dark"] .dtf-catgame {
+  background: #1c2228;
+  border-color: #3a4149;
+}
+html[data-theme="sap_horizon_dark"] .dtf-catgame-feedback { color: #f1acff; }
+
+@media (prefers-color-scheme: dark) {
+  .dtf-catgame {
+    background: var(--sapBackgroundColor, #1c2228);
+    border-color: var(--sapTile_BorderColor, #3a4149);
+  }
+  .dtf-catgame-feedback { color: #f1acff; }
+}
+
+/* Reduced motion: stop the wander glide + the hit wiggle. The cat stays put
+   (centered by its inline 50%/50% default) and is still fully clickable. */
+@media (prefers-reduced-motion: reduce) {
+  .dtf-catgame-cat { transition: none; }
+  .dtf-catgame-cat.is-reacting { animation: none; }
+}
