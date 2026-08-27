@@ -43,6 +43,7 @@ import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
+import * as devtoberfestCatGame from './routes/devtoberfest-cat-game.js';
 import * as alertsPublic from './routes/alerts-public.js';
 import * as deployEvents from './routes/deploy-events.js';
 import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
@@ -432,6 +433,7 @@ cds.on('bootstrap', (app) => {
   devtoberfestPublic.register(app);
   devtoberfestSchedule.register(app);
   devtoberfestAuth.register(app);
+  devtoberfestCatGame.register(app);
 
   // /api/alerts (anonymous) + /api/alerts/me (authenticated).
   // Spec: docs/superpowers/specs/2026-06-26-548-alert-system-design.md

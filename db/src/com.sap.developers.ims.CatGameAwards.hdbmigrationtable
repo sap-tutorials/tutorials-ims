@@ -1,0 +1,12 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_CatGameAwards (
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  user_ID NVARCHAR(36) NOT NULL,
+  event_ID NVARCHAR(36) NOT NULL,
+  awardDate DATE NOT NULL,
+  points INTEGER DEFAULT 5,
+  PRIMARY KEY(user_ID, event_ID, awardDate)
+)

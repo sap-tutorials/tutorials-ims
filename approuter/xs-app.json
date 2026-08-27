@@ -149,6 +149,12 @@
       "destination": "srv-api",
       "authenticationType": "xsuaa"
     },
+    {
+      "source": "^/api/devtoberfest/cat-game/award(\\?.*)?$",
+      "target": "/api/devtoberfest/cat-game/award$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
     { "source": "^/devtoberfest/?(\\?.*)?$", "target": "/content/pages/devtoberfest/$1", "destination": "srv-api", "authenticationType": "none" },
     {
       "source": "^/devtoberfest(/.*)?$",

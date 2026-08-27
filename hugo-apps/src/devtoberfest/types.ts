@@ -42,4 +42,19 @@ export interface MountConfig {
   imgKasimir: string
   imgTeched: string
   imgDevtoberfest: string
+  imgCatGame: string
+  catGameAwardUrl: string
+}
+
+/**
+ * Response shape of `POST /api/devtoberfest/cat-game/award` (server-authoritative
+ * scoring: 5 pts/day, once per day, max 100, contest-active only). Backend built
+ * in parallel — client codes to this contract. Anonymous callers get HTTP 401.
+ */
+export interface CatGameAwardResponse {
+  awarded: boolean
+  reason: 'awarded' | 'already-today' | 'max' | 'inactive'
+  points?: number
+  total?: number
+  cap?: number
 }

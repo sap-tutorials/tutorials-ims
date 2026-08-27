@@ -1,10 +1,13 @@
 VIEW "GAMEBOARD_COMPLETION_V1" AS
-  SELECT tr."USER_ID"                       AS "USER_ID",
-         LOWER(t."SLUG")                     AS "TUTORIAL_SLUG",
-         tr."TASKTYPE"                       AS "TASK_TYPE",
-         tr."COMPLETIONDATE"                 AS "COMPLETION_DATE",
-         tr."EVENT_ID"                       AS "EVENT_ID"
+  SELECT tr."USER_ID"                                        AS "USER_ID",
+         LOWER(COALESCE(t."SLUG", p."SLUG", pf."SLUG"))      AS "TUTORIAL_SLUG",
+         tr."TASKTYPE"                                       AS "TASK_TYPE",
+         tr."COMPLETIONDATE"                                 AS "COMPLETION_DATE",
+         tr."EVENT_ID"                                       AS "EVENT_ID"
   FROM "COM_SAP_DEVELOPERS_IMS_TASKRECORDS" tr
-  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS"   t ON t."LEGACYID" = tr."TASKLEGACYID"
+  LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS"    t  ON tr."TASKTYPE" = 'TUTORIAL'    AND t."LEGACYID"  = tr."TASKLEGACYID"
+  LEFT JOIN "COM_SAP_DEVELOPERS_IMS_PUZZLES"      p  ON tr."TASKTYPE" = 'PUZZLE'      AND p."LEGACYID"  = tr."TASKLEGACYID"
+  LEFT JOIN "COM_SAP_DEVELOPERS_IMS_PETOBERFESTS" pf ON tr."TASKTYPE" = 'PETOBERFEST' AND pf."LEGACYID" = tr."TASKLEGACYID"
   WHERE tr."STATUS" = 'COMPLETED'
-    AND tr."TASKTYPE" = 'TUTORIAL'
+    AND tr."TASKTYPE" IN ('TUTORIAL', 'PUZZLE', 'PETOBERFEST')
+    AND COALESCE(t."SLUG", p."SLUG", pf."SLUG") IS NOT NULL
