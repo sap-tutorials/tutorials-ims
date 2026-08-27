@@ -17,7 +17,7 @@
 process.env.TZ = 'America/Los_Angeles';
 
 import { describe, it, expect } from 'vitest';
-import { formatViewerLocal, formatHomeZone, viewerDayKey } from '../format-session-time';
+import { formatViewerLocal, formatHomeZone, viewerDayKey, formatViewerTimeShort } from '../format-session-time';
 
 // ── Sanity: confirm TZ actually took effect ─────────────────────────────────
 describe('TZ pin sanity', () => {
@@ -126,5 +126,24 @@ describe('formatViewerLocal', () => {
     // Should contain Oct 1 (not Oct 2)
     expect(result).toContain('Oct 1');
     expect(result).toMatch(/PDT|GMT-7/);
+  });
+});
+
+// ── formatViewerTimeShort (#2046 dense month-grid chips) ─────────────────────
+describe('formatViewerTimeShort', () => {
+  it('renders viewer-local time only — no date, no zone token', () => {
+    // 2026-10-01T18:00:00Z = 11:00 AM PDT
+    const result = formatViewerTimeShort('2026-10-01T18:00:00Z');
+    expect(result).toMatch(/11:00\s?AM/);
+    // deliberately terse: no month/day and no zone abbreviation
+    expect(result).not.toMatch(/Oct|PDT|PST|GMT/);
+  });
+
+  it('returns empty string for falsy input', () => {
+    expect(formatViewerTimeShort('')).toBe('');
+  });
+
+  it('returns empty string for invalid ISO string', () => {
+    expect(formatViewerTimeShort('not-a-date')).toBe('');
   });
 });
