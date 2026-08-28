@@ -82,6 +82,20 @@ function isFresh() {
 /** Fire-and-forget background refresh, deduplicated. Never throws. */
 function scheduleRefresh() {
   if (STATE.refreshing) return;
+  // Do NOT trigger a `cds.connect.to('db')` before the model is loaded. A
+  // synchronous isFlagEnabled() reader can fire during the `cds.on('bootstrap')`
+  // phase (e.g. the MCP_AUTH_ENABLED kill switch in server.js) — at that point
+  // `cds.model` is not yet linked. cds.connect.to('db') caches cds.db eagerly
+  // (cds.services.db = the pending promise) and resolves its model from the
+  // partial, service-less model that exists mid-bootstrap; that poisoned db
+  // instance then persists, so cqn4sql can't resolve service-qualified targets
+  // and every later read throws "Query was not inferred and includes '*'".
+  // Skipping the refresh here is harmless: the getter returns the flag's
+  // declared registry default (exactly the intended cold-cache behavior) and
+  // the boot warm-up in server.js's `served` handler performs the real refresh
+  // once the model is fully loaded. Runtime-safe on every dialect (the poison
+  // is model resolution, not SQLite-specific).
+  if (!cds.model) return;
   STATE.refreshing = refreshFeatureFlags()
     .catch(() => {})
     .finally(() => { STATE.refreshing = null; });

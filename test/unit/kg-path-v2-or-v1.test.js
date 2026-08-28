@@ -18,6 +18,9 @@ vi.mock('../../srv/lib/kg-sparql-client.js', () => ({
 const { kgPathV2 } = await import('../../srv/lib/kg-path-v2-client.js')
 const { kgQuery } = await import('../../srv/lib/kg-sparql-client.js')
 const { findPathV2OrV1 } = await import('../../srv/lib/kg-path.js')
+// KG_PATH_V2_ENABLED migrated env → DB (ImsConfig key flag.kg.pathV2, #2060):
+// kg-path.js now reads it via isFlagEnabled(), so stubEnv no longer toggles it.
+const { __setFlagForTest, __resetFlagsForTest } = await import('../../srv/lib/feature-flags/db-flags.js')
 
 const PFX = 'https://developers.sap.com/kg/tutorial/'
 function v1Json(slugs) {
@@ -41,11 +44,12 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.unstubAllEnvs()
+  __resetFlagsForTest()
 })
 
 describe('findPathV2OrV1 engine selection', () => {
   it('flag on + v2 non-empty → returns engine v2 with vertices', async () => {
-    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    __setFlagForTest('KG_PATH_V2_ENABLED', true)
     kgPathV2.mockResolvedValue([
       { pathRank: 1, hopCount: 2, vertices: [`tutorial:a`, `concept:x`, `tutorial:b`] },
     ])
@@ -57,7 +61,7 @@ describe('findPathV2OrV1 engine selection', () => {
   })
 
   it('flag on + v2 empty → falls through to v1', async () => {
-    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    __setFlagForTest('KG_PATH_V2_ENABLED', true)
     kgPathV2.mockResolvedValue([])
     kgQuery.mockResolvedValue({ response: v1Json(['b']) })
     const out = await findPathV2OrV1({ db, fromSlug: 'a', toSlug: 'b' })
@@ -66,7 +70,7 @@ describe('findPathV2OrV1 engine selection', () => {
   })
 
   it('flag on + v2 throws → falls through to v1 (fail-open)', async () => {
-    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    __setFlagForTest('KG_PATH_V2_ENABLED', true)
     kgPathV2.mockRejectedValue(Object.assign(new Error('boom'), { code: 'ETIMEDOUT' }))
     kgQuery.mockResolvedValue({ response: v1Json(['b']) })
     const out = await findPathV2OrV1({ db, fromSlug: 'a', toSlug: 'b' })
@@ -75,7 +79,7 @@ describe('findPathV2OrV1 engine selection', () => {
   })
 
   it('flag off → v1 directly, kgPathV2 never called', async () => {
-    vi.stubEnv('KG_PATH_V2_ENABLED', 'false')
+    __setFlagForTest('KG_PATH_V2_ENABLED', false)
     kgQuery.mockResolvedValue({ response: v1Json(['b']) })
     const out = await findPathV2OrV1({ db, fromSlug: 'a', toSlug: 'b' })
     expect(out.engine).toBe('v1')
