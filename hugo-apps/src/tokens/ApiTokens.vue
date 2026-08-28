@@ -134,6 +134,20 @@ function isRevocable(t: Pat): boolean {
   return t.revocable ?? !t.revokedAt;
 }
 
+// The approuter returns 200 + an XSUAA login-redirect HTML page (NOT 401) for a
+// lapsed/anonymous session, and Akamai can serve a cached anon /auth/user to a
+// signed-in user. So a truthy signal requires JSON + body.authenticated — never
+// resp.ok alone. Mirrors homepage-personalizer/coordinator.ts isSignedIn().
+async function isSignedIn(): Promise<boolean> {
+  try {
+    const r = await fetch('/auth/user', { credentials: 'include' });
+    if (!r.ok) return false;
+    if (!(r.headers.get('content-type') || '').includes('json')) return false;
+    const body = await r.json();
+    return !!body?.authenticated;
+  } catch { return false; }
+}
+
 async function loadTokens() {
   loading.value = true;
   try {
@@ -141,6 +155,13 @@ async function loadTokens() {
       headers: { Accept: 'application/json' }, credentials: 'include',
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    // Same 200-HTML-login-page hazard as the auth gate: if the session lapsed
+    // between the gate and here, /pats/MyPATs answers 200 + HTML. Treat a
+    // non-JSON body as an expired session (sign-in prompt), not a load error.
+    if (!(resp.headers.get('content-type') || '').includes('json')) {
+      needsLogin.value = true;
+      return;
+    }
     const data = await resp.json();
     tokens.value = data.value ?? [];
   } catch {
@@ -211,11 +232,9 @@ async function copyToken() {
 }
 
 onMounted(async () => {
-  // Gate on session like the other /me islands. 401/403 → sign-in prompt.
-  try {
-    const resp = await fetch('/auth/user', { credentials: 'include' });
-    if (!resp.ok) { needsLogin.value = true; loading.value = false; return; }
-  } catch {
+  // Gate on session like the other /me islands. A lapsed session yields a 200
+  // login-redirect HTML page (not 401), so check the parsed identity, not ok.
+  if (!(await isSignedIn())) {
     needsLogin.value = true; loading.value = false; return;
   }
   await loadTokens();
