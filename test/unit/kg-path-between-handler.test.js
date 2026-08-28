@@ -44,6 +44,9 @@ const { getConceptsForUser } = await import('../../srv/lib/kg/concepts-for-user.
 const { kgPathV2 } = await import('../../srv/lib/kg-path-v2-client.js')
 const { findLearningPathHandler, FIND_LEARNING_PATH_TOOL } =
   await import('../../srv/lib/kg/joule-tool-find-path.js')
+// KG_PATH_V2_ENABLED migrated env → DB (ImsConfig key flag.kg.pathV2, #2060):
+// the v2 branch is gated by isFlagEnabled(), so stubEnv no longer toggles it.
+const { __setFlagForTest, __resetFlagsForTest } = await import('../../srv/lib/feature-flags/db-flags.js')
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -515,6 +518,7 @@ describe('findLearningPathHandler — KG_PATH_V2 engine (issue #1253)', () => {
   })
   afterEach(() => {
     vi.unstubAllEnvs()
+    __resetFlagsForTest()
   })
 
   // db.run dispatcher for the v2 branch: TUTORIALS hydration + CONCEPTS names.
@@ -530,7 +534,7 @@ describe('findLearningPathHandler — KG_PATH_V2 engine (issue #1253)', () => {
   }
 
   it('collapsed [A,B] path: 2 steps, B last, bridge lists concept names', async () => {
-    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    __setFlagForTest('KG_PATH_V2_ENABLED', true)
     kgPathV2.mockResolvedValue([
       { pathRank: 1, hopCount: 2, vertices: ['tutorial:abap-create-basic-app', 'concept:abap-cloud', 'concept:rap-bo', 'tutorial:abap-create-project'] },
     ])
@@ -558,7 +562,7 @@ describe('findLearningPathHandler — KG_PATH_V2 engine (issue #1253)', () => {
   })
 
   it('intermediate tutorial on path renders as an ordered middle step', async () => {
-    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    __setFlagForTest('KG_PATH_V2_ENABLED', true)
     kgPathV2.mockResolvedValue([
       { pathRank: 1, hopCount: 3, vertices: ['tutorial:a', 'concept:x', 'tutorial:m', 'concept:y', 'tutorial:b'] },
     ])
@@ -578,7 +582,7 @@ describe('findLearningPathHandler — KG_PATH_V2 engine (issue #1253)', () => {
   })
 
   it('direct tutorial↔tutorial path (no interior concepts) → Directly connected', async () => {
-    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    __setFlagForTest('KG_PATH_V2_ENABLED', true)
     kgPathV2.mockResolvedValue([
       { pathRank: 1, hopCount: 1, vertices: ['tutorial:a', 'tutorial:b'] },
     ])
@@ -595,7 +599,7 @@ describe('findLearningPathHandler — KG_PATH_V2 engine (issue #1253)', () => {
   })
 
   it('emits engine:v2 in path_returned telemetry', async () => {
-    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    __setFlagForTest('KG_PATH_V2_ENABLED', true)
     kgPathV2.mockResolvedValue([
       { pathRank: 1, hopCount: 1, vertices: ['tutorial:a', 'tutorial:b'] },
     ])
@@ -612,7 +616,7 @@ describe('findLearningPathHandler — KG_PATH_V2 engine (issue #1253)', () => {
   })
 
   it('v2 empty → falls through to v1 neighbor render (engine:v1)', async () => {
-    vi.stubEnv('KG_PATH_V2_ENABLED', 'true')
+    __setFlagForTest('KG_PATH_V2_ENABLED', true)
     kgPathV2.mockResolvedValue([])
     kgQuery.mockResolvedValue({ response: buildJsonResponse([{ slug: 'cap-getting-started', pathType: 'SHARED_CONCEPT', rank: 3 }]) })
     // v1 branch uses makeDb() dispatcher (TASKRECORDS/TUTORIALCONCEPTLINKS/TUTORIALS).
