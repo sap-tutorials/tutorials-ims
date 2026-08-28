@@ -383,6 +383,10 @@ service AdminService {
   // Feature Flag Viewer (#feature-flags). Unbacked read-only entity; rows are
   // synthesized in srv/admin-service.js on('READ') from
   // srv/lib/feature-flags/resolve.js. No DB table.
+  // Bound row actions enable()/disable() flip the backing ImsConfig row for a
+  // kind:'db' flag (generic flag.* via db-flags.js, or a content.delta.* flag via
+  // content-delta-flags.js) — rendered as List Report / Object Page buttons
+  // (#2060). Non-db flags reject with 400.
   @readonly
   @cds.persistence.skip
   @Capabilities: { InsertRestrictions: { Insertable: false }, UpdateRestrictions: { Updatable: false }, DeleteRestrictions: { Deletable: false } }
@@ -402,6 +406,9 @@ service AdminService {
     rawEnvValue     : String(120);
     defaultValue    : String(60);
     howToChangeText : String(500);
+  } actions {
+    action enable()  returns FeatureFlags;
+    action disable() returns FeatureFlags;
   }
 
   @odata.singleton

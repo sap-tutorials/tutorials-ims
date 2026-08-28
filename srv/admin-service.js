@@ -59,6 +59,7 @@ import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js
 import * as mcpAdmin from './lib/mcp-admin-tools.js';   // #1106 Phase 3 (WS2) admin MCP tools
 import { computeCoverage, resolveThreshold } from './lib/kg-community-coverage.js'; // #1172
 import { resolveFeatureFlags } from './lib/feature-flags/resolve.js'; // #feature-flags
+import { FEATURE_FLAGS } from './lib/feature-flags/registry.js'; // #2060 bound enable/disable
 import { resetFeaturedCache } from './lib/featured-resolve.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
@@ -519,6 +520,42 @@ export default class AdminService extends cds.ApplicationService {
       if (wantsCount) rows.$count = total;
       return rows;
     });
+
+    // Bound row actions enable()/disable() on FeatureFlags (#2060). FeatureFlags
+    // is a synthesized @cds.persistence.skip viewer, so these flip the backing
+    // ImsConfig row for a kind:'db' flag and return the freshly re-resolved row
+    // so FE refreshes it. Two actions (not one param'd toggle) render as clean
+    // row buttons, mirroring NewsItems/approve|reject in content-moderation.
+    const setFeatureFlagRow = async (req, enabled) => {
+      // Bound-action key: CAP surfaces the entity key on req.params[0].key.
+      const params = req.params;
+      const last = Array.isArray(params) && params.length ? params[params.length - 1] : null;
+      const key = last && typeof last === 'object' ? last.key : last;
+      const desc = FEATURE_FLAGS.find((f) => f.key === key);
+      if (!desc || desc.kind !== 'db' || !desc.imsConfigKey) {
+        return req.reject(400, 'Only DB feature flags are togglable here');
+      }
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const value = String(Boolean(enabled));
+      const existing = await SELECT.one.from(ImsConfig).where({ key: desc.imsConfigKey });
+      if (existing) {
+        await UPDATE(ImsConfig, existing.ID).set({ value });
+      } else {
+        await INSERT.into(ImsConfig).entries({ ID: cds.utils.uuid(), key: desc.imsConfigKey, value });
+      }
+      // Dispatch the cache bust to the owning module: the content.delta.* flags
+      // keep their dedicated content-delta-flags.js cache (flagMeta returns null
+      // for them since db-flags.js excludes them); everything else is generic.
+      if (flagMeta(key)) bustFeatureFlagsCache();
+      else bustContentDeltaFlagsCache();
+      // Re-resolve (resolve.js reads ImsConfig live, not the cache) and return
+      // the updated row so the FE list/object page reflects the new state.
+      const all = await resolveFeatureFlags();
+      return all.find((r) => r.key === key) ?? null;
+    };
+
+    this.on('enable', 'FeatureFlags', (req) => setFeatureFlagRow(req, true));
+    this.on('disable', 'FeatureFlags', (req) => setFeatureFlagRow(req, false));
 
     // Virtual severityCrit element (drives @UI.LineItem Criticality coloring).
     // Information=3 (Neutral), Success=5 (Positive), Warning=2 (Critical), Error=1 (Negative)
