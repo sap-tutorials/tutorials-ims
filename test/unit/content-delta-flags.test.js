@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vites
 import cds from '@sap/cds';
 import {
   isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward,
-  refreshContentDeltaFlags, bustContentDeltaFlagsCache,
+  refreshContentDeltaFlags, bustContentDeltaFlagsCache, ensureContentDeltaDefaults,
   DELTA_WRITE_KEY, DELTA_READ_KEY, DELTA_SKIP_CARRYFORWARD_KEY,
 } from '../../srv/lib/content-delta-flags.js';
 
@@ -125,5 +125,33 @@ describe('content-delta-flags (ImsConfig-backed)', () => {
     expect(isDeltaWrite()).toBe(false);
     expect(isDeltaRead()).toBe(false);
     expect(isDeltaSkipCarryForward()).toBe(false);
+  });
+
+  it('ensureContentDeltaDefaults() seeds ALL absent flags to true (fast path defaults ON)', async () => {
+    const seeded = await ensureContentDeltaDefaults();
+    expect(seeded.sort()).toEqual([...ALL].sort());
+    await refreshContentDeltaFlags();
+    expect(isDeltaWrite()).toBe(true);
+    expect(isDeltaRead()).toBe(true);
+    expect(isDeltaSkipCarryForward()).toBe(true);
+  });
+
+  it('ensureContentDeltaDefaults() leaves an admin-set value untouched (disable survives deploy)', async () => {
+    await setKey(DELTA_READ_KEY, 'false'); // admin deliberately turned READ off
+    const seeded = await ensureContentDeltaDefaults();
+    // Only the two absent keys are seeded; the present READ row is not touched.
+    expect(seeded.sort()).toEqual([DELTA_WRITE_KEY, DELTA_SKIP_CARRYFORWARD_KEY].sort());
+    await refreshContentDeltaFlags();
+    expect(isDeltaRead()).toBe(false); // admin override preserved
+    expect(isDeltaWrite()).toBe(true);
+    expect(isDeltaSkipCarryForward()).toBe(true);
+  });
+
+  it('ensureContentDeltaDefaults() is idempotent (no duplicate rows on re-run)', async () => {
+    await ensureContentDeltaDefaults();
+    const second = await ensureContentDeltaDefaults();
+    expect(second).toEqual([]); // nothing left to seed
+    const rows = await SELECT.from(ImsConfig).where({ key: { in: ALL } });
+    expect(rows.length).toBe(3);
   });
 });
