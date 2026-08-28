@@ -1401,6 +1401,24 @@ cds.on('served', async () => {
     }
   }
 
+  // Seed the HomepageShelves baseline (verb-page shelf entries + footer links,
+  // including third-party content). Idempotent + non-destructive: inserts only
+  // missing (verb,url) rows, never overwrites admin edits. Replaces the retired
+  // seed CSV (whose .hdbtabledata full-replaced the table on deploy and wiped
+  // curated/third-party rows) and the manual `seed:thirdparty` step. Non-fatal.
+  if (!globalThis.__homepageShelvesSeeded) {
+    globalThis.__homepageShelvesSeeded = true;
+    try {
+      const { seedHomepageShelves } = await import('./lib/homepage/seed-homepage-shelves.js');
+      const result = await seedHomepageShelves(cds.db);
+      if (result.inserted > 0) {
+        console.log(`[homepage-shelves] seeded ${result.inserted}/${result.total} baseline entries`);
+      }
+    } catch (err) {
+      console.warn('[homepage-shelves] seed failed (non-fatal):', err.message);
+    }
+  }
+
   app.get('/auth/user', contextMw, authMw, async (req, res) => {
     // #1268: coarse deploy environment (DEV/PROD/QA/LOCAL) for the admin
     // header. Derived from the CF space name — safe to expose to anonymous
