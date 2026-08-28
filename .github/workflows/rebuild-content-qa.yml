@@ -19,6 +19,11 @@ on:
         required: false
         type: boolean
         default: true
+      force-publish:
+        description: 'Seed/repair Option B ContentCurrent (QA): publish ALL slugs (dual-write everything), bypassing the changed-slug diff. Use for a one-time ContentCurrent re-seed after the delta flags were toggled. Default false. Mirrors rebuild-content.yml force-publish.'
+        required: false
+        type: boolean
+        default: false
 
 env:
   NODE_VERSION: '22'
@@ -259,7 +264,7 @@ jobs:
         run: npm run build:highlight -- --dir hugo/public-qa
 
       - name: Publish QA content to HANA
-        run: npx tsx scripts/publish-content.ts --channel qa --initiator "ci/${{ github.run_id }}"
+        run: npx tsx scripts/publish-content.ts --channel qa ${{ inputs.force-publish && '--force' || '' }} --initiator "ci/${{ github.run_id }}"
         env:
           CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
           CONTENT_API_KEY_QA: ${{ secrets.CONTENT_API_KEY_QA }}
