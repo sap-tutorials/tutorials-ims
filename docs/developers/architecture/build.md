@@ -53,7 +53,7 @@ flowchart TB
 
     subgraph publish[Content publish]
         PublishProd["publish-content.ts<br/>delta-aware, gzip,<br/>sha256 hash compare"]
-        PublishQa["publish-content.ts<br/>--channel qa<br/>(always --force)"]
+        PublishQa["publish-content.ts<br/>--channel qa<br/>(delta; slug-scoped via PUBLISH_SLUG,<br/>--force for full re-seed)"]
     end
 
     subgraph deployed[Deployed targets]
@@ -184,7 +184,7 @@ build:qa  → hugo --config ../hugo.qa.toml → hugo/public-qa/
               (strips Joule FAB, rating, completion buttons, progress UI)
   ├─ verify-qa-build.ts  fails the build if QA-only stripping didn't apply
   ↓
-publish-content:qa  (always --force; CONTENT_API_KEY_QA)
+publish-content:qa  (delta by default; PUBLISH_SLUG scopes to the changed slug; --force = full re-seed; CONTENT_API_KEY_QA)
   ↓
 tutorials-srv-qa /content/publish
   ↓
