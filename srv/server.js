@@ -1099,7 +1099,10 @@ cds.on('served', async () => {
   // fault leaves the safe defaults (all false → legacy ContentFiles path) and
   // MUST NOT crash boot.
   try {
-    const { refreshContentDeltaFlags } = await import('./lib/content-delta-flags.js');
+    const { ensureContentDeltaDefaults, refreshContentDeltaFlags } = await import('./lib/content-delta-flags.js');
+    // Seed absent flags to 'true' so the fast path defaults ON and survives
+    // deploys (data, not env). Only fills missing keys — admin overrides stick.
+    await ensureContentDeltaDefaults();
     await refreshContentDeltaFlags();
   } catch (err) {
     cds.log('content-delta-flags').warn('boot warm-up failed (non-fatal):', err.message);

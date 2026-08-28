@@ -107,6 +107,51 @@ export function bustContentDeltaFlagsCache() {
   _refreshing = null;
 }
 
+/**
+ * Seed the three delta flags to 'true' for any key whose ImsConfig row is
+ * ABSENT. Run once on boot BEFORE the warm refresh so the fast path defaults ON
+ * and a fresh deploy never silently reverts to the legacy path (the failure mode
+ * that dropped the fast path on the 1.20.0 deploy, when the flags lived in env
+ * vars the blue-green swap discarded). Now that they are data, this makes the
+ * ON state durable across deploys.
+ *
+ * Only INSERTs missing keys — a key an admin already set (true OR false) has a
+ * row, which this leaves untouched, so a deliberate disable survives deploys.
+ * ImsConfig is `cuid`, so set ID explicitly (a raw db.run INSERT does not
+ * auto-fill the UUID key on HANA — cds-db-insert-omitting-uuid-key gotcha).
+ * Fail-open: never throws into boot.
+ *
+ * @returns {Promise<string[]>} the keys that were seeded (empty if all present)
+ */
+export async function ensureContentDeltaDefaults() {
+  try {
+    const db = await cds.connect.to('db');
+    const { ImsConfig } = cds.entities(NS);
+    const rows = await db.run(
+      SELECT.from(ImsConfig).columns('key').where({ key: { in: ALL_KEYS } })
+    );
+    const present = new Set((rows || []).map((r) => r.key));
+    const missing = ALL_KEYS.filter((k) => !present.has(k));
+    if (missing.length) {
+      await db.run(
+        INSERT.into(ImsConfig).entries(
+          missing.map((key) => ({ ID: cds.utils.uuid(), key, value: 'true' }))
+        )
+      );
+      cds.log('content-delta-flags').info(
+        `seeded default-ON for absent delta flags: ${missing.join(', ')}`
+      );
+    }
+    return missing;
+  } catch (err) {
+    cds.log('content-delta-flags').warn(
+      'default-ON seed failed (non-fatal):',
+      err.message
+    );
+    return [];
+  }
+}
+
 // --- Synchronous hot-path getters -----------------------------------------
 // Each returns the last-known boolean immediately. When the cache is stale (or
 // cold) it kicks off a non-blocking background refresh and returns the CURRENT
