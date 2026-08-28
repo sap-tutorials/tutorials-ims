@@ -90,8 +90,11 @@ host, so they are correct in every environment with no build-time substitution.
 
 - `approuter/lib/well-known-oauth.js` — `/.well-known/oauth-authorization-server`
   (RFC 8414), its alias `/.well-known/openid-configuration`, and
-  `/.well-known/oauth-protected-resource` (RFC 9728). `authorization_servers`/
-  `issuer` point at the XSUAA URL (Option A); `scopes_supported` advertises the
+  `/.well-known/oauth-protected-resource` (RFC 9728). The `openid-configuration`
+  alias returns the OAuth Authorization Server Metadata body (RFC 8414),
+  intentionally omitting OIDC-only fields like `jwks_uri`; MCP OAuth-fallback
+  clients consume only the OAuth endpoints. `authorization_servers`/`issuer`
+  point at the XSUAA URL (Option A); `scopes_supported` advertises the
   fully-qualified `<xsappname>.Tutorial.MCP` (bare `Tutorial.MCP` is rejected by
   XSUAA with `invalid_scope`).
 - `approuter/lib/well-known-mcp-manifest.js` — `/.well-known/mcp.json`, a

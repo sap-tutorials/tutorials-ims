@@ -28,4 +28,6 @@ curl -s https://developers.sap.com/.well-known/oauth-protected-resource | jq .
 curl -s -D - -o /dev/null https://developers.sap.com/mcp-auth/api | grep -i www-authenticate                 # expect resource_metadata pointer
 ```
 
+The `/mcp-auth/api` check exercises a separate path (`/mcp-auth/*`, which already reaches origin) and is not covered by the requested `/.well-known/*` edge-forward rule; it is included only to confirm the `WWW-Authenticate` discovery pointer end-to-end.
+
 DEV has no Akamai in front, so all paths work there as soon as the approuter deploys.
