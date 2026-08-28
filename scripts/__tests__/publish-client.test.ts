@@ -81,6 +81,17 @@ describe('publish-client', () => {
     expect(out).toEqual({ slug1: 'h1', slug2: 'h2' });
   });
 
+  it('fetchRemoteHashes sends a Bearer header when apiKey is given (srv-qa gates /content/hashes)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200, json: () => Promise.resolve({ slug1: 'h1' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await fetchRemoteHashes({ baseUrl, apiKey: 'qa-key' });
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${baseUrl}/content/hashes`);
+    expect(opts?.headers).toEqual(expect.objectContaining({ Authorization: 'Bearer qa-key' }));
+  });
+
   it('renderConceptsPhase POSTs sessionId to /render-concepts and returns counts (#1327)', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true, status: 200,

@@ -9,6 +9,7 @@
 
 import cds from '@sap/cds';
 import * as metrics from '../lib/metrics.js';
+import { isFlagEnabled } from '../lib/feature-flags/db-flags.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 const INSTANCE_ID = process.env.CF_INSTANCE_GUID || `local-${process.pid}`;
@@ -22,7 +23,7 @@ function alignedWindowStart() {
  * @param {{ instanceId?: string }} [opts] — instanceId override for tests.
  */
 export async function runMetricsRollup(opts = {}) {
-  if (process.env.METRICS_ENABLED === 'false') return { skipped: true };
+  if (!isFlagEnabled('METRICS_ENABLED')) return { skipped: true };
 
   const instanceId = opts.instanceId || INSTANCE_ID;
   const windowStart = alignedWindowStart();

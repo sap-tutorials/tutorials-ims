@@ -20,11 +20,33 @@ describe('publish-content qa channel', () => {
   it('uses CAP_QA_BASE_URL and CONTENT_API_KEY_QA when channel=qa', () => {
     process.env.CAP_QA_BASE_URL = 'https://qa.example';
     process.env.CONTENT_API_KEY_QA = 'qa-key';
-    const cfg = resolvePublishConfig({ channel: 'qa' });
-    expect(cfg.baseUrl).toBe('https://qa.example');
-    expect(cfg.apiKey).toBe('qa-key');
-    expect(cfg.sourceDir).toMatch(/public-qa$/);
-    expect(cfg.force).toBe(true);
+    const originalArgv = process.argv;
+    process.argv = process.argv.filter(a => a !== '--force');
+    try {
+      const cfg = resolvePublishConfig({ channel: 'qa' });
+      expect(cfg.baseUrl).toBe('https://qa.example');
+      expect(cfg.apiKey).toBe('qa-key');
+      expect(cfg.sourceDir).toMatch(/public-qa$/);
+      // QA is delta-by-default now (mirrors prod). A commit-triggered rebuild sets
+      // PUBLISH_SLUG for an O(changed) publish; force is opt-in via --force
+      // (workflow force-publish input) for a full re-seed.
+      expect(cfg.force).toBe(false);
+    } finally {
+      process.argv = originalArgv;
+    }
+  });
+
+  it('force-publishes on channel=qa only when --force is passed', () => {
+    process.env.CAP_QA_BASE_URL = 'https://qa.example';
+    process.env.CONTENT_API_KEY_QA = 'qa-key';
+    const originalArgv = process.argv;
+    process.argv = [...process.argv.filter(a => a !== '--force'), '--force'];
+    try {
+      const cfg = resolvePublishConfig({ channel: 'qa' });
+      expect(cfg.force).toBe(true);
+    } finally {
+      process.argv = originalArgv;
+    }
   });
 
   it('uses CAP_BASE_URL and CONTENT_API_KEY when channel=prod', () => {
@@ -59,5 +81,21 @@ describe('publish-content qa channel', () => {
         'srv-qa has no render-concepts route, so a QA full rebuild would 404 and abort. ' +
         'See scripts/check-srv-qa-route-drift.ts ALLOWLIST_ONLY_ON_SRV.',
     ).not.toBeNull();
+  });
+
+  // Regression guard for the half-done #2062 fix: the QA publish step MUST forward
+  // the dispatched slug as PUBLISH_SLUG so a commit-triggered rebuild is slug-scoped
+  // (sub-second commit) instead of a ~35s full-catalog force write that intermittently
+  // 502/503s the single srv-qa instance. Without this, resolvePublishConfig's delta
+  // default is inert on QA (the workflow never narrows the publish).
+  it('QA workflow forwards the dispatched slug to the publish step as PUBLISH_SLUG', () => {
+    const wf = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.github', 'workflows', 'rebuild-content-qa.yml'),
+      'utf8',
+    );
+    // PUBLISH_SLUG must resolve from the dispatch payload or the workflow_dispatch input,
+    // and must be empty on a force-publish re-seed (force + slug is contradictory).
+    expect(wf).toMatch(/PUBLISH_SLUG:\s*\$\{\{[^}]*github\.event\.client_payload\.slug[^}]*inputs\.slug/);
+    expect(wf).toMatch(/PUBLISH_SLUG:\s*\$\{\{[^}]*inputs\.force-publish/);
   });
 });

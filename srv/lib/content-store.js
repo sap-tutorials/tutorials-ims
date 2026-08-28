@@ -21,6 +21,7 @@ import { setContentCacheHeaders } from './edge-cache-headers.js';
 import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
+import { isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -324,7 +325,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     const { ContentFiles, ContentCurrent } = cds.entities(namespace);
     const db = await cds.connect.to('db');
     const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-    if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+    if (isDeltaRead() && ContentCurrent) {
       // slug-canonical: caller-canonicalizes
       const [cur] = await SELECT.from(ContentCurrent).where({ slug }).columns('contentHash', 'mimeType', 'sourceVersion');
       if (cur) {
@@ -1009,7 +1010,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // ContentFiles snapshot when the flag is off OR the slug isn't in
     // ContentCurrent yet (mid-migration, before the full seed) — so a partially-
     // populated ContentCurrent never 404s a slug that still lives in ContentFiles.
-    const READ_DELTA = process.env.CONTENT_DELTA_READ_ENABLED === 'true';
+    const READ_DELTA = isDeltaRead();
     let meta;
     let source = 'files';
     if (READ_DELTA && ContentCurrent) {
@@ -1298,7 +1299,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       // — correct once ContentCurrent is fully seeded (task 4.3). Metadata-only,
       // so plain CQL is fine on HANA + SQLite (no LOB). Else legacy active snapshot.
       let rows;
-      if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+      if (isDeltaRead() && ContentCurrent) {
         rows = await SELECT.from(ContentCurrent).columns('slug', 'contentHash');
       } else {
         const activeVersion = await getActiveVersion();
@@ -1341,7 +1342,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   async function sourceHashesHandler(req, res) {
     try {
-      const useCurrent = process.env.CONTENT_DELTA_READ_ENABLED === 'true';
+      const useCurrent = isDeltaRead();
       const db = await cds.connect.to('db');
       const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
 
@@ -1449,7 +1450,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // Option B: read source columns from ContentCurrent (read flag on) with a
     // fallback to the legacy active-version snapshot.
     let row = null;
-    if (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent) {
+    if (isDeltaRead() && ContentCurrent) {
       if (isHana) {
         const rows = await db.run(
           `SELECT TOP 1 "SOURCECONTENT", "SOURCEHASH", "CONTENTHASH" FROM "${hanaCurrentTableName()}" WHERE LOWER("SLUG") = ?`,
@@ -1511,7 +1512,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
     // Option B: enumerate ContentCurrent (no version) when the read flag is on —
     // correct once fully seeded (task 4.3). Metadata-only, plain CQL on both DBs.
-    const contentRows = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+    const contentRows = (isDeltaRead() && ContentCurrent)
       ? await SELECT.from(ContentCurrent).columns('slug', 'sizeBytes')
       : await SELECT.from(ContentFiles).where({ version: activeVersion }).columns('slug', 'sizeBytes');
 
@@ -1688,7 +1689,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .set({ status: 'ACTIVE' });
 
       // Option B rollback (Workstream D), flag-gated + fail-safe.
-      if (process.env.CONTENT_DELTA_SKIP_CARRYFORWARD === 'true') {
+      if (isDeltaSkipCarryForward()) {
         // Steady state: carry-forward is off, so ContentFiles(target.version) is
         // NOT a complete snapshot to fall back to — replay ContentCurrent from
         // ContentHistory to restore the exact state as of target.version.
@@ -1698,7 +1699,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         } catch (e) {
           console.error('[content/rollback] Option B replay FAILED — ContentCurrent may be inconsistent, re-run rollback:', e.message);
         }
-      } else if (process.env.CONTENT_DELTA_WRITE_ENABLED === 'true') {
+      } else if (isDeltaWrite()) {
         // Dual-write migration window: ContentFiles is still the full, authoritative
         // snapshot, so the flip above already restored content as of target.version.
         // Clearing ContentCurrent makes every read fall back to that restored

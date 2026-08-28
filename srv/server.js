@@ -51,6 +51,7 @@ import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
 import { resolveUser, captureUserMiddleware } from './lib/resolve-user.js';
 import { patMiddleware, pinPatUserToContext } from './lib/mcp-pat-middleware.js';
 import makeComposeRouter, { flags as mcpFlags } from './lib/mcp-compose-router.js';
+import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
@@ -697,14 +698,16 @@ cds.on('bootstrap', (app) => {
   // bootstrap before CAP mounts A2aService at /a2a. (#1220)
   app.post('/a2a', express.json({ limit: '64kb' }), (req, res, next) => a2aHandler(req, res, next));
 
-  // MCP_AUTH_ENABLED kill switch — when explicitly set to 'false', return 503
+  // MCP_AUTH_ENABLED kill switch — when the flag is off, return 503
   // for all /mcp-auth and /mcp-pat routes. This must come BEFORE the PAT
   // middleware registration so the kill switch short-circuits the whole stack.
-  // (Phase 2 Task 15 #1105)
-  if (process.env.MCP_AUTH_ENABLED === 'false') {
+  // (Phase 2 Task 15 #1105; DB-driven ImsConfig flag.mcp.auth since #2060 —
+  // NOTE: this bootstrap-time read runs on a cold flag cache and so honors the
+  // declared default (ON); the DB value gates the warm per-request paths.)
+  if (!isFlagEnabled('MCP_AUTH_ENABLED')) {
     app.use('/mcp-auth', (_req, res) => res.status(503).send('Phase 2 MCP auth disabled'));
     app.use('/mcp-pat',  (_req, res) => res.status(503).send('Phase 2 MCP auth disabled'));
-    cds.log('mcp').warn('MCP_AUTH_ENABLED=false — /mcp-auth and /mcp-pat return 503');
+    cds.log('mcp').warn('MCP_AUTH_ENABLED flag off — /mcp-auth and /mcp-pat return 503');
   }
 
   // /mcp-auth/* (OAuth tier) → /mcp/* rewrite (Phase 2 #1105). The approuter
@@ -1092,6 +1095,43 @@ cds.on('served', async () => {
     globalThis.__feedbackBeforeHookRegistered = true;
   }
 
+  // Warm the Content Option-B delta flags (ImsConfig-backed) once at boot so the
+  // synchronous hot-path getters (isDeltaRead/isDeltaWrite/isDeltaSkipCarryForward
+  // in content-store.js et al.) return the real DB values before the first
+  // request rather than the cold-cache fail-safe default. Fail-open: any read
+  // fault leaves the safe defaults (all false → legacy ContentFiles path) and
+  // MUST NOT crash boot.
+  try {
+    const { ensureContentDeltaDefaults, refreshContentDeltaFlags } = await import('./lib/content-delta-flags.js');
+    // Seed absent flags to 'true' so the fast path defaults ON and survives
+    // deploys (data, not env). Only fills missing keys — admin overrides stick.
+    // Skip under the vitest harness: unit/hybrid tests rely on the resolver's
+    // fail-safe-OFF default (legacy ContentFiles path) and set flag state
+    // explicitly per case. Seeding all three 'true' at boot leaked into every
+    // pre-existing content-store/publish/nav test — nav/hashes/catalog reads hit
+    // the empty ContentCurrent and rollback replayed instead of clearing. VITEST
+    // is set only by the test runner, never in CF or `cds watch`, so production
+    // and local dev still default-ON.
+    if (!process.env.VITEST) await ensureContentDeltaDefaults();
+    await refreshContentDeltaFlags();
+  } catch (err) {
+    cds.log('content-delta-flags').warn('boot warm-up failed (non-fatal):', err.message);
+  }
+
+  // Warm the generic ImsConfig-backed feature flags (issue #2060) the same way:
+  // seed any absent flag row to its DECLARED registry default, then warm the
+  // 60s cache so the synchronous isFlagEnabled() getters (metrics, MCP, KG jobs,
+  // homepage news relevance, freshness scan, etc.) return real DB values before
+  // the first request rather than the cold-cache declared default. Fail-open:
+  // any fault leaves the safe declared defaults and MUST NOT crash boot.
+  try {
+    const { ensureFeatureFlagDefaults, refreshFeatureFlags } = await import('./lib/feature-flags/db-flags.js');
+    await ensureFeatureFlagDefaults();
+    await refreshFeatureFlags();
+  } catch (err) {
+    cds.log('feature-flags').warn('boot warm-up failed (non-fatal):', err.message);
+  }
+
   // #658 — one-shot purge of accumulated noise rows in sap.changelog.Changes
   // for entities whose @changelog annotation was retroactively dropped. Held
   // behind a JobLocks sentinel so it runs exactly once per CF deploy across
@@ -1358,6 +1398,24 @@ cds.on('served', async () => {
       }
     } catch (err) {
       console.warn('[ai-grading-saved-queries] seed failed (non-fatal):', err.message);
+    }
+  }
+
+  // Seed the HomepageShelves baseline (verb-page shelf entries + footer links,
+  // including third-party content). Idempotent + non-destructive: inserts only
+  // missing (verb,url) rows, never overwrites admin edits. Replaces the retired
+  // seed CSV (whose .hdbtabledata full-replaced the table on deploy and wiped
+  // curated/third-party rows) and the manual `seed:thirdparty` step. Non-fatal.
+  if (!globalThis.__homepageShelvesSeeded) {
+    globalThis.__homepageShelvesSeeded = true;
+    try {
+      const { seedHomepageShelves } = await import('./lib/homepage/seed-homepage-shelves.js');
+      const result = await seedHomepageShelves(cds.db);
+      if (result.inserted > 0) {
+        console.log(`[homepage-shelves] seeded ${result.inserted}/${result.total} baseline entries`);
+      }
+    } catch (err) {
+      console.warn('[homepage-shelves] seed failed (non-fatal):', err.message);
     }
   }
 

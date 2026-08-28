@@ -34,7 +34,7 @@ describe('feature-flag registry shape', () => {
 });
 
 describe('resolveFeatureFlags precedence + polarity', () => {
-  it('env true-enables flag reads on when env=true, default when unset', async () => {
+  it('db flag (KG_PAGERANK_ENABLED, #2060) reads its declared default when no ImsConfig row exists', async () => {
     vi.resetModules();
     // KG resolvers hit cds; stub them so the module import is side-effect free.
     vi.doMock('../../srv/lib/runtime-config/kg-settings.js', () => ({
@@ -43,21 +43,18 @@ describe('resolveFeatureFlags precedence + polarity', () => {
     vi.doMock('../../srv/lib/runtime-config/ui-events-settings.js', () => ({
       resolveUiEventsSettings: async () => ({ enabled: false }),
     }));
+    // Empty entities → ImsConfig entity is undefined → the db flag falls back to
+    // its declared registry default (false). An env var must NOT influence it.
     vi.doMock('@sap/cds', () => ({ default: { entities: () => ({}), log: () => ({ warn() {}, info() {}, error() {}, debug() {} }) } }));
     const { resolveFeatureFlags } = await import('../../srv/lib/feature-flags/resolve.js');
 
-    process.env.KG_PAGERANK_ENABLED = 'true';
+    process.env.KG_PAGERANK_ENABLED = 'true'; // legacy env var — now inert
     const rows = await resolveFeatureFlags();
     const pr = rows.find((r) => r.key === 'KG_PAGERANK_ENABLED');
-    expect(pr.enabled).toBe(true);
-    expect(pr.winningLayer).toBe('env');
-    expect(pr.rawEnvValue).toBe('true');
-
+    expect(pr.kind).toBe('db');
+    expect(pr.enabled).toBe(false);
+    expect(pr.winningLayer).toBe('default');
     delete process.env.KG_PAGERANK_ENABLED;
-    const rows2 = await resolveFeatureFlags();
-    const pr2 = rows2.find((r) => r.key === 'KG_PAGERANK_ENABLED');
-    expect(pr2.enabled).toBe(false);
-    expect(pr2.winningLayer).toBe('default');
   });
 
   it('numeric chat db-setting falls back to env when the column is unset (#1171)', async () => {
@@ -131,10 +128,13 @@ const ENV_IGNORE = new Set([
   'KG_MERGE_SIM_THRESHOLD',                // similarity tuning
   'KG_MERGE_SIM_THRESHOLD_EXTRACT',        // similarity tuning
   'KG_EXTRACT_BUILD_CAP',                  // batch-size tuning
-  // NOTE: on-by-default kill switches (METRICS_ENABLED, MCP_*_ENABLED,
+  // NOTE (#2060): the on-by-default kill switches (METRICS_ENABLED, MCP_*_ENABLED,
   // KG_RETIRE_ORPHANS_ENABLED, KG_STEP_SLICER_ENABLED,
-  // COMMUNITY_BLOGS_CLASSIFIER_ENABLED, HOMEPAGE_NEWS_RELEVANCE_ENABLED)
-  // ARE registered in registry.js — do NOT ignore them here.
+  // COMMUNITY_BLOGS_CLASSIFIER_ENABLED, HOMEPAGE_NEWS_RELEVANCE_ENABLED) plus
+  // KG_PAGERANK_ENABLED, KG_PATH_V2_ENABLED and FRESHNESS_SCAN_ENABLED were
+  // migrated from process.env to ImsConfig (kind:'db'). They no longer carry an
+  // envVar and are no longer read via process.env, so they neither appear in the
+  // scan below nor need an ignore entry here.
 ]);
 
 function walkJs(dir, acc = []) {

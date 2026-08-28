@@ -148,7 +148,21 @@ Managed via the `LegacyRedirects` CDS entity. The approuter middleware (`approut
 
 **Nightly link-health:** The `homepage-link-health` cron job (04:00 daily) sends HEAD requests to every active `HomepageShelves.url` and writes `linkStatus` (`OK` | `SLOW` | `BROKEN`) + `lastChecked` back to the entity. Broken links surface as a red dot on the Shelves tab in the admin UI. Threshold for SLOW is 1500ms (default); timeout is 5000ms per URL; concurrency is 4 with 200ms between requests.
 
+## HomepageShelves seeding (baseline is boot-seeded, not CSV)
+
+`HomepageShelves` is **admin-managed on HANA** — its production HDI artifacts are structure-only (`.hdbtable` + unique index + change-tracking triggers), with **no `.hdbtabledata`**, so a deploy can never full-replace the table.
+
+The canonical baseline (SAP-owned entries + curated third-party links such as Prior Labs / Dremio / Reltio / n8n) lives inline in **`srv/lib/homepage/homepage-shelves-defaults.js`** and is seeded idempotently at boot by **`srv/lib/homepage/seed-homepage-shelves.js`** (called from `cds.on('served')` in `srv/server.js`). The seed is **insert-if-missing on `(verb,url)`**: it adds only rows that aren't already present, so admin edits are never overwritten, deleted baseline rows self-heal on the next restart, and it runs safely (non-fatal) in every profile — `cds watch`, unit tests, hybrid, and production.
+
+This replaced two fragile predecessors (both retired):
+
+- the `test/data/com.sap.developers.ims-HomepageShelves.csv` seed CSV, which — while it lived in `db/data` — compiled to an `.hdbtabledata` with `include_filter: []` and **full-replaced the table on every deploy whose CSV hash changed**, wiping curated/third-party rows and admin edits (the root cause of the recurring "shelf links disappeared" incidents); and
+- the manual `npm run seed:thirdparty` promotion step (DEV/PROD-ambiguous — it followed the CDS binding, so it could silently target the wrong environment).
+
+To add or curate a baseline link: edit `homepage-shelves-defaults.js`, or use `/admin-ui/#homepage` at runtime (see **Add shelf entry** above). No CSV, no manual seed script.
+
 ---
+
 
 ## Explainer popovers
 

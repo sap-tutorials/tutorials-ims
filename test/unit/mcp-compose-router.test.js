@@ -6,11 +6,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 // We unit-test the capability wiring by invoking the exported buildServer() with fakes,
 // NOT by standing up HTTP (that's the contract/hybrid layer's job).
 import { buildServer, flags } from '../../srv/lib/mcp-compose-router.js';
+import { __setFlagForTest, __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
 
 describe('mcp-compose-router capability wiring', () => {
   beforeEach(() => {
-    delete process.env.MCP_RESOURCES_ENABLED;
-    delete process.env.MCP_PROMPTS_ENABLED;
+    __resetFlagsForTest();
   });
 
   it('flags default all enabled', () => {
@@ -36,8 +36,8 @@ describe('mcp-compose-router capability wiring', () => {
     expect(server.registerResource).toHaveBeenCalled();
   });
 
-  it('omits resources capability when MCP_RESOURCES_ENABLED=false', async () => {
-    process.env.MCP_RESOURCES_ENABLED = 'false';
+  it('omits resources capability when the MCP_RESOURCES_ENABLED flag is off', async () => {
+    __setFlagForTest('MCP_RESOURCES_ENABLED', false);
     const caps = {};
     const server = { registerResource: vi.fn(), server: { registerCapabilities: (c) => Object.assign(caps, c), setRequestHandler: vi.fn() } };
     await buildServer(server, { name: 'X', definition: {} }, { entities: {}, actions: {} }, {

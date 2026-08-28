@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import cds from '@sap/cds';
 import { runRetireOrphans, readAgeDays, isEnabled } from '../../srv/jobs/kg-retire-orphans-job.js';
+import { __setFlagForTest, __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
 
 const NS = 'com.sap.developers.ims';
 
@@ -18,7 +19,7 @@ describe('runRetireOrphans (#1115)', () => {
     await DELETE.from(TutorialConceptLinks);
     await DELETE.from(ConceptEdges);
     await DELETE.from(Concepts);
-    delete process.env.KG_RETIRE_ORPHANS_ENABLED;
+    __resetFlagsForTest();
     delete process.env.KG_RETIRE_ORPHANS_AGE_DAYS;
   });
 
@@ -73,13 +74,13 @@ describe('runRetireOrphans (#1115)', () => {
     expect(res.retired).toBe(0);
   });
 
-  it('honors KG_RETIRE_ORPHANS_ENABLED=false', async () => {
+  it('honors the KG_RETIRE_ORPHANS_ENABLED flag = false', async () => {
     const { Concepts } = cds.entities(NS);
     await INSERT.into(Concepts).entries({
       ID: 'o0000000-0000-0000-0000-000000000009', slug: 'skip', name: 'Skip',
       status: 'ACTIVE', firstSeenAt: daysAgoIso(20),
     });
-    process.env.KG_RETIRE_ORPHANS_ENABLED = 'false';
+    __setFlagForTest('KG_RETIRE_ORPHANS_ENABLED', false);
     const res = await runRetireOrphans();
     expect(res.reason).toBe('disabled');
     expect(res.retired).toBe(0);

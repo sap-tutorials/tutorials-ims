@@ -383,6 +383,10 @@ service AdminService {
   // Feature Flag Viewer (#feature-flags). Unbacked read-only entity; rows are
   // synthesized in srv/admin-service.js on('READ') from
   // srv/lib/feature-flags/resolve.js. No DB table.
+  // Bound row actions enable()/disable() flip the backing ImsConfig row for a
+  // kind:'db' flag (generic flag.* via db-flags.js, or a content.delta.* flag via
+  // content-delta-flags.js) — rendered as List Report / Object Page buttons
+  // (#2060). Non-db flags reject with 400.
   @readonly
   @cds.persistence.skip
   @Capabilities: { InsertRestrictions: { Insertable: false }, UpdateRestrictions: { Updatable: false }, DeleteRestrictions: { Deletable: false } }
@@ -402,6 +406,9 @@ service AdminService {
     rawEnvValue     : String(120);
     defaultValue    : String(60);
     howToChangeText : String(500);
+  } actions {
+    action enable()  returns FeatureFlags;
+    action disable() returns FeatureFlags;
   }
 
   @odata.singleton
@@ -777,6 +784,23 @@ service AdminService {
   // (legacy IMS already credited them). Empty/null clears it. See ngds-autosend.js.
   action setNgdsAutoSendEpoch(epoch : String) returns { epoch : String };
   function getNgdsAutoSendConfig() returns { enabled : Boolean; environment : String; epoch : String; effective : Boolean };
+  // Content Option-B delta flags (ImsConfig-backed). Moved from env vars to
+  // DB config so an admin can flip the ContentFiles→ContentCurrent migration
+  // gates without a redeploy. Omitted fields are left unchanged. Setter busts
+  // the 60s server-side cache so a flip is effective at once.
+  action setContentDeltaFlags(write : Boolean, read : Boolean, skipCarryForward : Boolean)
+    returns { write : Boolean; read : Boolean; skipCarryForward : Boolean };
+  function getContentDeltaFlags()
+    returns { write : Boolean; read : Boolean; skipCarryForward : Boolean };
+  // Generic ImsConfig-backed on/off feature flags (issue #2060). Moved from env
+  // vars to DB config so an admin can flip them without a redeploy. `key` is the
+  // registry key (e.g. 'METRICS_ENABLED', 'KG_PAGERANK_ENABLED'). The setter
+  // upserts the backing ImsConfig row and busts the 60s server-side cache so a
+  // flip is effective at once.
+  action setFeatureFlag(flag : String, enabled : Boolean)
+    returns { flag : String; enabled : Boolean };
+  function getFeatureFlags()
+    returns many { flag : String; imsConfigKey : String; enabled : Boolean; default : Boolean };
   action testNotificationEmail(to: String, level: Integer) returns {
     success : Boolean;
     error   : String;

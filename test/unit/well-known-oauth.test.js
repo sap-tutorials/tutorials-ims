@@ -182,3 +182,31 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     expect(res.statusCode).toBeNull();
   });
 });
+
+describe('well-known-oauth: openid-configuration alias', () => {
+  const SAVED_VCAP = process.env.VCAP_SERVICES;
+  beforeEach(() => {
+    process.env.VCAP_SERVICES = JSON.stringify({ xsuaa: [{ credentials: {
+      url: 'https://tenant.authentication.eu10-005.hana.ondemand.com',
+      xsappname: 'tutorials!t676072',
+    } }] });
+  });
+  afterEach(() => {
+    if (SAVED_VCAP === undefined) delete process.env.VCAP_SERVICES; else process.env.VCAP_SERVICES = SAVED_VCAP;
+  });
+
+  it('serves openid-configuration with the same body as oauth-authorization-server', () => {
+    const { OPENID_CONFIG_PATH } = require('../../approuter/lib/well-known-oauth.js');
+    expect(OPENID_CONFIG_PATH).toBe('/.well-known/openid-configuration');
+    const res = mockRes();
+    let nexted = false;
+    wellKnownOAuthHandler({ method: 'GET', url: OPENID_CONFIG_PATH, headers: { host: 'x.example' } }, res, () => { nexted = true; });
+    expect(nexted).toBe(false);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['Content-Type']).toBe('application/json');
+    const doc = JSON.parse(res.body);
+    expect(doc).toEqual(authorizationServerMetadata(
+      'https://tenant.authentication.eu10-005.hana.ondemand.com', resolveScope()));
+    expect(doc.code_challenge_methods_supported).toContain('S256');
+  });
+});

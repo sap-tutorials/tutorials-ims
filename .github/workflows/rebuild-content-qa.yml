@@ -19,6 +19,11 @@ on:
         required: false
         type: boolean
         default: true
+      force-publish:
+        description: 'Seed/repair Option B ContentCurrent (QA): publish ALL slugs (dual-write everything), bypassing the changed-slug diff. Use for a one-time ContentCurrent re-seed after the delta flags were toggled. Default false. Mirrors rebuild-content.yml force-publish.'
+        required: false
+        type: boolean
+        default: false
 
 env:
   NODE_VERSION: '22'
@@ -259,10 +264,17 @@ jobs:
         run: npm run build:highlight -- --dir hugo/public-qa
 
       - name: Publish QA content to HANA
-        run: npx tsx scripts/publish-content.ts --channel qa --initiator "ci/${{ github.run_id }}"
+        run: npx tsx scripts/publish-content.ts --channel qa ${{ inputs.force-publish && '--force' || '' }} --initiator "ci/${{ github.run_id }}"
         env:
           CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
           CONTENT_API_KEY_QA: ${{ secrets.CONTENT_API_KEY_QA }}
+          # Scope the publish to the changed slug on a commit-triggered (or single-slug
+          # workflow_dispatch) rebuild — publish-content.ts reads PUBLISH_SLUG as the
+          # --slug fallback. Empty on a full rebuild → whole-catalog delta. Mirrors
+          # rebuild-content.yml. Without force-publish, this makes the commit O(changed)
+          # (sub-second) instead of a ~35s full-catalog write. force-publish=true ignores
+          # the slug and re-seeds the whole catalog (--force).
+          PUBLISH_SLUG: ${{ (! inputs.force-publish) && (github.event.client_payload.slug || inputs.slug) || '' }}
 
       # #1373 — synthetic watchdog. The publish step reporting success is not
       # proof rows landed: the render-concepts 404 that hid for days (#1372)

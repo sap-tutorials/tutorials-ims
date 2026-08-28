@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import cds from '@sap/cds';
 import { _resetForTests as resetRssFetcherCache } from '../../srv/lib/homepage-rss-fetcher.js';
+import { __setFlagForTest, __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
 
 cds.test('serve', '--project', '.', '--in-memory');
 
@@ -50,11 +51,11 @@ describe('homepage news() with #1034 filter', () => {
     await db.run(UPDATE('com.sap.developers.ims.HomepageConfig').set({ newsRelevanceEnabled: false }));
     const mod = await import('../../srv/homepage-service.js');
     mod._resetForTests();
-    delete process.env.HOMEPAGE_NEWS_RELEVANCE_ENABLED;
+    __resetFlagsForTest();
   });
 
   afterEach(() => {
-    delete process.env.HOMEPAGE_NEWS_RELEVANCE_ENABLED;
+    __resetFlagsForTest();
     delete process.env.RSS_TRANSPORT;
   });
 
@@ -122,8 +123,8 @@ describe('homepage news() with #1034 filter', () => {
     expect(r).toEqual([]);
   });
 
-  it('env HOMEPAGE_NEWS_RELEVANCE_ENABLED=false dominates HomepageConfig=true', async () => {
-    process.env.HOMEPAGE_NEWS_RELEVANCE_ENABLED = 'false';
+  it('feature flag HOMEPAGE_NEWS_RELEVANCE_ENABLED=false dominates HomepageConfig=true', async () => {
+    __setFlagForTest('HOMEPAGE_NEWS_RELEVANCE_ENABLED', false);
     await db.run(UPDATE('com.sap.developers.ims.HomepageConfig').set({ newsRelevanceEnabled: true }));
     vi.stubGlobal('fetch', vi.fn(async () => new Response(FAKE_ENV_RSS_XML, { status: 200 })));
     const r = await srv.send({ event: 'news' });

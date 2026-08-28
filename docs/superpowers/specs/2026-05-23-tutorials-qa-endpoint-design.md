@@ -126,8 +126,10 @@ features are out of scope and must not be reachable through the QA surface.
 - `scripts/publish-content.ts` — add `--channel <prod|qa>` flag. In `qa` mode:
   - `CAP_BASE_URL` defaults to `CAP_QA_BASE_URL` env.
   - Bearer token reads from `CONTENT_API_KEY_QA`.
-  - Always uses delta detection bypass (effectively `--force` semantics —
-    matches the existing prod gotcha).
+  - Delta by default (mirrors prod). `PUBLISH_SLUG` (dispatch slug) scopes a
+    commit-triggered rebuild to the changed slug; `--force` (workflow
+    `force-publish` input) does a full re-seed. Superseded the original
+    "always --force" design once QA gained Option B (mutable ContentCurrent).
   - Source dir: `hugo/public-qa/`.
 - `scripts/install-qa-workflows.ts` — one-shot installer that opens a PR adding
   `.github/workflows/notify-qa.yml` to each `*-Contribution` repo. Idempotent;
@@ -325,5 +327,7 @@ are deferred to deploy time.
   mirrors.
 - `scripts/parsers/github.ts:432,477` — existing `INCLUDE_CONTRIBUTION_REPOS`
   flag; QA uses inverse `ONLY_CONTRIBUTION_REPOS` semantic.
-- `feedback_publish_content_force.md` — published Tom-memory; QA always uses
-  force-publish for the same reason.
+- `feedback_publish_content_force.md` — published Tom-memory; originally QA
+  always force-published. Superseded: QA is now delta by default with
+  `PUBLISH_SLUG` scoping (safe once Option B landed); `--force` reserved for
+  full re-seeds.
