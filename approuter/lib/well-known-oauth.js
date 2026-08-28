@@ -23,6 +23,7 @@
 
 const AUTH_SERVER_PATH = '/.well-known/oauth-authorization-server'
 const PROTECTED_RESOURCE_PATH = '/.well-known/oauth-protected-resource'
+const OPENID_CONFIG_PATH = '/.well-known/openid-configuration'
 
 // The MCP authenticated mount the resource metadata advertises.
 const MCP_RESOURCE_SUFFIX = '/mcp-auth'
@@ -117,7 +118,7 @@ function wellKnownOAuthHandler(req, res, next) {
 
   // Strip any query string before matching.
   const pathOnly = (req.url || '').split('?')[0]
-  if (pathOnly !== AUTH_SERVER_PATH && pathOnly !== PROTECTED_RESOURCE_PATH) {
+  if (pathOnly !== AUTH_SERVER_PATH && pathOnly !== PROTECTED_RESOURCE_PATH && pathOnly !== OPENID_CONFIG_PATH) {
     return next()
   }
 
@@ -130,7 +131,7 @@ function wellKnownOAuthHandler(req, res, next) {
 
   const scope = resolveScope()
 
-  if (pathOnly === AUTH_SERVER_PATH) {
+  if (pathOnly === AUTH_SERVER_PATH || pathOnly === OPENID_CONFIG_PATH) {
     return sendJson(res, 200, authorizationServerMetadata(issuer, scope))
   }
 
@@ -149,4 +150,5 @@ module.exports = {
   protectedResourceMetadata,
   AUTH_SERVER_PATH,
   PROTECTED_RESOURCE_PATH,
+  OPENID_CONFIG_PATH,
 }
