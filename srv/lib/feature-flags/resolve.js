@@ -53,6 +53,23 @@ export async function resolveFeatureFlags() {
   const resolvedByResolver = { kg: kgResolved, uiEvents: uiResolved, navigator: navResolved };
   const rowByEntity = { KnowledgeGraphSettings: kgRow, UiEventsSettings: uiRow, ChatSettings: chatRow, NavigatorSettings: navRow };
 
+  // Pre-fetch the ImsConfig key/value rows backing any kind:'db' flags in one
+  // SELECT, so the (synchronous) descriptor map below can look them up without
+  // awaiting. Tolerates a read failure (→ empty map → those flags read default).
+  const imsKeys = FEATURE_FLAGS.filter((f) => f.kind === 'db' && f.imsConfigKey).map((f) => f.imsConfigKey);
+  const imsByKey = Object.create(null);
+  if (imsKeys.length) {
+    try {
+      const ent = cds.entities(NS).ImsConfig;
+      if (ent) {
+        const rows = await SELECT.from(ent).columns('key', 'value').where({ key: { in: imsKeys } });
+        for (const r of rows || []) imsByKey[r.key] = asStr(r.value);
+      }
+    } catch (err) {
+      LOG.warn('ImsConfig db-flag read failed', err.message);
+    }
+  }
+
   return FEATURE_FLAGS.map((f) => {
     const base = {
       key: f.key, label: f.label, category: f.category, kind: f.kind,
@@ -77,6 +94,18 @@ export async function resolveFeatureFlags() {
         return {
           ...base, rawEnvValue: raw, effectiveValue: effective, enabled,
           winningLayer: raw !== null ? 'env' : 'default',
+          howToChangeText: renderHowTo(f),
+        };
+      }
+
+      // db (ImsConfig key/value): value is a 'true'/'false' string. No env
+      // layer — DB row wins, else the descriptor default.
+      if (f.kind === 'db') {
+        const raw = f.imsConfigKey in imsByKey ? imsByKey[f.imsConfigKey] : null;
+        const enabled = raw !== null ? String(raw).toLowerCase() === 'true' : Boolean(f.default);
+        return {
+          ...base, rawDbValue: raw, effectiveValue: String(enabled), enabled,
+          winningLayer: raw !== null ? 'db' : 'default',
           howToChangeText: renderHowTo(f),
         };
       }
@@ -137,5 +166,6 @@ function renderHowTo(f) {
   if (h.method === 'admin-tile') {
     return `Admin UI → ${h.tile} tile (${h.hash})${h.note ? ` — ${h.note}` : ''}`;
   }
+  if (h.text) return h.text;
   return '';
 }

@@ -14,6 +14,10 @@ import cds from '@sap/cds';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { createSessionHelpers } from '../../srv/lib/content-publish-session.js';
 import { createContentHandlers, invalidateContentCache } from '../../srv/lib/content-store.js';
+import {
+  refreshContentDeltaFlags, bustContentDeltaFlagsCache,
+  DELTA_WRITE_KEY, DELTA_READ_KEY, DELTA_SKIP_CARRYFORWARD_KEY,
+} from '../../srv/lib/content-delta-flags.js';
 
 const NS = 'com.sap.developers.ims';
 cds.test('serve', '--project', '.', '--in-memory');
@@ -28,18 +32,29 @@ function makeRes() {
 
 describe('Option B carry-forward skip + rollback replay (Workstream D 8.4)', () => {
   let helpers, serveHandler, rollbackHandler;
-  let ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks;
-  const saved = {};
-  const FLAGS = ['CONTENT_DELTA_WRITE_ENABLED', 'CONTENT_DELTA_READ_ENABLED', 'CONTENT_DELTA_SKIP_CARRYFORWARD'];
+  let ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks, ImsConfig;
+  const DELTA_KEYS = [DELTA_WRITE_KEY, DELTA_READ_KEY, DELTA_SKIP_CARRYFORWARD_KEY];
+
+  // All three delta flags ON for this suite. Seed ImsConfig then warm the cache.
+  async function enableAllDeltaFlags() {
+    for (const key of DELTA_KEYS) {
+      const existing = await SELECT.one.from(ImsConfig).where({ key });
+      if (existing) await UPDATE(ImsConfig, existing.ID).set({ value: 'true' });
+      else await INSERT.into(ImsConfig).entries({ key, value: 'true' });
+    }
+    await refreshContentDeltaFlags();
+  }
 
   beforeAll(() => {
     helpers = createSessionHelpers({ namespace: NS });
-    ({ ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks } = cds.entities(NS));
-    for (const f of FLAGS) { saved[f] = process.env[f]; process.env[f] = 'true'; }
+    ({ ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks, ImsConfig } = cds.entities(NS));
   });
-  afterAll(() => { for (const f of FLAGS) { if (saved[f] === undefined) delete process.env[f]; else process.env[f] = saved[f]; } });
+  afterAll(() => { bustContentDeltaFlagsCache(); });
   beforeEach(async () => {
     for (const e of [ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks]) await DELETE.from(e);
+    await DELETE.from(ImsConfig).where({ key: { in: DELTA_KEYS } });
+    bustContentDeltaFlagsCache();
+    await enableAllDeltaFlags();
     // Fresh handlers per test → fresh in-memory content cache (in prod a publish
     // busts it via the cache-generation token; the test calls commitSession directly).
     ({ serveHandler, rollbackHandler } = createContentHandlers());

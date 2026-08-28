@@ -1,6 +1,7 @@
 import cds from '@sap/cds';
 import { embedSlugs } from '../lib/embedding-pipeline.js';
 import { logJobItem } from '../lib/pipeline-log.js';
+import { isDeltaRead } from '../lib/content-delta-flags.js';
 
 const LOG = cds.log('rag-reconcile');
 
@@ -39,7 +40,7 @@ export async function runReconciliationJob(logId) {
     return { skipped: true, reason: 'no active manifest' };
   }
 
-  const activeFiles = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+  const activeFiles = (isDeltaRead() && ContentCurrent)
     ? await SELECT.from(ContentCurrent).columns('slug')
     : await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
   const activeSlugs = activeFiles.map((f) => f.slug);

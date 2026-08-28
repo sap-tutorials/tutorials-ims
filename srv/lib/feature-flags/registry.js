@@ -9,11 +9,14 @@
 //                  `resolver` picks how the effective value is resolved:
 //                    'kg'/'uiEvents' → the env-layered resolveXSettings()
 //                    'chat'          → direct ChatSettings row (no env layer)
+//   'db'         — an ImsConfig key/value row (string 'true'/'false'); the
+//                  effective value is read live from ImsConfig by `imsConfigKey`.
+//                  No env layer — admin-toggle / SQL upsert only.
 //   'constant'   — a hardcoded, non-runtime-configurable value (shown, no howToChange).
 // envRule: 'true-enables' | 'false-disables' | 'numeric'.
 // status:  'ga' | 'dev-only' | 'beta' | 'parked'.
 
-export const KINDS = ['env', 'db-setting', 'constant'];
+export const KINDS = ['env', 'db-setting', 'db', 'constant'];
 export const ENV_RULES = ['true-enables', 'false-disables', 'numeric'];
 export const STATUSES = ['ga', 'dev-only', 'beta', 'parked'];
 
@@ -22,6 +25,12 @@ const cfEnv = (name, value) => ({
   command: `cf set-env tutorials-srv ${name} ${value} && cf restart tutorials-srv`,
 });
 const adminTile = (tile, hash, note) => ({ method: 'admin-tile', tile, hash, note });
+// ImsConfig-backed DB flag (kind:'db'): flipped via the AdminService
+// setContentDeltaFlags action or a direct ImsConfig upsert. No env var.
+const imsConfigUpsert = (imsKey) => ({
+  method: 'db-upsert',
+  text: `AdminService.setContentDeltaFlags action (busts cache), or UPSERT ImsConfig key '${imsKey}' = 'true'/'false'.`,
+});
 
 export const FEATURE_FLAGS = [
   // ---- Knowledge Graph env flags (env-layered via resolveKnowledgeGraphSettings where applicable) ----
@@ -270,24 +279,24 @@ export const FEATURE_FLAGS = [
   },
   {
     key: 'CONTENT_DELTA_WRITE_ENABLED', label: 'Content Option-B dual-write', category: 'Content',
-    kind: 'env', envVar: 'CONTENT_DELTA_WRITE_ENABLED', envRule: 'true-enables',
+    kind: 'db', imsConfigKey: 'content.delta.write',
     valueType: 'boolean', default: false, status: 'dev-only',
-    description: 'Workstream D Option B: on publish, mirror freshly-published slugs into ContentCurrent + ContentHistory alongside the legacy ContentFiles write. Fail-safe (never throws into the commit tx); legacy ContentFiles remains the source of truth until the read cutover. Default OFF.',
-    howToChange: cfEnv('CONTENT_DELTA_WRITE_ENABLED', 'true'),
+    description: 'Workstream D Option B: on publish, mirror freshly-published slugs into ContentCurrent + ContentHistory alongside the legacy ContentFiles write. Fail-safe (never throws into the commit tx); legacy ContentFiles remains the source of truth until the read cutover. DB-driven config (ImsConfig key content.delta.write); no env var. Default OFF.',
+    howToChange: imsConfigUpsert('content.delta.write'),
   },
   {
     key: 'CONTENT_DELTA_READ_ENABLED', label: 'Content Option-B read from ContentCurrent', category: 'Content',
-    kind: 'env', envVar: 'CONTENT_DELTA_READ_ENABLED', envRule: 'true-enables',
+    kind: 'db', imsConfigKey: 'content.delta.read',
     valueType: 'boolean', default: false, status: 'dev-only',
-    description: 'Workstream D Option B: serve + readers source from the mutable ContentCurrent (per-slug fallback to legacy ContentFiles). Enable after ContentCurrent is fully seeded. Default OFF.',
-    howToChange: cfEnv('CONTENT_DELTA_READ_ENABLED', 'true'),
+    description: 'Workstream D Option B: serve + readers source from the mutable ContentCurrent (per-slug fallback to legacy ContentFiles). Enable after ContentCurrent is fully seeded. DB-driven config (ImsConfig key content.delta.read); no env var. Default OFF.',
+    howToChange: imsConfigUpsert('content.delta.read'),
   },
   {
     key: 'CONTENT_DELTA_SKIP_CARRYFORWARD', label: 'Content Option-B skip carry-forward (O(changed) publish)', category: 'Content',
-    kind: 'env', envVar: 'CONTENT_DELTA_SKIP_CARRYFORWARD', envRule: 'true-enables',
+    kind: 'db', imsConfigKey: 'content.delta.skipCarryForward',
     valueType: 'boolean', default: false, status: 'dev-only',
-    description: 'Workstream D Option B: publish writes ONLY changed slugs (no carry-forward); rollback replays ContentHistory into ContentCurrent. Enable ONLY after the read cutover is live AND ContentCurrent is fully seeded. Default OFF.',
-    howToChange: cfEnv('CONTENT_DELTA_SKIP_CARRYFORWARD', 'true'),
+    description: 'Workstream D Option B: publish writes ONLY changed slugs (no carry-forward); rollback replays ContentHistory into ContentCurrent. Enable ONLY after the read cutover is live AND ContentCurrent is fully seeded. DB-driven config (ImsConfig key content.delta.skipCarryForward); no env var. Default OFF.',
+    howToChange: imsConfigUpsert('content.delta.skipCarryForward'),
   },
   {
     key: 'FRESHNESS_SCAN_ENABLED', label: 'Tutorial freshness bulk scan', category: 'Content',

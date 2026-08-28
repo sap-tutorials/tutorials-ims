@@ -4,6 +4,7 @@ import { extractStepText } from './step-text-extractor.js';
 import { embed } from './embedding-client.js';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { toBuffer } from './content-store.js';
+import { isDeltaRead } from './content-delta-flags.js';
 
 const LOG = cds.log('embedding-pipeline');
 const LOCK_NAME = 'embedding-pipeline';
@@ -23,7 +24,7 @@ async function readContentBuffer(db, slug) {
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
   // Option B: prefer the mutable ContentCurrent (read flag on), fall back to the
   // legacy active-manifest snapshot on a miss.
-  if (process.env.CONTENT_DELTA_READ_ENABLED === 'true') {
+  if (isDeltaRead()) {
     if (isHana) {
       const [row] = await db.run(
         `SELECT TOP 1 "CONTENT" FROM "COM_SAP_DEVELOPERS_IMS_CONTENTCURRENT" WHERE "SLUG" = ?`, [slug]);

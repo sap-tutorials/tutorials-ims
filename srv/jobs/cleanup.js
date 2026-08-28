@@ -1,5 +1,6 @@
 import cds from '@sap/cds';
 import * as alerting from '../lib/alerting.js';
+import { isDeltaRead } from '../lib/content-delta-flags.js';
 
 /**
  * HANA prepared-statement parameter buffer is bounded by `communication_max_packet_size`
@@ -229,7 +230,7 @@ export async function pruneOrphanEmbeddings() {
   // ContentCurrent must be fully seeded), else the legacy manifest snapshot.
   // Prunes embeddings for slugs NOT in this set, so an incomplete source would
   // over-prune — the read flag is only enabled once ContentCurrent is seeded.
-  const files = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+  const files = (isDeltaRead() && ContentCurrent)
     ? await SELECT.from(ContentCurrent).columns('slug')
     : await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
   const activeSlugs = new Set(files.map(f => f.slug));

@@ -2,17 +2,23 @@
 //
 // Workstream D (slug-targeted-delta-rebuild) — Option B read cutover guard.
 //
-// serveStoredSlug serves from the mutable ContentCurrent when
-// CONTENT_DELTA_READ_ENABLED=true AND the slug exists there, else falls back to
-// the legacy version-pinned ContentFiles snapshot. This keeps a partially-
-// populated ContentCurrent (mid-migration) from 404-ing slugs still in
+// serveStoredSlug serves from the mutable ContentCurrent when the
+// content.delta.read ImsConfig flag is 'true' AND the slug exists there, else
+// falls back to the legacy version-pinned ContentFiles snapshot. This keeps a
+// partially-populated ContentCurrent (mid-migration) from 404-ing slugs still in
 // ContentFiles. X-Content-Source distinguishes the path: 'db-current' vs 'db'.
+//
+// The flags moved from process.env.* to ImsConfig (DB-driven config); the tests
+// seed the ImsConfig row and warm the cached getter via refreshContentDeltaFlags().
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import cds from '@sap/cds';
 import { gzipSync } from 'node:zlib';
 import { createSessionHelpers } from '../../srv/lib/content-publish-session.js';
 import { createContentHandlers } from '../../srv/lib/content-store.js';
+import {
+  refreshContentDeltaFlags, bustContentDeltaFlagsCache, DELTA_WRITE_KEY, DELTA_READ_KEY,
+} from '../../srv/lib/content-delta-flags.js';
 
 const NS = 'com.sap.developers.ims';
 cds.test('serve', '--project', '.', '--in-memory');
@@ -29,36 +35,39 @@ function makeRes() {
     end() { return this; },
   };
 }
-async function publish(helpers, slug, body, { dualWrite }) {
-  const prev = process.env.CONTENT_DELTA_WRITE_ENABLED;
-  process.env.CONTENT_DELTA_WRITE_ENABLED = dualWrite ? 'true' : 'false';
-  try {
+
+describe('Option B read cutover (Workstream D)', () => {
+  let helpers, serveHandler, rollbackHandler;
+  let ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks, ImsConfig;
+
+  // Upsert a content.delta.* ImsConfig flag then warm the cached getter so the
+  // synchronous getters in content-store.js observe the new value.
+  async function setDelta(key, on) {
+    const value = String(Boolean(on));
+    const existing = await SELECT.one.from(ImsConfig).where({ key });
+    if (existing) await UPDATE(ImsConfig, existing.ID).set({ value });
+    else await INSERT.into(ImsConfig).entries({ key, value });
+    await refreshContentDeltaFlags();
+  }
+
+  async function publish(slug, body, { dualWrite }) {
+    await setDelta(DELTA_WRITE_KEY, dualWrite);
     const s = await helpers.beginPublishSession({ trigger: 'ci/test', expectedSlugCount: 1, initiator: 'test' });
     await helpers.appendToSession({ sessionId: s.sessionId, files: { [slug]: html(body) }, sources: { [slug]: source(body) } });
     const res = await helpers.commitSession({ sessionId: s.sessionId });
     return res.version;
-  } finally {
-    if (prev === undefined) delete process.env.CONTENT_DELTA_WRITE_ENABLED;
-    else process.env.CONTENT_DELTA_WRITE_ENABLED = prev;
   }
-}
-
-describe('Option B read cutover (Workstream D)', () => {
-  let helpers, serveHandler, rollbackHandler;
-  let ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks;
-  const prevRead = process.env.CONTENT_DELTA_READ_ENABLED;
 
   beforeAll(() => {
     helpers = createSessionHelpers({ namespace: NS });
     ({ serveHandler, rollbackHandler } = createContentHandlers());
-    ({ ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks } = cds.entities(NS));
+    ({ ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks, ImsConfig } = cds.entities(NS));
   });
-  afterAll(() => {
-    if (prevRead === undefined) delete process.env.CONTENT_DELTA_READ_ENABLED;
-    else process.env.CONTENT_DELTA_READ_ENABLED = prevRead;
-  });
+  afterAll(() => { bustContentDeltaFlagsCache(); });
   beforeEach(async () => {
     for (const e of [ContentFiles, ContentManifest, ContentCurrent, ContentHistory, PipelineLog, JobLocks]) await DELETE.from(e);
+    await DELETE.from(ImsConfig).where({ key: { in: [DELTA_WRITE_KEY, DELTA_READ_KEY] } });
+    bustContentDeltaFlagsCache();
   });
 
   async function serve(slug) {
@@ -68,16 +77,16 @@ describe('Option B read cutover (Workstream D)', () => {
   }
 
   it('serves from ContentCurrent when read flag ON and slug is present', async () => {
-    await publish(helpers, 'alpha', 'A', { dualWrite: true });
-    process.env.CONTENT_DELTA_READ_ENABLED = 'true';
+    await publish('alpha', 'A', { dualWrite: true });
+    await setDelta(DELTA_READ_KEY, true);
     const res = await serve('alpha');
     expect(res._headers['X-Content-Source']).toBe('db-current');
     expect(gunzipOrText(res._body)).toContain('A');
   });
 
   it('falls back to ContentFiles when slug is NOT in ContentCurrent (mid-migration)', async () => {
-    await publish(helpers, 'beta', 'B', { dualWrite: false }); // ContentFiles only
-    process.env.CONTENT_DELTA_READ_ENABLED = 'true';
+    await publish('beta', 'B', { dualWrite: false }); // ContentFiles only
+    await setDelta(DELTA_READ_KEY, true);
     expect((await SELECT.from(ContentCurrent).where({ slug: 'beta' })).length).toBe(0);
     const res = await serve('beta');
     expect(res._headers['X-Content-Source']).toBe('db');
@@ -85,8 +94,8 @@ describe('Option B read cutover (Workstream D)', () => {
   });
 
   it('uses legacy ContentFiles when read flag is OFF even if slug is in ContentCurrent', async () => {
-    await publish(helpers, 'gamma', 'G', { dualWrite: true });
-    process.env.CONTENT_DELTA_READ_ENABLED = 'false';
+    await publish('gamma', 'G', { dualWrite: true });
+    await setDelta(DELTA_READ_KEY, false);
     expect((await SELECT.from(ContentCurrent).where({ slug: 'gamma' })).length).toBe(1);
     const res = await serve('gamma');
     expect(res._headers['X-Content-Source']).toBe('db');
@@ -94,9 +103,8 @@ describe('Option B read cutover (Workstream D)', () => {
   });
 
   it('rollback clears ContentCurrent so reads fall back to the restored ContentFiles(V)', async () => {
-    process.env.CONTENT_DELTA_WRITE_ENABLED = 'true';
-    const v1 = await publish(helpers, 'delta', 'D1', { dualWrite: true }); // version 1
-    await publish(helpers, 'delta', 'D2', { dualWrite: true });            // version 2 (active)
+    const v1 = await publish('delta', 'D1', { dualWrite: true }); // version 1
+    await publish('delta', 'D2', { dualWrite: true });            // version 2 (active)
     expect((await SELECT.from(ContentCurrent).where({ slug: 'delta' })).length).toBe(1);
 
     const rb = makeRes();
@@ -105,7 +113,7 @@ describe('Option B read cutover (Workstream D)', () => {
     // ContentCurrent cleared → reads fall back to ContentFiles(active=v1)=D1.
     expect((await SELECT.from(ContentCurrent)).length).toBe(0);
 
-    process.env.CONTENT_DELTA_READ_ENABLED = 'true';
+    await setDelta(DELTA_READ_KEY, true);
     const s = await serve('delta');
     expect(s._headers['X-Content-Source']).toBe('db');
     expect(gunzipOrText(s._body)).toContain('D1');

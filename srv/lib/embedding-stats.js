@@ -9,6 +9,7 @@
 // track what visitors are actually reading, not orphaned historical rows.
 
 import cds from '@sap/cds';
+import { isDeltaRead } from './content-delta-flags.js';
 
 const LOG = cds.log('rag-stats');
 
@@ -64,7 +65,7 @@ export async function computeEmbeddingStats() {
 
   // Active slugs — from ContentCurrent when the read flag is on (Option B), else
   // the legacy manifest-version snapshot.
-  const files = (process.env.CONTENT_DELTA_READ_ENABLED === 'true' && ContentCurrent)
+  const files = (isDeltaRead() && ContentCurrent)
     ? await SELECT.from(ContentCurrent).columns('slug')
     : await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
   const slugs = files.map((f) => f.slug);
