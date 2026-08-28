@@ -20,16 +20,19 @@ export const KINDS = ['env', 'db-setting', 'db', 'constant'];
 export const ENV_RULES = ['true-enables', 'false-disables', 'numeric'];
 export const STATUSES = ['ga', 'dev-only', 'beta', 'parked'];
 
-const cfEnv = (name, value) => ({
-  method: 'cf-env',
-  command: `cf set-env tutorials-srv ${name} ${value} && cf restart tutorials-srv`,
-});
 const adminTile = (tile, hash, note) => ({ method: 'admin-tile', tile, hash, note });
 // ImsConfig-backed DB flag (kind:'db'): flipped via the AdminService
 // setContentDeltaFlags action or a direct ImsConfig upsert. No env var.
 const imsConfigUpsert = (imsKey) => ({
   method: 'db-upsert',
   text: `AdminService.setContentDeltaFlags action (busts cache), or UPSERT ImsConfig key '${imsKey}' = 'true'/'false'.`,
+});
+// Generic ImsConfig-backed DB feature flag (kind:'db', #2060): flipped via the
+// AdminService setFeatureFlag(key, enabled) action (busts the 60s cache) or a
+// direct ImsConfig upsert. No env var — read live through srv/lib/feature-flags/db-flags.js.
+const featureFlagUpsert = (registryKey, imsKey) => ({
+  method: 'db-upsert',
+  text: `AdminService.setFeatureFlag(key:'${registryKey}', enabled) action (busts cache), or UPSERT ImsConfig key '${imsKey}' = 'true'/'false'.`,
 });
 
 export const FEATURE_FLAGS = [
@@ -53,17 +56,17 @@ export const FEATURE_FLAGS = [
   },
   {
     key: 'KG_PAGERANK_ENABLED', label: 'KG PageRank blend', category: 'Knowledge Graph',
-    kind: 'env', envVar: 'KG_PAGERANK_ENABLED', envRule: 'true-enables',
+    kind: 'db', imsConfigKey: 'flag.kg.pagerank',
     valueType: 'boolean', default: false, issue: '#916', status: 'ga',
-    description: 'Blends per-tutorial PageRank into KG neighborhood ranking.',
-    howToChange: cfEnv('KG_PAGERANK_ENABLED', 'true'),
+    description: 'Blends per-tutorial PageRank into KG neighborhood ranking. DB-driven config (ImsConfig key flag.kg.pagerank); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('KG_PAGERANK_ENABLED', 'flag.kg.pagerank'),
   },
   {
     key: 'KG_PATH_V2_ENABLED', label: 'KG path-finding v2', category: 'Knowledge Graph',
-    kind: 'env', envVar: 'KG_PATH_V2_ENABLED', envRule: 'true-enables',
+    kind: 'db', imsConfigKey: 'flag.kg.pathV2',
     valueType: 'boolean', default: false, issue: '#913', status: 'beta',
-    description: 'Property-graph v2 pathBetween with fail-open v1 SPARQL fallback.',
-    howToChange: cfEnv('KG_PATH_V2_ENABLED', 'true'),
+    description: 'Property-graph v2 pathBetween with fail-open v1 SPARQL fallback. DB-driven config (ImsConfig key flag.kg.pathV2); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('KG_PATH_V2_ENABLED', 'flag.kg.pathV2'),
   },
   {
     key: 'communityRankWeight', label: 'KG community search weight',
@@ -199,83 +202,83 @@ export const FEATURE_FLAGS = [
   },
   {
     key: 'METRICS_ENABLED', label: 'Metrics collection', category: 'Observability',
-    kind: 'env', envVar: 'METRICS_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.metrics',
     valueType: 'boolean', default: true, issue: '', status: 'ga',
-    description: 'Prometheus-style metrics snapshots and DB wrap instrumentation. Kill switch — set false to disable all metric writes.',
-    howToChange: cfEnv('METRICS_ENABLED', 'false'),
+    description: 'Prometheus-style metrics snapshots and DB wrap instrumentation. Kill switch — set false to disable all metric writes. DB-driven config (ImsConfig key flag.metrics); no env var. Default ON.',
+    howToChange: featureFlagUpsert('METRICS_ENABLED', 'flag.metrics'),
   },
   // ---- MCP (Phase 2 / Phase 3) ----
   {
     key: 'MCP_AUTH_ENABLED', label: 'MCP OAuth auth tier', category: 'MCP',
-    kind: 'env', envVar: 'MCP_AUTH_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.mcp.auth',
     valueType: 'boolean', default: true, issue: '#1105', status: 'ga',
-    description: 'Phase 2 MCP /mcp-auth and /mcp-pat routes. Kill switch — set false to return 503 on both routes.',
-    howToChange: cfEnv('MCP_AUTH_ENABLED', 'false'),
+    description: 'Phase 2 MCP /mcp-auth and /mcp-pat routes. Kill switch — set false to return 503 on both routes. DB-driven config (ImsConfig key flag.mcp.auth); no env var. Default ON. NOTE: the boot-time route mount reads this on a cold cache and so honors the declared default (ON) at boot; the DB value gates the per-request paths and takes full effect after the warm-up / next restart.',
+    howToChange: featureFlagUpsert('MCP_AUTH_ENABLED', 'flag.mcp.auth'),
   },
   {
     key: 'MCP_PAT_MINT_ENABLED', label: 'MCP PAT minting', category: 'MCP',
-    kind: 'env', envVar: 'MCP_PAT_MINT_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.mcp.patMint',
     valueType: 'boolean', default: true, issue: '#1105', status: 'ga',
-    description: 'Allows PAT tokens to be minted via the MCP auth tier. Kill switch — set false to disable minting (existing PATs still valid).',
-    howToChange: cfEnv('MCP_PAT_MINT_ENABLED', 'false'),
+    description: 'Allows PAT tokens to be minted via the MCP auth tier. Kill switch — set false to disable minting (existing PATs still valid). DB-driven config (ImsConfig key flag.mcp.patMint); no env var. Default ON.',
+    howToChange: featureFlagUpsert('MCP_PAT_MINT_ENABLED', 'flag.mcp.patMint'),
   },
   {
     key: 'MCP_PHASE3_ENABLED', label: 'MCP Phase-3 compose router', category: 'MCP',
-    kind: 'env', envVar: 'MCP_PHASE3_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.mcp.phase3',
     valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
-    description: 'MCP Phase-3 compose router (resources + prompts + admin tools). Kill switch — set false to serve tools-only via plain @cap-js/mcp adapter.',
-    howToChange: cfEnv('MCP_PHASE3_ENABLED', 'false'),
+    description: 'MCP Phase-3 compose router (resources + prompts + admin tools). Kill switch — set false to serve tools-only via plain @cap-js/mcp adapter. DB-driven config (ImsConfig key flag.mcp.phase3); no env var. Default ON. NOTE: the boot-time compose-router mount reads this on a cold cache and so honors the declared default (ON) at boot; the per-request /mcp-admin gate uses the warm DB value.',
+    howToChange: featureFlagUpsert('MCP_PHASE3_ENABLED', 'flag.mcp.phase3'),
   },
   {
     key: 'MCP_RESOURCES_ENABLED', label: 'MCP resources', category: 'MCP',
-    kind: 'env', envVar: 'MCP_RESOURCES_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.mcp.resources',
     valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
-    description: 'MCP resource registration inside the Phase-3 compose router. Kill switch — set false to omit resources from the compose server.',
-    howToChange: cfEnv('MCP_RESOURCES_ENABLED', 'false'),
+    description: 'MCP resource registration inside the Phase-3 compose router. Kill switch — set false to omit resources from the compose server. DB-driven config (ImsConfig key flag.mcp.resources); no env var. Default ON.',
+    howToChange: featureFlagUpsert('MCP_RESOURCES_ENABLED', 'flag.mcp.resources'),
   },
   {
     key: 'MCP_PROMPTS_ENABLED', label: 'MCP prompts', category: 'MCP',
-    kind: 'env', envVar: 'MCP_PROMPTS_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.mcp.prompts',
     valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
-    description: 'MCP prompt registration inside the Phase-3 compose router. Kill switch — set false to omit prompts from the compose server.',
-    howToChange: cfEnv('MCP_PROMPTS_ENABLED', 'false'),
+    description: 'MCP prompt registration inside the Phase-3 compose router. Kill switch — set false to omit prompts from the compose server. DB-driven config (ImsConfig key flag.mcp.prompts); no env var. Default ON.',
+    howToChange: featureFlagUpsert('MCP_PROMPTS_ENABLED', 'flag.mcp.prompts'),
   },
   {
     key: 'MCP_ADMIN_TOOLS_ENABLED', label: 'MCP admin tools', category: 'MCP',
-    kind: 'env', envVar: 'MCP_ADMIN_TOOLS_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.mcp.adminTools',
     valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
-    description: 'MCP admin tool registration inside the Phase-3 compose router. Kill switch — set false to omit admin tools from the compose server.',
-    howToChange: cfEnv('MCP_ADMIN_TOOLS_ENABLED', 'false'),
+    description: 'MCP admin tool registration inside the Phase-3 compose router. Kill switch — set false to omit admin tools from the compose server. DB-driven config (ImsConfig key flag.mcp.adminTools); no env var. Default ON.',
+    howToChange: featureFlagUpsert('MCP_ADMIN_TOOLS_ENABLED', 'flag.mcp.adminTools'),
   },
   // ---- Knowledge Graph kill switches ----
   {
     key: 'KG_RETIRE_ORPHANS_ENABLED', label: 'KG orphan concept retirement', category: 'Knowledge Graph',
-    kind: 'env', envVar: 'KG_RETIRE_ORPHANS_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.kg.retireOrphans',
     valueType: 'boolean', default: true, issue: '#1115', status: 'ga',
-    description: 'Nightly job that retires zero-link orphaned concepts (ACTIVE→RETIRED). Kill switch — set false to skip retirement on each nightly run.',
-    howToChange: cfEnv('KG_RETIRE_ORPHANS_ENABLED', 'false'),
+    description: 'Nightly job that retires zero-link orphaned concepts (ACTIVE→RETIRED). Kill switch — set false to skip retirement on each nightly run. DB-driven config (ImsConfig key flag.kg.retireOrphans); no env var. Default ON.',
+    howToChange: featureFlagUpsert('KG_RETIRE_ORPHANS_ENABLED', 'flag.kg.retireOrphans'),
   },
   {
     key: 'KG_STEP_SLICER_ENABLED', label: 'KG tutorial step slicer', category: 'Knowledge Graph',
-    kind: 'env', envVar: 'KG_STEP_SLICER_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.kg.stepSlicer',
     valueType: 'boolean', default: true, issue: '', status: 'ga',
-    description: 'Per-step concept extraction slice during tutorial ingestion. Kill switch — set false to skip step-level slicing (whole-tutorial extraction still runs).',
-    howToChange: cfEnv('KG_STEP_SLICER_ENABLED', 'false'),
+    description: 'Per-step concept extraction slice during tutorial ingestion. Kill switch — set false to skip step-level slicing (whole-tutorial extraction still runs). DB-driven config (ImsConfig key flag.kg.stepSlicer); no env var. Default ON.',
+    howToChange: featureFlagUpsert('KG_STEP_SLICER_ENABLED', 'flag.kg.stepSlicer'),
   },
   // ---- Content ----
   {
     key: 'COMMUNITY_BLOGS_CLASSIFIER_ENABLED', label: 'Community blogs classifier', category: 'Content',
-    kind: 'env', envVar: 'COMMUNITY_BLOGS_CLASSIFIER_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.community.blogsClassifier',
     valueType: 'boolean', default: true, issue: '#1033', status: 'ga',
-    description: 'Scheduled AI classifier that drains PENDING CommunityBlogPosts rows via SAP Generative AI Hub. Kill switch — set false to skip all classification runs.',
-    howToChange: cfEnv('COMMUNITY_BLOGS_CLASSIFIER_ENABLED', 'false'),
+    description: 'Scheduled AI classifier that drains PENDING CommunityBlogPosts rows via SAP Generative AI Hub. Kill switch — set false to skip all classification runs. DB-driven config (ImsConfig key flag.community.blogsClassifier); no env var. Default ON.',
+    howToChange: featureFlagUpsert('COMMUNITY_BLOGS_CLASSIFIER_ENABLED', 'flag.community.blogsClassifier'),
   },
   {
     key: 'HOMEPAGE_NEWS_RELEVANCE_ENABLED', label: 'Homepage news relevance scoring', category: 'Content',
-    kind: 'env', envVar: 'HOMEPAGE_NEWS_RELEVANCE_ENABLED', envRule: 'false-disables',
+    kind: 'db', imsConfigKey: 'flag.homepage.newsRelevance',
     valueType: 'boolean', default: true, issue: '', status: 'ga',
-    description: 'AI-based relevance scoring for homepage news items. Kill switch — set false to fall back to chronological ordering.',
-    howToChange: cfEnv('HOMEPAGE_NEWS_RELEVANCE_ENABLED', 'false'),
+    description: 'AI-based relevance scoring for homepage news items. Kill switch — set false to fall back to chronological ordering. DB-driven config (ImsConfig key flag.homepage.newsRelevance); no env var. Default ON.',
+    howToChange: featureFlagUpsert('HOMEPAGE_NEWS_RELEVANCE_ENABLED', 'flag.homepage.newsRelevance'),
   },
   {
     key: 'CONTENT_DELTA_WRITE_ENABLED', label: 'Content Option-B dual-write', category: 'Content',
@@ -300,9 +303,9 @@ export const FEATURE_FLAGS = [
   },
   {
     key: 'FRESHNESS_SCAN_ENABLED', label: 'Tutorial freshness bulk scan', category: 'Content',
-    kind: 'env', envVar: 'FRESHNESS_SCAN_ENABLED', envRule: 'true-enables',
+    kind: 'db', imsConfigKey: 'flag.freshness.scan',
     valueType: 'boolean', default: false, status: 'dev-only',
-    description: 'When true, the nightly freshness-scan job runs the detector across the tutorial catalog. Default OFF.',
-    howToChange: cfEnv('FRESHNESS_SCAN_ENABLED', 'true'),
+    description: 'When true, the nightly freshness-scan job runs the detector across the tutorial catalog. DB-driven config (ImsConfig key flag.freshness.scan); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('FRESHNESS_SCAN_ENABLED', 'flag.freshness.scan'),
   },
 ];

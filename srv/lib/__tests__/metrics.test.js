@@ -1,10 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// METRICS_ENABLED moved from an env var to the ImsConfig-backed feature flag
+// (issue #2060). Mock the DB-flag resolver so tests toggle the kill switch
+// without a DB. `state.metricsFlag` is read at call time by isFlagEnabled.
+const state = vi.hoisted(() => ({ metricsFlag: true }));
+vi.mock('../feature-flags/db-flags.js', () => ({
+  isFlagEnabled: (key) => (key === 'METRICS_ENABLED' ? state.metricsFlag : true),
+}));
+
 import * as metrics from '../metrics.js';
 
 describe('metrics module (counters + gauges)', () => {
   beforeEach(() => {
     metrics._resetForTest();
-    delete process.env.METRICS_ENABLED;
+    state.metricsFlag = true;
   });
 
   it('counter() increments a named counter starting from 0', () => {
@@ -27,8 +36,8 @@ describe('metrics module (counters + gauges)', () => {
     expect(snap).toEqual({ counters: {}, gauges: {}, histograms: {} });
   });
 
-  it('is a no-op when METRICS_ENABLED=false (still returns stable shape)', () => {
-    process.env.METRICS_ENABLED = 'false';
+  it('is a no-op when the METRICS_ENABLED flag is off (still returns stable shape)', () => {
+    state.metricsFlag = false;
     metrics.counter('foo');
     metrics.gauge('bar', 42);
     const snap = metrics.snapshot();
@@ -95,7 +104,7 @@ describe('metrics module (counters + gauges)', () => {
 describe('metrics module (histograms)', () => {
   beforeEach(() => {
     metrics._resetForTest();
-    delete process.env.METRICS_ENABLED;
+    state.metricsFlag = true;
   });
 
   it('observe() records samples and snapshot() returns count/p50/p95/p99/max', () => {
@@ -126,8 +135,8 @@ describe('metrics module (histograms)', () => {
     expect(snap.histograms).toEqual({});
   });
 
-  it('observe() no-op when METRICS_ENABLED=false', () => {
-    process.env.METRICS_ENABLED = 'false';
+  it('observe() no-op when the METRICS_ENABLED flag is off', () => {
+    state.metricsFlag = false;
     metrics.observe('latency', 42);
     expect(metrics.snapshot().histograms).toEqual({});
   });
@@ -136,7 +145,7 @@ describe('metrics module (histograms)', () => {
 describe('metrics module (rotate + emitLogLine)', () => {
   beforeEach(() => {
     metrics._resetForTest();
-    delete process.env.METRICS_ENABLED;
+    state.metricsFlag = true;
   });
 
   it('rotate() returns the current snapshot and drains state', () => {

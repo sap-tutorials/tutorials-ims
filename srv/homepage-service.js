@@ -25,6 +25,7 @@ import * as mcpHp from './lib/mcp-homepage-tools.js';
 import { buildEnvelope, hashEnvelope } from './lib/homepage/personalized-envelope.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
 import * as metrics from './lib/metrics.js';
+import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 import { readSnapshotForFeed } from './lib/featured-topics-snapshot.js';
 import { readSnapshotForFeed as readTtSnapshotForFeed } from './lib/top-tutorials-snapshot.js';
 import { buildTopicClustersPayload } from './lib/build-topic-clusters.js';
@@ -102,7 +103,7 @@ const NEWS_CACHE_MS = 60_000;
 const NEWS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 async function _isNewsRelevanceEnabled() {
-  if (process.env.HOMEPAGE_NEWS_RELEVANCE_ENABLED === 'false') return false;
+  if (!isFlagEnabled('HOMEPAGE_NEWS_RELEVANCE_ENABLED')) return false;
   try {
     const db = await cds.connect.to('db');
     const { HomepageConfig } = cds.entities('com.sap.developers.ims');

@@ -37,6 +37,7 @@
 
 import cds from '@sap/cds';
 import * as metrics from '../lib/metrics.js';
+import { isFlagEnabled } from '../lib/feature-flags/db-flags.js';
 
 const NS = 'com.sap.developers.ims';
 const LOG = cds.log('kg-retire-orphans');
@@ -56,9 +57,9 @@ export function readAgeDays() {
   return n;
 }
 
-/** Only the literal string 'false' disables; default enabled. */
+/** Only the literal string 'false' disabled; default enabled. Now DB-driven (flag.kg.retireOrphans). */
 export function isEnabled() {
-  return process.env.KG_RETIRE_ORPHANS_ENABLED !== 'false';
+  return isFlagEnabled('KG_RETIRE_ORPHANS_ENABLED');
 }
 
 // ---------------------------------------------------------------------------

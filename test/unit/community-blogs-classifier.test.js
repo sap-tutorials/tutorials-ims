@@ -13,6 +13,7 @@ import {
   classifyPendingBatch,
   isClassifierEnabled,
 } from '../../srv/lib/community-blogs-classifier.js';
+import { __setFlagForTest, __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
 
 cds.test('serve', '--project', '.', '--in-memory');
 
@@ -42,23 +43,18 @@ function toolCall({ verdict, confidence, reason }) {
 // -----------------------------------------------------------------------------
 
 describe('isClassifierEnabled', () => {
-  const orig = process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED;
-  afterAll(() => {
-    // Restore env so the next describe doesn't inherit our last-test setting.
-    if (orig === undefined) delete process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED;
-    else process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED = orig;
-  });
+  afterAll(() => { __resetFlagsForTest(); });
 
-  it('enabled by default (env unset)', () => {
-    delete process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED;
+  it('enabled by default (flag unset)', () => {
+    __resetFlagsForTest();
     expect(isClassifierEnabled()).toBe(true);
   });
-  it('enabled when set to "true"', () => {
-    process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED = 'true';
+  it('enabled when flag set true', () => {
+    __setFlagForTest('COMMUNITY_BLOGS_CLASSIFIER_ENABLED', true);
     expect(isClassifierEnabled()).toBe(true);
   });
-  it('disabled when set to "false"', () => {
-    process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED = 'false';
+  it('disabled when flag set false', () => {
+    __setFlagForTest('COMMUNITY_BLOGS_CLASSIFIER_ENABLED', false);
     expect(isClassifierEnabled()).toBe(false);
   });
 });
@@ -199,15 +195,13 @@ describe('classifyPendingBatch', () => {
   });
 
   it('returns disabled:true when kill switch is on', async () => {
-    const orig = process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED;
-    process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED = 'false';
+    __setFlagForTest('COMMUNITY_BLOGS_CLASSIFIER_ENABLED', false);
     try {
       const summary = await classifyPendingBatch({ limit: 10 });
       expect(summary.disabled).toBe(true);
       expect(summary.drained).toBe(0);
     } finally {
-      if (orig === undefined) delete process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED;
-      else process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED = orig;
+      __resetFlagsForTest();
     }
   });
 

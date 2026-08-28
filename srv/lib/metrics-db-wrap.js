@@ -28,6 +28,7 @@
 //   - db.pool.timeout     counter   — error.message matches /timeout|acquire/i
 
 import * as metrics from './metrics.js';
+import { isFlagEnabled } from './feature-flags/db-flags.js';
 
 // Observe promise resolution/rejection without altering the caller's chain.
 // Non-thenable values (unlikely for cds.db.run/tx but defensive) are recorded
@@ -67,7 +68,7 @@ function timeAndCount(promise, metricName) {
  *   false if already installed, no db, or env-flags disabled.
  */
 export function installDbWrap(cds) {
-  if (process.env.METRICS_ENABLED === 'false') return false;
+  if (!isFlagEnabled('METRICS_ENABLED')) return false;
   if (process.env.METRICS_DB_WRAP !== 'true') return false;
   if (globalThis.__metricsDbWrapInstalled) return false;
   if (!cds?.db || typeof cds.db.run !== 'function' || typeof cds.db.tx !== 'function') {

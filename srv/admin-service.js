@@ -27,6 +27,9 @@ import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active
 import { enrichSignupRows } from './lib/devtoberfest-signup-enrich.js';
 import { getTutorialSource } from './lib/content-store.js';
 import { isDeltaRead, bustContentDeltaFlagsCache } from './lib/content-delta-flags.js';
+import {
+  bustFeatureFlagsCache, managedFlagKeys, flagMeta,
+} from './lib/feature-flags/db-flags.js';
 import { buildTutorialLinks } from './lib/tutorial-links.js';
 import { buildPreviewLinks } from './lib/preview-links.js';
 import { runSeedApiDocs } from './lib/seed-api-docs.js';
@@ -1996,6 +1999,47 @@ export default class AdminService extends cds.ApplicationService {
         skipCarryForward: await readKey(DELTA_SKIP_CARRYFORWARD_KEY),
       };
     }
+
+    // ---- Generic ImsConfig-backed feature flags (issue #2060) ----
+    // The 14 formerly-env on/off flags (metrics, MCP, KG jobs, homepage news
+    // relevance, freshness scan, etc.) are now ImsConfig rows read live through
+    // srv/lib/feature-flags/db-flags.js (60s cache). setFeatureFlag upserts one
+    // flag by its registry key and busts the cache so the flip is immediate.
+    this.on('setFeatureFlag', async (req) => {
+      const { flag: key, enabled } = req.data;
+      const meta = flagMeta(key);
+      if (!meta) return req.reject(400, `Unknown feature flag key: ${key}`);
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const value = String(Boolean(enabled));
+      const existing = await SELECT.one.from(ImsConfig).where({ key: meta.imsConfigKey });
+      if (existing) {
+        await UPDATE(ImsConfig, existing.ID).set({ value });
+      } else {
+        await INSERT.into(ImsConfig).entries({ ID: cds.utils.uuid(), key: meta.imsConfigKey, value });
+      }
+      bustFeatureFlagsCache();
+      return { flag: key, enabled: Boolean(enabled) };
+    });
+
+    this.on('getFeatureFlags', async () => {
+      // Read the backing ImsConfig rows directly (not the 60s cache) so the
+      // result reflects the true persisted value — including a value just set
+      // via setFeatureFlag, whose bust leaves the cache cold.
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const keys = managedFlagKeys();
+      const metas = keys.map((key) => ({ key, ...flagMeta(key) }));
+      const rows = await SELECT.from(ImsConfig)
+        .columns('key', 'value')
+        .where({ key: { in: metas.map((m) => m.imsConfigKey) } });
+      const byKey = Object.create(null);
+      for (const r of rows || []) byKey[r.key] = String(r.value).toLowerCase() === 'true';
+      return metas.map((m) => ({
+        flag: m.key,
+        imsConfigKey: m.imsConfigKey,
+        enabled: m.imsConfigKey in byKey ? byKey[m.imsConfigKey] : m.default,
+        default: m.default,
+      }));
+    });
 
     this.on('findMissingSlugs', async () => {
       const { findMissingSlugs } = await import('./lib/slug-mapping.js');

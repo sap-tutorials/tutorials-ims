@@ -14,6 +14,7 @@
 import cds from '@sap/cds';
 import { detectFreshness } from '../lib/freshness-detector.js';
 import { persistReport } from '../lib/freshness-persist.js';
+import { isFlagEnabled } from '../lib/feature-flags/db-flags.js';
 
 const LOG = cds.log('freshness-scan');
 const DEFAULT_LIMIT = 50;   // budget cap per run
@@ -28,8 +29,8 @@ const DEFAULT_LIMIT = 50;   // budget cap per run
  * @returns {Promise<{ scanned: number, skipped: boolean }>}
  */
 export async function runFreshnessScan(_logId, opts = {}) {
-  if (process.env.FRESHNESS_SCAN_ENABLED !== 'true') {
-    LOG.info('FRESHNESS_SCAN_ENABLED != true — skipping');
+  if (!isFlagEnabled('FRESHNESS_SCAN_ENABLED')) {
+    LOG.info('FRESHNESS_SCAN_ENABLED flag off — skipping');
     return { scanned: 0, skipped: true };
   }
 

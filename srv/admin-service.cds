@@ -785,6 +785,15 @@ service AdminService {
     returns { write : Boolean; read : Boolean; skipCarryForward : Boolean };
   function getContentDeltaFlags()
     returns { write : Boolean; read : Boolean; skipCarryForward : Boolean };
+  // Generic ImsConfig-backed on/off feature flags (issue #2060). Moved from env
+  // vars to DB config so an admin can flip them without a redeploy. `key` is the
+  // registry key (e.g. 'METRICS_ENABLED', 'KG_PAGERANK_ENABLED'). The setter
+  // upserts the backing ImsConfig row and busts the 60s server-side cache so a
+  // flip is effective at once.
+  action setFeatureFlag(flag : String, enabled : Boolean)
+    returns { flag : String; enabled : Boolean };
+  function getFeatureFlags()
+    returns many { flag : String; imsConfigKey : String; enabled : Boolean; default : Boolean };
   action testNotificationEmail(to: String, level: Integer) returns {
     success : Boolean;
     error   : String;

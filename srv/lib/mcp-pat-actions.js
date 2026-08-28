@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import { resolveDbUser } from './resolve-db-user.js';
 import { invalidateCacheByPatId } from './mcp-pat-middleware.js';
 import * as metrics from './metrics.js';
+import { isFlagEnabled } from './feature-flags/db-flags.js';
 
 const VALID_SCOPES = new Set(['read', 'write']);
 const MIN_TTL = 1;
@@ -49,7 +50,7 @@ function generateToken() {
 }
 
 export async function handleMintPAT(req) {
-  if (process.env.MCP_PAT_MINT_ENABLED === 'false') return req.reject(503, 'PAT minting is disabled');
+  if (!isFlagEnabled('MCP_PAT_MINT_ENABLED')) return req.reject(503, 'PAT minting is disabled');
   const { name, scopes, ttlDays } = req.data;
   if (!name || typeof name !== 'string') return req.error(400, 'name is required');
   try { assertValidScopes(scopes); } catch (e) { return req.error(400, e.message); }

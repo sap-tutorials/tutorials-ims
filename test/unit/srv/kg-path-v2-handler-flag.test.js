@@ -13,6 +13,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import cds from '@sap/cds';
+import { __setFlagForTest, __resetFlagsForTest } from '../../../srv/lib/feature-flags/db-flags.js';
 
 // Enable the KG service surface (bypasses the this.before('*') 503 gate).
 // Must be set BEFORE cds.test() boots so resolveKnowledgeGraphSettings
@@ -45,7 +46,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.KG_PATH_V2_ENABLED;
+  __resetFlagsForTest();
 });
 
 afterAll(() => {
@@ -58,7 +59,7 @@ const CALL = `/graph/pathBetween(fromSlug='a',toSlug='b')`;
 
 describe('pathBetween handler — flag off', () => {
   it('v2 wrapper is never called; v1 (kgQuery) runs with IRI-shaped params', async () => {
-    delete process.env.KG_PATH_V2_ENABLED;
+    __setFlagForTest('KG_PATH_V2_ENABLED', false);
     // v1 SPARQL result — an empty PATH_BETWEEN JSON body.
     kgQueryMock.mockResolvedValue({
       response: JSON.stringify({ results: { bindings: [] } }),
@@ -84,7 +85,7 @@ describe('pathBetween handler — flag off', () => {
 });
 
 describe('pathBetween handler — flag on', () => {
-  beforeEach(() => { process.env.KG_PATH_V2_ENABLED = 'true'; });
+  beforeEach(() => { __setFlagForTest('KG_PATH_V2_ENABLED', true); });
 
   it('v2 returns rows → response is v2-mapped, v1 not called', async () => {
     kgPathV2Mock.mockResolvedValue([
