@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { withRetry, classifyError, formatErrorChain } from '../lib/publish-retry.js';
+import { withRetry, classifyError, formatErrorChain, computeBackoff } from '../lib/publish-retry.js';
 
 describe('classifyError', () => {
   it('classifies HTTP 5xx as transient', () => {
@@ -46,6 +46,26 @@ describe('formatErrorChain', () => {
     expect(formatted).toContain('caused by: Error: middle');
     expect(formatted).toContain('caused by: Error: inner');
     expect(formatted).toContain('UND_ERR_SOCKET');
+  });
+});
+
+describe('computeBackoff', () => {
+  it('returns baseMs unchanged when jitterRatio is 0 or omitted', () => {
+    expect(computeBackoff(2000)).toBe(2000);
+    expect(computeBackoff(2000, 0)).toBe(2000);
+    // rand should be ignored when there is no jitter
+    expect(computeBackoff(2000, 0, () => 0.99)).toBe(2000);
+  });
+
+  it('scales within [1-r, 1+r] of baseMs', () => {
+    // rand()=0 → factor 1-r (low end); rand()=1 → factor 1+r (high end); 0.5 → base
+    expect(computeBackoff(1000, 0.2, () => 0)).toBe(800);
+    expect(computeBackoff(1000, 0.2, () => 1)).toBe(1200);
+    expect(computeBackoff(1000, 0.2, () => 0.5)).toBe(1000);
+  });
+
+  it('never returns a negative wait', () => {
+    expect(computeBackoff(100, 5, () => 0)).toBe(0);
   });
 });
 

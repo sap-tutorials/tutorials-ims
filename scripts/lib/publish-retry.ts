@@ -41,6 +41,23 @@ export interface RetryOptions {
   attempts: number;
   backoffMs: number[];
   onAttemptFail?: (attempt: number, err: any, willRetry: boolean) => void;
+  /**
+   * Optional +/- jitter as a fraction of the base delay (e.g. 0.2 = ±20%).
+   * Defaults to 0 (no jitter) so existing callers are byte-for-byte unchanged.
+   * Jitter de-synchronizes retries so all three DevRel projects' publishes don't
+   * re-hit a briefly-unhealthy backend in lockstep.
+   */
+  jitterRatio?: number;
+}
+
+/**
+ * Compute the wait before the next attempt. Pure + injectable rand for tests.
+ * With jitterRatio r, returns baseMs scaled by a factor in [1-r, 1+r], floored at 0.
+ */
+export function computeBackoff(baseMs: number, jitterRatio = 0, rand: () => number = Math.random): number {
+  if (!jitterRatio) return baseMs;
+  const factor = 1 + (rand() * 2 - 1) * jitterRatio; // [1-r, 1+r)
+  return Math.max(0, Math.round(baseMs * factor));
 }
 
 export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions): Promise<T> {
@@ -54,7 +71,8 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions): Pr
       const willRetry = cls === 'transient' && attempt < opts.attempts;
       opts.onAttemptFail?.(attempt, err, willRetry);
       if (!willRetry) break;
-      const wait = opts.backoffMs[Math.min(attempt - 1, opts.backoffMs.length - 1)];
+      const base = opts.backoffMs[Math.min(attempt - 1, opts.backoffMs.length - 1)];
+      const wait = computeBackoff(base, opts.jitterRatio);
       await new Promise(r => setTimeout(r, wait));
     }
   }

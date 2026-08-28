@@ -268,6 +268,13 @@ jobs:
         env:
           CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
           CONTENT_API_KEY_QA: ${{ secrets.CONTENT_API_KEY_QA }}
+          # Scope the publish to the changed slug on a commit-triggered (or single-slug
+          # workflow_dispatch) rebuild — publish-content.ts reads PUBLISH_SLUG as the
+          # --slug fallback. Empty on a full rebuild → whole-catalog delta. Mirrors
+          # rebuild-content.yml. Without force-publish, this makes the commit O(changed)
+          # (sub-second) instead of a ~35s full-catalog write. force-publish=true ignores
+          # the slug and re-seeds the whole catalog (--force).
+          PUBLISH_SLUG: ${{ (! inputs.force-publish) && (github.event.client_payload.slug || inputs.slug) || '' }}
 
       # #1373 — synthetic watchdog. The publish step reporting success is not
       # proof rows landed: the render-concepts 404 that hid for days (#1372)

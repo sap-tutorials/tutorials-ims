@@ -35,7 +35,13 @@ export function resolvePublishConfig({ channel }: { channel: Channel }): Publish
       baseUrl: process.env.CAP_QA_BASE_URL ?? 'http://localhost:4005',
       apiKey: process.env.CONTENT_API_KEY_QA,
       sourceDir: 'hugo/public-qa',
-      force: true,
+      // Delta by default (mirrors prod), so a commit-triggered QA rebuild that
+      // sets PUBLISH_SLUG publishes only the changed slug — a sub-second commit
+      // instead of a ~35s full-catalog force write that intermittently 502/503s
+      // the single srv-qa instance. `force-publish=true` (workflow input → --force)
+      // still does a full re-seed. Safe now that QA has Option B fully active
+      // (mutable ContentCurrent, O(changed) publish, server carries unchanged slugs).
+      force: process.argv.includes('--force'),
     };
   }
   return {
@@ -754,7 +760,7 @@ async function main() {
     // 2) Fetch server's source-hash map.
     let remote: Record<string, string>;
     try {
-      remote = await fetchRemoteSourceHashes({ baseUrl: opts.baseUrl });
+      remote = await fetchRemoteSourceHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey });
     } catch (err) {
       console.error('Verify failed: cannot reach /content/source-hashes:', formatErrorChain(err));
       process.exit(1);
@@ -845,7 +851,7 @@ async function main() {
 
     // 3. Fetch /content/source-hashes
     let remote: Record<string, string>;
-    try { remote = await fetchRemoteSourceHashes({ baseUrl: opts.baseUrl }); }
+    try { remote = await fetchRemoteSourceHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }); }
     catch (err) {
       console.error('purge-orphans: cannot reach /content/source-hashes:', formatErrorChain(err));
       process.exit(1);
@@ -1074,7 +1080,7 @@ async function main() {
   let remoteHashes: Record<string, string> = {};
   if (mode !== 'force') {
     log(`Fetching remote hashes from ${opts.baseUrl}/content/hashes...`);
-    try { remoteHashes = await fetchRemoteHashes({ baseUrl: opts.baseUrl }); }
+    try { remoteHashes = await fetchRemoteHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }); }
     catch (err) {
       console.error(`Cannot reach ${opts.baseUrl}/content/hashes: ${formatErrorChain(err)}`);
       process.exit(1);
@@ -1101,7 +1107,7 @@ async function main() {
     const localSourceHashes = computeLocalSourceHashes(targetSlugs, cacheDirForHashes);
     let serverSourceHashes: Record<string, string> = {};
     try {
-      serverSourceHashes = await fetchRemoteSourceHashes({ baseUrl: opts.baseUrl });
+      serverSourceHashes = await fetchRemoteSourceHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey });
     } catch (err) {
       console.warn(`[publish-content] #672 short-circuit disengaged: cannot reach /content/source-hashes: ${formatErrorChain(err)}`);
     }
@@ -1244,14 +1250,34 @@ async function main() {
     commit = await withRetry(
       () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, allowRevertSlugs }),
       {
-        attempts: 3, backoffMs: [1000, 3000, 9000],
+        // Widened from [1000,3000,9000]/3 attempts: the old schedule only ever
+        // waited 1s then 3s (~4s total window) — too short to ride out a transient
+        // gorouter 502/503 blip on the single srv-qa instance (the commit is the
+        // longest single request in the publish). ±20% jitter de-syncs retries
+        // across the three DevRel projects. 502/503/504 are already classified
+        // transient in publish-retry.ts.
+        attempts: 5, backoffMs: [2000, 5000, 10000, 20000], jitterRatio: 0.2,
         onAttemptFail: (attempt, err, willRetry) => {
-          console.error(`[publish-content] commit failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          console.error(`[publish-content] commit failed (attempt ${attempt}/5): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
         },
       }
     );
   } catch (err) {
-    console.error(`[publish-content] commit failed permanently — manifest left for GC reaper: ${formatErrorChain(err)}`);
+    console.error(`[publish-content] commit failed permanently: ${formatErrorChain(err)}`);
+    // Release the server-side publish lock + mark the manifest FAILED instead of
+    // stranding it for the 30-min TTL (which 409s every QA rebuild in that window).
+    // Mirrors the append-failure path; abort gets its own transient retry since the
+    // 502/503 that killed the commit is usually a brief blip that has cleared by now.
+    // If abort still can't reach the server, the stuck-manifest reaper is the backstop.
+    try {
+      await withRetry(
+        () => abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'commit failed' }),
+        { attempts: 4, backoffMs: [1000, 3000, 6000], jitterRatio: 0.2 }
+      );
+      console.error('[publish-content] session aborted — publish lock released');
+    } catch (abortErr) {
+      console.error(`[publish-content] abort after commit failure also failed — manifest left for GC reaper: ${formatErrorChain(abortErr)}`);
+    }
     process.exit(1);
   }
 
@@ -1328,7 +1354,7 @@ async function main() {
   // --- auto-verify ---
   log('Verifying server state matches local...');
   let postRemote: Record<string, string>;
-  try { postRemote = await fetchRemoteHashes({ baseUrl: opts.baseUrl }); }
+  try { postRemote = await fetchRemoteHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }); }
   catch (err) {
     console.error(`Auto-verify warning: cannot reach /content/hashes after commit: ${formatErrorChain(err)}`);
     process.exit(0); // commit was successful; don't punish for a transient verify-fetch error

@@ -112,8 +112,11 @@ export async function abortSession({ baseUrl, apiKey, sessionId, reason }: {
   }
 }
 
-export async function fetchRemoteHashes({ baseUrl }: { baseUrl: string }): Promise<Record<string, string>> {
-  const res = await fetch(`${baseUrl}/content/hashes`);
+export async function fetchRemoteHashes({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<Record<string, string>> {
+  // srv-qa gates /content/hashes behind contentAuthMiddleware (unlike prod srv,
+  // where it's public-read). Send the bearer when we have one — harmless on the
+  // public prod route, required on QA or delta detection 401s.
+  const res = await fetch(`${baseUrl}/content/hashes`, apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined);
   if (!res.ok) {
     if (res.status === 503) return {};
     const err: any = new Error(`HTTP ${res.status}`);
@@ -130,10 +133,11 @@ export async function fetchRemoteHashes({ baseUrl }: { baseUrl: string }): Promi
  * Slugs whose sourceHash is null (e.g. published before PR #591) are omitted
  * from the response — drift check skips those by design.
  *
- * Public-read like /content/hashes; no auth needed.
+ * Public-read on prod srv; srv-qa gates it behind contentAuthMiddleware, so pass
+ * apiKey when publishing to QA.
  */
-export async function fetchRemoteSourceHashes({ baseUrl }: { baseUrl: string }): Promise<Record<string, string>> {
-  const res = await fetch(`${baseUrl}/content/source-hashes`);
+export async function fetchRemoteSourceHashes({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<Record<string, string>> {
+  const res = await fetch(`${baseUrl}/content/source-hashes`, apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined);
   if (!res.ok) {
     if (res.status === 503) return {};
     if (res.status === 404) {
