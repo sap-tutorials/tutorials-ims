@@ -30,8 +30,14 @@ describe('SYSTEM_PROMPT context + SAP guidance', () => {
     expect(SYSTEM_PROMPT).toMatch(/pin/i);
   });
 
-  it('biases toward precision: omit speculative findings, report each issue once', () => {
-    expect(SYSTEM_PROMPT).toMatch(/prefer reporting nothing|omit it/i);
+  it('calibrates precision by severity: strict High/Medium, advisory Low, each issue once', () => {
+    // High/Medium held to a strict, confidence-first bar...
+    expect(SYSTEM_PROMPT).toMatch(/high and medium/i);
+    expect(SYSTEM_PROMPT).toMatch(/prefer omitting|speculative/i);
+    // ...but Low is explicitly advisory so the feature surfaces cosmetic/dated-style
+    // staleness instead of defaulting to an empty report (regression fix).
+    expect(SYSTEM_PROMPT).toMatch(/advisory/i);
+    expect(SYSTEM_PROMPT).toMatch(/do not default to reporting nothing/i);
     expect(SYSTEM_PROMPT).toMatch(/once/i);
     expect(SYSTEM_PROMPT).toMatch(/author/i);
   });
