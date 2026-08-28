@@ -22,6 +22,7 @@ const { bump, startAutoFlush } = require('./lib/hit-counter')
 const { safeFetch } = require('./lib/safe-fetch')
 const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
 const { mcpManifestHandler } = require('./lib/well-known-mcp-manifest')
+const { mcpAuthChallengeHandler } = require('./lib/mcp-auth-challenge')
 const { securityTxtHandler } = require('./lib/security-txt')
 const { sitemapIndexRedirectHandler } = require('./lib/sitemap-index-redirect')
 const shouldProcessImage = require('./lib/img-cdn-should-process')
@@ -596,6 +597,7 @@ ar.start({
           { path: '/', handler: mcpManifestHandler },
           { path: '/', handler: securityTxtHandler },
           { path: '/', handler: sitemapIndexRedirectHandler },
+          { path: '/', handler: mcpAuthChallengeHandler },
           { path: '/', handler: devtoberfestCspHandler },
           { path: '/', handler: imgCdnHandler },
           { path: '/', handler: legacyRedirectsHandler },
