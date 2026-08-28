@@ -73,15 +73,33 @@ function onTimelineNameClick(item: Completion) {
   window.location.href = itemUrl(item)
 }
 
+// The approuter serves a lapsed/anonymous session as 200 + an XSUAA
+// login-redirect HTML page (NOT 401), and Akamai can serve a cached anon
+// /auth/user to a signed-in browser. A truthy signal requires JSON +
+// body.authenticated — never authRes.ok alone. Mirrors coordinator.ts.
+async function isSignedIn(): Promise<boolean> {
+  try {
+    const r = await fetch('/auth/user', { credentials: 'include' })
+    if (!r.ok) return false
+    if (!(r.headers.get('content-type') || '').includes('json')) return false
+    const body = await r.json()
+    return !!body?.authenticated
+  } catch { return false }
+}
+
 onMounted(async () => {
   try {
-    const authRes = await fetch('/auth/user', { credentials: 'include' })
-    if (!authRes.ok) { isLoggedIn.value = false; loading.value = false; return }
+    if (!(await isSignedIn())) { isLoggedIn.value = false; loading.value = false; return }
     isLoggedIn.value = true
     const dataRes = await fetch('/api/getMyCompletions()', { credentials: 'include' })
     if (!dataRes.ok) {
       errorMsg.value = `Failed to load recent activity (HTTP ${dataRes.status}).`
       loading.value = false; return
+    }
+    // Session may have lapsed after the gate → 200 + HTML login page. Treat a
+    // non-JSON body as signed out, not a data error.
+    if (!(dataRes.headers.get('content-type') || '').includes('json')) {
+      isLoggedIn.value = false; loading.value = false; return
     }
     const body = await dataRes.json()
     rows.value = Array.isArray(body) ? body : (body.value || [])
