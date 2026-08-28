@@ -83,13 +83,30 @@ The slicer uses raw `db.run()` for BLOB retrieval to avoid the CAP/HANA LOB loca
 
 ## `.well-known` discovery
 
-Two OAuth discovery documents are served at the approuter level, enabling MCP 2.1 OAuth auto-discovery (RFC 8414 + RFC 9728):
+Discovery documents are served as **runtime approuter middleware**
+(`insertMiddleware.first` in `approuter/server.js`), NOT static files — values
+derive at request time from the bound XSUAA VCAP credentials and the request
+host, so they are correct in every environment with no build-time substitution.
 
-- **`/.well-known/oauth-authorization-server`** — populated from the XSUAA/IAS instance's metadata. Fields: `issuer`, `authorization_endpoint`, `token_endpoint`, `code_challenge_methods_supported: ['S256']`, `token_endpoint_auth_methods_supported: ['none']` (public clients). Per-env values are substituted at deploy time from `deploy/dev.mtaext` / `deploy/prod.mtaext`.
+- `approuter/lib/well-known-oauth.js` — `/.well-known/oauth-authorization-server`
+  (RFC 8414), its alias `/.well-known/openid-configuration`, and
+  `/.well-known/oauth-protected-resource` (RFC 9728). The `openid-configuration`
+  alias returns the OAuth Authorization Server Metadata body (RFC 8414),
+  intentionally omitting OIDC-only fields like `jwks_uri`; MCP OAuth-fallback
+  clients consume only the OAuth endpoints. `authorization_servers`/`issuer`
+  point at the XSUAA URL (Option A); `scopes_supported` advertises the
+  fully-qualified `<xsappname>.Tutorial.MCP` (bare `Tutorial.MCP` is rejected by
+  XSUAA with `invalid_scope`).
+- `approuter/lib/well-known-mcp-manifest.js` — `/.well-known/mcp.json`, a
+  non-standard courtesy manifest listing the MCP mounts. Not part of the MCP spec.
+- `approuter/lib/security-txt.js` — `/.well-known/security.txt` (RFC 9116).
+- `approuter/lib/mcp-auth-challenge.js` — a 401 on `/mcp-auth/*` and `/mcp-admin/*`
+  without a bearer carries `WWW-Authenticate: Bearer resource_metadata="…"`, the
+  MCP-preferred discovery trigger.
 
-- **`/.well-known/oauth-protected-resource`** — identifies this server as a protected resource (RFC 9728). Fields: `resource`, `scopes_supported: ['Tutorial.MCP']`, `authorization_servers: [<xsuaa-issuer>]`.
-
-Both documents are served as static JSON by the approuter (`approuter/static/.well-known/`). No CAP backend round-trip. Their content-type is `application/json`.
+**Edge note:** on `developers.sap.com`, Akamai 403s `/.well-known/*` at the edge
+except `security.txt`. The edge must forward these paths to origin — see
+[operations/akamai-well-known-forward.md](../operations/akamai-well-known-forward.md).
 
 ## Phase 3 — the compose layer
 

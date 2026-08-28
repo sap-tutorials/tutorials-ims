@@ -62,4 +62,21 @@ describeIf('OAuth discovery documents (deployed dev)', { timeout: 20_000 }, () =
     expect(Array.isArray(doc.authorization_servers)).toBe(true);
     expect(doc.authorization_servers.length).toBeGreaterThan(0);
   });
+
+  it('serves /.well-known/openid-configuration identical to oauth-authorization-server', async () => {
+    const [as, oidc] = await Promise.all([
+      fetch(`${BASE}/.well-known/oauth-authorization-server`).then(r => r.json()),
+      fetch(`${BASE}/.well-known/openid-configuration`).then(r => r.json()),
+    ]);
+    expect(oidc).toEqual(as);
+  });
+
+  it('serves /.well-known/mcp.json with the four servers', async () => {
+    const res = await fetch(`${BASE}/.well-known/mcp.json`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+    const doc = await res.json();
+    expect(doc.servers.map(s => s.name)).toEqual(['search', 'homepage', 'graph', 'developer']);
+    expect(doc.authorization.protected_resource).toContain('/.well-known/oauth-protected-resource');
+  });
 });
