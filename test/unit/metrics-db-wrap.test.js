@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as metrics from '../../srv/lib/metrics.js';
 import { installDbWrap, _resetForTest as _resetWrap } from '../../srv/lib/metrics-db-wrap.js';
+import { __setFlagForTest, __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
 
 // Build a mock `cds` module surface: cds.db.run + cds.db.tx with runtime-like
 // semantics — db.tx(fn) invokes fn with a tx object exposing tx.run(...) and
@@ -22,19 +23,18 @@ function makeMockCds({ runImpl, txRunImpl } = {}) {
 }
 
 describe('metrics-db-wrap installDbWrap (#909)', () => {
-  const originalMetricsEnabled = process.env.METRICS_ENABLED;
   const originalDbWrap = process.env.METRICS_DB_WRAP;
 
   beforeEach(() => {
     _resetWrap();
     metrics._resetForTest();
-    delete process.env.METRICS_ENABLED;
+    __resetFlagsForTest();
     process.env.METRICS_DB_WRAP = 'true';
   });
 
   afterEach(() => {
     _resetWrap();
-    process.env.METRICS_ENABLED = originalMetricsEnabled;
+    __resetFlagsForTest();
     process.env.METRICS_DB_WRAP = originalDbWrap;
   });
 
@@ -46,8 +46,8 @@ describe('metrics-db-wrap installDbWrap (#909)', () => {
     expect(cds.db.run).toBe(originalRun);
   });
 
-  it('does NOT install when METRICS_ENABLED === "false" (kill-switch)', () => {
-    process.env.METRICS_ENABLED = 'false';
+  it('does NOT install when the METRICS_ENABLED flag is off (kill-switch)', () => {
+    __setFlagForTest('METRICS_ENABLED', false);
     process.env.METRICS_DB_WRAP = 'true';
     const cds = makeMockCds();
     const originalRun = cds.db.run;

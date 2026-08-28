@@ -19,6 +19,7 @@ import { getDescription } from '@cap-js/mcp/lib/utils/cds-to-schema.js';
 import { registerResources as realRegisterResources } from './mcp-resources.js';
 import { loadPrompts, listPrompts, getPrompt } from './mcp-prompt-loader.js';
 import * as metrics from './metrics.js';
+import { isFlagEnabled } from './feature-flags/db-flags.js';
 
 const LOG = cds.log('mcp-compose');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,8 +34,15 @@ export function promptMapSingleton() {
 }
 
 export function flags() {
-  const on = (v) => process.env[v] !== 'false';
-  return { phase3: on('MCP_PHASE3_ENABLED'), resources: on('MCP_RESOURCES_ENABLED'), prompts: on('MCP_PROMPTS_ENABLED'), adminTools: on('MCP_ADMIN_TOOLS_ENABLED') };
+  // DB-driven (ImsConfig flag.mcp.*, #2060) — all default ON. On a cold cache
+  // (e.g. boot-time route mount) each read returns the declared default; the
+  // per-request paths read the warm DB value.
+  return {
+    phase3: isFlagEnabled('MCP_PHASE3_ENABLED'),
+    resources: isFlagEnabled('MCP_RESOURCES_ENABLED'),
+    prompts: isFlagEnabled('MCP_PROMPTS_ENABLED'),
+    adminTools: isFlagEnabled('MCP_ADMIN_TOOLS_ENABLED'),
+  };
 }
 
 /** Wire tools + (optionally) resources + prompts onto `server`, set capabilities. */

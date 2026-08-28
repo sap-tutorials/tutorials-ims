@@ -555,6 +555,7 @@ import { searchKgHandler } from './lib/kg/search-kg-handler.js';
 import { embed as embedInputs } from './lib/embedding-client.js';
 import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 import * as metrics from './lib/metrics.js';
+import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 import { handleSharedConcepts, handleNeighborhood, handleSearchConcepts, handleCommunity } from './lib/mcp-kg-tools.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
@@ -1108,7 +1109,7 @@ export default cds.service.impl(async function () {
     // (LRU-cached, 5-min TTL, single-flight in-file) and pass as the 5th
     // positional arg. When off, EMPTY_RANK_MAPS collapses every multiplier
     // to 1.0, so the arm output is identical to pre-#916.
-    const rankMaps = process.env.KG_PAGERANK_ENABLED === 'true'
+    const rankMaps = isFlagEnabled('KG_PAGERANK_ENABLED')
       ? await loadRankMaps()
       : EMPTY_RANK_MAPS;
     const ranked = rankNeighborhood(rows, slug, coMap, tutorialTeachesMap, rankMaps);
@@ -1318,7 +1319,7 @@ export default cds.service.impl(async function () {
     // 7. Rank with raised per-section cap (30 vs the sidebar's 10) AND
     //    flag-gated PageRank blend (#916). The 6th positional arg carries
     //    the cap; the 5th carries rankMaps (or EMPTY_RANK_MAPS when off).
-    const rankMaps = process.env.KG_PAGERANK_ENABLED === 'true'
+    const rankMaps = isFlagEnabled('KG_PAGERANK_ENABLED')
       ? await loadRankMaps()
       : EMPTY_RANK_MAPS;
     const ranked = rankNeighborhood(
@@ -1465,7 +1466,7 @@ export default cds.service.impl(async function () {
       ? globalThis.__KG_QUERY_TEST_IMPL__
       : kgQuery;
 
-    if (process.env.KG_PATH_V2_ENABLED === 'true') {
+    if (isFlagEnabled('KG_PATH_V2_ENABLED')) {
       try {
         const paths = await kgPathV2Impl({ fromIri, toIri });
         if (paths.length > 0) {

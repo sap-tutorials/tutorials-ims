@@ -19,6 +19,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 import { gzipSync } from 'node:zlib';
+import { __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -152,8 +153,9 @@ describe('DeveloperService authenticated MCP read tools', () => {
       version: 9001, slug: 'tut-a', content: gzBuf, mimeType: 'text/html'
     });
 
-    // Must set KG_STEP_SLICER_ENABLED to not 'false' (default is enabled)
-    delete process.env.KG_STEP_SLICER_ENABLED;
+    // KG_STEP_SLICER_ENABLED defaults enabled (ImsConfig flag.kg.stepSlicer);
+    // reset the flag cache so the step slicer is on for this read.
+    __resetFlagsForTest();
 
     const { data } = await project.get(
       `/api/get_tutorial_step(slug='tut-a',stepNumber=1)`,

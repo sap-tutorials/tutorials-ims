@@ -27,6 +27,9 @@ import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active
 import { enrichSignupRows } from './lib/devtoberfest-signup-enrich.js';
 import { getTutorialSource } from './lib/content-store.js';
 import { isDeltaRead, bustContentDeltaFlagsCache } from './lib/content-delta-flags.js';
+import {
+  bustFeatureFlagsCache, managedFlagKeys, flagMeta,
+} from './lib/feature-flags/db-flags.js';
 import { buildTutorialLinks } from './lib/tutorial-links.js';
 import { buildPreviewLinks } from './lib/preview-links.js';
 import { runSeedApiDocs } from './lib/seed-api-docs.js';
@@ -56,6 +59,7 @@ import { computeKgCommunityFingerprint } from './lib/kg-community-fingerprint.js
 import * as mcpAdmin from './lib/mcp-admin-tools.js';   // #1106 Phase 3 (WS2) admin MCP tools
 import { computeCoverage, resolveThreshold } from './lib/kg-community-coverage.js'; // #1172
 import { resolveFeatureFlags } from './lib/feature-flags/resolve.js'; // #feature-flags
+import { FEATURE_FLAGS } from './lib/feature-flags/registry.js'; // #2060 bound enable/disable
 import { resetFeaturedCache } from './lib/featured-resolve.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
@@ -516,6 +520,42 @@ export default class AdminService extends cds.ApplicationService {
       if (wantsCount) rows.$count = total;
       return rows;
     });
+
+    // Bound row actions enable()/disable() on FeatureFlags (#2060). FeatureFlags
+    // is a synthesized @cds.persistence.skip viewer, so these flip the backing
+    // ImsConfig row for a kind:'db' flag and return the freshly re-resolved row
+    // so FE refreshes it. Two actions (not one param'd toggle) render as clean
+    // row buttons, mirroring NewsItems/approve|reject in content-moderation.
+    const setFeatureFlagRow = async (req, enabled) => {
+      // Bound-action key: CAP surfaces the entity key on req.params[0].key.
+      const params = req.params;
+      const last = Array.isArray(params) && params.length ? params[params.length - 1] : null;
+      const key = last && typeof last === 'object' ? last.key : last;
+      const desc = FEATURE_FLAGS.find((f) => f.key === key);
+      if (!desc || desc.kind !== 'db' || !desc.imsConfigKey) {
+        return req.reject(400, 'Only DB feature flags are togglable here');
+      }
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const value = String(Boolean(enabled));
+      const existing = await SELECT.one.from(ImsConfig).where({ key: desc.imsConfigKey });
+      if (existing) {
+        await UPDATE(ImsConfig, existing.ID).set({ value });
+      } else {
+        await INSERT.into(ImsConfig).entries({ ID: cds.utils.uuid(), key: desc.imsConfigKey, value });
+      }
+      // Dispatch the cache bust to the owning module: the content.delta.* flags
+      // keep their dedicated content-delta-flags.js cache (flagMeta returns null
+      // for them since db-flags.js excludes them); everything else is generic.
+      if (flagMeta(key)) bustFeatureFlagsCache();
+      else bustContentDeltaFlagsCache();
+      // Re-resolve (resolve.js reads ImsConfig live, not the cache) and return
+      // the updated row so the FE list/object page reflects the new state.
+      const all = await resolveFeatureFlags();
+      return all.find((r) => r.key === key) ?? null;
+    };
+
+    this.on('enable', 'FeatureFlags', (req) => setFeatureFlagRow(req, true));
+    this.on('disable', 'FeatureFlags', (req) => setFeatureFlagRow(req, false));
 
     // Virtual severityCrit element (drives @UI.LineItem Criticality coloring).
     // Information=3 (Neutral), Success=5 (Positive), Warning=2 (Critical), Error=1 (Negative)
@@ -1996,6 +2036,47 @@ export default class AdminService extends cds.ApplicationService {
         skipCarryForward: await readKey(DELTA_SKIP_CARRYFORWARD_KEY),
       };
     }
+
+    // ---- Generic ImsConfig-backed feature flags (issue #2060) ----
+    // The 14 formerly-env on/off flags (metrics, MCP, KG jobs, homepage news
+    // relevance, freshness scan, etc.) are now ImsConfig rows read live through
+    // srv/lib/feature-flags/db-flags.js (60s cache). setFeatureFlag upserts one
+    // flag by its registry key and busts the cache so the flip is immediate.
+    this.on('setFeatureFlag', async (req) => {
+      const { flag: key, enabled } = req.data;
+      const meta = flagMeta(key);
+      if (!meta) return req.reject(400, `Unknown feature flag key: ${key}`);
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const value = String(Boolean(enabled));
+      const existing = await SELECT.one.from(ImsConfig).where({ key: meta.imsConfigKey });
+      if (existing) {
+        await UPDATE(ImsConfig, existing.ID).set({ value });
+      } else {
+        await INSERT.into(ImsConfig).entries({ ID: cds.utils.uuid(), key: meta.imsConfigKey, value });
+      }
+      bustFeatureFlagsCache();
+      return { flag: key, enabled: Boolean(enabled) };
+    });
+
+    this.on('getFeatureFlags', async () => {
+      // Read the backing ImsConfig rows directly (not the 60s cache) so the
+      // result reflects the true persisted value — including a value just set
+      // via setFeatureFlag, whose bust leaves the cache cold.
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const keys = managedFlagKeys();
+      const metas = keys.map((key) => ({ key, ...flagMeta(key) }));
+      const rows = await SELECT.from(ImsConfig)
+        .columns('key', 'value')
+        .where({ key: { in: metas.map((m) => m.imsConfigKey) } });
+      const byKey = Object.create(null);
+      for (const r of rows || []) byKey[r.key] = String(r.value).toLowerCase() === 'true';
+      return metas.map((m) => ({
+        flag: m.key,
+        imsConfigKey: m.imsConfigKey,
+        enabled: m.imsConfigKey in byKey ? byKey[m.imsConfigKey] : m.default,
+        default: m.default,
+      }));
+    });
 
     this.on('findMissingSlugs', async () => {
       const { findMissingSlugs } = await import('./lib/slug-mapping.js');

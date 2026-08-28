@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as metrics from '../../srv/lib/metrics.js';
+import { __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
 
 // Minimal cds stub — the job uses cds.log and cds.entities(NAMESPACE).
 vi.mock('@sap/cds', () => {
@@ -23,7 +24,7 @@ function installInsert(behavior) {
 describe('#1257 rollup per-row fallback', () => {
   beforeEach(() => {
     metrics._resetForTest();
-    delete process.env.METRICS_ENABLED;
+    __resetFlagsForTest();
     metrics.counter('a.b.c', 1);
     metrics.counter('d.e.f', 1);
   });

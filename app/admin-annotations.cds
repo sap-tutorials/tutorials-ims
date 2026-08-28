@@ -4130,7 +4130,15 @@ annotate AdminService.FeatureFlags with @UI: {
     { Value: effectiveValue, Label: 'Effective' },
     { Value: winningLayer, Label: 'Source' },
     { Value: status },
-    { Value: issue }
+    { Value: issue },
+    // #2060 — row-button toggles for kind:'db' flags (non-db flags reject 400).
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.FeatureFlags/enable',  Label: 'Enable' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.FeatureFlags/disable', Label: 'Disable' }
+  ],
+  // Object Page header actions — same enable/disable on the detail view (#2060).
+  Identification: [
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.FeatureFlags/enable',  Label: 'Enable' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.FeatureFlags/disable', Label: 'Disable' }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', ID: 'General', Label: 'General', Target: '@UI.FieldGroup#General' },

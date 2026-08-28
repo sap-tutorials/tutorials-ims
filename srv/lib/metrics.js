@@ -15,9 +15,12 @@
 // Behavior contract:
 //   - No public call ever throws to the caller. All wrapped in try/catch
 //     that funnels to a rate-limited warn.
-//   - When METRICS_ENABLED === 'false', all writes are no-ops and snapshot()
-//     returns the stable empty shape { counters:{}, gauges:{}, histograms:{} }.
+//   - When the METRICS_ENABLED feature flag is off (ImsConfig flag.metrics),
+//     all writes are no-ops and snapshot() returns the stable empty shape
+//     { counters:{}, gauges:{}, histograms:{} }.
 //   - The module owns in-memory state only. Persistence is the rollup job.
+
+import { isFlagEnabled } from './feature-flags/db-flags.js';
 
 const counters = new Map();
 const gauges = new Map();
@@ -40,7 +43,7 @@ function warn(msg) {
 }
 
 function isDisabled() {
-  return process.env.METRICS_ENABLED === 'false';
+  return !isFlagEnabled('METRICS_ENABLED');
 }
 
 export function counter(name, n = 1) {

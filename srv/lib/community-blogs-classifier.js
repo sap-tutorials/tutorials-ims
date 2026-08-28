@@ -11,7 +11,7 @@
 // Second ERROR sets attemptCount=2 and the row is sticky until the
 // admin fires reclassifyCommunityBlogPost to reset it.
 //
-// Kill switch: env COMMUNITY_BLOGS_CLASSIFIER_ENABLED=false → no-op.
+// Kill switch: ImsConfig flag.community.blogsClassifier=false → no-op.
 
 import cds from '@sap/cds';
 import fs from 'node:fs';
@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 import { resolveChatLlmSettings } from './chat-settings-resolver.js';
 import * as metrics from './metrics.js';
+import { isFlagEnabled } from './feature-flags/db-flags.js';
 
 const LOG = cds.log('community-blogs-classifier');
 
@@ -36,13 +37,12 @@ const SYSTEM_PROMPT = fs.readFileSync(
 );
 
 /**
- * Check the env kill switch.
+ * Check the DB-driven kill switch (ImsConfig flag.community.blogsClassifier).
  * @returns {boolean}
  */
 export function isClassifierEnabled() {
-  const v = process.env.COMMUNITY_BLOGS_CLASSIFIER_ENABLED;
-  // Only the exact literal 'false' disables — undefined / '' / 'true' all enable.
-  return v !== 'false';
+  // Default ON; an admin sets the flag false to disable all classification runs.
+  return isFlagEnabled('COMMUNITY_BLOGS_CLASSIFIER_ENABLED');
 }
 
 /**

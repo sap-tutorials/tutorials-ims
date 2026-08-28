@@ -15,6 +15,7 @@
 import cds from '@sap/cds'
 import { kgQuery } from './kg-sparql-client.js'
 import { kgPathV2 } from './kg-path-v2-client.js'
+import { isFlagEnabled } from './feature-flags/db-flags.js'
 
 // Single-source-of-truth tutorial IRI prefix. The PATH_BETWEEN procedure
 // validates p1/p2 as full tutorial IRIs (see srv/lib/kg-queries.js).
@@ -72,7 +73,7 @@ export async function findPathV2OrV1({ db, fromSlug, toSlug }) {
   const fromIri = `${TUTORIAL_IRI_PREFIX}${fromSlug}`
   const toIri = `${TUTORIAL_IRI_PREFIX}${toSlug}`
 
-  if (process.env.KG_PATH_V2_ENABLED === 'true') {
+  if (isFlagEnabled('KG_PATH_V2_ENABLED')) {
     try {
       const paths = await kgPathV2({ fromIri, toIri })
       if (paths.length > 0) {

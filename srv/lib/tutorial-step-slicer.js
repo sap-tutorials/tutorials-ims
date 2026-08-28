@@ -14,6 +14,7 @@ import { gunzipSync } from 'node:zlib';
 import { Readable } from 'node:stream';
 import * as cheerio from 'cheerio';
 import * as metrics from './metrics.js';
+import { isFlagEnabled } from './feature-flags/db-flags.js';
 
 const NS = 'com.sap.developers.ims';
 const LOG = cds.log('mcp-slicer');
@@ -70,7 +71,7 @@ async function getActiveVersion() {
 }
 
 async function loadAndParse(slug) {
-  if (process.env.KG_STEP_SLICER_ENABLED === 'false') return null;
+  if (!isFlagEnabled('KG_STEP_SLICER_ENABLED')) return null;
 
   const version = await getActiveVersion();
   if (!version) return null;
