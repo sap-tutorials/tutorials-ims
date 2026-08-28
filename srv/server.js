@@ -1105,7 +1105,14 @@ cds.on('served', async () => {
     const { ensureContentDeltaDefaults, refreshContentDeltaFlags } = await import('./lib/content-delta-flags.js');
     // Seed absent flags to 'true' so the fast path defaults ON and survives
     // deploys (data, not env). Only fills missing keys — admin overrides stick.
-    await ensureContentDeltaDefaults();
+    // Skip under the vitest harness: unit/hybrid tests rely on the resolver's
+    // fail-safe-OFF default (legacy ContentFiles path) and set flag state
+    // explicitly per case. Seeding all three 'true' at boot leaked into every
+    // pre-existing content-store/publish/nav test — nav/hashes/catalog reads hit
+    // the empty ContentCurrent and rollback replayed instead of clearing. VITEST
+    // is set only by the test runner, never in CF or `cds watch`, so production
+    // and local dev still default-ON.
+    if (!process.env.VITEST) await ensureContentDeltaDefaults();
     await refreshContentDeltaFlags();
   } catch (err) {
     cds.log('content-delta-flags').warn('boot warm-up failed (non-fatal):', err.message);
