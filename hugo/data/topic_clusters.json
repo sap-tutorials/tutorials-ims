@@ -1,10 +1,10 @@
 {
   "clusters": [
     {
-      "label": "SAP HANA Streaming Analytics Custom Adapters",
-      "rationale": "All tutorials and concepts center on building, configuring, and deploying custom C/C++ and Java adapters for SAP HANA Smart Data Streaming and Streaming Lite to ingest IoT sensor data.",
-      "communityFingerprint": "1a9def10195e6bd756a10644eccd7805eee3325e6289a909efc6056e4fd03580",
-      "tutorialCount": 1471,
+      "label": "Diverse SAP Platform Tutorials Sampler",
+      "rationale": "This cluster spans a broad, heterogeneous mix of SAP technologies—from HANA, BTP, IoT, ML, Fiori, CAP, and blockchain to Devtoberfest events—without a single dominant shared theme, making it a wide-ranging sampler of the SAP developer tutorial catalog.",
+      "communityFingerprint": "edd76f116a1f4c6d7db3e38e49b0342fad643cd5561fe0ba3e808bfbc7aed3dd",
+      "tutorialCount": 1391,
       "tutorials": [
         {
           "slug": "abap-environment-create-tile",
@@ -17,28 +17,246 @@
           "url": "/tutorials/sac-secure-oauth"
         },
         {
-          "slug": "hana-spatial-services-apis",
-          "title": "Access SAP HANA Spatial Service APIs",
-          "url": "/tutorials/hana-spatial-services-apis"
+          "slug": "luigi-app-localization-react",
+          "title": "Add Localization to Luigi React Application",
+          "url": "/tutorials/luigi-app-localization-react"
         },
         {
-          "slug": "hana-cloud-data-products-consumption",
-          "title": "Access and Query a Data Product in SAP HANA Cloud",
-          "url": "/tutorials/hana-cloud-data-products-consumption"
+          "slug": "conversational-ai-speech-2-text-simple",
+          "title": "Add Speech-to-Text to Your Chatbot",
+          "url": "/tutorials/conversational-ai-speech-2-text-simple"
+        }
+      ],
+      "items": [
+        {
+          "kind": "tutorial",
+          "slug": "abap-environment-booking-supplements-analytics",
+          "title": "Develop Queries Based on Booking Supplement and Consume on SAP Analytics Cloud",
+          "href": "/tutorials/abap-environment-booking-supplements-analytics",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "cp-portal-cloud-foundry-create-custom-domain",
+          "title": "Get Started with Creating a Custom Domain in SAP Build Work Zone, standard edition",
+          "href": "/tutorials/cp-portal-cloud-foundry-create-custom-domain",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "hsa-java-toolkit-adapter-part7",
+          "title": "Further Readings on Custom Adapters",
+          "href": "/tutorials/hsa-java-toolkit-adapter-part7",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "190b04-devtoberfest-2024-use-trial-to-set-up-account-for-document-information-extraction-and-go-to-application",
+          "title": "#190B04 - Devtoberfest 2024 - Use Trial to Set Up Account for Document Information Extraction and Go to Application",
+          "href": "/tutorials/mission-190b04-devtoberfest-2024-use-trial-to-set-up-account-for-document-information-extraction-and-go-to-application",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "2a170a-devtoberfest-2024-create-the-product-page-ui-with-ratings-comments",
+          "title": "#2A170A - Devtoberfest 2024 - Create the Product Page UI with Ratings/Comments",
+          "href": "/tutorials/mission-2a170a-devtoberfest-2024-create-the-product-page-ui-with-ratings-comments",
+          "isNew": false
+        },
+        {
+          "kind": "help-doc",
+          "slug": "hd-help-sap-com__btp__sap-business-technology-platform__54dd7126d5b74efeb7a21f6b0bfe5f1a",
+          "title": "ABAP Development Tools for Eclipse",
+          "href": "https://help.sap.com/docs/btp/sap-business-technology-platform/54dd7126d5b74efeb7a21f6b0bfe5f1a?locale=en-US&state=PRODUCTION&version=Cloud",
+          "isNew": false
+        },
+        {
+          "kind": "learning-journey",
+          "slug": "discover-retail-functions-and-business-processes-in-sap-s-4hana-retail",
+          "title": "Discover Retail Functions and Business Processes in SAP S/4HANA Retail",
+          "href": "https://learning.sap.com/learning-journeys/discover-retail-functions-and-business-processes-in-sap-s-4hana-retail",
+          "isNew": false
         }
       ]
     },
     {
       "label": "SAP BTP Full-Stack Development Essentials",
-      "rationale": "The tutorials collectively cover the broad spectrum of SAP BTP development, including UI5/Fiori app creation, CAP/HANA backend services, Cloud Foundry/Kyma deployments, workflow management, spatial data, and platform setup — all centered on building and deploying full-stack applications on SAP BTP.",
-      "communityFingerprint": "a060a8a5697db6934792c161fabeac0430f0a715ee9465e5c188592330580b3d",
-      "tutorialCount": 254,
+      "rationale": "The cluster spans the full breadth of SAP BTP development—ABAP/RAP, CAP, SAP Build (Apps, Process Automation, Work Zone), Fiori/UI5, integrations, and DevOps—tying together end-to-end tutorials for building, deploying, and operating solutions on SAP BTP.",
+      "communityFingerprint": "1f08a8c8238f500c5f18e2f2daf74ccc0f6f0f4bba819e84db94f3add56a2c66",
+      "tutorialCount": 295,
       "tutorials": [
         {
-          "slug": "teched-2016-10",
-          "title": "ABC Analysis with SAP HANA PAL",
-          "url": "/tutorials/teched-2016-10"
+          "slug": "abap-environment-adt-coretools-vscode",
+          "title": "ABAP Core Tools for Visual Studio Code",
+          "url": "/tutorials/abap-environment-adt-coretools-vscode"
         },
+        {
+          "slug": "abap-environment-adt-vscode",
+          "title": "ABAP Development Tools for Visual Studio Code",
+          "url": "/tutorials/abap-environment-adt-vscode"
+        },
+        {
+          "slug": "signavio-process-intelligence-machine-learning",
+          "title": "AI-driven Process Optimization: Run Machine Learning use cases in SAP Signavio leveraging SAP Build",
+          "url": "/tutorials/signavio-process-intelligence-machine-learning"
+        },
+        {
+          "slug": "spa-process-action-checkbackend",
+          "title": "Access S/4HANA Cloud System to View Sales Order",
+          "url": "/tutorials/spa-process-action-checkbackend"
+        }
+      ],
+      "items": [
+        {
+          "kind": "sample",
+          "slug": "sa-sap_samples__abap_cheat_sheets",
+          "title": "abap-cheat-sheets",
+          "href": "https://github.com/SAP-samples/abap-cheat-sheets",
+          "isNew": true
+        },
+        {
+          "kind": "tutorial",
+          "slug": "hcp-create-trial-account",
+          "title": "Get an Account on SAP BTP Trial",
+          "href": "/tutorials/hcp-create-trial-account",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "spa-subscribe-booster",
+          "title": "Subscribe to SAP Build Process Automation",
+          "href": "/tutorials/spa-subscribe-booster",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "spa-create-process",
+          "title": "Create a Business Process",
+          "href": "/tutorials/spa-create-process",
+          "isNew": false
+        },
+        {
+          "kind": "help-doc",
+          "slug": "hd-help-sap-com__btp__sap-business-technology-platform__f438645cb5664399a6b21f8d9bd3d004",
+          "title": "(Optional) Code Migration from On-Premise",
+          "href": "https://help.sap.com/docs/btp/sap-business-technology-platform/f438645cb5664399a6b21f8d9bd3d004?locale=en-US&state=PRODUCTION&version=Cloud",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "01171f-devtoberfest-2024-prepare-the-rap-based-travel-service",
+          "title": "#01171F - Devtoberfest 2024 - Prepare the RAP-Based Travel Service",
+          "href": "/tutorials/mission-01171f-devtoberfest-2024-prepare-the-rap-based-travel-service",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "030501-devtoberfest-2024-send-and-receive-test-sap-event-mesh",
+          "title": "#030501 - Devtoberfest 2024 - Send and Receive Test SAP Event Mesh",
+          "href": "/tutorials/mission-030501-devtoberfest-2024-send-and-receive-test-sap-event-mesh",
+          "isNew": false
+        },
+        {
+          "kind": "discovery-mission",
+          "slug": "dm-4678",
+          "title": "Accelerate your BTP Journey with FRE Acceleration Datasphere Pack",
+          "href": "https://discovery-center.cloud.sap/missiondetail/4678/",
+          "isNew": false
+        }
+      ]
+    },
+    {
+      "label": "SAP HANA Cloud Data Management",
+      "rationale": "All tutorials revolve around provisioning, connecting, modeling, querying, replicating, and managing data across SAP HANA Cloud and its related services such as Data Lake, Data Intelligence, and Analytics Cloud.",
+      "communityFingerprint": "00cd8bab7a5b982309327a8cbc5fe49b6d612f091733fc9f613ba880bb48bbf8",
+      "tutorialCount": 268,
+      "tutorials": [
+        {
+          "slug": "hana-cloud-mission-extend-10",
+          "title": "Access Data from Amazon S3 in SAP HANA Cloud, SAP HANA Database",
+          "url": "/tutorials/hana-cloud-mission-extend-10"
+        },
+        {
+          "slug": "hana-cloud-mission-extend-11",
+          "title": "Access Data from Google BigQuery in SAP HANA Cloud, SAP HANA Database",
+          "url": "/tutorials/hana-cloud-mission-extend-11"
+        },
+        {
+          "slug": "hana-cloud-sqltools-db",
+          "title": "Access Instances in SAP HANA Cloud Central",
+          "url": "/tutorials/hana-cloud-sqltools-db"
+        },
+        {
+          "slug": "hana-cloud-sqltools-remote-sources",
+          "title": "Access Remote Sources with SAP HANA Cloud Central",
+          "url": "/tutorials/hana-cloud-sqltools-remote-sources"
+        }
+      ],
+      "items": [
+        {
+          "kind": "sample",
+          "slug": "sa-sap_samples__btp_service_metadata",
+          "title": "btp-service-metadata",
+          "href": "https://github.com/SAP-samples/btp-service-metadata",
+          "isNew": true
+        },
+        {
+          "kind": "tutorial",
+          "slug": "hana-cloud-mission-trial-4",
+          "title": "Tools to Manage and Access the SAP HANA Cloud, SAP HANA Database",
+          "href": "/tutorials/hana-cloud-mission-trial-4",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "hana-cloud-mission-trial-5",
+          "title": "Import Data into SAP HANA Cloud, SAP HANA Database",
+          "href": "/tutorials/hana-cloud-mission-trial-5",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "hana-cloud-cap-add-authentication",
+          "title": "Add User Authentication to Your Application (SAP HANA Cloud)",
+          "href": "/tutorials/hana-cloud-cap-add-authentication",
+          "isNew": false
+        },
+        {
+          "kind": "help-doc",
+          "slug": "hd-help-sap-com__btp__sap-business-technology-platform__c9640b6bc22b43da8ec1b805f199e9ca",
+          "title": "(Optional) Add your SAP JVM to the VM Explorer",
+          "href": "https://help.sap.com/docs/btp/sap-business-technology-platform/c9640b6bc22b43da8ec1b805f199e9ca?locale=en-US&state=PRODUCTION&version=Cloud",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "a1532c-devtoberfest-2024-executing-sap-hana-cloud-tasks-from-the-command-line",
+          "title": "#A1532C - Devtoberfest 2024 - Executing SAP HANA Cloud Tasks from the Command Line",
+          "href": "/tutorials/mission-a1532c-devtoberfest-2024-executing-sap-hana-cloud-tasks-from-the-command-line",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "bdb308-devtoberfest-2024-authenticate-to-sap-hana-cloud-using-x-509",
+          "title": "#BDB308 - Devtoberfest 2024 - Authenticate to SAP HANA Cloud using X.509",
+          "href": "/tutorials/mission-bdb308-devtoberfest-2024-authenticate-to-sap-hana-cloud-using-x-509",
+          "isNew": false
+        },
+        {
+          "kind": "discovery-mission",
+          "slug": "dm-4652",
+          "title": "Accelerate Smart Supplier Selection with Retrieval-Augmented Generative AI",
+          "href": "https://discovery-center.cloud.sap/missiondetail/4652/",
+          "isNew": false
+        }
+      ]
+    },
+    {
+      "label": "SAP BTP Full-Stack App Development",
+      "rationale": "All tutorials revolve around building, deploying, and integrating full-stack applications across SAP BTP services, runtimes, and tools including CAP, SAPUI5, Fiori, Cloud Foundry, Kyma, and related development environments.",
+      "communityFingerprint": "28f9629414ba280a63ed6570d48cc1d852b393d577c35dc309c059426da204b4",
+      "tutorialCount": 189,
+      "tutorials": [
         {
           "slug": "mobile-start-access-launchpad-site",
           "title": "Access Your Launchpad Site with SAP Mobile Start",
@@ -50,79 +268,81 @@
           "url": "/tutorials/haas-dm-access-cross-container-schema"
         },
         {
-          "slug": "hana-cloud-hdl-getting-started-2",
-          "title": "Access a Standalone Data Lake in SAP HANA Cloud",
-          "url": "/tutorials/hana-cloud-hdl-getting-started-2"
+          "slug": "personas-access-learning-sys",
+          "title": "Access the SAP Screen Personas Training System",
+          "url": "/tutorials/personas-access-learning-sys"
+        },
+        {
+          "slug": "cp-cap-java-security-local",
+          "title": "Add Authentication and Authorization to the Application",
+          "url": "/tutorials/cp-cap-java-security-local"
+        }
+      ],
+      "items": [
+        {
+          "kind": "sample",
+          "slug": "sa-sap_samples__btp_admin_guide_samples",
+          "title": "btp-admin-guide-samples",
+          "href": "https://github.com/SAP-samples/btp-admin-guide-samples",
+          "isNew": true
+        },
+        {
+          "kind": "tutorial",
+          "slug": "cp-explore-cloud-platform",
+          "title": "View the SAP BTP from 10,000 Meters",
+          "href": "/tutorials/cp-explore-cloud-platform",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "hana-cloud-deploying",
+          "title": "Deploy SAP HANA Cloud",
+          "href": "/tutorials/hana-cloud-deploying",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "cp-cf-download-cli",
+          "title": "Install the Cloud Foundry Command Line Interface (CLI)",
+          "href": "/tutorials/cp-cf-download-cli",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "extend-sap-successfactors-on-sap-btp-with-the-sap-cloud-application-programming-model-cap",
+          "title": " Extend SAP SuccessFactors on SAP BTP with the SAP Cloud Application Programming Model (CAP) ",
+          "href": "/tutorials/mission-extend-sap-successfactors-on-sap-btp-with-the-sap-cloud-application-programming-model-cap",
+          "isNew": false
+        },
+        {
+          "kind": "help-doc",
+          "slug": "hd-help-sap-com__btp__sap-business-technology-platform__b04a9ae412894725a2fc539bfb1ca055",
+          "title": "(Deprecated) Test Integration (SAP_COM_0510)",
+          "href": "https://help.sap.com/docs/btp/sap-business-technology-platform/b04a9ae412894725a2fc539bfb1ca055?locale=en-US&state=PRODUCTION&version=Cloud",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "06160d-devtoberfest-2024-design-your-site-with-the-new-sap-build-work-zone-experience",
+          "title": "#06160D - Devtoberfest 2024 - Design Your Site With the New SAP Build Work Zone Experience",
+          "href": "/tutorials/mission-06160d-devtoberfest-2024-design-your-site-with-the-new-sap-build-work-zone-experience",
+          "isNew": false
+        },
+        {
+          "kind": "discovery-mission",
+          "slug": "dm-4687",
+          "title": "Build a Maintenance Notification App with GenAI-Powered SAP Build Code Assistant",
+          "href": "https://discovery-center.cloud.sap/missiondetail/4687/",
+          "isNew": false
         }
       ]
     },
     {
-      "label": "Broad SAP BTP ABAP & Devtoberfest",
-      "rationale": "This cluster spans a wide range of SAP BTP ABAP Environment development topics—RAP, CDS, Fiori, SaaS, integrations, and tooling—alongside the full suite of Devtoberfest 2025 community challenge and session entries.",
-      "communityFingerprint": "d43179049374f8267daadc0ace747ca3198b15aaff4708733bd89157effc7439",
-      "tutorialCount": 218,
+      "label": "SAP BTP Full-Stack App Development",
+      "rationale": "The cluster spans the end-to-end lifecycle of building, deploying, securing, and monitoring full-stack applications on SAP BTP using CAP, Kyma, Cloud Foundry, Fiori, CI/CD, and related platform services.",
+      "communityFingerprint": "4e8c2bedadb0d2654948c0611f5f42bc03f6d6c5ce2dd97d35256d5401bf0611",
+      "tutorialCount": 147,
       "tutorials": [
-        {
-          "slug": "abap-environment-portal-site-vscode",
-          "title": "Add Cloud Foundry App to Portal Site",
-          "url": "/tutorials/abap-environment-portal-site-vscode"
-        },
-        {
-          "slug": "abap-environment-portal-site-bas",
-          "title": "Add SAP BTP ABAP environment App to Portal Site",
-          "url": "/tutorials/abap-environment-portal-site-bas"
-        },
-        {
-          "slug": "abap-s4hanacloud-purchasereq-integrate-flp",
-          "title": "Add the Shopping Cart Fiori Application to FLP (2022)",
-          "url": "/tutorials/abap-s4hanacloud-purchasereq-integrate-flp"
-        },
-        {
-          "slug": "abap-s4hanacloud-purchasereq-integrate-flp-tier1",
-          "title": "Add the Shopping Cart Fiori Application to FLP (2023)",
-          "url": "/tutorials/abap-s4hanacloud-purchasereq-integrate-flp-tier1"
-        }
-      ]
-    },
-    {
-      "label": "SAP Build Low-Code Development",
-      "rationale": "The tutorials collectively cover building, automating, and integrating applications and business processes using the SAP Build platform, including SAP Build Apps, Process Automation, Work Zone, and Actions.",
-      "communityFingerprint": "891455449d54160053af21ebd99819f3c65292eae708648430a0daf52ef023b0",
-      "tutorialCount": 162,
-      "tutorials": [
-        {
-          "slug": "codejam-01-homepage",
-          "title": "1 - Create the Product List Page",
-          "url": "/tutorials/codejam-01-homepage"
-        },
-        {
-          "slug": "codejam-10-action-post",
-          "title": "10 - Create Action Project to Post Data to CAP Service",
-          "url": "/tutorials/codejam-10-action-post"
-        },
-        {
-          "slug": "codejam-11-spa-rework",
-          "title": "11 - Expand Process to Add Rework Flow",
-          "url": "/tutorials/codejam-11-spa-rework"
-        },
-        {
-          "slug": "codejam-12-scan-barcode",
-          "title": "12 - Enable App to Select Product by Scanning Barcode",
-          "url": "/tutorials/codejam-12-scan-barcode"
-        }
-      ]
-    },
-    {
-      "label": "SAP BTP App Development and Deployment",
-      "rationale": "All tutorials revolve around building, securing, deploying, and operating applications on SAP BTP across runtimes such as Cloud Foundry, Kyma, and CAP, covering the full application lifecycle from setup to production.",
-      "communityFingerprint": "bdb34d29f717849a778bfe29f25434a8c2d0088c3b7dc17d7ada32a61b92b52b",
-      "tutorialCount": 154,
-      "tutorials": [
-        {
-          "slug": "spa-acquire-businessprocess-store",
-          "title": "Acquire a Template Project From the Store",
-          "url": "/tutorials/spa-acquire-businessprocess-store"
-        },
         {
           "slug": "add-authorization",
           "title": "Add Authorization",
@@ -134,41 +354,162 @@
           "url": "/tutorials/add-custom-logic"
         },
         {
-          "slug": "ui5-webcomponents-react-styling",
-          "title": "Add Custom Styles and Components for UI5 Web Components for React",
-          "url": "/tutorials/ui5-webcomponents-react-styling"
+          "slug": "add-fiori-elements-uis",
+          "title": "Add SAP Fiori Elements UIs",
+          "url": "/tutorials/add-fiori-elements-uis"
+        },
+        {
+          "slug": "add-test-cases",
+          "title": "Add Test Cases",
+          "url": "/tutorials/add-test-cases"
+        }
+      ],
+      "items": [
+        {
+          "kind": "sample",
+          "slug": "sa-sap_samples__sap_devs_cli",
+          "title": "sap-devs-cli",
+          "href": "https://github.com/SAP-samples/sap-devs-cli",
+          "isNew": true
+        },
+        {
+          "kind": "tutorial",
+          "slug": "build-cap-app",
+          "title": "Build a CAP Application",
+          "href": "/tutorials/build-cap-app",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "set-up-bas",
+          "title": "Set Up SAP Business Application Studio",
+          "href": "/tutorials/set-up-bas",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "introduction",
+          "title": "Introduction to Application Development Using CAP",
+          "href": "/tutorials/introduction",
+          "isNew": false
+        },
+        {
+          "kind": "help-doc",
+          "slug": "hd-help-sap-com__btp__sap-business-technology-platform__ace3b22147eb40d3989c5525491eb729",
+          "title": "(Optional) Certification",
+          "href": "https://help.sap.com/docs/btp/sap-business-technology-platform/ace3b22147eb40d3989c5525491eb729?locale=en-US&state=PRODUCTION&version=Cloud",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "010101-devtoberfest-2024-build-a-cap-application",
+          "title": "#010101 - Devtoberfest 2024 - Build a CAP Application",
+          "href": "/tutorials/mission-010101-devtoberfest-2024-build-a-cap-application",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "030402-devtoberfest-2024-push-your-abap-source-code-from-sap-btp-abap-environment-to-a-github-repository-using-abapgit",
+          "title": "#030402 - Devtoberfest 2024 - Push Your ABAP Source Code from SAP BTP, ABAP Environment to a GitHub Repository using abapGit",
+          "href": "/tutorials/mission-030402-devtoberfest-2024-push-your-abap-source-code-from-sap-btp-abap-environment-to-a-github-repository-using-abapgit",
+          "isNew": false
+        },
+        {
+          "kind": "learning-journey",
+          "slug": "becoming-an-sap-btp-solution-architect",
+          "title": "Becoming an SAP BTP Solution Architect",
+          "href": "https://learning.sap.com/learning-journeys/becoming-an-sap-btp-solution-architect",
+          "isNew": false
         }
       ]
     },
     {
-      "label": "SAP Mobile & MDK App Development",
-      "rationale": "All tutorials focus on building, configuring, and extending mobile applications using SAP's Mobile Development Kit, BTP SDK for iOS/Android, SAP Mobile Services, and related mobile tooling.",
-      "communityFingerprint": "a48c29851a6baa477cfe3a20c3d370f26baaaba084822664c2dec33e0c27949f",
-      "tutorialCount": 138,
+      "label": "SAP BTP Deployment and Cloud Operations",
+      "rationale": "The tutorials collectively cover deploying, configuring, securing, and operating applications and services across SAP BTP environments including Cloud Foundry, Kyma, and ABAP, along with connectivity, multitenancy, and platform administration.",
+      "communityFingerprint": "5ba02d37e2c267f6b66e0c400cb3ab9c39b334e3d4e4973a25e7a15e650cceaf",
+      "tutorialCount": 121,
       "tutorials": [
         {
-          "slug": "fiori-ios-hcpms-setup",
-          "title": "Access SAP Mobile Services",
-          "url": "/tutorials/fiori-ios-hcpms-setup"
+          "slug": "hana-cloud-data-products-consumption",
+          "title": "Access and Query a Data Product in SAP HANA Cloud",
+          "url": "/tutorials/hana-cloud-data-products-consumption"
         },
         {
-          "slug": "cp-mobile-dev-kit-i18n-localization",
-          "title": "Add Internationalization and Localization to an MDK App",
-          "url": "/tutorials/cp-mobile-dev-kit-i18n-localization"
+          "slug": "cp-cicd-systemtest-recorder",
+          "title": "Add Automated System Tests with the SAPUI5 Test Recorder to Your CI/CD Pipeline",
+          "url": "/tutorials/cp-cicd-systemtest-recorder"
         },
         {
-          "slug": "cp-mobile-dev-kit-nativescript-geolocation",
-          "title": "Add NativeScript Plugins in an MDK App",
-          "url": "/tutorials/cp-mobile-dev-kit-nativescript-geolocation"
+          "slug": "cap-extend-sfsf-add-logic",
+          "title": "Add Business Logic to the SAP SuccessFactors Extension",
+          "url": "/tutorials/cap-extend-sfsf-add-logic"
         },
         {
-          "slug": "sdk-android-wizard-app-translation",
-          "title": "Add New Languages to Your Android Application",
-          "url": "/tutorials/sdk-android-wizard-app-translation"
+          "slug": "cap-add-mcp-capabilities",
+          "title": "Add MCP capabilities to a CAP service",
+          "url": "/tutorials/cap-add-mcp-capabilities"
+        }
+      ],
+      "items": [
+        {
+          "kind": "sample",
+          "slug": "sa-sap_samples__ams_samples_java",
+          "title": "ams-samples-java",
+          "href": "https://github.com/SAP-samples/ams-samples-java",
+          "isNew": true
+        },
+        {
+          "kind": "tutorial",
+          "slug": "btp-cockpit-cf-managing-deployed-applications",
+          "title": "Managing Deployed Applications",
+          "href": "/tutorials/btp-cockpit-cf-managing-deployed-applications",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "btp-cockpit-cf-understanding-space-quotas",
+          "title": "Understanding Space Quotas",
+          "href": "/tutorials/btp-cockpit-cf-understanding-space-quotas",
+          "isNew": false
+        },
+        {
+          "kind": "tutorial",
+          "slug": "btp-cockpit-cf-managing-org-members",
+          "title": "Managing Org Members",
+          "href": "/tutorials/btp-cockpit-cf-managing-org-members",
+          "isNew": false
+        },
+        {
+          "kind": "help-doc",
+          "slug": "hd-help-sap-com__btp__sap-business-technology-platform__d612be9bed6544b388b2c4cd3799395e",
+          "title": "(Experimental) Rollback of Multitarget Applications",
+          "href": "https://help.sap.com/docs/btp/sap-business-technology-platform/d612be9bed6544b388b2c4cd3799395e?locale=en-US&state=PRODUCTION&version=Cloud",
+          "isNew": false
+        },
+        {
+          "kind": "learning-journey",
+          "slug": "accelerating-hybrid-integrations-with-sap-integration-suite-on-microsoft-azure",
+          "title": "Accelerating Hybrid Integrations with SAP Integration Suite on Microsoft Azure",
+          "href": "https://learning.sap.com/learning-journeys/accelerating-hybrid-integrations-with-sap-integration-suite-on-microsoft-azure",
+          "isNew": false
+        },
+        {
+          "kind": "discovery-mission",
+          "slug": "dm-6024",
+          "title": "Activate free SAP Build - Test, Demo and Development for SAP Partners",
+          "href": "https://discovery-center.cloud.sap/missiondetail/6024/",
+          "isNew": false
+        },
+        {
+          "kind": "mission",
+          "slug": "devtoberfest-2025-build-and-deploy-app-to-btp",
+          "title": "Devtoberfest 2025 - Build and Deploy App to BTP",
+          "href": "/tutorials/mission-devtoberfest-2025-build-and-deploy-app-to-btp",
+          "isNew": false
         }
       ]
     }
   ],
-  "buildAt": "2026-07-25T06:56:28.172Z",
+  "buildAt": "2026-08-28T21:19:19.812Z",
   "error": null
 }

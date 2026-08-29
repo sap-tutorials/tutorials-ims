@@ -518,6 +518,33 @@ jobs:
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
 
+      # These four feeds drive homepage bands baked into the page-index BLOB
+      # (topic clusters, featured topics, topics gallery, tag labels). They are
+      # part of `npm run build:all`'s fetch chain but were previously omitted
+      # here, so the page-index bake used the STALE committed data files — e.g.
+      # hugo/data/topic_clusters.json (empty items[] since 2026-07-25) made the
+      # homepage "Explore" band render tutorials-only. Fetch them from the target
+      # env's srv so the bake reflects live backend data in every mode.
+      - name: Fetch featured topics
+        run: npm run fetch-featured-topics
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
+      - name: Fetch topic clusters
+        run: npm run fetch-topic-clusters
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
+      - name: Fetch topics gallery
+        run: npm run fetch-topics-gallery
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
+      - name: Fetch tag labels
+        run: npm run fetch-tags
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
       # Fail-closed guard (scripts/check-verb-shelves.cjs): fails the run if
       # any homepage verb baked with ZERO active shelf rows, or ALL verbs
       # baked with empty tagline+whyItMatters (the empty-feed signature). This
