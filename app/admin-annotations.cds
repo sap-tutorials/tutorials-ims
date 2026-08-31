@@ -714,12 +714,14 @@ annotate AdminService.Tutorials with {
 
 annotate AdminService.TutorialContributors with {
   name  @Common.Label: 'Name';
+  login @Common.Label: 'GitHub';
   email @Common.Label: 'Email';
   role  @Common.Label: 'Role';
 };
 
 annotate AdminService.TutorialContributors with @UI.LineItem: [
   { Value: name },
+  { $Type: 'UI.DataFieldWithUrl', Value: login, Url: profileUrl, Label: 'GitHub' },
   { Value: email },
   { Value: role }
 ];
