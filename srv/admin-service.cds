@@ -64,6 +64,7 @@ service AdminService {
     // Specs use the existing tutorial Association FK; submissions and stats
     // join by slug because they predate the FK pattern.
     validationSpecs       : Association to many ValidateAnswerSpecs        on validationSpecs.tutorial = $self,
+    validationRules       : Association to many TutorialValidationRules   on validationRules.tutorial = $self,
     validationSubmissions : Association to many ValidateAnswerSubmissions  on validationSubmissions.tutorialSlug = slug,
     codeCheckSpecs        : Association to many CodeCheckSpecs             on codeCheckSpecs.tutorial = $self,
     codeCheckSubmissions  : Association to many CodeCheckSubmissions       on codeCheckSubmissions.tutorialSlug = slug,
@@ -618,6 +619,7 @@ service AdminService {
   @readonly entity CodeCheckSubmissions      as projection on ims.CodeCheckSubmissions;
   @readonly entity AuthorAiRequests          as projection on ims.AuthorAiRequests;
   @readonly entity TutorialCompletionStats   as projection on ims.TutorialCompletionStats;
+  @readonly entity TutorialValidationRules   as projection on ims.TutorialValidationRules;
 
   // Issue #622 — read-only recipient list for the "Last Chance Emails"
   // admin section. Powers the dropdown for sendLastChanceEmail and the
