@@ -294,6 +294,56 @@ function parseChoiceOptions(content: string): { options: string[]; correctAnswer
 
 export { parseCodeCheckBlocks } from './codecheck.js'
 
+export interface AllRuleRow {
+  stepNumber: number
+  questionId: string
+  questionText: string
+  ruleType: string
+  questionType: 'MCQ' | 'TEXT'
+  choiceMode: string | null
+  options: string | null
+  correctAnswer: string | null
+  aiGrading: boolean
+}
+
+/**
+ * Collect ALL validation rules across all steps for a tutorial — both
+ * AI-graded and client-graded (MCQ single/multiple, exact-match text).
+ *
+ * Parallel to collectAiGradedSpecs but returns every emitted question so the
+ * publish pipeline can persist a full all-rules sidecar and the admin UI can
+ * surface a complete rule facet (issue WS3).
+ *
+ * Anti-leak contract preserved: correctAnswer is null for AI-graded rows —
+ * the reference answer stays server-side in ValidateAnswerSpecs only.
+ */
+export function collectAllRules(
+  map: Map<number, ValidationQuestion[]>,
+  ruleTypeByStepAndId: Map<string, string>,
+  correctAnswerByStepAndId: Map<string, string>,
+): AllRuleRow[] {
+  const rows: AllRuleRow[] = []
+  for (const [stepNumber, questions] of map.entries()) {
+    for (const q of questions) {
+      const key = `${stepNumber}:${q.id}`
+      const isMcq = q.type === QUESTION_TYPE_MCQ
+      const ai = Boolean((q as any).aiGrading)
+      rows.push({
+        stepNumber,
+        questionId: q.id,
+        questionText: q.question,
+        ruleType: ruleTypeByStepAndId.get(key) ?? '',
+        questionType: isMcq ? 'MCQ' : 'TEXT',
+        choiceMode: (q as any).choiceMode ?? null,
+        options: isMcq && (q as any).options ? JSON.stringify((q as any).options) : null,
+        correctAnswer: ai ? null : (correctAnswerByStepAndId.get(key) ?? (q as any).correctAnswer ?? null),
+        aiGrading: ai,
+      })
+    }
+  }
+  return rows
+}
+
 export interface AiGradedSpec {
   stepNumber: number
   questionId: string

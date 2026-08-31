@@ -1,0 +1,14 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_TutorialValidationRules (
+  tutorial_ID NVARCHAR(36) NOT NULL,
+  stepNumber INTEGER NOT NULL,
+  questionId NVARCHAR(100) NOT NULL,
+  questionText NVARCHAR(2000),
+  ruleType NVARCHAR(50),
+  questionType NVARCHAR(20),
+  choiceMode NVARCHAR(20),
+  options NCLOB,
+  correctAnswer NCLOB,
+  aiGrading BOOLEAN DEFAULT FALSE,
+  PRIMARY KEY(tutorial_ID, stepNumber, questionId)
+)

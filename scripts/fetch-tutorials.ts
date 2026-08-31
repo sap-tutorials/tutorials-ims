@@ -15,7 +15,7 @@ import {
   navEntriesBySlug,
   SIDECAR_VERSION,
 } from './lib/content-cache.js'
-import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
+import { parseRulesVrEnriched, collectAiGradedSpecs, collectAllRules } from './parsers/rules.js'
 import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
 import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
@@ -31,6 +31,7 @@ import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, Hier
 import { QUESTION_TYPE_TEXT } from './parsers/types.js'
 import { advocateLoginToSlug, type AuthorTutorialRow } from './parsers/author-index.js'
 import { writeAuthorPages } from './lib/author-pages-writer.js'
+import { buildContributorsSidecar } from './parsers/contributors-sidecar.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -1042,6 +1043,16 @@ async function main() {
           writeFileSync(validateSidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: aiGradedSpecs }, null, 2))
         }
 
+        // Write full validation-rules sidecar (all rule types, all steps).
+        // Consumed by the publish pipeline to upsert TutorialValidationRules rows.
+        const allRules = collectAllRules(validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId)
+        if (allRules.length > 0) {
+          writeFileSync(
+            join(CACHE_DIR, `${t.slug.toLowerCase()}.validation-rules.json`),
+            JSON.stringify({ slug: t.slug.toLowerCase(), rules: allRules }, null, 2),
+          )
+        }
+
         // [#208] Anti-leak strip: AI-authored text questions had correctAnswer
         // restored on validationMap so populateAiAuthoredSiblingMaps (above)
         // could mirror it into correctAnswerByStepAndId, which collectAiGradedSpecs
@@ -1074,6 +1085,14 @@ async function main() {
             writeFileSync(sidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: sidecar }, null, 2))
           }
         }
+      }
+
+      const contribSidecar = buildContributorsSidecar(t.slug, contributors)
+      if (contribSidecar) {
+        writeFileSync(
+          join(CACHE_DIR, `${t.slug.toLowerCase()}.contributors.json`),
+          JSON.stringify(contribSidecar, null, 2),
+        )
       }
 
       const rawNavSlugs = [...new Set([frontmatter.primary_tag ?? '', ...(frontmatter.tags ?? [])])]

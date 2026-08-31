@@ -714,12 +714,14 @@ annotate AdminService.Tutorials with {
 
 annotate AdminService.TutorialContributors with {
   name  @Common.Label: 'Name';
+  login @Common.Label: 'GitHub';
   email @Common.Label: 'Email';
   role  @Common.Label: 'Role';
 };
 
 annotate AdminService.TutorialContributors with @UI.LineItem: [
   { Value: name },
+  { $Type: 'UI.DataFieldWithUrl', Value: login, Url: profileUrl, Label: 'GitHub' },
   { Value: email },
   { Value: role }
 ];
@@ -881,6 +883,19 @@ annotate AdminService.ValidateAnswerSpecs with @UI: {
   }
 };
 
+// TutorialValidationRules — all validation rules for a tutorial (step, question,
+// type, rule, AI-grading flag, correct answer). Joined via `validationRules` association.
+annotate AdminService.TutorialValidationRules with @(
+  UI.LineItem: [
+    { Value: stepNumber,   Label: 'Step' },
+    { Value: questionText,  Label: 'Question' },
+    { Value: questionType,  Label: 'Type' },
+    { Value: ruleType,      Label: 'Rule' },
+    { Value: aiGrading,     Label: 'AI-Graded' },
+    { Value: correctAnswer, Label: 'Correct Answer' }
+  ]
+);
+
 // CodeCheckSpecs — per-step code-check specs (goal + reference solution).
 // Joined via `codeCheckSpecs` association.
 annotate AdminService.CodeCheckSpecs with {
@@ -954,8 +969,10 @@ annotate AdminService.Tutorials with @UI: {
     { $Type: 'UI.ReferenceFacet', Label: 'Contributors', ID: 'ContributorsFacet', Target: 'contributors/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Completion Stats', ID: 'CompletionStatsFacet',
       Target: 'completionStats/@UI.FieldGroup#Stats' },
-    { $Type: 'UI.ReferenceFacet', Label: 'Validation Questions', ID: 'ValidationSpecsFacet',
+    { $Type: 'UI.ReferenceFacet', Label: 'AI-Graded Validation', ID: 'ValidationSpecsFacet',
       Target: 'validationSpecs/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'All Validation Rules', ID: 'AllValidationRulesFacet',
+      Target: 'validationRules/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Code-Check Specs', ID: 'CodeCheckSpecsFacet',
       Target: 'codeCheckSpecs/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'AI-Author Requests', ID: 'AiRequestsFacet',
