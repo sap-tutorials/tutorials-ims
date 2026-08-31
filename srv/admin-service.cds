@@ -108,6 +108,7 @@ service AdminService {
     virtual mainPreviewLabel : String,
     // Freshness detector (spec 2026-08-22)
     freshnessFindings      : Association to many FreshnessFinding on freshnessFindings.tutorial.ID = ID,
+    freshnessReports       : Association to many FreshnessReport  on freshnessReports.tutorial = $self,
     virtual openHighCount      : Integer,   // populated in after('READ','Tutorials') — Task 8
     virtual freshnessStatus    : String,
     virtual freshnessCriticality : Integer,
