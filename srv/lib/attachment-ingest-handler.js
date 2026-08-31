@@ -84,7 +84,7 @@ export async function attachmentIngestHandler(req, res) {
         return res.status(200).json({ action: 'unchanged', contentHash })
       }
     }
-    await attachmentStore.put(u, { buffer, mimeType, contentHash, slug, channel, filename })
+    await attachmentStore.put(u, { buffer, mimeType, contentHash, slug, channel, filename, byteSize: buffer.length })
     return res.status(200).json({ action: 'stored', contentHash })
   } catch (err) {
     LOG.error('[attachment-ingest] store put failed for', u, '-', err.message)
