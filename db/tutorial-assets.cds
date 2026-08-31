@@ -11,6 +11,7 @@ entity TutorialAssets {
       channel     : String(8);               // 'prod' | 'qa'
       contentHash : String(64);              // sha-256 of stored bytes
       mimeType    : String(128);
+      byteSize    : Integer64;               // original byte length captured at ingest
       filename    : String(255);             // for Content-Disposition
       content     : Composition of many Attachments;
 }
