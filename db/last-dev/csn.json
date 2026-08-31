@@ -1075,6 +1075,21 @@
           "length": 50,
           "@cds.persistence.name": "ROLE"
         },
+        "login": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "LOGIN"
+        },
+        "avatarUrl": {
+          "type": "cds.String",
+          "length": 1024,
+          "@cds.persistence.name": "AVATARURL"
+        },
+        "profileUrl": {
+          "type": "cds.String",
+          "length": 1024,
+          "@cds.persistence.name": "PROFILEURL"
+        },
         "user_ID": {
           "type": "cds.String",
           "length": 36,

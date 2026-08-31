@@ -453,6 +453,9 @@ entity TutorialContributors : cuid, LegacyKeyed {
   name                      : String(255);
   email                     : String(255);
   role                      : String(50);
+  login                     : String(255);   // GitHub handle
+  avatarUrl                 : String(1024);  // https://github.com/<login>.png
+  profileUrl                : String(1024);  // https://github.com/<login>
   user                      : Association to Users;
 }
 
