@@ -116,6 +116,17 @@ service AdminService {
     // Filtered to channel='prod' so the admin OP shows prod-published media.
     images : Association to many TutorialImages on images.slug = $self.slug and images.channel = 'prod',
     assets : Association to many TutorialAssets on assets.slug = $self.slug and assets.channel = 'prod',
+    // KG facet (task-1): rank + co-completions associations.
+    // conceptLinks already carried by '*' (db/knowledge-graph.cds extends base.Tutorials).
+    rank          : Association to one  TutorialRank  on rank.slug          = $self.slug,
+    coCompletions : Association to many CoCompletions on coCompletions.sourceSlug = $self.slug,
+    // KG facet (task-2): community membership — links this tutorial to its
+    // Louvain-detected community rows (slug-based join). From the OP, a $expand
+    // on communityMembership exposes communityId + communityFingerprint, which
+    // can be used to fetch the label from KgCommunityLabel. No schema change:
+    // KgCommunityMembers is an @readonly projection on ims.KgCommunity, which
+    // already carries the slug column.
+    communityMembership : Association to many AdminService.KgCommunityMembers on communityMembership.slug = $self.slug,
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
@@ -633,6 +644,11 @@ service AdminService {
   // when the parent is reachable from an exposed entity (@cap-js/attachments).
   @readonly @cds.redirection.target: false entity TutorialImages as projection on ims.TutorialImages;
   @readonly @cds.redirection.target: false entity TutorialAssets as projection on ims.TutorialAssets;
+
+  // KG facet (task-1): read-only projections used by the Tutorials admin OP KG tab.
+  @readonly @cds.redirection.target: false entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
+  @readonly @cds.redirection.target: false entity TutorialRank         as projection on ims.TutorialRank;
+  @readonly @cds.redirection.target: false entity CoCompletions        as projection on ims.CoCompletions;
 
   // Issue #622 — read-only recipient list for the "Last Chance Emails"
   // admin section. Powers the dropdown for sendLastChanceEmail and the

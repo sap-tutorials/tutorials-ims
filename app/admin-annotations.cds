@@ -982,6 +982,10 @@ annotate AdminService.Tutorials with @UI: {
       Target: 'freshnessFindings/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Images', ID: 'MediaImagesFacet', Target: 'images/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Assets', ID: 'MediaAssetsFacet', Target: 'assets/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Knowledge Graph', ID: 'KgFieldsFacet', Target: '@UI.FieldGroup#KnowledgeGraph' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Concepts Taught', ID: 'ConceptsTaughtFacet', Target: 'conceptLinks/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Co-Completed', ID: 'CoCompletionsFacet', Target: 'coCompletions/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Community', ID: 'KgCommunityFacet', Target: 'communityMembership/@UI.LineItem' },
     { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
       { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
         Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',
@@ -4431,4 +4435,42 @@ annotate AdminService.TutorialAssets with @(
     { Value: byteSize,    Label: 'Bytes' },
     { Value: contentHash, Label: 'Hash' }
   ]
+);
+
+// --- Knowledge Graph facets (task-3) ---
+// TutorialConceptLinks LineItem: concept FK, predicate (teaches|extends), confidence score.
+annotate AdminService.TutorialConceptLinks with @(
+  UI.LineItem: [
+    { Value: concept_ID,  Label: 'Concept' },
+    { Value: predicate,   Label: 'Relation' },
+    { Value: confidence,  Label: 'Confidence' }
+  ]
+);
+
+// CoCompletions LineItem: target tutorial slug + co-completion score.
+annotate AdminService.CoCompletions with @(
+  UI.LineItem: [
+    { Value: targetSlug, Label: 'Also Completed' },
+    { Value: score,      Label: 'Score' }
+  ]
+);
+
+// KgCommunityMembers LineItem: community id + fingerprint for the OP facet.
+annotate AdminService.KgCommunityMembers with @(
+  UI.LineItem: [
+    { Value: communityId,          Label: 'Community ID' },
+    { Value: communityFingerprint, Label: 'Fingerprint' },
+    { Value: vertexType,           Label: 'Type' }
+  ]
+);
+
+// FieldGroup for PageRank score — shown in KgFieldsFacet on Tutorials OP.
+// rank is a to-one Association (slug-joined) added in task-1.
+annotate AdminService.Tutorials with @(
+  UI.FieldGroup #KnowledgeGraph: {
+    Label: 'Knowledge Graph',
+    Data: [
+      { $Type: 'UI.DataField', Value: rank.score, Label: 'PageRank Score' }
+    ]
+  }
 );
