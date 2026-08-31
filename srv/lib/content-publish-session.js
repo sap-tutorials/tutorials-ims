@@ -11,6 +11,19 @@ import { tutorialsTableInfo } from './_tutorials-table.js';
 import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
 import { resolveTutorialAuthor } from './resolve-tutorial-author.js';
 import { isDeltaWrite, isDeltaSkipCarryForward } from './content-delta-flags.js';
+import { classifyAndPersist } from './category-classifier.js';
+
+// Exported for unit testing; classifies touched tutorials without ever throwing
+// into the publish tx (publish bypasses the CAP after('CREATE') classifier hook).
+export async function classifyTouchedTutorials(tutorialIds) {
+  await Promise.all(
+    (tutorialIds || []).map((id) =>
+      Promise.resolve()
+        .then(() => classifyAndPersist('tutorial', id))
+        .catch((e) => console.warn('[publish] category classify skipped', id, e?.message)),
+    ),
+  );
+}
 
 const LOG = cds.log('content-publish');
 const LOCK_NAME = 'content-publish';
@@ -208,6 +221,8 @@ export function createSessionHelpers({ namespace }) {
       } catch (err) {
         LOG.warn('linkTutorialAuthorship failed; skipping', err);
       }
+      // Fire-and-forget: keep categories populated for publish-created tutorials.
+      classifyTouchedTutorials(tutorialIds);
     }
     if (Object.keys(bodyTexts).length > 0) {
       await upsertBodyTexts(namespace, bodyTexts);
