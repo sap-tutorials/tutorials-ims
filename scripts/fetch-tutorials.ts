@@ -31,6 +31,7 @@ import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, Hier
 import { QUESTION_TYPE_TEXT } from './parsers/types.js'
 import { advocateLoginToSlug, type AuthorTutorialRow } from './parsers/author-index.js'
 import { writeAuthorPages } from './lib/author-pages-writer.js'
+import { buildContributorsSidecar } from './parsers/contributors-sidecar.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -1074,6 +1075,14 @@ async function main() {
             writeFileSync(sidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: sidecar }, null, 2))
           }
         }
+      }
+
+      const contribSidecar = buildContributorsSidecar(t.slug, contributors)
+      if (contribSidecar) {
+        writeFileSync(
+          join(CACHE_DIR, `${t.slug.toLowerCase()}.contributors.json`),
+          JSON.stringify(contribSidecar, null, 2),
+        )
       }
 
       const rawNavSlugs = [...new Set([frontmatter.primary_tag ?? '', ...(frontmatter.tags ?? [])])]
