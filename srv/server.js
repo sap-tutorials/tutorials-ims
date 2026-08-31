@@ -65,6 +65,7 @@ import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
+import { publishContributors } from './lib/contributors-publish.js';
 import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
 import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
@@ -604,6 +605,14 @@ cds.on('bootstrap', (app) => {
     express.json({ limit: '5mb' }),
     contentAuthMiddleware,
     publishValidateAnswerSpecs
+  );
+
+  // REPLACE-per-slug handler for TutorialContributors (WS2 #task-6).
+  // Same auth guard and body parser as the validate-answer-specs sibling.
+  app.post('/content/publish-contributors',
+    express.json({ limit: '1mb' }),
+    contentAuthMiddleware,
+    publishContributors
   );
 
   // Tutorial feedback bridge. Express handler (rather than letting CAP expose
