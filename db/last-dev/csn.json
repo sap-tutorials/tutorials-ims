@@ -3630,6 +3630,66 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST"
+    },
+    "com.sap.developers.ims.TutorialValidationRules": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "tutorial_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "tutorial",
+          "key": true,
+          "@cds.persistence.name": "TUTORIAL_ID"
+        },
+        "stepNumber": {
+          "key": true,
+          "type": "cds.Integer",
+          "@cds.persistence.name": "STEPNUMBER"
+        },
+        "questionId": {
+          "key": true,
+          "type": "cds.String",
+          "length": 100,
+          "@cds.persistence.name": "QUESTIONID"
+        },
+        "questionText": {
+          "type": "cds.String",
+          "length": 2000,
+          "@cds.persistence.name": "QUESTIONTEXT"
+        },
+        "ruleType": {
+          "type": "cds.String",
+          "length": 50,
+          "@cds.persistence.name": "RULETYPE"
+        },
+        "questionType": {
+          "type": "cds.String",
+          "length": 20,
+          "@cds.persistence.name": "QUESTIONTYPE"
+        },
+        "choiceMode": {
+          "type": "cds.String",
+          "length": 20,
+          "@cds.persistence.name": "CHOICEMODE"
+        },
+        "options": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "OPTIONS"
+        },
+        "correctAnswer": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "CORRECTANSWER"
+        },
+        "aiGrading": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "AIGRADING"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALVALIDATIONRULES"
     }
   },
   "meta": {
