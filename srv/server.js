@@ -66,6 +66,7 @@ import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
 import { publishContributors } from './lib/contributors-publish.js';
+import { publishValidationRules } from './lib/validation-rules-publish.js';
 import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
 import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
@@ -613,6 +614,14 @@ cds.on('bootstrap', (app) => {
     express.json({ limit: '1mb' }),
     contentAuthMiddleware,
     publishContributors
+  );
+
+  // REPLACE-per-slug handler for TutorialValidationRules (WS3 #task-13).
+  // Same auth guard and body parser shape as publish-contributors.
+  app.post('/content/publish-validation-rules',
+    express.json({ limit: '4mb' }),
+    contentAuthMiddleware,
+    publishValidationRules
   );
 
   // Tutorial feedback bridge. Express handler (rather than letting CAP expose
