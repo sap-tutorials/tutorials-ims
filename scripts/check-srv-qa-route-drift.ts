@@ -102,6 +102,18 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     '(com.sap.developers.ims.qa) does not load, and srv-qa has no runtime reader of ' +
     'ValidateAnswerSpecs (author preview re-parses rules.vr live). The publish CLI skips this ' +
     'step for channel=qa. Re-evaluate only if QA gains a runtime /api/validate-answer surface.',
+  'POST /content/publish-contributors':
+    'Contributor sidecar publish (#WS2). Same rationale as validate-answer-specs above: srv-qa ' +
+    'has no ContributorCache entity (the QA model com.sap.developers.ims.qa does not load it), ' +
+    'so a POST would 404/500, and there is no QA runtime reader. The publish CLI already skips ' +
+    'this step for channel=qa (scripts/publish-content.ts: "[publish-contributors] skipped"). ' +
+    'Re-evaluate only if QA gains a contributor reader.',
+  'POST /content/publish-validation-rules':
+    'Validation-rules sidecar publish (#WS3). Same rationale as publish-contributors above: ' +
+    'srv-qa has no ValidationRules entity, so a POST would 404/500, and there is no QA runtime ' +
+    'reader. The publish CLI already skips this step for channel=qa ' +
+    '(scripts/publish-content.ts: "[publish-validation-rules] skipped"). Re-evaluate only if ' +
+    'QA gains a validation-rules reader.',
   'GET /content/authors/:login':
     'CAP-served /authors/{login}/ pages (#1659 Phase C) — a public prod content surface that ' +
     'aggregates across published tutorials, not tutorial-draft author preview. Same rationale ' +
