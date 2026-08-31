@@ -120,6 +120,13 @@ service AdminService {
     // conceptLinks already carried by '*' (db/knowledge-graph.cds extends base.Tutorials).
     rank          : Association to one  TutorialRank  on rank.slug          = $self.slug,
     coCompletions : Association to many CoCompletions on coCompletions.sourceSlug = $self.slug,
+    // KG facet (task-2): community membership — links this tutorial to its
+    // Louvain-detected community rows (slug-based join). From the OP, a $expand
+    // on communityMembership exposes communityId + communityFingerprint, which
+    // can be used to fetch the label from KgCommunityLabel. No schema change:
+    // KgCommunityMembers is an @readonly projection on ims.KgCommunity, which
+    // already carries the slug column.
+    communityMembership : Association to many AdminService.KgCommunityMembers on communityMembership.slug = $self.slug,
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
