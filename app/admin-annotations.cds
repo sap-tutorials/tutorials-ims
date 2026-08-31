@@ -985,6 +985,7 @@ annotate AdminService.Tutorials with @UI: {
     { $Type: 'UI.ReferenceFacet', Label: 'Knowledge Graph', ID: 'KgFieldsFacet', Target: '@UI.FieldGroup#KnowledgeGraph' },
     { $Type: 'UI.ReferenceFacet', Label: 'Concepts Taught', ID: 'ConceptsTaughtFacet', Target: 'conceptLinks/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Co-Completed', ID: 'CoCompletionsFacet', Target: 'coCompletions/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Community', ID: 'KgCommunityFacet', Target: 'communityMembership/@UI.LineItem' },
     { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
       { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
         Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',

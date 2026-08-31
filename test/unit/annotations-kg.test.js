@@ -9,6 +9,7 @@ describe('Knowledge Graph facets', () => {
     const ids = m.definitions['AdminService.Tutorials']['@UI.Facets'].map((f) => f.ID)
     expect(ids).toContain('ConceptsTaughtFacet')
     expect(ids).toContain('CoCompletionsFacet')
+    expect(ids).toContain('KgCommunityFacet')
   })
 
   it('concept links LineItem shows predicate + confidence', () => {
