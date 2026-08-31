@@ -17,10 +17,11 @@ Example tutorial used for reference: `Tutorials(ID=1350bd47-09eb-5656-a9b9-bdc25
 3. **Contributors** — populate the **full git-derived contributor list** (up to 10: login, name, email, avatar), each linking to `github.com/<login>`.
 4. **Media** — surface object-store items with **rich detail** (explicit user ask).
 
-## Open decisions (need a call — recommendations inline)
+## Resolved decisions (approved 2026-08-31)
 
-- **D1 — Object Store prod binding gap.** `package.json` sets `attachments.kind: s3` for `[production]`, but **`mta.yaml` declares no `objectstore` resource and `tutorials-srv` binds none**. Media may be DB-backed (or unpopulated) in prod today. **Recommendation:** the Media *facet* (read-only projection + download links) works regardless of backing store, so ship it; treat the S3 binding as a **separate ops investigation** tracked out of this design. Confirm.
-- **D2 — Byte size / image dimensions.** Not persisted today (`buffer.length` is used only for a guard; `probe-image-size` is a devDep but unused in the ingest path). To show size/dimensions we need a small schema + ingest change. **Recommendation:** add `byteSize : Integer64` (cheap, already in memory at ingest) now; defer width/height (needs probe wiring) unless you want it. Confirm which.
+- **D1 — Object Store prod binding gap.** `package.json` sets `attachments.kind: s3` for `[production]`, but **`mta.yaml` declares no `objectstore` resource and `tutorials-srv` binds none**. **Resolved:** ship the Media facet (works regardless of backing store); the S3 binding is a **separate ops task**, out of scope here.
+- **D2 — Byte size / image dimensions.** **Resolved:** add `byteSize : Integer64` and persist `buffer.length` at ingest now; **defer** width/height (needs `probe-image-size` wiring).
+- **D3 — WS3 validation UI.** **Resolved:** keep BOTH facets — relabel the existing AI-only facet "AI-Graded Validation", add the new "All Validation Rules" facet alongside it.
 
 ## Workstreams
 
@@ -70,7 +71,7 @@ Five independently shippable workstreams. Suggested phasing at the end.
    - *Note:* MCQ correct answers for client-graded rules are already public (they ship in Hugo frontmatter `TutorialStep.validation`), so showing them in the admin is not a new leak. AI-graded reference answers remain in `ValidateAnswerSpecs` as today.
 2. **Sidecar (fetch):** write `<slug>.validation-rules.json` = `{ slug, rules: [...] }` from the **full** `validationMap` (available at `fetch-tutorials.ts:975`), not the AI-filtered subset. Carry `type`, `options`, `choiceMode`, `correctAnswers` in addition to the AI-spec fields.
 3. **Publish + server upsert:** same REPLACE-per-slug pattern (new `srv/lib/validation-rules-publish.js`; add to srv-qa cp-list).
-4. **UI:** new facet "All Validation Rules" (read-only `@UI.LineItem`) with columns: step, question, type, ruleType, grading (AI/client), correct answer. Keep the existing "Validation Questions" (AI) facet, or relabel it "AI-Graded Validation" for clarity. Confirm whether to keep both or replace.
+4. **UI:** new facet "All Validation Rules" (read-only `@UI.LineItem`) with columns: step, question, type, ruleType, grading (AI/client), correct answer. **Keep both facets** (D3): relabel the existing AI facet "AI-Graded Validation"; the new all-rules facet sits alongside it.
 
 **Testing:** parser — sidecar carries all rule types incl. non-AI; server upsert REPLACE semantics; hybrid — publish a tutorial with mixed AI + MCQ rules, assert both appear in `TutorialValidationRules` and only AI ones in `ValidateAnswerSpecs`.
 
@@ -102,7 +103,7 @@ Five independently shippable workstreams. Suggested phasing at the end.
 **Design — Media:**
 1. **Expose** `@readonly` projections of `TutorialImages` and `TutorialAssets` on `AdminService`, reachable from `Tutorials` (association on matching `slug`, `channel='prod'`). The `content : Composition of many Attachments` child auto-exposes with `@cap-js/attachments` annotations (`@Core.MediaType`, `@Core.ContentDisposition`, `@UI.MediaResource`) → native Fiori **download/preview link**.
 2. **Surfaceable detail (persisted today):** `sourceUrl` (GitHub raw URL, render as external link), `contentHash` (sha-256), `mimeType`, `channel`, child `filename` + `createdAt` + `status`. 
-3. **Optional (D2):** add `byteSize : Integer64` to the schema and persist `buffer.length` at ingest (`srv/lib/image-ingest-handler.js` ~`:77`); width/height deferred unless requested.
+3. **Byte size (D2):** add `byteSize : Integer64` to the schema and persist `buffer.length` at ingest (`srv/lib/image-ingest-handler.js` ~`:77`); width/height deferred.
 4. **UI:** "Media" facet with two tables (Images, Assets): thumbnail/download link, filename, mime, size (if added), source URL link, content hash, channel.
 
 **Design — Freshness header:**
