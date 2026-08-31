@@ -979,6 +979,8 @@ annotate AdminService.Tutorials with @UI: {
       Target: 'aiRequests/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', ID: 'FreshnessFacet', Label: 'Freshness',
       Target: 'freshnessFindings/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Images', ID: 'MediaImagesFacet', Target: 'images/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Assets', ID: 'MediaAssetsFacet', Target: 'assets/@UI.LineItem' },
     { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
       { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
         Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',
@@ -4395,3 +4397,23 @@ annotate AdminService.FreshnessFinding with {
   suggestedFix @UI.MultiLineText;
   evidence     @UI.MultiLineText;
 };
+
+// --- Media facets: TutorialImages + TutorialAssets (Task 4) ---
+annotate AdminService.TutorialImages with @(
+  UI.LineItem: [
+    { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source (GitHub)' },
+    { Value: mimeType,    Label: 'Type' },
+    { Value: byteSize,    Label: 'Bytes' },
+    { Value: contentHash, Label: 'Hash' },
+    { Value: channel,     Label: 'Channel' }
+  ]
+);
+annotate AdminService.TutorialAssets with @(
+  UI.LineItem: [
+    { Value: filename,    Label: 'File' },
+    { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source (GitHub)' },
+    { Value: mimeType,    Label: 'Type' },
+    { Value: byteSize,    Label: 'Bytes' },
+    { Value: contentHash, Label: 'Hash' }
+  ]
+);
