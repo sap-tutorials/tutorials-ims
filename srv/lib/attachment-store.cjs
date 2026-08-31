@@ -35,14 +35,15 @@ async function head(sourceUrl) {
   })
 }
 
-async function put(sourceUrl, { buffer, mimeType, contentHash, slug, channel, filename }) {
+async function put(sourceUrl, { buffer, mimeType, contentHash, slug, channel, filename, byteSize }) {
   return withCtx(async () => {
     const { TutorialAssets } = cds.entities('com.sap.developers.ims')
     // delete-then-insert avoids NonUpdatableProperties:[content] 409 on overwrite
     await remove(sourceUrl)
     const parentID = cds.utils.uuid()
     const name = filename || sourceUrl.split('/').pop()
-    await INSERT.into(TutorialAssets).entries({ ID: parentID, sourceUrl, slug, channel, contentHash, mimeType, filename: name })
+    const bs = byteSize != null ? byteSize : (Buffer.isBuffer(buffer) ? buffer.length : null)
+    await INSERT.into(TutorialAssets).entries({ ID: parentID, sourceUrl, slug, channel, contentHash, mimeType, filename: name, byteSize: bs })
     const AttachmentsSrv = await cds.connect.to('attachments')
     await AttachmentsSrv.put(linkedContent(), {
       ID: cds.utils.uuid(),

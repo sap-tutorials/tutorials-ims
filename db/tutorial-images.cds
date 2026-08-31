@@ -12,5 +12,6 @@ entity TutorialImages {
       channel     : String(8);               // 'prod' | 'qa'
       contentHash : String(64);              // sha-256 of the stored original
       mimeType    : String(128);
+      byteSize    : Integer64;               // original byte length captured at ingest
       content     : Composition of many Attachments;
 }

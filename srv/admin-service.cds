@@ -9,6 +9,8 @@ using from '../db/homepage-featured';
 using from '../db/views';
 using from '../db/devtoberfest-analytics';
 using from '../db/mcp-pats';
+using from '../db/tutorial-images';
+using from '../db/tutorial-assets';
 using from '../app/admin-annotations';
 using { external.devtoberfest as external_dtf } from '../db/external/devtoberfest';
 
@@ -106,9 +108,14 @@ service AdminService {
     virtual mainPreviewLabel : String,
     // Freshness detector (spec 2026-08-22)
     freshnessFindings      : Association to many FreshnessFinding on freshnessFindings.tutorial.ID = ID,
+    freshnessReports       : Association to many FreshnessReport  on freshnessReports.tutorial = $self,
     virtual openHighCount      : Integer,   // populated in after('READ','Tutorials') — Task 8
     virtual freshnessStatus    : String,
     virtual freshnessCriticality : Integer,
+    // Media facet (task-3): object-store images + assets for this tutorial.
+    // Filtered to channel='prod' so the admin OP shows prod-published media.
+    images : Association to many TutorialImages on images.slug = $self.slug and images.channel = 'prod',
+    assets : Association to many TutorialAssets on assets.slug = $self.slug and assets.channel = 'prod',
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
@@ -620,6 +627,12 @@ service AdminService {
   @readonly entity AuthorAiRequests          as projection on ims.AuthorAiRequests;
   @readonly entity TutorialCompletionStats   as projection on ims.TutorialCompletionStats;
   @readonly entity TutorialValidationRules   as projection on ims.TutorialValidationRules;
+
+  // Media facet (task-3): read-only projections of the object-store image and
+  // asset metadata entities. The content Attachments composition auto-exposes
+  // when the parent is reachable from an exposed entity (@cap-js/attachments).
+  @readonly @cds.redirection.target: false entity TutorialImages as projection on ims.TutorialImages;
+  @readonly @cds.redirection.target: false entity TutorialAssets as projection on ims.TutorialAssets;
 
   // Issue #622 — read-only recipient list for the "Last Chance Emails"
   // admin section. Powers the dropdown for sendLastChanceEmail and the

@@ -977,8 +977,11 @@ annotate AdminService.Tutorials with @UI: {
       Target: 'codeCheckSpecs/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'AI-Author Requests', ID: 'AiRequestsFacet',
       Target: 'aiRequests/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Freshness Reports', ID: 'FreshnessReportsFacet', Target: 'freshnessReports/@UI.PresentationVariant' },
     { $Type: 'UI.ReferenceFacet', ID: 'FreshnessFacet', Label: 'Freshness',
       Target: 'freshnessFindings/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Images', ID: 'MediaImagesFacet', Target: 'images/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Assets', ID: 'MediaAssetsFacet', Target: 'assets/@UI.LineItem' },
     { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
       { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
         Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',
@@ -4365,6 +4368,20 @@ annotate AdminService.TopicClustersAdmin with @(
 
 // --- Tutorial Freshness Detector (spec 2026-08-22-tutorial-freshness-detector) ---
 // Surfaces per-finding analysis rows on the Tutorials Object Page and wires the
+// Freshness Reports — report-level header (spec 2026-08-31 task-5).
+// PresentationVariant sorts newest-first so the latest run appears at the top.
+annotate AdminService.FreshnessReport with @(
+  UI.LineItem: [
+    { Value: runAt,         Label: 'Run At' },
+    { Value: status,        Label: 'Status' },
+    { Value: model,         Label: 'Model' },
+    { Value: cost,          Label: 'Cost' },
+    { Value: openHighCount, Label: 'Open High' },
+    { Value: error,         Label: 'Error' }
+  ],
+  UI.PresentationVariant: { SortOrder: [{ Property: runAt, Descending: true }], Visualizations: ['@UI.LineItem'] }
+);
+
 // Set Disposition action. Criticality paths delegate to the virtual
 // `confidenceCriticality` field (computed by after('READ','FreshnessFinding')
 // in admin-service.js).
@@ -4395,3 +4412,23 @@ annotate AdminService.FreshnessFinding with {
   suggestedFix @UI.MultiLineText;
   evidence     @UI.MultiLineText;
 };
+
+// --- Media facets: TutorialImages + TutorialAssets (Task 4) ---
+annotate AdminService.TutorialImages with @(
+  UI.LineItem: [
+    { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source (GitHub)' },
+    { Value: mimeType,    Label: 'Type' },
+    { Value: byteSize,    Label: 'Bytes' },
+    { Value: contentHash, Label: 'Hash' },
+    { Value: channel,     Label: 'Channel' }
+  ]
+);
+annotate AdminService.TutorialAssets with @(
+  UI.LineItem: [
+    { Value: filename,    Label: 'File' },
+    { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source (GitHub)' },
+    { Value: mimeType,    Label: 'Type' },
+    { Value: byteSize,    Label: 'Bytes' },
+    { Value: contentHash, Label: 'Hash' }
+  ]
+);
