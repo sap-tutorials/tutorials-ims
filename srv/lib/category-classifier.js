@@ -13,7 +13,11 @@
 
 import cds from '@sap/cds';
 import { getSeedEmbeddings, embedAdHoc } from './category-seed-embeddings.js';
-import { classifyViaLlm } from './category-classifier-llm.js';
+// category-classifier-llm (→ @sap-ai-sdk/orchestration) is imported LAZILY inside the
+// LLM fallback path below. A static import here resolves @sap-ai-sdk/orchestration at
+// module load, which crash-loops the srv-qa container (that package is not installed in
+// the stripped srv-qa deps — only @sap-ai-sdk/foundation-models is). srv-qa never reaches
+// the LLM path, so deferring the import keeps srv-qa boot free of the missing dependency.
 
 const LOG = cds.log('category-classifier');
 
@@ -157,6 +161,7 @@ export async function classifyAndPersist(kind, id, _opts = {}) {
   if (!assigned) {
     path = 'llm';
     try {
+      const { classifyViaLlm } = await import('./category-classifier-llm.js');
       const { assigned: llmAssigned } = await classifyViaLlm({
         title:       item.raw.title,
         description: item.raw.description,
