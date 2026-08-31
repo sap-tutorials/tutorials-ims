@@ -10,6 +10,7 @@ import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
 import { publishValidateAnswerSpecs } from './lib/publish-validate-answer.js';
+import { publishContributors } from './publish/publish-contributors.js';
 import { computeOrphans, enforceCap, formatStepSummary } from './lib/purge-orphans.js';
 import { discoverPageFiles, discoverAuthorPages, discoverAdvocatePages } from '../srv/lib/page-key-map.js';
 
@@ -1348,6 +1349,20 @@ async function main() {
       // Don't process.exit(1) on failures — non-fatal per spec.
     } catch (err) {
       console.error('[publish-content] validate-answer spec publish failed (non-fatal):', formatErrorChain(err));
+    }
+  }
+
+  // --- contributors sidecar publish (non-fatal auxiliary step, issue #WS2) ---
+  // QA channel skips: srv-qa has no ContributorCache entity, POST would 404/500.
+  if (channel === 'qa') {
+    log('[publish-contributors] skipped (channel=qa)');
+  } else {
+    try {
+      const cacheDir = join(process.cwd(), '.tutorial-cache');
+      const r = await publishContributors({ cacheDir, baseUrl: opts.baseUrl, apiKey: opts.apiKey });
+      log(`[publish-contributors] published ${r.published}/${r.total}`);
+    } catch (err) {
+      console.error('[publish-content] contributors publish failed (non-fatal):', formatErrorChain(err));
     }
   }
 
