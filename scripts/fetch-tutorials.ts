@@ -15,7 +15,7 @@ import {
   navEntriesBySlug,
   SIDECAR_VERSION,
 } from './lib/content-cache.js'
-import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
+import { parseRulesVrEnriched, collectAiGradedSpecs, collectAllRules } from './parsers/rules.js'
 import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
 import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
@@ -1041,6 +1041,16 @@ async function main() {
           // produce mixed-case t.slug; the publish path matches against the
           // lowercase HANA row.
           writeFileSync(validateSidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: aiGradedSpecs }, null, 2))
+        }
+
+        // Write full validation-rules sidecar (all rule types, all steps).
+        // Consumed by the publish pipeline to upsert TutorialValidationRules rows.
+        const allRules = collectAllRules(validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId)
+        if (allRules.length > 0) {
+          writeFileSync(
+            join(CACHE_DIR, `${t.slug.toLowerCase()}.validation-rules.json`),
+            JSON.stringify({ slug: t.slug.toLowerCase(), rules: allRules }, null, 2),
+          )
         }
 
         // [#208] Anti-leak strip: AI-authored text questions had correctAnswer
