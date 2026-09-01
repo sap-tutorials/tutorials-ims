@@ -30,7 +30,7 @@ const describeIf = SMOKE_TARGET ? describe : describe.skip;
 // confirming the right page was served (not a fallback error page).
 const HTML_ROUTES = [
   { path: '/browse/',              marker: 'id="browse-results"'     },
-  { path: '/topics/',              marker: 'id="topics-map"'         },
+  { path: '/topics/',              marker: 'id="topics-tree-root"'   },
   { path: '/tutorial-navigator/', marker: 'id="tutorial-navigator"' },
   { path: '/developer-advocates/', marker: 'id="advocates-mount"'   },
   { path: '/devtoberfest/',        marker: 'id="devtoberfest-mount"' },
