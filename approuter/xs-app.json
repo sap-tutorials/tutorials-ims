@@ -371,6 +371,7 @@
       "destination": "srv-api",
       "authenticationType": "xsuaa"
     },
+    { "source": "^/search/?(\\?.*)?$", "target": "/tutorial-navigator/$1", "status": 301, "authenticationType": "none" },
     {
       "source": "^/search/(.*)$",
       "target": "/search/$1",
@@ -396,7 +397,7 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/build/(breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|kg-stats|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels|topics-gallery)(/.*)?(\\?.*)?$",
+      "source": "^/build/(breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|kg-stats|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels|topics-gallery|topics-tree|topics)(/.*)?(\\?.*)?$",
       "target": "/build/$1$2$3",
       "destination": "srv-api",
       "authenticationType": "none"
@@ -582,7 +583,8 @@
       "cacheControl": "public, max-age=3600"
     },
     { "source": "^/browse/?(\\?.*)?$",              "target": "/content/pages/browse/$1",              "destination": "srv-api", "authenticationType": "none" },
-    { "source": "^/topics/?(\\?.*)?$",              "target": "/content/pages/topics/$1",              "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/topics/?(\\?.*)?$", "target": "/content/topics-index$1", "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/topics/(.*)$", "target": "/content/topics/$1", "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/tutorial-navigator/?(\\?.*)?$",  "target": "/content/pages/tutorial-navigator/$1",  "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/developer-advocates/?(\\?.*)?$", "target": "/content/pages/developer-advocates/$1", "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/developer-advocates/([^/?]+)/?(\\?.*)?$", "target": "/content/developer-advocates/$1",   "destination": "srv-api", "authenticationType": "none" },
