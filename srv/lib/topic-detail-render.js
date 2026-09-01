@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 function esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 export function renderTopicDetail(topic) {
@@ -51,6 +51,6 @@ export function renderTopicDetail(topic) {
     ${relatedSection}
   </article>
 </main>`;
-  const contentHash = createHash('sha256').update(body).digest('hex');
+  const contentHash = createHash('sha256').update(body, 'utf-8').digest('hex');
   return { body, contentHash };
 }
