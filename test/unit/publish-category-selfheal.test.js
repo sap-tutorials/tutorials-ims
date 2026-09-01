@@ -24,4 +24,16 @@ describe('publish category self-heal', () => {
     classifySpy.mockRejectedValueOnce(new Error('boom'))
     await expect(classifyTouchedTutorials(['id-a'])).resolves.toBeUndefined()
   })
+
+  it('skips self-heal for a bulk publish (> 25 tutorials) so it cannot stampede', async () => {
+    const bulk = Array.from({ length: 26 }, (_, i) => `id-${i}`)
+    await classifyTouchedTutorials(bulk)
+    expect(classifySpy).not.toHaveBeenCalled()
+  })
+
+  it('still classifies an at-threshold incremental publish (25 tutorials)', async () => {
+    const ids = Array.from({ length: 25 }, (_, i) => `id-${i}`)
+    await classifyTouchedTutorials(ids)
+    expect(classifySpy).toHaveBeenCalledTimes(25)
+  })
 })
