@@ -1437,6 +1437,26 @@ cds.on('served', async () => {
     }
   }
 
+  // Seed baseline Category.seedDescription texts (tunes the embedding-based
+  // category classifier). Idempotent + non-destructive: fills only rows whose
+  // seedDescription is empty, never overwrites admin edits. Kept out of CSV so
+  // deploys can't full-replace the admin-editable column. VITEST-gated: seeding
+  // descriptions flips the classifier's embedding path ON, which would leak
+  // into unit tests asserting the LLM/skip fallback (see memory
+  // db-flag-boot-seed-leaks-into-vitest-harness). Non-fatal.
+  if (!process.env.VITEST && !globalThis.__categorySeedDescriptionsSeeded) {
+    globalThis.__categorySeedDescriptionsSeeded = true;
+    try {
+      const { seedCategoryDescriptions } = await import('./lib/seed-category-descriptions.js');
+      const result = await seedCategoryDescriptions(cds.db);
+      if (result.updated > 0) {
+        console.log(`[category-seed-descriptions] seeded ${result.updated}/${result.total} category descriptions`);
+      }
+    } catch (err) {
+      console.warn('[category-seed-descriptions] seed failed (non-fatal):', err.message);
+    }
+  }
+
   app.get('/auth/user', contextMw, authMw, async (req, res) => {
     // #1268: coarse deploy environment (DEV/PROD/QA/LOCAL) for the admin
     // header. Derived from the CF space name — safe to expose to anonymous
