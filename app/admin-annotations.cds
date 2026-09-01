@@ -4420,13 +4420,18 @@ annotate AdminService.FreshnessFinding with {
 // --- Media facets: TutorialImages + TutorialAssets (Task 4) ---
 annotate AdminService.TutorialImages with @(
   UI.LineItem: [
+    { Value: thumbUrl, Label: 'Preview' },
+    { $Type: 'UI.DataFieldWithUrl', Value: viewUrl,   Url: viewUrl,   Label: 'Image (served)' },
     { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source (GitHub)' },
     { Value: mimeType,    Label: 'Type' },
     { Value: byteSize,    Label: 'Bytes' },
     { Value: contentHash, Label: 'Hash' },
     { Value: channel,     Label: 'Channel' }
   ]
-);
+) {
+  // Render thumbUrl inline as an image thumbnail rather than as raw text.
+  thumbUrl @UI.IsImageURL;
+};
 annotate AdminService.TutorialAssets with @(
   UI.LineItem: [
     { Value: filename,    Label: 'File' },
@@ -4445,7 +4450,12 @@ annotate AdminService.TutorialConceptLinks with @(
     { Value: predicate,   Label: 'Relation' },
     { Value: confidence,  Label: 'Confidence' }
   ]
-);
+) {
+  // Show the human-readable concept name instead of the raw GUID FK.
+  // Annotate the association (not concept_ID) so the compiler propagates the
+  // text to the generated foreign key — mirrors the primaryTagRef precedent.
+  concept @Common.Text: concept.name @Common.TextArrangement: #TextOnly;
+};
 
 // CoCompletions LineItem: target tutorial slug + co-completion score.
 annotate AdminService.CoCompletions with @(
@@ -4455,14 +4465,18 @@ annotate AdminService.CoCompletions with @(
   ]
 );
 
-// KgCommunityMembers LineItem: community id + fingerprint for the OP facet.
+// KgCommunityMembers LineItem: community (with LLM label) + member slug + type.
 annotate AdminService.KgCommunityMembers with @(
   UI.LineItem: [
-    { Value: communityId,          Label: 'Community ID' },
-    { Value: communityFingerprint, Label: 'Fingerprint' },
-    { Value: vertexType,           Label: 'Type' }
+    { Value: communityId, Label: 'Community' },
+    { Value: slug,        Label: 'Member' },
+    { Value: vertexType,  Label: 'Type' }
   ]
-);
+) {
+  // Prefix the numeric id with the LLM-generated cluster label when present
+  // (#1126); falls back to the bare id where labeling hasn't run yet.
+  communityId @Common.Text: labelInfo.label @Common.TextArrangement: #TextFirst;
+};
 
 // FieldGroup for PageRank score — shown in KgFieldsFacet on Tutorials OP.
 // rank is a to-one Association (slug-joined) added in task-1.
