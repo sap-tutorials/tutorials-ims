@@ -3,8 +3,11 @@
 // Smoke tests for the tag-tree topics feature — CAP-served /topics/ routes.
 //
 // Tests:
-//   1. /topics/__definitely-not-a-real-slug__/ → 404 (unknown slug redirects
-//      in the approuter, or srv 404s — either way the caller sees no 200)
+//   1. /topics/__definitely-not-a-real-slug__/ → NOT 200. Topics unknown slugs
+//      301 to /topics/ (resolveTopicBySlug redirect path), unlike /concepts/
+//      which 404s. fetchWithRetry uses redirect:'manual' so the client sees the
+//      raw 301 — the invariant is simply: a bogus slug must never resolve to a
+//      served page (status ≠ 200).
 //   2. /topics/ index → 200 (published BLOB or SSR-served by CAP via
 //      /content/topics-index; x-content-source assertion is best-effort)
 //   3. A live leaf slug derived from /build/topics-tree → 200 + body
@@ -15,9 +18,12 @@ import { describe, it, expect } from 'vitest';
 import { BASE_URL, SRV_URL, fetchWithRetry } from './smoke.config.js';
 
 describe('/topics/ route smoke', () => {
-  it('returns 404 for a non-existent topic slug', async () => {
+  it('does not serve a non-existent topic slug as a page', async () => {
     const r = await fetchWithRetry(`${BASE_URL}/topics/__definitely-not-a-real-slug__/`);
-    expect(r.status).toBe(404);
+    // Topics 301 unknown slugs to /topics/ (resolveTopicBySlug redirect), unlike
+    // concepts which 404. fetchWithRetry uses redirect:'manual', so assert the
+    // real invariant: a bogus slug must never resolve to a served page.
+    expect(r.status).not.toBe(200);
   });
 
   it('/topics/ index returns 200', async () => {
