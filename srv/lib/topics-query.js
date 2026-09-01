@@ -1,6 +1,6 @@
 // srv/lib/topics-query.js
 import cds from '@sap/cds';
-import { buildTopicSlugMap, parseTitlePath, normalizeLegacyTopicSlug } from './topic-slug.js';
+import { buildTopicSlugMap, normalizeLegacyTopicSlug } from './topic-slug.js';
 
 const NS = 'com.sap.developers.ims';
 const MAX_TUTORIALS = 60;
@@ -83,8 +83,8 @@ export async function buildTopicsTreePayload(db) {
   }
 }
 
-export async function resolveTopicBySlug(db, slug) {
-  const live = await loadLiveTags(db);
+export async function resolveTopicBySlug(db, slug, live) {
+  if (!live) live = await loadLiveTags(db);
   const bySlug = new Map(live.map(t => [t.slug, t]));
   if (bySlug.has(slug)) return { tag: bySlug.get(slug), redirectTo: null };
   const base = normalizeLegacyTopicSlug(slug);
@@ -94,7 +94,8 @@ export async function resolveTopicBySlug(db, slug) {
 
 export async function buildTopicDetailPayload(db, slug) {
   try {
-    const { tag, redirectTo } = await resolveTopicBySlug(db, slug);
+    const live = await loadLiveTags(db);
+    const { tag, redirectTo } = await resolveTopicBySlug(db, slug, live);
     if (!tag) return { slug, notFound: true, redirectTo, tutorials: [], concepts: [], relatedTags: [], buildAt: new Date().toISOString(), error: null };
     if (redirectTo) return { slug: tag.slug, notFound: false, redirectTo, tutorials: [], concepts: [], relatedTags: [], buildAt: new Date().toISOString(), error: null };
 
@@ -115,7 +116,7 @@ export async function buildTopicDetailPayload(db, slug) {
         level: t.experienceTag || null,
         time: t.averageTimeToComplete || null,
         href: `/tutorials/${String(t.slug || '').toLowerCase()}/`,
-        isNew: false,
+        isNew: false, // isNew column absent from Tutorials model; always false until schema adds it
       }))
       .sort((a, b) => a.title.localeCompare(b.title))
       .slice(0, MAX_TUTORIALS);
@@ -132,8 +133,7 @@ export async function buildTopicDetailPayload(db, slug) {
       .sort((a, b) => b.rank - a.rank || a.name.localeCompare(b.name))
       .slice(0, MAX_CONCEPTS);
 
-    // related tags = same-facet siblings sharing the parent segment
-    const live = await loadLiveTags(db);
+    // related tags = same-facet siblings sharing the parent segment (reuses live loaded above)
     const parent = tag.segments.slice(0, -1);
     const relatedTags = live
       .filter(t => t.slug !== tag.slug && t.facet === tag.facet)
