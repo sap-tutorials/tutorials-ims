@@ -100,15 +100,22 @@ function pickEmbeddingResult(scored) {
 
 async function persist(kind, itemId, assigned) {
   const cfg = KIND_TO_ENTITY[kind];
+  // Resolve the junction to its namespaced entity object. A bare short-name
+  // string ('TutorialCategories') does NOT resolve to the HANA table
+  // (COM_SAP_DEVELOPERS_IMS_TUTORIALCATEGORIES) when this runs outside a
+  // service handler (e.g. the standalone backfill via `cds bind --exec`) —
+  // it emits bare `TUTORIALCATEGORIES` SQL and dies. loadItemText already
+  // resolves this way, so cds.entities() is known-good by the time we get here.
+  const junction = cds.entities('com.sap.developers.ims')[cfg.junction];
   await cds.tx(async (tx) => {
-    await tx.run(DELETE.from(cfg.junction).where({ [cfg.fk]: itemId }));
+    await tx.run(DELETE.from(junction).where({ [cfg.fk]: itemId }));
     if (assigned.length === 0) return;
     const rows = assigned.map(a => ({
       [cfg.fk]:    itemId,
       category_ID: a.ID,
       score:       a.score ?? 1.0,
     }));
-    await tx.run(INSERT.into(cfg.junction).entries(rows));
+    await tx.run(INSERT.into(junction).entries(rows));
   });
 }
 
