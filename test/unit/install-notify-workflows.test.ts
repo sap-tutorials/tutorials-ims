@@ -392,3 +392,30 @@ describe('PROD notify template branch trigger (regression guard)', () => {
     expect(template).not.toMatch(/branches:\s*\[\s*main\s*\]/)
   })
 })
+
+describe('QA notify template branch trigger (regression guard)', () => {
+  // -Contribution repos are ALSO a mixture of `main`- and `master`-default
+  // branches (Tutorials-Contribution defaults to `master`). The QA template
+  // MUST scope the push trigger to the default branch(es) — WITHOUT a branches:
+  // filter it fires on EVERY branch push (e.g. the devtoberfest validation-
+  // tutorial bot's `validation-tutorial/*` branches), dispatching a QA rebuild
+  // for a slug that exists only on that branch; QA discovery reads the default
+  // branch, so the slug is a phantom and the rebuild hard-fails "unknown slug
+  // in filter" (tutorials-ims#2097). Keep this in parity with the PROD guard.
+  const template = readFileSync(
+    join(__dirname, '..', '..', '.github', 'workflows', 'notify-qa.yml.template'),
+    'utf8',
+  )
+
+  it('fires on both master and main', () => {
+    expect(template).toMatch(/branches:\s*\[\s*master\s*,\s*main\s*\]/)
+  })
+
+  it('does not ship a main-only trigger', () => {
+    expect(template).not.toMatch(/branches:\s*\[\s*main\s*\]/)
+  })
+
+  it('ships a branches filter (never an unfiltered push trigger)', () => {
+    expect(template).toMatch(/branches:/)
+  })
+})
