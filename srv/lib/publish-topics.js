@@ -11,7 +11,7 @@
 import cds from '@sap/cds';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
-import { loadLiveTags, buildTopicDetailPayload } from './topics-query.js';
+import { loadLiveTags, buildTopicDetailPayload, loadTopicCorpus } from './topics-query.js';
 import { renderTopicDetail } from './topic-detail-render.js';
 import { composeShell, createShellLoader } from './chrome-shell.js';
 import { createSessionHelpers } from './content-publish-session.js';
@@ -39,7 +39,7 @@ export function topicMetaDescription(topic) {
  * @param {object} args.priorHashes  Map of `topic-<slug>` → prior stored
  *                                    contentHash (full-doc sha256) for delta skip.
  * @param {{before:string,after:string}} args.shell  Parsed __shell__ halves.
- * @param {object} [args.deps]       { loadLiveTags, buildTopicDetailPayload } — defaults to real.
+ * @param {object} [args.deps]       { loadLiveTags, buildTopicDetailPayload, loadTopicCorpus } — defaults to real.
  * @returns {Promise<{topicsSeen,topicsChanged,topicsSkipped,topicsErrored,durationMs}>}
  */
 export async function renderTopicsIntoSession({ db, sessionId, helpers, priorHashes = {}, shell, deps = {} }) {
@@ -49,7 +49,13 @@ export async function renderTopicsIntoSession({ db, sessionId, helpers, priorHas
   }
   const _loadLiveTags = deps.loadLiveTags || loadLiveTags;
   const _buildTopicDetailPayload = deps.buildTopicDetailPayload || buildTopicDetailPayload;
-  const live = await _loadLiveTags(db);
+  const _loadTopicCorpus = deps.loadTopicCorpus || loadTopicCorpus;
+
+  // Load the full corpus ONCE before the loop — avoids O(topics × full-corpus)
+  // redundant DB reads. The serve path (srv/server.js) calls buildTopicDetailPayload
+  // with only 2 args, so the corpus-free path remains intact for single-slug lookups.
+  const corpus = await _loadTopicCorpus(db);
+  const live = corpus.live;
   const topicsSeen = live.length;
 
   // Render + delta-filter into a flat file map first, so we can enforce the
@@ -61,7 +67,7 @@ export async function renderTopicsIntoSession({ db, sessionId, helpers, priorHas
   for (const tag of live) {
     const key = `topic-${tag.slug}`;
     try {
-      const topic = await _buildTopicDetailPayload(db, tag.slug);
+      const topic = await _buildTopicDetailPayload(db, tag.slug, corpus);
       if (topic.notFound || topic.error) {
         topicsErrored++;
         metrics.counter('topic_render_error');

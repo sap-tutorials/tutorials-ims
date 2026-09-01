@@ -92,22 +92,48 @@ export async function resolveTopicBySlug(db, slug, live) {
   return { tag: null, redirectTo: '/topics/' };
 }
 
-export async function buildTopicDetailPayload(db, slug) {
+/**
+ * Load the full per-publish corpus once so the publish loop can pass it to
+ * every buildTopicDetailPayload call instead of re-running O(topics) identical
+ * full-table reads.
+ *
+ * @param {object} db  CDS db service
+ * @returns {Promise<{live: Array, allTuts: Array, teaches: Array, allConcepts: Array, rankBySlug: Map}>}
+ */
+export async function loadTopicCorpus(db) {
+  const { Tutorials, TutorialConceptLinks, Concepts, ConceptRank } = ent();
+  const live = await loadLiveTags(db);
+  const allTuts = await db.run(SELECT.from(Tutorials).columns('ID', 'slug', 'title', 'experienceTag', 'averageTimeToComplete'));
+  const teaches = await db.run(SELECT.from(TutorialConceptLinks).columns('tutorial_ID', 'concept_ID').where({ predicate: 'teaches' }));
+  const allConcepts = await db.run(SELECT.from(Concepts).columns('ID', 'slug', 'name').where({ status: 'ACTIVE' }));
+  const rankRows = await db.run(SELECT.from(ConceptRank).columns('slug', 'score')).catch(() => []);
+  const rankBySlug = new Map(rankRows.map(r => [r.slug, r.score]));
+  return { live, allTuts, teaches, allConcepts, rankBySlug };
+}
+
+export async function buildTopicDetailPayload(db, slug, corpus) {
   try {
-    const live = await loadLiveTags(db);
+    // When corpus is provided (publish loop), reuse the pre-loaded live list;
+    // otherwise load fresh (single-slug serve path — corpus arg is absent).
+    const live = corpus ? corpus.live : await loadLiveTags(db);
     const { tag, redirectTo } = await resolveTopicBySlug(db, slug, live);
     if (!tag) return { slug, notFound: true, redirectTo, tutorials: [], concepts: [], relatedTags: [], buildAt: new Date().toISOString(), error: null };
     if (redirectTo) return { slug: tag.slug, notFound: false, redirectTo, tutorials: [], concepts: [], relatedTags: [], buildAt: new Date().toISOString(), error: null };
 
     const { Tags, TutorialTags, Tutorials, TutorialConceptLinks, Concepts, ConceptRank } = ent();
 
-    // tutorials carrying this tag
+    // tutorials carrying this tag (per-slug — NOT hoistable into corpus)
     const tagRow = await db.run(SELECT.one.from(Tags).columns('ID').where({ titlePath: tag.titlePath }));
     const ttRows = tagRow ? await db.run(SELECT.from(TutorialTags).columns('tutorial_ID', 'tag_ID').where({ tag_ID: tagRow.ID })) : [];
     const tutIds = new Set(ttRows.map(r => r.tutorial_ID));
+
+    // corpus reads — reuse pre-loaded data when caller provides corpus (publish
+    // loop), otherwise load fresh (single-slug serve path).
     // Column verification: Tutorials has averageTimeToComplete (Integer) from TaskBase,
     // not timeToComplete/time/estimatedTime. isNew does not exist — omitted from projection.
-    const allTuts = await db.run(SELECT.from(Tutorials).columns('ID', 'slug', 'title', 'experienceTag', 'averageTimeToComplete'));
+    const allTuts = corpus
+      ? corpus.allTuts
+      : await db.run(SELECT.from(Tutorials).columns('ID', 'slug', 'title', 'experienceTag', 'averageTimeToComplete'));
     const tutorials = allTuts
       .filter(t => tutIds.has(t.ID))
       .map(t => ({
@@ -122,11 +148,16 @@ export async function buildTopicDetailPayload(db, slug) {
       .slice(0, MAX_TUTORIALS);
 
     // concepts taught by those tutorials (unbounded fetch + Node filter)
-    const teaches = await db.run(SELECT.from(TutorialConceptLinks).columns('tutorial_ID', 'concept_ID').where({ predicate: 'teaches' }));
+    const teaches = corpus
+      ? corpus.teaches
+      : await db.run(SELECT.from(TutorialConceptLinks).columns('tutorial_ID', 'concept_ID').where({ predicate: 'teaches' }));
     const conceptIds = new Set(teaches.filter(l => tutIds.has(l.tutorial_ID) && l.concept_ID).map(l => l.concept_ID));
-    const allConcepts = await db.run(SELECT.from(Concepts).columns('ID', 'slug', 'name').where({ status: 'ACTIVE' }));
-    const rankRows = await db.run(SELECT.from(ConceptRank).columns('slug', 'score')).catch(() => []);
-    const rankBySlug = new Map(rankRows.map(r => [r.slug, r.score]));
+    const allConcepts = corpus
+      ? corpus.allConcepts
+      : await db.run(SELECT.from(Concepts).columns('ID', 'slug', 'name').where({ status: 'ACTIVE' }));
+    const rankBySlug = corpus
+      ? corpus.rankBySlug
+      : new Map((await db.run(SELECT.from(ConceptRank).columns('slug', 'score')).catch(() => [])).map(r => [r.slug, r.score]));
     const concepts = allConcepts
       .filter(c => conceptIds.has(c.ID))
       .map(c => ({ slug: c.slug, name: c.name, rank: rankBySlug.get(c.slug) ?? 0 }))
