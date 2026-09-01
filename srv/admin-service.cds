@@ -642,7 +642,14 @@ service AdminService {
   // Media facet (task-3): read-only projections of the object-store image and
   // asset metadata entities. The content Attachments composition auto-exposes
   // when the parent is reachable from an exposed entity (@cap-js/attachments).
-  @readonly @cds.redirection.target: false entity TutorialImages as projection on ims.TutorialImages;
+  @readonly @cds.redirection.target: false entity TutorialImages as projection on ims.TutorialImages {
+    *,
+    // Served-image URLs (filled in after('READ','TutorialImages')): the
+    // tutorial-system's own rendered output, not the GitHub source.
+    // thumbUrl → approuter resize/WebP CDN preview; viewUrl → raw original from CAP.
+    virtual thumbUrl : String,
+    virtual viewUrl  : String
+  };
   @readonly @cds.redirection.target: false entity TutorialAssets as projection on ims.TutorialAssets;
 
   // KG facet (task-1): read-only projections used by the Tutorials admin OP KG tab.
@@ -1275,9 +1282,23 @@ extend service AdminService with {
     virtual null as coverageHigh         : Boolean,
   };
 
+  // Human-readable Louvain community label (#1126), keyed by
+  // communityFingerprint. Exposed read-only so the OP membership facet can
+  // surface the LLM-generated cluster name instead of the numeric communityId.
+  @readonly @cds.redirection.target: false
+  entity KgCommunityLabelInfo as projection on ims.KgCommunityLabel;
+
   // OP-facing memberships. Rows keyed to (communityId, vertexKey).
+  // `labelInfo` is an unmanaged select-list association joining to
+  // KgCommunityLabelInfo on the shared communityFingerprint so the facet can
+  // show labelInfo.label (blank until the Louvain labeling job runs in the
+  // target env — member slug is the always-present fallback column).
   @readonly
-  entity KgCommunityMembers as projection on ims.KgCommunity;
+  entity KgCommunityMembers as projection on ims.KgCommunity {
+    *,
+    labelInfo : Association to KgCommunityLabelInfo
+                  on labelInfo.communityFingerprint = communityFingerprint
+  };
 
   // Drafts a Mission from the community's tutorial members, ordered A→Z.
   // Curator finishes the draft in the Missions LR (write description,

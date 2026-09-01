@@ -2195,6 +2195,21 @@ export default class AdminService extends cds.ApplicationService {
       for (const row of list) if (row) row.confidenceCriticality = map[row.confidence] ?? 0;
     });
 
+    // Media facet: surface the tutorial-system's own served-image URLs so the
+    // admin OP shows a live preview + a link to the rendered image (not just the
+    // GitHub source). thumbUrl → approuter resize/WebP CDN; viewUrl → raw
+    // original from CAP (self-heals from the object store on a miss). Both are
+    // root-relative so they resolve against the approuter origin serving /admin-ui/.
+    this.after('READ', 'TutorialImages', (rows) => {
+      const list = Array.isArray(rows) ? rows : [rows];
+      for (const row of list) {
+        if (!row || !row.sourceUrl) continue;
+        const u = encodeURIComponent(row.sourceUrl);
+        row.thumbUrl = `/img-cdn?u=${u}`;
+        row.viewUrl = `/content/image-source?u=${u}`;
+      }
+    });
+
     // Guard: only SuperAdmin can change the published flag in either direction
     // (publish OR unpublish). The CREATE exemption permits the runtime's
     // draft-activation flow, where the activation payload echoes published=false
