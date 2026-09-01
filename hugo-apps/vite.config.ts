@@ -314,6 +314,7 @@ export default defineConfig({
         'homepage-bands': resolve(__dirname, 'src/homepage-bands/index.ts'),
         'kg-stats-counter': resolve(__dirname, 'src/kg-stats-counter/main.ts'),
         'concepts-filter': resolve(__dirname, 'src/concepts-filter/main.ts'),
+        'topics-tree': resolve(__dirname, 'src/topics-tree/main.ts'),
         'topics-map': resolve(__dirname, 'src/topics-map/main.ts'),
         'homepage-explainers': resolve(__dirname, 'src/homepage-explainers/index.ts'),
         'homepage-personalizer': resolve(__dirname, 'src/homepage-personalizer/index.ts'),
