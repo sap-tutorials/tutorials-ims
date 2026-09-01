@@ -37,6 +37,7 @@ import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { puzzlePageHandler, puzzleIndexHandler } from './lib/puzzle-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
+import { renderTopicsHandler } from './lib/publish-topics.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { modelJsonHandler } from './lib/model-json-handler.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
@@ -573,6 +574,9 @@ cds.on('bootstrap', (app) => {
   // (Thread B). Dark launch: no publish-content.ts caller yet (Task 5 wires
   // it). Auth like the other publish routes.
   app.post('/content/publish/render-concepts', express.json({ limit: '1mb' }), contentAuthMiddleware, renderConceptsHandler);
+  // tag-tree-topics Task 7 — render topic detail pages alongside concepts.
+  // Auth and sequencing mirror render-concepts exactly.
+  app.post('/content/publish/render-topics', express.json({ limit: '1mb' }), contentAuthMiddleware, renderTopicsHandler);
   app.post('/content/publish/commit', express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
   app.post('/content/publish/abort',  express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
 

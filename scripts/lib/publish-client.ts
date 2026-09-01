@@ -100,6 +100,26 @@ export async function renderConceptsPhase(i: RenderConceptsInput): Promise<Rende
   return postJson(`${i.baseUrl}/content/publish/render-concepts`, i.apiKey, { sessionId: i.sessionId });
 }
 
+export interface RenderTopicsInput { baseUrl: string; apiKey: string; sessionId: string }
+export interface RenderTopicsResult {
+  topicsSeen: number;
+  topicsChanged: number;
+  topicsSkipped: number;
+  topicsErrored: number;
+  durationMs: number;
+}
+
+/**
+ * tag-tree-topics Task 7 — trigger the server-side render-topics phase within
+ * an open publish session. CAP reads live tags, renders each topic detail page,
+ * and appends `topic-<slug>` BLOBs to the session (delta skips unchanged).
+ * Mirrors renderConceptsPhase exactly: must run AFTER the __shell__ sidecar is
+ * present and BEFORE commit.
+ */
+export async function renderTopicsPhase(i: RenderTopicsInput): Promise<RenderTopicsResult> {
+  return postJson(`${i.baseUrl}/content/publish/render-topics`, i.apiKey, { sessionId: i.sessionId });
+}
+
 export async function abortSession({ baseUrl, apiKey, sessionId, reason }: {
   baseUrl: string; apiKey: string; sessionId: string; reason?: string;
 }): Promise<{ aborted: boolean }> {

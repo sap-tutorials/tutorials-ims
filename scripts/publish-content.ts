@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { userInfo, hostname } from 'node:os';
 import { parse as parseYaml } from 'yaml';
 import { parseChannel, type Channel } from './fetch-tutorials.js';
-import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, renderConceptsPhase } from './lib/publish-client.js';
+import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, renderConceptsPhase, renderTopicsPhase } from './lib/publish-client.js';
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
@@ -1243,6 +1243,25 @@ async function main() {
     } catch (err) {
       console.error(`[publish-content] render-concepts failed permanently: ${formatErrorChain(err)}`);
       await abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'render-concepts failed' });
+      process.exit(1);
+    }
+    // tag-tree-topics Task 7 — render topic detail pages alongside concepts.
+    // Same guard (prod-only, full-publish): POST /content/publish/render-topics
+    // is not registered on srv-qa (topics are a prod-only content surface).
+    try {
+      const rt = await withRetry(
+        () => renderTopicsPhase({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId }),
+        {
+          attempts: 3, backoffMs: [1000, 3000, 9000],
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] render-topics failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
+      log(`render-topics: ${rt.topicsChanged} changed, ${rt.topicsSkipped} skipped, ${rt.topicsErrored} errored of ${rt.topicsSeen} (${rt.durationMs} ms)`);
+    } catch (err) {
+      console.error(`[publish-content] render-topics failed permanently: ${formatErrorChain(err)}`);
+      await abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'render-topics failed' });
       process.exit(1);
     }
   }
