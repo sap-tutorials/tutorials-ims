@@ -547,20 +547,40 @@ cds.on('bootstrap', (app) => {
   // is. Both !tag+redirectTo and tag+redirectTo cases 301 — the redirect takes
   // precedence whenever it is set, matching the brief spec.
   app.get('/content/topics/:slug', async (req, res) => {
-    const raw = String(req.params.slug || '').replace(/\.html$/, '');
+    const raw = String(req.params.slug || '');
+    // Strip .html suffix → 301 to canonical /topics/<slug>
+    if (/\.html$/i.test(raw)) {
+      const stripped = raw.replace(/\.html$/i, '').toLowerCase();
+      if (/^[a-z0-9][a-z0-9-]*$/.test(stripped)) {
+        const qIdx = req.url.indexOf('?');
+        const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+        res.setHeader('Location', `/topics/${stripped}${query}`);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.status(301).end();
+      }
+    }
+    // Mixed-case → 301 to canonical lowercase /topics/<slug>
     const lower = raw.toLowerCase();
-    // Mixed-case or .html-stripped → 301 to canonical lowercase /topics/<slug>
-    if (raw !== lower) {
-      res.redirect(301, `/topics/${lower}/`);
-      return;
+    if (raw && raw !== lower && /^[a-z0-9][a-z0-9-]*$/.test(lower)) {
+      const qIdx = req.url.indexOf('?');
+      const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+      res.setHeader('Location', `/topics/${lower}${query}`);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(301).end();
     }
     // Legacy / retired slug resolution → 301 to canonical replacement
     try {
       const db = await cds.connect.to('db');
       const { redirectTo } = await resolveTopicBySlug(db, lower);
-      if (redirectTo) { res.redirect(301, redirectTo); return; }
+      if (redirectTo) {
+        const qIdx = req.url.indexOf('?');
+        const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+        res.setHeader('Location', `${redirectTo}${query}`);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.status(301).end();
+      }
     } catch { /* fail-open to blob lookup */ }
-    // Delegate to shared blob serve handler with topic- key prefix (same as concepts)
+    // Canonical form — delegate to serveHandler with the topic- prefix.
     req.params.slug = `topic-${lower}`;
     return serveHandler(req, res);
   });
