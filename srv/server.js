@@ -38,6 +38,9 @@ import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { puzzlePageHandler, puzzleIndexHandler } from './lib/puzzle-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
 import { renderTopicsHandler } from './lib/publish-topics.js';
+import { buildTopicsTreeHandler, buildTopicDetailHandler } from './lib/build-topics.js';
+import { topicsIndexHandler } from './lib/topic-list-page.js';
+import { resolveTopicBySlug } from './lib/topics-query.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { modelJsonHandler } from './lib/model-json-handler.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
@@ -299,6 +302,8 @@ cds.on('bootstrap', (app) => {
   app.get('/build/concepts', buildConceptsHandler);
   app.get('/build/topic-clusters', buildTopicClustersHandler);
   app.get('/build/topics-gallery', buildTopicsGalleryHandler);
+  app.get('/build/topics-tree', buildTopicsTreeHandler);
+  app.get('/build/topics/:slug', buildTopicDetailHandler);
   app.get('/graph/explore-data', exploreDataHandler);
   app.get('/graph/clusters-data', clustersDataHandler);
   app.get('/graph/path', graphPathHandler);
@@ -532,6 +537,35 @@ cds.on('bootstrap', (app) => {
   // here yet (the /concepts/?$ flip lands in Task 5). Public, no auth — like
   // serveHandler.
   app.get('/content/concepts-index', conceptsIndexHandler);
+  // #topics-scale Task 8 — CAP-served /topics/ detail pages (published topic-<slug>
+  // BLOBs) and the /topics/ index page. Mirrors the /content/concepts/:slug +
+  // /content/concepts-index pattern exactly: same serveHandler delegation, same
+  // two-arg call signature, no live-render fallback (concepts has none).
+  //
+  // Topics adds a legacy/retired slug resolution step: resolveTopicBySlug checks
+  // whether the slug is a renamed/retired tag and returns a redirectTo URL when it
+  // is. Both !tag+redirectTo and tag+redirectTo cases 301 — the redirect takes
+  // precedence whenever it is set, matching the brief spec.
+  app.get('/content/topics/:slug', async (req, res) => {
+    const raw = String(req.params.slug || '').replace(/\.html$/, '');
+    const lower = raw.toLowerCase();
+    // Mixed-case or .html-stripped → 301 to canonical lowercase /topics/<slug>
+    if (raw !== lower) {
+      res.redirect(301, `/topics/${lower}/`);
+      return;
+    }
+    // Legacy / retired slug resolution → 301 to canonical replacement
+    try {
+      const db = await cds.connect.to('db');
+      const { redirectTo } = await resolveTopicBySlug(db, lower);
+      if (redirectTo) { res.redirect(301, redirectTo); return; }
+    } catch { /* fail-open to blob lookup */ }
+    // Delegate to shared blob serve handler with topic- key prefix (same as concepts)
+    req.params.slug = `topic-${lower}`;
+    return serveHandler(req, res);
+  });
+  // Topics index page: /topics/ → CAP SSR (mirrors /content/concepts-index).
+  app.get('/content/topics-index', topicsIndexHandler);
   // #1914 — CAP-served puzzle solver pages (/puzzles/<slug>/, dynamic slug).
   // The page is a thin island shell composed into the __shell__ chrome; the
   // `puzzle` island fetches grid/clue data from /puzzle-api at runtime. Serving
