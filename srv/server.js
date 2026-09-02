@@ -47,6 +47,7 @@ import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
+import * as devtoberfestScheduleCheck from './routes/devtoberfest-schedule-check.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
 import * as devtoberfestCatGame from './routes/devtoberfest-cat-game.js';
 import * as alertsPublic from './routes/alerts-public.js';
@@ -473,6 +474,7 @@ cds.on('bootstrap', (app) => {
   advocatesPublic.register(app);
   devtoberfestPublic.register(app);
   devtoberfestSchedule.register(app);
+  devtoberfestScheduleCheck.register(app);
   devtoberfestAuth.register(app);
   devtoberfestCatGame.register(app);
 
