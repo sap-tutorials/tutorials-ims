@@ -9,6 +9,7 @@
 //   q=<text>        free-text search (title, abstract, speaker, bio…)
 //   week=<week>     week filter (matches ScheduleRow.week)
 //   track=<name>    track filter (matches trackName — by name, not id)
+//   format=<value>  broadcasting format filter (Live | PreRecorded)
 //   edition=<id>    edition selection
 //   session=<id>    opens that session's detail panel
 //
@@ -19,6 +20,7 @@ export interface SessionsUrlState {
   readonly q: string | null;
   readonly week: string | null;
   readonly track: string | null;
+  readonly format: string | null;
   readonly edition: string | null;
   readonly session: string | null;
 }
@@ -27,6 +29,7 @@ export const DEFAULT_URL_STATE: SessionsUrlState = Object.freeze({
   q: null,
   week: null,
   track: null,
+  format: null,
   edition: null,
   session: null,
 });
@@ -48,6 +51,7 @@ export function parseSessionsUrl(search: string | URLSearchParams): SessionsUrlS
     q: nonEmpty(p.get('q')),
     week: nonEmpty(p.get('week')),
     track: nonEmpty(p.get('track')),
+    format: nonEmpty(p.get('format')),
     edition: nonEmpty(p.get('edition')),
     session: nonEmpty(p.get('session')),
   };
@@ -63,6 +67,7 @@ export function toSessionsQuery(state: SessionsUrlState): string {
   if (nonEmpty(state.q)) p.set('q', state.q!);
   if (nonEmpty(state.week)) p.set('week', state.week!);
   if (nonEmpty(state.track)) p.set('track', state.track!);
+  if (nonEmpty(state.format)) p.set('format', state.format!);
   if (nonEmpty(state.edition)) p.set('edition', state.edition!);
   if (nonEmpty(state.session)) p.set('session', state.session!);
   const s = p.toString();

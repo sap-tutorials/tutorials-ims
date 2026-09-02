@@ -11,6 +11,17 @@ function isVisibleStatus(row) {
   return VISIBLE_STATUSES.has(s);
 }
 
+// Normalize the free-text facade BROADCASTINGPREFERENCE (String(5000)) to a
+// stable canonical token the views can key off. Observed planner values are
+// 'Live' and 'PreRecorded'; anything empty/unrecognized fails to null (no tag,
+// excluded from Live/PreRecorded filters) so casing/whitespace drift is safe.
+function normalizeBroadcastingPreference(raw) {
+  const v = (raw ?? '').trim().toLowerCase();
+  if (v === 'live') return 'Live';
+  if (v === 'prerecorded' || v === 'pre-recorded') return 'PreRecorded';
+  return null;
+}
+
 function normalizeSlugSet(rows) {
   const set = new Set();
   for (const r of rows || []) {
@@ -51,6 +62,7 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
         trackColor: mapTrack(s.TRACK_ID).COLOR || '', trackEmoji: mapTrack(s.TRACK_ID).EMOJI || '',
         week: s.WEEK, scheduledStart: s.SCHEDULEDSTART, scheduledTimeZone: s.SCHEDULEDTIMEZONE, recordingStart: s.RECORDINGSTART,
         sessionLength: s.SESSIONLENGTH || '',
+        broadcastingPreference: normalizeBroadcastingPreference(s.BROADCASTINGPREFERENCE),
         youtubeUrl: s.YOUTUBEURL || '', communityEventUrl: s.COMMUNITYEVENTURL || '',
         linkedinUrl: s.LINKEDINURL || '',
         speakers: speakerFor(s.ID),
@@ -110,4 +122,4 @@ function sortByWeekThenTitle(a, b) {
   return w !== 0 ? w : String(a.title || '').localeCompare(String(b.title || ''));
 }
 
-export { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow, isVisibleStatus };
+export { assembleFeed, completedActivityPoints, normalizeSlugSet, normalizeBroadcastingPreference, filterCompletionsWithinWindow, isVisibleStatus };

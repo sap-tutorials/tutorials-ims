@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
 import { mergeCompletion, youtubeThumb, safeHref, sessionMatchesQuery } from '../devtoberfest-schedule-shared/completion';
+import { broadcastingTag, matchesFormat, FORMAT_FILTER_OPTIONS } from '../devtoberfest-schedule-shared/broadcasting';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
@@ -23,6 +24,7 @@ const selectedRow = ref<ScheduleRow | null>(null);
 const filterQuery = ref('');
 const filterWeek = ref('');
 const filterTrack = ref('');
+const filterFormat = ref('');
 
 // --- Deep-linking (issue #2030) -------------------------------------------
 // The page URL is the source of truth on first load. We parse it once, apply
@@ -38,6 +40,7 @@ let applied = false;
 if (initialUrl.q) filterQuery.value = initialUrl.q;
 if (initialUrl.week) filterWeek.value = initialUrl.week;
 if (initialUrl.track) filterTrack.value = initialUrl.track;
+if (initialUrl.format) filterFormat.value = initialUrl.format;
 
 async function loadData(edition?: string) {
   loading.value = true;
@@ -93,6 +96,7 @@ const filtered = computed(() => {
   return sessions.value.filter((r) => {
     if (filterWeek.value && r.week !== filterWeek.value) return false;
     if (filterTrack.value && (r as any).trackName !== filterTrack.value) return false;
+    if (!matchesFormat((r as any).broadcastingPreference, filterFormat.value)) return false;
     if (!sessionMatchesQuery(r, filterQuery.value)) return false;
     return true;
   });
@@ -102,6 +106,7 @@ function clearFilters() {
   filterQuery.value = '';
   filterWeek.value = '';
   filterTrack.value = '';
+  filterFormat.value = '';
 }
 
 function onThumbError(ev: Event) {
@@ -118,6 +123,7 @@ function currentUrlState(): SessionsUrlState {
     q: filterQuery.value || null,
     week: filterWeek.value || null,
     track: filterTrack.value || null,
+    format: filterFormat.value || null,
     // Omit edition when it's just the active default — the ?edition param is
     // for explicitly viewing a non-active edition.
     edition: editionId.value && editionId.value !== feed.value?.activeEditionId
@@ -138,6 +144,7 @@ function applyFromUrl(st: SessionsUrlState) {
   filterQuery.value = st.q ?? '';
   filterWeek.value = st.week ?? '';
   filterTrack.value = st.track ?? '';
+  filterFormat.value = st.format ?? '';
   if (st.session) {
     const row = sessions.value.find((r) => r.id === st.session);
     selectedRow.value = row ?? null;
@@ -159,7 +166,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
 
-watch([filterQuery, filterWeek, filterTrack, editionId, selectedRow], writeUrl);
+watch([filterQuery, filterWeek, filterTrack, filterFormat, editionId, selectedRow], writeUrl);
 </script>
 
 <template>
@@ -220,8 +227,14 @@ watch([filterQuery, filterWeek, filterTrack, editionId, selectedRow], writeUrl);
             <option v-for="t in trackOptions" :key="t" :value="t">{{ t }}</option>
           </select>
         </label>
+        <label class="sg-field">
+          <span>Format</span>
+          <select v-model="filterFormat" aria-label="Filter by session format">
+            <option v-for="opt in FORMAT_FILTER_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </label>
         <button
-          v-if="filterQuery || filterWeek || filterTrack"
+          v-if="filterQuery || filterWeek || filterTrack || filterFormat"
           class="sg-btn sg-btn-ghost"
           @click="clearFilters"
         >Clear</button>
@@ -262,6 +275,14 @@ watch([filterQuery, filterWeek, filterTrack, editionId, selectedRow], writeUrl);
           <div class="sg-card-body">
             <!-- badges row -->
             <div class="sg-badges">
+              <span
+                v-if="broadcastingTag((session as any).broadcastingPreference)"
+                class="sg-badge"
+                :class="`sg-badge--${broadcastingTag((session as any).broadcastingPreference)!.modifier}`"
+              >
+                {{ broadcastingTag((session as any).broadcastingPreference)!.icon }}
+                {{ broadcastingTag((session as any).broadcastingPreference)!.label }}
+              </span>
               <span v-if="(session as any).trackName" class="sg-badge sg-badge--track">
                 {{ (session as any).trackName }}
               </span>
@@ -503,6 +524,16 @@ watch([filterQuery, filterWeek, filterTrack, editionId, selectedRow], writeUrl);
 }
 
 .sg-badge--week {
+  background: var(--sapNeutralBackground, #f5f6f7);
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+.sg-badge--live {
+  background: var(--sapErrorBackground, #ffebeb);
+  color: var(--sapNegativeColor, #b00020);
+}
+
+.sg-badge--prerecorded {
   background: var(--sapNeutralBackground, #f5f6f7);
   color: var(--sapContent_LabelColor, #6a6d70);
 }

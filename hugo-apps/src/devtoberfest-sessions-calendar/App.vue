@@ -3,6 +3,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
 import { mergeCompletion } from '../devtoberfest-schedule-shared/completion';
+import { broadcastingTag, matchesFormat, FORMAT_FILTER_OPTIONS } from '../devtoberfest-schedule-shared/broadcasting';
 import { useAuth } from '../devtoberfest-schedule-shared/useAuth';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
@@ -33,6 +34,7 @@ const maxPoints = ref(0);
 const joined = ref(false);
 const selectedRow = ref<ScheduleRow | null>(null);
 const filterTrack = ref('');
+const filterFormat = ref('');
 const viewMode = ref<ViewMode>('month');
 const cursor = ref<Date>(new Date());
 
@@ -53,6 +55,7 @@ let applied = false;
 
 if (initialUrl.view) viewMode.value = initialUrl.view;
 if (initialUrl.track) filterTrack.value = initialUrl.track;
+if (initialUrl.format) filterFormat.value = initialUrl.format;
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -141,7 +144,11 @@ const completeCount = computed(() => sessions.value.filter((r) => r.complete).le
 
 const filteredSessions = computed<Session[]>(() => {
   const base = sessions.value as Session[];
-  return filterTrack.value ? base.filter((r) => (r as any).trackName === filterTrack.value) : base;
+  return base.filter((r) => {
+    if (filterTrack.value && (r as any).trackName !== filterTrack.value) return false;
+    if (!matchesFormat((r as any).broadcastingPreference, filterFormat.value)) return false;
+    return true;
+  });
 });
 
 const byDate = computed(() => groupByDate(filteredSessions.value));
@@ -185,6 +192,7 @@ function currentUrlState(): CalendarUrlState {
     date: cur !== initialCursorIso.value ? cur : null,
     session: selectedRow.value?.id ?? null,
     track: filterTrack.value || null,
+    format: filterFormat.value || null,
     // Omit edition when it's just the active default — the ?edition param is
     // for explicitly viewing a non-active edition.
     edition: editionId.value && editionId.value !== feed.value?.activeEditionId
@@ -203,6 +211,7 @@ function writeUrl() {
 function applyFromUrl(st: CalendarUrlState) {
   viewMode.value = st.view ?? 'month';
   filterTrack.value = st.track ?? '';
+  filterFormat.value = st.format ?? '';
   let anchored = false;
   if (st.session) {
     const row = sessions.value.find((r) => r.id === st.session);
@@ -231,7 +240,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
 
-watch([viewMode, cursor, filterTrack, editionId, selectedRow], writeUrl);
+watch([viewMode, cursor, filterTrack, filterFormat, editionId, selectedRow], writeUrl);
 </script>
 
 <template>
@@ -274,6 +283,12 @@ watch([viewMode, cursor, filterTrack, editionId, selectedRow], writeUrl);
             <option v-for="t in trackOptions" :key="t" :value="t">{{ t }}</option>
           </select>
         </label>
+        <label class="sc-field cal-filter">
+          <span class="sr-only">Format</span>
+          <select v-model="filterFormat" aria-label="Filter by session format">
+            <option v-for="opt in FORMAT_FILTER_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </label>
         <div class="cal-switch" role="tablist">
           <button :class="{ active: viewMode === 'month' }" @click="viewMode = 'month'">Month</button>
           <button :class="{ active: viewMode === 'week' }" @click="viewMode = 'week'">Week</button>
@@ -305,6 +320,11 @@ watch([viewMode, cursor, filterTrack, editionId, selectedRow], writeUrl);
             @click="selectedRow = s as any"
           >
             <span class="cal-unscheduled-name">{{ s.title }}</span>
+            <span
+              v-if="broadcastingTag((s as any).broadcastingPreference)"
+              class="sg-badge cal-unscheduled-format"
+              :class="`sg-badge--${broadcastingTag((s as any).broadcastingPreference)!.modifier}`"
+            >{{ broadcastingTag((s as any).broadcastingPreference)!.icon }} {{ broadcastingTag((s as any).broadcastingPreference)!.label }}</span>
             <span v-if="s.trackName" class="cal-unscheduled-track">{{ s.trackName }}</span>
             <span v-if="isAuthenticated && (s as any).complete" class="cal-unscheduled-done" aria-label="Completed">✓</span>
           </button>
@@ -349,4 +369,7 @@ watch([viewMode, cursor, filterTrack, editionId, selectedRow], writeUrl);
 .cal-unscheduled-name { font-size: 0.8rem; font-weight: 600; }
 .cal-unscheduled-track { font-size: 0.7rem; color: var(--sapContent_LabelColor, #6a6d70); }
 .cal-unscheduled-done { color: var(--sapPositiveColor, #107e3e); font-size: 0.7rem; font-weight: 700; }
+.sg-badge { display: inline-block; padding: 0.05rem 0.4rem; border-radius: 20px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; }
+.sg-badge--live { background: var(--sapErrorBackground, #ffebeb); color: var(--sapNegativeColor, #b00020); }
+.sg-badge--prerecorded { background: var(--sapNeutralBackground, #f5f6f7); color: var(--sapContent_LabelColor, #6a6d70); }
 </style>

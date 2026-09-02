@@ -4,6 +4,7 @@ import { youtubeThumb, safeHref, taskHref, taskLinkLabel } from './completion';
 import { youtubeId, youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal } from './format-session-time';
 import { sessionIcsHref, sessionCalendarHref } from './calendar-links';
+import { broadcastingTag } from './broadcasting';
 import { renderMarkdown } from '../devtoberfest-shared/render-markdown';
 import { computed, ref } from 'vue';
 
@@ -100,6 +101,8 @@ const abstractHtml = computed(() => {
   return raw ? renderMarkdown(raw) : '';
 });
 
+const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastingPreference));
+
 </script>
 
 <template>
@@ -150,6 +153,12 @@ const abstractHtml = computed(() => {
         <div v-if="abstractHtml" class="detail-panel__abstract" v-html="abstractHtml"></div>
 
         <dl class="detail-panel__meta">
+          <template v-if="formatTag">
+            <dt>Format</dt>
+            <dd>
+              <span class="sg-badge" :class="`sg-badge--${formatTag.modifier}`">{{ formatTag.icon }} {{ formatTag.label }}</span>
+            </dd>
+          </template>
           <template v-if="(row as any).trackName">
             <dt>Track</dt>
             <dd>{{ (row as any).trackName }}</dd>
@@ -347,6 +356,25 @@ const abstractHtml = computed(() => {
 .detail-panel__meta dd {
   color: var(--sapTextColor, #32363a);
   margin: 0;
+}
+
+.sg-badge {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sg-badge--live {
+  background: var(--sapErrorBackground, #ffebeb);
+  color: var(--sapNegativeColor, #b00020);
+}
+
+.sg-badge--prerecorded {
+  background: var(--sapNeutralBackground, #f5f6f7);
+  color: var(--sapContent_LabelColor, #6a6d70);
 }
 
 .detail-panel__links {
