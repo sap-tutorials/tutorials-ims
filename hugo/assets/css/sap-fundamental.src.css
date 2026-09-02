@@ -891,6 +891,18 @@ blockquote {
   font-weight: 600;
 }
 
+/* #2112 — clickable Overview tags: deep-link parity with the header chips */
+a.tutorial-tag--link {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.tutorial-tag--link:hover,
+a.tutorial-tag--link:focus-visible {
+  background: var(--sapBrandColor, #0070f2);
+  color: var(--sapButton_Emphasized_TextColor, #fff);
+}
+
 /* Step progress bar */
 #progress-bar {
   display: flex;
