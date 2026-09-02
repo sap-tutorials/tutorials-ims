@@ -1,0 +1,21 @@
+-- Cross-container value-help view for the Devtoberfest planner's Session.host
+-- field (#2102). Exposes ACTIVE developer advocates as a suggestion list:
+-- a display NAME (firstName + ' ' + lastName), the name parts for OrderBy, the
+-- advocate TITLE, and the linked user's EMAIL for disambiguation.
+--
+-- All output columns are aliased UPPERCASE so the consumer synonym resolves
+-- (camelCase aliases pass this build but fail the consumer resolve with
+-- "invalid column name" — cross-container column-case rule).
+--
+-- Granted via tutorial_reader / tutorial_reader# (one role, many views).
+VIEW "ADVOCATE_VALUE_HELP_V1" AS
+  SELECT A."ID"                               AS "ID",
+         A."FIRSTNAME" || ' ' || A."LASTNAME" AS "NAME",
+         A."FIRSTNAME"                        AS "FIRSTNAME",
+         A."LASTNAME"                         AS "LASTNAME",
+         A."TITLE"                            AS "TITLE",
+         U."EMAIL"                            AS "EMAIL"
+  FROM "COM_SAP_DEVELOPERS_IMS_ADVOCATES" A
+  LEFT OUTER JOIN "COM_SAP_DEVELOPERS_IMS_USERS" U
+    ON A."USER_ID" = U."ID"
+  WHERE A."ISACTIVE" = TRUE
