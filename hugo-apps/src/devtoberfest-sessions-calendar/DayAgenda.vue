@@ -6,6 +6,7 @@ import type { TrackColor } from './track-colors';
 import type { Session } from '../devtoberfest-schedule-shared/types';
 import { youtubeThumb, speakerNames } from '../devtoberfest-schedule-shared/completion';
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
+import { broadcastingTag } from '../devtoberfest-schedule-shared/broadcasting';
 
 const props = defineProps<{
   cursor: Date;
@@ -49,6 +50,11 @@ function onThumbError(ev: Event) {
       <div class="da-meta">
         <span v-if="s.scheduledStart" class="da-time">{{ formatViewerLocal(s.scheduledStart) }}</span>
         <span class="da-title">{{ s.title }}</span>
+        <span
+          v-if="broadcastingTag((s as any).broadcastingPreference)"
+          class="sg-badge da-fmt"
+          :class="`sg-badge--${broadcastingTag((s as any).broadcastingPreference)!.modifier}`"
+        >{{ broadcastingTag((s as any).broadcastingPreference)!.icon }} {{ broadcastingTag((s as any).broadcastingPreference)!.label }}</span>
         <span v-if="speakerNames(s)" class="da-speakers">{{ speakerNames(s) }}</span>
         <span v-if="s.trackName" class="da-track">{{ s.trackName }}</span>
         <span v-if="isAuthenticated && (s as any).complete" class="da-done" aria-label="Completed">✓ Completed</span>
@@ -76,4 +82,7 @@ function onThumbError(ev: Event) {
 .da-speakers { font-size: 0.78rem; color: var(--sapContent_LabelColor, #6a6d70); }
 .da-track { font-size: 0.72rem; color: var(--sapContent_LabelColor, #6a6d70); }
 .da-done { font-size: 0.72rem; color: var(--sapPositiveColor, #107e3e); font-weight: 700; }
+.sg-badge { display: inline-block; align-self: flex-start; padding: 0.05rem 0.4rem; border-radius: 20px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; }
+.sg-badge--live { background: var(--sapErrorBackground, #ffebeb); color: var(--sapNegativeColor, #b00020); }
+.sg-badge--prerecorded { background: var(--sapNeutralBackground, #f5f6f7); color: var(--sapContent_LabelColor, #6a6d70); }
 </style>

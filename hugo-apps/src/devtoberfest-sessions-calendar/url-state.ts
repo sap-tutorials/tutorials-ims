@@ -10,6 +10,7 @@
 //   date=YYYY-MM-DD        cursor anchor (viewer-local day for a session link)
 //   session=<id>           opens that session's detail panel
 //   track=<trackName>      track filter (the toolbar filters by name, not id)
+//   format=<value>         broadcasting format filter (Live | PreRecorded)
 //   edition=<editionId>    edition selection
 //
 // Every value is validated; anything unrecognised falls back to null so a
@@ -22,6 +23,7 @@ export interface CalendarUrlState {
   readonly date: string | null;   // YYYY-MM-DD (validated real calendar date)
   readonly session: string | null;
   readonly track: string | null;
+  readonly format: string | null;
   readonly edition: string | null;
 }
 
@@ -30,6 +32,7 @@ export const DEFAULT_URL_STATE: CalendarUrlState = Object.freeze({
   date: null,
   session: null,
   track: null,
+  format: null,
   edition: null,
 });
 
@@ -76,6 +79,7 @@ export function parseCalendarUrl(search: string | URLSearchParams): CalendarUrlS
     date,
     session: nonEmpty(p.get('session')),
     track: nonEmpty(p.get('track')),
+    format: nonEmpty(p.get('format')),
     edition: nonEmpty(p.get('edition')),
   };
 }
@@ -91,6 +95,7 @@ export function toCalendarQuery(state: CalendarUrlState): string {
   if (isValidDate(state.date)) p.set('date', state.date);
   if (state.session) p.set('session', state.session);
   if (state.track) p.set('track', state.track);
+  if (state.format) p.set('format', state.format);
   if (state.edition) p.set('edition', state.edition);
   const s = p.toString();
   return s ? `?${s}` : '';

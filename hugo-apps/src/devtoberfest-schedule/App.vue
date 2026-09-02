@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, reactive } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
 import { mergeCompletion, safeHref, taskHref, taskLinkLabel } from '../devtoberfest-schedule-shared/completion';
+import { broadcastingTag, matchesFormat, FORMAT_FILTER_OPTIONS } from '../devtoberfest-schedule-shared/broadcasting';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
@@ -24,6 +25,7 @@ const filters = reactive({
   week: '',
   type: '',
   track: '',
+  format: '',
   q: '',
 });
 
@@ -65,6 +67,7 @@ const filtered = computed(() => {
     if (filters.week && r.week !== filters.week) return false;
     if (filters.type && r.kind !== filters.type) return false;
     if (filters.track && (r as any).trackName !== filters.track) return false;
+    if (!matchesFormat((r as any).broadcastingPreference, filters.format)) return false;
     if (q && !r.title.toLowerCase().includes(q)) return false;
     return true;
   });
@@ -119,6 +122,7 @@ function clearFilters() {
   filters.week = '';
   filters.type = '';
   filters.track = '';
+  filters.format = '';
   filters.q = '';
 }
 
@@ -189,8 +193,14 @@ defineExpose({ filters });
             <option v-for="t in trackOptions" :key="t" :value="t">{{ t }}</option>
           </select>
         </label>
+        <label class="sched-field">
+          <span>Format</span>
+          <select v-model="filters.format" aria-label="Filter by session format">
+            <option v-for="opt in FORMAT_FILTER_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </label>
         <button
-          v-if="filters.week || filters.type || filters.track || filters.q"
+          v-if="filters.week || filters.type || filters.track || filters.format || filters.q"
           class="sched-btn sched-btn-ghost"
           @click="clearFilters"
         >Clear</button>
@@ -212,6 +222,7 @@ defineExpose({ filters });
               <th @click="setSort('kind')"><button>Type{{ sortIcon('kind') }}</button></th>
               <th @click="setSort('title')"><button>Title{{ sortIcon('title') }}</button></th>
               <th @click="setSort('trackName')"><button>Track{{ sortIcon('trackName') }}</button></th>
+              <th>Format</th>
               <th @click="setSort('week')"><button>Week{{ sortIcon('week') }}</button></th>
               <th @click="setSort('scheduledStart')"><button>Date / Time{{ sortIcon('scheduledStart') }}</button></th>
               <th @click="setSort('points')" class="num"><button>Points{{ sortIcon('points') }}</button></th>
@@ -236,6 +247,14 @@ defineExpose({ filters });
               </td>
               <td class="sched-title-cell">{{ row.title }}</td>
               <td>{{ (row as any).trackName ?? '—' }}</td>
+              <td>
+                <span
+                  v-if="broadcastingTag((row as any).broadcastingPreference)"
+                  class="sched-fmt-badge"
+                  :class="`sched-fmt-badge--${broadcastingTag((row as any).broadcastingPreference)!.modifier}`"
+                >{{ broadcastingTag((row as any).broadcastingPreference)!.icon }} {{ broadcastingTag((row as any).broadcastingPreference)!.label }}</span>
+                <template v-else>—</template>
+              </td>
               <td>{{ row.week ?? '—' }}</td>
               <td>
                 <template v-if="(row as any).scheduledStart">
@@ -490,6 +509,25 @@ defineExpose({ filters });
 .sched-kind-badge--activity {
   background: var(--sapSuccessBackground, #f1fdf6);
   color: var(--sapPositiveColor, #107e3e);
+}
+
+.sched-fmt-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sched-fmt-badge--live {
+  background: var(--sapErrorBackground, #ffebeb);
+  color: var(--sapNegativeColor, #b00020);
+}
+
+.sched-fmt-badge--prerecorded {
+  background: var(--sapNeutralBackground, #f5f6f7);
+  color: var(--sapContent_LabelColor, #6a6d70);
 }
 
 .sched-done {

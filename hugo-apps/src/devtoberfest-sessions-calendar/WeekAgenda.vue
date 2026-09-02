@@ -6,6 +6,7 @@ import type { TrackColor } from './track-colors';
 import type { Session } from '../devtoberfest-schedule-shared/types';
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
 import { speakerNames } from '../devtoberfest-schedule-shared/completion';
+import { broadcastingTag } from '../devtoberfest-schedule-shared/broadcasting';
 
 const props = defineProps<{
   cursor: Date;
@@ -43,6 +44,11 @@ function borderColor(s: Session): string {
         >
           <span v-if="s.scheduledStart" class="wk-t">{{ formatViewerLocal(s.scheduledStart) }}</span>
           <span class="wk-n">{{ s.title }}</span>
+          <span
+            v-if="broadcastingTag((s as any).broadcastingPreference)"
+            class="sg-badge wk-fmt"
+            :class="`sg-badge--${broadcastingTag((s as any).broadcastingPreference)!.modifier}`"
+          >{{ broadcastingTag((s as any).broadcastingPreference)!.icon }} {{ broadcastingTag((s as any).broadcastingPreference)!.label }}</span>
           <span v-if="speakerNames(s)" class="wk-sp">{{ speakerNames(s) }}</span>
           <span v-if="isAuthenticated && (s as any).complete" class="wk-done" aria-label="Completed">✓</span>
         </button>
@@ -73,5 +79,8 @@ function borderColor(s: Session): string {
 .wk-n { display: block; font-size: 0.75rem; font-weight: 600; line-height: 1.25; }
 .wk-sp { display: block; font-size: 0.7rem; color: var(--sapContent_LabelColor, #6a6d70); line-height: 1.2; margin-top: 0.1rem; }
 .wk-done { color: var(--sapPositiveColor, #107e3e); font-size: 0.7rem; font-weight: 700; }
+.sg-badge { display: inline-block; margin-top: 0.2rem; padding: 0.02rem 0.35rem; border-radius: 20px; font-size: 0.65rem; font-weight: 600; white-space: nowrap; }
+.sg-badge--live { background: var(--sapErrorBackground, #ffebeb); color: var(--sapNegativeColor, #b00020); }
+.sg-badge--prerecorded { background: var(--sapNeutralBackground, #f5f6f7); color: var(--sapContent_LabelColor, #6a6d70); }
 .wk-empty { color: var(--sapContent_DisabledTextColor, #b0b0b0); font-size: 0.75rem; text-align: center; padding: 0.75rem 0; }
 </style>

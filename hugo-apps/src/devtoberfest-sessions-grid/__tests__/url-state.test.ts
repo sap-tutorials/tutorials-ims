@@ -21,11 +21,12 @@ describe('parseSessionsUrl', () => {
   });
 
   it('parses every recognised param (URL-decoded)', () => {
-    const s = parseSessionsUrl('?q=hana%20cloud&week=1&track=Cloud%20%26%20AI&edition=dtf-2026&session=abc-123');
+    const s = parseSessionsUrl('?q=hana%20cloud&week=1&track=Cloud%20%26%20AI&format=Live&edition=dtf-2026&session=abc-123');
     expect(s).toEqual({
       q: 'hana cloud',
       week: '1',
       track: 'Cloud & AI',
+      format: 'Live',
       edition: 'dtf-2026',
       session: 'abc-123',
     });
@@ -67,6 +68,7 @@ describe('toSessionsQuery', () => {
       q: 'hana cloud',
       week: '2',
       track: 'Cloud & AI',
+      format: 'PreRecorded',
       edition: 'dtf-2026',
       session: 'abc-123',
     });
@@ -74,6 +76,7 @@ describe('toSessionsQuery', () => {
     expect(p.get('q')).toBe('hana cloud');
     expect(p.get('week')).toBe('2');
     expect(p.get('track')).toBe('Cloud & AI');
+    expect(p.get('format')).toBe('PreRecorded');
     expect(p.get('edition')).toBe('dtf-2026');
     expect(p.get('session')).toBe('abc-123');
   });
@@ -83,7 +86,8 @@ describe('toSessionsQuery', () => {
       '',
       '?q=cap',
       '?week=1&track=DevOps',
-      '?q=hana%20cloud&week=2&track=Cloud%20%26%20AI&edition=dtf-2026&session=abc-123',
+      '?format=Live',
+      '?q=hana%20cloud&week=2&track=Cloud%20%26%20AI&format=PreRecorded&edition=dtf-2026&session=abc-123',
       '?session=xyz',
     ]) {
       const state = parseSessionsUrl(search);
