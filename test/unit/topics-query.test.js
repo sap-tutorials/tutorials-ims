@@ -15,14 +15,17 @@ describe('topics-query', () => {
     db = await cds.connect.to('db');
     const { Tutorials, Tags, TutorialTags, TutorialConceptLinks, Concepts } = cds.entities(NS);
     await db.run(INSERT.into(Tags).entries([
-      { ID: 't1', titlePath: 'software-product>sap-hana-cloud', label: 'SAP HANA Cloud', name: 'sap-hana-cloud' },
-      { ID: 't2', titlePath: 'software-product-function>sap-hana-cloud--data-lake', label: 'Data Lake', name: 'sap-hana-cloud--data-lake' },
+      // Real titlePath shape: facet split by " : ", hierarchy levels by " / ".
+      { ID: 't1', titlePath: 'Software Product : SAP HANA Cloud', label: 'SAP HANA Cloud', name: 'sap-hana-cloud' },
+      { ID: 't2', titlePath: 'Software Product : Database / SAP HANA Cloud / Data Lake', label: 'Data Lake', name: 'sap-hana-cloud-data-lake' },
     ]));
     await db.run(INSERT.into(Tutorials).entries([
       { ID: 'tut1', slug: 'hana-intro', title: 'HANA Intro', experienceTag: 'Beginner' },
+      { ID: 'tut2', slug: 'data-lake-intro', title: 'Data Lake Intro', experienceTag: 'Beginner' },
     ]));
     await db.run(INSERT.into(TutorialTags).entries([
       { tutorial_ID: 'tut1', tag_ID: 't1' },
+      { tutorial_ID: 'tut2', tag_ID: 't2' },
     ]));
     await db.run(INSERT.into(Concepts).entries([
       { ID: 'c1', slug: 'in-memory-database', name: 'In-Memory Database', status: 'ACTIVE', publishedAt: new Date().toISOString() },
@@ -35,31 +38,43 @@ describe('topics-query', () => {
   it('loadLiveTags returns only tags with ≥1 tutorial, with counts', async () => {
     const live = await loadLiveTags(db);
     const slugs = live.map(t => t.slug).sort();
-    expect(slugs).toContain('sap-hana-cloud');
-    expect(slugs).not.toContain('sap-hana-cloud-data-lake'); // t2 has no tutorial
-    const hana = live.find(t => t.slug === 'sap-hana-cloud');
+    expect(slugs).toContain('software-product-sap-hana-cloud');
+    const hana = live.find(t => t.slug === 'software-product-sap-hana-cloud');
     expect(hana.tutorialCount).toBe(1);
     expect(hana.conceptCount).toBe(1);
+    expect(hana.facet).toBe('Software Product');
+    expect(hana.segments).toEqual(['SAP HANA Cloud']);
   });
 
-  it('buildTopicsTreePayload groups by facet', async () => {
+  it('buildTopicsTreePayload nests facet → hierarchy folders → leaf', async () => {
     const { tree, error } = await buildTopicsTreePayload(db);
     expect(error).toBeFalsy();
-    const facet = tree.find(f => f.facet === 'software-product');
-    expect(facet.children.some(n => n.slug === 'sap-hana-cloud')).toBe(true);
+    const facet = tree.find(f => f.facet === 'Software Product');
+    expect(facet).toBeTruthy();
+    // single-level tag is a direct leaf under the facet
+    expect(facet.children.some(n => n.slug === 'software-product-sap-hana-cloud')).toBe(true);
+    // multi-level tag: Database (folder) → SAP HANA Cloud (folder) → Data Lake (leaf)
+    const database = facet.children.find(n => n.label === 'Database' || n.name === 'Database');
+    expect(database).toBeTruthy();
+    expect(database.children?.length).toBeGreaterThan(0);
+    const mid = database.children.find(n => (n.label || n.name) === 'SAP HANA Cloud');
+    expect(mid).toBeTruthy();
+    const leaf = mid.children.find(n => n.slug === 'software-product-database-sap-hana-cloud-data-lake');
+    expect(leaf).toBeTruthy();
+    expect(leaf.tutorialCount).toBe(1);
   });
 
   it('buildTopicDetailPayload returns tutorials + concepts', async () => {
-    const p = await buildTopicDetailPayload(db, 'sap-hana-cloud');
+    const p = await buildTopicDetailPayload(db, 'software-product-sap-hana-cloud');
     expect(p.notFound).toBeFalsy();
     expect(p.tutorials.map(t => t.slug)).toContain('hana-intro');
     expect(p.concepts.map(c => c.slug)).toContain('in-memory-database');
   });
 
   it('resolveTopicBySlug strips legacy -N and redirects', async () => {
-    const r = await resolveTopicBySlug(db, 'sap-hana-cloud-2');
-    expect(r.tag?.slug).toBe('sap-hana-cloud');
-    expect(r.redirectTo).toBe('/topics/sap-hana-cloud/');
+    const r = await resolveTopicBySlug(db, 'software-product-sap-hana-cloud-2');
+    expect(r.tag?.slug).toBe('software-product-sap-hana-cloud');
+    expect(r.redirectTo).toBe('/topics/software-product-sap-hana-cloud/');
   });
 
   it('unknown slug is notFound with redirect to /topics/', async () => {

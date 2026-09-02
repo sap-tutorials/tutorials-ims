@@ -33,28 +33,64 @@ describe('flattenTopicSlug', () => {
 });
 
 describe('parseTitlePath', () => {
-  it('splits facet, value and -- segments', () => {
-    expect(parseTitlePath('software-product-function>sap-hana-cloud--data-lake')).toEqual({
-      facet: 'software-product-function',
-      value: 'sap-hana-cloud--data-lake',
-      segments: ['sap-hana-cloud', 'data-lake'],
+  it('splits facet on " : " and levels on " / " (real titlePath shape)', () => {
+    expect(parseTitlePath('Software Product : Enterprise Management / SAP S 4HANA')).toEqual({
+      facet: 'Software Product',
+      value: 'Enterprise Management / SAP S 4HANA',
+      segments: ['Enterprise Management', 'SAP S 4HANA'],
+    });
+  });
+  it('single-level value yields one segment', () => {
+    expect(parseTitlePath('Operating System : Android')).toEqual({
+      facet: 'Operating System',
+      value: 'Android',
+      segments: ['Android'],
+    });
+  });
+  it('facetless titlePath yields empty facet and the whole string as value', () => {
+    expect(parseTitlePath('Just A Topic')).toEqual({
+      facet: '',
+      value: 'Just A Topic',
+      segments: ['Just A Topic'],
     });
   });
 });
 
 describe('buildTopicSlugMap', () => {
-  it('qualifies collisions with facet, first-by-titlePath wins bare', () => {
+  it('derives the slug from the FULL titlePath and parses facet/segments', () => {
     const { bySlug } = buildTopicSlugMap([
-      { titlePath: 'software-product>foo-bar', label: 'A' },
-      { titlePath: 'topic>foo--bar', label: 'B' }, // also flattens to foo-bar
+      { titlePath: 'Operating System : Android', label: null, tutorialCount: 5, conceptCount: 2 },
     ]);
-    expect(bySlug.has('foo-bar')).toBe(true);          // software-product wins (sorts first)
-    expect(bySlug.get('foo-bar').label).toBe('A');
-    expect(bySlug.has('topic-foo-bar')).toBe(true);    // loser facet-qualified
-    expect(bySlug.get('topic-foo-bar').label).toBe('B');
+    expect(bySlug.has('operating-system-android')).toBe(true);
+    const t = bySlug.get('operating-system-android');
+    expect(t.facet).toBe('Operating System');
+    expect(t.segments).toEqual(['Android']);
+    expect(t.label).toBe('Android'); // last segment when no curated label
+    expect(VALID_SLUG.test(t.slug)).toBe(true);
   });
 
-  it('every slug from real-world titlePaths (spaces/colons/slashes, no > facet) is VALID_SLUG-safe', () => {
+  it('parses a multi-level hierarchy into segments while keeping the full-path slug', () => {
+    const { bySlug } = buildTopicSlugMap([
+      { titlePath: 'Software Product : Enterprise Management / SAP S 4HANA' },
+    ]);
+    const t = bySlug.get('software-product-enterprise-management-sap-s-4hana');
+    expect(t).toBeTruthy();
+    expect(t.facet).toBe('Software Product');
+    expect(t.segments).toEqual(['Enterprise Management', 'SAP S 4HANA']);
+    expect(t.label).toBe('SAP S 4HANA');
+  });
+
+  it('index-suffixes a rare full-path slug collision (no leading hyphen)', () => {
+    const { bySlug } = buildTopicSlugMap([
+      { titlePath: 'Foo : Bar', label: 'A' },
+      { titlePath: 'Foo / Bar', label: 'B' }, // slugifies to the same "foo-bar"
+    ]);
+    for (const s of bySlug.keys()) expect(VALID_SLUG.test(s)).toBe(true);
+    expect(bySlug.has('foo-bar')).toBe(true);
+    expect(bySlug.has('foo-bar-2')).toBe(true); // index-suffixed, not "-foo-bar"
+  });
+
+  it('every slug from real-world titlePaths (spaces/colons/slashes) is VALID_SLUG-safe', () => {
     const { bySlug } = buildTopicSlugMap([
       { titlePath: 'software product : technology platform / sap business technology platform / open connectors', label: 'X' },
       { titlePath: 'topic : technology development / cloud operations', label: 'Y' },
@@ -63,16 +99,6 @@ describe('buildTopicSlugMap', () => {
     const slugs = [...bySlug.keys()];
     expect(slugs).toHaveLength(3);
     for (const s of slugs) expect(VALID_SLUG.test(s)).toBe(true);
-  });
-
-  it('never emits a leading-hyphen slug when a facetless titlePath collides', () => {
-    const { bySlug } = buildTopicSlugMap([
-      { titlePath: 'foo : bar', label: 'A' },
-      { titlePath: 'foo / bar', label: 'B' }, // slugifies to the same "foo-bar", no > facet
-    ]);
-    for (const s of bySlug.keys()) expect(VALID_SLUG.test(s)).toBe(true);
-    expect(bySlug.has('foo-bar')).toBe(true);
-    expect(bySlug.has('foo-bar-2')).toBe(true); // index-suffixed, not "-foo-bar"
   });
 });
 
