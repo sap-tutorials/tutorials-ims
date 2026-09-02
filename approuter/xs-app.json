@@ -371,7 +371,6 @@
       "destination": "srv-api",
       "authenticationType": "xsuaa"
     },
-    { "source": "^/search/?(\\?.*)?$", "target": "/tutorial-navigator/$1", "status": 301, "authenticationType": "none" },
     {
       "source": "^/search/(.*)$",
       "target": "/search/$1",

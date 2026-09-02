@@ -25,6 +25,7 @@ const { mcpManifestHandler } = require('./lib/well-known-mcp-manifest')
 const { mcpAuthChallengeHandler } = require('./lib/mcp-auth-challenge')
 const { securityTxtHandler } = require('./lib/security-txt')
 const { sitemapIndexRedirectHandler } = require('./lib/sitemap-index-redirect')
+const { searchRedirectHandler } = require('./lib/search-redirect')
 const shouldProcessImage = require('./lib/img-cdn-should-process')
 const { buildImageOriginUrl } = require('./lib/img-cdn-origin')
 const { ImgCache } = require('./lib/img-cdn-cache')
@@ -597,6 +598,7 @@ ar.start({
           { path: '/', handler: mcpManifestHandler },
           { path: '/', handler: securityTxtHandler },
           { path: '/', handler: sitemapIndexRedirectHandler },
+          { path: '/', handler: searchRedirectHandler },
           { path: '/', handler: mcpAuthChallengeHandler },
           { path: '/', handler: devtoberfestCspHandler },
           { path: '/', handler: imgCdnHandler },
