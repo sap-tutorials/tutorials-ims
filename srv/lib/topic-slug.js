@@ -17,30 +17,38 @@ export function flattenTopicSlug(value) {
   return slugifyTopic(value);
 }
 
+// Real Tags.titlePath uses " : " to separate the FACET from the value and
+// " / " to separate hierarchy LEVELS, e.g.
+//   "Software Product : Enterprise Management / SAP S 4HANA"
+// Product-name slashes are pre-spaced in the source ("SAP S/4HANA" → "SAP S
+// 4HANA"), so the spaced " : " / " / " separators are unambiguous. The legacy
+// ">" facet / "--" level separators never appear in live data — parsing on
+// them collapsed every titlePath into one facetless segment, which is what
+// flattened the /topics/ tree.
 export function parseTitlePath(titlePath) {
-  const idx = String(titlePath).indexOf('>');
-  const facet = idx === -1 ? '' : titlePath.slice(0, idx);
-  const value = idx === -1 ? titlePath : titlePath.slice(idx + 1);
-  return { facet, value, segments: value.split('--') };
+  const str = String(titlePath);
+  const idx = str.indexOf(' : ');
+  const facet = idx === -1 ? '' : str.slice(0, idx).trim();
+  const value = (idx === -1 ? str : str.slice(idx + 3)).trim();
+  const segments = value.split(' / ').map(s => s.trim()).filter(Boolean);
+  return { facet, value, segments: segments.length ? segments : [value] };
 }
 
-// Deterministic: sort by titlePath, first occupant of a slug keeps it bare;
-// later collisions are facet-qualified `<facet>-<slug>`.
+// Deterministic slug map. The slug is derived from the FULL titlePath (not the
+// post-facet value) so that already-published `topic-<slug>` BLOB keys and
+// their `/topics/<slug>/` URLs stay byte-stable even though facet/segments now
+// parse into a hierarchy for the tree. Rare full-path slug collisions (two
+// titlePaths that slugify identically) get an index suffix.
 export function buildTopicSlugMap(liveTags) {
   const bySlug = new Map();
   const byTag = new Map();
   const sorted = [...liveTags].sort((a, b) => a.titlePath.localeCompare(b.titlePath));
   for (const raw of sorted) {
     const { facet, value, segments } = parseTitlePath(raw.titlePath);
-    const base = flattenTopicSlug(value);
-    // Facet is slugified too — real facets carry spaces/colons, and an empty
-    // facet must NOT produce a leading-hyphen slug (`-base` fails VALID_SLUG).
-    const qf = slugifyTopic(facet);
+    const base = flattenTopicSlug(raw.titlePath);
     let slug = base;
-    if (bySlug.has(slug)) slug = qf ? `${qf}-${base}` : base;
-    // If even the qualified slug collides, suffix an index (defensive; asserted-rare).
     let n = 2;
-    while (bySlug.has(slug)) slug = qf ? `${qf}-${base}-${n++}` : `${base}-${n++}`;
+    while (bySlug.has(slug)) slug = `${base}-${n++}`;
     const tag = {
       titlePath: raw.titlePath, facet, value, segments, slug,
       label: raw.label || segments[segments.length - 1],
