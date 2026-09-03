@@ -535,11 +535,6 @@ jobs:
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
 
-      - name: Fetch topics gallery
-        run: npm run fetch-topics-gallery
-        env:
-          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
-
       - name: Fetch tag labels
         run: npm run fetch-tags
         env:
