@@ -34,10 +34,25 @@ These exist and are documented, but require elevated XSUAA scopes (`Tutorial.Aut
 
 `sap-devs` is a companion CLI that bundles the same SAP developer content and context this site consumes — CAP / BTP / ABAP tips, canonical code samples, error lookups, tutorial search, event listings, and more — so you can get to it without leaving your terminal.
 
-**Install**
+**Install** — the CLI ships as a self-contained binary (it's no longer published to npm). Pick your platform:
 
 ```bash
-npm i -g sap-devs
+# macOS (Homebrew)
+brew tap SAP-samples/sap-devs-cli https://github.com/SAP-samples/sap-devs-cli.git
+brew install --cask sap-devs
+
+# Windows (Scoop)
+scoop bucket add sap-devs https://github.com/SAP-samples/sap-devs-cli.git
+scoop install sap-devs
+
+# Linux / manual — download the archive for your platform from GitHub Releases,
+# extract it, and put the binary on your PATH:
+# https://github.com/SAP-samples/sap-devs-cli/releases
+```
+
+Then run the first-time setup:
+
+```bash
 sap-devs init            # first-time setup wizard
 sap-devs sync --force    # pull latest content
 ```
@@ -57,7 +72,7 @@ sap-devs doctor                          # tool + project health check
 sap-devs help                            # full command list
 ```
 
-The full command reference lives with the CLI itself: run `sap-devs help` or see the [sap-devs project repository](https://github.com/SAP-samples/sap-devs).
+The full command reference lives with the CLI itself: run `sap-devs help` or see the [sap-devs project repository](https://github.com/SAP-samples/sap-devs-cli).
 
 ## MCP server
 
