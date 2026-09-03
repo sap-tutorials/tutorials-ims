@@ -650,6 +650,36 @@ jobs:
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
+      # Preserve /sitemap.xml across catalog-only rebuilds (same wipe class as
+      # /browse/ + /authors/ above; reported 2026-09-03 by the Intelligent Search
+      # Data Crawling team). /sitemap.xml is served from the HANA `page-sitemap.xml`
+      # blob and publish-content.ts republishes it on every non-slug rebuild.
+      # catalog-only skips "Fetch tutorials", so the Hugo build just above bakes a
+      # sitemap with NO /tutorials/ URLs — publishing that would wipe the live
+      # sitemap to ~180 links. The sitemap can't be regenerated here (it needs the
+      # ~1.4k tutorial pages the skipped GitHub fetch provides), so — UNLIKE the
+      # browse/author preserve steps, which re-hydrate build INPUTS before the
+      # build — this runs AFTER the build and overwrites the freshly-baked sitemap
+      # with the one the approuter is CURRENTLY serving. Fails the run (non-zero)
+      # rather than ship a wiped sitemap if the deployed one is unreadable or names
+      # zero tutorials. Not needed in `full` (regenerates it) or `slug-targeted`
+      # (page-sitemap.xml is not republished).
+      - name: Preserve sitemap.xml for catalog-only rebuild
+        if: ${{ steps.mode.outputs.effective_mode == 'catalog-only' }}
+        env:
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
+        run: npx tsx scripts/seed-sitemap-from-deployed.ts
+
+      # Fail-closed net for the sitemap wipe class. Runs in the modes that
+      # republish the page-sitemap.xml blob (full + catalog-only; slug-targeted
+      # does not touch it). Fails BEFORE the HANA publish if the sitemap about to
+      # be published names zero /tutorials/ URLs — whatever the cause (broken
+      # preserve step, a future fetch-skipping mode, a bad Hugo build). A red run
+      # is recoverable (re-run mode=full); a silently wiped sitemap is the incident.
+      - name: Guard - sitemap includes tutorial URLs
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        run: node scripts/check-sitemap-tutorials.cjs --hugo-dir hugo/public
+
       # [#1657] Restore CDS syntax highlighting to the runtime-push path. Hugo's
       # render-codeblock.html maps ```cds → the Chroma SQL lexer as a PLACEHOLDER
       # (Chroma has no CDS lexer) and tags the wrapper `data-lang=cds`; the SQL
