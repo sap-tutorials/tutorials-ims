@@ -79,6 +79,7 @@
     "build:analytics-explorer": "npm --prefix app/analytics-explorer install && npm --prefix app/analytics-explorer run build",
     "check-explore-bundle-manifest": "node scripts/check-explore-bundle-manifest.cjs",
     "check-verb-shelves": "node scripts/check-verb-shelves.cjs",
+    "check-sitemap-tutorials": "node scripts/check-sitemap-tutorials.cjs",
     "build:hugo": "npm run check-explore-bundle-manifest && npm run check-verb-shelves && hugo --source hugo --minify",
     "build:page-fallback": "node scripts/build-page-fallback.cjs",
     "build:whats-new-snapshot": "node scripts/build-whats-new-snapshot.cjs",
