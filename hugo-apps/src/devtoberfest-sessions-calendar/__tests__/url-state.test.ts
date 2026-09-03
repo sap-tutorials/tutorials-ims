@@ -21,12 +21,13 @@ describe('parseCalendarUrl', () => {
   });
 
   it('parses every recognised param', () => {
-    const s = parseCalendarUrl('?view=week&date=2026-10-05&session=abc-123&track=Cloud%20%26%20AI&edition=dtf-2026');
+    const s = parseCalendarUrl('?view=week&date=2026-10-05&session=abc-123&track=Cloud%20%26%20AI&format=Live&edition=dtf-2026');
     expect(s).toEqual({
       view: 'week',
       date: '2026-10-05',
       session: 'abc-123',
       track: 'Cloud & AI', // URL-decoded
+      format: 'Live',
       edition: 'dtf-2026',
     });
   });
@@ -47,10 +48,16 @@ describe('parseCalendarUrl', () => {
   });
 
   it('treats empty session/track/edition as null', () => {
-    const s = parseCalendarUrl('session=&track=&edition=');
+    const s = parseCalendarUrl('session=&track=&format=&edition=');
     expect(s.session).toBeNull();
     expect(s.track).toBeNull();
+    expect(s.format).toBeNull();
     expect(s.edition).toBeNull();
+  });
+
+  it('parses the format filter (Live | PreRecorded)', () => {
+    expect(parseCalendarUrl('format=Live').format).toBe('Live');
+    expect(parseCalendarUrl('format=PreRecorded').format).toBe('PreRecorded');
   });
 
   it('accepts a URLSearchParams instance directly', () => {
@@ -76,6 +83,7 @@ describe('toCalendarQuery', () => {
       date: '2026-10-05',
       session: 'abc-123',
       track: 'Cloud & AI',
+      format: 'PreRecorded',
       edition: 'dtf-2026',
     });
     const p = new URLSearchParams(q.replace(/^\?/, ''));
@@ -83,6 +91,7 @@ describe('toCalendarQuery', () => {
     expect(p.get('date')).toBe('2026-10-05');
     expect(p.get('session')).toBe('abc-123');
     expect(p.get('track')).toBe('Cloud & AI');
+    expect(p.get('format')).toBe('PreRecorded');
     expect(p.get('edition')).toBe('dtf-2026');
   });
 
@@ -96,7 +105,8 @@ describe('toCalendarQuery', () => {
       '?view=week',
       '?view=day&date=2026-10-05',
       '?session=abc-123&track=DevOps',
-      '?view=day&date=2026-10-05&session=abc-123&track=Cloud%20%26%20AI&edition=dtf-2026',
+      '?format=Live',
+      '?view=day&date=2026-10-05&session=abc-123&track=Cloud%20%26%20AI&format=PreRecorded&edition=dtf-2026',
     ]) {
       const state = parseCalendarUrl(search);
       expect(parseCalendarUrl(toCalendarQuery(state))).toEqual(state);

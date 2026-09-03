@@ -6,10 +6,9 @@ import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
-// Renaming a published Group/Mission carries the `published: true` flag through
-// the activation PATCH, which a `_guardPublished` hook in admin-service.js
-// rejects for non-SuperAdmin users. Use superadmin so the rename succeeds and
-// we exercise the slug-history side effect.
+// Use superadmin throughout for simplicity. (Post-#2111 the `_guardPublished`
+// hook only rejects a genuine change to `published`, so a non-SuperAdmin rename
+// would also succeed — but superadmin keeps this test focused on slug history.)
 const adminAuth = { auth: { username: 'superadmin', password: 'superadmin' } };
 
 const TAG_ID = 'aaaaaaaa-3333-0000-0000-000000000001';

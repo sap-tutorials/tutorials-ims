@@ -453,6 +453,9 @@ entity TutorialContributors : cuid, LegacyKeyed {
   name                      : String(255);
   email                     : String(255);
   role                      : String(50);
+  login                     : String(255);   // GitHub handle
+  avatarUrl                 : String(1024);  // https://github.com/<login>.png
+  profileUrl                : String(1024);  // https://github.com/<login>
   user                      : Association to Users;
 }
 
@@ -870,6 +873,23 @@ entity ValidateAnswerSpecs : managed {
   correctAnswer     : LargeString @mandatory;
   ruleType          : String(40);          // e.g. 'exact-match', 'regex', 'regex-begins-with'
   aiGrading         : Boolean default false;
+}
+
+// Full parsed rules.vr rule set for a tutorial, persisted at publish time.
+// Unlike ValidateAnswerSpecs (AI-graded only), this holds ALL rule types so
+// the admin Validation Questions facet can display the complete rule set.
+// options and correctAnswer are JSON-serialised; null when not applicable.
+entity TutorialValidationRules {
+  key tutorial     : Association to Tutorials;
+  key stepNumber   : Integer;
+  key questionId   : String(100);
+      questionText : String(2000);
+      ruleType     : String(50);   // single-choice | multiple-choice | regex | exact-match | ...
+      questionType : String(20);   // MCQ | TEXT
+      choiceMode   : String(20);   // single | multiple | null
+      options      : LargeString;  // JSON array of option strings (MCQ) or null
+      correctAnswer: LargeString;  // reference answer (client-graded) or null when aiGrading
+      aiGrading    : Boolean default false;
 }
 
 // Every learner submission. Drives offline grader-quality evaluation.

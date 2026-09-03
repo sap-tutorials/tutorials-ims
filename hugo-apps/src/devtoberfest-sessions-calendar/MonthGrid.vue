@@ -6,6 +6,7 @@ import type { TrackColor } from './track-colors';
 import type { Session } from '../devtoberfest-schedule-shared/types';
 import { formatViewerTimeShort } from '../devtoberfest-schedule-shared/format-session-time';
 import { speakerNames } from '../devtoberfest-schedule-shared/completion';
+import { broadcastingTag } from '../devtoberfest-schedule-shared/broadcasting';
 
 const props = withDefaults(defineProps<{
   cursor: Date;
@@ -89,6 +90,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
             :title="chipTitle(s)"
           >
             <span v-if="s.scheduledStart" class="mg-chip-t">{{ formatViewerTimeShort(s.scheduledStart) }}</span>
+            <span
+              v-if="broadcastingTag((s as any).broadcastingPreference)"
+              class="mg-chip-fmt"
+              :class="`mg-chip-fmt--${broadcastingTag((s as any).broadcastingPreference)!.modifier}`"
+              :aria-label="broadcastingTag((s as any).broadcastingPreference)!.label"
+              :title="broadcastingTag((s as any).broadcastingPreference)!.label"
+            >{{ broadcastingTag((s as any).broadcastingPreference)!.icon }}</span>
             <span class="mg-chip-n">{{ s.title }}</span>
           </button>
         </template>
@@ -122,6 +130,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
               :title="chipTitle(s)"
             >
               <span v-if="s.scheduledStart" class="mg-chip-t">{{ formatViewerTimeShort(s.scheduledStart) }}</span>
+              <span
+                v-if="broadcastingTag((s as any).broadcastingPreference)"
+                class="mg-chip-fmt"
+                :class="`mg-chip-fmt--${broadcastingTag((s as any).broadcastingPreference)!.modifier}`"
+                :aria-label="broadcastingTag((s as any).broadcastingPreference)!.label"
+                :title="broadcastingTag((s as any).broadcastingPreference)!.label"
+              >{{ broadcastingTag((s as any).broadcastingPreference)!.icon }}</span>
               <span class="mg-chip-n">{{ s.title }}</span>
             </button>
           </div>
@@ -163,6 +178,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 }
 .mg-chip--complete { outline: 1px solid var(--sapSuccessBorderColor, #107e3e); }
 .mg-chip-t { flex: 0 0 auto; font-variant-numeric: tabular-nums; opacity: 0.75; }
+.mg-chip-fmt { flex: 0 0 auto; font-size: 0.7rem; line-height: 1; }
+.mg-chip-fmt--live { color: var(--sapNegativeColor, #b00020); }
+.mg-chip-fmt--prerecorded { opacity: 0.6; }
 .mg-chip-n { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mg-more { align-self: flex-start; border: none; background: transparent; cursor: pointer; font: inherit;
   font-size: 0.72rem; font-weight: 600; color: var(--sapLinkColor, #0a6ed1); padding: 0.1rem 0.25rem; }

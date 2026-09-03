@@ -5,11 +5,13 @@ import { gzipSync } from 'node:zlib';
 import { userInfo, hostname } from 'node:os';
 import { parse as parseYaml } from 'yaml';
 import { parseChannel, type Channel } from './fetch-tutorials.js';
-import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, renderConceptsPhase } from './lib/publish-client.js';
+import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, renderConceptsPhase, renderTopicsPhase } from './lib/publish-client.js';
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
 import { publishValidateAnswerSpecs } from './lib/publish-validate-answer.js';
+import { publishContributors } from './publish/publish-contributors.js';
+import { publishValidationRules } from './publish/publish-validation-rules.js';
 import { computeOrphans, enforceCap, formatStepSummary } from './lib/purge-orphans.js';
 import { discoverPageFiles, discoverAuthorPages, discoverAdvocatePages } from '../srv/lib/page-key-map.js';
 
@@ -1243,6 +1245,25 @@ async function main() {
       await abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'render-concepts failed' });
       process.exit(1);
     }
+    // tag-tree-topics Task 7 — render topic detail pages alongside concepts.
+    // Same guard (prod-only, full-publish): POST /content/publish/render-topics
+    // is not registered on srv-qa (topics are a prod-only content surface).
+    try {
+      const rt = await withRetry(
+        () => renderTopicsPhase({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId }),
+        {
+          attempts: 3, backoffMs: [1000, 3000, 9000],
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] render-topics failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
+      log(`render-topics: ${rt.topicsChanged} changed, ${rt.topicsSkipped} skipped, ${rt.topicsErrored} errored of ${rt.topicsSeen} (${rt.durationMs} ms)`);
+    } catch (err) {
+      console.error(`[publish-content] render-topics failed permanently: ${formatErrorChain(err)}`);
+      await abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'render-topics failed' });
+      process.exit(1);
+    }
   }
 
   let commit;
@@ -1348,6 +1369,34 @@ async function main() {
       // Don't process.exit(1) on failures — non-fatal per spec.
     } catch (err) {
       console.error('[publish-content] validate-answer spec publish failed (non-fatal):', formatErrorChain(err));
+    }
+  }
+
+  // --- contributors sidecar publish (non-fatal auxiliary step, issue #WS2) ---
+  // QA channel skips: srv-qa has no ContributorCache entity, POST would 404/500.
+  if (channel === 'qa') {
+    log('[publish-contributors] skipped (channel=qa)');
+  } else {
+    try {
+      const cacheDir = join(process.cwd(), '.tutorial-cache');
+      const r = await publishContributors({ cacheDir, baseUrl: opts.baseUrl, apiKey: opts.apiKey });
+      log(`[publish-contributors] published ${r.published}/${r.total}`);
+    } catch (err) {
+      console.error('[publish-content] contributors publish failed (non-fatal):', formatErrorChain(err));
+    }
+  }
+
+  // --- validation-rules sidecar publish (non-fatal auxiliary step, issue #WS3) ---
+  // QA channel skips: srv-qa has no ValidationRules entity, POST would 404/500.
+  if (channel === 'qa') {
+    log('[publish-validation-rules] skipped (channel=qa)');
+  } else {
+    try {
+      const cacheDir = join(process.cwd(), '.tutorial-cache');
+      const r = await publishValidationRules({ cacheDir, baseUrl: opts.baseUrl, apiKey: opts.apiKey });
+      log(`[publish-validation-rules] published ${r.published}/${r.total}`);
+    } catch (err) {
+      console.error('[publish-content] validation-rules publish failed (non-fatal):', formatErrorChain(err));
     }
   }
 

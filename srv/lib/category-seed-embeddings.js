@@ -18,17 +18,35 @@
 
 import cds from '@sap/cds';
 import { embed } from './embedding-client.js';
+import { resolveEmbeddingSettings } from './chat-settings-resolver.js';
 
 const LOG = cds.log('category-seed-embeddings');
 let _cache = null;            // Map<categoryId, Float32Array> | null
 let _stale = new Set();       // IDs marked invalid; recomputed on next getSeedEmbeddings()
 let _loadingPromise = null;   // Promise<Map> | null — in-flight loader
+let _modelPromise = null;     // Promise<string> | null — memoized embedding model name
 
 /** Test-only — resets module state between tests. */
 export function _resetCache() {
   _cache = null;
   _stale = new Set();
   _loadingPromise = null;
+  _modelPromise = null;
+}
+
+/**
+ * Resolve (once, memoized) the embedding model name. embed() REQUIRES a model
+ * — passing undefined constructs AzureOpenAiEmbeddingClient(undefined), which
+ * throws "Cannot read properties of undefined (reading 'modelName')" (the
+ * #2001 class of bug: embed callers must pass a resolved model). The model
+ * rarely changes; memoize so a bulk backfill (thousands of embedAdHoc calls)
+ * doesn't re-read ChatSettings per item. Cleared by _resetCache() in tests.
+ */
+function getEmbeddingModel() {
+  if (!_modelPromise) {
+    _modelPromise = resolveEmbeddingSettings().then((s) => s.model);
+  }
+  return _modelPromise;
 }
 
 /**
@@ -44,7 +62,7 @@ async function loadAll() {
     LOG.warn('No categories with seedDescription found — classifier will fall back to LLM for everything');
     return new Map();
   }
-  const vectors = await embed(usable.map(r => r.seedDescription));
+  const vectors = await embed(usable.map(r => r.seedDescription), await getEmbeddingModel());
   const m = new Map();
   for (let i = 0; i < usable.length; i++) {
     m.set(usable[i].ID, vectors[i]);
@@ -69,7 +87,7 @@ async function recomputeStale(staleIds) {
   const rows = await SELECT.from(Categories).columns('ID', 'seedDescription');
   const targets = rows.filter(r => staleIds.has(r.ID) && r.seedDescription && r.seedDescription.trim().length > 0);
   if (targets.length === 0) return;
-  const vectors = await embed(targets.map(r => r.seedDescription));
+  const vectors = await embed(targets.map(r => r.seedDescription), await getEmbeddingModel());
   for (let i = 0; i < targets.length; i++) {
     _cache.set(targets[i].ID, vectors[i]);
   }
@@ -142,6 +160,6 @@ export async function embedAdHoc(text) {
   if (!text || !text.trim()) {
     throw new Error('embedAdHoc: empty text');
   }
-  const [vec] = await embed([text]);
+  const [vec] = await embed([text], await getEmbeddingModel());
   return vec;
 }

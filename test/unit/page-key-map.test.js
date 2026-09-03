@@ -7,7 +7,7 @@ describe('page-key-map', () => {
   it('maps in-scope routes to page- keys', () => {
     expect(pageKeyForPath('/')).toBe('page-index');
     expect(pageKeyForPath('/browse/')).toBe('page-browse');
-    expect(pageKeyForPath('/topics/')).toBe('page-topics');
+    expect(pageKeyForPath('/topics/')).toBeNull(); // /topics/ now served by CAP dynamic route, not a page blob
     expect(pageKeyForPath('/tutorial-navigator/')).toBe('page-tutorial-navigator');
     expect(pageKeyForPath('/developer-advocates/')).toBe('page-developer-advocates');
     expect(pageKeyForPath('/devtoberfest/')).toBe('page-devtoberfest');

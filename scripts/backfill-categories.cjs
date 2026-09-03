@@ -41,6 +41,28 @@ function kindToEntity(kind) {
 }
 
 /**
+ * Resolve the ims namespace entities robustly across contexts.
+ *
+ * In a standalone `cds bind --exec` runner the model may not be linked into
+ * the cds.entities() globals (cds.model unset), so fall back to explicitly
+ * loading + linking (same gotcha as srv/lib/seed-poc-puzzle.js). Returns the
+ * RESOLVED entity objects — SELECT/DELETE/INSERT against a bare short-name
+ * STRING ('Tutorials') does NOT resolve to the namespaced HANA table
+ * (COM_SAP_DEVELOPERS_IMS_TUTORIALS) and dies with "Could not find table/view
+ * TUTORIALS"; it only ever worked against local SQLite.
+ *
+ * @param {typeof import('@sap/cds')} cds
+ * @returns {Promise<Record<string, any>>}
+ */
+async function resolveImsEntities(cds) {
+  if (typeof cds.entities === 'function' && cds.model) {
+    return cds.entities('com.sap.developers.ims');
+  }
+  const linked = cds.linked(await cds.load('*'));
+  return linked.entities('com.sap.developers.ims');
+}
+
+/**
  * Run a batch of items concurrently using Promise.allSettled.
  * @param {Array} items
  * @param {number} concurrency
@@ -64,6 +86,10 @@ async function main(argv) {
   // Connect to database
   const db = await cds.connect.to('db');
 
+  // Resolve namespaced entity objects once (see resolveImsEntities). Passing a
+  // bare short-name string to SELECT.from fails against HANA.
+  const ims = await resolveImsEntities(cds);
+
   // Dynamic import for ESM module
   const { classifyAndPersist } = await import('../srv/lib/category-classifier.js');
 
@@ -79,7 +105,7 @@ async function main(argv) {
 
     // Fetch all IDs ordered
     const rows = await db.run(
-      SELECT.from(entityName).columns('ID').orderBy('ID')
+      SELECT.from(ims[entityName]).columns('ID').orderBy('ID')
     );
 
     let items = rows;

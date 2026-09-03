@@ -22,7 +22,6 @@ export function extForMime(mimeType) {
 export const IN_SCOPE_PAGES = [
   { route: '/',                      key: 'page-index',               file: 'index.html',                mimeType: 'text/html' },
   { route: '/browse/',               key: 'page-browse',              file: 'browse/index.html',         mimeType: 'text/html' },
-  { route: '/topics/',               key: 'page-topics',              file: 'topics/index.html',         mimeType: 'text/html' },
   { route: '/tutorial-navigator/',   key: 'page-tutorial-navigator',  file: 'tutorial-navigator/index.html', mimeType: 'text/html' },
   { route: '/developer-advocates/',  key: 'page-developer-advocates', file: 'developer-advocates/index.html', mimeType: 'text/html' },
   { route: '/devtoberfest/',         key: 'page-devtoberfest',        file: 'devtoberfest/index.html',   mimeType: 'text/html' },

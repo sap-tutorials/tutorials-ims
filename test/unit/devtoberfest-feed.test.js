@@ -58,6 +58,19 @@ describe('devtoberfest-feed', () => {
     expect(out.sessions[0].sessionCode).toBe('DEV101');
   });
 
+  it('assembleFeed carries broadcastingPreference (Live/PreRecorded), null when unset', () => {
+    const sess = [
+      { ID: 's1', TITLE: 'Live one', TRACK_ID: 't1', STATUS: 'Confirmed', BROADCASTINGPREFERENCE: 'Live' },
+      { ID: 's2', TITLE: 'Recorded', TRACK_ID: 't1', STATUS: 'Confirmed', BROADCASTINGPREFERENCE: 'PreRecorded' },
+      { ID: 's3', TITLE: 'Unset', TRACK_ID: 't1', STATUS: 'Confirmed' },
+    ];
+    const out = assembleFeed({ sessions: sess, activities: [], tracks, editions: [], activeEditionId: null });
+    const byId = Object.fromEntries(out.sessions.map((s) => [s.id, s]));
+    expect(byId.s1.broadcastingPreference).toBe('Live');
+    expect(byId.s2.broadcastingPreference).toBe('PreRecorded');
+    expect(byId.s3.broadcastingPreference).toBe(null);
+  });
+
   it('normalizeSlugSet lowercases and dedupes', () => {
     const set = normalizeSlugSet([{ slug: 'Intro-Slug' }, { TASKSLUG: 'PUZ-1' }]);
     expect(set.has('intro-slug')).toBe(true);

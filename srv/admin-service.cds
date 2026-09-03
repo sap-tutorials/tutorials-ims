@@ -9,6 +9,8 @@ using from '../db/homepage-featured';
 using from '../db/views';
 using from '../db/devtoberfest-analytics';
 using from '../db/mcp-pats';
+using from '../db/tutorial-images';
+using from '../db/tutorial-assets';
 using from '../app/admin-annotations';
 using { external.devtoberfest as external_dtf } from '../db/external/devtoberfest';
 
@@ -64,6 +66,7 @@ service AdminService {
     // Specs use the existing tutorial Association FK; submissions and stats
     // join by slug because they predate the FK pattern.
     validationSpecs       : Association to many ValidateAnswerSpecs        on validationSpecs.tutorial = $self,
+    validationRules       : Association to many TutorialValidationRules   on validationRules.tutorial = $self,
     validationSubmissions : Association to many ValidateAnswerSubmissions  on validationSubmissions.tutorialSlug = slug,
     codeCheckSpecs        : Association to many CodeCheckSpecs             on codeCheckSpecs.tutorial = $self,
     codeCheckSubmissions  : Association to many CodeCheckSubmissions       on codeCheckSubmissions.tutorialSlug = slug,
@@ -105,9 +108,25 @@ service AdminService {
     virtual mainPreviewLabel : String,
     // Freshness detector (spec 2026-08-22)
     freshnessFindings      : Association to many FreshnessFinding on freshnessFindings.tutorial.ID = ID,
+    freshnessReports       : Association to many FreshnessReport  on freshnessReports.tutorial = $self,
     virtual openHighCount      : Integer,   // populated in after('READ','Tutorials') — Task 8
     virtual freshnessStatus    : String,
     virtual freshnessCriticality : Integer,
+    // Media facet (task-3): object-store images + assets for this tutorial.
+    // Filtered to channel='prod' so the admin OP shows prod-published media.
+    images : Association to many TutorialImages on images.slug = $self.slug and images.channel = 'prod',
+    assets : Association to many TutorialAssets on assets.slug = $self.slug and assets.channel = 'prod',
+    // KG facet (task-1): rank + co-completions associations.
+    // conceptLinks already carried by '*' (db/knowledge-graph.cds extends base.Tutorials).
+    rank          : Association to one  TutorialRank  on rank.slug          = $self.slug,
+    coCompletions : Association to many CoCompletions on coCompletions.sourceSlug = $self.slug,
+    // KG facet (task-2): community membership — links this tutorial to its
+    // Louvain-detected community rows (slug-based join). From the OP, a $expand
+    // on communityMembership exposes communityId + communityFingerprint, which
+    // can be used to fetch the label from KgCommunityLabel. No schema change:
+    // KgCommunityMembers is an @readonly projection on ims.KgCommunity, which
+    // already carries the slug column.
+    communityMembership : Association to many AdminService.KgCommunityMembers on communityMembership.slug = $self.slug,
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
@@ -618,6 +637,25 @@ service AdminService {
   @readonly entity CodeCheckSubmissions      as projection on ims.CodeCheckSubmissions;
   @readonly entity AuthorAiRequests          as projection on ims.AuthorAiRequests;
   @readonly entity TutorialCompletionStats   as projection on ims.TutorialCompletionStats;
+  @readonly entity TutorialValidationRules   as projection on ims.TutorialValidationRules;
+
+  // Media facet (task-3): read-only projections of the object-store image and
+  // asset metadata entities. The content Attachments composition auto-exposes
+  // when the parent is reachable from an exposed entity (@cap-js/attachments).
+  @readonly @cds.redirection.target: false entity TutorialImages as projection on ims.TutorialImages {
+    *,
+    // Served-image URLs (filled in after('READ','TutorialImages')): the
+    // tutorial-system's own rendered output, not the GitHub source.
+    // thumbUrl → approuter resize/WebP CDN preview; viewUrl → raw original from CAP.
+    virtual thumbUrl : String,
+    virtual viewUrl  : String
+  };
+  @readonly @cds.redirection.target: false entity TutorialAssets as projection on ims.TutorialAssets;
+
+  // KG facet (task-1): read-only projections used by the Tutorials admin OP KG tab.
+  @readonly @cds.redirection.target: false entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
+  @readonly @cds.redirection.target: false entity TutorialRank         as projection on ims.TutorialRank;
+  @readonly @cds.redirection.target: false entity CoCompletions        as projection on ims.CoCompletions;
 
   // Issue #622 — read-only recipient list for the "Last Chance Emails"
   // admin section. Powers the dropdown for sendLastChanceEmail and the
@@ -1244,9 +1282,23 @@ extend service AdminService with {
     virtual null as coverageHigh         : Boolean,
   };
 
+  // Human-readable Louvain community label (#1126), keyed by
+  // communityFingerprint. Exposed read-only so the OP membership facet can
+  // surface the LLM-generated cluster name instead of the numeric communityId.
+  @readonly @cds.redirection.target: false
+  entity KgCommunityLabelInfo as projection on ims.KgCommunityLabel;
+
   // OP-facing memberships. Rows keyed to (communityId, vertexKey).
+  // `labelInfo` is an unmanaged select-list association joining to
+  // KgCommunityLabelInfo on the shared communityFingerprint so the facet can
+  // show labelInfo.label (blank until the Louvain labeling job runs in the
+  // target env — member slug is the always-present fallback column).
   @readonly
-  entity KgCommunityMembers as projection on ims.KgCommunity;
+  entity KgCommunityMembers as projection on ims.KgCommunity {
+    *,
+    labelInfo : Association to KgCommunityLabelInfo
+                  on labelInfo.communityFingerprint = communityFingerprint
+  };
 
   // Drafts a Mission from the community's tutorial members, ordered A→Z.
   // Curator finishes the draft in the Missions LR (write description,

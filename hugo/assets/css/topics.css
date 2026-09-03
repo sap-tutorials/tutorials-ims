@@ -339,3 +339,112 @@
   margin-top: 2rem;
   min-height: 0;
 }
+
+/* ========================================================
+   Topic detail page (srv/lib/topic-detail-render.js)
+   .topic-* classes (singular, no 's') — distinct from the
+   retired .topics-detail/* cluster-detail classes above.
+   ======================================================== */
+.topic-detail {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+/* Breadcrumb */
+.topic-breadcrumb {
+  padding: 1.25rem 0 0;
+}
+.topic-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+.topic-breadcrumb__list li:not(:last-child)::after {
+  content: '/';
+  margin-left: 0.5rem;
+  color: var(--sapContent_LabelColor, #9ea0a2);
+}
+.topic-breadcrumb__list a {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+.topic-breadcrumb__list a:hover { text-decoration: underline; }
+
+/* Header */
+.topic-detail__header {
+  padding: 1.5rem 0 1rem;
+}
+.topic-detail__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+  margin: 0 0 0.5rem;
+}
+.topic-detail__facet {
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin: 0;
+  text-transform: capitalize;
+}
+
+/* Sections (tutorials, concepts, related) */
+.topic-tutorials,
+.topic-concepts,
+.topic-related {
+  margin: 1.75rem 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--sapContent_ForegroundBorderColor, #e5e5e5);
+}
+.topic-tutorials h2,
+.topic-concepts h2,
+.topic-related h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  margin: 0 0 0.75rem;
+}
+.topic-tutorials__list,
+.topic-concepts__list,
+.topic-related__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.topic-tutorials__item,
+.topic-concepts__item,
+.topic-related__item {
+  padding: 0.3rem 0;
+}
+.topic-tutorials__link,
+.topic-concepts__item a,
+.topic-related__item a {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+.topic-tutorials__link:hover,
+.topic-concepts__item a:hover,
+.topic-related__item a:hover { text-decoration: underline; }
+.topic-tutorials__new {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--sapPositiveTextColor, #107e3e);
+  background: var(--sapSuccessBackground, #f1fdf6);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.topic-tutorials__level {
+  font-size: 0.78rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin-left: 0.35rem;
+}

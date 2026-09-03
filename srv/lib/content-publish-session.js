@@ -11,6 +11,39 @@ import { tutorialsTableInfo } from './_tutorials-table.js';
 import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
 import { resolveTutorialAuthor } from './resolve-tutorial-author.js';
 import { isDeltaWrite, isDeltaSkipCarryForward } from './content-delta-flags.js';
+import { classifyAndPersist } from './category-classifier.js';
+
+// Incremental publishes above this many touched tutorials are treated as "bulk"
+// and skip the fire-and-forget self-heal (categories are (re)populated in bulk by
+// scripts/backfill-categories.cjs instead). Rationale: a full rebuild touches
+// ~all tutorials; firing an unbounded classification per tutorial (each does an
+// AI-Core embedding call) OOM-killed tutorials-srv mid-publish. See memory
+// srv-category-selfheal-bulk-publish-oom.
+const SELF_HEAL_MAX_TUTORIALS = 25;
+
+// Exported for unit testing; classifies touched tutorials without ever throwing
+// into the publish tx (publish bypasses the CAP after('CREATE') classifier hook).
+// Bulk publishes are skipped (backfill script handles them); incremental publishes
+// classify SEQUENTIALLY — never a fan-out Promise.all — so the classifier can't
+// stampede the srv / AI Core during a publish.
+export async function classifyTouchedTutorials(tutorialIds) {
+  const ids = tutorialIds || [];
+  if (ids.length === 0) return;
+  if (ids.length > SELF_HEAL_MAX_TUTORIALS) {
+    console.warn(
+      `[publish] category self-heal skipped for bulk publish (${ids.length} tutorials > ${SELF_HEAL_MAX_TUTORIALS}); ` +
+        `run scripts/backfill-categories.cjs to (re)classify in bulk`,
+    );
+    return;
+  }
+  for (const id of ids) {
+    try {
+      await classifyAndPersist('tutorial', id);
+    } catch (e) {
+      console.warn('[publish] category classify skipped', id, e?.message);
+    }
+  }
+}
 
 const LOG = cds.log('content-publish');
 const LOCK_NAME = 'content-publish';
@@ -208,6 +241,8 @@ export function createSessionHelpers({ namespace }) {
       } catch (err) {
         LOG.warn('linkTutorialAuthorship failed; skipping', err);
       }
+      // Fire-and-forget: keep categories populated for publish-created tutorials.
+      classifyTouchedTutorials(tutorialIds);
     }
     if (Object.keys(bodyTexts).length > 0) {
       await upsertBodyTexts(namespace, bodyTexts);

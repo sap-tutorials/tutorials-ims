@@ -84,6 +84,9 @@ export function canonicalUrlFor(meta) {
     case 'puzzle':         return `${CANONICAL_ORIGIN}/puzzles/${slug}/`;
     // #1914 follow-up: the /puzzles/ section index (also CAP-served).
     case 'puzzles-index':  return `${CANONICAL_ORIGIN}/puzzles/`;
+    // tag-tree-topics: topics section index and individual topic pages.
+    case 'topics-index':   return `${CANONICAL_ORIGIN}/topics/`;
+    case 'topic':          return `${CANONICAL_ORIGIN}/topics/${slug}/`;
     default:               return null;
   }
 }
@@ -122,6 +125,14 @@ export function buildBreadcrumbJsonLd(meta, canonicalUrl) {
       break;
     case 'puzzles-index':
       crumbs.push({ name: 'Puzzles', item: `${CANONICAL_ORIGIN}/puzzles/` });
+      break;
+    // tag-tree-topics: topics section index and individual topic pages.
+    case 'topics-index':
+      crumbs.push({ name: 'Topics', item: `${CANONICAL_ORIGIN}/topics/` });
+      break;
+    case 'topic':
+      crumbs.push({ name: 'Topics', item: `${CANONICAL_ORIGIN}/topics/` });
+      crumbs.push({ name: leaf, item: canonicalUrl });
       break;
     default:
       return null;

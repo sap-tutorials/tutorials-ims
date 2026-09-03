@@ -50,3 +50,4 @@ annotate ims.CatGameAwards with @cds.persistence.journal;   // #2042 Hit-the-Cat
 // #805 — Observability
 annotate ims.MetricSnapshots with @cds.persistence.journal;
 annotate ims.PublishTimings with @cds.persistence.journal;
+annotate ims.TutorialValidationRules with @cds.persistence.journal;

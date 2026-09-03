@@ -37,12 +37,17 @@ import { bumpCacheGeneration } from './lib/content-cache-coherence.js';
 import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { puzzlePageHandler, puzzleIndexHandler } from './lib/puzzle-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
+import { renderTopicsHandler } from './lib/publish-topics.js';
+import { buildTopicsTreeHandler, buildTopicDetailHandler } from './lib/build-topics.js';
+import { topicsIndexHandler } from './lib/topic-list-page.js';
+import { resolveTopicBySlug } from './lib/topics-query.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { modelJsonHandler } from './lib/model-json-handler.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
+import * as devtoberfestScheduleCheck from './routes/devtoberfest-schedule-check.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
 import * as devtoberfestCatGame from './routes/devtoberfest-cat-game.js';
 import * as alertsPublic from './routes/alerts-public.js';
@@ -65,6 +70,8 @@ import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
+import { publishContributors } from './lib/contributors-publish.js';
+import { publishValidationRules } from './lib/validation-rules-publish.js';
 import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
 import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
@@ -296,6 +303,8 @@ cds.on('bootstrap', (app) => {
   app.get('/build/concepts', buildConceptsHandler);
   app.get('/build/topic-clusters', buildTopicClustersHandler);
   app.get('/build/topics-gallery', buildTopicsGalleryHandler);
+  app.get('/build/topics-tree', buildTopicsTreeHandler);
+  app.get('/build/topics/:slug', buildTopicDetailHandler);
   app.get('/graph/explore-data', exploreDataHandler);
   app.get('/graph/clusters-data', clustersDataHandler);
   app.get('/graph/path', graphPathHandler);
@@ -465,6 +474,7 @@ cds.on('bootstrap', (app) => {
   advocatesPublic.register(app);
   devtoberfestPublic.register(app);
   devtoberfestSchedule.register(app);
+  devtoberfestScheduleCheck.register(app);
   devtoberfestAuth.register(app);
   devtoberfestCatGame.register(app);
 
@@ -529,6 +539,55 @@ cds.on('bootstrap', (app) => {
   // here yet (the /concepts/?$ flip lands in Task 5). Public, no auth — like
   // serveHandler.
   app.get('/content/concepts-index', conceptsIndexHandler);
+  // #topics-scale Task 8 — CAP-served /topics/ detail pages (published topic-<slug>
+  // BLOBs) and the /topics/ index page. Mirrors the /content/concepts/:slug +
+  // /content/concepts-index pattern exactly: same serveHandler delegation, same
+  // two-arg call signature, no live-render fallback (concepts has none).
+  //
+  // Topics adds a legacy/retired slug resolution step: resolveTopicBySlug checks
+  // whether the slug is a renamed/retired tag and returns a redirectTo URL when it
+  // is. Both !tag+redirectTo and tag+redirectTo cases 301 — the redirect takes
+  // precedence whenever it is set, matching the brief spec.
+  app.get('/content/topics/:slug', async (req, res) => {
+    const raw = String(req.params.slug || '');
+    // Strip .html suffix → 301 to canonical /topics/<slug>
+    if (/\.html$/i.test(raw)) {
+      const stripped = raw.replace(/\.html$/i, '').toLowerCase();
+      if (/^[a-z0-9][a-z0-9-]*$/.test(stripped)) {
+        const qIdx = req.url.indexOf('?');
+        const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+        res.setHeader('Location', `/topics/${stripped}${query}`);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.status(301).end();
+      }
+    }
+    // Mixed-case → 301 to canonical lowercase /topics/<slug>
+    const lower = raw.toLowerCase();
+    if (raw && raw !== lower && /^[a-z0-9][a-z0-9-]*$/.test(lower)) {
+      const qIdx = req.url.indexOf('?');
+      const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+      res.setHeader('Location', `/topics/${lower}${query}`);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(301).end();
+    }
+    // Legacy / retired slug resolution → 301 to canonical replacement
+    try {
+      const db = await cds.connect.to('db');
+      const { redirectTo } = await resolveTopicBySlug(db, lower);
+      if (redirectTo) {
+        const qIdx = req.url.indexOf('?');
+        const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+        res.setHeader('Location', `${redirectTo}${query}`);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.status(301).end();
+      }
+    } catch { /* fail-open to blob lookup */ }
+    // Canonical form — delegate to serveHandler with the topic- prefix.
+    req.params.slug = `topic-${lower}`;
+    return serveHandler(req, res);
+  });
+  // Topics index page: /topics/ → CAP SSR (mirrors /content/concepts-index).
+  app.get('/content/topics-index', topicsIndexHandler);
   // #1914 — CAP-served puzzle solver pages (/puzzles/<slug>/, dynamic slug).
   // The page is a thin island shell composed into the __shell__ chrome; the
   // `puzzle` island fetches grid/clue data from /puzzle-api at runtime. Serving
@@ -571,6 +630,9 @@ cds.on('bootstrap', (app) => {
   // (Thread B). Dark launch: no publish-content.ts caller yet (Task 5 wires
   // it). Auth like the other publish routes.
   app.post('/content/publish/render-concepts', express.json({ limit: '1mb' }), contentAuthMiddleware, renderConceptsHandler);
+  // tag-tree-topics Task 7 — render topic detail pages alongside concepts.
+  // Auth and sequencing mirror render-concepts exactly.
+  app.post('/content/publish/render-topics', express.json({ limit: '1mb' }), contentAuthMiddleware, renderTopicsHandler);
   app.post('/content/publish/commit', express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
   app.post('/content/publish/abort',  express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
 
@@ -604,6 +666,22 @@ cds.on('bootstrap', (app) => {
     express.json({ limit: '5mb' }),
     contentAuthMiddleware,
     publishValidateAnswerSpecs
+  );
+
+  // REPLACE-per-slug handler for TutorialContributors (WS2 #task-6).
+  // Same auth guard and body parser as the validate-answer-specs sibling.
+  app.post('/content/publish-contributors',
+    express.json({ limit: '1mb' }),
+    contentAuthMiddleware,
+    publishContributors
+  );
+
+  // REPLACE-per-slug handler for TutorialValidationRules (WS3 #task-13).
+  // Same auth guard and body parser shape as publish-contributors.
+  app.post('/content/publish-validation-rules',
+    express.json({ limit: '4mb' }),
+    contentAuthMiddleware,
+    publishValidationRules
   );
 
   // Tutorial feedback bridge. Express handler (rather than letting CAP expose
@@ -1416,6 +1494,26 @@ cds.on('served', async () => {
       }
     } catch (err) {
       console.warn('[homepage-shelves] seed failed (non-fatal):', err.message);
+    }
+  }
+
+  // Seed baseline Category.seedDescription texts (tunes the embedding-based
+  // category classifier). Idempotent + non-destructive: fills only rows whose
+  // seedDescription is empty, never overwrites admin edits. Kept out of CSV so
+  // deploys can't full-replace the admin-editable column. VITEST-gated: seeding
+  // descriptions flips the classifier's embedding path ON, which would leak
+  // into unit tests asserting the LLM/skip fallback (see memory
+  // db-flag-boot-seed-leaks-into-vitest-harness). Non-fatal.
+  if (!process.env.VITEST && !globalThis.__categorySeedDescriptionsSeeded) {
+    globalThis.__categorySeedDescriptionsSeeded = true;
+    try {
+      const { seedCategoryDescriptions } = await import('./lib/seed-category-descriptions.js');
+      const result = await seedCategoryDescriptions(cds.db);
+      if (result.updated > 0) {
+        console.log(`[category-seed-descriptions] seeded ${result.updated}/${result.total} category descriptions`);
+      }
+    } catch (err) {
+      console.warn('[category-seed-descriptions] seed failed (non-fatal):', err.message);
     }
   }
 

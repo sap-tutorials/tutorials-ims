@@ -93,6 +93,21 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'Concept-detail publish rendering (#1327 Task 3) — renders concept pages into a publish ' +
     'session for the same public prod concept surface as GET /content/concepts/:slug. Not ' +
     'a tutorial-draft author-preview endpoint; the QA channel has no concept publish flow.',
+  'GET /content/topics/:slug':
+    'KG topic landing pages (tag-tree-topics, #2099) — a public prod content surface that ' +
+    'mirrors GET /content/concepts/:slug (topic- prefixed BLOBs, legacy-slug 301 resolution), ' +
+    'not tutorial-draft author preview. The QA channel serves in-flight tutorials from ' +
+    '-Contribution repos; topic pages are out of its scope and srv-qa wires no topic serve flow.',
+  'GET /content/topics-index':
+    'CAP-served /topics/ LIST page (tag-tree-topics, #2099) — the index companion to ' +
+    'GET /content/topics/:slug above, same public prod content surface as the concepts-index ' +
+    'entry it mirrors, not tutorial-draft author preview. The QA channel serves in-flight ' +
+    'tutorials; topic pages are out of its scope and srv-qa wires no topicsIndexHandler.',
+  'POST /content/publish/render-topics':
+    'Topic-detail publish rendering (tag-tree-topics, #2099) — renders topic pages into a ' +
+    'publish session for the same public prod topic surface as GET /content/topics/:slug, ' +
+    'mirroring render-concepts exactly. Not a tutorial-draft author-preview endpoint; the QA ' +
+    'channel has no topic publish flow.',
   'POST /content/orphan-purge':
     'CI-only batched soft-delete for prod content maintenance (#823). Not an author-preview ' +
     'endpoint — the QA channel has no orphan-purge maintenance flow.',
@@ -102,6 +117,18 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     '(com.sap.developers.ims.qa) does not load, and srv-qa has no runtime reader of ' +
     'ValidateAnswerSpecs (author preview re-parses rules.vr live). The publish CLI skips this ' +
     'step for channel=qa. Re-evaluate only if QA gains a runtime /api/validate-answer surface.',
+  'POST /content/publish-contributors':
+    'Contributor sidecar publish (#WS2). Same rationale as validate-answer-specs above: srv-qa ' +
+    'has no ContributorCache entity (the QA model com.sap.developers.ims.qa does not load it), ' +
+    'so a POST would 404/500, and there is no QA runtime reader. The publish CLI already skips ' +
+    'this step for channel=qa (scripts/publish-content.ts: "[publish-contributors] skipped"). ' +
+    'Re-evaluate only if QA gains a contributor reader.',
+  'POST /content/publish-validation-rules':
+    'Validation-rules sidecar publish (#WS3). Same rationale as publish-contributors above: ' +
+    'srv-qa has no ValidationRules entity, so a POST would 404/500, and there is no QA runtime ' +
+    'reader. The publish CLI already skips this step for channel=qa ' +
+    '(scripts/publish-content.ts: "[publish-validation-rules] skipped"). Re-evaluate only if ' +
+    'QA gains a validation-rules reader.',
   'GET /content/authors/:login':
     'CAP-served /authors/{login}/ pages (#1659 Phase C) — a public prod content surface that ' +
     'aggregates across published tutorials, not tutorial-draft author preview. Same rationale ' +

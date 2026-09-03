@@ -714,12 +714,14 @@ annotate AdminService.Tutorials with {
 
 annotate AdminService.TutorialContributors with {
   name  @Common.Label: 'Name';
+  login @Common.Label: 'GitHub';
   email @Common.Label: 'Email';
   role  @Common.Label: 'Role';
 };
 
 annotate AdminService.TutorialContributors with @UI.LineItem: [
   { Value: name },
+  { $Type: 'UI.DataFieldWithUrl', Value: login, Url: profileUrl, Label: 'GitHub' },
   { Value: email },
   { Value: role }
 ];
@@ -881,6 +883,19 @@ annotate AdminService.ValidateAnswerSpecs with @UI: {
   }
 };
 
+// TutorialValidationRules — all validation rules for a tutorial (step, question,
+// type, rule, AI-grading flag, correct answer). Joined via `validationRules` association.
+annotate AdminService.TutorialValidationRules with @(
+  UI.LineItem: [
+    { Value: stepNumber,   Label: 'Step' },
+    { Value: questionText,  Label: 'Question' },
+    { Value: questionType,  Label: 'Type' },
+    { Value: ruleType,      Label: 'Rule' },
+    { Value: aiGrading,     Label: 'AI-Graded' },
+    { Value: correctAnswer, Label: 'Correct Answer' }
+  ]
+);
+
 // CodeCheckSpecs — per-step code-check specs (goal + reference solution).
 // Joined via `codeCheckSpecs` association.
 annotate AdminService.CodeCheckSpecs with {
@@ -954,14 +969,23 @@ annotate AdminService.Tutorials with @UI: {
     { $Type: 'UI.ReferenceFacet', Label: 'Contributors', ID: 'ContributorsFacet', Target: 'contributors/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Completion Stats', ID: 'CompletionStatsFacet',
       Target: 'completionStats/@UI.FieldGroup#Stats' },
-    { $Type: 'UI.ReferenceFacet', Label: 'Validation Questions', ID: 'ValidationSpecsFacet',
+    { $Type: 'UI.ReferenceFacet', Label: 'AI-Graded Validation', ID: 'ValidationSpecsFacet',
       Target: 'validationSpecs/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'All Validation Rules', ID: 'AllValidationRulesFacet',
+      Target: 'validationRules/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Code-Check Specs', ID: 'CodeCheckSpecsFacet',
       Target: 'codeCheckSpecs/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'AI-Author Requests', ID: 'AiRequestsFacet',
       Target: 'aiRequests/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Freshness Reports', ID: 'FreshnessReportsFacet', Target: 'freshnessReports/@UI.PresentationVariant' },
     { $Type: 'UI.ReferenceFacet', ID: 'FreshnessFacet', Label: 'Freshness',
       Target: 'freshnessFindings/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Images', ID: 'MediaImagesFacet', Target: 'images/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Assets', ID: 'MediaAssetsFacet', Target: 'assets/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Knowledge Graph', ID: 'KgFieldsFacet', Target: '@UI.FieldGroup#KnowledgeGraph' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Concepts Taught', ID: 'ConceptsTaughtFacet', Target: 'conceptLinks/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Co-Completed', ID: 'CoCompletionsFacet', Target: 'coCompletions/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Community', ID: 'KgCommunityFacet', Target: 'communityMembership/@UI.LineItem' },
     { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
       { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
         Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',
@@ -4348,6 +4372,20 @@ annotate AdminService.TopicClustersAdmin with @(
 
 // --- Tutorial Freshness Detector (spec 2026-08-22-tutorial-freshness-detector) ---
 // Surfaces per-finding analysis rows on the Tutorials Object Page and wires the
+// Freshness Reports — report-level header (spec 2026-08-31 task-5).
+// PresentationVariant sorts newest-first so the latest run appears at the top.
+annotate AdminService.FreshnessReport with @(
+  UI.LineItem: [
+    { Value: runAt,         Label: 'Run At' },
+    { Value: status,        Label: 'Status' },
+    { Value: model,         Label: 'Model' },
+    { Value: cost,          Label: 'Cost' },
+    { Value: openHighCount, Label: 'Open High' },
+    { Value: error,         Label: 'Error' }
+  ],
+  UI.PresentationVariant: { SortOrder: [{ Property: runAt, Descending: true }], Visualizations: ['@UI.LineItem'] }
+);
+
 // Set Disposition action. Criticality paths delegate to the virtual
 // `confidenceCriticality` field (computed by after('READ','FreshnessFinding')
 // in admin-service.js).
@@ -4378,3 +4416,75 @@ annotate AdminService.FreshnessFinding with {
   suggestedFix @UI.MultiLineText;
   evidence     @UI.MultiLineText;
 };
+
+// --- Media facets: TutorialImages + TutorialAssets (Task 4) ---
+annotate AdminService.TutorialImages with @(
+  UI.LineItem: [
+    { Value: thumbUrl, Label: 'Preview' },
+    { $Type: 'UI.DataFieldWithUrl', Value: viewUrl,   Url: viewUrl,   Label: 'Image (served)' },
+    { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source (GitHub)' },
+    { Value: mimeType,    Label: 'Type' },
+    { Value: byteSize,    Label: 'Bytes' },
+    { Value: contentHash, Label: 'Hash' },
+    { Value: channel,     Label: 'Channel' }
+  ]
+) {
+  // Render thumbUrl inline as an image thumbnail rather than as raw text.
+  thumbUrl @UI.IsImageURL;
+};
+annotate AdminService.TutorialAssets with @(
+  UI.LineItem: [
+    { Value: filename,    Label: 'File' },
+    { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source (GitHub)' },
+    { Value: mimeType,    Label: 'Type' },
+    { Value: byteSize,    Label: 'Bytes' },
+    { Value: contentHash, Label: 'Hash' }
+  ]
+);
+
+// --- Knowledge Graph facets (task-3) ---
+// TutorialConceptLinks LineItem: concept FK, predicate (teaches|extends), confidence score.
+annotate AdminService.TutorialConceptLinks with @(
+  UI.LineItem: [
+    { Value: concept_ID,  Label: 'Concept' },
+    { Value: predicate,   Label: 'Relation' },
+    { Value: confidence,  Label: 'Confidence' }
+  ]
+) {
+  // Show the human-readable concept name instead of the raw GUID FK.
+  // Annotate the association (not concept_ID) so the compiler propagates the
+  // text to the generated foreign key — mirrors the primaryTagRef precedent.
+  concept @Common.Text: concept.name @Common.TextArrangement: #TextOnly;
+};
+
+// CoCompletions LineItem: target tutorial slug + co-completion score.
+annotate AdminService.CoCompletions with @(
+  UI.LineItem: [
+    { Value: targetSlug, Label: 'Also Completed' },
+    { Value: score,      Label: 'Score' }
+  ]
+);
+
+// KgCommunityMembers LineItem: community (with LLM label) + member slug + type.
+annotate AdminService.KgCommunityMembers with @(
+  UI.LineItem: [
+    { Value: communityId, Label: 'Community' },
+    { Value: slug,        Label: 'Member' },
+    { Value: vertexType,  Label: 'Type' }
+  ]
+) {
+  // Prefix the numeric id with the LLM-generated cluster label when present
+  // (#1126); falls back to the bare id where labeling hasn't run yet.
+  communityId @Common.Text: labelInfo.label @Common.TextArrangement: #TextFirst;
+};
+
+// FieldGroup for PageRank score — shown in KgFieldsFacet on Tutorials OP.
+// rank is a to-one Association (slug-joined) added in task-1.
+annotate AdminService.Tutorials with @(
+  UI.FieldGroup #KnowledgeGraph: {
+    Label: 'Knowledge Graph',
+    Data: [
+      { $Type: 'UI.DataField', Value: rank.score, Label: 'PageRank Score' }
+    ]
+  }
+);

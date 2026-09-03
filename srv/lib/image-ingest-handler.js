@@ -74,7 +74,7 @@ export async function imageIngestHandler(req, res) {
         return res.status(200).json({ action: 'unchanged', contentHash })
       }
     }
-    await imageStore.put(u, { buffer, mimeType, contentHash, slug, channel })
+    await imageStore.put(u, { buffer, mimeType, contentHash, slug, channel, byteSize: buffer.length })
     return res.status(200).json({ action: 'stored', contentHash })
   } catch (err) {
     LOG.error('[image-ingest] store put failed for', u, '-', err.message)

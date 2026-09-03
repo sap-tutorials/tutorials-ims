@@ -13,7 +13,11 @@
 
 import cds from '@sap/cds';
 import { getSeedEmbeddings, embedAdHoc } from './category-seed-embeddings.js';
-import { classifyViaLlm } from './category-classifier-llm.js';
+// category-classifier-llm (→ @sap-ai-sdk/orchestration) is imported LAZILY inside the
+// LLM fallback path below. A static import here resolves @sap-ai-sdk/orchestration at
+// module load, which crash-loops the srv-qa container (that package is not installed in
+// the stripped srv-qa deps — only @sap-ai-sdk/foundation-models is). srv-qa never reaches
+// the LLM path, so deferring the import keeps srv-qa boot free of the missing dependency.
 
 const LOG = cds.log('category-classifier');
 
@@ -96,15 +100,22 @@ function pickEmbeddingResult(scored) {
 
 async function persist(kind, itemId, assigned) {
   const cfg = KIND_TO_ENTITY[kind];
+  // Resolve the junction to its namespaced entity object. A bare short-name
+  // string ('TutorialCategories') does NOT resolve to the HANA table
+  // (COM_SAP_DEVELOPERS_IMS_TUTORIALCATEGORIES) when this runs outside a
+  // service handler (e.g. the standalone backfill via `cds bind --exec`) —
+  // it emits bare `TUTORIALCATEGORIES` SQL and dies. loadItemText already
+  // resolves this way, so cds.entities() is known-good by the time we get here.
+  const junction = cds.entities('com.sap.developers.ims')[cfg.junction];
   await cds.tx(async (tx) => {
-    await tx.run(DELETE.from(cfg.junction).where({ [cfg.fk]: itemId }));
+    await tx.run(DELETE.from(junction).where({ [cfg.fk]: itemId }));
     if (assigned.length === 0) return;
     const rows = assigned.map(a => ({
       [cfg.fk]:    itemId,
       category_ID: a.ID,
       score:       a.score ?? 1.0,
     }));
-    await tx.run(INSERT.into(cfg.junction).entries(rows));
+    await tx.run(INSERT.into(junction).entries(rows));
   });
 }
 
@@ -157,6 +168,7 @@ export async function classifyAndPersist(kind, id, _opts = {}) {
   if (!assigned) {
     path = 'llm';
     try {
+      const { classifyViaLlm } = await import('./category-classifier-llm.js');
       const { assigned: llmAssigned } = await classifyViaLlm({
         title:       item.raw.title,
         description: item.raw.description,

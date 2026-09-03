@@ -2195,20 +2195,58 @@ export default class AdminService extends cds.ApplicationService {
       for (const row of list) if (row) row.confidenceCriticality = map[row.confidence] ?? 0;
     });
 
-    // Guard: only SuperAdmin can change the published flag in either direction
-    // (publish OR unpublish). The CREATE exemption permits the runtime's
-    // draft-activation flow, where the activation payload echoes published=false
-    // (the column default per #348) — this is a pass-through, not a change,
-    // so we let regular Admins activate new drafts without elevating.
-    // Any explicit published=true on CREATE is still a change (against the
-    // false default) and requires SuperAdmin. Any PATCH that touches published
-    // is a change against an existing row's value and always requires SuperAdmin.
-    const _guardPublished = (req) => {
-      if (!('published' in req.data)) return;
-      if (req.event === 'CREATE' && req.data.published === false) return;
-      if (!req.user.is('SuperAdmin')) {
-        req.reject(403, 'Only SuperAdmin can change the published state');
+    // Media facet: surface the tutorial-system's own served-image URLs so the
+    // admin OP shows a live preview + a link to the rendered image (not just the
+    // GitHub source). thumbUrl → approuter resize/WebP CDN; viewUrl → raw
+    // original from CAP (self-heals from the object store on a miss). Both are
+    // root-relative so they resolve against the approuter origin serving /admin-ui/.
+    this.after('READ', 'TutorialImages', (rows) => {
+      const list = Array.isArray(rows) ? rows : [rows];
+      for (const row of list) {
+        if (!row || !row.sourceUrl) continue;
+        const u = encodeURIComponent(row.sourceUrl);
+        row.thumbUrl = `/img-cdn?u=${u}`;
+        row.viewUrl = `/content/image-source?u=${u}`;
       }
+    });
+
+    // Guard: only SuperAdmin can CHANGE the published flag in either direction
+    // (publish OR unpublish). The check compares the incoming value against the
+    // currently persisted value — mere *presence* of `published` in the payload
+    // is not a change (#2111). Fiori draft activation echoes the whole entity,
+    // including an unchanged `published: true/false`, so a regular Admin editing
+    // only the title/description must not be rejected.
+    //
+    // CREATE has no prior row: the column default is false (#348), so an echoed
+    // published=false is a no-op the runtime's draft-activation flow emits — let
+    // regular Admins activate new drafts. An explicit published=true on CREATE is
+    // a change against the default and still requires SuperAdmin.
+    const _guardPublished = async (req) => {
+      if (!('published' in req.data)) return;
+      if (req.user.is('SuperAdmin')) return;
+
+      if (req.event === 'CREATE') {
+        if (req.data.published === false) return;
+        return req.reject(403, 'Only SuperAdmin can change the published state');
+      }
+
+      // UPDATE/PATCH (active row or draft): compare against the persisted active
+      // value. Equal → no change → allow. Missing active row (draft never
+      // activated) defaults to the column default (false).
+      const activeName = req.target.name.endsWith('.drafts')
+        ? req.target.name.slice(0, -'.drafts'.length)
+        : req.target.name;
+      const key = req.data.ID
+        ?? (Array.isArray(req.params) && req.params.length
+          ? (req.params[req.params.length - 1]?.ID ?? req.params[req.params.length - 1])
+          : undefined);
+      const current = key
+        ? await SELECT.one.from(activeName).columns('published').where({ ID: key })
+        : null;
+      const currentPublished = current?.published ?? false;
+      if (req.data.published === currentPublished) return;
+
+      req.reject(403, 'Only SuperAdmin can change the published state');
     };
     this.before(['CREATE', 'PATCH'], ['Missions', 'Groups'], _guardPublished);
     this.before('PATCH', ['Missions.drafts', 'Groups.drafts'], _guardPublished);
