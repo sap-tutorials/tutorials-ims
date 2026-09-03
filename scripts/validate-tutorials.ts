@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import matter from 'gray-matter'
@@ -9,6 +9,60 @@ const TUTORIALS_DIR = join(ROOT, 'hugo', 'content', 'tutorials')
 const QUARANTINE_DIR = join(ROOT, '.tutorial-cache', 'quarantine')
 
 const REQUIRED_FIELDS = ['type', 'slug', 'title', 'time', 'stepCount'] as const
+
+/**
+ * Source repos permitted to publish step-less tutorials (issue #2127).
+ *
+ * Devtoberfest "validation" tutorials are published with zero steps on purpose:
+ * authors want the page live (so it appears in the mission) but *not* completable
+ * — no Done button, no completion, no Devtoberfest points — until real questions
+ * are added. That render-without-completion behaviour already falls out of the
+ * Hugo layout when `stepCount === 0` (no step shortcodes → no Done buttons; the
+ * `total > 0` guards in tutorial.ts short-circuit). The only thing blocking it is
+ * this pre-validation gate, so the exception is scoped narrowly to the
+ * developer-advocates repo family. Every other repo still requires ≥1 step.
+ */
+export const NO_STEP_ALLOWED_REPOS = new Set([
+  'developer-advocates',
+  'developer-advocates-Contribution',
+])
+
+/**
+ * Validate a tutorial's `stepCount`. Returns a quarantine reason, or `null` if OK.
+ *
+ * Normal tutorials require a positive integer step count. A tutorial sourced from
+ * a {@link NO_STEP_ALLOWED_REPOS} repo may also have exactly 0 steps (see #2127) —
+ * but a missing/NaN/negative count is still invalid everywhere.
+ *
+ * @param stepCount the frontmatter `stepCount` value (untrusted)
+ * @param repo the tutorial's source repo (from the discovery map), or undefined
+ */
+export function stepCountReason(stepCount: unknown, repo: string | undefined): string | null {
+  if (Number.isInteger(stepCount) && (stepCount as number) > 0) return null
+  if (stepCount === 0 && repo !== undefined && NO_STEP_ALLOWED_REPOS.has(repo)) return null
+  return `Invalid 'stepCount' value: ${stepCount}`
+}
+
+/**
+ * Build a `slug → source repo` map from the fetch discovery cache
+ * (`.tutorial-cache/_discovery.json`, written by fetch-tutorials.ts). Used to
+ * scope the no-step exception to specific source repos. Missing/corrupt cache
+ * degrades safely to an empty map (→ every tutorial still requires a step).
+ */
+function loadRepoBySlug(): Record<string, string> {
+  const path = join(ROOT, '.tutorial-cache', '_discovery.json')
+  if (!existsSync(path)) return {}
+  try {
+    const map = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, { repo?: string }>
+    const out: Record<string, string> = {}
+    for (const [slug, entry] of Object.entries(map)) {
+      if (entry?.repo) out[slug] = entry.repo
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
 
 /**
  * Counts Hugo shortcode opens vs closes in a tutorial body.
@@ -64,6 +118,7 @@ const files = readdirSync(TUTORIALS_DIR).filter(f => f.endsWith('.md') && !f.sta
 console.log(`Pre-validating ${files.length} tutorials (Hugo frontmatter)...\n`)
 
 const quarantined: Array<{ file: string; reason: string }> = []
+const repoBySlug = loadRepoBySlug()
 
 for (const file of files) {
   const content = readFileSync(join(TUTORIALS_DIR, file), 'utf-8')
@@ -86,9 +141,10 @@ for (const file of files) {
         reason = `Invalid 'time' value: ${fm.time}`
       }
 
-      // Validate stepCount is a positive integer
-      if (!reason && (!Number.isInteger(fm.stepCount) || fm.stepCount <= 0)) {
-        reason = `Invalid 'stepCount' value: ${fm.stepCount}`
+      // Validate stepCount. Normal tutorials require ≥1 step; the
+      // developer-advocates repo family may publish 0-step tutorials (#2127).
+      if (!reason) {
+        reason = stepCountReason(fm.stepCount, repoBySlug[fm.slug])
       }
 
       // Check for unclosed shortcode blocks (Hugo-specific). Helper is exported

@@ -275,11 +275,15 @@
       {{ else if .Params.primaryTag }}
         <a class="op-chip op-chip--tag op-chip--link" href="{{ "/tutorials/" | relURL }}?tag={{ .Params.primaryTag | urlquery }}" aria-label="Filter tutorials by {{ .Params.primaryTag }}">{{ .Params.primaryTag }}</a>
       {{ end }}
+      {{/* No progress ring for step-less tutorials (e.g. Devtoberfest validation
+           tutorials, #2127) — nothing to complete, so "0/0" would be misleading. */}}
+      {{ if gt (int .Params.stepCount) 0 }}
       <span class="op-progress" id="op-progress" data-step-count="{{ .Params.stepCount }}">
         <span class="op-progress__ring" id="op-progress-ring" style="--pct: 0">
           <span class="op-progress__label" id="op-progress-label">0/{{ .Params.stepCount }}</span>
         </span>
       </span>
+      {{ end }}
     </div>
 
     <div class="op-anchor">
@@ -356,12 +360,16 @@
             </ui5-wizard>
           </div>
           {{ end }}
+          {{/* Step-oriented affordances (progress bar, PiP step navigator,
+               expand/collapse-all) are suppressed for step-less tutorials (#2127). */}}
+          {{ if gt (int .Params.stepCount) 0 }}
           {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
           {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1" data-pip-src="{{ partial "island-src.html" "tutorial-pip" }}"></div>{{ end }}
           <div class="step-controls">
             <button type="button" onclick="expandAllSteps()">Open all</button>
             <button type="button" onclick="collapseAllSteps()">Close all</button>
           </div>
+          {{ end }}
           {{ partial "tutorial-video.html" . }}
           <div class="tutorial-steps">{{ .Content }}</div>
         </section>

@@ -1,5 +1,6 @@
 import type { TutorialStep } from './types.js'
 import { createFenceTracker } from './fence-tracker.js'
+import { commentLineFlags } from './html-comment-lines.js'
 
 const VALIDATE_LINE = /^\s*\[VALIDATE_\d+\]\s*$/
 const DONE_LINE = /^\s*\[DONE\]\s*$/
@@ -15,12 +16,22 @@ export function parseV2Steps(body: string): TutorialStep[] {
   // literal content, not a step delimiter. Root cause of the cookbook
   // tutorial's phantom-step bug.
   const fence = createFenceTracker()
+  // Per-line mask for lines inside a *multi-line* `<!-- ... -->` comment. An
+  // author disabling a not-yet-ready step by commenting it out must not have
+  // that `### ` lifted as a phantom step, nor its `<!--`/`-->` markers stranded
+  // across the split (which breaks Hugo rendering of the whole page). Root cause
+  // of the Devtoberfest validation-tutorial break (#2127). Commented lines are
+  // both non-delimiting and dropped from step content, mirroring intro.ts.
+  const commented = commentLineFlags(lines)
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
     if (fence(line)) {
       if (inStep) currentLines.push(line)
       continue
     }
+
+    if (commented[i]) continue
 
     const h3Match = line.match(/^### (.+)$/)
     if (h3Match) {
