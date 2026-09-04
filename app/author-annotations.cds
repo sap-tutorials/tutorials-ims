@@ -97,3 +97,31 @@ annotate AuthorService.AuthorTutorialCompletions with @(
   completionDay   @title: 'Completion Day'  @Analytics.Dimension;
   completionCount @title: 'Completions'     @Analytics.Measure @Aggregation.default: #SUM;
 };
+
+// #2138 — filter value help + labels for BOTH reports above. Their
+// UI.SelectionFields reference `parents.missionTitle` / `parents.groupTitle`,
+// so FE derives the filter-field label and value help from the navigation
+// TARGET (AuthorTutorialParents), not from the base view. Without these the
+// filters showed the raw technical column name and a free-text box.
+// Value help mirrors AdminService.CompletionAnalytics (app/admin-annotations.cds):
+// the denormalized title string maps to Missions/Groups.title, with slug as the
+// read-only secondary text. Missions/Groups are projected on AuthorService.
+annotate AuthorService.AuthorTutorialParents with {
+  parentKey     @UI.Hidden;
+  tutorialSlug  @UI.Hidden;
+  tutorialTitle @title: 'Tutorial';
+  missionTitle  @title: 'Mission' @Common.ValueList: {
+    CollectionPath: 'Missions',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: missionTitle, ValueListProperty: 'title' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' }
+    ]
+  };
+  groupTitle    @title: 'Group' @Common.ValueList: {
+    CollectionPath: 'Groups',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: groupTitle, ValueListProperty: 'title' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' }
+    ]
+  };
+};

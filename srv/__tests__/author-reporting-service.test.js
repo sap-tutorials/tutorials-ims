@@ -30,4 +30,12 @@ describe('AuthorService reporting projections', () => {
     const res = await GET('/author/AuthorTutorialEngagement', { validateStatus: () => true });
     expect(res.status).toBe(401);
   });
+
+  it('exposes Missions and Groups value-help collections on /author (#2138 filter value help)', async () => {
+    for (const entity of ['Missions', 'Groups']) {
+      const res = await GET(`/author/${entity}?$top=1&$select=title,slug`, AUTHOR);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.data.value)).toBe(true);
+    }
+  });
 });
