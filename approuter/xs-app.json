@@ -372,6 +372,12 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/channel-submissions/(.*)$",
+      "target": "/channel-submissions/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",
