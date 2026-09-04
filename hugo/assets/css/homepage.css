@@ -797,8 +797,10 @@
 /* ===== Devtoberfest banner (#2131) =====
    Prominent top-of-homepage promo. SSR ships it hidden; the
    devtoberfest-banner island reveals it only when the event is upcoming
-   (live countdown) or running ("Live now" + date range). Autumn-orange
-   Devtoberfest branding, distinct from the neutral hp-band rows. */
+   (live countdown) or running ("Live now" + date range). Joule purple→pink
+   brand gradient (--joule-purple-* tokens from joule.css, matching the
+   Devtoberfest landing page it links to), distinct from the neutral hp-band
+   rows. Hex fallbacks cover QA, where joule.css is not loaded. */
 .hp-dtf-banner { margin: 0; }
 .hp-dtf-banner[hidden] { display: none; }
 
@@ -811,7 +813,7 @@
   border-radius: 10px;
   text-decoration: none;
   color: #fff;
-  background: linear-gradient(90deg, #c74806 0%, #e9730c 55%, #f0ab00 100%);
+  background: linear-gradient(90deg, var(--joule-purple-1, #5D36FF) 0%, var(--joule-purple-3, #A100C2) 60%, #D1188A 100%);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
