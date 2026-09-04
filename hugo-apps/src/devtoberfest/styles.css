@@ -505,6 +505,32 @@ html[data-theme="sap_horizon_dark"] .dtf-ticker { color: #f1acff; }
   .dtf-ticker-text { animation: none; opacity: 1; }
 }
 
+/* ------------------------------ Promo video ------------------------------ */
+/* Sits in the content column under the intro (issue #2144). Capped width so it
+   fills the previously-empty band without overwhelming the page. */
+.dtf-promo {
+  margin: 0.75rem 0 0;
+  width: 100%;
+  max-width: 560px;
+}
+
+.dtf-promo-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  background: #000;
+}
+
+.dtf-promo-embed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 @keyframes dtfBob {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-10px); }
