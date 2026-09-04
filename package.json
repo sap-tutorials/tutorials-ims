@@ -50,6 +50,7 @@
     "import:advocates": "cds bind --exec -- node scripts/import-advocates.cjs",
     "backfill-categories": "node scripts/backfill-categories.cjs",
     "kg:reextract": "cross-env KG_EXTRACT_BUILD_CAP=10000 cds bind --exec -- node scripts/kg-reextract.cjs",
+    "seed-channels": "cds bind --exec -- node scripts/seed-channels.cjs",
     "seed-tag-labels": "tsx scripts/seed-tag-labels.ts",
     "migrate:reference": "node scripts/migrate-reference-data.js",
     "migrate:users": "node scripts/migrate-user-progress.js",
