@@ -140,7 +140,8 @@ For builds that accept a pre-registered client, bridge through `mcp-remote`:
       "command": "npx",
       "args": [
         "-y", "mcp-remote", "<base>/mcp-auth/api",
-        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials-prod!t676072\"}"
+        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials-prod!t676072\"}",
+        "--host", "localhost"
       ]
     }
   }
@@ -203,7 +204,8 @@ npm install -g mcp-remote
       "command": "npx",
       "args": [
         "-y", "mcp-remote", "<base>/mcp-auth/api",
-        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials-prod!t676072\"}"
+        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials-prod!t676072\"}",
+        "--host", "localhost"
       ]
     }
   }
@@ -226,6 +228,15 @@ so `mcp-remote` discovers the authorize/token URLs automatically — you only su
 > ignored, so `mcp-remote` falls back to Dynamic Client Registration and fails with
 > `does not support dynamic client registration`. Only `--static-oauth-client-info` (a JSON
 > blob carrying `client_id`) short-circuits registration.
+
+> **Callback-host note (`--host localhost`):** XSUAA matches the OAuth `redirect_uri`
+> literally against the client's registered list, which whitelists
+> `http://localhost:*/oauth/callback`. Some `mcp-remote` builds bind the callback to the
+> loopback **IP** `127.0.0.1` instead (RFC 8252's preferred default), producing
+> `http://127.0.0.1:<port>/oauth/callback` — which does **not** match `localhost` and fails
+> at `/oauth/authorize` with **"redirect_uri does not match the configuration."** Passing
+> `--host localhost` forces the registered hostname to match. If you still hit this, delete
+> the cached tokens in `~/.mcp-auth/` and reconnect.
 
 > **Simplest path for Claude Code:** skip OAuth entirely and use a
 > [Personal Access Token](#headless--ci-with-a-personal-access-token). The PAT path needs no
