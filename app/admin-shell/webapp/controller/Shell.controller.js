@@ -65,7 +65,8 @@ sap.ui.define([
     topicClusters: "topicClusters",
     channels: "channels",
     channelCollections: "channelCollections",
-    channelTopicMap: "channelTopicMap"
+    channelTopicMap: "channelTopicMap",
+    channelSubmissions: "channelSubmissions"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -127,7 +128,8 @@ sap.ui.define([
     topicClusters: "Topic Clusters",
     channels: "Channels",
     channelCollections: "Channel Collections",
-    channelTopicMap: "Channel Topic Map"
+    channelTopicMap: "Channel Topic Map",
+    channelSubmissions: "Channel Submissions"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {

@@ -314,6 +314,7 @@ export default defineConfig({
         'ui5-me': resolve(__dirname, 'src/ui5/ui5-me.ts'),
         'ui5-illustrations': resolve(__dirname, 'src/ui5/ui5-illustrations.ts'),
         'channels-directory': resolve(__dirname, 'src/channels-directory/index.ts'),
+        'channel-submit': resolve(__dirname, 'src/channel-submit/main.ts'),
       },
       output: {
         // Content-hash entry bundles so a changed bundle gets a new URL the

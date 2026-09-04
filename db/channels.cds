@@ -69,3 +69,18 @@ entity ChannelTopicMap : cuid, managed {
   relevance       : Integer default 50;       // 0-100; orders the per-topic band, desc
   authoringStatus : AuthoringStatus default 'AI_SEEDED' @assert.range;
 }
+
+// --- P4: community submission loop (login-required proposals, admin-moderated) ---
+type SubmissionKind   : String enum { ADD; EDIT; REMOVE; }
+type SubmissionStatus : String enum { PENDING; APPROVED; REJECTED; }
+
+entity ChannelSubmissions : cuid, managed {
+  kind          : SubmissionKind   @mandatory @assert.range;
+  targetChannel : Association to Channels;              // null for ADD; required for EDIT/REMOVE (enforced in handler)
+  proposed      : LargeString;                          // JSON of proposed curated fields (ADD/EDIT); ignored for REMOVE
+  rationale     : String(1000);                         // submitter's free-text reason
+  submitterId   : String(120);                          // set server-side from req.user.id
+  status        : SubmissionStatus default 'PENDING' @assert.range;
+  reviewerId    : String(120);                          // set on approve/reject from req.user.id
+  reviewNote    : String(800);                          // moderator note
+}

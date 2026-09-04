@@ -1,0 +1,79 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.channelSubmissions",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "ChannelSubmissions-manage": {
+          "semanticObject": "ChannelSubmissions",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.channelSubmissions.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "name": "ChannelSubmissionsList", "pattern": ":?query:", "target": "ChannelSubmissionsList" },
+        { "name": "ChannelSubmissionsObject", "pattern": "ChannelSubmissions({key}):?query:", "target": "ChannelSubmissionsObject" }
+      ],
+      "targets": {
+        "ChannelSubmissionsList": {
+          "type": "Component",
+          "id": "ChannelSubmissionsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/ChannelSubmissions",
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "ChannelSubmissionsObject": {
+          "type": "Component",
+          "id": "ChannelSubmissionsObject",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/ChannelSubmissions"
+            }
+          }
+        }
+      }
+    }
+  }
+}

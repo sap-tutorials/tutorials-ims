@@ -310,6 +310,19 @@ service AdminService {
   @odata.draft.enabled
   entity ChannelTopicMap as projection on ims.ChannelTopicMap;
 
+  // P4: community submission moderation queue.
+  // AdminService is already @requires:'Admin' at service level — the projection
+  // and its bound actions inherit that gate. No per-action @requires needed:
+  // any Admin-scoped user may approve or reject submissions.
+  // @odata.draft.enabled: false — submissions are immediate-save (no draft round-trip).
+  // Handlers for approve/reject land in Task 4.
+  @odata.draft.enabled: false
+  entity ChannelSubmissions as projection on ims.ChannelSubmissions
+    actions {
+      action approve(note : String(500));
+      action reject (note : String(500));
+    };
+
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
   @odata.draft.enabled
@@ -1431,3 +1444,17 @@ extend entity AdminService.FreshnessFinding with actions {
   @(requires: 'Tutorial.Author')
   action setDisposition(disposition: String, note: String) returns { status: String };
 };
+
+// ── P4: ChannelSubmissions moderation queue FE annotations ──────────────────
+// Action FQN form follows ContentModerationService.NewsItems (lines 77-81 of
+// content-moderation-service.cds): ServiceName.EntityName/actionName.
+annotate AdminService.ChannelSubmissions with @(UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: kind },
+    { $Type: 'UI.DataField', Value: status },
+    { $Type: 'UI.DataField', Value: submitterId },
+    { $Type: 'UI.DataField', Value: rationale },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.ChannelSubmissions/approve', Label: '{i18n>approve}' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.ChannelSubmissions/reject',  Label: '{i18n>reject}' }
+  ]
+});

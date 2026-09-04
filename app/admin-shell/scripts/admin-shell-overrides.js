@@ -85,7 +85,8 @@ module.exports = {
     'petoberfest',
     'channels',
     'channel-collections',
-    'channel-topic-map'
+    'channel-topic-map',
+    'channel-submissions'
   ],
 
   //
@@ -171,7 +172,8 @@ module.exports = {
     petoberfest: 'pb',
     channels: 'ch',
     'channel-collections': 'cc',
-    'channel-topic-map': 'ctm'
+    'channel-topic-map': 'ctm',
+    'channel-submissions': 'csub'
   },
 
   //
