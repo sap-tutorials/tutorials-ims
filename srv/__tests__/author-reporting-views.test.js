@@ -109,4 +109,25 @@ describe('reporting foundation views', () => {
     expect(rows[0].missionTitle).toBeNull();
     expect(rows[0].groupTitle).toBe('Rep Group');
   });
+
+  it('AuthorTutorialEngagement joins counts to the mission/group spine with completion rate', async () => {
+    const { AuthorTutorialEngagement } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(AuthorTutorialEngagement).where({ tutorialSlug: 'rep-tut-a' });
+    expect(row).toBeTruthy();
+    expect(row.missionTitle).toBe('Rep Mission');
+    expect(row.groupTitle).toBe('Rep Group');
+    expect(row.startedLearners).toBe(2);
+    expect(row.completedLearners).toBe(1);
+    // 1 / 2 * 100 = 50.00
+    expect(Number(row.completionRatePct)).toBeCloseTo(50, 2);
+    expect(row.reportKey).toBeTruthy();
+  });
+
+  it('AuthorTutorialEngagement completionRatePct is null-safe when startedLearners is 0', async () => {
+    // rep-tut-b is group-direct with no TaskRecords -> not in TutorialEngagementBase,
+    // so the inner join drops it. Assert it is absent rather than dividing by zero.
+    const { AuthorTutorialEngagement } = cds.entities('com.sap.developers.ims');
+    const rows = await SELECT.from(AuthorTutorialEngagement).where({ tutorialSlug: 'rep-tut-b' });
+    expect(rows.length).toBe(0);
+  });
 });

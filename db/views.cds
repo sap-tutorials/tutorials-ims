@@ -572,3 +572,27 @@ view AuthorTutorialParents as
     }
     where tut.slug is not null
   );
+
+// Report A — Tutorial Engagement (FE Analytical List Page). Pre-aggregated,
+// all-time (no date slicer: distinct counts don't compose with a date range).
+// Fan-out: 1 row per (tutorialSlug, missionTitle, groupTitle). Synthetic
+// reportKey gives the OData entity a stable, unique key across fanned rows.
+view AuthorTutorialEngagement as
+  select from AuthorTutorialParents as p
+  inner join TutorialEngagementBase as e on e.tutorialSlug = p.tutorialSlug
+  {
+    key (
+      p.tutorialSlug || '::' || coalesce(p.missionTitle, '~') || '::' || coalesce(p.groupTitle, '~')
+    ) as reportKey : String(600),
+    p.tutorialSlug     as tutorialSlug     : String,
+    p.tutorialTitle    as tutorialTitle    : String,
+    p.missionTitle     as missionTitle     : String,
+    p.groupTitle       as groupTitle       : String,
+    e.startedLearners  as startedLearners  : Integer,
+    e.completedLearners as completedLearners : Integer,
+    e.completions      as completions      : Integer,
+    cast(e.completedLearners as Decimal(5,2)) * 100 / nullif(e.startedLearners, 0)
+                       as completionRatePct : Decimal(5,2),
+    e.firstCompletion  as firstCompletion  : Timestamp,
+    e.lastCompletion   as lastCompletion   : Timestamp
+  };
