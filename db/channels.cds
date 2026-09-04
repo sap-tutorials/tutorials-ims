@@ -19,12 +19,12 @@ entity Channels : cuid, managed {
   purpose        : String(1000);             // cleaned of [cite:] markers at ingest
   notes          : String(1000);
   ownerName      : String(120);
-  ownerType      : ChannelOwnerType;
+  ownerType      : ChannelOwnerType @assert.range;
   isSapOwned     : Boolean default false;
   category       : String(60);
   subcategory    : String(80);
   platform       : String(40);
-  status         : ChannelStatus default 'Active';
+  status         : ChannelStatus default 'Active' @assert.range;
   focusAreas     : array of String(60);
   tags           : array of String(40);
   updateFrequency: String(40);

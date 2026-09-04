@@ -23,6 +23,7 @@ describe('Channels entity', () => {
     const row = await SELECT.one.from(Channels).where({ sourceId: 'test-001' });
     expect(row.focusAreas).toEqual(['abap', 'cap']);
     expect(row.tags).toEqual(['t1']);
+    expect(row.relatedUrls).toEqual(['https://y.test']);
     expect(row.isPublished).toBe(true);
   });
 });
