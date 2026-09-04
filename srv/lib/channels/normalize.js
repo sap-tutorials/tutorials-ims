@@ -1,0 +1,73 @@
+'use strict';
+const crypto = require('node:crypto');
+
+// Strip trailing "[cite: N]" style markers (and any trailing whitespace).
+function cleanCitations(text) {
+  if (!text) return text;
+  return String(text).split('[cite')[0].replace(/\s+$/, '');
+}
+
+const OWNER_TYPE_MAP = {
+  'sap official': 'SAP_Official',
+  'sap developer advocate': 'SAP_Developer_Advocate',
+  'sap executive': 'SAP_Executive',
+  'community member': 'Community_Member',
+  'community organization': 'Community_Organization',
+  'user group': 'User_Group',
+  'third-party training': 'Third_party_Training',
+  'third-party media': 'Third_party_Media',
+  'third-party platform': 'Third_party_Platform',
+};
+function normalizeOwnerType(raw) {
+  if (!raw) return null;
+  return OWNER_TYPE_MAP[String(raw).trim().toLowerCase()] ?? null;
+}
+
+// Map free-text status → enum, carrying any parenthetical / qualifier as a note.
+function normalizeStatus(raw) {
+  if (!raw) return { status: 'Active', note: null };
+  const s = String(raw).trim();
+  const lower = s.toLowerCase();
+  if (lower.startsWith('entering eol') || lower === 'eol') return { status: 'EOL', note: s === 'EOL' ? null : s };
+  if (lower.startsWith('active')) {
+    const m = s.match(/\((.+)\)/);
+    return { status: 'Active', note: m ? m[1].trim() : null };
+  }
+  if (lower.startsWith('archiv')) return { status: 'Archived', note: null };
+  if (lower.startsWith('closed')) return { status: 'Closed', note: null };
+  if (lower.startsWith('discontinu')) return { status: 'Discontinued', note: null };
+  return { status: 'Active', note: s };
+}
+
+// Hash only the source (dataset-owned) fields, order-independent.
+function computeContentHash(sourceFields) {
+  const canonical = JSON.stringify(sourceFields, Object.keys(sourceFields).sort());
+  return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
+function normalizeChannel(raw, ingestBatch) {
+  const { status, note } = normalizeStatus(raw.status);
+  const purpose = cleanCitations(raw.purpose);
+  const notesParts = [cleanCitations(raw.notes), note].filter(Boolean);
+  const source = {
+    name: raw.name, url: raw.url,
+    relatedUrls: raw.related_urls ?? [],
+    aliases: raw.aliases ?? [],
+    purpose, notes: notesParts.join(' — ') || null,
+    ownerName: raw.owner ?? raw.owner_name ?? null,
+    ownerType: normalizeOwnerType(raw.owner_type),
+    isSapOwned: raw.isSapOwned === true,
+    category: raw.category ?? null,
+    subcategory: raw.subcategory ?? null,
+    platform: raw.platform ?? null,
+    status,
+    focusAreas: raw.focus_areas ?? [],
+    tags: raw.tags ?? [],
+    updateFrequency: raw.update_frequency ?? null,
+    githubStars: raw.github_stars ?? null,
+    subscribers: raw.subscribers ?? null,
+  };
+  return { sourceId: raw.id, ...source, contentHash: computeContentHash(source), ingestBatch };
+}
+
+module.exports = { cleanCitations, normalizeOwnerType, normalizeStatus, computeContentHash, normalizeChannel };

@@ -5,6 +5,7 @@ using { com.sap.developers.ims.shared } from './_content-shape';
 using from './advocates';
 using from './devtoberfest';
 using from './homepage';
+using from './channels';
 
 // Sequence-backed business ID for backward compatibility with legacy integer IDs
 aspect LegacyKeyed {

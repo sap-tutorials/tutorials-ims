@@ -60,7 +60,8 @@ sap.ui.define([
     pats: "pats",
     petoberfest: "petoberfest",
     petoberfestContests: "petoberfestContests",
-    topicClusters: "topicClusters"
+    topicClusters: "topicClusters",
+    channels: "channels"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -117,7 +118,8 @@ sap.ui.define([
     pats: "Personal Access Tokens",
     petoberfest: "Pet Photo Moderation",
     petoberfestContests: "Petoberfest Contests",
-    topicClusters: "Topic Clusters"
+    topicClusters: "Topic Clusters",
+    channels: "Channels"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {

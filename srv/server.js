@@ -416,6 +416,38 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // Build-time data for Hugo /channels directory — consumed by
+  // scripts/fetch-channels.ts at build time. Public, unauthenticated.
+  // Cache-Control 60s. Filters to isPublished=true + linkStatus!='BROKEN'
+  // (override wins). Array columns (focusAreas, tags, relatedUrls, aliases)
+  // are parsed from JSON strings on HANA; SQLite returns them as arrays already.
+  app.get('/build/channels', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.Channels')
+          .where({ isPublished: true })
+          .orderBy('category', 'name'),
+      );
+      const parseArr = (v) => (Array.isArray(v) ? v : (typeof v === 'string' && v ? JSON.parse(v) : []));
+      const channels = rows
+        .map((r) => ({
+          ...r,
+          linkStatus: r.linkStatusOverride || r.linkStatus,
+          focusAreas: parseArr(r.focusAreas),
+          tags: parseArr(r.tags),
+          relatedUrls: parseArr(r.relatedUrls),
+          aliases: parseArr(r.aliases),
+        }))
+        .filter((r) => r.linkStatus !== 'BROKEN');
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ channels, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/channels]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // (#1032) Build-time data for Hugo featured topics carousel — consumed by
   // scripts/fetch-tutorials.ts at build time. Public, unauthenticated.
   // Cache-Control 60s (Hugo fetches once per build, not per request).
