@@ -51,7 +51,7 @@ describe.skipIf(!hasBaseUrl())('e2e: Devtoberfest scavenger hunt (unauthenticate
         { timeout: 5_000 }
       );
 
-      expect(await page.locator('.sh--home .sh-clue-text').textContent()).toContain('1st letter of first name');
+      expect(await page.locator('.sh--home .sh-clue-text').textContent()).toContain('lettersYouNeed <- substr(firstName, 1, 1)');
       expect(await page.locator('.sh--home .sh-moreinfo a').getAttribute('href')).toBe('https://url.sap/7afji2');
       // Advocate hero actually loaded from /api/advocates/:slug/photo.
       const imgOk = await page.locator('.sh--home .sh-img').evaluate((el) => el.complete && el.naturalWidth > 0);
@@ -84,7 +84,7 @@ describe.skipIf(!hasBaseUrl())('e2e: Devtoberfest scavenger hunt (unauthenticate
       const block = page.locator('.sh--embed');
       await block.waitFor({ state: 'visible', timeout: 15_000 });
       expect(await block.locator('.sh-heading').textContent()).toContain('Devtoberfest Scavenger Hunt');
-      expect(await block.locator('.sh-clue-text').textContent()).toContain('4th letter of first name');
+      expect(await block.locator('.sh-clue-text').textContent()).toContain('func main() { lettersYouNeed := string(myString[3]) }');
       const imgOk = await block.locator('.sh-img').evaluate((el) => el.complete && el.naturalWidth > 0);
       expect(imgOk, '/api-docs/ advocate hero image failed to load').toBe(true);
     } finally {
