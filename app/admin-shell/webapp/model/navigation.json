@@ -23,6 +23,7 @@
         { "key": "advocates", "title": "Advocates" },
         { "key": "alerts", "title": "Alerts" },
         { "key": "channels", "title": "Channels" },
+        { "key": "channelCollections", "title": "Channel Collections" },
         { "key": "operations", "title": "Featured Tasks" }
       ]
     },

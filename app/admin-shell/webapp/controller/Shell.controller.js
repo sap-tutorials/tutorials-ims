@@ -61,7 +61,8 @@ sap.ui.define([
     petoberfest: "petoberfest",
     petoberfestContests: "petoberfestContests",
     topicClusters: "topicClusters",
-    channels: "channels"
+    channels: "channels",
+    channelCollections: "channelCollections"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -119,7 +120,8 @@ sap.ui.define([
     petoberfest: "Pet Photo Moderation",
     petoberfestContests: "Petoberfest Contests",
     topicClusters: "Topic Clusters",
-    channels: "Channels"
+    channels: "Channels",
+    channelCollections: "Channel Collections"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {

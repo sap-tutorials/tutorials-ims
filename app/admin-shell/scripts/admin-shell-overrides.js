@@ -81,7 +81,8 @@ module.exports = {
     'pats',
     'featureFlags',
     'petoberfest',
-    'channels'
+    'channels',
+    'channel-collections'
   ],
 
   //
@@ -163,7 +164,8 @@ module.exports = {
     pats: 'pt',
     featureFlags: 'ffl',
     petoberfest: 'pb',
-    channels: 'ch'
+    channels: 'ch',
+    'channel-collections': 'cc'
   },
 
   //
