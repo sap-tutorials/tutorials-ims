@@ -30,7 +30,8 @@ describe('DevtoberfestHome promo video (#2144)', () => {
     const iframe = wrapper.find('.dtf-promo-embed')
     expect(iframe.exists()).toBe(true)
     const src = iframe.attributes('src') || ''
-    expect(src).toContain('youtube-nocookie.com/embed/ZvxLbaMg2Gw')
+    expect(src).toContain('www.youtube.com/embed/ZvxLbaMg2Gw')
+    expect(src).not.toContain('youtube-nocookie.com')
     expect(src).toContain('autoplay=1')
     expect(src).toContain('mute=1')
     expect(iframe.attributes('allowfullscreen')).toBeDefined()
