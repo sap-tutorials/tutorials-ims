@@ -240,6 +240,64 @@ export async function getMyCompletedTutorials(user) {
   return rows;
 }
 
+// Returns the user's IN_PROGRESS ("partial") tutorials for the /me Recent
+// Activity timeline, so a signed-in user can resume where they left off
+// (issue #2146). Shape mirrors getMyCompletedTutorials — same kind/slug/title/
+// tag/time fields — but carries `progressPercent` (0-100) and `lastTouchedAt`
+// (the TaskRecord modifiedAt) instead of a completionDate, since a partial has
+// no completion timestamp. Rows are sorted lastTouchedAt DESC.
+//
+// Scope is TUTORIAL only: tutorial-level partial progress is the only
+// IN_PROGRESS state _updateTutorialProgress writes. Puzzles/petoberfests are
+// completion-only on /me. COMPLETED/SUPERSEDED rows are excluded here — those
+// belong to getMyCompletedTutorials. Anonymous users return an empty array;
+// rows whose legacyId no longer maps to a current slug are skipped.
+export async function getMyInProgressTutorials(user) {
+  const dbUserId = await resolveDbUserId(user);
+  if (!dbUserId) return [];
+
+  const { TaskRecords, Tutorials } = cds.entities('com.sap.developers.ims');
+
+  const records = await SELECT.from(TaskRecords)
+    .columns('taskLegacyId', 'progress', 'modifiedAt', 'titleSnapshot')
+    .where({
+      user_ID: dbUserId,
+      taskType: 'TUTORIAL',
+      status: 'IN_PROGRESS'
+    });
+  if (records.length === 0) return [];
+
+  const tutorialIds = records.map(r => r.taskLegacyId);
+  const tutorials = await SELECT.from(Tutorials)
+    .columns('legacyId', 'slug', 'title', 'primaryTag', 'experienceTag', 'averageTimeToComplete')
+    .where({ legacyId: { in: tutorialIds } });
+  const tutorialMeta = new Map(tutorials.map(t => [t.legacyId, t]));
+
+  const rows = [];
+  for (const r of records) {
+    const meta = tutorialMeta.get(r.taskLegacyId);
+    if (!meta?.slug) continue;
+    rows.push({
+      kind: 'tutorial',
+      slug: meta.slug,
+      title: meta.title || r.titleSnapshot || meta.slug,
+      primaryTag: meta.primaryTag || null,
+      experienceTag: meta.experienceTag || null,
+      averageTimeToComplete: typeof meta.averageTimeToComplete === 'number' ? meta.averageTimeToComplete : null,
+      progressPercent: typeof r.progress === 'number' ? r.progress : 0,
+      lastTouchedAt: r.modifiedAt || null
+    });
+  }
+
+  rows.sort((a, b) => {
+    const at = a.lastTouchedAt ? new Date(a.lastTouchedAt).getTime() : 0;
+    const bt = b.lastTouchedAt ? new Date(b.lastTouchedAt).getTime() : 0;
+    return bt - at;
+  });
+
+  return rows;
+}
+
 // Lightweight lookup used by searchTutorials annotation. Returns a Map keyed
 // by `${taskType}:${slug}` → { status, progressPercent, attemptNumber }. Uses
 // the same resolveDbUserId cache so the second call within a chat turn is
