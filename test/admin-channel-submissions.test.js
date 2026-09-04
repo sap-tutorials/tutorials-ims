@@ -34,6 +34,7 @@ describe('AdminService ChannelSubmissions moderation', () => {
     const sub = await SELECT.one.from(ChannelSubmissions).where({ ID: id });
     expect(sub.status).toBe('APPROVED');
     expect(sub.reviewNote).toBe('ok');
+    expect(sub.reviewerId).toBe('admin');         // req.user.id stamped from auth
   });
 
   test('approve EDIT patches only whitelisted fields on the target channel', async () => {
@@ -72,5 +73,26 @@ describe('AdminService ChannelSubmissions moderation', () => {
     await expect(
       project.post(`/admin/ChannelSubmissions(${id})/AdminService.approve`, { note: '' }, adminAuth),
     ).rejects.toMatchObject({ response: { status: 400 } });
+  });
+
+  test('rejecting an already-reviewed submission is rejected 400', async () => {
+    const id = await seedSubmission({ kind: 'ADD', proposed: '{}', status: 'REJECTED' });
+    await expect(
+      project.post(`/admin/ChannelSubmissions(${id})/AdminService.reject`, { note: '' }, adminAuth),
+    ).rejects.toMatchObject({ response: { status: 400 } });
+  });
+
+  test('approve unknown submission ID returns 404', async () => {
+    const fakeId = cds.utils.uuid();
+    await expect(
+      project.post(`/admin/ChannelSubmissions(${fakeId})/AdminService.approve`, { note: '' }, adminAuth),
+    ).rejects.toMatchObject({ response: { status: 404 } });
+  });
+
+  test('reject unknown submission ID returns 404', async () => {
+    const fakeId = cds.utils.uuid();
+    await expect(
+      project.post(`/admin/ChannelSubmissions(${fakeId})/AdminService.reject`, { note: '' }, adminAuth),
+    ).rejects.toMatchObject({ response: { status: 404 } });
   });
 });

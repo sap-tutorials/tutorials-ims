@@ -2669,9 +2669,9 @@ export default class AdminService extends cds.ApplicationService {
         await INSERT.into(Channels).entries({
           ID: cds.utils.uuid(),
           sourceId: `community-${cds.utils.uuid().slice(0, 8)}`,
+          ...clean,
           status: 'Active',
           isPublished: true,
-          ...clean,
         });
       } else if (sub.kind === 'EDIT') {
         if (!sub.targetChannel_ID) return req.reject(400, 'EDIT requires a target channel');
