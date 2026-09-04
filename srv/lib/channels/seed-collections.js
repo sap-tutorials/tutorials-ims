@@ -75,6 +75,7 @@ async function seedCollections(db, { commit = false, llm } = {}) {
 
   let created = 0, updatedDraft = 0, skippedReviewed = 0;
   for (const d of drafts) {
+    // slug-canonical: write-path-canonicalizes — draftCollections() lowercases d.slug at source
     const existing = await db.run(SELECT.one.from(ChannelCollections).where({ slug: d.slug }));
     if (existing && existing.authoringStatus === 'REVIEWED') { skippedReviewed++; continue; }
     if (!commit) { existing ? updatedDraft++ : created++; continue; }
