@@ -130,4 +130,30 @@ describe('reporting foundation views', () => {
     const rows = await SELECT.from(AuthorTutorialEngagement).where({ tutorialSlug: 'rep-tut-b' });
     expect(rows.length).toBe(0);
   });
+
+  it('AuthorTutorialCompletions emits one additive row per completion, carrying mission/group + day', async () => {
+    const { AuthorTutorialCompletions } = cds.entities('com.sap.developers.ims');
+    const rows = await SELECT.from(AuthorTutorialCompletions).where({ tutorialSlug: 'rep-tut-a' });
+    // rep-tut-a has 2 COMPLETED/SUPERSEDED TaskRecords (attempt-1 SUPERSEDED, attempt-2 COMPLETED),
+    // each fanned across its single (mission, group) parent => 2 rows.
+    expect(rows.length).toBe(2);
+    for (const r of rows) {
+      expect(r.missionTitle).toBe('Rep Mission');
+      expect(r.groupTitle).toBe('Rep Group');
+      expect(r.completionCount).toBe(1);
+      expect(r.completionDay).toBeTruthy();
+      expect(r.reportKey).toBeTruthy();
+    }
+    // completionDay is a date-only cast of completionDate.
+    const days = rows.map(r => String(r.completionDay)).sort();
+    expect(days[0]).toContain('2026-01-10');
+    expect(days[1]).toContain('2026-02-15');
+  });
+
+  it('AuthorTutorialCompletions excludes IN_PROGRESS records', async () => {
+    const { AuthorTutorialCompletions } = cds.entities('com.sap.developers.ims');
+    const rows = await SELECT.from(AuthorTutorialCompletions).where({ tutorialSlug: 'rep-tut-a' });
+    // The IN_PROGRESS attempt for userB must not appear.
+    expect(rows.length).toBe(2);
+  });
 });

@@ -596,3 +596,30 @@ view AuthorTutorialEngagement as
     e.firstCompletion  as firstCompletion  : Timestamp,
     e.lastCompletion   as lastCompletion   : Timestamp
   };
+
+// Report B — Tutorial Completions (FE List Report). Row-per-completion at
+// TUTORIAL grain, status IN (COMPLETED, SUPERSEDED) to match CompletionAnalytics
+// and capture re-completion history for the trend. completionCount is additive
+// (composes with a completionDay date filter). Left-joined to the parents spine
+// for mission/group FILTERING; this fans a completion across its parents, so
+// the measure must be filtered by mission/group, never summed across all
+// parents without DISTINCT (see spec §4.3). Synthetic reportKey stays unique
+// across fanned rows.
+view AuthorTutorialCompletions as
+  select from ims.TaskRecords as tr
+  inner join ims.Tutorials as tut on tut.legacyId = tr.taskLegacyId
+  left  join AuthorTutorialParents as p on p.tutorialSlug = tut.slug
+  {
+    key (
+      tr.ID || '::' || coalesce(p.missionTitle, '~') || '::' || coalesce(p.groupTitle, '~')
+    ) as reportKey : String(600),
+    tr.ID          as recordId       : UUID,
+    tut.slug       as tutorialSlug    : String,
+    tut.title      as tutorialTitle   : String,
+    p.missionTitle as missionTitle    : String,
+    p.groupTitle   as groupTitle      : String,
+    tr.completionDate                 as completionDate : Timestamp,
+    cast(tr.completionDate as Date)   as completionDay  : Date,
+    1              as completionCount : Integer
+  }
+  where tr.taskType = 'TUTORIAL' and tr.status in ('COMPLETED', 'SUPERSEDED');
