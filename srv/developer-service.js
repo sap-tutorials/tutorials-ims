@@ -2,7 +2,7 @@ import cds from '@sap/cds';
 import { calculateTutorialProgress } from './lib/status-calculator.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { hashIp } from './lib/feedback-salt.js';
-import { getMyCompletedTutorials } from './lib/user-progress.js';
+import { getMyCompletedTutorials, getMyInProgressTutorials } from './lib/user-progress.js';
 import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
 import { resolveUser as khorosResolveUser } from './lib/khoros-client.js';
@@ -452,6 +452,10 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('getMyCompletions', async (req) => {
       return getMyCompletedTutorials(req.user);
+    });
+
+    this.on('getMyInProgress', async (req) => {
+      return getMyInProgressTutorials(req.user);
     });
 
     this.on('getEventProgress', async (req) => {

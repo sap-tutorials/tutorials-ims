@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
-import { getUserProgress, getProgressLookup, getMyCompletedTutorials } from '../../srv/lib/user-progress.js';
+import { getUserProgress, getProgressLookup, getMyCompletedTutorials, getMyInProgressTutorials } from '../../srv/lib/user-progress.js';
 
 const schemaPath = path.join(process.cwd(), 'db', 'schema.cds');
 
@@ -308,6 +308,51 @@ describe('user-progress', () => {
       expect(slugs).not.toContain('cap-mission');        // mission, not tutorial
       expect(slugs).not.toContain('beginner-group');     // group, not tutorial
       expect(slugs).not.toContain('fiori-elements');     // untouched control
+    });
+  });
+
+  describe('getMyInProgressTutorials', () => {
+    it('returns an empty array for anonymous users', async () => {
+      const result = await getMyInProgressTutorials({ id: 'anonymous' });
+      expect(result).toEqual([]);
+    });
+
+    it('returns an empty array when user.id maps to no Users row', async () => {
+      const result = await getMyInProgressTutorials({ id: 'unknown-uuid' });
+      expect(result).toEqual([]);
+    });
+
+    it('returns one row per IN_PROGRESS tutorial with progressPercent, lastTouchedAt and full metadata', async () => {
+      const result = await getMyInProgressTutorials({ id: USER_UUID });
+      expect(result).toHaveLength(2);
+      const events = result.find(r => r.slug === 'cap-events');
+      expect(events).toMatchObject({
+        kind: 'tutorial',
+        slug: 'cap-events',
+        title: 'CAP Events',
+        primaryTag: 'CAP',
+        experienceTag: 'intermediate',
+        averageTimeToComplete: 40,
+        progressPercent: 57
+      });
+      expect(events.lastTouchedAt).toBeTruthy();
+    });
+
+    it('orders rows by lastTouchedAt descending (most recently touched first)', async () => {
+      const result = await getMyInProgressTutorials({ id: USER_UUID });
+      // cap-events touched 2026-05-20 is more recent than cap-cds-modeling 2026-03-15
+      expect(result.map(r => r.slug)).toEqual(['cap-events', 'cap-cds-modeling']);
+    });
+
+    it('does NOT include completed tutorials/puzzles, missions, groups, steps, or the untouched control', async () => {
+      const result = await getMyInProgressTutorials({ id: USER_UUID });
+      const slugs = result.map(r => r.slug);
+      expect(slugs).not.toContain('cap-getting-started'); // completed
+      expect(slugs).not.toContain('btp-trial');           // completed
+      expect(slugs).not.toContain('cryptic-crossword');   // completed puzzle
+      expect(slugs).not.toContain('cap-mission');         // mission
+      expect(slugs).not.toContain('beginner-group');      // group
+      expect(slugs).not.toContain('fiori-elements');      // untouched control
     });
   });
 });
