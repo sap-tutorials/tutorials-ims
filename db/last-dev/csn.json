@@ -292,6 +292,10 @@
           "length": 255,
           "@cds.persistence.name": "NAME"
         },
+        "description": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "DESCRIPTION"
+        },
         "startDate": {
           "type": "cds.Timestamp",
           "@cds.persistence.name": "STARTDATE"
@@ -318,6 +322,17 @@
           "length": 36,
           "@odata.foreignKey4": "mission",
           "@cds.persistence.name": "MISSION_ID"
+        },
+        "hasLogo": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "HASLOGO"
+        },
+        "logoUpdatedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "LOGOUPDATEDAT"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EVENTS"

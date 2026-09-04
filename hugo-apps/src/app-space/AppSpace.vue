@@ -10,12 +10,28 @@ const eventId = ref<number | null>(null)
 const isDark = ref(document.documentElement.dataset.theme === 'dark')
 const activeTheme = ref<'joule' | 'sapphire' | null>(null)
 const loadedEventName = ref('')
+const loadedEventDescription = ref('')
+const hasLogo = ref(false)
 
 const eventName = computed(() => {
   if (loadedEventName.value) return loadedEventName.value
   if (activeTheme.value === 'sapphire') return 'SAP Sapphire 2026'
   return 'SAP TechEd'
 })
+
+// Event description pulled from the related event (#2133); falls back to the
+// generic App Space blurb when the event has no description maintained.
+const eventDescription = computed(() =>
+  loadedEventDescription.value ||
+  'Pick a track, complete the tutorials, and earn prizes along the way.'
+)
+
+// Logo lockup served anonymously from HANA when the event has one (#2133).
+const logoUrl = computed(() =>
+  hasLogo.value && eventId.value
+    ? `/api/event-logo?eventLegacyId=${eventId.value}`
+    : ''
+)
 
 // ── Interfaces ─────────────────────────────────────────────────────
 interface AppSpaceItem {
@@ -41,6 +57,8 @@ interface AppSpaceTrack {
 interface AppSpaceData {
   eventId: number
   eventName: string
+  eventDescription?: string
+  hasLogo?: boolean
   type: string
   paths: AppSpaceTrack[]
 }
@@ -108,6 +126,8 @@ onMounted(async () => {
   if (data) {
     tracks.value = data.paths
     if (data.eventName) loadedEventName.value = data.eventName
+    if (data.eventDescription) loadedEventDescription.value = data.eventDescription
+    hasLogo.value = Boolean(data.hasLogo)
   }
   loading.value = false
 })
@@ -278,10 +298,16 @@ const emptyStateMessage = computed(() => {
     <section class="hero">
       <div class="hero-inner">
         <div class="hero-text">
+          <img
+            v-if="logoUrl"
+            class="hero-logo"
+            :src="logoUrl"
+            :alt="eventName + ' logo'"
+          />
           <h1 class="hero-title">{{ eventName }}</h1>
           <p class="hero-subtitle">Developer Garage &mdash; App Space</p>
           <p class="hero-desc">
-            Pick a track, complete the tutorials, and earn prizes along the way.
+            {{ eventDescription }}
           </p>
         </div>
         <div class="hero-stats" v-if="tracks.length > 0">
@@ -537,6 +563,16 @@ const emptyStateMessage = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 2rem;
+}
+
+.hero-logo {
+  max-height: 72px;
+  max-width: min(70%, 360px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  margin: 0 0 1rem;
+  display: block;
 }
 
 .hero-title {

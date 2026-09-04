@@ -293,6 +293,7 @@ entity DeveloperEnvironmentLinks : cuid, LegacyKeyed {
 
 entity Events : cuid, managed, LegacyKeyed {
   name                      : String(255);
+  description               : LargeString;   // Shown on the app-space hero (#2133)
   startDate                 : Timestamp;
   endDate                   : Timestamp;
   timeZone                  : String(50);
@@ -300,6 +301,27 @@ entity Events : cuid, managed, LegacyKeyed {
   mission                   : Association to Missions;
   taskRecords               : Association to many TaskRecords on taskRecords.event = $self;
   prizes                    : Association to many Prizes on prizes.event = $self;
+  // Event logo lockup (#2133). hasLogo/logoUpdatedAt mirror DevtoberfestConfig's
+  // hasBanner/bannerUpdatedAt so serving handlers can 404 fast without a BLOB read.
+  hasLogo                   : Boolean default false;
+  logoUpdatedAt             : Timestamp;
+  logo                      : Composition of one EventLogo on logo.event = $self;
+}
+
+// Per-event logo lockup image (#2133). 1:1 composition: the association IS the
+// key, so exactly one logo row exists per event. Mirrors DevtoberfestBanner
+// (db/devtoberfest.cds). Bytes are a single WebP rendition produced by the
+// sharp pipeline in srv/lib/event-logo-store.js. Served publicly (anonymous)
+// via GET /api/event-logo?eventLegacyId=N for the event-display + app-space pages.
+entity EventLogo {
+  key event     : Association to Events not null;
+  image         : LargeBinary @Core.MediaType: mimeType;
+  mimeType      : String(40)  @Core.IsMediaType default 'image/webp';
+  sizeBytes     : Integer;
+  sha256        : String(64);
+  width         : Integer;
+  height        : Integer;
+  uploadedAt    : Timestamp;
 }
 
 entity Prizes : cuid, LegacyKeyed {

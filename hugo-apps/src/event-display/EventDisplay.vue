@@ -14,6 +14,8 @@ const {
   totalCount,
   connectionState,
   errorMessage,
+  eventName,
+  hasLogo,
   connect,
   startDemo,
   disconnect,
@@ -63,10 +65,20 @@ const visibleBuckets = computed(() => {
 })
 
 const eventLabel = computed(() => {
+  // Prefer the real event name fetched from the related event (#2133); fall
+  // back to the theme-derived label when the name is unavailable (e.g. demo).
+  if (eventName.value) return eventName.value
   if (activeTheme.value === 'sapphire') return 'SAP Sapphire'
   if (activeTheme.value === 'joule') return 'SAP TechEd'
   return 'Event'
 })
+
+// Logo lockup served anonymously from HANA when the event has one (#2133).
+const logoUrl = computed(() =>
+  !isDemo.value && hasLogo.value && eventId.value
+    ? `/api/event-logo?eventLegacyId=${eventId.value}`
+    : ''
+)
 
 const showSetup = computed(() =>
   !isDemo.value && !eventId.value
@@ -161,6 +173,12 @@ onMounted(() => {
       <!-- Hero -->
       <section class="hero">
         <div class="hero-content">
+          <img
+            v-if="logoUrl"
+            class="hero-logo"
+            :src="logoUrl"
+            :alt="eventLabel + ' logo'"
+          />
           <p class="hero-label">{{ isDemo ? 'Demo Mode' : eventLabel }} &mdash; Live</p>
           <div class="hero-counter">{{ formatCount(displayedCount) }}</div>
           <p class="hero-subtitle">tutorials completed</p>
@@ -276,6 +294,16 @@ onMounted(() => {
 .hero-content {
   max-width: 800px;
   margin: 0 auto;
+}
+
+.hero-logo {
+  max-height: 96px;
+  max-width: min(80%, 480px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  margin: 0 auto 1.25rem;
+  display: block;
 }
 
 .hero-label {

@@ -635,7 +635,9 @@ export default class DeveloperService extends cds.ApplicationService {
       return {
         eventId: event.legacyId,
         eventName: event.name || '',
+        eventDescription: event.description || '',
         eventType: event.eventType ?? 'OTHER',
+        hasLogo: Boolean(event.hasLogo),
         type: 'COMPLEX',
         paths: paths.map(p => {
           const items = allItems

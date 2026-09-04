@@ -28,6 +28,9 @@ export function useEventStream() {
   const totalCount = ref(0)
   const connectionState = ref<ConnectionState>('idle')
   const errorMessage = ref('')
+  const eventName = ref('')
+  const eventType = ref('')
+  const hasLogo = ref(false)
 
   let socket: Socket | null = null
   let demoInterval: ReturnType<typeof setInterval> | null = null
@@ -64,13 +67,23 @@ export function useEventStream() {
     errorMessage.value = ''
     const url = String(baseUrl).replace(/\/+$/, '')
 
-    // Fetch initial bucket data from unauthenticated EventStreamService
+    // Fetch initial bucket data + event metadata from unauthenticated
+    // EventStreamService. getEventBuckets now returns a structured object
+    // { eventName, eventType, hasLogo, buckets:[...] } (#2133); older array
+    // shapes are tolerated for forward/backward safety.
     try {
       const res = await fetch(`${url}/rest/event-stream/getEventBuckets(eventLegacyId=${eventId})`)
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       const json = await res.json()
-      const data: Array<{ bucketName: string; count: number }> = json.value ?? json
-      buckets.value = data.map(b => ({ name: b.bucketName, count: b.count, justUpdated: false }))
+      const payload = json.value ?? json
+      const list: Array<{ bucketName: string; count: number }> =
+        Array.isArray(payload) ? payload : (payload.buckets ?? [])
+      if (!Array.isArray(payload)) {
+        eventName.value = payload.eventName ?? ''
+        eventType.value = payload.eventType ?? ''
+        hasLogo.value = Boolean(payload.hasLogo)
+      }
+      buckets.value = list.map(b => ({ name: b.bucketName, count: b.count, justUpdated: false }))
       sortBuckets()
       recalcTotal()
     } catch (e) {
@@ -137,6 +150,9 @@ export function useEventStream() {
     totalCount: readonly(totalCount),
     connectionState: readonly(connectionState),
     errorMessage: readonly(errorMessage),
+    eventName: readonly(eventName),
+    eventType: readonly(eventType),
+    hasLogo: readonly(hasLogo),
     connect,
     startDemo,
     disconnect,

@@ -175,10 +175,12 @@ service DeveloperService {
   // App Space progress by event ID (frontend default: latest event)
   @(requires: 'authenticated-user')
   function getAppSpaceProgress(eventLegacyId : Integer) returns {
-    eventId   : Integer;
-    eventName : String;
-    eventType : String;
-    type      : String;
+    eventId          : Integer;
+    eventName        : String;
+    eventDescription : String;
+    eventType        : String;
+    hasLogo          : Boolean;
+    type             : String;
     paths     : many {
       id          : Integer;
       title       : String;

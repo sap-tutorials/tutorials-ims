@@ -46,6 +46,7 @@ import { modelJsonHandler } from './lib/model-json-handler.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
+import * as eventLogoPublic from './routes/event-logo-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
 import * as devtoberfestScheduleCheck from './routes/devtoberfest-schedule-check.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
@@ -473,6 +474,7 @@ cds.on('bootstrap', (app) => {
   // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   advocatesPublic.register(app);
   devtoberfestPublic.register(app);
+  eventLogoPublic.register(app);
   devtoberfestSchedule.register(app);
   devtoberfestScheduleCheck.register(app);
   devtoberfestAuth.register(app);
