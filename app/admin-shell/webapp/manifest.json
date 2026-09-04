@@ -96,7 +96,8 @@
       "sap.tutorials.admin.pats": "./components/pats",
       "sap.tutorials.admin.featureFlags": "./components/featureFlags",
       "sap.tutorials.admin.petoberfest": "./components/petoberfest",
-      "sap.tutorials.admin.channels": "./components/channels"
+      "sap.tutorials.admin.channels": "./components/channels",
+      "sap.tutorials.admin.channelCollections": "./components/channel-collections"
     },
     "models": {
       "admin": {
@@ -397,6 +398,12 @@
       },
       "channelsComponent": {
         "name": "sap.tutorials.admin.channels",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "channelCollectionsComponent": {
+        "name": "sap.tutorials.admin.channelCollections",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -941,6 +948,16 @@
           ]
         },
         {
+          "name": "channelCollections",
+          "pattern": "channel-collections",
+          "target": [
+            {
+              "name": "channelCollectionsTarget",
+              "prefix": "cc"
+            }
+          ]
+        },
+        {
           "name": "feedbackDashboard",
           "pattern": "feedback/dashboard",
           "target": "feedbackDashboardTarget"
@@ -1303,6 +1320,13 @@
           "id": "channelsTarget",
           "viewLevel": 1,
           "prefix": "ch"
+        },
+        "channelCollectionsTarget": {
+          "type": "Component",
+          "usage": "channelCollectionsComponent",
+          "id": "channelCollectionsTarget",
+          "viewLevel": 1,
+          "prefix": "cc"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",

@@ -52,3 +52,5 @@ annotate ims.MetricSnapshots with @cds.persistence.journal;
 annotate ims.PublishTimings with @cds.persistence.journal;
 annotate ims.TutorialValidationRules with @cds.persistence.journal;
 annotate ims.Channels with @cds.persistence.journal;
+annotate ims.ChannelCollections with @cds.persistence.journal;
+annotate ims.ChannelCollectionItems with @cds.persistence.journal;

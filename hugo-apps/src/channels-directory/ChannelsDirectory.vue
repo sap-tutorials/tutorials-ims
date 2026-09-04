@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { filterChannels, ownerBadge, type Channel } from './filter';
+import { visibleCollections, type Collection } from './collections';
 
-const props = defineProps<{ channels: Channel[] }>();
+const props = defineProps<{ channels: Channel[]; collections?: Collection[] }>();
 const query = ref('');
 const category = ref('');
 const platform = ref('');
@@ -23,10 +24,23 @@ const results = computed(() =>
   }));
 const badgeClass = (c: Channel) =>
   c.isSapOwned || ownerBadge(c).startsWith('SAP') ? 'badge--sap' : 'badge--community';
+const cols = computed(() => visibleCollections(props.collections));
 </script>
 
 <template>
   <div class="channels-directory">
+    <section v-if="cols.length" class="channel-collections">
+      <article v-for="col in cols" :key="col.slug" class="collection">
+        <h2>{{ col.title }}</h2>
+        <p v-if="col.intro" class="collection-intro">{{ col.intro }}</p>
+        <ul>
+          <li v-for="it in col.items" :key="it.url">
+            <a :href="it.url">{{ it.name }}</a>
+            <span v-if="it.blurb" class="blurb">— {{ it.blurb }}</span>
+          </li>
+        </ul>
+      </article>
+    </section>
     <div class="channels-directory__controls">
       <input v-model="query" type="search" placeholder="Search channels…" aria-label="Search channels" />
       <select v-model="ownerScope" aria-label="Ownership">

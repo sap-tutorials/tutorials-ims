@@ -1,0 +1,15 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ChannelCollections (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(80),
+  title NVARCHAR(140),
+  intro NVARCHAR(1200),
+  sortOrder INTEGER DEFAULT 100,
+  isPublished BOOLEAN DEFAULT FALSE,
+  authoringStatus NVARCHAR(5000) DEFAULT 'BLANK',
+  PRIMARY KEY(ID)
+)
