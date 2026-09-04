@@ -516,3 +516,59 @@ view DormantAuthors as
     and t.status          = 'ACTIVE'
     and u.email is not null
   group by u.email, u.displayName;
+
+// ---------------------------------------------------------------------------
+// Standard reports (#2138) — author-facing reporting views.
+// See docs/superpowers/specs/2026-09-04-2138-standard-reports-design.md
+// ---------------------------------------------------------------------------
+
+// Per-tutorial engagement, all-time. DISTINCT-user counts are mandatory: the
+// reset/re-take flow leaves a user with SUPERSEDED + IN_PROGRESS rows for one
+// tutorial, so COUNT(*) would double-count. Grain: 1 row per tutorialSlug.
+entity TutorialEngagementBase as
+  select from ims.TaskRecords as tr
+  inner join ims.Tutorials as tut on tut.legacyId = tr.taskLegacyId
+  {
+    key tut.slug as tutorialSlug : String,
+    count(distinct tr.user.ID)                                                as startedLearners   : Integer,
+    count(distinct case when tr.status = 'COMPLETED' then tr.user.ID end)     as completedLearners : Integer,
+    sum(case when tr.status = 'COMPLETED' then 1 else 0 end)                  as completions       : Integer,
+    min(case when tr.status = 'COMPLETED' then tr.completionDate end)         as firstCompletion   : Timestamp,
+    max(case when tr.status = 'COMPLETED' then tr.completionDate end)         as lastCompletion    : Timestamp
+  }
+  where tr.taskType = 'TUTORIAL'
+  group by tut.slug;
+
+// Tutorial -> (mission, group) containment spine, mirroring NavigatorCatalog
+// but (a) WITHOUT the mission.published filter (authors need in-progress
+// content) and (b) adding a UNION for group-direct tutorials (missionTitle
+// NULL). Feeds the Vue survey filter dropdowns and the engagement/completions
+// mission/group columns. Distinct via UNION.
+view AuthorTutorialParents as
+  (
+    select from ims.CompletionPathItems as item
+    inner join ims.Tutorials      as tut     on tut.legacyId = item.taskLegacyId
+    inner join ims.CompletionPaths as path   on path.ID      = item.path.ID
+    inner join ims.Missions       as mission on mission.ID   = path.mission.ID
+    left  join ims.Groups         as grp     on grp.ID       = mission.group.ID
+    {
+      tut.slug      as tutorialSlug  : String,
+      tut.title     as tutorialTitle : String,
+      mission.title as missionTitle  : String,
+      grp.title     as groupTitle    : String
+    }
+    where item.taskType = 'TUTORIAL' and tut.slug is not null
+  )
+  union
+  (
+    select from ims.GroupPathItems as gitem
+    inner join ims.Tutorials as tut on tut.ID  = gitem.tutorial.ID
+    inner join ims.Groups    as grp on grp.ID  = gitem.group.ID
+    {
+      tut.slug            as tutorialSlug  : String,
+      tut.title           as tutorialTitle : String,
+      null as missionTitle                 : String,
+      grp.title           as groupTitle    : String
+    }
+    where tut.slug is not null
+  );
