@@ -1,0 +1,19 @@
+{{ define "main" }}
+{{- $channels := (.Site.Data.channels.channels) | default slice -}}
+<section class="channels-page">
+  <header class="channels-page__intro">
+    <h1>{{ .Title }}</h1>
+    <p>{{ .Description }}</p>
+  </header>
+  <script id="channels-data" type="application/json">{{ $channels | jsonify }}</script>
+  <div data-island="channels-directory"></div>
+  <noscript>
+    <ul>
+      {{- range $channels }}
+      <li><a href="{{ .url }}" target="_blank" rel="noopener">{{ .name }}</a> — {{ .purpose }}</li>
+      {{- end }}
+    </ul>
+  </noscript>
+</section>
+<script type="module" src="{{ partial "island-src.html" "channels-directory" }}"></script>
+{{ end }}
