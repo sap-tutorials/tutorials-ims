@@ -4,6 +4,7 @@ import { filterChannels } from './filter';
 const data = [
   { name: 'BTP Docs', category: 'Portal', platform: 'Web', isSapOwned: true, purpose: 'docs', tags: ['btp'] },
   { name: 'Reddit SAP', category: 'Community', platform: 'Web', isSapOwned: false, purpose: 'forum', tags: ['community'] },
+  { name: 'SAP YouTube', category: 'Video', platform: 'YouTube', isSapOwned: true, purpose: 'tutorials', tags: ['video'] },
 ];
 
 describe('filterChannels', () => {
@@ -12,11 +13,21 @@ describe('filterChannels', () => {
     expect(filterChannels(data, { query: 'btp' }).map((c) => c.name)).toEqual(['BTP Docs']);
   });
   it('filters by owner scope', () => {
-    expect(filterChannels(data, { ownerScope: 'sap' }).map((c) => c.name)).toEqual(['BTP Docs']);
+    expect(filterChannels(data, { ownerScope: 'sap' }).map((c) => c.name)).toEqual(['BTP Docs', 'SAP YouTube']);
     expect(filterChannels(data, { ownerScope: 'community' }).map((c) => c.name)).toEqual(['Reddit SAP']);
   });
   it('filters by category and platform', () => {
     expect(filterChannels(data, { category: 'Portal' })).toHaveLength(1);
+    // Web filter excludes the YouTube entry — proves exclusion
     expect(filterChannels(data, { platform: 'Web' })).toHaveLength(2);
+    expect(filterChannels(data, { platform: 'YouTube' })).toHaveLength(1);
+  });
+  it('applies multiple facets together (only rows matching ALL survive)', () => {
+    // community + query: only Reddit SAP matches both
+    expect(filterChannels(data, { query: 'forum', ownerScope: 'community' }).map((c) => c.name)).toEqual(['Reddit SAP']);
+    // sap + category Portal: only BTP Docs matches both
+    expect(filterChannels(data, { category: 'Portal', ownerScope: 'sap' }).map((c) => c.name)).toEqual(['BTP Docs']);
+    // sap + Web: BTP Docs only (SAP YouTube is sap but not Web)
+    expect(filterChannels(data, { ownerScope: 'sap', platform: 'Web' }).map((c) => c.name)).toEqual(['BTP Docs']);
   });
 });
