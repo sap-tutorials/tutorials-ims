@@ -30,6 +30,28 @@ export function renderTopicDetail(topic) {
       </section>`
     : '';
 
+  const badgeFor = (t) => {
+    switch (t) {
+      case 'SAP_Official': return 'SAP';
+      case 'SAP_Developer_Advocate': return 'SAP Advocate';
+      case 'User_Group': return 'User Group';
+      case 'Community_Member':
+      case 'Community_Organization': return 'Community';
+      default: return 'Third-party';
+    }
+  };
+  const channelItems = (topic.relatedChannels || []).map((c) => `
+      <li class="topic-channels__item">
+        <a href="${esc(c.url)}" rel="noopener" target="_blank">${esc(c.name)}</a>
+        <span class="topic-channels__badge" data-owner="${esc(c.ownerType || '')}">${esc(badgeFor(c.ownerType))}</span>
+      </li>`).join('');
+  const channelsSection = channelItems
+    ? `<section class="topic-channels" aria-labelledby="topic-channels-h">
+        <h2 id="topic-channels-h">Related channels</h2>
+        <ul class="topic-channels__list" role="list">${channelItems}</ul>
+      </section>`
+    : '';
+
   const body = `<main>
   <article class="topic-detail">
     <nav class="topic-breadcrumb" aria-label="Breadcrumb">
@@ -49,6 +71,7 @@ export function renderTopicDetail(topic) {
     </section>
     ${conceptsSection}
     ${relatedSection}
+    ${channelsSection}
   </article>
 </main>`;
   const contentHash = createHash('sha256').update(body, 'utf-8').digest('hex');
