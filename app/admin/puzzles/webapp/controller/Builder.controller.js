@@ -755,6 +755,7 @@ sap.ui.define([
           id: slot.id,
           dir: slot.dir,
           label: label,
+          num: num,
           len: slot.len,
           clue: clues[slot.id] || "",
           hint: hints[slot.id] || "",
@@ -766,6 +767,17 @@ sap.ui.define([
           down.push(item);
         }
       });
+
+      // findSlots emits Down slots in column-major (grid-position) order, but
+      // clue numbers are assigned row-major — so sort both lists by clue number
+      // to list them in the numeric order authors expect (#2140).
+      var byNumber = function (a, b) {
+        var na = a.num == null ? Number.MAX_SAFE_INTEGER : a.num;
+        var nb = b.num == null ? Number.MAX_SAFE_INTEGER : b.num;
+        return na - nb;
+      };
+      across.sort(byNumber);
+      down.sort(byNumber);
 
       b.setProperty("/slotsAcross", across);
       b.setProperty("/slotsDown", down);
