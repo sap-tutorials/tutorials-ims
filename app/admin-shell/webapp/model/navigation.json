@@ -25,6 +25,7 @@
         { "key": "channels", "title": "Channels" },
         { "key": "channelCollections", "title": "Channel Collections" },
         { "key": "channelTopicMap", "title": "Channel Topic Map" },
+        { "key": "channelSubmissions", "title": "Channel Submissions" },
         { "key": "operations", "title": "Featured Tasks" }
       ]
     },
