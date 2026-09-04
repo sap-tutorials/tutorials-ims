@@ -21,11 +21,6 @@ vi.mock('../../api/survey', () => ({
   ]),
 }))
 
-// Stub ChartRenderer (ECharts needs a real canvas; we only assert wiring).
-vi.mock('../../components/ChartRenderer.vue', () => ({
-  default: { name: 'ChartRenderer', props: ['chartType', 'data', 'dimensions', 'measures'], template: '<div class="chart-stub" />' }
-}))
-vi.mock('../../composables/useChartTheme', () => ({ installChartTheme: vi.fn() }))
 vi.mock('../../composables/useAuth', () => ({
   useAuth: () => ({ servicePath: { value: '/author/' }, userRole: { value: 'author' } })
 }))
@@ -35,11 +30,29 @@ import SurveyReport from '../SurveyReport.vue'
 describe('SurveyReport', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('renders one chart per survey dimension after loading parents + distribution', async () => {
+  it('renders one tile per survey dimension after loading parents + distribution', async () => {
     const w = mount(SurveyReport)
     await flushPromises()
-    // 7 dimensions => 7 ChartRenderer stubs
-    expect(w.findAll('.chart-stub').length).toBe(7)
+    // 7 dimensions => 7 chart cells
+    expect(w.findAll('.chart-cell').length).toBe(7)
+  })
+
+  it('renders a histogram for a dimension with responses and its full question prompt', async () => {
+    const w = mount(SurveyReport)
+    await flushPromises()
+    // The 'structure' dimension has 2 responses at score 8 => one histogram with
+    // 11 bars (scores 0–10) and the response count in the caption.
+    expect(w.findAll('.histogram').length).toBe(1)
+    expect(w.findAll('.histogram')[0].findAll('.bar-col').length).toBe(11)
+    expect(w.text()).toContain('2 responses')
+    expect(w.text()).toContain('The tutorial was well structured.')
+  })
+
+  it('shows an empty state for dimensions with no responses', async () => {
+    const w = mount(SurveyReport)
+    await flushPromises()
+    // 6 of 7 dimensions have no data in the stub => 6 "No responses yet" tiles.
+    expect(w.findAll('.chart-cell .empty-state').length).toBe(6)
   })
 
   it('renders the comments returned by the API', async () => {

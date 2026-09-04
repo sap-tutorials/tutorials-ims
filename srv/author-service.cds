@@ -35,6 +35,13 @@ service AuthorService {
   @readonly entity AuthorSurveyDistribution  as projection on ims.AuthorSurveyDistribution;
   @readonly entity AuthorTutorialParents     as projection on ims.AuthorTutorialParents;
 
+  // #2138 — value-help collections for the engagement/completions report filter
+  // bars. The FE reports' mainService is /author/, so the mission/group filter
+  // @Common.ValueList (app/author-annotations.cds) must resolve its CollectionPath
+  // here, not on AnalyticsService. Mirrors AnalyticsService.Missions/Groups.
+  @readonly entity Missions as projection on ims.Missions;
+  @readonly entity Groups   as projection on ims.Groups;
+
   @readonly entity CodeCheckSubmissions   as projection on ims.CodeCheckSubmissions {
     ID, tutorialSlug, stepNumber, language, verdict, modelName,
     promptTokens, completionTokens, latencyMs, errorReason,
