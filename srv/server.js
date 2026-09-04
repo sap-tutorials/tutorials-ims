@@ -462,7 +462,7 @@ cds.on('bootstrap', (app) => {
   });
 
   // P2: editorial collections leading the /channels directory landing.
-  // Consumed by scripts/fetch-channels.ts at build time. Public, unauthenticated.
+  // Consumed by scripts/fetch-channel-collections.ts at build time. Public, unauthenticated.
   // Cache-Control 60s. Filters to isPublished=true + authoringStatus='REVIEWED'
   // collections; items filtered to published channels with linkStatus!='BROKEN'
   // (override wins); collections ordered by sortOrder,title; items by sortOrder.

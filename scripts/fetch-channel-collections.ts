@@ -2,7 +2,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const CAP_BASE = process.env.CAP_BASE_URL || 'http://localhost:4004';
-const OUT = resolve('hugo/data/channel-collections.json');
+const OUT = resolve('hugo/data/channel_collections.json');
 
 async function main() {
   let payload: Record<string, unknown> = { collections: [], buildAt: new Date().toISOString() };

@@ -7,7 +7,8 @@ function boot() {
     let channels: unknown[] = [];
     try { channels = JSON.parse(dataEl?.textContent || '[]'); } catch { channels = []; }
     const collectionsEl = document.getElementById('channel-collections-data');
-    const collections = collectionsEl ? JSON.parse(collectionsEl.textContent || '[]') : [];
+    let collections: unknown[] = [];
+    try { collections = JSON.parse(collectionsEl?.textContent || '[]'); } catch { collections = []; }
     createApp(ChannelsDirectory, { channels, collections }).mount(el);
   });
 }
