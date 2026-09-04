@@ -55,6 +55,7 @@
     "seed-channels": "cds bind --exec -- node scripts/seed-channels.cjs",
     "promote-channels": "cds bind --exec -- node scripts/promote-channels-to-shelves.cjs",
     "seed-collections": "cds bind --exec -- node scripts/seed-collections.cjs",
+    "seed-channel-topic-map": "cds bind --exec -- node scripts/seed-channel-topic-map.cjs",
     "seed-tag-labels": "tsx scripts/seed-tag-labels.ts",
     "migrate:reference": "node scripts/migrate-reference-data.js",
     "migrate:users": "node scripts/migrate-user-progress.js",
