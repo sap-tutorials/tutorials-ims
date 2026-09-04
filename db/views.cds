@@ -516,3 +516,169 @@ view DormantAuthors as
     and t.status          = 'ACTIVE'
     and u.email is not null
   group by u.email, u.displayName;
+
+// ---------------------------------------------------------------------------
+// Standard reports (#2138) — author-facing reporting views.
+// See docs/superpowers/specs/2026-09-04-2138-standard-reports-design.md
+// ---------------------------------------------------------------------------
+
+// Per-tutorial engagement, all-time. DISTINCT-user counts are mandatory: the
+// reset/re-take flow leaves a user with SUPERSEDED + IN_PROGRESS rows for one
+// tutorial, so COUNT(*) would double-count. Grain: 1 row per tutorialSlug.
+entity TutorialEngagementBase as
+  select from ims.TaskRecords as tr
+  inner join ims.Tutorials as tut on tut.legacyId = tr.taskLegacyId
+  {
+    key tut.slug as tutorialSlug : String,
+    count(distinct tr.user.ID)                                                as startedLearners   : Integer,
+    count(distinct case when tr.status = 'COMPLETED' then tr.user.ID end)     as completedLearners : Integer,
+    sum(case when tr.status = 'COMPLETED' then 1 else 0 end)                  as completions       : Integer,
+    min(case when tr.status = 'COMPLETED' then tr.completionDate end)         as firstCompletion   : Timestamp,
+    max(case when tr.status = 'COMPLETED' then tr.completionDate end)         as lastCompletion    : Timestamp
+  }
+  where tr.taskType = 'TUTORIAL'
+  group by tut.slug;
+
+// Tutorial -> (mission, group) containment spine, mirroring NavigatorCatalog
+// but (a) WITHOUT the mission.published filter (authors need in-progress
+// content) and (b) adding a UNION for group-direct tutorials (missionTitle
+// NULL). Feeds the Vue survey filter dropdowns and the engagement/completions
+// mission/group columns. Distinct via UNION.
+view AuthorTutorialParents as
+  (
+    select from ims.CompletionPathItems as item
+    inner join ims.Tutorials      as tut     on tut.legacyId = item.taskLegacyId
+    inner join ims.CompletionPaths as path   on path.ID      = item.path.ID
+    inner join ims.Missions       as mission on mission.ID   = path.mission.ID
+    left  join ims.Groups         as grp     on grp.ID       = mission.group.ID
+    {
+      key(tut.slug || '::' || coalesce(mission.title, '~') || '::' || coalesce(grp.title, '~')) as parentKey : String(600),
+      tut.slug      as tutorialSlug  : String,
+      tut.title     as tutorialTitle : String,
+      mission.title as missionTitle  : String,
+      grp.title     as groupTitle    : String
+    }
+    where item.taskType = 'TUTORIAL' and tut.slug is not null
+  )
+  union
+  (
+    select from ims.GroupPathItems as gitem
+    inner join ims.Tutorials as tut on tut.ID  = gitem.tutorial.ID
+    inner join ims.Groups    as grp on grp.ID  = gitem.group.ID
+    {
+      key(tut.slug || '::' || '~' || '::' || coalesce(grp.title, '~')) as parentKey : String(600),
+      tut.slug            as tutorialSlug  : String,
+      tut.title           as tutorialTitle : String,
+      null as missionTitle                 : String,
+      grp.title           as groupTitle    : String
+    }
+    where tut.slug is not null
+  );
+
+// Report A — Tutorial Engagement (FE Analytical List Page). Pre-aggregated,
+// all-time (no date slicer: distinct counts don't compose with a date range).
+// Grain: EXACTLY 1 row per tutorialSlug (#2138 finding-1 split-grain fix). The
+// previous design fanned each tutorial to one row per (mission, group) parent so
+// a mission/group filter could work; the FE chart's $apply groupby+sum then
+// over-counted a reused tutorial N× in the DEFAULT (unfiltered) chart. We now
+// de-fan: TutorialEngagementBase already carries the correct DISTINCT counts per
+// tutorialSlug; join ims.Tutorials for the title (slug↔title 1:1, no fan).
+// mission/group filtering resolves through the `parents` to-many association
+// (a tutorial may sit in several missions/groups) — never a summed join.
+view AuthorTutorialEngagement as
+  select from TutorialEngagementBase as e
+  inner join ims.Tutorials as tut on tut.slug = e.tutorialSlug
+  {
+    key e.tutorialSlug   as tutorialSlug      : String,
+    tut.title            as tutorialTitle     : String,
+    e.startedLearners    as startedLearners   : Integer,
+    e.completedLearners  as completedLearners : Integer,
+    e.completions        as completions       : Integer,
+    cast(e.completedLearners as Decimal(5,2)) * 100 / nullif(e.startedLearners, 0)
+                         as completionRatePct : Decimal(5,2),
+    e.firstCompletion    as firstCompletion   : Timestamp,
+    e.lastCompletion     as lastCompletion    : Timestamp,
+    // mission/group filtering resolves through the parents spine (to-many:
+    // a tutorial may sit in several missions/groups)
+    parents : Association to many AuthorTutorialParents
+                on parents.tutorialSlug = tutorialSlug
+  };
+
+// Report B — Tutorial Completions (FE List Report). Grain: EXACTLY 1 row per
+// completion event (TaskRecords.ID) (#2138 finding-1 split-grain fix). status
+// IN (COMPLETED, SUPERSEDED) to match CompletionAnalytics and capture
+// re-completion history for the trend. The previous design left-joined the
+// parents spine, fanning each completion across its parents so completionCount=1
+// was summed N× per day for a reused tutorial. We now de-fan: one row per event,
+// completionCount summed once; mission/group filtering resolves through the
+// `parents` to-many association, never a summed join.
+view AuthorTutorialCompletions as
+  select from ims.TaskRecords as tr
+  inner join ims.Tutorials as tut on tut.legacyId = tr.taskLegacyId
+  {
+    key tr.ID          as recordId        : UUID,
+    tut.slug           as tutorialSlug    : String,
+    tut.title          as tutorialTitle   : String,
+    tr.completionDate                     as completionDate : Timestamp,
+    cast(tr.completionDate as Date)       as completionDay  : Date,
+    1                  as completionCount : Integer,
+    // mission/group filtering resolves through the parents spine (to-many)
+    parents : Association to many AuthorTutorialParents
+                on parents.tutorialSlug = tutorialSlug
+  }
+  where tr.taskType = 'TUTORIAL' and tr.status in ('COMPLETED', 'SUPERSEDED');
+
+// Report C — Tutorial Survey (Vue). Unpivots the 7 survey dimensions into
+// (tutorialSlug, dimension, score, responseCount). Null scores excluded per
+// dimension. The Vue page sums responseCount per (dimension, score) over the
+// filtered slug set and renders % = bucket ÷ dimension-total. Composite key
+// (tutorialSlug, dimension, score) is unique after the per-leg GROUP BY.
+entity AuthorSurveyDistribution as
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'structure' as dimension : String(20),
+         key ratingStructure as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingStructure is not null group by tutorialSlug, ratingStructure)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'interesting' as dimension : String(20),
+         key ratingInteresting as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingInteresting is not null group by tutorialSlug, ratingInteresting)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'useCase' as dimension : String(20),
+         key ratingUseCase as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingUseCase is not null group by tutorialSlug, ratingUseCase)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'relevance' as dimension : String(20),
+         key ratingRelevance as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingRelevance is not null group by tutorialSlug, ratingRelevance)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'duration' as dimension : String(20),
+         key ratingDuration as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingDuration is not null group by tutorialSlug, ratingDuration)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'visuals' as dimension : String(20),
+         key ratingVisuals as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingVisuals is not null group by tutorialSlug, ratingVisuals)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'nps' as dimension : String(20),
+         key npsScore as score : Integer,
+         count(*) as responseCount : Integer
+       } where npsScore is not null group by tutorialSlug, npsScore);
