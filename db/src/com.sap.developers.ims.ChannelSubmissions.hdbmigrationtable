@@ -1,0 +1,17 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ChannelSubmissions (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  kind NVARCHAR(5000),
+  targetChannel_ID NVARCHAR(36),
+  proposed NCLOB,
+  rationale NVARCHAR(1000),
+  submitterId NVARCHAR(120),
+  status NVARCHAR(5000) DEFAULT 'PENDING',
+  reviewerId NVARCHAR(120),
+  reviewNote NVARCHAR(800),
+  PRIMARY KEY(ID)
+)
