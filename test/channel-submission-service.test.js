@@ -37,9 +37,23 @@ describe('ChannelSubmissionService', () => {
     expect(row.reviewNote).toBeNull();
   });
 
-  test('service is insert-only — READ is not allowed', async () => {
+  test('service is insert-only — READ is rejected 405 Method Not Allowed', async () => {
+    // CAP 10 answers a READ on an @insertonly entity with 405 (not a generic 4xx/5xx).
+    // Asserting the exact code proves the entity is insert-only rather than merely erroring.
     await expect(
       project.get('/channel-submissions/Submissions', authUser),
-    ).rejects.toMatchObject({ response: { status: expect.any(Number) } });
+    ).rejects.toMatchObject({ response: { status: 405 } });
+  });
+
+  test('EDIT without a target channel is rejected at submit time (400)', async () => {
+    await expect(
+      project.post('/channel-submissions/Submissions', { kind: 'EDIT', proposed: '{}' }, authUser),
+    ).rejects.toMatchObject({ response: { status: 400 } });
+  });
+
+  test('REMOVE without a target channel is rejected at submit time (400)', async () => {
+    await expect(
+      project.post('/channel-submissions/Submissions', { kind: 'REMOVE', proposed: '{}' }, authUser),
+    ).rejects.toMatchObject({ response: { status: 400 } });
   });
 });
