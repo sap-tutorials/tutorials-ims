@@ -6,7 +6,9 @@ function boot() {
     const dataEl = document.getElementById('channels-data');
     let channels: unknown[] = [];
     try { channels = JSON.parse(dataEl?.textContent || '[]'); } catch { channels = []; }
-    createApp(ChannelsDirectory, { channels }).mount(el);
+    const collectionsEl = document.getElementById('channel-collections-data');
+    const collections = collectionsEl ? JSON.parse(collectionsEl.textContent || '[]') : [];
+    createApp(ChannelsDirectory, { channels, collections }).mount(el);
   });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

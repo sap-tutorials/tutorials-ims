@@ -5,7 +5,10 @@
     <h1>{{ .Title }}</h1>
     <p>{{ .Description }}</p>
   </header>
-  <script id="channels-data" type="application/json">{{ $channels | jsonify | safeJS }}</script>
+  <script id="channel-collections-data" type="application/json">
+      {{ with .Site.Data.channel_collections }}{{ .collections | jsonify }}{{ else }}[]{{ end }}
+    </script>
+    <script id="channels-data" type="application/json">{{ $channels | jsonify | safeJS }}</script>
   <div data-island="channels-directory"></div>
   <noscript>
     <ul>
