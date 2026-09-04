@@ -10,7 +10,7 @@ const linked = () => cds.linked(cds.model).entities(NS);
 describe('mapChannelToShelf', () => {
   it('maps an SAP learning portal to START_HERE/learn', () => {
     expect(mapChannelToShelf({ isSapOwned: true, category: 'Learning', focusAreas: ['onboarding'] }))
-      .toEqual({ verb: 'learn', shelf: 'START_HERE' });
+      .toEqual({ verb: 'LEARN', shelf: 'START_HERE' });
   });
   it('never puts a community channel in START_HERE', () => {
     const m = mapChannelToShelf({ isSapOwned: false, category: 'Learning', focusAreas: ['onboarding'] });

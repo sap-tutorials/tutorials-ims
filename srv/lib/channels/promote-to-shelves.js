@@ -9,15 +9,15 @@ const CATEGORY_TO_SHELF = {
   'Learning': 'START_HERE', 'Community': 'REFERENCE',
 };
 const FOCUS_TO_VERB = [
-  [['integration'], 'integrate'], [['ops', 'admin', 'operations'], 'operate'],
-  [['ai', 'genai'], 'AI'], [['rap', 'data-model', 'cds'], 'model'],
-  [['abap', 'cap', 'sdk', 'build'], 'build'], [['onboarding', 'tutorial', 'learn'], 'learn'],
+  [['integration'], 'INTEGRATE'], [['ops', 'admin', 'operations'], 'OPERATE'],
+  [['ai', 'genai'], 'AI'], [['rap', 'data-model', 'cds'], 'MODEL'],
+  [['abap', 'cap', 'sdk', 'build'], 'BUILD'], [['onboarding', 'tutorial', 'learn'], 'LEARN'],
 ];
 
 function pickVerb(focusAreas = []) {
   const lower = focusAreas.map((f) => String(f).toLowerCase());
   for (const [keys, verb] of FOCUS_TO_VERB) if (keys.some((k) => lower.includes(k))) return verb;
-  return 'build';
+  return 'BUILD';
 }
 
 function mapChannelToShelf(channel) {
