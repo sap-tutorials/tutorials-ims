@@ -14,10 +14,18 @@ describe('mapChannelToShelf', () => {
   });
   it('never puts a community channel in START_HERE', () => {
     const m = mapChannelToShelf({ isSapOwned: false, category: 'Learning', focusAreas: ['onboarding'] });
-    expect(m?.shelf).not.toBe('START_HERE');
+    expect(m.shelf).not.toBe('START_HERE');
   });
   it('maps a GitHub repo to TOOLS', () => {
     expect(mapChannelToShelf({ isSapOwned: true, category: 'GitHub Repository', focusAreas: ['cap'] }).shelf).toBe('TOOLS');
+  });
+  it('matches category case-insensitively', () => {
+    expect(mapChannelToShelf({ isSapOwned: true, category: 'github repository', focusAreas: ['cap'] }).shelf).toBe('TOOLS');
+    expect(mapChannelToShelf({ isSapOwned: true, category: 'DOCS', focusAreas: ['cap'] }).shelf).toBe('REFERENCE');
+  });
+  it('reaches the CONNECT verb for community/networking focus areas', () => {
+    expect(mapChannelToShelf({ isSapOwned: true, category: 'Community', focusAreas: ['community'] }).verb).toBe('CONNECT');
+    expect(mapChannelToShelf({ isSapOwned: true, category: 'Portal', focusAreas: ['networking'] }).verb).toBe('CONNECT');
   });
 });
 

@@ -22,12 +22,24 @@ describe('GET /build/channels', () => {
   it('returns only published, non-broken channels with parsed arrays', async () => {
     const { status, data } = await project.get('/build/channels');
     expect(status).toBe(200);
-    const ids = data.channels.map((c) => c.sourceId);
-    expect(ids).toContain('feed-pub');
-    expect(ids).not.toContain('feed-unpub');
-    expect(ids).not.toContain('feed-broken');
-    const pub = data.channels.find((c) => c.sourceId === 'feed-pub');
+    const urls = data.channels.map((c) => c.url);
+    expect(urls).toContain('https://pub');
+    expect(urls).not.toContain('https://unpub');
+    expect(urls).not.toContain('https://broken');
+    const pub = data.channels.find((c) => c.url === 'https://pub');
     expect(pub.focusAreas).toEqual(['btp']);
     expect(typeof data.buildAt).toBe('string');
+  });
+
+  it('projects a public whitelist — no audit / internal curation columns', async () => {
+    const { data } = await project.get('/build/channels');
+    const pub = data.channels.find((c) => c.url === 'https://pub');
+    for (const internal of ['sourceId', 'contentHash', 'ingestBatch', 'linkStatusOverride', 'isFeatured', 'notes', 'aliases', 'createdBy', 'modifiedBy', 'createdAt', 'modifiedAt']) {
+      expect(pub, `feed leaked internal column "${internal}"`).not.toHaveProperty(internal);
+    }
+    // consumed public fields are present
+    for (const pubfield of ['name', 'url', 'category', 'status', 'ownerType', 'focusAreas']) {
+      expect(pub).toHaveProperty(pubfield);
+    }
   });
 });

@@ -430,14 +430,27 @@ cds.on('bootstrap', (app) => {
           .orderBy('category', 'name'),
       );
       const parseArr = (v) => (Array.isArray(v) ? v : (typeof v === 'string' && v ? JSON.parse(v) : []));
+      // Explicit public projection — never spread the full row into an
+      // anon feed (drops managed audit + internal curation columns:
+      // sourceId, notes, aliases, contentHash, ingestBatch, lastChecked,
+      // isFeatured, linkStatusOverride, createdBy/modifiedBy, …).
       const channels = rows
         .map((r) => ({
-          ...r,
+          name: r.name,
+          url: r.url,
+          purpose: r.purpose,
+          category: r.category,
+          subcategory: r.subcategory,
+          platform: r.platform,
+          isSapOwned: r.isSapOwned,
+          ownerType: r.ownerType,
+          ownerName: r.ownerName,
+          status: r.status,
+          editorialNote: r.editorialNote,
           linkStatus: r.linkStatusOverride || r.linkStatus,
           focusAreas: parseArr(r.focusAreas),
           tags: parseArr(r.tags),
           relatedUrls: parseArr(r.relatedUrls),
-          aliases: parseArr(r.aliases),
         }))
         .filter((r) => r.linkStatus !== 'BROKEN');
       res.set('Cache-Control', 'public, max-age=60');

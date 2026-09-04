@@ -8,10 +8,16 @@ const CATEGORY_TO_SHELF = {
   'YouTube': 'KEEP_CURRENT', 'Podcast': 'KEEP_CURRENT', 'Blog': 'KEEP_CURRENT', 'News': 'KEEP_CURRENT',
   'Learning': 'START_HERE', 'Community': 'REFERENCE',
 };
+// Case-insensitive lookup so ingest variance ("github repository", "Docs"
+// vs "docs") still maps deterministically instead of silently defaulting.
+const CATEGORY_TO_SHELF_LC = Object.fromEntries(
+  Object.entries(CATEGORY_TO_SHELF).map(([k, v]) => [k.toLowerCase(), v]),
+);
 const FOCUS_TO_VERB = [
   [['integration'], 'INTEGRATE'], [['ops', 'admin', 'operations'], 'OPERATE'],
   [['ai', 'genai'], 'AI'], [['rap', 'data-model', 'cds'], 'MODEL'],
   [['abap', 'cap', 'sdk', 'build'], 'BUILD'], [['onboarding', 'tutorial', 'learn'], 'LEARN'],
+  [['community', 'network', 'networking', 'events', 'connect'], 'CONNECT'],
 ];
 
 function pickVerb(focusAreas = []) {
@@ -21,7 +27,7 @@ function pickVerb(focusAreas = []) {
 }
 
 function mapChannelToShelf(channel) {
-  let shelf = CATEGORY_TO_SHELF[channel.category] || 'REFERENCE';
+  let shelf = CATEGORY_TO_SHELF_LC[String(channel.category || '').toLowerCase()] || 'REFERENCE';
   // community / third-party may never land in START_HERE
   if (shelf === 'START_HERE' && channel.isSapOwned !== true) shelf = 'REFERENCE';
   return { verb: pickVerb(channel.focusAreas), shelf };
