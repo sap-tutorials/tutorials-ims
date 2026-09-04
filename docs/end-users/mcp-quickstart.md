@@ -86,6 +86,51 @@ Add a `.mcp.json` at the root of your project:
 }
 ```
 
+## Joule Work Desktop
+
+> **Naming:** SAP ships no product literally called "Joule Studio Desktop." The desktop client
+> that connects to a remote MCP server by pasting a URL is **Joule Work Desktop** (GA expected
+> Q3–Q4 2026). If you meant the cloud low-code agent builder **Joule Studio, classic edition**,
+> see [Joule Studio (classic edition)](#joule-studio-classic-edition) below — it connects via a
+> BTP destination, not a URL.
+
+Joule Work Desktop connects to an MCP server by registering the server's URL. For our
+**anonymous, read-only Phase 1** services this is all you need — no sign-in, no destination:
+
+1. In Joule Work Desktop, add / register an MCP server.
+2. Paste the service URL, e.g. `<base>/mcp/search` (the server speaks Streamable HTTP, which
+   Joule Work Desktop expects).
+3. Repeat for `<base>/mcp/homepage` and `<base>/mcp/graph` as needed.
+
+The curated tools then appear to Joule.
+
+> **Authenticated tools (`/mcp-auth/*`) are not reachable from Joule Work Desktop's native flow.**
+> Pasting an authenticated URL triggers Joule Work Desktop's OAuth 2.0 handshake, which uses
+> **Dynamic Client Registration (RFC 7591)** — it `POST`s to a `/register` endpoint to
+> self-register a client. XSUAA does **not** support DCR; OAuth clients must be **pre-registered**
+> (the same limitation described for native Claude clients above). So the personalized tools
+> (`get_my_tutorials`, `complete_step`, …) can't be used through Joule Work Desktop today —
+> stick to the anonymous `/mcp/*` URLs.
+
+## Joule Studio (classic edition)
+
+If instead you are building a **Joule agent** in the cloud low-code **Joule Studio, classic
+edition**, MCP servers are added via an **SAP BTP destination**, not a raw URL. Only the
+anonymous Phase 1 `/mcp/*` services fit cleanly (the authenticated namespaces need a
+pre-registered OAuth client, and interactive/authorization-code OAuth is not supported here).
+
+1. In **SAP BTP Cockpit**, create a **streamable HTTPS** destination whose URL points at
+   `<base>` (the destination URL **must not** end in `/mcp`), with the additional property
+   **`sap-joule-studio-mcp-server = true`**. Create it with the **same name** in both the Joule
+   Studio classic subaccount and the Joule subaccount, and register it in the control tower.
+2. In your Joule agent, open the **MCP Servers** tab → **Add MCP Server**.
+3. Give it a **Name** and **Description**, set **Path** to the service you want (e.g.
+   `/mcp/search`), pick the destination, review the listed **Tools**, and choose **Add Server**.
+
+SSE-type destinations are **not** supported. For servers that do require auth, SAP recommends
+**Client Credentials**; **OAuth2 Authorization Code** and **Principal Propagation** are not
+supported. Full reference: [Add MCP Servers to Your Joule Agent](https://help.sap.com/docs/joule-studio-classic/joule-studio-classic-edition/add-mcp-servers-to-your-joule-agent).
+
 ## Older stdio-only clients
 
 Clients that only speak stdio (older Claude Desktop builds, custom scripts) can bridge through **`mcp-remote`**:
