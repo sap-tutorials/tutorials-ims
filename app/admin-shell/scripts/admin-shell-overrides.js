@@ -84,7 +84,8 @@ module.exports = {
     'featureFlags',
     'petoberfest',
     'channels',
-    'channel-collections'
+    'channel-collections',
+    'channel-topic-map'
   ],
 
   //
@@ -169,7 +170,8 @@ module.exports = {
     featureFlags: 'ffl',
     petoberfest: 'pb',
     channels: 'ch',
-    'channel-collections': 'cc'
+    'channel-collections': 'cc',
+    'channel-topic-map': 'ctm'
   },
 
   //

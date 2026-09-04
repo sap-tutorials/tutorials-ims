@@ -60,3 +60,12 @@ entity ChannelCollectionItems : cuid {
   sortOrder  : Integer default 100;
   blurb      : String(280);
 }
+
+// --- P3: per-topic crosswalk (Surface C; LLM-drafted, human-reviewed) --------
+@assert.unique.pair: [ channel, topicTag ]
+entity ChannelTopicMap : cuid, managed {
+  channel         : Association to Channels @mandatory;
+  topicTag        : String(140) @mandatory;   // mdFormat tag, e.g. "software-product>sap-hana-cloud"
+  relevance       : Integer default 50;       // 0-100; orders the per-topic band, desc
+  authoringStatus : AuthoringStatus default 'AI_SEEDED' @assert.range;
+}

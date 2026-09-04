@@ -1,6 +1,7 @@
 // srv/lib/topics-query.js
 import cds from '@sap/cds';
 import { buildTopicSlugMap, normalizeLegacyTopicSlug } from './topic-slug.js';
+import { titlePathToMdFormat } from './tag-md-format.js';
 
 const NS = 'com.sap.developers.ims';
 const MAX_TUTORIALS = 60;
@@ -117,8 +118,8 @@ export async function buildTopicDetailPayload(db, slug, corpus) {
     // otherwise load fresh (single-slug serve path — corpus arg is absent).
     const live = corpus ? corpus.live : await loadLiveTags(db);
     const { tag, redirectTo } = await resolveTopicBySlug(db, slug, live);
-    if (!tag) return { slug, notFound: true, redirectTo, tutorials: [], concepts: [], relatedTags: [], buildAt: new Date().toISOString(), error: null };
-    if (redirectTo) return { slug: tag.slug, notFound: false, redirectTo, tutorials: [], concepts: [], relatedTags: [], buildAt: new Date().toISOString(), error: null };
+    if (!tag) return { slug, notFound: true, redirectTo, tutorials: [], concepts: [], relatedTags: [], relatedChannels: [], buildAt: new Date().toISOString(), error: null };
+    if (redirectTo) return { slug: tag.slug, notFound: false, redirectTo, tutorials: [], concepts: [], relatedTags: [], relatedChannels: [], buildAt: new Date().toISOString(), error: null };
 
     const { Tags, TutorialTags, Tutorials, TutorialConceptLinks, Concepts, ConceptRank } = ent();
 
@@ -173,12 +174,42 @@ export async function buildTopicDetailPayload(db, slug, corpus) {
       .sort((a, b) => a.label.localeCompare(b.label))
       .slice(0, 24);
 
+    // Surface C (P3): REVIEWED channel crosswalk rows for this topic, top 5 by relevance.
+    let relatedChannels = [];
+    try {
+      const { ChannelTopicMap, Channels } = cds.entities(NS);
+      const mdTag = titlePathToMdFormat(tag.titlePath);
+      if (mdTag) {
+        const rows = await db.run(
+          SELECT.from(ChannelTopicMap)
+            .where({ topicTag: mdTag, authoringStatus: 'REVIEWED' })
+            .orderBy('relevance desc'),
+        );
+        if (rows.length) {
+          const ids = rows.map((r) => r.channel_ID);
+          const chans = await db.run(
+            SELECT.from(Channels)
+              .columns('ID', 'name', 'url', 'ownerType', 'isSapOwned', 'isPublished', 'linkStatus', 'linkStatusOverride')
+              .where({ ID: { in: ids } }),
+          );
+          const chById = new Map(chans.map((c) => [c.ID, c]));
+          relatedChannels = rows
+            .map((r) => ({ ch: chById.get(r.channel_ID), relevance: r.relevance }))
+            .filter((x) => x.ch && x.ch.isPublished && (x.ch.linkStatusOverride || x.ch.linkStatus) !== 'BROKEN')
+            .slice(0, 5)
+            .map((x) => ({ name: x.ch.name, url: x.ch.url, ownerType: x.ch.ownerType, isSapOwned: x.ch.isSapOwned, relevance: x.relevance }));
+        }
+      }
+    } catch (e) {
+      relatedChannels = []; // Surface C is additive — never break topic rendering.
+    }
+
     return {
       slug: tag.slug, label: tag.label, facet: tag.facet,
-      tutorials, concepts, relatedTags,
+      tutorials, concepts, relatedTags, relatedChannels,
       buildAt: new Date().toISOString(), error: null,
     };
   } catch (err) {
-    return { slug, tutorials: [], concepts: [], relatedTags: [], buildAt: new Date().toISOString(), error: err.message };
+    return { slug, tutorials: [], concepts: [], relatedTags: [], relatedChannels: [], buildAt: new Date().toISOString(), error: err.message };
   }
 }

@@ -1,0 +1,13 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ChannelTopicMap (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  channel_ID NVARCHAR(36),
+  topicTag NVARCHAR(140),
+  relevance INTEGER DEFAULT 50,
+  authoringStatus NVARCHAR(5000) DEFAULT 'AI_SEEDED',
+  PRIMARY KEY(ID)
+)

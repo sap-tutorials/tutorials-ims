@@ -307,6 +307,9 @@ service AdminService {
   entity ChannelCollections as projection on ims.ChannelCollections;
   entity ChannelCollectionItems as projection on ims.ChannelCollectionItems;
 
+  @odata.draft.enabled
+  entity ChannelTopicMap as projection on ims.ChannelTopicMap;
+
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
   @odata.draft.enabled

@@ -24,6 +24,7 @@
         { "key": "alerts", "title": "Alerts" },
         { "key": "channels", "title": "Channels" },
         { "key": "channelCollections", "title": "Channel Collections" },
+        { "key": "channelTopicMap", "title": "Channel Topic Map" },
         { "key": "operations", "title": "Featured Tasks" }
       ]
     },

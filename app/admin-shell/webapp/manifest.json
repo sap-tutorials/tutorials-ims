@@ -97,7 +97,8 @@
       "sap.tutorials.admin.featureFlags": "./components/featureFlags",
       "sap.tutorials.admin.petoberfest": "./components/petoberfest",
       "sap.tutorials.admin.channels": "./components/channels",
-      "sap.tutorials.admin.channelCollections": "./components/channel-collections"
+      "sap.tutorials.admin.channelCollections": "./components/channel-collections",
+      "sap.tutorials.admin.channelTopicMap": "./components/channel-topic-map"
     },
     "models": {
       "admin": {
@@ -404,6 +405,12 @@
       },
       "channelCollectionsComponent": {
         "name": "sap.tutorials.admin.channelCollections",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "channelTopicMapComponent": {
+        "name": "sap.tutorials.admin.channelTopicMap",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -958,6 +965,16 @@
           ]
         },
         {
+          "name": "channelTopicMap",
+          "pattern": "channel-topic-map",
+          "target": [
+            {
+              "name": "channelTopicMapTarget",
+              "prefix": "ctm"
+            }
+          ]
+        },
+        {
           "name": "feedbackDashboard",
           "pattern": "feedback/dashboard",
           "target": "feedbackDashboardTarget"
@@ -1327,6 +1344,13 @@
           "id": "channelCollectionsTarget",
           "viewLevel": 1,
           "prefix": "cc"
+        },
+        "channelTopicMapTarget": {
+          "type": "Component",
+          "usage": "channelTopicMapComponent",
+          "id": "channelTopicMapTarget",
+          "viewLevel": 1,
+          "prefix": "ctm"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",
