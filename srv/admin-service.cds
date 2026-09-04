@@ -300,6 +300,9 @@ service AdminService {
     action regenerate()   returns { processed : Integer; skipped : Integer; cost : String };
   };
 
+  @odata.draft.enabled
+  entity Channels as projection on ims.Channels;
+
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
   @odata.draft.enabled

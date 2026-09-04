@@ -80,7 +80,8 @@ module.exports = {
     'video-rotation',
     'pats',
     'featureFlags',
-    'petoberfest'
+    'petoberfest',
+    'channels'
   ],
 
   //
@@ -161,7 +162,8 @@ module.exports = {
     'content-moderation': 'cm',
     pats: 'pt',
     featureFlags: 'ffl',
-    petoberfest: 'pb'
+    petoberfest: 'pb',
+    channels: 'ch'
   },
 
   //
