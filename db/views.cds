@@ -623,3 +623,58 @@ view AuthorTutorialCompletions as
     1              as completionCount : Integer
   }
   where tr.taskType = 'TUTORIAL' and tr.status in ('COMPLETED', 'SUPERSEDED');
+
+// Report C — Tutorial Survey (Vue). Unpivots the 7 survey dimensions into
+// (tutorialSlug, dimension, score, responseCount). Null scores excluded per
+// dimension. The Vue page sums responseCount per (dimension, score) over the
+// filtered slug set and renders % = bucket ÷ dimension-total. Composite key
+// (tutorialSlug, dimension, score) is unique after the per-leg GROUP BY.
+entity AuthorSurveyDistribution as
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'structure' as dimension : String(20),
+         key ratingStructure as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingStructure is not null group by tutorialSlug, ratingStructure)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'interesting' as dimension : String(20),
+         key ratingInteresting as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingInteresting is not null group by tutorialSlug, ratingInteresting)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'useCase' as dimension : String(20),
+         key ratingUseCase as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingUseCase is not null group by tutorialSlug, ratingUseCase)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'relevance' as dimension : String(20),
+         key ratingRelevance as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingRelevance is not null group by tutorialSlug, ratingRelevance)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'duration' as dimension : String(20),
+         key ratingDuration as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingDuration is not null group by tutorialSlug, ratingDuration)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'visuals' as dimension : String(20),
+         key ratingVisuals as score : Integer,
+         count(*) as responseCount : Integer
+       } where ratingVisuals is not null group by tutorialSlug, ratingVisuals)
+  union all
+      (select from ims.TutorialFeedback {
+         key tutorialSlug,
+         key 'nps' as dimension : String(20),
+         key npsScore as score : Integer,
+         count(*) as responseCount : Integer
+       } where npsScore is not null group by tutorialSlug, npsScore);

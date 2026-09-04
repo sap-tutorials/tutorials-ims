@@ -64,6 +64,15 @@ async function seed() {
     { ID: cds.utils.uuid(), user_ID: userB, taskLegacyId: TUT_A, taskType: 'TUTORIAL',
       status: 'IN_PROGRESS', attemptNumber: 1, completionDate: null }
   ]);
+  const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+  await INSERT.into(TutorialFeedback).entries([
+    { ID: cds.utils.uuid(), tutorialSlug: 'rep-tut-a', ratingStructure: 8, ratingInteresting: 8,
+      ratingUseCase: 7, ratingRelevance: 9, ratingDuration: 6, ratingVisuals: 8, npsScore: 10,
+      comment: 'Great', submittedAt: '2026-02-01T00:00:00Z' },
+    { ID: cds.utils.uuid(), tutorialSlug: 'rep-tut-a', ratingStructure: 8, ratingInteresting: 5,
+      ratingUseCase: null, ratingRelevance: 4, ratingDuration: 6, ratingVisuals: 3, npsScore: null,
+      comment: null, submittedAt: '2026-02-02T00:00:00Z' }
+  ]);
 }
 
 async function unseed() {
@@ -78,6 +87,8 @@ async function unseed() {
   await DELETE.from(Missions).where({ legacyId: MISSION });
   await DELETE.from(Groups).where({ legacyId: GROUP });
   await DELETE.from(Tutorials).where({ legacyId: { in: [TUT_A, TUT_B] } });
+  const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+  await DELETE.from(TutorialFeedback).where({ tutorialSlug: 'rep-tut-a' });
 }
 
 describe('reporting foundation views', () => {
@@ -155,5 +166,33 @@ describe('reporting foundation views', () => {
     const rows = await SELECT.from(AuthorTutorialCompletions).where({ tutorialSlug: 'rep-tut-a' });
     // The IN_PROGRESS attempt for userB must not appear.
     expect(rows.length).toBe(2);
+  });
+
+  it('AuthorSurveyDistribution unpivots ratings into (dimension, score, count), excluding nulls', async () => {
+    const { AuthorSurveyDistribution } = cds.entities('com.sap.developers.ims');
+    const rows = await SELECT.from(AuthorSurveyDistribution).where({ tutorialSlug: 'rep-tut-a' });
+
+    // structure: two responses both score 8 -> single bucket count 2
+    const structure = rows.filter(r => r.dimension === 'structure');
+    expect(structure.length).toBe(1);
+    expect(structure[0].score).toBe(8);
+    expect(structure[0].responseCount).toBe(2);
+
+    // useCase: one null excluded -> single bucket (score 7, count 1)
+    const useCase = rows.filter(r => r.dimension === 'useCase');
+    expect(useCase.length).toBe(1);
+    expect(useCase[0].score).toBe(7);
+    expect(useCase[0].responseCount).toBe(1);
+
+    // nps: one null excluded -> single bucket (score 10, count 1)
+    const nps = rows.filter(r => r.dimension === 'nps');
+    expect(nps.length).toBe(1);
+    expect(nps[0].score).toBe(10);
+
+    // all 7 dimension keys present among the rows
+    const dims = new Set(rows.map(r => r.dimension));
+    for (const d of ['structure', 'interesting', 'useCase', 'relevance', 'duration', 'visuals', 'nps']) {
+      expect(dims.has(d)).toBe(true);
+    }
   });
 });
