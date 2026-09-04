@@ -461,6 +461,43 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // P2: editorial collections leading the /channels directory landing.
+  // Consumed by scripts/fetch-channels.ts at build time. Public, unauthenticated.
+  // Cache-Control 60s. Filters to isPublished=true + authoringStatus='REVIEWED'
+  // collections; items filtered to published channels with linkStatus!='BROKEN'
+  // (override wins); collections ordered by sortOrder,title; items by sortOrder.
+  app.get('/build/channel-collections', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const NS = 'com.sap.developers.ims';
+      const cols = await db.run(
+        SELECT.from(`${NS}.ChannelCollections`)
+          .where({ isPublished: true, authoringStatus: 'REVIEWED' })
+          .orderBy('sortOrder', 'title'),
+      );
+      const items = await db.run(
+        SELECT.from(`${NS}.ChannelCollectionItems`).orderBy('sortOrder'),
+      );
+      const chans = await db.run(
+        SELECT.from(`${NS}.Channels`).columns('ID', 'name', 'url', 'isPublished', 'linkStatus', 'linkStatusOverride'),
+      );
+      const chById = new Map(chans.map((c) => [c.ID, c]));
+      const collections = cols.map((col) => ({
+        slug: col.slug, title: col.title, intro: col.intro, sortOrder: col.sortOrder,
+        items: items
+          .filter((it) => it.collection_ID === col.ID)
+          .map((it) => ({ ch: chById.get(it.channel_ID), blurb: it.blurb, sortOrder: it.sortOrder }))
+          .filter((x) => x.ch && x.ch.isPublished && (x.ch.linkStatusOverride || x.ch.linkStatus) !== 'BROKEN')
+          .map((x) => ({ url: x.ch.url, name: x.ch.name, blurb: x.blurb, sortOrder: x.sortOrder })),
+      }));
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ collections, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/channel-collections]', err.message);
+      res.status(500).json({ collections: [], error: String(err && err.message || err) });
+    }
+  });
+
   // (#1032) Build-time data for Hugo featured topics carousel — consumed by
   // scripts/fetch-tutorials.ts at build time. Public, unauthenticated.
   // Cache-Control 60s (Hugo fetches once per build, not per request).
