@@ -87,11 +87,28 @@ function sendJson(res, status, body) {
   res.end(payload)
 }
 
-function authorizationServerMetadata(issuer, scope) {
+// Build the RFC 8414 Authorization-Server metadata.
+//
+// `issuer` identifies THIS approuter (its own externally-visible base URL) as
+// the advertised authorization server — NOT the raw XSUAA URL. The authorize /
+// token endpoints still live on XSUAA (`endpointBase`).
+//
+// Why self-issuer, not the XSUAA issuer (reverses the original Option A):
+//   MCP clients (mcp-remote / MCP SDK) read the protected-resource metadata,
+//   take `authorization_servers[0]`, and run RFC 8414 discovery against THAT
+//   host. XSUAA does not implement RFC 8414 — `<xsuaa>/.well-known/oauth-
+//   authorization-server` 302-redirects to /login, which returns 200 (an HTML
+//   page). The SDK follows the redirect, sees 200, parses HTML as JSON, and
+//   every required field is undefined → ZodError. Because the bogus response is
+//   200 (not 404) the SDK never falls back to XSUAA's working openid-
+//   configuration. Advertising the approuter itself (which serves a valid 200
+//   RFC 8414 doc here) keeps XSUAA's broken well-known out of the discovery
+//   path entirely; the actual authorize/token calls still hit XSUAA.
+function authorizationServerMetadata(issuer, endpointBase, scope) {
   return {
     issuer,
-    authorization_endpoint: `${issuer}/oauth/authorize`,
-    token_endpoint: `${issuer}/oauth/token`,
+    authorization_endpoint: `${endpointBase}/oauth/authorize`,
+    token_endpoint: `${endpointBase}/oauth/token`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
@@ -100,10 +117,14 @@ function authorizationServerMetadata(issuer, scope) {
   }
 }
 
-function protectedResourceMetadata(baseUrl, issuer, scope) {
+// RFC 9728 Protected-Resource metadata. `authorization_servers` advertises the
+// approuter itself (baseUrl) as the authorization server — see the self-issuer
+// rationale on authorizationServerMetadata(). Clients then discover the AS doc
+// at our host, which returns a valid RFC 8414 document.
+function protectedResourceMetadata(baseUrl, scope) {
   return {
     resource: `${baseUrl}${MCP_RESOURCE_SUFFIX}`,
-    authorization_servers: [issuer],
+    authorization_servers: [baseUrl],
     scopes_supported: [scope],
     bearer_methods_supported: ['header'],
   }
@@ -122,8 +143,10 @@ function wellKnownOAuthHandler(req, res, next) {
     return next()
   }
 
-  const issuer = resolveIssuer()
-  if (!issuer) {
+  // XSUAA base — used ONLY for the authorize/token endpoint URLs, never as the
+  // advertised issuer (see authorizationServerMetadata()).
+  const endpointBase = resolveIssuer()
+  if (!endpointBase) {
     // No XSUAA binding and no env fallback — cannot produce a valid document.
     // 503 (not 404) so a misconfiguration is distinguishable from a missing route.
     return sendJson(res, 503, { error: 'oauth_metadata_unavailable' })
@@ -131,13 +154,16 @@ function wellKnownOAuthHandler(req, res, next) {
 
   const scope = resolveScope()
 
-  if (pathOnly === AUTH_SERVER_PATH || pathOnly === OPENID_CONFIG_PATH) {
-    return sendJson(res, 200, authorizationServerMetadata(issuer, scope))
-  }
-
+  // Both documents advertise THIS approuter (self) as the authorization server,
+  // so both need the externally-visible base URL derived from the request.
   const baseUrl = resolveBaseUrl(req)
   if (!baseUrl) return sendJson(res, 503, { error: 'oauth_metadata_unavailable' })
-  return sendJson(res, 200, protectedResourceMetadata(baseUrl, issuer, scope))
+
+  if (pathOnly === AUTH_SERVER_PATH || pathOnly === OPENID_CONFIG_PATH) {
+    return sendJson(res, 200, authorizationServerMetadata(baseUrl, endpointBase, scope))
+  }
+
+  return sendJson(res, 200, protectedResourceMetadata(baseUrl, scope))
 }
 
 module.exports = {

@@ -94,9 +94,14 @@ host, so they are correct in every environment with no build-time substitution.
   alias returns the OAuth Authorization Server Metadata body (RFC 8414),
   intentionally omitting OIDC-only fields like `jwks_uri`; MCP OAuth-fallback
   clients consume only the OAuth endpoints. `authorization_servers`/`issuer`
-  point at the XSUAA URL (Option A); `scopes_supported` advertises the
-  fully-qualified `<xsappname>.Tutorial.MCP` (bare `Tutorial.MCP` is rejected by
-  XSUAA with `invalid_scope`).
+  advertise **the approuter itself** (self-as-AS): clients run RFC 8414
+  discovery against our host, which returns a valid 200 document. The
+  authorize/token endpoints inside still point at XSUAA. (This reverses the
+  original "Option A" that pointed `issuer` at the XSUAA URL — XSUAA does not
+  implement RFC 8414 and 302→login→200-HTML on that path, which breaks MCP SDK
+  discovery with a ZodError and no 404 fallback.) `scopes_supported` advertises
+  the fully-qualified `<xsappname>.Tutorial.MCP` (bare `Tutorial.MCP` is rejected
+  by XSUAA with `invalid_scope`).
 - `approuter/lib/well-known-mcp-manifest.js` — `/.well-known/mcp.json`, a
   non-standard courtesy manifest listing the MCP mounts. Not part of the MCP spec.
 - `approuter/lib/security-txt.js` — `/.well-known/security.txt` (RFC 9116).

@@ -35,8 +35,12 @@ describeIf('OAuth discovery documents (deployed dev)', { timeout: 20_000 }, () =
     const doc = await res.json();
     // RFC 8414 required fields
     expect(typeof doc.issuer).toBe('string');
-    expect(doc.issuer).toMatch(/hana\.ondemand\.com|localhost/);
+    // issuer is the approuter's own base URL (self-as-AS), which may be a
+    // cfapps *.hana.ondemand.com host or the developers.sap.com vanity host.
+    expect(doc.issuer).toMatch(/hana\.ondemand\.com|sap\.com|localhost/);
     expect(doc.authorization_endpoint).toBeDefined();
+    // The authorize/token endpoints still live on XSUAA.
+    expect(doc.authorization_endpoint).toMatch(/authentication\..*hana\.ondemand\.com/);
     expect(doc.token_endpoint).toBeDefined();
     // MCP 2.1 requires PKCE support
     const methods = doc.code_challenge_methods_supported ?? [];
@@ -58,7 +62,8 @@ describeIf('OAuth discovery documents (deployed dev)', { timeout: 20_000 }, () =
     // scopes_supported must include Tutorial.MCP
     const scopes = doc.scopes_supported ?? [];
     expect(scopes).toContain('Tutorial.MCP');
-    // authorization_servers should point at the XSUAA/IAS issuer
+    // authorization_servers advertises the approuter itself (self-as-AS), so
+    // clients discover the RFC 8414 doc here rather than at XSUAA's non-8414 host.
     expect(Array.isArray(doc.authorization_servers)).toBe(true);
     expect(doc.authorization_servers.length).toBeGreaterThan(0);
   });
