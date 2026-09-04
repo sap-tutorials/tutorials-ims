@@ -577,52 +577,54 @@ view AuthorTutorialParents as
 
 // Report A — Tutorial Engagement (FE Analytical List Page). Pre-aggregated,
 // all-time (no date slicer: distinct counts don't compose with a date range).
-// Fan-out: 1 row per (tutorialSlug, missionTitle, groupTitle). Synthetic
-// reportKey gives the OData entity a stable, unique key across fanned rows.
+// Grain: EXACTLY 1 row per tutorialSlug (#2138 finding-1 split-grain fix). The
+// previous design fanned each tutorial to one row per (mission, group) parent so
+// a mission/group filter could work; the FE chart's $apply groupby+sum then
+// over-counted a reused tutorial N× in the DEFAULT (unfiltered) chart. We now
+// de-fan: TutorialEngagementBase already carries the correct DISTINCT counts per
+// tutorialSlug; join ims.Tutorials for the title (slug↔title 1:1, no fan).
+// mission/group filtering resolves through the `parents` to-many association
+// (a tutorial may sit in several missions/groups) — never a summed join.
 view AuthorTutorialEngagement as
-  select from AuthorTutorialParents as p
-  inner join TutorialEngagementBase as e on e.tutorialSlug = p.tutorialSlug
+  select from TutorialEngagementBase as e
+  inner join ims.Tutorials as tut on tut.slug = e.tutorialSlug
   {
-    key (
-      p.tutorialSlug || '::' || coalesce(p.missionTitle, '~') || '::' || coalesce(p.groupTitle, '~')
-    ) as reportKey : String(600),
-    p.tutorialSlug     as tutorialSlug     : String,
-    p.tutorialTitle    as tutorialTitle    : String,
-    p.missionTitle     as missionTitle     : String,
-    p.groupTitle       as groupTitle       : String,
-    e.startedLearners  as startedLearners  : Integer,
-    e.completedLearners as completedLearners : Integer,
-    e.completions      as completions      : Integer,
+    key e.tutorialSlug   as tutorialSlug      : String,
+    tut.title            as tutorialTitle     : String,
+    e.startedLearners    as startedLearners   : Integer,
+    e.completedLearners  as completedLearners : Integer,
+    e.completions        as completions       : Integer,
     cast(e.completedLearners as Decimal(5,2)) * 100 / nullif(e.startedLearners, 0)
-                       as completionRatePct : Decimal(5,2),
-    e.firstCompletion  as firstCompletion  : Timestamp,
-    e.lastCompletion   as lastCompletion   : Timestamp
+                         as completionRatePct : Decimal(5,2),
+    e.firstCompletion    as firstCompletion   : Timestamp,
+    e.lastCompletion     as lastCompletion    : Timestamp,
+    // mission/group filtering resolves through the parents spine (to-many:
+    // a tutorial may sit in several missions/groups)
+    parents : Association to many AuthorTutorialParents
+                on parents.tutorialSlug = tutorialSlug
   };
 
-// Report B — Tutorial Completions (FE List Report). Row-per-completion at
-// TUTORIAL grain, status IN (COMPLETED, SUPERSEDED) to match CompletionAnalytics
-// and capture re-completion history for the trend. completionCount is additive
-// (composes with a completionDay date filter). Left-joined to the parents spine
-// for mission/group FILTERING; this fans a completion across its parents, so
-// the measure must be filtered by mission/group, never summed across all
-// parents without DISTINCT (see spec §4.3). Synthetic reportKey stays unique
-// across fanned rows.
+// Report B — Tutorial Completions (FE List Report). Grain: EXACTLY 1 row per
+// completion event (TaskRecords.ID) (#2138 finding-1 split-grain fix). status
+// IN (COMPLETED, SUPERSEDED) to match CompletionAnalytics and capture
+// re-completion history for the trend. The previous design left-joined the
+// parents spine, fanning each completion across its parents so completionCount=1
+// was summed N× per day for a reused tutorial. We now de-fan: one row per event,
+// completionCount summed once; mission/group filtering resolves through the
+// `parents` to-many association, never a summed join.
 view AuthorTutorialCompletions as
   select from ims.TaskRecords as tr
   inner join ims.Tutorials as tut on tut.legacyId = tr.taskLegacyId
-  left  join AuthorTutorialParents as p on p.tutorialSlug = tut.slug
   {
-    key (
-      tr.ID || '::' || coalesce(p.missionTitle, '~') || '::' || coalesce(p.groupTitle, '~')
-    ) as reportKey : String(600),
-    tr.ID          as recordId       : UUID,
-    tut.slug       as tutorialSlug    : String,
-    tut.title      as tutorialTitle   : String,
-    p.missionTitle as missionTitle    : String,
-    p.groupTitle   as groupTitle      : String,
-    tr.completionDate                 as completionDate : Timestamp,
-    cast(tr.completionDate as Date)   as completionDay  : Date,
-    1              as completionCount : Integer
+    key tr.ID          as recordId        : UUID,
+    tut.slug           as tutorialSlug    : String,
+    tut.title          as tutorialTitle   : String,
+    tr.completionDate                     as completionDate : Timestamp,
+    cast(tr.completionDate as Date)       as completionDay  : Date,
+    1                  as completionCount : Integer,
+    // mission/group filtering resolves through the parents spine (to-many)
+    parents : Association to many AuthorTutorialParents
+                on parents.tutorialSlug = tutorialSlug
   }
   where tr.taskType = 'TUTORIAL' and tr.status in ('COMPLETED', 'SUPERSEDED');
 
