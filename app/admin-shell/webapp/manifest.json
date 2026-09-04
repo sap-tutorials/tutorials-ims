@@ -71,6 +71,8 @@
       "sap.tutorials.admin.devtoberfest": "./components/devtoberfest",
       "sap.tutorials.admin.devtoberfestSignups": "./components/devtoberfestSignups",
       "sap.tutorials.admin.analytics": "./components/analytics",
+      "sap.tutorials.admin.tutorialEngagement": "./components/tutorial-engagement",
+      "sap.tutorials.admin.tutorialCompletions": "./components/tutorial-completions",
       "sap.tutorials.admin.joule": "./components/joule",
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
       "sap.tutorials.admin.kgCommunities": "./components/kgCommunities",
@@ -238,6 +240,18 @@
       },
       "analyticsComponent": {
         "name": "sap.tutorials.admin.analytics",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "tutorialEngagementComponent": {
+        "name": "sap.tutorials.admin.tutorialEngagement",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "tutorialCompletionsComponent": {
+        "name": "sap.tutorials.admin.tutorialCompletions",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -626,6 +640,26 @@
             {
               "name": "analyticsTarget",
               "prefix": "an"
+            }
+          ]
+        },
+        {
+          "name": "tutorialEngagement",
+          "pattern": "tutorial-engagement",
+          "target": [
+            {
+              "name": "tutorialEngagementTarget",
+              "prefix": "teg"
+            }
+          ]
+        },
+        {
+          "name": "tutorialCompletions",
+          "pattern": "tutorial-completions",
+          "target": [
+            {
+              "name": "tutorialCompletionsTarget",
+              "prefix": "tcp"
             }
           ]
         },
@@ -1070,6 +1104,20 @@
           "id": "analyticsTarget",
           "viewLevel": 1,
           "prefix": "an"
+        },
+        "tutorialEngagementTarget": {
+          "type": "Component",
+          "usage": "tutorialEngagementComponent",
+          "id": "tutorialEngagementTarget",
+          "viewLevel": 1,
+          "prefix": "teg"
+        },
+        "tutorialCompletionsTarget": {
+          "type": "Component",
+          "usage": "tutorialCompletionsComponent",
+          "id": "tutorialCompletionsTarget",
+          "viewLevel": 1,
+          "prefix": "tcp"
         },
         "jouleSettingsTarget": {
           "type": "Component",
