@@ -4,14 +4,14 @@
     "homepage": {
       "slug": "ajay-soreng",
       "name": "Ajay Soreng",
-      "caption": "1st letter of first name",
+      "caption": "lettersYouNeed <- substr(firstName, 1, 1)",
       "showMoreInfo": true
     },
     "api-docs": {
       "slug": "shilpa-shankar",
       "name": "Shilpa Shankar",
       "heading": "Devtoberfest Scavenger Hunt",
-      "caption": "4th letter of first name",
+      "caption": "func main() { lettersYouNeed := string(myString[3]) }",
       "showMoreInfo": true
     },
     "ai": {
