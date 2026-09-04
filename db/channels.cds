@@ -1,6 +1,7 @@
 namespace com.sap.developers.ims;
 
 using { managed, cuid } from '@sap/cds/common';
+using { com.sap.developers.ims.AuthoringStatus } from './homepage';
 
 type ChannelOwnerType : String enum {
   SAP_Official; SAP_Developer_Advocate; SAP_Executive;
@@ -40,4 +41,22 @@ entity Channels : cuid, managed {
   linkStatus         : String(20) default 'UNKNOWN';
   linkStatusOverride : String(20);
   lastChecked        : Timestamp;
+}
+
+// --- P2: editorial clusters (LLM-drafted, human-reviewed) --------------------
+entity ChannelCollections : cuid, managed {
+  slug            : String(80)  @mandatory;
+  title           : String(140) @mandatory;
+  intro           : String(1200);
+  sortOrder       : Integer default 100;
+  isPublished     : Boolean default false;
+  authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
+  items           : Composition of many ChannelCollectionItems on items.collection = $self;
+}
+
+entity ChannelCollectionItems : cuid {
+  collection : Association to ChannelCollections;
+  channel    : Association to Channels;
+  sortOrder  : Integer default 100;
+  blurb      : String(280);
 }
