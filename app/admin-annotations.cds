@@ -46,6 +46,8 @@ annotate AdminService.Events with {
             };
   startDate @Common.Label: 'Start Date';
   endDate   @Common.Label: 'End Date';
+  description @Common.Label: 'Description' @UI.MultiLineText;   // Shown on app-space hero (#2133)
+  logoUpdatedAt @Common.Label: 'Logo Updated' @Common.FieldControl: #ReadOnly;
   timeZone  @Common.Label: 'Time Zone'
             @Common.ValueList: {
               CollectionPath: 'TimeZones',
@@ -93,10 +95,12 @@ annotate AdminService.Events with @UI: {
   ],
   FieldGroup#General: { Data: [
     { Value: name },
+    { Value: description },
     { Value: eventType },
     { Value: startDate },
     { Value: endDate },
-    { Value: timeZone }
+    { Value: timeZone },
+    { Value: logoUpdatedAt }
   ]}
 };
 

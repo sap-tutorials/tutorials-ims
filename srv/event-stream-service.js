@@ -18,7 +18,7 @@ export default class EventStreamService extends cds.ApplicationService {
       const event = await SELECT.one.from(Events).where({ legacyId: eventLegacyId });
       if (!event) return req.reject(404, `Event with legacy ID ${eventLegacyId} not found`);
 
-      return cached(`es-buckets:${eventLegacyId}`, CACHE_TTL, async () => {
+      const buckets = await cached(`es-buckets:${eventLegacyId}`, CACHE_TTL, async () => {
         const records = await SELECT.from(TaskRecords).where({
           event_ID: event.ID,
           taskType: 'TUTORIAL',
@@ -26,6 +26,13 @@ export default class EventStreamService extends cds.ApplicationService {
         });
         return computeBuckets(records);
       });
+
+      return {
+        eventName: event.name || '',
+        eventType: event.eventType ?? 'OTHER',
+        hasLogo: Boolean(event.hasLogo),
+        buckets,
+      };
     });
 
     await super.init();

@@ -182,7 +182,14 @@ service AdminService {
     @(requires: ['Tutorial.Author', 'Admin'])
     action purge();
   };
-  entity Events as projection on ims.Events { *, cast(legacyId as String) as legacyIdStr : String };
+  entity Events as projection on ims.Events { *, cast(legacyId as String) as legacyIdStr : String } actions {
+    // Base64-over-OData upload (FE UploadSet drops bytes on draft compositions —
+    // same reason as DevtoberfestConfig.uploadBanner). sharp → WebP → upsert
+    // EventLogo → flip hasLogo. See srv/handlers/event-logo-handlers.js (#2133).
+    action uploadEventLogo(imageBase64 : String, mimeType : String) returns Events;
+    action clearEventLogo() returns Events;
+  };
+  entity EventLogo as projection on ims.EventLogo;
   entity Prizes as projection on ims.Prizes { *, cast(legacyId as String) as legacyIdStr : String };
   entity PrizeRecords as projection on ims.PrizeRecords;
   @Capabilities.ChangeTracking : { Supported: true }
