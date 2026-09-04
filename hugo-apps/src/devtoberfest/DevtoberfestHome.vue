@@ -9,10 +9,12 @@ import CatGame from './CatGame.vue'
 
 // Legal T&C target — the fixed "THE RULES" rail route (see railItems below).
 const RULES_URL = '/devtoberfest/rules/'
-// Promo video (issue #2144) — fills the empty band in the content column.
-// youtube-nocookie keeps the privacy-friendly domain; autoplay is muted (the
-// only form browsers honor) and is dropped when the visitor prefers reduced
-// motion (see promoEmbedUrl).
+// Promo video (issue #2144) — fills the empty band beside Kasimir. We embed
+// from www.youtube.com (not youtube-nocookie.com): only the standard YouTube
+// hosts are in the approuter CSP frame-src allowlist, so a nocookie iframe is
+// blocked ("Content is blocked"). Autoplay is muted (the only form browsers
+// honor) and is dropped when the visitor prefers reduced motion (see
+// promoEmbedUrl).
 const PROMO_VIDEO_ID = 'ZvxLbaMg2Gw'
 // Explanatory tooltip text (issue #1725). The banner artwork bakes a date, but
 // the window below is the exact contest instant in the viewer's local zone, so
@@ -221,7 +223,7 @@ const prefersReducedMotion =
 // Muted autoplay is the only autoplay browsers honor; skip it entirely when the
 // visitor prefers reduced motion (they get a click-to-play player instead).
 const promoEmbedUrl = computed<string>(() => {
-  const base = `https://www.youtube-nocookie.com/embed/${PROMO_VIDEO_ID}?rel=0&playsinline=1`
+  const base = `https://www.youtube.com/embed/${PROMO_VIDEO_ID}?rel=0&playsinline=1`
   return prefersReducedMotion ? base : `${base}&autoplay=1&mute=1`
 })
 
@@ -402,10 +404,19 @@ defineExpose({ fetchStatus })
             <span class="dtf-ticker-prompt" aria-hidden="true">&gt;</span>
             <span :key="currentTip" class="dtf-ticker-text">{{ currentTip }}</span>
           </p>
+        </div>
 
-          <!-- Promo video (#2144): fills the empty band under the intro.
-               Capped width so it complements the column without dominating. -->
-          <figure class="dtf-promo">
+        <p v-if="state === 'error'" class="dtf-error">
+          {{ errorMsg || "Something went wrong loading Devtoberfest." }}
+          <button class="dtf-error-retry" @click="fetchStatus">Retry</button>
+        </p>
+
+        <!-- Media row (#2144): promo video fills the empty band to the left of
+             Kasimir, side by side, instead of stacking above him. -->
+        <div class="dtf-media-row">
+          <!-- Promo video: capped width so it complements the column without
+               dominating. Embedded from www.youtube.com (CSP-allowlisted host). -->
+          <figure v-if="showIntro" class="dtf-promo">
             <div class="dtf-promo-frame">
               <iframe
                 class="dtf-promo-embed"
@@ -418,19 +429,14 @@ defineExpose({ fetchStatus })
               ></iframe>
             </div>
           </figure>
+          <img
+            v-if="config.imgKasimir"
+            :src="config.imgKasimir"
+            alt=""
+            class="dtf-kasimir"
+            aria-hidden="true"
+          />
         </div>
-
-        <p v-if="state === 'error'" class="dtf-error">
-          {{ errorMsg || "Something went wrong loading Devtoberfest." }}
-          <button class="dtf-error-retry" @click="fetchStatus">Retry</button>
-        </p>
-        <img
-          v-if="config.imgKasimir"
-          :src="config.imgKasimir"
-          alt=""
-          class="dtf-kasimir"
-          aria-hidden="true"
-        />
       </div>
       <aside class="dtf-rail" aria-label="Devtoberfest links">
         <a

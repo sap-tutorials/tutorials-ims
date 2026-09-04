@@ -457,6 +457,7 @@ html[data-theme="sap_horizon_dark"] .dtf-window-countdown { color: #f1acff; }
   width: 160px;
   height: auto;
   align-self: flex-end;
+  margin-left: auto;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
 }
 
@@ -506,11 +507,22 @@ html[data-theme="sap_horizon_dark"] .dtf-ticker { color: #f1acff; }
 }
 
 /* ------------------------------ Promo video ------------------------------ */
-/* Sits in the content column under the intro (issue #2144). Capped width so it
-   fills the previously-empty band without overwhelming the page. */
+/* The promo video sits beside Kasimir in the content column (issue #2144),
+   filling the previously-empty band. The row lets the video take the free space
+   on the left while Kasimir stays bottom-right; both wrap on narrow screens. */
+.dtf-media-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+/* Capped width so it fills the band without overwhelming the page; flex-grows
+   to consume the space to the left of Kasimir. */
 .dtf-promo {
-  margin: 0.75rem 0 0;
-  width: 100%;
+  margin: 0;
+  flex: 1 1 300px;
   max-width: 560px;
 }
 
