@@ -552,6 +552,7 @@ view AuthorTutorialParents as
     inner join ims.Missions       as mission on mission.ID   = path.mission.ID
     left  join ims.Groups         as grp     on grp.ID       = mission.group.ID
     {
+      key(tut.slug || '::' || mission.title || '::' || coalesce(grp.title, '~')) as parentKey : String(600),
       tut.slug      as tutorialSlug  : String,
       tut.title     as tutorialTitle : String,
       mission.title as missionTitle  : String,
@@ -565,6 +566,7 @@ view AuthorTutorialParents as
     inner join ims.Tutorials as tut on tut.ID  = gitem.tutorial.ID
     inner join ims.Groups    as grp on grp.ID  = gitem.group.ID
     {
+      key(tut.slug || '::' || '~' || '::' || grp.title) as parentKey : String(600),
       tut.slug            as tutorialSlug  : String,
       tut.title           as tutorialTitle : String,
       null as missionTitle                 : String,
