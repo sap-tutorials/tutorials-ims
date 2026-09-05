@@ -1,7 +1,7 @@
 'use strict';
 // Usage: cds bind --exec -- node scripts/seed-channel-topic-map.cjs [--commit]
 const cds = require('@sap/cds');
-const { seedChannelTopicMap } = require('../srv/lib/channels/seed-channel-topic-map.js');
+const { seedChannelTopicMap } = require('../srv/lib/channels/seed-channel-topic-map.cjs');
 
 (async () => {
   const commit = process.argv.includes('--commit');

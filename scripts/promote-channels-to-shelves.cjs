@@ -1,6 +1,6 @@
 'use strict';
 const cds = require('@sap/cds');
-const { promoteFeatured } = require('../srv/lib/channels/promote-to-shelves.js');
+const { promoteFeatured } = require('../srv/lib/channels/promote-to-shelves.cjs');
 
 (async () => {
   await cds.load('*');

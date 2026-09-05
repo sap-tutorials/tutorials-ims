@@ -1,7 +1,7 @@
 // srv/lib/channels/__tests__/seed-collections.test.js
 import cds from '@sap/cds';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { draftCollections, seedCollections } from '../seed-collections.js';
+import { draftCollections, seedCollections } from '../seed-collections.cjs';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 const NS = 'com.sap.developers.ims';

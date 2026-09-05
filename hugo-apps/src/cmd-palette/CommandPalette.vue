@@ -143,7 +143,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { csrfFetch } from '@shared/csrf-fetch'
 import type { PaletteAction } from './actions'
-import { PALETTE_ACTIONS, buildStepActions } from './actions'
+import { PALETTE_ACTIONS, buildStepActions, navActionsFromData, readNavData } from './actions'
 
 const open = ref(false)
 const query = ref('')
@@ -159,7 +159,13 @@ const kgResults = ref<PaletteAction[]>([])
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let pageActions: PaletteAction[] = []
 
-const allStaticActions = computed<PaletteAction[]>(() => [...pageActions, ...PALETTE_ACTIONS])
+// EXPLORE-group actions derived from the shared nav tree (<script id="nav-data">
+// emitted by header.html). Read once — the tree is static in the DOM — so the
+// palette and the top-nav popover surface the same destinations. Empty on pages
+// without the header partial (readNavData returns null → []).
+const navActions: PaletteAction[] = navActionsFromData(readNavData())
+
+const allStaticActions = computed<PaletteAction[]>(() => [...pageActions, ...PALETTE_ACTIONS, ...navActions])
 
 function fuzzyMatch(item: PaletteAction, q: string): boolean {
   if (!q) return true

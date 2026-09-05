@@ -1,7 +1,7 @@
 // test/channels-promote.test.js
 import cds from '@sap/cds';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mapChannelToShelf, promoteFeatured } from '../srv/lib/channels/promote-to-shelves.js';
+import { mapChannelToShelf, promoteFeatured } from '../srv/lib/channels/promote-to-shelves.cjs';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 const NS = 'com.sap.developers.ims';

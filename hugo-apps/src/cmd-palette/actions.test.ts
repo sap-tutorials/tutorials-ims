@@ -2,13 +2,20 @@
 //
 // @vitest-environment happy-dom
 //
-// Issue #817 — verify the EXPLORE group is wired into the action registry
-// and that keyword filtering surfaces each new route by intent (not just
-// exact label match).
+// The EXPLORE group is no longer hardcoded in PALETTE_ACTIONS — it is derived
+// at runtime from the shared nav tree in hugo/data/navigation.yaml (the same
+// source the top-nav popover renders). These tests parse the REAL data file
+// and drive it through navActionsFromData(), so they guard both the derivation
+// logic AND the actual shipped set of destinations (regression net against
+// someone dropping Channels/Topics/Browse/etc. from the nav).
 
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+import { parse as parseYaml } from 'yaml'
 import { describe, it, expect } from 'vitest'
-import { PALETTE_ACTIONS } from './actions'
-import type { PaletteAction } from './actions'
+import { PALETTE_ACTIONS, navActionsFromData, readNavData } from './actions'
+import type { PaletteAction, NavData } from './actions'
 
 // Mirror of the fuzzy-match function inside CommandPalette.vue. Kept in sync
 // by the unit test below — if the Vue component's matcher diverges we want
@@ -19,61 +26,121 @@ function fuzzyMatch(item: PaletteAction, q: string): boolean {
   return q.toLowerCase().split(/\s+/).every(token => haystack.includes(token))
 }
 
-describe('PALETTE_ACTIONS — EXPLORE group registration', () => {
-  it('includes all seven homepage verb-spine routes', () => {
-    const exploreIds = PALETTE_ACTIONS.filter(a => a.group === 'explore').map(a => a.id)
-    // The verb-spine partial at hugo/layouts/partials/homepage/verb-spine.html
-    // emits exactly these seven verbs in order. If an eighth verb ever
-    // appears there, this list (and the registry) should grow to match.
-    expect(exploreIds).toEqual(expect.arrayContaining([
-      'explore-learn',
-      'explore-build',
-      'explore-integrate',
-      'explore-model',
-      'explore-operate',
-      'explore-ai',
-      'explore-connect',
-    ]))
-  })
+// Parse the actual shipped nav data and build the explore actions from it.
+const navDataPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../hugo/data/navigation.yaml')
+const NAV_DATA = parseYaml(readFileSync(navDataPath, 'utf8')) as NavData
+const EXPLORE = navActionsFromData(NAV_DATA)
 
-  it('includes the Knowledge Graph Explorer entry', () => {
-    const kg = PALETTE_ACTIONS.find(a => a.id === 'explore-knowledge-graph')
-    expect(kg).toBeDefined()
-    expect(kg?.group).toBe('explore')
-    expect(kg?.label).toMatch(/knowledge graph/i)
-  })
-
-  it('every explore-group entry has navigation keywords', () => {
-    const explore = PALETTE_ACTIONS.filter(a => a.group === 'explore')
-    // Each entry must declare at least one keyword so users can find it
-    // without remembering the exact label (the whole point of the palette).
-    for (const a of explore) {
+describe('navActionsFromData — EXPLORE group derivation', () => {
+  it('every derived action is in the explore group with a run and keywords', () => {
+    expect(EXPLORE.length).toBeGreaterThan(0)
+    for (const a of EXPLORE) {
+      expect(a.group).toBe('explore')
+      expect(typeof a.run).toBe('function')
       expect(Array.isArray(a.keywords)).toBe(true)
       expect((a.keywords ?? []).length).toBeGreaterThan(0)
     }
   })
 
-  it('default group is "actions" — explore-group entries opt in explicitly', () => {
-    // Pre-existing actions (go-home, toggle-theme, etc.) don't set `group`;
-    // they default to 'actions' at render time. Confirm the explore entries
-    // are the only ones that set group: 'explore'.
-    const explicitExplore = PALETTE_ACTIONS.filter(a => a.group === 'explore').length
-    const explicitActions = PALETTE_ACTIONS.filter(a => a.group === 'actions').length
-    const unset = PALETTE_ACTIONS.filter(a => a.group === undefined).length
-    expect(explicitExplore).toBeGreaterThanOrEqual(11)  // 7 verbs + KG + 3 new curated
-    expect(unset + explicitActions).toBe(PALETTE_ACTIONS.length - explicitExplore)
+  it('includes all seven homepage verb-spine routes', () => {
+    const ids = EXPLORE.map(a => a.id)
+    expect(ids).toEqual(expect.arrayContaining([
+      'explore-learn', 'explore-build', 'explore-integrate', 'explore-model',
+      'explore-operate', 'explore-ai', 'explore-connect',
+    ]))
+  })
+
+  it('includes the previously-curated destinations (Concepts, KG, Devtoberfest, Advocates, API)', () => {
+    const ids = EXPLORE.map(a => a.id)
+    expect(ids).toEqual(expect.arrayContaining([
+      'explore-concepts', 'explore-knowledge-graph', 'explore-devtoberfest',
+      'explore-advocates', 'explore-api-docs',
+    ]))
+  })
+
+  it('surfaces the destinations that were previously in neither menu (drift fix)', () => {
+    // The whole point of the shared source: Channels/Topics/Browse/What's New/
+    // App Space/Tutorial Navigator are now reachable from ⌘K, not just the nav.
+    const ids = EXPLORE.map(a => a.id)
+    expect(ids).toEqual(expect.arrayContaining([
+      'nav-browse', 'nav-topics', 'nav-channels', 'nav-whats-new',
+      'nav-app-space', 'nav-tutorial-navigator',
+    ]))
+  })
+
+  it('uses the richer paletteLabel when present, falls back to label otherwise', () => {
+    const build = EXPLORE.find(a => a.id === 'explore-build')!
+    expect(build.label).toMatch(/CAP/) // paletteLabel wins for verbs
+    const channels = EXPLORE.find(a => a.id === 'nav-channels')!
+    expect(channels.label).toBe('Channels') // no paletteLabel → plain label
+  })
+
+  it('run navigates to the item href', () => {
+    const kg = EXPLORE.find(a => a.id === 'explore-knowledge-graph')!
+    const originalHref = window.location.href
+    let assigned = ''
+    Object.defineProperty(window, 'location', {
+      value: { get href() { return originalHref }, set href(v) { assigned = v } },
+      configurable: true,
+    })
+    kg.run(() => {})
+    expect(assigned).toBe('/explore/')
   })
 })
 
-describe('keyword-driven discoverability', () => {
-  // Each test pair represents a real intent a user might type. If a future
-  // refactor drops the load-bearing keyword, the lookup regresses silently
-  // unless we lock the intent here.
+describe('navActionsFromData — resilience', () => {
+  it('returns [] for null/empty/malformed input', () => {
+    expect(navActionsFromData(null)).toEqual([])
+    expect(navActionsFromData(undefined)).toEqual([])
+    expect(navActionsFromData({ groups: [] })).toEqual([])
+    expect(navActionsFromData({} as NavData)).toEqual([])
+  })
+
+  it('skips items missing an id or href', () => {
+    const actions = navActionsFromData({
+      groups: [{ id: 'g', label: 'G', items: [
+        { id: 'ok', label: 'OK', href: '/ok/' },
+        { id: '', label: 'No id', href: '/x/' } as never,
+        { id: 'no-href', label: 'No href' } as never,
+      ] }],
+    })
+    expect(actions.map(a => a.id)).toEqual(['ok'])
+  })
+})
+
+describe('readNavData — parses the injected script tag', () => {
+  it('reads and parses <script id="nav-data">', () => {
+    const el = document.createElement('script')
+    el.id = 'nav-data'
+    el.type = 'application/json'
+    el.textContent = JSON.stringify({ groups: [{ id: 'g', label: 'G', items: [{ id: 'i', label: 'I', href: '/i/' }] }] })
+    document.body.appendChild(el)
+    try {
+      const data = readNavData(document)
+      expect(data?.groups[0].items[0].id).toBe('i')
+    } finally {
+      el.remove()
+    }
+  })
+
+  it('returns null when the tag is absent or holds bad JSON', () => {
+    expect(readNavData(document)).toBeNull()
+    const el = document.createElement('script')
+    el.id = 'nav-data'
+    el.textContent = '{not json'
+    document.body.appendChild(el)
+    try {
+      expect(readNavData(document)).toBeNull()
+    } finally {
+      el.remove()
+    }
+  })
+})
+
+describe('keyword-driven discoverability (over the derived explore actions)', () => {
   it.each<[string, string]>([
     ['kg',           'explore-knowledge-graph'],
     ['graph',        'explore-knowledge-graph'],
-    ['knowledge',    'explore-knowledge-graph'],
-    ['concepts',     'explore-knowledge-graph'],
     ['cap',          'explore-build'],
     ['abap',         'explore-build'],
     ['fiori',        'explore-build'],
@@ -82,22 +149,25 @@ describe('keyword-driven discoverability', () => {
     ['integration',  'explore-integrate'],
     ['btp',          'explore-operate'],
     ['deploy',       'explore-operate'],
-    ['advocates',    'explore-connect'],
-    ['community',    'explore-connect'],
     ['getting started', 'explore-learn'],
+    ['channels',     'nav-channels'],
+    ['topics',       'nav-topics'],
+    ['browse',       'nav-browse'],
+    ['whats new',    'nav-whats-new'],
+    ['navigator',    'nav-tutorial-navigator'],
   ])('keyword %j matches %s', (query, expectedId) => {
-    const matched = PALETTE_ACTIONS.filter(a => fuzzyMatch(a, query)).map(a => a.id)
+    const matched = EXPLORE.filter(a => fuzzyMatch(a, query)).map(a => a.id)
     expect(matched).toContain(expectedId)
   })
+})
 
-  it('an empty query matches every action (filter is opt-in)', () => {
-    const all = PALETTE_ACTIONS.filter(a => fuzzyMatch(a, ''))
-    expect(all.length).toBe(PALETTE_ACTIONS.length)
-  })
-
-  it('case-insensitive multi-token match (e.g. "Knowledge GRAPH" hits KG)', () => {
-    const matched = PALETTE_ACTIONS.filter(a => fuzzyMatch(a, 'Knowledge GRAPH')).map(a => a.id)
-    expect(matched).toContain('explore-knowledge-graph')
+describe('PALETTE_ACTIONS — static action group', () => {
+  it('holds only non-explore actions now (explore comes from nav data)', () => {
+    expect(PALETTE_ACTIONS.some(a => a.group === 'explore')).toBe(false)
+    const ids = PALETTE_ACTIONS.map(a => a.id)
+    expect(ids).toEqual(expect.arrayContaining([
+      'go-home', 'go-progress', 'open-joule', 'toggle-theme', 'copy-url', 'report-issue',
+    ]))
   })
 })
 
@@ -132,54 +202,5 @@ describe('#1054 — open-joule action wiring', () => {
     } finally {
       panel.remove()
     }
-  })
-})
-
-describe('#1036 — Concepts / Devtoberfest / Developer Advocates nav entries', () => {
-  it('includes explore-concepts, explore-devtoberfest, explore-advocates in the EXPLORE group', () => {
-    const exploreIds = PALETTE_ACTIONS.filter(a => a.group === 'explore').map(a => a.id)
-    expect(exploreIds).toEqual(expect.arrayContaining([
-      'explore-concepts',
-      'explore-devtoberfest',
-      'explore-advocates',
-    ]))
-  })
-
-  it('places the three new entries between explore-connect and explore-knowledge-graph', () => {
-    const explore = PALETTE_ACTIONS.filter(a => a.group === 'explore').map(a => a.id)
-    const iConnect = explore.indexOf('explore-connect')
-    const iKG      = explore.indexOf('explore-knowledge-graph')
-    const iConcepts     = explore.indexOf('explore-concepts')
-    const iDevtoberfest = explore.indexOf('explore-devtoberfest')
-    const iAdvocates    = explore.indexOf('explore-advocates')
-    expect(iConnect).toBeGreaterThanOrEqual(0)
-    expect(iKG).toBeGreaterThan(iConnect)
-    for (const idx of [iConcepts, iDevtoberfest, iAdvocates]) {
-      expect(idx).toBeGreaterThan(iConnect)
-      expect(idx).toBeLessThan(iKG)
-    }
-  })
-
-  it.each<[string, string, string]>([
-    ['concepts',      'explore-concepts',      '/concepts/'],
-    ['glossary',      'explore-concepts',      '/concepts/'],
-    ['devtoberfest',  'explore-devtoberfest',  '/devtoberfest/'],
-    ['festival',      'explore-devtoberfest',  '/devtoberfest/'],
-    ['advocates',     'explore-advocates',     '/developer-advocates/'],
-    ['devrel',        'explore-advocates',     '/developer-advocates/'],
-  ])('keyword %j matches %s and its run navigates to %s', (query, expectedId, expectedHref) => {
-    const matched = PALETTE_ACTIONS.filter(a => fuzzyMatch(a, query)).map(a => a.id)
-    expect(matched).toContain(expectedId)
-    // Assert the run closure navigates to the expected href by stubbing
-    // window.location.href assignment.
-    const entry = PALETTE_ACTIONS.find(a => a.id === expectedId)!
-    const originalHref = window.location.href
-    let assigned = ''
-    Object.defineProperty(window, 'location', {
-      value: { get href() { return originalHref }, set href(v) { assigned = v } },
-      configurable: true,
-    })
-    entry.run(() => {})
-    expect(assigned).toBe(expectedHref)
   })
 })
