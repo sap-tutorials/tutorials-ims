@@ -50,8 +50,8 @@ describe('generateSlug', () => {
   });
 
   it('does not mutate seen for no-dedup mode', () => {
-    // Just ensures no crash when seen is undefined
-    expect(() => generateSlug('X', undefined)).not.toThrow();
+    // Also asserts the actual return value, not just no-throw.
+    expect(generateSlug('Foo Bar', undefined)).toBe('foo-bar');
   });
 });
 
@@ -112,5 +112,44 @@ describe('normalizeChannel — slug + feedUrl fields', () => {
     const row1 = normalizeChannel(BASE_RAW, '2026-09', seen1);
     const row2 = normalizeChannel(BASE_RAW, '2026-09', seen2);
     expect(row1.contentHash).toBe(row2.contentHash);
+  });
+});
+
+describe('normalizeChannel — slug stability (re-ingest contract)', () => {
+  const BASE_RAW = {
+    id: 'x',
+    name: 'Foo',
+    url: 'https://example.com',
+    related_urls: [],
+    aliases: [],
+    purpose: null,
+    notes: null,
+    owner_type: null,
+    isSapOwned: false,
+    category: null,
+    subcategory: null,
+    platform: null,
+    status: null,
+    focus_areas: [],
+    tags: [],
+    update_frequency: null,
+    github_stars: null,
+    subscribers: null,
+  };
+
+  it('reuses existingSlug verbatim for a known sourceId (slug must not churn)', () => {
+    // Simulate: DB already has sourceId='x' → slug='foo'; seenSlugs already has 'foo'.
+    // Without existingSlug fix, generateSlug would return 'foo-2' (collision).
+    const seenSlugs = new Set(['foo']);
+    const row = normalizeChannel(BASE_RAW, 'batch', seenSlugs, 'foo');
+    expect(row.slug).toBe('foo');
+  });
+
+  it('deduplicates a genuinely new sourceId whose base slug is already taken', () => {
+    // A new sourceId 'y' with the same name 'Foo' must still get a unique slug.
+    const rawNew = { ...BASE_RAW, id: 'y' };
+    const seenSlugs = new Set(['foo']); // 'foo' is taken by existing row 'x'
+    const row = normalizeChannel(rawNew, 'batch', seenSlugs, undefined);
+    expect(row.slug).toBe('foo-2');
   });
 });

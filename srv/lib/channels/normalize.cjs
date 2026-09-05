@@ -83,11 +83,11 @@ function generateSlug(name, seenSlugs) {
   return slug;
 }
 
-function normalizeChannel(raw, ingestBatch, seenSlugs) {
+function normalizeChannel(raw, ingestBatch, seenSlugs, existingSlug) {
   const { status, note } = normalizeStatus(raw.status);
   const purpose = cleanCitations(raw.purpose);
   const notesParts = [cleanCitations(raw.notes), note].filter(Boolean);
-  const feedUrl = raw.feed ? String(raw.feed).trim() : null;
+  const feedUrl = (raw.feed ? String(raw.feed).trim() : '') || null;
   const source = {
     name: raw.name, url: raw.url,
     relatedUrls: raw.related_urls ?? [],
@@ -107,9 +107,10 @@ function normalizeChannel(raw, ingestBatch, seenSlugs) {
     subscribers: parseApproxCount(raw.subscribers),
     feedUrl,
   };
-  // slug is generated from name — not part of the content hash (dedup suffix must
-  // not trigger a content-hash mismatch on re-ingest of an unchanged record).
-  const slug = generateSlug(raw.name, seenSlugs);
+  // slug is assigned ONCE (when the sourceId is first seen) and reused verbatim on
+  // re-ingest. Not part of the content hash — dedup suffix must not trigger a
+  // content-hash mismatch on re-ingest of an unchanged record.
+  const slug = existingSlug || generateSlug(raw.name, seenSlugs);
   return { sourceId: raw.id, ...source, contentHash: computeContentHash(source), ingestBatch, slug };
 }
 
