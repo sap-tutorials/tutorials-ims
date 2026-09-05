@@ -25,8 +25,14 @@ async function main() {
 
   let inserted = 0, updated = 0, skipped = 0;
   const seen = new Set();
+
+  // Pre-populate seenSlugs with slugs already in the DB so incremental
+  // re-ingests don't collide with rows not in this batch.
+  const existingAll = await SELECT.from(Channels).columns('sourceId', 'slug');
+  const seenSlugs = new Set(existingAll.map((r) => r.slug).filter(Boolean));
+
   for (const raw of rawChannels) {
-    const row = normalizeChannel(raw, batch);
+    const row = normalizeChannel(raw, batch, seenSlugs);
     seen.add(row.sourceId);
     const existing = await SELECT.one.from(Channels).where({ sourceId: row.sourceId });
     if (existing && existing.contentHash === row.contentHash && !force) { skipped++; continue; }
