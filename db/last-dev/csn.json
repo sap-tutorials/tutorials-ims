@@ -2145,7 +2145,7 @@
         },
         "platform": {
           "type": "cds.String",
-          "length": 40,
+          "length": 80,
           "@cds.persistence.name": "PLATFORM"
         },
         "status": {
@@ -2430,6 +2430,80 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHANNELTOPICMAP"
+    },
+    "com.sap.developers.ims.ChannelSubmissions": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "kind": {
+          "type": "cds.String",
+          "length": 5000,
+          "@cds.persistence.name": "KIND"
+        },
+        "targetChannel_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "targetChannel",
+          "@cds.persistence.name": "TARGETCHANNEL_ID"
+        },
+        "proposed": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "PROPOSED"
+        },
+        "rationale": {
+          "type": "cds.String",
+          "length": 1000,
+          "@cds.persistence.name": "RATIONALE"
+        },
+        "submitterId": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "SUBMITTERID"
+        },
+        "status": {
+          "type": "cds.String",
+          "default": {
+            "val": "PENDING"
+          },
+          "length": 5000,
+          "@cds.persistence.name": "STATUS"
+        },
+        "reviewerId": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "REVIEWERID"
+        },
+        "reviewNote": {
+          "type": "cds.String",
+          "length": 800,
+          "@cds.persistence.name": "REVIEWNOTE"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHANNELSUBMISSIONS"
     },
     "com.sap.developers.ims.FailedEmails": {
       "kind": "entity",
@@ -3732,80 +3806,6 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_UIEVENT"
-    },
-    "com.sap.developers.ims.ChannelSubmissions": {
-      "kind": "entity",
-      "@cds.persistence.journal": true,
-      "elements": {
-        "ID": {
-          "key": true,
-          "type": "cds.String",
-          "length": 36,
-          "@cds.persistence.name": "ID"
-        },
-        "createdAt": {
-          "type": "cds.Timestamp",
-          "@cds.persistence.name": "CREATEDAT"
-        },
-        "createdBy": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "CREATEDBY"
-        },
-        "modifiedAt": {
-          "type": "cds.Timestamp",
-          "@cds.persistence.name": "MODIFIEDAT"
-        },
-        "modifiedBy": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "MODIFIEDBY"
-        },
-        "kind": {
-          "type": "cds.String",
-          "length": 5000,
-          "@cds.persistence.name": "KIND"
-        },
-        "targetChannel_ID": {
-          "type": "cds.String",
-          "length": 36,
-          "@odata.foreignKey4": "targetChannel",
-          "@cds.persistence.name": "TARGETCHANNEL_ID"
-        },
-        "proposed": {
-          "type": "cds.LargeString",
-          "@cds.persistence.name": "PROPOSED"
-        },
-        "rationale": {
-          "type": "cds.String",
-          "length": 1000,
-          "@cds.persistence.name": "RATIONALE"
-        },
-        "submitterId": {
-          "type": "cds.String",
-          "length": 120,
-          "@cds.persistence.name": "SUBMITTERID"
-        },
-        "status": {
-          "type": "cds.String",
-          "default": {
-            "val": "PENDING"
-          },
-          "length": 5000,
-          "@cds.persistence.name": "STATUS"
-        },
-        "reviewerId": {
-          "type": "cds.String",
-          "length": 120,
-          "@cds.persistence.name": "REVIEWERID"
-        },
-        "reviewNote": {
-          "type": "cds.String",
-          "length": 800,
-          "@cds.persistence.name": "REVIEWNOTE"
-        }
-      },
-      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHANNELSUBMISSIONS"
     },
     "com.sap.developers.ims.CatGameAwards": {
       "kind": "entity",

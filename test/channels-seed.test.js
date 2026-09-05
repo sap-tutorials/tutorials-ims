@@ -1,7 +1,7 @@
 // test/channels-seed.test.js
 import cds from '@sap/cds';
 import { describe, it, expect, afterAll } from 'vitest';
-import { normalizeChannel } from '../srv/lib/channels/normalize.js';
+import { normalizeChannel } from '../srv/lib/channels/normalize.cjs';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 const NS = 'com.sap.developers.ims';

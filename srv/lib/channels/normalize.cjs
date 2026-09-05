@@ -39,6 +39,20 @@ function normalizeStatus(raw) {
   return { status: 'Active', note: s };
 }
 
+// Coerce an approximate count ("~1.4K", "3,200", "1.7K", 806) to an integer.
+// The research dataset gives GitHub-star counts as human-readable approximations;
+// the Channels.githubStars/subscribers columns are Integer. Returns null when
+// there is nothing parseable.
+function parseApproxCount(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? Math.round(raw) : null;
+  const s = String(raw).trim().replace(/^~/, '').replace(/,/g, '');
+  const m = s.match(/^([0-9]*\.?[0-9]+)\s*([kKmMbB]?)$/);
+  if (!m) return null;
+  const mult = { '': 1, k: 1e3, m: 1e6, b: 1e9 }[m[2].toLowerCase()];
+  return Math.round(parseFloat(m[1]) * mult);
+}
+
 // Hash only the source (dataset-owned) fields, order-independent.
 function computeContentHash(sourceFields) {
   const canonical = JSON.stringify(sourceFields, Object.keys(sourceFields).sort());
@@ -64,10 +78,10 @@ function normalizeChannel(raw, ingestBatch) {
     focusAreas: raw.focus_areas ?? [],
     tags: raw.tags ?? [],
     updateFrequency: raw.update_frequency ?? null,
-    githubStars: raw.github_stars ?? null,
-    subscribers: raw.subscribers ?? null,
+    githubStars: parseApproxCount(raw.github_stars),
+    subscribers: parseApproxCount(raw.subscribers),
   };
   return { sourceId: raw.id, ...source, contentHash: computeContentHash(source), ingestBatch };
 }
 
-module.exports = { cleanCitations, normalizeOwnerType, normalizeStatus, computeContentHash, normalizeChannel };
+module.exports = { cleanCitations, normalizeOwnerType, normalizeStatus, parseApproxCount, computeContentHash, normalizeChannel };
