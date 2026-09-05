@@ -316,6 +316,7 @@ export default defineConfig({
         'channels-directory': resolve(__dirname, 'src/channels-directory/index.ts'),
         'channel-submit': resolve(__dirname, 'src/channel-submit/main.ts'),
         'channels-health': resolve(__dirname, 'src/channels-health/index.ts'),
+        'media-diet': resolve(__dirname, 'src/media-diet/index.ts'),
       },
       output: {
         // Content-hash entry bundles so a changed bundle gets a new URL the
