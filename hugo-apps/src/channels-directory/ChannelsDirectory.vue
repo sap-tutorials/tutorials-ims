@@ -29,6 +29,43 @@ const cols = computed(() => visibleCollections(props.collections));
 
 <template>
   <div class="channels-directory">
+    <section class="channels-hub-band">
+      <p class="channels-hub-band__intro">
+        SAP developers consume content across dozens of surfaces — portals, docs,
+        YouTube channels, podcasts, GitHub orgs, and community spaces. This directory
+        maps that ecosystem so you can find the channels that fit your workflow.
+      </p>
+      <ul class="channels-hub-band__cards">
+        <li>
+          <a href="/channels/atlas/" class="hub-card">
+            <ui5-icon name="org-chart" class="hub-card__icon"></ui5-icon>
+            <span class="hub-card__title">Channel Atlas</span>
+            <span class="hub-card__desc">Visual map of the full ecosystem</span>
+          </a>
+        </li>
+        <li>
+          <a href="/channels/crosswalk/" class="hub-card">
+            <ui5-icon name="chain-link" class="hub-card__icon"></ui5-icon>
+            <span class="hub-card__title">Learn ↔ Follow</span>
+            <span class="hub-card__desc">Tutorial topics to channels crosswalk</span>
+          </a>
+        </li>
+        <li>
+          <a href="/channels/health/" class="hub-card">
+            <ui5-icon name="sys-monitor" class="hub-card__icon"></ui5-icon>
+            <span class="hub-card__title">Ecosystem Health</span>
+            <span class="hub-card__desc">Active-vs-inactive and coverage radar</span>
+          </a>
+        </li>
+        <li>
+          <a href="/channels/media-diet/" class="hub-card">
+            <ui5-icon name="favorite" class="hub-card__icon"></ui5-icon>
+            <span class="hub-card__title">Build Your Media Diet</span>
+            <span class="hub-card__desc">Get a personalized channel bundle</span>
+          </a>
+        </li>
+      </ul>
+    </section>
     <section v-if="cols.length" class="channel-collections">
       <article v-for="col in cols" :key="col.slug" class="collection">
         <h2>{{ col.title }}</h2>
@@ -200,6 +237,54 @@ const cols = computed(() => visibleCollections(props.collections));
 .badge--community {
   color: var(--sapPositiveTextColor, #256f3a);
   background: var(--sapSuccessBackground, #e5f6e6);
+}
+
+/* --- Hub navigation band --- */
+.channels-hub-band {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.channels-hub-band__intro {
+  margin: 0;
+  color: var(--sapTextColor, #1d2d3e);
+  font-size: 1rem;
+}
+.channels-hub-band__cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem;
+}
+.hub-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--sapList_BorderColor, #d9d9d9);
+  border-radius: var(--sapElement_BorderCornerRadius, 0.75rem);
+  background: var(--sapGroup_ContentBackground, #fff);
+  text-decoration: none;
+  transition: box-shadow 0.12s;
+}
+.hub-card:hover {
+  box-shadow: var(--sapContent_Shadow1, 0 0 0.5rem rgba(0, 0, 0, 0.12));
+}
+.hub-card__icon {
+  font-size: 1.5rem;
+  color: var(--sapAccentColor6, #0064d9);
+}
+.hub-card__title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--sapLinkColor, #0070f2);
+}
+.hub-card__desc {
+  font-size: 0.875rem;
+  color: var(--sapNeutralTextColor, #556b82);
 }
 
 @media (max-width: 640px) {
