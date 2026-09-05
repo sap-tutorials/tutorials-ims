@@ -59,7 +59,10 @@
           "options": {
             "settings": {
               "contextPath": "/ChannelCollections",
-              "initialLoad": "Enabled"
+              "initialLoad": "Enabled",
+              "navigation": {
+                "ChannelCollections": { "detail": { "route": "ChannelCollectionsObject" } }
+              }
             }
           }
         },
