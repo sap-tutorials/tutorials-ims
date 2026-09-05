@@ -6,7 +6,7 @@
     <p>{{ .Description }}</p>
   </header>
   <script id="channel-collections-data" type="application/json">
-      {{ with .Site.Data.channel_collections }}{{ .collections | jsonify }}{{ else }}[]{{ end }}
+      {{ with .Site.Data.channel_collections }}{{ .collections | jsonify | safeJS }}{{ else }}[]{{ end }}
     </script>
     <script id="channels-data" type="application/json">{{ $channels | jsonify | safeJS }}</script>
   <div data-island="channels-directory"></div>

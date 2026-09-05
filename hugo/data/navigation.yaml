@@ -29,6 +29,11 @@ groups:
   - id: learn
     label: Learn
     items:
+      - id: nav-tutorial-navigator
+        label: Tutorial Navigator
+        href: /tutorial-navigator/
+        icon: course-book
+        keywords: [tutorial, navigator, catalog, browse tutorials, learn]
       - id: explore-learn
         label: Learn
         href: /learn/
@@ -74,11 +79,6 @@ groups:
         paletteLabel: Connect — events, advocates, community
         paletteIcon: group
         keywords: [connect, community, events, advocates, codejam, devtoberfest, verb]
-      - id: nav-tutorial-navigator
-        label: Tutorial Navigator
-        href: /tutorial-navigator/
-        icon: course-book
-        keywords: [tutorial, navigator, catalog, browse tutorials, learn]
   - id: explore
     label: Explore
     items:
