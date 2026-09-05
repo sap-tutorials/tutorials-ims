@@ -59,10 +59,35 @@ function computeContentHash(sourceFields) {
   return crypto.createHash('sha256').update(canonical).digest('hex');
 }
 
-function normalizeChannel(raw, ingestBatch) {
+// Converts a channel name to a kebab-case URL slug.
+// Lowercases, collapses all non-alphanumeric runs to a single '-', trims ends.
+function toKebabSlug(name) {
+  return String(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+// Returns a unique kebab slug. Appends -2, -3, … on collision.
+// When seenSlugs is undefined (single-channel mode), dedup is skipped.
+function generateSlug(name, seenSlugs) {
+  const base = toKebabSlug(name);
+  if (!seenSlugs || !seenSlugs.has(base)) {
+    if (seenSlugs) seenSlugs.add(base);
+    return base;
+  }
+  let n = 2;
+  while (seenSlugs.has(`${base}-${n}`)) n++;
+  const slug = `${base}-${n}`;
+  seenSlugs.add(slug);
+  return slug;
+}
+
+function normalizeChannel(raw, ingestBatch, seenSlugs, existingSlug) {
   const { status, note } = normalizeStatus(raw.status);
   const purpose = cleanCitations(raw.purpose);
   const notesParts = [cleanCitations(raw.notes), note].filter(Boolean);
+  const feedUrl = (raw.feed ? String(raw.feed).trim() : '') || null;
   const source = {
     name: raw.name, url: raw.url,
     relatedUrls: raw.related_urls ?? [],
@@ -80,8 +105,13 @@ function normalizeChannel(raw, ingestBatch) {
     updateFrequency: raw.update_frequency ?? null,
     githubStars: parseApproxCount(raw.github_stars),
     subscribers: parseApproxCount(raw.subscribers),
+    feedUrl,
   };
-  return { sourceId: raw.id, ...source, contentHash: computeContentHash(source), ingestBatch };
+  // slug is assigned ONCE (when the sourceId is first seen) and reused verbatim on
+  // re-ingest. Not part of the content hash — dedup suffix must not trigger a
+  // content-hash mismatch on re-ingest of an unchanged record.
+  const slug = existingSlug || generateSlug(raw.name, seenSlugs);
+  return { sourceId: raw.id, ...source, contentHash: computeContentHash(source), ingestBatch, slug };
 }
 
-module.exports = { cleanCitations, normalizeOwnerType, normalizeStatus, parseApproxCount, computeContentHash, normalizeChannel };
+module.exports = { cleanCitations, normalizeOwnerType, normalizeStatus, parseApproxCount, computeContentHash, toKebabSlug, generateSlug, normalizeChannel };
