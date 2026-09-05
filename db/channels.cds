@@ -11,6 +11,7 @@ type ChannelOwnerType : String enum {
 type ChannelStatus : String enum { Active; Archived; Closed; Discontinued; EOL; }
 
 @assert.unique.sourceId: [sourceId]
+@assert.unique.slugField: [slug]
 entity Channels : cuid, managed {
   sourceId       : String(40)  @mandatory;   // "portal-001" — dedup / re-ingest key
   name           : String(200) @mandatory;
@@ -31,6 +32,8 @@ entity Channels : cuid, managed {
   updateFrequency: String(40);
   githubStars    : Integer;
   subscribers    : Integer;
+  slug           : String(200);                // kebab-case of name; unique; populated at ingest
+  feedUrl        : String(500);                // RSS/Atom feed URL from dataset; null when absent
 
   // ── curation / lifecycle (admin-editable; absent from ingest so re-seed never wipes) ──
   isPublished        : Boolean default true;
