@@ -110,6 +110,12 @@ groups:
         icon: org-chart
         paletteLabel: Knowledge Graph Explorer
         keywords: [knowledge graph, kg, graph, concepts, map, network, explore, visualization]
+      - id: nav-explore-about
+        label: About the Knowledge Graph
+        href: /explore/about/
+        icon: question-mark
+        paletteLabel: About the Knowledge Graph — what it is, how it's built, SPARQL
+        keywords: [about, knowledge graph, kg, sparql, how it works, explainer, built by ai]
       - id: nav-whats-new
         label: What's New
         href: /whats-new/
