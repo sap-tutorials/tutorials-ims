@@ -1,0 +1,18 @@
+{
+  "total": 0,
+  "publishedCount": 0,
+  "byStatus": {},
+  "byOwnerType": {},
+  "byCategory": {},
+  "bySubcategory": {},
+  "sapVsCommunity": {
+    "sap": 0,
+    "community": 0
+  },
+  "activeVsInactive": {
+    "active": 0,
+    "inactive": 0
+  },
+  "buildAt": "2026-09-05T21:11:04.779Z",
+  "error": "fetch failed"
+}
