@@ -24,7 +24,7 @@ entity Channels : cuid, managed {
   isSapOwned     : Boolean default false;
   category       : String(60);
   subcategory    : String(80);
-  platform       : String(40);
+  platform       : String(80);
   status         : ChannelStatus default 'Active' @assert.range;
   focusAreas     : array of String(60);
   tags           : array of String(40);

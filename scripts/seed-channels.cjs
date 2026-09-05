@@ -4,7 +4,7 @@
 //   npx cds bind --exec -- node scripts/seed-channels.cjs --file d:/tmp/External-SAP-Channels-Complete.json --commit
 const cds = require('@sap/cds');
 const { readFileSync } = require('node:fs');
-const { normalizeChannel } = require('../srv/lib/channels/normalize.js');
+const { normalizeChannel } = require('../srv/lib/channels/normalize.cjs');
 
 const CURATED = ['isPublished', 'isFeatured', 'editorialNote', 'linkStatus', 'linkStatusOverride', 'lastChecked'];
 

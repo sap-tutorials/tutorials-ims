@@ -2,8 +2,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   cleanCitations, normalizeOwnerType, normalizeStatus,
-  computeContentHash, normalizeChannel,
-} from '../srv/lib/channels/normalize.js';
+  parseApproxCount, computeContentHash, normalizeChannel,
+} from '../srv/lib/channels/normalize.cjs';
 
 describe('channels normalize', () => {
   it('strips [cite:] markers and trailing space', () => {
@@ -22,6 +22,25 @@ describe('channels normalize', () => {
     expect(normalizeStatus('Entering EOL')).toEqual({ status: 'EOL', note: 'Entering EOL' });
     expect(normalizeStatus('Active (Canonical source)'))
       .toEqual({ status: 'Active', note: 'Canonical source' });
+  });
+
+  it('parses approximate counts to integers for the Integer columns', () => {
+    expect(parseApproxCount('~1.4K')).toBe(1400);
+    expect(parseApproxCount('~3.2K')).toBe(3200);
+    expect(parseApproxCount('~520')).toBe(520);
+    expect(parseApproxCount('1,234')).toBe(1234);
+    expect(parseApproxCount(806)).toBe(806);
+    expect(parseApproxCount(null)).toBeNull();
+    expect(parseApproxCount('n/a')).toBeNull();
+  });
+
+  it('normalizeChannel coerces github_stars/subscribers to integers', () => {
+    const row = normalizeChannel({
+      id: 'gh-1', name: 'Repo', url: 'https://x',
+      github_stars: '~1.4K', subscribers: 806,
+    }, '2026-09-03');
+    expect(row.githubStars).toBe(1400);
+    expect(row.subscribers).toBe(806);
   });
 
   it('content hash is stable across key order and changes with content', () => {
