@@ -59,7 +59,10 @@
           "options": {
             "settings": {
               "contextPath": "/ChannelTopicMap",
-              "initialLoad": "Enabled"
+              "initialLoad": "Enabled",
+              "navigation": {
+                "ChannelTopicMap": { "detail": { "route": "ChannelTopicMapObject" } }
+              }
             }
           }
         },

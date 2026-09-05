@@ -59,7 +59,10 @@
           "options": {
             "settings": {
               "contextPath": "/Channels",
-              "initialLoad": "Enabled"
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Channels": { "detail": { "route": "ChannelsObject" } }
+              }
             }
           }
         },
