@@ -498,6 +498,49 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // Aggregate stats for the ecosystem-health radar at /channels/health/.
+  // Consumed by scripts/fetch-channels-stats.ts at build time. Public, unauthenticated.
+  // v1 uses ONLY reliably-populated fields: status, ownerType, category/subcategory,
+  // isSapOwned, isPublished. Explicitly EXCLUDES linkStatus, lastChecked, updateFrequency.
+  app.get('/build/channels-stats', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.Channels')
+          .columns('status', 'ownerType', 'category', 'subcategory', 'isSapOwned', 'isPublished'),
+      );
+      const countBy = (key) => {
+        const map = {};
+        for (const r of rows) {
+          const v = r[key] ?? '(unknown)';
+          map[v] = (map[v] || 0) + 1;
+        }
+        return map;
+      };
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({
+        total: rows.length,
+        publishedCount: rows.filter((r) => r.isPublished).length,
+        byStatus: countBy('status'),
+        byOwnerType: countBy('ownerType'),
+        byCategory: countBy('category'),
+        bySubcategory: countBy('subcategory'),
+        sapVsCommunity: {
+          sap: rows.filter((r) => r.isSapOwned).length,
+          community: rows.filter((r) => !r.isSapOwned).length,
+        },
+        activeVsInactive: {
+          active: rows.filter((r) => r.status === 'Active').length,
+          inactive: rows.filter((r) => r.status !== 'Active').length,
+        },
+        buildAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('[build/channels-stats]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // (#1032) Build-time data for Hugo featured topics carousel — consumed by
   // scripts/fetch-tutorials.ts at build time. Public, unauthenticated.
   // Cache-Control 60s (Hugo fetches once per build, not per request).
