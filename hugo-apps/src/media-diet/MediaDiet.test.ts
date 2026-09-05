@@ -35,7 +35,7 @@ describe('MediaDiet', () => {
     expect(results.text()).not.toContain('HANA Academy');
   });
 
-  it('shows no more than 12 results', () => {
+  it('shows no more than 12 results', async () => {
     const manyChannels = Array.from({ length: 20 }, (_, i) => ({
       name: `Channel ${i}`, url: `https://ch${i}.example`, purpose: `Purpose ${i}`,
       focusAreas: ['BTP'],
@@ -45,7 +45,7 @@ describe('MediaDiet', () => {
       el.text().includes('BTP'),
     );
     expect(btpToggle).toBeDefined();
-    btpToggle!.trigger('click');
+    await btpToggle!.trigger('click');
     // Results should be capped at 12
     const resultItems = wrapper.findAll('[data-testid="result-item"]');
     expect(resultItems.length).toBeLessThanOrEqual(12);
