@@ -57,7 +57,7 @@
     </ui5-list>
   </div>
 </ui5-popover>
-<script id="nav-data" type="application/json">{{ site.Data.navigation | jsonify }}</script>
+<script id="nav-data" type="application/json">{{ site.Data.navigation | jsonify | safeJS }}</script>
 
 <ui5-popover id="sb-share-popover" placement="Bottom" horizontal-align="End" hide-arrow header-text="Share & feedback">
   <div class="share-popover__body">
@@ -245,17 +245,32 @@
   // Two-level accordion: clicking a group header opens its list and closes the
   // others (single-open keeps the menu compact on mobile). The first group ships
   // expanded (aria-expanded="true" in the template) so the verb spine stays
-  // visible at a glance on desktop.
+  // visible at a glance on desktop. The last-open group is remembered in
+  // localStorage and restored on the next load so navigation can continue where
+  // it left off (empty string = user collapsed everything).
+  const NAV_OPEN_KEY = 'sb-nav-open-group';
+  const setOpenGroup = (groupId) => {
+    navPopover.querySelectorAll('.nav-group__header').forEach(b => b.setAttribute('aria-expanded', 'false'));
+    navPopover.querySelectorAll('.nav-group__items').forEach(l => l.setAttribute('hidden', ''));
+    if (!groupId) return;
+    const header = navPopover.querySelector('.nav-group__header[data-nav-group="' + groupId + '"]');
+    const list = navPopover.querySelector('.nav-group__items[data-nav-items="' + groupId + '"]');
+    if (header && list) {
+      header.setAttribute('aria-expanded', 'true');
+      list.removeAttribute('hidden');
+    }
+  };
+  // Restore the remembered group (null = untouched, keep the template default).
+  try {
+    const stored = localStorage.getItem(NAV_OPEN_KEY);
+    if (stored !== null) setOpenGroup(stored);
+  } catch (e) { /* storage blocked; keep template default */ }
   document.querySelectorAll('#sb-nav-popover .nav-group__header').forEach(btn => {
     btn.addEventListener('click', () => {
       const wasOpen = btn.getAttribute('aria-expanded') === 'true';
-      navPopover.querySelectorAll('.nav-group__header').forEach(b => b.setAttribute('aria-expanded', 'false'));
-      navPopover.querySelectorAll('.nav-group__items').forEach(l => l.setAttribute('hidden', ''));
-      if (!wasOpen) {
-        btn.setAttribute('aria-expanded', 'true');
-        const list = navPopover.querySelector('.nav-group__items[data-nav-items="' + btn.getAttribute('data-nav-group') + '"]');
-        if (list) list.removeAttribute('hidden');
-      }
+      const groupId = wasOpen ? '' : btn.getAttribute('data-nav-group');
+      setOpenGroup(groupId);
+      try { localStorage.setItem(NAV_OPEN_KEY, groupId); } catch (e) { /* storage blocked */ }
     });
   });
 
