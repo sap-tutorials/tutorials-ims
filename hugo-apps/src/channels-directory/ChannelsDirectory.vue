@@ -74,3 +74,137 @@ const cols = computed(() => visibleCollections(props.collections));
     </ul>
   </div>
 </template>
+
+<style scoped>
+.channels-directory {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* --- Editorial collections --- */
+.channel-collections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem;
+}
+.collection {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--sapList_BorderColor, #d9d9d9);
+  border-radius: var(--sapElement_BorderCornerRadius, 0.75rem);
+  background: var(--sapGroup_ContentBackground, #fff);
+}
+.collection h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  color: var(--sapGroup_TitleTextColor, #1d2d3e);
+}
+.collection-intro {
+  margin: 0 0 0.75rem;
+  color: var(--sapNeutralTextColor, #556b82);
+}
+.collection ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.collection .blurb {
+  color: var(--sapNeutralTextColor, #556b82);
+}
+
+/* --- Filter toolbar --- */
+.channels-directory__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--sapList_BorderColor, #d9d9d9);
+  border-radius: var(--sapElement_BorderCornerRadius, 0.75rem);
+  background: var(--sapGroup_ContentBackground, #fff);
+}
+.channels-directory__controls input,
+.channels-directory__controls select {
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  color: var(--sapField_TextColor, #1d2d3e);
+  background: var(--sapField_Background, #fff);
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  border-radius: var(--sapField_BorderCornerRadius, 0.25rem);
+}
+.channels-directory__controls input[type='search'] {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+}
+.channels-directory__controls select {
+  flex: 0 1 auto;
+}
+.channels-directory__count {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--sapNeutralTextColor, #556b82);
+  white-space: nowrap;
+}
+
+/* --- Channel cards --- */
+.channels-directory__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  gap: 1rem;
+}
+.channel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--sapList_BorderColor, #d9d9d9);
+  border-radius: var(--sapElement_BorderCornerRadius, 0.75rem);
+  background: var(--sapGroup_ContentBackground, #fff);
+  box-shadow: var(--sapContent_Shadow0, 0 0 0.25rem rgba(0, 0, 0, 0.08));
+}
+.channel-card > a {
+  font-weight: 600;
+  font-size: 1.0625rem;
+  color: var(--sapLinkColor, #0070f2);
+  text-decoration: none;
+}
+.channel-card > a:hover {
+  text-decoration: underline;
+}
+.channel-card > p {
+  margin: 0;
+  color: var(--sapTextColor, #1d2d3e);
+}
+.channel-card__related {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+.badge {
+  align-self: flex-start;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 1rem;
+}
+.badge--sap {
+  color: var(--sapInformativeTextColor, #0070f2);
+  background: var(--sapInformationBackground, #e5f0fa);
+}
+.badge--community {
+  color: var(--sapPositiveTextColor, #256f3a);
+  background: var(--sapSuccessBackground, #e5f6e6);
+}
+
+@media (max-width: 640px) {
+  .channels-directory__count {
+    margin-left: 0;
+  }
+}
+</style>

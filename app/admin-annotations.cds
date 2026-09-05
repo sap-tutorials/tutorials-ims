@@ -4492,3 +4492,164 @@ annotate AdminService.Tutorials with @(
     ]
   }
 );
+
+// --- External Channels (P0-P4) ---------------------------------------------
+// Draft enablement lives in srv/admin-service.cds (Channels / ChannelCollections
+// / ChannelTopicMap are @odata.draft.enabled there). These blocks give the FE
+// List Reports their columns + Object Page facets so the tables render and the
+// Create/Edit toolbar appears. Array-typed source fields (relatedUrls, aliases,
+// focusAreas, tags) are deliberately omitted — FE V4 does not render
+// `array of String` cleanly in tables/OP; curators edit them via re-ingest.
+annotate AdminService.Channels with {
+  sourceId       @Common.Label: 'Source ID' @Common.FieldControl: #ReadOnly;
+  name           @Common.Label: 'Name' @mandatory;
+  url            @Common.Label: 'URL' @mandatory;
+  purpose        @Common.Label: 'Purpose' @UI.MultiLineText;
+  notes          @Common.Label: 'Notes' @UI.MultiLineText;
+  ownerName      @Common.Label: 'Owner';
+  ownerType      @Common.Label: 'Owner Type';
+  isSapOwned     @Common.Label: 'SAP-owned';
+  category       @Common.Label: 'Category';
+  subcategory    @Common.Label: 'Subcategory';
+  platform       @Common.Label: 'Platform';
+  status         @Common.Label: 'Status';
+  updateFrequency@Common.Label: 'Update Frequency';
+  githubStars    @Common.Label: 'GitHub Stars';
+  subscribers    @Common.Label: 'Subscribers';
+  isPublished    @Common.Label: 'Published';
+  isFeatured     @Common.Label: 'Featured';
+  editorialNote  @Common.Label: 'Editorial Note' @UI.MultiLineText;
+  linkStatus     @Common.Label: 'Link Status' @Common.FieldControl: #ReadOnly;
+  linkStatusOverride @Common.Label: 'Link Status Override';
+  lastChecked    @Common.Label: 'Last Checked' @Common.FieldControl: #ReadOnly;
+  ingestBatch    @Common.Label: 'Ingest Batch' @Common.FieldControl: #ReadOnly;
+};
+
+annotate AdminService.Channels with @UI: {
+  HeaderInfo: {
+    TypeName: 'Channel', TypeNamePlural: 'Channels',
+    Title: { Value: name },
+    Description: { Value: ownerName }
+  },
+  SelectionFields: [ name, category, ownerType, status, isPublished, isFeatured ],
+  LineItem: [
+    { Value: name },
+    { Value: category },
+    { Value: ownerType },
+    { Value: status },
+    { Value: platform },
+    { Value: isPublished },
+    { Value: isFeatured },
+    { Value: linkStatus }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General',   Label: 'General' },
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Curation',  Label: 'Curation' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: sourceId },
+    { Value: name },
+    { Value: url },
+    { Value: purpose },
+    { Value: notes },
+    { Value: ownerName },
+    { Value: ownerType },
+    { Value: isSapOwned },
+    { Value: category },
+    { Value: subcategory },
+    { Value: platform },
+    { Value: status },
+    { Value: updateFrequency },
+    { Value: githubStars },
+    { Value: subscribers }
+  ]},
+  FieldGroup#Curation: { Data: [
+    { Value: isPublished },
+    { Value: isFeatured },
+    { Value: editorialNote },
+    { Value: linkStatus },
+    { Value: linkStatusOverride },
+    { Value: lastChecked },
+    { Value: ingestBatch }
+  ]}
+};
+
+annotate AdminService.ChannelCollections with {
+  slug            @Common.Label: 'Slug' @mandatory;
+  title           @Common.Label: 'Title' @mandatory;
+  intro           @Common.Label: 'Introduction' @UI.MultiLineText;
+  sortOrder       @Common.Label: 'Sort Order';
+  isPublished     @Common.Label: 'Published';
+  authoringStatus @Common.Label: 'Authoring Status';
+};
+
+annotate AdminService.ChannelCollections with @UI: {
+  HeaderInfo: {
+    TypeName: 'Channel Collection', TypeNamePlural: 'Channel Collections',
+    Title: { Value: title },
+    Description: { Value: slug }
+  },
+  SelectionFields: [ title, isPublished, authoringStatus ],
+  LineItem: [
+    { Value: title },
+    { Value: slug },
+    { Value: sortOrder },
+    { Value: isPublished },
+    { Value: authoringStatus }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
+    { $Type: 'UI.ReferenceFacet', Target: 'items/@UI.LineItem',     Label: 'Items' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: slug },
+    { Value: title },
+    { Value: intro },
+    { Value: sortOrder },
+    { Value: isPublished },
+    { Value: authoringStatus }
+  ]}
+};
+
+annotate AdminService.ChannelCollectionItems with {
+  channel   @Common.Label: 'Channel' @Common.Text: channel.name @Common.TextArrangement: #TextOnly;
+  sortOrder @Common.Label: 'Sort Order';
+  blurb     @Common.Label: 'Blurb';
+};
+
+annotate AdminService.ChannelCollectionItems with @UI.LineItem: [
+  { Value: channel_ID, Label: 'Channel' },
+  { Value: sortOrder },
+  { Value: blurb }
+];
+
+annotate AdminService.ChannelTopicMap with {
+  topicTag        @Common.Label: 'Topic Tag' @mandatory;
+  relevance       @Common.Label: 'Relevance';
+  authoringStatus @Common.Label: 'Authoring Status';
+  channel         @Common.Label: 'Channel' @Common.Text: channel.name @Common.TextArrangement: #TextOnly;
+};
+
+annotate AdminService.ChannelTopicMap with @UI: {
+  HeaderInfo: {
+    TypeName: 'Channel Topic Mapping', TypeNamePlural: 'Channel Topic Mappings',
+    Title: { Value: topicTag },
+    Description: { Value: authoringStatus }
+  },
+  SelectionFields: [ topicTag, authoringStatus ],
+  LineItem: [
+    { Value: channel_ID, Label: 'Channel' },
+    { Value: topicTag },
+    { Value: relevance },
+    { Value: authoringStatus }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: channel_ID, Label: 'Channel' },
+    { Value: topicTag },
+    { Value: relevance },
+    { Value: authoringStatus }
+  ]}
+};

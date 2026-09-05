@@ -19,7 +19,7 @@ async function draftChannelTopicMap(channels, topicTags, { llm }) {
     }));
 }
 
-// Lazy-built real LLM caller. Mirrors srv/lib/channels/seed-collections.js.
+// Lazy-built real LLM caller. Mirrors srv/lib/channels/seed-collections.cjs.
 // NOTE: tag-md-format.js uses ESM exports, so it is loaded via await import()
 // inside loadTopicTags rather than require(). @sap-ai-sdk/orchestration and
 // chat-settings-resolver.js are also lazy-imported here to keep them off the

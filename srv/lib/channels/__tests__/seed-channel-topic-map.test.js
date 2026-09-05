@@ -1,7 +1,7 @@
 // srv/lib/channels/__tests__/seed-channel-topic-map.test.js
 import cds from '@sap/cds';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { draftChannelTopicMap, seedChannelTopicMap } from '../seed-channel-topic-map.js';
+import { draftChannelTopicMap, seedChannelTopicMap } from '../seed-channel-topic-map.cjs';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 const NS = 'com.sap.developers.ims';

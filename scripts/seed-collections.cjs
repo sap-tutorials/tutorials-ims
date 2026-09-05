@@ -1,7 +1,7 @@
 'use strict';
 // Usage: cds bind --exec -- node scripts/seed-collections.cjs [--commit]
 const cds = require('@sap/cds');
-const { seedCollections } = require('../srv/lib/channels/seed-collections.js');
+const { seedCollections } = require('../srv/lib/channels/seed-collections.cjs');
 
 (async () => {
   const commit = process.argv.includes('--commit');
