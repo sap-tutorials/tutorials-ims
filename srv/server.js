@@ -42,6 +42,7 @@ import { renderChannelsHandler } from './lib/publish-channels.js';
 import { buildTopicsTreeHandler, buildTopicDetailHandler } from './lib/build-topics.js';
 import { buildChannelDetailPayload } from './lib/build-channel-detail.js';
 import { mediaDietMyPicksLogic } from './lib/media-diet-picks.js';
+import { enforceIdCap, buildOpml, buildBookmarksHtml } from './lib/media-diet-export.js';
 import { topicsIndexHandler } from './lib/topic-list-page.js';
 import { resolveTopicBySlug } from './lib/topics-query.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
@@ -314,6 +315,45 @@ cds.on('bootstrap', (app) => {
     } catch (err) {
       cds.log('media-diet').error('my-picks failed', err);
       res.status(500).json({ channels: [], source: 'error', error: err?.message });
+    }
+  });
+
+  // channels-hub Phase 2 — anon media-diet export (OPML / bookmarks / JSON).
+  // authenticationType:none in xs-app.json. Cap: 50 ids.
+  app.get('/api/media-diet/export', async (req, res) => {
+    try {
+      const rawIds = [].concat(req.query['ids[]'] || req.query.ids || []);
+      const ids = enforceIdCap(rawIds.filter(Boolean));
+      const format = String(req.query.format || 'json').toLowerCase();
+
+      if (!ids.length) {
+        if (format === 'opml') return res.type('text/xml').send(buildOpml([]));
+        if (format === 'bookmarks') {
+          res.setHeader('Content-Disposition', 'attachment; filename="channels.html"');
+          return res.type('text/html').send(buildBookmarksHtml([]));
+        }
+        return res.json([]);
+      }
+
+      const { Channels } = cds.entities('com.sap.developers.ims');
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from(Channels)
+          .columns('ID', 'name', 'url', 'feedUrl', 'ownerType', 'isSapOwned')
+          .where({ ID: { in: ids }, isPublished: true }),
+      );
+
+      if (format === 'opml') {
+        return res.type('text/xml').send(buildOpml(rows));
+      }
+      if (format === 'bookmarks') {
+        res.setHeader('Content-Disposition', 'attachment; filename="channels.html"');
+        return res.type('text/html').send(buildBookmarksHtml(rows));
+      }
+      return res.json(rows);
+    } catch (err) {
+      cds.log('media-diet').error('export failed', err);
+      res.status(500).json({ error: err?.message });
     }
   });
 
