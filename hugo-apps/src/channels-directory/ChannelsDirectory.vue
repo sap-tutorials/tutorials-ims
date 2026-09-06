@@ -44,13 +44,6 @@ const cols = computed(() => visibleCollections(props.collections));
           </a>
         </li>
         <li>
-          <a href="/channels/crosswalk/" class="hub-card">
-            <ui5-icon name="chain-link" class="hub-card__icon"></ui5-icon>
-            <span class="hub-card__title">Learn ↔ Follow</span>
-            <span class="hub-card__desc">Tutorial topics to channels crosswalk</span>
-          </a>
-        </li>
-        <li>
           <a href="/channels/health/" class="hub-card">
             <ui5-icon name="sys-monitor" class="hub-card__icon"></ui5-icon>
             <span class="hub-card__title">Ecosystem Health</span>
