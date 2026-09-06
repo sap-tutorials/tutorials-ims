@@ -1,16 +1,38 @@
 'use strict';
 const cds = require('@sap/cds');
 
+// How many channels to send per LLM call. The tool schema embeds a sourceId
+// enum of exactly the batch's channels, and a single call is capped at
+// max_tokens (see buildLlm). Sending all ~236 published channels at once
+// blows past that cap: the model returns truncated/empty tool args and the
+// whole seed silently produces zero drafts. A batch of 25 keeps each
+// response (~2 rows/channel) well under the token budget.
+const CHANNEL_BATCH_SIZE = 25;
+
 // Pure: given channels + the valid topicTag vocabulary + an async
 // llm(channels, topicTags)->drafts fn, return normalized drafts.
 // The llm fn is injected so tests never touch the AI SDK. The real llm is
 // built lazily by buildLlm() below (never a top-level import — keeps
 // @sap-ai-sdk/orchestration out of srv-qa boot; see project srv-qa cp-list rule).
+// Channels are processed in batches so a large catalog never overruns the
+// per-call token cap; one failing batch is logged and skipped, never aborting
+// the whole run.
 async function draftChannelTopicMap(channels, topicTags, { llm }) {
   if (typeof llm !== 'function') throw new Error('draftChannelTopicMap requires an llm function');
   const valid = new Set(topicTags || []);
-  const drafts = await llm(channels, topicTags);
-  return (drafts || [])
+  const all = channels || [];
+  const raw = [];
+  for (let i = 0; i < all.length; i += CHANNEL_BATCH_SIZE) {
+    const batch = all.slice(i, i + CHANNEL_BATCH_SIZE);
+    try {
+      const rows = await llm(batch, topicTags);
+      if (Array.isArray(rows)) raw.push(...rows);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(`[seed-channel-topic-map] batch ${i}-${i + batch.length} failed: ${e.message}`);
+    }
+  }
+  return raw
     .filter((d) => d && d.sourceId && d.topicTag && (valid.size === 0 || valid.has(d.topicTag)))
     .map((d) => ({
       sourceId: d.sourceId,
