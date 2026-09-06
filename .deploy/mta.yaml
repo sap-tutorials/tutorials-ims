@@ -55,6 +55,12 @@ build-parameters:
         - bash -c "cd .. && npm --prefix app/explore install --no-audit --no-fund"
         - bash -c "cd .. && npm --prefix app/explore run build"
         - bash -c "cd .. && npx tsx scripts/build-explore-manifest.ts app/explore/dist hugo/data/explore_bundle.json"
+        # Build app/channel-atlas + emit the bundle manifest into hugo/data/.
+        # Hugo reads site.Data.channel_atlas_bundle in
+        # hugo/layouts/channels/atlas.html to inject hashed JS/CSS filenames.
+        - bash -c "cd .. && npm --prefix app/channel-atlas install --no-audit --no-fund"
+        - bash -c "cd .. && npm --prefix app/channel-atlas run build"
+        - bash -c "cd .. && npx tsx scripts/build-channel-atlas-manifest.ts app/channel-atlas/dist hugo/data/channel_atlas_bundle.json"
         - cp ../xs-security.json .
         # Prod-only XSUAA descriptor: distinct xsappname (tutorials-prod) +
         # ' (Prod)'-suffixed role-collection names so the prod xsuaa can coexist
@@ -205,7 +211,7 @@ modules:
         # Wipe each static dir BEFORE cp'ing fresh content. Hugo public, qa, admin-ui,
         # analytics-ui, scanner-ui all need this; everything not under static/ here
         # (e.g. node_modules, package.json) is preserved.
-        - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/explore-ui static/data-inspector-ui static/qa
+        - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/explore-ui static/channel-atlas-ui static/data-inspector-ui static/qa
         # CAP-sourced Hugo sections (concepts, developer-advocates, browse) are
         # generated at build time from /build/* endpoints. Because `cp -r` is
         # union (see comment above), a build against a backend with FEWER rows
@@ -230,6 +236,8 @@ modules:
         - cp -r ../app/analytics-explorer/dist/. static/analytics-ui/
         - mkdir -p static/explore-ui
         - cp -r ../app/explore/dist/. static/explore-ui/
+        - mkdir -p static/channel-atlas-ui
+        - cp -r ../app/channel-atlas/dist/. static/channel-atlas-ui/
         - cp -r ../app/scanner/webapp static/scanner-ui
         # Display App (event-monitor dashboard) — Vue 3 + Vite, base '/display-app/'.
         # Served from static/display-app via the /display-app/ approuter route. This
