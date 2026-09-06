@@ -1,5 +1,3 @@
-'use strict'
-
 // Mirrors the parseArr pattern from srv/server.js:432 for HANA NCLOB array columns
 // (focusAreas is `array of String(60)`, stored as a JSON string on HANA;
 //  SQLite in-memory tests return real JS arrays already).
@@ -30,4 +28,4 @@ function buildAtlasChannels(rows, topicsByChannel) {
   }))
 }
 
-module.exports = { buildAtlasChannels }
+export { buildAtlasChannels }

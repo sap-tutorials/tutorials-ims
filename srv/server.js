@@ -569,6 +569,44 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // Channel Atlas feed — build-time data for hugo/data/channel_atlas.json and
+  // the /channels/atlas/ SPA. Extends /build/channels projection with:
+  //   subscribers, githubStars, focusAreas (NCLOB parsed via parseArr),
+  //   topicTags from REVIEWED ChannelTopicMap rows (phase-2 edges).
+  // Public, unauthenticated. Cache-Control 60s.
+  app.get('/build/channel-atlas', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db')
+      const NS = 'com.sap.developers.ims'
+      const rows = await db.run(
+        SELECT.from(`${NS}.Channels`)
+          .where({ isPublished: true })
+          .columns('ID', 'name', 'url', 'purpose', 'ownerType', 'subscribers', 'githubStars', 'focusAreas')
+          .orderBy('name'),
+      )
+      // Fetch REVIEWED ChannelTopicMap rows for phase-2 topic-tag edges.
+      // Done as a separate SELECT — never mix BLOB/NCLOB reads with metadata (gotcha).
+      const topicRows = await db.run(
+        SELECT.from(`${NS}.ChannelTopicMap`)
+          .where({ authoringStatus: 'REVIEWED' })
+          .columns('channel_ID', 'topicTag'),
+      )
+      // Group topicTags by channel_ID for O(1) lookup in buildAtlasChannels.
+      const topicsByChannel = new Map()
+      for (const r of topicRows) {
+        if (!topicsByChannel.has(r.channel_ID)) topicsByChannel.set(r.channel_ID, [])
+        topicsByChannel.get(r.channel_ID).push(r.topicTag)
+      }
+      const { buildAtlasChannels } = await import('./lib/build-channel-atlas.js')
+      const channels = buildAtlasChannels(rows, topicsByChannel)
+      res.set('Cache-Control', 'public, max-age=60')
+      res.json({ channels, buildAt: new Date().toISOString() })
+    } catch (err) {
+      console.error('[build/channel-atlas]', err.message)
+      res.status(500).json({ error: err.message })
+    }
+  });
+
   // Aggregate stats for the ecosystem-health radar at /channels/health/.
   // Consumed by scripts/fetch-channels-stats.ts at build time. Public, unauthenticated.
   // v1 uses ONLY reliably-populated fields: status, ownerType, category/subcategory,
