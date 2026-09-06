@@ -24,13 +24,37 @@ export function useAtlasData(): {
   const error   = ref<Error | null>(null)
   const hasData = computed(() => !!payload.value)
 
+  /**
+   * Coerce the inline JSON text into an AtlasPayload object.
+   *
+   * The Hugo `{{ . | jsonify }}` pipeline emits the payload DOUBLE-ENCODED —
+   * a JSON *string* whose contents are themselves JSON — so a single
+   * `JSON.parse` yields a string, not the object. Re-parse once when that
+   * happens, then validate the shape before trusting it. Anything that
+   * isn't an object with a `channels` array is treated as unusable.
+   */
+  function coercePayload(text: string): AtlasPayload {
+    let parsed: unknown = JSON.parse(text)
+    if (typeof parsed === 'string') {
+      parsed = JSON.parse(parsed)   // unwrap the double-encoded string
+    }
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      !Array.isArray((parsed as AtlasPayload).channels)
+    ) {
+      throw new Error('atlas-payload is not a valid AtlasPayload object')
+    }
+    return parsed as AtlasPayload
+  }
+
   async function loadData() {
     try {
       // 1. Inline payload (injected by Hugo layout — no round-trip in production).
       if (typeof document !== 'undefined') {
         const inline = document.getElementById('atlas-payload')
         if (inline?.textContent) {
-          const parsed = JSON.parse(inline.textContent) as AtlasPayload
+          const parsed = coercePayload(inline.textContent)
           // A build-time fetch failure is inlined as { channels:[], error }.
           // Surface it as a load error instead of an empty-filter state.
           if (parsed.error) {
