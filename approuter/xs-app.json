@@ -378,6 +378,18 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/api/media-diet/my-picks(\\?.*)?$",
+      "target": "/api/media-diet/my-picks$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
+      "source": "^/api/media-diet/export(\\?.*)?$",
+      "target": "/api/media-diet/export$1",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",
@@ -613,6 +625,7 @@
     { "source": "^/authors/([^/?]+)/?(\\?.*)?$",     "target": "/content/authors/$1",                   "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/puzzles/?(\\?.*)?$",              "target": "/content/puzzles-index",                "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/puzzles/([^/?]+)/?(\\?.*)?$",      "target": "/content/puzzles/$1",                   "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/channels/(?!health(?:/|$)|media-diet(?:/|$)|crosswalk(?:/|$)|atlas(?:/|$))([^/?]+)/?(\\?.*)?$", "target": "/content/channel-detail/$1", "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/(\\?.*)?$",                       "target": "/content/pages/$1",                     "destination": "srv-api", "authenticationType": "none" },
     {
       "source": "^(.*)$",
