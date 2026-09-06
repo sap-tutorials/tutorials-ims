@@ -1,0 +1,40 @@
+{{ define "main" }}
+{{ with site.Data.channel_atlas_bundle }}
+  {{/*
+    CSS link OUTSIDE the mount container — placing it inside lets Vue wipe
+    the <link> on mount before the browser applies it, collapsing the Sigma
+    canvas to 0 height ("Container has no height"). Same fix as explore/single.html
+    issue #1131.
+  */}}
+  <link rel="stylesheet" href="/channel-atlas-ui/assets/{{ .css }}">
+  <script type="module" src="/channel-atlas-ui/main-{{ .hash }}.js"></script>
+  {{/*
+    Inline payload: useAtlasData reads this first — no runtime round-trip in
+    production. The SPA falls back to fetching /build/channel-atlas in dev
+    mode when this element is absent.
+  */}}
+  {{ with site.Data.channel_atlas }}
+  <script type="application/json" id="atlas-payload">{{ . | jsonify }}</script>
+  {{ end }}
+  <div id="atlas-app" class="atlas-page">
+    <p class="atlas-page__loading">Loading Channel Atlas…</p>
+  </div>
+{{ else }}
+  <div id="atlas-app" class="atlas-page">
+    <div class="atlas-build-error" role="alert">
+      <h2>Channel Atlas bundle missing</h2>
+      <p>
+        The bundle manifest <code>hugo/data/channel_atlas_bundle.json</code>
+        was not present at Hugo build time.
+        Run <code>npm run build:channel-atlas</code> before <code>hugo</code>
+        to regenerate it.
+      </p>
+    </div>
+  </div>
+{{ end }}
+<noscript>
+  <div class="ds-noscript-fallback">
+    <p>JavaScript is required to view the Channel Atlas.</p>
+  </div>
+</noscript>
+{{ end }}
