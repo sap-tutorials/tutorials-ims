@@ -14,7 +14,7 @@
     "start:approuter": "cd approuter && NODE_ENV=development npm start",
     "bind:setup": "node scripts/setup-hybrid-env.js",
     "seed:thirdparty": "echo 'RETIRED: HomepageShelves (incl. third-party links) is now seeded idempotently at boot by srv/lib/homepage/seed-homepage-shelves.js from srv/lib/homepage/homepage-shelves-defaults.js. Edit that module or use /admin-ui/#homepage; no manual seed step needed.' && exit 1",
-    "setup": "npm --prefix hugo-apps install --no-audit --no-fund && npm --prefix app/explore install --no-audit --no-fund && sh scripts/install-git-hooks.sh",
+    "setup": "npm --prefix hugo-apps install --no-audit --no-fund && npm --prefix app/explore install --no-audit --no-fund && npm --prefix app/channel-atlas install --no-audit --no-fund && sh scripts/install-git-hooks.sh",
     "build:cds": "cds build --production",
     "fetch-tutorials": "tsx scripts/fetch-tutorials.ts --target hugo",
     "fetch-homepage-shelves": "tsx scripts/fetch-homepage-shelves.ts",

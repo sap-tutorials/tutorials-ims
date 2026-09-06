@@ -11,10 +11,10 @@ on:
 # never lands unnoticed. Closes the PR-gate half of #961.
 #
 # The vitest `unit` project uses in-memory SQLite and does not need a HANA
-# binding or CF login. `npm run setup` installs the nested `hugo-apps` and
-# `app/explore` workspaces and rebuilds `better-sqlite3` — both are required
-# by the unit suite and are otherwise silently skipped by the org-wide
-# `npm config ignore-scripts=true` policy.
+# binding or CF login. `npm run setup` installs the nested `hugo-apps`,
+# `app/explore`, and `app/channel-atlas` workspaces and rebuilds
+# `better-sqlite3` — all are required by the unit suite and are otherwise
+# silently skipped by the org-wide `npm config ignore-scripts=true` policy.
 
 jobs:
   unit:
@@ -42,7 +42,7 @@ jobs:
         run: npm ci --no-audit --no-fund
         env:
           NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
-      - name: Setup nested workspaces (hugo-apps, app/explore) + rebuild native bindings
+      - name: Setup nested workspaces (hugo-apps, app/explore, app/channel-atlas) + rebuild native bindings
         run: npm run setup
       - name: Run unit tests
         run: npm test
