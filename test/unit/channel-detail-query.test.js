@@ -75,6 +75,7 @@ describe('buildChannelDetailPayload', () => {
     expect(topic.tutorialCount).toBe(2); // two tutorials tagged with this topic
     expect(topic.slug).toBeTruthy();
     expect(typeof topic.relevance).toBe('number');
+    expect(topic.label).toBe('SAP CAP'); // the exact label seeded for cdtag1
   });
 
   it('resolves channel by slug regardless of input case', async () => {
@@ -96,6 +97,62 @@ describe('buildChannelDetailPayload', () => {
   it('includes buildAt ISO timestamp', async () => {
     const payload = await buildChannelDetailPayload(db, 'sap-cap-channel');
     expect(typeof payload.buildAt).toBe('string');
-    expect(() => new Date(payload.buildAt)).not.toThrow();
+    expect(isNaN(new Date(payload.buildAt).getTime())).toBe(false);
+  });
+
+  it('resolves channel by sourceId fallback when slug is null', async () => {
+    const { Channels, ChannelTopicMap } = cds.entities(NS);
+    // Seed a channel with slug: null but known sourceId
+    await db.run(INSERT.into(Channels).entries([
+      {
+        ID: 'cdch3',
+        sourceId: 'cd-source-only-channel',
+        slug: null,
+        name: 'Source ID Channel',
+        url: 'https://source-only.example',
+        purpose: 'Resolved by sourceId',
+        ownerType: 'SAP_Official',
+        isSapOwned: true,
+        isPublished: true,
+        linkStatus: 'OK',
+      },
+    ]));
+    await db.run(INSERT.into(ChannelTopicMap).entries([
+      { ID: cds.utils.uuid(), channel_ID: 'cdch3', topicTag: md, authoringStatus: 'REVIEWED', relevance: 70 },
+    ]));
+
+    const payload = await buildChannelDetailPayload(db, 'cd-source-only-channel');
+    expect(payload.notFound).toBeFalsy();
+    expect(payload.name).toBe('Source ID Channel');
+  });
+
+  it('excludes non-REVIEWED topic mappings from topics array', async () => {
+    const { Tags, Tutorials, TutorialTags, ChannelTopicMap } = cds.entities(NS);
+    const TITLE_PATH_2 = 'Database : HANA';
+    const md2 = titlePathToMdFormat(TITLE_PATH_2);
+
+    // Seed a second tag and tutorial
+    await db.run(INSERT.into(Tags).entries([
+      { ID: 'cdtag2', titlePath: TITLE_PATH_2, label: 'SAP HANA', name: 'sap-hana' },
+    ]));
+    await db.run(INSERT.into(Tutorials).entries([
+      { ID: 'cdtut3', slug: 'cd-hana-intro', title: 'HANA Intro', experienceTag: 'Beginner' },
+    ]));
+    await db.run(INSERT.into(TutorialTags).entries([
+      { tutorial_ID: 'cdtut3', tag_ID: 'cdtag2' },
+    ]));
+
+    // Seed a DRAFT (non-REVIEWED) mapping for the main channel with the second topic
+    await db.run(INSERT.into(ChannelTopicMap).entries([
+      { ID: cds.utils.uuid(), channel_ID: 'cdch1', topicTag: md2, authoringStatus: 'DRAFT', relevance: 80 },
+    ]));
+
+    const payload = await buildChannelDetailPayload(db, 'sap-cap-channel');
+    expect(payload.notFound).toBeFalsy();
+    // Only REVIEWED rows should be in topics; DRAFT should be filtered out by the WHERE clause
+    // So we should only see the REVIEWED row with md (relevance 90), not the DRAFT row with md2
+    expect(payload.topics.length).toBe(1);
+    expect(payload.topics[0].relevance).toBe(90);
+    expect(payload.topics[0].label).toBe('SAP CAP');
   });
 });

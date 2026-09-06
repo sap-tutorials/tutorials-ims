@@ -39,7 +39,7 @@ export async function buildChannelDetailPayload(db, slug) {
       );
     }
     if (!channel) {
-      return { slug: canonSlug, notFound: true, topics: [], buildAt: new Date().toISOString() };
+      return { slug: canonSlug, name: null, url: null, purpose: null, ownerType: null, topics: [], buildAt: new Date().toISOString(), notFound: true };
     }
 
     // REVIEWED crosswalk rows for this channel, ordered by relevance desc.
@@ -50,16 +50,16 @@ export async function buildChannelDetailPayload(db, slug) {
         .orderBy('relevance desc'),
     );
 
-    // Build a tutorialCount lookup from live tags keyed by mdFormat.
+    // Build a tutorialCount + label lookup from live tags keyed by mdFormat.
     // loadLiveTags returns rows that already have titlePath; we compute mdFormat
-    // and build a Map<mdFormat → tutorialCount>.
+    // and build a Map<mdFormat → {label, tutorialCount}>.
     let tutorialCountByMd = new Map();
     try {
       const live = await loadLiveTags(db);
       for (const tag of live) {
         if (!tag.titlePath) continue;
         const md = titlePathToMdFormat(tag.titlePath);
-        if (md) tutorialCountByMd.set(md, tag.tutorialCount ?? 0);
+        if (md) tutorialCountByMd.set(md, { label: tag.label ?? md, tutorialCount: tag.tutorialCount ?? 0 });
       }
     } catch {
       // fail-open: counts will be 0 but topics still listed
@@ -70,13 +70,13 @@ export async function buildChannelDetailPayload(db, slug) {
     // We derive the slug from the live tag that matches, falling back to a safe transform.
     const topics = mapRows.map((row) => {
       const md = row.topicTag;
-      const count = tutorialCountByMd.get(md) ?? 0;
+      const entry = tutorialCountByMd.get(md);
       // Derive a display slug from mdFormat: 'software-product>sap-cap' → 'software-product-sap-cap'
       const topicSlug = md.replace('>', '-').replace(/[^a-z0-9-]/g, '');
       return {
         slug: topicSlug,
-        label: md, // displayable fallback; topic-detail-render uses slug for href
-        tutorialCount: count,
+        label: entry?.label ?? md, // human-readable label from loadLiveTags, fallback to mdFormat if tag missing
+        tutorialCount: entry?.tutorialCount ?? 0,
         relevance: row.relevance ?? 50,
       };
     });
@@ -92,12 +92,11 @@ export async function buildChannelDetailPayload(db, slug) {
       notFound: false,
     };
   } catch (err) {
+    console.error('[build-channel-detail] unexpected error for slug', slug, err);
     return {
       slug: String(slug || '').toLowerCase(),
-      notFound: false,
-      topics: [],
-      buildAt: new Date().toISOString(),
-      error: err.message,
+      name: null, url: null, purpose: null, ownerType: null,
+      topics: [], buildAt: new Date().toISOString(), notFound: true,
     };
   }
 }
