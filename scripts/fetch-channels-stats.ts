@@ -2,7 +2,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const CAP_BASE = process.env.CAP_BASE_URL || 'http://localhost:4004';
-const OUT_PATH = join('hugo', 'data', 'channels-stats.json');
+// Underscore filename: Hugo exposes data files under their literal basename
+// (no hyphen→underscore conversion), and the health layout reads
+// `.Site.Data.channels_stats`. Matches sibling convention (channel_collections.json).
+const OUT_PATH = join('hugo', 'data', 'channels_stats.json');
 
 let payload: {
   total: number; publishedCount: number;
