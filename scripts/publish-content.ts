@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { userInfo, hostname } from 'node:os';
 import { parse as parseYaml } from 'yaml';
 import { parseChannel, type Channel } from './fetch-tutorials.js';
-import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, renderConceptsPhase, renderTopicsPhase } from './lib/publish-client.js';
+import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, renderConceptsPhase, renderTopicsPhase, renderChannelsPhase } from './lib/publish-client.js';
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
@@ -1262,6 +1262,25 @@ async function main() {
     } catch (err) {
       console.error(`[publish-content] render-topics failed permanently: ${formatErrorChain(err)}`);
       await abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'render-topics failed' });
+      process.exit(1);
+    }
+    // channels-hub Phase 2 — render per-channel detail pages alongside topics.
+    // Same guard (prod-only, full-publish): POST /content/publish/render-channels
+    // is not registered on srv-qa. Sequenced after render-topics, before commit.
+    try {
+      const rc = await withRetry(
+        () => renderChannelsPhase({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId }),
+        {
+          attempts: 3, backoffMs: [1000, 3000, 9000],
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] render-channels failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
+      log(`render-channels: ${rc.channelsChanged} changed, ${rc.channelsSkipped} skipped, ${rc.channelsErrored} errored of ${rc.channelsSeen} (${rc.durationMs} ms)`);
+    } catch (err) {
+      console.error(`[publish-content] render-channels failed permanently: ${formatErrorChain(err)}`);
+      await abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'render-channels failed' });
       process.exit(1);
     }
   }

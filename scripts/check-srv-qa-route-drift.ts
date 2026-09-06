@@ -108,6 +108,10 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'publish session for the same public prod topic surface as GET /content/topics/:slug, ' +
     'mirroring render-concepts exactly. Not a tutorial-draft author-preview endpoint; the QA ' +
     'channel has no topic publish flow.',
+  'POST /content/publish/render-channels':
+    'Channel-detail publish rendering (channels-hub Phase 2) — renders per-channel BLOB pages ' +
+    'into a publish session for the public /channels/:slug/ detail surface. Not a ' +
+    'tutorial-draft author-preview endpoint; the QA channel has no channel-detail publish flow.',
   'POST /content/orphan-purge':
     'CI-only batched soft-delete for prod content maintenance (#823). Not an author-preview ' +
     'endpoint — the QA channel has no orphan-purge maintenance flow.',

@@ -120,6 +120,26 @@ export async function renderTopicsPhase(i: RenderTopicsInput): Promise<RenderTop
   return postJson(`${i.baseUrl}/content/publish/render-topics`, i.apiKey, { sessionId: i.sessionId });
 }
 
+export interface RenderChannelsInput { baseUrl: string; apiKey: string; sessionId: string }
+export interface RenderChannelsResult {
+  channelsSeen: number;
+  channelsChanged: number;
+  channelsSkipped: number;
+  channelsErrored: number;
+  durationMs: number;
+}
+
+/**
+ * channels-hub Phase 2 — trigger the server-side render-channels phase within an open
+ * publish session. CAP reads published Channels + REVIEWED ChannelTopicMap rows,
+ * renders each channel detail page, and appends `channel-<slug>` BLOBs to the session.
+ * Mirrors renderTopicsPhase: prod-only (srv-qa has no render-channels route), sequenced
+ * after render-topics and before commit.
+ */
+export async function renderChannelsPhase(i: RenderChannelsInput): Promise<RenderChannelsResult> {
+  return postJson(`${i.baseUrl}/content/publish/render-channels`, i.apiKey, { sessionId: i.sessionId });
+}
+
 export async function abortSession({ baseUrl, apiKey, sessionId, reason }: {
   baseUrl: string; apiKey: string; sessionId: string; reason?: string;
 }): Promise<{ aborted: boolean }> {
