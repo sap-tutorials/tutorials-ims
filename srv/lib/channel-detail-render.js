@@ -12,6 +12,11 @@ function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function safeUrl(u) {
+  const s = String(u ?? '');
+  return /^https?:\/\//i.test(s) ? esc(s) : '';
+}
+
 const OWNER_BADGE = {
   SAP_Official: 'SAP',
   SAP_Developer_Advocate: 'SAP Advocate',
@@ -57,7 +62,7 @@ export function renderChannelDetail(channel) {
       <h1 class="channel-detail__title">${esc(channel.name)}</h1>
       <span class="channel-detail__badge" data-owner="${esc(channel.ownerType || '')}">${esc(ownerBadge(channel.ownerType))}</span>
       ${purposeHtml}
-      <a class="channel-detail__link" href="${esc(channel.url)}" rel="noopener" target="_blank">Visit channel</a>
+      <a class="channel-detail__link" href="${safeUrl(channel.url)}" rel="noopener" target="_blank">Visit channel</a>
     </header>
     ${topicsSection}
   </article>

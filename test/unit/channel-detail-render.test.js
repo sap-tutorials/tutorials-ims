@@ -20,6 +20,8 @@ describe('renderChannelDetail', () => {
   it('throws when slug or name is missing', () => {
     expect(() => renderChannelDetail({ ...basePayload, slug: '' })).toThrow();
     expect(() => renderChannelDetail({ ...basePayload, name: '' })).toThrow();
+    expect(() => renderChannelDetail({ ...basePayload, name: null })).toThrow();
+    expect(() => renderChannelDetail({ ...basePayload, slug: null })).toThrow();
   });
 
   it('returns body string and contentHash string', () => {
@@ -31,8 +33,7 @@ describe('renderChannelDetail', () => {
 
   it('body contains channel name in an h1', () => {
     const { body } = renderChannelDetail(basePayload);
-    expect(body).toContain('<h1');
-    expect(body).toContain('SAP CAP Channel');
+    expect(body).toMatch(/<h1[^>]*>[\s\S]*SAP CAP Channel[\s\S]*<\/h1>/);
   });
 
   it('body renders topic links pointing to /topics/:slug/', () => {
@@ -66,6 +67,13 @@ describe('renderChannelDetail', () => {
     });
     expect(body).not.toContain('<script>');
     expect(body).toContain('&lt;script&gt;');
+  });
+
+  it('escapes and scheme-guards the channel url', () => {
+    const html = renderChannelDetail({ ...basePayload, url: '<img src=x onerror=alert(1)>' }).body;
+    expect(html).not.toContain('<img');
+    const js = renderChannelDetail({ ...basePayload, url: 'javascript:alert(document.cookie)' }).body;
+    expect(js).not.toContain('javascript:');
   });
 
   it('body is <main> element (not article) for smoke-test compatibility', () => {
