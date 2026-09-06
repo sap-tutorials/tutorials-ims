@@ -32,6 +32,7 @@ export async function buildChannelDetailPayload(db, slug, live) {
     let channel = await db.run(
       SELECT.one.from(Channels)
         .columns('ID', 'slug', 'sourceId', 'name', 'url', 'purpose', 'ownerType', 'isPublished')
+        // slug-canonical: pre-canonicalized (canonSlug lowercased at line 28)
         .where({ slug: canonSlug, isPublished: true }),
     );
     if (!channel) {
