@@ -30,7 +30,14 @@ export function useAtlasData(): {
       if (typeof document !== 'undefined') {
         const inline = document.getElementById('atlas-payload')
         if (inline?.textContent) {
-          payload.value = JSON.parse(inline.textContent) as AtlasPayload
+          const parsed = JSON.parse(inline.textContent) as AtlasPayload
+          // A build-time fetch failure is inlined as { channels:[], error }.
+          // Surface it as a load error instead of an empty-filter state.
+          if (parsed.error) {
+            error.value = new Error(parsed.error)
+          } else {
+            payload.value = parsed
+          }
           return
         }
       }

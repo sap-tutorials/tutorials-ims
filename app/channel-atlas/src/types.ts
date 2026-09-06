@@ -54,4 +54,10 @@ export interface AtlasEdge {
 export interface AtlasPayload {
   channels: AtlasChannelDTO[]
   buildAt: string
+  /**
+   * Set by scripts/fetch-channel-atlas.ts when the build-time fetch of
+   * /build/channel-atlas fails — the SPA surfaces it as a load error rather
+   * than an empty-filter state. Absent/null on a healthy build.
+   */
+  error?: string | null
 }

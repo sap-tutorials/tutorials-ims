@@ -46,6 +46,16 @@ describe('useAtlasData', () => {
     expect(error.value).toBeInstanceOf(Error)
   })
 
+  it('sets error and leaves payload null when inline payload contains error field', async () => {
+    injectPayload({ channels: [], buildAt: '2026-01-01T00:00:00Z', error: 'status 500' })
+    const { payload, hasData, error } = useAtlasData()
+    await nextTick()
+    expect(hasData.value).toBe(false)
+    expect(payload.value).toBeNull()
+    expect(error.value).toBeInstanceOf(Error)
+    expect(error.value?.message).toBe('status 500')
+  })
+
   it('hasData is false when inline element is absent and no inline fetch fires', async () => {
     // No inline element, no window (non-browser env).
     // Simulate: just construct without element — hasData stays false until async resolves.
