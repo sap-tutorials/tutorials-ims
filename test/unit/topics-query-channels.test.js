@@ -86,3 +86,29 @@ describe('topics-query — relatedChannels (Surface C)', () => {
     expect(payload.relatedChannels).toEqual([]);
   });
 });
+
+describe('topics-query — Direction 1 dark-code regression net', () => {
+  // Uses the same fixtures seeded in the outer beforeAll above.
+  // Purpose: ensure relatedChannels lights up in the topic payload once REVIEWED
+  // rows are present, so future refactors can't silently darken it again.
+  let db;
+
+  beforeAll(async () => {
+    db = await cds.connect.to('db');
+  });
+
+  it('returns at least one relatedChannel entry when REVIEWED ChannelTopicMap rows exist', async () => {
+    const payload = await buildTopicDetailPayload(db, 'software-product-sap-hana-cloud');
+    expect(payload.relatedChannels.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('relatedChannels entries include name, url, ownerType, isSapOwned, relevance fields', async () => {
+    const payload = await buildTopicDetailPayload(db, 'software-product-sap-hana-cloud');
+    const ch = payload.relatedChannels[0];
+    expect(ch).toHaveProperty('name');
+    expect(ch).toHaveProperty('url');
+    expect(ch).toHaveProperty('ownerType');
+    expect(ch).toHaveProperty('isSapOwned');
+    expect(ch).toHaveProperty('relevance');
+  });
+});
