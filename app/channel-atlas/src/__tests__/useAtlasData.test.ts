@@ -56,6 +56,28 @@ describe('useAtlasData', () => {
     expect(error.value?.message).toBe('status 500')
   })
 
+  it('reads payload when inline JSON is DOUBLE-ENCODED (Hugo jsonify)', async () => {
+    // hugo/layouts/channels/atlas.html {{ . | jsonify }} emits the payload as
+    // a JSON string whose contents are themselves JSON — one JSON.parse yields
+    // a string, not the object. The composable must re-parse and recover.
+    injectPayload(JSON.stringify(JSON.stringify(FIXTURE)))
+    const { payload, hasData, error } = useAtlasData()
+    await nextTick()
+    expect(error.value).toBeNull()
+    expect(hasData.value).toBe(true)
+    expect(payload.value?.channels).toHaveLength(1)
+    expect(payload.value?.channels[0].id).toBe('ch-1')
+  })
+
+  it('sets error when inline JSON parses but lacks a channels array', async () => {
+    injectPayload('{"buildAt":"2026-01-01T00:00:00Z"}')
+    const { payload, hasData, error } = useAtlasData()
+    await nextTick()
+    expect(hasData.value).toBe(false)
+    expect(payload.value).toBeNull()
+    expect(error.value).toBeInstanceOf(Error)
+  })
+
   it('hasData is false when inline element is absent and no inline fetch fires', async () => {
     // No inline element, no window (non-browser env).
     // Simulate: just construct without element — hasData stays false until async resolves.
