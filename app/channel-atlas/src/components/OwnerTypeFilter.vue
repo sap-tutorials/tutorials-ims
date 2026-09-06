@@ -2,7 +2,7 @@
      Fork of app/explore/src/components/FilterDropdown.vue.
      Renders a filter dropdown for ownerType values. -->
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount, onMounted, getCurrentInstance } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import type { OwnerType } from '../types.js'
 import { ALL_OWNER_TYPES } from '../composables/useOwnerTypeFilter.js'
 import { OWNER_TYPE_PALETTE, FALLBACK_COLOR } from '../graph.js'
@@ -14,10 +14,6 @@ const emit = defineEmits<{ toggle: [OwnerType] }>()
 
 const open = ref(false)
 const rootEl = ref<HTMLElement | null>(null)
-const instance = getCurrentInstance()
-onMounted(() => {
-  rootEl.value = (instance?.proxy?.$el as HTMLElement) ?? null
-})
 
 function toggle() { open.value = !open.value }
 
@@ -46,7 +42,7 @@ function labelFor(t: OwnerType) {
 </script>
 
 <template>
-  <div class="owner-filter">
+  <div ref="rootEl" class="owner-filter">
     <button class="owner-filter__toggle" @click="toggle" :aria-expanded="open">
       {{ label }}
     </button>

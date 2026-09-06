@@ -43,11 +43,16 @@ defineExpose({ panelLabel })
       <p v-if="selectedNode.subscribers != null" class="channel-panel__stats">
         Subscribers: {{ selectedNode.subscribers.toLocaleString() }}
       </p>
+      <!-- show GitHub stars only for GitHub-type channels — those without a subscriber count,
+           to avoid mixing YouTube-subscriber and GitHub-star metrics -->
       <p v-if="selectedNode.githubStars != null && selectedNode.subscribers == null" class="channel-panel__stats">
         GitHub Stars: {{ selectedNode.githubStars.toLocaleString() }}
       </p>
       <ul v-if="selectedNode.focusAreas.length" class="channel-panel__areas">
         <li v-for="area in selectedNode.focusAreas" :key="area">{{ area }}</li>
+      </ul>
+      <ul v-if="selectedNode.topicTags.length" class="channel-panel__topics">
+        <li v-for="tag in selectedNode.topicTags" :key="tag">{{ tag }}</li>
       </ul>
       <a
         :href="selectedNode.url"

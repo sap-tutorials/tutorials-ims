@@ -50,19 +50,19 @@ function onNodeClick(e: { id: string; node: AtlasNode }) {
     <p v-else-if="!hasData" class="atlas-page__loading">
       Loading Channel Atlas…
     </p>
-    <template v-else-if="filteredNodes.length === 0">
-      <p class="atlas-page__loading">
-        No channels to display. Try enabling more owner types.
-      </p>
-    </template>
     <template v-else>
+      <!-- Toolbar always visible when data is present — even when filteredNodes is
+           empty, so the user can re-enable owner types to escape the empty state. -->
       <div class="atlas-page__toolbar">
         <OwnerTypeFilter
           :enabledTypes="enabledTypes"
           @toggle="toggleType"
         />
       </div>
-      <div class="atlas-page__body">
+      <p v-if="filteredNodes.length === 0" class="atlas-page__loading">
+        No channels to display. Try enabling more owner types.
+      </p>
+      <div v-else class="atlas-page__body">
         <div class="atlas-page__canvas">
           <AtlasGraph
             :nodes="filteredNodes"

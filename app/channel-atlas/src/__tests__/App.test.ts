@@ -88,6 +88,8 @@ describe('App', () => {
     app.mount(root)
     await nextTick()
     expect(root.textContent).toMatch(/No channels to display/)
+    // Fix 2: toolbar must still be visible in the empty state so user can re-enable types
+    expect(root.querySelector('.atlas-page__toolbar')).toBeTruthy()
     app.unmount()
     // Restore
     _resetOwnerTypeFilter()
