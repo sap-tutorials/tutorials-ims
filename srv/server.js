@@ -38,7 +38,11 @@ import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { puzzlePageHandler, puzzleIndexHandler } from './lib/puzzle-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
 import { renderTopicsHandler } from './lib/publish-topics.js';
+import { renderChannelsHandler } from './lib/publish-channels.js';
 import { buildTopicsTreeHandler, buildTopicDetailHandler } from './lib/build-topics.js';
+import { buildChannelDetailPayload } from './lib/build-channel-detail.js';
+import { mediaDietMyPicksLogic } from './lib/media-diet-picks.js';
+import { enforceIdCap, buildOpml, buildBookmarksHtml } from './lib/media-diet-export.js';
 import { topicsIndexHandler } from './lib/topic-list-page.js';
 import { resolveTopicBySlug } from './lib/topics-query.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
@@ -80,7 +84,7 @@ import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
-import { provisionDbUser, resolveDbUser } from './lib/resolve-db-user.js';
+import { provisionDbUser, resolveDbUser, resolveUserSapId } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import { decodeBase64Upload } from './lib/decode-base64-upload.js';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
@@ -299,6 +303,60 @@ cds.on('bootstrap', (app) => {
   app.get('/api/qrcode', qrcodeHandler);
   app.get('/api/recommendations', recommendationsHandler);
   app.get('/api/branches/decide', decideHandler);
+
+  // channels-hub Phase 2 — signed-in media-diet picks derived from user completions.
+  // XSUAA-gated in xs-app.json; resolveUserSapId extracts sapId from JWT user_uuid claim.
+  app.get('/api/media-diet/my-picks', async (req, res) => {
+    try {
+      const sapId = resolveUserSapId(req.user);
+      const db = await cds.connect.to('db');
+      const result = await mediaDietMyPicksLogic(db, sapId);
+      res.json(result);
+    } catch (err) {
+      cds.log('media-diet').error('my-picks failed', err);
+      res.status(500).json({ channels: [], source: 'error' });
+    }
+  });
+
+  // channels-hub Phase 2 — anon media-diet export (OPML / bookmarks / JSON).
+  // authenticationType:none in xs-app.json. Cap: 50 ids.
+  app.get('/api/media-diet/export', async (req, res) => {
+    try {
+      const rawIds = [].concat(req.query['ids[]'] || req.query.ids || []);
+      const ids = enforceIdCap(rawIds.filter(Boolean));
+      const format = String(req.query.format || 'json').toLowerCase();
+
+      if (!ids.length) {
+        if (format === 'opml') return res.type('text/xml').send(buildOpml([]));
+        if (format === 'bookmarks') {
+          res.setHeader('Content-Disposition', 'attachment; filename="channels.html"');
+          return res.type('text/html').send(buildBookmarksHtml([]));
+        }
+        return res.json([]);
+      }
+
+      const { Channels } = cds.entities('com.sap.developers.ims');
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from(Channels)
+          .columns('ID', 'name', 'url', 'feedUrl', 'ownerType', 'isSapOwned')
+          .where({ ID: { in: ids }, isPublished: true }),
+      );
+
+      if (format === 'opml') {
+        return res.type('text/xml').send(buildOpml(rows));
+      }
+      if (format === 'bookmarks') {
+        res.setHeader('Content-Disposition', 'attachment; filename="channels.html"');
+        return res.type('text/html').send(buildBookmarksHtml(rows));
+      }
+      return res.json(rows);
+    } catch (err) {
+      cds.log('media-diet').error('export failed', err);
+      res.status(500).json({ error: 'Export failed' });
+    }
+  });
+
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/kg-stats', kgStatsHandler);
   app.get('/build/concepts', buildConceptsHandler);
@@ -306,6 +364,19 @@ cds.on('bootstrap', (app) => {
   app.get('/build/topics-gallery', buildTopicsGalleryHandler);
   app.get('/build/topics-tree', buildTopicsTreeHandler);
   app.get('/build/topics/:slug', buildTopicDetailHandler);
+  // channels-hub Phase 2 — per-channel detail payload (Direction 2 crosswalk).
+  app.get('/build/channel-detail/:slug', async (req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const slug = String(req.params.slug || '').toLowerCase();
+      const payload = await buildChannelDetailPayload(db, slug);
+      res.set('Cache-Control', 'public, max-age=60');
+      res.status(payload.notFound ? 404 : 200).json(payload);
+    } catch (err) {
+      cds.log('build-channel-detail').error('failed', err);
+      res.status(500).json({ error: 'Build channel detail query failed' });
+    }
+  });
   app.get('/graph/explore-data', exploreDataHandler);
   app.get('/graph/clusters-data', clustersDataHandler);
   app.get('/graph/path', graphPathHandler);
@@ -713,6 +784,23 @@ cds.on('bootstrap', (app) => {
     req.params.slug = `topic-${lower}`;
     return serveHandler(req, res);
   });
+  // channels-hub Phase 2 — BLOB serve for per-channel detail pages.
+  // Mirrors /content/topics/:slug: lowercase canonicalize, prepend 'channel-' prefix,
+  // delegate to serveHandler. No legacy-slug redirect needed (channel slugs are stable
+  // since Phase 0 normalization).
+  app.get('/content/channel-detail/:slug', (req, res) => {
+    const raw = String(req.params.slug || '');
+    const lower = raw.toLowerCase();
+    if (raw && raw !== lower) {
+      const qIdx = req.url.indexOf('?');
+      const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+      res.setHeader('Location', `/channels/${lower}/${query}`);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(301).end();
+    }
+    req.params.slug = `channel-${lower}`;
+    return serveHandler(req, res);
+  });
   // Topics index page: /topics/ → CAP SSR (mirrors /content/concepts-index).
   app.get('/content/topics-index', topicsIndexHandler);
   // #1914 — CAP-served puzzle solver pages (/puzzles/<slug>/, dynamic slug).
@@ -760,6 +848,11 @@ cds.on('bootstrap', (app) => {
   // tag-tree-topics Task 7 — render topic detail pages alongside concepts.
   // Auth and sequencing mirror render-concepts exactly.
   app.post('/content/publish/render-topics', express.json({ limit: '1mb' }), contentAuthMiddleware, renderTopicsHandler);
+  // channels-hub Phase 2 — render per-channel detail BLOBs into a publish session.
+  // Mirrors render-topics exactly: prod-only (not registered on srv-qa — see
+  // check-srv-qa-route-drift.ts ALLOWLIST_ONLY_ON_SRV), auth'd, sequenced after
+  // render-topics and before commit.
+  app.post('/content/publish/render-channels', express.json({ limit: '1mb' }), contentAuthMiddleware, renderChannelsHandler);
   app.post('/content/publish/commit', express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
   app.post('/content/publish/abort',  express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
 

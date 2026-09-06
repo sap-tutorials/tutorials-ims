@@ -87,6 +87,9 @@ export function canonicalUrlFor(meta) {
     // tag-tree-topics: topics section index and individual topic pages.
     case 'topics-index':   return `${CANONICAL_ORIGIN}/topics/`;
     case 'topic':          return `${CANONICAL_ORIGIN}/topics/${slug}/`;
+    // channels-hub Phase 2: per-channel detail pages served from CAP at
+    // /channels/<slug>/ (approuter catch-all → /content/channels/:slug).
+    case 'channel':        return `${CANONICAL_ORIGIN}/channels/${slug}/`;
     default:               return null;
   }
 }
@@ -132,6 +135,12 @@ export function buildBreadcrumbJsonLd(meta, canonicalUrl) {
       break;
     case 'topic':
       crumbs.push({ name: 'Topics', item: `${CANONICAL_ORIGIN}/topics/` });
+      crumbs.push({ name: leaf, item: canonicalUrl });
+      break;
+    // channels-hub Phase 2: Home → Channels → <channel name>. Returning a
+    // trail (not null) also blocks the baked _shell breadcrumb from leaking.
+    case 'channel':
+      crumbs.push({ name: 'Channels', item: `${CANONICAL_ORIGIN}/channels/` });
       crumbs.push({ name: leaf, item: canonicalUrl });
       break;
     default:

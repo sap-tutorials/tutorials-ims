@@ -191,6 +191,11 @@ describe('chrome-shell.composeShell — SEO head rewrite (#1795)', () => {
       .toBe('https://developers.sap.com/puzzles/');
   });
 
+  it('derives the /channels/<slug>/ canonical for kind "channel" (channels-hub Phase 2)', () => {
+    expect(canonicalUrlFor({ kind: 'channel', slug: 'sap-cap' }))
+      .toBe('https://developers.sap.com/channels/sap-cap/');
+  });
+
   it('leaves canonical + robots untouched on a shell that lacks those tags', () => {
     const bare = parseShell('<html><head><title></title></head><body><header>h</header><!-- MAIN --><footer>f</footer></body></html>');
     const html = composeShell(bare, '<main>B</main>', { kind: 'concept', slug: 's', title: 'T', description: 'd' });
@@ -309,5 +314,14 @@ describe('chrome-shell.buildBreadcrumbJsonLd — puzzles (#1914 index)', () => {
     const json = buildBreadcrumbJsonLd({ kind: 'puzzles-index', slug: 'puzzles' }, 'https://developers.sap.com/puzzles/');
     const bc = JSON.parse(json.replace(/\\u003c/g, '<'));
     expect(bc.itemListElement.map((e) => e.name)).toEqual(['Home', 'Puzzles']);
+  });
+
+  it('channel detail trail is Home → Channels → <name> (channels-hub Phase 2)', () => {
+    const url = canonicalUrlFor({ kind: 'channel', slug: 'sap-cap' });
+    const json = buildBreadcrumbJsonLd({ kind: 'channel', slug: 'sap-cap', title: 'SAP CAP' }, url);
+    const bc = JSON.parse(json.replace(/\\u003c/g, '<'));
+    expect(bc.itemListElement.map((e) => e.name)).toEqual(['Home', 'Channels', 'SAP CAP']);
+    const channelsCrumb = bc.itemListElement.find((e) => e.name === 'Channels');
+    expect(channelsCrumb.item).toBe('https://developers.sap.com/channels/');
   });
 });
