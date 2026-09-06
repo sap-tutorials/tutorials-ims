@@ -41,6 +41,7 @@ import { renderTopicsHandler } from './lib/publish-topics.js';
 import { renderChannelsHandler } from './lib/publish-channels.js';
 import { buildTopicsTreeHandler, buildTopicDetailHandler } from './lib/build-topics.js';
 import { buildChannelDetailPayload } from './lib/build-channel-detail.js';
+import { mediaDietMyPicksLogic } from './lib/media-diet-picks.js';
 import { topicsIndexHandler } from './lib/topic-list-page.js';
 import { resolveTopicBySlug } from './lib/topics-query.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
@@ -82,7 +83,7 @@ import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
-import { provisionDbUser, resolveDbUser } from './lib/resolve-db-user.js';
+import { provisionDbUser, resolveDbUser, resolveUserSapId } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import { decodeBase64Upload } from './lib/decode-base64-upload.js';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
@@ -301,6 +302,21 @@ cds.on('bootstrap', (app) => {
   app.get('/api/qrcode', qrcodeHandler);
   app.get('/api/recommendations', recommendationsHandler);
   app.get('/api/branches/decide', decideHandler);
+
+  // channels-hub Phase 2 — signed-in media-diet picks derived from user completions.
+  // XSUAA-gated in xs-app.json; resolveUserSapId extracts sapId from JWT user_uuid claim.
+  app.get('/api/media-diet/my-picks', async (req, res) => {
+    try {
+      const sapId = resolveUserSapId(req.user);
+      const db = await cds.connect.to('db');
+      const result = await mediaDietMyPicksLogic(db, sapId);
+      res.json(result);
+    } catch (err) {
+      cds.log('media-diet').error('my-picks failed', err);
+      res.status(500).json({ channels: [], source: 'error', error: err?.message });
+    }
+  });
+
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/kg-stats', kgStatsHandler);
   app.get('/build/concepts', buildConceptsHandler);
