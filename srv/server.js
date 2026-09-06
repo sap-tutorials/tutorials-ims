@@ -314,7 +314,7 @@ cds.on('bootstrap', (app) => {
       res.json(result);
     } catch (err) {
       cds.log('media-diet').error('my-picks failed', err);
-      res.status(500).json({ channels: [], source: 'error', error: err?.message });
+      res.status(500).json({ channels: [], source: 'error' });
     }
   });
 
@@ -353,7 +353,7 @@ cds.on('bootstrap', (app) => {
       return res.json(rows);
     } catch (err) {
       cds.log('media-diet').error('export failed', err);
-      res.status(500).json({ error: err?.message });
+      res.status(500).json({ error: 'Export failed' });
     }
   });
 

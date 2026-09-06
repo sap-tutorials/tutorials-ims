@@ -13,6 +13,7 @@ import { buildChannelDetailPayload } from './build-channel-detail.js';
 import { renderChannelDetail } from './channel-detail-render.js';
 import { composeShell, createShellLoader } from './chrome-shell.js';
 import { createSessionHelpers } from './content-publish-session.js';
+import { loadLiveTags } from './topics-query.js';
 import * as metrics from './metrics.js';
 
 const DEFAULT_NAMESPACE = 'com.sap.developers.ims';
@@ -62,6 +63,16 @@ export async function renderChannelsIntoSession({ db, sessionId, helpers, priorH
   const slugs = await _loadSlugs(db);
   const channelsSeen = slugs.length;
 
+  // Load live tags once for the whole render pass so each buildChannelDetailPayload
+  // call can reuse the same set rather than scanning Tags+TutorialTags per channel.
+  // Fail-open to undefined: each call falls back to its own loadLiveTags on error.
+  let live;
+  try {
+    live = await loadLiveTags(db);
+  } catch {
+    // fail-open — buildChannelDetailPayload will load its own live tags
+  }
+
   const changedFiles = {};
   let channelsSkipped = 0;
   let channelsErrored = 0;
@@ -69,7 +80,7 @@ export async function renderChannelsIntoSession({ db, sessionId, helpers, priorH
   for (const slug of slugs) {
     const key = `channel-${slug}`;
     try {
-      const channel = await _buildPayload(db, slug);
+      const channel = await _buildPayload(db, slug, live);
       if (channel.notFound || channel.error) {
         channelsErrored++;
         metrics.counter('channel_render_error');

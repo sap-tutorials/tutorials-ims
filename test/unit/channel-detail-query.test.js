@@ -3,6 +3,7 @@ import { describe, it, beforeAll, expect } from 'vitest';
 import cds from '@sap/cds';
 import { buildChannelDetailPayload } from '../../srv/lib/build-channel-detail.js';
 import { titlePathToMdFormat } from '../../srv/lib/tag-md-format.js';
+import { buildTopicSlugMap } from '../../srv/lib/topic-slug.js';
 
 const NS = 'com.sap.developers.ims';
 
@@ -12,6 +13,16 @@ describe('buildChannelDetailPayload', () => {
   let db;
   const TITLE_PATH = 'Software Product : SAP CAP';
   const md = titlePathToMdFormat(TITLE_PATH); // 'software-product>sap-cap'
+
+  // Hierarchical (≥3-segment) titlePath regression fixture for Fix 1.
+  // titlePathToMdFormat takes only FIRST+LAST segments → 'software-product>4hana'
+  // buildTopicSlugMap slugifies the FULL path → 'software-product-enterprise-management-sap-s-4hana'
+  const HIER_TITLE_PATH = 'Software Product : Enterprise Management / SAP S/4HANA';
+  const hierMd = titlePathToMdFormat(HIER_TITLE_PATH); // 'software-product>4hana'
+  // Expected canonical slug: slugifyTopic(HIER_TITLE_PATH)
+  const hierCanonicalSlug = buildTopicSlugMap([
+    { titlePath: HIER_TITLE_PATH, label: 'SAP S/4HANA', tutorialCount: 1 },
+  ]).byTag.get(HIER_TITLE_PATH); // 'software-product-enterprise-management-sap-s-4hana'
 
   beforeAll(async () => {
     db = await cds.connect.to('db');
@@ -62,6 +73,36 @@ describe('buildChannelDetailPayload', () => {
         isPublished: false,
         linkStatus: 'OK',
       },
+    ]));
+
+    // Hierarchical titlePath fixture (Fix 1 regression).
+    // hierMd = 'software-product>4hana' (first+last only — the buggy derivation).
+    // hierCanonicalSlug = 'software-product-enterprise-management-sap-s-4hana' (full path slug).
+    await db.run(INSERT.into(Tags).entries([
+      { ID: 'cdtag-hier', titlePath: HIER_TITLE_PATH, label: 'SAP S/4HANA', name: 'sap-s4hana' },
+    ]));
+    await db.run(INSERT.into(Tutorials).entries([
+      { ID: 'cdtut-hier', slug: 'cd-s4hana-intro', title: 'S/4HANA Intro', experienceTag: 'Beginner' },
+    ]));
+    await db.run(INSERT.into(TutorialTags).entries([
+      { tutorial_ID: 'cdtut-hier', tag_ID: 'cdtag-hier' },
+    ]));
+    await db.run(INSERT.into(Channels).entries([
+      {
+        ID: 'cdch-hier',
+        sourceId: 'cd-hier-channel',
+        slug: 'hier-channel',
+        name: 'Hierarchical Channel',
+        url: 'https://hier-channel.example',
+        purpose: 'Tests hierarchical title paths',
+        ownerType: 'SAP_Official',
+        isSapOwned: true,
+        isPublished: true,
+        linkStatus: 'OK',
+      },
+    ]));
+    await db.run(INSERT.into(ChannelTopicMap).entries([
+      { ID: cds.utils.uuid(), channel_ID: 'cdch-hier', topicTag: hierMd, authoringStatus: 'REVIEWED', relevance: 85 },
     ]));
   });
 
@@ -154,5 +195,24 @@ describe('buildChannelDetailPayload', () => {
     expect(payload.topics.length).toBe(1);
     expect(payload.topics[0].relevance).toBe(90);
     expect(payload.topics[0].label).toBe('SAP CAP');
+  });
+
+  it('returns canonical slug (full titlePath) not mdFormat-derived slug for hierarchical tags', async () => {
+    // Regression test for Fix 1: for a ≥3-segment titlePath, the old code derived
+    // the slug from mdFormat (first+last segments only), producing a 404-prone slug.
+    // The correct slug comes from buildTopicSlugMap, which slugifies the full titlePath.
+    //
+    // HIER_TITLE_PATH = 'Software Product : Enterprise Management / SAP S/4HANA'
+    // Old buggy slug (mdFormat-derived):  'software-product-4hana'
+    // Correct canonical slug:             'software-product-enterprise-management-sap-s-4hana'
+    const payload = await buildChannelDetailPayload(db, 'hier-channel');
+    expect(payload.notFound).toBeFalsy();
+    expect(payload.topics.length).toBe(1);
+    const topic = payload.topics[0];
+    // Must match the canonical slug (full titlePath slugified), not the mdFormat-derived one.
+    expect(topic.slug).toBe(hierCanonicalSlug); // 'software-product-enterprise-management-sap-s-4hana'
+    expect(topic.slug).not.toBe(hierMd.replace('>', '-').replace(/[^a-z0-9-]/g, '')); // not 'software-product-4hana'
+    expect(topic.label).toBe('SAP S/4HANA');
+    expect(topic.tutorialCount).toBe(1);
   });
 });

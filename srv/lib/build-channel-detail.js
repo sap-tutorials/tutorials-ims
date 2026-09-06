@@ -18,9 +18,12 @@ const NS = 'com.sap.developers.ims';
  *
  * @param {object} db   CDS db service
  * @param {string} slug URL slug (resolved lowercase; falls back to sourceId)
+ * @param {object[]} [live]  Pre-loaded live-tags array from loadLiveTags(db).
+ *   Pass from a bulk render loop to avoid one loadLiveTags call per channel.
+ *   When omitted the function loads tags itself (single-slug serve path).
  * @returns {Promise<{slug,name,url,purpose,ownerType,topics,buildAt,notFound}>}
  */
-export async function buildChannelDetailPayload(db, slug) {
+export async function buildChannelDetailPayload(db, slug, live) {
   try {
     const canonSlug = String(slug || '').toLowerCase();
     const { Channels, ChannelTopicMap } = cds.entities(NS);
@@ -51,31 +54,34 @@ export async function buildChannelDetailPayload(db, slug) {
     );
 
     // Build a tutorialCount + label lookup from live tags keyed by mdFormat.
-    // loadLiveTags returns rows that already have titlePath; we compute mdFormat
-    // and build a Map<mdFormat → {label, tutorialCount}>.
+    // loadLiveTags returns rows that already have titlePath and a canonical slug
+    // (from buildTopicSlugMap); we compute mdFormat and build a
+    // Map<mdFormat → {slug, label, tutorialCount}>.
     let tutorialCountByMd = new Map();
     try {
-      const live = await loadLiveTags(db);
-      for (const tag of live) {
+      const liveTags = live ?? await loadLiveTags(db);
+      for (const tag of liveTags) {
         if (!tag.titlePath) continue;
         const md = titlePathToMdFormat(tag.titlePath);
-        if (md) tutorialCountByMd.set(md, { label: tag.label ?? md, tutorialCount: tag.tutorialCount ?? 0 });
+        if (md) tutorialCountByMd.set(md, { slug: tag.slug, label: tag.label ?? md, tutorialCount: tag.tutorialCount ?? 0 });
       }
     } catch {
       // fail-open: counts will be 0 but topics still listed
     }
 
-    // Build topic slug from the mdFormat: replace '>' with '-' and remove non-slug chars.
-    // This mirrors the slug derivation in buildTopicSlugMap (topics-query.js uses bySlug).
-    // We derive the slug from the live tag that matches, falling back to a safe transform.
+    // Build topic entries: use the canonical slug from the matched live tag.
+    // The canonical slug comes from buildTopicSlugMap (via loadLiveTags), which
+    // slugifies the full titlePath, not just the mdFormat key. This ensures
+    // /topics/<slug>/ links resolve correctly for hierarchical (≥3-segment) titlePaths.
     const topics = mapRows.map((row) => {
       const md = row.topicTag;
       const entry = tutorialCountByMd.get(md);
-      // Derive a display slug from mdFormat: 'software-product>sap-cap' → 'software-product-sap-cap'
-      const topicSlug = md.replace('>', '-').replace(/[^a-z0-9-]/g, '');
+      // Canonical topic slug from loadLiveTags (matches /topics/<slug>/ + topic-<slug> BLOB key).
+      // Fallback: derive from mdFormat only when the topicTag has no matching live tag.
+      const topicSlug = entry?.slug ?? md.replace('>', '-').replace(/[^a-z0-9-]/g, '');
       return {
         slug: topicSlug,
-        label: entry?.label ?? md, // human-readable label from loadLiveTags, fallback to mdFormat if tag missing
+        label: entry?.label ?? md,
         tutorialCount: entry?.tutorialCount ?? 0,
         relevance: row.relevance ?? 50,
       };
