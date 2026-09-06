@@ -46,6 +46,23 @@ describe('ChannelsHealth', () => {
     expect(wrapper.text()).toContain('Community');
   });
 
+  it('renders a narrative summary sentence', () => {
+    const wrapper = mount(ChannelsHealth, { props: { stats: SAMPLE_STATS } });
+    const summary = wrapper.find('[data-testid="health-summary"]');
+    expect(summary.exists()).toBe(true);
+    // published/total + active count appear in the prose
+    expect(summary.text()).toContain('120');
+    expect(summary.text()).toContain('150');
+  });
+
+  it('renders an active-rate percentage headline', () => {
+    const wrapper = mount(ChannelsHealth, { props: { stats: SAMPLE_STATS } });
+    const rate = wrapper.find('[data-testid="active-rate"]');
+    expect(rate.exists()).toBe(true);
+    // 110 / 150 = 73%
+    expect(rate.text()).toContain('73%');
+  });
+
   it('does NOT render any panel referencing linkStatus, lastChecked, or updateFrequency', () => {
     const wrapper = mount(ChannelsHealth, { props: { stats: SAMPLE_STATS } });
     const html = wrapper.html();

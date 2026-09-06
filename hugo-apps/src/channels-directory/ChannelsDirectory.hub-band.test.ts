@@ -6,9 +6,9 @@ import ChannelsDirectory from './ChannelsDirectory.vue';
 describe('ChannelsDirectory — hub band', () => {
   const wrapper = () => mount(ChannelsDirectory, { props: { channels: [], collections: [] } });
 
-  it('renders four hub navigation cards', () => {
+  it('renders three hub navigation cards', () => {
     const links = wrapper().findAll('.channels-hub-band__cards a');
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(3);
   });
 
   it('card hrefs include atlas, health, and media-diet', () => {
@@ -16,6 +16,11 @@ describe('ChannelsDirectory — hub band', () => {
     expect(hrefs).toContain('/channels/atlas/');
     expect(hrefs).toContain('/channels/health/');
     expect(hrefs).toContain('/channels/media-diet/');
+  });
+
+  it('does not link to the unbuilt crosswalk page', () => {
+    const hrefs = wrapper().findAll('.channels-hub-band__cards a').map((l) => l.attributes('href'));
+    expect(hrefs).not.toContain('/channels/crosswalk/');
   });
 
   it('hub band appears in DOM before the filter controls', () => {
@@ -28,7 +33,7 @@ describe('ChannelsDirectory — hub band', () => {
 
   it('each card has a title and an icon name', () => {
     const cards = wrapper().findAll('.channels-hub-band__cards li');
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(3);
     for (const card of cards) {
       expect(card.find('.hub-card__title').text()).toBeTruthy();
       const icon = card.find('ui5-icon');

@@ -10,7 +10,7 @@ interface Channel {
 
 const props = defineProps<{ channels: Channel[] }>();
 
-const MAX_SELECTED = 3;
+const MAX_SELECTED = 6;
 const MAX_RESULTS = 12;
 
 // Derive unique, sorted focus areas from the channels array.
@@ -34,8 +34,8 @@ function toggle(area: string) {
   selected.value = next;
 }
 
-// Filter channels by any selected focus area, rank by match count descending, cap at 12.
-const results = computed(() => {
+// All channels matching at least one selected area (pre-cap), ranked by match count.
+const ranked = computed(() => {
   if (selected.value.size === 0) return [];
   return props.channels
     .map((ch) => {
@@ -43,10 +43,14 @@ const results = computed(() => {
       return { ch, matchCount };
     })
     .filter(({ matchCount }) => matchCount > 0)
-    .sort((a, b) => b.matchCount - a.matchCount)
-    .slice(0, MAX_RESULTS)
-    .map(({ ch }) => ch);
+    .sort((a, b) => b.matchCount - a.matchCount);
 });
+
+// Displayed results, capped at MAX_RESULTS.
+const results = computed(() => ranked.value.slice(0, MAX_RESULTS).map(({ ch }) => ch));
+
+// Total matches before the display cap, for the "N channels match" count.
+const matchedTotal = computed(() => ranked.value.length);
 </script>
 
 <template>
@@ -54,33 +58,51 @@ const results = computed(() => {
     <p class="media-diet__instruction">
       Pick up to {{ MAX_SELECTED }} focus areas to get a personalized channel bundle.
     </p>
-    <ul class="media-diet__areas">
-      <li v-for="area in focusAreas" :key="area">
-        <button
-          class="focus-area-btn"
-          :class="{ 'focus-area-btn--selected': selected.has(area) }"
-          :aria-pressed="selected.has(area)"
-          :disabled="!selected.has(area) && selected.size >= MAX_SELECTED"
-          data-focus-area
-          @click="toggle(area)"
-        >{{ area }}</button>
-      </li>
-    </ul>
+    <div class="media-diet__body">
+      <div class="media-diet__picker">
+        <ul class="media-diet__areas">
+          <li v-for="area in focusAreas" :key="area">
+            <button
+              class="focus-area-btn"
+              :class="{ 'focus-area-btn--selected': selected.has(area) }"
+              :aria-pressed="selected.has(area)"
+              :disabled="!selected.has(area) && selected.size >= MAX_SELECTED"
+              data-focus-area
+              @click="toggle(area)"
+            >{{ area }}</button>
+          </li>
+        </ul>
+      </div>
 
-    <p v-if="selected.size === 0" class="media-diet__prompt">
-      Select at least one focus area to see recommended channels.
-    </p>
+      <div class="media-diet__output">
+        <p v-if="selected.size === 0" class="media-diet__prompt">
+          Select at least one focus area to see recommended channels.
+        </p>
 
-    <ul v-else class="media-diet__results" data-testid="results">
-      <li v-for="ch in results" :key="ch.url" class="media-diet-result" data-testid="result-item">
-        <a :href="ch.url" target="_blank" rel="noopener" class="media-diet-result__name">{{ ch.name }}</a>
-        <p v-if="ch.purpose" class="media-diet-result__purpose">{{ ch.purpose }}</p>
-      </li>
-    </ul>
+        <template v-else>
+          <p class="media-diet__count" data-testid="result-count" aria-live="polite">
+            <template v-if="matchedTotal === 0">No channels match the selected focus areas yet.</template>
+            <template v-else-if="matchedTotal > results.length">
+              {{ matchedTotal }} channels match — showing top {{ results.length }}.
+            </template>
+            <template v-else>
+              {{ matchedTotal }} {{ matchedTotal === 1 ? 'channel matches' : 'channels match' }} your diet.
+            </template>
+          </p>
 
-    <p v-if="selected.size > 0 && results.length === 0" class="media-diet__empty">
-      No published channels match the selected focus areas yet.
-    </p>
+          <ul v-if="results.length" class="media-diet__results" data-testid="results">
+            <li v-for="ch in results" :key="ch.url" class="media-diet-result" data-testid="result-item">
+              <a :href="ch.url" target="_blank" rel="noopener" class="media-diet-result__name">{{ ch.name }}</a>
+              <p v-if="ch.purpose" class="media-diet-result__purpose">{{ ch.purpose }}</p>
+            </li>
+          </ul>
+
+          <p v-else class="media-diet__empty">
+            No published channels match the selected focus areas yet.
+          </p>
+        </template>
+      </div>
+    </div>
 
     <!-- PHASE 2 SEAM: export button (bookmarks + OPML) and signed-in inferred picks go here -->
   </div>
@@ -95,6 +117,29 @@ const results = computed(() => {
 .media-diet__instruction {
   margin: 0;
   color: var(--sapNeutralTextColor, #556b82);
+}
+.media-diet__body {
+  display: grid;
+  grid-template-columns: minmax(12rem, 16rem) 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 40rem) {
+  .media-diet__body {
+    grid-template-columns: 1fr;
+  }
+}
+.media-diet__picker {
+  position: sticky;
+  top: 1rem;
+}
+.media-diet__output {
+  min-width: 0;
+}
+.media-diet__count {
+  margin: 0 0 0.75rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #1d2d3e);
 }
 .media-diet__areas {
   list-style: none;

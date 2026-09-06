@@ -68,13 +68,28 @@ describe('MediaDiet', () => {
     expect(ytIndex).toBeLessThan(communityIndex);
   });
 
-  it('allows at most 3 focus areas selected simultaneously', async () => {
-    const wrapper = mount(MediaDiet, { props: { channels: CHANNELS } });
+  it('allows at most 6 focus areas selected simultaneously', async () => {
+    const manyAreas = Array.from({ length: 10 }, (_, i) => ({
+      name: `Channel ${i}`, url: `https://ch${i}.example`, purpose: `Purpose ${i}`,
+      focusAreas: [`Area${i}`],
+    }));
+    const wrapper = mount(MediaDiet, { props: { channels: manyAreas } });
     const toggles = wrapper.findAll('[data-focus-area]');
-    // Click all 4 focus areas
+    // Click all 10 focus areas
     for (const toggle of toggles) await toggle.trigger('click');
     const selected = wrapper.findAll('[data-focus-area][aria-pressed="true"]');
-    expect(selected.length).toBeLessThanOrEqual(3);
+    expect(selected.length).toBeLessThanOrEqual(6);
+    expect(selected.length).toBe(6);
+  });
+
+  it('shows a live match count once a focus area is selected', async () => {
+    const wrapper = mount(MediaDiet, { props: { channels: CHANNELS } });
+    const capToggle = wrapper.findAll('[data-focus-area]').find((el) => el.text().includes('CAP'));
+    await capToggle!.trigger('click');
+    const count = wrapper.find('[data-testid="result-count"]');
+    expect(count.exists()).toBe(true);
+    // CAP matches SAP Learning + SAP YouTube = 2
+    expect(count.text()).toContain('2');
   });
 
   it('shows empty-state prompt when no focus area is selected', () => {
