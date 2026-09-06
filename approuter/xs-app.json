@@ -88,6 +88,12 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/channel-atlas-ui/(.*)$",
+      "target": "/channel-atlas-ui/$1",
+      "localDir": "static",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
       "localDir": "static",
@@ -604,6 +610,13 @@
       "localDir": "static",
       "authenticationType": "none",
       "cacheControl": "public, max-age=3600"
+    },
+    {
+      "source": "^/channels/atlas(/.*)?$",
+      "target": "/channels/atlas$1",
+      "localDir": "static",
+      "authenticationType": "none",
+      "cacheControl": "public, max-age=60, s-maxage=600, stale-while-revalidate=600"
     },
     { "source": "^/browse/?(\\?.*)?$",              "target": "/content/pages/browse/$1",              "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/topics/?(\\?.*)?$", "target": "/content/topics-index$1", "destination": "srv-api", "authenticationType": "none" },
