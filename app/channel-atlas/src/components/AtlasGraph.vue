@@ -20,8 +20,37 @@ const container = ref<HTMLDivElement | null>(null)
 const containerLabel = computed(() => `atlas-graph-${props.nodes.length}`)
 
 let renderer: InstanceType<typeof Sigma> | null = null
+let themeObserver: MutationObserver | null = null
 
-onMounted(() => { buildGraph() })
+// Read the site theme's text color (from --sapTextColor, flipped by the
+// html.dark class). Sigma bakes labelColor into its settings at construction,
+// so we resolve the current value each buildGraph() and rebuild on theme flip.
+function themeLabelColor(): string {
+  if (typeof window === 'undefined') return '#32363a'
+  const v = getComputedStyle(document.documentElement)
+    .getPropertyValue('--sapTextColor')
+    .trim()
+  return v || '#32363a'
+}
+
+onMounted(() => {
+  buildGraph()
+  // Update baked Sigma label color when the site theme toggles (html.dark class
+  // add/remove) — a lightweight setting refresh, not a full rebuild, so the
+  // forceAtlas2 layout is preserved. Guarded for non-browser (unit) env.
+  if (typeof window !== 'undefined' && 'MutationObserver' in window) {
+    themeObserver = new MutationObserver(() => {
+      if (renderer) {
+        renderer.setSetting('labelColor', { color: themeLabelColor() })
+        renderer.refresh()
+      }
+    })
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    })
+  }
+})
 
 // Rebuild on prop changes — mirrors app/explore/src/components/ExploreGraph.vue.
 // deep:false — computed always produces a new array reference.
@@ -66,7 +95,9 @@ function buildGraph() {
     settings: { gravity: 1, scalingRatio: 10, barnesHutOptimize: true },
   })
 
-  renderer = new Sigma(graph, container.value)
+  renderer = new Sigma(graph, container.value, {
+    labelColor: { color: themeLabelColor() },
+  })
   renderer.on('clickNode', ({ node }) => {
     const atlasNode = props.nodes.find((n) => n.id === node)
     if (atlasNode) emit('nodeClick', { id: node, node: atlasNode })
@@ -74,6 +105,7 @@ function buildGraph() {
 }
 
 onBeforeUnmount(() => {
+  if (themeObserver) { themeObserver.disconnect(); themeObserver = null }
   if (renderer) { renderer.kill(); renderer = null }
 })
 
