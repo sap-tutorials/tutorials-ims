@@ -52,8 +52,11 @@ function labelFor(t: OwnerType) {
         :key="t"
         class="owner-filter__item"
         :class="{ 'owner-filter__item--disabled': !enabledTypes.has(t) }"
+        role="option"
+        :aria-selected="enabledTypes.has(t)"
         @click="emit('toggle', t)"
       >
+        <span class="owner-filter__check" aria-hidden="true">{{ enabledTypes.has(t) ? '✓' : '' }}</span>
         <span
           class="owner-filter__swatch"
           :style="{ background: colorFor(t) }"
@@ -63,3 +66,88 @@ function labelFor(t: OwnerType) {
     </ul>
   </div>
 </template>
+
+<style scoped>
+/* Consumes site theme vars (hugo/assets/css/sap-theme-vars.css, flipped by
+   the html.dark class). Light fallbacks keep the standalone/dev build legible. */
+.owner-filter {
+  position: relative;
+  display: inline-block;
+}
+
+.owner-filter__toggle {
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+  color: var(--sapButton_TextColor, #0064d9);
+  background: var(--sapButton_Background, #fff);
+  border: 1px solid var(--sapButton_BorderColor, #0064d9);
+  border-radius: 0.5rem;
+}
+
+.owner-filter__toggle:hover {
+  background: var(--sapButton_Hover_Background, rgba(0, 100, 217, 0.06));
+}
+
+.owner-filter__list {
+  position: absolute;
+  z-index: 10;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  min-width: 220px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--sapList_Background, #fff);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  box-shadow: var(--sapContent_Shadow1, 0 2px 8px rgba(0, 0, 0, 0.15));
+}
+
+.owner-filter__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.owner-filter__item:hover {
+  background: var(--sapList_Hover_Background, rgba(0, 112, 242, 0.06));
+}
+
+/* Selected (enabled) type: highlighted row + visible checkmark. */
+.owner-filter__item[aria-selected='true'] {
+  background: var(--sapList_SelectionBackgroundColor, #ebf5fe);
+  font-weight: 600;
+}
+
+.owner-filter__check {
+  display: inline-block;
+  width: 0.875em;
+  flex-shrink: 0;
+  color: var(--sapSelectedColor, #0064d9);
+  font-weight: 700;
+}
+
+/* Deselected type: dimmed text + faded swatch, no checkmark. */
+.owner-filter__item--disabled {
+  color: var(--sapContent_DisabledTextColor, #bcc3ca);
+  font-weight: 400;
+}
+
+.owner-filter__item--disabled .owner-filter__swatch {
+  opacity: 0.35;
+}
+
+.owner-filter__swatch {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+</style>
