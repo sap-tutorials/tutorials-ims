@@ -292,6 +292,10 @@
           "length": 255,
           "@cds.persistence.name": "NAME"
         },
+        "description": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "DESCRIPTION"
+        },
         "startDate": {
           "type": "cds.Timestamp",
           "@cds.persistence.name": "STARTDATE"
@@ -318,6 +322,17 @@
           "length": 36,
           "@odata.foreignKey4": "mission",
           "@cds.persistence.name": "MISSION_ID"
+        },
+        "hasLogo": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "HASLOGO"
+        },
+        "logoUpdatedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "LOGOUPDATEDAT"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EVENTS"
@@ -2034,6 +2049,487 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_FEATUREDTASKS"
+    },
+    "com.sap.developers.ims.Channels": {
+      "kind": "entity",
+      "@assert.unique.sourceId": [
+        {
+          "=": "sourceId"
+        }
+      ],
+      "@assert.unique.slugField": [
+        {
+          "=": "slug"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "sourceId": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "SOURCEID"
+        },
+        "name": {
+          "type": "cds.String",
+          "length": 200,
+          "@cds.persistence.name": "NAME"
+        },
+        "url": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "URL"
+        },
+        "relatedUrls": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "RELATEDURLS"
+        },
+        "aliases": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "ALIASES"
+        },
+        "purpose": {
+          "type": "cds.String",
+          "length": 1000,
+          "@cds.persistence.name": "PURPOSE"
+        },
+        "notes": {
+          "type": "cds.String",
+          "length": 1000,
+          "@cds.persistence.name": "NOTES"
+        },
+        "ownerName": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "OWNERNAME"
+        },
+        "ownerType": {
+          "type": "cds.String",
+          "length": 5000,
+          "@cds.persistence.name": "OWNERTYPE"
+        },
+        "isSapOwned": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "ISSAPOWNED"
+        },
+        "category": {
+          "type": "cds.String",
+          "length": 60,
+          "@cds.persistence.name": "CATEGORY"
+        },
+        "subcategory": {
+          "type": "cds.String",
+          "length": 80,
+          "@cds.persistence.name": "SUBCATEGORY"
+        },
+        "platform": {
+          "type": "cds.String",
+          "length": 80,
+          "@cds.persistence.name": "PLATFORM"
+        },
+        "status": {
+          "type": "cds.String",
+          "default": {
+            "val": "Active"
+          },
+          "length": 5000,
+          "@cds.persistence.name": "STATUS"
+        },
+        "focusAreas": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "FOCUSAREAS"
+        },
+        "tags": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "TAGS"
+        },
+        "updateFrequency": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "UPDATEFREQUENCY"
+        },
+        "githubStars": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "GITHUBSTARS"
+        },
+        "subscribers": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "SUBSCRIBERS"
+        },
+        "slug": {
+          "type": "cds.String",
+          "length": 200,
+          "@cds.persistence.name": "SLUG"
+        },
+        "feedUrl": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "FEEDURL"
+        },
+        "isPublished": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": true
+          },
+          "@cds.persistence.name": "ISPUBLISHED"
+        },
+        "isFeatured": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "ISFEATURED"
+        },
+        "editorialNote": {
+          "type": "cds.String",
+          "length": 800,
+          "@cds.persistence.name": "EDITORIALNOTE"
+        },
+        "contentHash": {
+          "type": "cds.String",
+          "length": 64,
+          "@cds.persistence.name": "CONTENTHASH"
+        },
+        "ingestBatch": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "INGESTBATCH"
+        },
+        "linkStatus": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "UNKNOWN"
+          },
+          "@cds.persistence.name": "LINKSTATUS"
+        },
+        "linkStatusOverride": {
+          "type": "cds.String",
+          "length": 20,
+          "@cds.persistence.name": "LINKSTATUSOVERRIDE"
+        },
+        "lastChecked": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "LASTCHECKED"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "sourceId": {
+            "paths": [
+              {
+                "ref": [
+                  "sourceId"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Channels"
+          },
+          "slugField": {
+            "paths": [
+              {
+                "ref": [
+                  "slug"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Channels"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHANNELS"
+    },
+    "com.sap.developers.ims.ChannelCollections": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "slug": {
+          "type": "cds.String",
+          "length": 80,
+          "@cds.persistence.name": "SLUG"
+        },
+        "title": {
+          "type": "cds.String",
+          "length": 140,
+          "@cds.persistence.name": "TITLE"
+        },
+        "intro": {
+          "type": "cds.String",
+          "length": 1200,
+          "@cds.persistence.name": "INTRO"
+        },
+        "sortOrder": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 100
+          },
+          "@cds.persistence.name": "SORTORDER"
+        },
+        "isPublished": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "ISPUBLISHED"
+        },
+        "authoringStatus": {
+          "type": "cds.String",
+          "default": {
+            "val": "BLANK"
+          },
+          "length": 5000,
+          "@cds.persistence.name": "AUTHORINGSTATUS"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHANNELCOLLECTIONS"
+    },
+    "com.sap.developers.ims.ChannelCollectionItems": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "collection_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "collection",
+          "@cds.persistence.name": "COLLECTION_ID"
+        },
+        "channel_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "channel",
+          "@cds.persistence.name": "CHANNEL_ID"
+        },
+        "sortOrder": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 100
+          },
+          "@cds.persistence.name": "SORTORDER"
+        },
+        "blurb": {
+          "type": "cds.String",
+          "length": 280,
+          "@cds.persistence.name": "BLURB"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHANNELCOLLECTIONITEMS"
+    },
+    "com.sap.developers.ims.ChannelTopicMap": {
+      "kind": "entity",
+      "@assert.unique.pair": [
+        {
+          "=": "channel"
+        },
+        {
+          "=": "topicTag"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "channel_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "channel",
+          "@cds.persistence.name": "CHANNEL_ID"
+        },
+        "topicTag": {
+          "type": "cds.String",
+          "length": 140,
+          "@cds.persistence.name": "TOPICTAG"
+        },
+        "relevance": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 50
+          },
+          "@cds.persistence.name": "RELEVANCE"
+        },
+        "authoringStatus": {
+          "type": "cds.String",
+          "default": {
+            "val": "AI_SEEDED"
+          },
+          "length": 5000,
+          "@cds.persistence.name": "AUTHORINGSTATUS"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "pair": {
+            "paths": [
+              {
+                "ref": [
+                  "channel_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "topicTag"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.ChannelTopicMap"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHANNELTOPICMAP"
+    },
+    "com.sap.developers.ims.ChannelSubmissions": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "kind": {
+          "type": "cds.String",
+          "length": 5000,
+          "@cds.persistence.name": "KIND"
+        },
+        "targetChannel_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "targetChannel",
+          "@cds.persistence.name": "TARGETCHANNEL_ID"
+        },
+        "proposed": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "PROPOSED"
+        },
+        "rationale": {
+          "type": "cds.String",
+          "length": 1000,
+          "@cds.persistence.name": "RATIONALE"
+        },
+        "submitterId": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "SUBMITTERID"
+        },
+        "status": {
+          "type": "cds.String",
+          "default": {
+            "val": "PENDING"
+          },
+          "length": 5000,
+          "@cds.persistence.name": "STATUS"
+        },
+        "reviewerId": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "REVIEWERID"
+        },
+        "reviewNote": {
+          "type": "cds.String",
+          "length": 800,
+          "@cds.persistence.name": "REVIEWNOTE"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHANNELSUBMISSIONS"
     },
     "com.sap.developers.ims.FailedEmails": {
       "kind": "entity",

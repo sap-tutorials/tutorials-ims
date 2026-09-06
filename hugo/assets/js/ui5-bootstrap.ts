@@ -160,6 +160,7 @@ import "@ui5/webcomponents-icons/dist/employee.js";
 // Icons referenced from Vue islands (cmd-palette, MyCompletions, code-check). Imported here so
 // they share the main bootstrap's icon registry rather than each island re-registering.
 import "@ui5/webcomponents-icons/dist/accept.js";
+import "@ui5/webcomponents-icons/dist/play.js"; // /me Recent Activity in-progress ("resume") items (#2146)
 import "@ui5/webcomponents-icons/dist/home.js";
 import "@ui5/webcomponents-icons/dist/palette.js";
 import "@ui5/webcomponents-icons/dist/arrow-right.js";

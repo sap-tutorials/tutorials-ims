@@ -19,6 +19,9 @@ sap.ui.define([
 
       this._initTheme();
       this._initNavModel();
+      // Guarantee every headless Fiori Elements app can navigate list -> object.
+      // Attached before initialize() so the very first route match is covered.
+      this.getRouter().attachRouteMatched(this._ensureFeInnerAppState, this);
       this.getRouter().initialize();
     },
 
@@ -311,6 +314,68 @@ sap.ui.define([
       var sCurrentHash = oHashChanger.getHash();
       var sShellRoute = sCurrentHash.split("&")[0];
       oHashChanger.setHash(sShellRoute);
+    },
+
+    // --- Fiori Elements list -> object navigation --------------------------
+    // The admin apps run headless inside this shell, which installs a minimal
+    // fake `sap.ushell.Container` (so FE thinks it is inside a launchpad and
+    // renders no standalone shell chrome of its own). A side effect of that FLP
+    // detection is that FE builds a NavigationService WITHOUT
+    // `storeInnerAppStateAsync` — it expects the (real) launchpad to persist
+    // inner-app state. Our fake container does not, so the first list-row click
+    // throws `i.storeInnerAppStateAsync is not a function` and navigation to the
+    // ObjectPage silently fails (this is why channel/tag rows "couldn't open the
+    // Object page"). Enhancing the fake CrossApplicationNavigation with app-state
+    // factory methods does NOT help — FE fixes the service shape purely on
+    // ushell.Container presence, before those methods are consulted.
+    //
+    // Fix: after each route match, wrap `getNavigationService()` on every headless
+    // admin FE component so the returned service always carries a working
+    // in-memory `storeInnerAppStateAsync` (and, defensively, `replaceInnerAppStateKey`).
+    // This mirrors what FE supplies in true standalone mode. Idempotent per component.
+    _ensureFeInnerAppState: function () {
+      var Component = sap.ui.require("sap/ui/core/Component");
+      if (!Component || !Component.registry) return;
+      var mComponents = Component.registry.all();
+      Object.keys(mComponents).forEach(function (sId) {
+        var oComp = mComponents[sId];
+        if (!oComp || oComp._bInnerAppStatePatched) return;
+        var sName = oComp.getMetadata && oComp.getMetadata().getName();
+        // Only the headless FE apps expose getNavigationService(); the shell
+        // component (a plain UIComponent) does not, so the method check is enough,
+        // but scope by namespace to be explicit and future-proof.
+        if (!sName || sName.indexOf("sap.tutorials.admin.") !== 0) return;
+        if (typeof oComp.getNavigationService !== "function") return;
+        this._wrapNavigationService(oComp);
+        oComp._bInnerAppStatePatched = true;
+      }.bind(this));
+    },
+
+    _wrapNavigationService: function (oComp) {
+      var fnOriginal = oComp.getNavigationService.bind(oComp);
+      oComp.getNavigationService = function () {
+        var oNav = fnOriginal();
+        if (oNav && typeof oNav.storeInnerAppStateAsync !== "function") {
+          oNav.storeInnerAppStateAsync = function (oAppStateData) {
+            // Standalone no-op app-state store: keep the payload in memory under a
+            // synthetic key and hand the key back, exactly as FE expects.
+            var sKey = "ias-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+            oNav.__innerAppStates = oNav.__innerAppStates || {};
+            oNav.__innerAppStates[sKey] = oAppStateData;
+            return Promise.resolve(sKey);
+          };
+        }
+        if (oNav && typeof oNav.replaceInnerAppStateKey !== "function") {
+          oNav.replaceInnerAppStateKey = function (sHash, sKey) {
+            if (!sHash) return sHash;
+            if (/sap-iapp-state=/.test(sHash)) {
+              return sHash.replace(/sap-iapp-state=[^&/]*/, "sap-iapp-state=" + sKey);
+            }
+            return sHash + (sHash.indexOf("?") >= 0 ? "&" : "?") + "sap-iapp-state=" + sKey;
+          };
+        }
+        return oNav;
+      };
     },
 
     _getShellUIServiceInstance: function () {

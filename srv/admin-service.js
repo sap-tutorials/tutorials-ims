@@ -13,6 +13,7 @@ import { classifyAndPersist } from './lib/category-classifier.js';
 import { makeAltGroupHandler } from './handlers/completion-path-items-altgroup.js';
 import * as advocateHandlers from './handlers/advocate-handlers.js';
 import * as devtoberfestBannerHandlers from './handlers/devtoberfest-banner-handlers.js';
+import * as eventLogoHandlers from './handlers/event-logo-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
@@ -1058,6 +1059,7 @@ export default class AdminService extends cds.ApplicationService {
     // Advocates: auto-derive slug from firstName + lastName on CREATE.
     advocateHandlers.register(this);
     devtoberfestBannerHandlers.register(this);
+    eventLogoHandlers.register(this);
 
     // Validate Start Date < End Date on Events
     this.before(['CREATE', 'PATCH'], 'Events', (req) => {
@@ -2633,6 +2635,70 @@ export default class AdminService extends cds.ApplicationService {
         return req.reject(400, 'Only hidden submissions can be deleted — hide it first.');
       }
       await DELETE.from(this.entities.PetSubmissions).where({ ID: id });
+      return req.reply();
+    });
+
+    // P4: ChannelSubmissions moderation — approve / reject bound actions.
+    // AdminService is @requires:'Admin' at service level; no per-action gate needed.
+    // approve: applies the whitelisted proposal fields to Channels (ADD→INSERT,
+    //   EDIT→UPDATE, REMOVE→isPublished:false) then stamps the submission APPROVED.
+    // reject: stamps REJECTED only; never touches Channels.
+    // Both guard: non-PENDING → 400, unknown ID → 404.
+    // PROPOSABLE whitelist: only these fields may be written from the proposed JSON.
+    const CHANNEL_PROPOSABLE = [
+      'name', 'url', 'purpose', 'ownerName', 'ownerType', 'category',
+      'subcategory', 'platform', 'tags', 'focusAreas', 'aliases',
+      'relatedUrls', 'notes', 'updateFrequency',
+    ];
+    const pickProposed = (json) => {
+      let obj = {};
+      try { obj = json ? JSON.parse(json) : {}; } catch { obj = {}; }
+      return Object.fromEntries(Object.entries(obj).filter(([k]) => CHANNEL_PROPOSABLE.includes(k)));
+    };
+
+    this.on('approve', 'ChannelSubmissions', async (req) => {
+      const id = req.params?.[0]?.ID ?? req.params?.[0];
+      if (!id) return req.reject(400, 'approve: missing entity key');
+      const { Channels, ChannelSubmissions } = cds.entities('com.sap.developers.ims');
+      const sub = await SELECT.one.from(ChannelSubmissions).where({ ID: id });
+      if (!sub) return req.reject(404, 'Submission not found');
+      if (sub.status !== 'PENDING') return req.reject(400, 'Submission already reviewed');
+
+      const clean = pickProposed(sub.proposed);
+      if (sub.kind === 'ADD') {
+        await INSERT.into(Channels).entries({
+          ID: cds.utils.uuid(),
+          sourceId: `community-${cds.utils.uuid().slice(0, 8)}`,
+          ...clean,
+          status: 'Active',
+          isPublished: true,
+        });
+      } else if (sub.kind === 'EDIT') {
+        if (!sub.targetChannel_ID) return req.reject(400, 'EDIT requires a target channel');
+        if (Object.keys(clean).length) {
+          await UPDATE(Channels).set(clean).where({ ID: sub.targetChannel_ID });
+        }
+      } else if (sub.kind === 'REMOVE') {
+        if (!sub.targetChannel_ID) return req.reject(400, 'REMOVE requires a target channel');
+        await UPDATE(Channels).set({ isPublished: false }).where({ ID: sub.targetChannel_ID });
+      }
+
+      await UPDATE(ChannelSubmissions).set({
+        status: 'APPROVED', reviewerId: req.user.id, reviewNote: req.data.note,
+      }).where({ ID: id });
+      return req.reply();
+    });
+
+    this.on('reject', 'ChannelSubmissions', async (req) => {
+      const id = req.params?.[0]?.ID ?? req.params?.[0];
+      if (!id) return req.reject(400, 'reject: missing entity key');
+      const { ChannelSubmissions } = cds.entities('com.sap.developers.ims');
+      const sub = await SELECT.one.from(ChannelSubmissions).where({ ID: id });
+      if (!sub) return req.reject(404, 'Submission not found');
+      if (sub.status !== 'PENDING') return req.reject(400, 'Submission already reviewed');
+      await UPDATE(ChannelSubmissions).set({
+        status: 'REJECTED', reviewerId: req.user.id, reviewNote: req.data.note,
+      }).where({ ID: id });
       return req.reply();
     });
 

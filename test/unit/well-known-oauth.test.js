@@ -82,7 +82,8 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
   });
 
   it('authorization-server metadata has all RFC 8414 required fields', () => {
-    const m = authorizationServerMetadata('https://t.authentication.eu10.hana.ondemand.com', 'tutorials!t676072.Tutorial.MCP');
+    // issuer = self (approuter base); endpoints = XSUAA base.
+    const m = authorizationServerMetadata('https://developers.sap.com', 'https://t.authentication.eu10.hana.ondemand.com', 'tutorials!t676072.Tutorial.MCP');
     for (const key of [
       'issuer', 'authorization_endpoint', 'token_endpoint',
       'response_types_supported', 'grant_types_supported',
@@ -93,16 +94,22 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     }
     expect(m.code_challenge_methods_supported).toContain('S256');
     expect(m.token_endpoint_auth_methods_supported).toContain('none');
+    // Advertised issuer is the approuter itself (self), NOT the XSUAA URL —
+    // clients discover the AS doc here instead of at XSUAA's broken well-known.
+    expect(m.issuer).toBe('https://developers.sap.com');
+    // ...but the authorize/token endpoints still point at XSUAA.
     expect(m.authorization_endpoint).toBe('https://t.authentication.eu10.hana.ondemand.com/oauth/authorize');
+    expect(m.token_endpoint).toBe('https://t.authentication.eu10.hana.ondemand.com/oauth/token');
     // Must advertise the fully-qualified, grantable scope — not the bare name.
     expect(m.scopes_supported).toContain('tutorials!t676072.Tutorial.MCP');
     expect(m.scopes_supported).not.toContain('Tutorial.MCP');
   });
 
   it('protected-resource metadata has MCP 2025-06 required fields', () => {
-    const m = protectedResourceMetadata('https://host.example', 'https://t.authentication.eu10.hana.ondemand.com', 'tutorials!t676072.Tutorial.MCP');
+    const m = protectedResourceMetadata('https://host.example', 'tutorials!t676072.Tutorial.MCP');
     expect(m.resource).toBe('https://host.example/mcp-auth');
-    expect(m.authorization_servers).toEqual(['https://t.authentication.eu10.hana.ondemand.com']);
+    // authorization_servers advertises the approuter (self), not XSUAA.
+    expect(m.authorization_servers).toEqual(['https://host.example']);
     expect(m.scopes_supported).toContain('tutorials!t676072.Tutorial.MCP');
     expect(m.bearer_methods_supported).toEqual(['header']);
   });
@@ -132,7 +139,10 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     expect(res.statusCode).toBe(200);
     expect(res.headers['Content-Type']).toBe('application/json');
     const parsed = JSON.parse(res.body);
-    expect(parsed.issuer).toBe('https://tutorial-system.authentication.eu10-005.hana.ondemand.com');
+    // issuer is the SELF host (request-derived), not the XSUAA URL...
+    expect(parsed.issuer).toBe('https://x.example');
+    // ...while the endpoints still point at the bound XSUAA.
+    expect(parsed.authorization_endpoint).toBe('https://tutorial-system.authentication.eu10-005.hana.ondemand.com/oauth/authorize');
   });
 
   it('serves the protected-resource doc keyed to the request host', () => {
@@ -206,7 +216,7 @@ describe('well-known-oauth: openid-configuration alias', () => {
     expect(res.headers['Content-Type']).toBe('application/json');
     const doc = JSON.parse(res.body);
     expect(doc).toEqual(authorizationServerMetadata(
-      'https://tenant.authentication.eu10-005.hana.ondemand.com', resolveScope()));
+      'https://x.example', 'https://tenant.authentication.eu10-005.hana.ondemand.com', resolveScope()));
     expect(doc.code_challenge_methods_supported).toContain('S256');
   });
 });

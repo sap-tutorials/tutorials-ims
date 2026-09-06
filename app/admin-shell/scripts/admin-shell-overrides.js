@@ -58,6 +58,8 @@ module.exports = {
     'devtoberfest',
     'devtoberfestSignups',
     'analytics',
+    'tutorial-engagement',
+    'tutorial-completions',
     'joule',
     'knowledgeGraph',
     'kgCommunities',
@@ -80,7 +82,11 @@ module.exports = {
     'video-rotation',
     'pats',
     'featureFlags',
-    'petoberfest'
+    'petoberfest',
+    'channels',
+    'channel-collections',
+    'channel-topic-map',
+    'channel-submissions'
   ],
 
   //
@@ -138,6 +144,8 @@ module.exports = {
     devtoberfest: 'dt',
     devtoberfestSignups: 'dsg',
     analytics: 'an',
+    'tutorial-engagement': 'teg',
+    'tutorial-completions': 'tcp',
     joule: 'jo',
     knowledgeGraph: 'kg',
     kgCommunities: 'kc',
@@ -161,7 +169,11 @@ module.exports = {
     'content-moderation': 'cm',
     pats: 'pt',
     featureFlags: 'ffl',
-    petoberfest: 'pb'
+    petoberfest: 'pb',
+    channels: 'ch',
+    'channel-collections': 'cc',
+    'channel-topic-map': 'ctm',
+    'channel-submissions': 'csub'
   },
 
   //

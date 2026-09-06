@@ -11,18 +11,61 @@ interface Completion {
   completionDate: string | null
 }
 
+interface InProgressItem {
+  kind?: string | null
+  slug: string
+  title: string
+  primaryTag: string | null
+  experienceTag: string | null
+  averageTimeToComplete: number | null
+  progressPercent: number | null
+  lastTouchedAt: string | null
+}
+
+// Unified timeline row. `partial` distinguishes an in-progress ("resume where
+// you left off", #2146) item from a finished one; `activityDate` is the field
+// we sort the merged timeline on (completionDate for completed, lastTouchedAt
+// for partial).
+interface ActivityItem {
+  kind?: string | null
+  slug: string
+  title: string
+  experienceTag: string | null
+  partial: boolean
+  progressPercent: number | null
+  activityDate: string | null
+}
+
 const loading = ref(true)
 const isLoggedIn = ref<boolean | null>(null)
-const rows = ref<Completion[]>([])
+const completedRows = ref<Completion[]>([])
+const partialRows = ref<InProgressItem[]>([])
 const errorMsg = ref('')
 
-const recentRows = computed(() =>
-  rows.value
-    .slice()
-    .filter(r => !!r.completionDate && !Number.isNaN(new Date(r.completionDate).getTime()))
-    .sort((a, b) => new Date(b.completionDate!).getTime() - new Date(a.completionDate!).getTime())
+const recentRows = computed<ActivityItem[]>(() => {
+  const completed: ActivityItem[] = completedRows.value.map(r => ({
+    kind: r.kind,
+    slug: r.slug,
+    title: r.title,
+    experienceTag: r.experienceTag,
+    partial: false,
+    progressPercent: null,
+    activityDate: r.completionDate
+  }))
+  const partial: ActivityItem[] = partialRows.value.map(r => ({
+    kind: r.kind,
+    slug: r.slug,
+    title: r.title,
+    experienceTag: r.experienceTag,
+    partial: true,
+    progressPercent: typeof r.progressPercent === 'number' ? r.progressPercent : null,
+    activityDate: r.lastTouchedAt
+  }))
+  return [...completed, ...partial]
+    .filter(r => !!r.activityDate && !Number.isNaN(new Date(r.activityDate).getTime()))
+    .sort((a, b) => new Date(b.activityDate!).getTime() - new Date(a.activityDate!).getTime())
     .slice(0, 10)
-)
+})
 
 function formatDate(iso: string | null) {
   if (!iso) return '—'
@@ -53,7 +96,7 @@ function formatLevel(level: string | null) {
   return level.charAt(0) + level.slice(1).toLowerCase()
 }
 
-function itemUrl(item: Completion): string {
+function itemUrl(item: ActivityItem): string {
   // Petoberfest and puzzles are served from their own content sections, not
   // /tutorials/ — linking their slug under /tutorials/ 404s (verified live).
   const base = item.kind === 'puzzle' ? '/puzzles/'
@@ -62,13 +105,23 @@ function itemUrl(item: Completion): string {
   return `${base}${item.slug}/`
 }
 
-function itemKindLabel(item: Completion): string {
+function itemKindLabel(item: ActivityItem): string {
   if (item.kind === 'puzzle') return 'Puzzle'
   if (item.kind === 'petoberfest') return 'Petoberfest'
-  return item.primaryTag || 'Tutorial'
+  return 'Tutorial'
 }
 
-function onTimelineNameClick(item: Completion) {
+// Subtitle differs for a partial: it shows resume progress ("In progress · 57%
+// · 3d ago") vs a completed item's kind + relative completion time.
+function itemSubtitle(item: ActivityItem): string {
+  if (item.partial) {
+    const pct = typeof item.progressPercent === 'number' ? `${item.progressPercent}% · ` : ''
+    return `In progress · ${pct}${formatRelative(item.activityDate)}`
+  }
+  return `${itemKindLabel(item)} · ${formatRelative(item.activityDate)}`
+}
+
+function onTimelineNameClick(item: ActivityItem) {
   if (!item.slug) return
   window.location.href = itemUrl(item)
 }
@@ -87,22 +140,32 @@ async function isSignedIn(): Promise<boolean> {
   } catch { return false }
 }
 
+// Fetch a /me OData collection. Returns the row array, or null when the
+// response is a lapsed-session HTML login page (caller treats null as signed
+// out) or an HTTP error (caller surfaces errorMsg).
+async function fetchRows(url: string): Promise<any[] | null> {
+  const res = await fetch(url, { credentials: 'include' })
+  if (!res.ok) { errorMsg.value = `Failed to load recent activity (HTTP ${res.status}).`; return null }
+  // Session may have lapsed after the gate → 200 + HTML login page. Treat a
+  // non-JSON body as signed out, not a data error.
+  if (!(res.headers.get('content-type') || '').includes('json')) { isLoggedIn.value = false; return null }
+  const body = await res.json()
+  return Array.isArray(body) ? body : (body.value || [])
+}
+
 onMounted(async () => {
   try {
     if (!(await isSignedIn())) { isLoggedIn.value = false; loading.value = false; return }
     isLoggedIn.value = true
-    const dataRes = await fetch('/api/getMyCompletions()', { credentials: 'include' })
-    if (!dataRes.ok) {
-      errorMsg.value = `Failed to load recent activity (HTTP ${dataRes.status}).`
-      loading.value = false; return
-    }
-    // Session may have lapsed after the gate → 200 + HTML login page. Treat a
-    // non-JSON body as signed out, not a data error.
-    if (!(dataRes.headers.get('content-type') || '').includes('json')) {
-      isLoggedIn.value = false; loading.value = false; return
-    }
-    const body = await dataRes.json()
-    rows.value = Array.isArray(body) ? body : (body.value || [])
+    const [completed, partial] = await Promise.all([
+      fetchRows('/api/getMyCompletions()'),
+      fetchRows('/api/getMyInProgress()')
+    ])
+    // A null from either fetch means signed-out or an HTTP error already
+    // recorded — bail without overwriting that state.
+    if (isLoggedIn.value === false || errorMsg.value) { loading.value = false; return }
+    completedRows.value = completed || []
+    partialRows.value = partial || []
   } catch {
     errorMsg.value = 'Network error loading recent activity.'
   } finally {
@@ -125,11 +188,11 @@ onMounted(async () => {
   <ui5-timeline v-else layout="Vertical" growing="None" class="me-timeline">
     <ui5-timeline-item
       v-for="(item, idx) in recentRows"
-      :key="`${item.kind || 'tutorial'}:${item.slug}:${item.completionDate || idx}`"
+      :key="`${item.kind || 'tutorial'}:${item.slug}:${item.partial ? 'p' : 'c'}:${item.activityDate || idx}`"
       :name="item.title"
-      :subtitle-text="`${itemKindLabel(item)} · ${formatRelative(item.completionDate)}`"
-      icon="accept"
-      state="Positive"
+      :subtitle-text="itemSubtitle(item)"
+      :icon="item.partial ? 'play' : 'accept'"
+      :state="item.partial ? 'Information' : 'Positive'"
       name-clickable
       @name-click="() => onTimelineNameClick(item)"
     >

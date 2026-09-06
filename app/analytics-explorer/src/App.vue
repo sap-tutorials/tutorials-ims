@@ -8,10 +8,15 @@ import '@ui5/webcomponents/dist/Title.js'
 import '@ui5/webcomponents/dist/Popover.js'
 import '@ui5/webcomponents/dist/List.js'
 import '@ui5/webcomponents/dist/ListItemStandard.js'
+import { useRouter } from 'vue-router'
 import { useTheme, type ThemeMode } from './composables/useTheme'
 import JoulePanel from './components/joule/JoulePanel.vue'
 import { useQuerySpec } from './composables/useQuerySpec'
 import { useAuth } from './composables/useAuth'
+
+const router = useRouter()
+function goHome() { router.push('/') }
+function goSurvey() { router.push('/reports/survey') }
 
 const { themeMode, cycleThemeMode, setThemeMode } = useTheme()
 
@@ -102,6 +107,8 @@ function onNotificationsClick() { /* TODO: notifications popover */ }
 <template>
   <div class="app-shell">
     <ui5-shellbar primary-title="Analytics Explorer" secondary-title="SAP Tutorials">
+      <ui5-shellbar-item icon="business-objects-experience" text="Explorer" @click="goHome" />
+      <ui5-shellbar-item icon="feedback" text="Survey" @click="goSurvey" />
       <ui5-shellbar-item
         :icon="themeIcon"
         :text="themeTooltip"

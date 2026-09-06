@@ -88,6 +88,12 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/channel-atlas-ui/(.*)$",
+      "target": "/channel-atlas-ui/$1",
+      "localDir": "static",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
       "localDir": "static",
@@ -124,6 +130,12 @@
       "authenticationType": "none",
       "target": "/version",
       "destination": "srv-api"
+    },
+    {
+      "source": "^/api/event-logo(\\?.*)?$",
+      "target": "/api/event-logo$1",
+      "destination": "srv-api",
+      "authenticationType": "none"
     },
     {
       "source": "^/api/devtoberfest/speaker/([^/?]+)/photo(\\?.*)?$",
@@ -366,6 +378,24 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/channel-submissions/(.*)$",
+      "target": "/channel-submissions/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
+      "source": "^/api/media-diet/my-picks(\\?.*)?$",
+      "target": "/api/media-diet/my-picks$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
+      "source": "^/api/media-diet/export(\\?.*)?$",
+      "target": "/api/media-diet/export$1",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",
@@ -396,7 +426,7 @@
       "authenticationType": "none"
     },
     {
-      "source": "^/build/(breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|kg-stats|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels|topics-gallery|topics-tree|topics)(/.*)?(\\?.*)?$",
+      "source": "^/build/(channels-stats|channels|channel-collections|channel-atlas|breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|kg-stats|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels|topics-gallery|topics-tree|topics)(/.*)?(\\?.*)?$",
       "target": "/build/$1$2$3",
       "destination": "srv-api",
       "authenticationType": "none"
@@ -581,6 +611,13 @@
       "authenticationType": "none",
       "cacheControl": "public, max-age=3600"
     },
+    {
+      "source": "^/channels/atlas(/.*)?$",
+      "target": "/channels/atlas$1",
+      "localDir": "static",
+      "authenticationType": "none",
+      "cacheControl": "public, max-age=60, s-maxage=600, stale-while-revalidate=600"
+    },
     { "source": "^/browse/?(\\?.*)?$",              "target": "/content/pages/browse/$1",              "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/topics/?(\\?.*)?$", "target": "/content/topics-index$1", "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/topics/(.*)$", "target": "/content/topics/$1", "destination": "srv-api", "authenticationType": "none" },
@@ -601,6 +638,7 @@
     { "source": "^/authors/([^/?]+)/?(\\?.*)?$",     "target": "/content/authors/$1",                   "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/puzzles/?(\\?.*)?$",              "target": "/content/puzzles-index",                "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/puzzles/([^/?]+)/?(\\?.*)?$",      "target": "/content/puzzles/$1",                   "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/channels/(?!health(?:/|$)|media-diet(?:/|$)|crosswalk(?:/|$)|atlas(?:/|$))([^/?]+)/?(\\?.*)?$", "target": "/content/channel-detail/$1", "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/(\\?.*)?$",                       "target": "/content/pages/$1",                     "destination": "srv-api", "authenticationType": "none" },
     {
       "source": "^(.*)$",

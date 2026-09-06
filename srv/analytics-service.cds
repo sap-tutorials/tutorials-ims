@@ -72,6 +72,15 @@ service AnalyticsService @(path : '/admin/analytics') {
   @readonly entity AnalyticsBranchPerformance as projection on ims.AnalyticsBranchPerformance;
   @readonly entity AnalyticsBranchTopPick     as projection on ims.AnalyticsBranchTopPick;
 
+  // Standard reports (#2138). AuthorSurveyDistribution + AuthorTutorialParents
+  // are also on AuthorService; duplicated here so the Vue survey page resolves
+  // under /admin/analytics for Admin-role users. TutorialFeedback + Aggregate
+  // are new on this service path (not previously projected here).
+  @readonly entity AuthorSurveyDistribution   as projection on ims.AuthorSurveyDistribution;
+  @readonly entity AuthorTutorialParents      as projection on ims.AuthorTutorialParents;
+  @readonly entity TutorialFeedback           as projection on ims.TutorialFeedback;
+  @readonly entity TutorialFeedbackAggregate  as projection on ims.TutorialFeedbackAggregate;
+
   function listExposedEntities() returns array of {
     name        : String;
     sqlName     : String;

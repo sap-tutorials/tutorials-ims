@@ -51,3 +51,8 @@ annotate ims.CatGameAwards with @cds.persistence.journal;   // #2042 Hit-the-Cat
 annotate ims.MetricSnapshots with @cds.persistence.journal;
 annotate ims.PublishTimings with @cds.persistence.journal;
 annotate ims.TutorialValidationRules with @cds.persistence.journal;
+annotate ims.Channels with @cds.persistence.journal;
+annotate ims.ChannelCollections with @cds.persistence.journal;
+annotate ims.ChannelCollectionItems with @cds.persistence.journal;
+annotate ims.ChannelTopicMap with @cds.persistence.journal;
+annotate ims.ChannelSubmissions with @cds.persistence.journal;

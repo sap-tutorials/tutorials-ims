@@ -1,0 +1,20 @@
+{{- /* Devtoberfest homepage banner — issue #2131.
+       Prominent top-of-page strip that links to the Devtoberfest page.
+       SSR emits a hidden shell; the devtoberfest-banner island fetches the
+       admin-managed event window from /api/devtoberfest/status and reveals it
+       only when the event is upcoming (live countdown) or running ("Live now"
+       + date range). Hidden when no active event / ended / on error — so there
+       is no layout shift in the common off-season case. */ -}}
+<aside class="hp-dtf-banner"
+       data-app="devtoberfest-banner"
+       data-api="/api/devtoberfest/status"
+       data-href="/devtoberfest/"
+       hidden
+       aria-hidden="true">
+  <a class="hp-dtf-banner__link" href="/devtoberfest/" aria-label="Devtoberfest — learn more">
+    <span class="hp-dtf-banner__brand">Devtoberfest</span>
+    <span class="hp-dtf-banner__msg" data-role="msg" aria-hidden="true"></span>
+    <span class="hp-dtf-banner__window" data-role="window"></span>
+    <span class="hp-dtf-banner__cta" aria-hidden="true">Learn more&nbsp;&rarr;</span>
+  </a>
+</aside>

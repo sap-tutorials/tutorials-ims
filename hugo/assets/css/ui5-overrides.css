@@ -708,15 +708,46 @@ html[data-embed="none"] .embed-escape {
   color: var(--sapTextColor);
 }
 
-/* Shellbar nav-menu group separators (header.html sb-nav-popover).
-   Visually divide the verb-pages group from the apps group, and apps
-   from the auth-gated tail. Mirrors the user-popover__separator idiom
-   in the sibling popover. aria-hidden on the <hr> so screen-readers
-   don't announce a list-item-shaped pause. */
-#sb-nav-popover .nav-list__separator {
+/* Shellbar nav-menu: two-level accordion (header.html sb-nav-popover).
+   Groups (Learn / Explore / Community) are collapsible sections rendered
+   from hugo/data/navigation.yaml. Each group header is a full-width button
+   with a CSS-drawn chevron that rotates when its list is expanded. Single-
+   open accordion keeps the menu compact on mobile; the first group ships
+   expanded. Leaf item color is handled by the #sb-nav-popover ui5-li rule
+   above. */
+#sb-nav-popover .nav-menu {
+  min-width: 15rem;
+}
+#sb-nav-popover .nav-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  margin: 0;
   border: none;
-  border-top: 1px solid var(--sapGroup_TitleBorderColor);
-  margin: 0.25rem 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: var(--sapGroup_TitleTextColor, var(--sapTextColor));
+  text-align: left;
+  cursor: pointer;
+}
+#sb-nav-popover .nav-group__header:hover {
+  background: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
+}
+#sb-nav-popover .nav-group__chevron {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  margin-right: 0.25rem;
+}
+#sb-nav-popover .nav-group__header[aria-expanded='true'] .nav-group__chevron {
+  transform: rotate(45deg);
 }
 
 /* #1966 — tutorial display preferences. Attribute-driven; the effective values

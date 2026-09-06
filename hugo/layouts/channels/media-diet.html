@@ -1,0 +1,15 @@
+{{ define "main" }}
+{{- $channels := (.Site.Data.channels.channels) | default slice -}}
+<section class="media-diet-page">
+  <header class="media-diet-page__intro">
+    <h1>{{ .Title }}</h1>
+    <p>{{ .Description }}</p>
+  </header>
+  <script id="media-diet-channels-data" type="application/json">{{ $channels | jsonify | safeJS }}</script>
+  <div data-island="media-diet"></div>
+  <noscript>
+    <p>Enable JavaScript to use the media-diet picker.</p>
+  </noscript>
+</section>
+<script type="module" src="{{ partial "island-src.html" "media-diet" }}"></script>
+{{ end }}

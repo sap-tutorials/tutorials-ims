@@ -141,113 +141,71 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
       window.open(url, '_blank', 'noopener,noreferrer')
     },
   },
-
-  // EXPLORE group — the 7 homepage verb-spine routes, three curated
-  // destinations (Concepts, Devtoberfest, Developer Advocates — #1036),
-  // and the Knowledge Graph Explorer. Order matches the verb-spine partial
-  // at hugo/layouts/partials/homepage/verb-spine.html (LEARN, BUILD,
-  // INTEGRATE, MODEL, OPERATE, AI, CONNECT). Keep the verb list in sync if
-  // the spine ever gains an eighth verb; otherwise the palette will be out
-  // of date with the homepage's own primary nav.
-  {
-    id: 'explore-learn',
-    label: 'Learn — getting started with SAP for developers',
-    icon: 'learning-assistant',
-    keywords: ['learn', 'learning', 'getting started', 'beginner', 'fundamentals', 'onboard', 'verb'],
-    group: 'explore',
-    run: navTo('/learn/'),
-  },
-  {
-    id: 'explore-build',
-    label: 'Build — apps and services (CAP, ABAP Cloud, Fiori, UI5)',
-    icon: 'wrench',
-    keywords: ['build', 'cap', 'abap', 'fiori', 'ui5', 'app', 'service', 'verb'],
-    group: 'explore',
-    run: navTo('/build/'),
-  },
-  {
-    id: 'explore-integrate',
-    label: 'Integrate — connect SAP to non-SAP, APIs, events',
-    icon: 'chain-link',
-    keywords: ['integrate', 'integration', 'api', 'events', 'connectivity', 'destination', 'verb'],
-    group: 'explore',
-    run: navTo('/integrate/'),
-  },
-  {
-    // (#1029) MODEL — data-platform verb: HANA Cloud, Datasphere, Business
-    // Data Cloud, SAP Analytics Cloud. CAP CDS stays under BUILD.
-    id: 'explore-model',
-    label: 'Model — HANA Cloud, Datasphere, Business Data Cloud, SAC',
-    icon: 'database',
-    keywords: ['model', 'data', 'hana', 'datasphere', 'bdc', 'business data cloud', 'sac', 'analytics', 'calc view', 'semantic', 'verb'],
-    group: 'explore',
-    run: navTo('/model/'),
-  },
-  {
-    id: 'explore-operate',
-    label: 'Operate — deploy, run, secure, govern on BTP',
-    icon: 'shield',
-    keywords: ['operate', 'deploy', 'run', 'btp', 'security', 'govern', 'devops', 'verb'],
-    group: 'explore',
-    run: navTo('/operate/'),
-  },
-  {
-    id: 'explore-ai',
-    label: 'Extend with AI — Joule, AI Core, ground-truth patterns',
-    icon: 'da',
-    keywords: ['ai', 'joule', 'ai core', 'genai', 'ml', 'agent', 'verb'],
-    group: 'explore',
-    run: navTo('/ai/'),
-  },
-  {
-    id: 'explore-connect',
-    label: 'Connect — events, advocates, community',
-    icon: 'group',
-    keywords: ['connect', 'community', 'events', 'advocates', 'codejam', 'devtoberfest', 'verb'],
-    group: 'explore',
-    run: navTo('/connect/'),
-  },
-  {
-    id: 'explore-concepts',
-    label: 'Concepts — index of every SAP concept in the knowledge graph',
-    icon: 'bullet-text',
-    keywords: ['concepts', 'index', 'glossary', 'terms', 'kg', 'knowledge'],
-    group: 'explore',
-    run: navTo('/concepts/'),
-  },
-  {
-    id: 'explore-devtoberfest',
-    label: 'Devtoberfest — annual SAP developer festival',
-    icon: 'calendar',
-    keywords: ['devtoberfest', 'festival', 'event', 'weekly', 'challenge', 'october'],
-    group: 'explore',
-    run: navTo('/devtoberfest/'),
-  },
-  {
-    id: 'explore-advocates',
-    label: 'Developer Advocates — meet the SAP DevRel team',
-    icon: 'group',
-    keywords: ['advocates', 'devrel', 'team', 'spokespeople', 'community', 'evangelists'],
-    group: 'explore',
-    run: navTo('/developer-advocates/'),
-  },
-  {
-    id: 'explore-knowledge-graph',
-    label: 'Knowledge Graph Explorer',
-    icon: 'org-chart',
-    keywords: ['knowledge graph', 'kg', 'graph', 'concepts', 'map', 'network', 'explore', 'visualization'],
-    group: 'explore',
-    run: navTo('/explore/'),
-  },
-  {
-    id: 'explore-api-docs',
-    label: 'API — HTTP services, sap-devs CLI, MCP server, and feeds',
-    icon: 'command-line',
-    keywords: ['api', 'apis', 'graphql', 'odata', 'rest', 'cli', 'sap-devs', 'mcp', 'feed', 'rss', 'edmx', 'openapi', 'schema', 'developer', 'programmatic'],
-    group: 'explore',
-    run: navTo('/api-docs/'),
-  },
 ]
+
+/**
+ * EXPLORE-group destinations live in hugo/data/navigation.yaml — the single
+ * source shared with the top-nav popover (rendered in header.html). header.html
+ * emits that tree as JSON in <script id="nav-data">; we read it here at runtime
+ * and project each nav item into a palette action, so the two menus can never
+ * drift on which destinations exist (the drift #817 half-fixed by hand).
+ *
+ * Falls back to [] when the script tag is absent (e.g. a page that doesn't
+ * include the header partial, or unit tests that don't inject it) — the palette
+ * then shows only PALETTE_ACTIONS, never crashes.
+ */
+export interface NavItem {
+  id: string
+  label: string
+  href: string
+  icon?: string
+  keywords?: string[]
+  /** Richer label for ⌘K; falls back to `label`. */
+  paletteLabel?: string
+  /** Palette icon (own font); falls back to `icon`. */
+  paletteIcon?: string
+}
+export interface NavGroup {
+  id: string
+  label: string
+  items: NavItem[]
+}
+export interface NavData {
+  groups: NavGroup[]
+}
+
+/** Project the shared nav tree into flat EXPLORE-group palette actions. */
+export function navActionsFromData(data: NavData | null | undefined): PaletteAction[] {
+  if (!data || !Array.isArray(data.groups)) return []
+  const actions: PaletteAction[] = []
+  for (const group of data.groups) {
+    if (!group || !Array.isArray(group.items)) continue
+    for (const item of group.items) {
+      if (!item || !item.id || !item.href) continue
+      actions.push({
+        id: item.id,
+        label: item.paletteLabel || item.label,
+        icon: item.paletteIcon || item.icon,
+        keywords: item.keywords,
+        group: 'explore',
+        run: navTo(item.href),
+      })
+    }
+  }
+  return actions
+}
+
+/** Parse <script id="nav-data"> emitted by header.html. Safe on missing/bad JSON. */
+export function readNavData(doc: Document = document): NavData | null {
+  const el = doc.getElementById('nav-data')
+  if (!el || !el.textContent) return null
+  try {
+    const parsed = JSON.parse(el.textContent)
+    return parsed && Array.isArray(parsed.groups) ? (parsed as NavData) : null
+  } catch {
+    return null
+  }
+}
 
 /**
  * Step-jump actions are page-aware and rebuilt every time the palette opens.

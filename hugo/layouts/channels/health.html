@@ -1,0 +1,16 @@
+{{ define "main" }}
+{{- $stats := .Site.Data.channels_stats | default dict -}}
+<section class="channels-health-page">
+  <header class="channels-health-page__intro">
+    <h1>{{ .Title }}</h1>
+    <p>{{ .Description }}</p>
+  </header>
+  <script id="channels-stats-data" type="application/json">{{ $stats | jsonify | safeJS }}</script>
+  <div data-island="channels-health"></div>
+  <noscript>
+    <p>Total channels: {{ $stats.total | default 0 }}</p>
+    <p>Published: {{ $stats.publishedCount | default 0 }}</p>
+  </noscript>
+</section>
+<script type="module" src="{{ partial "island-src.html" "channels-health" }}"></script>
+{{ end }}

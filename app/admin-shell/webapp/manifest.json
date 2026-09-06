@@ -71,6 +71,8 @@
       "sap.tutorials.admin.devtoberfest": "./components/devtoberfest",
       "sap.tutorials.admin.devtoberfestSignups": "./components/devtoberfestSignups",
       "sap.tutorials.admin.analytics": "./components/analytics",
+      "sap.tutorials.admin.tutorialEngagement": "./components/tutorial-engagement",
+      "sap.tutorials.admin.tutorialCompletions": "./components/tutorial-completions",
       "sap.tutorials.admin.joule": "./components/joule",
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
       "sap.tutorials.admin.kgCommunities": "./components/kgCommunities",
@@ -93,7 +95,11 @@
       "sap.tutorials.admin.videoRotation": "./components/video-rotation",
       "sap.tutorials.admin.pats": "./components/pats",
       "sap.tutorials.admin.featureFlags": "./components/featureFlags",
-      "sap.tutorials.admin.petoberfest": "./components/petoberfest"
+      "sap.tutorials.admin.petoberfest": "./components/petoberfest",
+      "sap.tutorials.admin.channels": "./components/channels",
+      "sap.tutorials.admin.channelCollections": "./components/channel-collections",
+      "sap.tutorials.admin.channelTopicMap": "./components/channel-topic-map",
+      "sap.tutorials.admin.channelSubmissions": "./components/channel-submissions"
     },
     "models": {
       "admin": {
@@ -242,6 +248,18 @@
         "componentData": {},
         "lazy": true
       },
+      "tutorialEngagementComponent": {
+        "name": "sap.tutorials.admin.tutorialEngagement",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "tutorialCompletionsComponent": {
+        "name": "sap.tutorials.admin.tutorialCompletions",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
       "jouleSettingsComponent": {
         "name": "sap.tutorials.admin.joule",
         "settings": {},
@@ -376,6 +394,30 @@
       },
       "petoberfestComponent": {
         "name": "sap.tutorials.admin.petoberfest",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "channelsComponent": {
+        "name": "sap.tutorials.admin.channels",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "channelCollectionsComponent": {
+        "name": "sap.tutorials.admin.channelCollections",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "channelTopicMapComponent": {
+        "name": "sap.tutorials.admin.channelTopicMap",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "channelSubmissionsComponent": {
+        "name": "sap.tutorials.admin.channelSubmissions",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -626,6 +668,26 @@
             {
               "name": "analyticsTarget",
               "prefix": "an"
+            }
+          ]
+        },
+        {
+          "name": "tutorialEngagement",
+          "pattern": "tutorial-engagement",
+          "target": [
+            {
+              "name": "tutorialEngagementTarget",
+              "prefix": "teg"
+            }
+          ]
+        },
+        {
+          "name": "tutorialCompletions",
+          "pattern": "tutorial-completions",
+          "target": [
+            {
+              "name": "tutorialCompletionsTarget",
+              "prefix": "tcp"
             }
           ]
         },
@@ -890,6 +952,46 @@
           ]
         },
         {
+          "name": "channels",
+          "pattern": "channels",
+          "target": [
+            {
+              "name": "channelsTarget",
+              "prefix": "ch"
+            }
+          ]
+        },
+        {
+          "name": "channelCollections",
+          "pattern": "channel-collections",
+          "target": [
+            {
+              "name": "channelCollectionsTarget",
+              "prefix": "cc"
+            }
+          ]
+        },
+        {
+          "name": "channelTopicMap",
+          "pattern": "channel-topic-map",
+          "target": [
+            {
+              "name": "channelTopicMapTarget",
+              "prefix": "ctm"
+            }
+          ]
+        },
+        {
+          "name": "channelSubmissions",
+          "pattern": "channel-submissions",
+          "target": [
+            {
+              "name": "channelSubmissionsTarget",
+              "prefix": "csub"
+            }
+          ]
+        },
+        {
           "name": "feedbackDashboard",
           "pattern": "feedback/dashboard",
           "target": "feedbackDashboardTarget"
@@ -1071,6 +1173,20 @@
           "viewLevel": 1,
           "prefix": "an"
         },
+        "tutorialEngagementTarget": {
+          "type": "Component",
+          "usage": "tutorialEngagementComponent",
+          "id": "tutorialEngagementTarget",
+          "viewLevel": 1,
+          "prefix": "teg"
+        },
+        "tutorialCompletionsTarget": {
+          "type": "Component",
+          "usage": "tutorialCompletionsComponent",
+          "id": "tutorialCompletionsTarget",
+          "viewLevel": 1,
+          "prefix": "tcp"
+        },
         "jouleSettingsTarget": {
           "type": "Component",
           "usage": "jouleSettingsComponent",
@@ -1231,6 +1347,34 @@
           "id": "petoberfestTarget",
           "viewLevel": 1,
           "prefix": "pb"
+        },
+        "channelsTarget": {
+          "type": "Component",
+          "usage": "channelsComponent",
+          "id": "channelsTarget",
+          "viewLevel": 1,
+          "prefix": "ch"
+        },
+        "channelCollectionsTarget": {
+          "type": "Component",
+          "usage": "channelCollectionsComponent",
+          "id": "channelCollectionsTarget",
+          "viewLevel": 1,
+          "prefix": "cc"
+        },
+        "channelTopicMapTarget": {
+          "type": "Component",
+          "usage": "channelTopicMapComponent",
+          "id": "channelTopicMapTarget",
+          "viewLevel": 1,
+          "prefix": "ctm"
+        },
+        "channelSubmissionsTarget": {
+          "type": "Component",
+          "usage": "channelSubmissionsComponent",
+          "id": "channelSubmissionsTarget",
+          "viewLevel": 1,
+          "prefix": "csub"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",

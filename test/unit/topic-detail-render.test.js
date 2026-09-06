@@ -21,4 +21,24 @@ describe('renderTopicDetail', () => {
   it('throws when slug or label missing', () => {
     expect(() => renderTopicDetail({ slug: '', label: 'x' })).toThrow();
   });
+  it('renders a related-channels band with external links', () => {
+    const topic = {
+      slug: 'sap-hana-cloud', label: 'SAP HANA Cloud', facet: 'Software Product',
+      tutorials: [], concepts: [], relatedTags: [],
+      relatedChannels: [
+        { name: 'SAP HANA Academy', url: 'https://youtube.com/hana', ownerType: 'SAP_Official', isSapOwned: true, relevance: 90 },
+        { name: 'HANA Reddit', url: 'https://reddit.com/r/hana', ownerType: 'Community_Member', isSapOwned: false, relevance: 60 },
+      ],
+    };
+    const { body, contentHash } = renderTopicDetail(topic);
+    expect(body).toContain('class="topic-channels"');
+    expect(body).toContain('href="https://youtube.com/hana"');
+    expect(body).toContain('rel="noopener"');
+    expect(body).toMatch(/^/); // sanity
+    expect(contentHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+  it('omits the related-channels band when there are none', () => {
+    const { body } = renderTopicDetail({ slug: 't', label: 'T', facet: 'F', tutorials: [], concepts: [], relatedTags: [], relatedChannels: [] });
+    expect(body).not.toContain('topic-channels');
+  });
 });

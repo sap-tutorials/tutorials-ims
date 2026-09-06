@@ -147,6 +147,23 @@ service DeveloperService {
     attemptNumber         : Integer;
   };
 
+  // In-progress ("partial") tutorials for the /me Recent Activity timeline so a
+  // user can resume where they left off (issue #2146). Same shape as
+  // getMyCompletions but carries `progressPercent` (0-100) + `lastTouchedAt`
+  // instead of a completionDate. TUTORIAL-only — the sole IN_PROGRESS state
+  // tracked at task level.
+  @(requires: 'authenticated-user')
+  function getMyInProgress() returns many {
+    kind                  : String;
+    slug                  : String;
+    title                 : String;
+    primaryTag            : String;
+    experienceTag         : String;
+    averageTimeToComplete : Integer;
+    progressPercent       : Integer;
+    lastTouchedAt         : DateTime;
+  };
+
   // App Space progress (replaces AEM /bin/sapdx/tutorials/v3/progress/series)
   @(requires: 'authenticated-user')
   function getEventProgress(missionLegacyId : Integer) returns {
@@ -175,10 +192,12 @@ service DeveloperService {
   // App Space progress by event ID (frontend default: latest event)
   @(requires: 'authenticated-user')
   function getAppSpaceProgress(eventLegacyId : Integer) returns {
-    eventId   : Integer;
-    eventName : String;
-    eventType : String;
-    type      : String;
+    eventId          : Integer;
+    eventName        : String;
+    eventDescription : String;
+    eventType        : String;
+    hasLogo          : Boolean;
+    type             : String;
     paths     : many {
       id          : Integer;
       title       : String;

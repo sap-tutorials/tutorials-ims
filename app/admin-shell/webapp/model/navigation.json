@@ -22,6 +22,10 @@
         { "key": "concepts", "title": "Concepts" },
         { "key": "advocates", "title": "Advocates" },
         { "key": "alerts", "title": "Alerts" },
+        { "key": "channels", "title": "Channels" },
+        { "key": "channelCollections", "title": "Channel Collections" },
+        { "key": "channelTopicMap", "title": "Channel Topic Map" },
+        { "key": "channelSubmissions", "title": "Channel Submissions" },
         { "key": "operations", "title": "Featured Tasks" }
       ]
     },
@@ -66,6 +70,9 @@
       "items": [
         { "key": "analyticsExternal", "title": "Analytics", "href": "/analytics-ui/", "target": "_self", "requiredScope": "Tutorial.Author" },
         { "key": "analytics", "title": "Completion analytics" },
+        { "key": "tutorialEngagement", "title": "Tutorial Engagement", "requiredScope": "Tutorial.Author" },
+        { "key": "tutorialCompletions", "title": "Tutorial Completions", "requiredScope": "Tutorial.Author" },
+        { "key": "tutorialSurvey", "title": "Tutorial Survey", "href": "/analytics-ui/#/reports/survey", "target": "_self", "requiredScope": "Tutorial.Author" },
         { "key": "statistics", "title": "Statistics" },
         { "key": "metrics", "title": "Metrics" },
         { "key": "dataExport", "title": "Data Export" }

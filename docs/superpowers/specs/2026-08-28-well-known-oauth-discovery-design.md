@@ -14,6 +14,20 @@ An earlier draft of this spec assumed nothing was served and proposed building a
 
 **Option A is retained** (`authorization_servers`/`issuer` point straight at the XSUAA URL; the docs advertise the *fully-qualified* scope `<xsappname>.Tutorial.MCP`, e.g. `tutorials!t676072.Tutorial.MCP` — bare `Tutorial.MCP` is rejected by XSUAA with `invalid_scope`; `resolveScope()` encodes this hard-won behavior). Do **not** rewrite to Option B.
 
+> **⚠️ SUPERSEDED 2026-09-04 (the `authorization_servers`/`issuer`=XSUAA part):**
+> Pointing `authorization_servers`/`issuer` at the raw XSUAA URL is broken for
+> real MCP clients. mcp-remote / the MCP SDK read `authorization_servers[0]` and
+> run RFC 8414 discovery against it; XSUAA does not implement RFC 8414 and
+> 302-redirects `/.well-known/oauth-authorization-server` → `/login` → **200 HTML**,
+> so the SDK parses HTML as metadata → ZodError, and because it's 200 (not 404)
+> it never falls back to XSUAA's working `openid-configuration`. Fix: advertise
+> **the approuter itself** as the authorization server (self-issuer) — clients
+> discover our valid RFC 8414 doc, while the authorize/token endpoints inside
+> still point at XSUAA. This is a targeted change to `authorization_servers`/`issuer`
+> only; it is **not** the rejected "Option B" (that was about relocating the whole
+> discovery surface to the CAP origin — still out of scope). The scope-qualification
+> and runtime-derivation behavior below is unchanged.
+
 **The real reason the docs are unreachable on `developers.sap.com`:** Akamai 403s every `/.well-known/*` path at the edge except `security.txt` (confirmed: `Server: AkamaiGHost` on the 403). The origin serves them correctly; the edge blocks them.
 
 ## Scope (four additions)

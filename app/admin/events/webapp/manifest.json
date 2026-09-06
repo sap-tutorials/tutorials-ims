@@ -77,7 +77,25 @@
           "options": {
             "settings": {
               "contextPath": "/Events",
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "content": {
+                "header": {
+                  "actions": {
+                    "uploadEventLogo": {
+                      "press": "sap.tutorials.admin.events.ext.LogoController.onUploadEventLogoPress",
+                      "visible": true,
+                      "enabled": "{= ${IsActiveEntity} === true }",
+                      "text": "Upload Logo"
+                    },
+                    "clearEventLogo": {
+                      "press": "sap.tutorials.admin.events.ext.LogoController.onClearEventLogoPress",
+                      "visible": "{= !!${hasLogo} }",
+                      "enabled": "{= ${IsActiveEntity} === true }",
+                      "text": "Clear Logo"
+                    }
+                  }
+                }
+              }
             }
           }
         }

@@ -1,0 +1,152 @@
+# Single source of truth for the top-nav popover (hugo/layouts/partials/header.html)
+# AND the ⌘K command palette EXPLORE group (hugo-apps/src/cmd-palette/actions.ts).
+#
+# header.html renders these groups as a two-level accordion menu and also emits
+# the whole tree as JSON in <script id="nav-data">; the palette island reads that
+# script at runtime (navActionsFromData) so the two menus can never drift on
+# WHICH destinations exist. This killed the drift where Concepts was in the
+# palette but not the nav, and Channels/Topics/Browse were in neither.
+#
+# Per-item fields:
+#   id           — stable palette action id (also the accordion leaf key)
+#   label        — nav display text (terse: fits a menu row)
+#   href         — internal route (all verified to resolve: Hugo layouts / CAP)
+#   icon         — nav icon; MUST already be imported in
+#                  hugo-apps/src/ui5/ui5-core.ts (the nav renders it via ui5-li;
+#                  unregistered icons render blank).
+#   keywords     — intent tokens for palette fuzzy-match; at least one required.
+#   paletteLabel — OPTIONAL richer label for ⌘K (falls back to `label`). The
+#                  verbs carry the self-describing labels added in #817/#1029.
+#   paletteIcon  — OPTIONAL palette icon (falls back to `icon`). The palette
+#                  renders its own icon font, so it can use names the nav's
+#                  ui5-li registry does not carry (wrench, shield, group, …).
+#
+# Auth/role-gated items (My Completions, Event Display, Admin UI) are NOT here —
+# they stay hardcoded in header.html because their visibility is toggled at
+# runtime by the nav-auth-only / nav-admin-only classes. Palette-only actions
+# (theme toggle, copy URL, Joule, report issue) stay in PALETTE_ACTIONS.
+groups:
+  - id: learn
+    label: Learn
+    items:
+      - id: nav-tutorial-navigator
+        label: Tutorial Navigator
+        href: /tutorial-navigator/
+        icon: course-book
+        keywords: [tutorial, navigator, catalog, browse tutorials, learn]
+      - id: explore-learn
+        label: Learn
+        href: /learn/
+        icon: learning-assistant
+        paletteLabel: Learn — getting started with SAP for developers
+        keywords: [learn, learning, getting started, beginner, fundamentals, onboard, verb]
+      - id: explore-build
+        label: Build
+        href: /build/
+        icon: developer-settings
+        paletteLabel: Build — apps and services (CAP, ABAP Cloud, Fiori, UI5)
+        paletteIcon: wrench
+        keywords: [build, cap, abap, fiori, ui5, app, service, verb]
+      - id: explore-integrate
+        label: Integrate
+        href: /integrate/
+        icon: chain-link
+        paletteLabel: Integrate — connect SAP to non-SAP, APIs, events
+        keywords: [integrate, integration, api, events, connectivity, destination, verb]
+      - id: explore-model
+        label: Model
+        href: /model/
+        icon: database
+        paletteLabel: Model — HANA Cloud, Datasphere, Business Data Cloud, SAC
+        keywords: [model, data, hana, datasphere, bdc, business data cloud, sac, analytics, calc view, semantic, verb]
+      - id: explore-operate
+        label: Operate
+        href: /operate/
+        icon: settings
+        paletteLabel: Operate — deploy, run, secure, govern on BTP
+        paletteIcon: shield
+        keywords: [operate, deploy, run, btp, security, govern, devops, verb]
+      - id: explore-ai
+        label: Extend with AI
+        href: /ai/
+        icon: da
+        paletteLabel: Extend with AI — Joule, AI Core, ground-truth patterns
+        keywords: [ai, joule, ai core, genai, ml, agent, verb]
+      - id: explore-connect
+        label: Connect
+        href: /connect/
+        icon: customer-and-contacts
+        paletteLabel: Connect — events, advocates, community
+        paletteIcon: group
+        keywords: [connect, community, events, advocates, codejam, devtoberfest, verb]
+  - id: explore
+    label: Explore
+    items:
+      - id: nav-browse
+        label: Browse
+        href: /browse/
+        icon: documents
+        keywords: [browse, catalog, all, index, directory]
+      - id: nav-topics
+        label: Topics
+        href: /topics/
+        icon: document
+        keywords: [topics, tags, subjects, areas]
+      - id: explore-concepts
+        label: Concepts
+        href: /concepts/
+        icon: document
+        paletteLabel: Concepts — index of every SAP concept in the knowledge graph
+        paletteIcon: bullet-text
+        keywords: [concepts, index, glossary, terms, kg, knowledge]
+      - id: nav-channels
+        label: Channels
+        href: /channels/
+        icon: post
+        keywords: [channels, youtube, blogs, podcasts, external, feeds, community]
+      - id: explore-knowledge-graph
+        label: Knowledge Graph
+        href: /explore/
+        icon: org-chart
+        paletteLabel: Knowledge Graph Explorer
+        keywords: [knowledge graph, kg, graph, concepts, map, network, explore, visualization]
+      - id: nav-explore-about
+        label: About the Knowledge Graph
+        href: /explore/about/
+        icon: question-mark
+        paletteLabel: About the Knowledge Graph — what it is, how it's built, SPARQL
+        keywords: [about, knowledge graph, kg, sparql, how it works, explainer, built by ai]
+      - id: nav-whats-new
+        label: What's New
+        href: /whats-new/
+        icon: newspaper
+        keywords: [whats new, news, latest, updates, changelog]
+      - id: explore-api-docs
+        label: API
+        href: /api-docs/
+        icon: command-line-interfaces
+        paletteLabel: API — HTTP services, sap-devs CLI, MCP server, and feeds
+        paletteIcon: command-line
+        keywords: [api, apis, graphql, odata, rest, cli, sap-devs, mcp, feed, rss, edmx, openapi, schema, developer, programmatic]
+  - id: community
+    label: Community
+    items:
+      - id: explore-devtoberfest
+        label: Devtoberfest
+        href: /devtoberfest/
+        icon: course-program
+        paletteLabel: Devtoberfest — annual SAP developer festival
+        paletteIcon: calendar
+        keywords: [devtoberfest, festival, event, weekly, challenge, october]
+      - id: explore-advocates
+        label: Developer Advocates
+        href: /developer-advocates/
+        icon: employee
+        paletteLabel: Developer Advocates — meet the SAP DevRel team
+        paletteIcon: group
+        keywords: [advocates, devrel, team, spokespeople, community, evangelists]
+      - id: nav-app-space
+        label: App Space
+        href: /app-space
+        icon: flight
+        keywords: [app space, apps, showcase, gallery]

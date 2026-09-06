@@ -1,0 +1,9 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ChannelCollectionItems (
+  ID NVARCHAR(36) NOT NULL,
+  collection_ID NVARCHAR(36),
+  channel_ID NVARCHAR(36),
+  sortOrder INTEGER DEFAULT 100,
+  blurb NVARCHAR(280),
+  PRIMARY KEY(ID)
+)

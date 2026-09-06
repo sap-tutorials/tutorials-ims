@@ -33,6 +33,8 @@ sap.ui.define([
     devtoberfestSignups: "devtoberfestSignups",
     board: "board",
     analytics: "analytics",
+    tutorialEngagement: "tutorialEngagement",
+    tutorialCompletions: "tutorialCompletions",
     statistics: "statistics",
     metrics: "metrics",
     joule: "joule",
@@ -60,7 +62,11 @@ sap.ui.define([
     pats: "pats",
     petoberfest: "petoberfest",
     petoberfestContests: "petoberfestContests",
-    topicClusters: "topicClusters"
+    topicClusters: "topicClusters",
+    channels: "channels",
+    channelCollections: "channelCollections",
+    channelTopicMap: "channelTopicMap",
+    channelSubmissions: "channelSubmissions"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -90,6 +96,8 @@ sap.ui.define([
     devtoberfestSignups: "Devtoberfest Signups",
     board: "Board",
     analytics: "Completion analytics",
+    tutorialEngagement: "Tutorial Engagement",
+    tutorialCompletions: "Tutorial Completions",
     statistics: "Statistics",
     metrics: "Observability",
     joule: "Joule Settings",
@@ -117,7 +125,11 @@ sap.ui.define([
     pats: "Personal Access Tokens",
     petoberfest: "Pet Photo Moderation",
     petoberfestContests: "Petoberfest Contests",
-    topicClusters: "Topic Clusters"
+    topicClusters: "Topic Clusters",
+    channels: "Channels",
+    channelCollections: "Channel Collections",
+    channelTopicMap: "Channel Topic Map",
+    channelSubmissions: "Channel Submissions"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {

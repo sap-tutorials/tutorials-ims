@@ -38,7 +38,11 @@ import { conceptsIndexHandler } from './lib/concept-list-page.js';
 import { puzzlePageHandler, puzzleIndexHandler } from './lib/puzzle-page.js';
 import { renderConceptsHandler } from './lib/publish-concepts.js';
 import { renderTopicsHandler } from './lib/publish-topics.js';
+import { renderChannelsHandler } from './lib/publish-channels.js';
 import { buildTopicsTreeHandler, buildTopicDetailHandler } from './lib/build-topics.js';
+import { buildChannelDetailPayload } from './lib/build-channel-detail.js';
+import { mediaDietMyPicksLogic } from './lib/media-diet-picks.js';
+import { enforceIdCap, buildOpml, buildBookmarksHtml } from './lib/media-diet-export.js';
 import { topicsIndexHandler } from './lib/topic-list-page.js';
 import { resolveTopicBySlug } from './lib/topics-query.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
@@ -46,6 +50,7 @@ import { modelJsonHandler } from './lib/model-json-handler.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
+import * as eventLogoPublic from './routes/event-logo-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
 import * as devtoberfestScheduleCheck from './routes/devtoberfest-schedule-check.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
@@ -79,7 +84,7 @@ import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
-import { provisionDbUser, resolveDbUser } from './lib/resolve-db-user.js';
+import { provisionDbUser, resolveDbUser, resolveUserSapId } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import { decodeBase64Upload } from './lib/decode-base64-upload.js';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
@@ -298,6 +303,60 @@ cds.on('bootstrap', (app) => {
   app.get('/api/qrcode', qrcodeHandler);
   app.get('/api/recommendations', recommendationsHandler);
   app.get('/api/branches/decide', decideHandler);
+
+  // channels-hub Phase 2 — signed-in media-diet picks derived from user completions.
+  // XSUAA-gated in xs-app.json; resolveUserSapId extracts sapId from JWT user_uuid claim.
+  app.get('/api/media-diet/my-picks', async (req, res) => {
+    try {
+      const sapId = resolveUserSapId(req.user);
+      const db = await cds.connect.to('db');
+      const result = await mediaDietMyPicksLogic(db, sapId);
+      res.json(result);
+    } catch (err) {
+      cds.log('media-diet').error('my-picks failed', err);
+      res.status(500).json({ channels: [], source: 'error' });
+    }
+  });
+
+  // channels-hub Phase 2 — anon media-diet export (OPML / bookmarks / JSON).
+  // authenticationType:none in xs-app.json. Cap: 50 ids.
+  app.get('/api/media-diet/export', async (req, res) => {
+    try {
+      const rawIds = [].concat(req.query['ids[]'] || req.query.ids || []);
+      const ids = enforceIdCap(rawIds.filter(Boolean));
+      const format = String(req.query.format || 'json').toLowerCase();
+
+      if (!ids.length) {
+        if (format === 'opml') return res.type('text/xml').send(buildOpml([]));
+        if (format === 'bookmarks') {
+          res.setHeader('Content-Disposition', 'attachment; filename="channels.html"');
+          return res.type('text/html').send(buildBookmarksHtml([]));
+        }
+        return res.json([]);
+      }
+
+      const { Channels } = cds.entities('com.sap.developers.ims');
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from(Channels)
+          .columns('ID', 'name', 'url', 'feedUrl', 'ownerType', 'isSapOwned')
+          .where({ ID: { in: ids }, isPublished: true }),
+      );
+
+      if (format === 'opml') {
+        return res.type('text/xml').send(buildOpml(rows));
+      }
+      if (format === 'bookmarks') {
+        res.setHeader('Content-Disposition', 'attachment; filename="channels.html"');
+        return res.type('text/html').send(buildBookmarksHtml(rows));
+      }
+      return res.json(rows);
+    } catch (err) {
+      cds.log('media-diet').error('export failed', err);
+      res.status(500).json({ error: 'Export failed' });
+    }
+  });
+
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/kg-stats', kgStatsHandler);
   app.get('/build/concepts', buildConceptsHandler);
@@ -305,6 +364,19 @@ cds.on('bootstrap', (app) => {
   app.get('/build/topics-gallery', buildTopicsGalleryHandler);
   app.get('/build/topics-tree', buildTopicsTreeHandler);
   app.get('/build/topics/:slug', buildTopicDetailHandler);
+  // channels-hub Phase 2 — per-channel detail payload (Direction 2 crosswalk).
+  app.get('/build/channel-detail/:slug', async (req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const slug = String(req.params.slug || '').toLowerCase();
+      const payload = await buildChannelDetailPayload(db, slug);
+      res.set('Cache-Control', 'public, max-age=60');
+      res.status(payload.notFound ? 404 : 200).json(payload);
+    } catch (err) {
+      cds.log('build-channel-detail').error('failed', err);
+      res.status(500).json({ error: 'Build channel detail query failed' });
+    }
+  });
   app.get('/graph/explore-data', exploreDataHandler);
   app.get('/graph/clusters-data', clustersDataHandler);
   app.get('/graph/path', graphPathHandler);
@@ -415,6 +487,169 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // Build-time data for Hugo /channels directory — consumed by
+  // scripts/fetch-channels.ts at build time. Public, unauthenticated.
+  // Cache-Control 60s. Filters to isPublished=true + linkStatus!='BROKEN'
+  // (override wins). Array columns (focusAreas, tags, relatedUrls, aliases)
+  // are parsed from JSON strings on HANA; SQLite returns them as arrays already.
+  app.get('/build/channels', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.Channels')
+          .where({ isPublished: true })
+          .orderBy('category', 'name'),
+      );
+      const parseArr = (v) => (Array.isArray(v) ? v : (typeof v === 'string' && v ? JSON.parse(v) : []));
+      // Explicit public projection — never spread the full row into an
+      // anon feed (drops managed audit + internal curation columns:
+      // sourceId, notes, aliases, contentHash, ingestBatch, lastChecked,
+      // isFeatured, linkStatusOverride, createdBy/modifiedBy, …).
+      const channels = rows
+        .map((r) => ({
+          name: r.name,
+          url: r.url,
+          purpose: r.purpose,
+          category: r.category,
+          subcategory: r.subcategory,
+          platform: r.platform,
+          isSapOwned: r.isSapOwned,
+          ownerType: r.ownerType,
+          ownerName: r.ownerName,
+          status: r.status,
+          editorialNote: r.editorialNote,
+          linkStatus: r.linkStatusOverride || r.linkStatus,
+          focusAreas: parseArr(r.focusAreas),
+          tags: parseArr(r.tags),
+          relatedUrls: parseArr(r.relatedUrls),
+        }))
+        .filter((r) => r.linkStatus !== 'BROKEN');
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ channels, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/channels]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // P2: editorial collections leading the /channels directory landing.
+  // Consumed by scripts/fetch-channel-collections.ts at build time. Public, unauthenticated.
+  // Cache-Control 60s. Filters to isPublished=true + authoringStatus='REVIEWED'
+  // collections; items filtered to published channels with linkStatus!='BROKEN'
+  // (override wins); collections ordered by sortOrder,title; items by sortOrder.
+  app.get('/build/channel-collections', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const NS = 'com.sap.developers.ims';
+      const cols = await db.run(
+        SELECT.from(`${NS}.ChannelCollections`)
+          .where({ isPublished: true, authoringStatus: 'REVIEWED' })
+          .orderBy('sortOrder', 'title'),
+      );
+      const items = await db.run(
+        SELECT.from(`${NS}.ChannelCollectionItems`).orderBy('sortOrder'),
+      );
+      const chans = await db.run(
+        SELECT.from(`${NS}.Channels`).columns('ID', 'name', 'url', 'isPublished', 'linkStatus', 'linkStatusOverride'),
+      );
+      const chById = new Map(chans.map((c) => [c.ID, c]));
+      const collections = cols.map((col) => ({
+        slug: col.slug, title: col.title, intro: col.intro, sortOrder: col.sortOrder,
+        items: items
+          .filter((it) => it.collection_ID === col.ID)
+          .map((it) => ({ ch: chById.get(it.channel_ID), blurb: it.blurb, sortOrder: it.sortOrder }))
+          .filter((x) => x.ch && x.ch.isPublished && (x.ch.linkStatusOverride || x.ch.linkStatus) !== 'BROKEN')
+          .map((x) => ({ url: x.ch.url, name: x.ch.name, blurb: x.blurb, sortOrder: x.sortOrder })),
+      }));
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ collections, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/channel-collections]', err.message);
+      res.status(500).json({ collections: [], error: String(err && err.message || err) });
+    }
+  });
+
+  // Channel Atlas feed — build-time data for hugo/data/channel_atlas.json and
+  // the /channels/atlas/ SPA. Extends /build/channels projection with:
+  //   subscribers, githubStars, focusAreas (NCLOB parsed via parseArr),
+  //   topicTags from REVIEWED ChannelTopicMap rows (phase-2 edges).
+  // Public, unauthenticated. Cache-Control 60s.
+  app.get('/build/channel-atlas', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db')
+      const NS = 'com.sap.developers.ims'
+      const rows = await db.run(
+        SELECT.from(`${NS}.Channels`)
+          .where({ isPublished: true })
+          .columns('ID', 'name', 'url', 'purpose', 'ownerType', 'subscribers', 'githubStars', 'focusAreas')
+          .orderBy('name'),
+      )
+      // Fetch REVIEWED ChannelTopicMap rows for phase-2 topic-tag edges.
+      // Done as a separate SELECT — never mix BLOB/NCLOB reads with metadata (gotcha).
+      const topicRows = await db.run(
+        SELECT.from(`${NS}.ChannelTopicMap`)
+          .where({ authoringStatus: 'REVIEWED' })
+          .columns('channel_ID', 'topicTag'),
+      )
+      // Group topicTags by channel_ID for O(1) lookup in buildAtlasChannels.
+      const topicsByChannel = new Map()
+      for (const r of topicRows) {
+        if (!topicsByChannel.has(r.channel_ID)) topicsByChannel.set(r.channel_ID, [])
+        topicsByChannel.get(r.channel_ID).push(r.topicTag)
+      }
+      const { buildAtlasChannels } = await import('./lib/build-channel-atlas.js')
+      const channels = buildAtlasChannels(rows, topicsByChannel)
+      res.set('Cache-Control', 'public, max-age=60')
+      res.json({ channels, buildAt: new Date().toISOString() })
+    } catch (err) {
+      console.error('[build/channel-atlas]', err.message)
+      res.status(500).json({ error: err.message })
+    }
+  });
+
+  // Aggregate stats for the ecosystem-health radar at /channels/health/.
+  // Consumed by scripts/fetch-channels-stats.ts at build time. Public, unauthenticated.
+  // v1 uses ONLY reliably-populated fields: status, ownerType, category/subcategory,
+  // isSapOwned, isPublished. Explicitly EXCLUDES linkStatus, lastChecked, updateFrequency.
+  app.get('/build/channels-stats', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.Channels')
+          .columns('status', 'ownerType', 'category', 'subcategory', 'isSapOwned', 'isPublished'),
+      );
+      const countBy = (key) => {
+        const map = {};
+        for (const r of rows) {
+          const v = r[key] ?? '(unknown)';
+          map[v] = (map[v] || 0) + 1;
+        }
+        return map;
+      };
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({
+        total: rows.length,
+        publishedCount: rows.filter((r) => r.isPublished).length,
+        byStatus: countBy('status'),
+        byOwnerType: countBy('ownerType'),
+        byCategory: countBy('category'),
+        bySubcategory: countBy('subcategory'),
+        sapVsCommunity: {
+          sap: rows.filter((r) => r.isSapOwned).length,
+          community: rows.filter((r) => !r.isSapOwned).length,
+        },
+        activeVsInactive: {
+          active: rows.filter((r) => r.status === 'Active').length,
+          inactive: rows.filter((r) => r.status !== 'Active').length,
+        },
+        buildAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('[build/channels-stats]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // (#1032) Build-time data for Hugo featured topics carousel — consumed by
   // scripts/fetch-tutorials.ts at build time. Public, unauthenticated.
   // Cache-Control 60s (Hugo fetches once per build, not per request).
@@ -473,6 +708,7 @@ cds.on('bootstrap', (app) => {
   // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   advocatesPublic.register(app);
   devtoberfestPublic.register(app);
+  eventLogoPublic.register(app);
   devtoberfestSchedule.register(app);
   devtoberfestScheduleCheck.register(app);
   devtoberfestAuth.register(app);
@@ -586,6 +822,23 @@ cds.on('bootstrap', (app) => {
     req.params.slug = `topic-${lower}`;
     return serveHandler(req, res);
   });
+  // channels-hub Phase 2 — BLOB serve for per-channel detail pages.
+  // Mirrors /content/topics/:slug: lowercase canonicalize, prepend 'channel-' prefix,
+  // delegate to serveHandler. No legacy-slug redirect needed (channel slugs are stable
+  // since Phase 0 normalization).
+  app.get('/content/channel-detail/:slug', (req, res) => {
+    const raw = String(req.params.slug || '');
+    const lower = raw.toLowerCase();
+    if (raw && raw !== lower) {
+      const qIdx = req.url.indexOf('?');
+      const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+      res.setHeader('Location', `/channels/${lower}/${query}`);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(301).end();
+    }
+    req.params.slug = `channel-${lower}`;
+    return serveHandler(req, res);
+  });
   // Topics index page: /topics/ → CAP SSR (mirrors /content/concepts-index).
   app.get('/content/topics-index', topicsIndexHandler);
   // #1914 — CAP-served puzzle solver pages (/puzzles/<slug>/, dynamic slug).
@@ -633,6 +886,11 @@ cds.on('bootstrap', (app) => {
   // tag-tree-topics Task 7 — render topic detail pages alongside concepts.
   // Auth and sequencing mirror render-concepts exactly.
   app.post('/content/publish/render-topics', express.json({ limit: '1mb' }), contentAuthMiddleware, renderTopicsHandler);
+  // channels-hub Phase 2 — render per-channel detail BLOBs into a publish session.
+  // Mirrors render-topics exactly: prod-only (not registered on srv-qa — see
+  // check-srv-qa-route-drift.ts ALLOWLIST_ONLY_ON_SRV), auth'd, sequenced after
+  // render-topics and before commit.
+  app.post('/content/publish/render-channels', express.json({ limit: '1mb' }), contentAuthMiddleware, renderChannelsHandler);
   app.post('/content/publish/commit', express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
   app.post('/content/publish/abort',  express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
 

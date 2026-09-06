@@ -793,3 +793,69 @@
 .hp-tc-badge--mission,
 .hp-tc-badge--group           { background: #e6f6ea; }
 .hp-tc-badge--community-event { background: #f0e6fb; }
+
+/* ===== Devtoberfest banner (#2131) =====
+   Prominent top-of-homepage promo. SSR ships it hidden; the
+   devtoberfest-banner island reveals it only when the event is upcoming
+   (live countdown) or running ("Live now" + date range). Joule purple→pink
+   brand gradient (--joule-purple-* tokens from joule.css, matching the
+   Devtoberfest landing page it links to), distinct from the neutral hp-band
+   rows. Hex fallbacks cover QA, where joule.css is not loaded. */
+.hp-dtf-banner { margin: 0; }
+.hp-dtf-banner[hidden] { display: none; }
+
+.hp-dtf-banner__link {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.9rem 1.5rem;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #fff;
+  background: linear-gradient(90deg, var(--joule-purple-1, #5D36FF) 0%, var(--joule-purple-3, #A100C2) 60%, #D1188A 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.hp-dtf-banner__link:hover,
+.hp-dtf-banner__link:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.hp-dtf-banner__link:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.hp-dtf-banner__brand {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.hp-dtf-banner__msg {
+  font-size: 1.1rem;
+  font-weight: 600;
+  /* Tabular figures keep the ticking countdown from jittering in width. */
+  font-variant-numeric: tabular-nums;
+}
+.hp-dtf-banner__window {
+  font-size: 1rem;
+  opacity: 0.95;
+}
+.hp-dtf-banner__cta {
+  margin-left: auto;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .hp-dtf-banner__link { flex-direction: column; align-items: flex-start; }
+  .hp-dtf-banner__cta { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-dtf-banner__link { transition: none; }
+  .hp-dtf-banner__link:hover,
+  .hp-dtf-banner__link:focus-visible { transform: none; }
+}

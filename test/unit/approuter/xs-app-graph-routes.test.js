@@ -100,7 +100,7 @@ describe('approuter /build/* route', () => {
   // makes that endpoint 404 on every request (it silently did so on DEV+PROD
   // until this fix — the frontend degraded to stale static breadcrumb text).
   const buildRoute = xsApp.routes.find(
-    (r) => typeof r.source === 'string' && r.source.startsWith('^/build/(breadcrumb-context'),
+    (r) => typeof r.source === 'string' && r.source.startsWith('^/build/(') && r.source.includes('breadcrumb-context'),
   )
 
   it('exists and forwards to srv-api anonymously', () => {

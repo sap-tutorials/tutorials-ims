@@ -25,29 +25,39 @@
   <ui5-avatar slot="profile" id="sb-avatar" icon="person-placeholder" size="XS"></ui5-avatar>
 </ui5-shellbar>
 
+{{/* Nav popover + command palette both render from hugo/data/navigation.yaml —
+     one source of truth, so the two menus can never drift. This template ranges
+     the groups into a two-level accordion (group header toggles its ui5-list);
+     the same tree is emitted below as <script id="nav-data"> for the palette
+     island (hugo-apps/src/cmd-palette) to read at runtime. Auth/admin items stay
+     hardcoded here because their visibility is toggled at runtime by the
+     nav-auth-only / nav-admin-only classes. */}}
 <ui5-popover id="sb-nav-popover" placement="Bottom" horizontal-align="End" hide-arrow>
-  <ui5-list id="nav-list" separators="None">
-    <ui5-li icon="home" data-href="/">Home</ui5-li>
-    <ui5-li icon="learning-assistant" data-href="/learn/">Learn</ui5-li>
-    <ui5-li icon="developer-settings" data-href="/build/">Build</ui5-li>
-    <ui5-li icon="chain-link" data-href="/integrate/">Integrate</ui5-li>
-    <ui5-li icon="database" data-href="/model/">Model</ui5-li>
-    <ui5-li icon="settings" data-href="/operate/">Operate</ui5-li>
-    <ui5-li icon="da" data-href="/ai/">Extend with AI</ui5-li>
-    <ui5-li icon="customer-and-contacts" data-href="/connect/">Connect</ui5-li>
-    <hr class="nav-list__separator" aria-hidden="true">
-    <ui5-li icon="course-book" data-href="/tutorial-navigator/">Tutorial navigator</ui5-li>
-    <ui5-li icon="org-chart" data-href="/explore/about/">Knowledge Graph</ui5-li>
-    <ui5-li icon="command-line-interfaces" data-href="/api-docs/">API</ui5-li>
-    <ui5-li icon="course-program" data-href="/devtoberfest">Devtoberfest</ui5-li>
-    <ui5-li icon="employee" data-href="/developer-advocates">Developer Advocates</ui5-li>
-    <ui5-li icon="flight" data-href="/app-space">App Space</ui5-li>
-    <ui5-li class="nav-admin-only" icon="sys-monitor" data-href="/event-display" hidden>Event Display</ui5-li>
-    <hr class="nav-list__separator nav-auth-only" aria-hidden="true" hidden>
-    <ui5-li class="nav-auth-only" icon="complete" data-href="/me" hidden>My Completions</ui5-li>
-    <ui5-li class="nav-admin-only" icon="settings" data-href="/admin-ui/" hidden>Admin UI</ui5-li>
-  </ui5-list>
+  <div id="nav-menu" class="nav-menu">
+    <ui5-list separators="None" class="nav-menu__top">
+      <ui5-li icon="home" data-href="/">Home</ui5-li>
+    </ui5-list>
+    {{ range $gi, $group := site.Data.navigation.groups }}
+    <div class="nav-group" data-group="{{ $group.id }}">
+      <button type="button" class="nav-group__header" data-nav-group="{{ $group.id }}" aria-expanded="{{ if eq $gi 0 }}true{{ else }}false{{ end }}">
+        <span class="nav-group__label">{{ $group.label }}</span>
+        <span class="nav-group__chevron" aria-hidden="true"></span>
+      </button>
+      <ui5-list separators="None" class="nav-group__items" data-nav-items="{{ $group.id }}"{{ if ne $gi 0 }} hidden{{ end }}>
+        {{ range $group.items }}
+        <ui5-li icon="{{ .icon }}" data-href="{{ .href }}">{{ .label }}</ui5-li>
+        {{ end }}
+      </ui5-list>
+    </div>
+    {{ end }}
+    <ui5-list separators="None" class="nav-menu__special">
+      <ui5-li class="nav-admin-only" icon="sys-monitor" data-href="/event-display" hidden>Event Display</ui5-li>
+      <ui5-li class="nav-auth-only" icon="complete" data-href="/me" hidden>My Completions</ui5-li>
+      <ui5-li class="nav-admin-only" icon="settings" data-href="/admin-ui/" hidden>Admin UI</ui5-li>
+    </ui5-list>
+  </div>
 </ui5-popover>
+<script id="nav-data" type="application/json">{{ site.Data.navigation | jsonify | safeJS }}</script>
 
 <ui5-popover id="sb-share-popover" placement="Bottom" horizontal-align="End" hide-arrow header-text="Share & feedback">
   <div class="share-popover__body">
@@ -229,6 +239,38 @@
     li.addEventListener('click', () => {
       navigate(li);
       navPopover.open = false;
+    });
+  });
+
+  // Two-level accordion: clicking a group header opens its list and closes the
+  // others (single-open keeps the menu compact on mobile). The first group ships
+  // expanded (aria-expanded="true" in the template) so the verb spine stays
+  // visible at a glance on desktop. The last-open group is remembered in
+  // localStorage and restored on the next load so navigation can continue where
+  // it left off (empty string = user collapsed everything).
+  const NAV_OPEN_KEY = 'sb-nav-open-group';
+  const setOpenGroup = (groupId) => {
+    navPopover.querySelectorAll('.nav-group__header').forEach(b => b.setAttribute('aria-expanded', 'false'));
+    navPopover.querySelectorAll('.nav-group__items').forEach(l => l.setAttribute('hidden', ''));
+    if (!groupId) return;
+    const header = navPopover.querySelector('.nav-group__header[data-nav-group="' + groupId + '"]');
+    const list = navPopover.querySelector('.nav-group__items[data-nav-items="' + groupId + '"]');
+    if (header && list) {
+      header.setAttribute('aria-expanded', 'true');
+      list.removeAttribute('hidden');
+    }
+  };
+  // Restore the remembered group (null = untouched, keep the template default).
+  try {
+    const stored = localStorage.getItem(NAV_OPEN_KEY);
+    if (stored !== null) setOpenGroup(stored);
+  } catch (e) { /* storage blocked; keep template default */ }
+  document.querySelectorAll('#sb-nav-popover .nav-group__header').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const wasOpen = btn.getAttribute('aria-expanded') === 'true';
+      const groupId = wasOpen ? '' : btn.getAttribute('data-nav-group');
+      setOpenGroup(groupId);
+      try { localStorage.setItem(NAV_OPEN_KEY, groupId); } catch (e) { /* storage blocked */ }
     });
   });
 

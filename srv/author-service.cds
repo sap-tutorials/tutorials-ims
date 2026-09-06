@@ -27,6 +27,21 @@ service AuthorService {
   @readonly entity ActiveLearnersDaily    as projection on ims.ActiveLearnersDaily;
   @readonly entity TaskRecords            as projection on ims.TaskRecords;
 
+  // Standard reports (#2138). Read-only views; no date slicer on engagement
+  // (see spec §4.3). Parents/Distribution also projected on AnalyticsService
+  // so the Vue survey page resolves them under both /author and /admin/analytics.
+  @readonly entity AuthorTutorialEngagement  as projection on ims.AuthorTutorialEngagement;
+  @readonly entity AuthorTutorialCompletions as projection on ims.AuthorTutorialCompletions;
+  @readonly entity AuthorSurveyDistribution  as projection on ims.AuthorSurveyDistribution;
+  @readonly entity AuthorTutorialParents     as projection on ims.AuthorTutorialParents;
+
+  // #2138 — value-help collections for the engagement/completions report filter
+  // bars. The FE reports' mainService is /author/, so the mission/group filter
+  // @Common.ValueList (app/author-annotations.cds) must resolve its CollectionPath
+  // here, not on AnalyticsService. Mirrors AnalyticsService.Missions/Groups.
+  @readonly entity Missions as projection on ims.Missions;
+  @readonly entity Groups   as projection on ims.Groups;
+
   @readonly entity CodeCheckSubmissions   as projection on ims.CodeCheckSubmissions {
     ID, tutorialSlug, stepNumber, language, verdict, modelName,
     promptTokens, completionTokens, latencyMs, errorReason,

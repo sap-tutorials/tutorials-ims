@@ -19,6 +19,12 @@ describe('SEO files', () => {
     expect(text).toContain('<urlset');
     expect(text).toMatch(/<loc>https:\/\/developers\.sap\.com\//);
     expect(text).toMatch(/<lastmod>/);
+    // Guards the 2026-09-03 sitemap-wipe class (reported by the Intelligent Search
+    // Data Crawling team): a catalog-only rebuild that skipped "Fetch tutorials"
+    // republished the page-sitemap.xml blob with NO /tutorials/ URLs, dropping the
+    // live sitemap from ~1.6k links to ~180. The sitemap MUST name tutorial pages.
+    expect(text, 'sitemap must contain /tutorials/ URLs — a sitemap without them is the wipe signature')
+      .toMatch(/<loc>https:\/\/developers\.sap\.com\/tutorials\/[^<]+<\/loc>/);
   });
 
   it('301-redirects legacy AEM sitemap URLs to /sitemap.xml', async () => {

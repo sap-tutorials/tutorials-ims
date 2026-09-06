@@ -86,6 +86,51 @@ Add a `.mcp.json` at the root of your project:
 }
 ```
 
+## Joule Work Desktop
+
+> **Naming:** SAP ships no product literally called "Joule Studio Desktop." The desktop client
+> that connects to a remote MCP server by pasting a URL is **Joule Work Desktop** (GA expected
+> Q3–Q4 2026). If you meant the cloud low-code agent builder **Joule Studio, classic edition**,
+> see [Joule Studio (classic edition)](#joule-studio-classic-edition) below — it connects via a
+> BTP destination, not a URL.
+
+Joule Work Desktop connects to an MCP server by registering the server's URL. For our
+**anonymous, read-only Phase 1** services this is all you need — no sign-in, no destination:
+
+1. In Joule Work Desktop, add / register an MCP server.
+2. Paste the service URL, e.g. `<base>/mcp/search` (the server speaks Streamable HTTP, which
+   Joule Work Desktop expects).
+3. Repeat for `<base>/mcp/homepage` and `<base>/mcp/graph` as needed.
+
+The curated tools then appear to Joule.
+
+> **Authenticated tools (`/mcp-auth/*`) are not reachable from Joule Work Desktop's native flow.**
+> Pasting an authenticated URL triggers Joule Work Desktop's OAuth 2.0 handshake, which uses
+> **Dynamic Client Registration (RFC 7591)** — it `POST`s to a `/register` endpoint to
+> self-register a client. XSUAA does **not** support DCR; OAuth clients must be **pre-registered**
+> (the same limitation described for native Claude clients above). So the personalized tools
+> (`get_my_tutorials`, `complete_step`, …) can't be used through Joule Work Desktop today —
+> stick to the anonymous `/mcp/*` URLs.
+
+## Joule Studio (classic edition)
+
+If instead you are building a **Joule agent** in the cloud low-code **Joule Studio, classic
+edition**, MCP servers are added via an **SAP BTP destination**, not a raw URL. Only the
+anonymous Phase 1 `/mcp/*` services fit cleanly (the authenticated namespaces need a
+pre-registered OAuth client, and interactive/authorization-code OAuth is not supported here).
+
+1. In **SAP BTP Cockpit**, create a **streamable HTTPS** destination whose URL points at
+   `<base>` (the destination URL **must not** end in `/mcp`), with the additional property
+   **`sap-joule-studio-mcp-server = true`**. Create it with the **same name** in both the Joule
+   Studio classic subaccount and the Joule subaccount, and register it in the control tower.
+2. In your Joule agent, open the **MCP Servers** tab → **Add MCP Server**.
+3. Give it a **Name** and **Description**, set **Path** to the service you want (e.g.
+   `/mcp/search`), pick the destination, review the listed **Tools**, and choose **Add Server**.
+
+SSE-type destinations are **not** supported. For servers that do require auth, SAP recommends
+**Client Credentials**; **OAuth2 Authorization Code** and **Principal Propagation** are not
+supported. Full reference: [Add MCP Servers to Your Joule Agent](https://help.sap.com/docs/joule-studio-classic/joule-studio-classic-edition/add-mcp-servers-to-your-joule-agent).
+
 ## Older stdio-only clients
 
 Clients that only speak stdio (older Claude Desktop builds, custom scripts) can bridge through **`mcp-remote`**:
@@ -140,12 +185,26 @@ For builds that accept a pre-registered client, bridge through `mcp-remote`:
       "command": "npx",
       "args": [
         "-y", "mcp-remote", "<base>/mcp-auth/api",
-        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials!t676072\"}"
+        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials-prod!t676072\"}",
+        "--host", "localhost"
       ]
     }
   }
 }
 ```
+
+> **The `client_id` is environment-specific — match it to your `<base>`:**
+>
+> | Environment | `<base>` | `client_id` |
+> | --- | --- | --- |
+> | **Production** | `https://developers.sap.com` | `sb-tutorials-prod!t676072` |
+> | **Dev** | your dev route | `sb-tutorials!t676072` |
+>
+> Dev and prod live in the same XSUAA tenant, so prod uses the distinct xsappname
+> `tutorials-prod` (hence the `sb-tutorials-prod!…` client). Using the dev `client_id`
+> against production fails at `/oauth/authorize` with **"The request for authorization was
+> invalid"** — the dev client can't be granted the prod-owned `Tutorial.MCP` scope that the
+> `.well-known` discovery advertises.
 
 On first connection `mcp-remote` opens a browser tab for consent (PKCE, no client secret required). The endpoints are discovered automatically from `<base>/.well-known/oauth-authorization-server`; you supply only the `client_id`. After approval, the token is cached and refreshed silently.
 
@@ -190,17 +249,20 @@ npm install -g mcp-remote
       "command": "npx",
       "args": [
         "-y", "mcp-remote", "<base>/mcp-auth/api",
-        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials!t676072\"}"
+        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials-prod!t676072\"}",
+        "--host", "localhost"
       ]
     }
   }
 }
 ```
 
-`sb-tutorials!t676072` is the **XSUAA-generated public client** for the `tutorials`
-application (XSUAA auto-creates exactly one `sb-<xsappname>!<instance-suffix>` client per
-instance — there is no separately-named MCP client). To confirm the current id for your
-environment, read the bound credentials: `cf env tutorials-srv` → `VCAP_SERVICES.xsuaa[0].credentials.clientid`.
+`sb-tutorials-prod!t676072` is the **XSUAA-generated public client** for the production
+`tutorials-prod` application (XSUAA auto-creates exactly one `sb-<xsappname>!<instance-suffix>`
+client per instance — there is no separately-named MCP client). **This id is
+environment-specific** — dev's client is `sb-tutorials!t676072` (see the table above). To
+confirm the current id for your environment, read the bound credentials:
+`cf env tutorials-prod-srv` (prod) or `cf env tutorials-srv` (dev) → `VCAP_SERVICES.xsuaa[0].credentials.clientid`.
 The flow uses PKCE with no client secret. On first run, `mcp-remote` opens your browser for the
 SAP universal-ID consent flow; after approval the token is cached in `~/.mcp-auth/` and refreshed
 silently. The server advertises its endpoints at `<base>/.well-known/oauth-authorization-server`,
@@ -211,6 +273,15 @@ so `mcp-remote` discovers the authorize/token URLs automatically — you only su
 > ignored, so `mcp-remote` falls back to Dynamic Client Registration and fails with
 > `does not support dynamic client registration`. Only `--static-oauth-client-info` (a JSON
 > blob carrying `client_id`) short-circuits registration.
+
+> **Callback-host note (`--host localhost`):** XSUAA matches the OAuth `redirect_uri`
+> literally against the client's registered list, which whitelists
+> `http://localhost:*/oauth/callback`. Some `mcp-remote` builds bind the callback to the
+> loopback **IP** `127.0.0.1` instead (RFC 8252's preferred default), producing
+> `http://127.0.0.1:<port>/oauth/callback` — which does **not** match `localhost` and fails
+> at `/oauth/authorize` with **"redirect_uri does not match the configuration."** Passing
+> `--host localhost` forces the registered hostname to match. If you still hit this, delete
+> the cached tokens in `~/.mcp-auth/` and reconnect.
 
 > **Simplest path for Claude Code:** skip OAuth entirely and use a
 > [Personal Access Token](#headless--ci-with-a-personal-access-token). The PAT path needs no
