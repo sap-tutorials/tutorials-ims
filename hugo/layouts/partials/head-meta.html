@@ -16,6 +16,10 @@
 <meta name="keywords" content="{{ delimit . ", " }}">
 {{- end }}
 
+{{- with .Params.smTechIds }}
+<meta name="sm_tech_ids" content="en-US,{{ delimit . "," }}">
+{{- end }}
+
 {{- with .Params.author }}
 <meta name="author" content="{{ . }}">
 {{- end }}

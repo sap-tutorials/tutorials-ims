@@ -67,4 +67,10 @@ describe('Meta tags — tutorial page', () => {
   it('has author meta tag', () => {
     expect(html).toMatch(/<meta name=["']?author["']? content="[^"]+"/);
   });
+
+  it('has sm_tech_ids meta tag when tutorial has product tags', () => {
+    // head-meta.html emits sm_tech_ids only when .Params.smTechIds is present.
+    // Expected format: en-US,<id>,<id>,...
+    expect(html).toMatch(/<meta name=["']?sm_tech_ids["']? content="en-US,[^"]*"/);
+  });
 });
