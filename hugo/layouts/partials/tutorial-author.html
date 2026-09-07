@@ -12,13 +12,20 @@
      login fallback below instead of leaving the name stuck on "Unknown". */}}
 {{ $displayName := $author }}
 {{ if eq $displayName "Unknown" }}{{ $displayName = "" }}{{ end }}
+{{/* #2181: whether the frontmatter names a real author (before any contributor
+     fallback overwrites $displayName). When true, we must NOT borrow a git
+     contributor's login/avatar/author-page — that grafts the last-changed-by
+     person's GitHub identity onto a different, named author. */}}
+{{ $hasAuthorName := ne $displayName "" }}
 {{ $displayLogin := $authorUsername }}
 {{ $lastCommitterLogin := "" }}
 {{ if $contributors }}
   {{ $first := index $contributors 0 }}
   {{ $lastCommitterLogin = $first.login }}
   {{ if not $displayName }}{{ $displayName = $first.name }}{{ end }}
-  {{ if not $displayLogin }}{{ $displayLogin = $first.login }}{{ end }}
+  {{/* Only inherit the contributor's login when the name also came from the
+       contributor (no frontmatter author) — keeps name+identity the same person. */}}
+  {{ if and (not $displayLogin) (not $hasAuthorName) }}{{ $displayLogin = $first.login }}{{ end }}
 {{ end }}
 {{/* Last resort when neither frontmatter author nor any contributor is available. */}}
 {{ if not $displayName }}{{ $displayName = "Unknown" }}{{ end }}
@@ -41,11 +48,14 @@
     {{ end }}
     {{ $authorLogin := "" }}
     {{ if $authorProfile }}{{ $authorLogin = lower (path.Base $authorProfile) }}
-    {{ else if $lastCommitterLogin }}{{ $authorLogin = lower $lastCommitterLogin }}{{ end }}
-    {{/* #1758: when there's no author_profile, fall back to the top git-contributor
-         login. author_index.json only holds established-author keys (the builder
-         mints no page from a contributor), so this links internally only when that
-         login already has an author page; otherwise it stays the GitHub link below. */}}
+    {{ else if and $lastCommitterLogin (not $hasAuthorName) }}{{ $authorLogin = lower $lastCommitterLogin }}{{ end }}
+    {{/* #1758: with no author_profile AND no frontmatter author name, fall back to
+         the top git-contributor login. author_index.json only holds established-
+         author keys (the builder mints no page from a contributor), so this links
+         internally only when that login already has an author page; otherwise it
+         stays the GitHub link below. #2181: gated on (not $hasAuthorName) so a named
+         author with a blank profile renders name-only (no link), never the last-
+         changed-by person's page. */}}
     {{ $authorEntry := "" }}
     {{ if and $authorLogin site.Data.author_index }}{{ $authorEntry = index site.Data.author_index $authorLogin }}{{ end }}
     {{ if $authorEntry }}
