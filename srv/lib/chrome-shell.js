@@ -17,6 +17,7 @@ import cds from '@sap/cds';
 import { gunzipSync } from 'node:zlib';
 import { Readable } from 'node:stream';
 import { isDeltaRead } from './content-delta-flags.js';
+import { formatSmTechIds } from './semaphore-tags.js';
 
 const SHELL_SLUG = '__shell__';
 const MARKER = '<!-- MAIN -->';
@@ -246,6 +247,22 @@ export function composeShell({ before, after }, bodyHtml, meta) {
       /<script type=(?:"application\/ld\+json"|application\/ld\+json)>\{[^<]*"@type":"BreadcrumbList"[^<]*\}<\/script>/,
       `<script type="application/ld+json">${breadcrumb}</script>`,
     );
+  }
+
+  // sm_tech_ids restoration: opt-in per caller (meta.smTechIds). Insert one
+  // meta immediately after the (already-rewritten) description meta so the
+  // crawler finds it in <head>. Idempotent: strip any pre-existing tag first
+  // (defensive against re-compose). No-op when the caller doesn't opt in.
+  if (Array.isArray(meta.smTechIds) && meta.smTechIds.length) {
+    const smContent = escapeAttr(formatSmTechIds(meta.smTechIds));
+    if (smContent) {
+      patchedBefore = patchedBefore
+        .replace(/<meta name="sm_tech_ids" content="[^"]*">/g, '')
+        .replace(
+          /<meta name="description" content="[^"]*">/,
+          (m) => `${m}<meta name="sm_tech_ids" content="${smContent}">`,
+        );
+    }
   }
 
   return `${patchedBefore}${bodyHtml}${after}`;
