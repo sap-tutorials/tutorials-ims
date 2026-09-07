@@ -1,15 +1,18 @@
 {{/* hugo/layouts/partials/more-from-author.html — "More from this author" rail (#1732).
      Static, primary-author only. Hidden when no siblings / no resolvable login. */}}
 {{- $profile := .Params.authorProfile -}}
+{{- $hasAuthorName := and .Params.author (ne .Params.author "Unknown") -}}
 {{- $login := "" -}}
 {{- if $profile -}}
   {{- $login = lower (path.Base $profile) -}}
-{{- else -}}
+{{- else if not $hasAuthorName -}}
   {{- with .Params.contributors -}}{{- $login = lower (index . 0).login -}}{{- end -}}
 {{- end -}}
-{{/* #1758: no author_profile → fall back to the top git-contributor login.
-     author_index.json holds only established-author keys, so the rail appears
-     only when that login already has an author page. */}}
+{{/* #1758: no author_profile AND no frontmatter author name → fall back to the top
+     git-contributor login. author_index.json holds only established-author keys, so
+     the rail appears only when that login already has an author page. #2181: gated on
+     (not $hasAuthorName) so a named author with a blank profile never surfaces a rail
+     titled after the last-changed-by person. */}}
 {{- $entry := "" -}}
 {{- if and $login site.Data.author_index -}}{{- $entry = index site.Data.author_index $login -}}{{- end -}}
 {{- with $entry -}}
