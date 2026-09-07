@@ -85,7 +85,7 @@ runtime for SSR), each ending at the same `<meta name="sm_tech_ids">` output.
              build-time      │                          │   runtime (SSR)
                              ▼                          ▼
    GET /build/tag-semaphore                  loadMissionContext / loadGroupContext
-   (srv/server.js, anon, 60s cache)          topic-list-page.js
+   (srv/server.js, anon, 60s cache)          publish-topics.js (topic detail)
         │                                        │ resolve entity's product tags → ids
         ▼                                        ▼
    fetch-tutorials.ts fetchSemaphoreMap()   pageMeta.smTechIds = [ids]
@@ -111,11 +111,12 @@ Single source of truth for the mapping and the format string.
   empty/nullish list (caller then emits **no** meta tag). De-dupes IDs,
   preserves first-seen order, prefixes locale: `en-US,id1,id2`.
 
-Reachable from `content-store.js`? No — SSR resolution lives in
-`catalog-data.js`/`topic-list-page.js`, which are already `srv-qa` cp-list
-members. New file must be added to the `srv-qa` `cp` list in
-`.deploy/mta.yaml` **only if** it becomes a transitive `./` import of
-`content-store.js`; audit at implementation time.
+Reachable from `content-store.js`? Its `getSemaphoreMdMap` is used only by the
+build feed; the SSR resolution lives in `catalog-data.js` and
+`publish-topics.js`, which are already `srv-qa` cp-list members. The new file
+must be added to the `srv-qa` `cp` list in `.deploy/mta.yaml` **only if** it
+becomes a transitive `./` import of `content-store.js`; audit at
+implementation time.
 
 ### Component 2 — `/build/tag-semaphore` feed (new, `srv/server.js`)
 
