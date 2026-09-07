@@ -52,8 +52,12 @@ const cellStatus = ref<Record<string, 'correct' | 'wrong'>>({});
 /** server/ui messages shown below the Check button */
 const statusMsg  = ref<string | null>(null);
 
-/** whether the puzzle has been completed (confetti + success banner) */
+/** whether the grid has been graded fully correct (enables Submit + success banner) */
 const solved     = ref(false);
+
+/** whether completion has been recorded server-side (via Submit, or on load if
+    the server already had it). Gates the Submit button so it can't double-post. */
+const submitted  = ref(false);
 
 /** whether current user is authenticated */
 const authed     = ref(false);
@@ -185,6 +189,9 @@ async function resumeProgress() {
  */
 function markSolvedFromServer() {
   solved.value = true;
+  // The server already recorded this completion, so treat it as submitted:
+  // show "Submitted" and never re-post on load (#2185).
+  submitted.value = true;
   const status: Record<string, 'correct' | 'wrong'> = {};
   for (let r = 0; r < grid.value.length; r++) {
     for (let c = 0; c < grid.value[r].length; c++) {
@@ -254,7 +261,9 @@ async function checkPuzzle() {
       status[`${r},${c}`] = 'wrong';
     }
     cellStatus.value = status;
-    if (data.complete) await onSolved();
+    // Check only grades the grid. When it's fully correct we enable Submit;
+    // completion is recorded when the user clicks Submit (#2185), not here.
+    if (data.complete) solved.value = true;
   } catch (e) {
     statusMsg.value = `Check failed: ${(e as Error).message}`;
   }
@@ -270,18 +279,23 @@ function clearCellStatus(r: number, c: number) {
   }
 }
 
-// ── Completion + confetti ─────────────────────────────────────────────────────
-async function onSolved() {
-  solved.value = true;
+// ── Submit (finalize) + confetti ───────────────────────────────────────────────
+// Wired to the Submit button (#2185). Only reachable once `solved` is true (the
+// grid has been Checked and graded complete). Records completion server-side and
+// fires the celebratory confetti. Guarded against double-submit.
+async function submitPuzzle() {
+  if (!solved.value || submitted.value) return;
   // Flush any pending debounced autosave so the server re-grades the CURRENT grid,
   // not a stale snapshot that may be missing the final letter (I1 race fix).
   await flushSave();
-  // Record completion server-side (silently ignore 401 for anon users)
+  // Record completion server-side. Anonymous users 401 here (silently ignored);
+  // we still mark submitted + fire confetti so the button reflects the attempt.
   try {
     await postComplete(props.apiUrl, props.slug);
   } catch {
     // anon user or network error — confetti still fires
   }
+  submitted.value = true;
   // Dynamic import keeps canvas-confetti out of the main chunk (budget guard)
   try {
     const confetti = (await import('canvas-confetti')).default;
@@ -435,6 +449,7 @@ async function resetProgress() {
   answers.value = {};
   cellStatus.value = {};
   solved.value = false;
+  submitted.value = false;
   statusMsg.value = 'Progress reset.';
   try { localStorage.removeItem(`puzzle-answers-${props.slug}`); } catch {}
 }
@@ -568,17 +583,18 @@ async function resetProgress() {
             >
               Check
             </button>
-            <!-- Submit: enabled only when puzzle is solved.
-                 TODO (follow-up): wire final-submission backend call. -->
+            <!-- Submit: finalizes the puzzle. Enabled once Check grades the grid
+                 complete (`solved`); records completion + confetti on click (#2185). -->
             <button
-              :disabled="!solved"
+              :disabled="!solved || submitted"
               class="puzzle-btn"
-              :class="{ 'puzzle-btn-disabled': !solved }"
+              :class="{ 'puzzle-btn-disabled': !solved || submitted }"
+              @click="submitPuzzle"
             >
-              Submit
+              {{ submitted ? 'Submitted ✓' : 'Submit' }}
             </button>
-            <!-- Reset: only visible after solving so progress is intentionally cleared -->
-            <button v-if="solved && authed" class="puzzle-btn" @click="resetProgress">
+            <!-- Reset: only visible after submitting so progress is intentionally cleared -->
+            <button v-if="submitted && authed" class="puzzle-btn" @click="resetProgress">
               Reset
             </button>
             <!-- Subtle status message (errors, etc.) -->
