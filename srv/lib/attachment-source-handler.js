@@ -18,7 +18,7 @@ import cds from '@sap/cds'
 import { createRequire } from 'node:module'
 import { safeFetch } from './safe-fetch.js'
 import { resolveSecret } from './secret-resolver.js'
-import { channelFor, warmAttachments } from './attachment-warm-utils.js'
+import { channelFor, warmAttachments, resolveAttachmentSourceUrl } from './attachment-warm-utils.js'
 
 const require = createRequire(import.meta.url)
 const attachmentStore = require('./attachment-store.cjs')
@@ -66,8 +66,16 @@ export function warmAttachmentsLive(urls, { slug }) {
  *   dl  — "1" or "true" forces attachment (download) disposition regardless of MIME type
  */
 export async function attachmentSourceHandler(req, res) {
-  const u = req.query.u
-  if (!u) return res.status(400).json({ error: 'Missing u parameter' })
+  const uParam = req.query.u
+  if (!uParam) return res.status(400).json({ error: 'Missing u parameter' })
+
+  let u
+  try {
+    u = resolveAttachmentSourceUrl(uParam)
+  } catch (err) {
+    LOG.warn('[attachment-source] failed to decode u parameter:', err.message)
+    return res.status(400).json({ error: 'Invalid u parameter' })
+  }
 
   const download = req.query.dl === '1' || req.query.dl === 'true'
 
