@@ -415,6 +415,7 @@
           "SecretExpiringSoon",
           "HomepageLinksBroken",
           "PublishStuck",
+          "ChannelSubmissionPending",
           "AlertingTest"
         ],
         "dedupWindowMs": 300000
