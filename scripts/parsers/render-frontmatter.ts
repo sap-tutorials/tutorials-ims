@@ -145,7 +145,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   // in mdFormat. Reuse dedupedRawSlugs (already deduped, already mdFormat).
   // Omit the key when nothing matches so non-product pages carry no stray field.
   if (semaphoreMap) {
-    const smTechIds = dedupedRawSlugs.map(s => semaphoreMap[s]).filter(Boolean)
+    const smTechIds = [...new Set(dedupedRawSlugs.map(s => semaphoreMap[s]).filter(Boolean))]
     if (smTechIds.length > 0) fm.smTechIds = smTechIds
   }
 

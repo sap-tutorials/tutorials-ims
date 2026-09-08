@@ -38,4 +38,23 @@ describe('renderHugoFrontmatter smTechIds', () => {
     })
     expect(out).not.toContain('smTechIds')
   })
+
+  it('dedupes smTechIds when two distinct tag slugs resolve to the same semaphoreId', () => {
+    // Two different product-tag slugs map to the same ID — the rendered
+    // frontmatter must contain that ID exactly once (byte-identical with the
+    // SSR path which already de-dupes via Set).
+    const out = renderHugoFrontmatter({
+      ...base,
+      tags: ['software-product>sap-hana', 'software-product>sap-hana-cloud'],
+      primaryTag: 'software-product>sap-hana',
+      semaphoreMap: {
+        'software-product>sap-hana': '7355001',
+        'software-product>sap-hana-cloud': '7355001',
+      },
+    })
+    expect(out).toContain('smTechIds:')
+    // The ID string must appear exactly once in the whole frontmatter output.
+    const occurrences = (out.match(/7355001/g) ?? []).length
+    expect(occurrences).toBe(1)
+  })
 })

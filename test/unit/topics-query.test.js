@@ -33,6 +33,26 @@ describe('topics-query', () => {
     await db.run(INSERT.into(TutorialConceptLinks).entries([
       { ID: 'l1', tutorial_ID: 'tut1', concept_ID: 'c1', predicate: 'teaches' },
     ]));
+
+    // Extra tags for smTechIds guard coverage:
+    //   t3: isActualTag=false, semaphoreId set  → guard false branch (not a product tag)
+    //   t4: isActualTag=true,  semaphoreId=null  → guard false branch (no ID)
+    //   t5: isActualTag=true,  semaphoreId='7399999' → guard true branch (positive)
+    await db.run(INSERT.into(Tags).entries([
+      { ID: 't3', titlePath: 'Software Product : Sm Guard False Tag', label: 'Sm Guard False Tag', name: 'sm-guard-false-tag', isActualTag: false, semaphoreId: '8888001' },
+      { ID: 't4', titlePath: 'Software Product : Sm Guard Null Sem', label: 'Sm Guard Null Sem', name: 'sm-guard-null-sem', isActualTag: true },
+      { ID: 't5', titlePath: 'Software Product : Sm Guard Positive', label: 'Sm Guard Positive', name: 'sm-guard-positive', isActualTag: true, semaphoreId: '7399999' },
+    ]));
+    await db.run(INSERT.into(Tutorials).entries([
+      { ID: 'tut3', slug: 'sm-guard-false-tut', title: 'Sm Guard False Tut', experienceTag: 'Beginner' },
+      { ID: 'tut4', slug: 'sm-guard-null-tut', title: 'Sm Guard Null Tut', experienceTag: 'Beginner' },
+      { ID: 'tut5', slug: 'sm-guard-positive-tut', title: 'Sm Guard Positive Tut', experienceTag: 'Beginner' },
+    ]));
+    await db.run(INSERT.into(TutorialTags).entries([
+      { tutorial_ID: 'tut3', tag_ID: 't3' },
+      { tutorial_ID: 'tut4', tag_ID: 't4' },
+      { tutorial_ID: 'tut5', tag_ID: 't5' },
+    ]));
   });
 
   it('loadLiveTags returns only tags with ≥1 tutorial, with counts', async () => {
@@ -81,5 +101,26 @@ describe('topics-query', () => {
     const p = await buildTopicDetailPayload(db, 'does-not-exist');
     expect(p.notFound).toBe(true);
     expect(p.redirectTo).toBe('/topics/');
+  });
+
+  // smTechIds guard coverage (lines 209-211 in topics-query.js):
+  //   guard: (tagRow && tagRow.isActualTag && tagRow.semaphoreId) ? [...] : []
+
+  it('smTechIds is [] when the tag has isActualTag=false (even with semaphoreId set)', async () => {
+    const p = await buildTopicDetailPayload(db, 'software-product-sm-guard-false-tag');
+    expect(p.notFound).toBeFalsy();
+    expect(p.smTechIds).toEqual([]);
+  });
+
+  it('smTechIds is [] when the tag has isActualTag=true but semaphoreId is null', async () => {
+    const p = await buildTopicDetailPayload(db, 'software-product-sm-guard-null-sem');
+    expect(p.notFound).toBeFalsy();
+    expect(p.smTechIds).toEqual([]);
+  });
+
+  it('smTechIds is [String(semaphoreId)] when isActualTag=true and semaphoreId is set', async () => {
+    const p = await buildTopicDetailPayload(db, 'software-product-sm-guard-positive');
+    expect(p.notFound).toBeFalsy();
+    expect(p.smTechIds).toEqual(['7399999']);
   });
 });
