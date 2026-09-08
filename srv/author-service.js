@@ -55,7 +55,7 @@ async function assertOwnership(tutorialId, user) {
 }
 
 export default cds.service.impl(async function () {
-  const { MyTutorials, MyAuthoredTutorials, MyOwnedTutorials } = this.entities;
+  const { MyTutorials, MyAuthoredTutorials, MyOwnedTutorials, MyMonitoredTutorials } = this.entities;
   const { Tutorials } = this.entities;
 
   // Audit emitter — best-effort; tolerates missing binding in dev/mock-auth.
@@ -180,7 +180,24 @@ export default cds.service.impl(async function () {
     req.query.where({ userId: dbUser.uuid });
   });
 
-  // Tags.mdFormat is a virtual field (no DB column) — populated on the way out
+  // #2199 — MyMonitoredTutorials is the read side of the eye-icon watch
+  // feature: the caller's personal opt-in watch list (TutorialMonitors).
+  // Scope every read to the caller's own uuid, exactly as MyOwnedTutorials
+  // does — the view keys on `Users.uuid as userId`. A caller with no Users
+  // row simply has no monitors, so an unresolvable identity yields an empty
+  // list (the WARN mirrors the ownership panel's #1027 diagnostic).
+  this.before('READ', MyMonitoredTutorials, async (req) => {
+    if (!req.user?.id || req.user.id === 'anonymous') {
+      return req.reject(401, 'Authentication required');
+    }
+    const dbUser = await provisionDbUser(req.user, ['uuid']);
+    if (!dbUser?.uuid) {
+      warnUsersRowMiss(cds.log('author-service'), 'MyMonitoredTutorials', req.user);
+      req.query.where({ userId: '__NO_USERS_ROW__' });
+      return;
+    }
+    req.query.where({ userId: dbUser.uuid });
+  });
   // so OData consumers (Sage tag-search, #824) get the legacy IMS markdown-ready
   // key, e.g. titlePath "Topic : SAP Community" → mdFormat "topic>sap-community".
   // Algorithm parity with com.sap.developers.ims.util.TagUtil; symmetric with
