@@ -169,6 +169,8 @@ sap.ui.define([
       var oModel = this.getView().getModel("watch");
       if (oModel) { oModel.setProperty("/version", (oModel.getProperty("/version") || 0) + 1); }
     },
+
+    _loadNotificationConfig: function () {
       var oModel = this.getOwnerComponent().getModel("admin");
       var oFunc = oModel.bindContext("/getNotificationConfig(...)");
       oFunc.execute().then(function () {
