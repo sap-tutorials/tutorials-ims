@@ -26,7 +26,11 @@ describeIf('/browse/ smoke', () => {
     // BrowsePage.vue + controller.ts wire onto.
     expect(html).toMatch(/<header[^>]+class=["']?browse-banner["']?/);
     expect(html).toMatch(/<aside[^>]+id=["']?browse-filter-rail["']?/);
-    expect(html).toMatch(/<main[^>]+id=["']?browse-results["']?/);
+    // The page has a semantic <main> landmark; the results region is a
+    // #browse-results element (a <div tabindex=-1> skip-link target, not
+    // <main> — #1989). Assert the landmark and the id independently.
+    expect(html).toMatch(/<main[\s>]/);
+    expect(html).toMatch(/id=["']?browse-results["']?/);
     // Skip-link (a11y)
     expect(html).toMatch(/skip-link/);
     // The grid mount point used by the Vue island.
