@@ -633,25 +633,17 @@ service AdminService {
   entity EventRegistrations as projection on ims.EventRegistrations;
 
   // Devtoberfest signups analytics — per-signup fact feeding the admin
-  // "Devtoberfest Signups" Analytical List Page (spec 2026-08-13). Read-only,
+  // "Devtoberfest Signups" Analytical List Page (spec 2026-08-13; week axis
+  // reworked to a categorical string for issue #2209). Read-only,
   // aggregation-enabled (see @Aggregation.ApplySupported in app/admin-annotations.cds).
-  // The virtual elements are populated by the read handler in srv/admin-service.js:
-  //   weekMonday — real, GROUPABLE Mon-anchored week-start Date supplied per
-  //     dialect (db/sqlite/native.cds via strftime, db/hana/native.cds via
-  //     ADD_DAYS; issue #2047) so the analytical chart has a human-readable time
-  //     axis instead of the raw integer weekIndex.
-  //   weekLabel — 'YYYY-Www' ISO label; the DB has no portable ISO-week function,
-  //     so Node derives it from weekMonday (see srv/lib/devtoberfest-signup-enrich.js).
-  //   cumulativeSignups — running total, populated ONLY on the pure by-week series
-  //     (one row per week); left null when the result is sliced by another
-  //     dimension, where a running total would be meaningless.
+  // The user-facing week dimension is the real, GROUPABLE STRING `weekStartText`
+  // (the week's Monday as an ISO 'YYYY-MM-DD' date) supplied per dialect
+  // (db/sqlite/native.cds via strftime, db/hana/native.cds via TO_VARCHAR) so the
+  // chart shows one discrete bar per week. The overall total comes from the
+  // analytical table's built-in grand-total row (no separate KPI/enrichment).
   @readonly
   @cds.redirection.target: false
-  entity DevtoberfestSignupAnalytics as projection on ims.DevtoberfestSignupAnalytics {
-    *,
-    virtual null as weekLabel         : String(10),
-    virtual null as cumulativeSignups : Integer
-  };
+  entity DevtoberfestSignupAnalytics as projection on ims.DevtoberfestSignupAnalytics;
 
 
   // PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
