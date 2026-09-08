@@ -40,7 +40,7 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(() => registerJob({ jobName: 'dup', schedule: '0 1 * * *', ttlMs: 1000, description: 'x', fn: async () => 'b' })).toThrow(/Duplicate jobName/);
   });
 
-  it('registerJobs() registers exactly 49 jobs (lockstep)', async () => {
+  it('registerJobs() registers exactly 50 jobs (lockstep)', async () => {
     // The full registerJobs() schedules crons against node-cron. We run it
     // in a fresh test context; the test isolates by resetting the registry
     // in beforeEach and again in afterAll (below).
@@ -62,7 +62,8 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     // Task 9 adds freshness-corpus-embedding (46 -> 47)
     // Task 9 adds freshness-scan             (47 -> 48)
     // #2188 adds feedback-owner-digest        (48 -> 49)
-    expect(_getJobRegistry().size).toBe(49);
+    // #2184 adds semaphore-tag-sync            (49 -> 50)
+    expect(_getJobRegistry().size).toBe(50);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
@@ -83,6 +84,7 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(names).toContain('freshness-corpus-embedding');
     expect(names).toContain('freshness-scan');
     expect(names).toContain('feedback-owner-digest');
+    expect(names).toContain('semaphore-tag-sync');
   });
 
   it('runJobByName(unknownName) throws', async () => {
