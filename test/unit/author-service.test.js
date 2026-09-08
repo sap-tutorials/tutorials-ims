@@ -501,6 +501,77 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
   });
 });
 
+// #2199 — MyMonitoredTutorials exposes the caller's personal watch list
+// (TutorialMonitors → MyMonitoredTutorialsView) as a readable AuthorService
+// entity, row-scoped to the caller like MyOwnedTutorials. This is the read
+// side of the eye-icon watch feature (toggleMonitor is the write side);
+// the Tutorial Health dashboard filters "Watching" against it.
+//
+// Fixture: alice (uuid-A / u-A) watches t-1; bob (uuid-B / u-B) watches t-2.
+// Alice must see ONLY tut-1 (her own opt-in), never tut-2 (bob's).
+describe('AuthorService.MyMonitoredTutorials (#2199)', () => {
+  beforeAll(async () => {
+    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialMonitors);
+    await INSERT.into(TutorialMonitors).entries([
+      { ID: 'mon-A-1', user_ID: 'u-A', tutorial_ID: 't-1' },
+      { ID: 'mon-B-2', user_ID: 'u-B', tutorial_ID: 't-2' }
+    ]);
+  });
+
+  it('exposes MyMonitoredTutorials as a readable entity', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    expect(srv.entities.MyMonitoredTutorials).toBeDefined();
+  });
+
+  it('returns only the caller\'s watched tutorials, scoped by userId', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyMonitoredTutorials))
+    );
+    expect(rows.map((r) => r.slug)).toEqual(['tut-1']);
+  });
+
+  it('does not leak another user\'s watch list', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-B', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyMonitoredTutorials))
+    );
+    expect(rows.map((r) => r.slug)).toEqual(['tut-2']);
+  });
+
+  it('populates the ID alias (backward-compat with tutorial_ID)', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyMonitoredTutorials))
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ID).toBe(rows[0].tutorial_ID);
+  });
+
+  it('returns empty when the caller has no matching Users row', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'unknown-uuid', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyMonitoredTutorials))
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('rejects anonymous callers', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    // @requires: 'Tutorial.Author' rejects the unauthenticated caller at the
+    // service layer (403) before the before-READ scoping handler runs.
+    await expect(
+      srv.tx({ user: { id: 'anonymous', roles: {} } }, (tx) =>
+        tx.run(SELECT.from(srv.entities.MyMonitoredTutorials)))
+    ).rejects.toMatchObject({ code: 403 });
+  });
+});
+
 // #923 — toggleMonitor action tests. The action is the CAP equivalent of
 // Java IMS's POST /tutorialMeta/setMonitoredStatus and controls a user's
 // personal watch list. Idempotent per spec.

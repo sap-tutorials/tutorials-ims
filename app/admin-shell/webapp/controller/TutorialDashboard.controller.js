@@ -19,8 +19,17 @@ sap.ui.define([
   return Controller.extend("sap.tutorials.admin.shell.controller.TutorialDashboard", {
     onInit: function () {
       this.getView().setModel(new JSONModel({ enabled: false, recipients: "" }), "notifConfig");
+      // #2199 — watch-list state. `_oWatchedSet` holds the tutorial IDs the
+      // caller currently watches (drives the eye-icon column); the "watch"
+      // JSONModel's /version integer is bumped on every change so the icon
+      // formatters re-evaluate for all rows. `_sScope` is the Show: selector
+      // ("all" | "owned" | "watching" | "both").
+      this.getView().setModel(new JSONModel({ version: 0 }), "watch");
+      this._oWatchedSet = new Set();
+      this._sScope = "all";
       this._loadNotificationConfig();
       this._loadUserEmail();
+      this._loadWatchedIds();
       // Issue #377: hide DELETED / INACTIVE tutorials from Tutorial Health.
       // The actual filter application happens in onAfterRendering — the
       // table's rows-binding doesn't exist during onInit (oTable.getBinding
@@ -51,24 +60,28 @@ sap.ui.define([
 
     // Build the active filter expression. Always includes the
     // baseline (live tutorials only), AND-combined with any user
-    // filters from _sSearchQuery / _bFilterMonitored / _bFilterOutdated.
+    // filters from _sSearchQuery / _sScope / _bFilterOutdated.
     _buildFilters: function () {
       var aUser = [];
       if (this._sSearchQuery) {
         aUser.push(new Filter("tutorial/title", FilterOperator.Contains, this._sSearchQuery));
       }
-      if (this._bFilterMonitored && Array.isArray(this._aMyTutorialIds) && this._aMyTutorialIds.length > 0) {
-        // Filter against the cached "my tutorials" set fetched via
-        // /author/MyTutorials (the canonical 4-source UNION view) — #777.
-        // Empty list means no rows match, which is the right semantic.
-        var aIdFilters = this._aMyTutorialIds.map(function (id) {
-          return new Filter("tutorial_ID", FilterOperator.EQ, id);
-        });
-        aUser.push(new Filter({ filters: aIdFilters, and: false }));
-      } else if (this._bFilterMonitored && Array.isArray(this._aMyTutorialIds) && this._aMyTutorialIds.length === 0) {
-        // Toggle is ON but the user has zero tutorials — apply a
-        // never-match filter so the table renders empty (not unfiltered).
-        aUser.push(new Filter("tutorial_ID", FilterOperator.EQ, "__NO_MATCH__"));
+      if (this._sScope && this._sScope !== "all") {
+        // #2199 — the Show: selector narrows the table to the caller's owned
+        // set (/author/MyTutorials — 4-source UNION, #777), watched set
+        // (/author/MyMonitoredTutorials, #923), or their union ("both"). The
+        // resolved id list is cached in _aScopeIds by _refreshScopeIdsThenFilter.
+        var aIds = Array.isArray(this._aScopeIds) ? this._aScopeIds : [];
+        if (aIds.length > 0) {
+          var aIdFilters = aIds.map(function (id) {
+            return new Filter("tutorial_ID", FilterOperator.EQ, id);
+          });
+          aUser.push(new Filter({ filters: aIdFilters, and: false }));
+        } else {
+          // Scope is active but the caller has no matching tutorials — apply a
+          // never-match filter so the table renders empty (not unfiltered).
+          aUser.push(new Filter("tutorial_ID", FilterOperator.EQ, "__NO_MATCH__"));
+        }
       }
       if (this._bFilterOutdated) {
         var dCutoff = new Date(Date.now() - OUTDATED_DAYS * 86400000).toISOString();
@@ -128,7 +141,34 @@ sap.ui.define([
         .catch(function () { return []; });
     },
 
-    _loadNotificationConfig: function () {
+    // #2199 — fetch the caller's watch-list tutorial IDs via the row-scoped
+    // /author/MyMonitoredTutorials (TutorialMonitors → MyMonitoredTutorialsView).
+    // Same $top=1000 caveat as _fetchMyTutorialIds. Degrades to [] on error.
+    _fetchWatchedIds: function () {
+      return fetch("/author/MyMonitoredTutorials?$select=tutorial_ID&$top=1000", { credentials: "include" })
+        .then(function (res) { return res.ok ? res.json() : { value: [] }; })
+        .then(function (data) {
+          return (data.value || []).map(function (r) { return r.tutorial_ID; });
+        })
+        .catch(function () { return []; });
+    },
+
+    // Load the watch set and refresh the eye-icon column. Called on init and
+    // after any toggle so the icons reflect the current server state.
+    _loadWatchedIds: function () {
+      return this._fetchWatchedIds().then(function (aIds) {
+        this._oWatchedSet = new Set(aIds);
+        this._bumpWatchVersion();
+        return aIds;
+      }.bind(this));
+    },
+
+    // Bump the "watch" model's /version so the icon/tooltip formatters
+    // re-evaluate for every row (their binding includes /version as a part).
+    _bumpWatchVersion: function () {
+      var oModel = this.getView().getModel("watch");
+      if (oModel) { oModel.setProperty("/version", (oModel.getProperty("/version") || 0) + 1); }
+    },
       var oModel = this.getOwnerComponent().getModel("admin");
       var oFunc = oModel.bindContext("/getNotificationConfig(...)");
       oFunc.execute().then(function () {
@@ -379,6 +419,58 @@ sap.ui.define([
       return DATE_FORMATTER.format(d);
     },
 
+    // #2199 — eye-icon column formatters. `this._oWatchedSet` is the source
+    // of truth; the unused iVersion part only exists to re-trigger the
+    // formatter when _bumpWatchVersion() runs after a toggle/refresh.
+    formatWatchIcon: function (sTutorialId) {
+      return this._oWatchedSet && this._oWatchedSet.has(sTutorialId)
+        ? "sap-icon://show"
+        : "sap-icon://hide";
+    },
+
+    formatWatchTooltip: function (sTutorialId) {
+      return this._oWatchedSet && this._oWatchedSet.has(sTutorialId)
+        ? "Stop watching this tutorial"
+        : "Watch this tutorial";
+    },
+
+    // #2199 — add/remove the row's tutorial from the caller's watch list via
+    // AuthorService.toggleMonitor. Optimistically flips the local set on
+    // success, then keeps the current scope filter consistent (a row watched
+    // while viewing "Watching"/"Owned + watching" stays/leaves accordingly).
+    onToggleWatch: function (oEvent) {
+      var oButton = oEvent.getSource();
+      var oContext = oButton.getBindingContext("admin");
+      var sTutorialId = oContext && oContext.getProperty("tutorial/ID");
+      if (!sTutorialId) { return; }
+      var bNewStatus = !this._oWatchedSet.has(sTutorialId);
+      oButton.setEnabled(false);
+      var oModel = this.getOwnerComponent().getModel("author");
+      var oAction = oModel.bindContext("/toggleMonitor(...)");
+      oAction.setParameter("tutorialId", sTutorialId);
+      oAction.setParameter("status", bNewStatus);
+      oAction.execute().then(function () {
+        var bResult = oAction.getBoundContext().getObject().value;
+        if (bResult) {
+          this._oWatchedSet.add(sTutorialId);
+          MessageToast.show("Added to your watch list");
+        } else {
+          this._oWatchedSet.delete(sTutorialId);
+          MessageToast.show("Removed from your watch list");
+        }
+        this._bumpWatchVersion();
+        // If the watch set feeds the current scope, re-resolve and re-filter
+        // so an unwatched row drops out (or a watched row appears).
+        if (this._sScope === "watching" || this._sScope === "both") {
+          this._refreshScopeIdsThenFilter();
+        }
+      }.bind(this)).catch(function (oError) {
+        MessageBox.error("Watch toggle failed: " + (oError && oError.message ? oError.message : "Unknown error"));
+      }).finally(function () {
+        oButton.setEnabled(true);
+      });
+    },
+
     onTutorialLinkPress: function (oEvent) {
       var oSource = oEvent.getSource();
       var oContext = oSource.getBindingContext("admin");
@@ -394,18 +486,36 @@ sap.ui.define([
       this._applyFilters();
     },
 
-    onFilterMonitored: function (oEvent) {
-      this._bFilterMonitored = oEvent.getParameter("selected");
-      if (this._bFilterMonitored) {
-        // Refresh the "mine" tutorial-ID list each time the toggle is
-        // turned ON — keeps the data fresh after admin writes.
-        this._fetchMyTutorialIds().then(function (ids) {
-          this._aMyTutorialIds = ids;
-          this._applyFilters();
-        }.bind(this));
-      } else {
+    // #2199 — the Show: selector. Resolves the owned and/or watched id sets
+    // for the chosen scope, caches their union in _aScopeIds, then re-filters.
+    onScopeChange: function (oEvent) {
+      var oItem = oEvent.getParameter("selectedItem");
+      this._sScope = oItem ? oItem.getKey() : "all";
+      this._refreshScopeIdsThenFilter();
+    },
+
+    _refreshScopeIdsThenFilter: function () {
+      var sScope = this._sScope;
+      if (sScope === "all") {
+        this._aScopeIds = null;
         this._applyFilters();
+        return;
       }
+      var bOwned = (sScope === "owned" || sScope === "both");
+      var bWatching = (sScope === "watching" || sScope === "both");
+      var pOwned = bOwned ? this._fetchMyTutorialIds() : Promise.resolve([]);
+      var pWatched = bWatching ? this._fetchWatchedIds() : Promise.resolve([]);
+      Promise.all([pOwned, pWatched]).then(function (aResults) {
+        var aWatched = aResults[1];
+        // Keep the eye-icon column in sync whenever we've just fetched the
+        // watch set (watching/both scopes).
+        if (bWatching) {
+          this._oWatchedSet = new Set(aWatched);
+          this._bumpWatchVersion();
+        }
+        this._aScopeIds = Array.from(new Set(aResults[0].concat(aWatched)));
+        this._applyFilters();
+      }.bind(this));
     },
 
     onFilterOutdated: function (oEvent) {
