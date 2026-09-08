@@ -52,6 +52,48 @@ function humanizeTag(raw, registry = {}) {
     .join(' ');
 }
 
+/**
+ * Resolve a group's or mission's product-tag semaphore IDs for SSR
+ * `sm_tech_ids` emission. Reads the join entity for the owner, joins
+ * tag_ID → Tags, and returns the non-null/non-empty semaphoreIds of
+ * `isActualTag=true` rows. Fail-open: any error → [] (never breaks the
+ * serve path).
+ *
+ * @param {object} db          CDS db service (from cds.connect.to('db'))
+ * @param {string} joinName    'GroupTags' | 'MissionTags'
+ * @param {string} ownerCol    'group_ID' | 'mission_ID'
+ * @param {string} ownerId     the group/mission UUID
+ * @returns {Promise<string[]>}
+ */
+export async function resolveSmTechIds(db, joinName, ownerCol, ownerId) {
+  try {
+    if (!db || !joinName || !ownerCol || !ownerId) return [];
+    // Use fully-qualified string names so the helper works without
+    // cds.entities() being populated (keeps unit tests simple).
+    const joinFqn = `${NAMESPACE}.${joinName}`;
+    const tagsFqn = `${NAMESPACE}.Tags`;
+    const links = await db.run(
+      SELECT.from(joinFqn).columns('tag_ID').where({ [ownerCol]: ownerId }),
+    );
+    const tagIds = [...new Set((links ?? []).map(l => l.tag_ID).filter(Boolean))];
+    if (tagIds.length === 0) return [];
+    const tags = await db.run(
+      SELECT.from(tagsFqn)
+        .columns('ID', 'semaphoreId', 'isActualTag')
+        .where({ ID: { in: tagIds }, isActualTag: true }),
+    );
+    const out = [];
+    for (const t of (tags ?? [])) {
+      if (t.semaphoreId === null || t.semaphoreId === undefined || t.semaphoreId === '') continue;
+      out.push(String(t.semaphoreId));
+    }
+    return out;
+  } catch (err) {
+    console.error('[catalog-data] resolveSmTechIds failed:', err.message);
+    return [];
+  }
+}
+
 function projectTutorial(t, tagLabelMap = {}) {
   return {
     ID: t.ID,
@@ -106,12 +148,16 @@ export async function loadGroupContext(slug) {
   const totalTime = orderedTutorials.reduce((s, t) => s + (t.time || 0), 0);
   const level = aggregateLevel(orderedTutorials.map(t => t.level));
 
+  const db = await cds.connect.to('db');
+  const smTechIds = await resolveSmTechIds(db, 'GroupTags', 'group_ID', group.ID);
+
   return {
     group,
     tutorials: orderedTutorials,
     tutorialCount: orderedTutorials.length,
     totalTime,
     level,
+    smTechIds,
   };
 }
 
@@ -249,6 +295,9 @@ export async function loadMissionContext(slug) {
   const totalTime = allTutorials.reduce((s, t) => s + (t.time || 0), 0);
   const level = aggregateLevel(allTutorials.map(t => t.level));
 
+  const db = await cds.connect.to('db');
+  const smTechIds = await resolveSmTechIds(db, 'MissionTags', 'mission_ID', mission.ID);
+
   return {
     mission,
     groups: groupCards,
@@ -256,5 +305,6 @@ export async function loadMissionContext(slug) {
     tutorialCount: allTutorials.length,
     totalTime,
     level,
+    smTechIds,
   };
 }

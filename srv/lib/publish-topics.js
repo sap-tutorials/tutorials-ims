@@ -80,6 +80,7 @@ export async function renderTopicsIntoSession({ db, sessionId, helpers, priorHas
         slug: topic.slug,
         title: topic.label,
         description: topicMetaDescription(topic),
+        smTechIds: topic.smTechIds ?? [],
       };
       const fullDoc = composeShell(shell, body, meta);
       const contentHash = createHash('sha256').update(fullDoc, 'utf-8').digest('hex');
