@@ -93,6 +93,7 @@ async function resolveSlugInfo(slug, db) {
   const tut = await db.run(
     SELECT.one.from(Tutorials)
       .columns('ID', 'title', 'author.email as authorEmail', 'author.displayName as authorName')
+      // slug-canonical: pre-canonicalized (slugLower lowercased at line 89)
       .where({ slug: slugLower })
   );
   if (!tut) return null;
