@@ -85,7 +85,7 @@ import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
-import { provisionDbUser, resolveDbUser, resolveUserSapId } from './lib/resolve-db-user.js';
+import { provisionDbUser, resolveDbUser, resolveUserSapId, emailFromUser } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import { decodeBase64Upload } from './lib/decode-base64-upload.js';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
@@ -1844,7 +1844,7 @@ cds.on('served', async () => {
       authenticated: true,
       id: user.id,
       userId: user.id,  // #777: explicit alias of id, kept stable as the Users.uuid value. The existing MyTutorialsView (db/views.cds) has empirically worked with `req.user.id === Users.uuid` for the email-only filter, so the new UNION view's `userId` column (also Users.uuid) accepts the same value.
-      email: user.attr?.email || '',
+      email: emailFromUser(user) || '',  // #2199: attr.email is unreliable; user.id is the email under XSUAA
       givenName: user.attr?.given_name || user.attr?.givenName || '',
       familyName: user.attr?.family_name || user.attr?.familyName || '',
       isAdmin: user.is?.('Admin') === true,
