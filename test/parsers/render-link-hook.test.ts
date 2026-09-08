@@ -11,7 +11,7 @@ describe('render-link hook', () => {
     expect(t).toContain('raw.githubusercontent.com')
     expect(t).toContain('/content/attachment-source?u=')
     expect(t).toContain('dl=1')                 // download sibling
-    expect(t).toContain('urlquery')             // encodes the source URL
+    expect(t).toContain('base64Encode')         // base64url-encodes the source URL (WAF-safe, #1931)
   })
   it('has a passthrough branch for non-attachment links', () => {
     const t = readFileSync(p, 'utf8')
