@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { BASE_URL, SRV_URL, fetchWithRetry } from './smoke.config.js';
+import { BASE_URL, fetchWithRetry } from './smoke.config.js';
 
 let tutorialPath = '/tutorials/abap-cloud-ui-from-interface/';
 
@@ -78,46 +78,28 @@ describe('Meta tags — tutorial page', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // sm_tech_ids — mission page
 //
-// Verifies that a deployed mission page carries the sm_tech_ids meta tag.
-// Requires a mission whose tutorials have product-tagged tags with Semaphore
-// IDs populated in HANA.
+// Hard-gated on SMOKE_MISSION_SLUG env var. Self-skips when the var is unset
+// so CI stays green while no confirmed slug has been provided, but FAILS (not
+// skips) when the slug IS supplied and the page is missing sm_tech_ids.
 //
-// Slug resolution order:
-//   1. SMOKE_MISSION_SLUG env var (operator-supplied, confirmed at deploy time —
-//      see /build/tag-semaphore hybrid test for the source-of-truth feed).
-//   2. Dynamic discovery from /build/catalog (first mission-prefixed slug).
-//      When dynamically discovered, the test skips instead of failing if
-//      sm_tech_ids is absent — the mission may not have product-tagged tutorials.
-//      Set SMOKE_MISSION_SLUG to a confirmed slug to turn this into a hard assertion.
+// Set SMOKE_MISSION_SLUG to a mission confirmed (via the /build/tag-semaphore
+// hybrid test) to have at least one product-tagged tutorial.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Meta tags — sm_tech_ids mission page', () => {
   it('mission page carries sm_tech_ids when product-tagged tutorials exist', async (ctx) => {
-    const envSlug = process.env.SMOKE_MISSION_SLUG;
-    let missionSlug = envSlug;
-    if (!missionSlug) {
-      try {
-        const res = await fetchWithRetry(`${SRV_URL}/build/catalog`);
-        if (res.ok) {
-          const cat = await res.json();
-          const found = (cat?.missions || []).find(m => m.slug?.startsWith('mission-'));
-          if (found) missionSlug = found.slug;
-        }
-      } catch {}
-    }
+    // Hard-gated on env var: this assertion only runs when the operator supplies
+    // a confirmed product-tagged mission slug. Without it the test self-skips so
+    // CI stays green while the env var is unset, but cannot produce a false-green
+    // when sm_tech_ids is actually missing.
+    //
+    // Set SMOKE_MISSION_SLUG to a mission confirmed (via /build/tag-semaphore)
+    // to have at least one product-tagged tutorial before enabling this gate.
+    const missionSlug = process.env.SMOKE_MISSION_SLUG;
     if (!missionSlug) { ctx.skip(); return; }
 
     const res = await fetchWithRetry(`${BASE_URL}/tutorials/${missionSlug}/`, { redirect: 'follow' });
     expect(res.status).toBe(200);
     const html = await res.text();
-
-    // When the slug was dynamically discovered (not env-supplied) and the mission
-    // has no product-tagged tutorials, skip rather than fail — it is a data gap,
-    // not a feature regression. Supply SMOKE_MISSION_SLUG with a confirmed
-    // product-tagged mission slug to make this a hard assertion.
-    if (!envSlug && !html.includes('sm_tech_ids')) {
-      ctx.skip();
-      return;
-    }
     expect(html).toMatch(/name="sm_tech_ids" content="en-US,[^"]+"/);
   });
 });
@@ -125,52 +107,27 @@ describe('Meta tags — sm_tech_ids mission page', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // sm_tech_ids — topics product detail page
 //
-// Verifies that a deployed /topics/<slug>/ product-detail page carries the
-// sm_tech_ids meta tag. The tag for a software-product type node emits its own
-// Semaphore ID (topics-query.js: isActualTag && semaphoreId → [semaphoreId]).
+// Hard-gated on SMOKE_PRODUCT_TOPIC_SLUG env var. Self-skips when unset;
+// FAILS when set and the page is missing sm_tech_ids.
 //
-// Slug resolution order:
-//   1. SMOKE_PRODUCT_TOPIC_SLUG env var (operator-supplied, confirmed at deploy
-//      time — the /build/tag-semaphore feed lists which mdFormat keys have IDs).
-//   2. Dynamic derivation: take the first `>`-containing key from the semaphore
-//      feed and convert facet>leaf → facet-leaf (the URL slug is the full
-//      titlePath slugified, which for single-level tags collapses to the same
-//      string as replacing `>` with `-`). Falls back to ctx.skip() when the
-//      derived URL returns non-200 (multi-level hierarchy or slug mismatch).
+// Set SMOKE_PRODUCT_TOPIC_SLUG to a /topics/<slug>/ URL slug confirmed (via
+// /build/tag-semaphore) to map to a tag with isActualTag=true and a non-null
+// semaphoreId.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Meta tags — sm_tech_ids topics product detail', () => {
   it('topics product detail page carries sm_tech_ids', async (ctx) => {
-    const envSlug = process.env.SMOKE_PRODUCT_TOPIC_SLUG;
-    let topicSlug = envSlug;
-    if (!topicSlug) {
-      try {
-        const res = await fetchWithRetry(`${SRV_URL}/build/tag-semaphore`);
-        if (res.ok) {
-          const body = await res.json();
-          // Find first key using the facet>leaf mdFormat pattern (e.g.
-          // "software-product>sap-hana-cloud"). Topic URL slug for single-level
-          // tags is derived from the full titlePath, which for "X : Y" becomes
-          // "x-y" — the same as replacing ">" with "-".
-          const entry = Object.keys(body.map || {}).find(k => k.includes('>'));
-          if (entry) topicSlug = entry.replace('>', '-');
-        }
-      } catch {}
-    }
+    // Hard-gated on env var: this assertion only runs when the operator supplies
+    // a confirmed product-tagged topic slug. Without it the test self-skips.
+    //
+    // Set SMOKE_PRODUCT_TOPIC_SLUG to a /topics/<slug>/ URL slug confirmed (via
+    // /build/tag-semaphore) to map to a tag with isActualTag=true and a
+    // non-null semaphoreId before enabling this gate.
+    const topicSlug = process.env.SMOKE_PRODUCT_TOPIC_SLUG;
     if (!topicSlug) { ctx.skip(); return; }
 
     const res = await fetchWithRetry(`${BASE_URL}/topics/${topicSlug}/`, { redirect: 'follow' });
-    // If the derived slug does not resolve (multi-level hierarchy, slug mismatch,
-    // or page not yet published), skip rather than fail. Set SMOKE_PRODUCT_TOPIC_SLUG
-    // to an operator-confirmed slug for a hard assertion.
-    if (res.status !== 200) { ctx.skip(); return; }
+    expect(res.status).toBe(200);
     const html = await res.text();
-
-    if (!envSlug && !html.includes('sm_tech_ids')) {
-      // Page exists but no sm_tech_ids: tag may lack isActualTag/semaphoreId.
-      // Supply SMOKE_PRODUCT_TOPIC_SLUG with a confirmed product-tagged slug.
-      ctx.skip();
-      return;
-    }
     expect(html).toMatch(/name="sm_tech_ids" content="en-US,[^"]+"/);
   });
 });
