@@ -67,11 +67,31 @@ describe('Meta tags — tutorial page', () => {
   it('has author meta tag', () => {
     expect(html).toMatch(/<meta name=["']?author["']? content="[^"]+"/);
   });
+});
 
-  it('has sm_tech_ids meta tag when tutorial has product tags', () => {
-    // head-meta.html emits sm_tech_ids only when .Params.smTechIds is present.
-    // Expected format: en-US,<id>,<id>,...
-    expect(html).toMatch(/<meta name=["']?sm_tech_ids["']? content="en-US,[^"]*"/);
+// ─────────────────────────────────────────────────────────────────────────────
+// sm_tech_ids — tutorial page
+//
+// Hard-gated on SMOKE_PRODUCT_TUTORIAL_SLUG env var. Self-skips when unset;
+// FAILS when set and the page is missing sm_tech_ids.
+//
+// The unqualified tutorial picked by the llms.txt beforeAll is NOT guaranteed
+// to carry a product tag whose semaphoreId is populated in the target env's
+// /build/tag-semaphore map — on DEV only a handful of tags are backfilled, so
+// a non-gated assertion here fails on a pure data condition rather than a code
+// defect. Set SMOKE_PRODUCT_TUTORIAL_SLUG to a tutorial confirmed (via
+// /build/tag-semaphore) to have a product tag with a non-null semaphoreId to
+// enable this gate.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Meta tags — sm_tech_ids tutorial page', () => {
+  it('tutorial page carries sm_tech_ids when product-tag semaphoreId exists', async (ctx) => {
+    const tutorialSlug = process.env.SMOKE_PRODUCT_TUTORIAL_SLUG;
+    if (!tutorialSlug) { ctx.skip(); return; }
+
+    const res = await fetchWithRetry(`${BASE_URL}/tutorials/${tutorialSlug}/`, { redirect: 'follow' });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toMatch(/<meta name=["']?sm_tech_ids["']? content="en-US,[^"]+"/);
   });
 });
 
