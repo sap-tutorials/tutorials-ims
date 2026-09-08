@@ -110,14 +110,34 @@ describe('backfillUserProfile (Issue #339)', () => {
     expect(row.email).toBe('old@example.com');
   });
 
-  it('no-op when JWT has no fillable claims (still returns no-blanks/no-claims, never throws)', async () => {
+  it('self-heals email from user.id (token subject) when JWT has no email claim (#2199)', async () => {
     await seedBlankUser();
-    const user = buildUser({});  // empty attr
+    const user = buildUser({});  // empty attr — no given_name/family_name/email
 
     const verdict = await backfillUserProfile(user);
-    expect(verdict.backfilled).toBe(false);
-    // attr={} satisfies "no-claims" guard; row stays blank
-    expect(verdict.reason).toBe('no-blanks');
+    // The subject (user.id === 'someone@example.com') is a usable email even
+    // though the `email` attribute is absent — this is the fix that lets
+    // migrated author rows resolve ownership after login.
+    expect(verdict.backfilled).toBe(true);
+    expect(verdict.fields).toEqual(['email']);
+
+    const row = await SELECT.one.from(Users).where({ sapId: SAP_ID });
+    expect(row.email).toBe('someone@example.com');
+    expect(row.firstName).toBeNull();  // no name claim → left blank
+    expect(row.lastName).toBeNull();
+  });
+
+  it('backfills email from user.id even when the user object has no attr at all (#2199)', async () => {
+    await seedBlankUser();
+    // No `attr` object at all, but the token subject is an email.
+    const user = { id: 'someone@example.com', authInfo: { token: { userId: SAP_ID } } };
+
+    const verdict = await backfillUserProfile(user);
+    expect(verdict.backfilled).toBe(true);
+    expect(verdict.fields).toEqual(['email']);
+
+    const row = await SELECT.one.from(Users).where({ sapId: SAP_ID });
+    expect(row.email).toBe('someone@example.com');
   });
 
   it('no-op when no Users row exists (auto-provision will fill on INSERT)', async () => {
@@ -137,7 +157,9 @@ describe('backfillUserProfile (Issue #339)', () => {
     expect(verdict.reason).toBe('anonymous');
   });
 
-  it('returns no-claims when user has no attr at all (defensive: malformed user object)', async () => {
+  it('returns no-claims when there are no name claims and user.id is not an email', async () => {
+    // Defensive: no attr object AND a non-email id (bare username / tech user)
+    // — nothing the token can contribute, so no DB write.
     const verdict = await backfillUserProfile({ id: 'x', authInfo: { token: { userId: 'I9' } } });
     expect(verdict.backfilled).toBe(false);
     expect(verdict.reason).toBe('no-claims');
