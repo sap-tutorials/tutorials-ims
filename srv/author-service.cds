@@ -142,6 +142,16 @@ service AuthorService {
   @readonly entity MyOwnedTutorials as
     projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority in (1, 3, 4);
 
+  // #2199 — the read side of the eye-icon watch feature. Exposes the
+  // caller's personal watch list (TutorialMonitors → MyMonitoredTutorialsView)
+  // so the Tutorial Health dashboard can offer an "Owned / Watching / both"
+  // scope selector. Orthogonal to MyOwnedTutorials (the 4-source ownership
+  // UNION) — this is a user's explicit opt-in, not a derived ownership signal.
+  // Row-scoped per caller in author-service.js (before READ), same as
+  // MyOwnedTutorials. See ADR 0006 §2026-07-02b.
+  @readonly entity MyMonitoredTutorials as
+    projection on ims.MyMonitoredTutorialsView { *, tutorial_ID as ID };
+
   // #923 — Sage's "watch this tutorial" toggle. Mirrors Java IMS's
   // POST /tutorialMeta/setMonitoredStatus?status=<bool> with body [<id>].
   //   status=true  : upsert TutorialMonitors row for (caller, tutorial)

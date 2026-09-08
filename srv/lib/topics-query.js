@@ -124,7 +124,7 @@ export async function buildTopicDetailPayload(db, slug, corpus) {
     const { Tags, TutorialTags, Tutorials, TutorialConceptLinks, Concepts, ConceptRank } = ent();
 
     // tutorials carrying this tag (per-slug — NOT hoistable into corpus)
-    const tagRow = await db.run(SELECT.one.from(Tags).columns('ID').where({ titlePath: tag.titlePath }));
+    const tagRow = await db.run(SELECT.one.from(Tags).columns('ID', 'semaphoreId', 'isActualTag').where({ titlePath: tag.titlePath }));
     const ttRows = tagRow ? await db.run(SELECT.from(TutorialTags).columns('tutorial_ID', 'tag_ID').where({ tag_ID: tagRow.ID })) : [];
     const tutIds = new Set(ttRows.map(r => r.tutorial_ID));
 
@@ -204,9 +204,15 @@ export async function buildTopicDetailPayload(db, slug, corpus) {
       relatedChannels = []; // Surface C is additive — never break topic rendering.
     }
 
+    // sm_tech_ids: a topic IS a tag — emit its own semaphoreId when it is a
+    // product tag. Empty otherwise (composeShell then emits no meta).
+    const smTechIds = (tagRow && tagRow.isActualTag && tagRow.semaphoreId)
+      ? [String(tagRow.semaphoreId)]
+      : [];
+
     return {
       slug: tag.slug, label: tag.label, facet: tag.facet,
-      tutorials, concepts, relatedTags, relatedChannels,
+      tutorials, concepts, relatedTags, relatedChannels, smTechIds,
       buildAt: new Date().toISOString(), error: null,
     };
   } catch (err) {

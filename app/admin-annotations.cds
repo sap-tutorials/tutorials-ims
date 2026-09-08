@@ -2022,26 +2022,27 @@ annotate AdminService.CompletionAnalytics with {
   };
 };
 
-// --- Devtoberfest Signups (aggregated report — spec 2026-08-13; readable-axis
-//     + total-KPI + breakdowns rework for issue #2047) --------------------------
+// --- Devtoberfest Signups (aggregated report — spec 2026-08-13; week axis
+//     reworked to a categorical string + trimmed to essentials for issue #2209) --
 //
 // Analytical List Page over the per-signup fact view. Native OData $apply drives
-// the chart + analytical table + filter bar (group by week / edition / region /
-// role, aggregate signup count, grand total).
+// the chart + analytical table + filter bar (group by week, aggregate signup
+// count; the analytical table's built-in grand-total row supplies the overall
+// total — same pattern as the tutorial-engagement ALP).
 //
-// Time axis: the chart and table group+sort on the REAL Date column `weekMonday`
-// (portable per dialect — db/sqlite/native.cds strftime, db/hana/native.cds
-// ADD_DAYS) and DISPLAY the readable `weekStartText` label via #TextOnly text
-// arrangement — so the axis reads "Mon 07 Sep 2026" (HANA) / the ISO Monday date
-// (local SQLite) as a category, never the raw integer bucket or a thinned Date
-// axis. The internal `weekIndex` is hidden (kept only to derive weekMonday) and
-// is NOT a user-facing dimension anymore (it used to leak as "449/451" — #2047).
-// weekLabel ('YYYY-Www') + cumulativeSignups are read-handler enrichment fields
-// (srv/lib/devtoberfest-signup-enrich.js), display-only, never $apply dimensions.
+// Time axis: the chart and table group + sort on the real STRING column
+// `weekStartText` — the week's Monday as an ISO 'YYYY-MM-DD' date (portable per
+// dialect: db/sqlite/native.cds strftime, db/hana/native.cds TO_VARCHAR). A
+// string is a DISCRETE category, so the chart draws exactly one bar per week; an
+// Edm.Date dimension (the #2047 approach) made Fiori render a continuous time
+// axis with an empty tick for every calendar day (#2209). ISO date order == plain
+// lexical order == chronological, so no separate sort key is needed. The internal
+// `weekIndex` stays hidden (kept only to bucket weeks) and is NOT a user-facing
+// dimension. region/edition/role are filter-bar fields only (not chart variants).
 annotate AdminService.DevtoberfestSignupAnalytics with @(
   Aggregation.ApplySupported: {
     Transformations: ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'],
-    GroupableProperties: [ weekMonday, weekStartText, eventName, eventType, region, role ],
+    GroupableProperties: [ weekStartText, eventName, eventType, region, role ],
     AggregatableProperties: [ { Property: signups } ]
   },
   Analytics.AggregatedProperty #newSignups: {
@@ -2050,100 +2051,34 @@ annotate AdminService.DevtoberfestSignupAnalytics with @(
     AggregatableProperty: signups,
     ![@Common.Label]: 'New Signups'
   },
-  // Overall total registrations as a prominent, LABELLED KPI header card (#2047).
-  // SUM(signups) with no filter → grand total across all Devtoberfest signups.
-  UI.DataPoint #totalSignups: {
-    Value: signups,
-    Title: 'Total Registrations'
-  },
-  UI.PresentationVariant #totalSignups: {
-    Visualizations: ['@UI.DataPoint#totalSignups']
-  },
-  UI.SelectionVariant #totalSignups: {
-    SelectOptions: []
-  },
-  UI.KPI #totalSignups: {
-    SelectionVariant           : ![@UI.SelectionVariant#totalSignups],
-    DataPoint                  : ![@UI.DataPoint#totalSignups],
-    ![@UI.PresentationVariant] : ![@UI.PresentationVariant#totalSignups]
-  },
-  // Default breakdown: signups per calendar week. The chart groups on the real
-  // Date column weekMonday and shows its readable weekStartText label (#2047).
+  // Default (and only) breakdown: signups per calendar week. One discrete column
+  // per week, sorted chronologically by the ISO weekStartText label (#2209).
   UI.Chart: {
     ChartType: #Column,
-    Dimensions: [weekMonday],
+    Dimensions: [weekStartText],
     DynamicMeasures: ['@Analytics.AggregatedProperty#newSignups']
   },
   UI.PresentationVariant: {
     Visualizations: ['@UI.Chart', '@UI.LineItem'],
-    SortOrder: [{ Property: weekMonday }]
-  },
-  // Alternate breakdowns, one click away via the page's variant management. Every
-  // GroupableProperty is also reachable through the chart's dimension drill-down.
-  UI.Chart #byRegion: {
-    ChartType: #Column,
-    Dimensions: [region],
-    DynamicMeasures: ['@Analytics.AggregatedProperty#newSignups']
-  },
-  UI.PresentationVariant #byRegion: {
-    Visualizations: ['@UI.Chart#byRegion', '@UI.LineItem'],
-    SortOrder: [{ Property: newSignups, Descending: true }]
-  },
-  UI.SelectionPresentationVariant #byRegion: {
-    Text                : 'By Region',
-    SelectionVariant    : { SelectOptions: [] },
-    PresentationVariant : ![@UI.PresentationVariant#byRegion]
-  },
-  UI.Chart #byEdition: {
-    ChartType: #Column,
-    Dimensions: [eventName],
-    DynamicMeasures: ['@Analytics.AggregatedProperty#newSignups']
-  },
-  UI.PresentationVariant #byEdition: {
-    Visualizations: ['@UI.Chart#byEdition', '@UI.LineItem'],
-    SortOrder: [{ Property: newSignups, Descending: true }]
-  },
-  UI.SelectionPresentationVariant #byEdition: {
-    Text                : 'By Edition',
-    SelectionVariant    : { SelectOptions: [] },
-    PresentationVariant : ![@UI.PresentationVariant#byEdition]
-  },
-  UI.Chart #byRole: {
-    ChartType: #Column,
-    Dimensions: [role],
-    DynamicMeasures: ['@Analytics.AggregatedProperty#newSignups']
-  },
-  UI.PresentationVariant #byRole: {
-    Visualizations: ['@UI.Chart#byRole', '@UI.LineItem'],
-    SortOrder: [{ Property: newSignups, Descending: true }]
-  },
-  UI.SelectionPresentationVariant #byRole: {
-    Text                : 'By Role',
-    SelectionVariant    : { SelectOptions: [] },
-    PresentationVariant : ![@UI.PresentationVariant#byRole]
+    SortOrder: [{ Property: weekStartText }]
   },
   UI.SelectionFields: [ eventName, region, role ],
   UI.LineItem: [
-    { Value: weekMonday,        Label: 'Week Starting' },
-    { Value: eventName,         Label: 'Edition' },
-    { Value: region,            Label: 'Region' },
-    { Value: role,              Label: 'Role' },
-    { Value: newSignups,        Label: 'New Signups' },
-    { Value: cumulativeSignups, Label: 'Cumulative (running total)' }
+    { Value: weekStartText, Label: 'Week Starting' },
+    { Value: eventName,     Label: 'Edition' },
+    { Value: region,        Label: 'Region' },
+    { Value: role,          Label: 'Role' },
+    { Value: newSignups,    Label: 'New Signups' }
   ]
 ) {
   ID            @UI.Hidden;
-  weekMonday    @title: 'Week Starting'  @Analytics.Dimension
-                @Common: { Text: weekStartText, TextArrangement: #TextOnly };
-  weekStartText @title: 'Week Starting'  @Analytics.Dimension  @UI.Hidden;
+  weekStartText @title: 'Week Starting'  @Analytics.Dimension;
   weekIndex     @title: 'Week #'         @UI.Hidden;
   eventName     @title: 'Edition'        @Analytics.Dimension;
   eventType     @title: 'Event Type'     @Analytics.Dimension;
   region        @title: 'Region'         @Analytics.Dimension;
   role          @title: 'Role'           @Analytics.Dimension;
   signups       @title: 'Signups'        @Analytics.Measure @Aggregation.default: #SUM;
-  weekLabel     @title: 'Calendar Week';
-  cumulativeSignups @title: 'Cumulative (running total)';
 };
 
 // Filter-bar value help. eventName resolves against Events (edition picker);

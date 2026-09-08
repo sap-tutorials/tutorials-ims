@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BASE_URL, SRV_URL, fetchWithRetry } from './smoke.config.js';
+import { BASE_URL, SRV_URL, fetchWithRetry, pickTutorialSlug } from './smoke.config.js';
 
 /**
  * Regression smoke for the bug fixed in PR #324: every Done button on every
@@ -25,9 +25,10 @@ describe('Done buttons render as real DOM (PR #324 regression)', () => {
     const body = await res.json();
     const slugs = Object.keys(body);
     expect(slugs.length, 'no published content — cannot run Done-button smoke').toBeGreaterThan(0);
-    // Skip concept-* pages: they render without step-actions / Done buttons.
-    // Pick a real step-based tutorial so the Done-button assertion is meaningful.
-    knownSlug = slugs.find(s => !s.startsWith('concept-')) ?? slugs[0];
+    // Pick a real step-based tutorial (excludes concept-/topic-/page-/group-/
+    // mission- pages, which render templates with no step-actions / Done button).
+    knownSlug = pickTutorialSlug(body);
+    expect(knownSlug, 'no step-based tutorial slug in content manifest').toBeTruthy();
   });
 
   it('tutorial page has no <pre><code> blocks containing escaped step-actions HTML', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BASE_URL, SRV_URL, fetchWithRetry } from './smoke.config.js';
+import { BASE_URL, SRV_URL, fetchWithRetry, pickTutorialSlug } from './smoke.config.js';
 
 const BASE = process.env.SMOKE_BASE_URL ?? BASE_URL;
 const SRV = process.env.SMOKE_SRV_URL ?? SRV_URL;
@@ -16,8 +16,8 @@ describe('PiP bundles deployed', () => {
     const res = await fetchWithRetry(`${SRV}/content/hashes`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    const slug = Object.keys(body).find(s => !s.startsWith('concept-'));
-    expect(slug, 'no published tutorial slug found').toBeTruthy();
+    const slug = pickTutorialSlug(body);
+    expect(slug, 'no step-based tutorial slug found').toBeTruthy();
 
     const page = await fetchWithRetry(`${BASE}/tutorials/${slug}/`, { redirect: 'follow' });
     expect(page.status).toBe(200);

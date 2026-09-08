@@ -68,3 +68,109 @@ describe('Meta tags — tutorial page', () => {
     expect(html).toMatch(/<meta name=["']?author["']? content="[^"]+"/);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sm_tech_ids — tutorial page
+//
+// Hard-gated on SMOKE_PRODUCT_TUTORIAL_SLUG env var. Self-skips when unset;
+// FAILS when set and the page is missing sm_tech_ids.
+//
+// The unqualified tutorial picked by the llms.txt beforeAll is NOT guaranteed
+// to carry a product tag whose semaphoreId is populated in the target env's
+// /build/tag-semaphore map — on DEV only a handful of tags are backfilled, so
+// a non-gated assertion here fails on a pure data condition rather than a code
+// defect. Set SMOKE_PRODUCT_TUTORIAL_SLUG to a tutorial confirmed (via
+// /build/tag-semaphore) to have a product tag with a non-null semaphoreId to
+// enable this gate.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Meta tags — sm_tech_ids tutorial page', () => {
+  it('tutorial page carries sm_tech_ids when product-tag semaphoreId exists', async (ctx) => {
+    const tutorialSlug = process.env.SMOKE_PRODUCT_TUTORIAL_SLUG;
+    if (!tutorialSlug) { ctx.skip(); return; }
+
+    const res = await fetchWithRetry(`${BASE_URL}/tutorials/${tutorialSlug}/`, { redirect: 'follow' });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toMatch(/<meta name=["']?sm_tech_ids["']? content="en-US,[^"]+"/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sm_tech_ids — mission page
+//
+// Hard-gated on SMOKE_MISSION_SLUG env var. Self-skips when the var is unset
+// so CI stays green while no confirmed slug has been provided, but FAILS (not
+// skips) when the slug IS supplied and the page is missing sm_tech_ids.
+//
+// Set SMOKE_MISSION_SLUG to a mission confirmed (via the /build/tag-semaphore
+// hybrid test) to have at least one product-tagged tutorial.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Meta tags — sm_tech_ids mission page', () => {
+  it('mission page carries sm_tech_ids when product-tagged tutorials exist', async (ctx) => {
+    // Hard-gated on env var: this assertion only runs when the operator supplies
+    // a confirmed product-tagged mission slug. Without it the test self-skips so
+    // CI stays green while the env var is unset, but cannot produce a false-green
+    // when sm_tech_ids is actually missing.
+    //
+    // Set SMOKE_MISSION_SLUG to a mission confirmed (via /build/tag-semaphore)
+    // to have at least one product-tagged tutorial before enabling this gate.
+    const missionSlug = process.env.SMOKE_MISSION_SLUG;
+    if (!missionSlug) { ctx.skip(); return; }
+
+    const res = await fetchWithRetry(`${BASE_URL}/tutorials/${missionSlug}/`, { redirect: 'follow' });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toMatch(/name="sm_tech_ids" content="en-US,[^"]+"/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sm_tech_ids — topics product detail page
+//
+// Hard-gated on SMOKE_PRODUCT_TOPIC_SLUG env var. Self-skips when unset;
+// FAILS when set and the page is missing sm_tech_ids.
+//
+// Set SMOKE_PRODUCT_TOPIC_SLUG to a /topics/<slug>/ URL slug confirmed (via
+// /build/tag-semaphore) to map to a tag with isActualTag=true and a non-null
+// semaphoreId.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Meta tags — sm_tech_ids topics product detail', () => {
+  it('topics product detail page carries sm_tech_ids', async (ctx) => {
+    // Hard-gated on env var: this assertion only runs when the operator supplies
+    // a confirmed product-tagged topic slug. Without it the test self-skips.
+    //
+    // Set SMOKE_PRODUCT_TOPIC_SLUG to a /topics/<slug>/ URL slug confirmed (via
+    // /build/tag-semaphore) to map to a tag with isActualTag=true and a
+    // non-null semaphoreId before enabling this gate.
+    const topicSlug = process.env.SMOKE_PRODUCT_TOPIC_SLUG;
+    if (!topicSlug) { ctx.skip(); return; }
+
+    const res = await fetchWithRetry(`${BASE_URL}/topics/${topicSlug}/`, { redirect: 'follow' });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toMatch(/name="sm_tech_ids" content="en-US,[^"]+"/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sm_tech_ids — absent on excluded pages (reliable, always runs)
+//
+// Verifies that pages OUTSIDE the tutorial/mission/topics-detail scope do NOT
+// carry an sm_tech_ids meta tag. These are the pages that are excluded by
+// design (browse, topics index).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Meta tags — sm_tech_ids absent on non-product pages', () => {
+  it('topics index /topics/ carries no sm_tech_ids', async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/topics/`, { redirect: 'follow' });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).not.toContain('sm_tech_ids');
+  });
+
+  it('/browse/ carries no sm_tech_ids', async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/browse/`, { redirect: 'follow' });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).not.toContain('sm_tech_ids');
+  });
+});

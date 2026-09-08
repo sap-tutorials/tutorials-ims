@@ -398,16 +398,18 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
 
   // #1027 — diagnostic surface: when the caller authenticates but STILL has
   // no Users row after provisioning is attempted (a token that carries no
-  // usable profile claims — no email, no given/family name — so
-  // provisionDbUser can't mint a row), the handler MUST log a WARN so
-  // `cf logs tutorials-srv --recent | grep 'Users-row miss'` finds it.
+  // usable identity — no email claim, no given/family name, AND a non-email
+  // user.id — so provisionDbUser can't mint a row), the handler MUST log a WARN
+  // so `cf logs tutorials-srv --recent | grep 'Users-row miss'` finds it.
   // Silent 0-row responses hid the real failure mode on #1027 for the better
   // part of an afternoon; the log line is the fix.
   //
   // NOTE (SAGE-ownership fix): a caller WITH profile claims but no Users row
-  // no longer reaches this branch — provisionDbUser now mints the row from
-  // the claims (see the get-or-create test below), so the miss only fires for
-  // genuinely un-provisionable tokens.
+  // no longer reaches this branch — provisionDbUser mints the row from the
+  // claims. NOTE (#2199): under XSUAA `user.id` IS the email, which now also
+  // provisions a row (email-only is enough for ownership priority-3). So the
+  // miss only fires for genuinely un-provisionable tokens: tech / basic-auth
+  // callers whose id is a bare username, not an email.
   it('logs a Users-row miss WARN when the caller cannot be provisioned (#1027)', async () => {
     const authorLog = cds.log('author-service');
     const originalWarn = authorLog.warn;
@@ -415,14 +417,14 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
     authorLog.warn = (...args) => { warnCalls.push(args.join(' ')); };
     try {
       const srv = await cds.connect.to('AuthorService');
-      // Real-token shape: a resolvable sapId (JWT user_uuid) but NO usable
-      // profile claims (empty attr) → provisionDbUser returns null → miss
-      // branch. user.id is the caller's email (PII); the token's userId is the
-      // I-number sapId.
+      // Tech-user shape: a resolvable sapId (JWT user_uuid) but NO usable
+      // identity — empty attr AND a non-email user.id — so provisionDbUser
+      // returns null → miss branch. (A real XSUAA browser login has an
+      // email-shaped user.id and would provision; see #2199.)
       await srv.tx(
         {
           user: {
-            id: 'ghost@example.com',
+            id: 'svc-ghost',
             attr: {},
             authInfo: { token: { userId: 'I999999' } },
             roles: { 'Tutorial.Author': true },
@@ -436,10 +438,10 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
       // are distinguishable) and the resolved sapId (direct FK into Users.sapId).
       expect(missLine).toContain('endpoint=MyOwnedTutorials');
       expect(missLine).toContain('resolved-sapId=I999999');
-      // PII gate (regression guard): the caller's email-shaped user.id is
-      // user-identifiable and MUST NOT appear in the log line — only the
-      // sapId is emitted. Guards against a future change that logs user.id.
-      expect(missLine).not.toContain('ghost@example.com');
+      // PII gate (regression guard): user.id is user-identifiable (an email for
+      // browser logins) and MUST NOT appear in the log line — only the sapId is
+      // emitted. Guards against a future change that logs user.id.
+      expect(missLine).not.toContain('svc-ghost');
     } finally {
       authorLog.warn = originalWarn;
     }
@@ -498,6 +500,77 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
     } finally {
       authorLog.warn = originalWarn;
     }
+  });
+});
+
+// #2199 — MyMonitoredTutorials exposes the caller's personal watch list
+// (TutorialMonitors → MyMonitoredTutorialsView) as a readable AuthorService
+// entity, row-scoped to the caller like MyOwnedTutorials. This is the read
+// side of the eye-icon watch feature (toggleMonitor is the write side);
+// the Tutorial Health dashboard filters "Watching" against it.
+//
+// Fixture: alice (uuid-A / u-A) watches t-1; bob (uuid-B / u-B) watches t-2.
+// Alice must see ONLY tut-1 (her own opt-in), never tut-2 (bob's).
+describe('AuthorService.MyMonitoredTutorials (#2199)', () => {
+  beforeAll(async () => {
+    const { TutorialMonitors } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialMonitors);
+    await INSERT.into(TutorialMonitors).entries([
+      { ID: 'mon-A-1', user_ID: 'u-A', tutorial_ID: 't-1' },
+      { ID: 'mon-B-2', user_ID: 'u-B', tutorial_ID: 't-2' }
+    ]);
+  });
+
+  it('exposes MyMonitoredTutorials as a readable entity', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    expect(srv.entities.MyMonitoredTutorials).toBeDefined();
+  });
+
+  it('returns only the caller\'s watched tutorials, scoped by userId', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyMonitoredTutorials))
+    );
+    expect(rows.map((r) => r.slug)).toEqual(['tut-1']);
+  });
+
+  it('does not leak another user\'s watch list', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-B', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyMonitoredTutorials))
+    );
+    expect(rows.map((r) => r.slug)).toEqual(['tut-2']);
+  });
+
+  it('populates the ID alias (backward-compat with tutorial_ID)', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyMonitoredTutorials))
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ID).toBe(rows[0].tutorial_ID);
+  });
+
+  it('returns empty when the caller has no matching Users row', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'unknown-uuid', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyMonitoredTutorials))
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('rejects anonymous callers', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    // @requires: 'Tutorial.Author' rejects the unauthenticated caller at the
+    // service layer (403) before the before-READ scoping handler runs.
+    await expect(
+      srv.tx({ user: { id: 'anonymous', roles: {} } }, (tx) =>
+        tx.run(SELECT.from(srv.entities.MyMonitoredTutorials)))
+    ).rejects.toMatchObject({ code: 403 });
   });
 });
 

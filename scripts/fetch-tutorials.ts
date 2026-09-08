@@ -513,6 +513,7 @@ export function writeHugoPage(
   hasOsOptions: boolean = false,
   intro: string = '',
   video: import('./parsers/types.js').NormalizedVideo | null = null,
+  semaphoreMap: Record<string, string> = {},
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -536,6 +537,7 @@ export function writeHugoPage(
     hasOsOptions,
     intro,
     video,
+    semaphoreMap,
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -634,6 +636,25 @@ async function fetchTagLabelRegistry(): Promise<TagLabelRegistry> {
     return map
   } catch (e) {
     console.warn(`[tag-labels] fetch failed (${(e as Error).message}) — falling back to heuristic for all tags`)
+    return {}
+  }
+}
+
+async function fetchSemaphoreMap(): Promise<Record<string, string>> {
+  const capBaseUrl = process.env.CAP_BASE_URL ?? 'http://localhost:4004'
+  const url = `${capBaseUrl}/build/tag-semaphore`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.warn(`[tag-semaphore] ${url} returned ${res.status} — no sm_tech_ids will be emitted`)
+      return {}
+    }
+    const body = await res.json() as { map?: Record<string, string> }
+    const map = body.map ?? {}
+    console.log(`[tag-semaphore] loaded ${Object.keys(map).length} (mdFormat, semaphoreId) pairs from ${url}`)
+    return map
+  } catch (e) {
+    console.warn(`[tag-semaphore] fetch failed (${(e as Error).message}) — no sm_tech_ids will be emitted`)
     return {}
   }
 }
@@ -843,6 +864,10 @@ async function main() {
   // An empty map is returned on failure; all tags fall back to the heuristic.
   const tagRegistry = await fetchTagLabelRegistry()
 
+  // sm_tech_ids restoration: product-tag semaphore IDs for frontmatter emit.
+  // Empty on failure → no sm_tech_ids meta (fail-open).
+  const semaphoreMap = await fetchSemaphoreMap()
+
   // ── Content-cache fast path (Workstream C, flag-gated: CONTENT_CACHE_FAST_PATH) ──
   // On a slug-targeted run, reuse the previously-generated content for non-target
   // slugs instead of recomposing all ~1400 (the bulk of Phase 3's cost). TWO gates,
@@ -862,7 +887,7 @@ async function main() {
   // falls through to recompose). Kept OUT of .tutorial-cache (whose key has no
   // parser hash) and OUT of hugo/data (Hugo would load it as site.Data).
   const contentSidecarPath = join(__dirname, '..', '.content-cache', 'content-cache-sidecar.json')
-  const decisionFingerprint = computeFeedFingerprint({ catalog: loadCapCache(), tagLabels: tagRegistry })
+  const decisionFingerprint = computeFeedFingerprint({ catalog: loadCapCache(), tagLabels: tagRegistry, semaphore: semaphoreMap })
   const restoredSidecar = CONTENT_CACHE_FAST_PATH ? readSidecar(contentSidecarPath) : null
   const fastPath = decideFastPath({
     flagEnabled: CONTENT_CACHE_FAST_PATH,
@@ -1140,6 +1165,7 @@ async function main() {
           composed.hasOsOptions,
           composed.intro,
           normalizeVideo(frontmatter.video, t.slug),
+          semaphoreMap,
         )
         authorRows.push({
           authorProfile: frontmatter.author_profile ?? '',

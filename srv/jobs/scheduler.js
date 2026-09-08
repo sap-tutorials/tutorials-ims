@@ -60,6 +60,7 @@ import { runCommunityBlogsFetch } from './community-blogs-fetch-job.js';
 import { runCommunityBlogsClassify } from './community-blogs-classify-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
+import { sendFeedbackDigests } from '../lib/feedback-digest.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
 import { deleteStuckOutboxRow } from '../lib/scheduler-wedge.js';
@@ -785,6 +786,18 @@ export function registerJobs() {
     fn: retryFailedEmails,
   });
 
+  // Daily 06:19 UTC — email tutorial owners any new commented feedback (#2188).
+  // Off-minute (:19) at an otherwise-idle hour. Double-gated inside the cycle
+  // (CF space=prod AND ImsConfig 'feedback.email.enabled'='true'); a no-op on
+  // DEV/QA and when the flag is off.
+  registerJob({
+    jobName: 'feedback-owner-digest',
+    schedule: '19 6 * * *',
+    ttlMs: 900000,
+    description: 'Daily digest of new commented tutorial feedback to owners (#2188)',
+    fn: (logId) => sendFeedbackDigests(logId),
+  });
+
   // Daily at 02:13 — knowledge-graph concept extraction (#381 PR 3).
   // Off-minute (:13) to avoid the :00/:30 thundering herd. 30-min TTL covers
   // a full pass of ~1400 tutorials at ~1s/tutorial cache-hit + ~3s/tutorial
@@ -953,6 +966,22 @@ export function registerJobs() {
     fn: async (logId, opts) => {
       const { runFetchCommunityEvents } = await import('./fetch-community-events-job.js');
       return runFetchCommunityEvents(logId, opts);
+    },
+  });
+
+  // #2184 — weekly Semaphore taxonomy auto-sync (replaces the manual SES batch
+  // load). Sunday 04:47 UTC — off-cluster from the :00/:07/:11/:13/:17/:19/:23/
+  // :31/:37/:43/:57 minute grid. Gated by the SEMAPHORE_SYNC_ENABLED DB flag
+  // (default OFF); flag-off runs no-op. Fail-shut — a bad fetch never writes.
+  // Lazy-import keeps boot fast + avoids pulling @sap-cloud-sdk at module load.
+  registerJob({
+    jobName: 'semaphore-tag-sync',
+    schedule: '47 4 * * 0',
+    ttlMs: 20 * 60 * 1000,
+    description: 'Sync Semaphore SES taxonomy (SAPCore) into Tags, keyed on semaphoreId (weekly)',
+    fn: async (logId, opts) => {
+      const { runSemaphoreTagSync } = await import('./semaphore-tag-sync-job.js');
+      return runSemaphoreTagSync(logId, opts);
     },
   });
 

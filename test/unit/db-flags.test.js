@@ -50,11 +50,11 @@ describe('db-flags (ImsConfig-backed generic feature flags, #2060)', () => {
 
   afterAll(() => { bustFeatureFlagsCache(); });
 
-  it('manages the 14 migrated flags but NOT the content.delta.* keys', () => {
+  it('manages the 15 migrated flags but NOT the content.delta.* keys', () => {
     const keys = managedFlagKeys();
     expect(keys).toContain(METRICS);
     expect(keys).toContain(PAGERANK);
-    expect(keys.length).toBe(14);
+    expect(keys.length).toBe(15); // 14 migrated (#2060) + SEMAPHORE_SYNC_ENABLED (#2184)
     // content-delta flags keep their own dedicated module.
     const imsKeys = keys.map(imsKey);
     expect(imsKeys).not.toContain('content.delta.write');
@@ -139,7 +139,7 @@ describe('db-flags (ImsConfig-backed generic feature flags, #2060)', () => {
 
   it('ensureFeatureFlagDefaults() seeds every absent flag to its declared default', async () => {
     const seeded = await ensureFeatureFlagDefaults();
-    expect(seeded.length).toBe(14);
+    expect(seeded.length).toBe(15);
     await refreshFeatureFlags();
     expect(isFlagEnabled(METRICS)).toBe(true);
     expect(isFlagEnabled(MCP_AUTH)).toBe(true);
@@ -166,6 +166,6 @@ describe('db-flags (ImsConfig-backed generic feature flags, #2060)', () => {
     expect(second).toEqual([]);
     const keys = managedFlagKeys().map(imsKey);
     const rows = await SELECT.from(ImsConfig).where({ key: { in: keys } });
-    expect(rows.length).toBe(14);
+    expect(rows.length).toBe(15);
   });
 });

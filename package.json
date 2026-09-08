@@ -328,6 +328,23 @@
           }
         }
       },
+      "semaphore": {
+        "kind": "rest",
+        "[hybrid]": {
+          "kind": "rest",
+          "credentials": {
+            "destination": "semaphore-destination",
+            "path": "/semantic/prodses"
+          }
+        },
+        "[production]": {
+          "kind": "rest",
+          "credentials": {
+            "destination": "semaphore-destination",
+            "path": "/semantic/prodses"
+          }
+        }
+      },
       "telemetry": {
         "kind": "telemetry-to-console",
         "tracing": {
@@ -398,6 +415,7 @@
           "SecretExpiringSoon",
           "HomepageLinksBroken",
           "PublishStuck",
+          "ChannelSubmissionPending",
           "AlertingTest"
         ],
         "dedupWindowMs": 300000

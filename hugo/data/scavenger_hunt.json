@@ -11,7 +11,7 @@
       "slug": "shilpa-shankar",
       "name": "Shilpa Shankar",
       "heading": "Devtoberfest Scavenger Hunt",
-      "caption": "func main() { lettersYouNeed := string(myString[3]) }",
+      "caption": "func main() { lettersYouNeed := string(firstName[3]) }",
       "showMoreInfo": true
     },
     "ai": {

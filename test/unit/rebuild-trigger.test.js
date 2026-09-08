@@ -17,7 +17,7 @@ vi.mock('../../srv/lib/credstore.js', () => ({
 // cds.connect.to('db') + full dev-model compile the first time it runs in a
 // worker with no booted server. That compile time makes the fixed post-debounce
 // waits below racy (surfaced by #2047, which enlarged the dev model with a
-// per-dialect weekMonday). The mode-merge logic under test doesn't depend on
+// per-dialect week-axis column). The mode-merge logic under test doesn't depend on
 // tenant settings, so stub it to a constant.
 vi.mock('../../srv/lib/runtime-config/tenant-settings.js', () => ({
   resolveTenantSettings: vi.fn().mockResolvedValue({ rebuildTargetEnv: 'dev' }),

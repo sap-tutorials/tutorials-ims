@@ -29,7 +29,7 @@ const store = require('../../srv/lib/attachment-store.cjs')
 const base = '/content/attachment-source'
 
 describe('GET /content/attachment-source', () => {
-  it('streams a stored .txt inline', async () => {
+  it('streams a stored .txt inline (plain URL-encoded u=)', async () => {
     const url = 'https://raw.githubusercontent.com/o/r/main/EX2.txt'
     await store.put(url, {
       buffer: Buffer.from('code'),
@@ -48,7 +48,27 @@ describe('GET /content/attachment-source', () => {
     expect(res.headers['x-content-type-options']).toBe('nosniff')
   })
 
-  it('dl=1 forces attachment disposition', async () => {
+  it('streams a stored .txt inline (base64url-encoded u=)', async () => {
+    const url = 'https://raw.githubusercontent.com/o/r/main/EX2.txt'
+    await store.put(url, {
+      buffer: Buffer.from('code'),
+      mimeType: 'text/plain; charset=utf-8',
+      contentHash: 'h3',
+      slug: 's',
+      channel: 'prod',
+      filename: 'EX2.txt',
+    })
+    // Encode as base64url (no colons, WAF-safe)
+    const b64 = Buffer.from(url).toString('base64url')
+    const res = await project.get(`${base}?u=${b64}`, {
+      responseType: 'arraybuffer',
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toMatch(/text\/plain/)
+    expect(res.headers['content-disposition']).toMatch(/^inline/)
+  })
+
+  it('dl=1 forces attachment disposition (base64url u=)', async () => {
     const url = 'https://raw.githubusercontent.com/o/r/main/D2.txt'
     await store.put(url, {
       buffer: Buffer.from('x'),
@@ -58,7 +78,8 @@ describe('GET /content/attachment-source', () => {
       channel: 'prod',
       filename: 'D2.txt',
     })
-    const res = await project.get(`${base}?u=${encodeURIComponent(url)}&dl=1`, {
+    const b64 = Buffer.from(url).toString('base64url')
+    const res = await project.get(`${base}?u=${b64}&dl=1`, {
       responseType: 'arraybuffer',
     })
     expect(res.headers['content-disposition']).toMatch(/^attachment/)

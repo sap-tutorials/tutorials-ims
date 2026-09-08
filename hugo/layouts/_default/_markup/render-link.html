@@ -3,19 +3,22 @@
        links whose destination is a raw.githubusercontent.com URL with an
        allowlisted extension (rewritten by scripts/parsers/attachment-links.ts)
        are routed through the CAP attachment store and get a download sibling.
+       The source URL is base64url-encoded in the u= query param to evade Akamai WAF.
        KEEP the extension list in sync with attachment-links.ts / attachment-mime.cjs. */ -}}
 {{- $dest := .Destination -}}
 {{- $exts := slice "txt" "csv" "json" "md" "sql" "abap" "properties" "yaml" "yml" "xml" "html" "zip" "pdf" "war" "jar" "zargo" "har" -}}
 {{- $ext := lower (path.Ext $dest | strings.TrimPrefix ".") -}}
 {{- $isAttachment := and (hasPrefix $dest "https://raw.githubusercontent.com/") (in $exts $ext) -}}
 {{- if $isAttachment -}}
-{{- $enc := $dest | urlquery -}}
-{{- $view := printf "/content/attachment-source?u=%s" $enc -}}
-{{- $dl := printf "/content/attachment-source?u=%s&dl=1" $enc -}}
-{{- /* $view/$dl are server-constructed, server-relative /content/attachment-source paths whose only
-       variable is $enc = $dest | urlquery (URL-query-encoded), so safeURL cannot introduce a foreign
-       scheme/host. .Text is Hugo's already-rendered, escaped link inner-markup (standard render-hook
-       safeHTML). security-reviewed: attachment link emission is trusted. #1931 */ -}}
+{{- /* Encode the raw GitHub URL as base64url (no colons = WAF-safe).
+       Hugo's base64Encode produces standard base64; convert to base64url by replacing +/= with -_. */ -}}
+{{- $b64 := $dest | base64Encode -}}
+{{- $b64url := $b64 | replace "+" "-" | replace "/" "_" | replace "=" "" -}}
+{{- $view := printf "/content/attachment-source?u=%s" $b64url -}}
+{{- $dl := printf "/content/attachment-source?u=%s&dl=1" $b64url -}}
+{{- /* $view/$dl are server-constructed, server-relative /content/attachment-source paths using base64url
+       encoding of $dest, which is decoded server-side by resolveAttachmentSourceUrl(); security-reviewed:
+       attachment link emission is trusted, base64url is reversible. #1931 */ -}}
 <a href="{{ $view | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }} class="tutorial-attachment-link">{{ .Text | safeHTML }}</a><a href="{{ $dl | safeURL }}" class="tutorial-attachment-download" aria-label="Download {{ .PlainText | default .Text }}" download>&#8595;</a>
 {{- else -}}
 {{- /* security-reviewed: default link emission — .Destination | safeURL + .Text | safeHTML is Hugo's

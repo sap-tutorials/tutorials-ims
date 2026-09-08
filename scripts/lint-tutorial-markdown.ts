@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url'
 import { extractBranchGroups, BranchParseError } from './parsers/branches.ts'
 import { prefetchBranchStaleness, branchStalenessRule } from './lint-rules/branch-staleness'
 import { iframeNonAllowlistedHostRule } from './lint-rules/iframe-non-allowlisted-host'
+import { authorNameWithoutProfileRule } from './lint-rules/author-name-without-profile'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
@@ -164,7 +165,7 @@ const indentedNumberedListItem: Rule = {
   },
 }
 
-const RULES: Rule[] = [indentedNumberedListItem, iframeNonAllowlistedHostRule]
+const RULES: Rule[] = [indentedNumberedListItem, iframeNonAllowlistedHostRule, authorNameWithoutProfileRule]
 
 /**
  * Rule: branch-syntax (issue #172 PR 3).

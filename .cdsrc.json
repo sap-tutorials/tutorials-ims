@@ -72,6 +72,12 @@
       "credentials": {
         "url": "http://localhost:0/ngds-mock"
       }
+    },
+    "semaphore": {
+      "kind": "rest",
+      "credentials": {
+        "url": "http://localhost:0/semaphore-mock"
+      }
     }
   }
 }
