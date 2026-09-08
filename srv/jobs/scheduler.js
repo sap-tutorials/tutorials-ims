@@ -969,6 +969,22 @@ export function registerJobs() {
     },
   });
 
+  // #2184 — weekly Semaphore taxonomy auto-sync (replaces the manual SES batch
+  // load). Sunday 04:47 UTC — off-cluster from the :00/:07/:11/:13/:17/:19/:23/
+  // :31/:37/:43/:57 minute grid. Gated by the SEMAPHORE_SYNC_ENABLED DB flag
+  // (default OFF); flag-off runs no-op. Fail-shut — a bad fetch never writes.
+  // Lazy-import keeps boot fast + avoids pulling @sap-cloud-sdk at module load.
+  registerJob({
+    jobName: 'semaphore-tag-sync',
+    schedule: '47 4 * * 0',
+    ttlMs: 20 * 60 * 1000,
+    description: 'Sync Semaphore SES taxonomy (SAPCore) into Tags, keyed on semaphoreId (weekly)',
+    fn: async (logId, opts) => {
+      const { runSemaphoreTagSync } = await import('./semaphore-tag-sync-job.js');
+      return runSemaphoreTagSync(logId, opts);
+    },
+  });
+
   // #1030 — Every 6 h at minute 17 (off :00/:30 to avoid stampede). Keeps the
   // Row 3 homepage events band fresh without incurring LLM cost — this job
   // ONLY re-pulls Khoros + RSS and upserts CommunityEvents (title, url,
