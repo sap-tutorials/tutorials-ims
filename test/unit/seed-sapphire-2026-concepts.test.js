@@ -13,8 +13,11 @@ import { describe, it, expect } from 'vitest';
 import { SAPPHIRE_2026_CONCEPTS } from '../../scripts/seed-sapphire-2026-concepts.js';
 
 describe('SAPPHIRE_2026_CONCEPTS (#858)', () => {
-  it('has the expected 14 concepts', () => {
-    expect(SAPPHIRE_2026_CONCEPTS).toHaveLength(14);
+  it('ships a non-trivial curated concept list', () => {
+    // Floor, not an exact count: the curated list can gain concepts without
+    // this test needing an edit. Shape, uniqueness, and headline coverage are
+    // asserted separately below.
+    expect(SAPPHIRE_2026_CONCEPTS.length).toBeGreaterThanOrEqual(14);
   });
 
   it('slugs are kebab-case, lowercase, ≤80 chars', () => {
