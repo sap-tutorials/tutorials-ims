@@ -316,4 +316,12 @@ export const FEATURE_FLAGS = [
     description: 'When true, the weekly semaphore-tag-sync job pulls the SAPCore model from the Semaphore SES allterms API and upserts Tags (keyed on semaphoreId). Fail-open: a fetch/mapping error records a FAILED run and never mutates tags. Pairs with ImsConfig keys semaphore.sync.{model,lang,filter,actualTagClasses,interestItemClasses,dryRun} and the semaphore-destination. DB-driven config (ImsConfig key flag.semaphore.sync); no env var. Default OFF (#2184).',
     howToChange: featureFlagUpsert('SEMAPHORE_SYNC_ENABLED', 'flag.semaphore.sync'),
   },
+  // ---- Notifications ----
+  {
+    key: 'FEEDBACK_EMAIL_ENABLED', label: 'Owner feedback digest email', category: 'Notifications',
+    kind: 'db', imsConfigKey: 'feedback.email.enabled',
+    valueType: 'boolean', default: false, issue: '#2188', status: 'ga',
+    description: 'When true, the daily feedback-owner-digest job emails each tutorial owner a summary of new commented feedback. Second gate: only fires when the CF space is prod, and requires the SMTP secrets in Credential Store — so this toggle is inert on dev/qa. Toggling takes effect within the job\'s 60s flag cache. DB-driven config (ImsConfig key feedback.email.enabled); no env var. Default OFF (#2188).',
+    howToChange: featureFlagUpsert('FEEDBACK_EMAIL_ENABLED', 'feedback.email.enabled'),
+  },
 ];
