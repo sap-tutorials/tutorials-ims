@@ -34,10 +34,11 @@ describe('topics-query', () => {
       { ID: 'l1', tutorial_ID: 'tut1', concept_ID: 'c1', predicate: 'teaches' },
     ]));
 
-    // Extra tags for smTechIds guard coverage:
-    //   t3: isActualTag=false, semaphoreId set  → guard false branch (not a product tag)
-    //   t4: isActualTag=true,  semaphoreId=null  → guard false branch (no ID)
-    //   t5: isActualTag=true,  semaphoreId='7399999' → guard true branch (positive)
+    // Extra tags for smTechIds guard coverage (emit iff semaphoreId set;
+    // isActualTag is NOT a gate):
+    //   t3: isActualTag=false, semaphoreId set  → emits (isActualTag irrelevant)
+    //   t4: isActualTag=true,  semaphoreId=null  → [] (no ID)
+    //   t5: isActualTag=true,  semaphoreId='7399999' → emits
     await db.run(INSERT.into(Tags).entries([
       { ID: 't3', titlePath: 'Software Product : Sm Guard False Tag', label: 'Sm Guard False Tag', name: 'sm-guard-false-tag', isActualTag: false, semaphoreId: '8888001' },
       { ID: 't4', titlePath: 'Software Product : Sm Guard Null Sem', label: 'Sm Guard Null Sem', name: 'sm-guard-null-sem', isActualTag: true },
@@ -104,15 +105,17 @@ describe('topics-query', () => {
   });
 
   // smTechIds guard coverage (lines 209-211 in topics-query.js):
-  //   guard: (tagRow && tagRow.isActualTag && tagRow.semaphoreId) ? [...] : []
+  //   guard: (tagRow && tagRow.semaphoreId) ? [...] : []
+  // A topic IS a tag; it emits its own semaphoreId whenever one is set,
+  // regardless of isActualTag. Only a null/empty semaphoreId yields [].
 
-  it('smTechIds is [] when the tag has isActualTag=false (even with semaphoreId set)', async () => {
+  it('smTechIds emits the semaphoreId even when isActualTag=false', async () => {
     const p = await buildTopicDetailPayload(db, 'software-product-sm-guard-false-tag');
     expect(p.notFound).toBeFalsy();
-    expect(p.smTechIds).toEqual([]);
+    expect(p.smTechIds).toEqual(['8888001']);
   });
 
-  it('smTechIds is [] when the tag has isActualTag=true but semaphoreId is null', async () => {
+  it('smTechIds is [] when semaphoreId is null', async () => {
     const p = await buildTopicDetailPayload(db, 'software-product-sm-guard-null-sem');
     expect(p.notFound).toBeFalsy();
     expect(p.smTechIds).toEqual([]);

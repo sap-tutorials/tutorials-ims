@@ -12,12 +12,13 @@ import { titlePathToMdFormat } from './tag-md-format.js';
 
 const TAGS = 'com.sap.developers.ims.Tags';
 
-// Product-tag semaphore IDs keyed by mdFormat slug. Mirrors /build/tags:
-// raw entity-name SELECT + JS-side titlePathToMdFormat + dedupe. Last-write-
-// wins on a duplicate mdFormat (deterministic, matches the /build/tags set).
+// Semaphore IDs keyed by mdFormat slug. Mirrors /build/tags: raw entity-name
+// SELECT + JS-side titlePathToMdFormat + dedupe. Last-write-wins on a duplicate
+// mdFormat (deterministic, matches the /build/tags set). Every tag with a
+// non-null semaphoreId is emitted — no isActualTag gate.
 export async function getSemaphoreMdMap(db) {
   const rows = await db.run(
-    SELECT.from(TAGS).columns('titlePath', 'semaphoreId', 'isActualTag').where({ isActualTag: true }),
+    SELECT.from(TAGS).columns('titlePath', 'semaphoreId'),
   );
   const map = {};
   for (const r of rows) {
