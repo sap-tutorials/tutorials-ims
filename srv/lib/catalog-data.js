@@ -53,10 +53,10 @@ function humanizeTag(raw, registry = {}) {
 }
 
 /**
- * Resolve a group's or mission's product-tag semaphore IDs for SSR
+ * Resolve a group's or mission's tag semaphore IDs for SSR
  * `sm_tech_ids` emission. Reads the join entity for the owner, joins
- * tag_ID → Tags, and returns the non-null/non-empty semaphoreIds of
- * `isActualTag=true` rows. Fail-open: any error → [] (never breaks the
+ * tag_ID → Tags, and returns the non-null/non-empty semaphoreIds of all
+ * linked tags. Fail-open: any error → [] (never breaks the
  * serve path).
  *
  * @param {object} db          CDS db service (from cds.connect.to('db'))
@@ -79,8 +79,8 @@ export async function resolveSmTechIds(db, joinName, ownerCol, ownerId) {
     if (tagIds.length === 0) return [];
     const tags = await db.run(
       SELECT.from(tagsFqn)
-        .columns('ID', 'semaphoreId', 'isActualTag')
-        .where({ ID: { in: tagIds }, isActualTag: true }),
+        .columns('ID', 'semaphoreId')
+        .where({ ID: { in: tagIds } }),
     );
     const out = [];
     for (const t of (tags ?? [])) {
