@@ -27,9 +27,22 @@ describe('getSemaphoreMdMap', () => {
 
   it('drops rows whose titlePath yields empty mdFormat', async () => {
     const map = await getSemaphoreMdMap(fakeDb([
-      { titlePath: '', semaphoreId: '999', isActualTag: true },
+      { titlePath: '', semaphoreId: '999' },
     ]));
     expect(map).toEqual({});
+  });
+
+  it('emits every tag with a semaphoreId regardless of isActualTag', async () => {
+    const map = await getSemaphoreMdMap(fakeDb([
+      { titlePath: 'Software Product : Technology Platform / SAP HANA', semaphoreId: '111', isActualTag: true },
+      { titlePath: 'Programming Tool / ABAP Development', semaphoreId: '222', isActualTag: false },
+      { titlePath: 'Topic / Machine Learning', semaphoreId: '333' },
+    ]));
+    expect(map).toEqual({
+      'software-product>sap-hana': '111',
+      'programming-tool>abap-development': '222',
+      'topic>machine-learning': '333',
+    });
   });
 });
 

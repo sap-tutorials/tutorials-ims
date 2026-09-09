@@ -1,0 +1,18 @@
+#!/bin/sh
+# scripts/git-hooks/pre-push
+#
+# Runs all static guard checks before allowing a push.
+# Catches violations early without waiting for CI.
+
+set -e
+
+# Skip if we're in a non-interactive context (e.g., GitHub Actions, CI environments)
+if [ ! -t 1 ]; then
+  exit 0
+fi
+
+echo "[pre-push] Running static guards..." >&2
+
+npm run static-guards
+
+exit $?

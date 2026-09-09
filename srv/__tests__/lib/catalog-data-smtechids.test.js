@@ -41,6 +41,18 @@ describe('resolveSmTechIds', () => {
     expect(ids).toEqual(['222']);
   });
 
+  it('emits every linked tag with a semaphoreId regardless of isActualTag', async () => {
+    const db = fakeDb({
+      links: [{ tag_ID: 't1' }, { tag_ID: 't2' }],
+      tags: [
+        { ID: 't1', semaphoreId: '111', isActualTag: true },
+        { ID: 't2', semaphoreId: '222', isActualTag: false },
+      ],
+    });
+    const ids = await resolveSmTechIds(db, 'GroupTags', 'group_ID', 'g1');
+    expect(ids).toEqual(['111', '222']);
+  });
+
   it('returns [] when the owner has no tag links', async () => {
     const db = fakeDb({ links: [], tags: [] });
     const ids = await resolveSmTechIds(db, 'GroupTags', 'group_ID', 'g-empty');

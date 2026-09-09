@@ -1,6 +1,6 @@
 ---
 title: API
-description: developers.sap.com is a developer site — so it's accessible via API too. HTTP services, a hosted MCP server, the sap-devs CLI, and feeds you can script against.
+description: developers.sap.com is a developer site — so it's accessible via API too. HTTP services, a hosted MCP server, an A2A agent, the sap-devs CLI, and feeds you can script against.
 weight: 35
 ---
 
@@ -135,6 +135,51 @@ claude mcp add sap-devs-server -- sap-devs mcp serve
 ```
 
 Once connected, ask your agent "what's new in SAP" or paste an SAP error and it will resolve against the live content instead of stale training data.
+
+## A2A agent
+
+Alongside the MCP server, this site exposes a first-party **[A2A protocol](https://a2a-protocol.org)** agent — so a *central* SAP Joule instance (or another trusted BTP integration) can consume the platform's Joule capabilities **agent-to-agent**, without going through MCP. Same brain as the site's own Joule; different wire protocol.
+
+MCP and A2A are complementary, not alternatives:
+
+- **MCP** exposes discrete *tools* an AI client calls directly (search, graph, your progress). Good for a client that wants to orchestrate the tools itself.
+- **A2A** exposes the platform as a single *agent* with named *skills*. A calling agent hands over a natural-language task and gets back a completed A2A `Task` (or a stream of events) — the platform runs its own agentic loop internally.
+
+### Discovery
+
+The **Agent Card** is public — no token:
+
+```bash
+curl <base>/.well-known/agent-card.json
+```
+
+It advertises the endpoint URL, security scheme, streaming capability, and the five skills below, and links its own consumption guide at `<base>/.well-known/a2a-instructions.md`. When A2A is disabled by an admin, the card sets `metadata.available: false` and `POST /a2a` returns HTTP 503.
+
+| Skill (`skillId`) | What it does |
+|---|---|
+| `tutorial-chat` | Conversational Q&A over tutorials, missions, and learning paths. Runs the full agentic loop (search + graph + progress). **Default** when no `skillId` is set; supports streaming. |
+| `search-tutorials` | Semantic/keyword search over the tutorial catalog. |
+| `user-progress` | The signed-in developer's tutorial/mission progress. Needs the end-user's identity forwarded in the token; returns empty otherwise. |
+| `knowledge-graph` | Concept expansion and learning-path reasoning over the tutorial knowledge graph. |
+| `tutorial-steps` | Returns the most relevant tutorial step content so a calling agent can quote exact instructions. |
+
+### Transport
+
+JSON-RPC 2.0 over `POST <base>/a2a`. Synchronous `message/send` returns a completed `Task` with results in `result.artifacts`; `message/stream` returns an SSE event stream (used by `tutorial-chat`). `tasks/get` and `tasks/cancel` operate on a task id.
+
+```bash
+curl -X POST <base>/a2a \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"message/send",
+       "params":{"message":{"role":"user","parts":[{"kind":"text","text":"Find CAP tutorials"}]},
+                 "metadata":{"skillId":"search-tutorials"}}}'
+```
+
+### Auth
+
+Every `/a2a` call needs an XSUAA bearer carrying the `Tutorial.MCP` scope, obtained via **OAuth2 client-credentials** against the `tokenUrl` in the card's `securitySchemes.xsuaa`. This is a machine-to-machine flow — there is **no** self-service PAT/PKCE path like the MCP signed-in tools. The Agent Card itself is public; `user-progress` additionally needs the end-user's identity forwarded.
+
+Full connection walkthrough (public probe, client-credentials, streaming, errors, Joule wiring): [A2A Quickstart](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/end-users/a2a-quickstart.md). Canonical served guide: [`/.well-known/a2a-instructions.md`](https://github.com/sap-tutorials/tutorials-ims/blob/main/srv/mcp/a2a-instructions.md).
 
 ## Feeds
 

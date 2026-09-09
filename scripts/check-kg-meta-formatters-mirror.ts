@@ -8,7 +8,7 @@
 // keep two copies in sync with this guard. CRLF vs LF differences are
 // normalised — Windows checkouts don't spuriously fail.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,6 +20,8 @@ const REPO_ROOT = process.env.KG_MIRROR_ROOT
 const SRV_PATH = join(REPO_ROOT, 'srv', 'lib', 'kg-meta-formatters.js');
 const MIRROR_PATH = join(REPO_ROOT, 'hugo-apps', 'src', 'related-graph', 'kg-meta-formatters.js');
 
+const FIX = process.argv.includes('--fix');
+
 function readNormalised(p: string): string {
   return readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
 }
@@ -28,9 +30,18 @@ try {
   const srv = readNormalised(SRV_PATH);
   const mirror = readNormalised(MIRROR_PATH);
   if (srv !== mirror) {
+    if (FIX) {
+      // Deterministic, zero-judgment fix: the srv module is authoritative,
+      // so overwrite the mirror with its content (LF-normalised).
+      writeFileSync(MIRROR_PATH, srv);
+      console.log(
+        `[check-kg-meta-formatters-mirror] FIXED — copied ${SRV_PATH} → ${MIRROR_PATH}`
+      );
+      process.exit(0);
+    }
     console.error(
       `[check-kg-meta-formatters-mirror] DRIFT — ${SRV_PATH} and ${MIRROR_PATH} differ.\n` +
-      `Regenerate the mirror: cp ${SRV_PATH} ${MIRROR_PATH}`
+      `Regenerate the mirror: cp ${SRV_PATH} ${MIRROR_PATH}  (or run: npm run static-guards -- --fix)`
     );
     process.exit(1);
   }
