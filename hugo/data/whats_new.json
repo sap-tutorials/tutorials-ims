@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-08T21:34:34.100Z",
+  "generatedAt": "2026-09-09T17:10:35Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,110 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2222",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2222,
+      "title": "fix(deploy): guard prepare hook so CF staging doesn't fail",
+      "summary": "Deployments to Cloud Foundry no longer fail during staging when an optional developer git-hook script isn't shipped, making releases more reliable.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-09T15:24:54Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2222"
+    },
+    {
+      "id": "tutorials-ims#2221",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2221,
+      "title": "feat(skills): provision-tutorial-repo skill + script",
+      "summary": "A new guided skill and script make it easy to provision a fresh tutorial source repository with the right structure and settings.",
+      "category": "Feature",
+      "mergedAt": "2026-09-09T15:15:52Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2221"
+    },
+    {
+      "id": "tutorials-ims#2220",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2220,
+      "title": "fix(puzzles): assign legacyId to admin-authored puzzles",
+      "summary": "Puzzles created in the admin tools now receive a proper identifier, so they track and display consistently alongside imported puzzles.",
+      "category": "Fix",
+      "mergedAt": "2026-09-09T15:12:53Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2220"
+    },
+    {
+      "id": "tutorials-ims#2217",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2217,
+      "title": "fix(sm_tech_ids): emit semaphoreId for every tag",
+      "summary": "Product-ID meta tags are now emitted for every tag on a page rather than only primary ones, improving downstream content classification.",
+      "category": "Fix",
+      "mergedAt": "2026-09-09T04:10:42Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2217"
+    },
+    {
+      "id": "tutorials-ims#2216",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2216,
+      "title": "feat(admin): surface feedback-email digest flag in Feature Flags UI",
+      "summary": "Admins can now toggle the feedback-email digest directly from the Feature Flags screen instead of changing configuration by hand.",
+      "category": "Feature",
+      "mergedAt": "2026-09-09T03:25:09Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2216"
+    },
+    {
+      "id": "tutorials-ims#2215",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2215,
+      "title": "docs(a2a): document A2A agent + add quickstart",
+      "summary": "New documentation and a quickstart on the API docs page explain the agent-to-agent (A2A) integration and how to get started with it.",
+      "category": "Docs",
+      "mergedAt": "2026-09-09T02:05:38Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2215"
+    },
+    {
+      "id": "tutorials-ims#2214",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2214,
+      "title": "ci: split unit tests from static guards",
+      "summary": "Continuous-integration now runs unit tests separately from static checks, so build failures are clearer and faster to diagnose.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-09T01:02:57Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2214"
+    },
+    {
+      "id": "tutorials-ims#2212",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2212,
+      "title": "fix(admin): categorical week axis for Devtoberfest Signups report",
+      "summary": "The Devtoberfest Signups admin report now uses a categorical week axis and a trimmed layout for clearer reading.",
+      "category": "Fix",
+      "mergedAt": "2026-09-08T21:41:06Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2212"
+    },
     {
       "id": "tutorials-ims#2211",
       "repo": "tutorials-ims",
