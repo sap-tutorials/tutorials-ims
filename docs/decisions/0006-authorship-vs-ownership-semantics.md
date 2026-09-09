@@ -123,6 +123,35 @@ The 2026-07-01 decision treated "author" (pri 1) and "owner" (pri 3/4) as disjoi
 | Union of 1–4 | `GET /author/MyTutorials` | Legacy compat, ad-hoc admin queries |
 | `TutorialMonitors.user = caller` | *(no endpoint yet)* | Eye-icon watch feature (deferred Sage adoption) |
 
+## 2026-09-09 update — blank-identity join collision (SAGE 718-tutorials bug)
+
+A SAGE user reported their "My Tutorials → Tutorials" panel listing **~718 tutorials** — vastly more than they own. The browser Admin/dashboard for the same account was correct, so the disconnect was in the `MyOwnedTutorials` read path, not the data.
+
+**Root cause — an empty-string equijoin collision, not a priority-filter miss.** `MyTutorialsRaw` resolves ownership by joining `Users` to `TutorialMeta` on plain equality:
+
+- Source 3 (priority 3): `u.email = m.ownerEmail`
+- Source 4 (priority 4): `m.owner = u.email OR m.owner = u.firstName || ' ' || u.lastName`
+
+Neither guarded against **blank** identity values. Two facts combined to detonate this:
+
+1. `provisionDbUser` (srv/lib/resolve-db-user.js) minted `Users` rows with `email: '', firstName: '', lastName: ''` for any absent JWT claim. Sage authenticates with a thin **direct-to-`tutorials-srv`** XSUAA token (the approuter has no `/author/` route yet), which frequently carries no `given_name`/`family_name` — so its caller row had blank name fields (and, for some tokens, blank email).
+2. The legacy resync left a large population of `TutorialMeta` rows with `owner = ''` / `owner = ' '` / `ownerEmail = ''`.
+
+A blank-identity caller therefore matched **every** blank-owner tutorial: `'' = ''` (priority 3) and `firstName || ' ' || lastName = ' ' = owner` (priority 4). All ~718 collapsed under the "Tutorials" repo group. The **browser dashboard is immune** because its approuter/IdP token carries a full name + email → a clean, non-blank identity → the joins match only genuine ownership. This is why *"we never got it right from both sides"*: prior fixes (#862, #872, #876, #923, the 2026-08-19 priority-1 inclusion) all tuned *which priorities* are selected — none addressed the *degenerate blank match* underneath.
+
+**Decision — defense in depth, two guards:**
+
+1. **Data at the source** — `provisionDbUser` writes `NULL`, not `''`, for absent claims (`claimX || null`). `NULL` never equals anything in SQL, so a claim-less token can no longer mint a colliding row. The existing "at least one claim is truthy" gate still prevents fully-blank rows.
+2. **Query at the view** — `MyTutorialsRaw` sources 3 & 4 now require a non-blank identity: source 3 adds `and trim(coalesce(m.ownerEmail,'')) <> ''`; source 4 adds `and trim(coalesce(m.owner,'')) <> ''` (wrapping the existing OR). Guard #2 protects against the **existing** blank rows already in the DB that guard #1 does not retroactively clean.
+
+Legitimate ownership is unaffected: a real email/name on both sides still matches; only blank ↔ blank pairs are dropped.
+
+**Regression guards** — [test/unit/author-service.test.js](../../test/unit/author-service.test.js), suite *"MyOwnedTutorials — blank identity must not collide (718 bug)"*: a blank-identity caller returns **0** owned tutorials (not the blank-owner population); a real-identity caller never picks up blank-owner rows; and `provisionDbUser` writes `NULL` (asserted `toBeNull`), not `''`, for absent name claims.
+
+**Client-side companion** — the Sage extension gained a defensive guard against a degenerate "hundreds of rows, all `bestPriority` 3/4" response so a future backend regression degrades safely instead of flooding the panel. Longer term, routing Sage through the approuter (full IdP identity) removes the blank-claim token entirely.
+
+**Change** — [srv/lib/resolve-db-user.js](../../srv/lib/resolve-db-user.js) `provisionDbUser`; [db/views.cds](../../db/views.cds) `MyTutorialsRaw` sources 3 & 4.
+
 ## Alternatives Considered
 
 - **Overload `MyAuthoredTutorials` to mean priority ≤ 3 (author OR contributor OR owner).** Rejected — the name would misdescribe the row set, and the Advocate/admin consumers explicitly need priority-1-only. Adding "Authored" behavior to it would drop rows they depend on.

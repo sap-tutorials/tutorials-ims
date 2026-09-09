@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
@@ -997,5 +997,115 @@ describe('AuthorService before-READ backfills Users profile from JWT (Sage path)
     const after = await SELECT.one.from(Users).where({ ID: 'u-R' }).columns('firstName', 'email');
     expect(after.firstName).toBeFalsy();
     expect(after.email).toBeFalsy();
+  });
+});
+
+// SAGE 718-tutorials bug — blank-identity join collision.
+//
+// Root cause of Sage's "My Tutorials → Tutorials" panel showing ~718 rows for
+// a caller who owns far fewer: MyTutorialsRaw sources 3 (ownerEmail) and 4
+// (owner free-text) join Users↔TutorialMeta on plain equality, so a Users row
+// whose email/name is a BLANK STRING ('' or ' ') matches EVERY TutorialMeta
+// whose owner/ownerEmail is likewise blank (the legacy-resync default shape).
+// provisionDbUser wrote '' for absent JWT claims, minting exactly such a blank
+// row for Sage's thin direct-to-srv token. The browser dashboard is immune
+// because its approuter/IdP token carries a full name+email → clean identity.
+//
+// Two-part fix, one regression guard each:
+//   A. db/views.cds MyTutorialsRaw sources 3/4 must not join on blank identity.
+//   B. provisionDbUser must write NULL (not '') for absent claims so a
+//      claim-less token can never mint a colliding blank row again.
+describe('AuthorService.MyOwnedTutorials — blank identity must not collide (718 bug)', () => {
+  beforeAll(async () => {
+    const { Tutorials, TutorialMeta, Users } = cds.entities('com.sap.developers.ims');
+    // A caller whose (already-provisioned) Users row has blank identity fields —
+    // the shape provisionDbUser produced for a claim-less token before fix B.
+    await INSERT.into(Users).entries({
+      ID: 'u-blank', uuid: 'uuid-blank', sapId: 'uuid-blank',
+      email: '', firstName: '', lastName: '',
+    });
+    // Tutorials owned by nobody in particular: blank owner/ownerEmail, exactly
+    // the legacy-resync default. These must NOT collide with the blank caller.
+    await INSERT.into(Tutorials).entries([
+      { ID: 't-blank1', slug: 'tut-blank1', title: 'Blank owner (empty)', status: 'ACTIVE' },
+      { ID: 't-blank2', slug: 'tut-blank2', title: 'Blank owner (space)', status: 'ACTIVE' },
+    ]);
+    await INSERT.into(TutorialMeta).entries([
+      { ID: 'm-blank1', tutorial_ID: 't-blank1', owner: '',  ownerEmail: '' },
+      { ID: 'm-blank2', tutorial_ID: 't-blank2', owner: ' ', ownerEmail: '' },
+    ]);
+  });
+
+  afterAll(async () => {
+    const { Tutorials, TutorialMeta, Users } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialMeta).where({ ID: { in: ['m-blank1', 'm-blank2'] } });
+    await DELETE.from(Tutorials).where({ ID: { in: ['t-blank1', 't-blank2'] } });
+    await DELETE.from(Users).where({ ID: 'u-blank' });
+  });
+
+  // Fix A guard: a blank-email / blank-name caller resolves to ZERO owned
+  // tutorials, not to every blank-owner row in the table.
+  it('a blank-identity caller does not collide with blank-owner tutorials', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-blank', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+    );
+    const slugs = rows.map((r) => r.slug);
+    expect(slugs).not.toContain('tut-blank1'); // priority-3 '' = '' collision
+    expect(slugs).not.toContain('tut-blank2'); // priority-4 ' ' = ' ' collision
+    expect(rows).toHaveLength(0);
+  });
+
+  // Fix A guard, from the owner side: a real-identity caller must never pick up
+  // a blank-owner tutorial either (its blank strings match nobody real).
+  it('a real-identity caller does not pick up blank-owner tutorials', async () => {
+    const { Users } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({
+      ID: 'u-real', uuid: 'uuid-real', sapId: 'uuid-real',
+      email: 'real.person@example.com', firstName: 'Real', lastName: 'Person',
+    });
+    try {
+      const srv = await cds.connect.to('AuthorService');
+      const rows = await srv.tx(
+        { user: { id: 'uuid-real', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      const slugs = rows.map((r) => r.slug);
+      expect(slugs).not.toContain('tut-blank1');
+      expect(slugs).not.toContain('tut-blank2');
+    } finally {
+      await DELETE.from(Users).where({ ID: 'u-real' });
+    }
+  });
+
+  // Fix B guard: provisioning from a token that carries ONLY an email claim
+  // (no given/family name) must leave firstName/lastName NULL — not '' — so
+  // the priority-4 name join can never degenerate to `owner = ' '`.
+  it('provisions NULL (not empty string) for absent name claims', async () => {
+    const { Users } = cds.entities('com.sap.developers.ims');
+    const sapId = 'prov-email-only-sapId';
+    try {
+      const srv = await cds.connect.to('AuthorService');
+      await srv.tx(
+        {
+          user: {
+            id: 'email-only@example.com',
+            attr: { email: 'email-only@example.com' }, // no given_name / family_name
+            authInfo: { token: { userId: sapId } },
+            roles: { 'Tutorial.Author': true },
+          },
+        },
+        (tx) => tx.run(SELECT.from(srv.entities.MyOwnedTutorials))
+      );
+      const row = await SELECT.one.from(Users).where({ sapId });
+      expect(row).toBeTruthy();
+      expect(row.email).toBe('email-only@example.com');
+      // Absent claims must be NULL, not '' — '' is what collides in the join.
+      expect(row.firstName).toBeNull();
+      expect(row.lastName).toBeNull();
+    } finally {
+      await DELETE.from(Users).where({ sapId });
+    }
   });
 });
