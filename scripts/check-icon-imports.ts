@@ -49,7 +49,7 @@
 //      complete (parser regression). Stderr lists missing names with
 //      file:line refs and the one-line fix.
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -62,6 +62,9 @@ const REPO_ROOT = process.env.CHECK_ICON_IMPORTS_ROOT
 const HUGO_LAYOUTS_DIR = join(REPO_ROOT, 'hugo', 'layouts');
 const HUGO_ASSETS_JS_DIR = join(REPO_ROOT, 'hugo', 'assets', 'js');
 const HUGO_APPS_SRC_DIR = join(REPO_ROOT, 'hugo-apps', 'src');
+const BOOTSTRAP_PATH = join(HUGO_ASSETS_JS_DIR, 'ui5-bootstrap.ts');
+
+const FIX = process.argv.includes('--fix');
 
 export interface IconUsage {
   /** Icon name as written, e.g. "bbyd-active-sales". */
@@ -251,6 +254,42 @@ function main(): void {
     const arr = byName.get(u.name) ?? [];
     arr.push(u);
     byName.set(u.name, arr);
+  }
+
+  if (FIX) {
+    // Zero-judgment fix: each missing icon needs exactly one side-effect
+    // import, and the name is fully determined by the usage. Insert the
+    // imports directly after the last existing icon import in the bootstrap
+    // so they stay grouped with the other icon registrations.
+    const names = [...byName.keys()].sort();
+    let src: string;
+    try {
+      src = readFileSync(BOOTSTRAP_PATH, 'utf8');
+    } catch (err) {
+      console.error(`[check-icon-imports] --fix could not read ${BOOTSTRAP_PATH}:`, err);
+      process.exit(1);
+    }
+    const eol = src.includes('\r\n') ? '\r\n' : '\n';
+    const lines = src.split(/\r?\n/);
+    const ICON_IMPORT_RE = /@ui5\/webcomponents-icons\/dist\/[a-z][a-z0-9-]*\.js/;
+    let lastIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (ICON_IMPORT_RE.test(lines[i])) lastIdx = i;
+    }
+    if (lastIdx === -1) {
+      console.error(
+        `[check-icon-imports] --fix found no existing icon import in ${BOOTSTRAP_PATH} to anchor to. Add the imports manually.`
+      );
+      process.exit(1);
+    }
+    const newLines = names.map(n => `import "@ui5/webcomponents-icons/dist/${n}.js";`);
+    lines.splice(lastIdx + 1, 0, ...newLines);
+    writeFileSync(BOOTSTRAP_PATH, lines.join(eol));
+    console.log(
+      `[check-icon-imports] FIXED — added ${names.length} icon import(s) to ${BOOTSTRAP_PATH}:`
+    );
+    for (const n of names) console.log(`    import "@ui5/webcomponents-icons/dist/${n}.js";`);
+    process.exit(0);
   }
 
   console.error('[check-icon-imports] FAILED — unregistered UI5 icon(s):');

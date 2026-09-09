@@ -1,0 +1,32 @@
+name: static guards
+
+on:
+  pull_request:
+  push:
+    branches: [main, DEV]
+
+# Runs the static guard suite on every PR and push to main/DEV.
+# This includes build collisions, icon/UI5 imports, srv-qa parity,
+# slug-lookup canonicalization, CSRF, GraphQL breaking-changes, etc.
+#
+# Previously these only ran in deploy.yml, so violations introduced by a PR
+# merged undetected and first surfaced at the next deploy. Running them as a
+# separate gate now fails such a PR before merge.
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Static build guards
+        run: npm run static-guards
