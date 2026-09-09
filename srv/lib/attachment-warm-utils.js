@@ -12,12 +12,31 @@ export { channelFor } from './image-warm-utils.js'
 import { channelFor } from './image-warm-utils.js'
 
 /**
+ * Decode an attachment-source URL parameter (either base64url-encoded or plain).
+ *
+ * Format: u=<base64url> (no colons) → decode from base64url to raw URL.
+ *         u=<urlencoded> (contains colons, e.g. %3A) → URL-decode as normal.
+ *
+ * @param {string} param — the `u=` query value
+ * @returns {string} decoded source URL
+ * @throws if param is malformed (non-UTF8 base64url, etc.)
+ */
+export function resolveAttachmentSourceUrl(param) {
+  // Base64url never contains colons; if param has %3A or literal :, it's URL-encoded
+  if (param.includes(':') || param.includes('%3A')) {
+    return decodeURIComponent(param)
+  }
+  // Strict base64url decode — throw on failure (invalid param)
+  return Buffer.from(param, 'base64url').toString('utf8')
+}
+
+/**
  * Extract and decode all unique raw-source URLs from an HTML string
  * containing `/content/attachment-source?u=<encoded>&…` references.
  *
  * The regex matches `/content/attachment-source` followed by a query string
  * containing `u=<value>`. Both `?u=` (first param) and `&u=` (later param)
- * are matched. The captured value is URL-decoded and deduplicated.
+ * are matched. The captured value is decoded (base64url or URL-encoded) and deduplicated.
  *
  * @param {string} html — rendered tutorial HTML
  * @returns {string[]} deduplicated decoded source URLs
@@ -30,7 +49,7 @@ export function extractAttachmentUrls(html) {
   const re = /\/content\/attachment-source[^"'\s>]*[?&]u=([^&"'\s>]+)/g
   let m
   while ((m = re.exec(html)) !== null) {
-    try { results.add(decodeURIComponent(m[1])) } catch { /* skip malformed */ }
+    try { results.add(resolveAttachmentSourceUrl(m[1])) } catch { /* skip malformed */ }
   }
   return [...results]
 }

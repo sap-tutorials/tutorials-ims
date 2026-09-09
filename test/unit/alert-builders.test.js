@@ -10,6 +10,9 @@ import { describe, it, expect } from 'vitest';
 import { buildSecretExpiryAlerts } from '../../srv/jobs/secret-expiry-check.js';
 import { buildBrokenLinksAlert } from '../../srv/jobs/homepage-link-health.js';
 import { buildPublishStuckAlert } from '../../srv/jobs/cleanup.js';
+import { buildChannelSubmissionAlert } from '../../srv/channel-submission-service.js';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 describe('buildSecretExpiryAlerts (#1718)', () => {
   it('returns no alert when nothing is critical or warning', () => {
@@ -71,5 +74,41 @@ describe('buildPublishStuckAlert (#1718)', () => {
     // null session ids (legacy single-shot publishes) are filtered out.
     expect(alert.body).toContain('s1, s2');
     expect(alert.body).not.toContain('null');
+  });
+});
+
+describe('buildChannelSubmissionAlert (#2198)', () => {
+  it('returns null when the submission has no kind', () => {
+    expect(buildChannelSubmissionAlert({})).toBe(null);
+    expect(buildChannelSubmissionAlert()).toBe(null);
+  });
+
+  it('builds a NOTICE alert naming the kind and submitter', () => {
+    const alert = buildChannelSubmissionAlert({ kind: 'ADD', submitterId: 'dev-42', rationale: 'great channel' });
+    expect(alert.eventType).toBe('ChannelSubmissionPending');
+    expect(alert.severity).toBe('NOTICE');
+    expect(alert.subject).toContain('ADD');
+    expect(alert.body).toContain('dev-42');
+    expect(alert.body).toContain('Rationale: great channel');
+    expect(alert.body).toContain('/admin-ui/#ChannelSubmissions-manage');
+  });
+
+  it('mentions the target channel for EDIT/REMOVE and omits an empty rationale', () => {
+    const alert = buildChannelSubmissionAlert({ kind: 'EDIT', submitterId: 'dev-1', targetChannel_ID: 'chan-9', rationale: '   ' });
+    expect(alert.subject).toContain('EDIT');
+    expect(alert.body).toContain('target channel chan-9');
+    expect(alert.body).not.toContain('Rationale:');
+  });
+
+  it('caps a long rationale at 300 chars', () => {
+    const long = 'x'.repeat(500);
+    const alert = buildChannelSubmissionAlert({ kind: 'ADD', submitterId: 'd', rationale: long });
+    expect(alert.body).toContain('x'.repeat(300));
+    expect(alert.body).not.toContain('x'.repeat(301));
+  });
+
+  it('is registered in the alerts eventTypes allow-list', () => {
+    const pkg = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+    expect(pkg.cds.requires.alerts.eventTypes).toContain('ChannelSubmissionPending');
   });
 });

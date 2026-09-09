@@ -12,7 +12,12 @@ describe.skipIf(!BASE)('GET /developer-advocates/', () => {
     // Tolerant of Hugo minifier's quote-stripping
     // (per feedback_hugo_minifier_strips_quotes — the minifier removes
     // attribute quotes when the value contains no special characters).
-    expect(html).toMatch(/<main[^>]+id=["']?advocates-mount["']?/);
+    // The page carries a semantic <main> landmark (baseof.html), and the Vue
+    // island mounts on a #advocates-mount element (a <div>, not <main> — #1989).
+    // Assert both independently rather than requiring the id to sit on <main>.
+    // Tolerant of the Hugo minifier's quote-stripping.
+    expect(html).toMatch(/<main[\s>]/);
+    expect(html).toMatch(/id=["']?advocates-mount["']?/);
     expect(html).toMatch(/src=["']?[^"']*\/js\/advocates(?:-[\w-]+)?\.js["']?/);
 
     // Joule advocates wiring (issue #564).

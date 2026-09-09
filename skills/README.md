@@ -26,6 +26,7 @@ skills/
 | [`graphify`](graphify/SKILL.md) | Turn any folder (code, docs, papers, images) into a navigable knowledge graph with community detection and an audit trail. Wraps the third-party `graphifyy` package by [@safishamsi](https://github.com/safishamsi) (attribution preserved in the skill). |
 | [`whats-new`](whats-new/SKILL.md) | Build/refresh a "What's New" digest from recently merged PRs across one or more GitHub repos. Self-contained (`gh`-based); works in any repo. |
 | [`sap-tutorials-content`](sap-tutorials-content/SKILL.md) | Read SAP developer tutorial content from the public developers.sap.com API — catalog, navigation, tutorial HTML/JSON, search, and a ready-made anonymous MCP endpoint. Read-only, no auth. |
+| [`sap-developers-mcp`](sap-developers-mcp/SKILL.md) | Connect any MCP client (Claude Code/Desktop, Joule, Cursor) to the SAP Developers hosted MCP server — anonymous read-only search/missions/knowledge-graph, plus authenticated personal progress via PAT or OAuth (with the XSUAA "no dynamic client registration" workaround). |
 
 ## Registering these with the SAP AI Skills Library
 
@@ -38,6 +39,7 @@ skills/
    - `graphify — any input → knowledge graph → clustered communities → HTML + JSON + audit report`
    - `whats-new — build a "What's New" digest from recently merged PRs across GitHub repos`
    - `sap-tutorials-content — read SAP tutorial content (catalog, HTML/JSON, search, MCP) from developers.sap.com`
+   - `sap-developers-mcp — connect an MCP client to the SAP Developers hosted MCP server (anonymous + PAT/OAuth)`
 
 ## Notes
 

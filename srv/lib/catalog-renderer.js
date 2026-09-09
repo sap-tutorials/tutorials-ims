@@ -268,6 +268,7 @@ export async function renderCatalogPage(slug, deps) {
         title: ctx.group.title,
         description: (ctx.group.description ?? '').trim()
           || synthCatalogDescription('group', ctx.group.title, ctx.tutorialCount),
+        smTechIds: ctx.smTechIds ?? [],
       },
     };
   }
@@ -285,6 +286,7 @@ export async function renderCatalogPage(slug, deps) {
         title: ctx.mission.title,
         description: (ctx.mission.description ?? '').trim()
           || synthCatalogDescription('mission', ctx.mission.title, ctx.tutorialCount),
+        smTechIds: ctx.smTechIds ?? [],
       },
     };
   }

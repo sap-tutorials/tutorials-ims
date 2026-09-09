@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BASE_URL, SRV_URL, fetchWithRetry } from './smoke.config.js';
+import { BASE_URL, SRV_URL, fetchWithRetry, pickTutorialSlug } from './smoke.config.js';
 
 describe('Joule step-help FAB smoke', () => {
   let slug;
@@ -8,11 +8,11 @@ describe('Joule step-help FAB smoke', () => {
     const res = await fetchWithRetry(`${SRV_URL}/content/hashes`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    const slugs = Object.keys(body);
-    // Skip concept-* pages: they render a different template with no step FAB
-    // and no window.opGetCurrentStep getter. Pick a real step-based tutorial.
-    const stepSlugs = slugs.filter(s => !s.startsWith('concept-'));
-    if (stepSlugs.length > 0) slug = stepSlugs[0];
+    // Pick a real step-based tutorial: concept-/topic-/page-/group-/mission-
+    // pages render a different template with no step FAB and no
+    // window.opGetCurrentStep getter.
+    slug = pickTutorialSlug(body);
+    expect(slug, 'no step-based tutorial slug in content manifest').toBeTruthy();
   });
 
   it('tutorial page renders the step-help FAB element', async () => {

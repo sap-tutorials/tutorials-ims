@@ -49,4 +49,37 @@ extend service SearchService {
     endDate     : Date;
     url         : String;
   };
+
+  /** Search the public external-channels catalog — SAP and community YouTube
+      channels, blogs, podcasts, and feeds. Anonymous: the same published
+      channels shown on the /channels directory, fully searchable and
+      filterable. Only published channels with a working link are returned,
+      ordered by category then name.
+      @param query      Free-text match on channel name, purpose, and tags (case-insensitive).
+      @param category   Optional exact-match filter on the channel category.
+      @param platform   Optional exact-match filter on the channel platform (e.g. 'YouTube', 'Blog', 'Podcast').
+      @param ownerScope Optional owner filter: 'sap' | 'community' | 'all' (default 'all').
+      @param limit      Max results, [1, 50]. Default 20. */
+  @(requires: 'any')
+  function search_channels(
+    query      : String,
+    category   : String,
+    platform   : String,
+    ownerScope : String,
+    limit      : Integer
+  ) returns array of {
+    name        : String;
+    url         : String;
+    purpose     : String;
+    category    : String;
+    subcategory : String;
+    platform    : String;
+    isSapOwned  : Boolean;
+    ownerType   : String;
+    ownerName   : String;
+    status      : String;
+    focusAreas  : array of String;
+    tags        : array of String;
+    slug        : String;
+  };
 }

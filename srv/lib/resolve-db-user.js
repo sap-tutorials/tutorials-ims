@@ -109,23 +109,45 @@ export async function resolveDbUser(user, columns) {
  * NOT covered:
  *   - displayName (computed at read time from firstName + lastName)
  */
+/**
+ * The email to backfill for this user. SAP ID Service / XSUAA tokens do NOT
+ * reliably populate the `email` *attribute* — whether it's present depends on
+ * the IdP's scope config — which is why migrated author rows stay NULL-email
+ * even after the author logs in (issue #2199). But the token *subject*
+ * `user.id` IS the email for real browser logins: that's exactly why
+ * resolveUserSapId falls back to it and /auth/user echoes it as the identity.
+ * So when the claim is absent, use `user.id`, guarded on '@' so basic-auth /
+ * tech-user ids (bare usernames, SAP IDs) never pollute Users.email.
+ */
+export function emailFromUser(user) {
+  if (user?.attr?.email) return user.attr.email;
+  const id = user?.id;
+  return typeof id === 'string' && id.includes('@') ? id : null;
+}
+
 export async function backfillUserProfile(user) {
   const sapId = resolveUserSapId(user);
   if (!sapId) return { backfilled: false, reason: 'anonymous' };
-  if (!user.attr) return { backfilled: false, reason: 'no-claims' };
+
+  // JWT claim shape from SAP ID Service / IAS — confirmed via /auth/user
+  // diag dump 2026-06-16. Either snake_case (SAP ID Service) or camelCase
+  // (some IAS configurations) shows up, hence the `||` fallback. Email also
+  // falls back to the token subject (user.id) — see emailFromUser.
+  const claimFirstName = user.attr?.given_name || user.attr?.givenName;
+  const claimLastName  = user.attr?.family_name || user.attr?.familyName;
+  const claimEmail     = emailFromUser(user);
+
+  // Nothing the token can contribute (no name claims AND no usable email).
+  // Checked before the SELECT so a claimless token never hits the DB.
+  if (!claimFirstName && !claimLastName && !claimEmail) {
+    return { backfilled: false, reason: 'no-claims' };
+  }
 
   const { Users } = cds.entities('com.sap.developers.ims');
   const dbUser = await SELECT.one.from(Users)
     .where({ sapId })
     .columns('ID', 'firstName', 'lastName', 'email');
   if (!dbUser) return { backfilled: false, reason: 'no-user' };
-
-  // JWT claim shape from SAP ID Service / IAS — confirmed via /auth/user
-  // diag dump 2026-06-16. Either snake_case (SAP ID Service) or camelCase
-  // (some IAS configurations) shows up, hence the `||` fallback.
-  const claimFirstName = user.attr.given_name || user.attr.givenName;
-  const claimLastName  = user.attr.family_name || user.attr.familyName;
-  const claimEmail     = user.attr.email;
 
   const updates = {};
   if (!dbUser.firstName && claimFirstName) updates.firstName = claimFirstName;
@@ -220,7 +242,7 @@ export async function provisionDbUser(user, columns) {
   // nothing. Same claim shape as backfillUserProfile.
   const claimFirstName = user.attr?.given_name || user.attr?.givenName;
   const claimLastName  = user.attr?.family_name || user.attr?.familyName;
-  const claimEmail     = user.attr?.email;
+  const claimEmail     = emailFromUser(user);
   if (!claimEmail && !claimFirstName && !claimLastName) return null;
 
   const db = await cds.connect.to('db');

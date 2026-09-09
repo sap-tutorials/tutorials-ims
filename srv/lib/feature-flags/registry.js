@@ -308,4 +308,12 @@ export const FEATURE_FLAGS = [
     description: 'When true, the nightly freshness-scan job runs the detector across the tutorial catalog. DB-driven config (ImsConfig key flag.freshness.scan); no env var. Default OFF.',
     howToChange: featureFlagUpsert('FRESHNESS_SCAN_ENABLED', 'flag.freshness.scan'),
   },
+  // ---- Taxonomy ----
+  {
+    key: 'SEMAPHORE_SYNC_ENABLED', label: 'Semaphore taxonomy auto-sync', category: 'Taxonomy',
+    kind: 'db', imsConfigKey: 'flag.semaphore.sync',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, the weekly semaphore-tag-sync job pulls the SAPCore model from the Semaphore SES allterms API and upserts Tags (keyed on semaphoreId). Fail-open: a fetch/mapping error records a FAILED run and never mutates tags. Pairs with ImsConfig keys semaphore.sync.{model,lang,filter,actualTagClasses,interestItemClasses,dryRun} and the semaphore-destination. DB-driven config (ImsConfig key flag.semaphore.sync); no env var. Default OFF (#2184).',
+    howToChange: featureFlagUpsert('SEMAPHORE_SYNC_ENABLED', 'flag.semaphore.sync'),
+  },
 ];

@@ -407,7 +407,7 @@ Handler at `srv/knowledge-graph-service.js:1376` also re-uses `neighborhood()` a
 
 ## Tier 2 curated tools
 
-Two additional anonymous tools extend the public MCP surface with the community-events catalog and full news-article bodies. Both are `@requires: 'any'`.
+Three additional anonymous tools extend the public MCP surface with the community-events catalog, the external-channels catalog, and full news-article bodies. All are `@requires: 'any'`.
 
 ### `search_events`
 
@@ -454,6 +454,60 @@ Fails open — returns `[]` on any DB error, never a 500.
   "params": {
     "name": "search_events",
     "arguments": { "query": "CAP", "eventType": "codejam", "region": "EMEA", "limit": 10 }
+  }
+}
+```
+
+---
+
+### `search_channels`
+
+**Purpose.** Search the public external-channels catalog — SAP and community YouTube channels, blogs, podcasts, and feeds. The same published channels shown on the `/channels` directory, fully searchable and filterable. Only published channels with a working link are returned, ordered by category then name.
+
+**Endpoint.** `/mcp/search`
+
+| Argument     | Type      | Required | Notes |
+| ---          | ---       | ---      | --- |
+| `query`      | `String`  | no       | Case-insensitive substring match across channel `name`, `purpose`, and `tags`. |
+| `category`   | `String`  | no       | Exact-match filter on `category`. |
+| `platform`   | `String`  | no       | Exact-match filter on `platform` (e.g. `'YouTube'`, `'Blog'`, `'Podcast'`). |
+| `ownerScope` | `String`  | no       | `'sap'` (only `isSapOwned=true`), `'community'` (only non-SAP), or `'all'` (default). Unknown values are treated as `'all'`. |
+| `limit`      | `Integer` | no       | Default 20, hard max 50. |
+
+**Return shape** (handler `srv/lib/mcp-channels-search.js`, backed by `Channels` in `db/channels.cds`):
+
+```jsonc
+[
+  {
+    "name":        "string",
+    "url":         "string",
+    "purpose":     "string",
+    "category":    "string",
+    "subcategory": "string",
+    "platform":    "string",
+    "isSapOwned":  false,
+    "ownerType":   "string",
+    "ownerName":   "string",
+    "status":      "Active | Archived | Closed | Discontinued | EOL",
+    "focusAreas":  ["string"],
+    "tags":        ["string"],
+    "slug":        "string"
+  }
+]
+```
+
+Mirrors the public `/build/channels` projection: filters to `isPublished=true`, then excludes any channel whose effective `linkStatus` is `'BROKEN'` (`linkStatusOverride` wins). Internal/curation columns (`sourceId`, `notes`, `aliases`, `contentHash`, audit) are never surfaced. Fails open — returns `[]` on any DB error, never a 500.
+
+**Example.**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "tools/call",
+  "params": {
+    "name": "search_channels",
+    "arguments": { "query": "CAP", "platform": "YouTube", "ownerScope": "sap", "limit": 10 }
   }
 }
 ```

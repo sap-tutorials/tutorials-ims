@@ -25,7 +25,6 @@ import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
 import { cleanupChangeLog, cleanupUnusedTags } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
-import { enrichSignupRows } from './lib/devtoberfest-signup-enrich.js';
 import { getTutorialSource } from './lib/content-store.js';
 import { isDeltaRead, bustContentDeltaFlagsCache } from './lib/content-delta-flags.js';
 import {
@@ -365,11 +364,6 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'student',   label: 'Student'   },
       { code: 'Not set',   label: 'Not set'   },
     ]);
-    // Devtoberfest Signups analytics — derive human-readable week label + Monday
-    // date from the portable integer weekIndex, and a running cumulative on the
-    // pure by-week series. $apply aggregation cannot produce either natively.
-    // Logic lives in the pure, unit-tested helper srv/lib/devtoberfest-signup-enrich.js.
-    this.after('READ', 'DevtoberfestSignupAnalytics', (rows) => enrichSignupRows(rows));
 
 
     // Pipeline / Job log dropdowns. PipelineTypes excludes SCHEDULED_JOB because

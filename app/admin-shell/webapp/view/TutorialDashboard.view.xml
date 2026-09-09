@@ -17,7 +17,14 @@
       <Toolbar class="sapUiSmallMarginTop">
         <SearchField placeholder="Search tutorials..." liveChange=".onSearch" width="20%"/>
         <ToolbarSpacer/>
-        <CheckBox text="Monitored by me" select=".onFilterMonitored"/>
+        <Label text="Show:" labelFor="scopeSelect"/>
+        <Select id="scopeSelect" selectedKey="all" change=".onScopeChange"
+          tooltip="Filter to tutorials you own, tutorials you watch, or both">
+          <core:Item key="all" text="All tutorials"/>
+          <core:Item key="owned" text="Owned by me"/>
+          <core:Item key="watching" text="Watching"/>
+          <core:Item key="both" text="Owned + watching"/>
+        </Select>
         <CheckBox text="Outdated only" select=".onFilterOutdated"/>
       </Toolbar>
 
@@ -44,6 +51,15 @@
           <t:RowSettings highlight="{parts: ['admin>reviewedDate'], formatter: '.formatRowHighlight'}"/>
         </t:rowSettingsTemplate>
         <t:columns>
+          <t:Column label="Watch" width="4.5rem" hAlign="Center" tooltip="Add or remove this tutorial from your personal watch list">
+            <t:template>
+              <Button
+                icon="{parts: ['admin>tutorial/ID', 'watch>/version'], formatter: '.formatWatchIcon'}"
+                tooltip="{parts: ['admin>tutorial/ID', 'watch>/version'], formatter: '.formatWatchTooltip'}"
+                type="Transparent"
+                press=".onToggleWatch"/>
+            </t:template>
+          </t:Column>
           <t:Column label="Tutorial" filterProperty="tutorial/title">
             <t:template>
               <Link text="{admin>tutorial/title}" press=".onTutorialLinkPress" wrapping="false"/>

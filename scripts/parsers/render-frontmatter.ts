@@ -24,6 +24,12 @@ export interface RenderHugoFrontmatterArgs {
   createdAt: string
   contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>
   registry?: TagLabelRegistry
+  /**
+   * sm_tech_ids restoration: mdFormat-slug → Semaphore product ID. When
+   * present, emits a top-level `smTechIds: string[]` frontmatter key from the
+   * page's deduped tag slugs. Absent/empty → key omitted (fail-open).
+   */
+  semaphoreMap?: Record<string, string>
   /** [#173] When true, page body contains at least one os-options shortcode. */
   hasOsOptions?: boolean
   /**
@@ -88,6 +94,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     allowDataUrls,
     intro,
     video,
+    semaphoreMap,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -132,6 +139,14 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
       if (s.skipReason)          entry.skipReason    = s.skipReason
       return entry
     }),
+  }
+
+  // sm_tech_ids restoration: product-tag semaphore IDs for this page's tags,
+  // in mdFormat. Reuse dedupedRawSlugs (already deduped, already mdFormat).
+  // Omit the key when nothing matches so non-product pages carry no stray field.
+  if (semaphoreMap) {
+    const smTechIds = [...new Set(dedupedRawSlugs.map(s => semaphoreMap[s]).filter(Boolean))]
+    if (smTechIds.length > 0) fm.smTechIds = smTechIds
   }
 
   if (nav.missionId) fm.missionId = nav.missionId

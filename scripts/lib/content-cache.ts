@@ -50,6 +50,10 @@ export interface FeedPayloads {
   // cache runs and client-hydrated at render time, so they are excluded from the
   // fingerprint by callers on the fast path. Kept optional for completeness/tests.
   coCompletions?: unknown
+  // Optional: product-tag semaphore map (mdFormat → semaphoreId) for sm_tech_ids
+  // frontmatter emit. Empty on failure (fail-open). A change busts the fingerprint
+  // so cached pages with stale/absent sm_tech_ids are never reused.
+  semaphore?: unknown
 }
 
 // Stable JSON stringify (sorted keys) so semantically-identical feeds always
@@ -70,6 +74,7 @@ export function computeFeedFingerprint(feeds: FeedPayloads): string {
   h.update('catalog\0'); h.update(stableStringify(feeds.catalog))
   h.update('\0coCompletions\0'); h.update(stableStringify(feeds.coCompletions ?? null))
   h.update('\0tagLabels\0'); h.update(stableStringify(feeds.tagLabels))
+  h.update('\0semaphore\0'); h.update(stableStringify(feeds.semaphore ?? null))
   return h.digest('hex')
 }
 

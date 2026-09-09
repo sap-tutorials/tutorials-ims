@@ -50,6 +50,32 @@ export async function fetchWithRetry(url, options = {}, retries = 4) {
   }
 }
 
+// Known /content/hashes key prefixes that are NOT step-based tutorials.
+// channels-p3-topics (Sept 2026) added ~321 topic-*/page-* keys, and the
+// content model has long carried concept-*/group-*/mission-* pages too. All of
+// these render DIFFERENT templates with no step-actions / Done button / Joule
+// step-FAB / PiP islands. A naive `Object.keys(body).find(s => !s.startsWith
+// ('concept-'))` picker returns the first such non-tutorial key (insertion
+// order lands on a topic page), so every tutorial-markup assertion fails
+// deterministically against a healthy deploy — a false alarm, not a regression.
+const NON_TUTORIAL_KEY_PREFIXES = ['concept-', 'topic-', 'page-', 'group-', 'mission-'];
+
+// Pick a genuine step-based tutorial slug from a /content/hashes response body.
+// Returns undefined if the manifest carries no tutorial keys (callers should
+// skip cleanly rather than assert against a non-tutorial page).
+export function pickTutorialSlug(body) {
+  return Object.keys(body || {}).find(
+    (s) => !NON_TUTORIAL_KEY_PREFIXES.some((p) => s.startsWith(p)),
+  );
+}
+
+// Concept-page slugs (concept-<slug> → <slug>) from a /content/hashes body.
+export function listConceptSlugs(body) {
+  return Object.keys(body || {})
+    .filter((s) => s.startsWith('concept-'))
+    .map((s) => s.slice('concept-'.length));
+}
+
 // Exponential backoff with full jitter: base 1s, 2s, 3s… plus up to 500ms
 // random so parallel workers that all hit a 503 at once don't retry in
 // lockstep and re-saturate the box (thundering herd).
