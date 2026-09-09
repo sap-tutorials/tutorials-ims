@@ -7,7 +7,7 @@ const VALID_ENTITIES = new Set([
   'Events', 'Prizes', 'PrizeRecords', 'Tags',
   'Accomplishments', 'AccomplishmentRecords',
   'CompletionPaths', 'CompletionPathItems',
-  'GroupPathItems',
+  'GroupPathItems', 'Puzzles',
   'TutorialMeta', 'TutorialContributors', 'TutorialRepositories',
   'StepFailures', 'NGDSFailedMessages', 'ImsConfig',
   'PrimaryAccounts', 'SecondaryAccounts',
