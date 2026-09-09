@@ -1016,7 +1016,7 @@ export default class AdminService extends cds.ApplicationService {
       'PrizeRecords', 'TutorialMeta', 'TutorialContributors', 'TutorialRepositories',
       'FeaturedTasks', 'PrimaryAccounts', 'SecondaryAccounts', 'PrivacyProtectionActions',
       'CompletionPaths', 'CompletionPathItems',
-      'GroupPathItems', 'EventRegistrations'
+      'GroupPathItems', 'EventRegistrations', 'Puzzles'
     ];
     for (const entity of legacyKeyedEntities) {
       this.before('CREATE', entity, async (req) => {
@@ -1233,6 +1233,12 @@ export default class AdminService extends cds.ApplicationService {
     //   - Does NOT register for CREATE (already handled by the line 71 loop)
     //   - Self-heals UPDATE/PATCH/SAVE on existing rows whose legacyId is NULL
     //   - Skips when the row already has legacyId (idempotent across draft lifecycle)
+    //
+    // [#2185] Puzzles is also @odata.draft.enabled and authored via the same
+    // NEW→PATCH→draftActivate flow, so it hit the identical NULL-legacyId bug:
+    // admin-created puzzles had no legacyId, so their PUZZLE TaskRecords were
+    // written with taskLegacyId=NULL and silently dropped from My Completions
+    // (and the Devtoberfest points path). Added to the loop below to fix it.
     const initLegacyIdForEntity = (entityName) => async (req) => {
       if (req.data.legacyId != null) return;
       // Self-heal path: only do the prior-row lookup when the row exists. NEW
@@ -1245,7 +1251,7 @@ export default class AdminService extends cds.ApplicationService {
       req.data.legacyId = await getNextLegacyId(entityName, db);
     };
 
-    for (const entityName of ['Missions', 'Groups', 'CompletionPaths']) {
+    for (const entityName of ['Missions', 'Groups', 'CompletionPaths', 'Puzzles']) {
       const handler = initLegacyIdForEntity(entityName);
       this.before('NEW',   `${entityName}.drafts`, handler);
       this.before('PATCH', `${entityName}.drafts`, handler);
