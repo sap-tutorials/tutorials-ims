@@ -268,4 +268,29 @@ describe('content publish routes', () => {
     expect(res._status).toBe(200);
     expect(res._body?.toString?.() ?? '').toContain('real content');
   });
+
+  it('serveHandler advertises the Markdown alternate via a Link header for tutorial slugs', async () => {
+    const { Tutorials, ContentFiles, ContentManifest } = cds.entities(NS);
+    await INSERT.into(Tutorials).entries({
+      ID: cds.utils.uuid(), slug: 'link-header-demo', title: 'Active', status: 'ACTIVE',
+    });
+    await INSERT.into(ContentManifest).entries({
+      version: 1, status: 'ACTIVE', activatedAt: new Date().toISOString(),
+    });
+    const html = '<html><body>real content</body></html>';
+    await INSERT.into(ContentFiles).entries({
+      slug: 'link-header-demo', version: 1,
+      content: gzipSync(Buffer.from(html)),
+      contentHash: 'h', mimeType: 'text/html', sizeBytes: html.length,
+    });
+
+    const req = makeServeReq('link-header-demo');
+    const res = makeServeRes();
+    await serveHandler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._headers.Link).toContain('/tutorials/link-header-demo.md');
+    expect(res._headers.Link).toContain('rel="alternate"');
+    expect(res._headers.Link).toContain('type="text/markdown"');
+  });
 });

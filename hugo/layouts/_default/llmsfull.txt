@@ -6,18 +6,14 @@ Content policy: see https://developers.sap.com/AGENTS.md
 
 # Missions
 
-{{ range where .Site.RegularPages "Type" "missions" }}
-URL: {{ .Permalink }}
-Title: {{ .Title }}
-Type: Mission
-Description: {{ .Params.description | plainify }}
-
-{{ end }}
+Missions are multi-tutorial learning paths served dynamically from the catalog.
+Browse the full, up-to-date list at the mission index: https://developers.sap.com/missions/
 
 # Tutorials
 
 {{ range where .Site.RegularPages "Type" "tutorials" }}
 URL: {{ .Permalink }}
+Markdown: {{ (printf "%s.md" (strings.TrimSuffix "/" .RelPermalink)) | absURL }}
 Title: {{ .Title }}
 Type: Tutorial
 Level: {{ .Params.level }}
