@@ -22,6 +22,7 @@ import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
 import { isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
+import { normalizeTutorialMarkdown } from './tutorial-markdown.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -150,9 +151,22 @@ export async function triggerPostPublishEmbeddings({ changedSlugs, settings }) {
 
 // --- Bounded LRU Cache ---
 
-class ContentCache {
-  constructor(maxBytes = 50 * 1024 * 1024) {
+// #2232: bounded TTL backstop for the content LRU. Cross-instance coherence
+// (#1621) already drops entries on publish/rollback via a shared generation
+// token, but if a srv instance MISSES that bump (shared-store read miss,
+// blue-green color split, fail-open swallow) the entry has no time-based
+// backstop and serves stale HTML indefinitely — until eviction or `cf restart`
+// (the 2026-09-10 #2228 incident: `x-content-source: cache`, unchanged ETag,
+// 100% of requests, 10+ minutes). Expiring entries on read caps that staleness
+// to a bounded, documented window with zero manual intervention. Env-overridable
+// with a safe baked default so a dropped env var (blue-green drops `cf set-env`)
+// still self-heals. Set to 0 to disable (entries live until evict/invalidate).
+export const DEFAULT_CONTENT_CACHE_TTL_MS = Number(process.env.CONTENT_CACHE_TTL_MS) || 5 * 60 * 1000;
+
+export class ContentCache {
+  constructor(maxBytes = 50 * 1024 * 1024, ttlMs = DEFAULT_CONTENT_CACHE_TTL_MS) {
     this.maxBytes = maxBytes;
+    this.ttlMs = ttlMs;
     this.totalBytes = 0;
     this.map = new Map();
   }
@@ -160,6 +174,15 @@ class ContentCache {
   get(key) {
     const entry = this.map.get(key);
     if (!entry) return null;
+    // #2232: TTL backstop — expire on read so a missed coherence bump can't
+    // strand stale content forever. Treated as a miss so the caller reloads
+    // the current bytes from the DB and repopulates.
+    if (entry.expiresAt !== Infinity && Date.now() >= entry.expiresAt) {
+      this.totalBytes -= entry.buffer.length;
+      this.map.delete(key);
+      metrics.counter('cache.ttl_expire');  // #2232
+      return null;
+    }
     this.map.delete(key);
     this.map.set(key, entry);
     return entry;
@@ -176,7 +199,10 @@ class ContentCache {
       this.map.delete(oldestKey);
       metrics.counter('cache.evict');  // #805
     }
-    this.map.set(key, { buffer, hash });
+    // #2232: stamp a fresh expiry on every write. A republish re-set() therefore
+    // resets the clock, so actively-updated content never expires mid-serve.
+    const expiresAt = this.ttlMs > 0 ? Date.now() + this.ttlMs : Infinity;
+    this.map.set(key, { buffer, hash, expiresAt });
     this.totalBytes += buffer.length;
     metrics.gauge('cache.bytes', this.totalBytes);  // #805
   }
@@ -1276,6 +1302,17 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       return serveNotFound(res, slug);
     }
 
+    // Advertise the Markdown alternate to agents that fetch the HTML without
+    // parsing <head> (#agent-readiness). Only real tutorial slugs have a
+    // `/tutorials/<slug>.md` — concept/topic/puzzle/channel/group/mission pages
+    // and internal `__…__` slugs don't, so we skip the header for them.
+    if (!/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__')) {
+      const proto = (req.get?.('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
+      const host = (req.get?.('x-forwarded-host') || req.get?.('host') || 'developers.sap.com')
+        .split(',')[0].trim();
+      res.setHeader('Link', `<${proto}://${host}/tutorials/${slug}.md>; rel="alternate"; type="text/markdown"`);
+    }
+
     // Delegate to the shared serve core — handles cache hit, DB BLOB read,
     // ETag/304, and cache population. Callers handle the 503/404 distinction.
     try {
@@ -1503,6 +1540,60 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       sourceHash:  row.sourceHash  ?? null,
       contentHash: row.contentHash ?? null,
     };
+  }
+
+  // --- GET /content/tutorials/<slug>.md ---
+  //
+  // Public, anonymous Markdown alternate of a tutorial, for agent/LLM consumers
+  // (the "machine-readable layer" an agent-readiness check looks for). Serves the
+  // captured upstream source markdown (ContentFiles.sourceContent / ContentCurrent),
+  // normalized so it stands alone: frontmatter carries `slug` + `canonical_url`,
+  // authoring image-directive comments are stripped. Relative image paths are
+  // preserved (correct absolutization needs repo/branch — a publish-time concern).
+  //
+  // Discovery is wired separately: a `<link rel="alternate" type="text/markdown">`
+  // in the tutorial HTML head, an HTTP `Link` header on the HTML response, sitemap
+  // `xhtml:link` alternates, and the llms.txt family.
+  async function markdownServeHandler(req, res) {
+    const segments = Array.isArray(req.params?.slug) ? req.params.slug : [req.params?.slug];
+    let slug = segments.join('/');
+    slug = slug.replace(/\.md$/i, '').replace(/\/$/, '').toLowerCase();
+
+    if (!slug || !VALID_SLUG.test(slug)) {
+      return serveNotFound(res, slug || '(empty)');
+    }
+
+    try {
+      const { markdown } = await getTutorialSource(slug);
+      if (!markdown) {
+        return serveNotFound(res, slug);
+      }
+
+      const proto = (req.get?.('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
+      const host = (req.get?.('x-forwarded-host') || req.get?.('host') || 'developers.sap.com')
+        .split(',')[0].trim();
+      const canonicalUrl = `${proto}://${host}/tutorials/${slug}`;
+
+      const out = normalizeTutorialMarkdown(markdown, { slug, canonicalUrl });
+      const buffer = Buffer.from(out, 'utf-8');
+      const etag = createHash('sha256').update(buffer).digest('hex');
+
+      const ifNoneMatch = req.headers?.['if-none-match'];
+      if (ifNoneMatch && ifNoneMatch === `"${etag}"`) {
+        res.status(304).end();
+        return;
+      }
+
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.setHeader('ETag', `"${etag}"`);
+      res.setHeader('Link', `<${canonicalUrl}>; rel="canonical"`);
+      setContentCacheHeaders(res, { slug });
+      res.setHeader('X-Content-Source', 'db-source');
+      res.status(200).send(buffer);
+    } catch (err) {
+      console.error('[content/serve:md]', err instanceof Error ? err.message : String(err));
+      res.status(500).json({ error: 'Markdown retrieval failed' });
+    }
   }
 
   // --- GET /content/nav ---
@@ -2028,6 +2119,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     contentAuthMiddleware,
     publishHandler,
     serveHandler,
+    markdownServeHandler,
     hashesHandler,
     sourceHashesHandler,
     getTutorialSource,
@@ -2053,6 +2145,7 @@ const _defaults = createContentHandlers();
 export const contentAuthMiddleware = _defaults.contentAuthMiddleware;
 export const publishHandler = _defaults.publishHandler;
 export const serveHandler = _defaults.serveHandler;
+export const markdownServeHandler = _defaults.markdownServeHandler;
 export const hashesHandler = _defaults.hashesHandler;
 export const sourceHashesHandler = _defaults.sourceHashesHandler;
 export const getTutorialSource = _defaults.getTutorialSource;

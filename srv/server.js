@@ -29,7 +29,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
 import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
 import { attachmentSourceHandler } from './lib/attachment-source-handler.js';
@@ -62,6 +62,7 @@ import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
 import { resolveUser, captureUserMiddleware } from './lib/resolve-user.js';
 import { patMiddleware, pinPatUserToContext } from './lib/mcp-pat-middleware.js';
 import makeComposeRouter, { flags as mcpFlags } from './lib/mcp-compose-router.js';
+import { buildMcpManifest } from './mcp/mcp-manifest.js';
 import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
@@ -748,6 +749,14 @@ cds.on('bootstrap', (app) => {
   // Public-read like /content/hashes; see srv/lib/content-store.js for the
   // rationale (rendered HTML is volatile-by-design, source markdown isn't).
   app.get('/content/source-hashes', sourceHashesHandler);
+  // Public, anonymous Markdown alternate of a tutorial (#agent-readiness): the
+  // "machine-readable layer" agents look for. Approuter maps ^/tutorials/<slug>.md$
+  // here. Registered BEFORE the wildcard serveHandler so the `.md` suffix wins;
+  // the regex capture (slug without `.md`) is placed on req.params.slug.
+  app.get(/^\/content\/tutorials\/(.+)\.md$/, (req, res) => {
+    req.params.slug = req.params[0];
+    return markdownServeHandler(req, res);
+  });
   app.get('/content/tutorials/*slug', serveHandler);
   // Legacy AEM `.model.json` compatibility for SAP Discovery Center (#DC cards).
   // Approuter maps ^/tutorials/<slug>.model.json$ → here. See srv/lib/model-json.js.
@@ -1032,6 +1041,18 @@ cds.on('bootstrap', (app) => {
     res.json(buildAgentCard({ baseUrl, tokenUrl: cfg.tokenUrl, enabled: cfg.enabled }));
   });
 
+  // MCP discovery manifest (public, anonymous) — served on the already-public
+  // /.well-known/* approuter route. Metadata only: advertises the anonymous
+  // SearchService tier (/mcp/search) + its tools and points to the OAuth-gated
+  // /mcp-auth/api tier via protected-resource metadata. No secrets, no new
+  // invocation surface. (#agent-readiness)
+  app.get('/.well-known/mcp.json', (req, res) => {
+    const baseUrl = a2aBaseUrlFallback(req);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Vary', 'X-Forwarded-Host, Host');
+    res.json(buildMcpManifest({ baseUrl }));
+  });
+
   // A2A consumption guide (public). Read from disk with fs (NOT res.sendFile —
   // sendFile with a file:// URL path is unreliable on Windows). Served from
   // srv/mcp/ (NOT docs/) because docs/ is not packaged into the deployed srv
@@ -1044,6 +1065,24 @@ cds.on('bootstrap', (app) => {
     } catch (e) {
       cds.log('a2a').warn(`a2a-instructions.md unreadable — ${e.message}`);
       res.status(404).type('text/plain').send('A2A instructions not found');
+    }
+  });
+
+  // GraphQL SDL (public). Serves the schema advertised on /api-docs/graphql/ and
+  // hugo/data/api_endpoints.yaml. Same disk-read rationale as the a2a guide above:
+  // scripts/emit-graphql-sdl.ts writes srv/graphql/schema.graphql (gitignored), which
+  // cds build ships to gen/srv/srv/graphql/. Registered in bootstrap so it beats
+  // graphql-config's `app.use('/graphql', …)` prefix mount ('served') for this exact
+  // path. text/plain so browsers render it inline. (#2227)
+  app.get('/graphql/schema.graphql', (_req, res) => {
+    try {
+      const p = fileURLToPath(new URL('./graphql/schema.graphql', import.meta.url));
+      res.type('text/plain; charset=utf-8')
+        .set('Cache-Control', 'public, max-age=3600')
+        .send(readFileSync(p, 'utf8'));
+    } catch (e) {
+      cds.log('graphql').warn(`schema.graphql unreadable — ${e.message}`);
+      res.status(404).type('text/plain').send('GraphQL SDL not available');
     }
   });
 

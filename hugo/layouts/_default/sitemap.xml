@@ -1,6 +1,6 @@
 {{- /* security-reviewed: static XML declaration string; no user input */ -}}
 {{- printf "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>" | safeHTML }}
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 {{- range site.Pages }}
 {{- /* The bare /tutorials/ section index is served by CAP (approuter routes
        /tutorials/* to srv-api), so Hugo's generated section list page 404s and
@@ -8,6 +8,11 @@
 {{- if and (not .Params.private) (ne .Kind "taxonomy") (ne .Kind "term") (not (and (eq .Kind "section") (eq .Type "tutorials"))) }}
   <url>
     <loc>{{ .Permalink }}</loc>
+    {{- /* Advertise the Markdown alternate for agent/LLM crawlers — CAP serves it
+           at /tutorials/<slug>.md (mirrors the <link rel="alternate"> in the page head). */ -}}
+    {{- if eq .Type "tutorials" }}
+    <xhtml:link rel="alternate" type="text/markdown" href="{{ (printf "%s.md" (strings.TrimSuffix "/" .RelPermalink)) | absURL }}"/>
+    {{- end }}
     {{- with .Lastmod }}<lastmod>{{ .Format "2006-01-02T15:04:05-07:00" }}</lastmod>{{ end }}
     {{- if .IsHome }}<changefreq>daily</changefreq><priority>1.0</priority>
     {{- else if eq .Type "tutorials" }}<changefreq>weekly</changefreq><priority>0.8</priority>

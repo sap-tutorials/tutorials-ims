@@ -71,6 +71,12 @@
 
   {{ partial "lightbox-dialog.html" . }}
   {{ partial "consent.html" . }}
+  {{/* #2226 site-wide "Copy code" handler. render-codeblock.html emits the copy
+       button on EVERY code block (api-docs, generic pages, tutorials), so its
+       handler must load unconditionally — not gated by qa/previewMode and not
+       scoped to the tutorial-only bundle. */}}
+  {{ $codeCopy := resources.Get "js/code-copy.ts" | js.Build (dict "minify" true) }}
+  <script src="{{ $codeCopy.RelPermalink }}" defer></script>
   {{/* #1908 Devtoberfest scavenger hunt — self-gating body-level overlays (home + /ai/). */}}
   {{ partial "scavenger-hunt.html" . }}
   <script defer src="/js/vendor/markdown-it.min.js"></script>

@@ -5,11 +5,12 @@
 Content policy: Citation in AI search and answer use cases is welcome. Use for model training is not.
 See https://developers.sap.com/AGENTS.md.
 
-## Featured Missions
+## Missions
 
-{{ range first 20 (where .Site.RegularPages "Type" "missions") }}
-- [{{ .Title }}]({{ .Permalink }}): {{ .Params.description | plainify | truncate 140 }}
-{{ end }}
+Missions are multi-tutorial learning paths served dynamically from the catalog.
+Browse the full, up-to-date list at the mission index below.
+
+- Mission index: https://developers.sap.com/missions/
 
 ## Tutorial Categories
 

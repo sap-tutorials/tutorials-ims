@@ -251,9 +251,15 @@ export async function provisionDbUser(user, columns) {
       uuid: cds.utils.uuid(),  // String(36): user.id is email under XSUAA → overflows on long addresses (#1614)
       sapId,
       legacyId: await getNextLegacyId('Users', db),
-      email: claimEmail || '',
-      firstName: claimFirstName || '',
-      lastName: claimLastName || '',
+      // NULL — not '' — for any absent claim (SAGE 718-bug). A blank-string
+      // identity collides in MyTutorialsRaw's priority-3 (ownerEmail) and
+      // priority-4 (owner-name) equijoins, matching every blank-owner
+      // TutorialMeta row; NULL never equals anything, so it can't over-match.
+      // The guard at line 246 guarantees at least one of these is truthy, so
+      // this never mints a fully-blank row.
+      email: claimEmail || null,
+      firstName: claimFirstName || null,
+      lastName: claimLastName || null,
     });
   } catch (err) {
     // Backstop for the SQLite unit path (which DOES enforce @assert.unique):

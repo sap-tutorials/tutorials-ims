@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T17:10:35Z",
+  "generatedAt": "2026-09-10T23:07:18.650Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,97 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2236",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2236,
+      "title": "fix(highlight-cds): show every step in tutorials with long code blocks",
+      "summary": "Tutorials that contain a long, collapsible code block no longer drop the steps that follow it, so every step of a walkthrough now renders correctly.",
+      "category": "Fix",
+      "mergedAt": "2026-09-10T21:49:19Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2236"
+    },
+    {
+      "id": "tutorials-ims#2234",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2234,
+      "title": "feat(agent-readiness): Markdown source, MCP manifest, and improved discovery for AI agents",
+      "summary": "Tutorials are now easier for AI assistants and agents to consume: each tutorial exposes its Markdown source, an MCP manifest is published, and llms.txt and sitemap discovery were fixed so tools can find the content reliably.",
+      "category": "Feature",
+      "mergedAt": "2026-09-10T21:44:20Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2234"
+    },
+    {
+      "id": "tutorials-ims#2233",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2233,
+      "title": "fix(content): stale content now self-heals within a short window",
+      "summary": "Added a time-based backstop to the content cache so that if a refresh signal is ever missed, recently updated pages correct themselves automatically instead of staying stale.",
+      "category": "Fix",
+      "mergedAt": "2026-09-10T20:26:39Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2233"
+    },
+    {
+      "id": "tutorials-ims#2231",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2231,
+      "title": "fix(graphql-docs): runnable examples and downloadable schema",
+      "summary": "The GraphQL documentation now offers working, runnable examples and serves the schema file directly, making it easier to explore and try the API.",
+      "category": "Docs",
+      "mergedAt": "2026-09-10T19:59:58Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2231"
+    },
+    {
+      "id": "tutorials-ims#2230",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2230,
+      "title": "fix: Copy button on code blocks works outside tutorial pages",
+      "summary": "The copy-to-clipboard button on code snippets now works on pages beyond tutorials, so code can be copied anywhere it appears on the site.",
+      "category": "Fix",
+      "mergedAt": "2026-09-10T18:27:56Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2230"
+    },
+    {
+      "id": "tutorials-ims#2225",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2225,
+      "title": "fix(author): correct tutorial attribution when a user record lacks an identity",
+      "summary": "Author dashboards no longer misattribute tutorials to the wrong person when some legacy user records are missing identity details.",
+      "category": "Fix",
+      "mergedAt": "2026-09-09T22:46:08Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2225"
+    },
+    {
+      "id": "tutorials-ims#2224",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2224,
+      "title": "Release 1.24.0 — What's New refresh + version bump",
+      "summary": "Promoted the accumulated DEV changes to production as release 1.24.0, refreshing the What's New digest and version.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-09T17:16:03Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2224"
+    },
     {
       "id": "tutorials-ims#2222",
       "repo": "tutorials-ims",
@@ -46,6 +137,19 @@
       "week": "2026-W37",
       "weekStart": "2026-09-07",
       "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2220"
+    },
+    {
+      "id": "tutorials-ims#2218",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2218,
+      "title": "promote(DEV→main): product-ID meta-tag emit-all fix + queued DEV changes",
+      "summary": "Promoted a batch of queued DEV changes to production, including a fix that emits product-ID meta tags for every tag on a page.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-09T04:18:24Z",
+      "week": "2026-W37",
+      "weekStart": "2026-09-07",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2218"
     },
     {
       "id": "tutorials-ims#2217",

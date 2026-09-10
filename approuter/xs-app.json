@@ -261,6 +261,12 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/graphql/schema\\.graphql(\\?.*)?$",
+      "target": "/graphql/schema.graphql",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/graphql/public(\\?.*)?$",
       "target": "/graphql/public",
       "destination": "srv-api",

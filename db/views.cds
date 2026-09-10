@@ -250,8 +250,15 @@ view MyTutorialsRaw as
   }
   UNION ALL
   // Source 3: post-publish ownerEmail match — priority 3
+  // Guard (SAGE 718-bug): never join on a blank ownerEmail. A migrated/auto-
+  // provisioned Users row with email='' collides with EVERY TutorialMeta whose
+  // ownerEmail is '' (the legacy-resync default), inflating Sage's owned-count
+  // to the whole blank-owner population. A real email is required on both sides
+  // for this signal to be meaningful.
   SELECT from ims.TutorialMeta as m
-    inner join ims.Users as u on u.email = m.ownerEmail
+    inner join ims.Users as u
+      on u.email = m.ownerEmail
+      and trim(coalesce(m.ownerEmail, '')) <> ''
   {
     key m.tutorial.ID   as tutorial_ID,
     key u.uuid          as userUuid,
@@ -260,10 +267,16 @@ view MyTutorialsRaw as
   UNION ALL
   // Source 4: legacy free-text owner match — priority 4 (lowest)
   // Equality not LIKE — see spec §1.2 rationale.
+  // Guard (SAGE 718-bug): the free-text owner must be non-blank once trimmed.
+  // Otherwise owner=' ' matches `firstName || ' ' || lastName` when a Users
+  // row has blank first+last names (concat collapses to ' '), and owner=''
+  // matches a blank email — both spurious. Requiring a real owner string keeps
+  // this to genuine display-name / email matches.
   SELECT from ims.TutorialMeta as m
     inner join ims.Users as u
-      on m.owner = u.email
-      or m.owner = u.firstName || ' ' || u.lastName
+      on trim(coalesce(m.owner, '')) <> ''
+      and ( m.owner = u.email
+         or m.owner = u.firstName || ' ' || u.lastName )
   {
     key m.tutorial.ID   as tutorial_ID,
     key u.uuid          as userUuid,
