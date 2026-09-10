@@ -103,6 +103,10 @@ srv/data/admin-docs-index.json
 # deploy.yml) before each build; a pure artifact, rewritten every deploy.
 srv/version.json
 
+# GraphQL SDL served copy — written by scripts/emit-graphql-sdl.ts alongside the
+# committed graphql/schema.graphql; shipped via cds build, served by srv/server.js.
+srv/graphql/
+
 # a11y / Lighthouse scan output (regenerated each run)
 .lighthouseci/
 test/a11y/axe-results.md
