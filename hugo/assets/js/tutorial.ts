@@ -1,23 +1,11 @@
 import { initMermaid } from './mermaid-bootstrap'
 import { csrfFetch } from './csrf-fetch'
-import { stripPrompts } from './copy-clean'
 
-// --- Copy code block ---
-;(window as any).copyCodeBlock = function(btn: HTMLButtonElement) {
-  const block = btn.closest('.code-block')
-  if (!block) return
-  const code = block.querySelector('.code-block-body code, .code-block-body pre')
-  if (!code) return
-  let text = code.textContent || ''
-  try { if (localStorage.getItem('tut.pref.copyClean') === 'on') text = stripPrompts(text) } catch {}
-  navigator.clipboard.writeText(text).then(() => {
-    const label = btn.querySelector('.copy-label')
-    if (label) {
-      label.textContent = 'Copied!'
-      setTimeout(() => { label.textContent = 'Copy' }, 2000)
-    }
-  })
-}
+// NOTE: copyCodeBlock (the "Copy code" button handler) now lives in the
+// site-wide code-copy.ts, loaded on every page from baseof.html. The
+// render-codeblock.html hook emits the button on all pages, not just
+// tutorials, so its handler must not be scoped to this tutorial-only bundle
+// (issue #2226).
 
 // Event delegation
 document.addEventListener('click', (e) => {
