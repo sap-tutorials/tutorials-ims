@@ -62,7 +62,14 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { writeFileSync, mkdirSync } = await import('node:fs');
   const path = await import('node:path');
   const sdl = await emitSdl();
+  const body = sdl.trimEnd() + '\n';
   mkdirSync('graphql', { recursive: true });
-  writeFileSync(path.join('graphql', 'schema.graphql'), sdl.trimEnd() + '\n', 'utf8');
-  console.log(`wrote graphql/schema.graphql (${sdl.length} bytes)`);
+  writeFileSync(path.join('graphql', 'schema.graphql'), body, 'utf8');
+  // Also emit a served copy under srv/ so `cds build --production` ships it into
+  // gen/srv/srv/graphql/schema.graphql, where the /graphql/schema.graphql bootstrap
+  // route (srv/server.js) reads it via an import.meta.url-relative path. Same emit
+  // run → the two copies never drift. srv/graphql/ is gitignored (#2227).
+  mkdirSync(path.join('srv', 'graphql'), { recursive: true });
+  writeFileSync(path.join('srv', 'graphql', 'schema.graphql'), body, 'utf8');
+  console.log(`wrote graphql/schema.graphql + srv/graphql/schema.graphql (${sdl.length} bytes)`);
 }

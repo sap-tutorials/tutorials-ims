@@ -1047,6 +1047,24 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // GraphQL SDL (public). Serves the schema advertised on /api-docs/graphql/ and
+  // hugo/data/api_endpoints.yaml. Same disk-read rationale as the a2a guide above:
+  // scripts/emit-graphql-sdl.ts writes srv/graphql/schema.graphql (gitignored), which
+  // cds build ships to gen/srv/srv/graphql/. Registered in bootstrap so it beats
+  // graphql-config's `app.use('/graphql', …)` prefix mount ('served') for this exact
+  // path. text/plain so browsers render it inline. (#2227)
+  app.get('/graphql/schema.graphql', (_req, res) => {
+    try {
+      const p = fileURLToPath(new URL('./graphql/schema.graphql', import.meta.url));
+      res.type('text/plain; charset=utf-8')
+        .set('Cache-Control', 'public, max-age=3600')
+        .send(readFileSync(p, 'utf8'));
+    } catch (e) {
+      cds.log('graphql').warn(`schema.graphql unreadable — ${e.message}`);
+      res.status(404).type('text/plain').send('GraphQL SDL not available');
+    }
+  });
+
   // A2A JSON-RPC endpoint. Body parser here; the CAP auth chain wraps it in
   // 'served' (like /chat/stream) so cds.context.user is populated. Reserved in
   // bootstrap before CAP mounts A2aService at /a2a. (#1220)

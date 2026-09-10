@@ -11,7 +11,7 @@ Hit our GraphQL endpoint with any HTTP client:
 ```bash
 curl -s https://developers.sap.com/graphql/public \
   -H 'Content-Type: application/json' \
-  -d '{"query": "{ KnowledgeGraphService { PublishedConcepts { totalCount value { slug name description } } } }"}'
+  -d '{"query": "{ KnowledgeGraphService { PublishedConcepts { totalCount nodes { slug name description } } } }"}'
 ```
 
 Interactive query editor: [GraphiQL](/graphql/public).
@@ -71,18 +71,24 @@ Without this assignment your bearer token will authenticate successfully at `/gr
 ```graphql
 {
   KnowledgeGraphService {
-    PublishedConcepts { totalCount value { slug name description } }
+    PublishedConcepts { totalCount nodes { slug name description } }
   }
 }
 ```
 
-### Full-text search
+### Search the catalog
+
+`SearchableItems` is a pre-ranked search index. GraphQL exposes it as a filterable, sortable collection — filter with `contains`/`startswith`/`eq`, order by `searchScore` for relevance.
 
 ```graphql
 {
   SearchService {
-    SearchableItems(search: "cap", top: 5) {
-      value { title description type }
+    SearchableItems(
+      filter: { title: { contains: "CAP" } }
+      orderBy: { searchScore: desc }
+      top: 5
+    ) {
+      nodes { title description taskType searchScore }
       totalCount
     }
   }
@@ -94,7 +100,7 @@ Without this assignment your bearer token will authenticate successfully at `/gr
 ```graphql
 {
   DeveloperService {
-    Tutorials { totalCount value { slug title } }
+    Tutorials { totalCount nodes { slug title } }
   }
 }
 ```
@@ -105,7 +111,7 @@ Without this assignment your bearer token will authenticate successfully at `/gr
 curl -s https://developers.sap.com/graphql \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"query": "{ DeveloperService { Tutorials { totalCount value { slug title } } } }"}'
+  -d '{"query": "{ DeveloperService { Tutorials { totalCount nodes { slug title } } } }"}'
 ```
 
 ## Schema
