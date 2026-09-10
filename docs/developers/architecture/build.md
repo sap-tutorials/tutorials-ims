@@ -674,7 +674,22 @@ Request: GET /content/tutorials/abap-dev-create-table
 | Max size | 50 MB |
 | Eviction | Least-recently-used |
 | Invalidation | Full flush on publish or rollback |
+| Per-entry TTL | 5 min (env `CONTENT_CACHE_TTL_MS`, `0` disables) |
 | Key format | `{slug}@{version}` |
+
+**TTL backstop (#2232).** Cross-instance coherence (#1621) drops cache entries on
+publish/rollback by bumping a shared generation token that peer instances poll
+(`content-cache-coherence.js`, `CONTENT_CACHE_CHECK_TTL_MS`=5s). If an instance
+*misses* that bump (shared-store read miss, blue-green color split, fail-open
+swallow), the entry previously had no time-based backstop and served stale HTML
+until LRU eviction or `cf restart` — the 2026-09-10 #2228 incident (4 prod
+`tutorials-srv` instances, `x-content-source: cache`, unchanged ETag, 100% of
+requests, 10+ min). The per-entry TTL expires an entry **on read** after
+`CONTENT_CACHE_TTL_MS` (default 5 min), so a missed bump self-heals within a
+bounded window with zero manual intervention. A republish `set()` resets the
+entry clock, so actively-updated content never expires mid-serve. The default is
+baked in code (not a required env var) so a dropped `cf set-env` during
+blue-green still self-heals. Expiries emit the `cache.ttl_expire` metric.
 
 ### HANA LOB Workaround
 
