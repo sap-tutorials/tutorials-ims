@@ -19,6 +19,23 @@ const CDS_BLOCK =
 // Shiki's codeToHtml returns a bare <pre> with NO wrapping div.
 const shikiStub = () => '<pre class="shiki"><code>entity Foo { key ID : Integer; }</code></pre>';
 
+// #2228: a LONG CDS block. render-codeblock.html sets $isLong when lineCount > 25,
+// which adds ` data-collapsed=true` on the body div AND a <button class=code-block-toggle>
+// after the body. Hugo --minify drops the attribute quotes. The old exact-string
+// matcher `<div class=code-block-body>` could not match this body-open tag.
+const CDS_BLOCK_LONG =
+  '<div class=code-block code-block-long data-lang=cds>' +
+    '<div class=code-block-header><span class=code-block-lang>CDS</span></div>' +
+    '<div class=code-block-body data-collapsed=true>' +
+      '<div class=highlight><pre tabindex=0 class=chroma><code>entity Foo { key ID : Integer; }</code></pre></div>' +
+    '</div>' +
+    '<button class=code-block-toggle>Show more</button>' +
+  '</div>';
+
+// A step content div, as tutorial-step shortcode renders per step.
+const STEP_DIV = (n) => `<div id=step-${n} class=tutorial-step><h2>Step ${n}</h2><p>body ${n}</p></div>`;
+
+
 const countDivs = (h) => ({
   open: (h.match(/<div\b/g) || []).length,
   close: (h.match(/<\/div>/g) || []).length,
@@ -44,5 +61,34 @@ describe('replaceCdsBlocks div balance (#1657)', () => {
     const { result } = replaceCdsBlocks(CDS_BLOCK, shikiStub);
     expect(result).toContain('class="shiki"');
     expect(result).not.toContain('class=chroma');
+  });
+
+  it('processes a LONG collapsible block (#2228: data-collapsed body)', () => {
+    const { result, processedBlocks } = replaceCdsBlocks(CDS_BLOCK_LONG, shikiStub);
+    expect(processedBlocks, 'long-block body-open tag must be matched despite attributes').toBe(1);
+    expect(result).toContain('class="shiki"');
+    expect(result).not.toContain('class=chroma');
+    // The toggle button must survive untouched.
+    expect(result).toContain('code-block-toggle');
+    const { open, close } = countDivs(result);
+    expect(open, `long block must stay balanced (got ${open}/${close})`).toBe(close);
+  });
+
+  it('does NOT delete step divs between a long block and a later short block (#2228)', () => {
+    // Shape of abap-environment-adt-coretools-vscode: a long CDS block inside an
+    // early step, then several intervening step divs, then a short CDS block.
+    // The old matcher jumped from the long block's unmatched body-open to the
+    // short block's body far downstream and spliced away everything in between.
+    const html =
+      STEP_DIV(7) + CDS_BLOCK_LONG +
+      STEP_DIV(8) + STEP_DIV(9) + STEP_DIV(10) + STEP_DIV(11) + STEP_DIV(12) + STEP_DIV(13) +
+      STEP_DIV(14) + CDS_BLOCK;
+    const { result, processedBlocks } = replaceCdsBlocks(html, shikiStub);
+    expect(processedBlocks).toBe(2);
+    for (const n of [7, 8, 9, 10, 11, 12, 13, 14]) {
+      expect(result, `step-${n} div must survive`).toContain(`id=step-${n}`);
+    }
+    const { open, close } = countDivs(result);
+    expect(open, `mixed blocks must stay balanced (got ${open}/${close})`).toBe(close);
   });
 });

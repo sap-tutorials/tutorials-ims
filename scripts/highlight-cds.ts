@@ -80,10 +80,23 @@ export function replaceCdsBlocks(
     const blockStart = html.lastIndexOf('<div', markerIdx);
     if (blockStart === -1) { cursor = markerIdx + 1; continue; }
 
-    const bodyStart = html.indexOf('<div class=code-block-body>', markerIdx);
+    // Match the code-block-body OPENING tag tolerating trailing attributes.
+    // Short blocks render `<div class=code-block-body>`, but LONG/collapsible
+    // blocks ($isLong = lineCount > 25 in render-codeblock.html) render
+    // `<div class=code-block-body data-collapsed=true>`. The old exact-string
+    // `indexOf('<div class=code-block-body>')` failed to match the collapsible
+    // variant and silently skipped ~40k chars downstream to the NEXT short
+    // block's body — splicing away every step div in between (issue #2228:
+    // abap-environment-adt-coretools-vscode lost steps 8-13). Prefix-match the
+    // tag, then find its own closing `>` for bodyContentStart.
+    const BODY_OPEN_PREFIX = '<div class=code-block-body';
+    const bodyStart = html.indexOf(BODY_OPEN_PREFIX, markerIdx);
     if (bodyStart === -1) { cursor = markerIdx + 1; continue; }
 
-    const bodyContentStart = bodyStart + '<div class=code-block-body>'.length;
+    const bodyTagEnd = html.indexOf('>', bodyStart + BODY_OPEN_PREFIX.length);
+    if (bodyTagEnd === -1) { cursor = markerIdx + 1; continue; }
+
+    const bodyContentStart = bodyTagEnd + 1;
 
     // Find the matching </div> — the body ends at the next </div></div> sequence
     // that closes code-block-body and code-block
