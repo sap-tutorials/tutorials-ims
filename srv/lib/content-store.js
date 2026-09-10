@@ -22,6 +22,7 @@ import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
 import { isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
+import { normalizeTutorialMarkdown } from './tutorial-markdown.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -1301,6 +1302,17 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       return serveNotFound(res, slug);
     }
 
+    // Advertise the Markdown alternate to agents that fetch the HTML without
+    // parsing <head> (#agent-readiness). Only real tutorial slugs have a
+    // `/tutorials/<slug>.md` — concept/topic/puzzle/channel/group/mission pages
+    // and internal `__…__` slugs don't, so we skip the header for them.
+    if (!/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__')) {
+      const proto = (req.get?.('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
+      const host = (req.get?.('x-forwarded-host') || req.get?.('host') || 'developers.sap.com')
+        .split(',')[0].trim();
+      res.setHeader('Link', `<${proto}://${host}/tutorials/${slug}.md>; rel="alternate"; type="text/markdown"`);
+    }
+
     // Delegate to the shared serve core — handles cache hit, DB BLOB read,
     // ETag/304, and cache population. Callers handle the 503/404 distinction.
     try {
@@ -1528,6 +1540,60 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       sourceHash:  row.sourceHash  ?? null,
       contentHash: row.contentHash ?? null,
     };
+  }
+
+  // --- GET /content/tutorials/<slug>.md ---
+  //
+  // Public, anonymous Markdown alternate of a tutorial, for agent/LLM consumers
+  // (the "machine-readable layer" an agent-readiness check looks for). Serves the
+  // captured upstream source markdown (ContentFiles.sourceContent / ContentCurrent),
+  // normalized so it stands alone: frontmatter carries `slug` + `canonical_url`,
+  // authoring image-directive comments are stripped. Relative image paths are
+  // preserved (correct absolutization needs repo/branch — a publish-time concern).
+  //
+  // Discovery is wired separately: a `<link rel="alternate" type="text/markdown">`
+  // in the tutorial HTML head, an HTTP `Link` header on the HTML response, sitemap
+  // `xhtml:link` alternates, and the llms.txt family.
+  async function markdownServeHandler(req, res) {
+    const segments = Array.isArray(req.params?.slug) ? req.params.slug : [req.params?.slug];
+    let slug = segments.join('/');
+    slug = slug.replace(/\.md$/i, '').replace(/\/$/, '').toLowerCase();
+
+    if (!slug || !VALID_SLUG.test(slug)) {
+      return serveNotFound(res, slug || '(empty)');
+    }
+
+    try {
+      const { markdown } = await getTutorialSource(slug);
+      if (!markdown) {
+        return serveNotFound(res, slug);
+      }
+
+      const proto = (req.get?.('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
+      const host = (req.get?.('x-forwarded-host') || req.get?.('host') || 'developers.sap.com')
+        .split(',')[0].trim();
+      const canonicalUrl = `${proto}://${host}/tutorials/${slug}`;
+
+      const out = normalizeTutorialMarkdown(markdown, { slug, canonicalUrl });
+      const buffer = Buffer.from(out, 'utf-8');
+      const etag = createHash('sha256').update(buffer).digest('hex');
+
+      const ifNoneMatch = req.headers?.['if-none-match'];
+      if (ifNoneMatch && ifNoneMatch === `"${etag}"`) {
+        res.status(304).end();
+        return;
+      }
+
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.setHeader('ETag', `"${etag}"`);
+      res.setHeader('Link', `<${canonicalUrl}>; rel="canonical"`);
+      setContentCacheHeaders(res, { slug });
+      res.setHeader('X-Content-Source', 'db-source');
+      res.status(200).send(buffer);
+    } catch (err) {
+      console.error('[content/serve:md]', err instanceof Error ? err.message : String(err));
+      res.status(500).json({ error: 'Markdown retrieval failed' });
+    }
   }
 
   // --- GET /content/nav ---
@@ -2053,6 +2119,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     contentAuthMiddleware,
     publishHandler,
     serveHandler,
+    markdownServeHandler,
     hashesHandler,
     sourceHashesHandler,
     getTutorialSource,
@@ -2078,6 +2145,7 @@ const _defaults = createContentHandlers();
 export const contentAuthMiddleware = _defaults.contentAuthMiddleware;
 export const publishHandler = _defaults.publishHandler;
 export const serveHandler = _defaults.serveHandler;
+export const markdownServeHandler = _defaults.markdownServeHandler;
 export const hashesHandler = _defaults.hashesHandler;
 export const sourceHashesHandler = _defaults.sourceHashesHandler;
 export const getTutorialSource = _defaults.getTutorialSource;

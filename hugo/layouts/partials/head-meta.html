@@ -5,6 +5,10 @@
 <title>{{ $title }}</title>
 <meta name="description" content="{{ $desc | plainify | truncate 160 }}">
 <link rel="canonical" href="{{ .Permalink }}">
+{{- if eq .Type "tutorials" }}
+{{- /* Markdown alternate for agent/LLM consumers — served by CAP at /tutorials/<slug>.md. */}}
+<link rel="alternate" type="text/markdown" href="{{ (printf "%s.md" (strings.TrimSuffix "/" .RelPermalink)) | absURL }}" title="Markdown version">
+{{- end }}
 {{- if .Params.robotsNoIndex }}
 <meta name="robots" content="noindex, nofollow">
 {{- else }}
