@@ -12,9 +12,11 @@ export async function loadProvenanceInputs(rawSlug) {
   const slug = String(rawSlug || '').toLowerCase();
   const { ContentCurrent, Tutorials, FreshnessReport, FreshnessFinding } = cds.entities('com.sap.developers.ims');
   try {
+    // slug-canonical: pre-canonicalized (lowercased at line 12)
     const content = await SELECT.one.from(ContentCurrent).columns('contentHash', 'sourceCommit', 'modifiedAt').where({ slug });
     if (!content) return null;
 
+    // slug-canonical: pre-canonicalized (lowercased at line 12)
     const tut = await SELECT.one.from(Tutorials).columns('ID').where({ slug });
     let report = null;
     if (tut) {
