@@ -5,14 +5,16 @@
 // Auth: AdminService is @requires:'Admin' service-level; each action ANDs its own scope (KnowledgeGraph.Admin/SuperAdmin/Tutorial.Author). Callers need Admin PLUS the action scope — intended for the admin-curation tier.
 // Doc-comments (first sentence ≥40 chars) become the MCP tool descriptions.
 //
-// @protocol is widened to expose MCP alongside OData. Object-form is REQUIRED
+// @protocol is widened to expose MCP and HCQL alongside OData. Object-form is REQUIRED
 // so OData still mounts at /admin (see [[cap-graphql-shortcut-replaces-odata]]):
-// an array form with a bare 'mcp'/'graphql' string collapses every adapter onto
+// an array form with a bare 'mcp'/'hcql'/'graphql' string collapses every adapter onto
 // one path and OData 404s. Task 13 adds the /mcp-admin route rewrite.
+// HCQL mounts on its own /hcql/admin path (#2247 re-land; guards the #1004 regression
+// where HCQL co-mounted on OData paths and parsed OData bodies as CQN).
 using from './admin-service';
 using from './knowledge-graph-service';
 
-annotate AdminService with @protocol: [{ kind: 'odata' }, { kind: 'mcp', path: '/mcp/admin' }];
+annotate AdminService with @protocol: [{ kind: 'odata' }, { kind: 'mcp', path: '/mcp/admin' }, { kind: 'hcql', path: '/hcql/admin' }];
 
 extend service AdminService {
 
