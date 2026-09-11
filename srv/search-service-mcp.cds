@@ -6,19 +6,24 @@ using from './search-service';
 // fetch + slice logic lives in exactly one place.
 extend service SearchService {
 
-  /** Return a single step's HTML plus metadata. No authentication required —
-      published tutorial content is public. Shares the DeveloperService
-      handler; the return shape is identical.
+  /** Return a single published tutorial step in the requested `format`. No
+      authentication required — published tutorial content is public. Shares
+      the DeveloperService handler; the return shape is identical. Exactly one
+      body is returned in `content`; `contentFormat` echoes which representation
+      it is.
       @param slug        Lowercase canonical tutorial slug.
-      @param stepNumber  1-indexed step number. */
+      @param stepNumber  1-indexed step number.
+      @param format      'markdown' (default, token-efficient source markdown
+                         matching /tutorials/<slug>.md) or 'html' (sliced HTML). */
   @(requires: 'any')
-  function get_tutorial_step(slug: String, stepNumber: Integer) returns {
-    slug        : String;
-    stepNumber  : Integer;
-    stepTitle   : String;
-    html        : String;
-    textLength  : Integer;
-    totalSteps  : Integer;
+  function get_tutorial_step(slug: String, stepNumber: Integer, format: String) returns {
+    slug          : String;
+    stepNumber    : Integer;
+    stepTitle     : String;
+    content       : String;
+    contentFormat : String;
+    textLength    : Integer;
+    totalSteps    : Integer;
   };
 
   /** Search the public SAP community events catalog — CodeJams, Devtoberfest,

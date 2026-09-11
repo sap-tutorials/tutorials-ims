@@ -15,6 +15,8 @@ import { Readable } from 'node:stream';
 import * as cheerio from 'cheerio';
 import * as metrics from './metrics.js';
 import { isFlagEnabled } from './feature-flags/db-flags.js';
+import { parseMarkdownSteps } from './tutorial-markdown-steps.js';
+import { absolutizeImagePaths } from './tutorial-markdown.js';
 
 const NS = 'com.sap.developers.ims';
 const LOG = cds.log('mcp-slicer');
@@ -35,6 +37,12 @@ const TTL_MS = 30 * 60 * 1000;
 
 function sliceKey(slug, version) {
   return `slice:${slug}::${version}`;
+}
+// Markdown-slice cache key (#2244). Distinct namespace from the HTML slice so
+// the two representations don't collide; shares the per-slug tag below so a
+// single `content.published` invalidation clears both.
+function mdSliceKey(slug, version) {
+  return `slice-md:${slug}::${version}`;
 }
 function slugTag(slug) {
   return `slice-slug:${slug}`;
@@ -161,6 +169,116 @@ export async function sliceStep(slug, stepNumber) {
   const step = parsed.steps.get(stepNumber);
   if (!step) return null;
   return { html: step.html, text: step.text, stepTitle: step.title, totalSteps: parsed.totalSteps };
+}
+
+// --- Markdown slice (#2244) -------------------------------------------------
+//
+// Per-step SOURCE markdown, sliced to the same parser-v2 `###` step numbering
+// the HTML slice uses so the two agree on totalSteps/titles. Backs the MCP
+// `get_tutorial_step(format='markdown')` path; the HTML slice above is left
+// untouched for its non-tool consumers (Joule checkStepCode, chat-context.js).
+//
+// Sourced from ContentFiles.sourceContent (the captured upstream `.md`),
+// normalized like the `/tutorials/<slug>.md` serve path: image-directive
+// comments stripped (in the pure parser) and relative image paths absolutized
+// via RepoCatalog provenance (#2235) here.
+
+/** RepoCatalog {repo, branch} for a slug. CDS QL is fine — only small string
+ *  columns, no BLOB. Fail-open to nulls (image paths stay relative). */
+async function getRepoProvenance(slug) {
+  try {
+    const { RepoCatalog } = cds.entities(NS);
+    if (!RepoCatalog) return { repo: null, branch: null };
+    const row = await SELECT.one.from(RepoCatalog)
+      .where({ slug })
+      .columns('repo', 'branch');
+    return { repo: row?.repo ?? null, branch: row?.branch ?? null };
+  } catch (err) {
+    LOG.warn(`slicer: repo-provenance lookup failed for ${slug}: ${err.message}`);
+    return { repo: null, branch: null };
+  }
+}
+
+async function loadAndParseMarkdown(slug) {
+  if (!isFlagEnabled('KG_STEP_SLICER_ENABLED')) return null;
+
+  const version = await getActiveVersion();
+  if (!version) return null;
+
+  const cacheKey = mdSliceKey(slug, version);
+  let hit;
+  try {
+    hit = await (await cache()).get(cacheKey);
+  } catch (err) {
+    LOG.warn(`slicer: md cache get failed for ${slug}, treating as miss: ${err.message}`);
+    hit = null;
+  }
+  if (hit) {
+    metrics.counter('mcp.slice.md[outcome=hit]');
+    return { steps: new Map(hit.stepsEntries), totalSteps: hit.totalSteps };
+  }
+
+  const { ContentFiles } = cds.entities(NS);
+  // Single-column BLOB read (no metadata alongside) — safe via CDS QL on HANA,
+  // same pattern as the HTML read above.
+  let blobRow;
+  try {
+    blobRow = await SELECT.one.from(ContentFiles)
+      .where({ version, slug })
+      .columns('sourceContent');
+  } catch (err) {
+    LOG.warn(`slicer: md source fetch failed for ${slug}`, err.message);
+    metrics.counter('mcp.slice.md[outcome=error]');
+    return null;
+  }
+  if (!blobRow || blobRow.sourceContent == null) return null;
+
+  let markdown;
+  try {
+    markdown = gunzipSync(await toBuffer(blobRow.sourceContent)).toString('utf8');
+  } catch (err) {
+    LOG.warn(`slicer: md gunzip failed for ${slug}`, err.message);
+    metrics.counter('mcp.slice.md[outcome=error]');
+    return null;
+  }
+
+  const parsedSteps = parseMarkdownSteps(markdown);
+  if (parsedSteps.length === 0) {
+    LOG.warn(`slicer: no markdown steps parsed for ${slug}; source may be malformed`);
+    metrics.counter('mcp.slice.md[outcome=error]');
+    return null;
+  }
+
+  const { repo, branch } = await getRepoProvenance(slug);
+  const steps = new Map();
+  for (const s of parsedSteps) {
+    const md = absolutizeImagePaths(s.markdown, { slug, repo, branch });
+    steps.set(s.number, { markdown: md, text: s.text, title: s.title });
+  }
+
+  const result = { steps, totalSteps: steps.size };
+  try {
+    await (await cache()).set(
+      cacheKey,
+      { stepsEntries: [...steps.entries()], totalSteps: steps.size },
+      { ttl: TTL_MS, tags: [{ value: slugTag(slug) }] },
+    );
+  } catch (err) {
+    LOG.warn(`slicer: md cache set failed for ${slug}, entry not cached: ${err.message}`);
+  }
+  metrics.counter('mcp.slice.md[outcome=miss]');
+  return result;
+}
+
+/** Per-step source markdown. Shape mirrors sliceStep but carries `markdown`
+ *  instead of `html`. Returns null on unknown slug / out-of-range step /
+ *  missing source. */
+export async function sliceStepMarkdown(slug, stepNumber) {
+  const parsed = await loadAndParseMarkdown(slug);
+  if (!parsed) return null;
+  const step = parsed.steps.get(stepNumber);
+  if (!step) return null;
+  return { markdown: step.markdown, text: step.text, stepTitle: step.title, totalSteps: parsed.totalSteps };
 }
 
 export async function sliceAllSteps(slug) {
