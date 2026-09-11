@@ -19,11 +19,14 @@ export async function loadProvenanceInputs(rawSlug) {
     let report = null;
     if (tut) {
       const rep = await SELECT.one.from(FreshnessReport)
-        .columns('status', 'openHighCount', 'runAt', 'model').where({ tutorial_ID: tut.ID });
+        .columns('ID', 'status', 'openHighCount', 'runAt', 'model')
+        .where({ tutorial_ID: tut.ID })
+        .orderBy('runAt desc');
       if (rep) {
         // Use JS counting to avoid count(*) as n CI-Node fragility (see memory ci-node-version-mismatch).
+        // Scope to the fetched report so multi-report tutorials only count findings for the latest run.
         const medRows = await SELECT.from(FreshnessFinding)
-          .columns('ID').where({ tutorial_ID: tut.ID, severity: 'Medium', disposition: 'OPEN' });
+          .columns('ID').where({ report_ID: rep.ID, severity: 'Medium', disposition: 'OPEN' });
         report = {
           status: rep.status,
           openHighCount: rep.openHighCount || 0,
