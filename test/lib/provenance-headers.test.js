@@ -58,4 +58,21 @@ describe('advisory provenance headers', () => {
     expect(hit.headers['x-freshness-confidence']).toBe('unknown');
     expect(hit.headers['x-content-provenance']).toBe('/content/tutorials/demo/provenance');
   });
+
+  it('suppresses advisory headers on cache-hit after flag flipped OFF mid-TTL', async () => {
+    // Warm the LRU with the flag ON so cached.advisory is populated.
+    __setFlagForTest('PROVENANCE_ENVELOPE_ENABLED', true);
+    const miss = await project.axios.get('/content/tutorials/demo');
+    expect(miss.status).toBe(200);
+    expect(miss.headers['x-freshness-confidence']).toBe('unknown');
+
+    // Flip flag OFF without invalidating the cache — simulates admin toggling off mid-TTL.
+    __setFlagForTest('PROVENANCE_ENVELOPE_ENABLED', false);
+
+    // Next GET must hit the warm LRU (X-Content-Source: cache) but must NOT emit advisory headers.
+    const hit = await project.axios.get('/content/tutorials/demo');
+    expect(hit.headers['x-content-source']).toBe('cache');
+    expect(hit.headers['x-freshness-confidence']).toBeUndefined();
+    expect(hit.headers['x-content-provenance']).toBeUndefined();
+  });
 });

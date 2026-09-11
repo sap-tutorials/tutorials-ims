@@ -1041,7 +1041,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       res.setHeader('ETag', `"${cached.hash}"`);
       setContentCacheHeaders(res, { slug: tagSlug });
       res.setHeader('X-Content-Source', 'cache');
-      setAdvisoryHeaders(res, cached.advisory);
+      setAdvisoryHeaders(res, isFlagEnabled('PROVENANCE_ENVELOPE_ENABLED') ? cached.advisory : null);
       res.send(cached.buffer);
       return 'served';
     }
