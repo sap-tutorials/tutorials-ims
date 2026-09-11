@@ -58,6 +58,17 @@ describe('devtoberfest-feed', () => {
     expect(out.sessions[0].sessionCode).toBe('DEV101');
   });
 
+  it('assembleFeed carries surveyUrl (computed SURVEYURL) onto sessions, empty when unset', () => {
+    const sess = [
+      { ID: 's1', TITLE: 'Has survey', TRACK_ID: 't1', STATUS: 'Confirmed', SURVEYURL: 'https://survey.example.com/feedback?session=DEV101' },
+      { ID: 's2', TITLE: 'No survey', TRACK_ID: 't1', STATUS: 'Confirmed' },
+    ];
+    const out = assembleFeed({ sessions: sess, activities: [], tracks, editions: [], activeEditionId: null });
+    const byId = new Map(out.sessions.map((s) => [s.id, s]));
+    expect(byId.get('s1').surveyUrl).toBe('https://survey.example.com/feedback?session=DEV101');
+    expect(byId.get('s2').surveyUrl).toBe('');
+  });
+
   it('assembleFeed carries broadcastingPreference (Live/PreRecorded), null when unset', () => {
     const sess = [
       { ID: 's1', TITLE: 'Live one', TRACK_ID: 't1', STATUS: 'Confirmed', BROADCASTINGPREFERENCE: 'Live' },
