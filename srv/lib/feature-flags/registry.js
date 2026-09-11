@@ -308,6 +308,13 @@ export const FEATURE_FLAGS = [
     description: 'When true, the nightly freshness-scan job runs the detector across the tutorial catalog. DB-driven config (ImsConfig key flag.freshness.scan); no env var. Default OFF.',
     howToChange: featureFlagUpsert('FRESHNESS_SCAN_ENABLED', 'flag.freshness.scan'),
   },
+  {
+    key: 'PROVENANCE_ENVELOPE_ENABLED', label: 'Signed provenance & freshness envelope', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.provenance.envelope',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, serves the signed provenance JWS at /content/tutorials/:slug/provenance, publishes the JWKS at /.well-known/tutorial-provenance/jwks.json, and emits advisory X-Freshness-Confidence / X-Content-Provenance headers. DB-driven config (ImsConfig key flag.provenance.envelope); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('PROVENANCE_ENVELOPE_ENABLED', 'flag.provenance.envelope'),
+  },
   // ---- Taxonomy ----
   {
     key: 'SEMAPHORE_SYNC_ENABLED', label: 'Semaphore taxonomy auto-sync', category: 'Taxonomy',
