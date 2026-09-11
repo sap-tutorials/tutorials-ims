@@ -3,7 +3,11 @@ import cds from '@sap/cds';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { createContentHandlers } from '../../srv/lib/content-store.js';
+import { createSessionHelpers } from '../../srv/lib/content-publish-session.js';
 import * as catalogRenderer from '../../srv/lib/catalog-renderer.js';
+import {
+  refreshContentDeltaFlags, bustContentDeltaFlagsCache, DELTA_WRITE_KEY,
+} from '../../srv/lib/content-delta-flags.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -123,6 +127,41 @@ describe('content-store', () => {
       });
 
       expect(res.status).toBe(403);
+    });
+
+    it('persists sourceCommit onto ContentCurrent when supplied', async () => {
+      const { ContentCurrent, ContentFiles, ContentManifest, ImsConfig, JobLocks } = cds.entities('com.sap.developers.ims');
+      const NS = 'com.sap.developers.ims';
+      const slug = 'commit-tutorial';
+      const sha = 'a'.repeat(40);
+      const helpers = createSessionHelpers({ namespace: NS });
+      // Clean up any pre-existing state for this slug.
+      await DELETE.from(ContentCurrent).where({ slug });
+      // Enable the delta write flag and warm the cache so the synchronous
+      // isDeltaWrite() getter sees the new value before commitSession runs.
+      await DELETE.from(ImsConfig).where({ key: DELTA_WRITE_KEY });
+      await INSERT.into(ImsConfig).entries({ key: DELTA_WRITE_KEY, value: 'true' });
+      await refreshContentDeltaFlags();
+      try {
+        const { sessionId } = await helpers.beginPublishSession({
+          trigger: 'test', expectedSlugCount: 1, initiator: 'test'
+        });
+        // append — passes sourceCommits so the per-slug commit SHA is persisted
+        const html = '<h1>x</h1>';
+        await helpers.appendToSession({
+          sessionId,
+          files: { [slug]: gzipSync(Buffer.from(html, 'utf-8')).toString('base64') },
+          sourceCommits: { [slug]: sha },
+        });
+        await helpers.commitSession({ sessionId });
+        // ContentCurrent must carry the sourceCommit through the promotion path
+        const row = await SELECT.one.from(ContentCurrent).where({ slug });
+        expect(row.sourceCommit).toBe(sha);
+      } finally {
+        await DELETE.from(ContentCurrent).where({ slug });
+        await DELETE.from(ImsConfig).where({ key: DELTA_WRITE_KEY });
+        bustContentDeltaFlagsCache();
+      }
     });
   });
 
