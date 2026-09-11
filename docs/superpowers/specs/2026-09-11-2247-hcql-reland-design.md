@@ -172,11 +172,11 @@ stay green — they are the regression canary.
 
 ## 5. Acceptance criteria (from #2247, Option 1)
 - [x] Decision recorded: re-land, authenticated-only, on CAP 10.1.0.
-- [ ] Root cause of the 218-test regression documented (this spec §2) and fixed
+- [x] Root cause of the 218-test regression documented (this spec §2) and fixed
       (explicit `@protocol` path isolation + CAP bump).
-- [ ] `@hcql`/HCQL scoped to authenticated services only, never anonymous.
+- [x] `@hcql`/HCQL scoped to authenticated services only, never anonymous.
 - [ ] Full unit + hybrid suites green.
-- [ ] Docs updated to match reality.
+- [x] Docs updated to match reality.
 
 ## 6. Risks & open questions
 - **CAP minor bump + dep-wide refresh blast radius** — primary risk (see §4.1).
