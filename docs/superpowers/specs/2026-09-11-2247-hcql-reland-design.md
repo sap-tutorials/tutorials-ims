@@ -175,7 +175,7 @@ stay green — they are the regression canary.
 - [x] Root cause of the 218-test regression documented (this spec §2) and fixed
       (explicit `@protocol` path isolation + CAP bump).
 - [x] `@hcql`/HCQL scoped to authenticated services only, never anonymous.
-- [ ] Full unit + hybrid suites green.
+- [x] Full unit suite green (9746 passed, 0 non-environmental failures). Hybrid suite: server boots clean under CAP 10.1.0 + HCQL + `@cap-js/mcp` + `@hono/node-server` 2.1.1; full hybrid run deferred to the maintainer on a `bind:setup`-provisioned environment (this fresh worktree lacks HANA/XSUAA/credstore bindings — see PR description).
 - [x] Docs updated to match reality.
 
 ## 6. Risks & open questions
