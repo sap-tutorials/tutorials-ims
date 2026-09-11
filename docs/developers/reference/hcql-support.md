@@ -170,7 +170,7 @@ HCQL enablement is split across two CDS files:
 - `srv/hcql-enablement.cds` — annotates `AuthorService`, `AnalyticsService`, `ExportsService`, `ConsolidationService` with their respective `@protocol` lists.
 - `srv/admin-service-mcp.cds` — `AdminService`'s `@protocol` list (which also carries MCP) was extended in-place to include `{kind:'hcql', path:'/hcql/admin'}`.
 
-The approuter (`xs-app.json` and `.deploy/xs-app.json`) has dedicated `/hcql/*` routes with `authenticationType: xsuaa` and JWT-forwarding to `tutorials-srv`.
+The approuter (`approuter/xs-app.json` — the only approuter config; the MTA builds the approuter module from `../approuter`, there is no `.deploy/xs-app.json`) has dedicated `/hcql/*` routes with `authenticationType: xsuaa`, `csrfProtection: false` (HCQL is a programmatic Bearer-token POST API, matching the `/mcp/*` and `/a2a` routes), and JWT-forwarding to `tutorials-srv`.
 
 ## Related
 
