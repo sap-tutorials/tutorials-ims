@@ -23,9 +23,6 @@ describe('HCQL enablement — AdminService', () => {
 
   it('does NOT mount HCQL on the OData path (POST /admin with CQN is rejected)', async () => {
     const { POST } = project;
-    await expect(POST('/admin', CQN, admin)).rejects.toMatchObject({
-      response: { status: expect.any(Number) },
-    }).catch(() => {}); // tolerate throw-shape; asserted precisely below
     let status;
     try { const r = await POST('/admin', CQN, admin); status = r.status; }
     catch (e) { status = e.response?.status ?? e.status; }
@@ -57,6 +54,40 @@ describe('HCQL enablement — AdminService', () => {
     const { POST } = project;
     let status;
     try { const r = await POST('/hcql/admin', CQN); status = r.status; }
+    catch (e) { status = e.response?.status ?? e.status; }
+    expect([401, 403]).toContain(status);
+  });
+});
+
+describe.each([
+  { svc: 'AuthorService',        odata: '/author',          hcql: '/hcql/author',        user: 'author',        password: '' },
+  { svc: 'AnalyticsService',     odata: '/admin/analytics', hcql: '/hcql/analytics',     user: 'admin',         password: 'admin' },
+  { svc: 'ExportsService',       odata: '/admin/exports',   hcql: '/hcql/exports',       user: 'admin',         password: 'admin' },
+  { svc: 'ConsolidationService', odata: '/api/v1',          hcql: '/hcql/consolidation', user: 'consolidation', password: 'consolidation' },
+])('HCQL enablement — $svc', ({ svc, odata, hcql, user, password }) => {
+  const auth = { auth: { username: user, password } };
+  const cqn = { SELECT: { from: { ref: [`${svc}.dummy`] }, limit: { rows: { val: 1 } } } };
+
+  it('mounts HCQL on its own path (not 404)', async () => {
+    const { POST } = project;
+    let status;
+    try { const r = await POST(hcql, cqn, auth); status = r.status; }
+    catch (e) { status = e.response?.status ?? e.status; }
+    expect(status).not.toBe(404); // adapter present; 200/400 acceptable
+  });
+
+  it('does not accept a CQN body on the OData path', async () => {
+    const { POST } = project;
+    let status;
+    try { const r = await POST(odata, cqn, auth); status = r.status; }
+    catch (e) { status = e.response?.status ?? e.status; }
+    expect(status).not.toBe(200);
+  });
+
+  it('rejects an unauthenticated HCQL call', async () => {
+    const { POST } = project;
+    let status;
+    try { const r = await POST(hcql, cqn); status = r.status; }
     catch (e) { status = e.response?.status ?? e.status; }
     expect([401, 403]).toContain(status);
   });
