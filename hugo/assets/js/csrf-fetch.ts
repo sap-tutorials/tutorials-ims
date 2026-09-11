@@ -29,13 +29,14 @@
  *         with a capital R in some versions, so we normalise case), the
  *         cached token was stale. Clear cache, refetch once, retry the
  *         original request exactly once, and return that response.
- *  - Stale-session re-auth (issue #1904): if the token handshake or the
- *    mutating request itself comes back as AppRouter's XSUAA login
+ *  - Stale-session re-auth (issues #1904, #2239): if the token handshake or
+ *    the mutating request itself comes back as AppRouter's XSUAA login
  *    interstitial (a followed redirect, or a 200 with an HTML body where
- *    JSON was expected), csrfFetch forces a top-level navigation to
- *    `/login?returnTo=<current path>` and throws `CsrfFetchError`. This turns
- *    the previously-swallowed "logged out while the page still looks logged
- *    in" case into a proper re-authentication redirect.
+ *    JSON was expected) OR as a genuine `401 Unauthorized`, csrfFetch forces a
+ *    top-level navigation to `/login?returnTo=<current path>` and throws
+ *    `CsrfFetchError`. This turns the previously-swallowed "logged out while
+ *    the page still looks logged in" case into a proper re-authentication
+ *    redirect.
  *  - `credentials: 'include'` is added when missing. Vue islands hit the
  *    approuter on the same origin so it's usually redundant, but for
  *    hybrid-dev port hopping (approuter on 5000, hugo on 1313) it
@@ -99,6 +100,15 @@ function isSafeMethod(init?: RequestInit): boolean {
  */
 function isSessionExpiredResponse(res: Response): boolean {
   if (res.redirected) return true;
+  // A genuine 401 Unauthorized is the stale-session tell that #1904 missed
+  // (issue #2239). The interstitial is no longer the only shape an expired
+  // session takes — AppRouter/CAP can reject the mutating request (or the
+  // /auth/user handshake) with a real 401. `401` means "unauthenticated", full
+  // stop, so re-authenticate. This is deliberately NOT `!res.ok`: a 403 is
+  // either the CSRF-token-required retry signal or an Akamai/edge "Access
+  // Denied" block (handled/surfaced elsewhere), and a 5xx is an origin error —
+  // neither should force a login navigation.
+  if (res.status === 401) return true;
   // Only a successful response can be the login interstitial. A 4xx/5xx HTML
   // body is an edge/CDN or origin error page — surface it, don't re-auth.
   if (!res.ok) return false;
