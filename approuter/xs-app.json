@@ -225,40 +225,35 @@
       "target": "/hcql/admin$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/hcql/author(.*)$",
       "target": "/hcql/author$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Tutorial.Author",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/hcql/analytics(.*)$",
       "target": "/hcql/analytics$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/hcql/exports(.*)$",
       "target": "/hcql/exports$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/hcql/consolidation(.*)$",
       "target": "/hcql/consolidation$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.ConsolidationScope",
-      "csrfProtection": false
+      "scope": "$XSAPPNAME.ConsolidationScope"
     },
     {
       "source": "^/admin/exports/(.*)$",

@@ -67,11 +67,27 @@ The base URL depends on the environment:
 
 Replace `$BASE_URL` and `$JWT` in the examples below. A valid JWT with the required scope is always required.
 
+### CSRF handshake (required through the approuter)
+
+The `/hcql/*` approuter routes enforce CSRF (approuter default, post-#895 — see [Implementation notes](#implementation-notes)). Every POST must carry an `x-csrf-token` obtained via a one-time fetch step:
+
+```bash
+# Step 1 — fetch a CSRF token (any GET to a protected route works)
+CSRF=$(curl -sI -X GET "$BASE_URL/admin/Tutorials?$top=1" \
+  -H "Authorization: Bearer $JWT" \
+  -H "x-csrf-token: fetch" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-csrf-token"{print $2}')
+
+# Step 2 — send the HCQL POST with the token (and reuse the same cookie jar if scripting)
+```
+
+Send `-H "x-csrf-token: $CSRF"` on each POST below. (Against a bare local `cds watch` on `http://localhost:4004` there is no approuter, so the token step is unnecessary; it is required for every deployed environment.)
+
 ### AdminService (Admin scope required)
 
 ```bash
 curl -X POST "$BASE_URL/hcql/admin" \
   -H "Authorization: Bearer $JWT" \
+  -H "x-csrf-token: $CSRF" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{
@@ -126,7 +142,7 @@ curl -X GET "$BASE_URL/api/v1/getMergeStatus(uuid='<USER_UUID>')" \
 
 ## Post-deploy smoke matrix
 
-Run after every deploy that touches HCQL:
+Run after every deploy that touches HCQL (the authenticated POSTs — items 3 and 5 — need the `x-csrf-token` handshake from [Curl examples](#curl-examples)):
 
 1. **Auth gate — 401** — anonymous `POST $BASE_URL/hcql/admin` returns `401 Unauthorized`.
 2. **Auth gate — 403** — authenticated curl (valid JWT, no `Admin` scope) to `POST $BASE_URL/hcql/admin` returns `403 Forbidden`.
@@ -170,7 +186,7 @@ HCQL enablement is split across two CDS files:
 - `srv/hcql-enablement.cds` — annotates `AuthorService`, `AnalyticsService`, `ExportsService`, `ConsolidationService` with their respective `@protocol` lists.
 - `srv/admin-service-mcp.cds` — `AdminService`'s `@protocol` list (which also carries MCP) was extended in-place to include `{kind:'hcql', path:'/hcql/admin'}`.
 
-The approuter (`approuter/xs-app.json` — the only approuter config; the MTA builds the approuter module from `../approuter`, there is no `.deploy/xs-app.json`) has dedicated `/hcql/*` routes with `authenticationType: xsuaa`, `csrfProtection: false` (HCQL is a programmatic Bearer-token POST API, matching the `/mcp/*` and `/a2a` routes), and JWT-forwarding to `tutorials-srv`.
+The approuter (`approuter/xs-app.json` — the only approuter config; the MTA builds the approuter module from `../approuter`, there is no `.deploy/xs-app.json`) has dedicated `/hcql/*` routes with `authenticationType: xsuaa` and JWT-forwarding to `tutorials-srv`. The routes do **not** set `csrfProtection` — they inherit the approuter default (CSRF **on**), enforced by the `check-csrf-clients` static guard (post-#895): only the `/mcp/*` and `/a2a` JSON-RPC routes are allowlisted to disable CSRF. Because HCQL sits behind CSRF protection, clients must perform the `x-csrf-token: fetch` two-step before every POST (see [Curl examples](#curl-examples)). Flipping HCQL to `csrfProtection: false` (the M2M pattern) would require adding its sources to `CSRF_EXEMPT_SOURCES` in `scripts/check-csrf-clients.ts` **and** maintainer sign-off on the issue tracker.
 
 ## Related
 
