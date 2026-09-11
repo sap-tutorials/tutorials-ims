@@ -135,35 +135,75 @@ describe('DeveloperService authenticated MCP read tools', () => {
     expect(data.slug).toBe('tut-c');
   });
 
-  it('get_tutorial_step (authenticated) returns per-step HTML', async () => {
+  it('get_tutorial_step returns markdown by default, html on request, and 400 on bad format', async () => {
     const { ContentManifest, ContentFiles } = cds.entities('com.sap.developers.ims');
     const htmlContent = `
       <main class="tutorial-body">
         <section class="step" data-step-number="1"><h2 class="step-title">One</h2><p>step-one-body</p></section>
         <section class="step" data-step-number="2"><h2 class="step-title">Two</h2><p>step-two-body</p></section>
       </main>`;
-    const gzBuf = gzipSync(Buffer.from(htmlContent));
+    const mdContent = [
+      '### One',
+      '',
+      'step-one-body-md',
+      '',
+      '### Two',
+      '',
+      'step-two-body-md',
+    ].join('\n');
 
     // version is Integer in the schema (ContentManifestAspect.key version : Integer)
     await INSERT.into(ContentManifest).entries({
       version: 9001, status: 'ACTIVE', publishedAt: new Date()
     });
-    // ContentFiles.content is LargeBinary (not contentGz); mimeType not contentType
+    // ContentFiles.content is LargeBinary (not contentGz); mimeType not contentType.
+    // sourceContent carries the gzipped upstream markdown for the format='markdown' path.
     await INSERT.into(ContentFiles).entries({
-      version: 9001, slug: 'tut-a', content: gzBuf, mimeType: 'text/html'
+      version: 9001, slug: 'tut-a',
+      content: gzipSync(Buffer.from(htmlContent)),
+      sourceContent: gzipSync(Buffer.from(mdContent)),
+      mimeType: 'text/html',
     });
 
     // KG_STEP_SLICER_ENABLED defaults enabled (ImsConfig flag.kg.stepSlicer);
     // reset the flag cache so the step slicer is on for this read.
     __resetFlagsForTest();
 
-    const { data } = await project.get(
+    // Default → markdown, single `content` body, contentFormat echoes it.
+    const { data: def } = await project.get(
       `/api/get_tutorial_step(slug='tut-a',stepNumber=1)`,
       auth1
     );
-    expect(data.html).toContain('step-one-body');
-    expect(data.stepTitle).toBe('One');
-    expect(data.totalSteps).toBe(2);
+    expect(def.contentFormat).toBe('markdown');
+    expect(def.content).toContain('step-one-body-md');
+    expect(def.content).toContain('### One');
+    expect(def.html).toBeUndefined();
+    expect(def.stepTitle).toBe('One');
+    expect(def.totalSteps).toBe(2);
+
+    // Explicit markdown matches the default.
+    const { data: md } = await project.get(
+      `/api/get_tutorial_step(slug='tut-a',stepNumber=1,format='markdown')`,
+      auth1
+    );
+    expect(md.contentFormat).toBe('markdown');
+    expect(md.content).toBe(def.content);
+
+    // Explicit html → sliced HTML in the same `content` field.
+    const { data: html } = await project.get(
+      `/api/get_tutorial_step(slug='tut-a',stepNumber=1,format='html')`,
+      auth1
+    );
+    expect(html.contentFormat).toBe('html');
+    expect(html.content).toContain('step-one-body');
+    expect(html.content).toContain('<section');
+    expect(html.stepTitle).toBe('One');
+    expect(html.totalSteps).toBe(2);
+
+    // Unknown format → 400.
+    await expect(
+      project.get(`/api/get_tutorial_step(slug='tut-a',stepNumber=1,format='pdf')`, auth1)
+    ).rejects.toMatchObject({ response: { status: 400 } });
   });
 
   it('rejects anonymous callers with 401', async () => {

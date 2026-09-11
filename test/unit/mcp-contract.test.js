@@ -91,7 +91,7 @@ const EXPECTED_PARAMS = {
 // verified in the hybrid/smoke layer (Task 17). See the top-of-file auth-
 // enumeration finding comment for the full explanation.
 const PHASE2_ANONYMOUS_TOOLS = [
-  { service: 'SearchService', name: 'get_tutorial_step', params: ['slug', 'stepNumber'] },
+  { service: 'SearchService', name: 'get_tutorial_step', params: ['slug', 'stepNumber', 'format'] },
 ];
 
 // ─── Server lifecycle ─────────────────────────────────────────────────────────
