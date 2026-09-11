@@ -190,6 +190,9 @@ async function getRepoProvenance(slug) {
     const { RepoCatalog } = cds.entities(NS);
     if (!RepoCatalog) return { repo: null, branch: null };
     const row = await SELECT.one.from(RepoCatalog)
+      // MCP handler lowercases via lcSlug before sliceStepMarkdown →
+      // loadAndParseMarkdown → getRepoProvenance.
+      // slug-canonical: caller-canonicalizes
       .where({ slug })
       .columns('repo', 'branch');
     return { repo: row?.repo ?? null, branch: row?.branch ?? null };
