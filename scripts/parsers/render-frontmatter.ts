@@ -128,6 +128,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
       const entry: Record<string, unknown> = { number: s.number, title: s.title }
       if (s.validation?.length) entry.validation = s.validation
       if (s.codeCheck) entry.codeCheck = s.codeCheck
+      if (s.asserts?.length) entry.asserts = s.asserts
       // [#172] PR 3 — step-level branch + skip metadata. Optional; only emit
       // when populated. branches.ts pre-pass attaches branchGroup/branchPointId/
       // branches; authors hand-write skipIf/skipLabel/skipReason in YAML.
