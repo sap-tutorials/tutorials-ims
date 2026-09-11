@@ -26,9 +26,9 @@ This feature is structurally identical to **CodeCheck** (`[CODECHECK_N]`) — an
 
 | Stage | CodeCheck (model) | AssertSpecs (this slice) |
 |---|---|---|
-| Parser | `scripts/parsers/codecheck.ts` | **new** `scripts/parsers/assert.ts` |
+| Parser | `scripts/parsers/codecheck.ts` (reads `rules.vr`) | **new** `scripts/parsers/assert.ts` (reads `rules.vr`) |
 | Step field | `TutorialStep.codeCheck` | **new** `TutorialStep.asserts?: AssertBlock[]` |
-| Merge | `compose.ts` step loop | same |
+| Attach + sidecar | `attachCodeCheckSpecs(steps, map)` at `fetch-tutorials.ts:1100-1112` | **new** `attachAssertSpecs(steps, map)`, mirror block |
 | Frontmatter emit | `render-frontmatter.ts` whitelist (~L127-141) | add `asserts` to whitelist |
 | Sidecar | `<slug>.codecheck.json` (`fetch-tutorials.ts` ~L1102) | **new** `<slug>.assert.json` |
 | Collect+POST | `scripts/lib/publish-codecheck.js` | **new** `scripts/lib/publish-asserts.js` |
@@ -40,7 +40,9 @@ This feature is structurally identical to **CodeCheck** (`[CODECHECK_N]`) — an
 
 ## 4. Authoring syntax
 
-Written inside a step's H3 body. The `[ASSERT_N]` marker line and its `###`-subsection lines are **stripped from rendered step content** (v2 already strips `[VALIDATE_N]`/`[CODECHECK_N]`/`[DONE]` — same mechanism, `scripts/parsers/v2.ts`). `N` is a per-step ordinal starting at 1.
+**Location: the `rules.vr` companion file** — the same file that already holds `[VALIDATE_N]` and `[CODECHECK_N]` blocks, NOT the tutorial's step markdown. This is how every existing machine-checkable per-step spec is authored (`parseCodeCheckBlocks(rulesContent)` at `fetch-tutorials.ts:1100`). Because these markers never appear in the step body, there is **no body-stripping to do** — `scripts/parsers/v2.ts` is untouched. (An earlier draft of this spec wrongly claimed v2 strips `[CODECHECK_N]` from the body; it does not — codecheck lives in `rules.vr`.)
+
+`N` = the **step number** the assertion applies to (matching `[CODECHECK_N]`/`[VALIDATE_N]`, where `[CODECHECK_3]` targets step 3). A step may carry multiple assertions: repeat the `[ASSERT_N]` block with the same `N`. Each block is one assertion; its `assertIndex` is assigned by order of appearance within that step (0-based).
 
 Three types, each with its own required/optional subsections. `###Match` (a regex) is optional everywhere except `file`+`contains` where it is required.
 
@@ -101,8 +103,8 @@ Unknown `###Type`, missing required subsection, or unparseable `###Expect` ⇒ t
 export type AssertType = 'cmd' | 'http' | 'file';
 
 export interface AssertBlock {
-  index: number;        // N from [ASSERT_N], 1-based, per step
-  stepNumber: number;
+  index: number;        // assertIndex within the step, 0-based (order of appearance)
+  stepNumber: number;   // N from [ASSERT_N]
   type: AssertType;
   // cmd
   run?: string;
@@ -128,18 +130,28 @@ There is **no server-only secret** in an assert block (unlike codecheck's `refer
 
 ## 6. Parser: `scripts/parsers/assert.ts`
 
-Export `extractAsserts(stepContent: string, stepNumber: number): { content: string; asserts: AssertBlock[] }`.
+Reads the `rules.vr` companion content (never the step body), mirroring `parseCodeCheckBlocks`. Two exports:
 
-- Fence-aware (reuse the fence tracker used by `codecheck.ts`/`v2.ts`) so `[ASSERT_N]` inside a ```` ``` ```` block is literal and never parsed.
-- Scan for `^\[ASSERT_(\d+)\]$` marker lines; collect following `###Subsection` blocks until the next marker or a non-subsection content line.
-- Build an `AssertBlock`, validate per §4, push or warn-and-skip.
-- Return the step content with all matched marker+subsection lines removed (so rendered output is clean), plus the `asserts` array.
+```ts
+// N in [ASSERT_N] is the step number; a step may have multiple blocks.
+export function parseAssertBlocks(content: string): Map<number, AssertBlock[]>
+// Attaches public asserts[] to matching steps in place; returns the flat
+// sidecar array (all blocks across all steps) for <slug>.assert.json.
+export function attachAssertSpecs<T extends { number: number; asserts?: AssertBlock[] }>(
+  steps: T[], specs: Map<number, AssertBlock[]>
+): AssertBlock[]
+```
+
+- Marker regex `^\[ASSERT_(\d+)\]\s*$`; sibling-marker regex closes an open block when the next `[VALIDATE_|CODECHECK_|ASSERT_\d+]` line appears (same flush pattern as `codecheck.ts:12-28`).
+- Per block: read `###Type`, then type-specific `###`-subsections via the existing `section(raw, name)` helper pattern; build+validate an `AssertBlock` per §4; assign `stepNumber = N`; append to `map.get(N)` (creating the array). `index` (assertIndex) = array position at append time.
+- Malformed block ⇒ `console.warn` + skip (never throw).
+- No fence-awareness needed — `rules.vr` is not rendered markdown, it is a directive file (matching `codecheck.ts`, which does not use a fence tracker).
 
 ## 7. Wiring
 
-1. **`compose.ts`** — in the v2 step-parse loop, call `extractAsserts(step.content, step.number)`, assign `step.content` (stripped) and `step.asserts` (when non-empty). Placed after existing per-step extractors (codecheck/validation) for consistent stripping order.
-2. **`render-frontmatter.ts`** — add `asserts` to the per-step frontmatter whitelist (~L127-141), emitted only when present. Serialized via the same YAML path as `validation`/`codeCheck`.
-3. **`fetch-tutorials.ts`** — after compose, collect `steps[].asserts` into `{ slug, specs: [...] }` and write `<slug>.assert.json` to `CACHE_DIR`, mirroring the codecheck sidecar write (~L1102). Only write when at least one assert exists.
+1. **`fetch-tutorials.ts`** — beside the codecheck block (`:1100-1112`), add: `const assertMap = parseAssertBlocks(rulesContent); if (assertMap.size) { const sidecar = attachAssertSpecs(steps, assertMap); if (sidecar.length) writeFileSync(join(CACHE_DIR, \`${t.slug.toLowerCase()}.assert.json\`), JSON.stringify({ slug: t.slug.toLowerCase(), specs: sidecar }, null, 2)); }`. `attachAssertSpecs` also sets `step.asserts` so frontmatter emit picks it up. No `compose.ts` change on the standard path; no `v2.ts` change.
+2. **`compose.ts` (preview parity, optional-but-included)** — in the `opts.rulesVr` preview block (`:222-228`), add `const assertMap = parseAssertBlocks(opts.rulesVr); if (assertMap.size) attachAssertSpecs(steps, assertMap);` so author-preview shows asserts too. No sidecar write here (preview has no cache), matching how codecheck preview differs from fetch.
+3. **`render-frontmatter.ts`** — add `if (s.asserts?.length) entry.asserts = s.asserts;` to the per-step whitelist (L128-139), emitted only when present.
 4. **`scripts/lib/publish-asserts.js`** — `collectAssertSpecs(cacheDir)` (reads `*.assert.json`, flattens to `{slug, ...spec}`, defensive skip on malformed) + `publishAssertSpecs(baseUrl, apiKey, specs)` (POST `/content/assert-specs`, returns `{upserted, skipped}`). Direct clone of `publish-codecheck.js`.
 5. **`srv/lib/assert-spec-publish.js`** — `assertSpecPublishHandler(req, res)`: validate `body.specs` (each needs `slug:string`, `stepNumber:number`, `type` ∈ enum, and type-specific required fields), then per spec resolve `Tutorials` by lower-cased slug (skip if absent), upsert `AssertSpecs` on `(tutorial_ID, stepNumber, assertIndex)` with **carry-forward** semantics (no DELETE). Clone of `code-check-spec-publish.js`.
 6. **`srv/server.js`** — import handler; `app.post('/content/assert-specs', express.json({limit:'5mb'}), contentAuthMiddleware, assertSpecPublishHandler)` beside L942.
@@ -186,7 +198,7 @@ entity AssertSpecs {
 
 Parse+persist is fully verifiable under `npm test` (in-memory SQLite + fixtures):
 
-1. **Parser** (`test/unit/assert-parser.test.js`) — a fixture step body exercising all three types + `###Match`; assert the returned `AssertBlock[]` shape and that markers are stripped from `content`. Negatives: unknown `###Type`, missing `###Run`, missing required `###Match` on `contains`, `[ASSERT_N]` inside a fence (must be ignored), stray marker with no subsections.
+1. **Parser** (`test/unit/assert-parser.test.js`) — a `rules.vr` string exercising all three types + `###Match` + two `[ASSERT_N]` blocks on the same `N`; assert the returned `Map<number, AssertBlock[]>` shape (multi-assert step keyed by ascending `assertIndex`), and that `attachAssertSpecs` sets `step.asserts` on matching steps and returns the flat sidecar array. Negatives: unknown `###Type`, missing `###Run`, missing required `###Match` on `contains`, stray marker with no subsections (all warn-and-skip, no throw).
 2. **Frontmatter emit** — compose a fixture tutorial, render frontmatter, assert `steps[].asserts` is present and correctly shaped, and absent when no asserts authored.
 3. **Sidecar collect** (`test/unit/assert-publish-cli.test.js`) — mirror `code-check-publish-cli.test.js`: temp dir with `*.assert.json`, assert `collectAssertSpecs` flattens/skips malformed.
 4. **Publish handler** (`test/unit/assert-spec-publish.test.js`) — mirror `code-check-spec-publish.test.js`: in-memory SQLite, 400 on invalid body/spec, upsert idempotency on re-post, skip on unknown slug, carry-forward (absent specs retained), multi-assert-per-step keying on `assertIndex`.
