@@ -23,8 +23,34 @@ const FIXTURE_HTML = `
 
 const NS = 'com.sap.developers.ims';
 
+// Fixture: the SAME 3-step tutorial as source markdown (parser-v2 `###` steps),
+// so the markdown slice must agree with the HTML slice on numbering/titles/count.
+const FIXTURE_MD = [
+  '---',
+  'title: Hello CAP',
+  'parser: v2',
+  '---',
+  '',
+  'Intro before the first step.',
+  '',
+  '### Install CAP',
+  '',
+  'Run `npm install -g @sap/cds-dk`.',
+  '',
+  '### Init the project',
+  '',
+  '<!-- border -->',
+  '![diagram](init.png)',
+  '',
+  'Run `cds init bookshop`.',
+  '',
+  '### Start the server',
+  '',
+  'Run `cds watch`.',
+].join('\n');
+
 describe('tutorial-step-slicer', () => {
-  let sliceStep, sliceAllSteps, invalidateSlug;
+  let sliceStep, sliceAllSteps, invalidateSlug, sliceStepMarkdown;
 
   beforeAll(async () => {
     // In-memory caching store so the `caching` service resolves — the slice
@@ -41,10 +67,11 @@ describe('tutorial-step-slicer', () => {
       version: 1,
       slug: 'hello-cap',
       content: gzipSync(Buffer.from(FIXTURE_HTML)),
+      sourceContent: gzipSync(Buffer.from(FIXTURE_MD)),
       mimeType: 'text/html'
     });
     const mod = await import('../../srv/lib/tutorial-step-slicer.js');
-    ({ sliceStep, sliceAllSteps, invalidateSlug } = mod);
+    ({ sliceStep, sliceAllSteps, invalidateSlug, sliceStepMarkdown } = mod);
     mod._resetConnection();
   });
 
@@ -103,5 +130,34 @@ describe('tutorial-step-slicer', () => {
     });
     const slice = await sliceStep('hello-cap', 1);
     expect(slice.stepTitle).toBe('INSTALL CAP');
+  });
+
+  it('sliceStepMarkdown returns per-step source markdown, agreeing with the HTML slice', async () => {
+    const md = await sliceStepMarkdown('hello-cap', 1);
+    expect(md).not.toBeNull();
+    expect(md.stepTitle).toBe('Install CAP');
+    expect(md.markdown.startsWith('### Install CAP')).toBe(true);
+    expect(md.markdown).toContain('npm install -g @sap/cds-dk');
+    // markdown is source, not rendered HTML.
+    expect(md.markdown).not.toContain('<section');
+    // totalSteps + titles agree with the HTML slicer for the same tutorial.
+    // (Cross-check step 3, which no earlier test mutates.)
+    expect(md.totalSteps).toBe(3);
+    const html3 = await sliceStep('hello-cap', 3);
+    const md3 = await sliceStepMarkdown('hello-cap', 3);
+    expect(md3.totalSteps).toBe(html3.totalSteps);
+    expect(md3.stepTitle).toBe(html3.stepTitle);
+  });
+
+  it('sliceStepMarkdown strips image-directive comments', async () => {
+    const md = await sliceStepMarkdown('hello-cap', 2);
+    expect(md.stepTitle).toBe('Init the project');
+    expect(md.markdown).not.toContain('<!-- border -->');
+    expect(md.markdown).toContain('![diagram]');
+  });
+
+  it('sliceStepMarkdown returns null for an out-of-range step and unknown slug', async () => {
+    expect(await sliceStepMarkdown('hello-cap', 99)).toBeNull();
+    expect(await sliceStepMarkdown('no-such-slug', 1)).toBeNull();
   });
 });

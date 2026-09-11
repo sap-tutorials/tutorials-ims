@@ -95,4 +95,52 @@ function injectFrontmatter(content, { slug, canonicalUrl } = {}) {
   return content.replace(fm, `---\n${injected}\n---\n`);
 }
 
-export { normalizeTutorialMarkdown, stripImageDirectiveComments, absolutizeImagePaths };
+/**
+ * Content-negotiation predicate for the primary `/tutorials/<slug>` URL: decide
+ * whether a client that hit the HTML route actually prefers the Markdown
+ * representation. True only when `text/markdown` is present in the `Accept`
+ * header AND its q-value is >= the effective q-value for HTML (matched by
+ * `text/html`, a `text` type wildcard, or a full wildcard). Browsers never send
+ * `text/markdown`, so they always get HTML; agents that send
+ * `Accept: text/markdown` get Markdown.
+ *
+ * Pure function, no I/O — safe to unit-test directly.
+ *
+ * @param {string} acceptHeader  Raw `Accept` request-header value.
+ * @returns {boolean}
+ */
+function prefersMarkdown(acceptHeader) {
+  if (typeof acceptHeader !== 'string' || acceptHeader.trim() === '') return false;
+
+  const ranges = acceptHeader.split(',').map(parseAcceptRange).filter(Boolean);
+
+  let mdQ = -1; // -1 = not requested
+  let htmlQ = 0; // best q among ranges that would match text/html
+  for (const { type, q } of ranges) {
+    if (type === 'text/markdown') mdQ = Math.max(mdQ, q);
+    if (type === 'text/html' || type === 'text/*' || type === '*/*') {
+      htmlQ = Math.max(htmlQ, q);
+    }
+  }
+
+  if (mdQ <= 0) return false; // absent, or explicitly refused via q=0
+  return mdQ >= htmlQ;
+}
+
+/** Parse one `Accept` range like `text/markdown;q=0.9` → { type, q }. */
+function parseAcceptRange(range) {
+  const parts = range.trim().split(';');
+  const type = parts[0].trim().toLowerCase();
+  if (!type) return null;
+  let q = 1;
+  for (const param of parts.slice(1)) {
+    const [k, v] = param.split('=');
+    if (k && k.trim().toLowerCase() === 'q') {
+      const parsed = Number.parseFloat(v);
+      if (!Number.isNaN(parsed)) q = parsed;
+    }
+  }
+  return { type, q };
+}
+
+export { normalizeTutorialMarkdown, stripImageDirectiveComments, absolutizeImagePaths, prefersMarkdown };
