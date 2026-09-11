@@ -82,4 +82,30 @@ extend service SearchService {
     tags        : array of String;
     slug        : String;
   };
+
+  /** Public semantic/vector search over the SAP developer content corpus.
+      Anonymous: the caller sends TEXT ONLY — the server embeds the query
+      server-side and returns scored content references. It NEVER returns raw
+      embedding vectors and NEVER accepts a caller-supplied vector. Off (503)
+      unless ChatSettings.semanticSearchEnabled is set. Fails open ([]) on any
+      retrieval error so a backfill gap never surfaces as an error to an agent.
+      @param query    Free-text query. Empty → []. The server embeds this.
+      @param corpus   'tutorials' (default) | 'concepts' | 'external' | 'all'.
+      @param topK     Max results, clamped [1, 50]. Default ChatSettings.embeddingTopK (5).
+      @param minScore Cosine floor; rows below are dropped. Default ChatSettings.embeddingMinScore (0.25). */
+  @(requires: 'any')
+  function semantic_search(
+    query    : String,
+    corpus   : String,
+    topK     : Integer,
+    minScore : Decimal
+  ) returns array of {
+    slug        : String;
+    title       : String;
+    stepNumber  : Integer;
+    snippet     : String;
+    score       : Decimal;
+    url         : String;
+    contentType : String;
+  };
 }

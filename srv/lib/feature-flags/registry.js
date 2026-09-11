@@ -115,6 +115,13 @@ export const FEATURE_FLAGS = [
     howToChange: adminTile('joule', '#joule'),
   },
   {
+    key: 'ChatSettings.semanticSearchEnabled', label: 'Public semantic search', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'semanticSearchEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#2246', status: 'dev-only',
+    description: 'Anonymous public semantic/vector search: SearchService.semantic_search function + /mcp/search MCP tool. Server embeds the query and returns scored content references (tutorials/concepts/external) — never vectors. Off → 503. Default OFF until corpora are backfilled and the anon surface is vetted.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
     key: 'ChatSettings.codeCheckEnabled', label: 'AI code-check', category: 'Chat / AI',
     kind: 'db-setting', entity: 'ChatSettings', column: 'codeCheckEnabled', resolver: 'chat',
     valueType: 'boolean', default: false, issue: '#171', status: 'ga',

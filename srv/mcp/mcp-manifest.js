@@ -56,6 +56,13 @@ function buildMcpManifest({ baseUrl } = {}) {
               'Search the public external-channels catalog (SAP and community YouTube ' +
               'channels, blogs, podcasts, feeds), filterable by category/platform/owner.',
           },
+          {
+            name: 'semantic_search',
+            description:
+              'Semantic/vector search over the SAP developer content corpus (tutorials, ' +
+              'concepts, external docs). Send free-text; the server embeds it and returns ' +
+              'scored content references — never raw vectors. Corpus-selectable, topK-capped.',
+          },
         ],
       },
       {
