@@ -1456,6 +1456,31 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- getRepoProvenance(slug) ---
+  //
+  // Returns { repo, branch } for a tutorial slug from RepoCatalog (the
+  // authoritative live repo+branch map, populated on content publish and
+  // keyed by slug — see db/views.cds and repo-catalog.js). Used by the
+  // `.md` serve handler to absolutize relative image paths (#2235).
+  //
+  // RepoCatalog holds only small string columns (no BLOBs), so CDS QL is
+  // safe on both HANA and SQLite. Fail-open: any miss/error yields
+  // { repo: null, branch: null }, leaving image paths relative.
+  async function getRepoProvenance(slug) {
+    if (!slug || typeof slug !== 'string') return { repo: null, branch: null };
+    try {
+      const { RepoCatalog } = cds.entities(namespace);
+      if (!RepoCatalog) return { repo: null, branch: null };
+      const row = await SELECT.one.from(RepoCatalog)
+        .where`LOWER(slug) = ${slug.toLowerCase()}`
+        .columns('repo', 'branch');
+      return { repo: row?.repo ?? null, branch: row?.branch ?? null };
+    } catch (err) {
+      console.error('[content/repo-provenance]', err instanceof Error ? err.message : String(err));
+      return { repo: null, branch: null };
+    }
+  }
+
   // --- getTutorialSource(slug) ---
   //
   // Used by the admin tile's Source Markdown facet (PR-2 of spec
@@ -1574,7 +1599,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .split(',')[0].trim();
       const canonicalUrl = `${proto}://${host}/tutorials/${slug}`;
 
-      const out = normalizeTutorialMarkdown(markdown, { slug, canonicalUrl });
+      // Provenance for absolutizing relative image paths (#2235). RepoCatalog is
+      // keyed by slug and carries repo+branch for 100% of live tutorials; it's a
+      // small non-BLOB table so CDS QL is safe. Fail-open: any miss/error leaves
+      // image paths relative (pre-#2235 behavior).
+      const { repo, branch } = await getRepoProvenance(slug);
+
+      const out = normalizeTutorialMarkdown(markdown, { slug, canonicalUrl, repo, branch });
       const buffer = Buffer.from(out, 'utf-8');
       const etag = createHash('sha256').update(buffer).digest('hex');
 
