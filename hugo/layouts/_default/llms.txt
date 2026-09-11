@@ -23,4 +23,5 @@ Browse the full, up-to-date list at the mission index below.
 - Tutorial index: https://developers.sap.com/tutorials/
 - Mission index: https://developers.sap.com/missions/
 - Full machine-readable catalog: https://developers.sap.com/llms-full.txt
+- Navigable site map: https://developers.sap.com/sitemap.md
 - Sitemap: https://developers.sap.com/sitemap.xml
