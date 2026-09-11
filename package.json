@@ -192,7 +192,7 @@
     "@cap-js/graphql": "0.14.0",
     "@cap-js/hana": "^3.0.1",
     "@cap-js/mcp": "1.1.1",
-    "@cap-js/ord": "^1.9.1",
+    "@cap-js/ord": "^1.9.3",
     "@cap-js/sqlite": "^3.0.2",
     "@cap-js/telemetry": "^2.0.1",
     "@grpc/grpc-js": "^1.14.4",
