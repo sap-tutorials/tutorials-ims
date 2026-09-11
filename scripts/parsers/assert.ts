@@ -35,8 +35,8 @@ export function parseAssertBlocks(content: string): Map<number, AssertBlock[]> {
 
 function parseBlock(lines: string[], stepNumber: number, index: number): AssertBlock | null {
   const raw = lines.join('\n')
-  const type = section(raw, 'Type').toLowerCase()
-  if (!VALID_TYPES.has(type as AssertType)) {
+  const type = section(raw, 'Type').toLowerCase() as AssertType
+  if (!VALID_TYPES.has(type)) {
     console.warn(`[assert] step ${stepNumber} assert ${index}: missing or unknown ###Type "${type || '(empty)'}" — skipped`)
     return null
   }
