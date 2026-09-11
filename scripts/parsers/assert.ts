@@ -37,7 +37,7 @@ function parseBlock(lines: string[], stepNumber: number, index: number): AssertB
   const raw = lines.join('\n')
   const type = section(raw, 'Type').toLowerCase()
   if (!VALID_TYPES.has(type as AssertType)) {
-    if (type) console.warn(`[assert] step ${stepNumber} assert ${index}: unknown ###Type "${type}" — skipped`)
+    console.warn(`[assert] step ${stepNumber} assert ${index}: missing or unknown ###Type "${type || '(empty)'}" — skipped`)
     return null
   }
   const matchRaw = section(raw, 'Match')

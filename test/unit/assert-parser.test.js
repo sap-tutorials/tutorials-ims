@@ -55,10 +55,30 @@ describe('parseAssertBlocks', () => {
 
   it('warn-and-skip: unknown type, missing Run, missing Match on contains, stray marker', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    warn.mockClear();
     expect(parseAssertBlocks(`[ASSERT_1]\n###Type\nquantum\n`).size).toBe(0);
+    expect(warn.mock.calls.length).toBeGreaterThan(0); // unknown type warns
+
+    warn.mockClear();
     expect(parseAssertBlocks(`[ASSERT_1]\n###Type\ncmd\n###Expect\nexit 0\n`).size).toBe(0); // no Run
+    expect(warn.mock.calls.length).toBeGreaterThan(0);
+
+    warn.mockClear();
     expect(parseAssertBlocks(`[ASSERT_1]\n###Type\nfile\n###Path\na\n###Expect\ncontains\n`).size).toBe(0); // no Match
+    expect(warn.mock.calls.length).toBeGreaterThan(0);
+
+    warn.mockClear();
     expect(parseAssertBlocks(`[ASSERT_1]\n`).size).toBe(0); // stray marker, no subsections
+    expect(warn.mock.calls.length).toBeGreaterThan(0); // missing ###Type warns
+
+    warn.mockRestore();
+  });
+
+  it('parseExpect rejects wrong keyword: cmd with "status" instead of "exit" is dropped', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const map = parseAssertBlocks(`[ASSERT_1]\n###Type\ncmd\n###Run\ncds build\n###Expect\nstatus 0\n`);
+    expect(map.size).toBe(0); // rejected because parseExpect('status 0', 'exit') returns null
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
