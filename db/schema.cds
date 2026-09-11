@@ -869,6 +869,26 @@ entity CodeCheckSpecs : managed {
   hasReference         : Boolean default false;
 }
 
+// Author-supplied, machine-checkable step postconditions (issue #2245 item #2).
+// Populated by the publish-content pipeline (carry-forward upsert); consumed
+// by #3 (skill bundles) / #4 (self-healing). No secret columns — public == full.
+// NOT journaled (absent from persistence.cds), exactly like CodeCheckSpecs:
+// fully regenerable from rules.vr on the next publish.
+entity AssertSpecs : managed {
+  key tutorial     : Association to Tutorials;
+  key stepNumber   : Integer;
+  key assertIndex  : Integer;       // 0-based order within the step
+  assertType       : String(8);     // 'cmd' | 'http' | 'file'
+  run              : LargeString;   // cmd
+  expectExit       : Integer;       // cmd
+  httpMethod       : String(8);     // http
+  httpPath         : LargeString;   // http
+  expectStatus     : Integer;       // http
+  filePath         : LargeString;   // file
+  expectContains   : Boolean;       // file (false ⇒ exists check)
+  matchRegex       : LargeString;   // shared, nullable
+}
+
 // Every learner submission. Drives offline grader-quality evaluation.
 // 'verdict' allows 'error' as a server-side outcome value (the LLM JSON
 // schema only emits 'pass' | 'partial' | 'fail').
