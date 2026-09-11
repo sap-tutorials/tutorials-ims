@@ -963,6 +963,12 @@ async function main() {
         lastUpdated = ghMeta.lastUpdated
         createdAt = ghMeta.createdAt
         contributors = ghMeta.contributors
+        // #2245: persist commit SHA sidecar so publish-content can thread it into
+        // the append body's sourceCommits map. Uses lowercase-canonical slug to
+        // match the sidecar convention (see validate-answer.json, codecheck.json).
+        if (ghMeta.lastCommitSha) {
+          writeFileSync(join(CACHE_DIR, `${t.slug.toLowerCase()}.commit-sha`), ghMeta.lastCommitSha, 'utf-8')
+        }
         cacheHits++
         console.log(`${label} [cached]`)
       } else {
@@ -972,6 +978,11 @@ async function main() {
         lastUpdated = ghMeta.lastUpdated
         createdAt = ghMeta.createdAt
         contributors = ghMeta.contributors
+        // #2245: persist commit SHA sidecar so publish-content can thread it into
+        // the append body's sourceCommits map.
+        if (ghMeta.lastCommitSha) {
+          writeFileSync(join(CACHE_DIR, `${t.slug.toLowerCase()}.commit-sha`), ghMeta.lastCommitSha, 'utf-8')
+        }
 
         if (cacheStatus === 'cached') cacheHits++
         else if (cacheStatus === 'refreshed') cacheRefreshes++

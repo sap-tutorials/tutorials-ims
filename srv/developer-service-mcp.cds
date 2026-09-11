@@ -63,18 +63,23 @@ extend service DeveloperService {
     lastActivityAt : Timestamp;
   };
 
-  /** Return a single step's HTML plus metadata. Enables LLMs to fetch the
-      exact step the user is asking about instead of the whole tutorial body.
+  /** Return a single tutorial step in the requested `format`. Enables LLMs to
+      fetch the exact step the user is asking about instead of the whole
+      tutorial body. Exactly one body is returned in `content`; `contentFormat`
+      echoes which representation it is.
       @param slug        Lowercase canonical tutorial slug.
-      @param stepNumber  1-indexed step number. */
+      @param stepNumber  1-indexed step number.
+      @param format      'markdown' (default, token-efficient source markdown
+                         matching /tutorials/<slug>.md) or 'html' (sliced HTML). */
   @(requires: 'authenticated-user')
-  function get_tutorial_step(slug: String, stepNumber: Integer) returns {
-    slug        : String;
-    stepNumber  : Integer;
-    stepTitle   : String;
-    html        : String;
-    textLength  : Integer;
-    totalSteps  : Integer;
+  function get_tutorial_step(slug: String, stepNumber: Integer, format: String) returns {
+    slug          : String;
+    stepNumber    : Integer;
+    stepTitle     : String;
+    content       : String;
+    contentFormat : String;
+    textLength    : Integer;
+    totalSteps    : Integer;
   };
 
   /** Mark a step of a tutorial as completed for the signed-in user.

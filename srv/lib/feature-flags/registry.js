@@ -115,6 +115,13 @@ export const FEATURE_FLAGS = [
     howToChange: adminTile('joule', '#joule'),
   },
   {
+    key: 'ChatSettings.semanticSearchEnabled', label: 'Public semantic search', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'semanticSearchEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#2246', status: 'dev-only',
+    description: 'Anonymous public semantic/vector search: SearchService.semantic_search function + /mcp/search MCP tool. Server embeds the query and returns scored content references (tutorials/concepts/external) — never vectors. Off → 503. Default OFF until corpora are backfilled and the anon surface is vetted.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
     key: 'ChatSettings.codeCheckEnabled', label: 'AI code-check', category: 'Chat / AI',
     kind: 'db-setting', entity: 'ChatSettings', column: 'codeCheckEnabled', resolver: 'chat',
     valueType: 'boolean', default: false, issue: '#171', status: 'ga',
@@ -307,6 +314,13 @@ export const FEATURE_FLAGS = [
     valueType: 'boolean', default: false, status: 'dev-only',
     description: 'When true, the nightly freshness-scan job runs the detector across the tutorial catalog. DB-driven config (ImsConfig key flag.freshness.scan); no env var. Default OFF.',
     howToChange: featureFlagUpsert('FRESHNESS_SCAN_ENABLED', 'flag.freshness.scan'),
+  },
+  {
+    key: 'PROVENANCE_ENVELOPE_ENABLED', label: 'Signed provenance & freshness envelope', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.provenance.envelope',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, serves the signed provenance JWS at /content/tutorials/:slug/provenance, publishes the JWKS at /.well-known/tutorial-provenance/jwks.json, and emits advisory X-Freshness-Confidence / X-Content-Provenance headers. DB-driven config (ImsConfig key flag.provenance.envelope); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('PROVENANCE_ENVELOPE_ENABLED', 'flag.provenance.envelope'),
   },
   // ---- Taxonomy ----
   {

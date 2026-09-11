@@ -4,38 +4,82 @@ import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 import { handleGetTutorialStep } from './lib/mcp-developer-tools.js';
 import { handleSearchEvents } from './lib/mcp-events-search.js';
 import { handleSearchChannels } from './lib/mcp-channels-search.js';
+import { semanticSearch, clampTopK } from './lib/semantic-search.js';
+import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
+import { createIpRateLimiter, IpRateLimitError } from './lib/ip-rate-limit.js';
 
 const LOG = cds.log('search-service');
 
 // #945: Cache ChatSettings for 30s to avoid a DB round-trip per search request.
 // The flag rarely changes and 30s propagation is acceptable — same as other
 // singleton-flag caches in the tree (see runtime-config/*-settings.js).
-let _chatSettingsCache = null;
-let _chatSettingsExpiresAt = 0;
+//
+// The cache lives on globalThis (keyed by a Symbol) rather than in module-level
+// `let`s: under Windows Vitest, cds.serve('SearchService').from('./srv/...') and
+// the test's own `import '../search-service.js'` resolve to TWO module instances,
+// so a plain module-level cache would diverge and _resetForTest() from the test
+// copy would never clear the served handler's copy. globalThis is the one shared
+// singleton across both — same reasoning as runtime-config/search-settings.js.
 const CHAT_SETTINGS_TTL_MS = 30_000;
+const _cacheStore = (globalThis[Symbol.for('ims.searchService.caches')] ??= {
+  chatSettings: null,
+  chatSettingsExpiresAt: 0,
+  semLimiter: null,
+  semLimiterAt: 0,
+});
 
 async function readChatSettings() {
   const now = Date.now();
-  if (_chatSettingsCache && now < _chatSettingsExpiresAt) return _chatSettingsCache;
+  if (_cacheStore.chatSettings && now < _cacheStore.chatSettingsExpiresAt) return _cacheStore.chatSettings;
   try {
     const { ChatSettings } = cds.entities('com.sap.developers.ims');
     const row = await SELECT.one.from(ChatSettings);
-    _chatSettingsCache = row || {};
-    _chatSettingsExpiresAt = now + CHAT_SETTINGS_TTL_MS;
-    return _chatSettingsCache;
+    _cacheStore.chatSettings = row || {};
+    _cacheStore.chatSettingsExpiresAt = now + CHAT_SETTINGS_TTL_MS;
+    return _cacheStore.chatSettings;
   } catch (err) {
     LOG.warn('readChatSettings failed', err.message);
     // Cache the empty result briefly so a failing DB doesn't flood retries.
-    _chatSettingsCache = {};
-    _chatSettingsExpiresAt = now + 5_000;
-    return _chatSettingsCache;
+    _cacheStore.chatSettings = {};
+    _cacheStore.chatSettingsExpiresAt = now + 5_000;
+    return _cacheStore.chatSettings;
   }
 }
 
 /** Reset internal caches — test-only. */
 export function _resetForTest() {
-  _chatSettingsCache = null;
-  _chatSettingsExpiresAt = 0;
+  _cacheStore.chatSettings = null;
+  _cacheStore.chatSettingsExpiresAt = 0;
+  _cacheStore.semLimiter = null;
+  _cacheStore.semLimiterAt = 0;
+}
+
+// #2246: dedicated per-IP rate limiter for semantic_search — the one anon tool
+// that costs an AI Core embed per uncached query. Lives in the handler (not the
+// Express /search mount) so it covers BOTH the OData /search invocation AND the
+// MCP /mcp/search tool call uniformly, without throttling the cheaper anon tools.
+// Reuses the DB-backed SearchSettings budget (resolveSearchSettings, 5s cache);
+// counter resets on rebuild within the cache window, matching the /search mount.
+const SEM_LIMITER_TTL_MS = 5_000;
+
+async function getSemanticLimiter() {
+  const now = Date.now();
+  if (_cacheStore.semLimiter && (now - _cacheStore.semLimiterAt) < SEM_LIMITER_TTL_MS) return _cacheStore.semLimiter;
+  const { rateLimitMax, rateLimitWindowMs } = await resolveSearchSettings();
+  _cacheStore.semLimiter = createIpRateLimiter({ windowMs: rateLimitWindowMs, max: rateLimitMax });
+  _cacheStore.semLimiterAt = now;
+  return _cacheStore.semLimiter;
+}
+
+// Derive the originating client IP from the leftmost X-Forwarded-For entry
+// (BTP Gorouter strips client-supplied XFF before AppRouter), falling back to
+// req.ip. MCP invocations may carry no Express request — those share one 'anon'
+// bucket, which still bounds the expensive path.
+function clientIpOf(req) {
+  const httpReq = req.http?.req;
+  const xff = String(httpReq?.headers?.['x-forwarded-for'] || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return xff[0] || httpReq?.ip || 'anon';
 }
 
 // #1171: Resolve the community-overlap rank weight. Admin-editable
@@ -541,6 +585,45 @@ export default class SearchService extends cds.ApplicationService {
     // Tier 2 MCP tool — anonymous public search over the external-channels
     // catalog (@requires:'any' in search-service-mcp.cds).
     this.on('search_channels', handleSearchChannels);
+
+    // #2246 — public anonymous semantic/vector search. The caller sends TEXT;
+    // the server embeds it and returns scored content references (never vectors).
+    // Gated by ChatSettings.semanticSearchEnabled (503 when off) and per-IP rate
+    // limited here so both the OData /search and MCP /mcp/search mounts are
+    // covered. Fails open ([]) on unexpected retrieval errors.
+    this.on('semantic_search', async (req) => {
+      const settings = await readChatSettings();
+      if (!settings.semanticSearchEnabled) {
+        return req.reject(503, 'Semantic search is not enabled.');
+      }
+
+      const ip = clientIpOf(req);
+      try {
+        const limiter = await getSemanticLimiter();
+        limiter.check(ip);
+      } catch (err) {
+        if (err instanceof IpRateLimitError) {
+          const retryAfter = err.retryAfterSec;
+          try { req.http?.res?.set?.('Retry-After', String(retryAfter)); } catch { /* best-effort */ }
+          return req.reject(429, `Rate limit exceeded. Retry after ${retryAfter}s.`);
+        }
+        throw err;
+      }
+
+      const { query, corpus, topK, minScore } = req.data;
+      try {
+        return await semanticSearch({
+          query,
+          corpus,
+          topK: clampTopK(topK ?? settings.embeddingTopK ?? 5),
+          minScore,
+          settings,
+        });
+      } catch (err) {
+        LOG.warn('semantic_search failed, returning []:', err.message);
+        return [];
+      }
+    });
 
     return super.init();
   }

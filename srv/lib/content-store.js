@@ -22,7 +22,10 @@ import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
 import { isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
-import { normalizeTutorialMarkdown } from './tutorial-markdown.js';
+import { normalizeTutorialMarkdown, prefersMarkdown } from './tutorial-markdown.js';
+import { isFlagEnabled } from './feature-flags/db-flags.js';
+import { loadProvenanceInputs } from './provenance-data.js';
+import { deriveConfidence } from './provenance-freshness.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -86,6 +89,23 @@ function dropCatalogSlugs(obj) {
 }
 
 export { toBuffer, isCatalogSlug, dropCatalogSlugs };
+
+// Advisory provenance helpers — called from serveStoredSlug. Fail-open: any
+// error or missing data returns null so the serve path is never blocked.
+async function computeAdvisory(slug) {
+  if (!isFlagEnabled('PROVENANCE_ENVELOPE_ENABLED')) return null;
+  try {
+    const inputs = await loadProvenanceInputs(slug);
+    if (!inputs) return null;
+    return { confidence: deriveConfidence({ report: inputs.report }), url: `/content/tutorials/${slug}/provenance` };
+  } catch { return null; }
+}
+
+function setAdvisoryHeaders(res, advisory) {
+  if (!advisory) return;
+  res.setHeader('X-Freshness-Confidence', advisory.confidence);
+  res.setHeader('X-Content-Provenance', advisory.url);
+}
 
 // Re-evaluate every TUTORIAL TaskRecord for `tutorialId` against the
 // authoritative step count (`stepCount`) and the user's actual completed STEP
@@ -188,7 +208,7 @@ export class ContentCache {
     return entry;
   }
 
-  set(key, buffer, hash) {
+  set(key, buffer, hash, advisory = null) {
     if (this.map.has(key)) {
       this.totalBytes -= this.map.get(key).buffer.length;
       this.map.delete(key);
@@ -202,7 +222,7 @@ export class ContentCache {
     // #2232: stamp a fresh expiry on every write. A republish re-set() therefore
     // resets the clock, so actively-updated content never expires mid-serve.
     const expiresAt = this.ttlMs > 0 ? Date.now() + this.ttlMs : Infinity;
-    this.map.set(key, { buffer, hash, expiresAt });
+    this.map.set(key, { buffer, hash, expiresAt, advisory });
     this.totalBytes += buffer.length;
     metrics.gauge('cache.bytes', this.totalBytes);  // #805
   }
@@ -1021,6 +1041,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       res.setHeader('ETag', `"${cached.hash}"`);
       setContentCacheHeaders(res, { slug: tagSlug });
       res.setHeader('X-Content-Source', 'cache');
+      setAdvisoryHeaders(res, isFlagEnabled('PROVENANCE_ENVELOPE_ENABLED') ? cached.advisory : null);
       res.send(cached.buffer);
       return 'served';
     }
@@ -1087,12 +1108,14 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       contentBuf = await toBuffer(blobRow.content);
     }
     const decompressed = gunzipSync(contentBuf);
-    cache.set(slug, decompressed, meta.contentHash);
+    const advisory = await computeAdvisory(slug);
+    cache.set(slug, decompressed, meta.contentHash, advisory);
 
     res.setHeader('Content-Type', `${mimeType || meta.mimeType}; charset=utf-8`);
     res.setHeader('ETag', `"${meta.contentHash}"`);
     setContentCacheHeaders(res, { slug: tagSlug });
     res.setHeader('X-Content-Source', source === 'current' ? 'db-current' : 'db');
+    setAdvisoryHeaders(res, advisory);
     res.send(decompressed);
     return 'served';
   }
@@ -1306,11 +1329,25 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // parsing <head> (#agent-readiness). Only real tutorial slugs have a
     // `/tutorials/<slug>.md` — concept/topic/puzzle/channel/group/mission pages
     // and internal `__…__` slugs don't, so we skip the header for them.
-    if (!/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__')) {
+    const isTutorialSlug =
+      !/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__');
+    if (isTutorialSlug) {
       const proto = (req.get?.('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
       const host = (req.get?.('x-forwarded-host') || req.get?.('host') || 'developers.sap.com')
         .split(',')[0].trim();
       res.setHeader('Link', `<${proto}://${host}/tutorials/${slug}.md>; rel="alternate"; type="text/markdown"`);
+
+      // Content negotiation on the primary URL: an agent/LLM that sends
+      // `Accept: text/markdown` gets the normalized Markdown source instead of
+      // HTML, without needing to rewrite the URL to the `.md` variant.
+      // `Vary: Accept` is set on BOTH representations (markdown branch below AND
+      // this HTML branch) so the edge cache keys on the header — a cached HTML
+      // response stored without `Vary` would otherwise be served to a later
+      // markdown request. #agent-readiness.
+      res.setHeader('Vary', 'Accept');
+      if (prefersMarkdown(req.get?.('accept'))) {
+        return markdownServeHandler(req, res);
+      }
     }
 
     // Delegate to the shared serve core — handles cache hit, DB BLOB read,
@@ -1968,17 +2005,18 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       // PR #591: `sources` is the per-slug gzipped raw markdown side of the
       // payload — destructure + forward it to appendToSession so source
       // hashes get persisted alongside content hashes.
-      const { sessionId, files, metadata, bodyTexts, branchSpecs, sources } = req.body || {};
+      const { sessionId, files, metadata, bodyTexts, branchSpecs, sources, sourceCommits } = req.body || {};
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
       const droppedFiles = dropCatalogSlugs(files);
       dropCatalogSlugs(metadata);
       dropCatalogSlugs(bodyTexts);
       dropCatalogSlugs(branchSpecs);
       dropCatalogSlugs(sources);
+      dropCatalogSlugs(sourceCommits);
       if (droppedFiles.length) {
         LOG.warn(`[content/publish/append] dropped ${droppedFiles.length} catalog slug(s)`);
       }
-      const result = await sessionHelpers.appendToSession({ sessionId, files, metadata, bodyTexts, branchSpecs, sources });
+      const result = await sessionHelpers.appendToSession({ sessionId, files, metadata, bodyTexts, branchSpecs, sources, sourceCommits });
       res.status(202).json(result);
     } catch (err) {
       const code = err.statusCode || 500;

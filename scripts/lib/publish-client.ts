@@ -10,14 +10,18 @@ export interface AppendInput {
   baseUrl: string; apiKey: string;
   sessionId: string;
   files: Record<string, string>;
-  metadata: Record<string, any>;
-  bodyTexts: Record<string, string>;
+  metadata?: Record<string, any>;
+  bodyTexts?: Record<string, string>;
   branchSpecs?: Record<string, any>;
   // PR #591: per-slug gzipped raw markdown for source-of-truth drift detection.
   // Map keyed by the SAME slug as `files`. Values are base64(gzip(rawMarkdownBytes)).
   // Optional + ignored by server when null/absent — back-compat with older
   // clients and with payload entries (__shell__, __nav__) that have no source.
   sources?: Record<string, string>;
+  // #2245: per-slug git commit SHA from the source tutorial repo, keyed by the
+  // SAME slug as `files`. Optional — omitted entirely when absent so the server
+  // stores null for all slugs in the batch (back-compat with older clients).
+  sourceCommits?: Record<string, string>;
 }
 export interface AppendResult { slugsAccepted: number; batchHash: string; totalSizeBytes: number }
 
@@ -68,11 +72,29 @@ export async function beginSession(i: BeginInput): Promise<BeginResult> {
   );
 }
 
+/**
+ * Build the plain POST body object for an append request. Extracted so it can
+ * be unit-tested without network access. `appendBatch` delegates to this.
+ *
+ * `sourceCommits` is omitted from the body entirely when absent on `opts` — the
+ * server treats a missing key as "no commit SHA for any slug in this batch"
+ * (back-compat with older clients).
+ */
+export function buildAppendBody(opts: Omit<AppendInput, 'baseUrl' | 'apiKey'>): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    sessionId: opts.sessionId,
+    files: opts.files,
+    metadata: opts.metadata,
+    bodyTexts: opts.bodyTexts,
+    branchSpecs: opts.branchSpecs,
+    sources: opts.sources,
+    ...(opts.sourceCommits ? { sourceCommits: opts.sourceCommits } : {}),
+  };
+  return body;
+}
+
 export async function appendBatch(i: AppendInput): Promise<AppendResult> {
-  return postJson(`${i.baseUrl}/content/publish/append`, i.apiKey, {
-    sessionId: i.sessionId, files: i.files, metadata: i.metadata, bodyTexts: i.bodyTexts,
-    branchSpecs: i.branchSpecs, sources: i.sources,
-  });
+  return postJson(`${i.baseUrl}/content/publish/append`, i.apiKey, buildAppendBody(i));
 }
 
 export async function commitSession(i: CommitInput): Promise<CommitResult> {
