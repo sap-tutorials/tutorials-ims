@@ -159,39 +159,38 @@ export function attachAssertSpecs<T extends { number: number; asserts?: AssertBl
 
 ## 8. CDS entity
 
-`db/tutorial-asserts.cds` (new file, imported from `db/schema.cds` or wherever content-shape CDS is aggregated — follow how `tutorial-freshness.cds` is included):
+Defined **inline in `db/schema.cds`**, immediately after `CodeCheckSpecs` (~L870) — a faithful mirror of that entity (`: managed`, same declaration style). No separate `.cds` file, no new `using`.
 
 ```cds
-using { com.sap.developers.ims as ims } from './schema';
-
-namespace com.sap.developers.ims;
-
-entity AssertSpecs {
-  key tutorial    : Association to ims.Tutorials;
-  key stepNumber  : Integer;
-  key assertIndex : Integer;      // N within the step
-  type            : String(8);    // 'cmd' | 'http' | 'file'
-  run             : String;       // cmd
-  expectExit      : Integer;      // cmd
-  httpMethod      : String(8);    // http
-  httpPath        : String;       // http
-  expectStatus    : Integer;      // http
-  filePath        : String;       // file
-  expectContains  : Boolean;      // file
-  matchRegex      : String;       // shared, nullable
+// Author-supplied, machine-checkable step postconditions (issue #2245 item #2).
+// Populated by the publish-content pipeline (carry-forward upsert); consumed
+// by #3 (skill bundles) / #4 (self-healing). No secret columns — public == full.
+entity AssertSpecs : managed {
+  key tutorial     : Association to Tutorials;
+  key stepNumber   : Integer;
+  key assertIndex  : Integer;       // 0-based order within the step
+  assertType       : String(8);     // 'cmd' | 'http' | 'file'
+  run              : LargeString;   // cmd
+  expectExit       : Integer;       // cmd
+  httpMethod       : String(8);     // http
+  httpPath         : LargeString;   // http
+  expectStatus     : Integer;       // http
+  filePath         : LargeString;   // file
+  expectContains   : Boolean;       // file (false ⇒ exists check)
+  matchRegex       : LargeString;   // shared, nullable
 }
 ```
 
-- Key `(tutorial, stepNumber, assertIndex)` — a step can hold multiple asserts, so `assertIndex` is part of the key (this differs from CodeCheckSpecs' single-per-step key; called out because the upsert must key on all three).
-- Add `AssertSpecs` to `db/persistence.cds` (`@cds.persistence.journal`) so the migration table is generated — per the "new persisted entity needs `db/persistence.cds` entry" rule.
-- Field names avoid the CDS reserved-ish `method`/`path` by prefixing `http`; `matchRegex` avoids overloading `match`.
+- Key `(tutorial, stepNumber, assertIndex)` — a step can hold multiple asserts, so `assertIndex` is part of the key (CodeCheckSpecs keys on just `(tutorial, stepNumber)`; called out because the upsert must key on all three).
+- **Not journaled** (absent from `persistence.cds`), exactly like `CodeCheckSpecs`. Assert rows are fully regenerable from `rules.vr` on the next publish, so a DROP+CREATE on schema change loses nothing. This is a deliberate mirror of the analog, not an oversight — do not add a `@cds.persistence.journal` entry.
+- Column named `assertType` (not `type`) and `httpMethod`/`httpPath` (not `method`/`path`) to avoid CDS keyword/reserved-name friction; `matchRegex` avoids overloading `match`. The JS `AssertBlock.type`/`method`/`path` map to these column names in the publish handler.
 
 ## 9. Deploy / ops guardrails (from repo memory)
 
 - **srv-qa route drift:** `/content/assert-specs` is srv-only (a publish endpoint, like `/content/code-check-specs`). Add it to `ALLOWLIST_ONLY_ON_SRV` in `scripts/check-srv-qa-route-drift.ts` (~L73) and mirror the assertion in `test/unit/check-srv-qa-route-drift.test.ts`, or the drift guard fails CI.
 - **srv-qa cp-list:** `srv/lib/assert-spec-publish.js` is imported by `srv/server.js`. Confirm it (and any `./` imports it adds) is present in `.deploy/mta.yaml`'s `srv-qa` `cp` list exactly as `code-check-spec-publish.js` is — a missing transitive dep crashes srv-qa boot at MTA deploy.
 - **Route smoke:** add `{ path: '/content/assert-specs', method: 'POST' }` to `test/smoke/express-route-mutations.test.js` (~L22).
-- **Schema migration:** run `cds build --production` after adding the entity to regenerate the `.hdbmigrationtable`; never hand-edit it.
+- **Schema build:** `AssertSpecs` is not journaled (like `CodeCheckSpecs`), so it compiles to a plain `.hdbtable`. Run `cds build --production` after adding the entity to confirm the model compiles and the artifact generates; nothing to hand-edit.
 - **Seed-secrets doc:** append `/content/assert-specs` to the `CONTENT_API_KEY` description in `scripts/seed-secrets.cjs` L58 (cosmetic, keeps the endpoint list accurate).
 
 ## 10. Testing (all offline — no HANA)
