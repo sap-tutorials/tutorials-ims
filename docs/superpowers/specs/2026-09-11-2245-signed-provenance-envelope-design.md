@@ -137,9 +137,9 @@ Deterministic unit coverage (no live LLM, no live HANA — SQLite/in-memory per 
 | Flag | `feature-flags/registry.js` (`kind:'db'`) |
 | New module | `srv/lib/provenance-envelope.js` (build + sign + cache), `srv/lib/provenance-keys.js` (key load + JWKS) |
 
-## Open review questions
+## Review questions — RESOLVED (defaults approved 2026-09-11)
 
-1. **B** — confirm the 30d/90d thresholds and TTL (24h), or make them DB-config.
-2. **C** — JWKS at `/.well-known/tutorial-provenance/jwks.json` acceptable, or prefer a plain served route under `/content/`?
-3. **F** — `sourceCommit` on `ContentCurrent` vs `ContentManifest`.
-4. **JOSE library** — pick a maintained EdDSA-capable JS JOSE lib (e.g. `jose`) vs Node's native `crypto` `sign('Ed25519')` + hand-rolled JWS assembly. Default: native `crypto` for Ed25519 with minimal JWS assembly to avoid a new runtime dependency (verify `npm ls jose` isn't already present).
+1. **B** — thresholds 30d (`high`) / 90d (`low`) and attestation TTL 24h ship as **constants** in the new module (not DB-config for v1).
+2. **C** — JWKS served at **`/.well-known/tutorial-provenance/jwks.json`** via the existing `.well-known` middleware seam.
+3. **F** — `sourceCommit` stored on **`ContentCurrent`** for cheap serve-time read.
+4. **Crypto** — **Node native `crypto`** Ed25519 (`sign`/`verify` with `'Ed25519'`) + minimal flattened-JWS assembly; **no new runtime dependency** (confirm `jose` is not already resolvable at plan time — if it is, reuse it).
