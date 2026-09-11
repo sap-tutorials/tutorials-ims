@@ -97,6 +97,7 @@ import './graphql-config.js';
 import { makeA2aRouter } from './lib/a2a/rpc-router.js';
 import { buildAgentCard } from './lib/a2a/agent-card.js';
 import { resolveA2aSettings } from './lib/runtime-config/a2a-settings.js';
+import { provenanceHandler, jwksHandler } from './lib/provenance-handlers.js';
 
 // #1182 — cds-caching resolve-guard fix. This module is evaluated by cds-serve
 // AFTER `await cds.plugins` (so the cds-caching plugin has already pushed its
@@ -757,6 +758,10 @@ cds.on('bootstrap', (app) => {
     req.params.slug = req.params[0];
     return markdownServeHandler(req, res);
   });
+  // Signed provenance JWS endpoint (#2245). Registered BEFORE the *slug wildcard
+  // below so `demo/provenance` is not swallowed as a slug. Public, read-only — no
+  // auth; these are attestation/key-distribution endpoints.
+  app.get('/content/tutorials/:slug/provenance', provenanceHandler);
   app.get('/content/tutorials/*slug', serveHandler);
   // Legacy AEM `.model.json` compatibility for SAP Discovery Center (#DC cards).
   // Approuter maps ^/tutorials/<slug>.model.json$ → here. See srv/lib/model-json.js.
@@ -1040,6 +1045,10 @@ cds.on('bootstrap', (app) => {
     res.setHeader('Vary', 'X-Forwarded-Host, Host');
     res.json(buildAgentCard({ baseUrl, tokenUrl: cfg.tokenUrl, enabled: cfg.enabled }));
   });
+
+  // JWKS key-distribution for the signed provenance envelope (#2245). Public,
+  // anonymous — clients verify JWS signatures with these public keys.
+  app.get('/.well-known/tutorial-provenance/jwks.json', jwksHandler);
 
   // MCP discovery manifest (public, anonymous) — served on the already-public
   // /.well-known/* approuter route. Metadata only: advertises the anonymous
