@@ -126,4 +126,59 @@ describe('validation (fail-fast)', () => {
     const { AssertSpecs } = cds.entities('com.sap.developers.ims');
     expect(await SELECT.from(AssertSpecs)).toHaveLength(0);
   });
+
+  // Type-specific required field validation (§7.5)
+  it('cmd missing run → 400 invalid_spec', async () => {
+    const res = mockRes();
+    await assertSpecPublishHandler(mockReq({ specs: [cmd({ run: undefined })] }), res);
+    expect(res.jsonBody).toEqual({ error: 'invalid_spec' });
+    const { AssertSpecs } = cds.entities('com.sap.developers.ims');
+    expect(await SELECT.from(AssertSpecs)).toHaveLength(0);
+  });
+  it('cmd missing expectExit → 400 invalid_spec', async () => {
+    const res = mockRes();
+    await assertSpecPublishHandler(mockReq({ specs: [cmd({ expectExit: undefined })] }), res);
+    expect(res.jsonBody).toEqual({ error: 'invalid_spec' });
+  });
+  it('http missing method → 400 invalid_spec', async () => {
+    const res = mockRes();
+    await assertSpecPublishHandler(mockReq({ specs: [http({ method: undefined })] }), res);
+    expect(res.jsonBody).toEqual({ error: 'invalid_spec' });
+    const { AssertSpecs } = cds.entities('com.sap.developers.ims');
+    expect(await SELECT.from(AssertSpecs)).toHaveLength(0);
+  });
+  it('http missing path → 400 invalid_spec', async () => {
+    const res = mockRes();
+    await assertSpecPublishHandler(mockReq({ specs: [http({ path: undefined })] }), res);
+    expect(res.jsonBody).toEqual({ error: 'invalid_spec' });
+  });
+  it('http missing expectStatus → 400 invalid_spec', async () => {
+    const res = mockRes();
+    await assertSpecPublishHandler(mockReq({ specs: [http({ expectStatus: undefined })] }), res);
+    expect(res.jsonBody).toEqual({ error: 'invalid_spec' });
+  });
+  it('file missing filePath → 400 invalid_spec', async () => {
+    const res = mockRes();
+    await assertSpecPublishHandler(mockReq({ specs: [file({ filePath: undefined })] }), res);
+    expect(res.jsonBody).toEqual({ error: 'invalid_spec' });
+    const { AssertSpecs } = cds.entities('com.sap.developers.ims');
+    expect(await SELECT.from(AssertSpecs)).toHaveLength(0);
+  });
+  it('file missing expectContains → 400 invalid_spec', async () => {
+    const res = mockRes();
+    await assertSpecPublishHandler(mockReq({ specs: [file({ expectContains: undefined })] }), res);
+    expect(res.jsonBody).toEqual({ error: 'invalid_spec' });
+  });
+  it('file with expectContains:true but no match → 400 invalid_spec', async () => {
+    const res = mockRes();
+    await assertSpecPublishHandler(mockReq({ specs: [file({ expectContains: true, match: undefined })] }), res);
+    expect(res.jsonBody).toEqual({ error: 'invalid_spec' });
+    const { AssertSpecs } = cds.entities('com.sap.developers.ims');
+    expect(await SELECT.from(AssertSpecs)).toHaveLength(0);
+  });
+  it('file with expectContains:false and no match → 200 (match not required)', async () => {
+    const res = mockRes();
+    await assertSpecPublishHandler(mockReq({ specs: [file({ expectContains: false })] }), res);
+    expect(res.statusCode).toBe(200);
+  });
 });

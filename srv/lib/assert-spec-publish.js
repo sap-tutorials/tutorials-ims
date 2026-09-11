@@ -24,6 +24,26 @@ export async function assertSpecPublishHandler(req, res) {
         || typeof s.type !== 'string' || !VALID_TYPES.has(s.type)) {
       return res.status(400).json({ error: 'invalid_spec' });
     }
+    // Type-specific required fields (§7.5).
+    if (s.type === 'cmd') {
+      if (typeof s.run !== 'string' || !s.run || typeof s.expectExit !== 'number') {
+        return res.status(400).json({ error: 'invalid_spec' });
+      }
+    } else if (s.type === 'http') {
+      if (typeof s.method !== 'string' || !s.method
+          || typeof s.path !== 'string' || !s.path
+          || typeof s.expectStatus !== 'number') {
+        return res.status(400).json({ error: 'invalid_spec' });
+      }
+    } else if (s.type === 'file') {
+      if (typeof s.filePath !== 'string' || !s.filePath
+          || typeof s.expectContains !== 'boolean') {
+        return res.status(400).json({ error: 'invalid_spec' });
+      }
+      if (s.expectContains === true && (typeof s.match !== 'string' || !s.match)) {
+        return res.status(400).json({ error: 'invalid_spec' });
+      }
+    }
   }
 
   const { Tutorials, AssertSpecs } = cds.entities('com.sap.developers.ims');
