@@ -84,17 +84,45 @@ symmetry and so the surface is uniform, matching the original intent.
 
 ## 4. Design
 
-### 4.1 CAP runtime bump (the dominant risk)
-- Bump `@sap/cds` `^10.0.3` → `^10.1.0` and `@sap/cds-dk` → `^10.1.x` in
-  `package.json`.
-- Check and align any CAP version pins in `.deploy/mta.yaml`, `.cdsrc*`, and CI.
-- **Risk:** this is a *minor* CAP bump across a large app with many CAP
-  plugins (`@cap-js/mcp`, `@cap-js-community/websocket`, `cds-caching`,
-  `@cap-js/ai`, `@cap-js/hana`, `@cap-js/sqlite`). Behavior changes beyond HCQL
-  are possible. **Mitigation:** the full unit + hybrid suites are the merge
-  gate; any regression is triaged before merge. If the bump proves too
-  disruptive, this issue falls back to Option 2 (mark docs NOT DEPLOYED) and
-  the bump is deferred — that decision returns to the maintainer.
+### 4.1 CAP runtime bump + package.json-wide dependency update (the dominant risk)
+
+A CAP minor bump must not be piecemeal: the whole CAP plugin stack moves with
+the runtime, and the maintainer has asked for a package.json-wide refresh
+overall. This is done as a coordinated, phased update, each phase gated by the
+full test suite so regressions are attributable.
+
+**Prerequisite:** dependency operations hit the private `@sap-tutorials/*`
+GitHub npm registry, so `NODE_AUTH_TOKEN` must be set (from `gh auth token`)
+before `npm install` / `npm outdated`. In a worktree, edit-isolation blocks the
+`$(gh auth token)` substitution — set the token in the environment first (or
+run dep work from the primary checkout).
+
+**Phase A — CAP ecosystem (compatibility-critical, required for HCQL):**
+- `@sap/cds` `^10.0.3` → `^10.1.0`; `@sap/cds-dk` → `^10.1.x` (10.1.1 latest).
+- Move the CAP plugin stack to latest versions compatible with cds 10.1:
+  `@cap-js/{ai,attachments,audit-logging,change-tracking,data-inspector,graphql,hana,mcp,ord,sqlite,telemetry}`,
+  `@cap-js-community/websocket`, `@cap-js/cds-test`, `cds-caching`,
+  `cds-swagger-ui-express`, `@sap/xsenv`, `@sap/xssec`, `@sap-cloud-sdk/*`,
+  `@sap-ai-sdk/*`, `@sap-tutorials/cds-alert-notification`.
+- Several of these are **exact-pinned** (`@cap-js/mcp 1.1.1`,
+  `@cap-js/graphql 0.14.0`, `@cap-js/attachments 4.0.0`,
+  `@cap-js/data-inspector 1.0.5`, `cds-caching 2.0.2`, …). Pins are treated as
+  deliberate: each is bumped consciously and cross-checked against the memory
+  gotchas for that plugin (cds-caching store, mcp, graphql-shortcut, ai, hana).
+- Align CAP version pins in `.deploy/mta.yaml`, `.cdsrc*`, CI Node config.
+
+**Phase B — broader tree:** refresh remaining deps (aws-sdk, sharp, socket.io,
+undici, cheerio, exceljs, ui5 webcomponents, vitest, playwright, esbuild,
+vitepress, etc.) **within their current major only** (maintainer decision,
+2026-09-11). Any major-version jump is explicitly out of scope for this PR and
+deferred to a separate maintenance change — not swept in here.
+
+**Gate for both phases:** commit the regenerated `package-lock.json`; full unit
++ hybrid suites green; `cds build --production` succeeds; Hugo/apps build
+sanity. **Risk:** this is now a broad update across a production app with many
+CAP plugins — behavior changes beyond HCQL are expected and triaged. If Phase A
+proves too disruptive, this issue falls back to Option 2 (mark docs NOT
+DEPLOYED) and the bump is deferred — that decision returns to the maintainer.
 
 ### 4.2 HCQL enablement via explicit `@protocol`
 - **AdminService** already has `@protocol: [{kind:'odata'},{kind:'mcp', path:'/mcp/admin'}]`
@@ -151,7 +179,9 @@ stay green — they are the regression canary.
 - [ ] Docs updated to match reality.
 
 ## 6. Risks & open questions
-- **CAP minor bump blast radius** — primary risk (see §4.1). Full suites gate it.
+- **CAP minor bump + dep-wide refresh blast radius** — primary risk (see §4.1).
+  Full suites + build gate it, phased for attribution.
+- **Decided (2026-09-11):** Phase B is within-major only; major bumps deferred.
 - **`@protocol` path exactness** — the OData `path` in each new `@protocol`
   list must equal the current `@path`; a repo-wide check of each service's
   `@path` is part of implementation.
