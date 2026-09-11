@@ -22,7 +22,7 @@ import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
 import { isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
-import { normalizeTutorialMarkdown } from './tutorial-markdown.js';
+import { normalizeTutorialMarkdown, prefersMarkdown } from './tutorial-markdown.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -1306,11 +1306,25 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // parsing <head> (#agent-readiness). Only real tutorial slugs have a
     // `/tutorials/<slug>.md` — concept/topic/puzzle/channel/group/mission pages
     // and internal `__…__` slugs don't, so we skip the header for them.
-    if (!/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__')) {
+    const isTutorialSlug =
+      !/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__');
+    if (isTutorialSlug) {
       const proto = (req.get?.('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
       const host = (req.get?.('x-forwarded-host') || req.get?.('host') || 'developers.sap.com')
         .split(',')[0].trim();
       res.setHeader('Link', `<${proto}://${host}/tutorials/${slug}.md>; rel="alternate"; type="text/markdown"`);
+
+      // Content negotiation on the primary URL: an agent/LLM that sends
+      // `Accept: text/markdown` gets the normalized Markdown source instead of
+      // HTML, without needing to rewrite the URL to the `.md` variant.
+      // `Vary: Accept` is set on BOTH representations (markdown branch below AND
+      // this HTML branch) so the edge cache keys on the header — a cached HTML
+      // response stored without `Vary` would otherwise be served to a later
+      // markdown request. #agent-readiness.
+      res.setHeader('Vary', 'Accept');
+      if (prefersMarkdown(req.get?.('accept'))) {
+        return markdownServeHandler(req, res);
+      }
     }
 
     // Delegate to the shared serve core — handles cache hit, DB BLOB read,
