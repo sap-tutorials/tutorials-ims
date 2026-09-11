@@ -699,6 +699,15 @@ entity ChatSettings : cuid, managed {
   embeddingTopK        : Integer default 5;
   embeddingMinScore    : Decimal(4, 3) default 0.25;
 
+  // Public anonymous semantic/vector search (#2246). When true, the
+  // SearchService.semantic_search function + matching MCP tool (/mcp/search)
+  // are live; when false they return 503. The agent sends TEXT only — the
+  // server embeds server-side and returns scored content references (never
+  // vectors, never accepts caller-supplied vectors). Reuses embeddingModel /
+  // embeddingTopK / embeddingMinScore above for its defaults. Default OFF
+  // (dev-only) until the corpora are backfilled and the anon surface is vetted.
+  semanticSearchEnabled : Boolean default false;
+
   // AI code-check spike (issue #171). When false, /api/codecheck → 503
   // and the checkCode tool is omitted from toolsForContext().
   codeCheckEnabled     : Boolean default false;
