@@ -22,7 +22,7 @@ import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
 import { isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
-import { normalizeTutorialMarkdown } from './tutorial-markdown.js';
+import { normalizeTutorialMarkdown, prefersMarkdown } from './tutorial-markdown.js';
 import { isFlagEnabled } from './feature-flags/db-flags.js';
 import { loadProvenanceInputs } from './provenance-data.js';
 import { deriveConfidence } from './provenance-freshness.js';
@@ -1329,11 +1329,25 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // parsing <head> (#agent-readiness). Only real tutorial slugs have a
     // `/tutorials/<slug>.md` — concept/topic/puzzle/channel/group/mission pages
     // and internal `__…__` slugs don't, so we skip the header for them.
-    if (!/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__')) {
+    const isTutorialSlug =
+      !/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__');
+    if (isTutorialSlug) {
       const proto = (req.get?.('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
       const host = (req.get?.('x-forwarded-host') || req.get?.('host') || 'developers.sap.com')
         .split(',')[0].trim();
       res.setHeader('Link', `<${proto}://${host}/tutorials/${slug}.md>; rel="alternate"; type="text/markdown"`);
+
+      // Content negotiation on the primary URL: an agent/LLM that sends
+      // `Accept: text/markdown` gets the normalized Markdown source instead of
+      // HTML, without needing to rewrite the URL to the `.md` variant.
+      // `Vary: Accept` is set on BOTH representations (markdown branch below AND
+      // this HTML branch) so the edge cache keys on the header — a cached HTML
+      // response stored without `Vary` would otherwise be served to a later
+      // markdown request. #agent-readiness.
+      res.setHeader('Vary', 'Accept');
+      if (prefersMarkdown(req.get?.('accept'))) {
+        return markdownServeHandler(req, res);
+      }
     }
 
     // Delegate to the shared serve core — handles cache hit, DB BLOB read,
@@ -1479,6 +1493,31 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- getRepoProvenance(slug) ---
+  //
+  // Returns { repo, branch } for a tutorial slug from RepoCatalog (the
+  // authoritative live repo+branch map, populated on content publish and
+  // keyed by slug — see db/views.cds and repo-catalog.js). Used by the
+  // `.md` serve handler to absolutize relative image paths (#2235).
+  //
+  // RepoCatalog holds only small string columns (no BLOBs), so CDS QL is
+  // safe on both HANA and SQLite. Fail-open: any miss/error yields
+  // { repo: null, branch: null }, leaving image paths relative.
+  async function getRepoProvenance(slug) {
+    if (!slug || typeof slug !== 'string') return { repo: null, branch: null };
+    try {
+      const { RepoCatalog } = cds.entities(namespace);
+      if (!RepoCatalog) return { repo: null, branch: null };
+      const row = await SELECT.one.from(RepoCatalog)
+        .where`LOWER(slug) = ${slug.toLowerCase()}`
+        .columns('repo', 'branch');
+      return { repo: row?.repo ?? null, branch: row?.branch ?? null };
+    } catch (err) {
+      console.error('[content/repo-provenance]', err instanceof Error ? err.message : String(err));
+      return { repo: null, branch: null };
+    }
+  }
+
   // --- getTutorialSource(slug) ---
   //
   // Used by the admin tile's Source Markdown facet (PR-2 of spec
@@ -1597,7 +1636,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .split(',')[0].trim();
       const canonicalUrl = `${proto}://${host}/tutorials/${slug}`;
 
-      const out = normalizeTutorialMarkdown(markdown, { slug, canonicalUrl });
+      // Provenance for absolutizing relative image paths (#2235). RepoCatalog is
+      // keyed by slug and carries repo+branch for 100% of live tutorials; it's a
+      // small non-BLOB table so CDS QL is safe. Fail-open: any miss/error leaves
+      // image paths relative (pre-#2235 behavior).
+      const { repo, branch } = await getRepoProvenance(slug);
+
+      const out = normalizeTutorialMarkdown(markdown, { slug, canonicalUrl, repo, branch });
       const buffer = Buffer.from(out, 'utf-8');
       const etag = createHash('sha256').update(buffer).digest('hex');
 

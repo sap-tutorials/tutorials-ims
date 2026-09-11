@@ -211,6 +211,13 @@ describe('SearchService anonymous get_tutorial_step', () => {
   <section class="step" data-step-number="2"><h2 class="step-title">S2 Title</h2><p>anon-step-two</p></section>
 </main>`;
 
+  // Source markdown for the default (format='markdown') path. v2 steps are H3;
+  // titles match the HTML slicer's step titles so totalSteps agrees.
+  const FIXTURE_MD = [
+    '### S1 Title', '', 'anon-step-one-md', '',
+    '### S2 Title', '', 'anon-step-two-md',
+  ].join('\n');
+
   beforeAll(async () => {
     await cds.deploy([
       path.join(process.cwd(), 'db'),
@@ -222,27 +229,35 @@ describe('SearchService anonymous get_tutorial_step', () => {
     const { ContentManifest, ContentFiles } = cds.entities(NS);
     // ContentManifest.version is Integer; status must be 'ACTIVE' for slicer to find it.
     await INSERT.into(ContentManifest).entries({ version: 8888, status: 'ACTIVE' });
-    // ContentFiles.content is LargeBinary (gzipped); field name is 'content' not 'contentGz'.
+    // ContentFiles.content is LargeBinary (gzipped HTML); sourceContent carries the
+    // gzipped upstream markdown for the default format='markdown' path.
     await INSERT.into(ContentFiles).entries({
-      version: 8888, slug: 'anon-tut', content: gzipSync(Buffer.from(FIXTURE_HTML)),
+      version: 8888, slug: 'anon-tut',
+      content: gzipSync(Buffer.from(FIXTURE_HTML)),
+      sourceContent: gzipSync(Buffer.from(FIXTURE_MD)),
       mimeType: 'text/html',
     });
   });
 
-  it('returns per-step HTML without authentication (anonymous access)', async () => {
+  it('returns per-step markdown by default without authentication (anonymous access)', async () => {
     // Call without any cds.context user — @requires:'any' means no auth needed.
     const result = await SearchService.send('get_tutorial_step', { slug: 'anon-tut', stepNumber: 1 });
     expect(result).toBeTruthy();
-    expect(result.html).toContain('anon-step-one');
+    expect(result.contentFormat).toBe('markdown');
+    expect(result.content).toContain('anon-step-one-md');
+    expect(result.content).toContain('### S1 Title');
+    expect(result.html).toBeUndefined();
     expect(result.stepTitle).toBe('S1 Title');
     expect(result.stepNumber).toBe(1);
     expect(result.totalSteps).toBe(2);
     expect(result.slug).toBe('anon-tut');
   });
 
-  it('returns step 2 HTML correctly', async () => {
-    const result = await SearchService.send('get_tutorial_step', { slug: 'anon-tut', stepNumber: 2 });
-    expect(result.html).toContain('anon-step-two');
+  it('returns step 2 HTML on explicit format=html', async () => {
+    const result = await SearchService.send('get_tutorial_step', { slug: 'anon-tut', stepNumber: 2, format: 'html' });
+    expect(result.contentFormat).toBe('html');
+    expect(result.content).toContain('anon-step-two');
+    expect(result.content).toContain('<section');
     expect(result.stepTitle).toBe('S2 Title');
   });
 

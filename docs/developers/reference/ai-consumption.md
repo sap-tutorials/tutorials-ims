@@ -16,6 +16,7 @@ When an AI agent visits developers.sap.com, it can rely on:
 | Sitemap | `/sitemap.xml` | Every URL with `<lastmod>` |
 | AI index | `/llms.txt` | Curated table-of-contents per llmstxt.org |
 | Full catalog | `/llms-full.txt` | Every tutorial + mission with metadata |
+| Navigable map | `/sitemap.md` | Nav lanes + every mission expanded to its ordered tutorials |
 | Agent guidance | `/AGENTS.md` | Citation policy + machine-readable conventions |
 | Per-page JSON-LD | (in HTML `<head>`) | schema.org structured data |
 | Per-response headers | (every route) | `Content-Signal` + `X-Robots-Tag` |
@@ -24,7 +25,7 @@ There is no separate AI "API." Everything ships in the same HTML and HTTP respon
 
 ---
 
-## The 15 features
+## The 16 features
 
 ### 1. Brand string and title pattern
 
@@ -291,6 +292,19 @@ Distinct from the **public** AGENTS.md (#10). This one targets coding agents (Cl
 - Run `npm test` (in-memory SQLite) before committing
 - Use `cds-mcp` to look up CDS definitions before editing CDS or CAP code
 
+### 16. sitemap.md — navigable site map
+
+**File:** [hugo/layouts/_default/sitemapmd.md](../../../hugo/layouts/_default/sitemapmd.md), served at `/sitemap.md`
+
+A human- and AI-navigable map of the whole site, mirroring [CAP/Capire's sitemap.md](https://cap.cloud.sap/docs/sitemap). Distinct from the three existing surfaces: `sitemap.xml` is a flat XML URL list for crawlers, `llms-full.txt` is a flat metadata dump of every resource, and this is a **navigable hierarchy** — the site's structure, not just its URLs. Sections:
+
+- **Navigation** — the verb lanes (Learn / Build / Integrate / Operate / Connect / AI), each linking its section page plus that lane's shelves. Built from the verb section pages (always present at build) and `hugo/data/shelf_definitions.json` (best-effort).
+- **Missions** — every mission expanded to its ordered tutorial list. Missions are **not** Hugo pages — they're served dynamically from the CAP catalog — so a build step [scripts/fetch-sitemap-catalog.ts](../../../scripts/fetch-sitemap-catalog.ts) fetches `GET /build/catalog` into `hugo/data/sitemap_catalog.json`. **Fail-open**: with no `CAP_BASE_URL` (plain `build:hugo` / dev) or on fetch failure, the mission list is empty and the section falls back to linking the `/missions/` index, exactly like llms.txt.
+- **Topics** — top 30 tags by tutorial count.
+- **Reference** — tutorial/mission indexes, llms.txt, llms-full.txt, sitemap.xml, AGENTS.md.
+
+Emitted via the `sitemapmd` output format. Because Hugo picks a media type's **first** suffix for the filename (the shared `text/markdown` lists `txt` first, which is why llms.txt is `.txt`), the format uses a dedicated `text/x-web-markdown` media type with `suffixes = ['md']` so the file is written as `sitemap.md`. The wire `Content-Type` for `/sitemap.md` is set by the AppRouter from the `.md` extension (markdown negotiation, PR #2252).
+
 ---
 
 ## Verification
@@ -301,7 +315,7 @@ Four Vitest files under `test/smoke/` validate the live deployment:
 
 | File | What it asserts |
 | --- | --- |
-| [test/smoke/seo-files.test.js](../../../test/smoke/seo-files.test.js) | robots.txt content, sitemap absolute URLs + `<lastmod>`, llms.txt brand header, llms-full.txt size > 10KB, /AGENTS.md served, og-default.png returns `image/png` |
+| [test/smoke/seo-files.test.js](../../../test/smoke/seo-files.test.js) | robots.txt content, sitemap absolute URLs + `<lastmod>`, llms.txt brand header, llms-full.txt size > 10KB, /AGENTS.md served, /sitemap.md nav + Missions section, og-default.png returns `image/png` |
 | [test/smoke/meta-tags.test.js](../../../test/smoke/meta-tags.test.js) | Home title has no duplication; canonical, description, robots, content-signal meta tags present; OG + Twitter Card complete; tutorial title has ` \| SAP Developers Tutorials` suffix; `og:type=article` and `author` on tutorials |
 | [test/smoke/jsonld.test.js](../../../test/smoke/jsonld.test.js) | Home page contains `Organization` + `WebSite` JSON-LD; tutorial pages contain `HowTo` with `step[]` and `BreadcrumbList` |
 | [test/smoke/content-signal.test.js](../../../test/smoke/content-signal.test.js) | Both AppRouter-served (`/`) and HANA-served (`/tutorials/`) responses carry `Content-Signal` and `X-Robots-Tag` headers |
@@ -410,6 +424,7 @@ hugo/
       sitemap.xml                              ← custom sitemap
       llms.txt                                 ← llmstxt.org index
       llmsfull.txt                             ← full machine catalog
+      sitemapmd.md                             ← navigable site map (nav + missions)
     partials/
       head.html                                ← assembles head from sub-partials
       head-meta.html                           ← canonical, description, robots, keywords, author

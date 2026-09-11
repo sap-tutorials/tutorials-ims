@@ -277,6 +277,52 @@ describe('csrfFetch', () => {
     }
   })
 
+  // --- Stale-session re-auth via a real 401 (issue #2239) ---
+  // A follow-on to #1904: the stale session no longer always surfaces as a
+  // 200-HTML interstitial. AppRouter/CAP can now answer the mutating request
+  // (or the /auth/user handshake) with a genuine `401 Unauthorized`. That is
+  // unambiguously "session absent/expired", so csrfFetch must force the same
+  // top-level /login navigation instead of returning the 401 to the caller
+  // (which the Done button swallows into a silent soft-fail).
+  it('redirects to /login when the mutating request returns a real 401 (stale session)', async () => {
+    const { replace, restore } = stubLocation('/tutorials/abap-env-trial-onboarding', '?step=3')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/auth/user') {
+        return makeResponse(200, { 'x-csrf-token': 'T', 'content-type': 'application/json' }, '{"authenticated":true}')
+      }
+      // Session expired between the handshake and the POST: the backend rejects
+      // the mutating request with a real 401 (not the 200-HTML interstitial).
+      return makeResponse(401, { 'content-type': 'application/json' }, '{"error":"Unauthorized"}')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(csrfFetch('/api/completeStep', { method: 'POST' })).rejects.toBeInstanceOf(
+        CsrfFetchError,
+      )
+      expect(replace).toHaveBeenCalledWith(
+        '/login?returnTo=' + encodeURIComponent('/tutorials/abap-env-trial-onboarding?step=3'),
+      )
+    } finally {
+      restore()
+    }
+  })
+
+  it('redirects to /login when the token handshake returns a real 401 (stale session)', async () => {
+    const { replace, restore } = stubLocation('/tutorials/x')
+    const fetchMock = vi.fn(async () => makeResponse(401, {}, '{"error":"Unauthorized"}'))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(csrfFetch('/api/completeStep', { method: 'POST' })).rejects.toBeInstanceOf(
+        CsrfFetchError,
+      )
+      expect(replace).toHaveBeenCalledWith('/login?returnTo=' + encodeURIComponent('/tutorials/x'))
+      // No mutating POST was sent — the stale session was caught at the handshake.
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      restore()
+    }
+  })
+
   // --- Edge/CDN HTML error pages are NOT the login interstitial ---
   // The XSUAA login interstitial is a *2xx* HTML body (or a followed redirect).
   // An HTML body on an ERROR status is an edge/CDN block (e.g. Akamai's

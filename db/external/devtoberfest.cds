@@ -70,6 +70,7 @@ entity Session {
       COMMUNITYEVENTURL     : String(500);
       CALENDARINVITE        : LargeString;
       ACTIVITY_ID           : String(36);
+      SURVEYURL             : String(500);   // computed in DTF_SESSION_V1 (base URL + session code)
 }
 
 @cds.persistence.exists

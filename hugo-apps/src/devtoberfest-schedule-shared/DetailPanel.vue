@@ -206,6 +206,13 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
             class="detail-panel__link detail-panel__link--linkedin"
           >LinkedIn</a>
           <a
+            v-if="(row as any).surveyUrl"
+            :href="safeHref((row as any).surveyUrl)"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="detail-panel__link detail-panel__link--survey"
+          >Session Survey</a>
+          <a
             v-if="taskUrl"
             :href="taskUrl"
             class="detail-panel__link detail-panel__link--task"

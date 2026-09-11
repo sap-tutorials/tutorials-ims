@@ -5,7 +5,7 @@
 
 import cds from '@sap/cds';
 import { resolveDbUser } from './resolve-db-user.js';
-import { sliceStep } from './tutorial-step-slicer.js';
+import { sliceStep, sliceStepMarkdown } from './tutorial-step-slicer.js';
 import { assertEnum, clampLimit } from './mcp-arg-validators.js';
 import * as store from './mcp-progress-store.js';
 import * as metrics from './metrics.js';
@@ -27,6 +27,7 @@ async function withToolMetrics(req, fn) {
 const STATUS_TUT = ['in_progress', 'completed', 'all'];
 const STATUS_MIS = ['in_progress', 'completed', 'not_started', 'all'];
 const WHEN_EVT   = ['upcoming', 'past', 'registered'];
+const STEP_FORMAT = ['markdown', 'html'];
 
 async function requireDbUser(req) {
   const dbUser = await resolveDbUser(req.user);
@@ -88,20 +89,44 @@ export async function handleGetMyCompletedSteps(req) {
   });
 }
 
-/** Also re-used by SearchService (anonymous mount) via the same handler symbol. */
+/** Also re-used by SearchService (anonymous mount) via the same handler symbol.
+ *  `format` selects a single representation — 'markdown' (default, agent-first,
+ *  token-efficient source markdown consistent with /tutorials/<slug>.md) or the
+ *  legacy sliced 'html'. Exactly one body field (`content`) is ever returned;
+ *  `contentFormat` echoes which representation it is (#2244). */
 export async function handleGetTutorialStep(req) {
   return withToolMetrics(req, async () => {
     const { slug, stepNumber } = req.data;
+    const format = req.data.format ?? 'markdown';
     if (!slug || typeof slug !== 'string') return req.reject(400, 'slug is required');
     if (!Number.isInteger(stepNumber) || stepNumber < 1)
       return req.reject(400, 'stepNumber must be a positive integer');
-    const slice = await sliceStep(slug.toLowerCase(), stepNumber);
+    try { assertEnum({ name: 'format', value: format, allowed: STEP_FORMAT }); }
+    catch (e) { return req.reject(400, e.message); }
+
+    const lcSlug = slug.toLowerCase();
+    if (format === 'html') {
+      const slice = await sliceStep(lcSlug, stepNumber);
+      if (!slice) return req.reject(404, 'step not found');
+      return {
+        slug: lcSlug,
+        stepNumber,
+        stepTitle: slice.stepTitle,
+        content: slice.html,
+        contentFormat: 'html',
+        textLength: slice.text.length,
+        totalSteps: slice.totalSteps,
+      };
+    }
+
+    const slice = await sliceStepMarkdown(lcSlug, stepNumber);
     if (!slice) return req.reject(404, 'step not found');
     return {
-      slug: slug.toLowerCase(),
+      slug: lcSlug,
       stepNumber,
       stepTitle: slice.stepTitle,
-      html:      slice.html,
+      content: slice.markdown,
+      contentFormat: 'markdown',
       textLength: slice.text.length,
       totalSteps: slice.totalSteps,
     };

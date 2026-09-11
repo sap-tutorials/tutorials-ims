@@ -2831,6 +2831,13 @@
           },
           "@cds.persistence.name": "EMBEDDINGMINSCORE"
         },
+        "semanticSearchEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "SEMANTICSEARCHENABLED"
+        },
         "codeCheckEnabled": {
           "type": "cds.Boolean",
           "default": {

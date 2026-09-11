@@ -65,6 +65,7 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
         broadcastingPreference: normalizeBroadcastingPreference(s.BROADCASTINGPREFERENCE),
         youtubeUrl: s.YOUTUBEURL || '', communityEventUrl: s.COMMUNITYEVENTURL || '',
         linkedinUrl: s.LINKEDINURL || '',
+        surveyUrl: s.SURVEYURL || '',
         speakers: speakerFor(s.ID),
         activityId: s.ACTIVITY_ID || null, status: s.STATUS,
       }))
