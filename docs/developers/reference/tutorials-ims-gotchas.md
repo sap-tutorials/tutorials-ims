@@ -147,3 +147,25 @@ All default OFF and DEV-only unless noted. Toggles fail-open on every fault path
 ## Freshness detector
 
 - **Freshness detector grounding needs the corpus-embedding backfill** — the `checkFreshness`/`freshness-scan` engine cosine-searches `ApiDocs`/`Samples` embeddings. Those columns are populated by `srv/jobs/freshness-corpus-embedding-job.js` (nightly `17 3` + on-demand `runJob`). Until it runs in an env, grounding returns nothing and every API-obsolescence claim degrades to `confidence: Low` (fail-open, by design). LLM calls use the SAP AI SDK directly (`@sap-ai-sdk/orchestration`, forced tool-call), NOT `@cap-js/ai`; unit tests inject `globalThis.__FRESHNESS_TEST_IMPL__`. Bulk scan gated by `FRESHNESS_SCAN_ENABLED` (default OFF). **Tutorial markdown is sourced from `ContentFiles.sourceContent` via `getTutorialSource(slug)` in `srv/lib/content-store.js` — NOT from `Steps.description`** (Steps are never populated with step markdown; reading Steps would yield nothing). Findings carry a **global `codeBlockIndex`** across the whole-tutorial markdown — per-step attribution is deferred because the persisted source is not split per step.
+
+## Signed provenance envelope (issue #2245)
+
+- **`PROVENANCE_ENVELOPE_ENABLED` is a DB config flag (ImsConfig), default OFF, DEV-first** — controlled via `ImsConfig` key `flag.provenance.envelope` (registered in `srv/lib/feature-flags/registry.js`). When OFF, `GET /content/tutorials/:slug/provenance` returns 404 and `GET /.well-known/tutorial-provenance/jwks.json` returns 404. No env var alternative; never store the signing key as an env var directly (use the credstore — see below). Flip via `/admin-ui/#featureFlags` (DEV); confirm PROD behaviour before enabling there.
+
+- **Two anonymous public endpoints** — both are plain Express routes registered in `srv/server.js`, intentionally outside any CAP service. `@requires` / `@restrict` do not apply. Both are read-only content-distribution endpoints, safe to serve unauthenticated:
+  - `GET /content/tutorials/:slug/provenance` — returns `{ jws, jwks_url }`. `jws` is a compact Ed25519-signed JWS (JWT serialisation via `jose`'s `SignJWT`) whose payload attests `{ sub, contentHash, sourceCommit, builtAt, freshness: { confidence, runAt, openHighCount, openMediumCount } }`. Returns 404 when the flag is OFF, 404 when the slug is unknown, or 500 on signing failure (fail-open: content still serves normally).
+  - `GET /.well-known/tutorial-provenance/jwks.json` — returns the Ed25519 JWKS `{ keys: [...] }` for out-of-band JWS verification. Returns 404 when the flag is OFF. Key ID (`kid`) in the JWKS matches the `kid` header in every issued JWS, enabling key rotation without re-verifying old tokens.
+
+- **`PROVENANCE_SIGNING_KEY` credstore secret** — the Ed25519 private key (PKCS8 PEM format) is stored in the target environment's BTP Credential Store as `PROVENANCE_SIGNING_KEY` and surfaced as an env var at runtime by the credstore binding. **Never commit a key or paste one into `.mtaext`, env files, or source.** Rotation: generate a new key (see below), store it via `/admin-ui/#secrets` (the per-env credstore rotation flow), then `cf restart tutorials-srv` — the new `kid` propagates to the JWKS automatically on next request. Old JWS tokens signed with the retired key will fail verification once the key is removed from the JWKS; that is expected.
+
+- **Generating a DEV signing key** — run locally and copy the PEM output, then paste it into `/admin-ui/#secrets` as `PROVENANCE_SIGNING_KEY` on the target env. Never write the output to a file you might commit.
+
+  ```bash
+  node -e "import('jose').then(async j=>{const {privateKey}=await j.generateKeyPair('EdDSA',{crv:'Ed25519',extractable:true});console.log(await j.exportPKCS8(privateKey))})"
+  ```
+
+- **Freshness confidence values** — derived by `deriveConfidence` in `srv/lib/provenance-freshness.js`. Possible values: `high` (freshness report DONE within 30 days, no open findings), `medium` (DONE but 30–90 days old or has open medium-severity findings), `low` (DONE but > 90 days old or any open high-severity finding), `unknown` (no freshness report or report status not DONE). Corpus-embedding backfill must have run before any value other than `unknown` can be returned — see "Freshness detector" above.
+
+- **Advisory headers on the HTML serve path** — when the flag is ON, `GET /content/tutorials/:slug` also sets `X-Freshness-Confidence: <value>` and `X-Content-Provenance: <jwks_url>` on the HTML response. These are advisory only; caching behaviour is unchanged. Any error deriving the advisory is swallowed silently (fail-open).
+
+- **`sourceCommit` plumbing** — `ContentCurrent.sourceCommit` (String(40)) is populated by the publish pipeline via the `source_commit` field in the publish payload; `scripts/fetch-tutorials.ts` threads the HEAD commit SHA through to the publish client. On older published content the column is NULL; the provenance JWS payload will carry `sourceCommit: null` in that case, which is valid.
