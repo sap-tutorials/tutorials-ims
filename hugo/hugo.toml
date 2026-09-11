@@ -39,7 +39,7 @@ enableRobotsTXT = false  # we ship our own via the robots output format
     kind = 'page'
 
 [outputs]
-  home = ['HTML', 'RSS', 'sitemap', 'robots', 'llms', 'llmsfull']
+  home = ['HTML', 'RSS', 'sitemap', 'robots', 'llms', 'llmsfull', 'sitemapmd']
   section = ['HTML', 'RSS']
   page = ['HTML']
 
@@ -55,6 +55,18 @@ enableRobotsTXT = false  # we ship our own via the robots output format
   isPlainText = true
   notAlternative = true
 
+# Human+AI navigable site map, mirroring CAP/Capire's sitemap.md. Distinct
+# from the XML `sitemap` output (sitemap.xml) and from the flat llms-full.txt.
+# Uses a dedicated media type so the file is written as `sitemap.md` (Hugo
+# picks a media type's FIRST suffix; the shared text/markdown lists 'txt'
+# first, which is why llms.txt is .txt). The wire Content-Type for /sitemap.md
+# is set by the approuter from the .md extension.
+[outputFormats.sitemapmd]
+  mediaType = 'text/x-web-markdown'
+  baseName = 'sitemap'
+  isPlainText = true
+  notAlternative = true
+
 [outputFormats.robots]
   mediaType = 'text/plain'
   baseName = 'robots'
@@ -64,6 +76,9 @@ enableRobotsTXT = false  # we ship our own via the robots output format
 
 [mediaTypes."text/markdown"]
   suffixes = ['txt', 'md']
+
+[mediaTypes."text/x-web-markdown"]
+  suffixes = ['md']
 
 [build]
   writeStats = true
