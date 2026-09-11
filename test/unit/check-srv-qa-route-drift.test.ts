@@ -193,6 +193,21 @@ describe('scripts/check-srv-qa-route-drift.ts', () => {
     expect(r.status).toBe(0);
   });
 
+  it('respects the ALLOWLIST_ONLY_ON_SRV entry for assert-specs', () => {
+    // /content/assert-specs is intentionally srv-only per the
+    // hard-coded allowlist in the script (#2245). A srv that has it and a
+    // srv-qa that doesn't should pass — that's the allowlist's job.
+    writeServer(root, 'srv', `
+      app.get('/content/nav', navHandler);
+      app.post('/content/assert-specs', assertSpecPublishHandler);
+    `);
+    writeServer(root, 'srv-qa', `
+      app.get('/content/nav', requireAuthorScope, navHandler);
+    `);
+    const r = run(root);
+    expect(r.status).toBe(0);
+  });
+
   it('parses a route whose literal contains "/*" (e.g. *slug) without swallowing the file', () => {
     // Regression for the string-unaware comment stripper: '/content/tutorials/*slug'
     // contains a `/*` sequence inside the string literal. The old stripper mistook

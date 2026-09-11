@@ -75,6 +75,9 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'AI code-check (#171) — gated behind ChatSettings.codeCheckEnabled feature flag; ' +
     'not yet wired for QA author-preview. Re-evaluate when credstore-backed ChatSettings ' +
     'reach QA.',
+  'POST /content/assert-specs':
+    'Assert spec publish (#2245) — non-fatal auxiliary step; no runtime reader on srv-qa. ' +
+    'Mirror of code-check-specs allowlist entry.',
   'GET /content/tutorial-model/*slug':
     'Legacy AEM `.model.json` compat shim for SAP Discovery Center cards (#1685) — a public ' +
     'prod content surface consumed externally against prod, not tutorial-draft author preview. ' +

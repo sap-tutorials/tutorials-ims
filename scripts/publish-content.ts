@@ -9,6 +9,7 @@ import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHash
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
+import { collectAssertSpecs, publishAssertSpecs } from './lib/publish-asserts.js';
 import { publishValidateAnswerSpecs } from './lib/publish-validate-answer.js';
 import { publishContributors } from './publish/publish-contributors.js';
 import { publishValidationRules } from './publish/publish-validation-rules.js';
@@ -1361,6 +1362,30 @@ async function main() {
     }
   } catch (err) {
     console.error('[publish-content] code-check spec publish failed (non-fatal):', formatErrorChain(err));
+    // Do NOT exit non-zero — content publish is the critical path; specs are auxiliary.
+  }
+
+  // --- assert spec publish (non-fatal auxiliary step, issue #2245) ---
+  try {
+    const cacheDir = channel === 'qa'
+      ? join(process.cwd(), '.tutorial-cache-qa')
+      : join(process.cwd(), '.tutorial-cache');
+    const specs = collectAssertSpecs(cacheDir);
+    if (specs.length) {
+      log(`Publishing ${specs.length} assert spec(s) to /content/assert-specs`);
+      const result = await withRetry(
+        () => publishAssertSpecs(opts.baseUrl, opts.apiKey, specs),
+        {
+          attempts: 3, backoffMs: [1000, 3000],
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] assert spec publish failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
+      log(`assert specs upserted=${result.upserted} skipped=${result.skipped.length}`);
+    }
+  } catch (err) {
+    console.error('[publish-content] assert spec publish failed (non-fatal):', formatErrorChain(err));
     // Do NOT exit non-zero — content publish is the critical path; specs are auxiliary.
   }
 
