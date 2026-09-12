@@ -4,6 +4,7 @@
 // data + handler wiring below.
 
 import matter from 'gray-matter';
+import cds from '@sap/cds';
 
 const DEFAULT_BASE_URL = 'http://localhost:4004';
 
@@ -105,4 +106,30 @@ export function buildSkillMd({ slug, source, asserts, stamp }) {
   ];
 
   return [fm, `# ${title}`, '', body, '', verify.join('\n'), '', provenance.join('\n'), ''].join('\n');
+}
+
+export async function loadAssertSpecs(slug) {
+  try {
+    const lc = String(slug || '').toLowerCase();
+    const { Tutorials, AssertSpecs } = cds.entities('com.sap.developers.ims');
+    const tut = await SELECT.one.from(Tutorials).columns('ID').where({ slug: lc });
+    if (!tut) return [];
+    const rows = await SELECT.from(AssertSpecs).where({ tutorial_ID: tut.ID }).orderBy('stepNumber', 'assertIndex');
+    return rows.map((r) => ({
+      stepNumber: r.stepNumber,
+      assertIndex: r.assertIndex,
+      type: r.assertType,
+      run: r.run ?? undefined,
+      expectExit: r.expectExit ?? undefined,
+      method: r.httpMethod ?? undefined,
+      path: r.httpPath ?? undefined,
+      expectStatus: r.expectStatus ?? undefined,
+      filePath: r.filePath ?? undefined,
+      expectContains: typeof r.expectContains === 'boolean' ? r.expectContains : undefined,
+      match: r.matchRegex ?? undefined,
+    }));
+  } catch (e) {
+    console.warn('[skill-bundle] loadAssertSpecs fail-open:', e.message);
+    return [];
+  }
 }
