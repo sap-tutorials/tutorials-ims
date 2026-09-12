@@ -37,6 +37,7 @@ describe('resolveKnowledgeGraphSettings (#463)', () => {
       mergeSimThreshold: 0.92,
       mergeSimThresholdExtract: 0.85,
       onDemandExtractionEnabled: false,
+      learningPathEnabled: false,
     });
   });
 

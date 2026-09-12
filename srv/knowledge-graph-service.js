@@ -557,6 +557,8 @@ import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 import * as metrics from './lib/metrics.js';
 import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 import { handleSharedConcepts, handleNeighborhood, handleSearchConcepts, handleCommunity } from './lib/mcp-kg-tools.js';
+import { computeLearningPath } from './lib/kg/learning-path.js';
+import { assembleLearningPathGraph } from './lib/kg/learning-path-graph.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -1545,8 +1547,57 @@ export default cds.service.impl(async function () {
     }
   });
 
-  // ─── searchKG — anonymous KG search for the ⌘K command palette ──────────
-  // Delegates to the anonymous-safe handler; never imports on-demand-enqueue.
+  // ─── learningPath — ordered prerequisite chain (kg-learning-path feature) ─
+  // Gate: kg.learningPathEnabled (KG_LEARNING_PATH_ENABLED DB flag, default OFF).
+  // Assembles the concept/edge graph snapshot via assembleLearningPathGraph, then
+  // runs the pure computeLearningPath reasoner. For authenticated users, derives
+  // learned/partial concepts via conceptsForUser and flags personalized=true.
+  // Any failure is caught and returns empty (fail-open, never 500).
+  this.on('learningPath', async (req) => {
+    const goalType = String(req.data.goalType || '').trim()
+    const goal = String(req.data.goal || '').trim().toLowerCase()
+    const VALID = new Set(['tutorial', 'mission', 'group', 'next-best'])
+    if (!VALID.has(goalType)) return req.error(400, 'Invalid goalType')
+    if (goalType !== 'next-best' && !goal) return req.error(400, 'goal is required')
+
+    const empty = { goalType, goal, totalSteps: 0, cyclesBroken: 0, truncated: false, personalized: false, steps: [] }
+    try {
+      const kg = await resolveKnowledgeGraphSettings()
+      if (!kg.learningPathEnabled) return empty // fail-open when flag off
+
+      const g = await assembleLearningPathGraph({ db, goalType, goal })
+
+      // Request-time personalization (authenticated only). conceptsForUser
+      // self-gates on ChatSettings.kgPathBetweenEnabled and returns empty
+      // when that flag is off — so personalized=false for those users too.
+      let learnedConcepts = []
+      let partialConcepts = []
+      let personalized = false
+      const userId = req.user?.id
+      if (userId) {
+        const cov = await this.send('conceptsForUser', { userId })
+        // conceptsForUser returns { learned: string[], partial: string[] } at the
+        // service layer — bare slug strings (getConceptsForUser returns Set → array
+        // of strings). The typeof guard is defensive for any future shape change.
+        learnedConcepts = (cov?.learned || []).map(c => (typeof c === 'string' ? c : c.slug)).filter(Boolean)
+        partialConcepts = (cov?.partial || []).map(c => (typeof c === 'string' ? c : c.slug)).filter(Boolean)
+        personalized = learnedConcepts.length > 0 || partialConcepts.length > 0
+        // Privacy invariant: subtract concepts only; never persist user→tutorial
+        // edges. completedTutorials stays empty.
+        g.completedTutorials = new Set()
+      }
+
+      const { steps, meta } = computeLearningPath({
+        goalType, goal, learnedConcepts, partialConcepts, graph: g,
+      })
+      return { ...meta, personalized, steps }
+    } catch (err) {
+      log.warn(`kg-service: learningPath(${goalType},${goal}) failed — ${err.message}`)
+      return empty // fail-open, never 500
+    }
+  });
+
+  // ─── searchKG — anonymous KG search for the ⌘K command palette ──────────  // Delegates to the anonymous-safe handler; never imports on-demand-enqueue.
   // Auth: inherited service-level @requires:'any' — anonymous callers get 200.
   // (issue #1036)
   this.on('searchKG', async (req) => {
