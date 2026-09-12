@@ -116,9 +116,9 @@ export function buildSkillMd({ slug, source, asserts, stamp }) {
 
 export async function loadAssertSpecs(slug) {
   try {
-    const lc = String(slug || '').toLowerCase();
+    const lcSlug = String(slug || '').toLowerCase();
     const { Tutorials, AssertSpecs } = cds.entities('com.sap.developers.ims');
-    const tut = await SELECT.one.from(Tutorials).columns('ID').where({ slug: lc });
+    const tut = await SELECT.one.from(Tutorials).columns('ID').where({ slug: lcSlug });
     if (!tut) return [];
     const rows = await SELECT.from(AssertSpecs).where({ tutorial_ID: tut.ID }).orderBy('stepNumber', 'assertIndex');
     return rows.map((r) => ({
