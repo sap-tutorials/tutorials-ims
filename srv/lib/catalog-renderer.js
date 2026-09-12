@@ -150,7 +150,9 @@ ${cards}
     </div>
   </div>
 </div>
-<script type="module" src="${islandSrc('nav-dropdown')}"></script>`;
+<script type="module" src="${islandSrc('nav-dropdown')}"></script>
+<div data-vue-island="learning-path" data-goal-type="group"></div>
+<script type="module" src="${islandSrc('learning-path')}"></script>`;
 }
 
 export function renderMissionBody(ctx) {
@@ -246,7 +248,9 @@ document.addEventListener('DOMContentLoaded', function() {
   if (firstCard) firstCard.classList.add('expanded');
 });
 </script>
-<script type="module" src="${islandSrc('nav-dropdown')}"></script>`;
+<script type="module" src="${islandSrc('nav-dropdown')}"></script>
+<div data-vue-island="learning-path" data-goal-type="mission"></div>
+<script type="module" src="${islandSrc('learning-path')}"></script>`;
 }
 
 // Composes a full page given a slug + chrome shell + already-loaded body data.
