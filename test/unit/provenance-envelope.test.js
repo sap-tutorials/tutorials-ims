@@ -27,7 +27,7 @@ describe('buildEnvelope', () => {
     __setKeyForTest(pem);
     const { jws, claims } = await buildEnvelope(base);
     const pub = await importJWK((await getJwks()).keys[0], 'EdDSA');
-    const { payload } = await jwtVerify(jws, pub, { issuer: 'https://developers.sap.com' });
+    const { payload } = await jwtVerify(jws, pub, { issuer: 'https://developers.sap.com', currentDate: new Date(base.now) });
     expect(payload.sub).toBe('my-tutorial');
     expect(payload.contentHash).toBe(base.contentHash);
     expect(payload.provenance).toMatchObject({ sourceRepo: 'sap-tutorials/Tutorials', sourceCommit: base.sourceCommit, builtAt: base.builtAt });
