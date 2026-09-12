@@ -54,6 +54,7 @@ export async function assertSpecPublishHandler(req, res) {
   try {
     for (const s of body.specs) {
       const slug = s.slug.toLowerCase();
+      // slug-canonical: pre-canonicalized
       const tut = await SELECT.one.from(Tutorials).where({ slug });
       if (!tut) { skipped.push(slug); continue; }
 
