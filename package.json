@@ -420,6 +420,7 @@
           "HomepageLinksBroken",
           "PublishStuck",
           "ChannelSubmissionPending",
+          "RateLimitAbuse",
           "AlertingTest"
         ],
         "dedupWindowMs": 300000

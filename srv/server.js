@@ -67,6 +67,7 @@ import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
+import { register as registerRateLimit } from './lib/rate-limit/register.js';
 import { streamChat } from './lib/chat-orchestrator.js';
 import { buildChatInvocation } from './lib/chat-invocation.js';
 import { computeEmbeddingStats } from './lib/embedding-stats.js';
@@ -1479,6 +1480,12 @@ cds.on('bootstrap', (app) => {
     const limiter = await getSearchLimiter();
     return ipRateLimitMiddleware(limiter, { logName: 'search-rate-limit' })(req, res, next);
   });
+
+  // Origin-side abuse protection: shared-store (cross-instance) rate limiter on
+  // the anon / expensive surface (/content, /build, /graph, /mcp*, …). Flag-
+  // gated (RATE_LIMIT_ENABLED, ImsConfig flag.ratelimit), default OFF, fail-open.
+  // Complements the always-on legacy /search limiter above.
+  registerRateLimit(app);
 });
 
 cds.on('served', async () => {
