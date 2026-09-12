@@ -101,5 +101,31 @@ describe.skipIf(!SRV_URL || SRV_URL.startsWith('http://localhost'))(
         expect([200, 204, 400, 413]).toContain(res.status);
       });
     });
+
+    describe('GET routes registered before the *slug wildcard (#2245)', () => {
+      // These routes MUST be registered before app.get('/content/tutorials/*slug',
+      // serveHandler) in srv/server.js. If the wildcard swallows them they return
+      // text/html instead of their own response type.
+      const getRoutesBeforeWildcard = [
+        'GET /content/tutorials/:slug/provenance',
+        'GET /content/tutorials/:slug/skill',
+      ];
+      it.each(getRoutesBeforeWildcard)(
+        '%s is registered before wildcard (non-HTML response for unknown slug)',
+        async (routeSpec) => {
+          const path = routeSpec
+            .replace('GET ', '')
+            .replace(':slug', '__smoke_no_such_slug__');
+          const res = await fetchWithRetry(`${SRV_URL}${path}`);
+          // The wildcard serveHandler returns text/html for all slugs (even 404s).
+          // A dedicated handler returns application/json, application/zip, or similar.
+          // Either a non-2xx status OR a non-HTML content-type confirms the route fires.
+          const ct = res.headers.get('content-type') ?? '';
+          const isHtml = ct.startsWith('text/html');
+          // If the response is HTML and 200, the wildcard swallowed it — that's a bug.
+          expect(isHtml && res.status === 200).toBe(false);
+        },
+      );
+    });
   }
 );
