@@ -438,6 +438,7 @@ export function createSessionHelpers({ namespace }) {
         fileCount: existing.fileCount,
         totalSizeBytes: existing.totalSizeBytes,
         durationMs: existing.publishDurationMs || 0,
+        freshSlugs: [], // already active → nothing freshly published to purge
         alreadyActive: true
       };
     }
@@ -655,6 +656,10 @@ export function createSessionHelpers({ namespace }) {
       totalSizeBytes: freshSize + carriedSize,
       durationMs,
       carriedForward,
+      // freshSlugs — the slugs freshly written by this publish (post revert
+      // filtering), surfaced so commitHandler can issue a targeted edge
+      // Fast-Purge by per-item tag (srv/lib/fast-purge.js).
+      freshSlugs,
       // #672 — empty array (not omitted) so clients can rely on the field
       // being present in every commit response. `allowedReverts` lists slugs
       // that WERE detected as reverts but committed anyway per an explicit

@@ -18,6 +18,7 @@ import * as metrics from './metrics.js';
 import * as alerting from './alerting.js';
 import { resolveSecret } from './secret-resolver.js';
 import { setContentCacheHeaders } from './edge-cache-headers.js';
+import { purgePublishedSlugs, purgeAllContent } from './fast-purge.js';
 import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
@@ -1874,6 +1875,11 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
 
+      // Rollback knows the manifest version, not a per-slug list — purge the
+      // whole content corpus at the edge (coarse `content` tag). Fire-and-forget,
+      // fail-open, no-op unless EDGE_PURGE_ENABLED. See fast-purge.js.
+      purgeAllContent();
+
       res.json({ rolledBackTo: target.version, status: 'ACTIVE' });
     } catch (err) {
       console.error('[content/rollback]', err instanceof Error ? err.message : String(err));
@@ -2032,6 +2038,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       const result = await sessionHelpers.commitSession({ sessionId, allowRevertSlugs });
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
+      // Fire-and-forget edge Fast-Purge of the freshly published slugs — void,
+      // never awaited, fail-open (no-op unless EDGE_PURGE_ENABLED). See fast-purge.js.
+      purgePublishedSlugs(result.freshSlugs);
       LOG.info(`[content/publish/commit] sessionId=${sessionId} version=${result.version} duration=${result.durationMs}ms alreadyActive=${result.alreadyActive}`);
       res.status(200).json(result);
     } catch (err) {
