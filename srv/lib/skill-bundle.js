@@ -40,7 +40,7 @@ export function buildVerifyScript(asserts) {
 
   for (const a of asserts) {
     const label = shquote(`step ${a.stepNumber} assert ${a.assertIndex} (${a.type})`);
-    L.push(`echo "Running check for ${a.type} @ step ${a.stepNumber}.${a.assertIndex}"`);
+    L.push(`echo ${shquote(`Running check for ${a.type} @ step ${a.stepNumber}.${a.assertIndex}`)}`);
     if (a.type === 'cmd') {
       L.push('out=$(' + a.run + ' 2>&1) && rc=$? || rc=$?');
       L.push(`if [ "$rc" -eq ${Number(a.expectExit)} ]; then ok=0; else ok=1; fi`);
@@ -48,7 +48,7 @@ export function buildVerifyScript(asserts) {
       L.push(`check "$ok" ${label} # ${shquote(a.run)}`);
     } else if (a.type === 'http') {
       L.push(`body=$(mktemp)`);
-      L.push(`code=$(curl -s -o "$body" -w '%{http_code}' -X ${a.method} "${'${BASE_URL}'}"${shquote(a.path)} || echo 000)`);
+      L.push(`code=$(curl -s -o "$body" -w '%{http_code}' -X ${shquote(a.method)} "${'${BASE_URL}'}"${shquote(a.path)} || echo 000)`);
       L.push(`if [ "$code" = ${shquote(String(a.expectStatus))} ]; then ok=0; else ok=1; fi`);
       if (a.match) L.push(`if [ "$ok" -eq 0 ] && ! grep -Eq -- ${shquote(a.match)} "$body"; then ok=1; fi`);
       L.push(`rm -f "$body"`);

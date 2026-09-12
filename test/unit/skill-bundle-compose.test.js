@@ -6,6 +6,12 @@ describe('shquote', () => {
     expect(shquote(`a'b`)).toBe(`'a'\\''b'`);
     expect(shquote('cds compile')).toBe(`'cds compile'`);
   });
+
+  it('preserves dollar signs and backticks inside single quotes so they cannot execute at runtime', () => {
+    // a'b$(x)`y  →  'a'\''b$(x)`y'
+    // The $ and ` land inside single-quoted segments and are shell-inert
+    expect(shquote("a'b$(x)`y")).toBe("'a'\\''b$(x)`y'");
+  });
 });
 
 describe('buildVerifyScript', () => {
@@ -31,7 +37,7 @@ describe('buildVerifyScript', () => {
   it('http assert curls BASE_URL+path with method and checks status', () => {
     const s = buildVerifyScript([{ stepNumber: 2, assertIndex: 0, type: 'http', method: 'GET', path: '/foo', expectStatus: 200 }]);
     expect(s).toContain('BASE_URL="${BASE_URL:-http://localhost:4004}"');
-    expect(s).toContain('-X GET');
+    expect(s).toContain("-X 'GET'");
     expect(s).toContain(shquote('/foo'));
     expect(s).toContain('200');
   });
@@ -51,6 +57,22 @@ describe('buildVerifyScript', () => {
     ]);
     expect(s.indexOf("'a'")).toBeLessThan(s.indexOf("'b'"));
     expect(s).toContain('exit 1');
+  });
+
+  it('shell-quotes curl -X method to prevent shell injection via a hostile method value', () => {
+    const s = buildVerifyScript([{ stepNumber: 1, assertIndex: 0, type: 'http', method: "GET;rm -rf ~ #", path: '/x', expectStatus: 200 }]);
+    // The injected semicolon must be inside single quotes so it cannot start a new command
+    expect(s).toContain("-X 'GET;rm -rf ~ #'");
+    // An unquoted -X GET; sequence that would let rm run must NOT appear
+    expect(s).not.toMatch(/-X GET;/);
+  });
+
+  it('shell-quotes the echo label to prevent command substitution via type or step metadata', () => {
+    const s = buildVerifyScript([{ stepNumber: 1, assertIndex: 0, type: 'cmd$(evil)', run: 'true', expectExit: 0 }]);
+    // The label must appear as a single-quoted string, not a double-quoted one that would expand $()
+    expect(s).toContain("echo 'Running check for cmd$(evil) @ step 1.0'");
+    // The per-assert echo must NOT use a double-quoted string (which would live-expand $(evil))
+    expect(s).not.toContain('echo "Running check for');
   });
 });
 
