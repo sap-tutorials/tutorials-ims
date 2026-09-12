@@ -1,0 +1,17 @@
+{{ define "main" }}
+<main id="ktt-mount"
+      data-page-kind="ktt"
+      data-api="/ktt"
+      data-lessons="{{ site.Data.ktt_lessons | jsonify }}">
+  <!-- SSR shell so the route is not an empty div for crawlers -->
+  <section class="ktt-ssr">
+    <h1>{{ .Title }}</h1>
+    <p>{{ .Description }}</p>
+    <ul>
+      {{ range site.Data.ktt_lessons.units }}<li>{{ .title }}</li>{{ end }}
+    </ul>
+  </section>
+</main>
+<noscript><p>KTT needs JavaScript to play. The unit list above summarizes what Kasimir covers.</p></noscript>
+<script type="module" src="{{ partial "island-src.html" "ktt" }}" defer></script>
+{{ end }}

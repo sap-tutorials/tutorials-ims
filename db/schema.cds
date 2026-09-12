@@ -6,6 +6,7 @@ using from './advocates';
 using from './devtoberfest';
 using from './homepage';
 using from './channels';
+using from './ktt';
 
 // Sequence-backed business ID for backward compatibility with legacy integer IDs
 aspect LegacyKeyed {
@@ -16,7 +17,7 @@ aspect LegacyKeyed {
 type ExperienceLevel : String(255) enum { beginner; intermediate; advanced; }
 type TaskStatus      : String(50)  enum { ACTIVE; INACTIVE; }
 type MissionType     : String(20)  enum { SEQUENTIAL; SET; }
-type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; PETOBERFEST; }
+type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; PETOBERFEST; KTT_LESSON; } // KTT (#KTT) — mostly-fun acronym trainer
 type EventType       : String(20)  enum { DEVTOBERFEST; TECHED; CODEJAM; CHALLENGE; OTHER; }
 
 aspect TaskBase : cuid, managed, LegacyKeyed {
@@ -192,7 +193,7 @@ entity TaskRecords : cuid, managed, LegacyKeyed {
   // NVARCHAR(5000); the enum is enforced at the CDS layer (@Common.ValueList
   // dropdowns + admin write-paths) rather than as a DB constraint, so this
   // change requires no .hdbmigrationtable ALTER.
-  taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; PUZZLE; PETOBERFEST; };
+  taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; PUZZLE; PETOBERFEST; KTT_LESSON; }; // KTT (#KTT) — mostly-fun acronym trainer
   status                    : String enum { COMPLETED; IN_PROGRESS; SUPERSEDED; };
   progress                  : Integer default 0;
   completionTime            : Int64;

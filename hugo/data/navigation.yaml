@@ -121,6 +121,12 @@ groups:
         href: /whats-new/
         icon: newspaper
         keywords: [whats new, news, latest, updates, changelog]
+      - id: explore-ktt
+        label: Kasimir Teaches TLAs
+        href: /explore/ktt/
+        icon: learning-assistant
+        paletteLabel: "KTT — Kasimir Teaches TLAs"
+        keywords: [acronym, tla, kasimir, quiz, learn]
       - id: explore-api-docs
         label: API
         href: /api-docs/
