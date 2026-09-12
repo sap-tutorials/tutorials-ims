@@ -42,14 +42,6 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
         <path d="M100,44 C129,44 153,63 153,95 C153,121 139,143 116,151 Q108,154 100,154 Q92,154 84,151 C61,143 47,121 47,95 C47,63 71,44 100,44 Z"
               fill="#70747a" stroke="#2b2d34" stroke-width="2.4" stroke-linejoin="round"/>
 
-        <!-- cheek fur tufts: soft irregular fluff breaking the round outline -->
-        <g id="cheeks" class="k-cheeks">
-          <path d="M49,110 l-7,-3 M48,118 l-8,-1 M49,126 l-7,3" fill="none"
-                stroke="#7f838a" stroke-width="2" stroke-linecap="round"/>
-          <path d="M151,110 l7,-3 M152,118 l8,-1 M151,126 l7,3" fill="none"
-                stroke="#7f838a" stroke-width="2" stroke-linecap="round"/>
-        </g>
-
         <!-- cowlick tuft: a fun little curl on the crown -->
         <path id="cowlick" class="k-cowlick"
               d="M96,45 Q94,34 100,37 Q97,41 103,42 Q108,40 106,46" fill="none"
@@ -67,18 +59,20 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
 
         <!-- eyes: smaller, warm, with a friendly upper lid line -->
         <g id="pupils" class="k-pupils">
-          <!-- left eye -->
-          <ellipse cx="81" cy="101" rx="10.5" ry="11.5" fill="#fff" stroke="#2b2d34" stroke-width="1.8"/>
-          <circle cx="81" cy="102" r="7.3" fill="#3a93e0" stroke="#1c6cb4" stroke-width="1.2"/>
-          <circle cx="81" cy="103" r="4" fill="#15191f"/>
-          <circle cx="84" cy="99" r="2.6" fill="#fff"/>
-          <circle cx="78.5" cy="105" r="1.2" fill="#fff" opacity="0.8"/>
-          <!-- right eye -->
-          <ellipse cx="119" cy="101" rx="10.5" ry="11.5" fill="#fff" stroke="#2b2d34" stroke-width="1.8"/>
-          <circle cx="119" cy="102" r="7.3" fill="#3a93e0" stroke="#1c6cb4" stroke-width="1.2"/>
-          <circle cx="119" cy="103" r="4" fill="#15191f"/>
-          <circle cx="122" cy="99" r="2.6" fill="#fff"/>
-          <circle cx="116.5" cy="105" r="1.2" fill="#fff" opacity="0.8"/>
+          <g class="k-eye k-eye-l">
+            <ellipse cx="81" cy="101" rx="10.5" ry="11.5" fill="#fff" stroke="#2b2d34" stroke-width="1.8"/>
+            <circle cx="81" cy="102" r="7.3" fill="#3a93e0" stroke="#1c6cb4" stroke-width="1.2"/>
+            <circle cx="81" cy="103" r="4" fill="#15191f"/>
+            <circle cx="84" cy="99" r="2.6" fill="#fff"/>
+            <circle cx="78.5" cy="105" r="1.2" fill="#fff" opacity="0.8"/>
+          </g>
+          <g class="k-eye k-eye-r">
+            <ellipse cx="119" cy="101" rx="10.5" ry="11.5" fill="#fff" stroke="#2b2d34" stroke-width="1.8"/>
+            <circle cx="119" cy="102" r="7.3" fill="#3a93e0" stroke="#1c6cb4" stroke-width="1.2"/>
+            <circle cx="119" cy="103" r="4" fill="#15191f"/>
+            <circle cx="122" cy="99" r="2.6" fill="#fff"/>
+            <circle cx="116.5" cy="105" r="1.2" fill="#fff" opacity="0.8"/>
+          </g>
         </g>
 
         <!-- upper-lid arcs: static, soften the wide-eyed stare -->
@@ -137,6 +131,17 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
         <ellipse cx="126" cy="230" rx="17" ry="11" fill="#f6f7f9" stroke="#2b2d34" stroke-width="2.4"/>
         <path d="M121,222 L121,238 M131,222 L131,238" fill="none" stroke="#2b2d34" stroke-width="1.4" stroke-linecap="round"/>
       </g>
+
+      <!-- confetti: invisible except during celebrate -->
+      <g id="confetti" class="k-confetti">
+        <rect x="46" y="48" width="7" height="7" rx="1.5" fill="#0a6ed1"/>
+        <rect x="150" y="54" width="7" height="7" rx="1.5" fill="#f0ab00"/>
+        <circle cx="70" cy="34" r="3.6" fill="#30914c"/>
+        <circle cx="132" cy="30" r="3.6" fill="#ea7088"/>
+        <rect x="98" y="22" width="6" height="6" rx="1.5" fill="#e52e5a"/>
+        <circle cx="40" cy="72" r="3" fill="#f0ab00"/>
+        <circle cx="162" cy="78" r="3" fill="#0a6ed1"/>
+      </g>
     </svg>
   </div>
 </template>
@@ -145,6 +150,7 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
 /* === Reduced motion: freeze all animations === */
 @media (prefers-reduced-motion: reduce) {
   .kasimir * { animation: none !important; }
+  .k-confetti { opacity: 0 !important; }
 }
 
 /* === Shared base === */
@@ -265,8 +271,13 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
   animation: k-ears-perk 0.5s ease-out forwards;
   transform-origin: 100px 44px;
 }
-.kasimir--correct .k-pupils {
-  animation: k-eyes-bright 0.7s ease-in-out 3;
+.kasimir--correct .k-eye-l {
+  animation: k-eye-pop 0.6s ease-in-out 3;
+  transform-origin: 81px 101px;
+}
+.kasimir--correct .k-eye-r {
+  animation: k-eye-pop 0.6s ease-in-out 3;
+  transform-origin: 119px 101px;
 }
 .kasimir--correct .k-tail {
   animation: k-tail-wag 0.4s ease-in-out 5;
@@ -282,9 +293,9 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
   0%   { transform: scaleY(1); }
   100% { transform: scaleY(1.2) translateY(-4px); }
 }
-@keyframes k-eyes-bright {
+@keyframes k-eye-pop {
   0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.12); }
+  50%      { transform: scale(1.08); }
 }
 @keyframes k-tail-wag {
   0%, 100% { transform: rotate(0deg); }
@@ -349,6 +360,21 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
   animation: k-whisker-confetti 0.8s ease-in-out 4;
 }
 
+/* Confetti burst — hidden everywhere except celebrate */
+.k-confetti { opacity: 0; }
+.kasimir--celebrate .k-confetti { opacity: 1; }
+.kasimir--celebrate .k-confetti > * {
+  animation: k-confetti-burst 1.1s ease-in 3;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.kasimir--celebrate .k-confetti > *:nth-child(2) { animation-delay: 0.12s; }
+.kasimir--celebrate .k-confetti > *:nth-child(3) { animation-delay: 0.28s; }
+.kasimir--celebrate .k-confetti > *:nth-child(4) { animation-delay: 0.06s; }
+.kasimir--celebrate .k-confetti > *:nth-child(5) { animation-delay: 0.34s; }
+.kasimir--celebrate .k-confetti > *:nth-child(6) { animation-delay: 0.20s; }
+.kasimir--celebrate .k-confetti > *:nth-child(7) { animation-delay: 0.42s; }
+
 @keyframes k-hop {
   0%, 100% { transform: translateY(0); }
   40%      { transform: translateY(-14px); }
@@ -360,5 +386,10 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
 @keyframes k-whisker-confetti {
   0%, 100% { opacity: 0.9; }
   50%      { opacity: 0.4; }
+}
+@keyframes k-confetti-burst {
+  0%   { transform: translateY(8px) scale(0.4) rotate(0deg); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translateY(-28px) scale(1) rotate(170deg); opacity: 0; }
 }
 </style>
