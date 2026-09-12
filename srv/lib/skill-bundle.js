@@ -5,9 +5,12 @@
 
 import matter from 'gray-matter';
 import cds from '@sap/cds';
+import { ZipArchive } from 'archiver';
 import { loadProvenanceInputs as _loadProvenanceInputs } from './provenance-data.js';
 import { deriveConfidence as _deriveConfidence } from './provenance-freshness.js';
 import { buildEnvelope as _buildEnvelope } from './provenance-envelope.js';
+import { isFlagEnabled as _isFlagEnabled } from './feature-flags/db-flags.js';
+import { getTutorialSource as _getTutorialSource } from './content-store.js';
 
 const DEFAULT_BASE_URL = 'http://localhost:4004';
 
@@ -165,3 +168,69 @@ export const buildFreshnessStamp = (slug, opts) =>
     deriveConfidence: _deriveConfidence,
     buildEnvelope: _buildEnvelope,
   })(slug, opts);
+
+const VALID_SLUG = /^[a-z0-9]+(?:[-/][a-z0-9]+)*$/;
+
+export function createSkillBundleHandler(deps = {}) {
+  const {
+    isFlagEnabled = _isFlagEnabled,
+    getTutorialSource = _getTutorialSource,
+    loadAssertSpecs: _load = loadAssertSpecs,
+    buildFreshnessStamp: _stamp = buildFreshnessStamp,
+    provenanceFlagKey = 'PROVENANCE_ENVELOPE_ENABLED',
+  } = deps;
+
+  return async function handler(req, res) {
+    if (!isFlagEnabled('SKILL_BUNDLE_ENABLED')) return res.status(404).end();
+
+    const raw = Array.isArray(req.params?.slug) ? req.params.slug.join('/') : req.params?.slug;
+    const slug = String(raw || '').replace(/\/$/, '').toLowerCase();
+    if (!slug || !VALID_SLUG.test(slug)) return res.status(404).json({ error: 'not_found' });
+
+    const src = await getTutorialSource(slug);
+    if (!src || !src.markdown) return res.status(404).json({ error: 'not_found' });
+
+    const [asserts, stamp] = await Promise.all([
+      _load(slug),
+      _stamp(slug, { provenanceEnabled: isFlagEnabled(provenanceFlagKey) }),
+    ]);
+
+    const skillMd = buildSkillMd({ slug, source: src.markdown, asserts, stamp });
+    const verifySh = buildVerifyScript(asserts);
+
+    res.status(200);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${slug.replace(/\//g, '-')}-skill.zip"`);
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=600');
+
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+
+    // Collect zip bytes via 'data' events (puts archive in flowing mode).
+    // Buffering the small text zip avoids readable-stream@4 ↔ native-Writable
+    // pipe backpressure incompatibilities in vitest workers, and is safe for
+    // production (SKILL.md + verify.sh are always <64 KB).
+    const bufferPromise = new Promise((resolve, reject) => {
+      const chunks = [];
+      archive.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+      archive.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+    });
+
+    const dir = slug.replace(/\//g, '-');
+    archive.append(skillMd, { name: `${dir}/SKILL.md` });
+    archive.append(verifySh, { name: `${dir}/verify.sh`, mode: 0o755 });
+    archive.finalize(); // fire-and-forget; 'data'/'end'/'error' drive completion
+
+    let buf;
+    try {
+      buf = await bufferPromise;
+    } catch (err) {
+      console.error('[skill-bundle] archive error:', err.message);
+      if (!res.headersSent) res.status(500).end();
+      return;
+    }
+    res.end(buf);
+  };
+}
+
+export const skillBundleHandler = createSkillBundleHandler();
