@@ -784,7 +784,8 @@ export default class AdminService extends cds.ApplicationService {
           enabled: false,
           extractBuildCap: 200,
           mergeSimThreshold: 0.92,
-          mergeSimThresholdExtract: 0.85
+          mergeSimThresholdExtract: 0.85,
+          learningPathEnabled: false
         });
       }
     });

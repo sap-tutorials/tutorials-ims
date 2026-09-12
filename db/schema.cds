@@ -827,6 +827,7 @@ entity KnowledgeGraphSettings : cuid, managed {
   mergeSimThreshold          : Decimal(3, 2) @assert.range: [0.01, 1.00];
   mergeSimThresholdExtract   : Decimal(3, 2) @assert.range: [0.01, 1.00];
   onDemandExtractionEnabled  : Boolean default false;
+  learningPathEnabled        : Boolean default false;  // learning-path reasoner, DEV-only
 }
 
 entity TutorialEmbedding {
