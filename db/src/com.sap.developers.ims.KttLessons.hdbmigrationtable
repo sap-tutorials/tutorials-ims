@@ -1,0 +1,10 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_KttLessons (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  slug NVARCHAR(120),
+  unitId NVARCHAR(60),
+  title NVARCHAR(200),
+  "ORDER" INTEGER DEFAULT 0,
+  PRIMARY KEY(ID)
+)

@@ -4243,12 +4243,12 @@
     }
   },
   "meta": {
-    "creator": "CDS Compiler v7.0.1",
+    "creator": "CDS Compiler v7.1.1",
     "compilerCsnFlavor": "$internal",
     "flavor": "inferred",
     "sap.changelog.enhanced": true,
     "minified": true,
-    "build": "CDS Build v10.0.3"
+    "build": "CDS Build v10.1.0"
   },
   "$version": "2.0"
 }
