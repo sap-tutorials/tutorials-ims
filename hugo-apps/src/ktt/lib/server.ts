@@ -6,6 +6,7 @@
  * MUST parse JSON and check body.authenticated === true.
  */
 
+import { csrfFetch } from '@shared/csrf-fetch';
 import type { KttProgress } from './progress';
 
 /**
@@ -48,7 +49,7 @@ export async function completeLesson(
   payload: { lessonSlug: string; legacyId: number; title: string },
 ): Promise<{ ok: boolean; alreadyDone: boolean } | null> {
   try {
-    const r = await fetch(`${apiUrl}/completeLesson`, {
+    const r = await csrfFetch(`${apiUrl}/completeLesson`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -69,7 +70,7 @@ export async function syncProgress(
   local: KttProgress,
 ): Promise<{ xp: number; streak: number; mastered: string[] } | null> {
   try {
-    const r = await fetch(`${apiUrl}/syncProgress`, {
+    const r = await csrfFetch(`${apiUrl}/syncProgress`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ localJson: JSON.stringify(local) }),
