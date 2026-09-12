@@ -108,6 +108,16 @@ Subsystem one-liners:
 
 - **Admin-UI changes need a FULL deploy + are bundle-gated** — the admin apps (`app/admin/*` + `app/admin-shell/`) are raw-copied into the approuter's `static/admin-ui/` by the MTA's approuter builder during `mbt build`. A `--skip-build` deploy (reuses a stale mtar), a module-scoped `cf deploy -m tutorials-srv`, or an mtar packaged before the change landed will silently ship a **stale admin UI** even though the fix is on `main` (this is why PR #1331/#1345's value-help fix looked "not deployed" on DEV). `npm run deploy` now runs **Step 3.5** (`scripts/check-shipped-admin-bundle.cjs`) which cracks the mtar and diffs the shipped admin component files against source, failing the deploy on drift. Rule: deploy admin-UI changes with a full `npm run deploy -- --env <env>` (NO `--skip-build`, NO `-m` scoping), and never bypass Step 3.5.
 
+## Agent Token Efficiency
+
+These are load-bearing habits for keeping AI-agent token usage down without reducing output. Ignoring them wastes tokens re-sending output the agent never uses.
+
+- **Never paste raw deploy/test/log scrollback into the main context.** Any command whose output can exceed ~50 lines (`mbt build`, `cf deploy`, `npm run build:all`, `npm test`, `cf logs`) MUST be wrapped in `scripts/quiet-run.sh <cmd…>` — it keeps the full log on disk under `.quiet-logs/` and prints only exit code + matched error lines + last N lines. Drill into the full log path only when the summary is insufficient.
+- **Delegate noisy investigation to a subagent.** Grep sweeps, "which files import X", log trawls, broad multi-file reads — dispatch to `Explore`/`general-purpose` so the raw output stays out of the main context and only the findings return.
+- **Don't read a whole file for a few lines.** Prefer cds-mcp / hana-cli / `Grep` with line ranges over full-file `Read`; read only the slice you need.
+- **Short sessions.** One deploy or one debugging thread per session; `/clear` between them so stale build output doesn't ride on every subsequent request.
+- Longer term, structural wins are tracked in issues #2265 (retrieval memory), #2266 (deploy-oracle), #2267 (verify/probe), #2268 (CDS answer path).
+
 ## Top Gotchas
 
 The load-bearing few. **Full detail for every relocated item → [tutorials-ims-gotchas.md](docs/developers/reference/tutorials-ims-gotchas.md)** ("Top Gotchas — full detail" section); items with their own reference doc link straight to it.
