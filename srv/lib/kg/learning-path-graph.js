@@ -22,7 +22,8 @@ const NS = 'com.sap.developers.ims'
  * Assembles the graph snapshot that learning-path.js consumes.
  *
  * @param {object} a
- * @param {object} a.db         cds.db handle
+ * @param {object} a.db         cds.db handle (all queries run through this handle
+ *                              so transactional callers get isolation)
  * @param {'tutorial'|'mission'|'group'|'next-best'} a.goalType
  * @param {string} a.goal       tutorial/mission/group slug (ignored for next-best)
  * @returns {Promise<{
@@ -46,9 +47,11 @@ export async function assembleLearningPathGraph({ db, goalType, goal }) {
   // 1. requires edges: concept slug -> concept slug.
   //    Path expressions source.slug / target.slug follow the pattern established
   //    in admin-service.js for CompletionPathItems.tutorial.slug (same 1-hop FK).
-  const edgeRows = await SELECT.from(ConceptEdges)
-    .columns('source.slug as source', 'target.slug as target', 'confidence')
-    .where({ predicate: 'requires', status: 'ACTIVE' })
+  const edgeRows = await db.run(
+    SELECT.from(ConceptEdges)
+      .columns('source.slug as source', 'target.slug as target', 'confidence')
+      .where({ predicate: 'requires', status: 'ACTIVE' })
+  )
 
   const requires = edgeRows
     .filter(r => r.source && r.target)
@@ -57,9 +60,11 @@ export async function assembleLearningPathGraph({ db, goalType, goal }) {
   // 2. teaches links: concept slug -> [tutorial slug].
   //    tutorial.slug path expression confirmed in srv/lib/featured-topics-snapshot.js line 158.
   //    We additionally request concept.slug here (same 1-hop pattern).
-  const teachRows = await SELECT.from(TutorialConceptLinks)
-    .columns('tutorial.slug as tutorialSlug', 'concept.slug as conceptSlug')
-    .where({ predicate: 'teaches' })
+  const teachRows = await db.run(
+    SELECT.from(TutorialConceptLinks)
+      .columns('tutorial.slug as tutorialSlug', 'concept.slug as conceptSlug')
+      .where({ predicate: 'teaches' })
+  )
 
   const teaches = new Map()
   for (const r of teachRows) {
@@ -69,12 +74,12 @@ export async function assembleLearningPathGraph({ db, goalType, goal }) {
   }
 
   // 3. Tutorial PageRank scores.
-  const rankRows = await SELECT.from(TutorialRank).columns('slug', 'score')
+  const rankRows = await db.run(SELECT.from(TutorialRank).columns('slug', 'score'))
   const tutorialRank = new Map(rankRows.map(r => [r.slug, Number(r.score ?? 0)]))
 
   // 4. Goal concept slugs: the set of concepts taught by the goal tutorial/mission/group.
   const goalConcepts = await resolveGoalConcepts({
-    goalType, goal, TutorialConceptLinks, CompletionPaths, CompletionPathItems, GroupPathItems,
+    db, goalType, goal, TutorialConceptLinks, CompletionPaths, CompletionPathItems, GroupPathItems,
   })
 
   // completedTutorials is intentionally empty: the handler (Task 5) fills it from
@@ -88,7 +93,7 @@ export async function assembleLearningPathGraph({ db, goalType, goal }) {
  * For a mission/group goal: union of concepts taught by all member tutorials.
  * For next-best: empty (the reasoning core uses the full teaches graph instead).
  */
-async function resolveGoalConcepts({ goalType, goal, TutorialConceptLinks, CompletionPaths, CompletionPathItems, GroupPathItems }) {
+async function resolveGoalConcepts({ db, goalType, goal, TutorialConceptLinks, CompletionPaths, CompletionPathItems, GroupPathItems }) {
   if (goalType === 'next-best' || !goal) return []
 
   const goalSlug = String(goal).toLowerCase()
@@ -98,7 +103,7 @@ async function resolveGoalConcepts({ goalType, goal, TutorialConceptLinks, Compl
     tutorialSlugs = [goalSlug]
   } else {
     tutorialSlugs = await resolveMemberTutorialSlugs({
-      goalType, goalSlug, CompletionPaths, CompletionPathItems, GroupPathItems,
+      db, goalType, goalSlug, CompletionPaths, CompletionPathItems, GroupPathItems,
     })
     if (!tutorialSlugs.length) return []
   }
@@ -106,9 +111,11 @@ async function resolveGoalConcepts({ goalType, goal, TutorialConceptLinks, Compl
   // Query TutorialConceptLinks for all concepts taught by these tutorials.
   // where({ 'tutorial.slug': { in: [...] } }) uses the path expression filter —
   // confirmed pattern from admin-service.js line 3714.
-  const rows = await SELECT.from(TutorialConceptLinks)
-    .columns('concept.slug as conceptSlug')
-    .where({ predicate: 'teaches', 'tutorial.slug': { in: tutorialSlugs } })
+  const rows = await db.run(
+    SELECT.from(TutorialConceptLinks)
+      .columns('concept.slug as conceptSlug')
+      .where({ predicate: 'teaches', 'tutorial.slug': { in: tutorialSlugs } })
+  )
 
   return [...new Set(rows.map(r => r.conceptSlug).filter(Boolean))]
 }
@@ -120,34 +127,38 @@ async function resolveGoalConcepts({ goalType, goal, TutorialConceptLinks, Compl
  * Missions: two-step (CompletionPaths -> CompletionPathItems) to avoid unreliable
  *   three-hop path.mission.slug expressions — same pattern as admin-service.js §3702.
  */
-async function resolveMemberTutorialSlugs({ goalType, goalSlug, CompletionPaths, CompletionPathItems, GroupPathItems }) {
+async function resolveMemberTutorialSlugs({ db, goalType, goalSlug, CompletionPaths, CompletionPathItems, GroupPathItems }) {
   try {
     if (goalType === 'group') {
       // 'group.slug' is a 1-hop path expression filter; confirmed safe pattern.
-      const rows = await SELECT.from(GroupPathItems)
-        .columns('tutorial.slug as slug')
-        .where({ 'group.slug': goalSlug })
+      const rows = await db.run(
+        SELECT.from(GroupPathItems)
+          .columns('tutorial.slug as slug')
+          .where({ 'group.slug': goalSlug })
+      )
       return rows.map(r => r.slug).filter(Boolean)
     }
 
     if (goalType === 'mission') {
       // Step 1: get path IDs for this mission.
       // 'mission.slug' 1-hop filter confirmed in srv/lib/mcp-resources.js line 116.
-      const pathRows = await SELECT.from(CompletionPaths)
-        .columns('ID')
-        .where({ 'mission.slug': goalSlug })
+      const pathRows = await db.run(
+        SELECT.from(CompletionPaths).columns('ID').where({ 'mission.slug': goalSlug })
+      )
       if (!pathRows.length) return []
 
       const pathIds = pathRows.map(r => r.ID).filter(Boolean)
 
       // Step 2: get tutorial slugs for those paths.
-      const itemRows = await SELECT.from(CompletionPathItems)
-        .columns('tutorial.slug as slug')
-        .where({ path_ID: { in: pathIds } })
+      const itemRows = await db.run(
+        SELECT.from(CompletionPathItems)
+          .columns('tutorial.slug as slug')
+          .where({ path_ID: { in: pathIds } })
+      )
       return [...new Set(itemRows.map(r => r.slug).filter(Boolean))]
     }
-  } catch {
-    // Membership shape may differ — fail-open with empty list.
+  } catch (err) {
+    cds.log('kg').warn('resolveMemberTutorialSlugs failed', err)
   }
   return []
 }
