@@ -1,11 +1,13 @@
 // srv/ktt-service.js
 // KttService handler — Task 2: completeLesson action (idempotent KTT_LESSON TaskRecord).
 //                     Task 3: syncProgress action (merge local + HANA progress on login).
+//                     Task 5: banter action (fail-open AI quip backed by @cap-js/ai).
 
 import cds from '@sap/cds';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { buildKttCompletionEntry, findExistingKttRecord } from './lib/ktt/completion.js';
 import { mergeProgress } from './lib/ktt/merge.js';
+import { computeBanter } from './lib/ktt/banter.js';
 
 export default class KttService extends cds.ApplicationService {
   async init() {
@@ -62,6 +64,12 @@ export default class KttService extends cds.ApplicationService {
 
       return merged;
     });
+
+    // banter: fail-open AI quip; AICore connect failure degrades silently to null.
+    let ai = null;
+    try { ai = await cds.connect.to('AICore'); } catch { ai = null; }
+    const aiAdapter = ai ? { chat: async (p) => (await ai.send('POST', '/chat', { prompt: p }))?.text } : null;
+    this.on('banter', async (req) => computeBanter(aiAdapter, { event: req.data.context }));
 
     return super.init();
   }
