@@ -5,6 +5,7 @@ const props = defineProps<{ goalType: 'tutorial' | 'mission' | 'group' | 'next-b
 
 type Step = { order: number; tutorialSlug: string; teachesConcepts: string[]; satisfiesPrereqFor: string[]; alreadyPartial: boolean }
 const steps = ref<Step[]>([])
+const signedIn = ref(false)
 const personalized = ref(false)
 const ready = ref(false)
 
@@ -27,7 +28,7 @@ onMounted(async () => {
   let goal = rawSlug
   if (props.goalType === 'group' && goal.startsWith('group-')) goal = goal.slice('group-'.length)
   if (props.goalType === 'mission' && goal.startsWith('mission-')) goal = goal.slice('mission-'.length)
-  await isSignedIn() // establishes session for the credentialed call below
+  signedIn.value = await isSignedIn() // establishes session for the credentialed call below
   let res: Response
   try {
     res = await fetch(
@@ -47,7 +48,7 @@ onMounted(async () => {
 <template>
   <section v-if="ready" class="learning-path" aria-label="Your learning path">
     <h2 class="learning-path__title">Your learning path</h2>
-    <p v-if="!personalized" class="learning-path__nudge">Sign in to personalize this to what you've completed.</p>
+    <p v-if="!signedIn" class="learning-path__nudge">Sign in to personalize this to what you've completed.</p>
     <ol class="learning-path__steps">
       <li v-for="s in steps" :key="s.tutorialSlug" class="learning-path__step">
         <a :href="`/tutorials/${s.tutorialSlug}/`">{{ s.tutorialSlug }}</a>

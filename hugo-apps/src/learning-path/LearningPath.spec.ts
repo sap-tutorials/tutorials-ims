@@ -66,4 +66,17 @@ describe('LearningPath island', () => {
     expect(lpCall).not.toContain("goal='group-foo'")
     expect(w.text()).toContain('tut-a')
   })
+
+  it('does not show sign-in nudge when user is signed in (even with personalized:false)', async () => {
+    global.fetch = mockFetch({
+      '/auth/user': { json: { authenticated: true } },
+      'learningPath': { json: { steps: [
+        { order: 1, tutorialSlug: 't-x', teachesConcepts: [], satisfiesPrereqFor: [], alreadyPartial: false },
+      ], totalSteps: 1, personalized: false } },
+    })
+    const w = mount(LearningPath, { props: { goalType: 'tutorial' } })
+    await flushPromises()
+    expect(w.text()).toContain('t-x')
+    expect(w.text()).not.toContain('Sign in to personalize')
+  })
 })
