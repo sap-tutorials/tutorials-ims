@@ -39,6 +39,7 @@ aspect ContentFilesAspect : managed {
   // skips slugs whose `sourceHash` is null on the server side.
   sourceContent             : LargeBinary;
   sourceHash                : Sha256;
+  sourceCommit              : String(64);   // git commit SHA of source .md at publish time (#2245); null for pre-2245 rows
 }
 
 aspect ContentManifestAspect : managed {
@@ -78,6 +79,7 @@ aspect ContentCurrentAspect : managed {
   mimeType                  : String(100) default 'text/html';
   sourceContent             : LargeBinary;
   sourceHash                : Sha256;
+  sourceCommit              : String(64);   // git commit SHA of source .md at publish time (#2245); null for pre-2245 rows
   sourceVersion             : Integer;
 }
 
@@ -97,6 +99,7 @@ aspect ContentHistoryAspect : managed {
   mimeType                  : String(100) default 'text/html';
   sourceContent             : LargeBinary;
   sourceHash                : Sha256;
+  sourceCommit              : String(64);   // git commit SHA of source .md at publish time (#2245); null for pre-2245 rows
 }
 
 aspect TutorialBodyTextAspect : managed {

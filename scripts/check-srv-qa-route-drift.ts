@@ -71,6 +71,14 @@ const SRV_QA_SERVER = join(REPO_ROOT, 'srv-qa', 'server.js');
  * Format: 'METHOD /path'
  */
 const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
+  'GET /content/tutorials/:slug/provenance':
+    'Signed provenance envelope (#2245) — an anonymous, public, read-only prod content ' +
+    'surface that emits a JWS over PUBLISHED-tutorial freshness/provenance. Feature-flagged ' +
+    '(PROVENANCE_ENVELOPE_ENABLED, DB config, default OFF, DEV-first) and fail-open. It does ' +
+    'not fit the QA channel: srv-qa serves /content/tutorials/*slug entirely behind ' +
+    'requireAuthorScope (author-draft preview), the PROVENANCE_SIGNING_KEY credstore secret is ' +
+    'not provisioned for srv-qa, and provenance is meaningful only for published content, not ' +
+    'in-flight -Contribution drafts. Re-evaluate if QA ever gains a published-content trust surface.',
   'POST /content/code-check-specs':
     'AI code-check (#171) — gated behind ChatSettings.codeCheckEnabled feature flag; ' +
     'not yet wired for QA author-preview. Re-evaluate when credstore-backed ChatSettings ' +

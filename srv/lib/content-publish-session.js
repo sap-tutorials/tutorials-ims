@@ -147,7 +147,7 @@ export function createSessionHelpers({ namespace }) {
     return row;
   }
 
-  async function appendToSession({ sessionId, files = {}, metadata = {}, bodyTexts = {}, branchSpecs = {}, sources = {} }) {
+  async function appendToSession({ sessionId, files = {}, metadata = {}, bodyTexts = {}, branchSpecs = {}, sources = {}, sourceCommits = {} }) {
     const appendStartHr = process.hrtime.bigint();  // #805
     const session = await findActiveSession(sessionId);
     const { ContentFiles, ContentManifest } = cds.entities(namespace);
@@ -193,6 +193,7 @@ export function createSessionHelpers({ namespace }) {
         mimeType: 'text/html',
         sourceContent,
         sourceHash,
+        sourceCommit: sourceCommits[slug] || null,
       });
       totalSizeBytes += decompressed.length;
     }
@@ -1399,7 +1400,7 @@ async function dualWriteCurrentAndHistory(namespace, newVersion, freshSlugs, han
     if (isHana) {
       const placeholders = chunk.map(() => '?').join(', ');
       const raw = await db.run(
-        `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
+        `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH", "SOURCECOMMIT"
            FROM "${hanaTableName()}"
           WHERE "VERSION" = ? AND "SLUG" IN (${placeholders})`,
         [newVersion, ...chunk]
@@ -1408,10 +1409,11 @@ async function dualWriteCurrentAndHistory(namespace, newVersion, freshSlugs, han
         slug: r.SLUG, content: r.CONTENT, contentHash: r.CONTENTHASH,
         sizeBytes: r.SIZEBYTES, compressedBytes: r.COMPRESSEDBYTES,
         mimeType: r.MIMETYPE, sourceContent: r.SOURCECONTENT, sourceHash: r.SOURCEHASH,
+        sourceCommit: r.SOURCECOMMIT,
       }));
     } else {
       rows = await SELECT.from(ContentFiles)
-        .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
+        .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash', 'sourceCommit')
         .where({ version: newVersion, slug: { in: chunk } });
     }
 
@@ -1427,12 +1429,14 @@ async function dualWriteCurrentAndHistory(namespace, newVersion, freshSlugs, han
         slug: row.slug, content: buf, contentHash: row.contentHash,
         sizeBytes: row.sizeBytes, compressedBytes: row.compressedBytes,
         mimeType: row.mimeType, sourceContent: srcBuf, sourceHash: row.sourceHash ?? null,
+        sourceCommit: row.sourceCommit ?? null,
         sourceVersion: newVersion,
       });
       historyEntries.push({
         version: newVersion, slug: row.slug, action: 'WRITTEN', content: buf,
         contentHash: row.contentHash, sizeBytes: row.sizeBytes, compressedBytes: row.compressedBytes,
         mimeType: row.mimeType, sourceContent: srcBuf, sourceHash: row.sourceHash ?? null,
+        sourceCommit: row.sourceCommit ?? null,
       });
     }
 
