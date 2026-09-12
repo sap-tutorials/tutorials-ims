@@ -31,6 +31,36 @@ const storyLesson = {
   ],
 };
 
+// Lesson with two drills — for XP credit testing
+const twoDrillLesson = {
+  id: 'core-2',
+  legacyId: 90002,
+  title: 'Two Drills',
+  acronyms: ['BTP', 'SAP'],
+  beats: [
+    {
+      type: 'drill',
+      kind: 'mc',
+      tla: 'BTP',
+      prompt: 'What is BTP?',
+      answer: 'Business Technology Platform',
+      distractors: ['Better Tech Portal'],
+      kasimirRight: 'Yes!',
+      kasimirWrong: 'Nope',
+    },
+    {
+      type: 'drill',
+      kind: 'mc',
+      tla: 'SAP',
+      prompt: 'What is SAP?',
+      answer: 'Systems Applications Products',
+      distractors: ['Some App Platform'],
+      kasimirRight: 'Right!',
+      kasimirWrong: 'Wrong',
+    },
+  ],
+};
+
 describe('Lesson', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,11 +94,11 @@ describe('Lesson', () => {
     expect(w.find('[data-testid="ktt-choice"]').exists()).toBe(true);
   });
 
-  it('correct answer shows correct mood and XP, then emits complete', async () => {
+  it('correct answer shows correct mood and XP, then emits complete with lessonId and xp', async () => {
     const w = mount(Lesson, { props: { lesson: storyLesson } });
     // advance past story beat
     await w.find('[data-testid="ktt-next"]').trigger('click');
-    // click the correct answer choice
+    // click the correct answer choice — select by text, not index (shuffle-safe)
     const choices = w.findAll('[data-testid="ktt-choice"]');
     const correct = choices.find(c => c.text() === 'Business Technology Platform');
     expect(correct).toBeTruthy();
@@ -77,11 +107,11 @@ describe('Lesson', () => {
     expect(w.find('.kasimir--correct').exists()).toBe(true);
     // advance to completion
     await w.find('[data-testid="ktt-next"]').trigger('click');
-    // lesson has no more beats — should emit complete with lesson id
     // Allow a tick for any async work
     await new Promise(r => setTimeout(r, 0));
     expect(w.emitted('complete')).toBeTruthy();
-    expect(w.emitted('complete')![0]).toEqual(['core-1']);
+    // 1A: emits (lessonId, sessionXp) — one correct drill = 10 XP
+    expect(w.emitted('complete')![0]).toEqual(['core-1', 10]);
   });
 
   it('wrong answer shows wrong mood and does not emit complete', async () => {
@@ -99,7 +129,7 @@ describe('Lesson', () => {
     const w = mount(Lesson, { props: { lesson: storyLesson } });
     // advance past story
     await w.find('[data-testid="ktt-next"]').trigger('click');
-    // answer correctly
+    // answer correctly — select by text (shuffle-safe)
     const choices = w.findAll('[data-testid="ktt-choice"]');
     await choices.find(c => c.text() === 'Business Technology Platform')!.trigger('click');
     // advance
@@ -113,8 +143,56 @@ describe('Lesson', () => {
     const w = mount(Lesson, { props: { lesson: storyLesson } });
     await w.find('[data-testid="ktt-next"]').trigger('click');
     const choices = w.findAll('[data-testid="ktt-choice"]');
+    // Select by text — shuffle-safe
     await choices.find(c => c.text() === 'Business Technology Platform')!.trigger('click');
     // Should show XP
     expect(w.text()).toContain('10');
+  });
+
+  // 1A: multi-drill lesson credits the true earned XP
+  it('two-drill lesson emits complete with accumulated XP (20)', async () => {
+    const w = mount(Lesson, { props: { lesson: twoDrillLesson } });
+
+    // Answer first drill correctly (select by text)
+    let choices = w.findAll('[data-testid="ktt-choice"]');
+    await choices.find(c => c.text() === 'Business Technology Platform')!.trigger('click');
+    await w.find('[data-testid="ktt-next"]').trigger('click');
+
+    // Answer second drill correctly (select by text)
+    choices = w.findAll('[data-testid="ktt-choice"]');
+    await choices.find(c => c.text() === 'Systems Applications Products')!.trigger('click');
+    await w.find('[data-testid="ktt-next"]').trigger('click');
+
+    await new Promise(r => setTimeout(r, 0));
+    expect(w.emitted('complete')).toBeTruthy();
+    // Two correct answers = 20 XP
+    expect(w.emitted('complete')![0]).toEqual(['core-2', 20]);
+  });
+
+  // 1B: the emitted XP is the session delta (sessionXp), not a floor
+  it('emitted XP equals session earned XP (delta), not a hardcoded floor', async () => {
+    const w = mount(Lesson, { props: { lesson: twoDrillLesson } });
+    // Answer first correctly, second wrongly then correctly (requeue logic)
+    let choices = w.findAll('[data-testid="ktt-choice"]');
+    await choices.find(c => c.text() === 'Business Technology Platform')!.trigger('click');
+    await w.find('[data-testid="ktt-next"]').trigger('click');
+
+    // Answer second wrong first
+    choices = w.findAll('[data-testid="ktt-choice"]');
+    await choices.find(c => c.text() === 'Some App Platform')!.trigger('click');
+    await w.find('[data-testid="ktt-next"]').trigger('click');
+
+    // Now re-queued — answer correctly
+    choices = w.findAll('[data-testid="ktt-choice"]');
+    await choices.find(c => c.text() === 'Systems Applications Products')!.trigger('click');
+    await w.find('[data-testid="ktt-next"]').trigger('click');
+
+    await new Promise(r => setTimeout(r, 0));
+    expect(w.emitted('complete')).toBeTruthy();
+    // Only 2 correct answers (10 each) despite 3 total attempts
+    const emittedXp = w.emitted('complete')![0][1] as number;
+    expect(emittedXp).toBe(20);
+    // It's definitely NOT the hardcoded floor of 10
+    expect(emittedXp).toBeGreaterThanOrEqual(10);
   });
 });

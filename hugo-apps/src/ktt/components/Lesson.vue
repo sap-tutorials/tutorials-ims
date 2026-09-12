@@ -14,7 +14,7 @@ import type { KttLesson, KttBeat, KttDrillBeat } from '../lib/engine';
 // Props / emits
 // ---------------------------------------------------------------------------
 const props = defineProps<{ lesson: KttLesson }>();
-const emit = defineEmits<{ (e: 'complete', lessonId: string): void }>();
+const emit = defineEmits<{ (e: 'complete', lessonId: string, xp: number): void }>();
 
 // ---------------------------------------------------------------------------
 // Session state
@@ -37,8 +37,13 @@ const drillChoices = computed<string[]>(() => {
   const b = beat.value;
   if (!b || b.type !== 'drill') return [];
   const d = b as KttDrillBeat;
-  // Shuffle answer + distractors deterministically for display
-  return [...d.distractors, d.answer].sort(() => 0);
+  // Fisher-Yates shuffle so the correct answer isn't always last
+  const arr = [...d.distractors, d.answer];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 });
 
 // Kasimir speech line for the current beat / feedback
@@ -65,7 +70,7 @@ function handleNext() {
   if (isComplete(session.value)) {
     done.value = true;
     mood.value = 'celebrate';
-    emit('complete', props.lesson.id);
+    emit('complete', props.lesson.id, session.value.xp);
     return;
   }
   const b = currentBeat(session.value);

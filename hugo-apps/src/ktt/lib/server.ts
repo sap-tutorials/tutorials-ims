@@ -74,7 +74,7 @@ export async function fetchBanter(
   context: string,
 ): Promise<string | null> {
   try {
-    const r = await fetch(`${apiUrl}/banter?context=${encodeURIComponent(context)}`);
+    const r = await fetch(`${apiUrl}/banter(context='${encodeURIComponent(context)}')`);
     if (!r.ok) return null;
     const body = await r.json();
     return typeof body.value === 'string' ? body.value : null;

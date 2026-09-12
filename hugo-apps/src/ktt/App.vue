@@ -50,32 +50,42 @@ function handleSelect(lessonId: string) {
   screen.value = 'lesson';
 }
 
-async function handleLessonComplete(lessonId: string) {
+async function handleLessonComplete(lessonId: string, sessionXp: number) {
   const lesson = activeLesson.value;
-  // The lesson component has its own session XP — we need to find the lesson
-  // to grab the metadata for server calls.
   if (!lesson) return;
 
-  // Add to mastered and update XP/streak locally
+  // Capture pre-merge XP so Results shows the earned delta for this session
+  const prevXp = progress.value.xp;
+
+  // Add to mastered and update XP/streak locally using real earned XP
   const updated = mergeProgress(progress.value, {
-    xp: progress.value.xp + 10, // At least 1 correct answer
+    xp: progress.value.xp + sessionXp,
     streak: progress.value.streak + 1,
     mastered: [lessonId],
   });
   progress.value = updated;
   saveLocal(updated);
 
-  // Best-effort server sync — never await result in a blocking way
-  const auth = await isAuthenticated();
-  if (auth) {
-    // Fire both, no await — fail-open
+  // Show the delta (= sessionXp after a clean lesson) so Results is always correct
+  lastXp.value = updated.xp - prevXp;
+
+  // Transition to results immediately — do NOT block on network
+  screen.value = 'results';
+
+  // Opportunistic banter — fail-open, updates after screen shows
+  fetchBanter(props.apiUrl, `lesson_complete:${lessonId}`).then(line => {
+    banterLine.value = line;
+  });
+
+  // Best-effort server sync — fire-and-forget in the background
+  isAuthenticated().then(auth => {
+    if (!auth) return;
     completeLesson(props.apiUrl, {
       lessonSlug: lessonId,
       legacyId: lesson.legacyId,
       title: lesson.title,
     }).then(result => {
       if (result) {
-        // Server accepted, also sync full progress
         syncProgress(props.apiUrl, progress.value).then(remote => {
           if (remote) {
             const merged = mergeProgress(progress.value, remote);
@@ -85,15 +95,7 @@ async function handleLessonComplete(lessonId: string) {
         });
       }
     });
-  }
-
-  // Opportunistic banter — fail-open
-  lastXp.value = updated.xp;
-  fetchBanter(props.apiUrl, `lesson_complete:${lessonId}`).then(line => {
-    banterLine.value = line;
   });
-
-  screen.value = 'results';
 }
 
 function handleContinue() {
