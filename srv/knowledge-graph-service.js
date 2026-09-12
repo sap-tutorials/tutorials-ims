@@ -1451,6 +1451,20 @@ export default cds.service.impl(async function () {
   // Read-only Louvain community surfacing by stable communityFingerprint.
   this.on('kg_community', handleCommunity);
 
+  // ─── kg_learning_path — MCP tool (Phase 2, #381 Task 7) ──────────────────
+  // Delegates to learningPath, returning the personalized prerequisite chain.
+  // Lowercases goal; defaults goal_type to 'tutorial'; fails open on error.
+  this.on('kg_learning_path', async (req) => {
+    const goal = (req.data.goal ?? '').toLowerCase()
+    const goalType = req.data.goal_type ?? 'tutorial'
+    try {
+      return await this.send('learningPath', { goal, goalType })
+    } catch (e) {
+      log.error(`kg-service: kg_learning_path(${goalType},${goal}) failed — ${e.message ?? e}`)
+      return { goalType, goal, totalSteps: 0, cyclesBroken: 0, truncated: false, personalized: false, steps: [] }
+    }
+  });
+
   // ─── pathBetween — property-graph v2 with fail-open v1 fallback (#913) ─
   this.on('pathBetween', async (req) => {
     const { fromSlug, toSlug } = req.data;
