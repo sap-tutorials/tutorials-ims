@@ -1,0 +1,1176 @@
+{
+  "units": [
+    {
+      "id": "unit-1-platform",
+      "title": "SAP Core Platform",
+      "icon": "🏗️",
+      "order": 1,
+      "lessons": [
+        {
+          "id": "unit-1-platform-lesson-1",
+          "legacyId": 90001,
+          "title": "Who's SAP, and what's BTP?",
+          "acronyms": [
+            {
+              "tla": "SAP",
+              "expansion": "Systems, Applications, Products in Data Processing",
+              "blurb": "The full name of the company behind your daily BTP adventures. Founded in Walldorf, 1972.",
+              "category": "company"
+            },
+            {
+              "tla": "BTP",
+              "expansion": "SAP Business Technology Platform",
+              "blurb": "SAP's unified cloud platform for building, extending, and integrating business applications. The successor to SAP Cloud Platform (SCP).",
+              "category": "platform"
+            },
+            {
+              "tla": "SCP",
+              "expansion": "SAP Cloud Platform",
+              "blurb": "The former name of SAP BTP (deprecated 2021). You'll still see SCP in older tutorials and Stack Overflow answers.",
+              "category": "platform"
+            },
+            {
+              "tla": "IAS",
+              "expansion": "SAP Identity Authentication Service",
+              "blurb": "SAP's cloud-based Identity Provider (IdP) on BTP. Handles authentication for SAP apps and custom services via SAML 2.0 and OIDC.",
+              "category": "security"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Ah, a fresh student! Before we write a single line of CDS, let's settle the most fundamental questions: who runs this show, and what platform are we on?",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "SAP",
+              "prompt": "What does SAP stand for?",
+              "answer": "Systems, Applications, Products in Data Processing",
+              "distractors": [
+                "Software Architecture Platform",
+                "Service Automation Protocol"
+              ],
+              "kasimirRight": "Correct! Even I know who signs my cat food invoices. 🐱",
+              "kasimirWrong": "SAP = Systems, Applications, Products in Data Processing. It's literally on the letterhead!"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "BTP",
+              "prompt": "What does BTP stand for?",
+              "answer": "SAP Business Technology Platform",
+              "distractors": [
+                "SAP Big-data Transaction Platform",
+                "SAP Business Transaction Processing"
+              ],
+              "kasimirRight": "BTP — the cloud with a view from Walldorf! Nicely done. ☁️",
+              "kasimirWrong": "BTP = SAP Business Technology Platform. The \"T\" is Technology, not Transaction."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "SCP",
+              "prompt": "What does SCP stand for?",
+              "answer": "SAP Cloud Platform",
+              "distractors": [
+                "SAP Continuous Provisioning",
+                "SAP Core Protocol"
+              ],
+              "kasimirRight": "SCP — the old BTP. Nostalgia is allowed. 📜",
+              "kasimirWrong": "SCP = SAP Cloud Platform, the predecessor to BTP. History matters in enterprise software!"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "IAS",
+              "prompt": "What does IAS stand for?",
+              "answer": "SAP Identity Authentication Service",
+              "distractors": [
+                "Integrated Authorization Service",
+                "Internal Application Server"
+              ],
+              "kasimirRight": "IAS — the bouncer of the SAP cloud. Excellent! 🚪",
+              "kasimirWrong": "IAS = SAP Identity Authentication Service. It's the IdP, not just any authorization layer."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered SAP, BTP, SCP, IAS. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        },
+        {
+          "id": "unit-1-platform-lesson-2",
+          "legacyId": 90002,
+          "title": "The CAP Stack",
+          "acronyms": [
+            {
+              "tla": "CAP",
+              "expansion": "SAP Cloud Application Programming Model",
+              "blurb": "SAP's framework for building cloud-native business applications using CDS, Node.js, and Java. The backbone of tutorials-ims.",
+              "category": "framework"
+            },
+            {
+              "tla": "BAS",
+              "expansion": "SAP Business Application Studio",
+              "blurb": "SAP's browser-based IDE on BTP, built on VS Code Open Source. The recommended tool for CAP, Fiori, and ABAP Cloud development.",
+              "category": "tooling"
+            },
+            {
+              "tla": "SDK",
+              "expansion": "Software Development Kit",
+              "blurb": "A bundle of tools, libraries, and documentation for building on a platform. SAP Cloud SDK adds BTP destinations, resilience, and type-safe OData clients.",
+              "category": "tooling"
+            },
+            {
+              "tla": "API",
+              "expansion": "Application Programming Interface",
+              "blurb": "A defined contract that lets software components talk to each other. SAP publishes thousands of APIs on SAP Business Accelerator Hub (api.sap.com).",
+              "category": "architecture"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Now we're cooking! CAP is where the magic happens. Let me introduce you to my favourite framework — and no, I'm not biased just because it's named after something a professor wears.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "CAP",
+              "prompt": "What does CAP stand for?",
+              "answer": "SAP Cloud Application Programming Model",
+              "distractors": [
+                "Cloud API Protocol",
+                "Customer Application Pack"
+              ],
+              "kasimirRight": "CAP! You've earned a treat. My whole world runs on CAP. 🐾",
+              "kasimirWrong": "CAP = SAP Cloud Application Programming Model. CDS, Node.js, Java — it's all in there."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "BAS",
+              "prompt": "What does BAS stand for?",
+              "answer": "SAP Business Application Studio",
+              "distractors": [
+                "Backend Automation System",
+                "Business API Services"
+              ],
+              "kasimirRight": "BAS — where humans write the code that Kasimir reviews. Well played! 💻",
+              "kasimirWrong": "BAS = SAP Business Application Studio — the cloud IDE on BTP, not a backend system."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "SDK",
+              "prompt": "What does SDK stand for?",
+              "answer": "Software Development Kit",
+              "distractors": [
+                "Service Deployment Kit",
+                "Standard Data Keyring"
+              ],
+              "kasimirRight": "SDK — the box of LEGO bricks every developer loves. Exactly right! 🧰",
+              "kasimirWrong": "SDK = Software Development Kit. Not \"Service Deployment\" anything."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "API",
+              "prompt": "What does API stand for?",
+              "answer": "Application Programming Interface",
+              "distractors": [
+                "Automated Process Integration",
+                "Application Persistence Index"
+              ],
+              "kasimirRight": "API — the handshake of the cloud world. I knew you'd get this one! 🤝",
+              "kasimirWrong": "API = Application Programming Interface. The \"P\" is Programming, not Process."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered CAP, BAS, SDK, API. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        },
+        {
+          "id": "unit-1-platform-lesson-3",
+          "legacyId": 90003,
+          "title": "Deploying & Operating",
+          "acronyms": [
+            {
+              "tla": "MTA",
+              "expansion": "Multi-Target Application",
+              "blurb": "SAP's deployment artefact format for BTP. A single `.mtar` archive bundles multiple modules (backend, UI, DB) and wires up service bindings automatically.",
+              "category": "deployment"
+            },
+            {
+              "tla": "ANS",
+              "expansion": "SAP Alert Notification Service",
+              "blurb": "A BTP service that sends real-time alerts about application events to email, Slack, or custom webhooks. Used in tutorials-ims for operational monitoring.",
+              "category": "operations"
+            },
+            {
+              "tla": "SAC",
+              "expansion": "SAP Analytics Cloud",
+              "blurb": "SAP's SaaS business intelligence platform for dashboards, planning, and predictive analytics. Lives on BTP.",
+              "category": "analytics"
+            },
+            {
+              "tla": "MDK",
+              "expansion": "SAP Mobile Development Kit",
+              "blurb": "A cross-platform toolkit for building native-looking SAP mobile apps that work offline. Based on a metadata-driven approach — no separate iOS/Android code.",
+              "category": "mobile"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Congratulations — you've built a CAP app! Now how do you actually ship it? MTA archives, alert services, analytics clouds — the operational layer awaits.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "MTA",
+              "prompt": "What does MTA stand for?",
+              "answer": "Multi-Target Application",
+              "distractors": [
+                "Managed Tenant Architecture",
+                "Module Transfer Archive"
+              ],
+              "kasimirRight": "MTA — one package to rule them all! Purrfectly correct. 📦",
+              "kasimirWrong": "MTA = Multi-Target Application. It bundles all your BTP modules into one deployable archive."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "ANS",
+              "prompt": "What does ANS stand for?",
+              "answer": "SAP Alert Notification Service",
+              "distractors": [
+                "Automated Notification System",
+                "Application Node Service"
+              ],
+              "kasimirRight": "ANS — the smoke alarm of your BTP app. Alert! You're correct! 🚨",
+              "kasimirWrong": "ANS = SAP Alert Notification Service. It notifies, alerts, and generally keeps you from sleeping."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "SAC",
+              "prompt": "What does SAC stand for?",
+              "answer": "SAP Analytics Cloud",
+              "distractors": [
+                "SAP Application Console",
+                "SAP Automation Center"
+              ],
+              "kasimirRight": "SAC — where data becomes pretty pictures! Right on target. 📊",
+              "kasimirWrong": "SAC = SAP Analytics Cloud. Dashboards, planning, predictions — all in the cloud."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "MDK",
+              "prompt": "What does MDK stand for?",
+              "answer": "SAP Mobile Development Kit",
+              "distractors": [
+                "Mobile Data Kit",
+                "Metadata Deployment Kit"
+              ],
+              "kasimirRight": "MDK — go mobile! Even I have a paw-friendly app. Great answer! 📱",
+              "kasimirWrong": "MDK = SAP Mobile Development Kit. Cross-platform, metadata-driven, and furiously offline-capable."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered MTA, ANS, SAC, MDK. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unit-2-cds",
+      "title": "CDS & App Development",
+      "icon": "🛠️",
+      "order": 2,
+      "lessons": [
+        {
+          "id": "unit-2-cds-lesson-1",
+          "legacyId": 90004,
+          "title": "The CDS Language Family",
+          "acronyms": [
+            {
+              "tla": "CDS",
+              "expansion": "Core Data Services",
+              "blurb": "CAP's universal declarative language for data models and service definitions. Also powers S/4HANA views. The backbone of everything in CAP.",
+              "category": "framework"
+            },
+            {
+              "tla": "CSN",
+              "expansion": "Core Schema Notation",
+              "blurb": "CDS models compiled to a compact JSON representation (pronounced \"Season\"). The runtime format CAP uses internally — generated from CDL source files.",
+              "category": "framework"
+            },
+            {
+              "tla": "CDL",
+              "expansion": "CDS Definition Language",
+              "blurb": "The human-readable source syntax you write in `.cds` files — entities, services, annotations. Compiles to CSN for runtime use.",
+              "category": "framework"
+            },
+            {
+              "tla": "CQL",
+              "expansion": "CDS Query Language",
+              "blurb": "The SQL-like query language for CAP: `SELECT.from(Books).where(...)`. Type-safe, composable, and database-agnostic. Part of the `cds.ql` API.",
+              "category": "framework"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "CDS is not one thing — it's a whole language family. CSN, CDL, CQL… I collect acronyms the way others collect stamps. Let's unpack them.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "CDS",
+              "prompt": "What does CDS stand for?",
+              "answer": "Core Data Services",
+              "distractors": [
+                "Cloud Data Store",
+                "Connected Data Services"
+              ],
+              "kasimirRight": "CDS — the language I dream in! You've clearly been reading the docs. 📚",
+              "kasimirWrong": "CDS = Core Data Services — SAP's universal modeling language. Not \"Cloud\" anything."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "CSN",
+              "prompt": "What does CSN stand for?",
+              "answer": "Core Schema Notation",
+              "distractors": [
+                "Cloud Service Network",
+                "Core Serialization Notation"
+              ],
+              "kasimirRight": "CSN — like JSON Schema but for full entity-relationship models. Season greetings! 🎄",
+              "kasimirWrong": "CSN = Core Schema Notation, pronounced \"Season\". It's the JSON form of your CDS models."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "CDL",
+              "prompt": "What does CDL stand for?",
+              "answer": "CDS Definition Language",
+              "distractors": [
+                "Cloud Deployment Language",
+                "Core Data Library"
+              ],
+              "kasimirRight": "CDL — what you write, CSN is what the machine reads. You're fluent! ✍️",
+              "kasimirWrong": "CDL = CDS Definition Language. The .cds files you write are CDL; they compile down to CSN."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "CQL",
+              "prompt": "What does CQL stand for?",
+              "answer": "CDS Query Language",
+              "distractors": [
+                "Cloud Query Layer",
+                "Core Queue Language"
+              ],
+              "kasimirRight": "CQL — SELECT * FROM correct_answers! Top marks. 🐱‍💻",
+              "kasimirWrong": "CQL = CDS Query Language — the SELECT.from(...) syntax in `cds.ql`. Never write raw SQL!"
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered CDS, CSN, CDL, CQL. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        },
+        {
+          "id": "unit-2-cds-lesson-2",
+          "legacyId": 90005,
+          "title": "Protocols & Standards",
+          "acronyms": [
+            {
+              "tla": "OData",
+              "expansion": "Open Data Protocol",
+              "blurb": "An OASIS standard REST-based protocol for CRUD APIs with query capabilities ($filter, $expand, $top…). All CAP services can be served as OData V4.",
+              "category": "protocol"
+            },
+            {
+              "tla": "RAP",
+              "expansion": "ABAP RESTful Application Programming Model",
+              "blurb": "SAP's recommended framework for building Fiori apps and OData services on ABAP. Uses CDS views, behavior definitions, and service bindings.",
+              "category": "framework"
+            },
+            {
+              "tla": "REST",
+              "expansion": "Representational State Transfer",
+              "blurb": "The architectural style behind most web APIs: stateless HTTP, resources as URLs, verbs as HTTP methods (GET/POST/PUT/DELETE). OData is a RESTful protocol.",
+              "category": "protocol"
+            },
+            {
+              "tla": "IDE",
+              "expansion": "Integrated Development Environment",
+              "blurb": "A software tool that combines code editor, debugger, and build tools in one UI. SAP's cloud IDE is BAS; locally VS Code + CDS extension is the go-to.",
+              "category": "tooling"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Every API speaks a language. OData, REST, RAP — the protocols that let your app talk to the world. Put on your headphones; it's time for a multilingual lesson.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "OData",
+              "prompt": "What does OData stand for?",
+              "answer": "Open Data Protocol",
+              "distractors": [
+                "Optimised Data Access",
+                "Object Data Architecture"
+              ],
+              "kasimirRight": "OData — the protocol that makes SAP APIs queryable from Excel. Impressive! 📡",
+              "kasimirWrong": "OData = Open Data Protocol (OASIS standard). Think REST + $filter + $expand — pure power."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "RAP",
+              "prompt": "What does RAP stand for?",
+              "answer": "ABAP RESTful Application Programming Model",
+              "distractors": [
+                "Remote Application Protocol",
+                "Resource-Aware Processing"
+              ],
+              "kasimirRight": "RAP — the CAP of the ABAP world! You're now officially bilingual. 🎓",
+              "kasimirWrong": "RAP = ABAP RESTful Application Programming Model. It's to ABAP what CAP is to Node.js/Java."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "REST",
+              "prompt": "What does REST stand for?",
+              "answer": "Representational State Transfer",
+              "distractors": [
+                "Remote Event Stream Transfer",
+                "Reliable Endpoint Service Technology"
+              ],
+              "kasimirRight": "REST — the law of the web land. Stateless, resourceful, correct! 🌐",
+              "kasimirWrong": "REST = Representational State Transfer (Roy Fielding, 2000). Every web API architect owes him a coffee."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "IDE",
+              "prompt": "What does IDE stand for?",
+              "answer": "Integrated Development Environment",
+              "distractors": [
+                "Internal Deployment Engine",
+                "Interface Design Editor"
+              ],
+              "kasimirRight": "IDE — where the magic happens before the bug report! You knew it. 🖥️",
+              "kasimirWrong": "IDE = Integrated Development Environment. VS Code + CDS extension = one happy IDE."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered OData, RAP, REST, IDE. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        },
+        {
+          "id": "unit-2-cds-lesson-3",
+          "legacyId": 90006,
+          "title": "Tools of the Trade",
+          "acronyms": [
+            {
+              "tla": "FLP",
+              "expansion": "SAP Fiori Launchpad",
+              "blurb": "The web shell that hosts SAP Fiori apps as tiles in a unified homepage. Handles navigation, routing, and user personalization across all Fiori apps.",
+              "category": "ui"
+            },
+            {
+              "tla": "UI5",
+              "expansion": "SAPUI5",
+              "blurb": "SAP's enterprise JavaScript UI framework (based on OpenUI5). Delivers Fiori-ready components, Horizon theme, and OData V4 model binding out of the box.",
+              "category": "ui"
+            },
+            {
+              "tla": "OPA",
+              "expansion": "One Page Acceptance Test Framework",
+              "blurb": "SAP's asynchronous integration-test framework for UI5/Fiori apps. Tests page objects and UI flows without flakiness, running inside the browser.",
+              "category": "testing"
+            },
+            {
+              "tla": "CLI",
+              "expansion": "Command-Line Interface",
+              "blurb": "A text-based tool for interacting with software. CAP provides `cds` CLI; BTP has `btp`; CF has `cf`. Together they're the developer's Swiss army knife.",
+              "category": "tooling"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "A developer without tools is just someone staring at a blank screen. FLP, UI5, OPA, CLI — the toolkit that turns ideas into shipped features.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "FLP",
+              "prompt": "What does FLP stand for?",
+              "answer": "SAP Fiori Launchpad",
+              "distractors": [
+                "Flexible Layout Page",
+                "Fiori Link Provider"
+              ],
+              "kasimirRight": "FLP — the tile garden where Fiori apps bloom! Nailed it. 🏡",
+              "kasimirWrong": "FLP = SAP Fiori Launchpad — the shell that tiles up your Fiori apps in one place."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "UI5",
+              "prompt": "What does UI5 stand for?",
+              "answer": "SAPUI5",
+              "distractors": [
+                "Universal Interface 5",
+                "SAP User Interaction 5"
+              ],
+              "kasimirRight": "UI5 — the framework behind every Fiori face! Stylishly correct. 🎨",
+              "kasimirWrong": "UI5 = SAPUI5 — SAP's enterprise JavaScript framework. OpenUI5 is its open-source twin."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "OPA",
+              "prompt": "What does OPA stand for?",
+              "answer": "One Page Acceptance Test Framework",
+              "distractors": [
+                "Open Protocol Adapter",
+                "Object Page Action"
+              ],
+              "kasimirRight": "OPA — the test cat catches every bug! Acceptably correct. 🧪",
+              "kasimirWrong": "OPA = One Page Acceptance Test Framework — UI5's built-in asynchronous integration test library."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "CLI",
+              "prompt": "What does CLI stand for?",
+              "answer": "Command-Line Interface",
+              "distractors": [
+                "Cloud Layer Interface",
+                "Component Library Index"
+              ],
+              "kasimirRight": "CLI — where humans type furiously and things actually happen! Correct! ⌨️",
+              "kasimirWrong": "CLI = Command-Line Interface. `cds watch`, `btp login`, `cf push` — all CLI commands."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered FLP, UI5, OPA, CLI. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unit-3-hana",
+      "title": "HANA & Data",
+      "icon": "🗄️",
+      "order": 3,
+      "lessons": [
+        {
+          "id": "unit-3-hana-lesson-1",
+          "legacyId": 90007,
+          "title": "The HANA Universe",
+          "acronyms": [
+            {
+              "tla": "HANA",
+              "expansion": "High-performance ANalytic Appliance",
+              "blurb": "SAP's in-memory relational database. Processes analytical and transactional workloads simultaneously (\"HTAP\"). The default production database for CAP apps on BTP.",
+              "category": "database"
+            },
+            {
+              "tla": "HDI",
+              "expansion": "HANA Deployment Infrastructure",
+              "blurb": "A SAP HANA feature that manages database artefacts (tables, views, procedures) in isolated, versioned containers. CAP uses HDI containers for all HANA deployments.",
+              "category": "database"
+            },
+            {
+              "tla": "SDA",
+              "expansion": "SAP HANA Smart Data Access",
+              "blurb": "A HANA feature for querying remote data sources (S/4HANA, Oracle, etc.) as virtual tables — without physically moving the data. Federation without ETL.",
+              "category": "database"
+            },
+            {
+              "tla": "SDI",
+              "expansion": "SAP HANA Smart Data Integration",
+              "blurb": "HANA's data integration layer: real-time replication, batch loading, and transformation from heterogeneous sources using Data Provisioning Agents.",
+              "category": "database"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "SAP HANA — high-performance, in-memory, and living in its own acronym universe. HDI, SDA, SDI… even I need a map sometimes.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "HANA",
+              "prompt": "What does HANA stand for?",
+              "answer": "High-performance ANalytic Appliance",
+              "distractors": [
+                "Hybrid Application and Network Architecture",
+                "Hosted Analytical Node Application"
+              ],
+              "kasimirRight": "HANA — in-memory, in-the-cloud, and in your heart. Right answer! 💾",
+              "kasimirWrong": "HANA = High-performance ANalytic Appliance. The capital letters in the middle are the clue!"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "HDI",
+              "prompt": "What does HDI stand for?",
+              "answer": "HANA Deployment Infrastructure",
+              "distractors": [
+                "HANA Data Index",
+                "Hybrid Deployment Interface"
+              ],
+              "kasimirRight": "HDI — HANA Deployment Infrastructure. Container-ised perfection! 📦",
+              "kasimirWrong": "HDI = HANA Deployment Infrastructure. It's the container system that keeps your DB artefacts isolated."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "SDA",
+              "prompt": "What does SDA stand for?",
+              "answer": "SAP HANA Smart Data Access",
+              "distractors": [
+                "Smart Database Adapter",
+                "Structured Data Access"
+              ],
+              "kasimirRight": "SDA — federation without migration! Your HANA knowledge is sharp. 🔗",
+              "kasimirWrong": "SDA = SAP HANA Smart Data Access — virtual tables pointing at remote sources. No data movement needed."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "SDI",
+              "prompt": "What does SDI stand for?",
+              "answer": "SAP HANA Smart Data Integration",
+              "distractors": [
+                "Structured Data Index",
+                "Smart Deployment Interface"
+              ],
+              "kasimirRight": "SDI — data flows like water to a thirsty cat! Correct! 🌊",
+              "kasimirWrong": "SDI = SAP HANA Smart Data Integration. Real-time replication + transformations via DP Agents."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered HANA, HDI, SDA, SDI. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        },
+        {
+          "id": "unit-3-hana-lesson-2",
+          "legacyId": 90008,
+          "title": "Integration & Migration",
+          "acronyms": [
+            {
+              "tla": "CPI",
+              "expansion": "SAP Cloud Platform Integration",
+              "blurb": "The former name for SAP Integration Suite's cloud integration capability. Still widely used in docs and project names. Handles message routing and transformation between systems.",
+              "category": "integration"
+            },
+            {
+              "tla": "DWC",
+              "expansion": "SAP Data Warehouse Cloud",
+              "blurb": "SAP's cloud data warehouse solution, rebranded as SAP Datasphere in 2023. Provides data modelling, integration, and analytics on a single platform.",
+              "category": "analytics"
+            },
+            {
+              "tla": "SQL",
+              "expansion": "Structured Query Language",
+              "blurb": "The standard language for relational databases. In CAP, you should use CQL (CDS Query Language) instead of raw SQL — but HANA's SQL dialect is what runs under the hood.",
+              "category": "database"
+            },
+            {
+              "tla": "ODP",
+              "expansion": "Operational Data Provisioning",
+              "blurb": "SAP's framework for extracting data from S/4HANA and ECC sources into analytics or integration platforms. Exposes CDS views, BW extractors, and SLT as replication sources.",
+              "category": "integration"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Data doesn't just sit still. CPI, DWC, SQL, ODP — the connectors and extractors that keep data flowing where it needs to go.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "CPI",
+              "prompt": "What does CPI stand for?",
+              "answer": "SAP Cloud Platform Integration",
+              "distractors": [
+                "Cloud Process Interface",
+                "Core Protocol Integration"
+              ],
+              "kasimirRight": "CPI — connecting the dots since before it was called Integration Suite! 🔌",
+              "kasimirWrong": "CPI = SAP Cloud Platform Integration — now part of SAP Integration Suite, but the name persists."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "DWC",
+              "prompt": "What does DWC stand for?",
+              "answer": "SAP Data Warehouse Cloud",
+              "distractors": [
+                "Distributed Warehouse Controller",
+                "Data Web Console"
+              ],
+              "kasimirRight": "DWC — now Datasphere but the acronym lives on. Historically accurate! 📐",
+              "kasimirWrong": "DWC = SAP Data Warehouse Cloud — rebranded to SAP Datasphere in 2023 but DWC still appears everywhere."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "SQL",
+              "prompt": "What does SQL stand for?",
+              "answer": "Structured Query Language",
+              "distractors": [
+                "Scalable Query Logic",
+                "Sequential Queue Language"
+              ],
+              "kasimirRight": "SQL — the granddaddy of data languages. CAP wraps it, but knowing it never hurts! ✅",
+              "kasimirWrong": "SQL = Structured Query Language. Use CQL in CAP code, but SQL is what HANA actually runs."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "ODP",
+              "prompt": "What does ODP stand for?",
+              "answer": "Operational Data Provisioning",
+              "distractors": [
+                "Open Data Provisioning",
+                "Output Data Protocol"
+              ],
+              "kasimirRight": "ODP — the SAP data extraction expressway! Spot on. 🚂",
+              "kasimirWrong": "ODP = Operational Data Provisioning — SAP's framework for exporting data from ERP systems to analytics."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered CPI, DWC, SQL, ODP. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        },
+        {
+          "id": "unit-3-hana-lesson-3",
+          "legacyId": 90009,
+          "title": "Data Engineering Basics",
+          "acronyms": [
+            {
+              "tla": "ETL",
+              "expansion": "Extract, Transform, Load",
+              "blurb": "The classic data pipeline pattern: extract from source, transform (cleanse/enrich), load into target. Used in SAP Data Services, BW, and Datasphere pipelines.",
+              "category": "integration"
+            },
+            {
+              "tla": "HDB",
+              "expansion": "SAP HANA Database",
+              "blurb": "The \"HDB\" prefix appears across HANA tooling: `hdbsql` (CLI SQL client), `.hdbtable` artefact files, and `@sap/hana-client` (the Node.js driver).",
+              "category": "database"
+            },
+            {
+              "tla": "DDL",
+              "expansion": "Data Definition Language",
+              "blurb": "The SQL subset for defining database structures: CREATE TABLE, ALTER TABLE, DROP. In CAP, CDS handles DDL generation automatically from your models.",
+              "category": "database"
+            },
+            {
+              "tla": "LOB",
+              "expansion": "Large Object",
+              "blurb": "A database column type for storing large binary (BLOB) or text (CLOB) data. SAP HANA supports LOBs natively; CAP uses raw `db.run()` to read them (locators expire on SELECT).",
+              "category": "database"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Time to get into the weeds: ETL pipelines, HDB artefacts, DDL, and the dreaded LOB column. Grab a coffee — or a warm saucer of milk.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "ETL",
+              "prompt": "What does ETL stand for?",
+              "answer": "Extract, Transform, Load",
+              "distractors": [
+                "Enterprise Transfer Layer",
+                "Event Trigger Logic"
+              ],
+              "kasimirRight": "ETL — the cat-nap to data-warehouse pipeline of legend! Extract correct answer, +1. 📥",
+              "kasimirWrong": "ETL = Extract, Transform, Load — the three-step dance every data warehouse knows by heart."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "HDB",
+              "prompt": "What does HDB stand for?",
+              "answer": "SAP HANA Database",
+              "distractors": [
+                "Hybrid Data Bus",
+                "HANA Deployment Bundle"
+              ],
+              "kasimirRight": "HDB — you'll see this prefix everywhere in HANA-land. Well spotted! 🐾",
+              "kasimirWrong": "HDB = SAP HANA Database — the prefix behind hdbsql, .hdbtable files, and the Node.js driver."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "DDL",
+              "prompt": "What does DDL stand for?",
+              "answer": "Data Definition Language",
+              "distractors": [
+                "Dynamic Data Loader",
+                "Distributed Definition Layer"
+              ],
+              "kasimirRight": "DDL — CREATE TABLE? More like CREATE SUCCESS. Correct! 🏗️",
+              "kasimirWrong": "DDL = Data Definition Language — CREATE, ALTER, DROP. CAP generates it from CDS; you rarely write it directly."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "LOB",
+              "prompt": "What does LOB stand for?",
+              "answer": "Large Object",
+              "distractors": [
+                "Line of Business",
+                "Local Object Buffer"
+              ],
+              "kasimirRight": "LOB — big data in a small column. Don't mix it with a CDS QL query! Correct! 📦",
+              "kasimirWrong": "LOB = Large Object (BLOB/CLOB) — in HANA, never SELECT a LOB alongside metadata in one CDS QL query."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered ETL, HDB, DDL, LOB. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unit-4-security",
+      "title": "Security & Ops",
+      "icon": "🔒",
+      "order": 4,
+      "lessons": [
+        {
+          "id": "unit-4-security-lesson-1",
+          "legacyId": 90010,
+          "title": "Authentication & Tokens",
+          "acronyms": [
+            {
+              "tla": "XSUAA",
+              "expansion": "Extended Services for User Account and Authorization",
+              "blurb": "SAP BTP's OAuth 2.0 authorization service (also called \"Authorization and Trust Management Service\"). Manages roles, scopes, and JWT tokens for CAP apps.",
+              "category": "security"
+            },
+            {
+              "tla": "UAA",
+              "expansion": "User Account and Authentication",
+              "blurb": "Cloud Foundry's open-source OAuth 2.0 / OpenID Connect server. SAP's XSUAA is a proprietary extension of UAA, adding BTP-specific scopes and role collections.",
+              "category": "security"
+            },
+            {
+              "tla": "SSO",
+              "expansion": "Single Sign-On",
+              "blurb": "Log in once, access everything. SAP IAS federates identity to BTP, SAP S/4HANA, and third-party apps so users don't need separate passwords per system.",
+              "category": "security"
+            },
+            {
+              "tla": "JWT",
+              "expansion": "JSON Web Token",
+              "blurb": "A compact, URL-safe token format (RFC 7519) for conveying claims between parties. BTP uses JWTs to carry XSUAA scopes and user info between services.",
+              "category": "security"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Security is not optional, and neither is this lesson. XSUAA, UAA, SSO, JWT — the alphabet soup that keeps your data from becoming everyone's data.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "XSUAA",
+              "prompt": "What does XSUAA stand for?",
+              "answer": "Extended Services for User Account and Authorization",
+              "distractors": [
+                "External Single-Use Authentication API",
+                "eXtended Security User Application API"
+              ],
+              "kasimirRight": "XSUAA — the gatekeeper with too many letters! You cracked it. 🔑",
+              "kasimirWrong": "XSUAA = Extended Services for User Account and Authorization. Every CAP prod app uses it."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "UAA",
+              "prompt": "What does UAA stand for?",
+              "answer": "User Account and Authentication",
+              "distractors": [
+                "Universal Access Authority",
+                "Unified App Authenticator"
+              ],
+              "kasimirRight": "UAA — the open-source core under XSUAA! Cloud Foundry heritage. Well done. 🦊",
+              "kasimirWrong": "UAA = User Account and Authentication — the CF OAuth server that XSUAA is built on top of."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "SSO",
+              "prompt": "What does SSO stand for?",
+              "answer": "Single Sign-On",
+              "distractors": [
+                "Secure Session Object",
+                "Synchronised Sign-Out"
+              ],
+              "kasimirRight": "SSO — one password to rule them all! You didn't even need to log in twice. 🔓",
+              "kasimirWrong": "SSO = Single Sign-On. Sign in once, use everything — Kasimir only has to remember one paw-print."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "JWT",
+              "prompt": "What does JWT stand for?",
+              "answer": "JSON Web Token",
+              "distractors": [
+                "JavaScript Web Transfer",
+                "JSON Workflow Trigger"
+              ],
+              "kasimirRight": "JWT — the travel passport of the cloud! Header.Payload.Signature, correct! 🛂",
+              "kasimirWrong": "JWT = JSON Web Token (RFC 7519). Three base64-encoded parts: header.payload.signature."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered XSUAA, UAA, SSO, JWT. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        },
+        {
+          "id": "unit-4-security-lesson-2",
+          "legacyId": 90011,
+          "title": "Identity & Factors",
+          "acronyms": [
+            {
+              "tla": "IDP",
+              "expansion": "Identity Provider",
+              "blurb": "A system that authenticates users and issues identity tokens. SAP IAS is a BTP Identity Provider. Corporate IdPs (Azure AD, Okta) can be federated into IAS.",
+              "category": "security"
+            },
+            {
+              "tla": "MFA",
+              "expansion": "Multi-Factor Authentication",
+              "blurb": "Requiring ≥2 verification methods (password + OTP, biometric, hardware key). SAP IAS supports MFA for BTP admin and application users.",
+              "category": "security"
+            },
+            {
+              "tla": "TLS",
+              "expansion": "Transport Layer Security",
+              "blurb": "The cryptographic protocol that secures HTTPS connections (successor to SSL). All BTP endpoints use TLS; CAP enforces it in production profiles automatically.",
+              "category": "security"
+            },
+            {
+              "tla": "ACL",
+              "expansion": "Access Control List",
+              "blurb": "A list specifying which users or roles can perform which operations on a resource. In CAP, `@restrict` annotations compile to XSUAA role-scope checks, implementing ACL logic.",
+              "category": "security"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Logging in is just the start. IDP, MFA, TLS, ACL — the layers that stop the wrong people from doing the wrong things.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "IDP",
+              "prompt": "What does IDP stand for?",
+              "answer": "Identity Provider",
+              "distractors": [
+                "Internal Data Processor",
+                "Interface Definition Protocol"
+              ],
+              "kasimirRight": "IDP — the trust anchor of the auth chain. You clearly trust your acronym knowledge! 🏛️",
+              "kasimirWrong": "IDP = Identity Provider — the system that says \"yes, that IS Kasimir\" during login."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "MFA",
+              "prompt": "What does MFA stand for?",
+              "answer": "Multi-Factor Authentication",
+              "distractors": [
+                "Managed Federation Access",
+                "Modular Flow Authentication"
+              ],
+              "kasimirRight": "MFA — two factors better than one! Twice as secure, half as convenient. Correct! 🔐",
+              "kasimirWrong": "MFA = Multi-Factor Authentication. Password + something else — a password alone is so last century."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "TLS",
+              "prompt": "What does TLS stand for?",
+              "answer": "Transport Layer Security",
+              "distractors": [
+                "Token Lifecycle Service",
+                "Trusted Link System"
+              ],
+              "kasimirRight": "TLS — the invisible shield on every HTTPS call. Lock-tight answer! 🔒",
+              "kasimirWrong": "TLS = Transport Layer Security — the \"S\" in HTTPS. SSL is the deprecated predecessor."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "ACL",
+              "prompt": "What does ACL stand for?",
+              "answer": "Access Control List",
+              "distractors": [
+                "Application Component Layer",
+                "Async Callback Loop"
+              ],
+              "kasimirRight": "ACL — the velvet rope of data security! Access granted to correct answers. 🚦",
+              "kasimirWrong": "ACL = Access Control List. In CAP terms, it's what `@restrict` annotations enforce via XSUAA scopes."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered IDP, MFA, TLS, ACL. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        },
+        {
+          "id": "unit-4-security-lesson-3",
+          "legacyId": 90012,
+          "title": "Governance & Control",
+          "acronyms": [
+            {
+              "tla": "ERP",
+              "expansion": "Enterprise Resource Planning",
+              "blurb": "Software that integrates core business processes (finance, HR, supply chain). SAP S/4HANA is the flagship ERP; it's why CAP and BTP exist — to extend and integrate ERP.",
+              "category": "business"
+            },
+            {
+              "tla": "GRC",
+              "expansion": "Governance, Risk, and Compliance",
+              "blurb": "A framework (and SAP product family) for managing audit, risk, and regulatory requirements. SAP GRC integrates with S/4HANA to automate access controls and policy enforcement.",
+              "category": "business"
+            },
+            {
+              "tla": "AMS",
+              "expansion": "SAP Authorization Management Service",
+              "blurb": "A BTP service (`@cap-js/ams`) providing policy-based authorization for CAP applications via the `@ams` CDS annotation. An alternative to pure XSUAA role checks.",
+              "category": "security"
+            },
+            {
+              "tla": "RBAC",
+              "expansion": "Role-Based Access Control",
+              "blurb": "Assigning permissions to roles, then roles to users — rather than granting permissions directly. XSUAA role collections implement RBAC for BTP apps.",
+              "category": "security"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "The business side of security: ERP context, GRC compliance, AMS policies, and the RBAC model that ties it all together.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "ERP",
+              "prompt": "What does ERP stand for?",
+              "answer": "Enterprise Resource Planning",
+              "distractors": [
+                "Enterprise Reporting Platform",
+                "Event-Routing Protocol"
+              ],
+              "kasimirRight": "ERP — the reason SAP exists and why your paycheck clears. Exactly right! 💼",
+              "kasimirWrong": "ERP = Enterprise Resource Planning — the big system that runs the business. S/4HANA is SAP's ERP."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "GRC",
+              "prompt": "What does GRC stand for?",
+              "answer": "Governance, Risk, and Compliance",
+              "distractors": [
+                "General Runtime Control",
+                "Global Resource Catalog"
+              ],
+              "kasimirRight": "GRC — keeping the auditors happy since forever. Correctly compliant answer! 📋",
+              "kasimirWrong": "GRC = Governance, Risk, and Compliance. A whole SAP product family dedicated to keeping regulators at bay."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "AMS",
+              "prompt": "What does AMS stand for?",
+              "answer": "SAP Authorization Management Service",
+              "distractors": [
+                "Application Monitoring Service",
+                "API Management Suite"
+              ],
+              "kasimirRight": "AMS — policy-based, fine-grained, and very grown-up authorization. Nailed it! 🏆",
+              "kasimirWrong": "AMS = SAP Authorization Management Service — the `@cap-js/ams` plugin for fine-grained policy authorization."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "RBAC",
+              "prompt": "What does RBAC stand for?",
+              "answer": "Role-Based Access Control",
+              "distractors": [
+                "Resource-Bound API Control",
+                "Runtime Backend Access Cache"
+              ],
+              "kasimirRight": "RBAC — roles for the role, access for the few. Permission granted! 🎖️",
+              "kasimirWrong": "RBAC = Role-Based Access Control. XSUAA role collections ARE the RBAC mechanism in BTP."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered ERP, GRC, AMS, RBAC. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

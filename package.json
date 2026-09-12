@@ -32,6 +32,7 @@
     "seed-ai-quizzes": "cross-env AI_AUTHOR_BUILD_CAP=10000 npm run fetch-tutorials",
     "discover-repos": "tsx scripts/fetch-tutorials.ts --discover-only",
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
+    "generate-ktt-lessons": "npx tsx scripts/generate-ktt-lessons.ts",
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",
     "lint:tutorial-markdown": "tsx scripts/lint-tutorial-markdown.ts",
     "scan-tutorial-markdown": "tsx scripts/scan-markdown-source.ts",
