@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import KasimirStage from './components/KasimirStage.vue';
 import SkillTreeMap from './components/SkillTreeMap.vue';
 import Lesson from './components/Lesson.vue';
 import Results from './components/Results.vue';
-import { loadLocal, saveLocal, mergeProgress } from './lib/progress';
-import { isAuthenticated, completeLesson, syncProgress, fetchBanter } from './lib/server';
+import { loadLocal, saveLocal, mergeProgress, type KttProgress } from './lib/progress';
+import { isAuthenticated, completeLesson, syncProgress, fetchBanter, isKttEnabled } from './lib/server';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -13,16 +13,30 @@ import { isAuthenticated, completeLesson, syncProgress, fetchBanter } from './li
 const props = defineProps<{ apiUrl: string; lessons: any }>();
 
 // ---------------------------------------------------------------------------
+// Feature gate (spec §7.7) — probe the server on mount. While the flag is OFF
+// the page fails closed: the drill engine never mounts and we never touch
+// localStorage. null = still probing, true = enabled, false = coming soon.
+// ---------------------------------------------------------------------------
+const enabled = ref<boolean | null>(null);
+
+// ---------------------------------------------------------------------------
 // Screen state machine
 // ---------------------------------------------------------------------------
 const screen = ref<'landing' | 'map' | 'lesson' | 'results'>('landing');
 
 // ---------------------------------------------------------------------------
-// Progress
+// Progress — deferred: not loaded from localStorage until KTT is enabled.
 // ---------------------------------------------------------------------------
-const progress = ref(loadLocal());
+const progress = ref<KttProgress | null>(null);
 
-const mastered = computed(() => progress.value.mastered);
+const mastered = computed(() => progress.value?.mastered ?? []);
+
+onMounted(async () => {
+  const ok = await isKttEnabled(props.apiUrl);
+  enabled.value = ok;
+  // Only touch localStorage once we know the feature is live.
+  if (ok) progress.value = loadLocal();
+});
 
 // ---------------------------------------------------------------------------
 // Active lesson
@@ -52,7 +66,7 @@ function handleSelect(lessonId: string) {
 
 async function handleLessonComplete(lessonId: string, sessionXp: number) {
   const lesson = activeLesson.value;
-  if (!lesson) return;
+  if (!lesson || !progress.value) return;
 
   // Capture pre-merge XP so Results shows the earned delta for this session
   const prevXp = progress.value.xp;
@@ -85,9 +99,9 @@ async function handleLessonComplete(lessonId: string, sessionXp: number) {
       legacyId: lesson.legacyId,
       title: lesson.title,
     }).then(result => {
-      if (result) {
+      if (result && progress.value) {
         syncProgress(props.apiUrl, progress.value).then(remote => {
-          if (remote) {
+          if (remote && progress.value) {
             const merged = mergeProgress(progress.value, remote);
             progress.value = merged;
             saveLocal(merged);
@@ -109,42 +123,52 @@ function handleBack() {
 </script>
 
 <template>
-  <div class="ktt-root" :data-screen="screen">
-    <!-- Landing -->
-    <section v-if="screen === 'landing'" class="ktt-landing">
+  <div class="ktt-root" :data-screen="screen" :data-enabled="enabled">
+    <!-- Coming soon: KTT_ENABLED is OFF server-side — fail closed, no engine -->
+    <section v-if="enabled === false" class="ktt-coming-soon" data-testid="ktt-coming-soon">
       <KasimirStage mood="idle" />
       <h1>Professor Kasimir Teaches TLAs</h1>
-      <p>SAP has more three-letter acronyms than a cat has naps. Let's fix that.</p>
-      <button data-testid="ktt-start" @click="screen = 'map'">Start</button>
+      <p>Kasimir is still sharpening his claws on this lesson plan. TLA school is coming soon — check back shortly.</p>
     </section>
 
-    <!-- Skill Tree Map -->
-    <section v-else-if="screen === 'map'" class="ktt-map">
-      <SkillTreeMap
-        :lessons="lessons"
-        :mastered="mastered"
-        @select="handleSelect"
-      />
-    </section>
+    <!-- Enabled: the normal drill engine -->
+    <template v-else-if="enabled === true">
+      <!-- Landing -->
+      <section v-if="screen === 'landing'" class="ktt-landing">
+        <KasimirStage mood="idle" />
+        <h1>Professor Kasimir Teaches TLAs</h1>
+        <p>SAP has more three-letter acronyms than a cat has naps. Let's fix that.</p>
+        <button data-testid="ktt-start" @click="screen = 'map'">Start</button>
+      </section>
 
-    <!-- Active Lesson -->
-    <section v-else-if="screen === 'lesson' && activeLesson" class="ktt-lesson-screen">
-      <Lesson
-        :lesson="activeLesson"
-        @complete="handleLessonComplete"
-      />
-    </section>
+      <!-- Skill Tree Map -->
+      <section v-else-if="screen === 'map'" class="ktt-map">
+        <SkillTreeMap
+          :lessons="lessons"
+          :mastered="mastered"
+          @select="handleSelect"
+        />
+      </section>
 
-    <!-- Results -->
-    <section v-else-if="screen === 'results' && activeLesson" class="ktt-results-screen">
-      <Results
-        :xp="lastXp"
-        :lesson-id="activeLessonId!"
-        :lesson-title="activeLesson.title"
-        :banter-line="banterLine"
-        @continue="handleContinue"
-        @back="handleBack"
-      />
-    </section>
+      <!-- Active Lesson -->
+      <section v-else-if="screen === 'lesson' && activeLesson" class="ktt-lesson-screen">
+        <Lesson
+          :lesson="activeLesson"
+          @complete="handleLessonComplete"
+        />
+      </section>
+
+      <!-- Results -->
+      <section v-else-if="screen === 'results' && activeLesson" class="ktt-results-screen">
+        <Results
+          :xp="lastXp"
+          :lesson-id="activeLessonId!"
+          :lesson-title="activeLesson.title"
+          :banter-line="banterLine"
+          @continue="handleContinue"
+          @back="handleBack"
+        />
+      </section>
+    </template>
   </div>
 </template>

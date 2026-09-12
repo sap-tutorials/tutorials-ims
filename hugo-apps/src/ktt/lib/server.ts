@@ -24,6 +24,22 @@ export async function isAuthenticated(): Promise<boolean> {
 }
 
 /**
+ * Probe whether the KTT feature is enabled server-side.
+ * The KTT_ENABLED flag is a runtime DB value (no redeploy), so the client must
+ * ask the server: it fetches the readonly Lessons projection, which the service
+ * rejects with 503 when the flag is OFF. Returns false on 503/network error,
+ * true on ok — best-effort, never throws.
+ */
+export async function isKttEnabled(apiUrl: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${apiUrl}/Lessons?$top=1`);
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Notify the server that a lesson was completed.
  * Best-effort: failures are caught and resolve to null.
  */

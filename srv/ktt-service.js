@@ -15,6 +15,14 @@ export default class KttService extends cds.ApplicationService {
     const db = await cds.connect.to('db');
     const { TaskRecords, Users, KttLessons } = cds.entities('com.sap.developers.ims');
 
+    // Fail closed when the flag is OFF (spec §7.7): the readonly Lessons
+    // projection is what the island probes on mount to decide whether to run.
+    // Gating it here — alongside the two write actions — makes the whole page
+    // fail closed via a runtime DB flag with no redeploy.
+    this.before('READ', 'Lessons', (req) => {
+      if (!isFlagEnabled('KTT_ENABLED')) return req.reject(503, 'KTT is not enabled');
+    });
+
     this.on('completeLesson', async (req) => {
       if (!isFlagEnabled('KTT_ENABLED')) return req.reject(503, 'KTT is not enabled');
       const { legacyId, title } = req.data;
