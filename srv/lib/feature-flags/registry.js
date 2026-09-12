@@ -97,6 +97,13 @@ export const FEATURE_FLAGS = [
     description: 'Cross-instance (cds-caching backed) rate limiter on the anon/expensive surface (/content, /build, /graph, /mcp*, …). Layered tiers: anon IP floor, higher tier for an already-present PAT/XSUAA token, top tier for HMAC-signed first-party agents. DB-driven config (ImsConfig key flag.ratelimit); thresholds in ImsConfig ratelimit.* via rate-limit-settings.js. No env var. Default OFF, fail-open.',
     howToChange: featureFlagUpsert('RATE_LIMIT_ENABLED', 'flag.ratelimit'),
   },
+  {
+    key: 'INPUT_VALIDATION_ENABLED', label: 'Origin input validation', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.inputvalidation',
+    valueType: 'boolean', default: false, issue: 'origin-abuse-protection', status: 'dev-only',
+    description: 'WAF-equivalent input validation on the anon/agentic write surface (PR3). Body-size caps + JSON depth/shape limits on anon POST bodies before handlers run, and a depth + complexity limit (plus prod-only introspection block) on GraphQL /graphql/public. DB-driven config (ImsConfig key flag.inputvalidation); thresholds in ImsConfig inputvalidation.* via input-validation-settings.js. No env var. Default OFF, fail-open.',
+    howToChange: featureFlagUpsert('INPUT_VALIDATION_ENABLED', 'flag.inputvalidation'),
+  },
   // ---- Navigator ----
   {
     key: 'NAV_INCLUDE_NESTED_GROUPS', label: 'Navigator nested-group cards',

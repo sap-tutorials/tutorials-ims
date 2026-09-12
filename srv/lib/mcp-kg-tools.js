@@ -49,7 +49,7 @@ const EMPTY_NB = { prerequisites: [], whatToLearnNext: [], sharedConcepts: [], t
  */
 export async function handleNeighborhood(req) {
   const slug = (req.data.slug ?? '').toLowerCase();
-  const depth = Math.min(Math.max(req.data.depth ?? 10, 1), 50);
+  const depth = clampLimit(req.data.depth, 10, 50);
   if (!slug) return { ...EMPTY_NB };
   // norm handles both tutorial-arm items ({slug, weight, reason, title}) and
   // concept items ({slug, name, description, published}) from the teaches arm:
