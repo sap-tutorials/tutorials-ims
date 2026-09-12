@@ -54,6 +54,14 @@ describe('skill bundle handler', () => {
     expect(skill).toContain('confidence: high');
   });
 
+  it('301 redirect when slug is non-canonical (mixed case)', async () => {
+    const res = fakeRes();
+    await createSkillBundleHandler(baseDeps)(req('My-Tutorial'), res);
+    expect(res.statusCode).toBe(301);
+    expect(res.headers['location']).toContain('my-tutorial');
+    expect(res.headers['location']).toMatch(/\/skill$/);
+  });
+
   it('still ships (degraded) when provenance/asserts are empty', async () => {
     const res = fakeRes();
     await createSkillBundleHandler({ ...baseDeps, loadAssertSpecs: async () => [], buildFreshnessStamp: async () => ({ confidence: 'unknown', lastVerified: null, sourceCommit: null, jws: null }) })(req('t'), res);

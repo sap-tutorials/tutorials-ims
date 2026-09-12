@@ -177,6 +177,8 @@ export function createSkillBundleHandler(deps = {}) {
     getTutorialSource = _getTutorialSource,
     loadAssertSpecs: _load = loadAssertSpecs,
     buildFreshnessStamp: _stamp = buildFreshnessStamp,
+    buildSkillMd: _buildSkillMd = buildSkillMd,
+    buildVerifyScript: _buildVerifyScript = buildVerifyScript,
     provenanceFlagKey = 'PROVENANCE_ENVELOPE_ENABLED',
   } = deps;
 
@@ -184,8 +186,15 @@ export function createSkillBundleHandler(deps = {}) {
     if (!isFlagEnabled('SKILL_BUNDLE_ENABLED')) return res.status(404).end();
 
     const raw = Array.isArray(req.params?.slug) ? req.params.slug.join('/') : req.params?.slug;
-    const slug = String(raw || '').replace(/\/$/, '').toLowerCase();
-    if (!slug || !VALID_SLUG.test(slug)) return res.status(404).json({ error: 'not_found' });
+    const canonical = String(raw || '').replace(/\/$/, '').toLowerCase();
+    if (!canonical || !VALID_SLUG.test(canonical)) return res.status(404).json({ error: 'not_found' });
+
+    // 301 redirect when the incoming slug differs from its canonical (lowercase) form
+    if (String(raw) !== canonical) {
+      res.setHeader('Location', `/content/tutorials/${canonical}/skill`);
+      return res.status(301).end();
+    }
+    const slug = canonical;
 
     const src = await getTutorialSource(slug);
     if (!src || !src.markdown) return res.status(404).json({ error: 'not_found' });
@@ -195,8 +204,8 @@ export function createSkillBundleHandler(deps = {}) {
       _stamp(slug, { provenanceEnabled: isFlagEnabled(provenanceFlagKey) }),
     ]);
 
-    const skillMd = buildSkillMd({ slug, source: src.markdown, asserts, stamp });
-    const verifySh = buildVerifyScript(asserts);
+    const skillMd = _buildSkillMd({ slug, source: src.markdown, asserts, stamp });
+    const verifySh = _buildVerifyScript(asserts);
 
     res.status(200);
     res.setHeader('Content-Type', 'application/zip');
