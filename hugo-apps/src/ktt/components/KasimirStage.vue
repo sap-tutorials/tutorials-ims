@@ -21,16 +21,6 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
               fill="#f6f7f9"/>
       </g>
 
-      <!-- front paws: white tuxedo mittens -->
-      <g id="pawLeft" class="k-paw-left">
-        <ellipse cx="74" cy="230" rx="17" ry="11" fill="#f6f7f9" stroke="#2b2d34" stroke-width="2.4"/>
-        <path d="M69,222 L69,238 M79,222 L79,238" fill="none" stroke="#2b2d34" stroke-width="1.4" stroke-linecap="round"/>
-      </g>
-      <g id="pawRight" class="k-paw-right">
-        <ellipse cx="126" cy="230" rx="17" ry="11" fill="#f6f7f9" stroke="#2b2d34" stroke-width="2.4"/>
-        <path d="M121,222 L121,238 M131,222 L131,238" fill="none" stroke="#2b2d34" stroke-width="1.4" stroke-linecap="round"/>
-      </g>
-
       <!-- head group: ears + face features -->
       <g id="head" class="k-head">
         <!-- ears: grey outer + pink inner, splayed outward (behind head crown) -->
@@ -38,37 +28,72 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
           <path d="M62,54 Q50,30 55,20 Q61,15 70,27 Q81,42 90,52 Z"
                 fill="#70747a" stroke="#2b2d34" stroke-width="2.4" stroke-linejoin="round"/>
           <path d="M66,49 Q59,32 62,26 Q67,29 73,37 Q80,45 83,49 Z" fill="#f3aab8"/>
+          <!-- ear-tip tuft: little fur point -->
+          <path d="M55,20 Q52,13 57,16 M55,20 Q60,12 61,18" fill="none" stroke="#2b2d34"
+                stroke-width="1.6" stroke-linecap="round"/>
           <path d="M138,54 Q150,30 145,20 Q139,15 130,27 Q119,42 110,52 Z"
                 fill="#70747a" stroke="#2b2d34" stroke-width="2.4" stroke-linejoin="round"/>
           <path d="M134,49 Q141,32 138,26 Q133,29 127,37 Q120,45 117,49 Z" fill="#f3aab8"/>
+          <path d="M145,20 Q148,13 143,16 M145,20 Q140,12 139,18" fill="none" stroke="#2b2d34"
+                stroke-width="1.6" stroke-linecap="round"/>
         </g>
 
         <!-- head silhouette: rounded, cheeks wider than crown -->
         <path d="M100,44 C129,44 153,63 153,95 C153,121 139,143 116,151 Q108,154 100,154 Q92,154 84,151 C61,143 47,121 47,95 C47,63 71,44 100,44 Z"
               fill="#70747a" stroke="#2b2d34" stroke-width="2.4" stroke-linejoin="round"/>
 
+        <!-- cheek fur tufts: soft irregular fluff breaking the round outline -->
+        <g id="cheeks" class="k-cheeks">
+          <path d="M49,110 l-7,-3 M48,118 l-8,-1 M49,126 l-7,3" fill="none"
+                stroke="#7f838a" stroke-width="2" stroke-linecap="round"/>
+          <path d="M151,110 l7,-3 M152,118 l8,-1 M151,126 l7,3" fill="none"
+                stroke="#7f838a" stroke-width="2" stroke-linecap="round"/>
+        </g>
+
+        <!-- cowlick tuft: a fun little curl on the crown -->
+        <path id="cowlick" class="k-cowlick"
+              d="M96,45 Q94,34 100,37 Q97,41 103,42 Q108,40 106,46" fill="none"
+              stroke="#2b2d34" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
         <!-- white blaze: narrow forehead stripe widening into the muzzle -->
         <path d="M88,60 Q100,54 112,60 L119,102 Q129,120 124,136 Q117,153 100,154 Q83,153 76,136 Q71,120 81,102 Z"
               fill="#f6f7f9"/>
 
-        <!-- eyelids: hidden by default, flashed by the blink animation -->
-        <g id="eyelids" class="k-eyelids">
-          <ellipse cx="80" cy="98" rx="15.5" ry="16.5" fill="#70747a"/>
-          <ellipse cx="120" cy="98" rx="15.5" ry="16.5" fill="#70747a"/>
+        <!-- eyebrows: soft grey brow tufts, a touch of expression -->
+        <g id="brows" class="k-brows">
+          <path d="M70,84 Q80,80 90,83" fill="none" stroke="#5b5f65" stroke-width="2" stroke-linecap="round"/>
+          <path d="M110,83 Q120,80 130,84" fill="none" stroke="#5b5f65" stroke-width="2" stroke-linecap="round"/>
         </g>
 
-        <!-- big round blue eyes -->
+        <!-- eyes: smaller, warm, with a friendly upper lid line -->
         <g id="pupils" class="k-pupils">
-          <ellipse cx="80" cy="98" rx="15" ry="16" fill="#fff" stroke="#2b2d34" stroke-width="2"/>
-          <circle cx="80" cy="100" r="10.5" fill="#2f8ede" stroke="#1c6cb4" stroke-width="1.4"/>
-          <circle cx="80" cy="101" r="6" fill="#15191f"/>
-          <circle cx="84.5" cy="95.5" r="3.2" fill="#fff"/>
-          <circle cx="77" cy="104" r="1.6" fill="#fff" opacity="0.85"/>
-          <ellipse cx="120" cy="98" rx="15" ry="16" fill="#fff" stroke="#2b2d34" stroke-width="2"/>
-          <circle cx="120" cy="100" r="10.5" fill="#2f8ede" stroke="#1c6cb4" stroke-width="1.4"/>
-          <circle cx="120" cy="101" r="6" fill="#15191f"/>
-          <circle cx="124.5" cy="95.5" r="3.2" fill="#fff"/>
-          <circle cx="117" cy="104" r="1.6" fill="#fff" opacity="0.85"/>
+          <!-- left eye -->
+          <ellipse cx="81" cy="101" rx="10.5" ry="11.5" fill="#fff" stroke="#2b2d34" stroke-width="1.8"/>
+          <circle cx="81" cy="102" r="7.3" fill="#3a93e0" stroke="#1c6cb4" stroke-width="1.2"/>
+          <circle cx="81" cy="103" r="4" fill="#15191f"/>
+          <circle cx="84" cy="99" r="2.6" fill="#fff"/>
+          <circle cx="78.5" cy="105" r="1.2" fill="#fff" opacity="0.8"/>
+          <!-- right eye -->
+          <ellipse cx="119" cy="101" rx="10.5" ry="11.5" fill="#fff" stroke="#2b2d34" stroke-width="1.8"/>
+          <circle cx="119" cy="102" r="7.3" fill="#3a93e0" stroke="#1c6cb4" stroke-width="1.2"/>
+          <circle cx="119" cy="103" r="4" fill="#15191f"/>
+          <circle cx="122" cy="99" r="2.6" fill="#fff"/>
+          <circle cx="116.5" cy="105" r="1.2" fill="#fff" opacity="0.8"/>
+        </g>
+
+        <!-- upper-lid arcs: static, soften the wide-eyed stare -->
+        <g id="lids" class="k-lids">
+          <path d="M70.5,98 Q81,92 91.5,98" fill="none" stroke="#2b2d34" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M108.5,98 Q119,92 129.5,98" fill="none" stroke="#2b2d34" stroke-width="1.8" stroke-linecap="round"/>
+        </g>
+
+        <!-- eyelids: hidden by default, flashed shut by the blink animation -->
+        <g id="eyelids" class="k-eyelids">
+          <ellipse cx="81" cy="101" rx="11.5" ry="12.5" fill="#70747a"/>
+          <ellipse cx="119" cy="101" rx="11.5" ry="12.5" fill="#70747a"/>
+          <!-- closed-eye smile lines -->
+          <path d="M71,101 Q81,107 91,101" fill="none" stroke="#2b2d34" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M109,101 Q119,107 129,101" fill="none" stroke="#2b2d34" stroke-width="1.8" stroke-linecap="round"/>
         </g>
 
         <!-- pink nose -->
@@ -102,6 +127,16 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
         <text x="100" y="192" text-anchor="middle" font-family="Arial,Helvetica,sans-serif"
               font-size="8" font-weight="700" fill="#fff">SAP</text>
       </g>
+
+      <!-- front paws: white tuxedo mittens (front-most so the facepalm reads) -->
+      <g id="pawLeft" class="k-paw-left">
+        <ellipse cx="74" cy="230" rx="17" ry="11" fill="#f6f7f9" stroke="#2b2d34" stroke-width="2.4"/>
+        <path d="M69,222 L69,238 M79,222 L79,238" fill="none" stroke="#2b2d34" stroke-width="1.4" stroke-linecap="round"/>
+      </g>
+      <g id="pawRight" class="k-paw-right">
+        <ellipse cx="126" cy="230" rx="17" ry="11" fill="#f6f7f9" stroke="#2b2d34" stroke-width="2.4"/>
+        <path d="M121,222 L121,238 M131,222 L131,238" fill="none" stroke="#2b2d34" stroke-width="1.4" stroke-linecap="round"/>
+      </g>
     </svg>
   </div>
 </template>
@@ -121,8 +156,22 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
 /* Eyes open by default; the blink animation flashes the lids shut. */
 .k-eyelids { opacity: 0; }
 
+/* Blink in EVERY mood so Kasimir always feels alive. Each instance is
+   seeded with a slightly different duration to avoid a robotic cadence. */
+.kasimir .k-eyelids {
+  animation: k-blink 5.4s ease-in-out infinite;
+}
+.kasimir--teaching .k-eyelids { animation-duration: 4.6s; }
+.kasimir--thinking .k-eyelids { animation-duration: 6.2s; }
+.kasimir--correct  .k-eyelids { animation-duration: 3.8s; }
+
+@keyframes k-blink {
+  0%, 46%, 54%, 100% { opacity: 0; }
+  49%, 51%           { opacity: 1; }
+}
+
 /* -----------------------------------------------
-   IDLE: gentle breathing + tail flick + blink
+   IDLE: breathing + tail flick + gentle head sway
 ----------------------------------------------- */
 .kasimir--idle .k-body {
   animation: k-breathe 4s ease-in-out infinite;
@@ -132,8 +181,9 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
   animation: k-tail-flick 3.5s ease-in-out infinite;
   transform-origin: 152px 206px;
 }
-.kasimir--idle .k-eyelids {
-  animation: k-blink 5s ease-in-out infinite;
+.kasimir--idle .k-head {
+  animation: k-head-sway 6.5s ease-in-out infinite;
+  transform-origin: 100px 152px;
 }
 
 @keyframes k-breathe {
@@ -145,13 +195,14 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
   30%      { transform: rotate(8deg); }
   60%      { transform: rotate(-4deg); }
 }
-@keyframes k-blink {
-  0%, 90%, 100% { opacity: 0; }
-  92%, 96%      { opacity: 1; }
+@keyframes k-head-sway {
+  0%, 100% { transform: rotate(0deg); }
+  30%      { transform: rotate(2.2deg); }
+  70%      { transform: rotate(-2.2deg); }
 }
 
 /* -----------------------------------------------
-   TEACHING: paw gesture (left paw raises)
+   TEACHING: paw gesture (left paw raises) + whisker spread
 ----------------------------------------------- */
 .kasimir--teaching .k-paw-left {
   animation: k-paw-raise 2s ease-in-out infinite;
@@ -160,18 +211,26 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
 .kasimir--teaching .k-whiskers {
   animation: k-whisker-spread 2s ease-in-out infinite;
 }
+.kasimir--teaching .k-head {
+  animation: k-nod 2s ease-in-out infinite;
+  transform-origin: 100px 152px;
+}
 
 @keyframes k-paw-raise {
-  0%, 100% { transform: translateY(0); }
-  40%      { transform: translateY(-24px) rotate(-12deg); }
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  40%      { transform: translateY(-26px) rotate(-12deg); }
 }
 @keyframes k-whisker-spread {
   0%, 100% { transform: scaleX(1); }
   50%      { transform: scaleX(1.08); }
 }
+@keyframes k-nod {
+  0%, 100% { transform: rotate(0deg); }
+  40%      { transform: rotate(2.5deg); }
+}
 
 /* -----------------------------------------------
-   THINKING: ear twitch + pupils drift up
+   THINKING: ear twitch + pupils drift up + head tilt
 ----------------------------------------------- */
 .kasimir--thinking .k-ears {
   animation: k-ear-twitch 2.2s ease-in-out infinite;
@@ -180,6 +239,10 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
 .kasimir--thinking .k-pupils {
   animation: k-eyes-up 3s ease-in-out infinite;
 }
+.kasimir--thinking .k-head {
+  animation: k-head-tilt 3s ease-in-out infinite;
+  transform-origin: 100px 152px;
+}
 
 @keyframes k-ear-twitch {
   0%, 100% { transform: rotate(0deg); }
@@ -187,23 +250,32 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
   75%      { transform: rotate(5deg); }
 }
 @keyframes k-eyes-up {
-  0%, 60%, 100% { transform: translateY(0); }
-  30%           { transform: translateY(-3px); }
+  0%, 60%, 100% { transform: translate(0, 0); }
+  30%           { transform: translate(2px, -3px); }
+}
+@keyframes k-head-tilt {
+  0%, 100% { transform: rotate(0deg); }
+  40%      { transform: rotate(5deg); }
 }
 
 /* -----------------------------------------------
-   CORRECT: ears perk up + eyes brighten + tail wag
+   CORRECT: ears perk + eyes sparkle + happy tail wag + bounce
 ----------------------------------------------- */
 .kasimir--correct .k-ears {
   animation: k-ears-perk 0.5s ease-out forwards;
   transform-origin: 100px 44px;
 }
 .kasimir--correct .k-pupils {
-  animation: k-eyes-bright 1s ease-in-out 3;
+  animation: k-eyes-bright 0.7s ease-in-out 3;
 }
 .kasimir--correct .k-tail {
-  animation: k-tail-wag 0.4s ease-in-out 4;
+  animation: k-tail-wag 0.4s ease-in-out 5;
   transform-origin: 152px 206px;
+}
+.kasimir--correct .k-head,
+.kasimir--correct .k-body {
+  animation: k-bounce 0.5s ease-in-out 3;
+  transform-origin: 100px 238px;
 }
 
 @keyframes k-ears-perk {
@@ -212,44 +284,62 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
 }
 @keyframes k-eyes-bright {
   0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.08); }
+  50%      { transform: scale(1.12); }
 }
 @keyframes k-tail-wag {
   0%, 100% { transform: rotate(0deg); }
   25%      { transform: rotate(14deg); }
   75%      { transform: rotate(-14deg); }
 }
+@keyframes k-bounce {
+  0%, 100% { transform: translateY(0); }
+  45%      { transform: translateY(-7px); }
+}
 
 /* -----------------------------------------------
-   WRONG: facepalm (right paw up to face) + flat ears
+   WRONG: facepalm (right paw covers eyes) + head droop + flat ears
 ----------------------------------------------- */
 .kasimir--wrong .k-paw-right {
-  animation: k-facepalm 1.2s ease-in-out forwards;
-  transform-origin: 126px 236px;
+  animation: k-facepalm 1.3s ease-in-out forwards;
+  transform-origin: 126px 230px;
+}
+.kasimir--wrong .k-head {
+  animation: k-head-droop 1.3s ease-in-out forwards;
+  transform-origin: 100px 152px;
 }
 .kasimir--wrong .k-ears {
-  animation: k-ears-flat 0.4s ease-out forwards;
+  animation: k-ears-flat 0.5s ease-out forwards;
   transform-origin: 100px 44px;
 }
 
+/* Paw rotates about its OWN centre and settles over the eyes/brow. */
 @keyframes k-facepalm {
   0%   { transform: translate(0, 0) rotate(0deg); }
-  60%  { transform: translate(-26px, -108px) rotate(-38deg); }
-  100% { transform: translate(-24px, -104px) rotate(-36deg); }
+  55%  { transform: translate(-22px, -122px) rotate(-15deg); }
+  100% { transform: translate(-20px, -118px) rotate(-13deg); }
+}
+@keyframes k-head-droop {
+  0%   { transform: rotate(0deg) translateY(0); }
+  55%  { transform: rotate(-5deg) translateY(5px); }
+  100% { transform: rotate(-4deg) translateY(4px); }
 }
 @keyframes k-ears-flat {
   0%   { transform: scaleY(1) rotate(0deg); }
-  100% { transform: scaleY(0.7) rotate(8deg); }
+  100% { transform: scaleY(0.68) rotate(6deg); }
 }
 
 /* -----------------------------------------------
-   CELEBRATE: hop + confetti shimmer on whiskers
+   CELEBRATE: hop + tail whirl + confetti shimmer on whiskers
 ----------------------------------------------- */
 .kasimir--celebrate .k-head,
 .kasimir--celebrate .k-body,
 .kasimir--celebrate .k-collar {
   animation: k-hop 0.6s ease-in-out 4;
   transform-origin: 100px 238px;
+}
+.kasimir--celebrate .k-ears {
+  animation: k-ears-perk 0.5s ease-out forwards;
+  transform-origin: 100px 44px;
 }
 .kasimir--celebrate .k-tail {
   animation: k-tail-celebrate 0.4s ease-in-out 8;
@@ -261,7 +351,7 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
 
 @keyframes k-hop {
   0%, 100% { transform: translateY(0); }
-  40%      { transform: translateY(-12px); }
+  40%      { transform: translateY(-14px); }
 }
 @keyframes k-tail-celebrate {
   0%, 100% { transform: rotate(0deg); }
