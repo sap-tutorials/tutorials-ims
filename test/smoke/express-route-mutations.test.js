@@ -117,13 +117,13 @@ describe.skipIf(!SRV_URL || SRV_URL.startsWith('http://localhost'))(
             .replace('GET ', '')
             .replace(':slug', '__smoke_no_such_slug__');
           const res = await fetchWithRetry(`${SRV_URL}${path}`);
-          // The wildcard serveHandler returns text/html for all slugs (even 404s).
-          // A dedicated handler returns application/json, application/zip, or similar.
-          // Either a non-2xx status OR a non-HTML content-type confirms the route fires.
+          // The wildcard serveHandler returns text/html for ALL slugs (including 404s).
+          // A dedicated handler returns application/json, application/zip, or similar —
+          // never text/html.
           const ct = res.headers.get('content-type') ?? '';
           const isHtml = ct.startsWith('text/html');
-          // If the response is HTML and 200, the wildcard swallowed it — that's a bug.
-          expect(isHtml && res.status === 200).toBe(false);
+          // Any HTML content-type means the wildcard swallowed the request — that's a bug.
+          expect(isHtml).toBe(false);
         },
       );
     });
