@@ -20,6 +20,7 @@ describe.skipIf(!SRV_URL || SRV_URL.startsWith('http://localhost'))(
         { path: '/content/rollback', method: 'POST' },
         { path: '/content/orphan-purge', method: 'POST' },
         { path: '/content/code-check-specs', method: 'POST' },
+        { path: '/content/assert-specs', method: 'POST' },
         { path: '/content/validate-answer-specs', method: 'POST' },
         { path: '/build/repo-catalog', method: 'POST' },
       ];

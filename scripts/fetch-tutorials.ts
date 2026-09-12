@@ -20,6 +20,7 @@ import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandSt
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
 import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
+import { parseAssertBlocks, attachAssertSpecs } from './parsers/assert.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import { computeCanonicalNav, type NavContainer } from './parsers/nav-owner.js'
 import { humanizeTag, cleanPrerequisites } from './parsers/frontmatter-utils.js'
@@ -1119,6 +1120,17 @@ async function main() {
             // Task 2.1 publish path matches against the lowercase HANA row, so a
             // mixed-case slug here would cause spec_missing at runtime.
             writeFileSync(sidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: sidecar }, null, 2))
+          }
+        }
+
+        const assertMap = parseAssertBlocks(rulesContent)
+        if (assertMap.size) {
+          const assertSidecar = attachAssertSpecs(steps, assertMap)
+          if (assertSidecar.length) {
+            const assertPath = join(CACHE_DIR, `${t.slug.toLowerCase()}.assert.json`)
+            // slug lowercased: Tutorials.slug in HANA is lowercase canonical, and
+            // the publish handler resolves against the lowercase row.
+            writeFileSync(assertPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: assertSidecar }, null, 2))
           }
         }
       }

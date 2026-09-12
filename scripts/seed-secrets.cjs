@@ -55,7 +55,7 @@ const INITIAL_SECRETS = [
   },
   {
     key: 'CONTENT_API_KEY',
-    description: 'Bearer token for POST /content/publish, /content/rollback, /content/code-check-specs, /build/repo-catalog, /content/validate-specs. Read at runtime by srv/lib/content-store.js.',
+    description: 'Bearer token for POST /content/publish, /content/rollback, /content/code-check-specs, /content/assert-specs, /build/repo-catalog, /content/validate-specs. Read at runtime by srv/lib/content-store.js.',
     kind: 'content-api-key',
     rotationOwner: 'thomas.jung@sap.com',
     rotationDocsUrl: '',

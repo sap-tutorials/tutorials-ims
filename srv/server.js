@@ -76,6 +76,7 @@ import { makeCodeCheckHandler } from './lib/code-check-handler.js';
 import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
+import { assertSpecPublishHandler } from './lib/assert-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
 import { publishContributors } from './lib/contributors-publish.js';
 import { publishValidationRules } from './lib/validation-rules-publish.js';
@@ -945,6 +946,7 @@ cds.on('bootstrap', (app) => {
   // Issue #orphan-purge — CI-only batched soft-delete. Same auth as /content/publish.
   app.post('/content/orphan-purge', express.json({ limit: '1mb' }), contentAuthMiddleware, orphanPurgeHandler);
   app.post('/content/code-check-specs', express.json({ limit: '5mb' }), contentAuthMiddleware, codeCheckSpecPublishHandler);
+  app.post('/content/assert-specs', express.json({ limit: '5mb' }), contentAuthMiddleware, assertSpecPublishHandler);
 
   // Validate-answer specs publish endpoint (issue #209). Now uses
   // contentAuthMiddleware (#242) for symmetry with /content/code-check-specs
