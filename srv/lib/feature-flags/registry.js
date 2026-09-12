@@ -371,4 +371,12 @@ export const FEATURE_FLAGS = [
     description: 'Enables the /explore/ktt/ acronym trainer and its /ktt CAP endpoints. Off → completeLesson/syncProgress reject 503.',
     howToChange: featureFlagUpsert('KTT_ENABLED', 'flag.ktt.enabled'),
   },
+  // ---- Edge cache ----
+  {
+    key: 'EDGE_PURGE_ENABLED', label: 'Akamai edge Fast-Purge on publish', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.edgepurge',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, a successful content publish/rollback fires a fire-and-forget Akamai Fast-Purge (CCU v3) purge-by-tag for the changed slugs, AND the served content Cache-Control s-maxage is raised from 600s to 86400s (safe only because the purge now bounds staleness). Requires the AKAMAI_FASTPURGE_EDGERC JSON credential in Credential Store; inert (no-op, short TTL) without it. Fail-open. Numeric tunables: ImsConfig edgepurge.network (production|staging), edgepurge.timeoutMs. DB-driven config (ImsConfig key flag.edgepurge); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('EDGE_PURGE_ENABLED', 'flag.edgepurge'),
+  },
 ];
