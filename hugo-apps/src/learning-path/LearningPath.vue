@@ -19,7 +19,14 @@ async function isSignedIn(): Promise<boolean> {
 }
 
 onMounted(async () => {
-  const goal = document.documentElement.getAttribute('data-page-slug') || ''
+  const rawSlug = document.documentElement.getAttribute('data-page-slug') || ''
+  // Strip the URL-routing prefix that catalog-renderer stamps onto data-page-slug
+  // for group/mission pages (e.g. 'group-foo' → 'foo', 'mission-bar' → 'bar').
+  // Groups.slug and Missions.slug store the bare slug without prefix; tutorial
+  // slugs are already bare and pass through unchanged.
+  let goal = rawSlug
+  if (props.goalType === 'group' && goal.startsWith('group-')) goal = goal.slice('group-'.length)
+  if (props.goalType === 'mission' && goal.startsWith('mission-')) goal = goal.slice('mission-'.length)
   await isSignedIn() // establishes session for the credentialed call below
   let res: Response
   try {

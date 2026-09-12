@@ -47,4 +47,23 @@ describe('LearningPath island', () => {
     await flushPromises()
     expect(w.html().trim()).toBe('<!--v-if-->')
   })
+
+  it('strips group- prefix before calling the API (group-foo → goal=foo)', async () => {
+    document.documentElement.setAttribute('data-page-slug', 'group-foo')
+    const fetchMock = mockFetch({
+      '/auth/user': { json: { authenticated: false } },
+      'learningPath': { json: { steps: [
+        { order: 1, tutorialSlug: 'tut-a', teachesConcepts: [], satisfiesPrereqFor: [], alreadyPartial: false },
+      ], totalSteps: 1, personalized: false } },
+    })
+    global.fetch = fetchMock
+    const w = mount(LearningPath, { props: { goalType: 'group' } })
+    await flushPromises()
+    // The URL passed to fetch must use bare slug 'foo', NOT 'group-foo'
+    const calls = fetchMock.mock.calls.map((c: any[]) => c[0] as string)
+    const lpCall = calls.find(u => u.includes('learningPath'))
+    expect(lpCall).toContain("goal='foo'")
+    expect(lpCall).not.toContain("goal='group-foo'")
+    expect(w.text()).toContain('tut-a')
+  })
 })
