@@ -95,6 +95,7 @@ function topoSort(remaining, prereqOf) {
       const active = edges.filter(e => remainingNodes.has(e.from) && remainingNodes.has(e.to))
       active.sort((a, b) => a.confidence - b.confidence)
       const drop = active[0]
+      if (!drop) break // degenerate: no active edges but nodes remain — treat as sorted
       edges = edges.filter(e => e !== drop)
       cyclesBroken++
       continue
@@ -134,11 +135,12 @@ function mapConceptsToSteps({ orderedConcepts, teaches, tutorialRank, completed,
     placed.set(best, step)
     steps.push(step)
   }
-  // satisfiesPrereqFor: concepts that require one of this step's taught concepts.
+  // satisfiesPrereqFor: concept slugs (not tutorial slugs) that require one of this step's
+  // taught concepts — constrained to concepts that are themselves part of the returned path.
   const conceptToStep = new Map()
   for (const s of steps) for (const c of s.teachesConcepts) conceptToStep.set(c, s)
-  for (const [source, prereqs] of prereqOf) {
-    for (const { target } of prereqs) {
+  for (const [source] of conceptToStep) {
+    for (const { target } of prereqOf.get(source) || []) {
       const s = conceptToStep.get(target)
       if (s && !s.satisfiesPrereqFor.includes(source)) s.satisfiesPrereqFor.push(source)
     }
