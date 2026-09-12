@@ -609,5 +609,53 @@ if (errs.length) {
 }
 writeFileSync('hugo/data/ktt_lessons.json', JSON.stringify(data, null, 2) + '\n');
 
+// ---------------------------------------------------------------------------
+// CAP seed CSV for the KttLessons catalog (db/data/…-KttLessons.csv).
+//
+// Loaded automatically into HANA (and the in-memory SQLite used by cds.test)
+// so srv/lib/user-progress.js can join a KTT_LESSON completion's legacyId →
+// title/slug in MyCompletions, and syncProgress can reconstruct mastery.
+// Without this seed the table ships EMPTY and every KTT completion is dropped.
+//
+// `slug` intentionally equals the lesson `id` (e.g. "unit-1-platform-lesson-1")
+// because that is the exact key the island stores in `progress.mastered` and
+// sends as `lessonSlug` — see hugo-apps/src/ktt/App.vue.
+//
+// `ID` is DETERMINISTIC (derived from legacyId, never random) so regenerating
+// this file is byte-identical — no churn in git. Scheme: a fixed structured
+// UUID template with the legacyId zero-padded into the final node segment.
+// ---------------------------------------------------------------------------
+const CSV_DELIM = ';';
+
+/** RFC-4180-style field escaping against the ';' delimiter. */
+function csvField(value: string): string {
+  const s = String(value ?? '');
+  if (s.includes(CSV_DELIM) || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+/** Deterministic, valid v4-shaped UUID derived solely from the legacyId. */
+function deterministicLessonId(legacyId: number): string {
+  return `9077e000-0000-4000-8000-${String(legacyId).padStart(12, '0')}`;
+}
+
+const csvLines: string[] = ['ID;legacyId;slug;unitId;title'];
+for (const unit of data.units) {
+  for (const lesson of unit.lessons) {
+    csvLines.push([
+      csvField(deterministicLessonId(lesson.legacyId)),
+      csvField(String(lesson.legacyId)),
+      csvField(lesson.id),
+      csvField(unit.id),
+      csvField(lesson.title),
+    ].join(CSV_DELIM));
+  }
+}
+writeFileSync('db/data/com.sap.developers.ims-KttLessons.csv', csvLines.join('\n') + '\n');
+
+const totalLessons = data.units.reduce((a, u) => a + u.lessons.length, 0);
 const totalAcronyms = data.units.reduce((a, u) => a + u.lessons.reduce((b, l) => b + l.acronyms.length, 0), 0);
-console.log(`Wrote ${data.units.length} units, ${data.units.reduce((a, u) => a + u.lessons.length, 0)} lessons, ${totalAcronyms} acronyms.`);
+console.log(`Wrote ${data.units.length} units, ${totalLessons} lessons, ${totalAcronyms} acronyms.`);
+console.log(`Wrote db/data/com.sap.developers.ims-KttLessons.csv (${csvLines.length - 1} data rows).`);

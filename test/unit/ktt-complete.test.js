@@ -17,6 +17,10 @@ beforeAll(async () => {
 
   const { Users, KttLessons } = cds.entities('com.sap.developers.ims');
   await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: 'alice', sapId: 'alice', legacyId: 1 });
+  // The KttLessons catalog is now seeded from db/data/…-KttLessons.csv, so clear
+  // it first to avoid an @assert.unique(legacyId) collision on this controlled
+  // fixture (seed legacyId 90001 slug 'unit-1-platform-lesson-1').
+  await DELETE.from(KttLessons);
   await INSERT.into(KttLessons).entries({ ID: cds.utils.uuid(), legacyId: 90001, slug: 'core-1' });
   authed = { auth: { username: 'alice', password: 'alice' } };
 });
