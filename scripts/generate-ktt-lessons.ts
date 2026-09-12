@@ -163,13 +163,13 @@ const SEED: SeedEntry[] = [
     kasimirWrong: 'CSN = Core Schema Notation, pronounced "Season". It\'s the JSON form of your CDS models.',
   },
   {
-    tla: 'CDL', expansion: 'CDS Definition Language',
-    blurb: 'The human-readable source syntax you write in `.cds` files — entities, services, annotations. Compiles to CSN for runtime use.',
+    tla: 'CDL', expansion: 'Conceptual Definition Language',
+    blurb: 'The human-readable source syntax you write in `.cds` files — entities, services, annotations. Official CAP docs state: "We use CDS\'s Conceptual Definition Language (CDL)…". Compiles to CSN for runtime use.',
     category: 'framework',
     unitId: 'unit-2-cds', lessonIdx: 0,
     distractors: ['Cloud Deployment Language', 'Core Data Library'],
     kasimirRight: 'CDL — what you write, CSN is what the machine reads. You\'re fluent! ✍️',
-    kasimirWrong: 'CDL = CDS Definition Language. The .cds files you write are CDL; they compile down to CSN.',
+    kasimirWrong: 'CDL = Conceptual Definition Language (official CAP term). The .cds files you write are CDL; they compile down to CSN.',
   },
   {
     tla: 'CQL', expansion: 'CDS Query Language',
@@ -229,7 +229,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'UI5', expansion: 'SAPUI5',
-    blurb: 'SAP\'s enterprise JavaScript UI framework (based on OpenUI5). Delivers Fiori-ready components, Horizon theme, and OData V4 model binding out of the box.',
+    blurb: 'SAPUI5 is a product name, not a spelled-out acronym — "5" is the generation designator for SAP\'s enterprise JavaScript UI framework. Built on OpenUI5 (the open-source base), it delivers Fiori-ready components, Horizon theme, and OData V4 model binding out of the box.',
     category: 'ui',
     unitId: 'unit-2-cds', lessonIdx: 2,
     distractors: ['Universal Interface 5', 'SAP User Interaction 5'],
@@ -362,7 +362,7 @@ const SEED: SeedEntry[] = [
     blurb: 'A database column type for storing large binary (BLOB) or text (CLOB) data. SAP HANA supports LOBs natively; CAP uses raw `db.run()` to read them (locators expire on SELECT).',
     category: 'database',
     unitId: 'unit-3-hana', lessonIdx: 2,
-    distractors: ['Line of Business', 'Local Object Buffer'],
+    distractors: ['Linked Object Buffer', 'Local Object Buffer'],
     kasimirRight: 'LOB — big data in a small column. Don\'t mix it with a CDS QL query! Correct! 📦',
     kasimirWrong: 'LOB = Large Object (BLOB/CLOB) — in HANA, never SELECT a LOB alongside metadata in one CDS QL query.',
   },
@@ -525,7 +525,7 @@ const UNITS: UnitMeta[] = [
     title: 'Security & Ops',
     icon: '🔒',
     order: 4,
-    lessonTitles: ['Authentication & Tokens', 'Identity & Factors', 'Governance & Control'],
+    lessonTitles: ['Authentication & Tokens', 'Identity & Factors', 'Business & Governance'],
     lessonIntros: [
       'Security is not optional, and neither is this lesson. XSUAA, UAA, SSO, JWT — the alphabet soup that keeps your data from becoming everyone\'s data.',
       'Logging in is just the start. IDP, MFA, TLS, ACL — the layers that stop the wrong people from doing the wrong things.',

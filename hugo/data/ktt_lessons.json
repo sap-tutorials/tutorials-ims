@@ -318,8 +318,8 @@
             },
             {
               "tla": "CDL",
-              "expansion": "CDS Definition Language",
-              "blurb": "The human-readable source syntax you write in `.cds` files — entities, services, annotations. Compiles to CSN for runtime use.",
+              "expansion": "Conceptual Definition Language",
+              "blurb": "The human-readable source syntax you write in `.cds` files — entities, services, annotations. Official CAP docs state: \"We use CDS's Conceptual Definition Language (CDL)…\". Compiles to CSN for runtime use.",
               "category": "framework"
             },
             {
@@ -366,13 +366,13 @@
               "kind": "mc",
               "tla": "CDL",
               "prompt": "What does CDL stand for?",
-              "answer": "CDS Definition Language",
+              "answer": "Conceptual Definition Language",
               "distractors": [
                 "Cloud Deployment Language",
                 "Core Data Library"
               ],
               "kasimirRight": "CDL — what you write, CSN is what the machine reads. You're fluent! ✍️",
-              "kasimirWrong": "CDL = CDS Definition Language. The .cds files you write are CDL; they compile down to CSN."
+              "kasimirWrong": "CDL = Conceptual Definition Language (official CAP term). The .cds files you write are CDL; they compile down to CSN."
             },
             {
               "type": "drill",
@@ -503,7 +503,7 @@
             {
               "tla": "UI5",
               "expansion": "SAPUI5",
-              "blurb": "SAP's enterprise JavaScript UI framework (based on OpenUI5). Delivers Fiori-ready components, Horizon theme, and OData V4 model binding out of the box.",
+              "blurb": "SAPUI5 is a product name, not a spelled-out acronym — \"5\" is the generation designator for SAP's enterprise JavaScript UI framework. Built on OpenUI5 (the open-source base), it delivers Fiori-ready components, Horizon theme, and OData V4 model binding out of the box.",
               "category": "ui"
             },
             {
@@ -864,7 +864,7 @@
               "prompt": "What does LOB stand for?",
               "answer": "Large Object",
               "distractors": [
-                "Line of Business",
+                "Linked Object Buffer",
                 "Local Object Buffer"
               ],
               "kasimirRight": "LOB — big data in a small column. Don't mix it with a CDS QL query! Correct! 📦",
@@ -1078,7 +1078,7 @@
         {
           "id": "unit-4-security-lesson-3",
           "legacyId": 90012,
-          "title": "Governance & Control",
+          "title": "Business & Governance",
           "acronyms": [
             {
               "tla": "ERP",

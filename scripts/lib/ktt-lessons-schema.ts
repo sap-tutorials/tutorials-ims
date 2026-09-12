@@ -22,6 +22,7 @@ export function validateLessons(data: KttData): string[] {
         if (b.type === 'drill') {
           if (!b.answer) errs.push(`${l.id}: drill for ${b.tla} missing answer`);
           if (!b.distractors || b.distractors.length < 2) errs.push(`${l.id}: drill for ${b.tla} needs >=2 distractors`);
+          if (b.answer && b.distractors?.includes(b.answer)) errs.push(`${l.id}: drill for ${b.tla} has answer in distractors`);
         }
       }
     }
