@@ -4243,7 +4243,7 @@
     }
   },
   "meta": {
-    "creator": "CDS Compiler v7.1.1",
+    "creator": "CDS Compiler v7.0.1",
     "compilerCsnFlavor": "$internal",
     "flavor": "inferred",
     "sap.changelog.enhanced": true,
