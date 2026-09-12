@@ -3,6 +3,8 @@
 // (SKILL.md + verify.sh) as a zip. Item 3 of #2245. Pure composition first,
 // data + handler wiring below.
 
+import matter from 'gray-matter';
+
 const DEFAULT_BASE_URL = 'http://localhost:4004';
 
 /** POSIX single-quote escape: a'b -> 'a'\''b' */
@@ -58,4 +60,49 @@ export function buildVerifyScript(asserts) {
   L.push('if [ "$fails" -gt 0 ]; then echo "$fails check(s) failed."; exit 1; fi');
   L.push('echo "All checks passed."');
   return L.join('\n') + '\n';
+}
+
+export function buildSkillMd({ slug, source, asserts, stamp }) {
+  let title = slug;
+  let description = '';
+  let body = String(source || '');
+  try {
+    const parsed = matter(String(source || ''));
+    title = parsed.data.title || slug;
+    description = parsed.data.description || '';
+    body = parsed.content.trim();
+  } catch {
+    body = String(source || '').trim();
+  }
+  // single-line, quote-safe description for YAML
+  const desc = `${title}${description ? ' — ' + description : ''}`.replace(/\s+/g, ' ').replace(/"/g, "'").trim();
+
+  const fm = ['---', `name: ${slug}`, `description: "${desc}"`, '---', ''].join('\n');
+
+  const n = asserts.length;
+  const verifyLine = asserts.some((a) => a.type === 'http')
+    ? 'Run `BASE_URL=<your-server> bash verify.sh` to check your work.'
+    : 'Run `bash verify.sh` to check your work.';
+
+  const provenance = [
+    '## Provenance & freshness',
+    '',
+    `- confidence: ${stamp.confidence}`,
+    `- last-verified: ${stamp.lastVerified || 'unknown'}`,
+    `- source-commit: ${stamp.sourceCommit || 'unknown'}`,
+    '- source: sap-tutorials/Tutorials',
+  ];
+  if (stamp.jws) {
+    provenance.push('', 'Signed attestation (verify against the JWKS at `/.well-known/tutorial-provenance/jwks.json`):', '', '```jws', stamp.jws, '```');
+  }
+
+  const verify = [
+    '## Verifying this Skill',
+    '',
+    n === 0
+      ? 'No automated checks are bundled with this tutorial. Follow the procedure above.'
+      : `${n} automated check(s) are bundled in \`verify.sh\`. ${verifyLine}`,
+  ];
+
+  return [fm, `# ${title}`, '', body, '', verify.join('\n'), '', provenance.join('\n'), ''].join('\n');
 }

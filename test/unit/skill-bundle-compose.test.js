@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildVerifyScript, shquote } from '../../srv/lib/skill-bundle.js';
+import { buildVerifyScript, shquote, buildSkillMd } from '../../srv/lib/skill-bundle.js';
 
 describe('shquote', () => {
   it('wraps in single quotes and escapes embedded single quotes', () => {
@@ -51,5 +51,37 @@ describe('buildVerifyScript', () => {
     ]);
     expect(s.indexOf("'a'")).toBeLessThan(s.indexOf("'b'"));
     expect(s).toContain('exit 1');
+  });
+});
+
+const SRC = `---\ntitle: Create a CAP Service\ndescription: Build and run a CAP service.\n---\n\n## Step 1\nDo the thing.\n`;
+
+describe('buildSkillMd', () => {
+  it('emits YAML frontmatter with name (slug) and description (from source)', () => {
+    const md = buildSkillMd({ slug: 'create-cap-service', source: SRC, asserts: [], stamp: { confidence: 'high', lastVerified: '2026-09-01', sourceCommit: 'abc123', jws: null } });
+    expect(md).toMatch(/^---\n/);
+    expect(md).toContain('name: create-cap-service');
+    expect(md).toContain('Create a CAP Service'); // description carried from source title/description
+  });
+
+  it('includes the procedure body (source minus frontmatter)', () => {
+    const md = buildSkillMd({ slug: 's', source: SRC, asserts: [], stamp: { confidence: 'unknown', lastVerified: null, sourceCommit: null, jws: null } });
+    expect(md).toContain('Do the thing.');
+    expect(md).not.toContain('title: Create a CAP Service'); // frontmatter not duplicated into body
+  });
+
+  it('provenance section reflects the stamp and states check count', () => {
+    const md = buildSkillMd({ slug: 's', source: SRC, asserts: [{ stepNumber: 1, assertIndex: 0, type: 'cmd', run: 'x', expectExit: 0 }], stamp: { confidence: 'medium', lastVerified: '2026-08-01', sourceCommit: 'deadbeef', jws: null } });
+    expect(md).toContain('confidence: medium');
+    expect(md).toContain('2026-08-01');
+    expect(md).toContain('deadbeef');
+    expect(md).toContain('1'); // one bundled check
+  });
+
+  it('includes the JWS fenced block only when present', () => {
+    const withJws = buildSkillMd({ slug: 's', source: SRC, asserts: [], stamp: { confidence: 'high', lastVerified: '2026-09-01', sourceCommit: 'abc', jws: 'eyJ.sig' } });
+    expect(withJws).toContain('eyJ.sig');
+    const without = buildSkillMd({ slug: 's', source: SRC, asserts: [], stamp: { confidence: 'unknown', lastVerified: null, sourceCommit: null, jws: null } });
+    expect(without).not.toContain('```jws');
   });
 });
