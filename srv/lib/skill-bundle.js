@@ -5,6 +5,9 @@
 
 import matter from 'gray-matter';
 import cds from '@sap/cds';
+import { loadProvenanceInputs as _loadProvenanceInputs } from './provenance-data.js';
+import { deriveConfidence as _deriveConfidence } from './provenance-freshness.js';
+import { buildEnvelope as _buildEnvelope } from './provenance-envelope.js';
 
 const DEFAULT_BASE_URL = 'http://localhost:4004';
 
@@ -133,3 +136,32 @@ export async function loadAssertSpecs(slug) {
     return [];
   }
 }
+
+export function makeFreshnessStampLoader({ loadProvenanceInputs, deriveConfidence, buildEnvelope }) {
+  return async function loadStamp(slug, { provenanceEnabled }) {
+    try {
+      const inputs = await loadProvenanceInputs(String(slug || '').toLowerCase());
+      if (!inputs) return { confidence: 'unknown', lastVerified: null, sourceCommit: null, jws: null };
+      const confidence = deriveConfidence({ report: inputs.report, now: Date.now() });
+      const lastVerified = inputs.report?.runAt || inputs.builtAt || null;
+      let jws = null;
+      if (provenanceEnabled) {
+        try {
+          const env = await buildEnvelope({ slug: String(slug).toLowerCase(), ...inputs });
+          jws = env?.jws || null;
+        } catch { jws = null; }
+      }
+      return { confidence, lastVerified, sourceCommit: inputs.sourceCommit || null, jws };
+    } catch (e) {
+      console.warn('[skill-bundle] freshness stamp fail-open:', e.message);
+      return { confidence: 'unknown', lastVerified: null, sourceCommit: null, jws: null };
+    }
+  };
+}
+
+export const buildFreshnessStamp = (slug, opts) =>
+  makeFreshnessStampLoader({
+    loadProvenanceInputs: _loadProvenanceInputs,
+    deriveConfidence: _deriveConfidence,
+    buildEnvelope: _buildEnvelope,
+  })(slug, opts);
