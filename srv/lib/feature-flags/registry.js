@@ -89,6 +89,14 @@ export const FEATURE_FLAGS = [
     issue: '#945', status: 'ga',
     description: 'Hardcoded concept-overlap rank multiplier. Not runtime-configurable.',
   },
+  // ---- Security / abuse protection ----
+  {
+    key: 'RATE_LIMIT_ENABLED', label: 'Origin rate limiting', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.ratelimit',
+    valueType: 'boolean', default: false, issue: 'origin-abuse-protection', status: 'dev-only',
+    description: 'Cross-instance (cds-caching backed) rate limiter on the anon/expensive surface (/content, /build, /graph, /mcp*, …). Layered tiers: anon IP floor, higher tier for an already-present PAT/XSUAA token, top tier for HMAC-signed first-party agents. DB-driven config (ImsConfig key flag.ratelimit); thresholds in ImsConfig ratelimit.* via rate-limit-settings.js. No env var. Default OFF, fail-open.',
+    howToChange: featureFlagUpsert('RATE_LIMIT_ENABLED', 'flag.ratelimit'),
+  },
   // ---- Navigator ----
   {
     key: 'NAV_INCLUDE_NESTED_GROUPS', label: 'Navigator nested-group cards',
