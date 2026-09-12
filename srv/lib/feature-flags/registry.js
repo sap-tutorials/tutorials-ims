@@ -355,4 +355,12 @@ export const FEATURE_FLAGS = [
     description: 'When true, the daily feedback-owner-digest job emails each tutorial owner a summary of new commented feedback. Second gate: only fires when the CF space is prod, and requires the SMTP secrets in Credential Store — so this toggle is inert on dev/qa. Toggling takes effect within the job\'s 60s flag cache. DB-driven config (ImsConfig key feedback.email.enabled); no env var. Default OFF (#2188).',
     howToChange: featureFlagUpsert('FEEDBACK_EMAIL_ENABLED', 'feedback.email.enabled'),
   },
+  // ---- KTT (Kasimir Teaches TLAs) ----
+  {
+    key: 'KTT_ENABLED', label: 'KTT — Kasimir Teaches TLAs', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.ktt.enabled',
+    valueType: 'boolean', default: false, status: 'beta',
+    description: 'Enables the /explore/ktt/ acronym trainer and its /ktt CAP endpoints. Off → completeLesson/syncProgress reject 503.',
+    howToChange: featureFlagUpsert('KTT_ENABLED', 'flag.ktt.enabled'),
+  },
 ];

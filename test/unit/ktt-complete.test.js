@@ -4,16 +4,25 @@
 // Bootstrap: same ESM + cds.test pattern used across test/unit/ served-mode tests.
 
 import cds from '@sap/cds';
-import { expect, test, beforeAll } from 'vitest';
+import { expect, test, beforeAll, afterAll } from 'vitest';
+import { __setFlagForTest, __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
 
 const { POST } = cds.test('serve', '--project', '.', '--in-memory');
 
 let authed;
 beforeAll(async () => {
+  // Force KTT_ENABLED ON for all tests in this file so the success-path
+  // assertions are not blocked by the flag gate introduced in Task 6.
+  __setFlagForTest('KTT_ENABLED', true);
+
   const { Users, KttLessons } = cds.entities('com.sap.developers.ims');
   await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: 'alice', sapId: 'alice', legacyId: 1 });
   await INSERT.into(KttLessons).entries({ ID: cds.utils.uuid(), legacyId: 90001, slug: 'core-1' });
   authed = { auth: { username: 'alice', password: 'alice' } };
+});
+
+afterAll(() => {
+  __resetFlagsForTest();
 });
 
 test('completeLesson writes one KTT_LESSON TaskRecord and is idempotent', async () => {

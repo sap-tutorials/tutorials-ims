@@ -8,6 +8,7 @@ import { getNextLegacyId } from './lib/legacy-id.js';
 import { buildKttCompletionEntry, findExistingKttRecord } from './lib/ktt/completion.js';
 import { mergeProgress } from './lib/ktt/merge.js';
 import { computeBanter } from './lib/ktt/banter.js';
+import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 
 export default class KttService extends cds.ApplicationService {
   async init() {
@@ -15,6 +16,7 @@ export default class KttService extends cds.ApplicationService {
     const { TaskRecords, Users, KttLessons } = cds.entities('com.sap.developers.ims');
 
     this.on('completeLesson', async (req) => {
+      if (!isFlagEnabled('KTT_ENABLED')) return req.reject(503, 'KTT is not enabled');
       const { legacyId, title } = req.data;
       const dbUser = await SELECT.one.from(Users).where({ sapId: req.user.id });
       if (!dbUser) return req.reject(403, 'Unknown user');
@@ -29,6 +31,7 @@ export default class KttService extends cds.ApplicationService {
     });
 
     this.on('syncProgress', async (req) => {
+      if (!isFlagEnabled('KTT_ENABLED')) return req.reject(503, 'KTT is not enabled');
       const local = JSON.parse(req.data.localJson || '{}');
       const dbUser = await SELECT.one.from(Users).where({ sapId: req.user.id });
       if (!dbUser) return req.reject(403, 'Unknown user');
