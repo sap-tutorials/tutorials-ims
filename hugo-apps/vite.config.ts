@@ -12,6 +12,7 @@ const MAX_ADVOCATES_GZIP = 30 * 1024;
 const MAX_PUZZLE_GZIP = 30 * 1024;
 const MAX_ADVOCATE_PROFILE_GZIP = 25 * 1024;
 const MAX_RELATED_GRAPH_GZIP = 12 * 1024;
+const MAX_LEARNING_PATH_GZIP = 12 * 1024;
 const MAX_ALERTS_GZIP = 12 * 1024;
 const MAX_HOMEPAGE_EXPLAINERS_GZIP = 12 * 1024;
 const MAX_HOMEPAGE_PERSONALIZER_GZIP = 12 * 1024;
@@ -215,6 +216,24 @@ function relatedGraphBudget() {
   };
 }
 
+function learningPathBudget() {
+  return {
+    name: 'learning-path-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'learning-path');
+      if (!chunk) return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_LEARNING_PATH_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`learning-path.js is ${gz} bytes gzipped (> ${MAX_LEARNING_PATH_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`learning-path.js: ${gz} bytes gzipped (budget ${MAX_LEARNING_PATH_GZIP}).`);
+      }
+    }
+  };
+}
+
 function petoberfestBudget() {
   return {
     name: 'petoberfest-budget',
@@ -234,7 +253,7 @@ function petoberfestBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), puzzleBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget(), petoberfestBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), puzzleBudget(), relatedGraphBudget(), learningPathBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget(), petoberfestBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -290,6 +309,7 @@ export default defineConfig({
         'advocate-profile': resolve(__dirname, 'src/advocate-profile/main.ts'),
         alerts: resolve(__dirname, 'src/alerts/main.ts'),
         'related-graph': resolve(__dirname, 'src/related-graph/main.ts'),
+        'learning-path': resolve(__dirname, 'src/learning-path/main.ts'),
         'tutorial-reset': resolve(__dirname, 'src/tutorial-reset/main.ts'),
         'preview-banner': resolve(__dirname, 'src/validation/preview-banner.ts'),
         'homepage-bands': resolve(__dirname, 'src/homepage-bands/index.ts'),

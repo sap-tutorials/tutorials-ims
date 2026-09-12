@@ -47,6 +47,13 @@ export const FEATURE_FLAGS = [
     howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Or env KNOWLEDGE_GRAPH_ENABLED.'),
   },
   {
+    key: 'KG_LEARNING_PATH_ENABLED', label: 'KG learning-path reasoner', category: 'Knowledge Graph',
+    kind: 'db-setting', entity: 'KnowledgeGraphSettings', column: 'learningPathEnabled', resolver: 'kg',
+    valueType: 'boolean', default: false, issue: 'kg-learning-path', status: 'dev-only',
+    description: 'Ordered/personalized "what should I learn next / prerequisite chain" reasoner exposed via learningPath(). DB-driven config (KnowledgeGraphSettings.learningPathEnabled); no env var. DEV-only, default OFF, fail-open.',
+    howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Toggle learning-path reasoner in the Knowledge Graph settings tile'),
+  },
+  {
     key: 'KG_ONDEMAND_ENABLED', label: 'KG on-demand extraction',
     category: 'Knowledge Graph', kind: 'db-setting', entity: 'KnowledgeGraphSettings',
     column: 'onDemandExtractionEnabled', resolver: 'kg', envVar: 'KG_ONDEMAND_ENABLED',
