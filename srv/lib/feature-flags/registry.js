@@ -329,6 +329,16 @@ export const FEATURE_FLAGS = [
     description: 'When true, serves the signed provenance JWS at /content/tutorials/:slug/provenance, publishes the JWKS at /.well-known/tutorial-provenance/jwks.json, and emits advisory X-Freshness-Confidence / X-Content-Provenance headers. DB-driven config (ImsConfig key flag.provenance.envelope); no env var. Default OFF.',
     howToChange: featureFlagUpsert('PROVENANCE_ENVELOPE_ENABLED', 'flag.provenance.envelope'),
   },
+  {
+    key: 'SKILL_BUNDLE_ENABLED', label: 'Installable Skill bundle endpoint', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.skill.bundle',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, serves an installable agent-Skill zip at '
+      + '/content/tutorials/:slug/skill (SKILL.md procedure + verify.sh generated from assert '
+      + 'blocks + provenance/freshness stamp). Public, anonymous, read-only over PUBLISHED '
+      + 'tutorials. DB-driven config (ImsConfig key flag.skill.bundle); no env var. Default OFF (#2245).',
+    howToChange: featureFlagUpsert('SKILL_BUNDLE_ENABLED', 'flag.skill.bundle'),
+  },
   // ---- Taxonomy ----
   {
     key: 'SEMAPHORE_SYNC_ENABLED', label: 'Semaphore taxonomy auto-sync', category: 'Taxonomy',

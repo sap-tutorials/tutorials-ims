@@ -99,6 +99,7 @@ import { makeA2aRouter } from './lib/a2a/rpc-router.js';
 import { buildAgentCard } from './lib/a2a/agent-card.js';
 import { resolveA2aSettings } from './lib/runtime-config/a2a-settings.js';
 import { provenanceHandler, jwksHandler } from './lib/provenance-handlers.js';
+import { skillBundleHandler } from './lib/skill-bundle.js';
 
 // #1182 — cds-caching resolve-guard fix. This module is evaluated by cds-serve
 // AFTER `await cds.plugins` (so the cds-caching plugin has already pushed its
@@ -763,6 +764,7 @@ cds.on('bootstrap', (app) => {
   // below so `demo/provenance` is not swallowed as a slug. Public, read-only — no
   // auth; these are attestation/key-distribution endpoints.
   app.get('/content/tutorials/:slug/provenance', provenanceHandler);
+  app.get('/content/tutorials/:slug/skill', skillBundleHandler);
   app.get('/content/tutorials/*slug', serveHandler);
   // Legacy AEM `.model.json` compatibility for SAP Discovery Center (#DC cards).
   // Approuter maps ^/tutorials/<slug>.model.json$ → here. See srv/lib/model-json.js.
