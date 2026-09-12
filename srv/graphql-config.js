@@ -25,6 +25,7 @@
 
 import cds from '@sap/cds';
 import { createRequire } from 'node:module';
+import { buildPublicValidationRules } from './lib/graphql-guard.js';
 
 const _require = createRequire(import.meta.url);
 const GraphQLAdapter = _require('@cap-js/graphql/lib/GraphQLAdapter');
@@ -50,10 +51,19 @@ cds.on('served', () => {
   // /graphql/public MUST be mounted before /graphql — Express's longest-prefix
   // rule does NOT apply to app.use(); it uses insertion order. Without this
   // ordering, a request to /graphql/public would match the /graphql handler first.
+  //
+  // validationRules is a per-request function (graphql-http evaluates it on every
+  // request) that adds a depth+complexity cap and, in PROD, an introspection
+  // block — flag-gated + config-driven, fail-open (srv/lib/graphql-guard.js).
   app.use(
     '/graphql/public',
     cds.middlewares.before,
-    GraphQLAdapter({ services: pick(PUBLIC_SERVICES), path: '/graphql/public', graphiql: false }),
+    GraphQLAdapter({
+      services: pick(PUBLIC_SERVICES),
+      path: '/graphql/public',
+      graphiql: false,
+      validationRules: buildPublicValidationRules,
+    }),
     cds.middlewares.after
   );
 

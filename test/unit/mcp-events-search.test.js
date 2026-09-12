@@ -93,8 +93,11 @@ describe('search_events', () => {
 
   it('clamps limit to [1,50]', async () => {
     expect(await call({ limit: 1 })).toHaveLength(1);
-    // limit=0 coerces to the default 20 (Number(0)||20); all upcoming still fit.
-    expect((await call({ limit: 0 })).length).toBe(4);
+    // clampLimit: an explicit 0 clamps to the floor of 1 (only undefined/null
+    // fall back to the default). Canonical shared validator, PR3 #2270.
+    expect((await call({ limit: 0 })).length).toBe(1);
+    // omitted → default 20; all upcoming rows fit.
+    expect((await call({})).length).toBe(4);
   });
 
   it('returns the documented wire shape', async () => {

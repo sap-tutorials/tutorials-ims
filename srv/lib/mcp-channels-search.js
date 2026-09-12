@@ -12,6 +12,7 @@
 // contentHash, ingestBatch, audit) are never surfaced.
 
 import cds from '@sap/cds';
+import { clampLimit } from './mcp-arg-validators.js';
 
 const LOG = cds.log('mcp-channels-search');
 
@@ -66,7 +67,7 @@ export async function handleSearchChannels(req) {
   const platform = typeof d.platform === 'string' ? d.platform.trim() : '';
   let ownerScope = typeof d.ownerScope === 'string' ? d.ownerScope.trim().toLowerCase() : 'all';
   if (!VALID_OWNER_SCOPES.has(ownerScope)) ownerScope = 'all';
-  const limit = Math.min(Math.max(Number(d.limit) || 20, 1), 50);
+  const limit = clampLimit(d.limit, 20, 50);
 
   try {
     const { Channels } = cds.entities('com.sap.developers.ims');

@@ -68,6 +68,7 @@ import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
 import { register as registerRateLimit } from './lib/rate-limit/register.js';
+import { register as registerInputValidation } from './lib/input-validation/register.js';
 import { streamChat } from './lib/chat-orchestrator.js';
 import { buildChatInvocation } from './lib/chat-invocation.js';
 import { computeEmbeddingStats } from './lib/embedding-stats.js';
@@ -1486,6 +1487,13 @@ cds.on('bootstrap', (app) => {
   // gated (RATE_LIMIT_ENABLED, ImsConfig flag.ratelimit), default OFF, fail-open.
   // Complements the always-on legacy /search limiter above.
   registerRateLimit(app);
+
+  // Origin-side abuse protection: WAF-equivalent input validation on the anon /
+  // agentic write surface — body-size caps everywhere, plus a JSON depth/shape
+  // check on the agentic JSON-RPC surface (/mcp*, /a2a, /chat/stream). Flag-
+  // gated (INPUT_VALIDATION_ENABLED, ImsConfig flag.inputvalidation), default
+  // OFF, fail-open. Mounted after the rate limiter so floods are shed first.
+  registerInputValidation(app);
 });
 
 cds.on('served', async () => {
