@@ -104,6 +104,13 @@ export const FEATURE_FLAGS = [
     description: 'WAF-equivalent input validation on the anon/agentic write surface (PR3). Body-size caps + JSON depth/shape limits on anon POST bodies before handlers run, and a depth + complexity limit (plus prod-only introspection block) on GraphQL /graphql/public. DB-driven config (ImsConfig key flag.inputvalidation); thresholds in ImsConfig inputvalidation.* via input-validation-settings.js. No env var. Default OFF, fail-open.',
     howToChange: featureFlagUpsert('INPUT_VALIDATION_ENABLED', 'flag.inputvalidation'),
   },
+  {
+    key: 'LOADSHED_ENABLED', label: 'Origin load-shedding', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.loadshed',
+    valueType: 'boolean', default: false, issue: 'origin-abuse-protection', status: 'dev-only',
+    description: 'In-flight concurrency guard on the anonymous HANA content-serve path (content-store.js serveStoredSlug — tutorial HTML + content pages + author/advocate pages). When concurrent per-request gzip-BLOB reads exceed loadshed.maxConcurrent, excess requests are shed with 503 + Retry-After instead of piling up toward OOM under a scraper flood that gets past the edge cache (the serve path has no static fallback). Cache hits are never counted. Per-instance ceiling (in-memory, not cross-instance). DB-driven config (ImsConfig key flag.loadshed); ceiling + Retry-After in ImsConfig loadshed.maxConcurrent / loadshed.retryAfterSeconds via load-shed-settings.js. No env var. Default OFF, fail-open (a guard fault admits).',
+    howToChange: featureFlagUpsert('LOADSHED_ENABLED', 'flag.loadshed'),
+  },
   // ---- Navigator ----
   {
     key: 'NAV_INCLUDE_NESTED_GROUPS', label: 'Navigator nested-group cards',
