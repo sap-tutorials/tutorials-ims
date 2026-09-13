@@ -25,6 +25,7 @@ import { stampSubmissionId } from './task-record-submission-id.js';
 import { isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
 import { normalizeTutorialMarkdown, prefersMarkdown } from './tutorial-markdown.js';
 import { isFlagEnabled } from './feature-flags/db-flags.js';
+import { acquireServeSlot } from './load-shed.js';
 import { loadProvenanceInputs } from './provenance-data.js';
 import { deriveConfidence } from './provenance-freshness.js';
 
@@ -1048,77 +1049,97 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
     metrics.counter('content.cache.miss');  // #805
 
-    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
-    const db = await cds.connect.to('db');
-    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-
-    // Option B read cutover (slug-targeted-delta-rebuild), flag-gated + fail-safe.
-    // When CONTENT_DELTA_READ_ENABLED=true, serve from the mutable ContentCurrent
-    // (WHERE slug=?, no version join). Fall back to the legacy version-pinned
-    // ContentFiles snapshot when the flag is off OR the slug isn't in
-    // ContentCurrent yet (mid-migration, before the full seed) — so a partially-
-    // populated ContentCurrent never 404s a slug that still lives in ContentFiles.
-    const READ_DELTA = isDeltaRead();
-    let meta;
-    let source = 'files';
-    if (READ_DELTA && ContentCurrent) {
-      const [cur] = await SELECT.from(ContentCurrent)
-        // slug-canonical: caller-canonicalizes
-        .where({ slug })
-        .columns('contentHash', 'mimeType');
-      if (cur) { meta = cur; source = 'current'; }
-    }
-    if (!meta) {
-      const activeVersion = await getActiveVersion();
-      if (activeVersion === null) return 'no-version';
-      // Serve only from the active version — legacy full-snapshot path.
-      const [legacy] = await SELECT.from(ContentFiles)
-        // slug-canonical: callers canonicalize before calling.
-        .where({ slug, version: activeVersion })
-        .columns('contentHash', 'mimeType', 'version');
-      if (!legacy) return 'not-found';
-      meta = legacy;
-      source = 'files';
+    // #2271 load-shedding: bound concurrent DB BLOB reads on the anonymous
+    // content-serve path. Cache hits above never reach here, so a warm cache is
+    // untouched. Flag-gated (LOADSHED_ENABLED, default OFF) + fail-open — a
+    // guard fault admits. When in-flight reads exceed the configured ceiling,
+    // shed with 503 + Retry-After rather than piling up toward OOM.
+    const slot = await acquireServeSlot();
+    if (!slot.admitted) {
+      metrics.counter('loadshed.triggered');
+      res.setHeader('Retry-After', String(slot.retryAfter));
+      res.setHeader('Cache-Control', 'no-store'); // don't let the edge cache a shed response
+      res.status(503).json({ error: 'Service temporarily unavailable' });
+      return 'served'; // response handled; callers treat 'served' as done
     }
 
-    const ifNoneMatch = req.headers['if-none-match'];
-    if (ifNoneMatch && ifNoneMatch === `"${meta.contentHash}"`) {
-      res.status(304).end();
+    // Hold the in-flight slot for the whole DB read + gunzip + send; release on
+    // EVERY exit path (304 / no-version / not-found / served / throw).
+    try {
+      const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+      const db = await cds.connect.to('db');
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
+      // Option B read cutover (slug-targeted-delta-rebuild), flag-gated + fail-safe.
+      // When CONTENT_DELTA_READ_ENABLED=true, serve from the mutable ContentCurrent
+      // (WHERE slug=?, no version join). Fall back to the legacy version-pinned
+      // ContentFiles snapshot when the flag is off OR the slug isn't in
+      // ContentCurrent yet (mid-migration, before the full seed) — so a partially-
+      // populated ContentCurrent never 404s a slug that still lives in ContentFiles.
+      const READ_DELTA = isDeltaRead();
+      let meta;
+      let source = 'files';
+      if (READ_DELTA && ContentCurrent) {
+        const [cur] = await SELECT.from(ContentCurrent)
+          // slug-canonical: caller-canonicalizes
+          .where({ slug })
+          .columns('contentHash', 'mimeType');
+        if (cur) { meta = cur; source = 'current'; }
+      }
+      if (!meta) {
+        const activeVersion = await getActiveVersion();
+        if (activeVersion === null) return 'no-version';
+        // Serve only from the active version — legacy full-snapshot path.
+        const [legacy] = await SELECT.from(ContentFiles)
+          // slug-canonical: callers canonicalize before calling.
+          .where({ slug, version: activeVersion })
+          .columns('contentHash', 'mimeType', 'version');
+        if (!legacy) return 'not-found';
+        meta = legacy;
+        source = 'files';
+      }
+
+      const ifNoneMatch = req.headers['if-none-match'];
+      if (ifNoneMatch && ifNoneMatch === `"${meta.contentHash}"`) {
+        res.status(304).end();
+        return 'served';
+      }
+
+      // Read BLOB separately — CDS QL returns HANA BLOBs as streams with locators
+      // that expire before consumption. Raw SQL returns a Buffer directly.
+      // For SQLite (tests), CDS QL works fine since there's no LOB streaming.
+      let contentBuf;
+      if (isHana) {
+        const [blobRow] = source === 'current'
+          ? await db.run(
+              `SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`,
+              [slug]
+            )
+          : await db.run(
+              `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
+              [slug, meta.version]
+            );
+        contentBuf = blobRow.CONTENT;
+      } else {
+        const blobRow = source === 'current'
+          ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content') // slug-canonical: caller-canonicalizes
+          : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content'); // slug-canonical: caller-canonicalizes
+        contentBuf = await toBuffer(blobRow.content);
+      }
+      const decompressed = gunzipSync(contentBuf);
+      const advisory = await computeAdvisory(slug);
+      cache.set(slug, decompressed, meta.contentHash, advisory);
+
+      res.setHeader('Content-Type', `${mimeType || meta.mimeType}; charset=utf-8`);
+      res.setHeader('ETag', `"${meta.contentHash}"`);
+      setContentCacheHeaders(res, { slug: tagSlug });
+      res.setHeader('X-Content-Source', source === 'current' ? 'db-current' : 'db');
+      setAdvisoryHeaders(res, advisory);
+      res.send(decompressed);
       return 'served';
+    } finally {
+      slot.release();
     }
-
-    // Read BLOB separately — CDS QL returns HANA BLOBs as streams with locators
-    // that expire before consumption. Raw SQL returns a Buffer directly.
-    // For SQLite (tests), CDS QL works fine since there's no LOB streaming.
-    let contentBuf;
-    if (isHana) {
-      const [blobRow] = source === 'current'
-        ? await db.run(
-            `SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`,
-            [slug]
-          )
-        : await db.run(
-            `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
-            [slug, meta.version]
-          );
-      contentBuf = blobRow.CONTENT;
-    } else {
-      const blobRow = source === 'current'
-        ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content') // slug-canonical: caller-canonicalizes
-        : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content'); // slug-canonical: caller-canonicalizes
-      contentBuf = await toBuffer(blobRow.content);
-    }
-    const decompressed = gunzipSync(contentBuf);
-    const advisory = await computeAdvisory(slug);
-    cache.set(slug, decompressed, meta.contentHash, advisory);
-
-    res.setHeader('Content-Type', `${mimeType || meta.mimeType}; charset=utf-8`);
-    res.setHeader('ETag', `"${meta.contentHash}"`);
-    setContentCacheHeaders(res, { slug: tagSlug });
-    res.setHeader('X-Content-Source', source === 'current' ? 'db-current' : 'db');
-    setAdvisoryHeaders(res, advisory);
-    res.send(decompressed);
-    return 'served';
   }
 
   async function serveHandler(req, res) {
