@@ -1,0 +1,94 @@
+# deploy-watcher descriptor — tutorials-ims (SAP Developer Portal tutorial hosting platform)
+#
+# Read by the deploy-watcher tool (github.tools.sap/developer-relations/deploy-watcher)
+# from the project root. It runs the deploy chain server-side and returns a compact
+# verdict instead of dumping raw scrollback into the agent context.
+#
+# Every value below is validated against the real deploy chain in
+# scripts/deploy-mta.cjs (the `deploy` npm script). Keep them in sync.
+
+project: tutorials-ims
+
+# Canonical local deploy entrypoint: `npm run deploy -- --env <env> [--strategy <strategy>]`.
+chain:
+  command: node scripts/deploy-mta.cjs
+  env_flag: "--env {env}"
+  strategy_flag: "--strategy {strategy}"
+
+# Matches the ENVS keys in scripts/deploy-mta.cjs.
+envs:
+  - dev
+  - qa
+  - prod
+
+# dev/qa deploy from the DEV integration branch (human-in-the-loop OK);
+# prod deploys from the primary tree on main and the blue-green swap is
+# operator-gated (see guardPrimaryTreeBranch + blue-green swap in deploy-mta.cjs).
+exec_policy:
+  hitl:
+    - dev
+    - qa
+  operator_only:
+    - prod
+
+# Step rules: last matching rule wins (deepest phase reached).
+# A rule with status overrides the verdict status for that run.
+steps:
+  - match: "Step 3.5"
+    name: "admin-bundle drift check"
+  - match: "SMOKE GATE FAILED"
+    name: "smoke gate"
+    status: "smoke_regressed"
+
+# Signal patterns: first matching pattern wins (declaration order = priority).
+# Each signal surfaces a specific failure cause and routes next_action.
+signals:
+  - id: mbt_minify
+    pattern: "Minification failed|Unexpected token"
+    next_action: >
+      Check admin-shell / admin controller JS for syntax errors (private fields, optional chaining).
+      This class of break passes CI and dies only at mbt minify. Run mbt build locally and watch for
+      "Minification failed" before deploying.
+  - id: stale_admin_bundle
+    pattern: "stale admin UI"
+    next_action: >
+      The mtar would ship a stale admin UI (Step 3.5 drift check). Rebuild WITHOUT --skip-build and
+      WITHOUT -m module scoping. Run: npm run deploy -- --env <env>
+  - id: cds_deploy_error
+    pattern: "in cds\\.deploy"
+    next_action: >
+      CI annotations hide the real cds.deploy error — grep the full log for 'in cds.deploy'.
+      Reproduce locally with: cds deploy --to sqlite::memory:
+  - id: oom
+    pattern: "exit status 137"
+    next_action: >
+      Application ran out of memory during staging or runtime. srv-qa content publish OOMs at 768M —
+      raise srv-qa memory to at least 1536M (thresholds.srv_qa_min_mb); prod approuter needs 2048M
+      (thresholds.approuter_prod_min_mb).
+  - id: smoke_regression
+    pattern: "smoke test failed|SMOKE GATE FAILED|\\d+ of \\d+ tests FAILED"
+    next_action: >
+      A smoke check regressed after deploy (exit code 2). Treat the deployed env as BROKEN until triaged.
+      Review the smoke diff in the verdict, then roll back:
+      cf deploy mta_archives/<last-good>.mtar -e deploy/<env>.mtaext -f
+
+# Resource thresholds enforced during pre-flight. Sourced from the OOM gotchas:
+# srv-qa content publish OOMs at 768M (needs >=1536M); prod approuter OOMs at 512M (needs 2048M).
+thresholds:
+  srv_qa_min_mb: 1536
+  approuter_prod_min_mb: 2048
+
+# Smoke suite run after a successful deploy (Step 5). `npm run test:smoke` =
+# `vitest run --project smoke`, driven by SMOKE_BASE_URL / SMOKE_SRV_URL.
+smoke:
+  command: npm run test:smoke
+  baseline: ""   # set to a run-id to enable diff mode
+
+# Pre-flight checks run before the chain command. All must pass or the deploy aborts.
+#   cf_target_matches_env   — Step 1: cf target region + space match the chosen env
+#   git_fresh_origin        — Step 0: HEAD is at fetched origin/<branch> (fresh base)
+#   node_auth_token_present — mbt build needs NODE_AUTH_TOKEN for the private @sap ANS package
+preflight:
+  - cf_target_matches_env
+  - git_fresh_origin
+  - node_auth_token_present
