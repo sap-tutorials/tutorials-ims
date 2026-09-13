@@ -236,6 +236,25 @@ completion machinery rather than a new progress entity.
   DEV-verified. Flag off ⇒ `/explore/ktt/` fails closed (coming-soon / 404
   per convention).
 
+#### Enabling on DEV (runbook)
+
+The flag is a **runtime DB change on the deployed backend** — no redeploy, no
+code change. Two equivalent paths:
+
+1. **Admin UI (preferred):** open `/admin-ui/#featureFlags` on the DEV
+   approuter, find **"KTT — Kasimir Teaches TLAs"** (category *Content*), and
+   toggle it on. Persists to `ImsConfig` key `flag.ktt.enabled`.
+2. **Action call:** invoke `featureFlagUpsert('KTT_ENABLED', 'flag.ktt.enabled')`
+   against `AdminService` with `value: true` (the exact `howToChange` recorded
+   in the registry entry).
+
+Verify: `GET /ktt/Lessons?$top=1` returns `200` (not `503`), and
+`/explore/ktt/` renders the landing screen (Start button) instead of the
+coming-soon section. The island probes the flag via `isKttEnabled()` on mount,
+so a hard refresh is enough — no rebuild. Flip back to `false` to fail closed
+again.
+
+
 ## 8. Error handling & resilience
 
 - **AI banter non-blocking** — timeout + try/catch; falls back to a scripted
