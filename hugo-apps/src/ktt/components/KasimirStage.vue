@@ -154,6 +154,14 @@ defineProps<{ mood: 'idle'|'teaching'|'thinking'|'correct'|'wrong'|'celebrate' }
 }
 
 /* === Shared base === */
+/* Cap the mascot so it never floods its column. Without this the SVG scales
+   to full container width and pushes everything below the fold (only his ears
+   show). clamp() keeps him proportional across viewports. */
+.kasimir {
+  width: 100%;
+  max-width: clamp(140px, 20vw, 240px);
+  margin: 0 auto;
+}
 .kasimir svg {
   width: 100%;
   height: auto;

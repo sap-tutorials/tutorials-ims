@@ -172,3 +172,51 @@ function handleBack() {
     </template>
   </div>
 </template>
+
+<style scoped>
+/* Root: constrain overall width and center within the Hugo content column. */
+.ktt-root {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+/* Coming-soon (flag OFF) and landing share the same centered hero layout. */
+.ktt-coming-soon,
+.ktt-landing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.ktt-coming-soon h1,
+.ktt-landing h1 {
+  font-size: 1.6rem;
+  margin: 0;
+}
+
+.ktt-coming-soon p,
+.ktt-landing p {
+  max-width: 42ch;
+  color: #555;
+  margin: 0;
+}
+
+.ktt-landing button[data-testid="ktt-start"] {
+  margin-top: 0.5rem;
+  padding: 0.7rem 2rem;
+  font-size: 1rem;
+  background: #0070f2;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ktt-landing button[data-testid="ktt-start"]:hover {
+  background: #005bb5;
+}
+</style>
