@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { collectHashedFiles, main } from '../../scripts/retain-asset-bundles.cjs';
@@ -39,6 +39,19 @@ describe('collectHashedFiles', () => {
 
   it('returns [] for a missing directory', () => {
     expect(collectHashedFiles(join(dir, 'nope'))).toEqual([]);
+  });
+
+  it('recurses into chunks/ and returns forward-slash relative paths (the events-band 404 fix)', () => {
+    mkdirSync(join(dir, 'chunks'));
+    writeFileSync(join(dir, 'homepage-events-band-BX0x3PRG.js'), '');   // top-level entry
+    writeFileSync(join(dir, 'chunks', 'csrf-fetch-C6Fpypfx.js'), '');   // shared chunk it imports
+    writeFileSync(join(dir, 'chunks', 'format-date-DooLMa2G.js'), '');
+    const got = collectHashedFiles(dir).sort();
+    expect(got).toEqual([
+      'chunks/csrf-fetch-C6Fpypfx.js',
+      'chunks/format-date-DooLMa2G.js',
+      'homepage-events-band-BX0x3PRG.js',
+    ]);
   });
 });
 
@@ -170,5 +183,51 @@ describe('main() network fail-open', () => {
     expect(warnText).toContain('prior-Xy12Ab34.js');
 
     console.warn = origWarn;
+  });
+
+  it('(d) carries forward a prior chunk into chunks/ via the /js/chunks/ URL (events-band regression)', async () => {
+    const jsDir = join(dir, 'js');
+    const cssDir = join(dir, 'css');
+    const manifestOut = join(dir, 'manifest.json');
+
+    mkdirSync(jsDir);
+    mkdirSync(cssDir);
+    // Current build ships a fresh csrf-fetch chunk hash; the old one dropped out.
+    mkdirSync(join(jsDir, 'chunks'));
+    writeFileSync(join(jsDir, 'homepage-events-band-NEWENTRY.js'), '');
+    writeFileSync(join(jsDir, 'chunks', 'csrf-fetch-NEWHASH0.js'), '');
+
+    // Prior manifest recorded the OLD entry + OLD chunk (still referenced by
+    // already-published HTML). Both must carry forward.
+    const priorManifest = [
+      { file: 'homepage-events-band-OLDENTRY.js', firstSeenMs: 0, lastSeenMs: 0 },
+      { file: 'chunks/csrf-fetch-C6Fpypfx.js', firstSeenMs: 0, lastSeenMs: 0 },
+    ];
+
+    const requested = [];
+    globalThis.fetch = vi.fn(async (url) => {
+      requested.push(url);
+      if (url.includes('_retained-assets.json')) return { ok: true, json: async () => priorManifest };
+      return { ok: true, arrayBuffer: async () => new ArrayBuffer(0) };
+    });
+
+    await main({
+      jsDir, cssDir, manifestOut,
+      approuterUrl: 'https://approuter.example.com',
+      nowMs: 0,
+      windowMs: 48 * 3600_000,
+    });
+
+    // The chunk was fetched from its /js/chunks/ URL and written under chunks/.
+    expect(requested).toContain('https://approuter.example.com/js/chunks/csrf-fetch-C6Fpypfx.js');
+    expect(existsSync(join(jsDir, 'chunks', 'csrf-fetch-C6Fpypfx.js'))).toBe(true);
+
+    const manifest = JSON.parse(readFileSync(manifestOut, 'utf8'));
+    expect(manifest.map(e => e.file).sort()).toEqual([
+      'chunks/csrf-fetch-C6Fpypfx.js',
+      'chunks/csrf-fetch-NEWHASH0.js',
+      'homepage-events-band-NEWENTRY.js',
+      'homepage-events-band-OLDENTRY.js',
+    ]);
   });
 });
