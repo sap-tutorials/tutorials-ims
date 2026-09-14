@@ -302,13 +302,25 @@
           "kind": "hana",
           "model": [
             "db/hana"
-          ]
+          ],
+          "pool": {
+            "acquireTimeoutMillis": 5000,
+            "min": 0,
+            "max": 100,
+            "fifo": true
+          }
         },
         "[production]": {
           "kind": "hana",
           "model": [
             "db/hana"
-          ]
+          ],
+          "pool": {
+            "acquireTimeoutMillis": 5000,
+            "min": 0,
+            "max": 100,
+            "fifo": true
+          }
         }
       },
       "audit-log": {
