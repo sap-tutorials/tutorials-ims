@@ -412,6 +412,12 @@
               "category": "framework"
             },
             {
+              "tla": "ABAP",
+              "expansion": "Advanced Business Application Programming",
+              "blurb": "SAP's original high-level programming language, born in the 1980s and still the heart of S/4HANA. ABAP Cloud is its clean-core, BTP-ready modern incarnation — and the foundation RAP is built on.",
+              "category": "framework"
+            },
+            {
               "tla": "REST",
               "expansion": "Representational State Transfer",
               "blurb": "The architectural style behind most web APIs: stateless HTTP, resources as URLs, verbs as HTTP methods (GET/POST/PUT/DELETE). OData is a RESTful protocol.",
@@ -459,6 +465,19 @@
             {
               "type": "drill",
               "kind": "mc",
+              "tla": "ABAP",
+              "prompt": "What does ABAP stand for?",
+              "answer": "Advanced Business Application Programming",
+              "distractors": [
+                "Automated Batch Application Processing",
+                "ABAP Business Application Platform"
+              ],
+              "kasimirRight": "ABAP — SAP's original language, older than most developers and still going strong! Correct. 🧓",
+              "kasimirWrong": "ABAP = Advanced Business Application Programming. SAP's classic language, and RAP's foundation."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
               "tla": "REST",
               "prompt": "What does REST stand for?",
               "answer": "Representational State Transfer",
@@ -484,7 +503,7 @@
             },
             {
               "type": "story",
-              "kasimir": "Lesson complete! You've mastered OData, RAP, REST, IDE. Kasimir approves. 🐱",
+              "kasimir": "Lesson complete! You've mastered OData, RAP, ABAP, REST, IDE. Kasimir approves. 🐱",
               "mood": "celebrate"
             }
           ]
@@ -705,6 +724,12 @@
               "category": "analytics"
             },
             {
+              "tla": "BDC",
+              "expansion": "SAP Business Data Cloud",
+              "blurb": "SAP's unified, fully-managed SaaS solution (announced 2025) that connects and harmonises data across SAP and third-party sources — built on SAP Datasphere, SAP Analytics Cloud, and Databricks.",
+              "category": "analytics"
+            },
+            {
               "tla": "SQL",
               "expansion": "Structured Query Language",
               "blurb": "The standard language for relational databases. In CAP, you should use CQL (CDS Query Language) instead of raw SQL — but HANA's SQL dialect is what runs under the hood.",
@@ -752,6 +777,19 @@
             {
               "type": "drill",
               "kind": "mc",
+              "tla": "BDC",
+              "prompt": "What does BDC stand for?",
+              "answer": "SAP Business Data Cloud",
+              "distractors": [
+                "Business Data Center",
+                "Batch Data Communication"
+              ],
+              "kasimirRight": "BDC — SAP's newest home for unified business data. Bang up to date! 📊",
+              "kasimirWrong": "BDC = SAP Business Data Cloud — SAP's unified data platform, not the old batch-input trick."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
               "tla": "SQL",
               "prompt": "What does SQL stand for?",
               "answer": "Structured Query Language",
@@ -777,7 +815,7 @@
             },
             {
               "type": "story",
-              "kasimir": "Lesson complete! You've mastered CPI, DWC, SQL, ODP. Kasimir approves. 🐱",
+              "kasimir": "Lesson complete! You've mastered CPI, DWC, BDC, SQL, ODP. Kasimir approves. 🐱",
               "mood": "celebrate"
             }
           ]
@@ -1166,6 +1204,204 @@
             {
               "type": "story",
               "kasimir": "Lesson complete! You've mastered ERP, GRC, AMS, RBAC. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unit-5-ai",
+      "title": "SAP & AI",
+      "icon": "🤖",
+      "order": 5,
+      "lessons": [
+        {
+          "id": "unit-5-ai-lesson-1",
+          "legacyId": 90013,
+          "title": "AI Foundations",
+          "acronyms": [
+            {
+              "tla": "AI",
+              "expansion": "Artificial Intelligence",
+              "blurb": "The broad field of building systems that perform tasks normally requiring human intelligence — reasoning, perception, language. SAP's \"Business AI\" strategy embeds it across the whole product suite.",
+              "category": "ai"
+            },
+            {
+              "tla": "ML",
+              "expansion": "Machine Learning",
+              "blurb": "A subset of AI where models learn patterns from data instead of being explicitly programmed. Powers SAP recommendations, forecasting, and the ValueList suggestions in this very project.",
+              "category": "ai"
+            },
+            {
+              "tla": "LLM",
+              "expansion": "Large Language Model",
+              "blurb": "A neural network trained on vast amounts of text to predict and generate language. The engine behind modern chat assistants — including the one narrating these lessons.",
+              "category": "ai"
+            },
+            {
+              "tla": "RAG",
+              "expansion": "Retrieval-Augmented Generation",
+              "blurb": "A pattern that grounds an LLM by first retrieving relevant documents, then having the model answer from them. Reduces hallucination — this project uses it for tutorial Q&A.",
+              "category": "ai"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Everyone's talking about AI, but half of them can't spell the acronyms. Let's fix that. AI, ML, LLM, RAG — the vocabulary you need before we get to the SAP-flavoured parts.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "AI",
+              "prompt": "What does AI stand for?",
+              "answer": "Artificial Intelligence",
+              "distractors": [
+                "Automated Inference",
+                "Augmented Interaction"
+              ],
+              "kasimirRight": "AI — teaching machines to think, and cats to nap ever more strategically. Correct! 🤖",
+              "kasimirWrong": "AI = Artificial Intelligence. The umbrella term for machines that mimic human reasoning."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "ML",
+              "prompt": "What does ML stand for?",
+              "answer": "Machine Learning",
+              "distractors": [
+                "Model Logic",
+                "Managed Learning"
+              ],
+              "kasimirRight": "ML — where machines learn from data rather than hard-coded rules. Well trained! 🎯",
+              "kasimirWrong": "ML = Machine Learning — the subset of AI where models learn patterns from data."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "LLM",
+              "prompt": "What does LLM stand for?",
+              "answer": "Large Language Model",
+              "distractors": [
+                "Linked Learning Module",
+                "Layered Logic Machine"
+              ],
+              "kasimirRight": "LLM — the giant text-predicting brains behind modern chatbots. Purrfect! 🧠",
+              "kasimirWrong": "LLM = Large Language Model — the huge neural nets trained on text to generate language."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "RAG",
+              "prompt": "What does RAG stand for?",
+              "answer": "Retrieval-Augmented Generation",
+              "distractors": [
+                "Rapid Application Generator",
+                "Response Aggregation Gateway"
+              ],
+              "kasimirRight": "RAG — grounding an LLM in real documents so it stops making things up. Sharp! 📚",
+              "kasimirWrong": "RAG = Retrieval-Augmented Generation — fetch relevant docs, then let the LLM answer from them."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered AI, ML, LLM, RAG. Kasimir approves. 🐱",
+              "mood": "celebrate"
+            }
+          ]
+        },
+        {
+          "id": "unit-5-ai-lesson-2",
+          "legacyId": 90014,
+          "title": "SAP's AI Stack",
+          "acronyms": [
+            {
+              "tla": "BAIP",
+              "expansion": "SAP Business AI Platform",
+              "blurb": "SAP's platform for building, deploying, and governing AI across business processes — bringing generative and predictive AI to BTP apps with enterprise data grounding.",
+              "category": "ai"
+            },
+            {
+              "tla": "NLP",
+              "expansion": "Natural Language Processing",
+              "blurb": "The AI discipline for understanding and generating human language — tokenisation, parsing, sentiment, translation. The foundation under every chatbot and search box.",
+              "category": "ai"
+            },
+            {
+              "tla": "ISLM",
+              "expansion": "Intelligent Scenario Lifecycle Management",
+              "blurb": "SAP's framework for managing embedded machine-learning scenarios end to end — training, deploying, and monitoring predictive models inside S/4HANA and BTP apps.",
+              "category": "ai"
+            },
+            {
+              "tla": "MCP",
+              "expansion": "Model Context Protocol",
+              "blurb": "An open standard for connecting AI assistants to external tools and data sources through a uniform interface. SAP tooling (like the cds-mcp and sap-devs MCP servers) speaks it.",
+              "category": "ai"
+            }
+          ],
+          "beats": [
+            {
+              "type": "story",
+              "kasimir": "Now the SAP twist. BAIP, NLP, ISLM, MCP — how SAP wraps all that clever maths into a governed, enterprise-ready platform. Even a cat can sound like a solution architect after this.",
+              "mood": "teaching"
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "BAIP",
+              "prompt": "What does BAIP stand for?",
+              "answer": "SAP Business AI Platform",
+              "distractors": [
+                "Business Application Integration Platform",
+                "BTP Analytics & Insights Portal"
+              ],
+              "kasimirRight": "BAIP — SAP's platform for embedding AI across business processes. Right on! 🚀",
+              "kasimirWrong": "BAIP = SAP Business AI Platform — SAP's platform for building and running business AI."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "NLP",
+              "prompt": "What does NLP stand for?",
+              "answer": "Natural Language Processing",
+              "distractors": [
+                "Neural Learning Pipeline",
+                "Native Language Parser"
+              ],
+              "kasimirRight": "NLP — teaching computers to read and write human language. Eloquent answer! 💬",
+              "kasimirWrong": "NLP = Natural Language Processing — the AI field for understanding and generating human language."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "ISLM",
+              "prompt": "What does ISLM stand for?",
+              "answer": "Intelligent Scenario Lifecycle Management",
+              "distractors": [
+                "Integrated Service Layer Model",
+                "Intelligent System Learning Module"
+              ],
+              "kasimirRight": "ISLM — SAP's framework for managing embedded AI scenarios end to end. Impressive! 🔄",
+              "kasimirWrong": "ISLM = Intelligent Scenario Lifecycle Management — SAP's way to operate embedded ML scenarios."
+            },
+            {
+              "type": "drill",
+              "kind": "mc",
+              "tla": "MCP",
+              "prompt": "What does MCP stand for?",
+              "answer": "Model Context Protocol",
+              "distractors": [
+                "Managed Cloud Platform",
+                "Multi-Channel Processing"
+              ],
+              "kasimirRight": "MCP — the open standard wiring AI models to tools and data. Very current! 🔌",
+              "kasimirWrong": "MCP = Model Context Protocol — the open standard connecting AI assistants to tools and data."
+            },
+            {
+              "type": "story",
+              "kasimir": "Lesson complete! You've mastered BAIP, NLP, ISLM, MCP. Kasimir approves. 🐱",
               "mood": "celebrate"
             }
           ]

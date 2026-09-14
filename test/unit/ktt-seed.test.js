@@ -9,6 +9,8 @@
 // assert getMyCompletedTutorials surfaces it with the SEEDED title + slug.
 
 import cds from '@sap/cds';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test, beforeAll, afterAll } from 'vitest';
 import { getMyCompletedTutorials } from '../../srv/lib/user-progress.js';
 import { __setFlagForTest, __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
@@ -19,6 +21,13 @@ const { POST } = cds.test('serve', '--project', '.', '--in-memory');
 const SEEDED_LEGACY_ID = 90001;
 const SEEDED_SLUG = 'unit-1-platform-lesson-1';
 const SEEDED_TITLE = "Who's SAP, and what's BTP?";
+
+// Expected row count is derived from the generated CSV itself (not hardcoded)
+// so adding lessons/units only requires regenerating the seed, not editing this test.
+const CSV_PATH = fileURLToPath(new URL('../../db/data/com.sap.developers.ims-KttLessons.csv', import.meta.url));
+const EXPECTED_LESSON_COUNT = readFileSync(CSV_PATH, 'utf8')
+  .split(/\r?\n/)
+  .filter((line, i) => i > 0 && line.trim().length > 0).length;
 
 let authed;
 beforeAll(async () => {
@@ -39,7 +48,7 @@ test('KttLessons catalog is seeded from the generated CSV (no manual insert)', a
   expect(seeded.slug).toBe(SEEDED_SLUG);
   expect(seeded.title).toBe(SEEDED_TITLE);
   const count = await SELECT.from(KttLessons);
-  expect(count.length).toBe(12);
+  expect(count.length).toBe(EXPECTED_LESSON_COUNT);
 });
 
 test('a completed lesson surfaces in MyCompletions with the SEEDED title/slug', async () => {
