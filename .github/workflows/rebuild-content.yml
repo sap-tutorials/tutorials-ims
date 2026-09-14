@@ -801,6 +801,27 @@ jobs:
           channel: ${{ steps.env.outputs.target }}
           min-slugs: '1'
 
+      # #2288 — same-filename image byte changes are invisible to the publish
+      # delta detector: publish hashes rendered HTML + source markdown, never the
+      # image bytes, so a screenshot edited in place (unchanged filename → unchanged
+      # /img-cdn URL) never triggers a republish and the stale image is served
+      # indefinitely. On a slug-targeted rebuild, re-warm just that tutorial's
+      # images through the content-aware ingest endpoint (POST /content/image
+      # dedups on image bytes), so changed bytes are re-stored while unchanged
+      # ones report 'unchanged'. Best-effort: a warm failure must never fail the
+      # content rebuild. Scoped to slug-targeted (not full) per #2288 decision —
+      # full rebuilds already re-warm the whole catalog elsewhere. CAP_BASE_URL is
+      # the already target-resolved srv url; the QA target needs its own key.
+      - name: Refresh tutorial images (slug-targeted)
+        if: ${{ steps.publish.outcome == 'success' && steps.mode.outputs.effective_mode == 'slug-targeted' && inputs.force-publish != true }}
+        continue-on-error: true
+        env:
+          CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
+          CONTENT_API_KEY: ${{ steps.env.outputs.target == 'qa' && secrets.CONTENT_API_KEY_QA || secrets.CONTENT_API_KEY }}
+          GITHUB_TOKEN:    ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
+          REFRESH_SLUG:    ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
+        run: npx tsx scripts/backfill-images.ts --slug "$REFRESH_SLUG"
+
       - name: Purge orphan tutorials
         id: purge
         if: |
