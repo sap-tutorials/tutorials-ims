@@ -1106,7 +1106,20 @@ async function main() {
   let remoteHashes: Record<string, string> = {};
   if (mode !== 'force') {
     log(`Fetching remote hashes from ${opts.baseUrl}/content/hashes...`);
-    try { remoteHashes = await fetchRemoteHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }); }
+    // #2286 — retry transient 500s (HANA pool-acquire timeout) so a momentary
+    // load spike during delta detection doesn't fatally abort the rebuild
+    // before a session is even opened. 503 already returns {} inside the client.
+    try {
+      remoteHashes = await withRetry(
+        () => fetchRemoteHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }),
+        {
+          attempts: 4, backoffMs: [1000, 3000, 6000], jitterRatio: 0.2,
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] /content/hashes fetch failed (attempt ${attempt}/4): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
+    }
     catch (err) {
       console.error(`Cannot reach ${opts.baseUrl}/content/hashes: ${formatErrorChain(err)}`);
       process.exit(1);
@@ -1201,11 +1214,25 @@ async function main() {
   // small and the server happily accepts them mixed with regular slugs).
   const sidecarKeys = await collectSidecars(opts.hugoDir, payload, log, channel);
 
-  const begin = await beginSession({
-    baseUrl: opts.baseUrl, apiKey: opts.apiKey,
-    trigger: opts.trigger, hugoVersion: opts.hugoVersion, expectedSlugCount: targetSlugs.length,
-    initiator: opts.initiator,
-  });
+  // #2286 — begin was the ONE publish HTTP call in the happy path with neither
+  // withRetry nor a try/catch, so a transient HANA pool-acquire 500 ("Pool
+  // resource could not be acquired within 1s") aborted the whole rebuild via
+  // the top-level Fatal catch. Wrap it like commit: 500/502/503/504 are already
+  // classified transient in publish-retry.ts; jitter de-syncs the three DevRel
+  // projects so a briefly-saturated pool isn't re-hit in lockstep.
+  const begin = await withRetry(
+    () => beginSession({
+      baseUrl: opts.baseUrl, apiKey: opts.apiKey,
+      trigger: opts.trigger, hugoVersion: opts.hugoVersion, expectedSlugCount: targetSlugs.length,
+      initiator: opts.initiator,
+    }),
+    {
+      attempts: 5, backoffMs: [2000, 5000, 10000, 20000], jitterRatio: 0.2,
+      onAttemptFail: (attempt, err, willRetry) => {
+        console.error(`[publish-content] begin failed (attempt ${attempt}/5): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+      },
+    }
+  );
   log(`Session ${begin.sessionId} version ${begin.version} (expires ${begin.expiresAt})`);
 
   const allKeys = [...targetSlugs, ...sidecarKeys];

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, renderConceptsPhase
 } from '../lib/publish-client.js';
+import { withRetry } from '../lib/publish-retry.js';
 
 const baseUrl = 'http://localhost:4004';
 const apiKey  = 'test-key';
@@ -34,6 +35,43 @@ describe('publish-client', () => {
     await expect(
       beginSession({ baseUrl, apiKey, trigger: 't', hugoVersion: 'v1', expectedSlugCount: 0 })
     ).rejects.toMatchObject({ status: 409 });
+  });
+
+  // #2286 — begin under withRetry rides out a transient HANA pool-acquire 500
+  // ("Pool resource could not be acquired within 1s") instead of aborting the
+  // whole prod rebuild. This is the exact composition main() now uses.
+  it('beginSession under withRetry recovers from a transient pool-timeout 500', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, status: 500,
+        text: () => Promise.resolve('{"error":"Pool resource could not be acquired within 1s"}'),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 201,
+        json: () => Promise.resolve({ sessionId: 'abc', version: 8, expiresAt: '2026-09-14T00:00:00Z' }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const out = await withRetry(
+      () => beginSession({ baseUrl, apiKey, trigger: 't', hugoVersion: 'v1', expectedSlugCount: 1 }),
+      { attempts: 5, backoffMs: [0] }
+    );
+    expect(out).toMatchObject({ sessionId: 'abc', version: 8 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  // A non-transient status (e.g. 409 lock held) must NOT be retried.
+  it('beginSession under withRetry does not retry a permanent 409', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false, status: 409, text: () => Promise.resolve('lock held'),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      withRetry(
+        () => beginSession({ baseUrl, apiKey, trigger: 't', hugoVersion: 'v1', expectedSlugCount: 1 }),
+        { attempts: 5, backoffMs: [0] }
+      )
+    ).rejects.toMatchObject({ status: 409 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('appendBatch posts files/metadata/bodyTexts and returns server result', async () => {
