@@ -162,7 +162,11 @@ const showSetup = computed(() =>
   !isDemo.value && !eventId.value
 )
 
-const qrUrl = computed(() => participateUrl.value || 'https://developers.sap.com/app-space.html')
+const qrUrl = computed(() => {
+  if (participateUrl.value) return participateUrl.value
+  const base = `${window.location.origin}/app-space`
+  return eventId.value ? `${base}?eventId=${eventId.value}` : base
+})
 const qrFg = computed(() => isDark.value ? '#eaecee' : '#32363a')
 const qrBg = computed(() => isDark.value ? '#1c2228' : '#ffffff')
 
@@ -388,7 +392,7 @@ onMounted(() => {
               Scan the code or visit the link below
             </p>
             <a class="participate-link" :href="qrUrl" target="_blank">
-              {{ participateUrl || 'developers.sap.com/app-space.html' }}
+              {{ participateUrl || qrUrl.replace(/^https?:\/\//, '') }}
             </a>
           </div>
           <div class="right-sidebar">
