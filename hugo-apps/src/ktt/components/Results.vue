@@ -1,19 +1,28 @@
 <script setup lang="ts">
-defineProps<{
+import { PASS_RATIO } from '../lib/engine';
+
+const props = defineProps<{
   xp: number;
   lessonId: string;
   lessonTitle: string;
   banterLine: string | null;
+  passed: boolean;
+  correct: number;
+  total: number;
 }>();
 
 const emit = defineEmits<{
   (e: 'continue'): void;
+  (e: 'retry'): void;
   (e: 'back'): void;
 }>();
+
+const passPercent = Math.round(PASS_RATIO * 100);
 </script>
 
 <template>
-  <div class="ktt-results" data-testid="ktt-results">
+  <!-- Passed: mastered -->
+  <div v-if="passed" class="ktt-results" data-testid="ktt-results">
     <h2>Lesson Complete!</h2>
     <p class="ktt-results__lesson">{{ lessonTitle }}</p>
 
@@ -28,6 +37,29 @@ const emit = defineEmits<{
     <div class="ktt-results__actions">
       <button data-testid="ktt-results-continue" @click="emit('continue')">
         Keep Learning
+      </button>
+      <button data-testid="ktt-results-back" class="ktt-results__back" @click="emit('back')">
+        Back to Map
+      </button>
+    </div>
+  </div>
+
+  <!-- Not passed: below the mastery threshold — no XP banked, offer a retry -->
+  <div v-else class="ktt-results ktt-results--failed" data-testid="ktt-results-failed">
+    <h2>Not quite yet</h2>
+    <p class="ktt-results__lesson">{{ lessonTitle }}</p>
+
+    <div class="ktt-results__score" data-testid="ktt-results-score">
+      You got {{ correct }} of {{ total }} right — you need {{ passPercent }}% to master this lesson.
+    </div>
+
+    <p v-if="banterLine" class="ktt-results__banter">
+      {{ banterLine }}
+    </p>
+
+    <div class="ktt-results__actions">
+      <button data-testid="ktt-results-retry" @click="emit('retry')">
+        Try Again
       </button>
       <button data-testid="ktt-results-back" class="ktt-results__back" @click="emit('back')">
         Back to Map
@@ -57,6 +89,13 @@ const emit = defineEmits<{
   font-size: 1.4rem;
   font-weight: bold;
   color: #28a745;
+}
+
+.ktt-results__score {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #b45309;
+  max-width: 38ch;
 }
 
 .ktt-results__banter {
@@ -103,6 +142,10 @@ html.dark .ktt-results__lesson {
 
 html.dark .ktt-results__xp {
   color: #4ade80;
+}
+
+html.dark .ktt-results__score {
+  color: #fbbf24;
 }
 
 html.dark .ktt-results__banter {

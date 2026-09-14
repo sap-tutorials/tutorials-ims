@@ -59,6 +59,14 @@ export interface Session {
 
 export const XP_PER_CORRECT = 10;
 
+/**
+ * Fraction of a lesson's drills that must be answered correctly to "master" it.
+ * Bug C fix: completion used to fire whenever the beat queue emptied, so a
+ * learner who missed every drill still saw "You've mastered …". Mastery is now
+ * gated on this ratio (see `passed`).
+ */
+export const PASS_RATIO = 0.7;
+
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
@@ -127,4 +135,27 @@ export function advance(s: Session): void {
 /** Return true when all beats in the queue have been visited. */
 export function isComplete(s: Session): boolean {
   return currentBeat(s) === null;
+}
+
+/** Count the distinct drill beats in a lesson (the mastery denominator). */
+export function totalDrills(lesson: KttLesson): number {
+  return lesson.beats.filter((b) => b.type === 'drill').length;
+}
+
+/**
+ * Fraction of the lesson's drills answered correctly, in [0, 1].
+ *
+ * Denominator is the count of DISTINCT drills (`totalDrills`), not attempts —
+ * a wrong-then-right drill (re-queued once) still counts as one drill worth one
+ * correct. A lesson with no drills (pure story) scores 1 (nothing to get wrong).
+ */
+export function scoreRatio(s: Session, lesson: KttLesson): number {
+  const total = totalDrills(lesson);
+  if (total === 0) return 1;
+  return s.correct / total;
+}
+
+/** True when the learner cleared the mastery threshold for this lesson. */
+export function passed(s: Session, lesson: KttLesson): boolean {
+  return scoreRatio(s, lesson) >= PASS_RATIO;
 }

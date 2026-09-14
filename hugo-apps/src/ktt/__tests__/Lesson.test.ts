@@ -110,8 +110,10 @@ describe('Lesson', () => {
     // Allow a tick for any async work
     await new Promise(r => setTimeout(r, 0));
     expect(w.emitted('complete')).toBeTruthy();
-    // 1A: emits (lessonId, sessionXp) — one correct drill = 10 XP
-    expect(w.emitted('complete')![0]).toEqual(['core-1', 10]);
+    // 1A: emits a payload — one correct drill of one = 10 XP, passed
+    expect(w.emitted('complete')![0]).toEqual([
+      { lessonId: 'core-1', xp: 10, passed: true, correct: 1, total: 1 },
+    ]);
   });
 
   it('wrong answer shows wrong mood and does not emit complete', async () => {
@@ -165,8 +167,10 @@ describe('Lesson', () => {
 
     await new Promise(r => setTimeout(r, 0));
     expect(w.emitted('complete')).toBeTruthy();
-    // Two correct answers = 20 XP
-    expect(w.emitted('complete')![0]).toEqual(['core-2', 20]);
+    // Two correct answers = 20 XP, both drills right → passed
+    expect(w.emitted('complete')![0]).toEqual([
+      { lessonId: 'core-2', xp: 20, passed: true, correct: 2, total: 2 },
+    ]);
   });
 
   // 1B: the emitted XP is the session delta (sessionXp), not a floor
@@ -190,9 +194,36 @@ describe('Lesson', () => {
     await new Promise(r => setTimeout(r, 0));
     expect(w.emitted('complete')).toBeTruthy();
     // Only 2 correct answers (10 each) despite 3 total attempts
-    const emittedXp = w.emitted('complete')![0][1] as number;
-    expect(emittedXp).toBe(20);
+    const payload = w.emitted('complete')![0][0] as { xp: number };
+    expect(payload.xp).toBe(20);
     // It's definitely NOT the hardcoded floor of 10
-    expect(emittedXp).toBeGreaterThanOrEqual(10);
+    expect(payload.xp).toBeGreaterThanOrEqual(10);
+  });
+
+  it('emits passed:false with the score when below the 70% threshold', async () => {
+    const w = mount(Lesson, { props: { lesson: twoDrillLesson } });
+    // Answer first wrong twice (re-queued once, second wrong sticks)
+    let choices = w.findAll('[data-testid="ktt-choice"]');
+    await choices.find(c => c.text() === 'Better Tech Portal')!.trigger('click');
+    await w.find('[data-testid="ktt-next"]').trigger('click');
+
+    // Answer second correctly
+    choices = w.findAll('[data-testid="ktt-choice"]');
+    await choices.find(c => c.text() === 'Systems Applications Products')!.trigger('click');
+    await w.find('[data-testid="ktt-next"]').trigger('click');
+
+    // The first drill was re-queued to the end — answer it wrong again
+    choices = w.findAll('[data-testid="ktt-choice"]');
+    await choices.find(c => c.text() === 'Better Tech Portal')!.trigger('click');
+    await w.find('[data-testid="ktt-next"]').trigger('click');
+
+    await new Promise(r => setTimeout(r, 0));
+    expect(w.emitted('complete')).toBeTruthy();
+    // 1 of 2 correct = 50% < 70% → not passed
+    expect(w.emitted('complete')![0]).toEqual([
+      { lessonId: 'core-2', xp: 10, passed: false, correct: 1, total: 2 },
+    ]);
+    // Not a celebration
+    expect(w.find('.kasimir--celebrate').exists()).toBe(false);
   });
 });
