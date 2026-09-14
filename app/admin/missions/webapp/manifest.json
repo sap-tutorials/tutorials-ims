@@ -109,6 +109,19 @@
                     "route": "MissionsObjectPage"
                   }
                 }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "copyMission": {
+                      "press": "sap.tutorials.admin.missions.ext.CopyMission.onCopyMission",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Copy Mission",
+                      "requiresSelection": true
+                    }
+                  }
+                }
               }
             }
           },

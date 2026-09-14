@@ -478,4 +478,76 @@ describe('AdminService', () => {
       for (const fb of data.feedbackItems) expect(fb.tutorialSlug).toBe(slug);
     });
   });
+
+  describe('copyMission (deep copy) — #2300', () => {
+    let srcId;
+
+    beforeAll(async () => {
+      const {
+        Missions, CompletionPaths, CompletionPathItems,
+        MissionTags, MissionCategories, Tags, Categories, Tutorials,
+      } = cds.entities('com.sap.developers.ims');
+
+      const tutId = cds.utils.uuid();
+      const tagId = cds.utils.uuid();
+      const catId = cds.utils.uuid();
+      srcId = cds.utils.uuid();
+      const pathId = cds.utils.uuid();
+
+      await INSERT.into(Tutorials).entries({ ID: tutId, title: 'T', slug: 'copy-src-tut' });
+      await INSERT.into(Tags).entries({ ID: tagId, name: 'copytag' });
+      await INSERT.into(Categories).entries({ ID: catId, name: 'copycat' });
+      await INSERT.into(Missions).entries({
+        ID: srcId, slug: 'copy-src', title: 'Copy Source', published: true,
+        missionType: 'SEQUENTIAL', experienceTag: 'beginner',
+        communityMissionId: 'orig-community', legacyId: 4242,
+      });
+      await INSERT.into(CompletionPaths).entries({
+        ID: pathId, mission_ID: srcId, name: 'Default', slug: 'copy-src-default',
+      });
+      await INSERT.into(CompletionPathItems).entries([
+        { ID: cds.utils.uuid(), path_ID: pathId, tutorial_ID: tutId, taskType: 'TUTORIAL', itemOrder: 0 },
+        { ID: cds.utils.uuid(), path_ID: pathId, taskType: 'CHECKPOINT', checkpointTitle: 'CP', itemOrder: 1 },
+      ]);
+      await INSERT.into(MissionTags).entries({ ID: cds.utils.uuid(), mission_ID: srcId, tag_ID: tagId });
+      await INSERT.into(MissionCategories).entries({ ID: cds.utils.uuid(), mission_ID: srcId, category_ID: catId, score: 0.5 });
+    });
+
+    it('duplicates a mission with -copy slug, unpublished, and clones the full path graph', async () => {
+      const { status, data } = await project.post('/admin/copyMission', { ID: srcId }, adminAuth);
+      expect(status).toBe(200);
+      expect(data.ID).toBeDefined();
+      expect(data.ID).not.toBe(srcId);
+      expect(data.slug).toBe('copy-src-copy');
+      expect(data.published).toBe(false);
+      // community identity + legacy key are NOT carried over
+      expect(data.communityMissionId).toBeNull();
+      expect(data.legacyId).toBeNull();
+
+      const {
+        CompletionPaths, CompletionPathItems, MissionTags, MissionCategories,
+      } = cds.entities('com.sap.developers.ims');
+      const paths = await SELECT.from(CompletionPaths).where({ mission_ID: data.ID });
+      expect(paths.length).toBe(1);
+      const items = await SELECT.from(CompletionPathItems).where({ path_ID: paths[0].ID });
+      expect(items.length).toBe(2);
+      expect(items.find((i) => i.taskType === 'TUTORIAL')).toBeTruthy();
+      const mtags = await SELECT.from(MissionTags).where({ mission_ID: data.ID });
+      expect(mtags.length).toBe(1);
+      const mcats = await SELECT.from(MissionCategories).where({ mission_ID: data.ID });
+      expect(mcats.length).toBe(1);
+
+      // source untouched
+      const { Missions } = cds.entities('com.sap.developers.ims');
+      const [orig] = await SELECT.from(Missions).where({ ID: srcId });
+      expect(orig.slug).toBe('copy-src');
+      expect(orig.published).toBe(true);
+    });
+
+    it('disambiguates the slug when -copy already exists', async () => {
+      const { data } = await project.post('/admin/copyMission', { ID: srcId }, adminAuth);
+      // first copy took copy-src-copy; this one falls back
+      expect(data.slug).toBe('copy-src-copy-2');
+    });
+  });
 });
