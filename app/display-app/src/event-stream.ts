@@ -121,12 +121,12 @@ export function useEventStream() {
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       const json = await res.json()
-      const data: Array<{ bucketName: string; count: number }> = json.value ?? json
-      if (data.length === 0) {
-        connectionState.value = 'error'
-        errorMessage.value = `Event ID ${eventId} not found or has no completed tutorials yet.`
-        return
-      }
+      // getEventBuckets returns { eventName, eventType, hasLogo, buckets:[...] } (#2133);
+      // fall back to legacy array shapes for safety.
+      const data: Array<{ bucketName: string; count: number }> =
+        json.buckets ?? json.value ?? (Array.isArray(json) ? json : [])
+      // Empty buckets = event exists but no completions yet (a 404 event is rejected
+      // above). Don't error out — proceed to the socket so late completions render (#2294).
       buckets.value = data.map(b => ({ name: b.bucketName, count: b.count, justUpdated: false }))
       sortBuckets()
       recalcTotal()
