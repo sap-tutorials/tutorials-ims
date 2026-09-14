@@ -1334,6 +1334,14 @@ extend service AdminService with {
     missionSlug : String(255),
     title       : String(255)
   ) returns AdminService.Missions;
+
+  // #2300 — Deep-copy an existing Mission (structure + full path graph +
+  // tag/category links) into a new unpublished Mission with a `-copy` slug.
+  // Returns the new Mission so the Missions LR can navigate into edit mode.
+  // Referenced Tutorials/Groups/Tags/Prizes are linked, NOT duplicated.
+  // Handler in srv/admin-service.js. Admin-gated via the service-level
+  // @requires:'Admin' (line 13); no extra per-action gate needed.
+  action copyMission(ID : UUID) returns AdminService.Missions;
 }
 
 // Topic Clusters admin surface (#topics-discovery, Task 11).

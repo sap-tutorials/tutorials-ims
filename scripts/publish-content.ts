@@ -9,6 +9,7 @@ import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHash
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
+import { collectAssertSpecs, publishAssertSpecs } from './lib/publish-asserts.js';
 import { publishValidateAnswerSpecs } from './lib/publish-validate-answer.js';
 import { publishContributors } from './publish/publish-contributors.js';
 import { publishValidationRules } from './publish/publish-validation-rules.js';
@@ -244,7 +245,30 @@ export function buildSourcePayload(
   return { sources, sourceHashes };
 }
 
-// --- Body text extraction (for HANA full-text search) ---
+/**
+ * #2245: Build the per-slug git commit SHA map for the append payload.
+ * For each slug, reads `<cacheDir>/<slug-lowercase>.commit-sha` (written by
+ * fetch-tutorials.ts alongside the main .md cache file). Slugs with no sidecar
+ * are silently skipped — the server stores null sourceCommit for those rows.
+ *
+ * The key in the returned map is the ORIGINAL-CASE slug (matching how `sources`
+ * and `files` are keyed), so the server's `sourceCommits[slug]` lookup lands on
+ * the correct entry. The file lookup uses `slug.toLowerCase()` to match the
+ * lowercase-canonical filename written by fetch-tutorials.
+ */
+export function buildSourceCommitsPayload(
+  slugs: string[],
+  cacheDir: string,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const slug of slugs) {
+    const shaPath = join(cacheDir, `${slug.toLowerCase()}.commit-sha`);
+    if (!existsSync(shaPath)) continue;
+    const sha = readFileSync(shaPath, 'utf-8').trim();
+    if (sha) result[slug] = sha;
+  }
+  return result;
+}
 
 const TUTORIAL_MAIN_RE = /<main\b[^>]*class\s*=\s*["']?[^"'>]*\btutorial-main\b[^"'>]*["']?[^>]*>([\s\S]*?)<\/main>/i;
 const BODY_RE = /<body\b[^>]*>([\s\S]*?)<\/body>/i;
@@ -1082,7 +1106,20 @@ async function main() {
   let remoteHashes: Record<string, string> = {};
   if (mode !== 'force') {
     log(`Fetching remote hashes from ${opts.baseUrl}/content/hashes...`);
-    try { remoteHashes = await fetchRemoteHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }); }
+    // #2286 — retry transient 500s (HANA pool-acquire timeout) so a momentary
+    // load spike during delta detection doesn't fatally abort the rebuild
+    // before a session is even opened. 503 already returns {} inside the client.
+    try {
+      remoteHashes = await withRetry(
+        () => fetchRemoteHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }),
+        {
+          attempts: 4, backoffMs: [1000, 3000, 6000], jitterRatio: 0.2,
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] /content/hashes fetch failed (attempt ${attempt}/4): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
+    }
     catch (err) {
       console.error(`Cannot reach ${opts.baseUrl}/content/hashes: ${formatErrorChain(err)}`);
       process.exit(1);
@@ -1167,15 +1204,35 @@ async function main() {
     buildSourcePayload(tutorialOnlySlugs, cacheDir);
   log(`Source markdown payload: ${Object.keys(sourcesAll).length}/${tutorialOnlySlugs.length} slugs have upstream .md files`);
 
+  // #2245: build per-slug git commit SHA map (keyed by original-case slug,
+  // matching `files`). Reads .commit-sha sidecars written by fetch-tutorials.
+  // Silently empty when sidecars are absent (e.g. first run or cached path).
+  const sourceCommitsAll = buildSourceCommitsPayload(tutorialOnlySlugs, cacheDir);
+  log(`Source commit SHA payload: ${Object.keys(sourceCommitsAll).length}/${tutorialOnlySlugs.length} slugs have commit SHAs`);
+
   // __nav__ / __404__ / __shell__ ride along on the first batch (these are
   // small and the server happily accepts them mixed with regular slugs).
   const sidecarKeys = await collectSidecars(opts.hugoDir, payload, log, channel);
 
-  const begin = await beginSession({
-    baseUrl: opts.baseUrl, apiKey: opts.apiKey,
-    trigger: opts.trigger, hugoVersion: opts.hugoVersion, expectedSlugCount: targetSlugs.length,
-    initiator: opts.initiator,
-  });
+  // #2286 — begin was the ONE publish HTTP call in the happy path with neither
+  // withRetry nor a try/catch, so a transient HANA pool-acquire 500 ("Pool
+  // resource could not be acquired within 1s") aborted the whole rebuild via
+  // the top-level Fatal catch. Wrap it like commit: 500/502/503/504 are already
+  // classified transient in publish-retry.ts; jitter de-syncs the three DevRel
+  // projects so a briefly-saturated pool isn't re-hit in lockstep.
+  const begin = await withRetry(
+    () => beginSession({
+      baseUrl: opts.baseUrl, apiKey: opts.apiKey,
+      trigger: opts.trigger, hugoVersion: opts.hugoVersion, expectedSlugCount: targetSlugs.length,
+      initiator: opts.initiator,
+    }),
+    {
+      attempts: 5, backoffMs: [2000, 5000, 10000, 20000], jitterRatio: 0.2,
+      onAttemptFail: (attempt, err, willRetry) => {
+        console.error(`[publish-content] begin failed (attempt ${attempt}/5): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+      },
+    }
+  );
   log(`Session ${begin.sessionId} version ${begin.version} (expires ${begin.expiresAt})`);
 
   const allKeys = [...targetSlugs, ...sidecarKeys];
@@ -1196,6 +1253,11 @@ async function main() {
           // pickEntries returns {} for them, which the server treats as
           // "no source for this batch" and skips the source-side INSERT.
           sources:   pickEntries(sourcesAll,     batch),
+          // #2245: thread per-slug git commit SHA so the server stamps
+          // sourceCommit on each ContentCurrent row. Sidecar keys produce {}
+          // (no .commit-sha sidecar exists for __shell__ etc.) which is fine
+          // — the server stores null for missing entries.
+          sourceCommits: pickEntries(sourceCommitsAll, batch),
         }),
         {
           attempts: 3, backoffMs: [1000, 3000, 9000],
@@ -1361,6 +1423,30 @@ async function main() {
     }
   } catch (err) {
     console.error('[publish-content] code-check spec publish failed (non-fatal):', formatErrorChain(err));
+    // Do NOT exit non-zero — content publish is the critical path; specs are auxiliary.
+  }
+
+  // --- assert spec publish (non-fatal auxiliary step, issue #2245) ---
+  try {
+    const cacheDir = channel === 'qa'
+      ? join(process.cwd(), '.tutorial-cache-qa')
+      : join(process.cwd(), '.tutorial-cache');
+    const specs = collectAssertSpecs(cacheDir);
+    if (specs.length) {
+      log(`Publishing ${specs.length} assert spec(s) to /content/assert-specs`);
+      const result = await withRetry(
+        () => publishAssertSpecs(opts.baseUrl, opts.apiKey, specs),
+        {
+          attempts: 3, backoffMs: [1000, 3000],
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] assert spec publish failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
+      log(`assert specs upserted=${result.upserted} skipped=${result.skipped.length}`);
+    }
+  } catch (err) {
+    console.error('[publish-content] assert spec publish failed (non-fatal):', formatErrorChain(err));
     // Do NOT exit non-zero — content publish is the critical path; specs are auxiliary.
   }
 

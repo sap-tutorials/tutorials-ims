@@ -46,7 +46,8 @@ annotate AdminService.Events with {
             };
   startDate @Common.Label: 'Start Date';
   endDate   @Common.Label: 'End Date';
-  description @Common.Label: 'Description' @UI.MultiLineText;   // Shown on app-space hero (#2133)
+  description @Common.Label: 'Description (Markdown)' @UI.MultiLineText   // #2296: rendered as formatted HTML on app-space hero
+              @Common.QuickInfo: 'Markdown supported — bold, lists, and links render on the App Space page.';
   logoUpdatedAt @Common.Label: 'Logo Updated' @Common.FieldControl: #ReadOnly;
   timeZone  @Common.Label: 'Time Zone'
             @Common.ValueList: {

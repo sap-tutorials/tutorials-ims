@@ -166,13 +166,13 @@ export async function getMyCompletedTutorials(user) {
   const dbUserId = await resolveDbUserId(user);
   if (!dbUserId) return [];
 
-  const { TaskRecords, Tutorials, Puzzles, Petoberfests } = cds.entities('com.sap.developers.ims');
+  const { TaskRecords, Tutorials, Puzzles, Petoberfests, KttLessons } = cds.entities('com.sap.developers.ims');
 
   const records = await SELECT.from(TaskRecords)
     .columns('taskLegacyId', 'taskType', 'completionDate', 'modifiedAt', 'titleSnapshot', 'attemptNumber')
     .where({
       user_ID: dbUserId,
-      taskType: { in: ['TUTORIAL', 'PUZZLE', 'PETOBERFEST'] },
+      taskType: { in: ['TUTORIAL', 'PUZZLE', 'PETOBERFEST', 'KTT_LESSON'] },
       status: { in: ['COMPLETED', 'SUPERSEDED'] }
     });
   if (records.length === 0) return [];
@@ -180,13 +180,15 @@ export async function getMyCompletedTutorials(user) {
   const tutorialIds = [];
   const puzzleIds = [];
   const petoberfestIds = [];
+  const kttIds = [];
   for (const r of records) {
     if (r.taskType === 'TUTORIAL') tutorialIds.push(r.taskLegacyId);
     else if (r.taskType === 'PUZZLE') puzzleIds.push(r.taskLegacyId);
     else if (r.taskType === 'PETOBERFEST') petoberfestIds.push(r.taskLegacyId);
+    else if (r.taskType === 'KTT_LESSON') kttIds.push(r.taskLegacyId);
   }
 
-  const [tutorials, puzzles, petoberfests] = await Promise.all([
+  const [tutorials, puzzles, petoberfests, kttLessons] = await Promise.all([
     tutorialIds.length
       ? SELECT.from(Tutorials)
           .columns('legacyId', 'slug', 'title', 'primaryTag', 'experienceTag', 'averageTimeToComplete')
@@ -201,22 +203,31 @@ export async function getMyCompletedTutorials(user) {
       ? SELECT.from(Petoberfests)
           .columns('legacyId', 'slug', 'title')
           .where({ legacyId: { in: petoberfestIds } })
+      : [],
+    kttIds.length
+      ? SELECT.from(KttLessons)
+          .columns('legacyId', 'slug', 'title')
+          .where({ legacyId: { in: kttIds } })
       : []
   ]);
 
   const tutorialMeta = new Map(tutorials.map(t => [t.legacyId, t]));
   const puzzleMeta = new Map(puzzles.map(p => [p.legacyId, p]));
   const petoberfestMeta = new Map(petoberfests.map(p => [p.legacyId, p]));
+  const kttMeta = new Map(kttLessons.map(k => [k.legacyId, k]));
 
   const rows = [];
   for (const r of records) {
     const kind = r.taskType === 'PUZZLE' ? 'puzzle'
       : r.taskType === 'PETOBERFEST' ? 'petoberfest'
+      : r.taskType === 'KTT_LESSON' ? 'ktt'
       : 'tutorial';
     const meta = kind === 'puzzle'
       ? puzzleMeta.get(r.taskLegacyId)
       : kind === 'petoberfest'
       ? petoberfestMeta.get(r.taskLegacyId)
+      : kind === 'ktt'
+      ? kttMeta.get(r.taskLegacyId)
       : tutorialMeta.get(r.taskLegacyId);
     if (!meta?.slug) continue;
     rows.push({

@@ -1,7 +1,7 @@
 'use strict';
 
-const { readdirSync, existsSync, writeFileSync } = require('node:fs');
-const { join } = require('node:path');
+const { readdirSync, existsSync, writeFileSync, mkdirSync } = require('node:fs');
+const { join, dirname } = require('node:path');
 const { mergeRetention } = require('./lib/asset-retention.cjs');
 
 // Hash detection: support TWO formats from the build pipeline:
@@ -16,9 +16,21 @@ function isHashedFile(filename) {
   return VITE_HASHED_RE.test(filename) || HUGO_HASHED_RE.test(filename);
 }
 
+// Collect hashed files RECURSIVELY, returning paths relative to `dir` with
+// forward slashes (e.g. 'chunks/csrf-fetch-C6Fpypfx.js'). Recursion matters:
+// Vite emits shared code (csrf-fetch, format-date, …) as content-hashed files
+// under `chunks/`, imported by the top-level island entry bundles. A top-level
+// scan never saw those, so they were never recorded in the retention manifest
+// and never carried forward. When a churny chunk's hash rotated on a fresh CI
+// build, already-published HTML importing the OLD chunk 404'd (the events band
+// bug). Tracking chunks with the SAME last-seen/window logic as entries fixes
+// this: a chunk is always emitted in the same build as the entries importing
+// it, so its lastSeenMs tracks theirs and it carries forward exactly when they do.
 function collectHashedFiles(dir) {
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter(isHashedFile);
+  return readdirSync(dir, { recursive: true })
+    .map((f) => String(f).split(/[\\/]/).join('/'))     // normalize win32 backslashes
+    .filter((rel) => isHashedFile(rel.split('/').pop())); // hash test on the basename
 }
 
 function parseArgs(argv) {
@@ -49,6 +61,7 @@ async function downloadTo(url, dest, timeoutMs = 30000) {
     const res = await fetch(url, { signal: ac.signal });
     if (!res.ok) return false;
     const buf = Buffer.from(await res.arrayBuffer());
+    mkdirSync(dirname(dest), { recursive: true }); // carried chunks live in a chunks/ subdir
     writeFileSync(dest, buf);
     return true;
   } catch { return false; } finally { clearTimeout(t); }

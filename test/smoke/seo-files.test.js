@@ -60,6 +60,20 @@ describe('SEO files', () => {
     expect(text).toMatch(/AGENTS\.md.*Guidance for AI Agents/);
   });
 
+  it('serves /sitemap.md navigable map with brand header and Missions section', async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/sitemap.md`);
+    expect(res.status).toBe(200);
+    // Approuter serves .md as markdown; some edge configs fall back to text/plain.
+    expect(res.headers.get('content-type')).toMatch(/text\/(markdown|plain|x-web-markdown)/);
+    const text = await res.text();
+    expect(text).toMatch(/^# SAP Developers Tutorials/);
+    expect(text).toMatch(/## Navigation/);
+    expect(text).toMatch(/## Missions/);
+    // Either missions are expanded (tutorial links) or the /missions/ index
+    // fallback is present — both are valid; a sparse catalog must not fail this.
+    expect(text).toMatch(/\/(tutorials|missions)\//);
+  });
+
   it('serves og-default image', async () => {
     const res = await fetchWithRetry(`${BASE_URL}/img/og-default.png`);
     expect(res.status).toBe(200);

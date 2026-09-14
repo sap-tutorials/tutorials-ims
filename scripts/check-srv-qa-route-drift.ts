@@ -71,10 +71,28 @@ const SRV_QA_SERVER = join(REPO_ROOT, 'srv-qa', 'server.js');
  * Format: 'METHOD /path'
  */
 const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
+  'GET /content/tutorials/:slug/provenance':
+    'Signed provenance envelope (#2245) — an anonymous, public, read-only prod content ' +
+    'surface that emits a JWS over PUBLISHED-tutorial freshness/provenance. Feature-flagged ' +
+    '(PROVENANCE_ENVELOPE_ENABLED, DB config, default OFF, DEV-first) and fail-open. It does ' +
+    'not fit the QA channel: srv-qa serves /content/tutorials/*slug entirely behind ' +
+    'requireAuthorScope (author-draft preview), the PROVENANCE_SIGNING_KEY credstore secret is ' +
+    'not provisioned for srv-qa, and provenance is meaningful only for published content, not ' +
+    'in-flight -Contribution drafts. Re-evaluate if QA ever gains a published-content trust surface.',
+  'GET /content/tutorials/:slug/skill':
+    'Installable Skill bundle (#2245) — an anonymous, public, read-only prod content ' +
+    'surface that streams a zip (SKILL.md + verify.sh from assert blocks + provenance stamp) ' +
+    'over PUBLISHED tutorials. Feature-flagged (SKILL_BUNDLE_ENABLED, DB config, default OFF, ' +
+    'DEV-first) and fail-open. Not a QA-channel surface: srv-qa serves tutorials behind ' +
+    'requireAuthorScope (author-draft preview) and the Skill bundle is meaningful only for ' +
+    'published content. Mirror of the /provenance allowlist rationale.',
   'POST /content/code-check-specs':
     'AI code-check (#171) — gated behind ChatSettings.codeCheckEnabled feature flag; ' +
     'not yet wired for QA author-preview. Re-evaluate when credstore-backed ChatSettings ' +
     'reach QA.',
+  'POST /content/assert-specs':
+    'Assert spec publish (#2245) — non-fatal auxiliary step; no runtime reader on srv-qa. ' +
+    'Mirror of code-check-specs allowlist entry.',
   'GET /content/tutorial-model/*slug':
     'Legacy AEM `.model.json` compat shim for SAP Discovery Center cards (#1685) — a public ' +
     'prod content surface consumed externally against prod, not tutorial-draft author preview. ' +

@@ -784,7 +784,8 @@ export default class AdminService extends cds.ApplicationService {
           enabled: false,
           extractBuildCap: 200,
           mergeSimThreshold: 0.92,
-          mergeSimThresholdExtract: 0.85
+          mergeSimThresholdExtract: 0.85,
+          learningPathEnabled: false
         });
       }
     });
@@ -3607,6 +3608,119 @@ export default class AdminService extends cds.ApplicationService {
 
       // 4. Return the created Mission so FE can navigate to its OP.
       return await SELECT.one.from(Missions).where({ ID: missionId });
+    });
+
+    // ── copyMission — #2300 ──
+    // Deep-copies a Mission into a new unpublished Mission: the mission row,
+    // every CompletionPath + its CompletionPathItems, and the MissionTags /
+    // MissionCategories link rows. Referenced Tutorials/Groups/Tags/Prizes are
+    // linked (associations carried by *_ID), never duplicated. All writes run
+    // in the request tx so a mid-flight failure leaves nothing behind. The
+    // new slug is `<slug>-copy` (then `-copy-2`, `-3`… on collision against
+    // the @assert.unique.slug constraint). published/legacyId/community
+    // identity are intentionally NOT carried over. Returns the new Mission so
+    // the Missions LR can navigate into edit mode.
+    this.on('copyMission', async (req) => {
+      const { ID } = req.data || {};
+      if (!ID) return req.reject(400, 'ID is required');
+
+      const { Missions, CompletionPaths, CompletionPathItems, MissionTags, MissionCategories } =
+        cds.entities('com.sap.developers.ims');
+      const tx = cds.tx(req);
+
+      const src = await tx.run(SELECT.one.from(Missions).where({ ID }));
+      if (!src) return req.reject(404, `Mission ${ID} not found`);
+
+      // Append a suffix until the slug is free in `entity` (both Missions and
+      // CompletionPaths carry a @assert.unique.slug → DB unique index). `base`
+      // is lowercased here so the probe and the returned (inserted) slug are
+      // both canonical — slugs are lowercase-canonical repo-wide.
+      const uniqueSlug = async (entity, rawBase) => {
+        const base = String(rawBase).toLowerCase();
+        let candidate = base;
+        for (let n = 2; ; n += 1) {
+          // slug-canonical: pre-canonicalized
+          const clash = await tx.run(SELECT.one.from(entity).columns('ID').where({ slug: candidate }));
+          if (!clash) return candidate;
+          candidate = `${base}-${n}`;
+        }
+      };
+
+      // Base can be null on legacy/community-drafted missions; fall back to the
+      // ID so we never write a null/empty slug.
+      const baseSlug = (src.slug || ID).toLowerCase();
+      const newSlug = await uniqueSlug(Missions, `${baseSlug}-copy`);
+
+      const newId = randomUUID();
+      await tx.run(INSERT.into(Missions).entries({
+        ID: newId,
+        slug: newSlug,
+        title: `${src.title} (Copy)`,
+        description: src.description,
+        status: src.status,
+        primaryTag: src.primaryTag,
+        experienceTag: src.experienceTag,
+        averageTimeToComplete: src.averageTimeToComplete,
+        missionType: src.missionType,
+        primaryTagRef_ID: src.primaryTagRef_ID,
+        group_ID: src.group_ID,
+        event_ID: src.event_ID,
+        // Deliberately reset: copies start unpublished with no legacy/community identity.
+        published: false,
+        legacyId: null,
+        communityMissionId: null,
+        sourceKgCommunityId: null,
+        sourceKgCommunityFingerprint: null,
+      }));
+
+      // Completion paths + their items. Path slug is rebased onto the new
+      // mission slug (still globally unique via uniqueSlug) so copied paths
+      // don't collide with the source's.
+      const paths = await tx.run(SELECT.from(CompletionPaths).where({ mission_ID: ID }));
+      for (const p of paths) {
+        const newPathId = randomUUID();
+        const pathSlug = p.slug ? await uniqueSlug(CompletionPaths, `${p.slug}-copy`) : null;
+        await tx.run(INSERT.into(CompletionPaths).entries({
+          ID: newPathId,
+          mission_ID: newId,
+          name: p.name,
+          description: p.description,
+          slug: pathSlug,
+        }));
+        const items = await tx.run(SELECT.from(CompletionPathItems).where({ path_ID: p.ID }));
+        if (items.length) {
+          await tx.run(INSERT.into(CompletionPathItems).entries(items.map((it) => ({
+            ID: randomUUID(),
+            path_ID: newPathId,
+            taskLegacyId: it.taskLegacyId,
+            taskType: it.taskType,
+            tutorial_ID: it.tutorial_ID,
+            group_ID: it.group_ID,
+            checkpointTitle: it.checkpointTitle,
+            prize_ID: it.prize_ID,
+            itemOrder: it.itemOrder,
+            altGroupKey: it.altGroupKey,
+            altGroupLabel: it.altGroupLabel,
+            altCondition: it.altCondition,
+          }))));
+        }
+      }
+
+      // Tag + category links.
+      const tags = await tx.run(SELECT.from(MissionTags).where({ mission_ID: ID }));
+      if (tags.length) {
+        await tx.run(INSERT.into(MissionTags).entries(tags.map((t) => ({
+          ID: randomUUID(), mission_ID: newId, tag_ID: t.tag_ID,
+        }))));
+      }
+      const cats = await tx.run(SELECT.from(MissionCategories).where({ mission_ID: ID }));
+      if (cats.length) {
+        await tx.run(INSERT.into(MissionCategories).entries(cats.map((c) => ({
+          ID: randomUUID(), mission_ID: newId, category_ID: c.category_ID, score: c.score,
+        }))));
+      }
+
+      return await SELECT.one.from(Missions).where({ ID: newId });
     });
 
     // ── KgCommunities read decorators — #917 ──

@@ -1,6 +1,6 @@
 # HCQL Protocol Adapter Support
 
-**Status:** Beta (CAP 10, shipped June 2026). This feature is enabled on 9 read-heavy services in this project — see the table below.
+**Status:** Enabled on 5 authenticated services (CAP 10.1.0, re-landed #2247). Requires `@sap/cds >= 10.1.0`.
 
 **Upstream reference:** [CAP 10 June 2026 release notes — New HCQL Protocol Adapter](https://cap.cloud.sap/docs/releases/2026/jun26#new-hcql-protocol-adapter).
 
@@ -20,31 +20,43 @@ CAP Node.js also accepts a **text CQL body** (`Content-Type: text/plain`) as syn
 
 - **Read operations only** are guaranteed stable cross-runtime. Writes may work in Node.js beta but are explicitly unsupported.
 - The protocol is **not yet fully specified**. A future CAP release may change wire format.
-- **Kill switch:** delete `srv/hcql-enablement.cds`, run `cds build --production`, then `mbt build` + `cf deploy`. ~15 minutes end-to-end.
+- **Authenticated services only.** HCQL is intentionally scoped to the 5 services that already require an XSUAA JWT. It is not exposed on any public/anonymous path.
+- **Kill switch:** delete `srv/hcql-enablement.cds` AND drop the `hcql` entry from `AdminService`'s `@protocol` list in `srv/admin-service-mcp.cds`, run `cds build --production`, then `mbt build` + `cf deploy`. ~15 minutes end-to-end.
 
-## Known runtime hazards
+## Malformed CQN behaviour (fixed in 10.1.0)
 
-- **Malformed CQN crashes the process.** CAP 10.0.3's HCQL adapter runs under `cds.uncaughtErrors = "exit"`. A request body that fails to parse as CQL (missing `SELECT`, invalid entity reference) throws an uncaught exception that exits the Node process. In Cloud Foundry the app restarts within seconds, but a malicious or buggy client can force restart loops. Do NOT expose HCQL to untrusted clients until CAP hardens the adapter. Existing @requires/@readonly gates still apply for cross-scope protection, but the exit-on-error hazard is behind them.
-- **Content-Type sensitivity.** The adapter only reads bodies under `application/json` or `text/plain` (Node.js CQL text bodies). Other MIME types silently skip body parsing and trigger the crash above. Clients must set `Content-Type: application/json`.
-- **Same URL as OData.** Every enabled service exposes both protocols at the same path. Route dispatch is by request-body shape — `{ "SELECT": ... }` → HCQL; anything else → OData. This is a CAP design choice, not a bug.
+In CAP 10.0.3 the HCQL adapter had a process-exit DoS: a request body that failed to parse as CQL (missing `SELECT`, invalid entity reference) threw an uncaught exception that exited the Node process. **This is fixed in 10.1.0.** Malformed CQN now returns `HTTP 400` and the server continues running. Authentication is enforced _before_ CQN parsing, so unauthenticated requests are rejected with `401`/`403` before the body is evaluated.
+
+## Architecture: distinct `/hcql/<svc>` paths
+
+HCQL is mounted on separate paths via explicit `@protocol` lists — it does **not** share the OData URL. Each enabled service has two independent mounts:
+
+| Service | OData path | HCQL path |
+|---|---|---|
+| `AdminService`         | `/admin`           | `POST /hcql/admin`         |
+| `AuthorService`        | `/author`          | `POST /hcql/author`        |
+| `AnalyticsService`     | `/admin/analytics` | `POST /hcql/analytics`     |
+| `ExportsService`       | `/admin/exports`   | `POST /hcql/exports`       |
+| `ConsolidationService` | `/api/v1`          | `POST /hcql/consolidation` |
+
+This separation means:
+- `GET /admin/Tutorials?$filter=title eq 'x'` → OData 200 (no HCQL interception)
+- `POST /admin` with a CQN body → OData 405 (OData path rejects CQN bodies)
+- `POST /hcql/admin` with a CQN body → HCQL 200
 
 ## Enabled services
 
-| Service | HCQL path | Auth |
+| Service | HCQL path | Scope required |
 |---|---|---|
-| `AdminService`          | `/admin`             | XSUAA + `Admin` |
-| `AuthorService`         | `/author`            | XSUAA + `Tutorial.Author` |
-| `AnalyticsService`      | `/admin/analytics`   | XSUAA + `Admin` |
-| `ExportsService`        | `/admin/exports`     | XSUAA + `Admin` |
-| `ConsolidationService`  | `/api/v1`            | XSUAA + `ConsolidationScope` |
-| `KnowledgeGraphService` | `/graph`             | Public (entities `@readonly`) |
-| `HomepageService`       | `/homepage`          | Public + per-entity `@requires` |
-| `SearchService`         | `/search`            | Public |
-| `DeveloperService`      | `/api`               | Public + per-entity `@requires` |
+| `AdminService`         | `/hcql/admin`         | XSUAA + `Admin` |
+| `AuthorService`        | `/hcql/author`        | XSUAA + `Tutorial.Author` |
+| `AnalyticsService`     | `/hcql/analytics`     | XSUAA + `Admin` |
+| `ExportsService`       | `/hcql/exports`       | XSUAA + `Admin` |
+| `ConsolidationService` | `/hcql/consolidation` | XSUAA + `ConsolidationScope` |
 
-**Note on actions-only services:** `ExportsService`, `ConsolidationService`, and `HomepageService` expose only actions and functions — no queryable entities. The `@hcql` annotation is present for completeness and to avoid toggling it separately when the adapter matures. HCQL `SELECT` queries against these services return a `400` (no entity in scope). OData continues to serve them normally.
+**Note on actions-only services:** `ExportsService` and `ConsolidationService` expose only actions and functions — no queryable entities. HCQL `SELECT` queries against these paths return no rows (`{ "data": [] }`). OData continues to serve their actions normally. They are included so the HCQL surface is uniform across the authenticated tier.
 
-Not enabled (out of scope for #995): `ChatService`, `DisplayService`, `EventStreamService` (WebSocket surfaces), `CronService` (no entities), `ScannerService` (function-only).
+Not enabled: the 4 public/anonymous services (`KnowledgeGraphService`, `HomepageService`, `SearchService`, `DeveloperService`) and all WebSocket/function-only surfaces (`ChatService`, `DisplayService`, `EventStreamService`, `CronService`, `ScannerService`).
 
 ## Curl examples
 
@@ -53,13 +65,29 @@ The base URL depends on the environment:
 - Local: `http://localhost:4004`
 - Dev: `https://tutorials-approuter-dev.cfapps.eu10-005.hana.ondemand.com`
 
-Replace `$BASE_URL` and `$JWT` in the examples below.
+Replace `$BASE_URL` and `$JWT` in the examples below. A valid JWT with the required scope is always required.
 
-### AdminService (admin scope required)
+### CSRF handshake (required through the approuter)
+
+The `/hcql/*` approuter routes enforce CSRF (approuter default, post-#895 — see [Implementation notes](#implementation-notes)). Every POST must carry an `x-csrf-token` obtained via a one-time fetch step:
 
 ```bash
-curl -X POST "$BASE_URL/admin" \
+# Step 1 — fetch a CSRF token (any GET to a protected route works)
+CSRF=$(curl -sI -X GET "$BASE_URL/admin/Tutorials?$top=1" \
   -H "Authorization: Bearer $JWT" \
+  -H "x-csrf-token: fetch" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-csrf-token"{print $2}')
+
+# Step 2 — send the HCQL POST with the token (and reuse the same cookie jar if scripting)
+```
+
+Send `-H "x-csrf-token: $CSRF"` on each POST below. (Against a bare local `cds watch` on `http://localhost:4004` there is no approuter, so the token step is unnecessary; it is required for every deployed environment.)
+
+### AdminService (Admin scope required)
+
+```bash
+curl -X POST "$BASE_URL/hcql/admin" \
+  -H "Authorization: Bearer $JWT" \
+  -H "x-csrf-token: $CSRF" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{
@@ -74,26 +102,26 @@ curl -X POST "$BASE_URL/admin" \
 ### AuthorService (Tutorial.Author scope required)
 
 ```bash
-curl -X POST "$BASE_URL/author" \
+curl -X POST "$BASE_URL/hcql/author" \
   -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{ "SELECT": { "from": { "ref": ["AuthorService.Tutorials"] }, "limit": { "rows": { "val": 3 } } } }'
 ```
 
-### AnalyticsService (admin scope required)
+### AnalyticsService (Admin scope required)
 
 ```bash
-curl -X POST "$BASE_URL/admin/analytics" \
+curl -X POST "$BASE_URL/hcql/analytics" \
   -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{ "SELECT": { "from": { "ref": ["AnalyticsService.Tutorials"] }, "limit": { "rows": { "val": 5 } } } }'
 ```
 
-### ExportsService (admin scope required)
+### ExportsService (Admin scope required)
 
-ExportsService exposes only the `exportLegacyData` action — no queryable entities. HCQL `SELECT` does not apply. Use the OData action endpoint to trigger exports:
+ExportsService exposes only the `exportLegacyData` action — no queryable entities. HCQL `SELECT` returns `{ "data": [] }`. Use the OData action endpoint to trigger exports:
 
 ```bash
 curl -X POST "$BASE_URL/admin/exports/exportLegacyData" \
@@ -104,7 +132,7 @@ curl -X POST "$BASE_URL/admin/exports/exportLegacyData" \
 
 ### ConsolidationService (ConsolidationScope required)
 
-ConsolidationService exposes only the `userMerge` action and `getMergeStatus` function — no queryable entities. HCQL `SELECT` does not apply. Use the OData function endpoint:
+ConsolidationService exposes only the `userMerge` action and `getMergeStatus` function — no queryable entities. HCQL `SELECT` returns `{ "data": [] }`. Use the OData function endpoint:
 
 ```bash
 curl -X GET "$BASE_URL/api/v1/getMergeStatus(uuid='<USER_UUID>')" \
@@ -112,74 +140,57 @@ curl -X GET "$BASE_URL/api/v1/getMergeStatus(uuid='<USER_UUID>')" \
   -H "Accept: application/json"
 ```
 
-### KnowledgeGraphService (public)
-
-```bash
-curl -X POST "$BASE_URL/graph" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{ "SELECT": { "from": { "ref": ["KnowledgeGraphService.Concepts"] }, "columns": [{"ref":["slug"]},{"ref":["title"]}], "limit": { "rows": { "val": 5 } } } }'
-```
-
-### HomepageService (public)
-
-HomepageService exposes only functions (`events`, `videos`, `news`, `shelves`, etc.) — no queryable entities. HCQL `SELECT` does not apply. Use the OData function endpoints:
-
-```bash
-curl -X GET "$BASE_URL/homepage/events()" \
-  -H "Accept: application/json"
-```
-
-### SearchService (public)
-
-```bash
-curl -X POST "$BASE_URL/search" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{ "SELECT": { "from": { "ref": ["SearchService.SearchableItems"] }, "columns": [{"ref":["ID"]}], "limit": { "rows": { "val": 3 } } } }'
-```
-
-### DeveloperService (public + per-entity requires)
-
-Most `DeveloperService` entities require `authenticated-user`. The example below uses `Tutorials` (requires auth token):
-
-```bash
-curl -X POST "$BASE_URL/api" \
-  -H "Authorization: Bearer $JWT" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{ "SELECT": { "from": { "ref": ["DeveloperService.Tutorials"] }, "columns": [{"ref":["slug"]}], "limit": { "rows": { "val": 3 } } } }'
-```
-
 ## Post-deploy smoke matrix
 
-Run after every deploy that touches HCQL:
+Run after every deploy that touches HCQL (the authenticated POSTs — items 3 and 5 — need the `x-csrf-token` handshake from [Curl examples](#curl-examples)):
 
-1. **Public 200** — anonymous curl to `$BASE_URL/search` returns `200` + JSON body with a `data` array.
-2. **Scoped 401** — anonymous curl to `$BASE_URL/admin` returns `401 Unauthorized`.
-3. **Scoped 403 without scope** — authenticated curl (valid JWT but no `Admin` scope) to `$BASE_URL/admin` returns `403 Forbidden`.
+1. **Auth gate — 401** — anonymous `POST $BASE_URL/hcql/admin` returns `401 Unauthorized`.
+2. **Auth gate — 403** — authenticated curl (valid JWT, no `Admin` scope) to `POST $BASE_URL/hcql/admin` returns `403 Forbidden`.
+3. **HCQL 200** — authenticated `Admin`-scoped `POST $BASE_URL/hcql/admin` with a valid CQN `SELECT` returns `200` + `{ "data": [...] }`.
+4. **OData unaffected** — `GET $BASE_URL/admin/Tutorials?$top=1` returns `200` with OData envelope `{ "value": [...] }`.
+5. **Malformed CQN 400** — `POST $BASE_URL/hcql/admin` with `{ "BROKEN": {} }` and a valid `Admin` JWT returns `400` and the server stays alive (verify item 3 still works after).
 
-Paste the three response codes into the PR that changes HCQL configuration.
+Paste the five response codes into the PR that changes HCQL configuration.
 
 ## Disabling HCQL (kill switch)
 
+Two steps — both are required:
+
 ```bash
+# 1. Remove the central enablement file (covers 4 services)
 git rm srv/hcql-enablement.cds
+
+# 2. Drop the hcql entry from AdminService's @protocol list in
+#    srv/admin-service-mcp.cds — change from:
+#    @protocol: [{kind:'odata'}, {kind:'mcp', path:'/mcp/admin'}, {kind:'hcql', path:'/hcql/admin'}]
+#    to:
+#    @protocol: [{kind:'odata'}, {kind:'mcp', path:'/mcp/admin'}]
+
 npx cds build --production
 git commit -am "revert: disable HCQL adapter (kill switch)"
 # From the primary tree, on main:
-cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
+cd .deploy && mbt build && cf deploy mta_archives/<env>.mtar -e ../deploy/dev.mtaext -f
 ```
 
-After redeploy, the URLs remain (OData is still served at the same paths), but POSTs with a CQN body shape return the same response OData would give (typically `405` or `400` for `SELECT`-shaped bodies against an OData endpoint).
+After redeploy, `POST /hcql/*` returns `404` (the approuter routes remain but the CAP backend no longer serves that path).
 
 ## Known caveats
 
-- **Content-Type:** `application/cqn+json` is the final protocol MIME type under specification. Today (CAP 10.0.3), use `application/json` — sending `application/cqn+json` crashes the body parser and exits the process (see "Known runtime hazards" above).
+- **`application/cqn+json`** is the final protocol MIME type under specification. Today (CAP 10.1.0), use `application/json` — the spec MIME type may not yet be recognised.
 - **HCQL response envelope** is `{ "data": [...] }`, not OData's `{ "value": [...] }`. Callers must not assume OData envelope shape.
+- **CAP 10.1.0 required.** HCQL on `@protocol`-isolated paths does not work correctly on 10.0.3: distinct-path mounting is silently ignored and HCQL collides with the OData path, causing OData regressions.
+
+## Implementation notes
+
+HCQL enablement is split across two CDS files:
+- `srv/hcql-enablement.cds` — annotates `AuthorService`, `AnalyticsService`, `ExportsService`, `ConsolidationService` with their respective `@protocol` lists.
+- `srv/admin-service-mcp.cds` — `AdminService`'s `@protocol` list (which also carries MCP) was extended in-place to include `{kind:'hcql', path:'/hcql/admin'}`.
+
+The approuter (`approuter/xs-app.json` — the only approuter config; the MTA builds the approuter module from `../approuter`, there is no `.deploy/xs-app.json`) has dedicated `/hcql/*` routes with `authenticationType: xsuaa` and JWT-forwarding to `tutorials-srv`. The routes do **not** set `csrfProtection` — they inherit the approuter default (CSRF **on**), enforced by the `check-csrf-clients` static guard (post-#895): only the `/mcp/*` and `/a2a` JSON-RPC routes are allowlisted to disable CSRF. Because HCQL sits behind CSRF protection, clients must perform the `x-csrf-token: fetch` two-step before every POST (see [Curl examples](#curl-examples)). Flipping HCQL to `csrfProtection: false` (the M2M pattern) would require adding its sources to `CSRF_EXEMPT_SOURCES` in `scripts/check-csrf-clients.ts` **and** maintainer sign-off on the issue tracker.
 
 ## Related
 
-- Design spec: [docs/superpowers/specs/2026-07-05-995-hcql-support-design.md](../../superpowers/specs/2026-07-05-995-hcql-support-design.md)
-- Issue: [sap-tutorials/tutorials-ims#995](https://github.com/sap-tutorials/tutorials-ims/issues/995)
+- Re-land design spec: [docs/superpowers/specs/2026-09-11-2247-hcql-reland-design.md](../../superpowers/specs/2026-09-11-2247-hcql-reland-design.md)
+- Original design spec: [docs/superpowers/specs/2026-07-05-995-hcql-support-design.md](../../superpowers/specs/2026-07-05-995-hcql-support-design.md)
+- Issue: [sap-tutorials/tutorials-ims#2247](https://github.com/sap-tutorials/tutorials-ims/issues/2247)
 - Upstream: [CAP 10 June 2026 release notes](https://cap.cloud.sap/docs/releases/2026/jun26#new-hcql-protocol-adapter)

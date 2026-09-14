@@ -1,5 +1,5 @@
-// Normalizes 4-space-indented fenced code blocks that Goldmark misinterprets
-// as indented code blocks.
+// Normalizes 4-to-7-space-indented fenced code blocks that Goldmark
+// misinterprets as indented code blocks.
 //
 // BACKGROUND
 // ----------
@@ -33,50 +33,62 @@
 //
 // FIX
 // ---
-// Strip 1 leading space from the opening fence line, all content lines
-// between it and the matching closing fence, and the closing fence line
-// itself. This brings the delimiters to ≤ 3 spaces (a valid CommonMark fenced
-// code block position) while preserving relative indentation inside the code.
+// Strip enough leading whitespace from the opening fence line, all content
+// lines between it and the matching closing fence, and the closing fence line
+// itself to bring the delimiters to exactly 3 spaces (a valid CommonMark
+// fenced code block position) while preserving relative indentation inside the
+// code.
+//
+// A partial list-marker outdent can land the continuation fence at 5, 6, or 7
+// spaces rather than 4 (issue #2287); all of these are still doc-level indented
+// code blocks and must be repaired. Fences at 8+ spaces are left alone: they
+// represent genuinely deeper nesting, not the shallow list-continuation slip
+// this repair targets.
 //
 // SAFETY
 // ------
-// - Only fence delimiter lines at exactly 4 spaces are targeted; 0–3 space
-//   fences (already valid) are left untouched.
+// - Only fence delimiter lines indented 4–7 spaces are targeted; 0–3 space
+//   fences (already valid) and 8+ space fences are left untouched.
 // - A matching CLOSE fence must be found before the transform is applied;
 //   unterminated blocks are left verbatim.
-// - Content lines have at most 1 leading space stripped (blank lines and
-//   lines that are already at < 1 space are emitted unchanged).
+// - Content lines have at most (indent − 3) leading spaces stripped (blank
+//   lines and lines with fewer leading spaces are emitted with only the
+//   available whitespace removed, preserving relative indentation).
 // - The function is idempotent: running it twice on already-normalized content
 //   produces the same result (opening fences at ≤ 3 spaces are not re-
 //   processed).
 
-// Opening fence at exactly 4 spaces: `    ``` ` optionally followed by an
-// info string (language identifier).
-const LIST_FENCE_OPEN_4 = /^    (`{3,}|~{3,})(.*)$/
+// Opening fence indented 4–7 spaces: `    ``` ` optionally followed by an
+// info string (language identifier). Group 1 is the leading whitespace so its
+// length drives how much to strip; group 2 is the fence delimiter run.
+const LIST_FENCE_OPEN = /^( {4,7})(`{3,}|~{3,})(.*)$/
 
 // Closing fence: 3–7 spaces then fence chars (same-or-greater run length),
 // then only optional whitespace.
 const LIST_FENCE_CLOSE = /^(\s*)(`{3,}|~{3,})\s*$/
 
 /**
- * Strip 1 leading space from fenced code blocks whose delimiter is indented
- * with exactly 4 spaces, converting them from "indented code block" (4-space
- * prefix → literal text in CommonMark) to "fenced code block" (≤ 3 spaces →
- * render hook fires). Idempotent and a no-op on well-formed input.
+ * Strip leading whitespace from fenced code blocks whose delimiter is indented
+ * 4–7 spaces, converting them from "indented code block" (4+-space prefix →
+ * literal text in CommonMark) to "fenced code block" (≤ 3 spaces → render hook
+ * fires). Enough whitespace is removed to bring the delimiter to 3 spaces.
+ * Idempotent and a no-op on well-formed input.
  */
 export function normalizeListContinuationFences(md: string): string {
   const lines = md.split('\n')
   const out: string[] = []
 
   for (let i = 0; i < lines.length; i++) {
-    const open = lines[i].match(LIST_FENCE_OPEN_4)
+    const open = lines[i].match(LIST_FENCE_OPEN)
     if (!open) {
       out.push(lines[i])
       continue
     }
 
-    const fenceChar = open[1][0] as '`' | '~'
-    const fenceLen = open[1].length
+    // Bring the delimiter to 3 spaces: strip (indent − 3) leading spaces.
+    const strip = open[1].length - 3
+    const fenceChar = open[2][0] as '`' | '~'
+    const fenceLen = open[2].length
 
     // Scan forward for the matching close fence: same character, run length
     // >= opening, and nothing after except whitespace.
@@ -99,17 +111,23 @@ export function normalizeListContinuationFences(md: string): string {
       continue
     }
 
-    // Strip 1 leading space from the open fence, all content lines, and the
-    // close fence. Blank lines (or lines with no leading space) are emitted
-    // unchanged so blank code-content lines survive.
-    out.push(lines[i].slice(1))
+    // Strip up to `strip` leading spaces from the open fence, all content
+    // lines, and the close fence. Lines with fewer leading spaces (including
+    // blank lines) lose only what they have, preserving relative indentation.
+    out.push(stripLeadingSpaces(lines[i], strip))
     for (let k = i + 1; k < closeIdx; k++) {
-      const line = lines[k]
-      out.push(line.startsWith(' ') ? line.slice(1) : line)
+      out.push(stripLeadingSpaces(lines[k], strip))
     }
-    out.push(lines[closeIdx].startsWith(' ') ? lines[closeIdx].slice(1) : lines[closeIdx])
+    out.push(stripLeadingSpaces(lines[closeIdx], strip))
     i = closeIdx
   }
 
   return out.join('\n')
+}
+
+/** Remove up to `max` leading space characters from `line`. */
+function stripLeadingSpaces(line: string, max: number): string {
+  let n = 0
+  while (n < max && line[n] === ' ') n++
+  return line.slice(n)
 }

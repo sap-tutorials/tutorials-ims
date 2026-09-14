@@ -9,8 +9,12 @@
         <Title text="{i18n>noAccess.heading}" level="H1" />
         <Text text="{i18n>noAccess.body}" class="sapUiMediumMarginTop" />
         <Link text="{i18n>noAccess.requestAccess}"
-              href="mailto:tutorials-admin@example.sap?subject=Request%20Tutorial.Author%20access"
+              href="mailto:thomas.jung@sap.com?subject=Request%20Tutorial.Author%20access"
               class="sapUiMediumMarginTop" />
+        <Link text="{i18n>noAccess.teamsChannel}"
+              href="https://teams.microsoft.com/l/channel/19%3A6EbgThwH454hgKLLg5CAnFG4gc9M3PCxv0Ko2zRHD8U1%40thread.tacv2/Developer%20Tutorial%20Authors?groupId=189541d0-ea24-4064-8fba-ee848177c342&amp;tenantId=42f7676c-f455-423c-82f6-dc2d99791af7&amp;ngc=true&amp;allowXTenantAccess=true"
+              target="_blank"
+              class="sapUiSmallMarginTop" />
       </layout:VerticalLayout>
     </content>
   </Page>

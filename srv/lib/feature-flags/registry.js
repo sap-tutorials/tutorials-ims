@@ -47,6 +47,13 @@ export const FEATURE_FLAGS = [
     howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Or env KNOWLEDGE_GRAPH_ENABLED.'),
   },
   {
+    key: 'KG_LEARNING_PATH_ENABLED', label: 'KG learning-path reasoner', category: 'Knowledge Graph',
+    kind: 'db-setting', entity: 'KnowledgeGraphSettings', column: 'learningPathEnabled', resolver: 'kg',
+    valueType: 'boolean', default: false, issue: 'kg-learning-path', status: 'dev-only',
+    description: 'Ordered/personalized "what should I learn next / prerequisite chain" reasoner exposed via learningPath(). DB-driven config (KnowledgeGraphSettings.learningPathEnabled); no env var. DEV-only, default OFF, fail-open.',
+    howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Toggle learning-path reasoner in the Knowledge Graph settings tile'),
+  },
+  {
     key: 'KG_ONDEMAND_ENABLED', label: 'KG on-demand extraction',
     category: 'Knowledge Graph', kind: 'db-setting', entity: 'KnowledgeGraphSettings',
     column: 'onDemandExtractionEnabled', resolver: 'kg', envVar: 'KG_ONDEMAND_ENABLED',
@@ -82,6 +89,28 @@ export const FEATURE_FLAGS = [
     issue: '#945', status: 'ga',
     description: 'Hardcoded concept-overlap rank multiplier. Not runtime-configurable.',
   },
+  // ---- Security / abuse protection ----
+  {
+    key: 'RATE_LIMIT_ENABLED', label: 'Origin rate limiting', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.ratelimit',
+    valueType: 'boolean', default: false, issue: 'origin-abuse-protection', status: 'dev-only',
+    description: 'Cross-instance (cds-caching backed) rate limiter on the anon/expensive surface (/content, /build, /graph, /mcp*, …). Layered tiers: anon IP floor, higher tier for an already-present PAT/XSUAA token, top tier for HMAC-signed first-party agents. DB-driven config (ImsConfig key flag.ratelimit); thresholds in ImsConfig ratelimit.* via rate-limit-settings.js. No env var. Default OFF, fail-open.',
+    howToChange: featureFlagUpsert('RATE_LIMIT_ENABLED', 'flag.ratelimit'),
+  },
+  {
+    key: 'INPUT_VALIDATION_ENABLED', label: 'Origin input validation', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.inputvalidation',
+    valueType: 'boolean', default: false, issue: 'origin-abuse-protection', status: 'dev-only',
+    description: 'WAF-equivalent input validation on the anon/agentic write surface (PR3). Body-size caps + JSON depth/shape limits on anon POST bodies before handlers run, and a depth + complexity limit (plus prod-only introspection block) on GraphQL /graphql/public. DB-driven config (ImsConfig key flag.inputvalidation); thresholds in ImsConfig inputvalidation.* via input-validation-settings.js. No env var. Default OFF, fail-open.',
+    howToChange: featureFlagUpsert('INPUT_VALIDATION_ENABLED', 'flag.inputvalidation'),
+  },
+  {
+    key: 'LOADSHED_ENABLED', label: 'Origin load-shedding', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.loadshed',
+    valueType: 'boolean', default: false, issue: 'origin-abuse-protection', status: 'dev-only',
+    description: 'In-flight concurrency guard on the anonymous HANA content-serve path (content-store.js serveStoredSlug — tutorial HTML + content pages + author/advocate pages). When concurrent per-request gzip-BLOB reads exceed loadshed.maxConcurrent, excess requests are shed with 503 + Retry-After instead of piling up toward OOM under a scraper flood that gets past the edge cache (the serve path has no static fallback). Cache hits are never counted. Per-instance ceiling (in-memory, not cross-instance). DB-driven config (ImsConfig key flag.loadshed); ceiling + Retry-After in ImsConfig loadshed.maxConcurrent / loadshed.retryAfterSeconds via load-shed-settings.js. No env var. Default OFF, fail-open (a guard fault admits).',
+    howToChange: featureFlagUpsert('LOADSHED_ENABLED', 'flag.loadshed'),
+  },
   // ---- Navigator ----
   {
     key: 'NAV_INCLUDE_NESTED_GROUPS', label: 'Navigator nested-group cards',
@@ -112,6 +141,13 @@ export const FEATURE_FLAGS = [
     kind: 'db-setting', entity: 'ChatSettings', column: 'ragEnabled', resolver: 'chat',
     valueType: 'boolean', default: false, issue: '', status: 'ga',
     description: 'Retrieval-augmented grounding over tutorial embeddings.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.semanticSearchEnabled', label: 'Public semantic search', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'semanticSearchEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#2246', status: 'dev-only',
+    description: 'Anonymous public semantic/vector search: SearchService.semantic_search function + /mcp/search MCP tool. Server embeds the query and returns scored content references (tutorials/concepts/external) — never vectors. Off → 503. Default OFF until corpora are backfilled and the anon surface is vetted.',
     howToChange: adminTile('joule', '#joule'),
   },
   {
@@ -308,6 +344,23 @@ export const FEATURE_FLAGS = [
     description: 'When true, the nightly freshness-scan job runs the detector across the tutorial catalog. DB-driven config (ImsConfig key flag.freshness.scan); no env var. Default OFF.',
     howToChange: featureFlagUpsert('FRESHNESS_SCAN_ENABLED', 'flag.freshness.scan'),
   },
+  {
+    key: 'PROVENANCE_ENVELOPE_ENABLED', label: 'Signed provenance & freshness envelope', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.provenance.envelope',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, serves the signed provenance JWS at /content/tutorials/:slug/provenance, publishes the JWKS at /.well-known/tutorial-provenance/jwks.json, and emits advisory X-Freshness-Confidence / X-Content-Provenance headers. DB-driven config (ImsConfig key flag.provenance.envelope); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('PROVENANCE_ENVELOPE_ENABLED', 'flag.provenance.envelope'),
+  },
+  {
+    key: 'SKILL_BUNDLE_ENABLED', label: 'Installable Skill bundle endpoint', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.skill.bundle',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, serves an installable agent-Skill zip at '
+      + '/content/tutorials/:slug/skill (SKILL.md procedure + verify.sh generated from assert '
+      + 'blocks + provenance/freshness stamp). Public, anonymous, read-only over PUBLISHED '
+      + 'tutorials. DB-driven config (ImsConfig key flag.skill.bundle); no env var. Default OFF (#2245).',
+    howToChange: featureFlagUpsert('SKILL_BUNDLE_ENABLED', 'flag.skill.bundle'),
+  },
   // ---- Taxonomy ----
   {
     key: 'SEMAPHORE_SYNC_ENABLED', label: 'Semaphore taxonomy auto-sync', category: 'Taxonomy',
@@ -323,5 +376,21 @@ export const FEATURE_FLAGS = [
     valueType: 'boolean', default: false, issue: '#2188', status: 'ga',
     description: 'When true, the daily feedback-owner-digest job emails each tutorial owner a summary of new commented feedback. Second gate: only fires when the CF space is prod, and requires the SMTP secrets in Credential Store — so this toggle is inert on dev/qa. Toggling takes effect within the job\'s 60s flag cache. DB-driven config (ImsConfig key feedback.email.enabled); no env var. Default OFF (#2188).',
     howToChange: featureFlagUpsert('FEEDBACK_EMAIL_ENABLED', 'feedback.email.enabled'),
+  },
+  // ---- KTT (Kasimir Teaches TLAs) ----
+  {
+    key: 'KTT_ENABLED', label: 'KTT — Kasimir Teaches TLAs', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.ktt.enabled',
+    valueType: 'boolean', default: false, status: 'beta',
+    description: 'Enables the /explore/ktt/ acronym trainer and its /ktt CAP endpoints. Off → completeLesson/syncProgress reject 503.',
+    howToChange: featureFlagUpsert('KTT_ENABLED', 'flag.ktt.enabled'),
+  },
+  // ---- Edge cache ----
+  {
+    key: 'EDGE_PURGE_ENABLED', label: 'Akamai edge Fast-Purge on publish', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.edgepurge',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, a successful content publish/rollback fires a fire-and-forget Akamai Fast-Purge (CCU v3) purge-by-tag for the changed slugs, AND the served content Cache-Control s-maxage is raised from 600s to 86400s (safe only because the purge now bounds staleness). Requires the AKAMAI_FASTPURGE_EDGERC JSON credential in Credential Store; inert (no-op, short TTL) without it. Fail-open. Numeric tunables: ImsConfig edgepurge.network (production|staging), edgepurge.timeoutMs. DB-driven config (ImsConfig key flag.edgepurge); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('EDGE_PURGE_ENABLED', 'flag.edgepurge'),
   },
 ];

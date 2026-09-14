@@ -6,6 +6,7 @@ using from './advocates';
 using from './devtoberfest';
 using from './homepage';
 using from './channels';
+using from './ktt';
 
 // Sequence-backed business ID for backward compatibility with legacy integer IDs
 aspect LegacyKeyed {
@@ -16,7 +17,7 @@ aspect LegacyKeyed {
 type ExperienceLevel : String(255) enum { beginner; intermediate; advanced; }
 type TaskStatus      : String(50)  enum { ACTIVE; INACTIVE; }
 type MissionType     : String(20)  enum { SEQUENTIAL; SET; }
-type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; PETOBERFEST; }
+type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; PETOBERFEST; KTT_LESSON; } // KTT (#KTT) — mostly-fun acronym trainer
 type EventType       : String(20)  enum { DEVTOBERFEST; TECHED; CODEJAM; CHALLENGE; OTHER; }
 
 aspect TaskBase : cuid, managed, LegacyKeyed {
@@ -192,7 +193,7 @@ entity TaskRecords : cuid, managed, LegacyKeyed {
   // NVARCHAR(5000); the enum is enforced at the CDS layer (@Common.ValueList
   // dropdowns + admin write-paths) rather than as a DB constraint, so this
   // change requires no .hdbmigrationtable ALTER.
-  taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; PUZZLE; PETOBERFEST; };
+  taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; PUZZLE; PETOBERFEST; KTT_LESSON; }; // KTT (#KTT) — mostly-fun acronym trainer
   status                    : String enum { COMPLETED; IN_PROGRESS; SUPERSEDED; };
   progress                  : Integer default 0;
   completionTime            : Int64;
@@ -699,6 +700,15 @@ entity ChatSettings : cuid, managed {
   embeddingTopK        : Integer default 5;
   embeddingMinScore    : Decimal(4, 3) default 0.25;
 
+  // Public anonymous semantic/vector search (#2246). When true, the
+  // SearchService.semantic_search function + matching MCP tool (/mcp/search)
+  // are live; when false they return 503. The agent sends TEXT only — the
+  // server embeds server-side and returns scored content references (never
+  // vectors, never accepts caller-supplied vectors). Reuses embeddingModel /
+  // embeddingTopK / embeddingMinScore above for its defaults. Default OFF
+  // (dev-only) until the corpora are backfilled and the anon surface is vetted.
+  semanticSearchEnabled : Boolean default false;
+
   // AI code-check spike (issue #171). When false, /api/codecheck → 503
   // and the checkCode tool is omitted from toolsForContext().
   codeCheckEnabled     : Boolean default false;
@@ -818,6 +828,7 @@ entity KnowledgeGraphSettings : cuid, managed {
   mergeSimThreshold          : Decimal(3, 2) @assert.range: [0.01, 1.00];
   mergeSimThresholdExtract   : Decimal(3, 2) @assert.range: [0.01, 1.00];
   onDemandExtractionEnabled  : Boolean default false;
+  learningPathEnabled        : Boolean default false;  // learning-path reasoner, DEV-only
 }
 
 entity TutorialEmbedding {
@@ -858,6 +869,26 @@ entity CodeCheckSpecs : managed {
   hints                : LargeString;        // JSON-encoded string[]
   referenceSolution    : LargeString;        // server-only
   hasReference         : Boolean default false;
+}
+
+// Author-supplied, machine-checkable step postconditions (issue #2245 item #2).
+// Populated by the publish-content pipeline (carry-forward upsert); consumed
+// by #3 (skill bundles) / #4 (self-healing). No secret columns — public == full.
+// NOT journaled (absent from persistence.cds), exactly like CodeCheckSpecs:
+// fully regenerable from rules.vr on the next publish.
+entity AssertSpecs : managed {
+  key tutorial     : Association to Tutorials;
+  key stepNumber   : Integer;
+  key assertIndex  : Integer;       // 0-based order within the step
+  assertType       : String(8);     // 'cmd' | 'http' | 'file'
+  run              : LargeString;   // cmd
+  expectExit       : Integer;       // cmd
+  httpMethod       : String(8);     // http
+  httpPath         : LargeString;   // http
+  expectStatus     : Integer;       // http
+  filePath         : LargeString;   // file
+  expectContains   : Boolean;       // file (false ⇒ exists check)
+  matchRegex       : LargeString;   // shared, nullable
 }
 
 // Every learner submission. Drives offline grader-quality evaluation.

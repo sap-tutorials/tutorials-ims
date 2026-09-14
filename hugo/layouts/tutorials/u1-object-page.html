@@ -406,6 +406,7 @@
              via window.matchMedia so we don't double-fetch + double-emit
              telemetry. Same QA/preview gate as the desktop mount. */}}
         {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div data-vue-island="related-graph" class="kg-sidebar-mobile"></div>{{ end }}
+        {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div data-vue-island="learning-path" data-goal-type="tutorial"></div>{{ end }}
       </div>
 
       <aside class="tutorial-right-col">
@@ -490,6 +491,7 @@
 <script type="module" src="{{ partial "island-src.html" "validation" }}" defer></script>
 {{ if not site.Params.previewMode }}<script type="module" src="{{ partial "island-src.html" "tutorial-branches" }}" defer></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "related-graph" }}" defer></script>{{ end }}
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "learning-path" }}" defer></script>{{ end }}
 
 <script type="module">
   // U1 Object Page — keep --op-header-h in sync with the rendered .op-header height

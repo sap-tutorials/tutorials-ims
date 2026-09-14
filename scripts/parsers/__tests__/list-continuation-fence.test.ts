@@ -214,6 +214,113 @@ describe('normalizeListContinuationFences', () => {
     expect(normalizeListContinuationFences(input)).toBe(expected)
   })
 
+  // ── deeper indents 5–7 spaces (issue #2287) ──────────────────────────────
+  // A partial list-marker outdent can leave the continuation fence indented at
+  // 5, 6, or 7 spaces instead of 4. Goldmark still treats these as doc-level
+  // indented code blocks, so the repair must bring the delimiter back to ≤ 3.
+
+  it('strips a 5-space-indented fence down to 3 spaces', () => {
+    const input = [
+      '  2. Replace your code:',
+      '',
+      '     ```ABAP',
+      '     @Search.searchable: true',
+      '     ```',
+    ].join('\n')
+    const expected = [
+      '  2. Replace your code:',
+      '',
+      '   ```ABAP',
+      '   @Search.searchable: true',
+      '   ```',
+    ].join('\n')
+    expect(normalizeListContinuationFences(input)).toBe(expected)
+  })
+
+  it('strips a 6-space-indented fence down to 3 spaces (the #2287 repro)', () => {
+    // 6-space fence from a `  4.` marker whose continuation was under-outdented.
+    const input = [
+      '  4. Replace your code:',
+      '',
+      '      ```ABAP',
+      '      METHOD create_events.',
+      '      ENDMETHOD.',
+      '      ```',
+    ].join('\n')
+    const expected = [
+      '  4. Replace your code:',
+      '',
+      '   ```ABAP',
+      '   METHOD create_events.',
+      '   ENDMETHOD.',
+      '   ```',
+    ].join('\n')
+    expect(normalizeListContinuationFences(input)).toBe(expected)
+  })
+
+  it('strips a 7-space-indented fence down to 3 spaces', () => {
+    const input = [
+      '       ```ABAP',
+      '       code',
+      '       ```',
+    ].join('\n')
+    const expected = [
+      '   ```ABAP',
+      '   code',
+      '   ```',
+    ].join('\n')
+    expect(normalizeListContinuationFences(input)).toBe(expected)
+  })
+
+  it('leaves an 8-space-indented fence unchanged (deeper nesting, not a repair target)', () => {
+    const input = [
+      '        ```ABAP',
+      '        code',
+      '        ```',
+    ].join('\n')
+    expect(normalizeListContinuationFences(input)).toBe(input)
+  })
+
+  it('preserves relative indentation inside a 6-space block', () => {
+    // Content indented deeper than the fence keeps its extra indentation.
+    const input = [
+      '      ```ABAP',
+      '      IF x = 1.',
+      '        do_thing( ).',
+      '      ENDIF.',
+      '      ```',
+    ].join('\n')
+    const expected = [
+      '   ```ABAP',
+      '   IF x = 1.',
+      '     do_thing( ).',
+      '   ENDIF.',
+      '   ```',
+    ].join('\n')
+    expect(normalizeListContinuationFences(input)).toBe(expected)
+  })
+
+  it('is idempotent for deeper indents (5–7 spaces)', () => {
+    const input = [
+      '      ```ABAP',
+      '      code',
+      '      ```',
+    ].join('\n')
+    const once = normalizeListContinuationFences(input)
+    const twice = normalizeListContinuationFences(once)
+    expect(twice).toBe(once)
+  })
+
+  it('leaves a deeper-indented fence with no matching close verbatim', () => {
+    const input = [
+      '      ```ABAP',
+      '      some code here',
+      '',
+      'Unrelated paragraph.',
+    ].join('\n')
+    expect(normalizeListContinuationFences(input)).toBe(input)
+  })
+
   // ── longer fence run (4 backticks) ────────────────────────────────────────
 
   it('matches longer fence runs (4+ backticks)', () => {

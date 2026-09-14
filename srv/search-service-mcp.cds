@@ -6,19 +6,24 @@ using from './search-service';
 // fetch + slice logic lives in exactly one place.
 extend service SearchService {
 
-  /** Return a single step's HTML plus metadata. No authentication required —
-      published tutorial content is public. Shares the DeveloperService
-      handler; the return shape is identical.
+  /** Return a single published tutorial step in the requested `format`. No
+      authentication required — published tutorial content is public. Shares
+      the DeveloperService handler; the return shape is identical. Exactly one
+      body is returned in `content`; `contentFormat` echoes which representation
+      it is.
       @param slug        Lowercase canonical tutorial slug.
-      @param stepNumber  1-indexed step number. */
+      @param stepNumber  1-indexed step number.
+      @param format      'markdown' (default, token-efficient source markdown
+                         matching /tutorials/<slug>.md) or 'html' (sliced HTML). */
   @(requires: 'any')
-  function get_tutorial_step(slug: String, stepNumber: Integer) returns {
-    slug        : String;
-    stepNumber  : Integer;
-    stepTitle   : String;
-    html        : String;
-    textLength  : Integer;
-    totalSteps  : Integer;
+  function get_tutorial_step(slug: String, stepNumber: Integer, format: String) returns {
+    slug          : String;
+    stepNumber    : Integer;
+    stepTitle     : String;
+    content       : String;
+    contentFormat : String;
+    textLength    : Integer;
+    totalSteps    : Integer;
   };
 
   /** Search the public SAP community events catalog — CodeJams, Devtoberfest,
@@ -81,5 +86,31 @@ extend service SearchService {
     focusAreas  : array of String;
     tags        : array of String;
     slug        : String;
+  };
+
+  /** Public semantic/vector search over the SAP developer content corpus.
+      Anonymous: the caller sends TEXT ONLY — the server embeds the query
+      server-side and returns scored content references. It NEVER returns raw
+      embedding vectors and NEVER accepts a caller-supplied vector. Off (503)
+      unless ChatSettings.semanticSearchEnabled is set. Fails open ([]) on any
+      retrieval error so a backfill gap never surfaces as an error to an agent.
+      @param query    Free-text query. Empty → []. The server embeds this.
+      @param corpus   'tutorials' (default) | 'concepts' | 'external' | 'all'.
+      @param topK     Max results, clamped [1, 50]. Default ChatSettings.embeddingTopK (5).
+      @param minScore Cosine floor; rows below are dropped. Default ChatSettings.embeddingMinScore (0.25). */
+  @(requires: 'any')
+  function semantic_search(
+    query    : String,
+    corpus   : String,
+    topK     : Integer,
+    minScore : Decimal
+  ) returns array of {
+    slug        : String;
+    title       : String;
+    stepNumber  : Integer;
+    snippet     : String;
+    score       : Decimal;
+    url         : String;
+    contentType : String;
   };
 }

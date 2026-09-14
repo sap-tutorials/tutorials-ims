@@ -41,8 +41,9 @@ function buildMcpManifest({ baseUrl } = {}) {
           {
             name: 'get_tutorial_step',
             description:
-              "Return a single published tutorial step's HTML plus metadata " +
-              '(step title, text length, total steps). Public content.',
+              "Return a single published tutorial step in the requested format " +
+              "(markdown by default, or html) plus metadata (step title, text " +
+              "length, total steps). Public content.",
           },
           {
             name: 'search_events',
@@ -55,6 +56,13 @@ function buildMcpManifest({ baseUrl } = {}) {
             description:
               'Search the public external-channels catalog (SAP and community YouTube ' +
               'channels, blogs, podcasts, feeds), filterable by category/platform/owner.',
+          },
+          {
+            name: 'semantic_search',
+            description:
+              'Semantic/vector search over the SAP developer content corpus (tutorials, ' +
+              'concepts, external docs). Send free-text; the server embeds it and returns ' +
+              'scored content references — never raw vectors. Corpus-selectable, topK-capped.',
           },
         ],
       },

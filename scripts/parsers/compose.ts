@@ -14,6 +14,7 @@ import { extractBranchGroups, BranchParseError } from './branches.js'
 import type { BranchGroup } from './branches.js'
 import { parseRulesVrEnriched } from './rules.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './codecheck.js'
+import { parseAssertBlocks, attachAssertSpecs } from './assert.js'
 import type { TutorialStep, TutorialFrontmatter } from './types.js'
 
 /**
@@ -226,6 +227,8 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
         if (step.codeCheck) step.aiInvolved = true
       }
     }
+    const assertMap = parseAssertBlocks(opts.rulesVr)
+    if (assertMap.size) attachAssertSpecs(steps, assertMap)
   }
 
   return {

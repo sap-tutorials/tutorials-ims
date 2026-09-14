@@ -3,7 +3,21 @@ import cds from '@sap/cds';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { createContentHandlers } from '../../srv/lib/content-store.js';
+import { createSessionHelpers } from '../../srv/lib/content-publish-session.js';
 import * as catalogRenderer from '../../srv/lib/catalog-renderer.js';
+import {
+  refreshContentDeltaFlags, bustContentDeltaFlagsCache, DELTA_WRITE_KEY,
+} from '../../srv/lib/content-delta-flags.js';
+import {
+  acquireServeSlot,
+  _inFlightForTest,
+  _resetForTest as _resetLoadShed,
+} from '../../srv/lib/load-shed.js';
+import {
+  _primeForTest as _primeLoadShedCfg,
+  _resetForTest as _resetLoadShedCfg,
+} from '../../srv/lib/runtime-config/load-shed-settings.js';
+import { __setFlagForTest, __resetFlagsForTest } from '../../srv/lib/feature-flags/db-flags.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -123,6 +137,41 @@ describe('content-store', () => {
       });
 
       expect(res.status).toBe(403);
+    });
+
+    it('persists sourceCommit onto ContentCurrent when supplied', async () => {
+      const { ContentCurrent, ContentFiles, ContentManifest, ImsConfig, JobLocks } = cds.entities('com.sap.developers.ims');
+      const NS = 'com.sap.developers.ims';
+      const slug = 'commit-tutorial';
+      const sha = 'a'.repeat(40);
+      const helpers = createSessionHelpers({ namespace: NS });
+      // Clean up any pre-existing state for this slug.
+      await DELETE.from(ContentCurrent).where({ slug });
+      // Enable the delta write flag and warm the cache so the synchronous
+      // isDeltaWrite() getter sees the new value before commitSession runs.
+      await DELETE.from(ImsConfig).where({ key: DELTA_WRITE_KEY });
+      await INSERT.into(ImsConfig).entries({ key: DELTA_WRITE_KEY, value: 'true' });
+      await refreshContentDeltaFlags();
+      try {
+        const { sessionId } = await helpers.beginPublishSession({
+          trigger: 'test', expectedSlugCount: 1, initiator: 'test'
+        });
+        // append — passes sourceCommits so the per-slug commit SHA is persisted
+        const html = '<h1>x</h1>';
+        await helpers.appendToSession({
+          sessionId,
+          files: { [slug]: gzipSync(Buffer.from(html, 'utf-8')).toString('base64') },
+          sourceCommits: { [slug]: sha },
+        });
+        await helpers.commitSession({ sessionId });
+        // ContentCurrent must carry the sourceCommit through the promotion path
+        const row = await SELECT.one.from(ContentCurrent).where({ slug });
+        expect(row.sourceCommit).toBe(sha);
+      } finally {
+        await DELETE.from(ContentCurrent).where({ slug });
+        await DELETE.from(ImsConfig).where({ key: DELTA_WRITE_KEY });
+        bustContentDeltaFlagsCache();
+      }
     });
   });
 
@@ -876,5 +925,88 @@ describe('content-store catalog render failure → nice error page (#1938)', () 
     expect(res._headers['X-Content-Source']).toBe('db');
     expect(Buffer.isBuffer(res._body)).toBe(true);
     expect(res._body.toString('utf-8')).toContain('Tutorial not found');
+  });
+});
+
+describe('content-store load-shedding guard on the serve path (#2271)', () => {
+  const API_KEY = 'test-content-key-12345';
+  const html = '<h1>Shed Tutorial</h1>';
+
+  beforeAll(() => {
+    process.env.CONTENT_API_KEY = API_KEY;
+  });
+
+  beforeEach(async () => {
+    // Fresh publish → the slug is a cache MISS, so the serve reaches the guard
+    // (the guard sits after the cache-miss counter, so warm hits never count).
+    await project.axios.post('/content/publish', {
+      trigger: 'loadshed-seed',
+      files: makePayload({ 'shed-tut': html }),
+    }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+    _resetLoadShed();
+    _resetLoadShedCfg();
+    __resetFlagsForTest();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    _resetLoadShed();
+    _resetLoadShedCfg();
+    __resetFlagsForTest();
+  });
+
+  function makeServeRes() {
+    return {
+      _status: null,
+      _headers: {},
+      _body: null,
+      status(code) { this._status = code; return this; },
+      setHeader(k, v) { this._headers[k] = v; },
+      json(b) { this._body = b; return this; },
+      send(b) { this._body = b; return this; },
+      end() { return this; },
+    };
+  }
+
+  it('sheds with 503 + Retry-After once the in-flight ceiling is reached', async () => {
+    __setFlagForTest('LOADSHED_ENABLED', true);
+    _primeLoadShedCfg({ maxConcurrent: 1, retryAfterSeconds: 3 });
+
+    // Occupy the single slot so the incoming request must be shed. State is
+    // globalThis-pinned, so this held slot is visible to the served handler.
+    const held = await acquireServeSlot();
+    expect(held.admitted).toBe(true);
+
+    const { serveHandler } = createContentHandlers();
+    const res = makeServeRes();
+    await serveHandler(
+      { params: { slug: 'shed-tut' }, url: '/content/tutorials/shed-tut', headers: {} },
+      res,
+    );
+
+    expect(res._status).toBe(503);
+    expect(String(res._headers['Retry-After'])).toBe('3');
+    expect(res._headers['Cache-Control']).toBe('no-store');
+    expect(res._body).toEqual({ error: 'Service temporarily unavailable' });
+
+    held.release();
+  });
+
+  it('admits and serves normally below the ceiling, releasing the slot afterward', async () => {
+    __setFlagForTest('LOADSHED_ENABLED', true);
+    _primeLoadShedCfg({ maxConcurrent: 4, retryAfterSeconds: 3 });
+
+    const { serveHandler } = createContentHandlers();
+    const res = makeServeRes();
+    await serveHandler(
+      { params: { slug: 'shed-tut' }, url: '/content/tutorials/shed-tut', headers: {} },
+      res,
+    );
+
+    expect(res._body.toString('utf-8')).toBe(html);
+    expect(res._headers['X-Content-Source']).toBe('db');
+    expect(res._status).not.toBe(503);
+    // finally{} must release the slot on the success path.
+    expect(_inFlightForTest()).toBe(0);
   });
 });

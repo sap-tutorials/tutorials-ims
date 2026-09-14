@@ -18,11 +18,16 @@ import * as metrics from './metrics.js';
 import * as alerting from './alerting.js';
 import { resolveSecret } from './secret-resolver.js';
 import { setContentCacheHeaders } from './edge-cache-headers.js';
+import { purgePublishedSlugs, purgeAllContent } from './fast-purge.js';
 import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
 import { isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
-import { normalizeTutorialMarkdown } from './tutorial-markdown.js';
+import { normalizeTutorialMarkdown, prefersMarkdown } from './tutorial-markdown.js';
+import { isFlagEnabled } from './feature-flags/db-flags.js';
+import { acquireServeSlot } from './load-shed.js';
+import { loadProvenanceInputs } from './provenance-data.js';
+import { deriveConfidence } from './provenance-freshness.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -86,6 +91,23 @@ function dropCatalogSlugs(obj) {
 }
 
 export { toBuffer, isCatalogSlug, dropCatalogSlugs };
+
+// Advisory provenance helpers — called from serveStoredSlug. Fail-open: any
+// error or missing data returns null so the serve path is never blocked.
+async function computeAdvisory(slug) {
+  if (!isFlagEnabled('PROVENANCE_ENVELOPE_ENABLED')) return null;
+  try {
+    const inputs = await loadProvenanceInputs(slug);
+    if (!inputs) return null;
+    return { confidence: deriveConfidence({ report: inputs.report }), url: `/content/tutorials/${slug}/provenance` };
+  } catch { return null; }
+}
+
+function setAdvisoryHeaders(res, advisory) {
+  if (!advisory) return;
+  res.setHeader('X-Freshness-Confidence', advisory.confidence);
+  res.setHeader('X-Content-Provenance', advisory.url);
+}
 
 // Re-evaluate every TUTORIAL TaskRecord for `tutorialId` against the
 // authoritative step count (`stepCount`) and the user's actual completed STEP
@@ -188,7 +210,7 @@ export class ContentCache {
     return entry;
   }
 
-  set(key, buffer, hash) {
+  set(key, buffer, hash, advisory = null) {
     if (this.map.has(key)) {
       this.totalBytes -= this.map.get(key).buffer.length;
       this.map.delete(key);
@@ -202,7 +224,7 @@ export class ContentCache {
     // #2232: stamp a fresh expiry on every write. A republish re-set() therefore
     // resets the clock, so actively-updated content never expires mid-serve.
     const expiresAt = this.ttlMs > 0 ? Date.now() + this.ttlMs : Infinity;
-    this.map.set(key, { buffer, hash, expiresAt });
+    this.map.set(key, { buffer, hash, expiresAt, advisory });
     this.totalBytes += buffer.length;
     metrics.gauge('cache.bytes', this.totalBytes);  // #805
   }
@@ -1021,80 +1043,103 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       res.setHeader('ETag', `"${cached.hash}"`);
       setContentCacheHeaders(res, { slug: tagSlug });
       res.setHeader('X-Content-Source', 'cache');
+      setAdvisoryHeaders(res, isFlagEnabled('PROVENANCE_ENVELOPE_ENABLED') ? cached.advisory : null);
       res.send(cached.buffer);
       return 'served';
     }
     metrics.counter('content.cache.miss');  // #805
 
-    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
-    const db = await cds.connect.to('db');
-    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-
-    // Option B read cutover (slug-targeted-delta-rebuild), flag-gated + fail-safe.
-    // When CONTENT_DELTA_READ_ENABLED=true, serve from the mutable ContentCurrent
-    // (WHERE slug=?, no version join). Fall back to the legacy version-pinned
-    // ContentFiles snapshot when the flag is off OR the slug isn't in
-    // ContentCurrent yet (mid-migration, before the full seed) — so a partially-
-    // populated ContentCurrent never 404s a slug that still lives in ContentFiles.
-    const READ_DELTA = isDeltaRead();
-    let meta;
-    let source = 'files';
-    if (READ_DELTA && ContentCurrent) {
-      const [cur] = await SELECT.from(ContentCurrent)
-        // slug-canonical: caller-canonicalizes
-        .where({ slug })
-        .columns('contentHash', 'mimeType');
-      if (cur) { meta = cur; source = 'current'; }
-    }
-    if (!meta) {
-      const activeVersion = await getActiveVersion();
-      if (activeVersion === null) return 'no-version';
-      // Serve only from the active version — legacy full-snapshot path.
-      const [legacy] = await SELECT.from(ContentFiles)
-        // slug-canonical: callers canonicalize before calling.
-        .where({ slug, version: activeVersion })
-        .columns('contentHash', 'mimeType', 'version');
-      if (!legacy) return 'not-found';
-      meta = legacy;
-      source = 'files';
+    // #2271 load-shedding: bound concurrent DB BLOB reads on the anonymous
+    // content-serve path. Cache hits above never reach here, so a warm cache is
+    // untouched. Flag-gated (LOADSHED_ENABLED, default OFF) + fail-open — a
+    // guard fault admits. When in-flight reads exceed the configured ceiling,
+    // shed with 503 + Retry-After rather than piling up toward OOM.
+    const slot = await acquireServeSlot();
+    if (!slot.admitted) {
+      metrics.counter('loadshed.triggered');
+      res.setHeader('Retry-After', String(slot.retryAfter));
+      res.setHeader('Cache-Control', 'no-store'); // don't let the edge cache a shed response
+      res.status(503).json({ error: 'Service temporarily unavailable' });
+      return 'served'; // response handled; callers treat 'served' as done
     }
 
-    const ifNoneMatch = req.headers['if-none-match'];
-    if (ifNoneMatch && ifNoneMatch === `"${meta.contentHash}"`) {
-      res.status(304).end();
+    // Hold the in-flight slot for the whole DB read + gunzip + send; release on
+    // EVERY exit path (304 / no-version / not-found / served / throw).
+    try {
+      const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+      const db = await cds.connect.to('db');
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
+      // Option B read cutover (slug-targeted-delta-rebuild), flag-gated + fail-safe.
+      // When CONTENT_DELTA_READ_ENABLED=true, serve from the mutable ContentCurrent
+      // (WHERE slug=?, no version join). Fall back to the legacy version-pinned
+      // ContentFiles snapshot when the flag is off OR the slug isn't in
+      // ContentCurrent yet (mid-migration, before the full seed) — so a partially-
+      // populated ContentCurrent never 404s a slug that still lives in ContentFiles.
+      const READ_DELTA = isDeltaRead();
+      let meta;
+      let source = 'files';
+      if (READ_DELTA && ContentCurrent) {
+        const [cur] = await SELECT.from(ContentCurrent)
+          // slug-canonical: caller-canonicalizes
+          .where({ slug })
+          .columns('contentHash', 'mimeType');
+        if (cur) { meta = cur; source = 'current'; }
+      }
+      if (!meta) {
+        const activeVersion = await getActiveVersion();
+        if (activeVersion === null) return 'no-version';
+        // Serve only from the active version — legacy full-snapshot path.
+        const [legacy] = await SELECT.from(ContentFiles)
+          // slug-canonical: callers canonicalize before calling.
+          .where({ slug, version: activeVersion })
+          .columns('contentHash', 'mimeType', 'version');
+        if (!legacy) return 'not-found';
+        meta = legacy;
+        source = 'files';
+      }
+
+      const ifNoneMatch = req.headers['if-none-match'];
+      if (ifNoneMatch && ifNoneMatch === `"${meta.contentHash}"`) {
+        res.status(304).end();
+        return 'served';
+      }
+
+      // Read BLOB separately — CDS QL returns HANA BLOBs as streams with locators
+      // that expire before consumption. Raw SQL returns a Buffer directly.
+      // For SQLite (tests), CDS QL works fine since there's no LOB streaming.
+      let contentBuf;
+      if (isHana) {
+        const [blobRow] = source === 'current'
+          ? await db.run(
+              `SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`,
+              [slug]
+            )
+          : await db.run(
+              `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
+              [slug, meta.version]
+            );
+        contentBuf = blobRow.CONTENT;
+      } else {
+        const blobRow = source === 'current'
+          ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content') // slug-canonical: caller-canonicalizes
+          : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content'); // slug-canonical: caller-canonicalizes
+        contentBuf = await toBuffer(blobRow.content);
+      }
+      const decompressed = gunzipSync(contentBuf);
+      const advisory = await computeAdvisory(slug);
+      cache.set(slug, decompressed, meta.contentHash, advisory);
+
+      res.setHeader('Content-Type', `${mimeType || meta.mimeType}; charset=utf-8`);
+      res.setHeader('ETag', `"${meta.contentHash}"`);
+      setContentCacheHeaders(res, { slug: tagSlug });
+      res.setHeader('X-Content-Source', source === 'current' ? 'db-current' : 'db');
+      setAdvisoryHeaders(res, advisory);
+      res.send(decompressed);
       return 'served';
+    } finally {
+      slot.release();
     }
-
-    // Read BLOB separately — CDS QL returns HANA BLOBs as streams with locators
-    // that expire before consumption. Raw SQL returns a Buffer directly.
-    // For SQLite (tests), CDS QL works fine since there's no LOB streaming.
-    let contentBuf;
-    if (isHana) {
-      const [blobRow] = source === 'current'
-        ? await db.run(
-            `SELECT TOP 1 "CONTENT" FROM "${hanaCurrentTableName()}" WHERE "SLUG" = ?`,
-            [slug]
-          )
-        : await db.run(
-            `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
-            [slug, meta.version]
-          );
-      contentBuf = blobRow.CONTENT;
-    } else {
-      const blobRow = source === 'current'
-        ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content') // slug-canonical: caller-canonicalizes
-        : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content'); // slug-canonical: caller-canonicalizes
-      contentBuf = await toBuffer(blobRow.content);
-    }
-    const decompressed = gunzipSync(contentBuf);
-    cache.set(slug, decompressed, meta.contentHash);
-
-    res.setHeader('Content-Type', `${mimeType || meta.mimeType}; charset=utf-8`);
-    res.setHeader('ETag', `"${meta.contentHash}"`);
-    setContentCacheHeaders(res, { slug: tagSlug });
-    res.setHeader('X-Content-Source', source === 'current' ? 'db-current' : 'db');
-    res.send(decompressed);
-    return 'served';
   }
 
   async function serveHandler(req, res) {
@@ -1306,11 +1351,25 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // parsing <head> (#agent-readiness). Only real tutorial slugs have a
     // `/tutorials/<slug>.md` — concept/topic/puzzle/channel/group/mission pages
     // and internal `__…__` slugs don't, so we skip the header for them.
-    if (!/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__')) {
+    const isTutorialSlug =
+      !/^(concept|topic|puzzle|channel|group|mission)-/.test(slug) && !slug.startsWith('__');
+    if (isTutorialSlug) {
       const proto = (req.get?.('x-forwarded-proto') || '').split(',')[0].trim() || 'https';
       const host = (req.get?.('x-forwarded-host') || req.get?.('host') || 'developers.sap.com')
         .split(',')[0].trim();
       res.setHeader('Link', `<${proto}://${host}/tutorials/${slug}.md>; rel="alternate"; type="text/markdown"`);
+
+      // Content negotiation on the primary URL: an agent/LLM that sends
+      // `Accept: text/markdown` gets the normalized Markdown source instead of
+      // HTML, without needing to rewrite the URL to the `.md` variant.
+      // `Vary: Accept` is set on BOTH representations (markdown branch below AND
+      // this HTML branch) so the edge cache keys on the header — a cached HTML
+      // response stored without `Vary` would otherwise be served to a later
+      // markdown request. #agent-readiness.
+      res.setHeader('Vary', 'Accept');
+      if (prefersMarkdown(req.get?.('accept'))) {
+        return markdownServeHandler(req, res);
+      }
     }
 
     // Delegate to the shared serve core — handles cache hit, DB BLOB read,
@@ -1456,6 +1515,31 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- getRepoProvenance(slug) ---
+  //
+  // Returns { repo, branch } for a tutorial slug from RepoCatalog (the
+  // authoritative live repo+branch map, populated on content publish and
+  // keyed by slug — see db/views.cds and repo-catalog.js). Used by the
+  // `.md` serve handler to absolutize relative image paths (#2235).
+  //
+  // RepoCatalog holds only small string columns (no BLOBs), so CDS QL is
+  // safe on both HANA and SQLite. Fail-open: any miss/error yields
+  // { repo: null, branch: null }, leaving image paths relative.
+  async function getRepoProvenance(slug) {
+    if (!slug || typeof slug !== 'string') return { repo: null, branch: null };
+    try {
+      const { RepoCatalog } = cds.entities(namespace);
+      if (!RepoCatalog) return { repo: null, branch: null };
+      const row = await SELECT.one.from(RepoCatalog)
+        .where`LOWER(slug) = ${slug.toLowerCase()}`
+        .columns('repo', 'branch');
+      return { repo: row?.repo ?? null, branch: row?.branch ?? null };
+    } catch (err) {
+      console.error('[content/repo-provenance]', err instanceof Error ? err.message : String(err));
+      return { repo: null, branch: null };
+    }
+  }
+
   // --- getTutorialSource(slug) ---
   //
   // Used by the admin tile's Source Markdown facet (PR-2 of spec
@@ -1574,7 +1658,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .split(',')[0].trim();
       const canonicalUrl = `${proto}://${host}/tutorials/${slug}`;
 
-      const out = normalizeTutorialMarkdown(markdown, { slug, canonicalUrl });
+      // Provenance for absolutizing relative image paths (#2235). RepoCatalog is
+      // keyed by slug and carries repo+branch for 100% of live tutorials; it's a
+      // small non-BLOB table so CDS QL is safe. Fail-open: any miss/error leaves
+      // image paths relative (pre-#2235 behavior).
+      const { repo, branch } = await getRepoProvenance(slug);
+
+      const out = normalizeTutorialMarkdown(markdown, { slug, canonicalUrl, repo, branch });
       const buffer = Buffer.from(out, 'utf-8');
       const etag = createHash('sha256').update(buffer).digest('hex');
 
@@ -1806,6 +1896,11 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
 
+      // Rollback knows the manifest version, not a per-slug list — purge the
+      // whole content corpus at the edge (coarse `content` tag). Fire-and-forget,
+      // fail-open, no-op unless EDGE_PURGE_ENABLED. See fast-purge.js.
+      purgeAllContent();
+
       res.json({ rolledBackTo: target.version, status: 'ACTIVE' });
     } catch (err) {
       console.error('[content/rollback]', err instanceof Error ? err.message : String(err));
@@ -1937,17 +2032,18 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       // PR #591: `sources` is the per-slug gzipped raw markdown side of the
       // payload — destructure + forward it to appendToSession so source
       // hashes get persisted alongside content hashes.
-      const { sessionId, files, metadata, bodyTexts, branchSpecs, sources } = req.body || {};
+      const { sessionId, files, metadata, bodyTexts, branchSpecs, sources, sourceCommits } = req.body || {};
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
       const droppedFiles = dropCatalogSlugs(files);
       dropCatalogSlugs(metadata);
       dropCatalogSlugs(bodyTexts);
       dropCatalogSlugs(branchSpecs);
       dropCatalogSlugs(sources);
+      dropCatalogSlugs(sourceCommits);
       if (droppedFiles.length) {
         LOG.warn(`[content/publish/append] dropped ${droppedFiles.length} catalog slug(s)`);
       }
-      const result = await sessionHelpers.appendToSession({ sessionId, files, metadata, bodyTexts, branchSpecs, sources });
+      const result = await sessionHelpers.appendToSession({ sessionId, files, metadata, bodyTexts, branchSpecs, sources, sourceCommits });
       res.status(202).json(result);
     } catch (err) {
       const code = err.statusCode || 500;
@@ -1963,6 +2059,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       const result = await sessionHelpers.commitSession({ sessionId, allowRevertSlugs });
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
+      // Fire-and-forget edge Fast-Purge of the freshly published slugs — void,
+      // never awaited, fail-open (no-op unless EDGE_PURGE_ENABLED). See fast-purge.js.
+      purgePublishedSlugs(result.freshSlugs);
       LOG.info(`[content/publish/commit] sessionId=${sessionId} version=${result.version} duration=${result.durationMs}ms alreadyActive=${result.alreadyActive}`);
       res.status(200).json(result);
     } catch (err) {

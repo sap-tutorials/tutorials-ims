@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import { clampLimit } from './mcp-arg-validators.js';
 
 const LOG = cds.log('mcp-events-search');
 
@@ -36,7 +37,7 @@ export async function handleSearchEvents(req) {
   const eventType = typeof d.eventType === 'string' ? d.eventType.trim().toLowerCase() : '';
   const region = typeof d.region === 'string' ? d.region.trim().toUpperCase() : 'ALL';
   const upcomingOnly = d.upcomingOnly !== false; // default true
-  const limit = Math.min(Math.max(Number(d.limit) || 20, 1), 50);
+  const limit = clampLimit(d.limit, 20, 50);
 
   try {
     const { CommunityEvents } = cds.entities('com.sap.developers.ims.external');

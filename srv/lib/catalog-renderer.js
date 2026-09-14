@@ -10,7 +10,7 @@
 // auto-expand) are reproduced verbatim — they are tiny, scoped, and removing
 // them would require parallel CSS work outside this change's scope.
 
-import MarkdownIt from 'markdown-it';
+import { renderMarkdown } from './markdown.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,18 +54,8 @@ export function synthCatalogDescription(kind, title, count) {
 
 // Group/Mission descriptions are admin-authored Markdown (issue #121).
 // Authors edit them via the admin MarkdownEditor (app/admin/{missions,groups}/
-// webapp/ext/MarkdownEditor.js), so we render with the same flavor here.
-// `html: false` blocks raw HTML embeds (we never want a description to ship a
-// <script>); markdown-it always escapes literal HTML when html is off. `breaks`
-// turns single newlines into <br> so soft line breaks survive — authors expect
-// this from the live preview. `linkify` auto-links bare URLs.
-const md = new MarkdownIt({ html: false, breaks: true, linkify: true });
-
-// Render Markdown safely. With html:false, markdown-it escapes raw HTML and
-// emits only its own tag set, so the result is safe to drop into the page.
-function renderMarkdown(s) {
-  return md.render(String(s ?? '')).trim();
-}
+// webapp/ext/MarkdownEditor.js), so we render with the same flavor here —
+// see renderMarkdown in ./markdown.js for the (shared) safety policy.
 
 const NEW_WINDOW_DAYS = 31;
 
@@ -150,7 +140,9 @@ ${cards}
     </div>
   </div>
 </div>
-<script type="module" src="${islandSrc('nav-dropdown')}"></script>`;
+<script type="module" src="${islandSrc('nav-dropdown')}"></script>
+<div data-vue-island="learning-path" data-goal-type="group"></div>
+<script type="module" src="${islandSrc('learning-path')}"></script>`;
 }
 
 export function renderMissionBody(ctx) {
@@ -246,7 +238,9 @@ document.addEventListener('DOMContentLoaded', function() {
   if (firstCard) firstCard.classList.add('expanded');
 });
 </script>
-<script type="module" src="${islandSrc('nav-dropdown')}"></script>`;
+<script type="module" src="${islandSrc('nav-dropdown')}"></script>
+<div data-vue-island="learning-path" data-goal-type="mission"></div>
+<script type="module" src="${islandSrc('learning-path')}"></script>`;
 }
 
 // Composes a full page given a slug + chrome shell + already-loaded body data.

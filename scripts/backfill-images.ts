@@ -11,6 +11,8 @@
 //
 // Usage:
 //   CAP_BASE_URL=<srv-url> CONTENT_API_KEY=<key> npm run backfill-images
+//   ...            [--slug <slug>]   # only images referenced by one tutorial (#2288)
+//   ...            [--channel qa]    # QA: reads CAP_QA_BASE_URL/CONTENT_API_KEY_QA + hugo/public-qa
 //   ...            [--limit N]        # only the first N unique images (smoke)
 //   ...            [--concurrency N]  # parallel fetch+push (default 12)
 //   ...            [--dry-run]        # enumerate + count only, no fetch/push
@@ -23,7 +25,20 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { extractImgCdnUrls, channelFor } from '../srv/lib/image-warm-utils.js';
 
-interface Args { limit: number; concurrency: number; dryRun: boolean; force: boolean; }
+interface Args { limit: number; concurrency: number; dryRun: boolean; force: boolean; slug?: string; channel: 'prod' | 'qa'; }
+
+/** Read `--slug <value>` from argv; undefined when absent or blank. */
+export function parseSlug(argv: string[]): string | undefined {
+  const i = argv.indexOf('--slug');
+  const v = i >= 0 ? argv[i + 1]?.trim() : undefined;
+  return v || undefined;
+}
+
+/** Read `--channel qa|prod` from argv; defaults to 'prod'. Mirrors publish-content.ts. */
+export function parseChannel(argv: string[]): 'prod' | 'qa' {
+  const i = argv.indexOf('--channel');
+  return i >= 0 && argv[i + 1]?.trim().toLowerCase() === 'qa' ? 'qa' : 'prod';
+}
 
 function parseArgs(argv: string[]): Args {
   const get = (flag: string): string | undefined => {
@@ -35,23 +50,33 @@ function parseArgs(argv: string[]): Args {
     concurrency: Number(get('--concurrency')) || 12,
     dryRun: argv.includes('--dry-run'),
     force: argv.includes('--force'),
+    slug: parseSlug(argv),
+    channel: parseChannel(argv),
   };
 }
 
-/** Walk hugo/public/tutorials/<slug>/index.html → Map<sourceUrl, slug>. */
-function collectImageUrls(publicDir: string): Map<string, string> {
+/**
+ * Walk hugo/public/tutorials/<slug>/index.html → Map<sourceUrl, slug>.
+ *
+ * When `slug` is given, only that one tutorial's built HTML is scanned — used
+ * by the slug-targeted rebuild path (#2288) to re-warm just the changed
+ * tutorial's images without re-fetching the whole catalog. An unknown slug
+ * yields an empty map (no throw): nothing to warm.
+ */
+export function collectImageUrls(publicDir: string, slug?: string): Map<string, string> {
   const urlToSlug = new Map<string, string>();
   const tutorialsDir = join(publicDir, 'tutorials');
   if (!existsSync(tutorialsDir)) {
     throw new Error(`Not found: ${tutorialsDir} — run the Hugo build first (npm run build:all).`);
   }
-  for (const slug of readdirSync(tutorialsDir)) {
-    const indexPath = join(tutorialsDir, slug, 'index.html');
+  const slugs = slug ? [slug] : readdirSync(tutorialsDir);
+  for (const s of slugs) {
+    const indexPath = join(tutorialsDir, s, 'index.html');
     if (!existsSync(indexPath)) continue;
     let html: string;
     try { html = readFileSync(indexPath, 'utf8'); } catch { continue; }
     for (const u of extractImgCdnUrls(html)) {
-      if (!urlToSlug.has(u)) urlToSlug.set(u, slug); // first-seen slug wins
+      if (!urlToSlug.has(u)) urlToSlug.set(u, s); // first-seen slug wins
     }
   }
   return urlToSlug;
@@ -90,16 +115,19 @@ async function pushImage(baseUrl: string, apiKey: string, u: string, slug: strin
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const baseUrl = (process.env.CAP_BASE_URL || '').replace(/\/$/, '');
-  const apiKey = process.env.CONTENT_API_KEY || '';
+  // Channel selects the srv + built-HTML dir, mirroring publish-content.ts.
+  const isQa = args.channel === 'qa';
+  const baseUrl = ((isQa ? process.env.CAP_QA_BASE_URL : process.env.CAP_BASE_URL) || '').replace(/\/$/, '');
+  const apiKey = (isQa ? process.env.CONTENT_API_KEY_QA : process.env.CONTENT_API_KEY) || '';
   const token = process.env.TUTORIALS_GITHUB_TOKEN || process.env.GITHUB_TOKEN || undefined;
+  const envHint = isQa ? 'CAP_QA_BASE_URL / CONTENT_API_KEY_QA' : 'CAP_BASE_URL / CONTENT_API_KEY';
 
-  if (!baseUrl) { console.error('Fatal: CAP_BASE_URL not set'); process.exit(1); }
-  if (!apiKey && !args.dryRun) { console.error('Fatal: CONTENT_API_KEY not set'); process.exit(1); }
+  if (!baseUrl) { console.error(`Fatal: ${isQa ? 'CAP_QA_BASE_URL' : 'CAP_BASE_URL'} not set`); process.exit(1); }
+  if (!apiKey && !args.dryRun) { console.error(`Fatal: ${isQa ? 'CONTENT_API_KEY_QA' : 'CONTENT_API_KEY'} not set (${envHint})`); process.exit(1); }
 
-  const publicDir = join(process.cwd(), 'hugo', 'public');
-  console.log(`Enumerating image URLs under ${publicDir}/tutorials ...`);
-  let urlToSlug = collectImageUrls(publicDir);
+  const publicDir = join(process.cwd(), 'hugo', isQa ? 'public-qa' : 'public');
+  console.log(`Enumerating image URLs under ${publicDir}/tutorials ${args.slug ? `(slug: ${args.slug}) ` : ''}...`);
+  let urlToSlug = collectImageUrls(publicDir, args.slug);
   let entries = [...urlToSlug.entries()];
   const totalUnique = entries.length;
   if (args.limit > 0) entries = entries.slice(0, args.limit);
@@ -151,4 +179,11 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(err => { console.error('Fatal:', err instanceof Error ? err.message : String(err)); process.exit(1); });
+// Only run main() when executed directly (not when imported by tests).
+const isMainModule = process.argv[1] && (
+  process.argv[1].endsWith('backfill-images.ts') ||
+  process.argv[1].endsWith('backfill-images.js')
+);
+if (isMainModule) {
+  main().catch(err => { console.error('Fatal:', err instanceof Error ? err.message : String(err)); process.exit(1); });
+}

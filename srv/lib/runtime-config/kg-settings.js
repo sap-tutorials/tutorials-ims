@@ -35,6 +35,7 @@ const DEFAULTS = {
   mergeSimThreshold: 0.92,
   mergeSimThresholdExtract: 0.85,
   onDemandExtractionEnabled: false,   // #948
+  learningPathEnabled: false,         // kg-learning-path
 };
 
 /** Read the singleton row, tolerant of build-pipeline contexts where
@@ -50,7 +51,7 @@ async function readRow() {
     try {
       const db = await cds.connect.to('db');
       const rows = await db.run(
-        'SELECT enabled, extractBuildCap, mergeSimThreshold, mergeSimThresholdExtract, onDemandExtractionEnabled ' +
+        'SELECT enabled, extractBuildCap, mergeSimThreshold, mergeSimThresholdExtract, onDemandExtractionEnabled, LEARNINGPATHENABLED ' +
         'FROM COM_SAP_DEVELOPERS_IMS_KNOWLEDGEGRAPHSETTINGS LIMIT 1'
       );
       return rows?.[0] ?? null;
@@ -90,6 +91,17 @@ function envNumber(name) {
  *                     onDemandExtractionEnabled: boolean }>}
  */
 export async function resolveKnowledgeGraphSettings() {
+  // Test-only: globalThis cache invalidation. cds.test('serve') on Windows creates
+  // a duplicate ESM module instance for this file, so _resetCacheForTests() called
+  // from the test file targets the wrong instance. Setting globalThis.__kgSettingsCacheDirty__
+  // crosses the module-duplication boundary — both instances check the same global.
+  // Production: the flag is never set, so this branch is always skipped.
+  // See repo gotcha: vitest-served-handler-test-hooks-need-globalthis.
+  if (process.env.VITEST && globalThis.__kgSettingsCacheDirty__) {
+    _cached = null;
+    _cachedAt = 0;
+    globalThis.__kgSettingsCacheDirty__ = false;
+  }
   const now = Date.now();
   if (_cached && (now - _cachedAt) < TTL_MS) return _cached;
 
@@ -121,6 +133,11 @@ export async function resolveKnowledgeGraphSettings() {
       pick(row, 'onDemandExtractionEnabled', 'ONDEMANDEXTRACTIONENABLED')
       ?? envFlag('KG_ONDEMAND_ENABLED')
       ?? DEFAULTS.onDemandExtractionEnabled
+    ),
+    learningPathEnabled: Boolean(
+      pick(row, 'learningPathEnabled', 'LEARNINGPATHENABLED')
+      ?? envFlag('KNOWLEDGE_GRAPH_LEARNING_PATH_ENABLED')
+      ?? DEFAULTS.learningPathEnabled
     ),
   };
 

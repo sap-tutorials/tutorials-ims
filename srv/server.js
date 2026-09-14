@@ -67,6 +67,8 @@ import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
+import { register as registerRateLimit } from './lib/rate-limit/register.js';
+import { register as registerInputValidation } from './lib/input-validation/register.js';
 import { streamChat } from './lib/chat-orchestrator.js';
 import { buildChatInvocation } from './lib/chat-invocation.js';
 import { computeEmbeddingStats } from './lib/embedding-stats.js';
@@ -76,6 +78,7 @@ import { makeCodeCheckHandler } from './lib/code-check-handler.js';
 import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
+import { assertSpecPublishHandler } from './lib/assert-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
 import { publishContributors } from './lib/contributors-publish.js';
 import { publishValidationRules } from './lib/validation-rules-publish.js';
@@ -97,6 +100,8 @@ import './graphql-config.js';
 import { makeA2aRouter } from './lib/a2a/rpc-router.js';
 import { buildAgentCard } from './lib/a2a/agent-card.js';
 import { resolveA2aSettings } from './lib/runtime-config/a2a-settings.js';
+import { provenanceHandler, jwksHandler } from './lib/provenance-handlers.js';
+import { skillBundleHandler } from './lib/skill-bundle.js';
 
 // #1182 — cds-caching resolve-guard fix. This module is evaluated by cds-serve
 // AFTER `await cds.plugins` (so the cds-caching plugin has already pushed its
@@ -757,6 +762,11 @@ cds.on('bootstrap', (app) => {
     req.params.slug = req.params[0];
     return markdownServeHandler(req, res);
   });
+  // Signed provenance JWS endpoint (#2245). Registered BEFORE the *slug wildcard
+  // below so `demo/provenance` is not swallowed as a slug. Public, read-only — no
+  // auth; these are attestation/key-distribution endpoints.
+  app.get('/content/tutorials/:slug/provenance', provenanceHandler);
+  app.get('/content/tutorials/:slug/skill', skillBundleHandler);
   app.get('/content/tutorials/*slug', serveHandler);
   // Legacy AEM `.model.json` compatibility for SAP Discovery Center (#DC cards).
   // Approuter maps ^/tutorials/<slug>.model.json$ → here. See srv/lib/model-json.js.
@@ -940,6 +950,7 @@ cds.on('bootstrap', (app) => {
   // Issue #orphan-purge — CI-only batched soft-delete. Same auth as /content/publish.
   app.post('/content/orphan-purge', express.json({ limit: '1mb' }), contentAuthMiddleware, orphanPurgeHandler);
   app.post('/content/code-check-specs', express.json({ limit: '5mb' }), contentAuthMiddleware, codeCheckSpecPublishHandler);
+  app.post('/content/assert-specs', express.json({ limit: '5mb' }), contentAuthMiddleware, assertSpecPublishHandler);
 
   // Validate-answer specs publish endpoint (issue #209). Now uses
   // contentAuthMiddleware (#242) for symmetry with /content/code-check-specs
@@ -1040,6 +1051,10 @@ cds.on('bootstrap', (app) => {
     res.setHeader('Vary', 'X-Forwarded-Host, Host');
     res.json(buildAgentCard({ baseUrl, tokenUrl: cfg.tokenUrl, enabled: cfg.enabled }));
   });
+
+  // JWKS key-distribution for the signed provenance envelope (#2245). Public,
+  // anonymous — clients verify JWS signatures with these public keys.
+  app.get('/.well-known/tutorial-provenance/jwks.json', jwksHandler);
 
   // MCP discovery manifest (public, anonymous) — served on the already-public
   // /.well-known/* approuter route. Metadata only: advertises the anonymous
@@ -1466,6 +1481,19 @@ cds.on('bootstrap', (app) => {
     const limiter = await getSearchLimiter();
     return ipRateLimitMiddleware(limiter, { logName: 'search-rate-limit' })(req, res, next);
   });
+
+  // Origin-side abuse protection: shared-store (cross-instance) rate limiter on
+  // the anon / expensive surface (/content, /build, /graph, /mcp*, …). Flag-
+  // gated (RATE_LIMIT_ENABLED, ImsConfig flag.ratelimit), default OFF, fail-open.
+  // Complements the always-on legacy /search limiter above.
+  registerRateLimit(app);
+
+  // Origin-side abuse protection: WAF-equivalent input validation on the anon /
+  // agentic write surface — body-size caps everywhere, plus a JSON depth/shape
+  // check on the agentic JSON-RPC surface (/mcp*, /a2a, /chat/stream). Flag-
+  // gated (INPUT_VALIDATION_ENABLED, ImsConfig flag.inputvalidation), default
+  // OFF, fail-open. Mounted after the rate limiter so floods are shed first.
+  registerInputValidation(app);
 });
 
 cds.on('served', async () => {

@@ -1,0 +1,15 @@
+ID;legacyId;slug;unitId;title
+9077e000-0000-4000-8000-000000090001;90001;unit-1-platform-lesson-1;unit-1-platform;Who's SAP, and what's BTP?
+9077e000-0000-4000-8000-000000090002;90002;unit-1-platform-lesson-2;unit-1-platform;The CAP Stack
+9077e000-0000-4000-8000-000000090003;90003;unit-1-platform-lesson-3;unit-1-platform;Deploying & Operating
+9077e000-0000-4000-8000-000000090004;90004;unit-2-cds-lesson-1;unit-2-cds;The CDS Language Family
+9077e000-0000-4000-8000-000000090005;90005;unit-2-cds-lesson-2;unit-2-cds;Protocols & Standards
+9077e000-0000-4000-8000-000000090006;90006;unit-2-cds-lesson-3;unit-2-cds;Tools of the Trade
+9077e000-0000-4000-8000-000000090007;90007;unit-3-hana-lesson-1;unit-3-hana;The HANA Universe
+9077e000-0000-4000-8000-000000090008;90008;unit-3-hana-lesson-2;unit-3-hana;Integration & Migration
+9077e000-0000-4000-8000-000000090009;90009;unit-3-hana-lesson-3;unit-3-hana;Data Engineering Basics
+9077e000-0000-4000-8000-000000090010;90010;unit-4-security-lesson-1;unit-4-security;Authentication & Tokens
+9077e000-0000-4000-8000-000000090011;90011;unit-4-security-lesson-2;unit-4-security;Identity & Factors
+9077e000-0000-4000-8000-000000090012;90012;unit-4-security-lesson-3;unit-4-security;Business & Governance
+9077e000-0000-4000-8000-000000090013;90013;unit-5-ai-lesson-1;unit-5-ai;AI Foundations
+9077e000-0000-4000-8000-000000090014;90014;unit-5-ai-lesson-2;unit-5-ai;SAP's AI Stack

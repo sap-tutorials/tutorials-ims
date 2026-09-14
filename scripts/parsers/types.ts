@@ -138,6 +138,8 @@ export interface TutorialStep {
    * builds — fetch-tutorials.ts doesn't set this field.
    */
   aiInvolved?: boolean
+
+  asserts?: AssertBlock[]
 }
 
 export interface ParsedTutorial {
@@ -329,4 +331,20 @@ export interface PublicCodeCheckSpec {
   language?: string
   hints?: string[]
   hasReference: boolean
+}
+
+export type AssertType = 'cmd' | 'http' | 'file';
+
+export interface AssertBlock {
+  index: number;        // assertIndex within the step, 0-based (order of appearance)
+  stepNumber: number;   // N from [ASSERT_N]
+  type: AssertType;
+  run?: string;         // cmd
+  expectExit?: number;  // cmd
+  method?: string;      // http, upper-cased
+  path?: string;        // http
+  expectStatus?: number;// http
+  filePath?: string;    // file
+  expectContains?: boolean; // file: false ⇒ "exists"; true ⇒ "contains"
+  match?: string;       // shared, optional regex source (required for file+contains)
 }

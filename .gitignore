@@ -163,3 +163,6 @@ approuter/static/.well-known/oauth-protected-resource
 test-results/
 playwright-report/
 .playwright-auth-state.json
+
+# quiet-run wrapper full logs — local scrollback capture, never committed.
+.quiet-logs/

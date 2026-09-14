@@ -275,7 +275,29 @@ service KnowledgeGraphService {
     similarity    : Decimal(4, 3);  // 0.000–1.000
   }
 
+  type LearningPathStep {
+    order              : Integer;
+    tutorialSlug       : String;
+    teachesConcepts    : array of String;
+    satisfiesPrereqFor : array of String;
+    alreadyPartial     : Boolean;
+  }
+
+  type LearningPathResult {
+    goalType     : String;
+    goal         : String;
+    totalSteps   : Integer;
+    cyclesBroken : Integer;
+    truncated    : Boolean;
+    personalized : Boolean;
+    steps        : array of LearningPathStep;
+  }
+
   // ─── Phase 1 + Phase 2 typed query functions (open to authenticated) ──
+  /** Ordered, personalized prerequisite chain toward a goal.
+      goalType: 'tutorial' | 'mission' | 'group' | 'next-best'. */
+  function learningPath(goal : String, goalType : String) returns LearningPathResult;
+
   function neighborhood(slug : String)                        returns NeighborhoodResult;
   // Task 5 of #850: expanded-panel data source. Per-type buckets with
   // larger caps for the /tutorials/*/ ExpandedPanel dialog.

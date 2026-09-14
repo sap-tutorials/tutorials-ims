@@ -51,4 +51,24 @@ extend service KnowledgeGraphService {
     size                  : Integer;
     promotedToMissionSlug : String;
   };
+
+  /** Ordered prerequisite chain / "what should I learn next" for a goal.
+      Returns the sequence of tutorials to complete, prerequisites first.
+      @param goal       Tutorial or mission/group slug (lowercase). Empty for next-best.
+      @param goal_type  'tutorial' | 'mission' | 'group' | 'next-best'. */
+  function kg_learning_path(goal: String, goal_type: String) returns {
+    goalType     : String;
+    goal         : String;
+    totalSteps   : Integer;
+    cyclesBroken : Integer;
+    truncated    : Boolean;
+    personalized : Boolean;
+    steps        : array of {
+      order              : Integer;
+      tutorialSlug       : String;
+      teachesConcepts    : array of String;
+      satisfiesPrereqFor : array of String;
+      alreadyPartial     : Boolean;
+    };
+  };
 }
