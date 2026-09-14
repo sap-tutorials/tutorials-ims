@@ -146,4 +146,28 @@ function handleClick(unit: KttUnit, idx: number, lessonId: string): void {
   border-color: #28a745;
   color: #155724;
 }
+
+/* Dark mode — site toggles `html.dark`. Without explicit colors the white
+   card kept a white inherited text color (light-on-light, unreadable). */
+html.dark .ktt-node {
+  background: #1c2733;
+  border-color: #4db1ff;
+  color: #e6edf3;
+}
+
+html.dark .ktt-node:hover:not(.is-locked) {
+  background: #243447;
+}
+
+html.dark .ktt-node.is-locked {
+  background: #141b22;
+  border-color: #55606b;
+  color: #8a97a5;
+}
+
+html.dark .ktt-node.is-done {
+  background: #14301c;
+  border-color: #3fa45a;
+  color: #d4f7dd;
+}
 </style>

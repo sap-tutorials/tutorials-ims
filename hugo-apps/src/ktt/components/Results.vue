@@ -95,4 +95,27 @@ button:hover {
 .ktt-results__back:hover {
   background: #d0d0d0;
 }
+
+/* Dark mode — site toggles `html.dark`. */
+html.dark .ktt-results__lesson {
+  color: #aeb8c2;
+}
+
+html.dark .ktt-results__xp {
+  color: #4ade80;
+}
+
+html.dark .ktt-results__banter {
+  color: #c3ccd5;
+}
+
+html.dark .ktt-results__back {
+  background: #2a3542;
+  color: #e6edf3;
+  border-color: #55606b;
+}
+
+html.dark .ktt-results__back:hover {
+  background: #354354;
+}
 </style>
