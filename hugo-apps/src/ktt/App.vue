@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import KasimirStage from './components/KasimirStage.vue';
 import SkillTreeMap from './components/SkillTreeMap.vue';
+import StatsBar from './components/StatsBar.vue';
 import Lesson from './components/Lesson.vue';
 import Results from './components/Results.vue';
 import { loadLocal, saveLocal, mergeProgress, type KttProgress } from './lib/progress';
@@ -55,27 +56,55 @@ const activeLesson = computed(() => {
 // Results state
 const lastXp = ref(0);
 const banterLine = ref<string | null>(null);
+const resultPassed = ref(true);
+const resultCorrect = ref(0);
+const resultTotal = ref(0);
+// Bumped to force-remount <Lesson> (fresh session) on retry.
+const lessonRunKey = ref(0);
 
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
 function handleSelect(lessonId: string) {
   activeLessonId.value = lessonId;
+  lessonRunKey.value += 1;
   screen.value = 'lesson';
 }
 
-async function handleLessonComplete(lessonId: string, sessionXp: number) {
+async function handleLessonComplete(payload: {
+  lessonId: string;
+  xp: number;
+  passed: boolean;
+  correct: number;
+  total: number;
+}) {
   const lesson = activeLesson.value;
   if (!lesson || !progress.value) return;
+
+  resultPassed.value = payload.passed;
+  resultCorrect.value = payload.correct;
+  resultTotal.value = payload.total;
+  banterLine.value = null;
+
+  // Below the mastery threshold (Bug C): bank nothing — no XP, no streak, no
+  // "mastered". Show the retry screen instead of a false success.
+  if (!payload.passed) {
+    lastXp.value = 0;
+    screen.value = 'results';
+    fetchBanter(props.apiUrl, `lesson_failed:${payload.lessonId}`).then(line => {
+      banterLine.value = line;
+    });
+    return;
+  }
 
   // Capture pre-merge XP so Results shows the earned delta for this session
   const prevXp = progress.value.xp;
 
   // Add to mastered and update XP/streak locally using real earned XP
   const updated = mergeProgress(progress.value, {
-    xp: progress.value.xp + sessionXp,
+    xp: progress.value.xp + payload.xp,
     streak: progress.value.streak + 1,
-    mastered: [lessonId],
+    mastered: [payload.lessonId],
   });
   progress.value = updated;
   saveLocal(updated);
@@ -87,7 +116,7 @@ async function handleLessonComplete(lessonId: string, sessionXp: number) {
   screen.value = 'results';
 
   // Opportunistic banter — fail-open, updates after screen shows
-  fetchBanter(props.apiUrl, `lesson_complete:${lessonId}`).then(line => {
+  fetchBanter(props.apiUrl, `lesson_complete:${payload.lessonId}`).then(line => {
     banterLine.value = line;
   });
 
@@ -95,7 +124,7 @@ async function handleLessonComplete(lessonId: string, sessionXp: number) {
   isAuthenticated().then(auth => {
     if (!auth) return;
     completeLesson(props.apiUrl, {
-      lessonSlug: lessonId,
+      lessonSlug: payload.lessonId,
       legacyId: lesson.legacyId,
       title: lesson.title,
     }).then(result => {
@@ -115,6 +144,12 @@ async function handleLessonComplete(lessonId: string, sessionXp: number) {
 function handleContinue() {
   // Go back to map to pick the next lesson
   screen.value = 'map';
+}
+
+function handleRetry() {
+  // Restart the same lesson with a fresh session (remount via key bump).
+  lessonRunKey.value += 1;
+  screen.value = 'lesson';
 }
 
 function handleBack() {
@@ -143,6 +178,7 @@ function handleBack() {
 
       <!-- Skill Tree Map -->
       <section v-else-if="screen === 'map'" class="ktt-map">
+        <StatsBar v-if="progress" :progress="progress" />
         <SkillTreeMap
           :lessons="lessons"
           :mastered="mastered"
@@ -153,6 +189,7 @@ function handleBack() {
       <!-- Active Lesson -->
       <section v-else-if="screen === 'lesson' && activeLesson" class="ktt-lesson-screen">
         <Lesson
+          :key="lessonRunKey"
           :lesson="activeLesson"
           @complete="handleLessonComplete"
           @back="handleBack"
@@ -166,7 +203,11 @@ function handleBack() {
           :lesson-id="activeLessonId!"
           :lesson-title="activeLesson.title"
           :banter-line="banterLine"
+          :passed="resultPassed"
+          :correct="resultCorrect"
+          :total="resultTotal"
           @continue="handleContinue"
+          @retry="handleRetry"
           @back="handleBack"
         />
       </section>

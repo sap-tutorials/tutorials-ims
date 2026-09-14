@@ -7,6 +7,8 @@ import {
   answerDrill,
   advance,
   isComplete,
+  passed,
+  totalDrills,
 } from '../lib/engine';
 import type { KttLesson, KttBeat, KttDrillBeat } from '../lib/engine';
 
@@ -15,7 +17,7 @@ import type { KttLesson, KttBeat, KttDrillBeat } from '../lib/engine';
 // ---------------------------------------------------------------------------
 const props = defineProps<{ lesson: KttLesson }>();
 const emit = defineEmits<{
-  (e: 'complete', lessonId: string, xp: number): void;
+  (e: 'complete', payload: { lessonId: string; xp: number; passed: boolean; correct: number; total: number }): void;
   (e: 'back'): void;
 }>();
 
@@ -72,8 +74,15 @@ function handleNext() {
   advance(session.value);
   if (isComplete(session.value)) {
     done.value = true;
-    mood.value = 'celebrate';
-    emit('complete', props.lesson.id, session.value.xp);
+    const didPass = passed(session.value, props.lesson);
+    mood.value = didPass ? 'celebrate' : 'thinking';
+    emit('complete', {
+      lessonId: props.lesson.id,
+      xp: session.value.xp,
+      passed: didPass,
+      correct: session.value.correct,
+      total: totalDrills(props.lesson),
+    });
     return;
   }
   const b = currentBeat(session.value);

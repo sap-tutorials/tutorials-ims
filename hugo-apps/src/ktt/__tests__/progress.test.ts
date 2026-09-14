@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { loadLocal, saveLocal, mergeProgress } from '../lib/progress';
+import { loadLocal, saveLocal, mergeProgress, levelForXp } from '../lib/progress';
 
 beforeEach(() => {
   localStorage.clear();
@@ -44,5 +44,32 @@ describe('mergeProgress — matches backend semantics', () => {
     const result = mergeProgress(local, remote);
     expect(result.xp).toBe(200);
     expect(result.streak).toBe(1);
+  });
+});
+
+describe('levelForXp — XP tiers', () => {
+  it('0 XP is level 1 Kitten', () => {
+    const l = levelForXp(0);
+    expect(l.level).toBe(1);
+    expect(l.name).toBe('Kitten');
+    expect(l.nextAt).toBe(50);
+  });
+
+  it('crosses into higher tiers at the thresholds', () => {
+    expect(levelForXp(49).name).toBe('Kitten');
+    expect(levelForXp(50).name).toBe('Curious Cat');
+    expect(levelForXp(150).name).toBe('Clever Cat');
+    expect(levelForXp(300).name).toBe('Acronym Adept');
+  });
+
+  it('top tier has no next threshold', () => {
+    const l = levelForXp(999);
+    expect(l.name).toBe('TLA Sage');
+    expect(l.level).toBe(5);
+    expect(l.nextAt).toBeNull();
+  });
+
+  it('handles non-numeric xp defensively', () => {
+    expect(levelForXp(NaN as any).level).toBe(1);
   });
 });
