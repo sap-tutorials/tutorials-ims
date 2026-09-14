@@ -509,6 +509,24 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/ktt/Lessons(.*)$",
+      "target": "/ktt/Lessons$1",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/ktt/banter(.*)$",
+      "target": "/ktt/banter$1",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/ktt/(.*)$",
+      "target": "/ktt/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa"
+    },
+    {
       "source": "^/content/(.*)$",
       "target": "/content/$1",
       "destination": "srv-api",
