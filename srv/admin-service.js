@@ -3632,10 +3632,14 @@ export default class AdminService extends cds.ApplicationService {
       if (!src) return req.reject(404, `Mission ${ID} not found`);
 
       // Append a suffix until the slug is free in `entity` (both Missions and
-      // CompletionPaths carry a @assert.unique.slug → DB unique index).
-      const uniqueSlug = async (entity, base) => {
+      // CompletionPaths carry a @assert.unique.slug → DB unique index). `base`
+      // is lowercased here so the probe and the returned (inserted) slug are
+      // both canonical — slugs are lowercase-canonical repo-wide.
+      const uniqueSlug = async (entity, rawBase) => {
+        const base = String(rawBase).toLowerCase();
         let candidate = base;
         for (let n = 2; ; n += 1) {
+          // slug-canonical: pre-canonicalized
           const clash = await tx.run(SELECT.one.from(entity).columns('ID').where({ slug: candidate }));
           if (!clash) return candidate;
           candidate = `${base}-${n}`;
