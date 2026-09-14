@@ -13,6 +13,7 @@ import * as mcpDev from './lib/mcp-developer-tools.js';
 import { maybeAutoSendCompletion } from './lib/ngds-autosend.js';
 import { stampSubmissionId } from './lib/task-record-submission-id.js';
 import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
+import { renderMarkdown } from './lib/markdown.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
@@ -639,7 +640,7 @@ export default class DeveloperService extends cds.ApplicationService {
       return {
         eventId: event.legacyId,
         eventName: event.name || '',
-        eventDescription: event.description || '',
+        eventDescription: renderMarkdown(event.description),   // #2296: admin-authored Markdown → safe HTML for the app-space hero
         eventType: event.eventType ?? 'OTHER',
         hasLogo: Boolean(event.hasLogo),
         type: 'COMPLEX',

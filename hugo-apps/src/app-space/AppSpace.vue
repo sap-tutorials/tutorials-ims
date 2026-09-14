@@ -306,9 +306,10 @@ const emptyStateMessage = computed(() => {
           />
           <h1 class="hero-title">{{ eventName }}</h1>
           <p class="hero-subtitle">Developer Garage &mdash; App Space</p>
-          <p class="hero-desc">
-            {{ eventDescription }}
-          </p>
+          <!-- #2296: eventDescription is server-rendered Markdown → safe HTML
+               (markdown-it html:false escapes raw HTML). Block element, not <p>,
+               because markdown emits its own <p> and <p>-in-<p> is invalid. -->
+          <div class="hero-desc" v-html="eventDescription"></div>
         </div>
         <div class="hero-stats" v-if="tracks.length > 0">
           <div class="stat-card">
@@ -594,6 +595,11 @@ const emptyStateMessage = computed(() => {
   opacity: 0.7;
   margin: 0;
 }
+/* Markdown wraps text in its own block tags — collapse their outer margins so a
+   single-paragraph description reads like the previous plain-text line (#2296).
+   :deep() needed: v-html children carry no scoped-style attribute. */
+.hero-desc :deep(:first-child) { margin-top: 0; }
+.hero-desc :deep(:last-child) { margin-bottom: 0; }
 
 .hero-stats {
   display: flex;
