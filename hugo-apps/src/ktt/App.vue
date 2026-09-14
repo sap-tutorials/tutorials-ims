@@ -155,6 +155,7 @@ function handleBack() {
         <Lesson
           :lesson="activeLesson"
           @complete="handleLessonComplete"
+          @back="handleBack"
         />
       </section>
 
@@ -218,5 +219,11 @@ function handleBack() {
 
 .ktt-landing button[data-testid="ktt-start"]:hover {
   background: #005bb5;
+}
+
+/* Dark mode — site toggles `html.dark`. */
+html.dark .ktt-coming-soon p,
+html.dark .ktt-landing p {
+  color: #aeb8c2;
 }
 </style>

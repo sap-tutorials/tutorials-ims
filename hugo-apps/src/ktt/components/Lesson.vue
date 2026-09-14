@@ -14,7 +14,10 @@ import type { KttLesson, KttBeat, KttDrillBeat } from '../lib/engine';
 // Props / emits
 // ---------------------------------------------------------------------------
 const props = defineProps<{ lesson: KttLesson }>();
-const emit = defineEmits<{ (e: 'complete', lessonId: string, xp: number): void }>();
+const emit = defineEmits<{
+  (e: 'complete', lessonId: string, xp: number): void;
+  (e: 'back'): void;
+}>();
 
 // ---------------------------------------------------------------------------
 // Session state
@@ -91,6 +94,14 @@ function handleChoice(choice: string) {
 
 <template>
   <div class="ktt-lesson">
+    <button
+      v-if="!done"
+      type="button"
+      class="ktt-lesson__back"
+      data-testid="ktt-lesson-back"
+      @click="emit('back')"
+    >← Back to map</button>
+
     <div class="ktt-lesson__stage">
       <KasimirStage :mood="mood" />
       <p class="ktt-lesson__speech" v-if="speechLine">{{ speechLine }}</p>
@@ -128,7 +139,7 @@ function handleChoice(choice: string) {
       <div v-else class="ktt-lesson__feedback">
         <p>{{ answerState === 'correct' ? (beat as any).kasimirRight : (beat as any).kasimirWrong }}</p>
         <button data-testid="ktt-next" @click="handleNext">
-          {{ answerState === 'correct' ? 'Continue' : 'Try Again' }}
+          {{ answerState === 'correct' ? 'Continue' : 'Got it — continue' }}
         </button>
       </div>
     </div>
@@ -216,5 +227,43 @@ button[data-testid="ktt-next"] {
 
 button[data-testid="ktt-next"]:hover {
   background: #005bb5;
+}
+
+.ktt-lesson__back {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0.25rem 0;
+  color: #0070f2;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.ktt-lesson__back:hover {
+  text-decoration: underline;
+}
+
+/* Dark mode — site toggles `html.dark`. White choice cards otherwise
+   inherited white text (light-on-light, unreadable). */
+html.dark .ktt-choice {
+  background: #1c2733;
+  border-color: #4db1ff;
+  color: #e6edf3;
+}
+
+html.dark .ktt-choice:hover {
+  background: #243447;
+}
+
+html.dark .ktt-lesson__speech {
+  color: #aeb8c2;
+}
+
+html.dark .ktt-lesson__xp {
+  color: #4ade80;
+}
+
+html.dark .ktt-lesson__back {
+  color: #4db1ff;
 }
 </style>
