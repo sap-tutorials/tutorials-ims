@@ -77,7 +77,12 @@ export async function handleSearchTechEd(req) {
       .columns('ID', 'slug', 'title', 'venue', 'track_ID', 'scheduledStart', 'room', 'url')
       .where`1 = 1`;
 
-    if (venue && VALID_VENUES.has(venue)) {
+    if (venue) {
+      // A named-but-unknown venue scopes to nothing — mirror the `track`
+      // filter's fail-with-[] behavior rather than silently returning BOTH
+      // venues (the caller asked to narrow; don't over-broaden). Absent/empty
+      // venue = no venue filter, handled by this guard being skipped.
+      if (!VALID_VENUES.has(venue)) return [];
       q = q.and`venue = ${venue}`;
     }
     if (trackIds) {

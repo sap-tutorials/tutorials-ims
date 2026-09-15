@@ -80,8 +80,11 @@ describe('search_teched', () => {
     expect(slugs(await call({ venue: 'virtual' }))).toEqual(['abap-cloud-clean-core']);
   });
 
-  it('ignores an unknown venue (no filter applied)', async () => {
-    expect(await call({ venue: 'MARS' })).toHaveLength(3);
+  it('returns [] for a named-but-unknown venue (scoped, so match nothing)', async () => {
+    // A caller that scopes to an unknown venue asked to narrow — do NOT
+    // over-broaden to both venues. Mirrors the track filter's fail-with-[].
+    expect(await call({ venue: 'MARS' })).toEqual([]);
+    expect(await call({ venue: 'EMEA' })).toEqual([]);
   });
 
   it('filters by track slug', async () => {

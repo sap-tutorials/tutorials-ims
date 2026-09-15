@@ -50,6 +50,32 @@ function makeFetch() {
   };
 }
 
+// Synthetic session items for offset-pagination tests (parseSession needs
+// sourceId + title + sessionCode; times drive dropPast keep/drop).
+function makeSessions(n, prefix) {
+  return Array.from({ length: n }, (_, i) => ({
+    sessionID: `${prefix}-${i}`,
+    code: `S${prefix}${i}`,
+    title: `Session ${prefix} ${i}`,
+    times: [{ utcStartTime: '2026/10/27 08:00:00', utcEndTime: '2026/10/27 09:30:00' }],
+  }));
+}
+
+// Fake fetch that soft-throttles the middle page: `from`===50 returns only 20 of
+// the requested 50 items (a NON-EMPTY partial page); every other page serves the
+// full window. Records requested offsets so a test can assert the loop realigns.
+function makePartialPageFetch(rows, total) {
+  const requested = [];
+  const fetchImpl = async (_url, init) => {
+    const from = Number(new URLSearchParams(init.body).get('from'));
+    requested.push(from);
+    const size = from === 50 ? 20 : 50; // throttle the second page
+    const items = rows.slice(from, from + size);
+    return fakeResponse({ responseCode: '0', totalSearchItems: total, sectionList: [{ items }] });
+  };
+  return { fetchImpl, requested };
+}
+
 // now BEFORE the fixture session dates so dropPast keeps everything
 const NOW_BEFORE = Date.parse('2026-10-01T00:00:00Z');
 
@@ -139,6 +165,23 @@ describe('fetchAllTechEdSessions', () => {
     expect(out.sessions.every((s) => s.venue === 'VIRTUAL')).toBe(true);
     expect(out.sessions).toHaveLength(3);
   });
+
+  it('retrieves all rows across a non-empty PARTIAL middle page (advances by items.length)', async () => {
+    // 90 real rows; the from=50 page soft-throttles to 20 items (rows 50-69).
+    // Advancing by the requested PAGE_SIZE (50) would jump from→100 and skip
+    // rows 70-89 (silent under-fetch). Advancing by items.length realigns
+    // from→70 so the tail is fetched — all 90 must come back.
+    const rows = makeSessions(90, 'B');
+    const { fetchImpl, requested } = makePartialPageFetch(rows, 90);
+    const out = await fetchAllTechEdSessions({
+      _fetch: fetchImpl, venues: { BERLIN: { widgetId: 'w-b', profileId: 'p-b' } }, now: NOW_BEFORE,
+    });
+    expect(out.sessions).toHaveLength(90);
+    expect(new Set(out.sessions.map((s) => s.sourceId)).size).toBe(90);
+    // The loop realigned to the un-returned offset instead of skipping to 100.
+    expect(requested).toContain(70);
+    expect(requested).not.toContain(100);
+  });
 });
 
 describe('parseVenuePayload', () => {
@@ -150,5 +193,36 @@ describe('parseVenuePayload', () => {
     // Virtual: Herzig + Pietsch + Narayanan + Gall = 4 distinct participants
     expect(speakers).toHaveLength(4);
     expect(speakers.find((s) => s.name === 'Philipp Herzig')).toBeTruthy();
+  });
+
+  it('does not treat a "Subtrack" facet as a Track (no exact Track ⇒ unset)', () => {
+    const { sessions, tracks } = parseVenuePayload({
+      venue: 'BERLIN',
+      sessionItems: [{
+        sessionID: 'x-1', code: 'SUB1', title: 'Subtrack only',
+        attributevalues: [
+          { attribute: 'Subtrack', value: 'Not A Track', rf_attributevalue_id: 'st-1' },
+          { attribute: 'Session Track Level', value: 'Advanced', rf_attributevalue_id: 'lvl-1' },
+        ],
+      }],
+    });
+    // The substring fallback used to match "Subtrack"/"Session Track Level" and
+    // mint a spurious track; the exact-only fallback leaves the track unset.
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].trackSourceId).toBeNull();
+    expect(tracks).toHaveLength(0);
+  });
+
+  it('still maps a case/whitespace variant of the Track facet via the exact fallback', () => {
+    const { sessions, tracks } = parseVenuePayload({
+      venue: 'BERLIN',
+      sessionItems: [{
+        sessionID: 'x-2', code: 'TRK1', title: 'Lowercase track',
+        attributevalues: [{ attribute: ' track ', value: 'Real Track', rf_attributevalue_id: 'trk-9' }],
+      }],
+    });
+    expect(sessions[0].trackSourceId).toBe('trk-9');
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0].name).toBe('Real Track');
   });
 });
