@@ -3,6 +3,7 @@ import { computeKgSignal, buildKgRankFragment, buildCommunityRankFragment, KG_CO
 import { resolveEmbeddingSettings } from './lib/chat-settings-resolver.js';
 import { handleGetTutorialStep } from './lib/mcp-developer-tools.js';
 import { handleSearchEvents } from './lib/mcp-events-search.js';
+import { handleSearchTechEd } from './lib/mcp-teched-search.js';
 import { handleSearchChannels } from './lib/mcp-channels-search.js';
 import { semanticSearch, clampTopK } from './lib/semantic-search.js';
 import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
@@ -581,6 +582,10 @@ export default class SearchService extends cds.ApplicationService {
     // Tier 2 MCP tool — anonymous public search over the CommunityEvents
     // catalog (@requires:'any' in search-service-mcp.cds).
     this.on('search_events', handleSearchEvents);
+
+    // Tier 2 MCP tool — anonymous public search over the TechEd 2026 session
+    // catalog (@requires:'any' in search-service-mcp.cds).
+    this.on('search_teched', handleSearchTechEd);
 
     // Tier 2 MCP tool — anonymous public search over the external-channels
     // catalog (@requires:'any' in search-service-mcp.cds).

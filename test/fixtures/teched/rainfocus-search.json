@@ -1,94 +1,412 @@
 {
-  "_note": "Representative RainFocus /api/search responses for SAP TechEd 2026, keyed by venue then request type. The live per-venue widget/apiProfile IDs are Akamai-gated in the catalog SPA JS and the 2026 catalog was not yet live at capture time, so this fixture is CONSTRUCTED to match the confirmed RainFocus contract (POST events.rainfocus.com/api/search, form-urlencoded, {responseCode, sectionList[].items}). Verify field names against a live capture before relying on the fetcher in prod. See srv/lib/teched/README.md.",
-  "VIRTUAL": {
-    "session": {
-      "responseCode": "0",
-      "responseMessage": "OK",
-      "sectionList": [
-        {
-          "items": [
-            {
-              "sessionID": "s-tev-1001",
-              "code": "DEV101",
-              "title": "Build Cloud-Native Apps with SAP CAP",
-              "abstract": "A hands-on tour of the SAP Cloud Application Programming Model.",
-              "times": [
-                { "utcStartTime": "2026-11-03T09:00:00Z", "utcEndTime": "2026-11-03T10:00:00Z", "room": "Virtual Room A" }
-              ],
-              "attributevalues": [
-                { "attribute": "Track", "value": "Application Development", "id": "trk-appdev" }
-              ],
-              "participants": [
-                { "speakerId": "spk-1", "firstName": "Ada", "lastName": "Byron", "jobtitle": "Chief Developer Advocate", "companyName": "SAP", "bio": "Loves CAP.", "photoURL": "https://example.com/ada.jpg" }
-              ],
-              "url": "https://www.sap.com/events/teched/virtual/session/DEV101"
-            },
-            {
-              "sessionID": "s-tev-1002",
-              "code": "AI200",
-              "title": "Generative AI on SAP BTP",
-              "abstract": "Patterns for building GenAI apps on BTP.",
-              "times": [
-                { "utcStartTime": "2026-11-03T11:00:00Z", "utcEndTime": "2026-11-03T11:45:00Z", "room": "Virtual Room B" }
-              ],
-              "attributevalues": [
-                { "attribute": "Track", "value": "Artificial Intelligence", "id": "trk-ai" }
-              ],
-              "participants": [
-                { "speakerId": "spk-2", "fullName": "Grace Hopper", "jobtitle": "Distinguished Engineer", "companyName": "SAP", "bio": "COBOL and compilers.", "photoURL": "https://example.com/grace.jpg" }
-              ],
-              "youtubeUrl": "https://youtube.com/watch?v=abc",
-              "url": "https://www.sap.com/events/teched/virtual/session/AI200"
-            }
-          ]
-        }
-      ]
-    },
-    "speaker": {
-      "responseCode": "0",
-      "responseMessage": "OK",
-      "sectionList": [
-        {
-          "items": [
-            { "speakerId": "spk-1", "firstName": "Ada", "lastName": "Byron", "jobtitle": "Chief Developer Advocate", "companyName": "SAP", "bio": "Loves CAP and clean core.", "photoURL": "https://example.com/ada.jpg" },
-            { "speakerId": "spk-2", "fullName": "Grace Hopper", "jobtitle": "Distinguished Engineer", "companyName": "SAP", "bio": "COBOL and compilers.", "photoURL": "https://example.com/grace.jpg" }
-          ]
-        }
-      ]
-    }
-  },
   "BERLIN": {
-    "session": {
-      "responseCode": "0",
-      "responseMessage": "OK",
-      "sectionList": [
-        {
-          "items": [
-            {
-              "sessionID": "s-te-2001",
-              "code": "DEV101",
-              "title": "Build Cloud-Native Apps with SAP CAP (Berlin)",
-              "abstract": "The in-person Berlin edition of the CAP hands-on.",
-              "times": [
-                { "utcStartTime": "2026-11-10T13:00:00Z", "utcEndTime": "2026-11-10T14:30:00Z", "room": "Hall 3.1" }
-              ],
-              "attributevalues": [
-                { "attribute": "Track", "value": "Application Development", "id": "trk-appdev" }
-              ],
-              "participants": [
-                { "speakerId": "spk-1", "firstName": "Ada", "lastName": "Byron", "jobtitle": "Chief Developer Advocate", "companyName": "SAP", "bio": "Loves CAP.", "photoURL": "https://example.com/ada.jpg" }
-              ],
-              "url": "https://www.sap.com/events/teched/berlin/session/DEV101"
-            },
-            {
-              "code": "",
-              "title": "Broken row without id or code",
-              "times": []
-            }
-          ]
-        }
-      ]
-    },
-    "speaker": { "responseCode": "0", "sectionList": [ { "items": [] } ] }
+    "responseCode": "0",
+    "responseMessage": "Success",
+    "totalSearchItems": 299,
+    "sectionList": [
+      {
+        "total": 3,
+        "from": 0,
+        "size": 3,
+        "items": [
+          {
+            "sessionID": "1786103955856001msiq",
+            "code": "KEY100",
+            "title": "Built for the ones who build",
+            "type": "Keynote",
+            "eventName": "SAP TechEd in Berlin 2026",
+            "eventCode": "te26",
+            "published": 1,
+            "abstract": "Imagine if you could walk into work and just build. No data pipelines. No models to teach the business. No AI cost surprises. SAP brings together AI, tools, business data, governance, agents, and a new UX layer in one in",
+            "times": [
+              {
+                "date": "2026-10-27",
+                "room": "Keynote Theater",
+                "length": 90,
+                "startTime": "09:00",
+                "endTime": "10:30",
+                "utcStartTime": "2026/10/27 08:00:00",
+                "utcEndTime": "2026/10/27 09:30:00",
+                "dayName": "Tuesday"
+              }
+            ],
+            "attributevalues": [
+              {
+                "attribute": "Track",
+                "value": "Keynote",
+                "rf_attributevalue_id": "1745939183774010keFq",
+                "attributevalue_id": "Keynote",
+                "attributevalue_code": "1745939183539010k979"
+              }
+            ],
+            "participants": [
+              {
+                "speakerId": "1734109533258001oaQ3_1773259901317001te26",
+                "fullName": "Philipp Herzig",
+                "firstName": "Philipp",
+                "lastName": "Herzig",
+                "companyName": "SAP",
+                "globalJobtitle": "Chief Technology Officer",
+                "bio": "<p>Philipp Herzig is Chief AI Officer and Chief Technology Officer of SAP SE. In this role, Herzig leads SAP technology strategy, research, innovation, corporat",
+                "photoURL": "https://static.rainfocus.com/sap/te26/att/1734109533258001oaQ3/attprofile/Philipp-Herzig-Feb2023_1788532803164001Iqhy.jpg",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "Keynote Speaker"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "sessionID": "1785940912205001gJ72",
+            "code": "IN202",
+            "title": "Accelerate your migration to SAP Integration Suite",
+            "type": "Deep dive",
+            "eventName": "SAP TechEd in Berlin 2026",
+            "eventCode": "te26",
+            "published": 1,
+            "abstract": "Gain the in-depth knowledge you need to migrate from the SAP Process Integration offering and SAP Process Orchestration software to SAP Integration Suite. Explore the services and tools available to you—including new AI-",
+            "times": [
+              {
+                "date": "2026-10-27",
+                "room": "Deep Dive Room 6",
+                "length": 45,
+                "startTime": "11:00",
+                "endTime": "11:45",
+                "utcStartTime": "2026/10/27 10:00:00",
+                "utcEndTime": "2026/10/27 10:45:00",
+                "dayName": "Tuesday"
+              }
+            ],
+            "attributevalues": [
+              {
+                "attribute": "Track",
+                "value": "Integrate agents, applications, and data (IN)",
+                "rf_attributevalue_id": "1745939183774003kz40",
+                "attributevalue_id": "Integrate agents, applications, and data (IN)",
+                "attributevalue_code": "1745939183539003ksMW"
+              }
+            ],
+            "participants": [
+              {
+                "speakerId": "1753966281661001mEu4_1773259901317001te26",
+                "fullName": "Morten Wittrock",
+                "firstName": "Morten",
+                "lastName": "Wittrock",
+                "companyName": "SAP SE",
+                "globalJobtitle": "Lead Product Manager",
+                "bio": "Morten Wittrock is a Lead Product Manager in the SAP Integration Suite product management team at SAP, with over 20 years of experience in the SAP integration s",
+                "photoURL": "https://static.rainfocus.com/sap/te26/att/1753966281661001mEu4/attprofile/Morten-headshot_1787312450201001Pau0.jpg",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "SAP Speaker"
+                  },
+                  {
+                    "speakerRole": "SAP Speaker"
+                  },
+                  {
+                    "speakerRole": "SAP Speaker"
+                  },
+                  {
+                    "speakerRole": "SAP Speaker"
+                  },
+                  {
+                    "speakerRole": "SAP Speaker"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "sessionID": "1786525647304001OTzl",
+            "code": "AD262",
+            "title": "Agentic CAP: Build MCP servers and enterprise AI agents",
+            "type": "Hands-on workshop",
+            "eventName": "SAP TechEd in Berlin 2026",
+            "eventCode": "te26",
+            "published": 1,
+            "abstract": "Learn how to turn apps based on SAP Cloud Application Programming Model (CAP) into enterprise AI agents using the model context protocol (MCP) and Agent2Agent protocol. With the integration of the SAP AI Core infrastruct",
+            "times": [
+              {
+                "date": "2026-10-27",
+                "room": "Hands-On Room 2",
+                "length": 120,
+                "startTime": "11:00",
+                "endTime": "13:00",
+                "utcStartTime": "2026/10/27 10:00:00",
+                "utcEndTime": "2026/10/27 12:00:00",
+                "dayName": "Tuesday"
+              }
+            ],
+            "attributevalues": [
+              {
+                "attribute": "Track",
+                "value": "Build agents, workflows, and applications (AD)",
+                "rf_attributevalue_id": "1745939183774002kMU7",
+                "attributevalue_id": "Build agents, workflows, and applications (AD)",
+                "attributevalue_code": "1745939183539002kHpv"
+              }
+            ],
+            "participants": [
+              {
+                "speakerId": "1635951876257001cTdK_1773259901317001te26",
+                "fullName": "Marc Huber",
+                "firstName": "Marc",
+                "lastName": "Huber",
+                "companyName": "SAP SE",
+                "globalJobtitle": "Product Management",
+                "bio": "Founder of an AI software company in Germany for predicting fresh food demands in supermarkets and bakeries. Now working in Product Management at SAP for SAP Bu",
+                "photoURL": "https://static.rainfocus.com/sap/te26/att/1635951876257001cTdK/attprofile/Marc_Huber_1789047514874001fiY9.jpg",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "SAP Speaker"
+                  },
+                  {
+                    "speakerRole": "SAP Speaker"
+                  }
+                ]
+              },
+              {
+                "speakerId": "1602216772383001D6kW_1773259901317001te26",
+                "fullName": "Sami Lechner",
+                "firstName": "Sami",
+                "lastName": "Lechner",
+                "companyName": "SAP SE",
+                "globalJobtitle": "Product manager",
+                "bio": "",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "SAP Speaker"
+                  },
+                  {
+                    "speakerRole": "SAP Speaker"
+                  },
+                  {
+                    "speakerRole": "SAP Speaker"
+                  }
+                ]
+              },
+              {
+                "speakerId": "1605732114298001aaGL_1773259901317001te26",
+                "fullName": "Daniel Hutzel",
+                "firstName": "Daniel",
+                "lastName": "Hutzel",
+                "companyName": "SAP SE",
+                "globalJobtitle": "Chief Architect",
+                "bio": "Joined SAP in 2004, since then went through several Chief Architect positions in SAP technology units, with focus on application frameworks. Designed Core Data ",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "SAP Speaker"
+                  },
+                  {
+                    "speakerRole": "SAP Speaker"
+                  }
+                ]
+              },
+              {
+                "speakerId": "1604997538270001oJsj_1773259901317001te26",
+                "fullName": "Daniel Schlachter",
+                "firstName": "Daniel",
+                "lastName": "Schlachter",
+                "companyName": "SAP SE",
+                "globalJobtitle": "Software Architect",
+                "bio": "CAP Architect / Developer\nLeading the CAP Enablement Team, which is working with internal and external development teams to use CAP to its full potential – look",
+                "photoURL": "https://static.rainfocus.com/sap/te26/att/1604997538270001oJsj/attprofile/profile_1789397734267001wLyr.png",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "SAP Speaker"
+                  },
+                  {
+                    "speakerRole": "SAP Speaker"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "VIRTUAL": {
+    "responseCode": "0",
+    "responseMessage": "Success",
+    "totalSearchItems": 49,
+    "sectionList": [
+      {
+        "total": 3,
+        "from": 0,
+        "size": 3,
+        "items": [
+          {
+            "sessionID": "1788236862932001eQGI",
+            "code": "KEY100V",
+            "title": "Built for the ones who build",
+            "type": "Keynote",
+            "eventName": "SAP TechEd Virtual 2026",
+            "eventCode": "tev26",
+            "published": 1,
+            "abstract": "Imagine if you could walk into work and just build. No data pipelines. No models to teach the business. No AI cost surprises. SAP brings together AI, tools, business data, governance, agents, and a new UX layer in one in",
+            "times": [
+              {
+                "date": "2026-10-27",
+                "room": "Channel 1",
+                "length": 90,
+                "startTime": "09:00",
+                "endTime": "10:30",
+                "utcStartTime": "2026/10/27 08:00:00",
+                "utcEndTime": "2026/10/27 09:30:00",
+                "dayName": "Tuesday"
+              }
+            ],
+            "attributevalues": [
+              {
+                "attribute": "Track",
+                "value": "Keynote",
+                "rf_attributevalue_id": "1745939183774010keFq",
+                "attributevalue_id": "Keynote",
+                "attributevalue_code": "1745939183539010k979"
+              }
+            ],
+            "participants": [
+              {
+                "speakerId": "1734109533258001oaQ3_177394505920700tev26",
+                "fullName": "Philipp Herzig",
+                "firstName": "Philipp",
+                "lastName": "Herzig",
+                "companyName": "SAP SE",
+                "globalJobtitle": "Chief Technology Officer",
+                "bio": "<p>Philipp Herzig is Chief Technology Officer of SAP SE. In this role, Herzig leads SAP’s technology strategy, <br/>\nresearch, innovation, corporate development",
+                "photoURL": "https://static.rainfocus.com/sap/tev26/att/1734109533258001oaQ3/attprofile/Philipp-Herzig-Feb2023_1788533084831001UhOz.jpg",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "Speaker"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "sessionID": "1787735938125001muyh",
+            "code": "ST134V",
+            "title": "SAP Business AI Platform: Vision, strategy, and what's next",
+            "type": "Strategy talk",
+            "eventName": "SAP TechEd Virtual 2026",
+            "eventCode": "tev26",
+            "published": 1,
+            "abstract": "SAP Business AI Platform brings together AI, trusted business data, process context, and governance to help organizations build, integrate, scale, and run AI that delivers real business impact. Understand the vision, see",
+            "times": [
+              {
+                "date": "2026-10-27",
+                "room": "Channel 1",
+                "length": 25,
+                "startTime": "11:00",
+                "endTime": "11:25",
+                "utcStartTime": "2026/10/27 10:00:00",
+                "utcEndTime": "2026/10/27 10:25:00",
+                "dayName": "Tuesday"
+              }
+            ],
+            "attributevalues": [
+              {
+                "attribute": "Track",
+                "value": "Architect, operate, and secure AI at scale (XP)",
+                "rf_attributevalue_id": "1780572314128002OZdN",
+                "attributevalue_id": "Architect, operate, and secure AI at scale (XP)",
+                "attributevalue_code": "1780572314043002OfAv"
+              }
+            ],
+            "participants": [
+              {
+                "speakerId": "1774949614733001H7R7_177394505920700tev26",
+                "fullName": "Steffen Pietsch",
+                "firstName": "Steffen",
+                "lastName": "Pietsch",
+                "companyName": "SAP SE",
+                "globalJobtitle": "Vice President, Head of Platform Product Management",
+                "bio": "<p>Steffen Pietsch is globally responsible for Platform Product Management. Together with his teams, he drives innovation, further development, enablement, and ",
+                "photoURL": "https://static.rainfocus.com/sap/te26/att/1774949614733001H7R7/attprofile/steffen-pietsch.1024x1024_1787067932527001da2e.jpg",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "Speaker"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "sessionID": "1787737071824001u9x8",
+            "code": "ST125V",
+            "title": "Building the enterprise agentic future with Joule Studio",
+            "type": "Strategy talk",
+            "eventName": "SAP TechEd Virtual 2026",
+            "eventCode": "tev26",
+            "published": 1,
+            "abstract": "AI agents are reshaping how enterprises automate work, extend applications, and create new business solutions. We present the strategy and vision behind the Joule Studio solution as a key enabler of the Autonomous Enterp",
+            "times": [
+              {
+                "date": "2026-10-27",
+                "room": "Channel 1",
+                "length": 25,
+                "startTime": "11:45",
+                "endTime": "12:10",
+                "utcStartTime": "2026/10/27 10:45:00",
+                "utcEndTime": "2026/10/27 11:10:00",
+                "dayName": "Tuesday"
+              }
+            ],
+            "attributevalues": [
+              {
+                "attribute": "Track",
+                "value": "Build agents, workflows, and applications (AD)",
+                "rf_attributevalue_id": "1745939183774002kMU7",
+                "attributevalue_id": "Build agents, workflows, and applications (AD)",
+                "attributevalue_code": "1745939183539002kHpv"
+              }
+            ],
+            "participants": [
+              {
+                "speakerId": "1787144220747001l0Be_177394505920700tev26",
+                "fullName": "Sankara Narayanan",
+                "firstName": "Sankara",
+                "lastName": "Narayanan",
+                "companyName": "SAP LABS INDIA PVT. LTD.",
+                "globalJobtitle": "SVP and Head of Product Management Joule Studio",
+                "bio": "Sankara Narayanan heads the Product Management for SAP Build and Joule Studio. He drives SAP's AI-first developer platform strategy across low-code, pro-code, w",
+                "photoURL": "https://static.rainfocus.com/sap/te26/att/1787144220747001l0Be/attprofile/40920eb6-e91d-4433-8416-97d3b0ca2e03_1788241409611001QIpB.png",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "Speaker"
+                  }
+                ]
+              },
+              {
+                "speakerId": "1761810393365001Sk8Q_177394505920700tev26",
+                "fullName": "Michael Gall",
+                "firstName": "Michael",
+                "lastName": "Gall",
+                "companyName": "SAP Oesterreich GmbH",
+                "globalJobtitle": "SVP & Chief Product Officer for SAP Build​",
+                "bio": "",
+                "Speaker-Photo-Published": "Published",
+                "session": [
+                  {
+                    "speakerRole": "Speaker"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

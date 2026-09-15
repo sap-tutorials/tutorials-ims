@@ -315,6 +315,13 @@ export const FEATURE_FLAGS = [
     description: 'Bidirectional related-session cross-linking between Devtoberfest sessions and SAP TechEd sessions, computed from shared Knowledge-Graph concepts (Devtoberfest session → tutorial via Activity.TASKSLUG → TutorialConceptLinks; TechEd session → TechEdSessionConceptLinks). When ON, the Devtoberfest schedule feed attaches relatedTechEdSessions and /build/teched attaches relatedDevtoberfestSessions (top 3 by concept overlap). Fail-open: when concept links are cold or the cross-container Devtoberfest planner facades are absent (e.g. unit SQLite), the related arrays are empty and nothing throws. DB-driven config (ImsConfig key flag.teched.devtoberfestCrosslink); no env var. Default OFF.',
     howToChange: featureFlagUpsert('TECHED_DEVTOBERFEST_CROSSLINK_ENABLED', 'flag.teched.devtoberfestCrosslink'),
   },
+  {
+    key: 'KG_TECHED_SESSIONS_ENABLED', label: 'KG TechEd session ingestion', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.techedSessions',
+    valueType: 'boolean', default: false, issue: '#2312', status: 'dev-only',
+    description: 'KG concept-link enrichment for the weekly SAP TechEd session ingest. When on (and the master KG switch KNOWLEDGE_GRAPH_ENABLED is on), the fetch-teched-sessions job embeds each new/changed session and LLM-extracts "covers" concept links into TechEdSessionConceptLinks. The fetch + upsert + delta core of the job ALWAYS runs regardless of this flag; only the LLM/embedding enrichment is gated. DB-driven config (ImsConfig key flag.kg.techedSessions); no env var. Default OFF. Fail-open.',
+    howToChange: featureFlagUpsert('KG_TECHED_SESSIONS_ENABLED', 'flag.kg.techedSessions'),
+  },
   // ---- Content ----
   {
     key: 'COMMUNITY_BLOGS_CLASSIFIER_ENABLED', label: 'Community blogs classifier', category: 'Content',
@@ -329,6 +336,13 @@ export const FEATURE_FLAGS = [
     valueType: 'boolean', default: true, issue: '', status: 'ga',
     description: 'AI-based relevance scoring for homepage news items. Kill switch — set false to fall back to chronological ordering. DB-driven config (ImsConfig key flag.homepage.newsRelevance); no env var. Default ON.',
     howToChange: featureFlagUpsert('HOMEPAGE_NEWS_RELEVANCE_ENABLED', 'flag.homepage.newsRelevance'),
+  },
+  {
+    key: 'TECHED_HOMEPAGE_ENABLED', label: 'Homepage TechEd sessions band', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.homepage.teched',
+    valueType: 'boolean', default: false, issue: '#2312', status: 'dev-only',
+    description: 'When true, upcoming SAP TechEd 2026 sessions (from external.TechEdSessions) are surfaced as always-on cards in the homepage events band, each linking to its session URL (falling back to /teched/). Additive to the existing CodeJam/Devtoberfest band; region-agnostic like Devtoberfest. Fail-open: an empty catalog or a query error yields no cards (the band is unchanged). DB-driven config (ImsConfig key flag.homepage.teched); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('TECHED_HOMEPAGE_ENABLED', 'flag.homepage.teched'),
   },
   {
     key: 'CONTENT_DELTA_WRITE_ENABLED', label: 'Content Option-B dual-write', category: 'Content',

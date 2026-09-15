@@ -10,10 +10,16 @@
 //   - slug is assigned ONCE (first time a sourceId is seen) and reused verbatim
 //     on re-ingest, so it is deliberately NOT part of the content hash.
 import crypto from 'node:crypto';
+import { slugify } from '../slug-utils.js';
 
 // Hash only the source (RainFocus-owned) fields, order-independent.
 // Arrays are sorted before hashing so speaker-order churn upstream does not
 // flip the hash. Undefined/null are normalized so shape changes don't churn.
+//
+// NB: we deliberately do NOT reuse srv/lib/channels/normalize.cjs
+// computeContentHash — that one sorts object KEYS but not ARRAY ELEMENTS and
+// doesn't fold undefined→null, so it would churn on speakerSourceIds reorder
+// (exactly what TechEd sessions need to be stable against).
 export function computeContentHash(sourceFields) {
   const normalized = {};
   for (const k of Object.keys(sourceFields)) {
@@ -26,12 +32,13 @@ export function computeContentHash(sourceFields) {
   return crypto.createHash('sha256').update(canonical).digest('hex');
 }
 
-// Converts a name/code to a kebab-case URL slug.
+// Converts a name/code to a kebab-case URL slug. Delegates to the shared
+// slugify (NFKD + eszett/ligature transliteration + 200-char cap) so accented
+// TechEd titles / speaker names ("José Müller") produce clean ASCII slugs.
+// slugify returns 'item' for empty/undefined input.
 export function toKebabSlug(value) {
-  return String(value ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const s = slugify(value);
+  return s === 'item' ? '' : s;
 }
 
 // Returns a unique kebab slug. Appends -2, -3, … on collision.

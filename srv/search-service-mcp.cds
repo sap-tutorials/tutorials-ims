@@ -55,6 +55,31 @@ extend service SearchService {
     url         : String;
   };
 
+  /** Search the public SAP TechEd 2026 session catalog. Anonymous: the same
+      sessions shown on the /teched/ page, filterable by venue/track and
+      free-text over title/abstract, ordered by scheduled start (soonest first).
+      @param query  Free-text match on session title and abstract (case-insensitive).
+      @param venue  Optional venue filter: 'BERLIN' | 'VIRTUAL'.
+      @param track  Optional track filter (track slug, or a case-insensitive name substring).
+      @param limit  Max results, [1, 50]. Default 20. */
+  @(requires: 'any')
+  function search_teched(
+    query : String,
+    venue : String,
+    track : String,
+    limit : Integer
+  ) returns array of {
+    slug           : String;
+    title          : String;
+    abstract       : String;
+    venue          : String;
+    track          : String;
+    scheduledStart : Timestamp;
+    room           : String;
+    url            : String;
+    speakers       : array of String;
+  };
+
   /** Search the public external-channels catalog — SAP and community YouTube
       channels, blogs, podcasts, and feeds. Anonymous: the same published
       channels shown on the /channels directory, fully searchable and
@@ -95,7 +120,7 @@ extend service SearchService {
       unless ChatSettings.semanticSearchEnabled is set. Fails open ([]) on any
       retrieval error so a backfill gap never surfaces as an error to an agent.
       @param query    Free-text query. Empty → []. The server embeds this.
-      @param corpus   'tutorials' (default) | 'concepts' | 'external' | 'all'.
+      @param corpus   'tutorials' (default) | 'concepts' | 'external' | 'teched' | 'all'.
       @param topK     Max results, clamped [1, 50]. Default ChatSettings.embeddingTopK (5).
       @param minScore Cosine floor; rows below are dropped. Default ChatSettings.embeddingMinScore (0.25). */
   @(requires: 'any')
