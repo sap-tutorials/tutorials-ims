@@ -135,4 +135,53 @@ describe('runSeed', () => {
     const links = await SELECT.from(e.TechEdSessionSpeakers);
     expect(links).toHaveLength(9); // was 10, one pruned
   });
+
+  it('retains existing links when a re-seed omits a session\'s speakers (incomplete input)', async () => {
+    const db = await cds.connect.to('db');
+    const e = entities();
+    await runSeed({ db, entities: e, data: DATA, commit: true });
+
+    const before = await SELECT.from(e.TechEdSessionSpeakers).where({
+      session_ID: { in: SELECT.from(e.TechEdSessions).columns('ID').where({ sourceId: AD262 }) },
+    });
+    expect(before.length).toBe(4); // AD262 has 4 speakers
+
+    // partial/subset re-seed: AD262 comes back with no speakers at all
+    const mutated = structuredClone(DATA);
+    const ad = mutated.sessions.find((s) => s.sourceId === AD262);
+    ad.speakerSourceIds = []; // omitted upstream
+    ad.title = `${ad.title} (updated)`; // force a re-write so the row updates
+
+    const summary = await runSeed({ db, entities: e, data: mutated, commit: true });
+    expect(summary.links.removed).toBe(0); // nothing pruned on empty input
+
+    const after = await SELECT.from(e.TechEdSessionSpeakers).where({
+      session_ID: { in: SELECT.from(e.TechEdSessions).columns('ID').where({ sourceId: AD262 }) },
+    });
+    expect(after.length).toBe(4); // links RETAINED, not wiped
+  });
+
+  it('retains links when a session still carries speakers but the batch omits those speaker rows (subset seed)', async () => {
+    const db = await cds.connect.to('db');
+    const e = entities();
+    await runSeed({ db, entities: e, data: DATA, commit: true });
+
+    const sessionLinks = () =>
+      SELECT.from(e.TechEdSessionSpeakers).where({
+        session_ID: { in: SELECT.from(e.TechEdSessions).columns('ID').where({ sourceId: AD262 }) },
+      });
+    expect((await sessionLinks()).length).toBe(4);
+
+    // subset seed: AD262 still carries its speakerSourceIds, but data.speakers
+    // omits those speaker rows entirely (so none resolve in this batch).
+    const mutated = structuredClone(DATA);
+    const ad = mutated.sessions.find((s) => s.sourceId === AD262);
+    const adSpeakerIds = new Set(ad.speakerSourceIds);
+    mutated.speakers = mutated.speakers.filter((sp) => !adSpeakerIds.has(sp.sourceId));
+
+    const summary = await runSeed({ db, entities: e, data: mutated, commit: true });
+    expect(summary.links.removed).toBe(0); // unresolved speakers are not confirmed removals
+
+    expect((await sessionLinks()).length).toBe(4); // links RETAINED
+  });
 });

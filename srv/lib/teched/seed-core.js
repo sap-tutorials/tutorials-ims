@@ -112,13 +112,18 @@ export async function runSeed({ db, entities, data, commit = false, force = fals
   }
   const sessionRes = { inserted, updated, skipped, idBySource: sessionIdBySource };
 
-  // 4) junction reconciliation — for every session IN THIS BATCH, add missing
-  // (session, speaker) links AND prune stale ones (a speaker dropped upstream
-  // must not linger). Sessions not in the batch are left untouched.
+  // 4) junction reconciliation — for every session IN THIS BATCH that carries a
+  // speaker list, add missing (session, speaker) links AND prune stale ones (a
+  // speaker dropped upstream must not linger). Sessions not in the batch, and
+  // sessions whose incoming record omits speakers, are left untouched.
   let linksInserted = 0, linksRemoved = 0;
   const existingLinks = await db.run(SELECT.from(TechEdSessionSpeakers).columns('ID', 'session_ID', 'speaker_ID'));
   const linkKey = (s, sp) => `${s}::${sp}`;
   const haveLinks = new Set(existingLinks.map((l) => linkKey(l.session_ID, l.speaker_ID)));
+  // Speaker IDs present in THIS batch (populated from data.speakers). A link
+  // whose speaker is absent here can't be confirmed as removed, so it is never
+  // pruned — mirrors the insert loop's "speaker not in this batch" skip (#2312).
+  const batchSpeakerIds = new Set(speakerRes.idBySource.values());
   const linkRowsBySession = new Map();
   for (const l of existingLinks) {
     if (!linkRowsBySession.has(l.session_ID)) linkRowsBySession.set(l.session_ID, []);
@@ -127,6 +132,11 @@ export async function runSeed({ db, entities, data, commit = false, force = fals
   for (const raw of sessions) {
     const sessionId = sessionRes.idBySource.get(String(raw.sourceId));
     if (!sessionId) continue;
+    // Only reconcile links for sessions whose incoming record actually carries a
+    // speaker list. A partial/subset seed (or a fetch that returned a session
+    // with no participants) omits speakers; treating that as "remove all" would
+    // wipe existing links, so skip the prune in that case (#2312).
+    const carriesSpeakers = Array.isArray(raw.speakerSourceIds) && raw.speakerSourceIds.length > 0;
     const desired = new Set();
     for (const spSource of raw.speakerSourceIds ?? []) {
       const speakerId = speakerRes.idBySource.get(String(spSource));
@@ -137,9 +147,14 @@ export async function runSeed({ db, entities, data, commit = false, force = fals
       haveLinks.add(linkKey(sessionId, speakerId));
       linksInserted++;
     }
-    // prune links for this session whose speaker is no longer desired
+    // prune links for this session whose speaker is no longer desired — but only
+    // when the incoming record carries speakers (a genuine removal), never on an
+    // empty/absent speaker set (incomplete input). Also never prune a link whose
+    // speaker is absent from this batch: that is missing data, not a removal.
+    if (!carriesSpeakers) continue;
     for (const l of linkRowsBySession.get(sessionId) ?? []) {
       if (desired.has(l.speaker_ID)) continue;
+      if (!batchSpeakerIds.has(l.speaker_ID)) continue;
       if (commit) await db.run(DELETE.from(TechEdSessionSpeakers).where({ ID: l.ID }));
       linksRemoved++;
     }
