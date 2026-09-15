@@ -7,11 +7,14 @@
 // Vector(1536) embeddings, and returns scored CONTENT REFERENCES only. It never
 // returns raw embedding vectors and never accepts a caller-supplied vector.
 //
-// Three corpora, all direct cosine over a stored Vector(1536):
+// Corpora, all direct cosine over a stored Vector(1536):
 //   - tutorials → TutorialEmbedding (joined to Tutorials for slug/title)
 //   - concepts  → Concepts.embeddingVec (reuses topConceptsByCosine)
-//   - external  → ApiDocs + Samples embeddingVec (the "external embedding corpus")
-//   - all       → union of the above, re-ranked and sliced to topK globally.
+//   - external  → ApiDocs + Samples + DevtoberfestSessions + TechEdSessions
+//                 embeddingVec (the "external embedding corpus")
+//   - teched    → the TechEdSessions-only slice of the external corpus (#2312)
+//   - all       → union of tutorials + concepts + external (external already
+//                 includes teched), re-ranked and sliced to topK globally.
 //
 // Dual dialect, mirroring srv/lib/embedding-query.js:
 //   - HANA: raw db.run() with the native COSINE_SIMILARITY scalar. Raw SQL (not
@@ -32,7 +35,7 @@ import { topConceptsByCosine } from './kg/concept-embedding-query.js';
 
 const LOG = cds.log('semantic-search');
 
-export const VALID_CORPORA = Object.freeze(['tutorials', 'concepts', 'external', 'all']);
+export const VALID_CORPORA = Object.freeze(['tutorials', 'concepts', 'external', 'teched', 'all']);
 export const DEFAULT_CORPUS = 'tutorials';
 export const TOPK_MIN = 1;
 export const TOPK_MAX = 50;
@@ -221,25 +224,35 @@ async function searchConcepts({ db, qVec, topK }) {
   }
 }
 
-// External "embedding corpus": ApiDocs + Samples + DevtoberfestSessions all
-// carry embeddingVec (HANA REAL_VECTOR) / embedding (SQLite Float32 BLOB), a
-// public url, and an NCLOB description. Each is scanned independently and
-// merged by the caller.
+// External "embedding corpus": ApiDocs + Samples + DevtoberfestSessions +
+// TechEdSessions all carry embeddingVec (HANA REAL_VECTOR) / embedding (SQLite
+// Float32 BLOB), a public url, and an NCLOB body-text column. Each is scanned
+// independently and merged by the caller. Most sources call the body column
+// `description`; TechEdSessions call it `abstract` (#2312) — searchExternalSource
+// takes per-source column overrides (aliased back to `description` in the shape).
+const TECHED_SOURCE = Object.freeze({
+  hanaTable: 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSESSIONS',
+  sqliteTable: 'com_sap_developers_ims_external_TechEdSessions',
+  contentType: 'teched-session',
+  descColHana: 'ABSTRACT',
+  descColSqlite: 'abstract',
+});
 const EXTERNAL_SOURCES = [
   { hanaTable: 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_APIDOCS', sqliteTable: 'com_sap_developers_ims_external_ApiDocs', contentType: 'api-doc' },
   { hanaTable: 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_SAMPLES', sqliteTable: 'com_sap_developers_ims_external_Samples', contentType: 'sample' },
   { hanaTable: 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_DEVTOBERFESTSESSIONS', sqliteTable: 'com_sap_developers_ims_external_DevtoberfestSessions', contentType: 'devtoberfest-session' },
+  TECHED_SOURCE,
 ];
 
-async function searchExternalSource({ db, qVec, topK, hanaTable, sqliteTable, contentType }) {
+async function searchExternalSource({ db, qVec, topK, hanaTable, sqliteTable, contentType, descColHana = 'DESCRIPTION', descColSqlite = 'description' }) {
   try {
     if (isHana(db)) {
-      // Raw SQL so DESCRIPTION (NCLOB) can be selected alongside the cosine
+      // Raw SQL so the body NCLOB can be selected alongside the cosine
       // scalar; the vector column is only READ by COSINE_SIMILARITY, never
       // SELECTed, so no vector LOB-locator is materialized.
       const sql = `
         SELECT TOP ${topK}
-          "SLUG" AS "slug", "TITLE" AS "title", "URL" AS "url", "DESCRIPTION" AS "description",
+          "SLUG" AS "slug", "TITLE" AS "title", "URL" AS "url", "${descColHana}" AS "description",
           COSINE_SIMILARITY("EMBEDDINGVEC", TO_REAL_VECTOR(?)) AS "score"
         FROM "${hanaTable}"
         WHERE "EMBEDDINGVEC" IS NOT NULL
@@ -252,7 +265,7 @@ async function searchExternalSource({ db, qVec, topK, hanaTable, sqliteTable, co
     // SQLite: raw SQL so the BLOB comes back as a base64 string (CDS QL returns
     // a LOB stream object that can't be decoded synchronously). JS cosine.
     const rows = await db.run(
-      `SELECT slug, title, url, description, embedding FROM ${sqliteTable}`,
+      `SELECT slug, title, url, ${descColSqlite} AS description, embedding FROM ${sqliteTable}`,
     );
     return (rows || []).map((r) => {
       const v = decodeF32(r.embedding);
@@ -284,12 +297,19 @@ async function searchExternal({ db, qVec, topK }) {
   return batches.flat();
 }
 
+// #2312: the 'teched' corpus is the TechEd-only slice of the external embedding
+// corpus (already part of 'external'/'all' via EXTERNAL_SOURCES). Reuses the
+// same dual-dialect, fail-open scanner.
+async function searchTechEd({ db, qVec, topK }) {
+  return searchExternalSource({ db, qVec, topK, ...TECHED_SOURCE });
+}
+
 /**
  * Public semantic search over the selected corpus.
  *
  * @param {object} args
  * @param {string} args.query     Free-text query. Empty/whitespace → [].
- * @param {string} [args.corpus]  'tutorials' (default) | 'concepts' | 'external' | 'all'.
+ * @param {string} [args.corpus]  'tutorials' (default) | 'concepts' | 'external' | 'teched' | 'all'.
  * @param {number} [args.topK]    Clamped to [1, 50]. Default from settings.embeddingTopK (5).
  * @param {number} [args.minScore] Rows scoring strictly below are dropped. Default settings.embeddingMinScore (0.25).
  * @param {object} args.settings  ChatSettings snapshot: { embeddingModel, embeddingTopK, embeddingMinScore }.
@@ -314,6 +334,7 @@ export async function semanticSearch({ query, corpus, topK, minScore, settings =
     if (c === 'tutorials') return searchTutorials({ db, qVec, model, topK: k });
     if (c === 'concepts') return searchConcepts({ db, qVec, topK: k });
     if (c === 'external') return searchExternal({ db, qVec, topK: k });
+    if (c === 'teched') return searchTechEd({ db, qVec, topK: k });
     return Promise.resolve([]);
   }));
 
