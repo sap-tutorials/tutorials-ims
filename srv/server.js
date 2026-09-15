@@ -12,6 +12,7 @@ import { resolveDeployEnvironment } from './lib/deploy-environment.js';
 import { versionHandler } from './lib/version-handler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
+import { computeRelatedDevtoberfestByTechEd } from './lib/teched-devtoberfest-crosslink.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
 import { buildTopicClustersHandler } from './lib/build-topic-clusters.js';
 import { buildTopicsGalleryHandler } from './lib/build-topics-gallery.js';
@@ -684,6 +685,17 @@ cds.on('bootstrap', (app) => {
         speakerSlugsBySession.get(l.session_ID).push(slug);
       }
 
+      // TechEd → Devtoberfest related-session cross-links (issue #2312).
+      // Flag-gated + fail-open inside the helper (empty map on flag OFF, absent
+      // planner facades on SQLite, or any read fault) — never blanks the page.
+      let relatedDtfByTechEd = new Map();
+      try {
+        relatedDtfByTechEd = await computeRelatedDevtoberfestByTechEd();
+      } catch (e) {
+        console.warn('[build/teched] cross-link skipped:', e.message);
+        relatedDtfByTechEd = new Map();
+      }
+
       const sessions = sessionRows.map((r) => ({
         slug: r.slug,
         venue: r.venue,
@@ -697,6 +709,7 @@ cds.on('bootstrap', (app) => {
         url: r.url,
         track: r.track_ID ? trackSlugById.get(r.track_ID) ?? null : null,
         speakers: (speakerSlugsBySession.get(r.ID) ?? []).sort(),
+        relatedDevtoberfestSessions: relatedDtfByTechEd.get(r.slug) ?? [],
       }));
       const speakers = speakerRows.map((s) => ({
         slug: s.slug, name: s.name, title: s.title, company: s.company, bio: speakerBioById.get(s.ID) ?? null, photoUrl: s.photoUrl,

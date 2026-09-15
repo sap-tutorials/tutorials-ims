@@ -6,6 +6,7 @@
 // soft (503 / empty) when the facades are unavailable (e.g. unit SQLite).
 import cds from '@sap/cds';
 import { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow } from '../lib/devtoberfest-feed.js';
+import { computeRelatedTechEdBySlug } from '../lib/teched-devtoberfest-crosslink.js';
 import { buildICS, buildEventICS, addToCalendarLinks } from '../lib/devtoberfest-ical.js';
 import { buildRSS } from '../lib/devtoberfest-rss.js';
 import { resolveUser } from '../lib/resolve-user.js';
@@ -77,7 +78,21 @@ async function loadAssembledFeed(req) {
     return { ok: false, status: 503, error: 'EVENT_NOT_CONFIGURED' };
   }
 
-  const feed = assembleFeed({ sessions, activities, tracks, editions, activeEditionId: editionId, speakers, sessionSpeakers });
+  // Devtoberfest → TechEd related-session cross-links (issue #2312). Flag-gated
+  // + fail-open inside computeRelatedTechEdBySlug; the outer guard is belt-and-
+  // suspenders so a cross-link fault never blanks the schedule feed.
+  let relatedTechEdBySlug = new Map();
+  try {
+    const taskSlugs = new Set(
+      activities.map((a) => (a.TASKSLUG || '').toLowerCase()).filter(Boolean),
+    );
+    relatedTechEdBySlug = await computeRelatedTechEdBySlug(taskSlugs);
+  } catch (err) {
+    LOG.warn('teched cross-link failed, feed proceeds without it:', err.message);
+    relatedTechEdBySlug = new Map();
+  }
+
+  const feed = assembleFeed({ sessions, activities, tracks, editions, activeEditionId: editionId, speakers, sessionSpeakers, relatedTechEdBySlug });
   return { ok: true, editionId, feed };
 }
 

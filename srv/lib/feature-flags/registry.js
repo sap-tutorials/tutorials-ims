@@ -309,6 +309,13 @@ export const FEATURE_FLAGS = [
     howToChange: featureFlagUpsert('KG_DEVTOBERFEST_SESSIONS_ENABLED', 'flag.kg.devtoberfestSessions'),
   },
   {
+    key: 'TECHED_DEVTOBERFEST_CROSSLINK_ENABLED', label: 'TechEd ↔ Devtoberfest session cross-links', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.teched.devtoberfestCrosslink',
+    valueType: 'boolean', default: false, issue: '#2312', status: 'dev-only',
+    description: 'Bidirectional related-session cross-linking between Devtoberfest sessions and SAP TechEd sessions, computed from shared Knowledge-Graph concepts (Devtoberfest session → tutorial via Activity.TASKSLUG → TutorialConceptLinks; TechEd session → TechEdSessionConceptLinks). When ON, the Devtoberfest schedule feed attaches relatedTechEdSessions and /build/teched attaches relatedDevtoberfestSessions (top 3 by concept overlap). Fail-open: when concept links are cold or the cross-container Devtoberfest planner facades are absent (e.g. unit SQLite), the related arrays are empty and nothing throws. DB-driven config (ImsConfig key flag.teched.devtoberfestCrosslink); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('TECHED_DEVTOBERFEST_CROSSLINK_ENABLED', 'flag.teched.devtoberfestCrosslink'),
+  },
+  {
     key: 'KG_TECHED_SESSIONS_ENABLED', label: 'KG TechEd session ingestion', category: 'Knowledge Graph',
     kind: 'db', imsConfigKey: 'flag.kg.techedSessions',
     valueType: 'boolean', default: false, issue: '#2312', status: 'dev-only',
