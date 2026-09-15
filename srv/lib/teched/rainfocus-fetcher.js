@@ -46,11 +46,15 @@ const RETRY_AFTER_CAP_MS = 60_000; // honor Retry-After up to 60 s (guard vs. ho
 const MAX_BODY_BYTES = 25 * 1024 * 1024; // 25 MiB hard cap per response
 // RainFocus hard-caps a page at 50 items (size>50 is clamped server-side;
 // omitting size defaults to 20). We request 50 and page by `from`, advancing
-// `from += size` until `from >= totalSearchItems`. Proven live 2026-09-15:
-// this retrieves the full catalog (~297 Berlin + 49 Virtual). NB: hammering
-// the endpoint with many rapid requests can trip a soft throttle that returns
-// empty offset pages — the empty-page break below handles that gracefully
-// (partial ingest that cycle) and the retry/backoff spaces requests out.
+// `from` by the number of items ACTUALLY returned (not the requested size)
+// until `from >= totalSearchItems`. Proven live 2026-09-15: this retrieves the
+// full catalog (~297 Berlin + 49 Virtual). NB: hammering the endpoint with many
+// rapid requests can trip a soft throttle that returns SHORT offset pages —
+// either empty (handled by the empty-page break below) or a non-empty PARTIAL
+// page (e.g. 20 items when 50 were requested). Advancing by items.length rather
+// than PAGE_SIZE keeps the next offset aligned to the un-returned rows so a
+// partial page never causes us to skip past sessions; the retry/backoff also
+// spaces requests out.
 const PAGE_SIZE = 50;
 const PAGINATION_MAX = 10000; // RainFocus paginationMax — runaway-paging guard
 
@@ -168,8 +172,10 @@ function itemsOf(json) {
   return out;
 }
 
-// Offset-paginate one venue: loop `from` in steps of `size` until
-// `from >= totalSearchItems` (or the empty/PAGINATION_MAX guards trip).
+// Offset-paginate one venue: loop `from`, advancing by the number of items
+// actually returned each page, until `from >= totalSearchItems` (or the
+// empty/PAGINATION_MAX guards trip). Advancing by items.length (not the
+// requested PAGE_SIZE) means a soft-throttled PARTIAL page never skips rows.
 async function paginate({ fetchImpl, profileId, widgetId, label }) {
   const all = [];
   let from = 0;
@@ -183,7 +189,7 @@ async function paginate({ fetchImpl, profileId, widgetId, label }) {
     const items = itemsOf(json);
     all.push(...items);
     if (items.length === 0) break; // defensive: upstream stopped returning rows
-    from += PAGE_SIZE;
+    from += items.length; // advance by ACTUAL count — a partial page must not skip un-returned offsets
   }
   return all;
 }
@@ -220,9 +226,13 @@ function toIso(value) {
 function parseTrack(item, venue) {
   const attrs = Array.isArray(item?.attributevalues) ? item.attributevalues : [];
   // Only the "Track" facet maps to TechEdTracks (other facets exist:
-  // "Products (offerings)", "Session level", subtracks, …). First Track wins.
+  // "Products (offerings)", "Session level", "Subtrack", … — none of those are
+  // a track). Prefer an exact `attribute === 'Track'`, else fall back to an
+  // exact case-insensitive match on 'Track' (tolerates casing/whitespace only).
+  // A substring test would wrongly match siblings like "Subtrack" or "Session
+  // Track Level", so we do NOT guess — no exact Track facet ⇒ track stays unset.
   const trackAttr = attrs.find((a) => a?.attribute === 'Track')
-    ?? attrs.find((a) => /track/i.test(a?.attribute ?? ''));
+    ?? attrs.find((a) => a?.attribute?.trim().toLowerCase() === 'track');
   const name = trackAttr?.value ?? (Array.isArray(item?.tracks) ? item.tracks[0] : null);
   if (!name) return null;
   // rf_attributevalue_id is the stable, cross-venue opaque id; fall back to the
