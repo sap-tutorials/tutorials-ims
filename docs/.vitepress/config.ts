@@ -239,6 +239,7 @@ export default defineConfig({
           { text: 'MCP server tool reference', link: '/developers/reference/mcp-server' },
           { text: 'On-read fetch caching',     link: '/developers/reference/on-read-fetch-caching' },
           { text: 'Sage extension migration',  link: '/developers/reference/sage-extension-migration' },
+          { text: 'TechEd sessions',           link: '/developers/reference/teched' },
           { text: 'Test hygiene',              link: '/developers/reference/test-hygiene' },
           { text: 'Theme variants',            link: '/developers/reference/theme-variants' },
           { text: 'tutorials-ims gotchas',     link: '/developers/reference/tutorials-ims-gotchas' },
