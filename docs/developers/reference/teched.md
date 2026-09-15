@@ -2,7 +2,7 @@
 
 This document covers the SAP TechEd 2026 session subsystem (issue [#2312](https://github.com/sap-tutorials/tutorials-ims/issues/2312)): the `TechEd*` source-of-truth entities, the RainFocus ingest, the delta-schedule cron jobs, the `/build/teched` feed, the `/teched/` Hugo page + island, the knowledge-graph projection, the semantic-search corpus entry, and Devtoberfest cross-linking.
 
-The subsystem is delivered in units. The **foundation** (entities, RainFocus fetcher, normalizer, idempotent seed, `/build/teched` feed) is merged. The **later units** (cron jobs, `/teched/` page + island, KG projection population, embeddings, Devtoberfest cross-linking) build on the foundation and are tracked in the same issue — sections below mark what is **foundation-present** vs **planned-later**.
+The subsystem is delivered in units. The **foundation** (entities, RainFocus fetcher, normalizer, idempotent seed, `/build/teched` feed) is merged. PR [#2332](https://github.com/sap-tutorials/tutorials-ims/pull/2332) then **corrects the fetcher to the live-confirmed RainFocus contract** (see below) and adds the **delta-schedule cron jobs**. The remaining **later units** (`/teched/` page + island, KG projection population, embeddings, Devtoberfest cross-linking) build on the foundation and are tracked in the same issue — sections below mark what is **present** vs **planned-later**.
 
 TechEd sessions are intentionally modelled as **new** `TechEd*` entities rather than reusing `CommunityEvents` (`db/external-content.cds`). They carry per-session structure (tracks, speakers, schedule, abstracts) that the flat `CommunityEvents` chassis does not.
 
@@ -10,68 +10,74 @@ TechEd sessions are intentionally modelled as **new** `TechEd*` entities rather 
 
 ## Source: RainFocus live contract
 
-The SAP TechEd catalog SPA (Berlin + Virtual) is backed by the RainFocus JSON search API. The catalog is a single POST search endpoint with offset pagination.
+The SAP TechEd catalog SPA (Berlin + Virtual) is backed by the RainFocus JSON API. Sessions come from a single POST endpoint with offset pagination. **This contract is confirmed live** — proven across repeated production runs against both venues (stable, both venues, repeated), and implemented by the corrected fetcher shipped in PR [#2332](https://github.com/sap-tutorials/tutorials-ims/pull/2332) (`srv/lib/teched/rainfocus-fetcher.js`).
+
+> ⚠️ **Superseded contract.** The merged **foundation** fetcher was written against a wrong, constructed guess (`POST /api/search` + a separate `type=speaker` catalog scrape) *before* the contract could be verified. PR #2332 replaces it with the real contract documented below. Any older revision of this doc that mentions `/api/search`, a standalone speaker catalog, or "unverified candidate" IDs is obsolete.
 
 ```
-POST https://events.rainfocus.com/api/search
-Content-Type: application/x-www-form-urlencoded
-rfWidgetId: <per-venue widget id>
-rfApiProfileId: <per-venue api profile id>
+POST https://events.rainfocus.com/api/sessions
+content-type: application/x-www-form-urlencoded; charset=UTF-8
+rfapiprofileid: <per-venue api profile id>
+rfwidgetid:     <per-venue widget id>
 
-type=session&size=50&from=0        # sessions (offset pagination via `from`)
-type=speaker&size=50&from=0        # speaker catalog
+type=session&browserTimezone=Europe%2FBerlin&catalogDisplay=list&from=0&size=50
 ```
+
+- **Auth is the two `rf*` headers only** — no cookie / bearer token required.
+- **Offset pagination:** advance `from += size` (`size = 50`) until `from >= totalSearchItems`. `size` is **hard-capped at 50 server-side** (a larger value is clamped; omitting it defaults to 20), so 50 is a per-*page* ceiling, **not** a per-venue cap — the loop pages through the entire catalog. A runaway-paging guard (`PAGINATION_MAX = 10000`) and an empty-page safety break bound the loop.
 
 Success response:
 
 ```jsonc
 {
-  "responseCode": "0",            // non-"0" ⇒ error (e.g. "101" = Invalid API Profile)
-  "responseMessage": "OK",
-  "sectionList": [ { "items": [ /* session or speaker records */ ] } ]
+  "responseCode": "0",                 // non-"0" ⇒ error (e.g. "Invalid API Profile")
+  "responseMessage": "Success",
+  "totalSearchItems": 299,             // drives the pagination loop
+  "sectionList": [ { "total": 299, "from": 0, "size": 50, "items": [ /* session records */ ] } ]
 }
 ```
 
-- **Success gate:** `responseCode === "0"`. Any other code throws (`[venue/type] RainFocus error <code>: <message>`).
-- **Items path:** `sectionList[].items[]` flattened across sections; some RainFocus deployments also return a flat top-level `items` array, which the fetcher falls back to.
-- **Speakers** are embedded on each session in `participants[]` (aliased `speakers[]`), and are also available as a standalone `type=speaker` catalog. Embedded speakers fill gaps the standalone catalog missed.
-- **Tracks** are read from `attributevalues[]` where `attribute` matches `/track/i`, falling back to `tracks[]` / `trackIds[]`.
-- **Field aliases:** RainFocus field names vary per deployment; the fetcher reads common aliases defensively (`sessionID`/`sessionId`/`id`/`code`, `utcStartTime`/`startTimestamp`/`startTime`, `photoURL`/`photoUrl`/`imageUrl`, …). See `parseSession` / `parseSpeakers` in `srv/lib/teched/rainfocus-fetcher.js`.
+- **Success gate:** `responseCode === "0"`. Any other code throws (`[venue] RainFocus error responseCode=<code>: <message>`) and fails **that venue softly** under `Promise.allSettled` — the other venue still ingests.
+- **Items path:** `sectionList[].items[]` flattened across sections; a flat top-level `items` array is a defensive fallback.
+- **Speakers are embedded per session** in `participants[]` — there is **NO separate speaker endpoint or scrape**. Each participant carries `speakerId`, `fullName` (`globalFullName`), `companyName`, `jobtitle` (`globalJobtitle`), `bio`, `photoURL`, and a speaker role; speakers are deduped by `speakerId` across sessions.
+- **Tracks** come from `attributevalues[]` entries whose `attribute === "Track"` (other facets — "Products (offerings)", "Session level", subtracks — also live in `attributevalues[]` and are ignored). Keyed on the stable, cross-venue **`rf_attributevalue_id`** (fallback `attributevalue_code` / `attributevalue_id` / `id`).
+- **Timestamps:** `utcStartTime` / `utcEndTime` arrive as `"YYYY/MM/DD HH:MM:SS"` in **UTC** (slash-separated, no zone). A plain `Date.parse` would misread them as local time, so the fetcher normalizes them to explicit ISO-`Z`.
+- **Field aliases:** RainFocus field names vary; the fetcher reads common aliases defensively (`sessionID`/`sessionId`/`id`/`code`, `fullName`/`globalFullName`, `jobtitle`/`globalJobtitle`, `photoURL`/`photoUrl`/`imageUrl`, …). See `parseSession` / `parseSpeakers` / `parseTrack` in `srv/lib/teched/rainfocus-fetcher.js`.
 
 ### Venue flow IDs and per-venue credentials
 
 Flow ids come from the catalog SPA URLs `www.sap.com/events/teched/{virtual,berlin}/flow/sap/{tev26,te26}/…`:
 
-| Venue | Flow | Approx. sessions |
+| Venue | Flow | Sessions (live-verified) |
 |---|---|---|
-| Berlin | `te26` | ~299 |
-| Virtual | `tev26` | ~49 |
+| Berlin | `te26` | 297 (of `totalSearchItems` 299 — 2 all-day / invalid rows dropped) |
+| Virtual | `tev26` | 49 |
 
-Each venue needs a `rfWidgetId` + `rfApiProfileId`. These are **not** hard-coded — the fetcher reads them from env (or an explicit `opts.venues`):
+Full-catalog retrieval is confirmed across repeated live runs: **Berlin 297 + Virtual 49 = 346 sessions, 362 speakers, 10 tracks.**
 
-| Env var | Venue |
-|---|---|
-| `TECHED_RF_TE26_WIDGET_ID` / `TECHED_RF_TE26_API_PROFILE` | Berlin (`te26`) |
-| `TECHED_RF_TEV26_WIDGET_ID` / `TECHED_RF_TEV26_API_PROFILE` | Virtual (`tev26`) |
+Each venue needs an `rfapiprofileid` + `rfwidgetid`. These are **confirmed working** (live-verified — not candidates), static for the event lifetime but **may rotate**. The fetcher ships them as defaults and lets env vars override:
 
-> ⚠️ **The per-venue IDs may rotate and must be verified live.** They live in the catalog SPA's JavaScript, which is Akamai bot-gated (a direct `curl` of the catalog page returns `Access Denied`). Candidate IDs observed for the 2026 event are:
->
-> - Berlin `te26`: `e8GkmAN9xTm5w6ZMi76B5wL0V9uhHEl1`, `WO1M8ZqF9INWQDVqfJueEsSg3eT4veku`
-> - Virtual `tev26`: `KHfXyIUaP8kwISNUh32sNyjJAYKBXYYv`, `Zk0wC45uzrCrfscqh7YqpcF26iUuP9Rf`
->
-> Treat these as **unverified** — they are static per event but may rotate. **Re-derive** by opening the live catalog and either (a) inspecting `/api/widgetConfig`, or (b) watching the Network tab for the `POST /api/search` request and copying the `rfWidgetId` / `rfApiProfileId` request headers. Supply the current values via the env vars above.
+| Env var | Venue | Confirmed 2026 value (default) |
+|---|---|---|
+| `RAINFOCUS_TE26_PROFILE` / `RAINFOCUS_TE26_WIDGET` | Berlin (`te26`) | `rfapiprofileid` `e8GkmAN9xTm5w6ZMi76B5wL0V9uhHEl1` · `rfwidgetid` `WO1M8ZqF9INWQDVqfJueEsSg3eT4veku` |
+| `RAINFOCUS_TEV26_PROFILE` / `RAINFOCUS_TEV26_WIDGET` | Virtual (`tev26`) | `rfapiprofileid` `KHfXyIUaP8kwISNUh32sNyjJAYKBXYYv` · `rfwidgetid` `Zk0wC45uzrCrfscqh7YqpcF26iUuP9Rf` |
 
-Because the IDs were not confirmable at capture time, the test fixture (`test/fixtures/teched/rainfocus-search.json`) is **constructed** to match the contract, not a live capture. When the catalog goes live, capture a real response, diff the field names against `parseSession` / `parseSpeakers`, and refresh the fixture.
+> **If the IDs rotate**, re-derive them by opening the live catalog and either (a) inspecting `/api/widgetConfig`, or (b) watching the Network tab for the `POST /api/sessions` request and copying the `rfapiprofileid` / `rfwidgetid` request headers. Supply the current values via the env vars above — no code change needed (they merely override the shipped defaults).
+
+> **Soft rate-limit — NOT a hard cap.** Aggressive rapid probing (many offset pages back-to-back) can trip a soft RainFocus throttle that makes `from > 0` pages transiently return **empty** rows. The empty-page safety break handles this gracefully: that cycle does a partial ingest and the next scheduled run recovers (the seed is idempotent, so no data is lost). This is **not** a hard 50-item or per-venue cap; the retry/backoff also spaces requests out.
+
+The test fixture (`test/fixtures/teched/rainfocus-search.json`) is now a **real, trimmed capture** of `/api/sessions` for both venues (PR #2332 replaced the earlier constructed fixture); `test/fixtures/teched/teched-feed.json` is derived by running the real fetcher over that capture.
 
 ### Fetcher resilience
 
 `fetchAllTechEdSessions(opts)` (`srv/lib/teched/rainfocus-fetcher.js`) returns `{ sessions, speakers, tracks }` for **both** venues:
 
-- Both venues fetched under `Promise.allSettled` — one venue failing does not sink the other (the failure is logged, that venue's rows are simply absent).
-- Per-venue `session` and `speaker` pages fetched in parallel; the speaker catalog is best-effort (`.catch(() => [])`).
-- Retry: exponential backoff + jitter on 5xx / 429 / network errors, honoring `Retry-After`; fail-fast on other 4xx. `MAX_RETRIES = 4`.
-- Guards: `AbortController` 20s timeout; `MAX_BODY_BYTES` 25 MiB streamed cap; `PAGE_SIZE = 50`; `MAX_PAGES = 60` (3000-row/venue ceiling against runaway paging).
-- `_fetch` is a swappable seam so tests inject fixtures without hitting the network.
+- Both venues fetched under `Promise.allSettled` — one venue failing (including a non-`"0"` `responseCode`) does not sink the other (the failure is logged, that venue's rows are simply absent).
+- Each venue offset-paginates `/api/sessions` (`from += 50` until `from >= totalSearchItems`); speakers and tracks are read from the embedded session payload, so there is **no** separate speaker fetch.
+- The outbound POST is routed through `srv/lib/safe-fetch.js` `safeFetch` (SSRF / private-IP guard + redirect handling + `AbortSignal` timeout, #895) — SSRF/redirect verdicts are terminal (never retried, fail the venue).
+- Retry/backoff reuses `srv/lib/img-cdn-retry.cjs` (equal-jitter exponential backoff, retry on 429 / 5xx / network); a server `Retry-After` is honored up to `RETRY_AFTER_CAP_MS` (60 s) so a hostile value can't stall the cron. `MAX_RETRIES = 4`.
+- Guards: `REQUEST_TIMEOUT_MS` 20 s; `MAX_BODY_BYTES` 25 MiB streamed cap; `PAGE_SIZE = 50`; `PAGINATION_MAX = 10000` (runaway-paging ceiling); empty-page safety break.
+- `_fetch` is a swappable transport seam passed through to `safeFetch`'s `fetchImpl`, so tests inject fixtures without hitting the network.
 - Cross-venue dedup by `sourceId` (first-writer-wins); past sessions (`scheduledEnd` before `now`) are dropped by default (`opts.dropPast`, undated rows kept).
 
 ---
@@ -141,16 +147,16 @@ Requires a live DB binding (`cds bind --exec`).
 
 ---
 
-## Cron jobs (delta schedule) — planned-later
+## Cron jobs (delta schedule) — shipped in PR [#2332](https://github.com/sap-tutorials/tutorials-ims/pull/2332)
 
 The recurring delta ingest runs as two scheduled jobs under `srv/jobs/`, wired through CAP 10's Scheduling API via the internal `CronService` (`srv/cron-service.js`, #958), same as the other jobs:
 
-- **Fetch (weekly):** full `fetchAllTechEdSessions` → `runSeed` — picks up newly published sessions and structural changes.
-- **Refresh (~6h):** lighter cadence during the event window to catch room/time/abstract edits and late speaker changes.
+- **Fetch — `srv/jobs/fetch-teched-sessions-job.js` (weekly, Sun 05:43 UTC):** full `fetchAllTechEdSessions` → `runSeed` upsert + `contentHash` delta + junction reconciliation (**always runs** — the must-have). Optional KG concept-link enrichment (embed + LLM `covers` extraction → `TechEdSessionConceptLinks`, then `lastExtractedHash`) is **double-gated** (`KNOWLEDGE_GRAPH_ENABLED` + `KG_TECHED_SESSIONS_ENABLED`, both default OFF) and fail-open (#708 crash-safety).
+- **Refresh — `srv/jobs/refresh-teched-sessions-job.js` (every 6h at :23):** metadata-only upsert (`seed-core` `metadataOnly` mode) to catch room/time/abstract edits and late speaker changes; no LLM, never touches `contentHash` / `lastExtractedHash`.
 
-Both are idempotent (the `contentHash` skip makes a no-op re-run cheap) and fail-open (a RainFocus outage logs and leaves the last-good rows in place). The KG projection / embedding backfill runs off `lastExtractedHash` so it only reprocesses rows whose content actually changed.
+Both are idempotent (the `contentHash` skip makes a no-op re-run cheap) and fail-open (a RainFocus outage logs and leaves the last-good rows in place). `TechEdSessions` is wired into `gc-external-content-job` (`teched-session`, 730-day TTL, cascades the junction + concept links).
 
-> Until the cron unit lands, seed manually via `scripts/seed-teched.cjs` (see above).
+> To seed ad-hoc outside the cron cadence, run `scripts/seed-teched.cjs` (see above).
 
 ---
 
@@ -214,8 +220,9 @@ TechEd and Devtoberfest (#2311) are sibling event subsystems that share the KG. 
 
 **Planned-later** (build on the foundation, tracked in #2312):
 
-- **Cron jobs** — weekly fetch + ~6h refresh delta schedule (`srv/jobs/`).
 - **`/teched/` page + island** — `scripts/fetch-teched.ts`, `hugo/content/teched/`, `teched-directory` Vue island.
-- **KG projection** — populate `TechEdSessionConceptLinks`; property-graph arms in the KG neighborhood.
+- **KG projection** — populate `TechEdSessionConceptLinks`; property-graph arms in the KG neighborhood. (The enrichment loop ships behind the `KG_TECHED_SESSIONS_ENABLED` gate in the #2332 fetch job.)
 - **Semantic-search corpus entry** — TechEd sessions in the embedding corpus.
 - **Devtoberfest cross-linking** — shared-concept surfacing + `/teched/` ↔ `/devtoberfest/` links.
+
+**Shipped in PR [#2332](https://github.com/sap-tutorials/tutorials-ims/pull/2332)** (on top of the foundation): the corrected live RainFocus `/api/sessions` fetcher and the two delta-schedule cron jobs (`fetch-teched-sessions-job.js`, `refresh-teched-sessions-job.js`).
