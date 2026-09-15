@@ -96,6 +96,9 @@ export const KG_IRI_PREFIXES = Object.freeze({
   'help-doc': `${KG}help-doc/`,       // Phase 4.7 (#748)
   'community-event': `${KG}community-event/`,   // Phase 4.8 (#765)
   'devtoberfest-session': `${KG}devtoberfest-session/`,   // #2311
+  'teched-session': `${KG}teched-session/`,   // #2312
+  'teched-speaker': `${KG}teched-speaker/`,   // #2312
+  'teched-track':   `${KG}teched-track/`,     // #2312
 });
 
 /**
@@ -178,6 +181,23 @@ export function iriCommunityEvent(slug) {
  */
 export function iriDevtoberfestSession(slug) {
   return KG_IRI_PREFIXES['devtoberfest-session'] + iriEscapeSegment(slug);
+}
+
+/**
+ * #2312: IRI helpers for SAP TechEd 2026 sessions, speakers, and tracks.
+ * Slugs are kebab-case stable ids assigned at ingest (see db/external/teched.cds);
+ * escape defensively like the other Phase-4 helpers.
+ */
+export function iriTechEdSession(slug) {
+  return KG_IRI_PREFIXES['teched-session'] + iriEscapeSegment(slug);
+}
+
+export function iriTechEdSpeaker(slug) {
+  return KG_IRI_PREFIXES['teched-speaker'] + iriEscapeSegment(slug);
+}
+
+export function iriTechEdTrack(slug) {
+  return KG_IRI_PREFIXES['teched-track'] + iriEscapeSegment(slug);
 }
 
 /**
@@ -458,6 +478,22 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     (fixtures && fixtures.devtoberfestSessions) || {};
   if (dtfSessionRows.length > 0) {
     for (const t of buildDevtoberfestSessionTriples({ sessions: dtfSessionRows, links: dtfSessionLinks })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
+  // Section 16 — #2312 TechEd-session triples. Same optional shape: when the
+  // fixture omits techedSessions, emission is skipped.
+  const {
+    sessions: teSessionRows = [], links: teSessionLinks = [],
+    tracks: teTrackRows = [], speakers: teSpeakerRows = [],
+  } = (fixtures && fixtures.techedSessions) || {};
+  if (teSessionRows.length > 0) {
+    for (const t of buildTechEdSessionTriples({
+      sessions: teSessionRows, links: teSessionLinks,
+      tracks: teTrackRows, speakers: teSpeakerRows,
+    })) {
       buffer.push(t);
       if (buffer.length >= batchSize) { yield buffer; buffer = []; }
     }
@@ -1018,6 +1054,102 @@ export function buildDevtoberfestSessionTriples({ sessions = [], links = [] } = 
   return triples;
 }
 
+// #2312 — SAP TechEd session predicates + node types.
+export const IMS_IN_TRACK = `${KG}inTrack`;
+export const IMS_PRESENTED_BY = `${KG}presentedBy`;
+const KG_TECHED_SESSION = `${KG}TechEdSession`;
+const KG_TECHED_SPEAKER = `${KG}TechEdSpeaker`;
+const KG_TECHED_TRACK = `${KG}TechEdTrack`;
+
+/**
+ * #2312: emit N-Triples for SAP TechEd 2026 session graph nodes, their concept
+ * `covers` edges (from TechEdSessionConceptLinks), and structural edges to
+ * their track (`inTrack`) and speakers (`presentedBy`). Mirrors
+ * buildCommunityEventTriples: date-aware TTL via scheduledEnd + 30-day grace
+ * (falls back to scheduledStart), and a link/edge filter that drops rows whose
+ * parent session was dropped.
+ *
+ * Track and speaker nodes are emitted only when referenced by at least one
+ * visible session — no orphan nodes leak past the TTL gate. Empty until Unit 2
+ * populates TechEdSessionConceptLinks; the projection is additive and safe.
+ *
+ * @param {object} args
+ * @param {Array<{slug, title, sessionCode?, room?, venue?, youtubeUrl?, url?,
+ *   track_slug?, speakerSlugs?, scheduledStart?, scheduledEnd?, lastSeenAt}>} args.sessions
+ * @param {Array<{session_slug, conceptSlug, predicate?}>} args.links
+ * @param {Array<{slug, name?}>} args.tracks
+ * @param {Array<{slug, name?}>} args.speakers
+ * @returns {string[]} N-Triples lines
+ */
+export function buildTechEdSessionTriples({ sessions = [], links = [], tracks = [], speakers = [] } = {}) {
+  const triples = [];
+  const visibleSlugs = new Set();
+  const trackNameBySlug = new Map(tracks.map((t) => [t.slug, t.name]));
+  const speakerNameBySlug = new Map(speakers.map((s) => [s.slug, s.name]));
+  const referencedTracks = new Set();
+  const referencedSpeakers = new Set();
+
+  for (const s of sessions) {
+    if (!s || !s.slug) continue;
+    // Date-aware TTL — scheduledEnd + 30-day grace; fall back to scheduledStart
+    // when scheduledEnd is null. Mirrors community-event gating.
+    const decayDate = s.scheduledEnd ?? s.scheduledStart ?? null;
+    if (!isWithinTTL('teched-session', s.lastSeenAt, decayDate)) continue;
+    visibleSlugs.add(s.slug);
+    const subj = iriTechEdSession(s.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_TECHED_SESSION)));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), s.slug));
+    if (s.title)       triples.push(literalTriple(iri(subj), iriPredicate('title'), s.title));
+    if (s.sessionCode) triples.push(literalTriple(iri(subj), iriPredicate('sessionCode'), s.sessionCode));
+    if (s.venue)       triples.push(literalTriple(iri(subj), iriPredicate('venue'), s.venue));
+    if (s.room)        triples.push(literalTriple(iri(subj), iriPredicate('room'), s.room));
+    if (s.youtubeUrl)  triples.push(literalTriple(iri(subj), iriPredicate('youtubeUrl'), s.youtubeUrl));
+    if (s.url)         triples.push(literalTriple(iri(subj), iriPredicate('url'), s.url));
+
+    // Structural edge to the session's track.
+    if (s.track_slug) {
+      referencedTracks.add(s.track_slug);
+      triples.push(triple(iri(subj), iri(IMS_IN_TRACK), iri(iriTechEdTrack(s.track_slug))));
+    }
+    // Structural edges to the session's speakers.
+    for (const speakerSlug of s.speakerSlugs || []) {
+      if (!speakerSlug) continue;
+      referencedSpeakers.add(speakerSlug);
+      triples.push(triple(iri(subj), iri(IMS_PRESENTED_BY), iri(iriTechEdSpeaker(speakerSlug))));
+    }
+  }
+
+  // Emit track nodes for tracks referenced by a visible session.
+  for (const trackSlug of referencedTracks) {
+    const tsubj = iriTechEdTrack(trackSlug);
+    triples.push(triple(iri(tsubj), iri(RDF_TYPE), iri(KG_TECHED_TRACK)));
+    triples.push(literalTriple(iri(tsubj), iriPredicate('slug'), trackSlug));
+    const tname = trackNameBySlug.get(trackSlug);
+    if (tname) triples.push(literalTriple(iri(tsubj), iriPredicate('name'), tname));
+  }
+
+  // Emit speaker nodes for speakers referenced by a visible session.
+  for (const speakerSlug of referencedSpeakers) {
+    const spsubj = iriTechEdSpeaker(speakerSlug);
+    triples.push(triple(iri(spsubj), iri(RDF_TYPE), iri(KG_TECHED_SPEAKER)));
+    triples.push(literalTriple(iri(spsubj), iriPredicate('slug'), speakerSlug));
+    const spname = speakerNameBySlug.get(speakerSlug);
+    if (spname) triples.push(literalTriple(iri(spsubj), iriPredicate('name'), spname));
+  }
+
+  for (const link of links) {
+    if (!link || !link.session_slug || !link.conceptSlug) continue;
+    if (!visibleSlugs.has(link.session_slug)) continue;
+    triples.push(triple(
+      iri(iriTechEdSession(link.session_slug)),
+      iriPredicate(link.predicate || 'covers'),
+      iriConcept(link.conceptSlug)
+    ));
+  }
+
+  return triples;
+}
+
 /**
  * Production projection. Loads CDS state into a fixture-shaped snapshot
  * and delegates to `projectFromFixtures`.
@@ -1553,6 +1685,82 @@ async function loadFixtures(db) {
     );
   }
 
+  // #2312: TechEd-session fixtures. LOB-safe — never SELECT the abstract/bio/
+  // description LargeString/NCLOB alongside metadata (locator can expire before
+  // triple emission on HANA). Tracks/speakers loaded for structural edges +
+  // node labels; the session↔speaker junction is resolved to slug arrays here.
+  let techedSessions = { sessions: [], links: [], tracks: [], speakers: [] };
+  try {
+    const {
+      TechEdSessions, TechEdSessionConceptLinks, TechEdTracks,
+      TechEdSpeakers, TechEdSessionSpeakers,
+    } = cds.entities('com.sap.developers.ims.external');
+
+    const teTrackRows = await db.run(
+      SELECT.from(TechEdTracks).columns('ID', 'slug', 'name', 'lastSeenAt')
+    );
+    const trackSlugById = new Map(teTrackRows.map((r) => [r.ID, r.slug]));
+
+    const teSpeakerRows = await db.run(
+      SELECT.from(TechEdSpeakers).columns('ID', 'slug', 'name', 'lastSeenAt')
+    );
+    const speakerSlugById = new Map(teSpeakerRows.map((r) => [r.ID, r.slug]));
+
+    const teSessionRows = await db.run(
+      SELECT.from(TechEdSessions).columns(
+        'ID', 'slug', 'title', 'sessionCode', 'room', 'venue',
+        'youtubeUrl', 'url', 'scheduledStart', 'scheduledEnd',
+        'track_ID', 'lastSeenAt', 'pinUntil',
+      )
+    );
+    const sessionSlugById = new Map(teSessionRows.map((r) => [r.ID, r.slug]));
+
+    // Resolve the session↔speaker junction into per-session speaker-slug arrays.
+    const junctionRows = await db.run(
+      SELECT.from(TechEdSessionSpeakers).columns('session_ID', 'speaker_ID')
+    );
+    const speakerSlugsBySessionId = new Map();
+    for (const j of junctionRows) {
+      const spSlug = speakerSlugById.get(j.speaker_ID);
+      if (!spSlug) continue;
+      if (!speakerSlugsBySessionId.has(j.session_ID)) speakerSlugsBySessionId.set(j.session_ID, []);
+      speakerSlugsBySessionId.get(j.session_ID).push(spSlug);
+    }
+
+    const teLinkRows = await db.run(
+      SELECT.from(TechEdSessionConceptLinks).columns('session_ID', 'concept_ID', 'predicate', 'confidence')
+    );
+    const teLinks = [];
+    for (const l of teLinkRows) {
+      const session_slug = sessionSlugById.get(l.session_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!session_slug || !conceptSlug) continue;
+      teLinks.push({
+        session_slug, conceptSlug,
+        predicate: l.predicate || 'covers',
+      });
+    }
+
+    techedSessions = {
+      sessions: teSessionRows.map((s) => ({
+        slug: s.slug, title: s.title, sessionCode: s.sessionCode,
+        room: s.room, venue: s.venue, youtubeUrl: s.youtubeUrl, url: s.url,
+        scheduledStart: s.scheduledStart, scheduledEnd: s.scheduledEnd,
+        track_slug: trackSlugById.get(s.track_ID) || null,
+        speakerSlugs: speakerSlugsBySessionId.get(s.ID) || [],
+        lastSeenAt: s.lastSeenAt,
+      })),
+      links: teLinks,
+      tracks: teTrackRows.map((t) => ({ slug: t.slug, name: t.name })),
+      speakers: teSpeakerRows.map((sp) => ({ slug: sp.slug, name: sp.name })),
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: TechEdSessions load failed; teched-session triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -1571,5 +1779,6 @@ async function loadFixtures(db) {
     helpDocs,
     communityEvents,
     devtoberfestSessions,
+    techedSessions,
   };
 }
