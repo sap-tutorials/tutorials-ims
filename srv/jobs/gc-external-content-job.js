@@ -37,6 +37,7 @@ export const ITERATION_SET = {
   'sample': 'Samples',  // Phase 4.6 (#747)
   'help-doc': 'HelpDocs',  // Phase 4.7 (#748)
   'community-event': 'CommunityEvents',  // Phase 4.8 (#765)
+  'teched-session': 'TechEdSessions',  // #2312 — lastSeenAt+2×TTL; cascades junction + concept links
 };
 
 export async function runGcExternalContent() {

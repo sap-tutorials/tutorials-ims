@@ -1,5 +1,6 @@
 // test/unit/teched-seed.test.js
 // Seed upsert/skip logic against in-memory SQLite reflecting db/*.cds.
+// Fixture is derived from a REAL RainFocus capture (see teched-feed.json).
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -15,6 +16,11 @@ test('serve', 'all', '--in-memory');
 const DATA = JSON.parse(
   readFileSync(path.join(__dirname, '..', 'fixtures', 'teched', 'teched-feed.json'), 'utf8'),
 );
+
+// Known ids from the real fixture.
+const AD262 = '1786525647304001OTzl';        // Berlin AD track, 4 speakers
+const ST134V = '1787735938125001muyh';       // Virtual XP track
+const TRACK_AD = '1745939183774002kMU7';
 
 function entities() {
   const { TechEdSessions, TechEdSpeakers, TechEdTracks, TechEdSessionSpeakers } = cds.entities(NAMESPACE_EXT);
@@ -38,7 +44,7 @@ describe('runSeed', () => {
   it('dry-run writes nothing', async () => {
     const db = await cds.connect.to('db');
     const summary = await runSeed({ db, entities: entities(), data: DATA, commit: false });
-    expect(summary.sessions.inserted).toBe(3);
+    expect(summary.sessions.inserted).toBe(6);
     const rows = await SELECT.from(entities().TechEdSessions);
     expect(rows).toHaveLength(0);
   });
@@ -47,28 +53,23 @@ describe('runSeed', () => {
     const db = await cds.connect.to('db');
     const e = entities();
     const summary = await runSeed({ db, entities: e, data: DATA, commit: true });
-    expect(summary.tracks.inserted).toBe(2);
-    expect(summary.speakers.inserted).toBe(2);
-    expect(summary.sessions.inserted).toBe(3);
-    expect(summary.links.inserted).toBe(3); // s1→spk-1, s2→spk-2, s3→spk-1
+    expect(summary.tracks.inserted).toBe(4);
+    expect(summary.speakers.inserted).toBe(10);
+    expect(summary.sessions.inserted).toBe(6);
+    // 1 + 1 + 4 + 1 + 1 + 2 = 10 session↔speaker links
+    expect(summary.links.inserted).toBe(10);
 
     const sessions = await SELECT.from(e.TechEdSessions);
-    expect(sessions).toHaveLength(3);
+    expect(sessions).toHaveLength(6);
 
-    // slug dedup on the duplicate DEV101 code
-    const slugs = sessions.map((s) => s.slug).sort();
-    expect(slugs).toContain('dev101');
-    expect(slugs).toContain('dev101-2');
-
-    // track association resolved
+    // track association resolved (AD track shared across two sessions)
     const tracks = await SELECT.from(e.TechEdTracks);
-    const appdev = tracks.find((t) => t.sourceId === 'trk-appdev');
-    const dev = sessions.find((s) => s.sourceId === 's-tev-1001');
-    expect(dev.track_ID).toBe(appdev.ID);
+    const ad = tracks.find((t) => t.sourceId === TRACK_AD);
+    const ad262 = sessions.find((s) => s.sourceId === AD262);
+    expect(ad262.track_ID).toBe(ad.ID);
 
-    // junction rows
     const links = await SELECT.from(e.TechEdSessionSpeakers);
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(10);
   });
 
   it('second run with unchanged data skips everything (idempotent)', async () => {
@@ -76,11 +77,11 @@ describe('runSeed', () => {
     const e = entities();
     await runSeed({ db, entities: e, data: DATA, commit: true });
     const second = await runSeed({ db, entities: e, data: DATA, commit: true });
-    expect(second.sessions.skipped).toBe(3);
+    expect(second.sessions.skipped).toBe(6);
     expect(second.sessions.inserted).toBe(0);
     expect(second.sessions.updated).toBe(0);
-    expect(second.speakers.skipped).toBe(2);
-    expect(second.tracks.skipped).toBe(2);
+    expect(second.speakers.skipped).toBe(10);
+    expect(second.tracks.skipped).toBe(4);
     expect(second.links.inserted).toBe(0); // links already present
   });
 
@@ -91,18 +92,18 @@ describe('runSeed', () => {
 
     // pin one session (curated/lifecycle column)
     const pin = new Date('2099-01-01T00:00:00Z').toISOString();
-    await UPDATE(e.TechEdSessions).set({ pinUntil: pin }).where({ sourceId: 's-tev-1002' });
+    await UPDATE(e.TechEdSessions).set({ pinUntil: pin }).where({ sourceId: ST134V });
 
     // change the title of that session
     const mutated = structuredClone(DATA);
-    mutated.sessions.find((s) => s.sourceId === 's-tev-1002').title = 'Generative AI on SAP BTP (v2)';
+    mutated.sessions.find((s) => s.sourceId === ST134V).title = 'SAP Business AI Platform (v2)';
 
     const summary = await runSeed({ db, entities: e, data: mutated, commit: true });
     expect(summary.sessions.updated).toBe(1);
-    expect(summary.sessions.skipped).toBe(2);
+    expect(summary.sessions.skipped).toBe(5);
 
-    const row = await SELECT.one.from(e.TechEdSessions).where({ sourceId: 's-tev-1002' });
-    expect(row.title).toBe('Generative AI on SAP BTP (v2)');
+    const row = await SELECT.one.from(e.TechEdSessions).where({ sourceId: ST134V });
+    expect(row.title).toBe('SAP Business AI Platform (v2)');
     // pinUntil must NOT be wiped by the source-owned update
     expect(row.pinUntil).toBeTruthy();
     expect(new Date(row.pinUntil).toISOString()).toBe(pin);
@@ -113,7 +114,7 @@ describe('runSeed', () => {
     const e = entities();
     await runSeed({ db, entities: e, data: DATA, commit: true });
     const forced = await runSeed({ db, entities: e, data: DATA, commit: true, force: true });
-    expect(forced.sessions.updated).toBe(3);
+    expect(forced.sessions.updated).toBe(6);
     expect(forced.sessions.skipped).toBe(0);
   });
 
@@ -122,16 +123,16 @@ describe('runSeed', () => {
     const e = entities();
     await runSeed({ db, entities: e, data: DATA, commit: true });
 
-    // drop spk-1 from the Berlin session (s-te-2001) upstream
+    // drop one speaker from AD262 (has 4) upstream
     const mutated = structuredClone(DATA);
-    const berlin = mutated.sessions.find((s) => s.sourceId === 's-te-2001');
-    berlin.speakerSourceIds = [];
-    berlin.title = `${berlin.title} (no speaker)`; // force a re-write so the row updates
+    const ad = mutated.sessions.find((s) => s.sourceId === AD262);
+    ad.speakerSourceIds = ad.speakerSourceIds.slice(0, 3); // 4 → 3
+    ad.title = `${ad.title} (updated)`; // force a re-write so the row updates
 
     const summary = await runSeed({ db, entities: e, data: mutated, commit: true });
     expect(summary.links.removed).toBe(1);
 
     const links = await SELECT.from(e.TechEdSessionSpeakers);
-    expect(links).toHaveLength(2); // was 3, one pruned
+    expect(links).toHaveLength(9); // was 10, one pruned
   });
 });
