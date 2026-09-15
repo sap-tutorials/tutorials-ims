@@ -37,7 +37,7 @@ export const ITERATION_SET = {
   'sample': 'Samples',  // Phase 4.6 (#747)
   'help-doc': 'HelpDocs',  // Phase 4.7 (#748)
   'community-event': 'CommunityEvents',  // Phase 4.8 (#765)
-  'teched-session': 'TechEdSessions',  // #2312 — lastSeenAt+2×TTL; cascades junction + concept links
+  'teched-session': 'TechEdSessions',  // #2312 — date-aware (scheduledEnd/scheduledStart + 30d); cascades junction + concept links
 };
 
 export async function runGcExternalContent() {
@@ -73,6 +73,32 @@ export async function runGcExternalContent() {
           pruned++;
         }
         LOG.info(`gc-external-content: pruned ${pruned} community-event rows past endDate + 30d`);
+        summary[contentType] = { pruned };
+        continue;
+      }
+      // #2312 — TechEd sessions are date-aware (scheduledEnd, falling back to
+      // scheduledStart) + 30-day grace, mirroring community-event. Compositions
+      // (speakers, conceptLinks) auto-cascade on the parent DELETE.
+      if (contentType === 'teched-session') {
+        const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const nowStr = new Date().toISOString();
+        const { TechEdSessions } = cds.entities('com.sap.developers.ims.external');
+        // Tagged-template syntax is safe on both SQLite and HANA (see the
+        // community-event branch above); the object/or form is malformed on SQLite.
+        const stale = await SELECT.from(TechEdSessions).columns('ID', 'slug').where`
+          (
+            (scheduledEnd is not null and scheduledEnd < ${cutoff})
+            or
+            (scheduledEnd is null and scheduledStart is not null and scheduledStart < ${cutoff})
+          )
+          and (pinUntil is null or pinUntil < ${nowStr})
+        `;
+        let pruned = 0;
+        for (const row of stale) {
+          await DELETE.from(TechEdSessions).where({ ID: row.ID });
+          pruned++;
+        }
+        LOG.info(`gc-external-content: pruned ${pruned} teched-session rows past scheduledEnd/scheduledStart + 30d`);
         summary[contentType] = { pruned };
         continue;
       }
