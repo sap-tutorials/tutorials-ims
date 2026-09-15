@@ -2,7 +2,7 @@
 // adds 'blog-post'. Phase 4.3 (#447 §8) adds 'discovery-mission'.
 // Phase 4.4 (#447 §9) adds 'video'. Phase 4.5 (#746) adds 'api-doc'.
 // Phase 4.6 (#747) adds 'sample'. Phase 4.7 (#748) adds 'help-doc'.
-// Phase 4.8 (#765) adds 'community-event'.
+// Phase 4.8 (#765) adds 'community-event'. #2311 adds 'devtoberfest-session'.
 // Mirror of hugo-apps/src/related-graph/types.ts. Keep these two NodeType
 // unions in sync.
 export type NodeType =
@@ -21,9 +21,11 @@ export type NodeType =
   | 'sample'
   | 'help-doc'
   | 'community-event'    // Phase 4.8 (#765)
+  | 'devtoberfest-session'  // #2311
 export type PredicateType =
   | 'teaches' | 'requires' | 'relatedTo' | 'extends'
   | 'partOf' | 'taggedWith' | 'aboutProduct' | 'inCategory' | 'coCompletedWith'
+  | 'presents' | 'aboutTutorial'   // #2311
 
 export interface ExploreNode {
   id: string

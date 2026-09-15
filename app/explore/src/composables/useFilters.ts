@@ -9,11 +9,12 @@ import type { NodeType, PredicateType } from '../types'
 export const ALL_NODE_TYPES: NodeType[] = [
   'tutorial', 'concept', 'mission', 'product', 'group', 'category', 'tag',
   'learning-journey', 'blog-post', 'discovery-mission', 'video',
-  'api-doc', 'sample', 'help-doc', 'community-event',
+  'api-doc', 'sample', 'help-doc', 'community-event', 'devtoberfest-session',
 ]
 export const ALL_PREDICATES: PredicateType[] = [
   'teaches', 'requires', 'relatedTo', 'extends',
   'partOf', 'taggedWith', 'aboutProduct', 'inCategory', 'coCompletedWith',
+  'presents', 'aboutTutorial',
 ]
 
 // Module-scoped singleton state — all consumers share the same filter state.

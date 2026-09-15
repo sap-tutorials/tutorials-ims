@@ -204,6 +204,7 @@ export async function runFetchDevtoberfestSessions(logId, opts = {}) {
 
         const existing = await SELECT.one.from(DevtoberfestSessions)
           .columns('ID', 'contentHash', 'lastExtractedHash')
+          // slug-canonical: write-path-canonicalizes
           .where({ slug });
 
         const upsertRow = {
@@ -309,6 +310,7 @@ export async function runFetchDevtoberfestSessions(logId, opts = {}) {
             .where({ ID: { in: reactivatedIds } });
         }
 
+        // slug-canonical: write-path-canonicalizes
         const sesRow = await SELECT.one.from(DevtoberfestSessions).columns('ID').where({ slug });
         if (!sesRow) {
           LOG.warn(`[${slug}] missing after upsert; skipping link persist`);

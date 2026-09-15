@@ -274,7 +274,8 @@ BEGIN
     --
     -- Filter: skip the literal-emitting predicates (kg:slug, kg:name) and
     -- the rdf:type triple — those carry no graph-shape information that the
-    -- explore UI needs. Keep only the 9 edge predicates.
+    -- explore UI needs. Keep only the 11 edge predicates (9 core +
+    -- kg:presents / kg:aboutTutorial for Devtoberfest sessions, #2311).
     --
     -- p1/p2/p3 are unused for this query name. No validation needed beyond
     -- the dispatch — the body has no caller-supplied substitution.
@@ -288,7 +289,8 @@ BEGIN
       '  FILTER(?p IN (' || CHAR(10) ||
       '    kg:teaches, kg:requires, kg:relatedTo, kg:extends,' || CHAR(10) ||
       '    kg:partOf, kg:taggedWith, kg:aboutProduct,' || CHAR(10) ||
-      '    kg:inCategory, kg:coCompletedWith' || CHAR(10) ||
+      '    kg:inCategory, kg:coCompletedWith,' || CHAR(10) ||
+      '    kg:presents, kg:aboutTutorial' || CHAR(10) ||
       '  ))' || CHAR(10) ||
       '  OPTIONAL { ?s kg:name ?sName }' || CHAR(10) ||
       '  OPTIONAL { ?o kg:name ?oName }' || CHAR(10) ||
