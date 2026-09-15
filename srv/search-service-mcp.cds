@@ -95,7 +95,7 @@ extend service SearchService {
       unless ChatSettings.semanticSearchEnabled is set. Fails open ([]) on any
       retrieval error so a backfill gap never surfaces as an error to an agent.
       @param query    Free-text query. Empty → []. The server embeds this.
-      @param corpus   'tutorials' (default) | 'concepts' | 'external' | 'all'.
+      @param corpus   'tutorials' (default) | 'concepts' | 'external' | 'teched' | 'all'.
       @param topK     Max results, clamped [1, 50]. Default ChatSettings.embeddingTopK (5).
       @param minScore Cosine floor; rows below are dropped. Default ChatSettings.embeddingMinScore (0.25). */
   @(requires: 'any')

@@ -6,6 +6,11 @@ using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 // live in ./external/teched.cds; import here (side-effect) so they load with
 // the served model (CAP only loads db/ subfolder files reached via `using`).
 using from './external/teched';
+// #2312 (Unit 5) — semantic-search embedding columns for TechEdSessions live in
+// ./external/teched-embedding.cds (separate from the FOUNDATION file); import
+// here (side-effect) so the extend loads with the served model. Mirrors the
+// inline ApiDocs/Samples/DevtoberfestSessions embedding extends below.
+using from './external/teched-embedding';
 
 /**
  * Phase 4 per-content-type entities. Sub-phases 4.1-4.6 each add their own
