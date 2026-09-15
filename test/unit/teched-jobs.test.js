@@ -159,6 +159,29 @@ describe('runFetchTechEdSessions', () => {
       expect(seenByTitle.get(row.title)).toBe(expected);
     }
   });
+
+  it('re-throws a TOTAL-fetch-failure escalation so the scheduler can mark FAILED / alert', async () => {
+    // The fetcher escalates a total failure as a tagged throw. The job has TWO
+    // fail-open catches (inner fetch + outer cycle); the tag must escape BOTH so
+    // the scheduler chassis records PipelineLog FAILED and fires alerting.raise.
+    const boom = Object.assign(new Error('all venues down'), { code: 'TECHED_TOTAL_FETCH_FAILURE' });
+    await expect(
+      runFetchTechEdSessions('log-x', {
+        fetchAllTechEdSessions: async () => { throw boom; },
+        flagEnabled: () => false,
+      }),
+    ).rejects.toThrow(/all venues down/);
+  });
+
+  it('stays fail-open (returns summary, no throw) on a non-escalation fetch error', async () => {
+    // A single-venue blip / ordinary fetch error must NOT crash the cron.
+    const s = await runFetchTechEdSessions('log-y', {
+      fetchAllTechEdSessions: async () => { throw new Error('transient blip'); },
+      flagEnabled: () => false,
+    });
+    expect(s.errors).toBe(1);
+    expect(s.fetched).toBe(0);
+  });
 });
 
 describe('runRefreshTechEdSessions', () => {

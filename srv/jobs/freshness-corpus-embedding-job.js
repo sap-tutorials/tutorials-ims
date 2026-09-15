@@ -79,9 +79,18 @@ export async function runFreshnessCorpusEmbedding(_logId, _opts) {
     const samples = await embedEntity(db, Samples, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_SAMPLES', model);
     // #2311: embed Devtoberfest sessions for the semantic-search 'external'
     // corpus. embedEntity is generic over title+description (session abstract).
-    const devtoberfestSessions = await embedEntity(
-      db, DevtoberfestSessions, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_DEVTOBERFESTSESSIONS', model,
-    );
+    // Fault-isolated: DevtoberfestSessions is a newer table that may be absent
+    // on an env without the migration, so a failure here must NOT abort the
+    // whole job or mask the apiDocs/samples counts already computed above, nor
+    // prevent the TechEd arm below from running. Log and continue with 0.
+    let devtoberfestSessions = 0;
+    try {
+      devtoberfestSessions = await embedEntity(
+        db, DevtoberfestSessions, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_DEVTOBERFESTSESSIONS', model,
+      );
+    } catch (devtoberfestErr) {
+      LOG.warn('[freshness-corpus] DevtoberfestSessions embedding skipped:', devtoberfestErr.message);
+    }
     // #2312 (Unit 5): embed TechEd sessions for the 'teched'/'external'/'all'
     // corpora. Fault-isolated: TechEdSessions is a newer table that may be
     // absent on an env without the migration, so a failure here must NOT abort
