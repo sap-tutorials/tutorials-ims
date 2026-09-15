@@ -643,6 +643,7 @@ export default class DeveloperService extends cds.ApplicationService {
         eventDescription: renderMarkdown(event.description),   // #2296: admin-authored Markdown → safe HTML for the app-space hero
         eventType: event.eventType ?? 'OTHER',
         hasLogo: Boolean(event.hasLogo),
+        authenticated: Boolean(sapId),   // #2314: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy even if no Users row exists yet (identity resolved from JWT).
         type: 'COMPLEX',
         paths: paths.map(p => {
           const items = allItems
