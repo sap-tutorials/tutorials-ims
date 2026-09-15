@@ -221,12 +221,14 @@ async function searchConcepts({ db, qVec, topK }) {
   }
 }
 
-// External "embedding corpus": ApiDocs + Samples both carry embeddingVec
-// (HANA REAL_VECTOR) / embedding (SQLite Float32 BLOB), a public url, and an
-// NCLOB description. Each is scanned independently and merged by the caller.
+// External "embedding corpus": ApiDocs + Samples + DevtoberfestSessions all
+// carry embeddingVec (HANA REAL_VECTOR) / embedding (SQLite Float32 BLOB), a
+// public url, and an NCLOB description. Each is scanned independently and
+// merged by the caller.
 const EXTERNAL_SOURCES = [
   { hanaTable: 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_APIDOCS', sqliteTable: 'com_sap_developers_ims_external_ApiDocs', contentType: 'api-doc' },
   { hanaTable: 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_SAMPLES', sqliteTable: 'com_sap_developers_ims_external_Samples', contentType: 'sample' },
+  { hanaTable: 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_DEVTOBERFESTSESSIONS', sqliteTable: 'com_sap_developers_ims_external_DevtoberfestSessions', contentType: 'devtoberfest-session' },
 ];
 
 async function searchExternalSource({ db, qVec, topK, hanaTable, sqliteTable, contentType }) {

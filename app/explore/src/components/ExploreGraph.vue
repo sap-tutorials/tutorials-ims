@@ -318,6 +318,7 @@ const NODE_COLORS: Record<NodeType, string> = {
   sample:             '#6a6d70',
   'help-doc':         '#7858a8',
   'community-event':  '#049f9a',
+  'devtoberfest-session': '#e97800',   // #2311 — Devtoberfest orange
 }
 
 const EDGE_COLORS: Record<PredicateType, string> = {
@@ -330,6 +331,8 @@ const EDGE_COLORS: Record<PredicateType, string> = {
   aboutProduct:    '#999999',
   inCategory:      '#999999',
   coCompletedWith: '#cccccc',
+  presents:        '#e97800',   // #2311 — Devtoberfest session → concept
+  aboutTutorial:   '#e97800',   // #2311 — session → tutorial bridge
 }
 </script>
 
