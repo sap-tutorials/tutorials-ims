@@ -690,6 +690,7 @@
     { "source": "^/learn/?(\\?.*)?$",               "target": "/content/pages/learn/$1",               "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/model/?(\\?.*)?$",               "target": "/content/pages/model/$1",               "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/operate/?(\\?.*)?$",             "target": "/content/pages/operate/$1",             "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/teched/?(\\?.*)?$",              "target": "/content/pages/teched/$1",              "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/sitemap\\.xml(\\?.*)?$",         "target": "/content/pages/sitemap.xml$1",          "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/index\\.xml(\\?.*)?$",           "target": "/content/pages/index.xml$1",            "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/llms\\.txt(\\?.*)?$",            "target": "/content/pages/llms.txt$1",             "destination": "srv-api", "authenticationType": "none" },

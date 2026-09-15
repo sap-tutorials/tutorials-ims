@@ -27,6 +27,19 @@ describe('runFreshnessCorpusEmbedding', () => {
     expect(row.embedding).toBeTruthy();
   });
 
+  it('embeds TechEdSessions rows via the `abstract` column and writes the BLOB (#2312)', async () => {
+    const { TechEdSessions } = cds.entities('com.sap.developers.ims.external');
+    await INSERT.into(TechEdSessions).entries({
+      ID: cds.utils.uuid(), sourceId: 'te-1', slug: 'teched-1', title: 'TechEd 1',
+      abstract: 'A TechEd session abstract',
+    });
+    const { runFreshnessCorpusEmbedding } = await import('../../srv/jobs/freshness-corpus-embedding-job.js');
+    const res = await runFreshnessCorpusEmbedding('test-log');
+    expect(res.techedSessions).toBeGreaterThanOrEqual(1);
+    const row = await SELECT.one.from(TechEdSessions).columns('ID', 'embedding').where({ slug: 'teched-1' });
+    expect(row.embedding).toBeTruthy();
+  });
+
   it('passes a resolved embedding model to embed() (regression: undefined model crashed the job)', async () => {
     const { ApiDocs } = cds.entities('com.sap.developers.ims.external');
     await INSERT.into(ApiDocs).entries({ ID: cds.utils.uuid(), slug: 'y', title: 'Y', description: 'desc' });
