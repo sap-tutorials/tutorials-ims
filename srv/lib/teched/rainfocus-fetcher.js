@@ -33,7 +33,11 @@
 // that part is TechEd-specific and kept local. `_fetch` is a swappable
 // transport seam passed through to safeFetch's fetchImpl so tests inject
 // fixtures. A venue that returns a non-"0" responseCode (or otherwise throws)
-// fails SOFTLY via Promise.allSettled — the other venue still ingests.
+// fails SOFTLY via Promise.allSettled — the other venue still ingests. But if
+// EVERY venue fails or returns 0 sessions, fetchAllTechEdSessions escalates:
+// it THROWS a tagged (`code:'TECHED_TOTAL_FETCH_FAILURE'`) error instead of
+// returning an empty result, so the cron marks the run FAILED and alerts rather
+// than silently freezing /teched behind the stale content-hash delta gate.
 
 import { safeFetch } from '../safe-fetch.js';
 import { isRetryableStatus, backoffMs, parseRetryAfterMs } from '../img-cdn-retry.cjs';
@@ -379,15 +383,58 @@ export async function fetchAllTechEdSessions(opts = {}) {
     }),
   );
 
-  // Merge venues; dedup by sourceId (first-writer-wins).
+  // Merge venues; dedup by sourceId (first-writer-wins). Track per-venue
+  // outcomes so a TOTAL failure (every venue rejected or returned 0 sessions)
+  // can be escalated LOUDLY below — a SINGLE venue failing still succeeds
+  // SOFTLY (partial ingest), preserving the existing allSettled semantics.
+  const venueNames = Object.keys(venues);
   const sessions = new Map();
   const speakers = new Map();
   const tracks = new Map();
-  for (const r of settled) {
-    if (r.status !== 'fulfilled') { console.warn('[teched-fetcher] venue failed:', r.reason?.message ?? r.reason); continue; }
+  let venuesWithSessions = 0;
+  const venueFailures = [];
+  for (const [i, r] of settled.entries()) {
+    const venue = venueNames[i] ?? `venue#${i}`;
+    if (r.status !== 'fulfilled') {
+      venueFailures.push(`${venue}: ${r.reason?.message ?? r.reason}`);
+      console.warn('[teched-fetcher] venue failed:', r.reason?.message ?? r.reason);
+      continue;
+    }
+    if (r.value.sessions.length === 0) {
+      venueFailures.push(`${venue}: returned 0 sessions`);
+      continue;
+    }
+    venuesWithSessions++;
     for (const s of r.value.sessions) if (!sessions.has(s.sourceId)) sessions.set(s.sourceId, s);
     for (const sp of r.value.speakers) if (!speakers.has(sp.sourceId)) speakers.set(sp.sourceId, sp);
     for (const t of r.value.tracks) if (!tracks.has(t.sourceId)) tracks.set(t.sourceId, t);
+  }
+
+  // TOTAL failure escalation: NO venue produced any sessions (all venues either
+  // rejected or returned 0). Throw LOUD instead of returning an empty result —
+  // otherwise the weekly cron ingests nothing, the content-hash/lastSeen delta
+  // gate carries stale rows forward, and /teched silently freezes for weeks
+  // until a human notices. The most likely root cause is rotated/stale
+  // RainFocus profile/widget IDs; override them via the RAINFOCUS_TE26_PROFILE /
+  // RAINFOCUS_TE26_WIDGET and RAINFOCUS_TEV26_PROFILE / RAINFOCUS_TEV26_WIDGET
+  // env vars. (Sourcing these IDs from ImsConfig/credstore would further reduce
+  // the rotation risk — a deliberate follow-up, intentionally NOT done here.)
+  // The tagged `err.code` lets the cron job re-throw this past its fail-open
+  // catches so the scheduler records the run FAILED and fires alerting.raise.
+  // Detection is on the per-venue FETCH outcome, NOT the post-dropPast list, so
+  // an event that is simply over (the API still returns PAST sessions, later
+  // emptied by dropPast) stays a legitimate empty result rather than a hard
+  // failure. NB: once TechEd 2026 is over and RainFocus empties/decommissions
+  // the catalog outright (0 raw items), this guard WILL fire every run — retire
+  // or flag-gate the weekly job post-event so it stops raising recurring alerts.
+  if (venuesWithSessions === 0) {
+    const err = new Error(
+      `[teched-fetcher] TOTAL fetch failure — all ${settled.length} venue(s) failed or returned 0 sessions ` +
+        `[${venueFailures.join('; ')}]. Likely rotated/stale RainFocus profile/widget IDs; override via ` +
+        `RAINFOCUS_TE26_PROFILE/RAINFOCUS_TE26_WIDGET and RAINFOCUS_TEV26_PROFILE/RAINFOCUS_TEV26_WIDGET.`,
+    );
+    err.code = 'TECHED_TOTAL_FETCH_FAILURE';
+    throw err;
   }
 
   let sessionList = [...sessions.values()];
