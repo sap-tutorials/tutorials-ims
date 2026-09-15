@@ -324,6 +324,13 @@ export const FEATURE_FLAGS = [
     howToChange: featureFlagUpsert('HOMEPAGE_NEWS_RELEVANCE_ENABLED', 'flag.homepage.newsRelevance'),
   },
   {
+    key: 'TECHED_HOMEPAGE_ENABLED', label: 'Homepage TechEd sessions band', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.homepage.teched',
+    valueType: 'boolean', default: false, issue: '#2312', status: 'dev-only',
+    description: 'When true, upcoming SAP TechEd 2026 sessions (from external.TechEdSessions) are surfaced as always-on cards in the homepage events band, each linking to its session URL (falling back to /teched/). Additive to the existing CodeJam/Devtoberfest band; region-agnostic like Devtoberfest. Fail-open: an empty catalog or a query error yields no cards (the band is unchanged). DB-driven config (ImsConfig key flag.homepage.teched); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('TECHED_HOMEPAGE_ENABLED', 'flag.homepage.teched'),
+  },
+  {
     key: 'CONTENT_DELTA_WRITE_ENABLED', label: 'Content Option-B dual-write', category: 'Content',
     kind: 'db', imsConfigKey: 'content.delta.write',
     valueType: 'boolean', default: false, status: 'dev-only',
