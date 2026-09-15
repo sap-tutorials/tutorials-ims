@@ -95,6 +95,7 @@ export const KG_IRI_PREFIXES = Object.freeze({
   'sample': `${KG}sample/`,           // Phase 4.6 (#747)
   'help-doc': `${KG}help-doc/`,       // Phase 4.7 (#748)
   'community-event': `${KG}community-event/`,   // Phase 4.8 (#765)
+  'devtoberfest-session': `${KG}devtoberfest-session/`,   // #2311
 });
 
 /**
@@ -168,6 +169,15 @@ export function iriHelpDoc(slug) {
 
 export function iriCommunityEvent(slug) {
   return KG_IRI_PREFIXES['community-event'] + iriEscapeSegment(slug);
+}
+
+/**
+ * #2311: IRI helper for Devtoberfest Planner sessions. Slug is
+ * 'dtf-<sessionCode|canonicalized-ID>' (canonicalized in the fetch job);
+ * escape defensively like the other Phase-4 helpers.
+ */
+export function iriDevtoberfestSession(slug) {
+  return KG_IRI_PREFIXES['devtoberfest-session'] + iriEscapeSegment(slug);
 }
 
 /**
@@ -437,6 +447,17 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     (fixtures && fixtures.communityEvents) || {};
   if (eventRows.length > 0) {
     for (const t of buildCommunityEventTriples({ events: eventRows, links: eventLinks })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
+  // Section 15 — #2311 Devtoberfest-session triples. Same optional shape:
+  // when the fixture omits devtoberfestSessions, emission is skipped.
+  const { sessions: dtfSessionRows = [], links: dtfSessionLinks = [] } =
+    (fixtures && fixtures.devtoberfestSessions) || {};
+  if (dtfSessionRows.length > 0) {
+    for (const t of buildDevtoberfestSessionTriples({ sessions: dtfSessionRows, links: dtfSessionLinks })) {
       buffer.push(t);
       if (buffer.length >= batchSize) { yield buffer; buffer = []; }
     }
@@ -935,6 +956,68 @@ export function buildCommunityEventTriples({ events = [], links = [] } = {}) {
   return triples;
 }
 
+// #2311 — Devtoberfest-session predicate + node type.
+export const IMS_PRESENTS = `${KG}presents`;
+const KG_DEVTOBERFEST_SESSION = `${KG}DevtoberfestSession`;
+
+/**
+ * #2311: emit N-Triples for Devtoberfest-session graph nodes + their concept
+ * `presents` edges. Mirrors buildCommunityEventTriples. Standard (non-date-
+ * aware) TTL via isWithinTTL('devtoberfest-session', lastSeenAt).
+ *
+ * Bridge edge: when a session carries activityTaskSlug (its Planner Activity's
+ * TASKSLUG when the Activity is a tutorial), emit an extra
+ * `session :aboutTutorial tutorial` edge so the session connects into the
+ * existing tutorial subgraph. Only emitted for TUTORIAL-typed activities —
+ * puzzle/other task types have no tutorial IRI to point at.
+ *
+ * @param {object} args
+ * @param {Array<{slug, title, url, youtubeUrl?, sessionCode?, speakerNames?,
+ *   scheduledStart?, activityTaskSlug?, activityTaskType?, lastSeenAt}>} args.sessions
+ * @param {Array<{session_slug, conceptSlug, predicate?}>} args.links
+ * @returns {string[]} N-Triples lines
+ */
+export function buildDevtoberfestSessionTriples({ sessions = [], links = [] } = {}) {
+  const triples = [];
+  const visibleSlugs = new Set();
+
+  for (const s of sessions) {
+    if (!s || !s.slug) continue;
+    if (!isWithinTTL('devtoberfest-session', s.lastSeenAt)) continue;
+    visibleSlugs.add(s.slug);
+    const subj = iriDevtoberfestSession(s.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_DEVTOBERFEST_SESSION)));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), s.slug));
+    if (s.title)          triples.push(literalTriple(iri(subj), iriPredicate('title'), s.title));
+    if (s.sessionCode)    triples.push(literalTriple(iri(subj), iriPredicate('sessionCode'), s.sessionCode));
+    if (s.speakerNames)   triples.push(literalTriple(iri(subj), iriPredicate('speakerNames'), s.speakerNames));
+    if (s.youtubeUrl)     triples.push(literalTriple(iri(subj), iriPredicate('youtubeUrl'), s.youtubeUrl));
+    if (s.url)            triples.push(literalTriple(iri(subj), iriPredicate('url'), s.url));
+    // Bridge into the tutorial subgraph. TASKTYPE is uppercase from the
+    // Planner facade ('TUTORIAL' | 'PUZZLE' | ...); only tutorials are graph
+    // nodes we can point at. Tutorial slugs are lowercase-canonical.
+    if (s.activityTaskSlug && String(s.activityTaskType || '').toUpperCase() === 'TUTORIAL') {
+      triples.push(triple(
+        iri(subj),
+        iriPredicate('aboutTutorial'),
+        iriTutorial(String(s.activityTaskSlug).toLowerCase())
+      ));
+    }
+  }
+
+  for (const link of links) {
+    if (!link || !link.session_slug || !link.conceptSlug) continue;
+    if (!visibleSlugs.has(link.session_slug)) continue;
+    triples.push(triple(
+      iri(iriDevtoberfestSession(link.session_slug)),
+      iriPredicate(link.predicate || 'presents'),
+      iriConcept(link.conceptSlug)
+    ));
+  }
+
+  return triples;
+}
+
 /**
  * Production projection. Loads CDS state into a fixture-shaped snapshot
  * and delegates to `projectFromFixtures`.
@@ -1426,6 +1509,50 @@ async function loadFixtures(db) {
     );
   }
 
+  // #2311: Devtoberfest-session fixtures. LOB-safe — never SELECT the
+  // description LargeString/NCLOB (session abstract) alongside metadata
+  // (locator can expire before triple emission on HANA).
+  let devtoberfestSessions = { sessions: [], links: [] };
+  try {
+    const { DevtoberfestSessions, DevtoberfestSessionConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const sessionRows = await db.run(
+      SELECT.from(DevtoberfestSessions).columns(
+        'ID', 'slug', 'title', 'url', 'youtubeUrl', 'sessionCode',
+        'speakerNames', 'scheduledStart', 'activityTaskSlug', 'activityTaskType',
+        'lastSeenAt', 'pinUntil',
+      )
+    );
+    const sessionSlugById = new Map(sessionRows.map((r) => [r.ID, r.slug]));
+    const sLinkRows = await db.run(
+      SELECT.from(DevtoberfestSessionConceptLinks).columns('session_ID', 'concept_ID', 'predicate', 'confidence')
+    );
+    const sLinks = [];
+    for (const l of sLinkRows) {
+      const session_slug = sessionSlugById.get(l.session_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!session_slug || !conceptSlug) continue;
+      sLinks.push({
+        session_slug, conceptSlug,
+        predicate: l.predicate || 'presents',
+      });
+    }
+    devtoberfestSessions = {
+      sessions: sessionRows.map((s) => ({
+        slug: s.slug, title: s.title, url: s.url, youtubeUrl: s.youtubeUrl,
+        sessionCode: s.sessionCode, speakerNames: s.speakerNames,
+        scheduledStart: s.scheduledStart,
+        activityTaskSlug: s.activityTaskSlug, activityTaskType: s.activityTaskType,
+        lastSeenAt: s.lastSeenAt,
+      })),
+      links: sLinks,
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: DevtoberfestSessions load failed; devtoberfest-session triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -1443,5 +1570,6 @@ async function loadFixtures(db) {
     samples,
     helpDocs,
     communityEvents,
+    devtoberfestSessions,
   };
 }

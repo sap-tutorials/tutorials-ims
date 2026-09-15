@@ -63,10 +63,12 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     // Task 9 adds freshness-scan             (47 -> 48)
     // #2188 adds feedback-owner-digest        (48 -> 49)
     // #2184 adds semaphore-tag-sync            (49 -> 50)
-    expect(_getJobRegistry().size).toBe(50);
+    // #2311 adds fetch-devtoberfest-sessions    (50 -> 51)
+    expect(_getJobRegistry().size).toBe(51);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
+    expect(names).toContain('fetch-devtoberfest-sessions');
     expect(names).toContain('refresh-community-events');
     expect(names).toContain('kg-pagerank');
     expect(names).toContain('kg-communities');

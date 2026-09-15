@@ -969,6 +969,22 @@ export function registerJobs() {
     },
   });
 
+  // #2311: twice-weekly cron ingesting rich Devtoberfest Planner sessions
+  // (cross-container facade) into the KG as DevtoberfestSession nodes. Double-
+  // gated inside the job (KG master switch + KG_DEVTOBERFEST_SESSIONS_ENABLED)
+  // and fail-closed when Leg B isn't deployed, so it's inert until enabled.
+  // Off-minute :43 avoids the 04:31 community-events and other 04:xx slots.
+  registerJob({
+    jobName: 'fetch-devtoberfest-sessions',
+    schedule: '43 4 * * 1,4',       // Mon+Thu 04:43 UTC
+    ttlMs: 20 * 60 * 1000,           // 20 min — same band as community-events
+    description: 'Ingest Devtoberfest Planner sessions into the KG (presents concept links) and prep them for semantic search (twice-weekly, flag-gated)',
+    fn: async (logId, opts) => {
+      const { runFetchDevtoberfestSessions } = await import('./fetch-devtoberfest-sessions-job.js');
+      return runFetchDevtoberfestSessions(logId, opts);
+    },
+  });
+
   // #2184 — weekly Semaphore taxonomy auto-sync (replaces the manual SES batch
   // load). Sunday 04:47 UTC — off-cluster from the :00/:07/:11/:13/:17/:19/:23/
   // :31/:37/:43/:57 minute grid. Gated by the SEMAPHORE_SYNC_ENABLED DB flag

@@ -301,6 +301,13 @@ export const FEATURE_FLAGS = [
     description: 'Per-step concept extraction slice during tutorial ingestion. Kill switch — set false to skip step-level slicing (whole-tutorial extraction still runs). DB-driven config (ImsConfig key flag.kg.stepSlicer); no env var. Default ON.',
     howToChange: featureFlagUpsert('KG_STEP_SLICER_ENABLED', 'flag.kg.stepSlicer'),
   },
+  {
+    key: 'KG_DEVTOBERFEST_SESSIONS_ENABLED', label: 'KG Devtoberfest session ingestion', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.devtoberfestSessions',
+    valueType: 'boolean', default: false, issue: '#2311', status: 'dev-only',
+    description: 'Twice-weekly job that ingests rich Devtoberfest Planner sessions (title/abstract/speaker/YouTube) from the cross-container facade into the Knowledge Graph as first-class DevtoberfestSession nodes (predicate "presents") and embeds them for the semantic-search external corpus. Requires the master KG switch (KNOWLEDGE_GRAPH_ENABLED) AND cross-container Leg B (ACTIVITY_SESSION_V1 / DTF_*_V1 synonym+grant) deployed — the facade query is empty/errors without it (fail-closed). DB-driven config (ImsConfig key flag.kg.devtoberfestSessions); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('KG_DEVTOBERFEST_SESSIONS_ENABLED', 'flag.kg.devtoberfestSessions'),
+  },
   // ---- Content ----
   {
     key: 'COMMUNITY_BLOGS_CLASSIFIER_ENABLED', label: 'Community blogs classifier', category: 'Content',

@@ -178,4 +178,26 @@ export const RESOURCE_TYPE_CONFIG = Object.freeze([
       return joinMeta(parts);
     },
   },
+  {
+    type: 'devtoberfest-session',
+    icon: '🎃',
+    singular: 'Devtoberfest session',
+    plural: 'Devtoberfest sessions',
+    priority: 90,
+    metaTemplate: 'Speaker · Date',
+    renderMeta(r) {
+      // #2311: speakerNames + scheduledStart from DevtoberfestSessions. The
+      // 🎥 icon is appended when a YouTube recording exists so the sidebar
+      // surfaces "watchable" sessions without extra UI chrome.
+      const row = r || {};
+      const parts = [];
+      if (row.speakerNames) parts.push(`by ${row.speakerNames}`);
+      if (row.scheduledStart) {
+        const d = formatDate(row.scheduledStart);
+        if (d) parts.push(d);
+      }
+      if (row.youtubeUrl) parts.push('🎥');
+      return joinMeta(parts);
+    },
+  },
 ]);

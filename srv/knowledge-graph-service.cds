@@ -186,6 +186,14 @@ service KnowledgeGraphService {
     virtualOrInPerson : String(20);
     startDate         : Date;
     endDate           : Date;
+    // #2311: devtoberfest-session rows carry speaker + youtube + schedule +
+    // the linked Planner Activity's task slug/type (tutorial/puzzle bridge).
+    youtubeUrl        : String(500);
+    speakerNames      : String(500);
+    scheduledStart    : Timestamp;
+    sessionCode       : String(20);
+    activityTaskSlug  : String(255);
+    activityTaskType  : String(20);
     overlapCount  : Integer;
     // Task 4 of #850 (KG-widget redesign): server-composed meta-text string
     // for the sidebar. Stamped by the neighborhood handler via

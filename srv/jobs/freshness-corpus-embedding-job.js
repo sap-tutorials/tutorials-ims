@@ -61,21 +61,27 @@ async function embedEntity(db, entity, tableName, model) {
 }
 
 /**
- * Backfill embedding columns for ApiDocs and Samples rows that lack them.
+ * Backfill embedding columns for ApiDocs, Samples, and DevtoberfestSessions
+ * rows that lack them.
  *
  * @param {string} _logId   - caller-supplied correlation id (for future audit log)
  * @param {object} [_opts]  - reserved for future options
- * @returns {Promise<{apiDocs:number, samples:number}>}
+ * @returns {Promise<{apiDocs:number, samples:number, devtoberfestSessions:number}>}
  */
 export async function runFreshnessCorpusEmbedding(_logId, _opts) {
   const db = await cds.connect.to('db');
   const { model } = await resolveEmbeddingSettings();
-  const { ApiDocs, Samples } = cds.entities('com.sap.developers.ims.external');
+  const { ApiDocs, Samples, DevtoberfestSessions } = cds.entities('com.sap.developers.ims.external');
   try {
     const apiDocs = await embedEntity(db, ApiDocs, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_APIDOCS', model);
     const samples = await embedEntity(db, Samples, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_SAMPLES', model);
-    LOG.info(`[freshness-corpus] embedded apiDocs=${apiDocs} samples=${samples}`);
-    return { apiDocs, samples };
+    // #2311: embed Devtoberfest sessions for the semantic-search 'external'
+    // corpus. embedEntity is generic over title+description (session abstract).
+    const devtoberfestSessions = await embedEntity(
+      db, DevtoberfestSessions, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_DEVTOBERFESTSESSIONS', model,
+    );
+    LOG.info(`[freshness-corpus] embedded apiDocs=${apiDocs} samples=${samples} devtoberfestSessions=${devtoberfestSessions}`);
+    return { apiDocs, samples, devtoberfestSessions };
   } catch (err) {
     LOG.error('[freshness-corpus] embedding failed', err);
     throw err;

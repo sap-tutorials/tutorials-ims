@@ -247,7 +247,8 @@ Every active cross-container link. Update on add/version-bump/retire.
 |---|---|---|---|---|---|---|
 | `tutorials-hana` | `TUTORIAL_VALUE_HELP_V1` | `devtoberfest-planner-db` | `external.tutorials.TutorialValueHelpV1` | V1 | planned | Session tutorial value help |
 | `tutorials-hana` | `TASK_VALUE_HELP_V1` | `devtoberfest-planner-db` | `external.tutorials.TASK_VALUE_HELP_V1` | V1 | planned | Activity task (tutorial/puzzle) value help |
-| `devtoberfest-planner-db` | `ACTIVITY_SESSION_V1` | `tutorials-hana` | `external.devtoberfest.ActivitySessionV1` | V1 | planned (no consumer yet) | reciprocal leg, reserved |
+| `devtoberfest-planner-db` | `ACTIVITY_SESSION_V1` | `tutorials-hana` | `external.devtoberfest.ActivitySessionV1` | V1 | planned (Leg B) | reciprocal leg — plumbing for #2311 |
+| `devtoberfest-planner-db` | `DTF_*_V1` (Session, Speaker, Activity, …) | `tutorials-hana` | `external.devtoberfest.*` | V1 | planned (consumer: #2311 KG session ingestion) | Devtoberfest sessions → Knowledge Graph + semantic search |
 
 ---
 
