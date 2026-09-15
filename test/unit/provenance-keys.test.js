@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { generateKeyPair, exportPKCS8, jwtVerify, importJWK } from 'jose';
 import { getSigningKey, getJwks, __setKeyForTest, __resetKeysForTest } from '../../srv/lib/provenance-keys.js';
+import { _primeForTests, _resetForTests } from '../../srv/lib/secret-resolver.js';
 
 let pem;
 beforeAll(async () => {
   const { privateKey } = await generateKeyPair('EdDSA', { crv: 'Ed25519', extractable: true });
   pem = await exportPKCS8(privateKey);
 });
-afterEach(() => __resetKeysForTest());
+afterEach(() => { __resetKeysForTest(); _resetForTests(); });
 
 describe('provenance-keys', () => {
   it('returns null signer when no key configured', async () => {
@@ -31,5 +32,17 @@ describe('provenance-keys', () => {
     const pub = await importJWK(jwks.keys[0], 'EdDSA');
     const { payload } = await jwtVerify(jws, pub);
     expect(payload.t).toBe(1);
+  });
+
+  it('resolves the PEM credstore-first via resolveSecret (not process.env directly) — #2308', async () => {
+    // No test override: exercises the real readPem() path. Prime the shared
+    // secret-resolver cache the way a credstore hit would, and assert the signer
+    // loads from it. Guards the regression where provenance read process.env
+    // directly and never saw a key rotated in via /admin-ui/#secrets (credstore).
+    __resetKeysForTest();
+    _primeForTests('PROVENANCE_SIGNING_KEY', pem);
+    const signer = await getSigningKey();
+    expect(signer).not.toBeNull();
+    expect((await getJwks()).keys).toHaveLength(1);
   });
 });
