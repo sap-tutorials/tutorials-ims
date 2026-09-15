@@ -1,0 +1,55 @@
+{
+  "_note": "Fetcher-output shape ({sessions,speakers,tracks}) consumed by scripts/seed-teched.cjs --file and the seed unit test. Mirrors what fetchAllTechEdSessions() emits over test/fixtures/teched/rainfocus-search.json.",
+  "sessions": [
+    {
+      "sourceId": "s-tev-1001",
+      "venue": "VIRTUAL",
+      "sessionCode": "DEV101",
+      "title": "Build Cloud-Native Apps with SAP CAP",
+      "abstract": "A hands-on tour of the SAP Cloud Application Programming Model.",
+      "scheduledStart": "2026-11-03T09:00:00.000Z",
+      "scheduledEnd": "2026-11-03T10:00:00.000Z",
+      "room": "Virtual Room A",
+      "youtubeUrl": null,
+      "url": "https://www.sap.com/events/teched/virtual/session/DEV101",
+      "trackSourceId": "trk-appdev",
+      "speakerSourceIds": ["spk-1"]
+    },
+    {
+      "sourceId": "s-tev-1002",
+      "venue": "VIRTUAL",
+      "sessionCode": "AI200",
+      "title": "Generative AI on SAP BTP",
+      "abstract": "Patterns for building GenAI apps on BTP.",
+      "scheduledStart": "2026-11-03T11:00:00.000Z",
+      "scheduledEnd": "2026-11-03T11:45:00.000Z",
+      "room": "Virtual Room B",
+      "youtubeUrl": "https://youtube.com/watch?v=abc",
+      "url": "https://www.sap.com/events/teched/virtual/session/AI200",
+      "trackSourceId": "trk-ai",
+      "speakerSourceIds": ["spk-2"]
+    },
+    {
+      "sourceId": "s-te-2001",
+      "venue": "BERLIN",
+      "sessionCode": "DEV101",
+      "title": "Build Cloud-Native Apps with SAP CAP (Berlin)",
+      "abstract": "The in-person Berlin edition of the CAP hands-on.",
+      "scheduledStart": "2026-11-10T13:00:00.000Z",
+      "scheduledEnd": "2026-11-10T14:30:00.000Z",
+      "room": "Hall 3.1",
+      "youtubeUrl": null,
+      "url": "https://www.sap.com/events/teched/berlin/session/DEV101",
+      "trackSourceId": "trk-appdev",
+      "speakerSourceIds": ["spk-1"]
+    }
+  ],
+  "speakers": [
+    { "sourceId": "spk-1", "name": "Ada Byron", "title": "Chief Developer Advocate", "company": "SAP", "bio": "Loves CAP and clean core.", "photoUrl": "https://example.com/ada.jpg" },
+    { "sourceId": "spk-2", "name": "Grace Hopper", "title": "Distinguished Engineer", "company": "SAP", "bio": "COBOL and compilers.", "photoUrl": "https://example.com/grace.jpg" }
+  ],
+  "tracks": [
+    { "sourceId": "trk-appdev", "name": "Application Development", "venue": "VIRTUAL", "description": null },
+    { "sourceId": "trk-ai", "name": "Artificial Intelligence", "venue": "VIRTUAL", "description": null }
+  ]
+}
