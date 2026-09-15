@@ -631,6 +631,88 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // Build-time data for the Hugo /teched/ page (issue #2312) — consumed at
+  // build time by a LATER unit's fetcher. Public, unauthenticated,
+  // Cache-Control 60s. Sessions carry `venue` (BERLIN|VIRTUAL) so the page can
+  // split Berlin vs Virtual. EXPLICIT public projection — never spread the full
+  // row (drops sourceId, contentHash, lastExtractedHash, firstSeenAt,
+  // lastSeenAt, pinUntil, createdBy/modifiedBy, …).
+  app.get('/build/teched', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const NS = 'com.sap.developers.ims.external';
+      const sessionRows = await db.run(
+        SELECT.from(`${NS}.TechEdSessions`)
+          .columns('ID', 'slug', 'venue', 'sessionCode', 'title', 'scheduledStart', 'scheduledEnd', 'room', 'youtubeUrl', 'url', 'track_ID')
+          .orderBy('scheduledStart', 'sessionCode'),
+      );
+      // `abstract` is a LargeString (NCLOB on HANA). Never SELECT a LOB
+      // alongside metadata in one query — locators can expire before the
+      // row .map() reads them (CLAUDE.md LOB rule; mirrors kg-projection.js).
+      // Read it in a dedicated LOB-only query and merge by ID.
+      const abstractRows = await db.run(
+        SELECT.from(`${NS}.TechEdSessions`).columns('ID', 'abstract'),
+      );
+      const abstractById = new Map(abstractRows.map((r) => [r.ID, r.abstract]));
+      const trackRows = await db.run(
+        SELECT.from(`${NS}.TechEdTracks`).columns('ID', 'slug', 'name', 'venue'),
+      );
+      // `description` (LargeString) fetched in its own query for the same reason.
+      const trackDescRows = await db.run(
+        SELECT.from(`${NS}.TechEdTracks`).columns('ID', 'description'),
+      );
+      const trackDescById = new Map(trackDescRows.map((r) => [r.ID, r.description]));
+      const speakerRows = await db.run(
+        SELECT.from(`${NS}.TechEdSpeakers`).columns('ID', 'slug', 'name', 'title', 'company', 'photoUrl'),
+      );
+      // `bio` (LargeString) fetched separately (LOB rule).
+      const speakerBioRows = await db.run(
+        SELECT.from(`${NS}.TechEdSpeakers`).columns('ID', 'bio'),
+      );
+      const speakerBioById = new Map(speakerBioRows.map((r) => [r.ID, r.bio]));
+      const linkRows = await db.run(
+        SELECT.from(`${NS}.TechEdSessionSpeakers`).columns('session_ID', 'speaker_ID'),
+      );
+
+      const trackSlugById = new Map(trackRows.map((t) => [t.ID, t.slug]));
+      const speakerSlugById = new Map(speakerRows.map((s) => [s.ID, s.slug]));
+      const speakerSlugsBySession = new Map();
+      for (const l of linkRows) {
+        const slug = speakerSlugById.get(l.speaker_ID);
+        if (!slug) continue;
+        if (!speakerSlugsBySession.has(l.session_ID)) speakerSlugsBySession.set(l.session_ID, []);
+        speakerSlugsBySession.get(l.session_ID).push(slug);
+      }
+
+      const sessions = sessionRows.map((r) => ({
+        slug: r.slug,
+        venue: r.venue,
+        sessionCode: r.sessionCode,
+        title: r.title,
+        abstract: abstractById.get(r.ID) ?? null,
+        scheduledStart: r.scheduledStart,
+        scheduledEnd: r.scheduledEnd,
+        room: r.room,
+        youtubeUrl: r.youtubeUrl,
+        url: r.url,
+        track: r.track_ID ? trackSlugById.get(r.track_ID) ?? null : null,
+        speakers: (speakerSlugsBySession.get(r.ID) ?? []).sort(),
+      }));
+      const speakers = speakerRows.map((s) => ({
+        slug: s.slug, name: s.name, title: s.title, company: s.company, bio: speakerBioById.get(s.ID) ?? null, photoUrl: s.photoUrl,
+      }));
+      const tracks = trackRows.map((t) => ({
+        slug: t.slug, name: t.name, venue: t.venue, description: trackDescById.get(t.ID) ?? null,
+      }));
+
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ sessions, speakers, tracks, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/teched]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Aggregate stats for the ecosystem-health radar at /channels/health/.
   // Consumed by scripts/fetch-channels-stats.ts at build time. Public, unauthenticated.
   // v1 uses ONLY reliably-populated fields: status, ownerType, category/subcategory,

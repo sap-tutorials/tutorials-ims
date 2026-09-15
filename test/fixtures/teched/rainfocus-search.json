@@ -1,0 +1,94 @@
+{
+  "_note": "Representative RainFocus /api/search responses for SAP TechEd 2026, keyed by venue then request type. The live per-venue widget/apiProfile IDs are Akamai-gated in the catalog SPA JS and the 2026 catalog was not yet live at capture time, so this fixture is CONSTRUCTED to match the confirmed RainFocus contract (POST events.rainfocus.com/api/search, form-urlencoded, {responseCode, sectionList[].items}). Verify field names against a live capture before relying on the fetcher in prod. See srv/lib/teched/README.md.",
+  "VIRTUAL": {
+    "session": {
+      "responseCode": "0",
+      "responseMessage": "OK",
+      "sectionList": [
+        {
+          "items": [
+            {
+              "sessionID": "s-tev-1001",
+              "code": "DEV101",
+              "title": "Build Cloud-Native Apps with SAP CAP",
+              "abstract": "A hands-on tour of the SAP Cloud Application Programming Model.",
+              "times": [
+                { "utcStartTime": "2026-11-03T09:00:00Z", "utcEndTime": "2026-11-03T10:00:00Z", "room": "Virtual Room A" }
+              ],
+              "attributevalues": [
+                { "attribute": "Track", "value": "Application Development", "id": "trk-appdev" }
+              ],
+              "participants": [
+                { "speakerId": "spk-1", "firstName": "Ada", "lastName": "Byron", "jobtitle": "Chief Developer Advocate", "companyName": "SAP", "bio": "Loves CAP.", "photoURL": "https://example.com/ada.jpg" }
+              ],
+              "url": "https://www.sap.com/events/teched/virtual/session/DEV101"
+            },
+            {
+              "sessionID": "s-tev-1002",
+              "code": "AI200",
+              "title": "Generative AI on SAP BTP",
+              "abstract": "Patterns for building GenAI apps on BTP.",
+              "times": [
+                { "utcStartTime": "2026-11-03T11:00:00Z", "utcEndTime": "2026-11-03T11:45:00Z", "room": "Virtual Room B" }
+              ],
+              "attributevalues": [
+                { "attribute": "Track", "value": "Artificial Intelligence", "id": "trk-ai" }
+              ],
+              "participants": [
+                { "speakerId": "spk-2", "fullName": "Grace Hopper", "jobtitle": "Distinguished Engineer", "companyName": "SAP", "bio": "COBOL and compilers.", "photoURL": "https://example.com/grace.jpg" }
+              ],
+              "youtubeUrl": "https://youtube.com/watch?v=abc",
+              "url": "https://www.sap.com/events/teched/virtual/session/AI200"
+            }
+          ]
+        }
+      ]
+    },
+    "speaker": {
+      "responseCode": "0",
+      "responseMessage": "OK",
+      "sectionList": [
+        {
+          "items": [
+            { "speakerId": "spk-1", "firstName": "Ada", "lastName": "Byron", "jobtitle": "Chief Developer Advocate", "companyName": "SAP", "bio": "Loves CAP and clean core.", "photoURL": "https://example.com/ada.jpg" },
+            { "speakerId": "spk-2", "fullName": "Grace Hopper", "jobtitle": "Distinguished Engineer", "companyName": "SAP", "bio": "COBOL and compilers.", "photoURL": "https://example.com/grace.jpg" }
+          ]
+        }
+      ]
+    }
+  },
+  "BERLIN": {
+    "session": {
+      "responseCode": "0",
+      "responseMessage": "OK",
+      "sectionList": [
+        {
+          "items": [
+            {
+              "sessionID": "s-te-2001",
+              "code": "DEV101",
+              "title": "Build Cloud-Native Apps with SAP CAP (Berlin)",
+              "abstract": "The in-person Berlin edition of the CAP hands-on.",
+              "times": [
+                { "utcStartTime": "2026-11-10T13:00:00Z", "utcEndTime": "2026-11-10T14:30:00Z", "room": "Hall 3.1" }
+              ],
+              "attributevalues": [
+                { "attribute": "Track", "value": "Application Development", "id": "trk-appdev" }
+              ],
+              "participants": [
+                { "speakerId": "spk-1", "firstName": "Ada", "lastName": "Byron", "jobtitle": "Chief Developer Advocate", "companyName": "SAP", "bio": "Loves CAP.", "photoURL": "https://example.com/ada.jpg" }
+              ],
+              "url": "https://www.sap.com/events/teched/berlin/session/DEV101"
+            },
+            {
+              "code": "",
+              "title": "Broken row without id or code",
+              "times": []
+            }
+          ]
+        }
+      ]
+    },
+    "speaker": { "responseCode": "0", "sectionList": [ { "items": [] } ] }
+  }
+}

@@ -2,6 +2,10 @@ namespace com.sap.developers.ims.external;
 
 using { managed, cuid } from '@sap/cds/common';
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
+// #2312 — TechEd session catalog entities share this external namespace. They
+// live in ./external/teched.cds; import here (side-effect) so they load with
+// the served model (CAP only loads db/ subfolder files reached via `using`).
+using from './external/teched';
 
 /**
  * Phase 4 per-content-type entities. Sub-phases 4.1-4.6 each add their own
