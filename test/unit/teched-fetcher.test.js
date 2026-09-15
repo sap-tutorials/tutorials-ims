@@ -182,6 +182,46 @@ describe('fetchAllTechEdSessions', () => {
     expect(requested).toContain(70);
     expect(requested).not.toContain(100);
   });
+
+  it('throws a TOTAL-failure error when EVERY venue fails (rotated/invalid IDs)', async () => {
+    // Both venues answer with a non-"0" responseCode — the rotated/stale-ID
+    // case. A single-venue blip fails soft (tested above); a TOTAL failure must
+    // escalate LOUD so the cron marks the run FAILED instead of silently
+    // ingesting nothing.
+    const fetchImpl = async () => fakeResponse({ responseCode: '1', responseMessage: 'Invalid API Profile' });
+    const err = await fetchAllTechEdSessions({ _fetch: fetchImpl, venues: VENUES, now: NOW_BEFORE })
+      .then(() => { throw new Error('expected fetchAllTechEdSessions to throw'); }, (e) => e);
+    expect(err.code).toBe('TECHED_TOTAL_FETCH_FAILURE');
+    expect(err.message).toMatch(/TOTAL fetch failure/);
+    // Actionable: names the RainFocus IDs + all four env-var overrides.
+    expect(err.message).toMatch(/RainFocus profile\/widget IDs/);
+    expect(err.message).toMatch(/RAINFOCUS_TE26_PROFILE\/RAINFOCUS_TE26_WIDGET/);
+    expect(err.message).toMatch(/RAINFOCUS_TEV26_PROFILE\/RAINFOCUS_TEV26_WIDGET/);
+  });
+
+  it('throws a TOTAL-failure error when EVERY venue returns 0 sessions', async () => {
+    // responseCode "0" but an empty catalog for both venues (soft-throttle to
+    // empty). Detection is on the FETCH outcome, so this escalates too.
+    const fetchImpl = async () => fakeResponse({ responseCode: '0', totalSearchItems: 0, sectionList: [{ items: [] }] });
+    const err = await fetchAllTechEdSessions({ _fetch: fetchImpl, venues: VENUES, now: NOW_BEFORE })
+      .then(() => { throw new Error('expected fetchAllTechEdSessions to throw'); }, (e) => e);
+    expect(err.code).toBe('TECHED_TOTAL_FETCH_FAILURE');
+    expect(err.message).toMatch(/returned 0 sessions/);
+  });
+
+  it('resolves SOFTLY (no throw) when ONE venue returns sessions and the other fails', async () => {
+    // Partial success must still succeed with the good venue's data — the
+    // single-venue-soft-fail semantics are unchanged by the total-failure guard.
+    const fetchImpl = async (_url, init) => {
+      if (init.headers.rfwidgetid === 'w-b') return fakeResponse({ responseCode: '1', responseMessage: 'Invalid API Profile' });
+      const from = Number(new URLSearchParams(init.body).get('from'));
+      if (from > 0) return fakeResponse({ responseCode: '0', totalSearchItems: FIXTURE.VIRTUAL.totalSearchItems, sectionList: [{ items: [] }] });
+      return fakeResponse(FIXTURE.VIRTUAL);
+    };
+    const out = await fetchAllTechEdSessions({ _fetch: fetchImpl, venues: VENUES, now: NOW_BEFORE });
+    expect(out.sessions).toHaveLength(3);
+    expect(out.sessions.every((s) => s.venue === 'VIRTUAL')).toBe(true);
+  });
 });
 
 describe('parseVenuePayload', () => {

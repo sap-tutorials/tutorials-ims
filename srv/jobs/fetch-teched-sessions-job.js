@@ -69,6 +69,13 @@ export async function runFetchTechEdSessions(logId, opts = {}) {
     try {
       data = await fetchAll({ now: Date.now() });
     } catch (err) {
+      // A TOTAL fetch failure (every venue down / 0 sessions) is escalated by
+      // the fetcher as a tagged throw — RE-THROW it (past this fail-open catch
+      // AND the outer one below) so the scheduler chassis records PipelineLog
+      // FAILED and fires alerting.raise. A silent stale-content freeze is worse
+      // than a loud failure. Any OTHER fetch error stays fail-open (logged +
+      // counted), preserving single-venue-soft-fail semantics.
+      if (err?.code === 'TECHED_TOTAL_FETCH_FAILURE') throw err;
       LOG.error(`fetcher failed: ${err.message}`);
       summary.errors++;
       return summary;
@@ -252,6 +259,9 @@ export async function runFetchTechEdSessions(logId, opts = {}) {
     LOG.info(JSON.stringify(summary));
     return summary;
   } catch (err) {
+    // Let a TOTAL-fetch-failure escalation propagate to the scheduler chassis
+    // (PipelineLog FAILED + alerting.raise); everything else stays fail-open.
+    if (err?.code === 'TECHED_TOTAL_FETCH_FAILURE') throw err;
     LOG.error(`cycle failed: ${err.message}`);
     summary.errors++;
     return summary;
