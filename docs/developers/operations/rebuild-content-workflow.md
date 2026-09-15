@@ -85,6 +85,8 @@ gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref mai
   -f mode=full -f force-cap-refetch=true
 ```
 
+> **Top-level HANA pages (`page-<key>`) ride the same rebuild.** Pages like `/teched/` (issue #2312), `/channels/`, `/browse/`, and `/topics/` are baked into `hugo/public/` by `build:all` (their build-time data feeds — e.g. `/build/teched`, `/build/channels` — are fetched during the build) and published to HANA as `page-<key>` BLOBs by the same publish step. They are **not** slug-targeted; refresh them with a `full` rebuild (or `catalog-only` if only their CAP-sourced data changed and the Hugo templates are unchanged). See [teched.md](../reference/teched.md) and [channels.md](../reference/channels.md).
+
 ## Measured wall-clock (verified 2026-06-24)
 
 These numbers come from real runs against `main` ([PR #615](https://github.com/sap-tutorials/tutorials-ims/pull/615) measurement section). Times include GH Actions runner startup overhead (~30-40s for setup + checkout + Hugo install + npm ci) which is the floor for any mode.
