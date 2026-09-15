@@ -39,9 +39,10 @@ describe('Public endpoints', () => {
     expect(body.groupSlugs).toEqual([]);
   });
 
-  // TODO: @cap-js/ord 1.6.0 routes are not active in production CSN —
-  // requires plugin wiring investigation. Skipping until that's resolved.
-  it.skip('GET /.well-known/open-resource-discovery returns ORD configuration', async () => {
+  // ORD routes are served by @cap-js/ord's OpenResourceDiscoveryService, folded
+  // into the production CSN via `using from '@cap-js/ord/lib/services/ord-service'`
+  // in srv/ord-annotations.cds (#2307). Anonymous ("Open" access strategy) by default.
+  it('GET /.well-known/open-resource-discovery returns ORD configuration', async () => {
     const res = await fetchWithRetry(`${SRV_URL}/.well-known/open-resource-discovery`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
@@ -51,7 +52,7 @@ describe('Public endpoints', () => {
     expect(body.openResourceDiscoveryV1.documents).toBeDefined();
   });
 
-  it.skip('GET /ord/v1/documents/ord-document returns ORD document', async () => {
+  it('GET /ord/v1/documents/ord-document returns ORD document', async () => {
     const res = await fetchWithRetry(`${SRV_URL}/ord/v1/documents/ord-document`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
