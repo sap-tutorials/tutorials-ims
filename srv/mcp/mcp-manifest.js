@@ -52,6 +52,12 @@ function buildMcpManifest({ baseUrl } = {}) {
               'TechEd, user groups), filterable by type/region and ordered by start date.',
           },
           {
+            name: 'search_teched',
+            description:
+              'Search the public SAP TechEd 2026 session catalog, filterable by ' +
+              'venue (Berlin/Virtual) and track, ordered by scheduled start.',
+          },
+          {
             name: 'search_channels',
             description:
               'Search the public external-channels catalog (SAP and community YouTube ' +
