@@ -40,6 +40,34 @@ describe('runFreshnessCorpusEmbedding', () => {
     expect(row.embedding).toBeTruthy();
   });
 
+  it('fault-isolates a failing DevtoberfestSessions arm: job still resolves, apiDocs/samples survive, TechEd arm still runs (#2311/#2312)', async () => {
+    const { ApiDocs, TechEdSessions } = cds.entities('com.sap.developers.ims.external');
+    // Fresh rows so both surviving arms have work to do.
+    await INSERT.into(ApiDocs).entries({ ID: cds.utils.uuid(), slug: 'iso-api', title: 'Iso API', description: 'desc' });
+    await INSERT.into(TechEdSessions).entries({
+      ID: cds.utils.uuid(), sourceId: 'te-iso', slug: 'teched-iso', title: 'TechEd Iso',
+      abstract: 'A TechEd session abstract',
+    });
+    // Simulate the newer DevtoberfestSessions table being absent on an
+    // un-migrated env: SELECT.from(DevtoberfestSessions) will now reject.
+    // No other test reads this table, so dropping it here is safe.
+    await db.run('DROP TABLE "COM_SAP_DEVELOPERS_IMS_EXTERNAL_DEVTOBERFESTSESSIONS"');
+
+    const { runFreshnessCorpusEmbedding } = await import('../../srv/jobs/freshness-corpus-embedding-job.js');
+    // Must resolve (not reject) despite the devtoberfest arm throwing.
+    const res = await runFreshnessCorpusEmbedding('test-log');
+
+    // Failing arm contributes 0 without aborting the job.
+    expect(res.devtoberfestSessions).toBe(0);
+    // Counts computed before the failing arm survive.
+    expect(res.apiDocs).toBeGreaterThanOrEqual(1);
+    expect(typeof res.samples).toBe('number');
+    // The TechEd arm (below the devtoberfest arm) still ran — not aborted.
+    expect(res.techedSessions).toBeGreaterThanOrEqual(1);
+    const row = await SELECT.one.from(TechEdSessions).columns('ID', 'embedding').where({ slug: 'teched-iso' });
+    expect(row.embedding).toBeTruthy();
+  });
+
   it('passes a resolved embedding model to embed() (regression: undefined model crashed the job)', async () => {
     const { ApiDocs } = cds.entities('com.sap.developers.ims.external');
     await INSERT.into(ApiDocs).entries({ ID: cds.utils.uuid(), slug: 'y', title: 'Y', description: 'desc' });
