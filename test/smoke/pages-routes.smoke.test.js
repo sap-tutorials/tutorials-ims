@@ -34,6 +34,7 @@ const HTML_ROUTES = [
   { path: '/tutorial-navigator/', marker: 'id="tutorial-navigator"' },
   { path: '/developer-advocates/', marker: 'id="advocates-mount"'   },
   { path: '/devtoberfest/',        marker: 'id="devtoberfest-mount"' },
+  { path: '/teched/',              marker: 'SAP TechEd'              },
   { path: '/ai/',                  marker: 'data-verb="ai"'          },
   { path: '/build/',               marker: 'data-verb="build"'       },
   { path: '/connect/',             marker: 'data-verb="connect"'     },
