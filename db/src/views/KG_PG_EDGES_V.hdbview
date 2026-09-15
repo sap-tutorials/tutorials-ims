@@ -16,8 +16,11 @@ VIEW "KG_PG_EDGES_V" AS
   --   isolation before the 7 new UNION-ALL arms land.
   --
   -- The type prefix ('r|', 't|', 'rel|', 'ext|', 'po|', 'tw|', 'ap|',
-  -- 'ic|', 'cc|') prevents any theoretical collision if slugs from
-  -- different vertex types happen to coincide.
+  -- 'ic|', 'cc|', 'tec|', 'itk|', 'pby|') prevents any theoretical collision
+  -- if slugs from different vertex types happen to coincide. The three #2312
+  -- TechEd arms stay well within the 600 ceiling: widest is 'itk|'/'pby|' =
+  -- 4 + session-slug(≤200) + '|' + track/speaker-slug(≤200) ≈ ≤ 405 chars
+  -- (still below `taggedWith`'s 513).
   --
   -- Why EDGE_KEY exists at all: HDI's .hdbgraphworkspace plugin (unlike
   -- HANA's raw CREATE GRAPH WORKSPACE DDL) rejects a workspace without an
@@ -190,4 +193,60 @@ VIEW "KG_PG_EDGES_V" AS
     'coCompletedWith'                                               AS "EDGE_TYPE"
   FROM "COM_SAP_DEVELOPERS_IMS_COCOMPLETIONS"
   WHERE SCORE >= 10
-    AND SOURCESLUG IS NOT NULL AND TARGETSLUG IS NOT NULL;
+    AND SOURCESLUG IS NOT NULL AND TARGETSLUG IS NOT NULL
+  UNION ALL
+  -- kg:covers edges: teched_session → concept (#2312)
+  -- Source: TechEdSessionConceptLinks (session ↔ concept junction, populated
+  -- by the KG projection). @assert.unique.pair [session, concept] guarantees
+  -- one link per (session, concept), so 'tec|<session-slug>|<concept-slug>' is
+  -- unique; DISTINCT is defense-in-depth (mirrors the `teaches` arm above).
+  -- The inner JOIN to Concepts + STATUS='ACTIVE' drops links to retired/absent
+  -- concepts, so no dangling 'concept:<slug>' TARGET reaches the workspace
+  -- validator ([4907] range 3). The teched_session SOURCE resolves to the
+  -- teched_session vertex arm in KG_PG_VERTICES_V.
+  SELECT DISTINCT
+    CAST('tec|' || s.SLUG || '|' || c.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('teched_session:' || s.SLUG AS NVARCHAR(280))       AS "SOURCE",
+    CAST('concept:'        || c.SLUG AS NVARCHAR(280))       AS "TARGET",
+    'covers'                                                 AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSESSIONCONCEPTLINKS" tscl
+  JOIN "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSESSIONS" s ON s.ID = tscl.SESSION_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" c ON c.ID = tscl.CONCEPT_ID
+  WHERE tscl.PREDICATE = 'covers'
+    AND c.STATUS = 'ACTIVE'
+    AND s.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:inTrack edges: teched_session → teched_track (#2312)
+  -- FK TechEdSessions.track → TRACK_ID. Inner JOIN + IS NOT NULL drops sessions
+  -- with no track. One track per session, so 'itk|<session>|<track>' is unique
+  -- per row — but DISTINCT is defense-in-depth (matching the covers/presentedBy
+  -- arms): a sourceId-churn / re-slug race could leave two TechEdSessions rows
+  -- sharing a SLUG and the same TRACK_ID, which would emit 'itk|x|y' twice and
+  -- crash the whole KG workspace at KG_LOUVAIN_GRAPH runtime with [4907]
+  -- range 1. Both endpoints have vertices (teched_session + teched_track arms
+  -- in KG_PG_VERTICES_V).
+  SELECT DISTINCT
+    CAST('itk|' || s.SLUG || '|' || tr.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('teched_session:' || s.SLUG AS NVARCHAR(280))        AS "SOURCE",
+    CAST('teched_track:'   || tr.SLUG AS NVARCHAR(280))       AS "TARGET",
+    'inTrack'                                                 AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSESSIONS" s
+  JOIN "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDTRACKS" tr ON tr.ID = s.TRACK_ID
+  WHERE s.TRACK_ID IS NOT NULL
+    AND s.SLUG IS NOT NULL AND tr.SLUG IS NOT NULL
+  UNION ALL
+  -- kg:presentedBy edges: teched_session → teched_speaker (#2312)
+  -- Via TechEdSessionSpeakers junction (session ↔ speaker many-to-many).
+  -- @assert.unique.pair [session, speaker] makes 'pby|<session>|<speaker>'
+  -- unique; DISTINCT is defense-in-depth (the junction is written by raw
+  -- db.run() in seed-core.js, bypassing the @assert.unique.pair runtime check).
+  -- Both endpoints have vertices (teched_session + teched_speaker arms).
+  SELECT DISTINCT
+    CAST('pby|' || s.SLUG || '|' || sp.SLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('teched_session:' || s.SLUG AS NVARCHAR(280))        AS "SOURCE",
+    CAST('teched_speaker:' || sp.SLUG AS NVARCHAR(280))       AS "TARGET",
+    'presentedBy'                                             AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSESSIONSPEAKERS" ss
+  JOIN "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSESSIONS" s ON s.ID = ss.SESSION_ID
+  JOIN "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSPEAKERS" sp ON sp.ID = ss.SPEAKER_ID
+  WHERE s.SLUG IS NOT NULL AND sp.SLUG IS NOT NULL;
