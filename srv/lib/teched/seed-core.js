@@ -27,7 +27,7 @@ function pick(row, keys) {
   return out;
 }
 
-async function upsertSimple({ db, entity, rawList, normalizeFn, cols, commit, force, nowTs }) {
+async function upsertSimple({ db, entity, rawList, normalizeFn, cols, commit, force, nowTs, metadataOnly }) {
   const existing = await db.run(SELECT.from(entity).columns('ID', 'sourceId', 'slug', 'contentHash'));
   const bySource = new Map(existing.map((r) => [r.sourceId, r]));
   const seenSlugs = new Set(existing.map((r) => r.slug).filter(Boolean));
@@ -39,14 +39,18 @@ async function upsertSimple({ db, entity, rawList, normalizeFn, cols, commit, fo
     const row = normalizeFn(raw, seenSlugs, prior?.slug);
     if (prior) {
       idBySource.set(row.sourceId, prior.ID);
-      if (prior.contentHash === row.contentHash && !force) { skipped++; continue; }
-      const patch = { ...pick(row, cols), slug: row.slug, contentHash: row.contentHash, lastSeenAt: nowTs };
+      // metadataOnly (refresh job): always patch metadata, never gate on / write
+      // contentHash — that column is owned by the weekly extraction job.
+      if (!metadataOnly && prior.contentHash === row.contentHash && !force) { skipped++; continue; }
+      const patch = { ...pick(row, cols), slug: row.slug, lastSeenAt: nowTs };
+      if (!metadataOnly) patch.contentHash = row.contentHash;
       if (commit) await db.run(UPDATE(entity).set(patch).where({ ID: prior.ID }));
       updated++;
     } else {
       const ID = cds.utils.uuid();
       idBySource.set(row.sourceId, ID);
-      const entry = { ID, sourceId: row.sourceId, slug: row.slug, contentHash: row.contentHash, lastSeenAt: nowTs, ...pick(row, cols) };
+      const entry = { ID, sourceId: row.sourceId, slug: row.slug, lastSeenAt: nowTs, ...pick(row, cols) };
+      if (!metadataOnly) entry.contentHash = row.contentHash;
       if (commit) await db.run(INSERT.into(entity).entries(entry));
       inserted++;
     }
@@ -63,9 +67,12 @@ async function upsertSimple({ db, entity, rawList, normalizeFn, cols, commit, fo
  * @param {object} args.data      { sessions, speakers, tracks } — fetcher output shape
  * @param {boolean} [args.commit=false]  dry-run unless true
  * @param {boolean} [args.force=false]   bypass the contentHash skip
+ * @param {boolean} [args.metadataOnly=false] refresh mode: always upsert
+ *   source-owned metadata + lastSeenAt, but NEVER read/write contentHash
+ *   (owned by the weekly extraction job). Used by refresh-teched-sessions-job.
  * @param {Date}   [args.now]
  */
-export async function runSeed({ db, entities, data, commit = false, force = false, now = new Date() }) {
+export async function runSeed({ db, entities, data, commit = false, force = false, metadataOnly = false, now = new Date() }) {
   const { TechEdSessions, TechEdSpeakers, TechEdTracks, TechEdSessionSpeakers } = entities;
   const nowTs = now instanceof Date ? now.toISOString() : now;
   const tracks = Array.isArray(data.tracks) ? data.tracks : [];
@@ -73,8 +80,8 @@ export async function runSeed({ db, entities, data, commit = false, force = fals
   const sessions = Array.isArray(data.sessions) ? data.sessions : [];
 
   // 1) tracks + 2) speakers — independent, no FKs
-  const trackRes = await upsertSimple({ db, entity: TechEdTracks, rawList: tracks, normalizeFn: normalizeTrack, cols: TRACK_COLS, commit, force, nowTs });
-  const speakerRes = await upsertSimple({ db, entity: TechEdSpeakers, rawList: speakers, normalizeFn: normalizeSpeaker, cols: SPEAKER_COLS, commit, force, nowTs });
+  const trackRes = await upsertSimple({ db, entity: TechEdTracks, rawList: tracks, normalizeFn: normalizeTrack, cols: TRACK_COLS, commit, force, nowTs, metadataOnly });
+  const speakerRes = await upsertSimple({ db, entity: TechEdSpeakers, rawList: speakers, normalizeFn: normalizeSpeaker, cols: SPEAKER_COLS, commit, force, nowTs, metadataOnly });
 
   // 3) sessions — resolve track_ID via the track map
   const existing = await db.run(SELECT.from(TechEdSessions).columns('ID', 'sourceId', 'slug', 'contentHash'));
@@ -89,14 +96,16 @@ export async function runSeed({ db, entities, data, commit = false, force = fals
     const trackId = row.trackSourceId ? trackRes.idBySource.get(String(row.trackSourceId)) ?? null : null;
     if (prior) {
       sessionIdBySource.set(row.sourceId, prior.ID);
-      if (prior.contentHash === row.contentHash && !force) { skipped++; continue; }
-      const patch = { ...pick(row, SESSION_COLS), track_ID: trackId, slug: row.slug, contentHash: row.contentHash, lastSeenAt: nowTs };
+      if (!metadataOnly && prior.contentHash === row.contentHash && !force) { skipped++; continue; }
+      const patch = { ...pick(row, SESSION_COLS), track_ID: trackId, slug: row.slug, lastSeenAt: nowTs };
+      if (!metadataOnly) patch.contentHash = row.contentHash;
       if (commit) await db.run(UPDATE(TechEdSessions).set(patch).where({ ID: prior.ID }));
       updated++;
     } else {
       const ID = cds.utils.uuid();
       sessionIdBySource.set(row.sourceId, ID);
-      const entry = { ID, sourceId: row.sourceId, slug: row.slug, contentHash: row.contentHash, lastSeenAt: nowTs, track_ID: trackId, ...pick(row, SESSION_COLS) };
+      const entry = { ID, sourceId: row.sourceId, slug: row.slug, lastSeenAt: nowTs, track_ID: trackId, ...pick(row, SESSION_COLS) };
+      if (!metadataOnly) entry.contentHash = row.contentHash;
       if (commit) await db.run(INSERT.into(TechEdSessions).entries(entry));
       inserted++;
     }
