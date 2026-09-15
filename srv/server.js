@@ -221,6 +221,25 @@ function sendPetPhoto(res, p, { isPrivate = false } = {}) {
   return res.send(p.buffer);
 }
 
+// Fetch a single LOB column for a bounded set of row IDs, batched to stay well
+// under HANA's bound-parameter packet cap on the IN list. Returns Map<ID,value>.
+// LOB-safe by design: selects ONLY the key + the LOB column in its own query
+// (never alongside other metadata — CLAUDE.md LOB-locator rule). Skips empty
+// input (avoids a degenerate `IN ()`).
+async function fetchLobColumnByIds(db, entity, lobColumn, ids) {
+  const byId = new Map();
+  const BATCH = 500;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const chunk = ids.slice(i, i + BATCH);
+    if (!chunk.length) continue;
+    const rows = await db.run(
+      SELECT.from(entity).columns('ID', lobColumn).where({ ID: { in: chunk } }),
+    );
+    for (const r of rows) byId.set(r.ID, r[lobColumn]);
+  }
+  return byId;
+}
+
 cds.on('bootstrap', (app) => {
   // #1105: copy the PAT synthetic user (req.user, tokenSource==='pat') onto
   // cds.context.user, immediately AFTER CAP's built-in `auth` middleware. The
@@ -638,42 +657,73 @@ cds.on('bootstrap', (app) => {
   // split Berlin vs Virtual. EXPLICIT public projection — never spread the full
   // row (drops sourceId, contentHash, lastExtractedHash, firstSeenAt,
   // lastSeenAt, pinUntil, createdBy/modifiedBy, …).
-  app.get('/build/teched', async (_req, res) => {
+  app.get('/build/teched', async (req, res) => {
     try {
       const db = await cds.connect.to('db');
       const NS = 'com.sap.developers.ims.external';
-      const sessionRows = await db.run(
-        SELECT.from(`${NS}.TechEdSessions`)
-          .columns('ID', 'slug', 'venue', 'sessionCode', 'title', 'scheduledStart', 'scheduledEnd', 'room', 'youtubeUrl', 'url', 'track_ID')
-          .orderBy('scheduledStart', 'sessionCode'),
+
+      // Bound the public feed. The real catalog is ~300 sessions/venue; a
+      // 1000-row cap sits well above that (nothing is dropped) but keeps the
+      // sessions query — and the abstract LOB pass derived from it — bounded on
+      // a public, lightly-cached route. Tracks/speakers are tiny dimension
+      // tables that MUST be fetched in full (unbounded): every emitted session
+      // resolves its track_ID / speaker links against them, so an unordered cap
+      // there could silently drop a referenced row.
+      const MAX_SESSIONS = 1000;
+
+      // Optional scoping (the page today fetches all and splits client-side, so
+      // these are additive, not required): ?venue=BERLIN|VIRTUAL narrows to one
+      // venue; ?upcoming=true drops sessions that have already ended.
+      const sessionWhere = {};
+      const venue = String(req.query.venue || '').trim().toUpperCase();
+      if (venue === 'BERLIN' || venue === 'VIRTUAL') sessionWhere.venue = venue;
+      if (String(req.query.upcoming || '').toLowerCase() === 'true') {
+        sessionWhere.scheduledEnd = { '>=': new Date().toISOString() };
+      }
+
+      let sessionQuery = SELECT.from(`${NS}.TechEdSessions`)
+        .columns('ID', 'slug', 'venue', 'sessionCode', 'title', 'scheduledStart', 'scheduledEnd', 'room', 'youtubeUrl', 'url', 'track_ID');
+      if (Object.keys(sessionWhere).length) sessionQuery = sessionQuery.where(sessionWhere);
+      sessionQuery = sessionQuery.orderBy('scheduledStart', 'sessionCode').limit(MAX_SESSIONS);
+      const sessionRows = await db.run(sessionQuery);
+
+      // `abstract`/`bio`/`description` are LargeString (NCLOB on HANA). Never
+      // SELECT a LOB alongside metadata in one query — locators can expire
+      // before the row .map() reads them (CLAUDE.md LOB rule; mirrors
+      // kg-projection.js). Fetch each in a dedicated LOB-only query. The
+      // abstract pass is scoped by WHERE ID IN (...) to ONLY the emitted
+      // (bounded) sessions — no full-table pass. Track/speaker LOBs match their
+      // full metadata fetch (all IDs), so no referenced row loses its text.
+      const abstractById = await fetchLobColumnByIds(
+        db, `${NS}.TechEdSessions`, 'abstract', sessionRows.map((r) => r.ID),
       );
-      // `abstract` is a LargeString (NCLOB on HANA). Never SELECT a LOB
-      // alongside metadata in one query — locators can expire before the
-      // row .map() reads them (CLAUDE.md LOB rule; mirrors kg-projection.js).
-      // Read it in a dedicated LOB-only query and merge by ID.
-      const abstractRows = await db.run(
-        SELECT.from(`${NS}.TechEdSessions`).columns('ID', 'abstract'),
-      );
-      const abstractById = new Map(abstractRows.map((r) => [r.ID, r.abstract]));
       const trackRows = await db.run(
         SELECT.from(`${NS}.TechEdTracks`).columns('ID', 'slug', 'name', 'venue'),
       );
-      // `description` (LargeString) fetched in its own query for the same reason.
-      const trackDescRows = await db.run(
-        SELECT.from(`${NS}.TechEdTracks`).columns('ID', 'description'),
+      const trackDescById = await fetchLobColumnByIds(
+        db, `${NS}.TechEdTracks`, 'description', trackRows.map((t) => t.ID),
       );
-      const trackDescById = new Map(trackDescRows.map((r) => [r.ID, r.description]));
       const speakerRows = await db.run(
         SELECT.from(`${NS}.TechEdSpeakers`).columns('ID', 'slug', 'name', 'title', 'company', 'photoUrl'),
       );
-      // `bio` (LargeString) fetched separately (LOB rule).
-      const speakerBioRows = await db.run(
-        SELECT.from(`${NS}.TechEdSpeakers`).columns('ID', 'bio'),
+      const speakerBioById = await fetchLobColumnByIds(
+        db, `${NS}.TechEdSpeakers`, 'bio', speakerRows.map((s) => s.ID),
       );
-      const speakerBioById = new Map(speakerBioRows.map((r) => [r.ID, r.bio]));
-      const linkRows = await db.run(
-        SELECT.from(`${NS}.TechEdSessionSpeakers`).columns('session_ID', 'speaker_ID'),
-      );
+
+      // Only the junction rows for the emitted sessions are consumed below, so
+      // scope + batch the IN list — keeps this bounded and correct when the
+      // feed is venue/upcoming-filtered.
+      const sessionIds = sessionRows.map((r) => r.ID);
+      const linkRows = [];
+      const LINK_BATCH = 500;
+      for (let i = 0; i < sessionIds.length; i += LINK_BATCH) {
+        const chunk = sessionIds.slice(i, i + LINK_BATCH);
+        if (!chunk.length) continue;
+        const batch = await db.run(
+          SELECT.from(`${NS}.TechEdSessionSpeakers`).columns('session_ID', 'speaker_ID').where({ session_ID: { in: chunk } }),
+        );
+        for (const l of batch) linkRows.push(l);
+      }
 
       const trackSlugById = new Map(trackRows.map((t) => [t.ID, t.slug]));
       const speakerSlugById = new Map(speakerRows.map((s) => [s.ID, s.slug]));
