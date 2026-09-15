@@ -396,6 +396,33 @@ describe('getEventProgress event association', () => {
     expect(data.paths.length).toBe(1);
     expect(data.paths[0].title).toBe('Published Path');
   });
+
+  // #2314: an anonymous visitor opening app-space with an eventId in the URL
+  // must get the CORRECT event's tracks (not a 401 that pushes the client onto
+  // the default-event static fallback). Progress fields come back empty because
+  // there is no user, and `authenticated` is false so the client won't light up
+  // the logged-in-only realtime/confetti path.
+  it('getAppSpaceProgress serves the event to an anonymous visitor with empty progress', async () => {
+    const { status, data } = await project.get(
+      `/api/getAppSpaceProgress(eventLegacyId=66303)`,
+      { validateStatus: () => true }
+    );
+    expect(status).toBe(200);
+    expect(data.eventId).toBe(66303);
+    expect(data.eventName).toBe('Devtoberfest 2026');
+    expect(data.authenticated).toBe(false);
+    expect(data.paths.length).toBeGreaterThan(0);
+    // No user → every item carries no completion status.
+    const statuses = data.paths.flatMap(p => p.items.map(i => i.status));
+    expect(statuses.every(s => s === '')).toBe(true);
+  });
+
+  it('getAppSpaceProgress reports authenticated:true for a logged-in caller', async () => {
+    const { data } = await project.get(
+      `/api/getAppSpaceProgress(eventLegacyId=66303)`, auth
+    );
+    expect(data.authenticated).toBe(true);
+  });
 });
 
 describe('group/mission rollup (via completeStep)', () => {

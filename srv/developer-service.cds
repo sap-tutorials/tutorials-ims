@@ -189,14 +189,21 @@ service DeveloperService {
     };
   };
 
-  // App Space progress by event ID (frontend default: latest event)
-  @(requires: 'authenticated-user')
+  // App Space progress by event ID (frontend default: latest event).
+  // #2314: anonymous-readable. The app-space page is a public kiosk/QR landing
+  // — an anonymous visitor with an eventId in the URL must see the CORRECT
+  // event's tracks, not a 401 that forces the client onto the default-event
+  // static fallback. Progress fields come back empty for anonymous callers
+  // (resolveUserSapId → null → no TaskRecords); `authenticated` tells the
+  // client whether to enable the logged-in-only realtime/confetti path.
+  @(requires: 'any')
   function getAppSpaceProgress(eventLegacyId : Integer) returns {
     eventId          : Integer;
     eventName        : String;
     eventDescription : String;
     eventType        : String;
     hasLogo          : Boolean;
+    authenticated    : Boolean;
     type             : String;
     paths     : many {
       id          : Integer;
