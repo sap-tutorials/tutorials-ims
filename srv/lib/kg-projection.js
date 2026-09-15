@@ -1647,17 +1647,20 @@ async function loadFixtures(db) {
   let devtoberfestSessions = { sessions: [], links: [] };
   try {
     const { DevtoberfestSessions, DevtoberfestSessionConceptLinks } = cds.entities('com.sap.developers.ims.external');
-    const sessionRows = await db.run(
-      SELECT.from(DevtoberfestSessions).columns(
-        'ID', 'slug', 'title', 'url', 'youtubeUrl', 'sessionCode',
-        'speakerNames', 'scheduledStart', 'activityTaskSlug', 'activityTaskType',
-        'lastSeenAt', 'pinUntil',
-      )
-    );
+    // Independent reads — run concurrently; map-building depends on neither's completion order.
+    const [sessionRows, sLinkRows] = await Promise.all([
+      db.run(
+        SELECT.from(DevtoberfestSessions).columns(
+          'ID', 'slug', 'title', 'url', 'youtubeUrl', 'sessionCode',
+          'speakerNames', 'scheduledStart', 'activityTaskSlug', 'activityTaskType',
+          'lastSeenAt', 'pinUntil',
+        )
+      ),
+      db.run(
+        SELECT.from(DevtoberfestSessionConceptLinks).columns('session_ID', 'concept_ID', 'predicate', 'confidence')
+      ),
+    ]);
     const sessionSlugById = new Map(sessionRows.map((r) => [r.ID, r.slug]));
-    const sLinkRows = await db.run(
-      SELECT.from(DevtoberfestSessionConceptLinks).columns('session_ID', 'concept_ID', 'predicate', 'confidence')
-    );
     const sLinks = [];
     for (const l of sLinkRows) {
       const session_slug = sessionSlugById.get(l.session_ID);
@@ -1696,29 +1699,27 @@ async function loadFixtures(db) {
       TechEdSpeakers, TechEdSessionSpeakers,
     } = cds.entities('com.sap.developers.ims.external');
 
-    const teTrackRows = await db.run(
-      SELECT.from(TechEdTracks).columns('ID', 'slug', 'name', 'lastSeenAt')
-    );
+    // Five independent reads — run concurrently. LOB-safe: none of these SELECTs
+    // pull an abstract/bio/description LargeString. Map-building below depends on
+    // the resolved rows, not on completion order between the reads.
+    const [teTrackRows, teSpeakerRows, teSessionRows, junctionRows, teLinkRows] = await Promise.all([
+      db.run(SELECT.from(TechEdTracks).columns('ID', 'slug', 'name', 'lastSeenAt')),
+      db.run(SELECT.from(TechEdSpeakers).columns('ID', 'slug', 'name', 'lastSeenAt')),
+      db.run(
+        SELECT.from(TechEdSessions).columns(
+          'ID', 'slug', 'title', 'sessionCode', 'room', 'venue',
+          'youtubeUrl', 'url', 'scheduledStart', 'scheduledEnd',
+          'track_ID', 'lastSeenAt', 'pinUntil',
+        )
+      ),
+      db.run(SELECT.from(TechEdSessionSpeakers).columns('session_ID', 'speaker_ID')),
+      db.run(SELECT.from(TechEdSessionConceptLinks).columns('session_ID', 'concept_ID', 'predicate', 'confidence')),
+    ]);
     const trackSlugById = new Map(teTrackRows.map((r) => [r.ID, r.slug]));
-
-    const teSpeakerRows = await db.run(
-      SELECT.from(TechEdSpeakers).columns('ID', 'slug', 'name', 'lastSeenAt')
-    );
     const speakerSlugById = new Map(teSpeakerRows.map((r) => [r.ID, r.slug]));
-
-    const teSessionRows = await db.run(
-      SELECT.from(TechEdSessions).columns(
-        'ID', 'slug', 'title', 'sessionCode', 'room', 'venue',
-        'youtubeUrl', 'url', 'scheduledStart', 'scheduledEnd',
-        'track_ID', 'lastSeenAt', 'pinUntil',
-      )
-    );
     const sessionSlugById = new Map(teSessionRows.map((r) => [r.ID, r.slug]));
 
     // Resolve the session↔speaker junction into per-session speaker-slug arrays.
-    const junctionRows = await db.run(
-      SELECT.from(TechEdSessionSpeakers).columns('session_ID', 'speaker_ID')
-    );
     const speakerSlugsBySessionId = new Map();
     for (const j of junctionRows) {
       const spSlug = speakerSlugById.get(j.speaker_ID);
@@ -1727,9 +1728,6 @@ async function loadFixtures(db) {
       speakerSlugsBySessionId.get(j.session_ID).push(spSlug);
     }
 
-    const teLinkRows = await db.run(
-      SELECT.from(TechEdSessionConceptLinks).columns('session_ID', 'concept_ID', 'predicate', 'confidence')
-    );
     const teLinks = [];
     for (const l of teLinkRows) {
       const session_slug = sessionSlugById.get(l.session_ID);

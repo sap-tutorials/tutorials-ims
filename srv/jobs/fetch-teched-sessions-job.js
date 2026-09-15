@@ -148,12 +148,32 @@ export async function runFetchTechEdSessions(logId, opts = {}) {
       }
     }
 
+    // Abstracts (LargeString / HANA NCLOB) batch-fetched here to avoid an N+1
+    // per-row SELECT in the enrichment loop below. LOB-safe: the abstract is
+    // read in its own query (never alongside metadata — CLAUDE.md LOB-locator
+    // rule), ID-chunked ≤500 to stay under HANA's bound-param packet cap.
+    // Mirrors server.js fetchLobColumnByIds. Bounded to `budget` — the loop only
+    // enriches the first `budget` candidates, so fetching more abstracts would
+    // waste LOB I/O on backfill runs where candidates ≫ budget (slice(0,Infinity)
+    // returns the full list, preserving unbounded-backfill behavior).
+    const abstractIds = candidateIds.slice(0, budget);
+    const abstractById = new Map();
+    const ABSTRACT_BATCH = 500;
+    for (let i = 0; i < abstractIds.length; i += ABSTRACT_BATCH) {
+      const chunk = abstractIds.slice(i, i + ABSTRACT_BATCH);
+      if (!chunk.length) continue;
+      const abstractRows = await SELECT.from(TechEdSessions)
+        .columns('ID', 'abstract')
+        .where({ ID: { in: chunk } });
+      for (const ar of abstractRows) abstractById.set(ar.ID, ar.abstract);
+    }
+
     for (const row of candidates) {
       try {
         if (summary.enriched >= budget) { summary.budgetExhausted = true; break; }
-        // Separate LOB read (HANA-safe): abstract fetched on its own by ID.
-        const abstractRow = await SELECT.one.from(TechEdSessions).columns('abstract').where({ ID: row.ID });
-        const description = (abstractRow?.abstract && String(abstractRow.abstract).trim()) || row.title;
+        // Abstract pre-fetched above in a batched, LOB-safe IN query.
+        const abstract = abstractById.get(row.ID);
+        const description = (abstract && String(abstract).trim()) || row.title;
         const speakerNames = (speakersBySession.get(row.ID) ?? []).join(', ') || null;
 
         let descEmbedding = null;
