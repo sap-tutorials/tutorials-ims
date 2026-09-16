@@ -7,15 +7,21 @@ import RelatedSessions from './RelatedSessions.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 
 // --- Feed shapes (see GET /build/teched in srv/server.js) ------------------
-interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; }
+interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; }
 interface RawTrack { slug: string; name: string; venue?: string | null; description?: string | null; }
 interface TechEdFeed { sessions: TechEdSession[]; speakers: RawSpeaker[]; tracks: RawTrack[]; }
+/** Per-session speaker link, pre-computed once in loadData so the template avoids double calls. */
+interface SpeakerLink { slug: string; name: string; authorLogin?: string | null; }
+/** Speaker card shape used by DetailPanel (Unit 2). */
+interface EnrichedSpeaker { id: string; name: string; role?: string; company?: string; photoUrl?: string; authorLogin?: string; }
+/** Enriched session carrying pre-resolved display fields. */
+interface EnrichedSession extends TechEdSession { speakerLinks?: SpeakerLink[]; speakersEnriched?: EnrichedSpeaker[]; }
 
 const loading = ref(true);
 const error = ref('');
 const speakers = ref<RawSpeaker[]>([]);
 const tracks = ref<RawTrack[]>([]);
-const sessions = ref<TechEdSession[]>([]);
+const sessions = ref<EnrichedSession[]>([]);
 
 const filterQuery = ref('');
 const filterVenue = ref('');   // '' | 'BERLIN' | 'VIRTUAL'
@@ -70,12 +76,13 @@ async function loadData() {
     // filter can search over them without re-plumbing the lookup maps.
     // Also build a speakersEnriched array (objects with name/role/company/photoUrl)
     // so the DetailPanel can render speaker cards.
+    // speakerLinks is pre-computed here so the template never calls speakerLinksFor twice.
     sessions.value = (feed.sessions || []).map((s) => {
       const enrichedSpeakers = (s.speakers || [])
         .map((slug) => {
           const sp = speakerBySlug.get(slug);
           if (!sp) return null;
-          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined };
+          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined, authorLogin: sp.authorLogin ?? undefined };
         })
         .filter(Boolean);
       return {
@@ -83,6 +90,10 @@ async function loadData() {
         trackName: s.track ? trackNameBySlug.get(s.track) ?? null : null,
         speakerNames: (s.speakers || []).map((slug) => speakerNameBySlug.get(slug)).filter(Boolean) as string[],
         speakersEnriched: enrichedSpeakers,
+        speakerLinks: (s.speakers || []).map((slug) => {
+          const sp = speakerBySlug.get(slug);
+          return { slug, name: sp?.name ?? slug, authorLogin: sp?.authorLogin ?? null };
+        }),
       };
     });
 
@@ -169,6 +180,7 @@ function onDocKeydown(e: KeyboardEvent) {
     selectedRow.value = null;
   }
 }
+
 
 function formatStart(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -370,7 +382,13 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
               <p v-if="formatStart(s.scheduledStart)" class="tsg-meta">
                 {{ formatStart(s.scheduledStart) }}<template v-if="s.room"> · {{ s.room }}</template>
               </p>
-              <p v-if="speakerNamesFor(s)" class="tsg-speakers">{{ speakerNamesFor(s) }}</p>
+              <p v-if="s.speakerLinks?.length" class="tsg-speakers">
+                <template v-for="(sp, i) in s.speakerLinks" :key="sp.slug">
+                  <template v-if="i > 0">, </template>
+                  <a v-if="sp.authorLogin" :href="`/authors/${sp.authorLogin}/`" class="tsg-speaker-link">{{ sp.name }}</a>
+                  <span v-else>{{ sp.name }}</span>
+                </template>
+              </p>
               <p v-if="s.abstract" class="tsg-abstract">{{ s.abstract }}</p>
               <div class="tsg-links" @click.stop>
                 <a v-if="s.url" :href="safeHref(s.url)" target="_blank" rel="noopener noreferrer" class="tsg-link">↗ Session page</a>
@@ -551,6 +569,8 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
 
 .tsg-meta, .tsg-speakers { font-size: 0.8rem; color: var(--sapContent_LabelColor, #6a6d70); margin: 0; }
 .tsg-speakers { font-weight: 600; }
+.tsg-speaker-link { color: inherit; text-decoration: underline; text-decoration-color: var(--sapLinkColor, #0854a0); }
+.tsg-speaker-link:hover { color: var(--sapLinkColor, #0854a0); }
 
 .tsg-abstract {
   font-size: 0.85rem;
