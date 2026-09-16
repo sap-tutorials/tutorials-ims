@@ -232,6 +232,7 @@ export default defineConfig({
           { text: 'E2E coverage pattern',      link: '/developers/reference/e2e-coverage-pattern' },
           { text: 'External Channels Subsystem', link: '/developers/reference/channels' },
           { text: 'External integrations',     link: '/developers/reference/external-integrations' },
+          { text: 'Generative UI Research',    link: '/developers/reference/generative-ui-research' },
           { text: 'GraphQL API',               link: '/developers/reference/graphql-api' },
           { text: 'HANA / HDI / SQL gotchas',  link: '/developers/reference/hana-hdi-gotchas' },
           { text: 'HCQL protocol adapter support', link: '/developers/reference/hcql-support' },
