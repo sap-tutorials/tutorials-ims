@@ -19,6 +19,7 @@ type TaskStatus      : String(50)  enum { ACTIVE; INACTIVE; }
 type MissionType     : String(20)  enum { SEQUENTIAL; SET; }
 type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; PETOBERFEST; KTT_LESSON; } // KTT (#KTT) — mostly-fun acronym trainer
 type EventType       : String(20)  enum { DEVTOBERFEST; TECHED; CODEJAM; CHALLENGE; OTHER; }
+type AttendanceMode  : String(20)  enum { VIRTUAL; IN_PERSON; HYBRID; } // #2370
 
 aspect TaskBase : cuid, managed, LegacyKeyed {
   title                     : String(255) @mandatory;
@@ -299,6 +300,9 @@ entity Events : cuid, managed, LegacyKeyed {
   startDate                 : Timestamp;
   endDate                   : Timestamp;
   timeZone                  : String(50);
+  location                  : String(255);   // #2370 — free-form venue/city; homepage tile location
+  eventUrl                  : String(1000);  // #2370 — clickthrough target for the Upcoming Events tile
+  attendanceMode            : AttendanceMode @assert.range;  // #2370 — VIRTUAL | IN_PERSON | HYBRID
   eventType                 : EventType default 'OTHER' @assert.range;
   mission                   : Association to Missions;
   taskRecords               : Association to many TaskRecords on taskRecords.event = $self;

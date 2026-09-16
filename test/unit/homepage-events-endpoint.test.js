@@ -195,13 +195,60 @@ describe('HomepageService.events()', () => {
     expect(rows[0].title).toBe('Legacy manual event');
   });
 
-  it('cache keys are isolated per (region, includeVirtual)', async () => {
-    await seedCommunityEvent({ region: 'EMEA' });
+  // ── #2370 new fields: location / eventUrl / attendanceMode ────────────
+
+  it('manual Events surface location, url, and isVirtual from the new fields', async () => {
+    await seedManualEvent({
+      name: 'DevDay Walldorf',
+      startDate: '2099-05-01T00:00:00Z',
+      eventType: 'TECHED',
+      timeZone: 'CET',
+      location: 'Walldorf, Germany',
+      eventUrl: 'https://developers.sap.com/devday',
+      attendanceMode: 'IN_PERSON',
+    });
     const svc = await cds.connect.to('HomepageService');
-    const emea = await svc.send('events', { region: 'EMEA' });
-    const americas = await svc.send('events', { region: 'AMERICAS' });
-    expect(emea).toHaveLength(1);
-    // AMERICAS: no manual events seeded, no codejams match → empty.
-    expect(americas).toHaveLength(0);
+    const rows = await svc.send('events', { region: 'ALL' });
+    const card = rows.find(r => r.title === 'DevDay Walldorf');
+    expect(card).toBeTruthy();
+    expect(card.location).toBe('Walldorf, Germany');   // dedicated field wins over timeZone
+    expect(card.url).toBe('https://developers.sap.com/devday');
+    expect(card.isVirtual).toBe(false);                // IN_PERSON => false
+  });
+
+  it('attendanceMode=VIRTUAL maps to isVirtual=true; empty location falls back to timeZone', async () => {
+    await seedManualEvent({
+      name: 'Virtual CodeJam',
+      startDate: '2099-05-02T00:00:00Z',
+      eventType: 'CODEJAM',
+      timeZone: 'UTC',
+      attendanceMode: 'VIRTUAL',
+      // no location set
+    });
+    const svc = await cds.connect.to('HomepageService');
+    const rows = await svc.send('events', { region: 'ALL' });
+    const card = rows.find(r => r.title === 'Virtual CodeJam');
+    expect(card).toBeTruthy();
+    expect(card.isVirtual).toBe(true);
+    expect(card.location).toBe('UTC');   // timeZone fallback
+    expect(card.url).toBe(null);         // no eventUrl => null
+  });
+
+  it('legacy path (flag OFF) also surfaces the new fields', async () => {
+    await ensureHomepageConfig({ eventsBandAutoPullEnabled: false });
+    await seedManualEvent({
+      name: 'Legacy DevDay',
+      startDate: '2099-05-03T00:00:00Z',
+      eventType: 'TECHED',
+      location: 'Bangalore, India',
+      eventUrl: 'https://developers.sap.com/legacy-devday',
+      attendanceMode: 'HYBRID',
+    });
+    const svc = await cds.connect.to('HomepageService');
+    const rows = await svc.send('events', { region: 'EMEA' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].location).toBe('Bangalore, India');
+    expect(rows[0].url).toBe('https://developers.sap.com/legacy-devday');
+    expect(rows[0].isVirtual).toBe(false);   // HYBRID => false
   });
 });

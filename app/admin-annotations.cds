@@ -58,6 +58,9 @@ annotate AdminService.Events with {
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'utcOffset' }
               ]
             };
+  location  @Common.Label: 'Location';                              // #2370
+  eventUrl  @Common.Label: 'Event URL';                             // #2370 — Upcoming Events tile clickthrough
+  attendanceMode @Common.Label: 'Attendance' @Common.ValueListWithFixedValues; // #2370 — enum DDLB (VIRTUAL/IN_PERSON/HYBRID)
   eventType @Common.Label: 'Event Type'
             @Common.ValueListWithFixedValues
             // Issue #715 — Value-list backing for the DDLB. Code list served by
@@ -81,14 +84,16 @@ annotate AdminService.Events with @UI: {
     Title: { Value: name },
     Description: { Value: timeZone }
   },
-  SelectionFields: [ name, eventType, startDate, endDate ],
+  SelectionFields: [ name, eventType, attendanceMode, startDate, endDate ],
   LineItem: [
     { Value: legacyIdStr },
     { Value: name },
     { Value: eventType },
     { Value: startDate },
     { Value: endDate },
-    { Value: timeZone }
+    { Value: timeZone },
+    { Value: location },        // #2370
+    { Value: attendanceMode }   // #2370
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General Information' },
@@ -98,9 +103,12 @@ annotate AdminService.Events with @UI: {
     { Value: name },
     { Value: description },
     { Value: eventType },
+    { Value: attendanceMode },  // #2370
     { Value: startDate },
     { Value: endDate },
     { Value: timeZone },
+    { Value: location },        // #2370
+    { Value: eventUrl },        // #2370
     { Value: logoUpdatedAt }
   ]}
 };
