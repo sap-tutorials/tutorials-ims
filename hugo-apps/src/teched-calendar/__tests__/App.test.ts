@@ -229,4 +229,27 @@ describe('TechEd calendar island', () => {
     const dayBtn = wrapper.findAll('button[role="tab"]').find((b) => b.text() === 'Day')!;
     expect(dayBtn.classes()).toContain('active');
   });
+
+  it('falls back to /build/teched when #teched-data contains literal "null" (missing hugo/data/teched.json)', async () => {
+    // Hugo's jsonify of a missing .Site.Data.teched emits the string "null".
+    // loadFeed() must skip the blob and fall through to the network fetch.
+    const el = document.createElement('script');
+    el.id = 'teched-data';
+    el.type = 'application/json';
+    el.textContent = 'null';
+    document.body.appendChild(el);
+
+    // The network fallback returns the real feed.
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(feed),
+    } as any)) as any;
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('AI on BTP');
+    expect(global.fetch).toHaveBeenCalled();
+  });
 });

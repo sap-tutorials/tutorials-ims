@@ -79,8 +79,12 @@ if (initialUrl.venue) filterVenue.value = initialUrl.venue;
 // --- Feed loading -----------------------------------------------------------
 async function loadFeed(): Promise<TechEdFeed> {
   const el = typeof document !== 'undefined' ? document.getElementById('teched-data') : null;
-  if (el?.textContent && el.textContent.trim()) {
-    return JSON.parse(el.textContent) as TechEdFeed;
+  // Guard against Hugo's `jsonify` of a missing .Site.Data.teched producing the
+  // literal string "null" — that's truthy but JSON.parse("null") returns null,
+  // causing feed.speakers to throw. Skip to the network fallback in that case.
+  const text = el?.textContent?.trim();
+  if (text && text !== 'null') {
+    return JSON.parse(text) as TechEdFeed;
   }
   const r = await fetch('/build/teched', { headers: { Accept: 'application/json' } });
   if (!r.ok) throw new Error(`teched ${r.status}`);
