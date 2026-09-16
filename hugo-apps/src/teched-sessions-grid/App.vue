@@ -50,8 +50,12 @@ if (initialUrl.speaker) filterSpeaker.value = initialUrl.speaker;
  */
 async function loadFeed(): Promise<TechEdFeed> {
   const el = typeof document !== 'undefined' ? document.getElementById('teched-data') : null;
-  if (el?.textContent && el.textContent.trim()) {
-    return JSON.parse(el.textContent) as TechEdFeed;
+  // Hugo's jsonify of a nil .Site.Data.teched emits the literal string "null" —
+  // truthy and non-empty, but JSON.parse("null") returns null, which then throws
+  // on feed.speakers below. Treat "null" as absent and fall through to /build/teched.
+  const text = el?.textContent?.trim();
+  if (text && text !== 'null') {
+    return JSON.parse(text) as TechEdFeed;
   }
   const r = await fetch('/build/teched', { headers: { Accept: 'application/json' } });
   if (!r.ok) throw new Error(`teched ${r.status}`);
