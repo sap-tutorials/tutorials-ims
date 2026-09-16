@@ -219,7 +219,7 @@ async function _manualEventsAlways(db) {
     const nowIso = new Date().toISOString();
     const raw = await db.run(
       SELECT.from(Events)
-        .columns('name', 'startDate', 'timeZone', 'eventType')
+        .columns('name', 'startDate', 'timeZone', 'eventType', 'location', 'eventUrl', 'attendanceMode')
         .where`startDate >= ${nowIso}`
         .orderBy('startDate asc')
         .limit(6)
@@ -228,13 +228,13 @@ async function _manualEventsAlways(db) {
       title:     e.name       || '',
       startsAt:  e.startDate  || null,
       endsAt:    null,
-      location:  e.timeZone   || '',
-      url:       null,
+      location:  e.location   || e.timeZone || '',   // #2370 — dedicated field, timeZone fallback
+      url:       e.eventUrl   || null,                // #2370 — tile clickthrough
       format:    e.eventType  || '',
       register:  null,
       eventType: e.eventType  || null,
       region:    'UNKNOWN',
-      isVirtual: false,
+      isVirtual: e.attendanceMode === 'VIRTUAL',      // #2370 — HYBRID/IN_PERSON => false
     }));
   } catch (err) {
     log.warn('[events] manual Events query failed:', err.message);
@@ -370,7 +370,7 @@ async function _legacyEventsFromEventsEntity() {
     const nowIso = new Date().toISOString();
     const raw = await db.run(
       SELECT.from(Events)
-        .columns('name', 'startDate', 'timeZone', 'eventType')
+        .columns('name', 'startDate', 'timeZone', 'eventType', 'location', 'eventUrl', 'attendanceMode')
         .where`startDate >= ${nowIso}`
         .orderBy('startDate asc')
         .limit(4)
@@ -379,13 +379,13 @@ async function _legacyEventsFromEventsEntity() {
       title:     e.name       || '',
       startsAt:  e.startDate  || null,
       endsAt:    null,
-      location:  e.timeZone   || '',
-      url:       null,
+      location:  e.location   || e.timeZone || '',   // #2370 — dedicated field, timeZone fallback
+      url:       e.eventUrl   || null,                // #2370 — tile clickthrough
       format:    e.eventType  || '',
       register:  null,
       eventType: e.eventType  || null,
       region:    'UNKNOWN',
-      isVirtual: false,
+      isVirtual: e.attendanceMode === 'VIRTUAL',      // #2370 — HYBRID/IN_PERSON => false
     }));
   } catch (err) {
     log.warn('[events] legacy Events query failed:', err.message);
