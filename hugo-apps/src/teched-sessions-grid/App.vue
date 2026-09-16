@@ -91,24 +91,16 @@ const speakerOptions = computed(() => {
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 });
 
-// Non-venue facets applied here; the venue split happens per-section below so
-// both Berlin and Virtual sections stay visible unless the venue toggle narrows.
+// All facets (venue, track, speaker, query) applied in one pass to produce
+// the unified session list rendered in a single grid.
 const filtered = computed(() => filterSessions(sessions.value, {
+  venue: filterVenue.value,
   track: filterTrack.value,
   speaker: filterSpeaker.value,
   query: filterQuery.value,
 }));
 
-const berlinSessions = computed(() => filtered.value.filter((s) => s.venue === 'BERLIN'));
-const virtualSessions = computed(() => filtered.value.filter((s) => s.venue === 'VIRTUAL'));
-
-const showBerlin = computed(() => filterVenue.value === '' || filterVenue.value === 'BERLIN');
-const showVirtual = computed(() => filterVenue.value === '' || filterVenue.value === 'VIRTUAL');
-
-const visibleCount = computed(() =>
-  (showBerlin.value ? berlinSessions.value.length : 0) +
-  (showVirtual.value ? virtualSessions.value.length : 0),
-);
+const visibleCount = computed(() => filtered.value.length);
 
 const hasActiveFilters = computed(() =>
   !!(filterQuery.value || filterVenue.value || filterTrack.value || filterSpeaker.value),
@@ -266,40 +258,14 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker], writeUrl);
         No sessions match your filters.
       </div>
 
-      <!-- Berlin -->
-      <section v-if="showBerlin && berlinSessions.length" class="tsg-section" aria-labelledby="tsg-berlin-h">
-        <h2 id="tsg-berlin-h" class="tsg-section-title">TechEd Berlin</h2>
+      <!-- unified sessions grid -->
+      <section v-if="filtered.length" class="tsg-section" aria-label="TechEd Sessions">
         <div class="tsg-grid">
-          <article v-for="s in berlinSessions" :key="s.slug" class="tsg-card">
+          <article v-for="s in filtered" :key="s.slug" class="tsg-card">
             <div class="tsg-card-body">
               <div class="tsg-badges">
-                <span class="tsg-badge tsg-badge--berlin">Berlin</span>
-                <span v-if="s.trackName" class="tsg-badge tsg-badge--track">{{ s.trackName }}</span>
-                <span v-if="s.sessionCode" class="tsg-badge tsg-badge--code">{{ s.sessionCode }}</span>
-              </div>
-              <h3 class="tsg-card-title">{{ s.title }}</h3>
-              <p v-if="formatStart(s.scheduledStart)" class="tsg-meta">
-                {{ formatStart(s.scheduledStart) }}<template v-if="s.room"> · {{ s.room }}</template>
-              </p>
-              <p v-if="speakerNamesFor(s)" class="tsg-speakers">{{ speakerNamesFor(s) }}</p>
-              <p v-if="s.abstract" class="tsg-abstract">{{ s.abstract }}</p>
-              <div class="tsg-links">
-                <a v-if="s.url" :href="safeHref(s.url)" target="_blank" rel="noopener noreferrer" class="tsg-link">↗ Session page</a>
-                <a v-if="s.youtubeUrl" :href="safeHref(s.youtubeUrl)" target="_blank" rel="noopener noreferrer" class="tsg-link tsg-link--yt">▶ Watch</a>
-              </div>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <!-- Virtual -->
-      <section v-if="showVirtual && virtualSessions.length" class="tsg-section" aria-labelledby="tsg-virtual-h">
-        <h2 id="tsg-virtual-h" class="tsg-section-title">TechEd Virtual</h2>
-        <div class="tsg-grid">
-          <article v-for="s in virtualSessions" :key="s.slug" class="tsg-card">
-            <div class="tsg-card-body">
-              <div class="tsg-badges">
-                <span class="tsg-badge tsg-badge--virtual">Virtual</span>
+                <span v-if="s.venue === 'BERLIN'" class="tsg-badge tsg-badge--berlin">Berlin</span>
+                <span v-else-if="s.venue === 'VIRTUAL'" class="tsg-badge tsg-badge--virtual">Virtual</span>
                 <span v-if="s.trackName" class="tsg-badge tsg-badge--track">{{ s.trackName }}</span>
                 <span v-if="s.sessionCode" class="tsg-badge tsg-badge--code">{{ s.sessionCode }}</span>
               </div>

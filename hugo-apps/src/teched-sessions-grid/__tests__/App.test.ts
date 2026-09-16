@@ -49,17 +49,22 @@ afterEach(() => {
 });
 
 describe('TechEd sessions grid', () => {
-  it('renders Berlin and Virtual sections with a card per session', async () => {
+  it('renders a single unified grid with a card per session (no per-venue headings)', async () => {
     const wrapper = mount(App);
     await flushPromises();
-    expect(wrapper.text()).toContain('TechEd Berlin');
-    expect(wrapper.text()).toContain('TechEd Virtual');
+    // No separate section headings — one grid only.
+    expect(wrapper.text()).not.toContain('TechEd Berlin');
+    expect(wrapper.text()).not.toContain('TechEd Virtual');
+    // Both session cards are present.
     expect(wrapper.text()).toContain('AI on BTP');
     expect(wrapper.text()).toContain('CAP deep dive');
     // resolved speaker + track names surface on the cards
     expect(wrapper.text()).toContain('Ada Lovelace');
     expect(wrapper.text()).toContain('AI & Machine Learning');
     expect(wrapper.findAll('article').length).toBe(2);
+    // venue badges still visible per card
+    expect(wrapper.text()).toContain('Berlin');
+    expect(wrapper.text()).toContain('Virtual');
   });
 
   it('venue toggle narrows to a single venue', async () => {
@@ -70,7 +75,6 @@ describe('TechEd sessions grid', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('AI on BTP');
     expect(wrapper.text()).not.toContain('CAP deep dive');
-    expect(wrapper.text()).not.toContain('TechEd Virtual');
   });
 
   it('keyword search filters across title, abstract and speaker', async () => {
