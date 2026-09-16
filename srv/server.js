@@ -12,7 +12,7 @@ import { resolveDeployEnvironment } from './lib/deploy-environment.js';
 import { versionHandler } from './lib/version-handler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
-import { computeRelatedDevtoberfestByTechEd } from './lib/teched-devtoberfest-crosslink.js';
+import { loadTechEdFeed } from './lib/teched-feed.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
 import { buildTopicClustersHandler } from './lib/build-topic-clusters.js';
 import { buildTopicsGalleryHandler } from './lib/build-topics-gallery.js';
@@ -219,25 +219,6 @@ function sendPetPhoto(res, p, { isPrivate = false } = {}) {
     res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
   }
   return res.send(p.buffer);
-}
-
-// Fetch a single LOB column for a bounded set of row IDs, batched to stay well
-// under HANA's bound-parameter packet cap on the IN list. Returns Map<ID,value>.
-// LOB-safe by design: selects ONLY the key + the LOB column in its own query
-// (never alongside other metadata — CLAUDE.md LOB-locator rule). Skips empty
-// input (avoids a degenerate `IN ()`).
-async function fetchLobColumnByIds(db, entity, lobColumn, ids) {
-  const byId = new Map();
-  const BATCH = 500;
-  for (let i = 0; i < ids.length; i += BATCH) {
-    const chunk = ids.slice(i, i + BATCH);
-    if (!chunk.length) continue;
-    const rows = await db.run(
-      SELECT.from(entity).columns('ID', lobColumn).where({ ID: { in: chunk } }),
-    );
-    for (const r of rows) byId.set(r.ID, r[lobColumn]);
-  }
-  return byId;
 }
 
 cds.on('bootstrap', (app) => {
@@ -660,116 +641,14 @@ cds.on('bootstrap', (app) => {
   app.get('/build/teched', async (req, res) => {
     try {
       const db = await cds.connect.to('db');
-      const NS = 'com.sap.developers.ims.external';
-
-      // Bound the public feed. The real catalog is ~300 sessions/venue; a
-      // 1000-row cap sits well above that (nothing is dropped) but keeps the
-      // sessions query — and the abstract LOB pass derived from it — bounded on
-      // a public, lightly-cached route. Tracks/speakers are tiny dimension
-      // tables that MUST be fetched in full (unbounded): every emitted session
-      // resolves its track_ID / speaker links against them, so an unordered cap
-      // there could silently drop a referenced row.
-      const MAX_SESSIONS = 1000;
-
-      // Optional scoping (the page today fetches all and splits client-side, so
-      // these are additive, not required): ?venue=BERLIN|VIRTUAL narrows to one
-      // venue; ?upcoming=true drops sessions that have already ended.
-      const sessionWhere = {};
-      const venue = String(req.query.venue || '').trim().toUpperCase();
-      if (venue === 'BERLIN' || venue === 'VIRTUAL') sessionWhere.venue = venue;
-      if (String(req.query.upcoming || '').toLowerCase() === 'true') {
-        sessionWhere.scheduledEnd = { '>=': new Date().toISOString() };
-      }
-
-      let sessionQuery = SELECT.from(`${NS}.TechEdSessions`)
-        .columns('ID', 'slug', 'venue', 'sessionCode', 'title', 'scheduledStart', 'scheduledEnd', 'room', 'youtubeUrl', 'url', 'track_ID');
-      if (Object.keys(sessionWhere).length) sessionQuery = sessionQuery.where(sessionWhere);
-      sessionQuery = sessionQuery.orderBy('scheduledStart', 'sessionCode').limit(MAX_SESSIONS);
-      const sessionRows = await db.run(sessionQuery);
-
-      // `abstract`/`bio`/`description` are LargeString (NCLOB on HANA). Never
-      // SELECT a LOB alongside metadata in one query — locators can expire
-      // before the row .map() reads them (CLAUDE.md LOB rule; mirrors
-      // kg-projection.js). Fetch each in a dedicated LOB-only query. The
-      // abstract pass is scoped by WHERE ID IN (...) to ONLY the emitted
-      // (bounded) sessions — no full-table pass. Track/speaker LOBs match their
-      // full metadata fetch (all IDs), so no referenced row loses its text.
-      const abstractById = await fetchLobColumnByIds(
-        db, `${NS}.TechEdSessions`, 'abstract', sessionRows.map((r) => r.ID),
-      );
-      const trackRows = await db.run(
-        SELECT.from(`${NS}.TechEdTracks`).columns('ID', 'slug', 'name', 'venue'),
-      );
-      const trackDescById = await fetchLobColumnByIds(
-        db, `${NS}.TechEdTracks`, 'description', trackRows.map((t) => t.ID),
-      );
-      const speakerRows = await db.run(
-        SELECT.from(`${NS}.TechEdSpeakers`).columns('ID', 'slug', 'name', 'title', 'company', 'photoUrl'),
-      );
-      const speakerBioById = await fetchLobColumnByIds(
-        db, `${NS}.TechEdSpeakers`, 'bio', speakerRows.map((s) => s.ID),
-      );
-
-      // Only the junction rows for the emitted sessions are consumed below, so
-      // scope + batch the IN list — keeps this bounded and correct when the
-      // feed is venue/upcoming-filtered.
-      const sessionIds = sessionRows.map((r) => r.ID);
-      const linkRows = [];
-      const LINK_BATCH = 500;
-      for (let i = 0; i < sessionIds.length; i += LINK_BATCH) {
-        const chunk = sessionIds.slice(i, i + LINK_BATCH);
-        if (!chunk.length) continue;
-        const batch = await db.run(
-          SELECT.from(`${NS}.TechEdSessionSpeakers`).columns('session_ID', 'speaker_ID').where({ session_ID: { in: chunk } }),
-        );
-        for (const l of batch) linkRows.push(l);
-      }
-
-      const trackSlugById = new Map(trackRows.map((t) => [t.ID, t.slug]));
-      const speakerSlugById = new Map(speakerRows.map((s) => [s.ID, s.slug]));
-      const speakerSlugsBySession = new Map();
-      for (const l of linkRows) {
-        const slug = speakerSlugById.get(l.speaker_ID);
-        if (!slug) continue;
-        if (!speakerSlugsBySession.has(l.session_ID)) speakerSlugsBySession.set(l.session_ID, []);
-        speakerSlugsBySession.get(l.session_ID).push(slug);
-      }
-
-      // TechEd → Devtoberfest related-session cross-links (issue #2312).
-      // Flag-gated + fail-open inside the helper (empty map on flag OFF, absent
-      // planner facades on SQLite, or any read fault) — never blanks the page.
-      let relatedDtfByTechEd = new Map();
-      try {
-        relatedDtfByTechEd = await computeRelatedDevtoberfestByTechEd();
-      } catch (e) {
-        console.warn('[build/teched] cross-link skipped:', e.message);
-        relatedDtfByTechEd = new Map();
-      }
-
-      const sessions = sessionRows.map((r) => ({
-        slug: r.slug,
-        venue: r.venue,
-        sessionCode: r.sessionCode,
-        title: r.title,
-        abstract: abstractById.get(r.ID) ?? null,
-        scheduledStart: r.scheduledStart,
-        scheduledEnd: r.scheduledEnd,
-        room: r.room,
-        youtubeUrl: r.youtubeUrl,
-        url: r.url,
-        track: r.track_ID ? trackSlugById.get(r.track_ID) ?? null : null,
-        speakers: (speakerSlugsBySession.get(r.ID) ?? []).sort(),
-        relatedDevtoberfestSessions: relatedDtfByTechEd.get(r.slug) ?? [],
-      }));
-      const speakers = speakerRows.map((s) => ({
-        slug: s.slug, name: s.name, title: s.title, company: s.company, bio: speakerBioById.get(s.ID) ?? null, photoUrl: s.photoUrl,
-      }));
-      const tracks = trackRows.map((t) => ({
-        slug: t.slug, name: t.name, venue: t.venue, description: trackDescById.get(t.ID) ?? null,
-      }));
-
+      // Optional scoping (the page fetches all and splits client-side, so these
+      // are additive): ?venue=BERLIN|VIRTUAL; ?upcoming=true drops ended sessions.
+      const feed = await loadTechEdFeed(db, {
+        venue: req.query.venue,
+        upcoming: String(req.query.upcoming || '').toLowerCase() === 'true',
+      });
       res.set('Cache-Control', 'public, max-age=60');
-      res.json({ sessions, speakers, tracks, buildAt: new Date().toISOString() });
+      res.json({ ...feed, buildAt: new Date().toISOString() });
     } catch (err) {
       console.error('[build/teched]', err.message);
       res.status(500).json({ error: err.message });
