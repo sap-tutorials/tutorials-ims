@@ -144,4 +144,78 @@ describe('TechEd sessions grid', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('Could not load TechEd sessions');
   });
+
+  // --- Track color tests ---------------------------------------------------
+
+  it('track badges for different tracks have distinct background colors', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    // Find all .tsg-badge--track elements across the unified grid (one per session)
+    const trackBadges = wrapper.findAll('.tsg-badge--track');
+    expect(trackBadges.length).toBe(2);
+
+    const bg0 = (trackBadges[0].element as HTMLElement).style.background;
+    const bg1 = (trackBadges[1].element as HTMLElement).style.background;
+
+    // Both badges must have a non-empty background (inline style applied)
+    expect(bg0).toBeTruthy();
+    expect(bg1).toBeTruthy();
+
+    // The two different tracks must have distinct background colors
+    expect(bg0).not.toBe(bg1);
+  });
+
+  it('track badge border color matches the track color from colorMap', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const trackBadges = wrapper.findAll('.tsg-badge--track');
+    expect(trackBadges.length).toBeGreaterThan(0);
+
+    // Every track badge must have a non-empty borderColor inline style.
+    // .tsg-badge--track now has `border: 1px solid transparent` in CSS so the
+    // inline borderColor from trackBadgeStyle() renders visually.
+    for (const badge of trackBadges) {
+      const el = badge.element as HTMLElement;
+      expect(el.style.borderColor).toBeTruthy();
+    }
+
+    // The two different tracks must have distinct border colors
+    const bc0 = (trackBadges[0].element as HTMLElement).style.borderColor;
+    const bc1 = (trackBadges[1].element as HTMLElement).style.borderColor;
+    expect(bc0).not.toBe(bc1);
+  });
+
+  it('renders a track color legend with one entry per track', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const legend = wrapper.find('.tsg-legend');
+    expect(legend.exists()).toBe(true);
+
+    const items = wrapper.findAll('.tsg-legend-item');
+    // There are 2 tracks in the fixture; legend should have 2 entries
+    expect(items.length).toBe(2);
+
+    // Legend text contains both track names
+    expect(legend.text()).toContain('AI & Machine Learning');
+    expect(legend.text()).toContain('Application Development');
+  });
+
+  it('legend dots have distinct background colors for distinct tracks', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const dots = wrapper.findAll('.tsg-legend-dot');
+    expect(dots.length).toBe(2);
+
+    const dotBg0 = (dots[0].element as HTMLElement).style.background;
+    const dotBg1 = (dots[1].element as HTMLElement).style.background;
+
+    expect(dotBg0).toBeTruthy();
+    expect(dotBg1).toBeTruthy();
+    expect(dotBg0).not.toBe(dotBg1);
+  });
 });
+
