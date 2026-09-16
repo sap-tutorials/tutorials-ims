@@ -11,12 +11,15 @@
     {{ with .Description }}<p>{{ . }}</p>{{ end }}
   </header>
 
-  {{/* Full session payload for the island (Unit 8), which mounts into
+  {{/* Full feed payload for the island (Unit 8), which mounts into
        #teched-sessions-grid-mount and renders the interactive Berlin/Virtual
-       grids. The static section headings + per-venue <noscript> lists below
-       keep the page useful without JavaScript (fail-open — teched.json is
-       written empty on a build-time fetch error). */}}
-  <script id="teched-sessions-data" type="application/json">{{ $sessions | jsonify | safeJS }}</script>
+       grids. Bake the WHOLE .Site.Data.teched object ({sessions,speakers,tracks,...})
+       under id="teched-data" — the id + shape the island's loadFeed() reads
+       (hugo-apps/src/teched-sessions-grid/App.vue). The static section headings
+       + per-venue <noscript> lists below keep the page useful without
+       JavaScript (fail-open — teched.json is written empty on a build-time
+       fetch error). */}}
+  <script id="teched-data" type="application/json">{{ (.Site.Data.teched) | jsonify | safeJS }}</script>
 
   <section class="teched-page__venue teched-page__venue--berlin" aria-labelledby="teched-berlin-heading">
     <h2 id="teched-berlin-heading">Berlin</h2>
