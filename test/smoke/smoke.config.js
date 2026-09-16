@@ -3,6 +3,18 @@ export const SRV_URL = (process.env.SMOKE_SRV_URL || BASE_URL).replace(/\/$/, ''
 export const TECH_USER = process.env.SMOKE_TECH_USER;
 export const TECH_PASSWORD = process.env.SMOKE_TECH_PASSWORD;
 
+// Content freshness gate. A DEPLOY (mbt build + cf deploy) ships the approuter
+// and srv fallbacks but does NOT publish the mutable HANA page-* BLOBs — those
+// are published only by the rebuild-content workflow. So assertions that check
+// the CATALOG FRESHNESS of a served page-* BLOB (llms-full.txt has every
+// tutorial, sitemap.xml names /tutorials/ URLs) are guaranteed by a content
+// rebuild, not by a deploy. Running them in the post-deploy smoke gate produces
+// a false regression whenever content is merely stale (the deploy is fine).
+// They are therefore gated OFF by default and switched ON only when the caller
+// asserts content was just published — the rebuild-content workflow sets
+// SMOKE_CONTENT_FRESH=1 for its post-publish verification run.
+export const CONTENT_FRESH = process.env.SMOKE_CONTENT_FRESH === '1';
+
 export function authHeader() {
   if (!TECH_USER || !TECH_PASSWORD) return undefined;
   return 'Basic ' + Buffer.from(`${TECH_USER}:${TECH_PASSWORD}`).toString('base64');
