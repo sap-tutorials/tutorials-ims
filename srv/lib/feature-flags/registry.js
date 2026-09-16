@@ -385,6 +385,14 @@ export const FEATURE_FLAGS = [
     description: 'Enables the /explore/ktt/ acronym trainer and its /ktt CAP endpoints. Off → completeLesson/syncProgress reject 503.',
     howToChange: featureFlagUpsert('KTT_ENABLED', 'flag.ktt.enabled'),
   },
+  // ---- Generative UI (research spike #2362) ----
+  {
+    key: 'CHALLENGE_WIDGET_ENABLED', label: 'AI challenge widget (json-render POC)', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.challengeWidget',
+    valueType: 'boolean', default: false, issue: '#2362', status: 'dev-only',
+    description: 'Research spike (#2362): AI-authored json-render challenge panel per tutorial step. The model emits a constrained UI spec (srv/lib/ai-challenge-spec.js) rendered by a generic Vue catalog (hugo-apps/src/challenge-render). Anti-leak: reference answers are stripped from the public spec and returned separately for the ValidateAnswerSpecs sidecar. DB-driven config (ImsConfig key flag.challengeWidget); no env var. Default OFF, DEV-only, fail-open.',
+    howToChange: featureFlagUpsert('CHALLENGE_WIDGET_ENABLED', 'flag.challengeWidget'),
+  },
   // ---- Edge cache ----
   {
     key: 'EDGE_PURGE_ENABLED', label: 'Akamai edge Fast-Purge on publish', category: 'Security',

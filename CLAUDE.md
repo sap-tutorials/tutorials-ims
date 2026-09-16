@@ -76,6 +76,7 @@ Deep dives (do not duplicate here — read the doc when relevant):
 - [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md) — QA author-preview channel
 - [docs/developers/operations/scheduler-troubleshooting.md](docs/developers/operations/scheduler-troubleshooting.md) — outbox-wedge recovery runbook
 - [docs/developers/reference/tutorials-ims-gotchas.md](docs/developers/reference/tutorials-ims-gotchas.md) — everything else (build pipeline quirks, publish flags, AI features, env vars, migration)
+- [docs/developers/reference/generative-ui-research.md](docs/developers/reference/generative-ui-research.md) — research spike (#2362): MCP Apps + json-render evaluation, ranked use cases, json-render challenge-widget POC
 
 Subsystem one-liners:
 
