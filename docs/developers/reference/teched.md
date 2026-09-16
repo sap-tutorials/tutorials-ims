@@ -226,3 +226,25 @@ TechEd and Devtoberfest (#2311) are sibling event subsystems that share the KG. 
 - **Devtoberfest cross-linking** — shared-concept surfacing + `/teched/` ↔ `/devtoberfest/` links.
 
 **Shipped in PR [#2332](https://github.com/sap-tutorials/tutorials-ims/pull/2332)** (on top of the foundation): the corrected live RainFocus `/api/sessions` fetcher and the two delta-schedule cron jobs (`fetch-teched-sessions-job.js`, `refresh-teched-sessions-job.js`).
+
+---
+
+## Session cards on author + advocate pages (issue #2354)
+
+Author (`/authors/<login>/`) and Developer-Advocate (`/developer-advocates/<slug>/`) pages show cards for the TechEd **and** Devtoberfest sessions where that person is a speaker.
+
+**Speaker → person match** (`srv/lib/session-speaker-match.js`, pure + unit-tested):
+
+- **Devtoberfest** — email match against `Speaker.EMAIL`, normalized-name fallback. The schedule route (`srv/routes/devtoberfest-schedule.js`) deliberately omits EMAIL; the reusable loader `srv/lib/devtoberfest-feed-load.js` adds it and returns `{ feed, speakerEmailById }`.
+- **TechEd** — **normalized-name match only**. `TechEdSpeakers` has no email, and the RainFocus source exposes none (`parseSpeakers` reads no email alias; the real fixture has zero email keys). Reliability caveat: name collisions and "Tom" vs "Thomas" drift are possible.
+
+**Where the match runs:**
+
+- **Advocate pages** (live) — `/api/advocates/:slug` attaches `sessions: { teched: [], devtoberfest: [] }` (omitted when empty). Advocate email comes from the linked user, so Devtoberfest gets a true email match here.
+- **Author pages** (build time) — `scripts/fetch-tutorials.ts` `computeAuthorSessions()` fetches `/build/teched` + `/api/devtoberfest/schedule` once and matches each author. Advocate-authors (present in the `/api/advocates` roster) match on email+name; other authors match on `displayName` (name only). Result rides inside `hugo/data/author_index.json`.
+
+`/build/teched`'s query logic now lives in `srv/lib/teched-feed.js` `loadTechEdFeed(db,{venue,upcoming})` (the route is a thin wrapper) so the advocate route can reuse it without an HTTP round-trip. The LOB-only passes moved with it (CLAUDE.md LOB rule preserved).
+
+**Fail-open everywhere:** the cross-container Devtoberfest planner facades are absent on unit SQLite and the feeds can be cold — every read degrades to empty session arrays and never throws, so neither page type blanks on a session hiccup.
+
+The card is one shared design: `hugo/layouts/partials/session-card.html` (authors, SSR) and `hugo-apps/src/advocate-profile/SessionCard.vue` (advocates, Vue) render the same `{ event, title, sourceUrl, track, venue, date }` DTO with the `.next-steps-*` card classes. Advocate tutorial links, previously a `<ul>`, are now the same card grid.
