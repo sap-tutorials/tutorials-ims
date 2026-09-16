@@ -219,6 +219,15 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
           >{{ taskLinkLabelTitle }}</a>
         </div>
 
+        <div v-if="(row as any).relatedTechEdSessions?.length" class="detail-panel__related-teched">
+          <span class="detail-panel__related-teched-label">Related SAP TechEd sessions</span>
+          <ul class="detail-panel__related-teched-list">
+            <li v-for="ts in (row as any).relatedTechEdSessions" :key="ts.slug" class="detail-panel__related-teched-item">
+              <a :href="`/teched/?session=${encodeURIComponent(ts.slug)}`" class="detail-panel__link detail-panel__link--teched">{{ ts.title }}<template v-if="ts.sessionCode"> ({{ ts.sessionCode }})</template><template v-if="ts.venue">&thinsp;&mdash;&thinsp;{{ ts.venue }}</template></a>
+            </li>
+          </ul>
+        </div>
+
         <div v-if="showCalendar" class="detail-panel__calendar">
           <span class="detail-panel__calendar-label">Add to calendar</span>
           <div class="detail-panel__calendar-links">
@@ -496,6 +505,35 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
 
 .detail-panel__link--linkedin {
   color: #0a66c2;
+}
+
+.detail-panel__related-teched {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapList_BorderColor, #e4e5e7);
+}
+
+.detail-panel__related-teched-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.detail-panel__related-teched-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.detail-panel__related-teched-item {
+  margin: 0;
 }
 
 .detail-panel__enlarge {
