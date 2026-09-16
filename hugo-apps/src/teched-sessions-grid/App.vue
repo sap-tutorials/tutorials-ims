@@ -4,6 +4,7 @@ import { filterSessions, type TechEdSession } from './filter';
 import { parseTechEdUrl, toTechEdQuery, type TechEdUrlState } from './url-state';
 import { buildTrackColorMap, legendFor, type TrackColor } from '../devtoberfest-sessions-calendar/track-colors';
 import RelatedSessions from './RelatedSessions.vue';
+import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 
 // --- Feed shapes (see GET /build/teched in srv/server.js) ------------------
 interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; }
@@ -20,12 +21,15 @@ const filterQuery = ref('');
 const filterVenue = ref('');   // '' | 'BERLIN' | 'VIRTUAL'
 const filterTrack = ref('');   // track slug
 const filterSpeaker = ref(''); // speaker slug
+const selectedRow = ref<TechEdSession | null>(null);
 
 // --- Deep-linking ----------------------------------------------------------
 // The page URL is the source of truth on first load. Parse it once and apply
 // synchronously (all facets are feed-independent). Suppress URL writes until
 // the incoming link has been applied.
 const initialUrl = parseTechEdUrl(typeof window !== 'undefined' ? window.location.search : '');
+// One-shot session deep-link: consumed on first load after feed is available.
+let pendingSession: string | null = initialUrl.session;
 let applied = false;
 if (initialUrl.q) filterQuery.value = initialUrl.q;
 if (initialUrl.venue) filterVenue.value = initialUrl.venue;
@@ -59,15 +63,35 @@ async function loadData() {
     tracks.value = rawTracks;
 
     const speakerNameBySlug = new Map(rawSpeakers.map((s) => [s.slug, s.name]));
+    const speakerBySlug = new Map(rawSpeakers.map((s) => [s.slug, s]));
     const trackNameBySlug = new Map(rawTracks.map((t) => [t.slug, t.name]));
 
     // Enrich each session with resolved speaker names + track name so the pure
     // filter can search over them without re-plumbing the lookup maps.
-    sessions.value = (feed.sessions || []).map((s) => ({
-      ...s,
-      trackName: s.track ? trackNameBySlug.get(s.track) ?? null : null,
-      speakerNames: (s.speakers || []).map((slug) => speakerNameBySlug.get(slug)).filter(Boolean) as string[],
-    }));
+    // Also build a speakersEnriched array (objects with name/role/company/photoUrl)
+    // so the DetailPanel can render speaker cards.
+    sessions.value = (feed.sessions || []).map((s) => {
+      const enrichedSpeakers = (s.speakers || [])
+        .map((slug) => {
+          const sp = speakerBySlug.get(slug);
+          if (!sp) return null;
+          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined };
+        })
+        .filter(Boolean);
+      return {
+        ...s,
+        trackName: s.track ? trackNameBySlug.get(s.track) ?? null : null,
+        speakerNames: (s.speakers || []).map((slug) => speakerNameBySlug.get(slug)).filter(Boolean) as string[],
+        speakersEnriched: enrichedSpeakers,
+      };
+    });
+
+    // Session deep-link: open its detail panel (first load only).
+    if (pendingSession) {
+      const row = sessions.value.find((r) => r.slug === pendingSession);
+      if (row) selectedRow.value = row;
+      pendingSession = null;
+    }
   } catch (e: any) {
     error.value = e?.message ?? 'Failed to load TechEd sessions.';
   } finally {
@@ -129,6 +153,23 @@ function speakerNamesFor(s: TechEdSession): string {
   return (s.speakerNames && s.speakerNames.length ? s.speakerNames : (s.speakers || [])).join(', ');
 }
 
+function openCard(s: TechEdSession) {
+  selectedRow.value = s;
+}
+
+function onCardKeydown(e: KeyboardEvent, s: TechEdSession) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    openCard(s);
+  }
+}
+
+function onDocKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && selectedRow.value) {
+    selectedRow.value = null;
+  }
+}
+
 function formatStart(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -163,6 +204,7 @@ function currentUrlState(): TechEdUrlState {
     venue: filterVenue.value || null,
     track: filterTrack.value || null,
     speaker: filterSpeaker.value || null,
+    session: selectedRow.value?.slug ?? null,
   };
 }
 
@@ -177,20 +219,35 @@ function applyFromUrl(st: TechEdUrlState) {
   filterVenue.value = st.venue ?? '';
   filterTrack.value = st.track ?? '';
   filterSpeaker.value = st.speaker ?? '';
+  if (st.session) {
+    const row = sessions.value.find((r) => r.slug === st.session);
+    selectedRow.value = row ?? null;
+  } else {
+    selectedRow.value = null;
+  }
 }
 
-function onPopState() { applyFromUrl(parseTechEdUrl(window.location.search)); }
+function onPopState() {
+  // A popstate event overrides any pending deep-link session so back/forward
+  // navigation always wins over the original URL's session param.
+  pendingSession = null;
+  applyFromUrl(parseTechEdUrl(window.location.search));
+}
 
 onMounted(async () => {
   window.addEventListener('popstate', onPopState);
+  window.addEventListener('keydown', onDocKeydown);
   await loadData();
   applied = true;
   writeUrl();
 });
 
-onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
+onBeforeUnmount(() => {
+  window.removeEventListener('popstate', onPopState);
+  window.removeEventListener('keydown', onDocKeydown);
+});
 
-watch([filterQuery, filterVenue, filterTrack, filterSpeaker], writeUrl);
+watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], writeUrl);
 </script>
 
 <template>
@@ -288,7 +345,16 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker], writeUrl);
       <!-- unified sessions grid -->
       <section v-if="filtered.length" class="tsg-section" aria-label="TechEd Sessions">
         <div class="tsg-grid">
-          <article v-for="s in filtered" :key="s.slug" class="tsg-card">
+          <article
+            v-for="s in filtered"
+            :key="s.slug"
+            class="tsg-card tsg-card--clickable"
+            role="button"
+            tabindex="0"
+            :aria-label="`Open details for ${s.title}`"
+            @click="openCard(s)"
+            @keydown="onCardKeydown($event, s)"
+          >
             <div class="tsg-card-body">
               <div class="tsg-badges">
                 <span v-if="s.venue === 'BERLIN'" class="tsg-badge tsg-badge--berlin">Berlin</span>
@@ -306,7 +372,7 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker], writeUrl);
               </p>
               <p v-if="speakerNamesFor(s)" class="tsg-speakers">{{ speakerNamesFor(s) }}</p>
               <p v-if="s.abstract" class="tsg-abstract">{{ s.abstract }}</p>
-              <div class="tsg-links">
+              <div class="tsg-links" @click.stop>
                 <a v-if="s.url" :href="safeHref(s.url)" target="_blank" rel="noopener noreferrer" class="tsg-link">↗ Session page</a>
                 <a v-if="s.youtubeUrl" :href="safeHref(s.youtubeUrl)" target="_blank" rel="noopener noreferrer" class="tsg-link tsg-link--yt">▶ Watch</a>
               </div>
@@ -316,9 +382,11 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker], writeUrl);
         </div>
       </section>
     </template>
+
+    <!-- Detail panel — renders as a fixed overlay when a card is selected -->
+    <DetailPanel :row="(selectedRow as any)" @close="selectedRow = null" />
   </div>
 </template>
-
 <style scoped>
 .tsg-wrap {
   font-family: var(--sapFontFamily, '72', 'Helvetica Neue', Arial, sans-serif);
@@ -521,4 +589,16 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker], writeUrl);
 }
 .tsg-legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
 .tsg-legend-dot { width: 0.7rem; height: 0.7rem; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+
+.tsg-card--clickable {
+  cursor: pointer;
+}
+.tsg-card--clickable:hover {
+  border-color: var(--sapButton_Emphasized_Background, #0854a0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.tsg-card--clickable:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0854a0);
+  outline-offset: 2px;
+}
 </style>

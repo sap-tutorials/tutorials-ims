@@ -121,7 +121,9 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
       </div>
-      <div v-if="embedUrl" class="detail-panel__transcript-wrap">
+      <!-- Transcript toggle is Devtoberfest-specific (/api/devtoberfest/transcript endpoint).
+           Only show it for DTF session rows — identified by row.kind === 'session'. -->
+      <div v-if="embedUrl && row.kind === 'session'" class="detail-panel__transcript-wrap">
         <button class="detail-panel__transcript-toggle" @click="toggleTranscript" :aria-expanded="transcriptOpen">
           {{ transcriptOpen ? 'Hide transcript' : 'Show transcript' }}
         </button>
@@ -139,7 +141,17 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
       </div>
 
       <div class="detail-panel__body">
-        <div v-if="(row as any).speakers && (row as any).speakers.length" class="detail-panel__speakers">
+        <div v-if="(row as any).speakersEnriched && (row as any).speakersEnriched.length" class="detail-panel__speakers">
+          <div v-for="sp in (row as any).speakersEnriched" :key="sp.id" class="detail-panel__speaker">
+            <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
+            <div class="detail-panel__speaker-meta">
+              <span class="detail-panel__speaker-name">{{ sp.name }}</span>
+              <span v-if="sp.role || sp.company" class="detail-panel__speaker-role">{{ [sp.role, sp.company].filter(Boolean).join(' @ ') }}</span>
+            </div>
+          </div>
+        </div>
+        <!-- DTF speaker objects: only render when speakers array contains objects (not slugs) -->
+        <div v-else-if="(row as any).speakers && (row as any).speakers.length && typeof (row as any).speakers[0] === 'object'" class="detail-panel__speakers">
           <div v-for="sp in (row as any).speakers" :key="sp.id" class="detail-panel__speaker">
             <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
             <div class="detail-panel__speaker-meta">
@@ -159,6 +171,10 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
               <span class="sg-badge" :class="`sg-badge--${formatTag.modifier}`">{{ formatTag.icon }} {{ formatTag.label }}</span>
             </dd>
           </template>
+          <template v-if="(row as any).venue">
+            <dt>Venue</dt>
+            <dd>{{ (row as any).venue }}</dd>
+          </template>
           <template v-if="(row as any).trackName">
             <dt>Track</dt>
             <dd>{{ (row as any).trackName }}</dd>
@@ -173,6 +189,10 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
               {{ formatViewerLocal((row as any).scheduledStart) }}
             </dd>
           </template>
+          <template v-if="(row as any).room">
+            <dt>Room</dt>
+            <dd>{{ (row as any).room }}</dd>
+          </template>
           <template v-if="isActivity && (row as any).points">
             <dt>Points</dt>
             <dd>{{ (row as any).points }}</dd>
@@ -184,6 +204,13 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
         </dl>
 
         <div class="detail-panel__links">
+          <a
+            v-if="(row as any).url"
+            :href="safeHref((row as any).url)"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="detail-panel__link detail-panel__link--session"
+          >Session Page</a>
           <a
             v-if="(row as any).youtubeUrl"
             :href="safeHref((row as any).youtubeUrl)"
@@ -434,6 +461,10 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
 
 .detail-panel__link--youtube {
   color: #c4302b;
+}
+
+.detail-panel__link--session {
+  color: var(--sapLinkColor, #0854a0);
 }
 
 .detail-panel__complete-badge {
