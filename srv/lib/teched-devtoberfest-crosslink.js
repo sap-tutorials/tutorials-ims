@@ -297,9 +297,11 @@ export async function computeRelatedDevtoberfestByTechEd() {
   try {
     if (!isFlagEnabled(FLAG)) return new Map();
     await cds.connect.to('db');
-    const techEd = await loadTechEdSessionsWithConcepts();
+    const [techEd, dtf] = await Promise.all([
+      loadTechEdSessionsWithConcepts(),
+      loadDevtoberfestSessionsWithConcepts(),
+    ]);
     if (!techEd.length) return new Map();
-    const dtf = await loadDevtoberfestSessionsWithConcepts();
     if (!dtf.length) return new Map();
     return buildRelatedDevtoberfestByTechEd(techEd, dtf);
   } catch (err) {

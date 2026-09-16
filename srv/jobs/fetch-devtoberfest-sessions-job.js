@@ -67,9 +67,13 @@ async function defaultFetchSessions() {
   );
   if (!sessions.length) return [];
 
-  // Speaker join — two flat SELECTs + JS join (no cross-container associations).
-  const links = await SELECT.from(Sessionspeaker).columns('SESSION_ID', 'SPEAKER_ID', 'SPEAKERORDER');
-  const speakers = await SELECT.from(Speaker).columns('ID', 'FIRSTNAME', 'LASTNAME');
+  // Speaker join + Activity bridge — three independent flat SELECTs run
+  // concurrently (no cross-container associations); JS joins happen after.
+  const [links, speakers, activities] = await Promise.all([
+    SELECT.from(Sessionspeaker).columns('SESSION_ID', 'SPEAKER_ID', 'SPEAKERORDER'),
+    SELECT.from(Speaker).columns('ID', 'FIRSTNAME', 'LASTNAME'),
+    SELECT.from(Activity).columns('ID', 'TASKSLUG', 'TASKTYPE'),
+  ]);
   const speakerById = new Map(speakers.map((s) => [s.ID, s]));
   const speakersBySession = new Map();
   for (const l of links.sort((a, b) => (a.SPEAKERORDER ?? 0) - (b.SPEAKERORDER ?? 0))) {
@@ -80,7 +84,6 @@ async function defaultFetchSessions() {
   }
 
   // Activity bridge — TASKSLUG/TASKTYPE for sessions tied to a tutorial/puzzle.
-  const activities = await SELECT.from(Activity).columns('ID', 'TASKSLUG', 'TASKTYPE');
   const activityById = new Map(activities.map((a) => [a.ID, a]));
 
   return sessions.map((s) => {
@@ -222,9 +225,14 @@ export async function runFetchDevtoberfestSessions(logId, opts = {}) {
           contentHash,
           lastSeenAt: now,
         };
+        let sessionId;
         if (!existing) {
-          await INSERT.into(DevtoberfestSessions).entries({ ...upsertRow, firstSeenAt: now });
+          // Pre-mint the UUID so we can INSERT with an explicit ID and skip the
+          // post-upsert re-SELECT (matches seed-core.js's cds.utils.uuid() path).
+          sessionId = cds.utils.uuid();
+          await INSERT.into(DevtoberfestSessions).entries({ ID: sessionId, ...upsertRow, firstSeenAt: now });
         } else {
+          sessionId = existing.ID;
           await UPDATE(DevtoberfestSessions).set(upsertRow).where({ ID: existing.ID });
         }
         summary.upserted++;
@@ -310,20 +318,15 @@ export async function runFetchDevtoberfestSessions(logId, opts = {}) {
             .where({ ID: { in: reactivatedIds } });
         }
 
-        // slug-canonical: write-path-canonicalizes
-        const sesRow = await SELECT.one.from(DevtoberfestSessions).columns('ID').where({ slug });
-        if (!sesRow) {
-          LOG.warn(`[${slug}] missing after upsert; skipping link persist`);
-          continue;
-        }
-        await DELETE.from(DevtoberfestSessionConceptLinks).where({ session_ID: sesRow.ID });
+        // Session ID already in hand (minted on INSERT / existing.ID on UPDATE) — no re-SELECT.
+        await DELETE.from(DevtoberfestSessionConceptLinks).where({ session_ID: sessionId });
         const snippet = computeSnippet(title, row.speakerNames, row.scheduledStart);
         const written = new Set();
         for (const r of resolution.resolved) {
           if (written.has(r.conceptId)) continue;
           written.add(r.conceptId);
           await INSERT.into(DevtoberfestSessionConceptLinks).entries({
-            session_ID: sesRow.ID,
+            session_ID: sessionId,
             concept_ID: r.conceptId,
             predicate: PREDICATE,
             confidence: r.confidence,
@@ -334,7 +337,7 @@ export async function runFetchDevtoberfestSessions(logId, opts = {}) {
           summary.linksWritten++;
         }
 
-        await UPDATE(DevtoberfestSessions).set({ lastExtractedHash: contentHash }).where({ ID: sesRow.ID });
+        await UPDATE(DevtoberfestSessions).set({ lastExtractedHash: contentHash }).where({ ID: sessionId });
       } catch (err) {
         LOG.error(`error on ${row.id}: ${err.message}`);
         summary.errors++;

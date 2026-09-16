@@ -133,6 +133,33 @@ describe('runFetchTechEdSessions', () => {
     expect(s2.enriched).toBe(0);
   });
 
+  it('batched abstract fetch yields the same per-session abstract as a per-row SELECT (perf/parallelize)', async () => {
+    // Guards the N+1 → batched-IN change: the description handed to extractFn
+    // must equal what the old per-row `SELECT.one abstract WHERE ID=row.ID`
+    // produced, i.e. (abstract?.trim()) || title, for every candidate.
+    const e = entities();
+    const seenByTitle = new Map();
+    await runFetchTechEdSessions('log-abs', {
+      fetchAllTechEdSessions: fetchAllSeam,
+      flagEnabled: () => true,
+      resolveKnowledgeGraphSettings: async () => ({ enabled: true, mergeSimThresholdExtract: 0.85 }),
+      embed: async (inputs) => (Array.isArray(inputs) ? inputs.map(() => new Array(8).fill(0.1)) : []),
+      extractFn: async (input) => {
+        seenByTitle.set(input.session.title, input.session.description);
+        return { concepts: [], promptTokens: 0, completionTokens: 0 };
+      },
+    });
+
+    const sessions = await SELECT.from(e.TechEdSessions).columns('ID', 'title');
+    expect(sessions.length).toBe(6);
+    for (const row of sessions) {
+      // OLD per-row read path, recomputed independently for comparison.
+      const abstractRow = await SELECT.one.from(e.TechEdSessions).columns('abstract').where({ ID: row.ID });
+      const expected = (abstractRow?.abstract && String(abstractRow.abstract).trim()) || row.title;
+      expect(seenByTitle.get(row.title)).toBe(expected);
+    }
+  });
+
   it('re-throws a TOTAL-fetch-failure escalation so the scheduler can mark FAILED / alert', async () => {
     // The fetcher escalates a total failure as a tagged throw. The job has TWO
     // fail-open catches (inner fetch + outer cycle); the tag must escape BOTH so
