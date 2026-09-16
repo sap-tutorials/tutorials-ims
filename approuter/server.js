@@ -28,7 +28,7 @@ const { sitemapIndexRedirectHandler } = require('./lib/sitemap-index-redirect')
 const { searchRedirectHandler } = require('./lib/search-redirect')
 const shouldProcessImage = require('./lib/img-cdn-should-process')
 const { buildImageOriginUrl } = require('./lib/img-cdn-origin')
-const { ImgCache } = require('./lib/img-cdn-cache')
+const { ImgCache, IMG_CDN_CACHE_CONTROL } = require('./lib/img-cdn-cache')
 const { fetchImageResponse } = require('./lib/img-cdn-fetch')
 const { createHealer } = require('./lib/img-cdn-heal')
 
@@ -315,7 +315,7 @@ async function imgCdnHandler(req, res, next) {
   const sendOk = (result, cacheHit) => {
     res.writeHead(200, {
       'Content-Type': result.contentType,
-      'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable',
+      'Cache-Control': IMG_CDN_CACHE_CONTROL,
       'Vary': 'Accept',
       'X-Img-Cdn': result.xImgCdn + (cacheHit ? ';cache=hit' : ''),
     })
