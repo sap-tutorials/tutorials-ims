@@ -1,4 +1,5 @@
 {{ define "main" }}
+{{ partial "devtoberfest-breadcrumb.html" . }}
 <main id="devtoberfest-sessions-grid-mount"></main>
 <noscript>The Devtoberfest sessions grid requires JavaScript.</noscript>
 <script type="module" src="{{ partial "island-src.html" "devtoberfest-sessions-grid" | relURL }}"></script>
