@@ -217,5 +217,100 @@ describe('TechEd sessions grid', () => {
     expect(dotBg1).toBeTruthy();
     expect(dotBg0).not.toBe(dotBg1);
   });
+
+  // --- Detail panel tests ---------------------------------------------------
+
+  it('clicking a card opens the detail panel with the session title', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    const card = wrapper.findAll('article')[0];
+    await card.trigger('click');
+    await flushPromises();
+    // Panel should be present as a dialog with the session title
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[role="dialog"]').text()).toContain('AI on BTP');
+  });
+
+  it('closing the panel via the close button dismisses it', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    await wrapper.findAll('article')[0].trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    // Click the close button (aria-label="Close")
+    const closeBtn = wrapper.find('[aria-label="Close"]');
+    await closeBtn.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  });
+
+  it('pressing Escape closes the panel', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    await wrapper.findAll('article')[0].trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    // Dispatch a keydown Escape on the window
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  });
+
+  it('clicking the backdrop closes the panel', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    await wrapper.findAll('article')[0].trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    // The backdrop is the .detail-panel__backdrop element
+    const backdrop = wrapper.find('.detail-panel__backdrop');
+    await backdrop.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  });
+
+  it('clicking a card updates the URL with ?session=<slug>', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    const card = wrapper.findAll('article')[0]; // ai-berlin
+    await card.trigger('click');
+    await flushPromises();
+    expect(window.location.search).toContain('session=ai-berlin');
+  });
+
+  it('?session=<slug> deep-link opens the panel on mount', async () => {
+    window.history.replaceState({}, '', '/teched/?session=cap-virtual');
+    const wrapper = mount(App);
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[role="dialog"]').text()).toContain('CAP deep dive');
+  });
+
+  it('?session= with unknown slug does not open the panel', async () => {
+    window.history.replaceState({}, '', '/teched/?session=no-such-session');
+    const wrapper = mount(App);
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  });
+
+  it('Enter key on a card opens the detail panel', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    const card = wrapper.findAll('article')[1]; // cap-virtual
+    await card.trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[role="dialog"]').text()).toContain('CAP deep dive');
+  });
+
+  it('Space key on a card opens the detail panel', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    const card = wrapper.findAll('article')[0]; // ai-berlin
+    await card.trigger('keydown', { key: ' ' });
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[role="dialog"]').text()).toContain('AI on BTP');
+  });
 });
 

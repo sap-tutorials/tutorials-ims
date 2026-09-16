@@ -36,6 +36,7 @@ export interface TechEdSession {
   sessionCode?: string | null;
   speakers?: string[];              // speaker slugs
   speakerNames?: string[];          // resolved speaker names (enriched by App)
+  speakersEnriched?: { id: string; name: string; role?: string; company?: string; photoUrl?: string }[]; // enriched speaker objects (enriched by App for DetailPanel)
   /** Cross-linked Devtoberfest sessions. Emitted by /build/teched when
    *  TECHED_DEVTOBERFEST_CROSSLINK_ENABLED DB flag is ON. Empty array (or
    *  absent) when the flag is OFF — components must treat both as "nothing

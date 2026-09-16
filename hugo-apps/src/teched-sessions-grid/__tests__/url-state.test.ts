@@ -13,8 +13,8 @@ describe('parseTechEdUrl', () => {
   });
 
   it('parses every recognised param (URL-decoded)', () => {
-    const s = parseTechEdUrl('?q=hana%20cloud&venue=BERLIN&track=ai-ml&speaker=ada-lovelace');
-    expect(s).toEqual({ q: 'hana cloud', venue: 'BERLIN', track: 'ai-ml', speaker: 'ada-lovelace' });
+    const s = parseTechEdUrl('?q=hana%20cloud&venue=BERLIN&track=ai-ml&speaker=ada-lovelace&session=my-session');
+    expect(s).toEqual({ q: 'hana cloud', venue: 'BERLIN', track: 'ai-ml', speaker: 'ada-lovelace', session: 'my-session' });
   });
 
   it('normalises venue to canonical upper-case, else null', () => {
@@ -24,9 +24,10 @@ describe('parseTechEdUrl', () => {
   });
 
   it('treats empty and whitespace-only values as null', () => {
-    expect(parseTechEdUrl('q=&venue=&track=&speaker=')).toEqual(DEFAULT_URL_STATE);
+    expect(parseTechEdUrl('q=&venue=&track=&speaker=&session=')).toEqual(DEFAULT_URL_STATE);
     expect(parseTechEdUrl('q=%20%20').q).toBeNull();
     expect(parseTechEdUrl('track=%20').track).toBeNull();
+    expect(parseTechEdUrl('session=%20').session).toBeNull();
   });
 
   it('trims surrounding whitespace on retained values', () => {
@@ -35,16 +36,23 @@ describe('parseTechEdUrl', () => {
     expect(parseTechEdUrl('track=%20ai%20').track).toBe('ai');
     expect(parseTechEdUrl('q=%20hana%20').q).toBe('hana');
     expect(parseTechEdUrl('speaker=%20ada-lovelace').speaker).toBe('ada-lovelace');
+    expect(parseTechEdUrl('session=%20my-session%20').session).toBe('my-session');
   });
 
   it('accepts a URLSearchParams instance directly', () => {
-    const s = parseTechEdUrl(new URLSearchParams({ q: 'abap', speaker: 'x' }));
+    const s = parseTechEdUrl(new URLSearchParams({ q: 'abap', speaker: 'x', session: 'my-session' }));
     expect(s.q).toBe('abap');
     expect(s.speaker).toBe('x');
+    expect(s.session).toBe('my-session');
   });
 
   it('ignores unknown params', () => {
     expect(parseTechEdUrl('foo=bar&view=day')).toEqual(DEFAULT_URL_STATE);
+  });
+
+  it('parses session param', () => {
+    expect(parseTechEdUrl('?session=ai-berlin').session).toBe('ai-berlin');
+    expect(parseTechEdUrl('?session=').session).toBeNull();
   });
 });
 
@@ -56,6 +64,7 @@ describe('toTechEdQuery', () => {
   it('omits empty/whitespace-only fields', () => {
     expect(toTechEdQuery({ ...DEFAULT_URL_STATE, q: '   ' })).toBe('');
     expect(toTechEdQuery({ ...DEFAULT_URL_STATE, track: '' })).toBe('');
+    expect(toTechEdQuery({ ...DEFAULT_URL_STATE, session: '' })).toBe('');
   });
 
   it('drops an invalid venue', () => {
@@ -63,12 +72,18 @@ describe('toTechEdQuery', () => {
   });
 
   it('serialises non-default fields and URL-encodes values', () => {
-    const q = toTechEdQuery({ q: 'hana cloud', venue: 'VIRTUAL', track: 'ai-ml', speaker: 'ada-lovelace' });
+    const q = toTechEdQuery({ q: 'hana cloud', venue: 'VIRTUAL', track: 'ai-ml', speaker: 'ada-lovelace', session: 'my-session' });
     const p = new URLSearchParams(q.replace(/^\?/, ''));
     expect(p.get('q')).toBe('hana cloud');
     expect(p.get('venue')).toBe('VIRTUAL');
     expect(p.get('track')).toBe('ai-ml');
     expect(p.get('speaker')).toBe('ada-lovelace');
+    expect(p.get('session')).toBe('my-session');
+  });
+
+  it('serialises session param', () => {
+    const q = toTechEdQuery({ ...DEFAULT_URL_STATE, session: 'ai-berlin' });
+    expect(q).toContain('session=ai-berlin');
   });
 
   it('round-trips any parsed state back to the same state', () => {
@@ -78,6 +93,8 @@ describe('toTechEdQuery', () => {
       '?venue=BERLIN',
       '?track=ai-ml&speaker=x',
       '?q=hana%20cloud&venue=VIRTUAL&track=ai-ml&speaker=ada-lovelace',
+      '?session=ai-berlin',
+      '?q=cap&session=cap-virtual',
     ]) {
       const state = parseTechEdUrl(search);
       expect(parseTechEdUrl(toTechEdQuery(state))).toEqual(state);
