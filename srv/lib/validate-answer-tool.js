@@ -143,6 +143,9 @@ export async function dispatchValidateAnswer(input, deps) {
     question: question.question,
     correctAnswer: question.correctAnswer,
     submittedAnswer,
+    // [#2345] Present for video-sourced quizzes; undefined/null → prompt shape
+    // unchanged from v3.
+    videoContext: question.videoContext,
   });
 
   // 4. Call LLM

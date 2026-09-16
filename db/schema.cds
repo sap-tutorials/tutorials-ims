@@ -927,6 +927,10 @@ entity ValidateAnswerSpecs : managed {
   correctAnswer     : LargeString @mandatory;
   ruleType          : String(40);          // e.g. 'exact-match', 'regex', 'regex-begins-with'
   aiGrading         : Boolean default false;
+  // [#2345] Capped YouTube transcript excerpt for video-sourced quizzes,
+  // supplied to the AI grader as judgment context. Server-only (like
+  // correctAnswer) — never shipped to clients. Null for step-sourced quizzes.
+  videoContext      : LargeString;
 }
 
 // Full parsed rules.vr rule set for a tutorial, persisted at publish time.

@@ -662,6 +662,35 @@ async function fetchSemaphoreMap(): Promise<Record<string, string>> {
   }
 }
 
+// [#2345] Transcript fetcher for the build-time AI video-quiz path. Reuses the
+// deployed, anonymous GET /api/devtoberfest/transcript?video=<id> endpoint,
+// which reads/populates the shared Transcript entity (7d/1h cache, gzip BLOB,
+// LOB-safe raw SQL) for ANY video id — it is not event-scoped in behavior, so
+// we reuse it rather than add a near-duplicate /content/transcript endpoint.
+// Returns { source:'none', segments:[] } on any failure so expandAiAuthored
+// drops the video quiz and the build never fails on a bad/unreachable video.
+async function fetchTranscriptViaHttp(
+  videoId: string,
+): Promise<{ source: 'uploaded' | 'auto' | 'none'; segments: Array<{ start: number; text: string }> }> {
+  const capBaseUrl = process.env.CAP_BASE_URL ?? 'http://localhost:4004'
+  const url = `${capBaseUrl}/api/devtoberfest/transcript?video=${encodeURIComponent(videoId)}`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.warn(`[ai-author] transcript endpoint ${url} returned ${res.status} — dropping video quiz`)
+      return { source: 'none', segments: [] }
+    }
+    const body = await res.json() as { source?: string; segments?: Array<{ start: number; text: string }> }
+    return {
+      source: (body.source as 'uploaded' | 'auto' | 'none') ?? 'none',
+      segments: Array.isArray(body.segments) ? body.segments : [],
+    }
+  } catch (e) {
+    console.warn(`[ai-author] transcript fetch failed (${(e as Error).message}) — dropping video quiz`)
+    return { source: 'none', segments: [] }
+  }
+}
+
 async function main() {
   const totalStart = performance.now()
   const regenerateMode = process.argv.includes('--regenerate')
@@ -1043,6 +1072,9 @@ async function main() {
           // so AI never fires on top of regex-substring or other [VALIDATE_N]
           // blocks where parseBlock returned [].
           handAuthoredSteps,
+          // [#2345] video-sourced quizzes ([AUTOAUTHOR_VIDEO_*]) fetch the
+          // transcript from the deployed transcript endpoint (CAP_BASE_URL).
+          fetchTranscript: fetchTranscriptViaHttp,
         })
         saveAiQuizCache(t.slug, aiCache)
 
@@ -1107,6 +1139,13 @@ async function main() {
           for (const q of questions) {
             if (q.aiAuthored && q.type === QUESTION_TYPE_TEXT) {
               delete q.correctAnswer
+            }
+            // [#2345] __videoContext is server-only grader grounding (captured
+            // into the validate-answer sidecar above). Strip from every emitted
+            // question so the transcript excerpt never lands in public Hugo
+            // frontmatter shipped to clients.
+            if ((q as any).__videoContext !== undefined) {
+              delete (q as any).__videoContext
             }
           }
         }

@@ -118,4 +118,34 @@ describe('AI quiz flow — end to end (#208)', () => {
       expect(spec.questionText).toBe('Q?')
     }
   })
+
+  it('[#2345] video directive → transcript → text quiz → videoContext on the spec', async () => {
+    const rulesContent = `[AUTOAUTHOR_VIDEO_1:text url=https://youtu.be/dQw4w9WgXcQ]\n`
+    const stepBodies = new Map<number, string>([[1, 'the step body is irrelevant for a video quiz']])
+
+    // Mock a substantive transcript (> 50 words) so the guard passes.
+    const transcriptText = 'In this video we build a CAP service for the bookshop sample application, define the domain model with entities and associations, deploy the schema to SAP HANA Cloud, bind the destination service to the approuter, and verify that the generated OData endpoints render correctly in the Fiori Elements preview. We also add custom event handlers, write unit tests against an in-memory SQLite database, and finally push the finished application to Cloud Foundry with proper XSUAA authentication and role collections configured for the business users.'
+    const fetchTranscript = vi.fn().mockResolvedValue({
+      source: 'auto',
+      segments: transcriptText.split(' ').map((w, i) => ({ start: i, text: w })),
+    })
+    const callModel = vi.fn().mockResolvedValue(MOCK_RESP_TEXT)
+    const cache = loadAiQuizCache('synthetic-video-slug', { cacheDir: testCacheDir })
+    const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective } = parseRulesVrEnriched(rulesContent)
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    await expandAiAuthoredQuestions(validationMap, stepBodies, {
+      cache, callModel, onCallStats: stats, allDirective, fetchTranscript,
+    })
+
+    expect(fetchTranscript).toHaveBeenCalledWith('dQw4w9WgXcQ')
+    // Generator was fed the transcript text, tagged as a video.
+    const genUserMsg = callModel.mock.calls[0][0].messages.find((m: any) => m.role === 'user').content
+    expect(genUserMsg).toContain('VIDEO TRANSCRIPT')
+
+    populateAiAuthoredSiblingMaps(validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId)
+    const specs = collectAiGradedSpecs(validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId)
+    expect(specs).toHaveLength(1)
+    expect(specs[0].aiGrading).toBe(true)
+    expect(specs[0].videoContext).toContain('In this video we build a CAP service')
+  })
 })
