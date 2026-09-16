@@ -144,6 +144,13 @@ groups:
         paletteLabel: Devtoberfest — annual SAP developer festival
         paletteIcon: calendar
         keywords: [devtoberfest, festival, event, weekly, challenge, october]
+      - id: explore-teched
+        label: SAP TechEd
+        href: /teched/
+        icon: course-program
+        paletteLabel: SAP TechEd 2026 — session catalog
+        paletteIcon: calendar
+        keywords: [teched, sessions, berlin, virtual, event, 2026]
       - id: explore-advocates
         label: Developer Advocates
         href: /developer-advocates/
