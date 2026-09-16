@@ -13,11 +13,23 @@ describe('validate-answer prompt builder', () => {
     expect(PROMPT_VERSION.length).toBeGreaterThan(0);
   });
 
-  it('PROMPT_VERSION reflects the v2 semantics change (hint required on fail too)', () => {
-    // Bumped 2026-06-23: hint is REQUIRED on partial AND fail (was: partial only).
-    // Telemetry that aggregates submissions by promptVersion can distinguish
-    // pre/post-change verdict distributions to detect regression.
-    expect(PROMPT_VERSION).toBe('v2');
+  it('PROMPT_VERSION reflects the v3 semantics change (grade the idea, not the checklist)', () => {
+    // Bumped 2026-09-16 (#2348): "pass" broadened so omitting minor
+    // supporting detail is fine; "partial" narrowed to a missing distinct
+    // sub-question or a wrong core term. Telemetry that aggregates
+    // submissions by promptVersion can compare v2 vs v3 verdict distributions.
+    expect(PROMPT_VERSION).toBe('v3');
+  });
+
+  it('system prompt grades the idea, not the completeness of the enumeration (v3)', () => {
+    // #2348: the grader was penalizing answers that conveyed the core concept
+    // but omitted an example/anecdote/supporting detail. v3 must explicitly
+    // tell the model NOT to penalize for those omissions.
+    const sys = buildSystemPrompt();
+    expect(sys).toMatch(/Grade the idea, not the completeness/i);
+    expect(sys).toMatch(/omitting (minor supporting details|examples)/i);
+    // pass should prefer over partial when uncertain (was "prefer partial" in v2).
+    expect(sys).toMatch(/uncertain between pass and partial, prefer PASS/i);
   });
 
   it('system prompt mentions verdict scale + DO-NOT-QUOTE rule', () => {

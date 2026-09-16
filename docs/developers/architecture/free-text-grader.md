@@ -38,6 +38,28 @@ At runtime:
                       → step-validated CustomEvent + data-validated="true" gate
 ```
 
+## Verdict semantics & progression (v3, #2348)
+
+The grader prompt is `srv/lib/validate-answer-prompt.js`, versioned via
+`PROMPT_VERSION` (telemetry on `ValidateAnswerSubmissions.promptVersion`).
+
+- **v3 (2026-09-16, #2348)** relaxed the verdict scale: the grader grades the
+  *core idea*, not completeness. Omitting a minor supporting detail, example,
+  or anecdote the author happened to mention is a **pass**. `partial` is now
+  reserved for missing a *distinct* thing the question explicitly asked for,
+  or a materially wrong/imprecise core term.
+- **Progression gating** (`hugo-apps/src/validation/Validation.vue`): a
+  `partial` verdict is now an **accepting** verdict — the step unlocks
+  (fires `step-validated`, re-enables the Done button) and surfaces the hint
+  as advisory guidance (`result: 'accepted'`), instead of blocking + forcing
+  retries. Only a hard `fail` (or a local MCQ mismatch) still blocks. This
+  removes the retry loop that risked exhausting the per-user LLM token /
+  rate-limit budget.
+
+The server still returns the raw `pass`/`partial`/`fail` verdict verbatim and
+logs it accurately; "accepting on partial" is a pure client-gating decision,
+so verdict-distribution analytics are unaffected.
+
 ## Feature flag
 
 `ChatSettings.validateAnswerEnabled` (boolean, default **false**).

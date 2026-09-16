@@ -38,7 +38,7 @@ const rulesBlockText = ref<string>('');
 // selected option strings. grading.gradeAnswers accepts both shapes.
 const answers = ref<Record<string, string | string[]>>({});
 const submitted = ref(false);
-const result = ref<'correct' | 'incorrect' | 'partial' | 'disabled' | null>(null);
+const result = ref<'correct' | 'accepted' | 'incorrect' | 'partial' | 'disabled' | null>(null);
 const pending = ref(false);
 const hint = ref('');
 
@@ -327,11 +327,18 @@ async function onSubmit() {
     // the granular breakdown.
     const verdicts = Object.values(perQuestionResults.value).map(r => r.verdict);
     const allPass = verdicts.every(v => v === 'pass');
+    // [#2348] "partial" is now an ACCEPTING verdict for progression: a learner
+    // who conveyed the core concept but omitted a minor detail should not be
+    // stuck resubmitting (which burns the per-user LLM token/rate-limit
+    // budget). A step is accepted when every AI question is pass OR partial —
+    // i.e. no hard "fail". Local (non-AI) failures already short-circuit to
+    // 'incorrect' above, so verdicts here are AI-only.
+    const allAccepted = verdicts.every(v => v === 'pass' || v === 'partial');
     const anyPartial = verdicts.some(v => v === 'partial');
-    // First hint from any failing question (partial or fail with hint). This
-    // surfaces in the friendlier 'partial' Information strip so the learner
-    // sees ONE clear "what to do next" callout. Per-Q hints in the badge
-    // strips below give the granular breakdown.
+    // First hint from any question that came back partial or fail with a hint.
+    // On the accepting path it's advisory ("one thing to consider"); on the
+    // blocking path it's the "what to do next" callout. Per-Q hints in the
+    // badge strips below give the granular breakdown.
     const firstHint = aiQs
       .map(q => perQuestionResults.value[q.id])
       .find(r => r && (r.verdict === 'partial' || r.verdict === 'fail') && r.hint)?.hint || '';
@@ -341,16 +348,19 @@ async function onSubmit() {
       hint.value = '';
       writePersisted(props.slug, props.stepNumber, true);
       emitStepValidated();
-    } else if (anyPartial && firstHint) {
-      // Any partial → step is 'partial' so the learner sees the hint banner.
-      // Per-question badges still show fail for any non-partial mistakes.
-      result.value = 'partial';
+    } else if (allAccepted && anyPartial) {
+      // [#2348] All AI questions pass-or-partial (no fail): accept the step so
+      // the Done button unlocks, but still surface the advisory hint so the
+      // learner sees what they could have added. No "Try Again" — they're done.
+      result.value = 'accepted';
       hint.value = firstHint;
+      writePersisted(props.slug, props.stepNumber, true);
+      emitStepValidated();
     } else if (firstHint) {
-      // No partial, but at least one fail with a hint (v2 prompt provides
+      // At least one hard fail, but it carries a hint (v2+ prompt provides
       // these). Use the 'partial' result-state so the hint surfaces in a
       // friendlier Information strip rather than the bare Negative "Not
-      // quite" strip with no path forward.
+      // quite" strip with no path forward. This still BLOCKS progression.
       result.value = 'partial';
       hint.value = firstHint;
     } else {
@@ -454,6 +464,20 @@ defineExpose({
       Correct! Well done.
     </ui5-message-strip>
 
+    <!-- [#2348] Accepted state: all AI questions came back pass-or-partial
+         (no hard fail). The step is unlocked (Done button re-enabled) just
+         like 'correct', but we surface the advisory hint so the learner sees
+         what they could have added. No "Try Again" button — the step is done.
+         {{ hint }} is auto-escaped by Vue; NEVER switch to v-html (see the
+         partial strip's security note below). -->
+    <ui5-message-strip
+      v-if="submitted && result === 'accepted'"
+      design="Positive"
+      hide-close-button
+    >
+      Good enough — you've got the main idea.<template v-if="hint"> One thing to consider: {{ hint }}</template>
+    </ui5-message-strip>
+
     <!-- Form: always mounted; disabled state controlled per-input by
          `result === 'correct'`. NOT @submit.prevent-suppressed on correct
          because the Submit button is conditionally rendered (and pressing
@@ -508,7 +532,7 @@ defineExpose({
                 :text="opt"
                 v-bind="{
                   ...(isOptionSelected(q.id, opt) ? { checked: true } : {}),
-                  ...(result === 'correct' ? { disabled: true } : {}),
+                  ...(result === 'correct' || result === 'accepted' ? { disabled: true } : {}),
                 }"
                 @change="onCheckboxChange(q.id, opt, $event)"
               />
@@ -528,7 +552,7 @@ defineExpose({
                 :text="opt"
                 v-bind="{
                   ...(isOptionSelected(q.id, opt) ? { checked: true } : {}),
-                  ...(result === 'correct' ? { disabled: true } : {}),
+                  ...(result === 'correct' || result === 'accepted' ? { disabled: true } : {}),
                 }"
                 @change="onRadioChange(q.id, opt)"
               />
@@ -546,7 +570,7 @@ defineExpose({
           placeholder="Type your answer…"
           :rows="2"
           :value="answers[q.id] || ''"
-          v-bind="result === 'correct' ? { disabled: true } : {}"
+          v-bind="result === 'correct' || result === 'accepted' ? { disabled: true } : {}"
           @input="onTextInput(q.id, $event)"
         />
 
@@ -582,14 +606,14 @@ defineExpose({
         </div>
       </fieldset>
 
-      <!-- Submit + busy indicator: hidden once result === 'correct'. The
-           submission is locked in (writePersisted fired on the all-pass
-           branch) — there's nothing left to re-submit, and showing a
-           disabled Submit button just adds noise to a happy-path view.
-           Partial / incorrect / disabled / error states keep the button
-           visible (those branches use the surrounding result-specific
-           strips below to drive Try Again instead of Submit). -->
-      <div v-if="result !== 'correct'" class="validation-actions">
+      <!-- Submit + busy indicator: hidden once the step is locked in
+           (result === 'correct' all-pass, OR result === 'accepted' —
+           #2348, pass-or-partial with no fail). writePersisted fired on
+           both branches — there's nothing left to re-submit. Partial /
+           incorrect / disabled / error states keep the button visible
+           (those branches use the surrounding result-specific strips below
+           to drive Try Again instead of Submit). -->
+      <div v-if="result !== 'correct' && result !== 'accepted'" class="validation-actions">
         <ui5-button design="Emphasized" type="Submit" v-bind="pending ? { disabled: true } : {}">
           Submit Answer
         </ui5-button>
