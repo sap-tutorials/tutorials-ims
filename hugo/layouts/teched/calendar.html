@@ -1,0 +1,11 @@
+{{ define "main" }}
+{{- /* Bake the full TechEd feed under #teched-data — the same blob the
+       sessions-grid island reads, so the calendar island can load without
+       a network round-trip to /build/teched on first paint. */ -}}
+<script id="teched-data" type="application/json">{{ (.Site.Data.teched) | jsonify | safeJS }}</script>
+<div class="teched-page">
+  <div id="teched-calendar-mount"></div>
+  <noscript>The SAP TechEd calendar requires JavaScript. <a href="/teched/">Browse sessions list</a>.</noscript>
+</div>
+<script type="module" src="{{ partial "island-src.html" "teched-calendar" | relURL }}"></script>
+{{ end }}
