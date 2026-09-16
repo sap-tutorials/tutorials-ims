@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import App from '../App.vue';
 
@@ -40,6 +40,12 @@ beforeEach(() => {
   // Reset URL so deep-link state doesn't leak between tests.
   window.history.replaceState({}, '', '/teched/');
   mockFetch();
+});
+
+afterEach(() => {
+  // Remove any embedded-blob <script> a test planted so the fetch-based tests
+  // (which assume no blob) don't accidentally read it.
+  document.getElementById('teched-data')?.remove();
 });
 
 describe('TechEd sessions grid', () => {
@@ -104,6 +110,28 @@ describe('TechEd sessions grid', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('CAP deep dive');
     expect(wrapper.text()).not.toContain('AI on BTP');
+  });
+
+  it('reads the embedded #teched-data blob without fetching', async () => {
+    // Bake the blob the way hugo/layouts/teched/list.html does: the WHOLE feed
+    // object under id="teched-data". The island must consume it and skip the
+    // /build/teched network fallback entirely (the fallback 404 is what
+    // produced the "Could not load TechEd sessions: teched 404" bug).
+    const el = document.createElement('script');
+    el.id = 'teched-data';
+    el.type = 'application/json';
+    el.textContent = JSON.stringify(feed);
+    document.body.appendChild(el);
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy as any;
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('AI on BTP');
+    expect(wrapper.text()).toContain('CAP deep dive');
+    expect(wrapper.findAll('article').length).toBe(2);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('shows an error state when the feed fails to load', async () => {
