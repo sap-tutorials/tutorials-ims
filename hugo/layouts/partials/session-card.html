@@ -1,0 +1,25 @@
+{{/* hugo/layouts/partials/session-card.html — shared conference-session card
+     (issue #2354). Mirrors hugo-apps/src/advocate-profile/SessionCard.vue 1:1
+     (same fields + .next-steps-* / .session-card classes) so TechEd +
+     Devtoberfest cards look identical on author (SSR) and advocate (Vue) pages.
+     Input dict: { event, title, sourceUrl, track, venue, date }. */}}
+{{- $event := .event -}}
+{{- $label := cond (eq $event "teched") "SAP TechEd" "Devtoberfest" -}}
+{{- $meta := slice -}}
+{{- with .track }}{{ $meta = $meta | append . }}{{ end -}}
+{{- with .venue }}{{ if ne . "Devtoberfest" }}{{ $meta = $meta | append . }}{{ end }}{{ end -}}
+{{- with .date }}{{ $t := time.AsTime . }}{{ if $t }}{{ $meta = $meta | append ($t.Format "Jan 2, 2006") }}{{ end }}{{ end -}}
+{{- $metaText := delimit $meta " · " -}}
+{{- if .sourceUrl -}}
+<a href="{{ .sourceUrl }}" class="next-steps-rail-card session-card" data-event="{{ $event }}" target="_blank" rel="noopener">
+  <span class="next-steps-label session-card-badge">{{ $label }}</span>
+  <span class="next-steps-title">{{ .title }}</span>
+  {{- with $metaText }}<span class="next-steps-meta">{{ . }}</span>{{ end }}
+</a>
+{{- else -}}
+<div class="next-steps-rail-card session-card" data-event="{{ $event }}">
+  <span class="next-steps-label session-card-badge">{{ $label }}</span>
+  <span class="next-steps-title">{{ .title }}</span>
+  {{- with $metaText }}<span class="next-steps-meta">{{ . }}</span>{{ end }}
+</div>
+{{- end -}}

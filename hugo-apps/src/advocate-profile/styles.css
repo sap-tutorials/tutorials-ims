@@ -72,15 +72,15 @@
 .adv-profile-bio { margin-bottom: 24px; }
 .adv-profile-bio h2,
 .adv-profile-topics h2,
-.adv-profile-tutorials h2 {
+.adv-profile-tutorials h2,
+.adv-profile-sessions h2 {
   font-size: 20px; margin: 16px 0 8px;
   color: var(--sapTextColor, #32363a);
 }
 .adv-bio-md { color: var(--sapTextColor, #32363a); }
 .adv-bio-md p { line-height: 1.6; margin: 0 0 10px; }
 .adv-bio-md a { color: var(--sapLinkColor, var(--ds-link, #0a6ed1)); }
-.adv-profile-topics ul,
-.adv-profile-tutorials ul { list-style: none; padding: 0; margin: 0; }
+.adv-profile-topics ul { list-style: none; padding: 0; margin: 0; }
 .adv-profile-topics li { display: inline-block; margin: 0 8px 8px 0; }
 .adv-chip {
   display: inline-block; padding: 4px 10px; border-radius: 999px;
@@ -91,12 +91,10 @@
   transition: background .2s ease;
 }
 .adv-chip:hover { background: var(--sapButton_Lite_Hover_Background, #dfe6ef); }
-.adv-profile-tutorials li {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--sapList_BorderColor, #eef2f7);
-}
-.adv-profile-tutorials a { color: var(--sapLinkColor, var(--ds-link, #0a6ed1)); text-decoration: none; }
-.adv-profile-tutorials a:hover { text-decoration: underline; }
+/* Tutorials + sessions render as .next-steps-* cards (issue #2354); the card
+   box/badge styling lives in the global sap-fundamental.css. */
+.adv-profile-tutorials,
+.adv-profile-sessions { margin-bottom: 24px; }
 .adv-profile-island-banner {
   padding: 12px 16px; border-radius: 8px;
   background: var(--sapInformationBackground, #fff5e6);
