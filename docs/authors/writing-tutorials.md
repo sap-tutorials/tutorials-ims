@@ -36,6 +36,13 @@ The filename (without `.md`) becomes the **slug** — the public URL segment. Sl
 
 If your tutorial has a quiz, validation rules live in a parallel `<repo>-Contribution` repo (private) under the same org as a `rules.vr` file with the same slug. The platform fetches it automatically when the build runs.
 
+You can also have the platform **generate** quiz questions for you at build time with an `[AUTOAUTHOR_*]` directive in `rules.vr` (see the [AUTOAUTHOR live example](https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/use-autoauthor-to-generate-quiz-questions)):
+
+- `[AUTOAUTHOR_3]` / `[AUTOAUTHOR_ALL]` — generate questions from the step's text (add `:mcq` or `:text` to restrict the type).
+- `[AUTOAUTHOR_VIDEO_3 url=https://youtu.be/…]` / `[AUTOAUTHOR_VIDEO_ALL url=https://youtu.be/…]` — generate questions from a **YouTube video's transcript** instead of the step text. Use the per-step form to quiz on the video referenced by one step, or the `_ALL` form for one quiz covering the whole tutorial's video. Add `:mcq` / `:text` the same way.
+
+A hand-authored `[VALIDATE_N]` question for a step always wins over any `[AUTOAUTHOR_*]` directive for that step — the generated questions are opt-in *extra* coverage, never an override. If a video has no captions the generated quiz is simply skipped; your build still succeeds.
+
 ---
 
 ## 3. Anatomy of a tutorial
