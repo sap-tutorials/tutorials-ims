@@ -10,7 +10,16 @@
 //   track    — track slug (exact match on session.track)
 //   speaker  — speaker slug (membership test against session.speakers)
 //   query    — free text over title, abstract, resolved speaker names,
-//              speaker slugs, the resolved track name, and the session code.
+//              speaker slugs, the resolved track name, the session code,
+//              and related Devtoberfest session titles.
+
+export interface RelatedDevtoberfestSession {
+  sessionId: string;
+  title: string;
+  sessionCode?: string;
+  taskSlug?: string;
+  sharedConceptCount?: number;
+}
 
 export interface TechEdSession {
   slug: string;
@@ -27,6 +36,11 @@ export interface TechEdSession {
   sessionCode?: string | null;
   speakers?: string[];              // speaker slugs
   speakerNames?: string[];          // resolved speaker names (enriched by App)
+  /** Cross-linked Devtoberfest sessions. Emitted by /build/teched when
+   *  TECHED_DEVTOBERFEST_CROSSLINK_ENABLED DB flag is ON. Empty array (or
+   *  absent) when the flag is OFF — components must treat both as "nothing
+   *  to show" (fail-open). */
+  relatedDevtoberfestSessions?: RelatedDevtoberfestSession[];
 }
 
 export interface TechEdFilterState {
@@ -45,6 +59,9 @@ function haystack(s: TechEdSession): string {
     (s.speakers || []).join(' '),
     s.trackName || '',
     s.sessionCode || '',
+    // Index related Devtoberfest session titles so keyword search finds TechEd
+    // sessions whose cross-linked sessions match the query (e.g. "CAP Basics").
+    (s.relatedDevtoberfestSessions || []).map((r) => r.title || '').join(' '),
   ].join(' ').toLowerCase();
 }
 
