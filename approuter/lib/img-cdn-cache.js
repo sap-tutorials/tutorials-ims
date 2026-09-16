@@ -18,8 +18,27 @@
  *
  * `now` is injectable for deterministic tests.
  */
+
+// Cache-Control header for /img-cdn 200 responses.
+//
+// Images are referenced by branch-pinned raw.githubusercontent.com URLs
+// rewritten to stable /img-cdn?u=…&w=… URLs — the URL never changes when an
+// author edits a screenshot in place (same filename). Serving `immutable` on a
+// stable, non-content-hashed URL is a lie: browsers never revalidate for 24h
+// and the CDN never revalidates for 7 days even after the store is corrected
+// (#2346). Per the "never raise the staleness ceiling without a purge"
+// principle in srv/lib/edge-cache-headers.js, TTLs are kept short:
+//   - max-age=300 (5 min browser): author sees their edit in minutes.
+//   - s-maxage=3600 (1 h edge): worst-case edge staleness with no active purge.
+//   - stale-while-revalidate=86400: serve stale instantly, revalidate async —
+//     no user-facing latency penalty from dropping immutable.
+// When image-purge-by-tag lands (EDGE_PURGE_ENABLED pattern), s-maxage can be
+// raised; until then this ceiling is the only staleness bound.
+const IMG_CDN_CACHE_CONTROL =
+  'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400'
+
 class ImgCache {
-  constructor({ maxBytes = 64 * 1024 * 1024, ttlMs = 6 * 60 * 60 * 1000, now = Date.now } = {}) {
+  constructor({ maxBytes = 64 * 1024 * 1024, ttlMs = 60 * 60 * 1000, now = Date.now } = {}) {
     this.maxBytes = maxBytes
     this.ttlMs = ttlMs
     this._now = now
@@ -66,4 +85,4 @@ class ImgCache {
   }
 }
 
-module.exports = { ImgCache }
+module.exports = { ImgCache, IMG_CDN_CACHE_CONTROL }

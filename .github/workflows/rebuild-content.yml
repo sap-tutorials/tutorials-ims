@@ -88,6 +88,11 @@ on:
         required: false
         type: boolean
         default: true
+      warm-images:
+        description: 'On a full rebuild, re-fetch and re-store every tutorial image through the POST /content/image byte-dedup endpoint after publish. Catches same-filename screenshot edits that are invisible to the HTML+markdown delta detector (#2346). Unchanged images report "unchanged" (dedup is content-hash-based), so only genuinely-changed bytes re-store. Best-effort (continue-on-error). Default true; set false to skip if CI time is critical.'
+        required: false
+        type: boolean
+        default: true
 
 env:
   NODE_VERSION: '22'
@@ -817,19 +822,31 @@ jobs:
           SMOKE_CONTENT_FRESH: '1'
         run: npx vitest run --project smoke test/smoke/seo-files.test.js
 
-      # #2288 — same-filename image byte changes are invisible to the publish
-      # delta detector: publish hashes rendered HTML + source markdown, never the
-      # image bytes, so a screenshot edited in place (unchanged filename → unchanged
-      # /img-cdn URL) never triggers a republish and the stale image is served
-      # indefinitely. On a slug-targeted rebuild, re-warm just that tutorial's
-      # images through the content-aware ingest endpoint (POST /content/image
-      # dedups on image bytes), so changed bytes are re-stored while unchanged
-      # ones report 'unchanged'. Best-effort: a warm failure must never fail the
-      # content rebuild. Scoped to slug-targeted (not full) per #2288 decision —
-      # full rebuilds already re-warm the whole catalog elsewhere. CAP_BASE_URL is
-      # the already target-resolved srv url; the QA target needs its own key.
+      # #2288 / #2346 — same-filename image byte changes are invisible to the
+      # publish delta detector: publish hashes rendered HTML + source markdown,
+      # never the image bytes, so a screenshot edited in place (unchanged
+      # filename → unchanged /img-cdn URL) never triggers a republish and the
+      # stale image would be served indefinitely without these steps.
+      #
+      # Two warm paths:
+      #
+      # 1. slug-targeted: re-warm just that tutorial's images (including when
+      #    force-publish is set — that is exactly the "push my stubborn change
+      #    through" case). POST /content/image dedups on image bytes; changed
+      #    bytes are re-stored, unchanged report 'unchanged'.
+      #
+      # 2. full: re-warm the whole catalog (warm-images input, default true).
+      #    No full-catalog warm existed before #2346; the prior comment claiming
+      #    "full rebuilds already re-warm the whole catalog elsewhere" was false.
+      #    catalog-only is intentionally excluded — that mode skips fetch-tutorials
+      #    entirely so no tutorial image can have changed.
+      #
+      # Best-effort: a warm failure must never fail the content rebuild.
+      # CAP_BASE_URL is the already target-resolved srv url; the QA target
+      # needs its own key.
+
       - name: Refresh tutorial images (slug-targeted)
-        if: ${{ steps.publish.outcome == 'success' && steps.mode.outputs.effective_mode == 'slug-targeted' && inputs.force-publish != true }}
+        if: ${{ steps.publish.outcome == 'success' && steps.mode.outputs.effective_mode == 'slug-targeted' }}
         continue-on-error: true
         env:
           CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
@@ -837,6 +854,15 @@ jobs:
           GITHUB_TOKEN:    ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           REFRESH_SLUG:    ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
         run: npx tsx scripts/backfill-images.ts --slug "$REFRESH_SLUG"
+
+      - name: Refresh tutorial images (full catalog)
+        if: ${{ steps.publish.outcome == 'success' && steps.mode.outputs.effective_mode == 'full' && inputs.warm-images != false }}
+        continue-on-error: true
+        env:
+          CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
+          CONTENT_API_KEY: ${{ steps.env.outputs.target == 'qa' && secrets.CONTENT_API_KEY_QA || secrets.CONTENT_API_KEY }}
+          GITHUB_TOKEN:    ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
+        run: npx tsx scripts/backfill-images.ts
 
       - name: Purge orphan tutorials
         id: purge

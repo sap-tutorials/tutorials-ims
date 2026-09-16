@@ -296,11 +296,11 @@ jobs:
       # stale bytes. Re-warm just this slug's images: backfill re-fetches from
       # GitHub and POSTs bytes; the srv ingest content-hash-dedups (re-stores only
       # changed images). Slug-targeted only — a full rebuild would re-fetch every
-      # image. Skipped on a full QA rebuild (empty slug) and on force-publish
-      # (which already republishes + warms every slug). Non-fatal: image refresh
-      # must never fail the content rebuild.
+      # image. Non-fatal: image refresh must never fail the content rebuild.
+      # force-publish exclusion removed (#2346): that is exactly the
+      # "push my stubborn change through" case where re-warming is needed.
       - name: Refresh QA tutorial images (slug-targeted)
-        if: ${{ !inputs.force-publish && (github.event.client_payload.slug || inputs.slug) }}
+        if: ${{ github.event.client_payload.slug || inputs.slug }}
         continue-on-error: true
         run: npx tsx scripts/backfill-images.ts --channel qa --slug "${{ github.event.client_payload.slug || inputs.slug }}"
         env:
