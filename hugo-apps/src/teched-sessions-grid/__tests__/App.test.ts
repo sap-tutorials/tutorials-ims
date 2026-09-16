@@ -312,5 +312,51 @@ describe('TechEd sessions grid', () => {
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
     expect(wrapper.find('[role="dialog"]').text()).toContain('AI on BTP');
   });
+
+  // --- Speaker author-link tests (#2355 unit 8) ----------------------------
+
+  it('renders speaker name as a link when authorLogin is set', async () => {
+    const feedWithLogin = {
+      ...feed,
+      speakers: [
+        { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP', authorLogin: 'ada-lovelace' },
+        { slug: 'grace-hopper', name: 'Grace Hopper', title: 'Engineer', company: 'SAP', authorLogin: null },
+      ],
+    };
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(feedWithLogin),
+    } as any)) as any;
+    const wrapper = mount(App);
+    await flushPromises();
+    // Ada has authorLogin → should render as <a>
+    const adaLink = wrapper.find('a[href="/authors/ada-lovelace/"]');
+    expect(adaLink.exists()).toBe(true);
+    expect(adaLink.text()).toBe('Ada Lovelace');
+    // Grace has no authorLogin → no <a> with her name as href
+    expect(wrapper.find('a[href="/authors/grace-hopper/"]').exists()).toBe(false);
+    // Grace's name still appears as plain text
+    expect(wrapper.text()).toContain('Grace Hopper');
+  });
+
+  it('renders speaker name as plain text when authorLogin is absent', async () => {
+    // All speakers without authorLogin → zero author-page links rendered
+    const feedNoLogin = {
+      ...feed,
+      speakers: [
+        { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP' },
+      ],
+    };
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(feedNoLogin),
+    } as any)) as any;
+    const wrapper = mount(App);
+    await flushPromises();
+    expect(wrapper.find('a[href="/authors/ada-lovelace/"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Ada Lovelace');
+  });
 });
 

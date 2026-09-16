@@ -155,7 +155,11 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
           <div v-for="sp in (row as any).speakers" :key="sp.id" class="detail-panel__speaker">
             <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
             <div class="detail-panel__speaker-meta">
-              <span class="detail-panel__speaker-name">{{ sp.name }}</span>
+              <component
+                :is="sp.authorLogin ? 'a' : 'span'"
+                v-bind="sp.authorLogin ? { href: `/authors/${sp.authorLogin}/`, class: 'detail-panel__speaker-link' } : {}"
+                class="detail-panel__speaker-name"
+              >{{ sp.name }}</component>
               <span v-if="sp.role || sp.company" class="detail-panel__speaker-role">{{ [sp.role, sp.company].filter(Boolean).join(' @ ') }}</span>
             </div>
           </div>
@@ -527,6 +531,15 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
   font-size: var(--sapFontSize, 0.875rem);
   font-weight: 600;
   color: var(--sapTextColor, #32363a);
+}
+
+a.detail-panel__speaker-name.detail-panel__speaker-link {
+  text-decoration: underline;
+  text-decoration-color: var(--sapLinkColor, #0854a0);
+}
+
+a.detail-panel__speaker-name.detail-panel__speaker-link:hover {
+  color: var(--sapLinkColor, #0854a0);
 }
 
 .detail-panel__speaker-role {
