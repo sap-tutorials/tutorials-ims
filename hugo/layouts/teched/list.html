@@ -1,7 +1,5 @@
 {{ define "main" }}
 {{- $sessions := (.Site.Data.teched.sessions) | default slice -}}
-{{- $berlin := where $sessions "venue" "BERLIN" -}}
-{{- $virtual := where $sessions "venue" "VIRTUAL" -}}
 {{/* baseof.html already wraps this block in a single <main> landmark, so this
      shell uses a plain <div> (the channels-page pattern) rather than nesting a
      second <main> — a duplicate-main landmark trips axe landmark-no-duplicate-main. */}}
@@ -11,50 +9,27 @@
     {{ with .Description }}<p>{{ . }}</p>{{ end }}
   </header>
 
-  {{/* Full feed payload for the island (Unit 8), which mounts into
-       #teched-sessions-grid-mount and renders the interactive Berlin/Virtual
-       grids. Bake the WHOLE .Site.Data.teched object ({sessions,speakers,tracks,...})
+  {{/* Full feed payload for the island, which mounts into
+       #teched-sessions-grid-mount and renders the interactive unified sessions
+       grid. Bake the WHOLE .Site.Data.teched object ({sessions,speakers,tracks,...})
        under id="teched-data" — the id + shape the island's loadFeed() reads
-       (hugo-apps/src/teched-sessions-grid/App.vue). The static section headings
-       + per-venue <noscript> lists below keep the page useful without
-       JavaScript (fail-open — teched.json is written empty on a build-time
-       fetch error). */}}
+       (hugo-apps/src/teched-sessions-grid/App.vue). The <noscript> list below
+       keeps the page useful without JavaScript (fail-open — teched.json is
+       written empty on a build-time fetch error). */}}
   <script id="teched-data" type="application/json">{{ (.Site.Data.teched) | jsonify | safeJS }}</script>
 
-  <section class="teched-page__venue teched-page__venue--berlin" aria-labelledby="teched-berlin-heading">
-    <h2 id="teched-berlin-heading">Berlin</h2>
-    <noscript>
-      {{- if $berlin }}
-      <ul>
-        {{- range $berlin }}
-        <li><a href="{{ .url }}" target="_blank" rel="noopener">{{ .title }}</a>{{ with .room }} — {{ . }}{{ end }}</li>
-        {{- end }}
-      </ul>
-      {{- else }}
-      <p>No Berlin sessions published yet.</p>
+  <div id="teched-sessions-grid-mount"></div>
+  <noscript>
+    {{- if $sessions }}
+    <ul>
+      {{- range $sessions }}
+      <li><a href="{{ .url }}" target="_blank" rel="noopener">{{ .title }}</a>{{ with .venue }} ({{ . }}){{ end }}{{ with .room }} — {{ . }}{{ end }}</li>
       {{- end }}
-    </noscript>
-  </section>
-
-  <section class="teched-page__venue teched-page__venue--virtual" aria-labelledby="teched-virtual-heading">
-    <h2 id="teched-virtual-heading">Virtual</h2>
-    <noscript>
-      {{- if $virtual }}
-      <ul>
-        {{- range $virtual }}
-        <li><a href="{{ .url }}" target="_blank" rel="noopener">{{ .title }}</a>{{ with .room }} — {{ . }}{{ end }}</li>
-        {{- end }}
-      </ul>
-      {{- else }}
-      <p>No Virtual sessions published yet.</p>
-      {{- end }}
-    </noscript>
-  </section>
-
-  <div id="teched-sessions-grid-mount"
-       data-berlin-count="{{ len $berlin }}"
-       data-virtual-count="{{ len $virtual }}"></div>
-  <noscript>The interactive SAP TechEd session browser requires JavaScript. The Berlin and Virtual session lists above are the no-JavaScript fallback.</noscript>
+    </ul>
+    {{- else }}
+    <p>No sessions published yet. Enable JavaScript for the interactive session browser.</p>
+    {{- end }}
+  </noscript>
 </div>
 <script type="module" src="{{ partial "island-src.html" "teched-sessions-grid" | relURL }}"></script>
 {{ end }}
