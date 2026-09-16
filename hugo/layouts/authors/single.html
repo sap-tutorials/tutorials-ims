@@ -26,6 +26,23 @@
       {{ end }}
     </div>
   </div>
+  {{ with .sessions }}
+  {{ $all := slice }}
+  {{ with .teched }}{{ $all = $all | append . }}{{ end }}
+  {{ with .devtoberfest }}{{ $all = $all | append . }}{{ end }}
+  {{ if $all }}
+  <section class="author-page-sessions" aria-labelledby="author-sessions-h">
+    <h2 id="author-sessions-h">Sessions ({{ len $all }})</h2>
+    <div class="next-steps-rail">
+      <div class="next-steps-grid">
+        {{ range $all }}
+        {{ partial "session-card.html" . }}
+        {{ end }}
+      </div>
+    </div>
+  </section>
+  {{ end }}
+  {{ end }}
   {{ else }}
   <header class="author-page-hero">
     <h1>Author not found</h1>

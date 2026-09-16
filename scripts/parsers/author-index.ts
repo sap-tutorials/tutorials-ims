@@ -21,9 +21,17 @@ export interface AuthorTutorialRow {
 export interface AuthorIndexTutorial {
   slug: string; title: string; time: number; level: string; tags: string[]; isNew: boolean
 }
+/** One conference-session card (issue #2354). Mirrors srv/lib/session-speaker-match.js toSessionCard. */
+export interface AuthorSessionCard {
+  event: 'teched' | 'devtoberfest'; title: string; sourceUrl: string
+  track: string; venue: string; date: string | null
+}
+export interface AuthorSessions { teched: AuthorSessionCard[]; devtoberfest: AuthorSessionCard[] }
 export interface AuthorIndexEntry {
   login: string; displayName: string; githubUrl: string; advocateSlug?: string
   tutorials: AuthorIndexTutorial[]
+  /** Sessions where this author is a speaker (issue #2354); omitted when none. */
+  sessions?: AuthorSessions
 }
 export type AuthorIndex = Record<string, AuthorIndexEntry>
 
@@ -64,6 +72,7 @@ export function buildAuthorIndex(
   rows: AuthorTutorialRow[],
   advocates: Map<string, string>,
   activeSlugs?: Set<string>,
+  sessionsByLogin?: Map<string, AuthorSessions>,
 ): AuthorIndex {
   // Sort once up front: most-recent-first, title A→Z tiebreak. Push order = display order.
   const sorted = [...rows].sort((a, b) => {
@@ -130,6 +139,16 @@ export function buildAuthorIndex(
       slug: row.slug, title: row.title, time: row.time,
       level: row.level, tags: row.tags, isNew: row.isNew,
     })
+  }
+
+  // Issue #2354: attach conference sessions per author, keyed by login.
+  // Fail-open — attach only when a non-empty map is supplied and the login has
+  // at least one session; the field is omitted otherwise.
+  if (sessionsByLogin && sessionsByLogin.size) {
+    for (const login of Object.keys(index)) {
+      const s = sessionsByLogin.get(login)
+      if (s && (s.teched.length || s.devtoberfest.length)) index[login].sessions = s
+    }
   }
   return index
 }

@@ -68,4 +68,13 @@ describe('GET /api/advocates/:slug', () => {
     const res = await project.get('/api/advocates/__test__single-inactive', { validateStatus: () => true });
     expect(res.status).toBe(404);
   });
+
+  // Issue #2354: sessions attach fail-open. On unit SQLite the cross-container
+  // Devtoberfest + TechEd facades are absent, so the session load degrades to
+  // empty and `sessions` is omitted — the response is still a well-formed 200.
+  it('omits sessions (fail-open) when session facades are absent', async () => {
+    const res = await project.get('/api/advocates/__test__single-slug-amer');
+    expect(res.status).toBe(200);
+    expect(res.data).not.toHaveProperty('sessions');
+  });
 });

@@ -3,6 +3,9 @@
 
 import cds from '@sap/cds';
 import { fetchPhoto } from '../lib/advocate-photo-store.js';
+import { loadTechEdFeed } from '../lib/teched-feed.js';
+import { loadDevtoberfestFeedWithEmail } from '../lib/devtoberfest-feed-load.js';
+import { matchTechEdSessions, matchDevtoberfestSessions } from '../lib/session-speaker-match.js';
 
 const log = cds.log('advocates');
 
@@ -217,6 +220,35 @@ async function buildAdvocateLookups(db, advocates) {
   };
 }
 
+/**
+ * Sessions (TechEd + Devtoberfest) where a person is a speaker, as
+ * { teched, devtoberfest } card arrays. Issue #2354.
+ *
+ * Devtoberfest → email match (Speaker.EMAIL), name fallback; TechEd → normalized
+ * name match only (the RainFocus source carries no speaker email). Both feed
+ * loads are fail-open (empty feed when the cross-container planner facades are
+ * absent, e.g. unit SQLite), and the whole helper is wrapped so a session read
+ * NEVER blanks the advocate page — a fault degrades to no sessions.
+ */
+async function loadSessionsFor(db, person) {
+  if (!person || (!person.email && !person.firstName && !person.lastName)) {
+    return { teched: [], devtoberfest: [] };
+  }
+  try {
+    const [techedFeed, dtf] = await Promise.all([
+      loadTechEdFeed(db).catch((e) => { log.warn('teched feed skipped:', e.message); return { sessions: [] }; }),
+      loadDevtoberfestFeedWithEmail().catch((e) => { log.warn('devtoberfest feed skipped:', e.message); return { feed: { sessions: [] }, speakerEmailById: new Map() }; }),
+    ]);
+    return {
+      teched: matchTechEdSessions(person, techedFeed),
+      devtoberfest: matchDevtoberfestSessions(person, dtf.feed, dtf.speakerEmailById),
+    };
+  } catch (err) {
+    log.warn('loadSessionsFor failed, returning no sessions:', err.message);
+    return { teched: [], devtoberfest: [] };
+  }
+}
+
 async function handleAdvocates(req, res) {
   try {
     const db = await cds.connect.to('db');
@@ -289,6 +321,18 @@ async function handleSingle(req, res) {
     const body = shapeAdvocateRow(advocate, {
       topicsByAdv, linksByAdv, userById, authoredByUserId, contribByUserId,
     });
+
+    // Issue #2354: attach the sessions this advocate speaks at (TechEd +
+    // Devtoberfest). Email comes from the linked user (already on `body`); name
+    // is the Devtoberfest fallback + the only TechEd key. Omit when empty.
+    const sessions = await loadSessionsFor(db, {
+      email: body.email,
+      firstName: advocate.firstName,
+      lastName: advocate.lastName,
+    });
+    if (sessions.teched.length || sessions.devtoberfest.length) {
+      body.sessions = sessions;
+    }
 
     const max = Math.max(
       maxModified([advocate]),

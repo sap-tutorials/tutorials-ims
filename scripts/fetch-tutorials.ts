@@ -30,8 +30,10 @@ import { normalizeVideo } from './parsers/video.js'
 import { extractGithubLoginFromProfile } from './parsers/github-login-from-profile.js'
 import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 import { QUESTION_TYPE_TEXT } from './parsers/types.js'
-import { advocateLoginToSlug, type AuthorTutorialRow } from './parsers/author-index.js'
+import { advocateLoginToSlug, normalizeAuthorLogin, type AuthorTutorialRow } from './parsers/author-index.js'
 import { writeAuthorPages } from './lib/author-pages-writer.js'
+import { matchTechEdSessions, matchDevtoberfestSessions } from '../srv/lib/session-speaker-match.js'
+import type { AuthorSessions } from './parsers/author-index.js'
 import { buildContributorsSidecar } from './parsers/contributors-sidecar.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -1480,7 +1482,8 @@ async function main() {
 
   if (target === 'hugo') {
     try {
-      const advocates = advocateLoginToSlug(await fetchAdvocateRoster())
+      const roster = await fetchAdvocateRoster()
+      const advocates = advocateLoginToSlug(roster)
       const dataDir = join(__dirname, '..', 'hugo', channel === 'qa' ? 'data-qa' : 'data')
       // Active/published catalog slugs (lowercase) — same ACTIVE-only set the
       // navigator/browse use (status='ACTIVE' or null, srv/lib/build-catalog.js).
@@ -1496,15 +1499,20 @@ async function main() {
         channel === 'qa'
           ? undefined
           : join(__dirname, '..', 'hugo', 'static', 'author_index.json')
+      // Issue #2354: conference sessions per author (fail-open — empty map on
+      // any feed miss). Built from the same running CAP the roster came from.
+      const sessionsByLogin = await computeAuthorSessions(authorRows, roster)
       const { pagesWritten } = writeAuthorPages({
         rows: authorRows,
         advocates,
         activeSlugs,
         publishFile,
+        sessionsByLogin,
         dataFile: join(dataDir, 'author_index.json'),
         contentDir: join(getHugoContentDir(channel), 'authors'),
       })
-      console.log(`  [authors] wrote author_index.json + ${pagesWritten} author page(s)`)
+      const withSessions = [...sessionsByLogin.keys()].length
+      console.log(`  [authors] wrote author_index.json + ${pagesWritten} author page(s) (${withSessions} with sessions)`)
     } catch (err) {
       console.warn(`  [authors] emit failed: ${err instanceof Error ? err.message : err}`)
     }
@@ -1774,6 +1782,76 @@ async function fetchAdvocateRoster(): Promise<unknown[]> {
     console.warn(`  [authors] advocate roster fetch failed (no redirects): ${err instanceof Error ? err.message : err}`)
     return []
   }
+}
+
+async function fetchJsonSafe(path: string): Promise<any | null> {
+  try {
+    const base = process.env.CAP_BASE_URL || 'http://localhost:4004'
+    const res = await fetch(`${base}${path}`, { headers: { Accept: 'application/json' } })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Build login → { teched, devtoberfest } session cards for author pages
+ * (issue #2354). Fetches the public TechEd (/build/teched) and Devtoberfest
+ * (/api/devtoberfest/schedule) feeds ONCE, then matches each author.
+ *
+ * Match keys: advocate-authors (in the roster) match on email + name; all other
+ * authors match on displayName (name only — the build has no DB email for
+ * non-advocate authors, and the public feeds carry no speaker email). Fully
+ * fail-open: any feed miss / fetch fault yields an empty map, so author pages
+ * never blank on a session-feed hiccup.
+ */
+async function computeAuthorSessions(
+  authorRows: AuthorTutorialRow[],
+  roster: unknown[],
+): Promise<Map<string, AuthorSessions>> {
+  const out = new Map<string, AuthorSessions>()
+  try {
+    const [techedFeed, dtfFeed] = await Promise.all([
+      fetchJsonSafe('/build/teched'),
+      fetchJsonSafe('/api/devtoberfest/schedule'),
+    ])
+    if (!techedFeed && !dtfFeed) return out
+
+    // login → { email?, name } from the advocate roster (email-match for the
+    // advocate-authors); everyone else falls back to displayName name-match.
+    const personByLogin = new Map<string, { email?: string; name: string }>()
+    if (Array.isArray(roster)) {
+      for (const a of roster as any[]) {
+        const login = a?.githubLogin ? String(a.githubLogin).toLowerCase() : null
+        if (!login) continue
+        const name = `${a.firstName || ''} ${a.lastName || ''}`.trim()
+        personByLogin.set(login, { email: a.email || undefined, name })
+      }
+    }
+
+    // Unique authors from the rows (login + displayName).
+    const displayByLogin = new Map<string, string>()
+    for (const r of authorRows) {
+      const login = normalizeAuthorLogin(r.authorProfile)
+      if (login && !displayByLogin.has(login)) displayByLogin.set(login, r.displayName || login)
+    }
+
+    for (const [login, displayName] of displayByLogin) {
+      const rosterPerson = personByLogin.get(login)
+      const person = {
+        email: rosterPerson?.email,
+        name: rosterPerson?.name || displayName,
+      }
+      const teched = techedFeed ? matchTechEdSessions(person, techedFeed) : []
+      const devtoberfest = dtfFeed ? matchDevtoberfestSessions(person, dtfFeed) : []
+      if (teched.length || devtoberfest.length) out.set(login, { teched, devtoberfest })
+    }
+  } catch (err) {
+    console.warn(`  [authors] session compute failed (pages proceed without sessions): ${err instanceof Error ? err.message : err}`)
+    return new Map()
+  }
+  return out
 }
 
 function browseIsWithinNewWindow(createdAt: string | undefined): boolean {
