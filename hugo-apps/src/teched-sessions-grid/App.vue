@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { filterSessions, type TechEdSession } from './filter';
 import { parseTechEdUrl, toTechEdQuery, type TechEdUrlState } from './url-state';
 import { buildTrackColorMap, legendFor, type TrackColor } from '../devtoberfest-sessions-calendar/track-colors';
+import RelatedSessions from './RelatedSessions.vue';
 
 // --- Feed shapes (see GET /build/teched in srv/server.js) ------------------
 interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; }
@@ -309,6 +310,7 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker], writeUrl);
                 <a v-if="s.url" :href="safeHref(s.url)" target="_blank" rel="noopener noreferrer" class="tsg-link">↗ Session page</a>
                 <a v-if="s.youtubeUrl" :href="safeHref(s.youtubeUrl)" target="_blank" rel="noopener noreferrer" class="tsg-link tsg-link--yt">▶ Watch</a>
               </div>
+              <RelatedSessions v-if="s.relatedDevtoberfestSessions?.length" :sessions="s.relatedDevtoberfestSessions" />
             </div>
           </article>
         </div>
