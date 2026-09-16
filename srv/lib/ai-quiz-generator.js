@@ -14,7 +14,12 @@ import { QUESTION_TYPE_TEXT } from '../../scripts/parsers/types.js';
 
 const LOG = cds.log('ai-quiz-generator');
 
-export const PROMPT_VERSION = 'v1';
+// v2 (#2345) — generation can now be grounded in a YouTube video transcript
+// (source: 'video') in addition to tutorial-step markdown (source: 'step',
+// default). The only prompt-shape change is the user-message content heading;
+// the system prompt, schema, and anti-leak guards are unchanged. Bumped so
+// cached v1 entries regenerate under the new user-message wording.
+export const PROMPT_VERSION = 'v2';
 
 const STEP_BODY_CAP = 4000;
 const TOOL_NAME = 'submitQuiz';
@@ -31,7 +36,7 @@ Output rules:
 - ANTI-LEAK: never reveal the correct answer's literal wording inside the question text.`;
 }
 
-export function buildUserMessage({ stepBody, types }) {
+export function buildUserMessage({ stepBody, types, source = 'step' }) {
   const cappedBody = stepBody.length > STEP_BODY_CAP
     ? stepBody.slice(0, STEP_BODY_CAP) + '\n[...content truncated...]'
     : stepBody;
@@ -40,11 +45,15 @@ export function buildUserMessage({ stepBody, types }) {
     'text-only': 'free-text',
     'mcq-and-text': 'multiple-choice and free-text',
   }[types] ?? 'multiple-choice and free-text';
-  return `TUTORIAL STEP CONTENT (markdown):
+  const heading = source === 'video'
+    ? 'VIDEO TRANSCRIPT (auto-captioned text may contain minor errors):'
+    : 'TUTORIAL STEP CONTENT (markdown):';
+  const requestNoun = source === 'video' ? 'video' : 'step';
+  return `${heading}
 ${cappedBody}
 
 REQUEST:
-Generate ${typeLabel} question(s) about the main learning of this step.`;
+Generate ${typeLabel} question(s) about the main learning of this ${requestNoun}.`;
 }
 
 export const QUIZ_OUTPUT_SCHEMA = {
@@ -105,15 +114,16 @@ function normalize(s) {
  * @param {number} input.stepNumber   For the questionId emit.
  * @param {string} input.slug         Tutorial slug (logging + cache key).
  * @param {'mcq-only' | 'text-only' | 'mcq-and-text'} input.types
+ * @param {'step' | 'video'} [input.source]  Content provenance for the user-message heading. Default 'step'.
  * @param {object} input.deps
  * @param {Function} input.deps.callModel  ({ messages, tools, toolChoice, schema }) => { toolCalls, modelName, promptTokens, completionTokens, finishReason }
  *
  * @returns {Promise<{questions, errorReason?, modelName, promptTokens, completionTokens, latencyMs, promptVersion}>}
  */
-export async function generateQuiz({ stepBody, stepNumber, slug, types, deps }) {
+export async function generateQuiz({ stepBody, stepNumber, slug, types, source = 'step', deps }) {
   const startedAt = Date.now();
   const system = buildSystemPrompt();
-  const userMsg = buildUserMessage({ stepBody, types });
+  const userMsg = buildUserMessage({ stepBody, types, source });
 
   let modelResp;
   try {

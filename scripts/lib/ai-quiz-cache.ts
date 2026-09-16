@@ -39,9 +39,14 @@ export function hashKey(input: {
   types: string
   promptVersion: string
   modelName: string
+  // [#2345] Present for video-sourced quizzes; folded into the key so a video
+  // entry never collides with a step entry (or another video) on the same
+  // step number. Undefined for step-sourced quizzes → empty segment, keeping
+  // existing step-quiz hashes byte-identical.
+  videoId?: string
 }): string {
   return createHash('sha256')
-    .update([input.stepBody, input.directive, input.types, input.promptVersion, input.modelName].join(SEP))
+    .update([input.stepBody, input.directive, input.types, input.promptVersion, input.modelName, input.videoId ?? ''].join(SEP))
     .digest('hex')
 }
 

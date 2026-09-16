@@ -41,6 +41,16 @@ export async function publishValidateAnswerSpecs(req, res) {
         || Buffer.byteLength(s.questionText, 'utf8') > MAX_FIELD_BYTES) {
       return res.status(400).json({ error: 'too_long' });
     }
+    // [#2345] videoContext is optional; when present it must be a string
+    // within the field cap. Absent → step-sourced quiz, no context.
+    if (s.videoContext != null) {
+      if (typeof s.videoContext !== 'string') {
+        return res.status(400).json({ error: 'invalid_spec' });
+      }
+      if (Buffer.byteLength(s.videoContext, 'utf8') > MAX_FIELD_BYTES) {
+        return res.status(400).json({ error: 'too_long' });
+      }
+    }
   }
 
   // Duplicate-key guard: the DB primary key is (tutorial_ID, stepNumber,
@@ -106,6 +116,7 @@ export async function publishValidateAnswerSpecs(req, res) {
             correctAnswer: s.correctAnswer,
             ruleType: s.ruleType,
             aiGrading: Boolean(s.aiGrading),
+            videoContext: s.videoContext ?? null,  // [#2345] null for step-sourced quizzes
           }))
         );
       }

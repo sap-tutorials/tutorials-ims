@@ -37,12 +37,29 @@ describe('defaultLoadQuestion', () => {
       correctAnswer: 'X is Y.',
       aiGrading: true,
       ruleType: 'exact-match',  // [#238] surface ruleType for MCQ guard
+      videoContext: null,       // [#2345] null for step-sourced quizzes
     });
   });
 
   it('lowercases the slug for lookup', async () => {
     const result = await defaultLoadQuestion('SAMPLE', 3, 'validate-3');
     expect(result?.questionId).toBe('validate-3');
+  });
+
+  it('[#2345] surfaces videoContext when the spec has one', async () => {
+    const { ValidateAnswerSpecs } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(ValidateAnswerSpecs).entries({
+      tutorial_ID: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      stepNumber: 4,
+      questionId: 'validate-4-ai-1',
+      questionText: 'What did the video explain?',
+      correctAnswer: 'The CAP model.',
+      ruleType: 'ai-authored',
+      aiGrading: true,
+      videoContext: 'In this video we cover the CAP model and its layers.',
+    });
+    const result = await defaultLoadQuestion('sample', 4, 'validate-4-ai-1');
+    expect(result?.videoContext).toBe('In this video we cover the CAP model and its layers.');
   });
 
   it('returns null when slug not found', async () => {

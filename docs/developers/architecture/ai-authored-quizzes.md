@@ -50,15 +50,48 @@ codepath, no runtime LLM call for the question body.
 | `[AUTOAUTHOR_ALL]`         | tutorial-wide | mixed       |
 | `[AUTOAUTHOR_ALL:mcq]`     | tutorial-wide | MCQ only    |
 | `[AUTOAUTHOR_ALL:text]`    | tutorial-wide | text only   |
+| `[AUTOAUTHOR_VIDEO_N url=…]`   | step `N`      | mixed (from video) |
+| `[AUTOAUTHOR_VIDEO_N:mcq url=…]`  | step `N`      | MCQ only (from video) |
+| `[AUTOAUTHOR_VIDEO_N:text url=…]` | step `N`      | text only (from video) |
+| `[AUTOAUTHOR_VIDEO_ALL url=…]`     | tutorial-wide | one quiz from the video |
+| `[AUTOAUTHOR_VIDEO_ALL:mcq url=…]`  | tutorial-wide | MCQ only (from video) |
+| `[AUTOAUTHOR_VIDEO_ALL:text url=…]` | tutorial-wide | text only (from video) |
 
 Precedence (highest wins):
 
 1. **Hand-authored `[VALIDATE_N]`** for that step always wins. No
    AI call is made for that step — the AI path is strictly opt-in
    _additional_ coverage, never an override.
-2. **Per-step `[AUTOAUTHOR_N]`** wins over tutorial-wide.
+2. **Per-step `[AUTOAUTHOR_N]` / `[AUTOAUTHOR_VIDEO_N]`** wins over tutorial-wide.
 3. **`[AUTOAUTHOR_ALL]`** expands only on steps that have neither a
    hand-authored question nor a per-step directive.
+
+## Video-transcript variant (#2345)
+
+The `[AUTOAUTHOR_VIDEO_*]` directives generate the quiz from a **YouTube
+video's transcript** instead of the step's markdown body. Everything downstream
+(cache, `ValidationQuestion` shape, grading) is identical — only the *source
+text* differs.
+
+- `url=<youtube-url>` is required; `youtu.be/`, `watch?v=`, `/embed/`,
+  `/live/`, `/shorts/` shapes are accepted (`scripts/lib/youtube-id.ts`).
+- The build resolves the URL to a video id and fetches the transcript from the
+  deployed, anonymous `GET /api/devtoberfest/transcript?video=<id>` endpoint
+  (reused as-is — it reads/populates the shared `Transcript` HANA cache for any
+  video id, not just event videos). The build runs with `CAP_BASE_URL` set.
+- The transcript text is fed to `generateQuiz({ source: 'video' })`, which only
+  swaps the user-message heading (`VIDEO TRANSCRIPT` vs `TUTORIAL STEP CONTENT`).
+- **Tutorial-wide** `[AUTOAUTHOR_VIDEO_ALL]` generates **one** quiz from the
+  single video, attached to the first step with no hand-authored / per-step
+  content — it does **not** fan out one quiz per step.
+- **Fail-open:** an invalid URL, an unreachable endpoint, or a video with no
+  transcript (`source: 'none'`) drops that quiz with a warning; the build never
+  fails on a bad video.
+- **Transcript-aware grading:** the transcript excerpt (capped at 4000 chars)
+  is persisted on `ValidateAnswerSpecs.videoContext` and passed to the free-text
+  grader so it can judge answers that reference the video. Server-only — never
+  shipped to clients (stripped from public Hugo frontmatter alongside
+  `correctAnswer`). See [free-text grader](./free-text-grader.md) `PROMPT_VERSION` v4.
 
 ## Cache invalidation
 
@@ -66,13 +99,15 @@ Per-tutorial JSON cache at `.tutorial-cache/<slug>.ai-quiz-cache.json`.
 Each entry is keyed by a SHA-256 hash of:
 
 ```text
-stepBody          (verbatim from s.content)
+stepBody          (verbatim from s.content; the TRANSCRIPT text for video quizzes)
 \x00              (NUL separator)
 directiveSuffix   ('' | 'mcq' | 'text')
 \x00
-PROMPT_VERSION    (constant in srv/lib/ai-quiz-generator.js)
+PROMPT_VERSION    (constant in srv/lib/ai-quiz-generator.js — v2 as of #2345)
 \x00
 modelName         (recorded on first generation)
+\x00
+videoId           ('' for step quizzes; the YouTube id for [AUTOAUTHOR_VIDEO_*])
 ```
 
 What invalidates an entry:

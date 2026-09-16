@@ -10,8 +10,21 @@
 
 import { generateQuiz } from '../../srv/lib/ai-quiz-generator.js'
 import { hashKey, type AiQuizCache, type AiQuizCacheEntry } from './ai-quiz-cache.js'
+import { youtubeId } from './youtube-id.js'
 import type { ValidationQuestion } from '../parsers/types.js'
 import { QUESTION_TYPE_TEXT } from '../parsers/types.js'
+
+// [#2345] Transcript fetcher signature. Injected so the build path can supply
+// an HTTP-to-deployed-backend impl and unit tests can mock it. Mirrors the
+// return shape of srv/lib/devtoberfest-transcript.js's fetchTranscript.
+export type TranscriptFetcher = (videoId: string) => Promise<{
+  source: 'uploaded' | 'auto' | 'none'
+  segments: Array<{ start: number; text: string }>
+}>
+
+// [#2345] Cap for the transcript excerpt persisted as grader context. Matches
+// STEP_BODY_CAP in ai-quiz-generator.js so the excerpt stays bounded.
+const VIDEO_CONTEXT_CAP = 4000
 
 export interface ExpandStats {
   calls: number    // cache miss → LLM call
@@ -23,11 +36,16 @@ export interface ExpandStats {
 export interface AllDirective {
   types: 'mcq-and-text' | 'mcq-only' | 'text-only'
   present: true
+  // [#2345] When set, the tutorial-wide directive is the video variant:
+  // generate ONE quiz from this video's transcript (attached to the first step).
+  videoUrl?: string
 }
 
 interface PlaceholderQuestion extends ValidationQuestion {
   __autoauthor?: true
   __directiveTypes?: 'mcq-and-text' | 'mcq-only' | 'text-only'
+  // [#2345] present on video-sourced placeholders emitted by rules.ts.
+  __videoUrl?: string
 }
 
 const DEFAULT_HARD_CAP = parseInt(process.env.AI_AUTHOR_BUILD_CAP ?? '200', 10)
@@ -119,6 +137,10 @@ export async function expandAiAuthoredQuestions(
     // care about the empty-step guard.
     minSubstantiveWords?: number
     hashKeyOverride?: (input: any) => string
+    // [#2345] Injected transcript fetcher. Required for [AUTOAUTHOR_VIDEO_*]
+    // directives; when absent, video placeholders are dropped with a warning
+    // (a non-video build simply never provides it).
+    fetchTranscript?: TranscriptFetcher
   },
 ): Promise<void> {
   const hardCap = deps.hardCap ?? DEFAULT_HARD_CAP
@@ -129,19 +151,37 @@ export async function expandAiAuthoredQuestions(
   //    already have content in parsedMap. (Per-step directives have already
   //    been materialized by the parser.)
   if (deps.allDirective?.present) {
-    for (const [stepNum] of stepBodies) {
-      // [#208 precedence-fix] hand-authored wins over [AUTOAUTHOR_ALL],
-      // even when parseBlock didn't emit a ValidationQuestion (e.g.
-      // regex-substring blocks without ###Question).
-      if (deps.handAuthoredSteps?.has(stepNum)) continue
-      if ((parsedMap.get(stepNum) ?? []).length > 0) continue
-      parsedMap.set(stepNum, [{
-        id: `autoauthor-${stepNum}`,
-        question: '__autoauthor_placeholder__',
-        type: QUESTION_TYPE_TEXT,
-        __autoauthor: true,
-        __directiveTypes: deps.allDirective.types,
-      } as PlaceholderQuestion])
+    if (deps.allDirective.videoUrl) {
+      // [#2345] Tutorial-wide VIDEO directive: generate ONE quiz from the
+      // single video, attached to the first step that has no hand-authored
+      // content. (Non-video [AUTOAUTHOR_ALL] fans out per-step below.)
+      const firstStep = [...stepBodies.keys()].sort((a, b) => a - b)
+        .find(n => !deps.handAuthoredSteps?.has(n) && (parsedMap.get(n) ?? []).length === 0)
+      if (firstStep != null) {
+        parsedMap.set(firstStep, [{
+          id: `autoauthor-${firstStep}`,
+          question: '__autoauthor_placeholder__',
+          type: QUESTION_TYPE_TEXT,
+          __autoauthor: true,
+          __directiveTypes: deps.allDirective.types,
+          __videoUrl: deps.allDirective.videoUrl,
+        } as PlaceholderQuestion])
+      }
+    } else {
+      for (const [stepNum] of stepBodies) {
+        // [#208 precedence-fix] hand-authored wins over [AUTOAUTHOR_ALL],
+        // even when parseBlock didn't emit a ValidationQuestion (e.g.
+        // regex-substring blocks without ###Question).
+        if (deps.handAuthoredSteps?.has(stepNum)) continue
+        if ((parsedMap.get(stepNum) ?? []).length > 0) continue
+        parsedMap.set(stepNum, [{
+          id: `autoauthor-${stepNum}`,
+          question: '__autoauthor_placeholder__',
+          type: QUESTION_TYPE_TEXT,
+          __autoauthor: true,
+          __directiveTypes: deps.allDirective.types,
+        } as PlaceholderQuestion])
+      }
     }
   }
 
@@ -157,18 +197,57 @@ export async function expandAiAuthoredQuestions(
       continue
     }
 
-    const stepBody = stepBodies.get(stepNum) ?? ''
+    // [#2345] Resolve the effective generation body + provenance. For a normal
+    // placeholder the body is the tutorial step markdown. For a video
+    // placeholder we fetch the transcript and generate from THAT instead; the
+    // step markdown is irrelevant to a video quiz.
+    const source: 'step' | 'video' = placeholder.__videoUrl ? 'video' : 'step'
+    let stepBody = stepBodies.get(stepNum) ?? ''
+    let videoContext: string | undefined
+    let videoId: string | undefined
+    if (source === 'video') {
+      videoId = youtubeId(placeholder.__videoUrl!) ?? undefined
+      if (!videoId) {
+        console.warn(`[ai-author] step ${stepNum}: invalid YouTube URL "${placeholder.__videoUrl}" — dropping video quiz`)
+        parsedMap.set(stepNum, [])
+        continue
+      }
+      if (!deps.fetchTranscript) {
+        console.warn(`[ai-author] step ${stepNum}: no transcript fetcher available — dropping video quiz`)
+        parsedMap.set(stepNum, [])
+        continue
+      }
+      let transcript
+      try {
+        transcript = await deps.fetchTranscript(videoId)
+      } catch (err: any) {
+        console.warn(`[ai-author] step ${stepNum}: transcript fetch failed for ${videoId}: ${err?.message ?? err} — dropping video quiz`)
+        parsedMap.set(stepNum, [])
+        continue
+      }
+      if (!transcript || transcript.source === 'none' || !transcript.segments?.length) {
+        console.warn(`[ai-author] step ${stepNum}: no transcript for ${videoId} — dropping video quiz`)
+        deps.onCallStats.skips = (deps.onCallStats.skips ?? 0) + 1
+        parsedMap.set(stepNum, [])
+        delete deps.cache.entries[String(stepNum)]
+        continue
+      }
+      stepBody = transcript.segments.map(s => s.text).join(' ')
+      // Excerpt persisted alongside the emitted questions so the runtime
+      // grader can reference the video (bounded — see VIDEO_CONTEXT_CAP).
+      videoContext = stepBody.slice(0, VIDEO_CONTEXT_CAP)
+    }
 
     // [#311] Empty-step guard. Catch the abap-create-project step-5
     // failure mode: a step with no substantive body + an [AUTOAUTHOR_*]
     // directive made the LLM confabulate questions about completely
     // unrelated topics. Skip the LLM call entirely and clear any stale
     // cache entry so a future re-seed against substantive content
-    // doesn't surface ghosts.
+    // doesn't surface ghosts. Applies to transcript text too (#2345).
     const wordCount = countSubstantiveWords(stepBody)
     if (wordCount < minWords) {
       console.warn(
-        `[ai-author] skipping empty step ${stepNum} — body has ${wordCount} substantive words, threshold is ${minWords}`,
+        `[ai-author] skipping empty ${source} ${stepNum} — body has ${wordCount} substantive words, threshold is ${minWords}`,
       )
       deps.onCallStats.skips = (deps.onCallStats.skips ?? 0) + 1
       parsedMap.set(stepNum, [])
@@ -176,7 +255,9 @@ export async function expandAiAuthoredQuestions(
       continue
     }
 
-    const directive = `[AUTOAUTHOR_${stepNum}${placeholder.__directiveTypes !== 'mcq-and-text' ? ':' + (placeholder.__directiveTypes === 'mcq-only' ? 'mcq' : 'text') : ''}]`
+    const directive = source === 'video'
+      ? `[AUTOAUTHOR_VIDEO_${stepNum}${placeholder.__directiveTypes !== 'mcq-and-text' ? ':' + (placeholder.__directiveTypes === 'mcq-only' ? 'mcq' : 'text') : ''} url=${placeholder.__videoUrl}]`
+      : `[AUTOAUTHOR_${stepNum}${placeholder.__directiveTypes !== 'mcq-and-text' ? ':' + (placeholder.__directiveTypes === 'mcq-only' ? 'mcq' : 'text') : ''}]`
     const types = placeholder.__directiveTypes ?? 'mcq-and-text'
 
     const entryKey = String(stepNum)
@@ -187,6 +268,9 @@ export async function expandAiAuthoredQuestions(
         types,
         promptVersion: deps.cache.promptVersion,
         modelName: deps.cache.modelName,
+        // [#2345] videoId disambiguates the cache entry even if two videos
+        // ever produced byte-identical transcript text under the same directive.
+        videoId,
       })
     const stepHash = computeHash()
 
@@ -207,14 +291,22 @@ export async function expandAiAuthoredQuestions(
       stepNumber: stepNum,
       slug: '<unknown>',  // expand-ai-authored doesn't know the slug; loaded by caller
       types,
+      source,
       deps: { callModel: deps.callModel },
     })
 
     if (result.errorReason || result.questions.length === 0) {
       deps.onCallStats.errors++
-      console.warn(`[ai-author] step ${stepNum}: ${result.errorReason ?? 'empty result'}`)
+      console.warn(`[ai-author] ${source} ${stepNum}: ${result.errorReason ?? 'empty result'}`)
       parsedMap.set(stepNum, [])
       continue
+    }
+
+    // [#2345] Stamp the transcript excerpt onto every emitted question so the
+    // pipeline (collectAiGradedSpecs → ValidateAnswerSpecs.videoContext) and
+    // the eval cache both carry it. Server-only, never shipped to the client.
+    if (videoContext) {
+      for (const q of result.questions) (q as any).__videoContext = videoContext
     }
 
     // Two transforms — same questions, different shape per consumer:

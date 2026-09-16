@@ -13,6 +13,14 @@ const AUTOAUTHOR_PER_STEP_MARKER = /^\[AUTOAUTHOR_(\d+)(?::(mcq|text))?\]\s*$/
 // the result and lets Phase 3 expand against the actual step count.
 const AUTOAUTHOR_ALL_MARKER = /^\[AUTOAUTHOR_ALL(?::(mcq|text))?\]\s*$/
 
+// [#2345] Video-transcript variants. Same shape as the markers above plus a
+// mandatory `url=<youtube-url>`. Phase 3 resolves the URL to a transcript and
+// feeds it to generateQuiz(source:'video') instead of step markdown.
+//   [AUTOAUTHOR_VIDEO_N url=...] / [AUTOAUTHOR_VIDEO_N:mcq|text url=...]
+//   [AUTOAUTHOR_VIDEO_ALL url=...] / [AUTOAUTHOR_VIDEO_ALL:mcq|text url=...]
+const AUTOAUTHOR_VIDEO_PER_STEP_MARKER = /^\[AUTOAUTHOR_VIDEO_(\d+)(?::(mcq|text))?\s+url=(\S+)\]\s*$/
+const AUTOAUTHOR_VIDEO_ALL_MARKER = /^\[AUTOAUTHOR_VIDEO_ALL(?::(mcq|text))?\s+url=(\S+)\]\s*$/
+
 type AutoAuthorTypes = 'mcq-and-text' | 'mcq-only' | 'text-only'
 function suffixToTypes(suffix: 'mcq' | 'text' | undefined): AutoAuthorTypes {
   if (suffix === 'mcq') return 'mcq-only'
@@ -55,7 +63,9 @@ export function parseRulesVrEnriched(content: string): {
   // [#208] tutorial-wide [AUTOAUTHOR_ALL] / [AUTOAUTHOR_ALL:mcq|text] directive,
   // captured for the post-parse expansion step (it doesn't know the step list
   // until fetch-tutorials.ts iterates `steps`).
-  allDirective?: { types: 'mcq-and-text' | 'mcq-only' | 'text-only'; present: true }
+  // [#2345] `videoUrl` is set when the directive is the [AUTOAUTHOR_VIDEO_ALL]
+  // variant — Phase 3 generates a single video-sourced quiz from that URL.
+  allDirective?: { types: 'mcq-and-text' | 'mcq-only' | 'text-only'; present: true; videoUrl?: string }
   // [#208 precedence-fix] Set of step numbers that have ANY hand-authored
   // [VALIDATE_N] block, regardless of whether parseBlock emitted a
   // ValidationQuestion (e.g. regex-substring blocks without ###Question
@@ -72,7 +82,9 @@ export function parseRulesVrEnriched(content: string): {
   // [#208] per-step AUTOAUTHOR directives — materialized into placeholders
   // AFTER the main loop so hand-authored [VALIDATE_N] content always wins.
   const perStepAutoAuthor = new Map<number, AutoAuthorTypes>()
-  let allDirective: { types: AutoAuthorTypes; present: true } | undefined
+  // [#2345] per-step video directives: stepNum → { types, videoUrl }.
+  const perStepVideoAutoAuthor = new Map<number, { types: AutoAuthorTypes; videoUrl: string }>()
+  let allDirective: { types: AutoAuthorTypes; present: true; videoUrl?: string } | undefined
   const lines = content.split('\n')
 
   let currentNum: number | null = null
@@ -101,6 +113,28 @@ export function parseRulesVrEnriched(content: string): {
     if (allMatch) {
       flush()
       allDirective = { types: suffixToTypes(allMatch[1] as 'mcq' | 'text' | undefined), present: true }
+      continue
+    }
+    // [#2345] Video variants are checked before the non-video per-step marker
+    // so their `url=` payload isn't misread. (The regexes are disjoint anyway
+    // — the VIDEO markers require the AUTOAUTHOR_VIDEO_ prefix — but ordering
+    // them first keeps the intent obvious.)
+    const videoAllMatch = line.match(AUTOAUTHOR_VIDEO_ALL_MARKER)
+    if (videoAllMatch) {
+      flush()
+      allDirective = {
+        types: suffixToTypes(videoAllMatch[1] as 'mcq' | 'text' | undefined),
+        present: true,
+        videoUrl: videoAllMatch[2],
+      }
+      continue
+    }
+    const videoPerStepMatch = line.match(AUTOAUTHOR_VIDEO_PER_STEP_MARKER)
+    if (videoPerStepMatch) {
+      flush()
+      const num = Number(videoPerStepMatch[1])
+      const types = suffixToTypes(videoPerStepMatch[2] as 'mcq' | 'text' | undefined)
+      perStepVideoAutoAuthor.set(num, { types, videoUrl: videoPerStepMatch[3] })
       continue
     }
     const perStepMatch = line.match(AUTOAUTHOR_PER_STEP_MARKER)
@@ -153,6 +187,21 @@ export function parseRulesVrEnriched(content: string): {
       type: QUESTION_TYPE_TEXT,
       __autoauthor: true,
       __directiveTypes: types,
+    } as any]) // sentinel fields not on ValidationQuestion's exported type
+  }
+
+  // [#2345] Same materialization for per-step video directives, plus the
+  // `__videoUrl` sentinel Phase 3 uses to fetch the transcript. Hand-authored
+  // [VALIDATE_N] still wins.
+  for (const [num, { types, videoUrl }] of perStepVideoAutoAuthor) {
+    if (handAuthoredSteps.has(num)) continue
+    result.set(num, [{
+      id: `autoauthor-${num}`,
+      question: '__autoauthor_placeholder__',
+      type: QUESTION_TYPE_TEXT,
+      __autoauthor: true,
+      __directiveTypes: types,
+      __videoUrl: videoUrl,
     } as any]) // sentinel fields not on ValidationQuestion's exported type
   }
 
@@ -351,6 +400,8 @@ export interface AiGradedSpec {
   correctAnswer: string
   ruleType: string | undefined
   aiGrading: boolean
+  // [#2345] Transcript excerpt for video-sourced quizzes; omitted otherwise.
+  videoContext?: string
 }
 
 /**
@@ -375,14 +426,21 @@ export function collectAiGradedSpecs(
         // question it emits, AI-graded or not. Defensive log + skip.
         continue
       }
-      specs.push({
+      const spec: AiGradedSpec = {
         stepNumber,
         questionId: q.id,
         questionText: q.question,
         correctAnswer,                    // <-- from sibling map, NOT q.correctAnswer
         ruleType: ruleTypeByStepAndId.get(key),
         aiGrading: true
-      })
+      }
+      // [#2345] Carry the transcript excerpt stamped by expandAiAuthoredQuestions
+      // onto the emitted question, so it reaches ValidateAnswerSpecs.videoContext.
+      const videoContext = (q as any).__videoContext
+      if (typeof videoContext === 'string' && videoContext.length > 0) {
+        spec.videoContext = videoContext
+      }
+      specs.push(spec)
     }
   }
   return specs

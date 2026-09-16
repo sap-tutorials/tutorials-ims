@@ -36,10 +36,18 @@
 // Pairs with a client change (#2348): a "partial" verdict now UNLOCKS step
 // progression with an advisory hint rather than blocking + forcing retries
 // (which risked exhausting the per-user LLM token/rate-limit budget).
+//
+// v4 (2026-09-16) — Video-transcript grounding (#2345). buildUserMessage now
+// accepts an optional `videoContext` (a capped transcript excerpt for
+// video-sourced quizzes). When present it is inserted between the question and
+// the author's expected answer so the grader can judge answers that reference
+// the video. When absent the user message is byte-identical to v3, so
+// step-sourced grading is unchanged; the version bump lets telemetry separate
+// video-grounded from plain submissions.
 
 export { redactReferenceLeaks } from './code-check-prompt.js';
 
-export const PROMPT_VERSION = 'v3';
+export const PROMPT_VERSION = 'v4';
 
 export function buildSystemPrompt() {
   return `You are a patient tutorial grader evaluating a learner's answer to a free-text
@@ -84,23 +92,32 @@ Output JSON: { verdict, summary, hint }
   answer's wording.
 
 NEVER reveal the author's expected answer literally. Speak about concepts.
-NEVER fabricate or invent additional context the question didn't include.`;
+NEVER fabricate or invent additional context the question didn't include.
+When a video transcript excerpt is provided, the learner's answer may draw on
+the video; use the excerpt only to judge correctness and NEVER quote it.`;
 }
 
 /**
  * Deterministic, ordered user message. Sections always in this order:
- *   Question → Author's expected answer → Learner's answer.
+ *   Question → [Video transcript context, if any] → Author's expected answer → Learner's answer.
  * No "step text" or "tutorial samples" sections — text-question grading
  * doesn't benefit from broader tutorial context (this diverges from
  * code-check, which DOES include those because code grading benefits
  * more from "what was the learner being taught when they wrote this code").
+ *
+ * [#2345] `videoContext` is an optional transcript excerpt for video-sourced
+ * quizzes. When non-empty it is inserted right after the question so the
+ * grader has the same grounding the question was generated from. Absent /
+ * empty → the message is identical to the pre-v4 shape.
  */
-export function buildUserMessage({ question, correctAnswer, submittedAnswer }) {
-  return [
-    `Question:\n${question}`,
-    `Author's expected answer (DO NOT QUOTE — for your judgment only):\n${correctAnswer}`,
-    `Learner's answer:\n${submittedAnswer}`
-  ].join('\n\n');
+export function buildUserMessage({ question, correctAnswer, submittedAnswer, videoContext }) {
+  const sections = [`Question:\n${question}`];
+  if (typeof videoContext === 'string' && videoContext.length > 0) {
+    sections.push(`Video transcript context (for your judgment only — do not quote):\n${videoContext}`);
+  }
+  sections.push(`Author's expected answer (DO NOT QUOTE — for your judgment only):\n${correctAnswer}`);
+  sections.push(`Learner's answer:\n${submittedAnswer}`);
+  return sections.join('\n\n');
 }
 
 /**

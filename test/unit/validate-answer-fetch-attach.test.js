@@ -102,4 +102,24 @@ describe('collectAiGradedSpecs (#209)', () => {
     expect(specs.map(s => s.questionId)).toEqual(['validate-1b', 'validate-1d']);
     expect(specs.map(s => s.correctAnswer)).toEqual(['A1b', 'A1d']);
   });
+
+  it('[#2345] carries __videoContext onto the emitted spec when present', () => {
+    const validation = new Map([
+      [1, [
+        { id: 'validate-1-ai-1', question: 'What did the video cover?', type: 'text', aiGrading: true, aiAuthored: true, __videoContext: 'The video covers the CAP model.' }
+      ]],
+      [2, [
+        { id: 'validate-2', question: 'Q2', type: 'text', aiGrading: true }  // no video context
+      ]]
+    ]);
+    const ruleTypes = new Map([['1:validate-1-ai-1', 'ai-authored'], ['2:validate-2', 'exact-match']]);
+    const correctAnswers = new Map([['1:validate-1-ai-1', 'A1'], ['2:validate-2', 'A2']]);
+
+    const specs = collectAiGradedSpecs(validation, ruleTypes, correctAnswers);
+
+    const withVideo = specs.find(s => s.questionId === 'validate-1-ai-1');
+    const withoutVideo = specs.find(s => s.questionId === 'validate-2');
+    expect(withVideo.videoContext).toBe('The video covers the CAP model.');
+    expect(withoutVideo.videoContext).toBeUndefined();
+  });
 });
