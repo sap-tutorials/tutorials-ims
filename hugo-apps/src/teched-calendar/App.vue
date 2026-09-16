@@ -372,7 +372,7 @@ watch([viewMode, cursor, filterTrack, filterVenue, filterQuery, selectedRow], wr
 
     <!-- Detail panel — row cast via `as any` since TechEd session extends Session
          with extras (sessionCode, venue) that DetailPanel accesses via (row as any). -->
-    <DetailPanel :row="(selectedRow as any)" :edition-id="null" @close="selectedRow = null" />
+    <DetailPanel :row="(selectedRow as any)" :edition-id="null" source="teched" @close="selectedRow = null" />
   </div>
 </template>
 

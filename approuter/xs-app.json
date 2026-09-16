@@ -156,6 +156,18 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/api/teched/session/([^/?]+)(\\?.*)?$",
+      "target": "/api/teched/session/$1$2",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/api/teched/feed\\.ics(\\?.*)?$",
+      "target": "/api/teched/feed.ics$1",
+      "destination": "srv-api",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/api/devtoberfest/join(\\?.*)?$",
       "target": "/api/devtoberfest/join$1",
       "destination": "srv-api",
