@@ -686,6 +686,24 @@ jobs:
           AUTHOR_CHANNEL: ${{ steps.env.outputs.target == 'qa' && 'qa' || 'prod' }}
         run: npx tsx scripts/seed-authors-from-deployed.ts
 
+      # [#2312] TechEd sessions feed. Writes hugo/data/teched.json from the target
+      # env's /build/teched, which the /teched/ Hugo page bakes into a
+      # <script id="teched-data"> blob and publish-content.ts commits to the
+      # page-teched HANA BLOB (page-teched is in srv/lib/page-key-map.js's
+      # IN_SCOPE_PAGES, so it republishes on every non-slug rebuild). This
+      # workflow drives /tmp/hugo directly rather than `npm run build:all` (which
+      # chains fetch-teched), so — exactly like the feed fetchers above — it must
+      # be an explicit step here. WITHOUT it, .Site.Data.teched is nil and Hugo's
+      # jsonify emits the literal string "null" → the baked+published page-teched
+      # blob carries <script id="teched-data">null</script>, crashing the island
+      # and leaving speakers unlinked (authorLogin enrichment reads author_index.json,
+      # emitted by "Fetch tutorials" above in full mode). Positioned AFTER the
+      # author-index-producing steps and BEFORE the Hugo build.
+      - name: Fetch teched
+        run: npm run fetch-teched
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
