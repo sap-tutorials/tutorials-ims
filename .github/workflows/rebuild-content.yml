@@ -801,6 +801,22 @@ jobs:
           channel: ${{ steps.env.outputs.target }}
           min-slugs: '1'
 
+      # Catalog-freshness SEO gate. The seo-files smoke assertions that a served
+      # page-* BLOB carries the FULL catalog (llms-full.txt > 10 KB, sitemap.xml
+      # names /tutorials/ URLs) are gated behind SMOKE_CONTENT_FRESH in
+      # test/smoke/seo-files.test.js — they are NOT owned by a deploy (which ships
+      # only the srv fallback) but by THIS publish. Running them here, right after
+      # a successful publish, is where they actually verify something: it catches
+      # the "publish landed but the catalog blob is thin/empty" class that
+      # /content/hashes row-count alone (verify-publish-landed above) misses.
+      # SMOKE_BASE_URL → approuter (these are approuter-served routes, not srv).
+      - name: Verify SEO catalog freshness
+        if: ${{ steps.publish.outcome == 'success' }}
+        env:
+          SMOKE_BASE_URL: ${{ steps.url.outputs.approuter_url }}
+          SMOKE_CONTENT_FRESH: '1'
+        run: npx vitest run --project smoke test/smoke/seo-files.test.js
+
       # #2288 — same-filename image byte changes are invisible to the publish
       # delta detector: publish hashes rendered HTML + source markdown, never the
       # image bytes, so a screenshot edited in place (unchanged filename → unchanged
