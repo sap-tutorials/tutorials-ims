@@ -32,3 +32,17 @@ export function feedRssHref(editionId?: string | null): string {
 export function subscribeWebcalHref(host: string, editionId?: string | null): string {
   return withEdition(`webcal://${host}${FEED_BASE}/feed.ics`, editionId);
 }
+
+// --- TechEd variants ------------------------------------------------------
+// TechEd sessions are served by a separate endpoint (/api/teched/session/:slug.ics)
+// and are keyed by slug, with no edition concept. Same server-side redirect
+// pattern for ?to=google|outlook (single source of truth for date logic).
+const TECHED_FEED_BASE = '/api/teched';
+
+export function techedSessionIcsHref(slug: string): string {
+  return `${TECHED_FEED_BASE}/session/${encodeURIComponent(slug)}.ics`;
+}
+
+export function techedSessionCalendarHref(slug: string, to: 'google' | 'outlook'): string {
+  return `${TECHED_FEED_BASE}/session/${encodeURIComponent(slug)}.ics?to=${to}`;
+}

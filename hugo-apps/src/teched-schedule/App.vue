@@ -311,6 +311,7 @@ defineExpose({ filters });
       v-if="selectedRow"
       :row="selectedRow"
       :edition-id="null"
+      source="teched"
       @close="selectedRow = null"
     />
 

@@ -406,7 +406,7 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
     </template>
 
     <!-- Detail panel — renders as a fixed overlay when a card is selected -->
-    <DetailPanel :row="(selectedRow as any)" @close="selectedRow = null" />
+    <DetailPanel :row="(selectedRow as any)" source="teched" @close="selectedRow = null" />
   </div>
 </template>
 <style scoped>

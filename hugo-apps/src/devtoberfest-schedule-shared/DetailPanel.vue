@@ -3,7 +3,7 @@ import type { ScheduleRow } from './types';
 import { youtubeThumb, safeHref, taskHref, taskLinkLabel } from './completion';
 import { youtubeId, youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal } from './format-session-time';
-import { sessionIcsHref, sessionCalendarHref } from './calendar-links';
+import { sessionIcsHref, sessionCalendarHref, techedSessionIcsHref, techedSessionCalendarHref } from './calendar-links';
 import { broadcastingTag } from './broadcasting';
 import { renderMarkdown } from '../devtoberfest-shared/render-markdown';
 import { computed, ref } from 'vue';
@@ -11,6 +11,11 @@ import { computed, ref } from 'vue';
 const props = defineProps<{
   row: ScheduleRow | null;
   editionId?: string | null;
+  // Event source. Devtoberfest rows carry kind:'session' + numeric id and use
+  // the /api/devtoberfest endpoints. TechEd rows are keyed by slug (no kind/id)
+  // and use /api/teched. Defaults to devtoberfest so existing callers are
+  // unchanged; the teched-sessions-grid passes source="teched".
+  source?: 'devtoberfest' | 'teched';
 }>();
 
 const emit = defineEmits<{
@@ -81,14 +86,30 @@ const taskLinkLabelTitle = computed(() =>
   taskLinkLabel(props.row as any).replace(/\b\w/g, (c) => c.toUpperCase()),
 );
 
-const isSession = computed(() => props.row?.kind === 'session');
-const isActivity = computed(() => props.row?.kind === 'activity');
+const isTeched = computed(() => props.source === 'teched');
+// A devtoberfest row is a session by its kind discriminator; a teched row has no
+// kind (it's a TechEdSession), so for teched the "is a session" test is implicit.
+const isSession = computed(() => isTeched.value || props.row?.kind === 'session');
+const isActivity = computed(() => !isTeched.value && props.row?.kind === 'activity');
 
 // Calendar affordances only make sense for a session that has a start time.
 const showCalendar = computed(() => isSession.value && !!(props.row as any)?.scheduledStart);
-const icsHref = computed(() => (showCalendar.value ? sessionIcsHref(props.row!.id, props.editionId) : ''));
-const googleHref = computed(() => (showCalendar.value ? sessionCalendarHref(props.row!.id, 'google', props.editionId) : ''));
-const outlookHref = computed(() => (showCalendar.value ? sessionCalendarHref(props.row!.id, 'outlook', props.editionId) : ''));
+// TechEd sessions are keyed by slug and use /api/teched; devtoberfest by id +
+// /api/devtoberfest (with optional editionId).
+const calendarKey = computed(() => (isTeched.value ? (props.row as any)?.slug : props.row?.id));
+// Single guard + source branch for all three calendar affordances.
+function calHref(to?: 'google' | 'outlook'): string {
+  if (!showCalendar.value || !calendarKey.value) return '';
+  if (isTeched.value) {
+    return to ? techedSessionCalendarHref(calendarKey.value, to) : techedSessionIcsHref(calendarKey.value);
+  }
+  return to
+    ? sessionCalendarHref(calendarKey.value, to, props.editionId)
+    : sessionIcsHref(calendarKey.value, props.editionId);
+}
+const icsHref = computed(() => calHref());
+const googleHref = computed(() => calHref('google'));
+const outlookHref = computed(() => calHref('outlook'));
 
 function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.display = 'none'; }
 

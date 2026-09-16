@@ -54,6 +54,7 @@ import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as eventLogoPublic from './routes/event-logo-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
+import * as techedIcal from './routes/teched-ical.js';
 import * as devtoberfestScheduleCheck from './routes/devtoberfest-schedule-check.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
 import * as devtoberfestCatGame from './routes/devtoberfest-cat-game.js';
@@ -758,6 +759,7 @@ cds.on('bootstrap', (app) => {
   devtoberfestPublic.register(app);
   eventLogoPublic.register(app);
   devtoberfestSchedule.register(app);
+  techedIcal.register(app);
   devtoberfestScheduleCheck.register(app);
   devtoberfestAuth.register(app);
   devtoberfestCatGame.register(app);
