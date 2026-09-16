@@ -471,16 +471,52 @@ function writeStepSummary(markdown: string) {
   }
 }
 
-export function validateFlagCombo(flags: { force: boolean; heal: boolean; verifyOnly: boolean; purgeOrphans?: boolean }) {
+export function validateFlagCombo(flags: { force: boolean; heal: boolean; verifyOnly: boolean; purgeOrphans?: boolean; unpublishSlugs?: boolean }) {
   const modes = [
     flags.force && 'force',
     flags.heal && 'heal',
     flags.verifyOnly && 'verify-only',
-    flags.purgeOrphans && 'purge-orphans'
+    flags.purgeOrphans && 'purge-orphans',
+    flags.unpublishSlugs && 'unpublish-slugs'
   ].filter(Boolean);
   if (modes.length > 1) {
     throw new Error(`Flags ${modes.join(', ')} are mutually exclusive`);
   }
+}
+
+/**
+ * #2349 — parse + validate the `--unpublish-slugs <csv>` argument into a clean
+ * slug list. Unlike `--purge-orphans` (which COMPUTES the orphan set by diffing
+ * a full local cache against the server), this mode is handed an EXPLICIT list
+ * of slugs already known to be deleted upstream — the source-repo dispatch
+ * computed them from `git diff --diff-filter=D`. So there is no cache to read
+ * and no discovery to trust; the list IS the input.
+ *
+ * Validation mirrors the dispatch/receiver slug charset contract (lowercase
+ * canonical [a-z0-9-]): split on comma, trim, drop empties, lowercase, and
+ * reject any token with a non-slug character so a malformed dispatch payload
+ * can never reach the soft-delete endpoint. De-dupes while preserving order.
+ *
+ * Pure: no I/O. Throws on an empty result (an unpublish call with zero valid
+ * slugs is a caller bug — fail loud rather than POST an empty batch).
+ */
+export function parseUnpublishSlugs(csv: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of (csv ?? '').split(',')) {
+    const s = raw.trim().toLowerCase();
+    if (!s) continue;
+    if (!/^[a-z0-9-]+$/.test(s)) {
+      throw new Error(`--unpublish-slugs: invalid slug "${raw.trim()}" (must be lowercase [a-z0-9-])`);
+    }
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  if (out.length === 0) {
+    throw new Error('--unpublish-slugs: no valid slugs after parsing');
+  }
+  return out;
 }
 
 export type PublishMode = 'force' | 'heal' | 'delta';
@@ -605,6 +641,7 @@ interface PublishOptions {
   batchSize: number;
   purgeOrphans: boolean;
   purgeCapAbs: number;
+  unpublishSlugs: string;
   slug: string;
 }
 
@@ -636,6 +673,12 @@ function parseArgs(argv: string[]): PublishOptions {
     batchSize:   parseInt(get('--batch-size', '50'), 10),
     purgeOrphans: has('--purge-orphans'),
     purgeCapAbs:  parseInt(get('--purge-cap-abs', process.env.PURGE_CAP_ABS ?? '50'), 10),
+    // #2349 — targeted unpublish. Comma-separated slugs known-deleted upstream
+    // (source-repo dispatch computed them via `git diff --diff-filter=D`). POSTs
+    // them straight to /content/orphan-purge (soft-delete) — no cache read, no
+    // orphan computation. Env fallback so the workflow can pass the dispatch's
+    // deleted_slugs through without an extra flag. Empty = mode off.
+    unpublishSlugs: get('--unpublish-slugs', process.env.UNPUBLISH_SLUGS ?? ''),
     // #1278 — single-tutorial fast path. When set, only this slug is hashed +
     // published; the server carries forward all other slugs from the prior
     // ACTIVE version (normal delta behavior), so the catalog stays complete.
@@ -840,6 +883,118 @@ async function main() {
     for (const s of drifted.slice(0, 50).sort()) console.error(`  - ${s}`);
     if (drifted.length > 50) console.error(`  ... (+${drifted.length - 50} more)`);
     process.exit(2);
+  }
+
+  // --- --unpublish-slugs short-circuit (#2349) ---
+  // Targeted soft-delete of an EXPLICIT list of tutorials deleted upstream.
+  // Unlike --purge-orphans (which diffs a full local cache to DISCOVER orphans),
+  // the slug list here is already known — the source-repo dispatch computed it
+  // via `git diff --diff-filter=D` and passed it as deleted_slugs. So this mode
+  // reads no cache and fetches no catalog; it just POSTs the list to the same
+  // /content/orphan-purge endpoint (soft-delete, redirectTo-honoring, bucketed).
+  // Reuses the purge endpoint, the cap, and the bucket-report shape.
+  if (opts.unpublishSlugs) {
+    // CI-only guard — same posture as --purge-orphans; a destructive soft-delete
+    // must never run from a workstation against whatever env CAP_BASE_URL points at.
+    if (!process.env.GITHUB_ACTIONS) {
+      console.error('unpublish-slugs is CI-only; it is driven by the rebuild-content deletion lane.');
+      process.exit(1);
+    }
+    if (!Number.isFinite(opts.purgeCapAbs) || opts.purgeCapAbs <= 0) {
+      console.error(`Invalid --purge-cap-abs / PURGE_CAP_ABS: "${process.env.PURGE_CAP_ABS ?? '(unset)'}" — must be a positive integer`);
+      process.exit(1);
+    }
+
+    let slugs: string[];
+    try {
+      slugs = parseUnpublishSlugs(opts.unpublishSlugs);
+    } catch (err) {
+      console.error(`[unpublish-slugs] ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+
+    // Same 50-slug default cap as --purge-orphans: a commit deleting >50
+    // tutorials is exactly the "did the author really mean this?" case. Fail
+    // loud; operator re-runs deliberately (or splits the batch).
+    const capErr = enforceCap(slugs.length, opts.purgeCapAbs);
+    if (capErr) {
+      console.error(`[unpublish-slugs] ${capErr}`);
+      for (const s of slugs.slice(0, 20)) console.error(`  - ${s}`);
+      process.exit(1);
+    }
+
+    console.log(`[unpublish-slugs] ${slugs.length} slug(s) to unpublish: ${slugs.slice(0, 10).join(', ')}${slugs.length > 10 ? ` ... (+${slugs.length - 10} more)` : ''}`);
+
+    if (opts.dryRun) {
+      console.log(`[unpublish-slugs] --dry-run: would have unpublished ${slugs.length} slug(s); exiting`);
+      process.exit(0);
+    }
+
+    const purgeUrl = `${opts.baseUrl.replace(/\/$/, '')}/content/orphan-purge`;
+    const initiator = opts.initiator;
+    console.log(`[unpublish-slugs] POST ${purgeUrl} (${slugs.length} slugs, initiator=${initiator})`);
+
+    let resp: Response;
+    try {
+      resp = await fetch(purgeUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${opts.apiKey}`,
+          'Content-Type':  'application/json',
+          'x-initiator':   initiator
+        },
+        body: JSON.stringify({ slugs })
+      });
+    } catch (err) {
+      console.error(`[unpublish-slugs] Connectivity error — verify CAP_BASE_URL: ${formatErrorChain(err)}`);
+      process.exit(1);
+    }
+
+    if (!resp.ok) {
+      const bodyText = await resp.text();
+      let msg: string;
+      if (resp.status === 401 || resp.status === 403) {
+        msg = 'Auth failure — check CONTENT_API_KEY secret for this environment';
+      } else if (resp.status === 400) {
+        msg = `Server rejected payload — ${bodyText}`;
+      } else if (resp.status >= 500) {
+        msg = `Server error — retry once with same INITIATOR; endpoint is idempotent. Body: ${bodyText}`;
+      } else {
+        msg = `Unexpected status ${resp.status}: ${bodyText}`;
+      }
+      console.error(`[unpublish-slugs] ${msg}`);
+      process.exit(1);
+    }
+
+    const result = await resp.json() as {
+      purged: string[]; alreadyInactive: string[]; notFound: string[]; redirected: string[];
+      totalAttempted: number; totalPurged: number; version: number;
+    };
+    const bucketSum = result.purged.length + result.alreadyInactive.length + result.notFound.length + result.redirected.length;
+    if (bucketSum !== result.totalAttempted) {
+      console.error(`[unpublish-slugs] Server returned malformed response: bucket sum ${bucketSum} != totalAttempted ${result.totalAttempted}`);
+      process.exit(1);
+    }
+
+    console.log('[unpublish-slugs] Response:');
+    console.log(`  purged:          ${result.purged.length}`);
+    console.log(`  alreadyInactive: ${result.alreadyInactive.length}`);
+    console.log(`  notFound:        ${result.notFound.length}${result.notFound.length ? ` (no Tutorials row — never published, or already hard-gone: ${result.notFound.join(', ')})` : ''}`);
+    console.log(`  redirected:      ${result.redirected.length}${result.redirected.length ? ` (preserved: ${result.redirected.slice(0, 5).join(', ')})` : ''}`);
+    console.log(`  manifest version: ${result.version}`);
+    writeStepSummary(formatStepSummary({
+      mode: 'committed',
+      serverCount: result.totalAttempted,
+      orphanCount: slugs.length,
+      purged: result.purged.length,
+      alreadyInactive: result.alreadyInactive.length,
+      notFound: result.notFound.length,
+      redirected: result.redirected.length,
+      redirectedSamples: result.redirected,
+      version: result.version
+    }));
+    console.log(`[unpublish-slugs] Done — ${result.purged.length} slug(s) soft-deleted`);
+    process.exit(0);
   }
 
   // --- --purge-orphans short-circuit ---
@@ -1064,7 +1219,7 @@ async function main() {
   }
   log('Production build validation passed');
 
-  validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly, purgeOrphans: opts.purgeOrphans });
+  validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly, purgeOrphans: opts.purgeOrphans, unpublishSlugs: !!opts.unpublishSlugs });
 
   // #672 — resolve the per-slug operator override up front so a misused
   // `--allow-revert` (without `--slug`) fails loudly BEFORE any publish work.
