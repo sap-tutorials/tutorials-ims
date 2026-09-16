@@ -13,8 +13,12 @@ interface TechEdFeed { sessions: TechEdSession[]; speakers: RawSpeaker[]; tracks
 // baked by both list.html and schedule.html; falls back to /build/teched.
 async function loadFeed(): Promise<TechEdFeed> {
   const el = typeof document !== 'undefined' ? document.getElementById('teched-data') : null;
-  if (el?.textContent && el.textContent.trim()) {
-    return JSON.parse(el.textContent) as TechEdFeed;
+  // Hugo's jsonify of a nil .Site.Data.teched emits the literal string "null" —
+  // truthy and non-empty, but JSON.parse("null") returns null, which then throws
+  // downstream. Treat "null" as absent and fall through to /build/teched.
+  const text = el?.textContent?.trim();
+  if (text && text !== 'null') {
+    return JSON.parse(text) as TechEdFeed;
   }
   const r = await fetch('/build/teched', { headers: { Accept: 'application/json' } });
   if (!r.ok) throw new Error(`teched ${r.status}`);

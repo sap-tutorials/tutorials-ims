@@ -358,5 +358,22 @@ describe('TechEd sessions grid', () => {
     expect(wrapper.find('a[href="/authors/ada-lovelace/"]').exists()).toBe(false);
     expect(wrapper.text()).toContain('Ada Lovelace');
   });
+
+  it('falls back to /build/teched when #teched-data contains literal "null" (missing hugo/data/teched.json)', async () => {
+    // Hugo's jsonify of a nil .Site.Data.teched emits the string "null" — truthy
+    // and non-empty, but JSON.parse("null") returns null. loadFeed() must skip the
+    // blob and fall through to the network fetch (mocked in beforeEach to return feed).
+    const el = document.createElement('script');
+    el.id = 'teched-data';
+    el.type = 'application/json';
+    el.textContent = 'null';
+    document.body.appendChild(el);
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('AI on BTP');
+    expect(global.fetch).toHaveBeenCalled();
+  });
 });
 
