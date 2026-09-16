@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync, readdirSync, unlinkSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { hugoFrontmatterStringify as yamlStringify } from './hugo-yaml.js'
-import { buildAuthorIndex, type AuthorTutorialRow, type AuthorIndex } from '../parsers/author-index'
+import { buildAuthorIndex, type AuthorTutorialRow, type AuthorIndex, type AuthorSessions } from '../parsers/author-index'
 
 /**
  * Write author artifacts from an ALREADY-BUILT index:
@@ -72,8 +72,10 @@ export function writeAuthorPages(opts: {
   /** ACTIVE/published catalog slug set (lowercase). Rows whose slug isn't in it
    *  are excluded (unpublished/deleted). Fail-open when empty/undefined. */
   activeSlugs?: Set<string>
+  /** Conference sessions per author login (issue #2354). Fail-open when absent. */
+  sessionsByLogin?: Map<string, AuthorSessions>
 }): { pagesWritten: number } {
-  const { rows, advocates, dataFile, contentDir, publishFile, activeSlugs } = opts
-  const index = buildAuthorIndex(rows, advocates, activeSlugs)
+  const { rows, advocates, dataFile, contentDir, publishFile, activeSlugs, sessionsByLogin } = opts
+  const index = buildAuthorIndex(rows, advocates, activeSlugs, sessionsByLogin)
   return writeAuthorPagesFromIndex({ index, dataFile, contentDir, publishFile })
 }
