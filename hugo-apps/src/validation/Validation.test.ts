@@ -145,7 +145,7 @@ afterEach(() => {
 // ── Helper: drive a submission ────────────────────────────────────────
 
 interface VmExposed {
-  result: 'correct' | 'incorrect' | 'partial' | 'disabled' | null
+  result: 'correct' | 'accepted' | 'incorrect' | 'partial' | 'disabled' | null
   pending: boolean
   hint: string
   submitted: boolean
@@ -251,6 +251,9 @@ describe('Validation.vue — #235 component flow', () => {
       .mockResolvedValueOnce(mockFetchResponse({ verdict: 'pass', summary: 'OK' }))
       .mockResolvedValueOnce(mockFetchResponse({ verdict: 'fail',  summary: 'Way off' }))
 
+    const eventSpy = vi.fn()
+    document.addEventListener('step-validated', eventSpy)
+
     const wrapper = await submitWithAnswers(
       [TEXT_AI, TEXT_AI_2],
       { 'q-ai': 'a1', 'q-ai-2': 'a2' }
@@ -259,6 +262,10 @@ describe('Validation.vue — #235 component flow', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(getVm(wrapper).result).toBe('incorrect')
     expect(getVm(wrapper).hint).toBe('')
+    // #2348: a hard 'fail' still BLOCKS — the step must NOT unlock even though
+    // partial now does. No step-validated event fires on the fail path.
+    expect(eventSpy).not.toHaveBeenCalled()
+    document.removeEventListener('step-validated', eventSpy)
 
     // #239 v2 follow-up: even though aggregate is 'incorrect', the per-question
     // map MUST be populated with Q1=pass + Q2=fail so the badges render
@@ -345,31 +352,38 @@ describe('Validation.vue — #235 component flow', () => {
   })
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Test 4: Partial with hint → result=partial, hint binding correct
+  // Test 4: pass + partial → result=accepted (#2348: partial unlocks the step)
   // ─────────────────────────────────────────────────────────────────────────
 
-  it('AI Q1 pass + AI Q2 partial-with-hint → result=partial, hint shown', async () => {
+  it('AI Q1 pass + AI Q2 partial-with-hint → result=accepted, hint shown, step-validated fired (#2348)', async () => {
     fetchMock
       .mockResolvedValueOnce(mockFetchResponse({ verdict: 'pass', summary: 'OK' }))
       .mockResolvedValueOnce(mockFetchResponse({
         verdict: 'partial', summary: 'Close', hint: 'Consider edge cases.',
       }))
 
+    const eventSpy = vi.fn()
+    document.addEventListener('step-validated', eventSpy)
+
     const wrapper = await submitWithAnswers(
       [TEXT_AI, TEXT_AI_2],
       { 'q-ai': 'a1', 'q-ai-2': 'a2' }
     )
 
-    expect(getVm(wrapper).result).toBe('partial')
-    expect(getVm(wrapper).hint)
-      .toBe('Consider edge cases.')
+    // #2348: pass-or-partial with no fail is now ACCEPTED — the step unlocks
+    // and the advisory hint is surfaced, rather than blocking on 'partial'.
+    expect(getVm(wrapper).result).toBe('accepted')
+    expect(getVm(wrapper).hint).toBe('Consider edge cases.')
+    expect(eventSpy).toHaveBeenCalledTimes(1)
+    document.removeEventListener('step-validated', eventSpy)
   })
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Test 5: Partial without hint demotes to incorrect
+  // Test 5: Partial without hint still accepts (#2348: partial unlocks
+  // regardless of whether a hint came back)
   // ─────────────────────────────────────────────────────────────────────────
 
-  it('AI Q2 partial with empty hint → result=incorrect (demoted)', async () => {
+  it('AI Q partial with empty hint → result=accepted, empty hint (#2348)', async () => {
     fetchMock.mockResolvedValueOnce(mockFetchResponse({
       verdict: 'partial', summary: 'Close', hint: '',
     }))
@@ -379,7 +393,10 @@ describe('Validation.vue — #235 component flow', () => {
       { 'q-ai': 'something' }
     )
 
-    expect(getVm(wrapper).result).toBe('incorrect')
+    // Partial is an accepting verdict now — even with no hint, the step
+    // unlocks. The accepted strip renders "Good enough…" without the
+    // "one thing to consider" clause (guarded by v-if="hint").
+    expect(getVm(wrapper).result).toBe('accepted')
     expect(getVm(wrapper).hint).toBe('')
   })
 
@@ -490,10 +507,13 @@ describe('Validation.vue — #235 component flow', () => {
     //    verified manually in DEV per PR #602 verification table.)
   })
 
-  it('partial: form stays mounted, Submit visible (re-attempt path)', async () => {
+  it('accepted (single partial): unlocks step + persists, answer preserved (#2348)', async () => {
     fetchMock.mockResolvedValueOnce(mockFetchResponse({
       verdict: 'partial', summary: 'Close but missing X', hint: 'Think about X',
     }))
+
+    const eventSpy = vi.fn()
+    document.addEventListener('step-validated', eventSpy)
 
     const wrapper = await submitWithAnswers(
       [TEXT_AI],
@@ -501,12 +521,17 @@ describe('Validation.vue — #235 component flow', () => {
       { slug: 'partial-test', stepNumber: 1 },
     )
 
-    expect(getVm(wrapper).result).toBe('partial')
-    expect(wrapper.find('ui5-textarea-stub').exists()).toBe(true)
-    // Answer preserved even in partial state (the textarea was never
-    // unmounted, so the typed text remained in the ref).
+    // #2348: a single partial now ACCEPTS the step (unlocks progression) and
+    // fires step-validated so the Done button re-enables. Advisory hint shown.
+    expect(getVm(wrapper).result).toBe('accepted')
+    expect(getVm(wrapper).hint).toBe('Think about X')
+    expect(eventSpy).toHaveBeenCalledTimes(1)
+    // Answer preserved (the textarea is never unmounted). NOTE: we assert on
+    // the answers ref, not a stub .exists() finder — happy-dom's stub-sibling
+    // rendering is unreliable (see the 'correct' test's note above).
     const answersMap = (wrapper.vm as unknown as VmExposed & { answers: Record<string, string> }).answers
     expect(answersMap['q-ai']).toBe('rough answer')
+    document.removeEventListener('step-validated', eventSpy)
   })
 })
 

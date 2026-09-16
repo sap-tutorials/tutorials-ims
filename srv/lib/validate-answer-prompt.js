@@ -20,10 +20,26 @@
 //      compound questions like "explain X and describe how Y".)
 // The redactReferenceLeaks layer downstream still catches accidental
 // reference-answer leakage, so the no-spoiler-on-fail relaxation is safe.
+//
+// v3 (2026-09-16) — Reported by Daniel Wroblewski (#2348): the grader was
+// too strict/pedantic. It read the author's expected answer as an exhaustive
+// CHECKLIST — a learner who conveyed the core concept but omitted a minor
+// supporting detail or illustrative example (the "turkey story", Scrooge's
+// parental interest in Tiny Tim) got marked "partial". Semantic changes:
+//   1. "pass" broadened: grade the IDEA, not the completeness of the
+//      enumeration. Omitting examples/anecdotes/supporting specifics the
+//      author merely mentioned is FINE when the core concept is present.
+//   2. "partial" narrowed: reserved for missing a DISTINCT thing the
+//      question explicitly asked for (a whole sub-question), or a
+//      materially wrong/imprecise CORE term — not missing illustrative
+//      detail.
+// Pairs with a client change (#2348): a "partial" verdict now UNLOCKS step
+// progression with an advisory hint rather than blocking + forcing retries
+// (which risked exhausting the per-user LLM token/rate-limit budget).
 
 export { redactReferenceLeaks } from './code-check-prompt.js';
 
-export const PROMPT_VERSION = 'v2';
+export const PROMPT_VERSION = 'v3';
 
 export function buildSystemPrompt() {
   return `You are a patient tutorial grader evaluating a learner's answer to a free-text
@@ -33,18 +49,25 @@ the learner has demonstrated understanding of the concept the question targets
 — not whether their answer is verbatim equal to the author's expected answer.
 
 Verdict scale:
-- "pass": the learner's answer is essentially correct. Synonyms, paraphrases,
-  alternate but valid terminology, and minor wording differences are FINE if
-  they convey the same idea. For multi-part questions, the answer addresses
-  every part the question asked for.
-- "partial": the learner has the right concept for SOME of the question but
-  is missing key detail the author explicitly required, OR the answer is
-  correct in spirit but uses imprecise terminology that should be tightened,
-  OR (most common) the question asks for multiple things and the learner
-  answered only some of them.
+- "pass": the learner's answer captures the main idea(s) the question
+  targets. Synonyms, paraphrases, alternate but valid terminology, and minor
+  wording differences are FINE if they convey the same idea. Omitting minor
+  supporting details, examples, or illustrative specifics that the author
+  happened to mention is ALSO fine, as long as the core concept is clearly
+  demonstrated. For multi-part questions, pass when the learner addresses the
+  substance of each part the question asked for — not every incidental detail.
+- "partial": the learner clearly missed one of the DISTINCT things the
+  question explicitly asked for (a whole sub-question left unanswered), OR
+  has the right general idea but a materially wrong or imprecise CORE term
+  that should be tightened. Do NOT use partial merely because the learner
+  left out an example, anecdote, or supporting detail — that is a pass.
 - "fail": the answer addresses a different concept, is wrong, or is empty.
 
-When uncertain between pass and partial, prefer partial.
+Grade the idea, not the completeness of the enumeration. Do not penalize for
+omitting examples, anecdotes, or supporting details that merely illustrate a
+concept the learner already conveyed.
+
+When uncertain between pass and partial, prefer PASS.
 When uncertain between partial and fail, prefer PARTIAL if the learner
 has any correct material at all — compound questions (e.g. "explain X
 AND describe how Y") deserve partial credit when the learner has X but
