@@ -222,6 +222,9 @@ jobs:
           # tutorial slug (#1154 follow-up). Untrusted payload — validated below
           # against a strict slug charset before use.
           PAYLOAD_SLUG: ${{ github.event.client_payload.slug }}
+          # #2349 — tutorials deleted upstream (comma-separated). Untrusted
+          # payload; validated below against the same strict charset before use.
+          PAYLOAD_DELETED_SLUGS: ${{ github.event.client_payload.deleted_slugs }}
         run: |
           EFFECTIVE="$INPUT_MODE"
           REASON="explicit (inputs.mode=$INPUT_MODE)"
@@ -260,8 +263,39 @@ jobs:
             exit 1
           fi
 
+          # #2349 — validate deleted_slugs. Untrusted dispatch payload: accept
+          # ONLY a comma-separated list of strict lowercase slugs [a-z0-9-],
+          # reject any token with another char or malformed commas (which could
+          # corrupt the GITHUB_OUTPUT key=value line). Anything invalid → empty →
+          # the unpublish lane is skipped (safe default). workflow_dispatch has no
+          # deleted_slugs input, so this is repository_dispatch-only in practice.
+          DELETED_OK=""
+          case "$PAYLOAD_DELETED_SLUGS" in
+            *[!a-z0-9,-]* | *,, | ,* | *, ) : ;;             # bad charset / malformed commas → drop
+            "" ) : ;;                                        # none → drop
+            * ) DELETED_OK="$PAYLOAD_DELETED_SLUGS" ;;
+          esac
+
+          # #2349 — a repository_dispatch that carries deleted_slugs but NO valid
+          # changed slug (a commit that only removed tutorials) falls through to
+          # the default 'full' rebuild. That is correct-but-heavier: the deletions
+          # are handled by the dedicated unpublish step below (soft-delete), while
+          # the full rebuild republishes everything else via carry-forward. We do
+          # NOT special-case it to a lighter mode — a bespoke 'unpublish-only'
+          # mode would have to be threaded through ~20 content-step `if:` gates
+          # (fetch, Hugo build, guards, publish), and getting one wrong ships a
+          # broken pipeline. The extra wall-clock on a delete-only push is a fine
+          # trade for keeping the mode matrix small and every existing gate intact.
+          # A commit that BOTH edits and deletes keeps its slug-targeted/full mode
+          # and also runs the unpublish step.
+
           echo "effective_mode=$EFFECTIVE" >> "$GITHUB_OUTPUT"
           echo "effective_reason=$REASON" >> "$GITHUB_OUTPUT"
+
+          echo "deleted_slugs=$DELETED_OK" >> "$GITHUB_OUTPUT"
+          if [ -n "$DELETED_OK" ]; then
+            echo "::notice title=Tutorial deletions::will unpublish: $DELETED_OK"
+          fi
 
           # Content-cache master switch (Workstream C, default ON). Enabled unless
           # explicitly opted out with -f content-cache=false. Computed HERE (not
@@ -834,6 +868,30 @@ jobs:
           PURGE_CAP_ABS:   '50'
           INITIATOR:       "ci/${{ github.run_id }}"
         run: npx tsx scripts/publish-content.ts --purge-orphans
+
+      # #2349 — Unpublish tutorials deleted upstream. The source-repo dispatch
+      # detected the deletions (git diff --diff-filter=D) and passed them as
+      # client_payload.deleted_slugs; the mode step validated + re-emitted them.
+      # This soft-deletes exactly those slugs via the same /content/orphan-purge
+      # endpoint the purge step uses, but with an EXPLICIT list (no orphan
+      # computation, no full-cache dependency) so it works in every mode,
+      # including slug-targeted. Gated on publish success: don't compound a
+      # failed publish with a destructive soft-delete — the deletion re-fires on
+      # the operator's rerun. Runs AFTER purge/publish. CONTENT_API_KEY is the
+      # same bearer as publish; QA target uses its own key. The 50-slug cap in
+      # the CLI guards a runaway mass-deletion commit.
+      - name: Unpublish deleted tutorials
+        id: unpublish
+        if: |
+          steps.mode.outputs.deleted_slugs != '' &&
+          steps.publish.outcome == 'success'
+        env:
+          CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
+          CONTENT_API_KEY: ${{ steps.env.outputs.target == 'qa' && secrets.CONTENT_API_KEY_QA || secrets.CONTENT_API_KEY }}
+          PURGE_CAP_ABS:   '50'
+          INITIATOR:       "ci/${{ github.run_id }}"
+          UNPUBLISH_SLUGS: ${{ steps.mode.outputs.deleted_slugs }}
+        run: npx tsx scripts/publish-content.ts --unpublish-slugs "$UNPUBLISH_SLUGS"
 
       # [#1659 Phase C.4] The /admin/rebuild static push is RETIRED. Content
       # rebuilds are now HANA-only: pages render against the deployed asset hashes
